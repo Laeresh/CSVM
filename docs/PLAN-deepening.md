@@ -52,10 +52,33 @@ prose disagrees with itself.
 | 4 | Is Wave G in scope at all, or just noted? | **In scope as a gate, not a commitment.** `G18` is a design-it-twice decision that may land as `❌` with an entry in `docs/architecture.md` saying why — which is a success. `G19` executes only if `G18` says go. |
 | 5 | Wave C converts the remaining `GD.Print` sites? | **No.** `docs/architecture.md`'s `src/Utils/Log.cs` entry forbids a bulk sweep (SHELL-3). `C6` adds the seam; `C7` converts exactly one family to prove the seam works. The rest converts incrementally, as items touch it. |
 | 6 | What counts as "verified" for a pure refactor? | **13/13 goldens hash-identical plus `.\RunTests.ps1` green — and at least one new assertion that has been seen able to fail.** An unchanged green proves nothing on its own; every wave lands a test that was watched failing first. |
-| 7 | Does every wave get a `/grilling` session? | **No — only the two whose interface is open: `D8` and `E12`.** A, B, C and F are graded traced: the fix shape is dictated by the code, and grilling a settled shape is ceremony. `G18` is already a decision item by construction. |
+| 7 | Does every wave get a `/grilling` session? | **No — only the two whose interface is open: `D8` and `E12`.** (`E12` ran on 2026-08-03; its output is the Decisions 9–18 table below. `D8` is still open.) A, B, C and F are graded traced: the fix shape is dictated by the code, and grilling a settled shape is ceremony. `G18` is already a decision item by construction. |
 | 8 | When do those sessions run? | **Whenever — they contend on nothing.** A grilling session lands no code, so it never blocks or is blocked by a wave in flight. Running `D8` and `E12` early is free, and means D and E start against a settled interface instead of designing from scratch. |
 | 9 (2026-08-03, `A2`) | Should `March` take the sim step, or keep its fixed `1/120 s`? | **Keep the fixed step.** Census of the 48 `BALLISTICS` entries: four carry a non-zero `ACCELERATION` (`wep_04`, `wep_25`, `wep_26`, `wep_27` — all 150 m/s²), **zero** carry a non-zero `GRAVITY`, and none of the four is a gun. A gun group resolves caliber + ammo → `wep_30..73` only, so the divergence disproven claim 4 predicted is **unreachable**: every marched round is a straight line, and the step size cannot move a straight line's endpoint. A fixed step also keeps the reticle from twitching with the frame rate. Guarded by two `[ExtractedDataFact]` tripwires in `CSVM.Tests/BallisticsTests.cs`, so the answer re-checks itself if the data or the loadouts change. |
 | 10 (2026-08-03, `B3`) | `Resolve`'s sketched signature takes three arguments. Is that enough to pick a stand-in? | **No — it takes a fourth, `hasEffectsRuntime`.** The explosion stand-in's live condition is `!showedModel && !weapon.IsGun && EffectSink == null` (`Projectile.cs:1173`): a hardpoint weapon in a scene-less pool (the weapon lab) has nowhere to build its real fireball, so the burst stands in for it. That is a fact about the *caller*, exactly like `modelResolved`, and it cannot be derived from the weapon and the surface — with three arguments one of the three stand-ins the item is defined by is unreachable. `B4` passes `EffectSink != null`. |
+
+## Decisions — Wave E's interface (2026-08-03, the `E12` `/grilling` session)
+
+`E12`'s deliverable. Every row was put as a fork with a recommendation and answered by the author;
+the code facts each rests on were traced during the session and are cited inline. This table is the
+authority for `E13`–`E15b`, and it closes every question `E12` listed as one it "must not leave open".
+
+| # | Question | Decision |
+|---|---|---|
+| 9 | Where does the seam cut — at `Puffer.Create`, or lower at the `MultiMesh`? | **Both, as two seams with different jobs.** `IEmitter` is what `EmitterDirector` holds (lifetime); `IEmitterRenderer` lives inside `Puffer` (particles → GPU) and is what makes `Puffer.cs`'s 847 untested lines reachable. Forced by `Puffer` being `sealed` — a fake cannot *be* a `Puffer`, so the director's collaborator has to be an interface regardless. |
+| 10 | Two seams, so two fakes — or does one cover both? | **Two, with non-overlapping jobs.** `E15`'s fake is a plain record implementing `IEmitter`, with **no Godot type anywhere**; the renderer fake exists for a later `Puffer`-modes suite, not for `E15`. This is what makes `E15`'s own trap self-enforcing: if the suite is slow, something constructed a real emitter, and under this split nothing in its path *can*. |
+| 11 | `IEmitter` is not a `Node3D`. Who parents the real emitter? | **The factory.** The real adapter is constructed with the `TextureArchive` **and** the parent node, and does `Create` + `AddChild` itself. `PufferParent` leaves `AnimRuntime`, and with it the "must be the world root, never the per-player crash root" rule currently kept alive by prose in `ForEffects` and `ForCrashRig`. |
+| 12 | Do the three stops reconcile into one, or stay three? | **There are four, and they stay four (plus `Reset`).** They vary on two *independent* axes — selector (key / host-subtree / owner / all) × disposition (pause-revivable / forget / destroy) — proven independent by `FinishEffectInstance` and `TearDownResourcesOf` sharing a selector and differing in disposition. One named method per **selector**; disposition implied by the name. Rationale: every shipped bug in this family (`BL-224`, `BL-233`, `BL-235`, `BL-236`, `BL-242`) was a *selector* error, never a disposition error, so the selectors are the distinctions worth naming. |
+| 13 | What is `Census` a census *of*? | **Structured rows over the *known* entries**, not the active ones: `(Name, Host, Def, Emitting, LiveParticles)`. Active-only cannot distinguish paused-but-revivable from forgotten — which is exactly the `EndFor`/`Discard` distinction row 12 just named, so an active-only census could not guard its own module. `--debug-anim`'s block at `:3308` becomes a projection of `Census` rather than a parallel re-derivation. |
+| 14 | Does `EmitterDirector` outlive its `AnimRuntime` — one shared, or one each? | **One per runtime; one shared real factory.** All three factory closures are already byte-identical (`st => Puffer.Create(st, textures, sustained: true)` — `WorldSession.cs:209`, `WorldEffectsFactory.cs:244`, `:363`), so the *factory* consolidates while the *directors* do not. A shared director is disqualified by `Clear()`: a crash respawn must destroy exactly the crash rig's emitters, which in a shared map becomes a filtered delete over a discriminator — the "did I select the right set?" error this family has already shipped five times, re-created at session scope. `DefScopedPufferKeys` becomes a director constructor argument. |
+| 15 | How is "the factory is gone after the build" expressed once it is an interface? | **A null-object `SpentEmitterFactory`, installed via `RetireFactory()`.** Behaviour-identical (returns null, counts, warns once), but it removes a null-branch from the hottest dispatch method and gives `BL-234`'s failure mode a *name* you can ask for. ⚠ The warn stays a warn: a null object that silently swallows **is** `BL-234`. |
+| 16 | Is the key's variability a bool, or a supplied key-scope selector? | **A bool, and the effect-template pool stays out of `EmitterDirector`** — the constraint `E12` was required to reach explicitly. A supplied selector is the "third keying scheme" `docs/architecture.md` forbids, wearing a nicer suit: it would make the key unstatable in code. The rule has exactly two cases and a measurement behind each (def-scoped **required** on the effects runtime — the two `black_smoke` sputters masked each other; **forbidden** on the world runtime — C5's six `m_crane_go(#N)` twins stacked six `man_spark` emitters and moved the `c5-city-night` golden). `SlotOf` / `NextPooledAnchors` / `PlaceTemplateAt` stay in `AnimRuntime`; the director is handed already-resolved host and anchor nodes, which is also what lets a suite call it with two arbitrary nodes and no pool at all. |
+| 17 | `E13` → `E14`, or `E14` → `E13`? (The plan contradicted itself — `E14`'s Verify said "before `E13` makes it permanent".) | **Seam-first, renderer last: `E13` → `E14` → `E15` → `E15b`.** `E13` defines the interfaces and lands the director wired to the *real* adapter from its first commit, so the emitter construction path is edited once rather than twice — worth more than a smaller first diff on a plan whose only evidence is 13/13 hash-identical. `E15b` (the renderer seam) goes **after** `E15` because it is the sole item near the particle spawn path, where `_rng` ordering and all four emitter-bearing goldens live; landing it after the census suite exists turns a hash diff into a named failing assertion. |
+| 18 | How does a suite install the counting fake into a session `WorldSession.Build` constructs? | **`WorldSession.Options.EmitterFactory`**, defaulting to the real adapter. A post-build swap is disqualified: the bootstrap is where most `PUFFER_STATE`s fire (`:258` — C1's waterfall mist, the train's steam, two truck dust plumes), so a late install leaves `E15` with no pre-kill baseline, and `E15`'s assertion *is* "the census returns to its pre-kill set". ⚠ Accepted smell: production code carries a seam whose only non-default caller is a harness. Judged acceptable because the session already picks between two factory behaviours by flag today; this makes that choice a value instead of a branch. |
+
+**Consequence for Decision 3 and for Wave F.** `E15` **no longer needs `TexturesOutliveBuild = true` at all** — with the fake being a plain record it needs neither a `TextureArchive` nor a `MultiMesh`. Decision 3's objection to `BL-241`'s original fix shape now applies to `E15` just as fully. Wave E's edit to `TestHarness.cs` is therefore **one argument in an options initialiser**, no archive-lifetime change and no `using` restructure, so `F16` has nothing to revisit. `F16` still sets the flag for the world-build path that genuinely wants real emitters.
+
+**What Wave E now touches beyond `AnimRuntime.cs`** (wider than the plan assumed, from Decision 11): `WorldSession.cs` (`:209`, `:251`, `Options`), `WorldEffectsFactory.cs` (`:244`, `:363`), `TestHarness.cs` (one option), `Puffer.cs` (`E15b` only). It deliberately does **not** touch `GameSession.cs:1222`'s `EffectSink`/`ExternalEffect` wiring — that is `F17`/`BL-232`'s line, and E must not cross it.
 
 ## ⚠ Read this before implementing anything
 
@@ -69,8 +92,9 @@ prose disagrees with itself.
 | Confidence | Items | What that means for you |
 |---|---|---|
 | **Traced to an exact mechanism in code, with the data that proves it** | A1–A2, B3–B5, C6–C7, F16–F17 | The friction *and* the fix shape are both traced. Confirm the trace, then implement. |
-| **Direction sound, module shape a judgement call** | D9–D11, E13–E15 | *That* the concept is spread is measured; *which* interface collects it is a design call — which is why each of these waves opens with a grilling session (`D8`, `E12`) whose output is the interface. Do not start the extraction before its session has landed rows in the Decisions table. |
-| **Leads only — no mechanism yet** | D8, E12, G18–G19 | Budget for investigation. These may end in a disproof, and a recorded "no" is the deliverable if so. |
+| **Interface settled by a grilling session; implementation traced** | E13–E15b | Upgraded from "direction sound" on 2026-08-03 when `E12` landed. The module shape is no longer a judgement call — Decisions 9–18 fix the seam, the members, the census, the ownership and the item order, with each fork's losing option recorded. Implement against that table; reopening a row is allowed, editing it silently is not. |
+| **Direction sound, module shape a judgement call** | D9–D11 | *That* the concept is spread is measured; *which* interface collects it is a design call — which is why the wave opens with a grilling session (`D8`) whose output is the interface. Do not start the extraction before its session has landed rows in the Decisions table. |
+| **Leads only — no mechanism yet** | D8, G18–G19 | Budget for investigation. These may end in a disproof, and a recorded "no" is the deliverable if so. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
 worktree session here; use a local commit or a file copy. Wave C is the only wave that may run in a
@@ -124,10 +148,11 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E — emitter lifetime behind a seam
 
-12. ☐ **Grill the `EmitterDirector` interface and the seam** — no code
-13. ☐ Extract `EmitterDirector` with all three stop paths
-14. ☐ `IEmitterFactory` + a counting adapter
+12. ☑ **Grill the `EmitterDirector` interface and the seam** — no code *(landed 2026-08-03; Decisions 9–18)*
+13. ☐ `IEmitter`/`IEmitterFactory` + extract `EmitterDirector` with all **four** stop paths
+14. ☐ The counting fake, and proof it is reachable
 15. ☐ The suite `BL-241` says cannot exist
+15b. ☐ `IEmitterRenderer` inside `Puffer` — **last** (numbered `15b`, not `16`, so F and G keep their IDs)
 
 ### Wave F — invariants the caller no longer remembers
 
@@ -147,19 +172,27 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 completed. Nothing else here waits on anything outside this file.
 
 **The grilling items are outside every gate.** `D8` and `E12` land no code, so they contend on
-nothing and wait for nothing (Decision 8). Run them early — ideally while Wave A is in flight — so
-that `D9` and `E13` start against a settled interface rather than designing from scratch. They are
-also the two items that **cannot be delegated**: `/grilling` interrogates the author, so these are
-sessions you sit in, not work an agent runs in a worktree.
+nothing and wait for nothing (Decision 8). `E12` ran on 2026-08-03, while Wave A was in flight, and
+that is exactly the intended timing: `E13` now starts against a settled interface. `D8` is still
+open and should be run the same way. They are also the two items that **cannot be delegated**:
+`/grilling` interrogates the author, so these are sessions you sit in, not work an agent runs in a
+worktree.
 
 **Chains.** A1 → A2 (A2 is a decision about the module A1 creates). B3 → B4 → B5. C6 → C7
-(disproven claim 1). D8 → D9 → D10 → D11. E12 → E13 → E14 → E15. F16 and F17 are independent of
-each other but both want E landed, since E changes what the harness needs from the archive
-(Decision 3). G18 → G19, and G19 may never open.
+(disproven claim 1). D8 → D9 → D10 → D11. E12 → E13 → E14 → E15 → E15b (Decision 17 — and note it
+overrides `E14`'s original Verify, which had the E13/E14 order backwards). F16 and F17 are
+independent of each other. **They no longer wait on E**: Decision 18 means `E15` needs no
+`TextureArchive` at all, so E stops changing what the harness asks of the archive and the
+E-before-F preference weakens to "F17 must not be pre-empted by E touching
+`GameSession.cs:1222`" — which Wave E is now explicitly forbidden to do. G18 → G19, and G19 may
+never open.
 
 **File contention — never run these in parallel worktrees.** A and B both own `Projectile.cs`
-(A also `FlightController.cs`). D and E both own `AnimRuntime.cs`. F owns `GameSession.cs` +
-`TestHarness.cs`, which E15 also touches — E before F.
+(A also `FlightController.cs`). D and E both own `AnimRuntime.cs`. **Wave E's footprint is wider
+than first written** (Decision 11): it also owns `WorldSession.cs`, `WorldEffectsFactory.cs`, one
+line of `TestHarness.cs`, and — at `E15b` only — `Puffer.cs`. F owns `GameSession.cs` +
+`TestHarness.cs`; the `TestHarness.cs` overlap is now a single options argument rather than an
+archive-lifetime change, so E and F contend far less than the plan assumed.
 
 **The one safe parallel pair:** Wave C touches only `Utils/Log.cs` and one caller family, so it may
 run in a worktree alongside Wave A or B. Give the C agent `CSVM/src/Utils/Log.cs` plus its chosen
@@ -497,7 +530,15 @@ seed does not pin the draw.
 
 # Wave E — emitter lifetime behind a seam
 
-## E12 ☐ Grill the `EmitterDirector` interface and the seam — no code
+## E12 ☑ Grill the `EmitterDirector` interface and the seam — no code
+
+**Landed 2026-08-03.** The deliverable is the "Decisions — Wave E's interface" table above
+(rows 9–18) and the restated `E13`–`E15b` below. All four questions this item said it must not
+leave open are answered, including the effect-template-pool constraint its trap demanded be
+reached explicitly (Decision 16). Three answers changed the wave's shape rather than merely
+detailing it: the seam cuts in **two** places (9), there are **four** stop paths rather than three
+(12), and the wave's file footprint is wider than written (11). One item was added (`E15b`) and the
+`E13`/`E14` order in `E14`'s Verify was found self-contradictory and settled (17).
 
 **Goal.** The interface and the seam's exact shape are decided before `E13` moves a line — this is
 the plan's top recommendation and its largest extraction, so a wrong interface here is the most
@@ -530,31 +571,91 @@ Append the answers as a dated Decisions block.
 **Verify.** Not code. The deliverable is the Decisions rows, and the test is that `E13` and `E14`
 can each be restated with exact signatures and no remaining "or". If the seam question is still
 open after the session, the wave is not ready.
+**Met** — the signatures are in `E13` below, and every "or" in this item's question list resolved
+to a recorded fork with its losing option stated.
 
 **⚠ Traps.** ⚠ `docs/architecture.md` warns the effect-template pool is **not** a third keying
 scheme — the session must reach that constraint explicitly and decide the pool stays out, rather
 than discovering it mid-extraction. Read `src/Effects/Puffer.cs`'s entry too, not just
 `AnimRuntime`'s: the seam's lower option lands inside it.
 
-## E13 ☐ Extract `EmitterDirector` with all three stop paths
+## E13 ☐ `IEmitter`/`IEmitterFactory` + extract `EmitterDirector` with all four stop paths
 
-**Goal.** An emitter's whole life — start and all three stops — is one module with a readable
-census, instead of four methods over a private dictionary.
+**Goal.** An emitter's whole life — start and all four stops — is one module with a readable
+census, instead of five methods over two private collections.
 
-**Evidence (confidence: direction sound; the spread is measured).** Start is `HandlePufferState`
-(`AnimRuntime.cs:2243`, ~143 lines). The three stops are `HandlePufferState`'s own stop branch,
-`EndSustainedOn` (`:2399`, the `OBJECT_ACTIVE_STATE false` path, `BL-224`) and
-`FinishEffectInstance` (`:1815`, the instance-end path, `BL-236`). Per-frame follow is `TickPuffers`
-(`:2421`). The keying rule — `(Name, Node, Def?)` gated by `DefScopedPufferKeys` — is explained in a
-field comment at `:381`, nowhere near the method that implements it. Four bugs in this family
-(`BL-233`, `BL-235`, `BL-236`, `BL-242`) were each diagnosed by hand from a `--debug-anim` log.
+**Evidence (confidence: traced; the spread is measured and the interface is settled by `E12`).**
+Start is `HandlePufferState` (`AnimRuntime.cs:2243`, ~136 lines). **There are four stops, not
+three** — the fourth, `TearDownResourcesOf` (`:1836`), is the only one that also *removes* the
+`_puffers` entry rather than just `SustainEnd`-ing it, and it shares its selector with
+`FinishEffectInstance` (`:1815`, `BL-236`); the other two are `HandlePufferState`'s own stop branch
+(`:2264`, including `BL-242`'s owner fallback) and `EndSustainedOn` (`:2399`, the
+`OBJECT_ACTIVE_STATE false` path, `BL-224`). `Clear()` (`:838`) is a fifth disposition again
+(`SustainEnd` + `Clear` + `QueueFree`). Per-frame follow is `TickPuffers` (`:2421`), whose
+`HostOffsetOf`/`_hostOffsets` (`:2442`, `:390`) has no other caller and moves with it — but
+`VisualOriginOf` (`:1319`) is shared with the `ExternalEffect` path at `:2172` and stays. The keying
+rule — `(Name, Node, Def?)` gated by `DefScopedPufferKeys` — is explained in a field comment at
+`:368`, nowhere near the method that implements it. Four bugs in this family (`BL-233`, `BL-235`,
+`BL-236`, `BL-242`) were each diagnosed by hand from a `--debug-anim` log.
 
-**Approach.** New `CSVM/src/Mech3/Anim/EmitterDirector.cs`: `Assert(PufferState, host, def)`,
-`EndOn(host)`, `EndFor(def, anchor)`, `Tick(dt)`, and `Census` — a public read-only view of the live
-keys, which is the thing `BL-241` says is missing. Move the keying rule's explanation onto the
-module. `AnimRuntime` keeps the dispatch case and forwards.
+**Approach.** Per Decisions 9–18. New files under `CSVM/src/Mech3/Anim/` — and the interfaces land
+here, wired to the **real** adapter from the first commit, so the emitter construction path is
+edited once rather than twice (Decision 17):
+
+```csharp
+public interface IEmitter
+{
+    void SustainAt(Vector3 worldPos, Basis worldBasis, float dt);
+    void SustainEnd();
+    void Clear();
+    void Destroy();
+    int  LiveCount { get; }
+    bool IsValid   { get; }   // the IsInstanceValid guard EndSustainedOn/TickPuffers both make
+}
+
+public interface IEmitterFactory { IEmitter? Create(PufferState state); }
+// real:  PufferEmitterFactory(TextureArchive textures, Node parent) — Create + AddChild (Decision 11)
+// spent: SpentEmitterFactory(Action<string> count) — returns null, warns once (Decision 15)
+
+public readonly record struct EmitterCensusRow(
+    string Name, string Host, string Def, bool Emitting, int LiveParticles);
+
+public sealed class EmitterDirector
+{
+    public EmitterDirector(IEmitterFactory factory, bool defScopedKeys, bool debug,
+                           Action<string> count);
+
+    public void Assert (string name, Node3D host, AnimDefinition def, Node3D? anchor, PufferState state);
+    public void End    (string name, Node3D host, AnimDefinition def, Node3D? anchor); // + BL-242 owner fallback
+    public void EndOn  (Node3D root);                        // OBJECT_ACTIVE_STATE false
+    public void EndFor (AnimDefinition def, Node3D? anchor);  // pause, entry kept  (FinishEffectInstance)
+    public void Discard(AnimDefinition def, Node3D? anchor);  // pause + forget     (TearDownResourcesOf)
+    public void Reset  ();                                    // + Destroy          (Clear)
+    public void Tick   (float dt);
+
+    public IReadOnlyList<EmitterCensusRow> Census { get; }
+    public int  Built { get; }        // PuffersBuilt forwards here, keeping verification.md WORLD-12 true
+    public void RetireFactory();      // bootstrap end: swaps in SpentEmitterFactory
+}
+```
+
+One director per runtime, one shared real factory (Decision 14). Move the keying rule's explanation
+onto the module. `AnimRuntime` keeps the dispatch case, the `at_node` sentinel resolution and the
+`active_state` read, and forwards; the **stub check** (`Textures.Count == 0 &&
+TextureSequence.Count == 0`) moves to the director, being emitter knowledge. The `Action<string>
+count` argument exists so every `Count("PufferState(...)")` string stays byte-identical in the
+report lines.
+
+**What leaves `AnimRuntime`:** `_puffers`, `_activePuffers`, `_hostOffsets`, `HostOffsetOf`,
+`PufferFactory`, `PufferParent`, `_reportedPufferFactoryGone`, `DefScopedPufferKeys`, the four stop
+methods, `TickPuffers`, `HandlePufferState`'s body below the `at_node` resolve, the `:368` keying
+comment, and the `:3308` debug block (which becomes a projection of `Census`). `PuffersBuilt` stays
+as a forwarding property.
 
 **Model recommendation.** high — the biggest extraction in the plan, out of the highest-churn file.
+If it is too large to verify as one unit, split **by file, not by seam**: `E13a` lands the
+interfaces and adapters as new files with `AnimRuntime` untouched (trivially golden-identical, since
+nothing calls them), `E13b` moves the director onto them.
 
 **Verify.** Baseline the emitter census from a `--freecam --chapter=C1 --destroy=refuel --debug-anim`
 run at 1 s / 5 s / 10 s **before** the edit; after, the same names at the same times. The `BL-236`
@@ -563,35 +664,45 @@ them frame live emitters (`c1-waterfall`, `c3-island`, `c1-destroy-effects`, `c1
 makes them the sharpest instrument in this wave.
 
 **⚠ Traps.** ⚠ `docs/architecture.md` warns the effect-template pool is **not** a third keying
-scheme. `EmitterDirector` absorbs the existing two keys and leaves `SlotOf` / `NextPooledAnchors` /
-`PlaceTemplateAt` where they are. Assert **names**, not counts, in every census comparison —
-`BL-241`'s own trap: several runtimes contribute to the count.
+scheme, and Decision 16 settles that the pool **stays out**: `EmitterDirector` absorbs the existing
+two keys and leaves `SlotOf` / `NextPooledAnchors` / `PlaceTemplateAt` where they are, being handed
+already-resolved host and anchor nodes. Assert **names**, not counts, in every census comparison —
+`BL-241`'s own trap: several runtimes contribute to the count. ⚠ Do not "simplify" the four
+selectors into one parameterised `End` — the two axes are provably independent (`FinishEffectInstance`
+and `TearDownResourcesOf` share a selector, differ in disposition), and every shipped bug in this
+family was a selector error, which a collapsed call site would re-enable (Decision 12).
 
-## E14 ☐ `IEmitterFactory` + a counting adapter
+## E14 ☐ The counting fake, and proof it is reachable
 
-**Goal.** Emitter construction sits behind a seam with two real adapters, so a suite can observe
-lifetime with no GPU and no `TextureArchive`.
+**Goal.** A suite can observe emitter lifetime with no GPU, no `TextureArchive` and no `Puffer` —
+the third implementation that makes the `E13` seam real rather than hypothetical.
 
-**Evidence (confidence: direction sound).** `Puffer.Create` builds a texture atlas and a `MultiMesh`
-— a genuinely essential engine dependency, per `docs/architecture.md`'s `src/Effects/Puffer.cs`
-entry. That is exactly why the dependency belongs behind a seam rather than being fought:
-`WorldSession.cs:249` nulls `PufferFactory` when `TexturesOutliveBuild` is false, and the harness
-takes that branch (`TestHarness.cs:582`).
+**Evidence (confidence: traced).** `Puffer.Create` builds a texture atlas and a `MultiMesh` — a
+genuinely essential engine dependency, per `docs/architecture.md`'s `src/Effects/Puffer.cs` entry.
+That is exactly why the dependency belongs behind a seam rather than being fought:
+`WorldSession.cs:251` nulls `PufferFactory` when `TexturesOutliveBuild` is false, and the harness
+takes that branch (`TestHarness.cs:582`). `Puffer` is `sealed` (`Puffer.cs:274`), so the fake cannot
+*be* a `Puffer` — which is what forced `IEmitter` in Decision 9.
 
-**Approach.** An `IEmitterFactory` with the one method `EmitterDirector` needs to make an emitter,
-implemented twice: the real `Puffer`-backed adapter used by every session, and a counting fake the
-suites install that records `(key, started, stopped)` and draws nothing. Two adapters, so the seam
-is real rather than hypothetical.
+**Approach.** `CountingEmitterFactory` in `CSVM/src/Testing/`, returning a **plain record**
+implementing `IEmitter` that records `(key, started, stopped)` and holds no Godot type at all
+(Decision 10). Reached by suites through `WorldSession.Options.EmitterFactory`, which defaults to
+the real adapter (Decision 18); `TestHarness` passes it, and that is Wave E's entire edit to that
+file. ⚠ The fake must stay honest about `SustainEnd`-then-revive — the damage-stage sputter loop
+cycles `ACTIVE_STATE` 0/1 and depends on the entry surviving — or `E15` asserts against a lie.
 
-**Model recommendation.** high — seam placement decides whether E15 is writable.
+**Model recommendation.** medium — a small type against an interface `E13` has already settled.
 
-**Verify.** 13/13 goldens hash-identical — the real adapter must be indistinguishable from today.
-Then confirm the fake is actually reachable: a scratch suite that installs it and reads one emitter
-start, before E13 makes it permanent.
+**Verify.** 13/13 goldens hash-identical (nothing in a session's path changed). Then confirm the
+fake is actually reachable: a scratch suite that installs it and reads one emitter start, before
+`E15` depends on it.
 
 **⚠ Traps.** Do not let the fake become the default anywhere outside a suite — a session that
 silently draws no emitters is `BL-234` again, and `BL-234` was found by a human noticing missing
-fire, not by a test.
+fire, not by a test. Enforce it structurally: the fake lives in `CSVM/src/Testing/` and is
+**never referenced from `src/Session/` or `src/Mech3/`**. ⚠ And `SpentEmitterFactory`'s warn stays a
+warn (Decision 15) — a null object that silently swallows *is* `BL-234`, however polite its type
+name.
 
 ## E15 ☐ The suite `BL-241` says cannot exist
 
@@ -603,9 +714,16 @@ world builds no puffers at all." Its fix note asks for a public read-only census
 because "`_activePuffers` is private, and the debug line is a `GD.Print`" — E13 provides that census
 and E14 removes the GPU requirement.
 
-**Approach.** In `Suites.cs`, kill a `refuel*` tank through `DamageAt` with the counting adapter
-installed, then assert the emitter census returns to its pre-kill set. Close `BL-241` with
-`/close-backlog-item`.
+**Approach.** In `Suites.cs`, kill a `refuel*` tank through `DamageAt` with the counting fake
+installed via `WorldSession.Options.EmitterFactory`, then assert the emitter census returns to its
+pre-kill set. Close `BL-241` with `/close-backlog-item`.
+
+⚠ **This item does *not* set `TexturesOutliveBuild = true`** — `BL-241`'s own fix shape, and now
+unnecessary: the fake needs neither a `TextureArchive` nor a `MultiMesh`, so the harness's archive
+lifetime stays entirely `F16`'s problem. The fake must be installed **through `Options`, not after
+`Build` returns**: the bootstrap is where most `PUFFER_STATE`s fire (`AnimRuntime.cs:258` — C1's
+waterfall mist, the train's steam, two truck dust plumes), so a late install leaves this suite with
+no pre-kill baseline, and the pre-kill set is the whole assertion (Decision 18).
 
 **Model recommendation.** medium — a suite against behaviour E13/E14 have settled.
 
@@ -613,9 +731,48 @@ installed, then assert the emitter census returns to its pre-kill set. Close `BL
 possible proof, since `BL-236` is a bug this family actually shipped. Restore, then
 `.\RunTests.ps1` full pass.
 
-**⚠ Traps.** **Assert the names, not the count** (`BL-241`'s own trap). And `BL-241` warns that
-baking an atlas per authored state costs real time on world build — with the counting adapter that
-cost is gone, so if the suite is slow, something is still constructing real emitters.
+**⚠ Traps.** **Assert the names, not the count** (`BL-241`'s own trap) — though note the per-runtime
+census (Decision 14) narrows that hazard: rows now say which director they came from, so a
+cross-runtime miscount is no longer the default failure. Assert on `Emitting` **and** on the row's
+presence: they are different facts (`EndFor` pauses and keeps, `Discard` forgets), and a suite that
+reads only one cannot tell a broken disposition from a working one. And `BL-241` warns that baking
+an atlas per authored state costs real time on world build — with the fake that cost is gone, so if
+the suite is slow, something is still constructing real emitters.
+
+## E15b ☐ `IEmitterRenderer` inside `Puffer` — last
+
+**Goal.** `Puffer`'s own logic — burst, distance-trail and sustain modes — becomes reachable by a
+test, which today it is not at any point in its 847 lines.
+
+**Evidence (confidence: direction sound; the seam's exact cut is deliberately left to this item).**
+`Puffer.Create` (`Puffer.cs:403`) does three separable things: `BuildAtlas` (returns null → `Create`
+returns null, the "no texture" data-coverage outcome the director counts), `new Puffer()`, and
+`Init` (`:676`), which sizes the particle pool, compiles the shader and builds the `MultiMesh`
+(`:716`). `docs/architecture.md` records the atlas + `MultiMesh` as a genuinely essential engine
+dependency — which is the argument for a seam, not against one.
+
+**Approach.** Settle at the top of this item, not now: `IEmitterRenderer`'s shape depends on whether
+the atlas is built **above** or **below** it. Above makes `Puffer`'s modes constructible without a
+`TextureArchive` — the entire point of Decision 9's lower seam; below does not, and would leave this
+item delivering nothing testable. Nothing in `E13`–`E15` depends on the answer, and `Puffer`'s
+internals will read differently once they do.
+
+**Model recommendation.** high — the one item in this wave that goes near the particle spawn path.
+
+**Verify.** 13/13 goldens hash-identical, and this is the item where that is *hard*: `_rng` is a
+field initializer (`Puffer.cs:354`), so the RNG stream is pinned to the order of `Puffer` **object**
+constructions, and `docs/architecture.md` records that each emitter's seed depends on how many were
+built before it. Leave `new Puffer()` exactly where it sits in `Create` and the stream is untouched;
+move it, and all four emitter-bearing goldens (`c1-waterfall`, `c3-island`, `c1-destroy-effects`,
+`c1-crash`) move with it. Then a new suite exercising at least one mode through the fake renderer,
+seen failing first.
+
+**⚠ Traps.** ⚠ **This item runs after `E15`, deliberately** (Decision 17): it is the only Wave E
+change near the spawn path, and landing it once the census suite exists turns a regression into a
+named failing assertion instead of a hash diff to bisect. ⚠ The honest risk of that ordering is that
+`E15b` arrives when the wave reads as finished and a 847-line refactor is least appetising — if it
+is going to be dropped, drop it *explicitly* into `backlog.md` with this section as its evidence,
+rather than by attrition.
 
 # Wave F — invariants the caller no longer remembers
 
