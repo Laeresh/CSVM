@@ -11,7 +11,8 @@ working the capture-blocked items themselves. Also excluded by the user: the new
 flight-model pair `BL-092`/`BL-247` (deserves its own focused plan — both touch the guarded
 `flight-envelope` suite). Excluded during selection: `BL-047` (ruled capture-blocked 2026-07-30,
 `docs/HISTORY.md`), `BL-160` (blocked on `CAP-09`), `BL-161` (out of scope until a cockpit-audio
-feature), `BL-048` (a future Hi-Def-mode invention, not a bug fix).
+feature), `BL-048` (judged a future Hi-Def-mode invention at selection time; since closed 2026-08-04 outside
+this plan — the needle shape shipped in the `rtexture*` tiers' alpha, `docs/HISTORY.md`).
 
 **Each item was re-verified still-open against both `docs/HISTORY.md` and the code on 2026-08-03**:
 none of the ten IDs has a landed HISTORY entry; `zone_set` has zero hits in `CSVM/src`;

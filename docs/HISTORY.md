@@ -80,7 +80,7 @@ Item 8 **Mission states — anim-state engine part 1 ✅ DONE (2026-07-18)** —
 
 **HUD gauges: altimeter, speedometer, damage display (2026-07-19, user request):** the original's three main cockpit dials as a screen-space HUD in `--fly` and the damage lab (`src/Flight/GaugeCluster.cs`; format write-up in `docs/formats/hud.md`). **Resource discovery answering the user's questions:** the dials are not composed screen-side — each player plane carries a `gauges` subtree under its (skipped) cockpit in planes.zbd whose flat meshes ARE the 2D dials in dial-local coords (bezel radius 1): the face is a 12-gon mapping `altimeter`/`speedometer`/`<plane>_damage`.tif (textures ship in every chapter's texture.zbd), **each needle is a single slim textured quad — the taper and hub are painted in needle.tif (32×128), not meshed** (pivot at origin, tip +y; altimeter has long `hundreds` + shorter `thousands`, speedometer `speed`); the `lowalt_on`/`stallwarning_on` warning meshes hold the lit window quad plus two red bezel slashes; and the damage dial's four `*damage` child meshes each carry a bezel border bar (`greenhilite`) plus a part-shaped tiled hatch fill (`grn_hatchptrn`) traced to that plane's silhouette — **part positions are per-plane mesh data**, and the interp `cockpit.gw` script recolors by 4-map texture cycles (green/yellow/orange/red `*hilite`/`*_hatchptrn` — the remake uses 3, per the reference shots). The remake extracts all of it per plane at build time (nothing hand-modeled) and draws in the data's priority order (STALL under the needle, needles over LOW ALT). Wiring: altimeter long/short needles 360°/1k/10k ft; speedometer 0.72°/mph (measured off the face labels); LOW ALT blinks below **300 m over ground** (user spec; FlightController down-ray per physics frame); STALL blinks from `isStalled()`; damage zones color at the part injure_anims thresholds (yellow ≤0.46, red ≤0.20) with fractions from PlaneDamage, and a hit zone (fill + border) **blinks 5 s even in green range** (user-observed original behavior) via `OnPartDamage` beside the DamageVisuals call. **Damage lab integration (user follow-up):** the lab builds the cluster too — sliders drive the dial live, decreases trigger the blink, presets end in a blink `Reset()` (deterministic `--screenshot` shots), a "HUD gauges" CheckButton toggles it. Screen metrics: dark-span scans of HUD.png's bezel rings put all three dials at R 85 @1440p — alt (425.5,1108.5), dmg (426.5,1299), spd mirrored 420 from the right (the two reference screenshots differ slightly in placement; HUD.png canonical). One diagnosed dead end: color-keying needle.tif's black erased the hub's two black discs — the original draws the quad opaque (it is slim; the dark tail region IS the hub art). Verified: 1440p side-by-side crops vs HUD.png (size, position, needles + hub, LOW ALT + red slashes match); lab preset `leftwing:0.25,nose:0.1,tail:0.55` renders yellow/red/green fills + matching border arcs; the pre-Reset preset shot caught zones mid-blink (blink path proven); C1 fly smoke test clean. Pending user playtest: blink rates (`WarnBlinkPeriod` 0.4 s / `DamageBlinkPeriod` 0.32 s TUNE), whether the original ever shows the cycle's orange state, exact gauge placement.
 
-**HUD gauges follow-up: pointed needles + LOW ALT 50 m (2026-07-19, user feedback):** two same-day tweaks from the user's zoomed-original comparison. (1) **LOW ALT threshold 300 → 50 m AGL.** (2) **Needle shaping:** the first pass drew the needle quads with the raw texture, giving square tips — full row sampling proved needle.tif's shaft is a flat full-width slab with no taper at all, so the original's slim pointed lance is an engine-side shape (in neither the texture colors nor the mesh/UVs). `GaugeCluster.FindGaugeTexture` now shapes the texture at load: shaft rows get an alpha mask tapering linearly to a point at the tip (`NeedleMaxHalfFrac` 0.65 / `NeedleTaperEndFrac` 0.9 of the shaft, TUNE, eyeballed against the user's zoom), the darker center notch is filled with slab color (it survived the taper as a split "tweezer" tip), hub rows untouched. Telemetry grew an `agl=` readout (the down-ray's height over ground). Verified: 1440p altimeter crop shows both needles as solid pointed lances with intact hubs; a false "LOW ALT stuck on" scare was disproven by pixel values — the face textures contain dark UNLIT window copies that read deceptively lit in upscaled crops (~58,0,0 vs the lit overlay's 180+,0,0; second time bitten, gotcha recorded in the architecture bullet), with `agl=145` > 50 confirming the wiring.
+**HUD gauges follow-up: pointed needles + LOW ALT 50 m (2026-07-19, user feedback):** **[The "engine-side shape" conclusion below was wrong — the pointer silhouette ships as the alpha channel of the `rtexture*` tiers' needle.tif, which the base texture.zbd copy lacks; the carved taper was deleted when chapter textures switched to the top tier. See the 2026-08-04 entry (BL-048).]** two same-day tweaks from the user's zoomed-original comparison. (1) **LOW ALT threshold 300 → 50 m AGL.** (2) **Needle shaping:** the first pass drew the needle quads with the raw texture, giving square tips — full row sampling proved needle.tif's shaft is a flat full-width slab with no taper at all, so the original's slim pointed lance is an engine-side shape (in neither the texture colors nor the mesh/UVs). `GaugeCluster.FindGaugeTexture` now shapes the texture at load: shaft rows get an alpha mask tapering linearly to a point at the tip (`NeedleMaxHalfFrac` 0.65 / `NeedleTaperEndFrac` 0.9 of the shaft, TUNE, eyeballed against the user's zoom), the darker center notch is filled with slab color (it survived the taper as a split "tweezer" tip), hub rows untouched. Telemetry grew an `agl=` readout (the down-ray's height over ground). Verified: 1440p altimeter crop shows both needles as solid pointed lances with intact hubs; a false "LOW ALT stuck on" scare was disproven by pixel values — the face textures contain dark UNLIT window copies that read deceptively lit in upscaled crops (~58,0,0 vs the lit overlay's 180+,0,0; second time bitten, gotcha recorded in the architecture bullet), with `agl=145` > 50 confirming the wiring.
 
 **Damage display: orange state confirmed + wired (2026-07-19, user in-game check):** the user confirmed the original damage display DOES use the cycle's 4th color — the remake now steps through all four: green > 0.72, yellow <= 0.72, orange <= 0.46, red <= 0.20. This resolves the threshold-mapping ambiguity: the data has three *_damage_* anim thresholds and four cycle maps, so each anim steps to the NEXT color (the anim names lag their effect by one state — *_damage_green at 0.72 turns the zone yellow); red on a still-flying plane matches the "HUD with dmg" reference, and the lab's old yellow-at-25% is exactly where the original shows orange. GaugeCluster: 4-entry hilite/hatchptrn variant arrays (orangehilite/orng_hatchptrn resolve from the chapter archive), per-zone YellowAt/OrangeAt/RedAt parsed from the part anims. Verified: lab preset leftwing:0.25,nose:0.1,tail:0.55 renders orange/red/yellow fills + matching border arcs, rightwing green.
 
@@ -13060,3 +13060,48 @@ frames a few apart cancels the text and brings the pivot to within 1.8 px of the
 New tool: `ammoarrow.py` (arrow angle per frame, plus the pivot solve), which takes a HUD and so
 works on either. All rates are sim seconds at k = 1.390 — implementing 218 °/s would run the sweep
 39% fast.
+
+## 2026-08-04 — `BL-048` closed: the needle shape shipped in the data all along — chapter textures now load the top `rtextureN` tier
+
+**Closure kind: fixed.** The user noticed the gauge needles never matched the original's and asked
+for the connection between the gauge nodes and the `needle`/`smallneedle` textures. The hunt
+answered three questions at once:
+
+1. **The needles have nodes** — named by function, not texture: `altimeter/hundreds`+`thousands`,
+   `speedometer/speed`, `gungauge/ggarrow`, `missilegauge/mgarrow`, `nitrogauge/nitro_boost`+
+   `nitro_charge` under every player plane's `cockpit1/gauges`. The dial needles are plain
+   full-UV rectangles; the weapon-gauge arrows are 5-vertex pentagons whose mesh IS the arrow
+   shape (wrapping UVs smear the 16×16 `smallneedle.tif` across it).
+2. **The pointer silhouette is the texture's alpha channel — in the `rtexture*` archives only.**
+   `texture.zbd`'s needle.tif is a 32×128 RGB slab with no alpha (which is why the 2026-07-19
+   session concluded "engine-side shape" and carved an eyeballed taper at load). Every `rtextureN`
+   tier ships a same-size RGBA copy with different, better art whose alpha is the complete
+   antialiased pointer — tip, tapering shaft, waist, two hub discs.
+3. **`rtextureN` = the texture set fitted to N MB of video-card texture memory** (file sizes:
+   rtexture2 ≈ 1.95 MB, rtexture4 ≈ 3.85, rtexture6 ≈ 5.7, rtexture8 ≈ 7.65 in every chapter, plus
+   one full-quality tier of 9–15 MB). Per-file, C1's top tier holds the identical 881-name set at
+   identical dimensions as `texture.zbd`, but 296 differ in pixels and 5 in mode (RGBA vs RGB) —
+   every chapter shows the same pattern (209–328 differing). Where checked (C4's `c4sky2`/`sky1`),
+   **all five tiers agree with each other and only `texture.zbd` differs** — so the shipped game,
+   which picks a tier by card memory, never rendered `texture.zbd`'s pixels; it reads as an older
+   build of the set. This overturns the 2026-07-21 Run-2 finding that the rtextures are plain
+   downscale tiers — that measurement compared *dimensions*, which do match; content does not.
+
+**What changed:** `SessionPaths.ChapterTextures` resolves the chapter's top `rtextureN`
+(zip-or-unpacked, numeric max, falling back to `texture.zip` when absent — the C4 fallback keeps
+`extracted/`-less setups working); `GaugeCluster` lost `FindGaugeTexture`'s carved alpha taper,
+the `ShapedNeedles` cache and its three TUNE constants (`NeedleHubStartFrac`/`NeedleMaxHalfFrac`/
+`NeedleTaperEndFrac`) — needles now draw the shipped RGBA art untouched. Docs: `tooling.md`
+rtexture paragraph rewritten, `hud.md` needle/arrow bullets corrected, the 2026-07-19 entries
+above got forward-pointers.
+
+**Verified:** 414 unit tests (incl. a new top-tier-beats-base SessionPaths test), 22 in-engine
+suites, engine errors clean. Goldens regenerated: **10 of 13 moved, every mover explained in the
+manifest** — the HUD/aircraft shots via the gauge art (max delta 212 at the needles), the world
+shots via the tier terrain/facade/fire sheets (c4-snow 38 % — the sky sheets are much brighter in
+every tier), and the three unmoved shots (c1b-night-sea, c1c-rain, c2b-rain) have 200+ differing
+tier textures in their chapters with none visible at those poses. A follow-up verify run: 13/13
+hash-identical. **Limit of the evidence:** which tier the original picks on a given card is
+inferred from the MB-budget naming, not traced in the exe — but all tiers carry the needle alpha,
+so the needle conclusion is tier-independent. The user still owes an at-the-controls look at the
+new needles against the original (the standing cockpit re-tests PT-13–PT-30 cover the area).

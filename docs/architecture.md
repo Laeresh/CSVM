@@ -1427,9 +1427,10 @@ the gun + missile weapon gauges (E35), all geometry extracted from the plane's o
 (structure/scales/quirks: docs/formats/hud.md); polys draw by data priority, rest rotations
 ignored; PartFraction binds flight or the lab; dial centres are bottom-anchored (FromBottom) so
 panes keep them on screen.
-⚠ The gauge textures lie — compare pixel values, never appearances: never color-key needle.tif (a
-  black key erases the hub's two black discs), and the faces hold dark UNLIT copies of the STALL /
-  LOW ALT windows (~58,0,0 unlit vs 180+,0,0 lit); bitten twice.
+⚠ The gauge textures lie — compare pixel values, never appearances: the faces hold dark UNLIT
+  copies of the STALL / LOW ALT windows (~58,0,0 unlit vs 180+,0,0 lit); bitten twice. The needle
+  draws its shipped RGBA art untouched (the pointer silhouette is the rtexture-tier alpha, BL-048)
+  — never re-add keying or load-time shaping.
 ⚠ The weapon-gauge 4-digit readout is per-GROUP for guns, per-PYLON for rockets — NOT a total; the
   belt-indicator yellow tier is likewise GUN-ONLY (hardpoint/pylon indicators go green→red, never
   yellow — confirmed against the original).
@@ -1688,7 +1689,9 @@ ticks below, one lane per Initial sequence; a slanted first-firing connector = s
 ## src/SessionPaths.cs
 Static resolver for the extracted-data paths (`ChapterTextures`/`ChapterGamez`/`ChapterZrdr`/
 `MissionZrdr`) under a data root, plus `PreferUnzipped` (an unpacked sibling dir beats its `.zip`).
-⚠ Pure path arithmetic — the only I/O is `PreferUnzipped`'s directory-exists probe.
+⚠ Near-pure path arithmetic — the only I/O is `PreferUnzipped`'s directory-exists probe and
+  `ChapterTextures`' scan for the chapter's top `rtextureN` tier (the archive the original renders
+  from — same files/resolutions as `texture.zbd`, different pixels; see docs/tooling.md).
 ⚠ The `--gamez=`/`--textures=` override policy deliberately stays in GameSession; this class only
   builds the default extraction-tree paths.
 

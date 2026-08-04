@@ -16,8 +16,10 @@ namespace CSVM.Flight;
 /// meshes ARE the 2D dials — flat polygons in dial-local coords (x right, y up,
 /// bezel radius 1): the face is a 12-gon mapping the whole dial texture
 /// (altimeter/speedometer/&lt;plane&gt;_damage), each needle is a single textured quad
-/// (needle.tif, pivot at the origin, tip +y — the taper and hub are painted in
-/// the texture, no extra geometry), the lowalt_on/stallwarning_on overlays are
+/// (needle.tif, pivot at the origin, tip +y — the tapered pointer silhouette is the
+/// texture's alpha channel, which only the rtexture-tier archives carry; the
+/// weapon-gauge arrows are instead shaped by their 5-vertex mesh), the
+/// lowalt_on/stallwarning_on overlays are
 /// the lit warning window plus two red bezel slashes (redhilite), and each
 /// damage zone (nosedamage/taildamage/leftwingdamage/rightwingdamage) is a
 /// border bar (greenhilite) plus a part-shaped hatch fill (grn_hatchptrn, tiled
@@ -74,23 +76,9 @@ public sealed partial class GaugeCluster : Control
     private const float MissileRadius = 85f;
     private const float GunCenterFromRight = 420f, GunCenterY = 918f, GunRadius = 85f;
 
-    // The needle texture's shaft is a flat full-width slab (32×128, no alpha; the hub
-    // box with its two black discs fills the tail rows), but the original renders a
-    // slim pointer that tapers to a point at the tip (reference: the HUD screenshot
-    // zooms). That shape is made engine-side — it is in neither the texture colors
-    // nor the mesh/UVs — so the remake shapes it at load: shaft texels get an alpha
-    // mask tapering linearly from the widest point near the hub to a point at the
-    // tip; the hub rows stay fully opaque (an earlier black color-key erased the hub
-    // discs — never key this texture). Profile constants are TUNE (eyeballed against
-    // the user's zoomed original altimeter).
-    private const float NeedleHubStartFrac = 76f / 128f; // shaft rows above, hub box below
-    private const float NeedleMaxHalfFrac = 0.65f;       // widest half-width / texture half-width
-    private const float NeedleTaperEndFrac = 0.9f;       // taper spans this much of the shaft
-
     private static readonly Vector2 AltCenter = new(425.5f, 1108.5f);
     private static readonly Vector2 DmgCenter = new(426.5f, 1299f);
     private static readonly Vector2 MissileCenter = new(425.5f, 918f);
-    private static readonly Dictionary<string, Texture2D?> ShapedNeedles = new(StringComparer.OrdinalIgnoreCase);
 
     // flat indicator tints when a colour-variant png is missing from the archive
     private static readonly Color[] IndicatorFlat =
@@ -337,7 +325,7 @@ public sealed partial class GaugeCluster : Control
             {
                 Points = pts,
                 Uvs = uvs,
-                Tex = texName.Length > 0 ? FindGaugeTexture(textures, texName) : null,
+                Tex = texName.Length > 0 ? textures.Find(texName) : null,
                 Priority = poly.Priority,
                 TexName = texName,
             });
@@ -364,44 +352,6 @@ public sealed partial class GaugeCluster : Control
             i--;
         }
         return i < name.Length && int.TryParse(name[i..], out var n) ? n : 0;
-    }
-
-    private static Texture2D? FindGaugeTexture(TextureArchive textures, string texName)
-    {
-        var baseName = System.IO.Path.GetFileNameWithoutExtension(texName);
-        bool isNeedle = baseName.Equals("needle", StringComparison.OrdinalIgnoreCase);
-        if (isNeedle && ShapedNeedles.TryGetValue(baseName, out var cached))
-            return cached;
-        var tex = textures.Find(texName);
-        if (!isNeedle || tex == null)
-            return tex;
-
-        var img = tex.GetImage();
-        img.Convert(Image.Format.Rgba8);
-        int w = img.GetWidth(), h = img.GetHeight();
-        int hubStart = (int)(h * NeedleHubStartFrac);
-        float cx = (w - 1) / 2f;
-        float maxHalf = w / 2f * NeedleMaxHalfFrac;
-        for (int y = 0; y < hubStart; y++)
-        {
-            float hw = maxHalf * Mathf.Min(1f, y / (hubStart * NeedleTaperEndFrac));
-            var slab = img.GetPixel(w / 4, y); // a mid-slab texel left of the notch
-            for (int x = 0; x < w; x++)
-            {
-                var c = img.GetPixel(x, y);
-                // the texture's darker center notch would survive the taper as a
-                // split "tweezer" tip — the original tip is solid, so fill the notch
-                // with the shaft color (invisible at game scale anyway)
-                if (Mathf.Abs(x - cx) <= 3f && c.R < slab.R - 0.05f)
-                    c = slab;
-                float a = Mathf.Clamp(hw - Mathf.Abs(x - cx) + 0.5f, 0f, 1f);
-                img.SetPixel(x, y, new Color(c.R, c.G, c.B, c.A * a));
-            }
-        }
-        img.GenerateMipmaps();
-        var shaped = ImageTexture.CreateFromImage(img);
-        ShapedNeedles[baseName] = shaped;
-        return shaped;
     }
 
     /// <summary>The dials are measured off HUD.png as absolute 1440p-reference y coordinates, but
@@ -545,7 +495,7 @@ public sealed partial class GaugeCluster : Control
                 var polys = MeshPolys(gz, textures, child);
                 if (polys.Count > 0)
                 {
-                    geom.Arrow = polys[0]; // a single needle quad
+                    geom.Arrow = polys[0]; // a single arrow-shaped polygon (5 verts, tip +y)
                 }
             }
             else if (name.StartsWith(prefix + "indicator", StringComparison.Ordinal))

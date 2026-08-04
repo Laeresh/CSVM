@@ -343,8 +343,6 @@ unscheduled.
   hit — `FlightController.Crash()` touches audio, fireball, breakup and visibility and never calls
   into `Gauges`. So the all-red state is not a crash behaviour being mis-fired; it is the ordinary
   damage path left latched. Check what the original shows on a crash before wiring anything.
-- `BL-048` **Gauge needles are the wrong shape** — they come from the game's own HUD textures. Could be
-  drawn procedurally instead in a future Hi-Def mode.
 - `BL-050` **`OBJECT_MOTION_FROM_TO`'s `*_delta` channels are silently dropped — all 26 of them.**
   `FromToMotion.Channel` reads a channel as `data.Obj(name)` and then looks for `from`/`to` keys.
   The absolute channels ship that shape (919/919 `rotate`, 401/401 `translate`, 663/663 `scale` all

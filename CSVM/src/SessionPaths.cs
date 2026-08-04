@@ -7,8 +7,9 @@ namespace CSVM;
 /// extraction paths (gamez / texture / zrdr) under a data root, preferring an unpacked sibling
 /// folder over its <c>.zip</c>. Extracted from <see cref="CSVM.Session.GameSession"/> so
 /// <c>--anim-lab</c> resolves the same paths a normal session
-/// does. Pure path arithmetic — the only I/O is <see cref="PreferUnzipped"/>'s directory-exists
-/// probe.
+/// does. Path arithmetic plus two directory probes: <see cref="PreferUnzipped"/>'s
+/// directory-exists check and <see cref="ChapterTextures"/>'s scan for the top
+/// <c>rtextureN</c> tier.
 ///
 /// <para>The <c>--gamez=</c>/<c>--textures=</c>/<c>--zrdr=</c>/<c>--sounds=</c> CLI overrides are
 /// the caller's policy and stay in <see cref="CSVM.Session.GameSession"/>; this class only builds the default
@@ -25,10 +26,31 @@ public static class SessionPaths
         return Directory.Exists(dir) ? dir : zipPath;
     }
 
-    /// <summary>The chapter's texture archive (<c>extracted/&lt;chapter&gt;/texture.zip</c>) — the
-    /// plane skins and world textures for that chapter.</summary>
-    public static string ChapterTextures(string dataRoot, string chapter) =>
-        PreferUnzipped(Path.Combine(dataRoot, "extracted", chapter, "texture.zip"));
+    /// <summary>The chapter's texture archive — the plane skins and world textures. Prefers the
+    /// chapter's top-budget <c>rtextureN</c> set (<c>N</c> ≈ the set's size in MB of late-90s
+    /// texture memory; every chapter ships 2/4/6/8 plus one full-quality tier) over
+    /// <c>texture.zip</c>: the tiers are what the original renders, and hundreds of same-name,
+    /// same-size textures differ in content from the base archive — the gauge needles only carry
+    /// their painted alpha silhouette there.</summary>
+    public static string ChapterTextures(string dataRoot, string chapter)
+    {
+        var dir = Path.Combine(dataRoot, "extracted", chapter);
+        string best = "texture";
+        int bestN = -1;
+        if (Directory.Exists(dir))
+        {
+            foreach (var entry in Directory.EnumerateFileSystemEntries(dir, "rtexture*"))
+            {
+                var name = Path.GetFileNameWithoutExtension(entry);
+                if (int.TryParse(name.Substring("rtexture".Length), out int n) && n > bestN)
+                {
+                    bestN = n;
+                    best = name;
+                }
+            }
+        }
+        return PreferUnzipped(Path.Combine(dir, best + ".zip"));
+    }
 
     /// <summary>The chapter's world GameZ (<c>extracted/&lt;chapter&gt;/gamez.zip</c>) — the single
     /// <c>world1</c> node and everything under it.</summary>

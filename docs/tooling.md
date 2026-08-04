@@ -15,19 +15,32 @@ Populated by `ExtractAssets.ps1`, mirroring the game's own ZBD folder structure:
 `rimage.zip`, plus per-chapter `C1/gamez.zip`, `C1/texture.zip`, `C1/rtexture*.zip`, `C1/zrdr.zip`,
 and per-mission `C1/IA1/zrdr.zip`.
 
-The viewer's defaults read `planes.zip`, `C1/gamez.zip`, `C1/texture.zip`, `zrdr.zip` and
+The viewer's defaults read `planes.zip`, `C1/gamez.zip`, the chapter's top texture tier (below),
+`zrdr.zip` and
 `soundsh.zip` — but for each default it **prefers the unpacked sibling folder when present** (it
-reads `extracted/C1/texture/` over `C1/texture.zip`). So running `ExtractAssets.ps1 -Unzip`, or
+reads `extracted/C1/rtexture15/` over `C1/rtexture15.zip`). So running `ExtractAssets.ps1 -Unzip`,
+or
 unzipping just the archives you want to grep in the editor, makes the viewer load loose files and
 skip zip decompression. All four loaders (`GameZ`, `TextureArchive`, `Zrdr`, `SoundArchive`) accept
 a zip or a directory; an explicit `--gamez=`/`--textures=`/`--zrdr=`/`--sounds=` is used verbatim.
 
-**The `rtexture*`/`rimage` archives are NOT loaded, by design** (verified Run-2 item 2): each
-`rtextureN.zip` is a **downscaled quality tier** of the same texture set, not a hi-res replacement.
-Measured across all 896 C5 textures: `texture` == `rtexture14` (both max-res), `rtexture2` = ¼,
-`rtexture4/6/8` = ½, and no rtexture file ever exceeds `texture` — so the base `texture.zip` the
-viewer loads is already the highest resolution available. `rimage.zip` is the UI/HUD image set
-(crosshairs, buttons, cursor, menu splash, briefing thumbnails), with no world geometry textures.
+**Chapter textures load from the top `rtextureN` tier, falling back to `texture.zip`**
+(`SessionPaths.ChapterTextures`, 2026-08-04). The `N` in `rtextureN` is a **size budget in MB of
+video-card texture memory** (the file sizes give it away: rtexture2 ≈ 1.95 MB, rtexture4 ≈ 3.85,
+rtexture6 ≈ 5.7, rtexture8 ≈ 7.65 in every chapter); each chapter ships the 2/4/6/8 tiers plus one
+full-quality tier sized to whatever it needs (`rtexture15`/`11`/`10`/`14`/`9`/`12`/`14`/`14` for
+C1…C5). ⚠ **The tiers are not mere downscales of `texture.zbd`, and resolution comparison misses
+that**: the top tier holds the identical 881-file set at identical dimensions (C1, verified
+per-file), but **301 of them differ in pixel content and five in pixel format** — `needle`,
+`smallneedle`, `steps`, `tarmac_lines`, `bal_taillogo` are RGBA there and RGB in `texture.zbd` —
+and the tier copies are richer (more color levels, painted alpha), never worse. The gauge needle's
+tapered-pointer silhouette exists **only** in the tier copies' alpha (see `docs/formats/hud.md`);
+the original engine picks a tier by texture memory and plainly renders the tier art, so
+`texture.zbd` looks like an older build of the set that the shipped game never draws. An earlier
+note here said the rtextures are "not loaded, by design" after measuring C5 *dimensions*
+(`texture` == `rtexture14` max-res, `rtexture2` = ¼, `rtexture4/6/8` = ½) — true of resolution,
+wrong about content. `rimage.zip` is still not loaded: it is the UI/HUD image set (crosshairs,
+buttons, cursor, menu splash, briefing thumbnails), with no world geometry textures.
 
 **`extracted/rof/`** is produced by the separate `ExtractRof.ps1`, not `ExtractAssets.ps1`, and
 holds the unpacked `.rof` UI archives plus `ui_strings.json`. `PatternLibrary` reads the paint

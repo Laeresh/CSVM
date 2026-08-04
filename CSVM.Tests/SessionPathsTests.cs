@@ -43,4 +43,23 @@ public class SessionPathsTests
         var missing = Path.Combine(TestData.TempDir(), "nowhere", "zrdr.zip");
         Assert.Equal(missing, SessionPaths.PreferUnzipped(missing));
     }
+
+    [Fact]
+    public void TheTopRtextureTierBeatsTheBaseTextureArchive()
+    {
+        var root = TestData.TempDir();
+        var chapter = Path.Combine(root, "extracted", "C1");
+        Directory.CreateDirectory(chapter);
+        File.WriteAllText(Path.Combine(chapter, "texture.zip"), "x");
+        File.WriteAllText(Path.Combine(chapter, "rtexture2.zip"), "x");
+        File.WriteAllText(Path.Combine(chapter, "rtexture15.zip"), "x");
+        // numeric, not lexicographic: 15 must beat 2 and 8
+        File.WriteAllText(Path.Combine(chapter, "rtexture8.zip"), "x");
+
+        Assert.Equal(Path.Combine(chapter, "rtexture15.zip"), SessionPaths.ChapterTextures(root, "C1"));
+
+        // and the tier obeys the same unpacked-folder preference as everything else
+        Directory.CreateDirectory(Path.Combine(chapter, "rtexture15"));
+        Assert.Equal(Path.Combine(chapter, "rtexture15"), SessionPaths.ChapterTextures(root, "C1"));
+    }
 }

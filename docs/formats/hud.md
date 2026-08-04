@@ -68,17 +68,19 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   and the *unlit* (dark) LOW ALT / STALL windows; 12-gon corners cut the texture's
   square corners. Draw priority 1.
 - **Needles are single textured quads — the taper and the hub are painted in
-  `needle.tif` (32×128, no alpha, drawn opaque), not meshed.** Quad x −0.055…0.052,
-  y −0.245…0.510 (pivot at the origin, tip +y = texture top; the texture's top 60 %
-  is the light shaft with a notch, the bottom 40 % the dark hub box with two black
-  discs). The altimeter has two: `hundreds` (long, priority 9, z 0.05) and
+  `needle.tif`, not meshed.** Quad x −0.055…0.052,
+  y −0.245…0.510 (pivot at the origin, tip +y = texture top). The altimeter has
+  two: `hundreds` (long, priority 9, z 0.05) and
   `thousands` (short/wider: x ±0.07, y −0.181…0.368, priority 8, z 0.025 — same
   texture); the speedometer one (`speed`, priority 8). The nodes' modeled rest
-  rotations are arbitrary; the engine sets absolute angles. **Note:** the shaft in
-  the texture is a flat full-width slab (rows 0–75 all constant, verified by full
-  sampling), yet the original's rendered needle is a slim lance tapering to a point
-  — that shape is applied engine-side, in neither the texture nor the mesh/UVs (the
-  remake replicates it with a load-time alpha taper).
+  rotations are arbitrary; the engine sets absolute angles. ⚠ **The pointer shape
+  lives only in the `rtexture*` tiers' copy of `needle.tif`** (decoded 2026-08-04):
+  the base `texture.zbd` copy is a 32×128 RGB flat full-width slab with no alpha,
+  but every `rtextureN` tier ships a same-size **RGBA** copy with different art
+  (beveled lance, rimmed hub discs) whose alpha channel is the complete antialiased
+  silhouette — pointed tip, tapering shaft, waist, two hub discs. An earlier note
+  here claimed the shape was applied engine-side; it is simply in the archives the
+  engine actually renders from (see `docs/tooling.md` on the tiers).
 - **Warning overlays** `lowalt_on` / `stallwarning_on` (priority 7 — *under* the
   needles): the lit window quad (`lowalt.tif` / `stall.tif`, 64×32, red) **plus two
   red bezel slashes** (`redhilite.tif` quads at the dial edge, left+right of the
@@ -165,6 +167,9 @@ The functional children, and how `cockpit.gw` drives each:
 - **`ggarrow`/`mgarrow`** — a `smallneedle.tif` pointer (priority 49, rest points
   up at slot 0) rotated about the dial centre to the selected slot: the gun arrow to
   the **selected gun group**, the missile arrow to the **next pylon that will fire**.
+  Unlike the dial needles, the arrow's shape IS its mesh: a single 5-vertex polygon
+  (pointed tip at +y, two shoulders, a base) whose wrapping UVs (u 0.98–2.02,
+  v 0.50–3.10) smear the tiny 16×16 texture across it.
 
 ⚠ The digit/letter/indicator textures (`zero.tif`…, `A.tif`…, `greenindicator.tif`,
 `greenhilite.tif`, `smallneedle.tif`, `gungauge.tif`, `missilegauge.tif`) live in
