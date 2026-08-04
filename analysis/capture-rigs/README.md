@@ -113,5 +113,53 @@ and back down makes ordering and hysteresis visible instead of assumed.
 - Arrow-key scancodes are extended (`sc148`/`sc150`), deliberately not numpad 8/2 — those are the
   camera, and would swing the view mid-measurement.
 
+## `ThrottleSweep.ahk` — `CAP-21`
+
+AutoHotkey v2. **F13** steps throttle up `1`→`9` (0/8 → 8/8) at 5 s per step (~51 s), **F14** the
+same downward (~51 s), **F15** goes `1` then `9` and **F16** `9` then `1` (~16 s each). **F21**
+aborts. Writes `throttle-<mode>-<stamp>-log.txt` next to the script.
+
+Throttle in the original is a discrete 9-position setting on the **main-row** digits, so the sweep
+is a staircase of taps rather than a held axis.
+
+- **The two-point runs are the control, and they are why this is scripted.** The staircase walks the
+  speed range in readable plateaux; F15/F16 traverse *the same speeds* with a different throttle
+  history and a much larger acceleration. If apparent size tracks **speed**, the two must agree
+  wherever their speeds agree; if it tracks **throttle setting** or **acceleration**, they cannot,
+  and the disagreement says which. One gentle hand-flown sweep confounds all three at once.
+- ⚠ **`STEP_S` 5 s is a stall CEILING, not a settling time** (user, 2026-08-04). Held at idle the
+  aircraft bleeds speed and eventually stalls, ending the take, so 5 s is the longest the low end
+  tolerates — not the shortest the measurement needs. **Do not raise it.** That it also falls short
+  of equilibrium is fine and worth knowing so nobody "fixes" it: the pairing this capture needs is
+  (apparent size, airspeed) read off the *same frame*, so a step still accelerating just supplies
+  more distinct speeds per second of footage. Equilibria are `CAP-20`'s job.
+- **The tail is throttle-aware, for that reason.** A flat 3 s tail after `down`/`hi-lo` would leave
+  the aircraft at 0/8 for `STEP_S + TAIL_S` = 8 s, 60% past the budget the 5 s exists to respect. A
+  run ending below `TAIL_MIN_KEY` therefore takes its final step's dwell in full — that step is the
+  near-stall end of the range and the most valuable in the run — then skips the tail and taps
+  `SAFE_KEY` (6 = 5/8) to recover. The recovery is logged *after* the sweep-end marker so it can
+  never be read as a step. Set `RECOVER := false` to be handed the aircraft exactly as it ended.
+- ⚠ **F14 (`down`) is the mode most likely to stall**, and inherently so: it spends 5 s at 1/8
+  *before* its 5 s at 0/8, so it arrives at idle already slow. F16 (`hi-lo`) reaches 0/8 straight
+  from full speed with maximum energy in hand, so if the low end is proving marginal, get it from
+  F16 and treat F14's last step or two as expendable.
+- **Key `0` is not bound to throttle** (user-confirmed, 2026-08-04) — the set is `1`–`9`, nine keys
+  for nine notches. Recorded rather than assumed, as `BL-150`(e) records `Kp5`.
+- ⚠ **Do not touch the camera** — no numpad key, no `+`/`−` distance trim, no view change. Apparent
+  size *is* the measurement. This is also why the rig uses main-row scancodes (`sc002`–`sc00A`) and
+  why numpad scancodes must never appear in it.
+- A flat result closes `BL-248`(a) rather than leaving it open: constant apparent size across the
+  whole speed range disproves the hypothesis, and a correct disproof is a close.
+- `TAP_MS` is 120 ms (~3.6 frames at 30 fps), not the 20 ms a bare `Send` would give — rule 3 again.
+  A 20 ms tap is 0.6 of a frame and a once-per-frame sampler drops steps out of the middle of the
+  staircase silently.
+- Verified 2026-08-04 on AutoHotkey 2.0.26 by a dry run with the key sending stubbed to a recorder:
+  edges land at 3.000 / 8.000 / 13.000 … s to the millisecond, taps measure 120 ms, the emitted
+  scancodes are `sc002`…`sc00A` in the right order, and all three ending cases behave — `down` and
+  `hi-lo` hold exactly 5.0 s at 0/8 then recover, `lo-hi` ends high and keeps its tail. ⚠ As with
+  `pitch_cadence.ahk`, that verifies **timing and ordering, not delivery into the game** — only a
+  real take proves the original saw the taps. Check the first log against the footage before
+  trusting a long run.
+
 ⚠ The rigs must not be run in the same take — they all bind F13, and the analysis keys off one log
 per recording.
