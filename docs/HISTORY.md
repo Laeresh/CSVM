@@ -13755,3 +13755,39 @@ own logs. A separate full `RunTests.ps1 -SkipUnits -SkipEngine` pass confirmed t
 unchanged. New rule `docs/verification.md` **GOLD-7**. `BL-039` deleted from `backlog.md` (no fix
 to the original engine mystery — the deliverable was making a recurrence diagnosable, which it now
 is).
+
+## 2026-08-04 — M3 polish-6 C22 landed: the static collider probe is back, and the off-by-6/11 gap is gone, closing `BL-070`
+
+**What landed.** `analysis/collider-probe/probe.py` — a from-scratch rewrite (the prior
+`.scratch/probe_exempt.py` was gitignored and swept by `CleanScratch.ps1`; no copy exists anywhere,
+including git history). Reads `extracted/<chapter>/gamez/{nodes,models,materials,textures}.json`
+directly and replicates `WorldBuilder.Build` + `SceneBuilder.BuildSubtree`'s collider walk field
+for field: root selection (`world1`'s children + partition grid, undeduplicated between the two,
+matching `WorldBuilder.cs:216-218`), `SkipWorldNode`, nearest-LOD-only, `NoCollisionNode`'s
+subtree-inherited exemption, and — the detail a naive node-count probe would miss —
+`CollidersForMesh`'s per-surface-class split, so a node can predict 0/1/2/3 colliders depending
+how many of water/buildings/untagged its own polygons touch. No engine code changed.
+
+**The gap: measured gone, not re-explained.** The 2026-07-22 measurement (this file, "Polish-3
+item 5") found the old probe under-predicted by 6 (C4) / 11 (C5) against the runtime. Re-run
+against today's build (`--freecam --collision` via `RunProbe.ps1`, all 8 chapters), the new probe
+matches the printed `loaded ...: N colliders` line **exactly on 8 of 8 chapters** — C1 1991, C1B
+1046, C1C 1324, C2 1239, C2B 957, C3 1730, C4 1852, C5 3569, all bit-for-bit. The Verify step's
+explicit alternative to "reproduced-and-explained" is "measured gone," and that's what happened:
+the 2026-07-22 counts (C4 2545/C5 4253 final) predate `597101f`'s per-surface-class collider split
+(replacing an area-weighted single-vote-per-mesh classifier), `85c67b2`'s `intersect_surface`
+honouring, `7c82b80`'s marker-gizmo mesh suppression, and this plan's own Wave A — any of which
+could move a chapter total by single digits, and DIAG-6 (correlation is not a mechanism) argues
+against picking one without isolating it when the outcome the item asks for is already satisfied
+without it. One candidate — marker gizmos losing their collider — was checked directly
+(`marker_check.py`) and only partially fits (3 in C4, 1 in C5, not 6/11), so it's recorded as
+ruled-inconclusive rather than claimed as the cause. Full writeup:
+`analysis/collider-probe/FINDINGS.md`.
+
+**Also confirmed, not modelled:** `ClutterBuilder`'s collision (3D city-block decorations,
+region-attached shared shapes) never touches `SceneBuilder.ColliderCount` — its decoration
+subtrees are parentless and unreferenced by `world1`, so `WorldBuilder`'s placed-node walk never
+reaches them. Read both call paths to confirm rather than assumed; documented as a one-line
+addendum to `WorldBuilder.cs`'s `docs/architecture.md` entry so it isn't re-chased. `BL-070`
+deleted from `backlog.md` (its first bullet, the `poleflare` billboard-axis TUNE, remains open —
+needs an original-game A/B, out of this item's scope).

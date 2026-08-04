@@ -393,6 +393,10 @@ Splits the overcast deck into
 textures, billboards, and any node with gamez `intersect_surface` false — the original's own
 collision flag, false on props/debris/effects/glows and the C3 spiderweb (docs/formats/gamez.md);
 honouring it is what lets the plane fly through the web and wreck debris as the original does.
+A static probe re-deriving this walk from `extracted/` alone (`analysis/collider-probe/probe.py`)
+reproduces `SceneBuilder.ColliderCount` exactly on all 8 chapters (`BL-070`); it deliberately does
+not model `ClutterBuilder` — clutter's decoration subtrees are parentless and never reached by this
+walk, so their colliders (a wholly separate `BodyAddShape` mechanism) never counted here either.
 `Add` skips a world-build root outright when gamez `flags.active` is false (default true when
 absent) — the build script's own `NodeSetActive` record; `BuildNode` (`--node=`) deliberately does
 not check it, since the caller named the subtree explicitly.

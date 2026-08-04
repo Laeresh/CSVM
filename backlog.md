@@ -608,33 +608,17 @@ unscheduled.
     health 40`). `PlaneStats` does not read either. The model is **armour-first, then health**
     (see `docs/plans/PLAN-M3-weapons.md` C23 for the dominance argument that settles it).
 
-- `BL-070` **Residuals from polish-3 item 5 (2026-07-22) — all small, all deliberate.** *(Three of the
-  original five — the `csky_fog_on` uniform ordering, the missing `csky_opacity`, and
-  `FlightController`'s dead soft-tree branch — were scheduled into `docs/plans/PLAN-M2-polish-4.md`
-  items 10 and 6 on 2026-07-22. These two remain.)*
-  - **C5's `poleflare` clutter renders with the wrong billboard axis.** The `cblock*` templates
-    ship `lightpole` (`CylindricalY`) posts *and* `poleflare` (`SphericalY`) glows — 33,682 of
-    each in `cblock1` alone. `ClutterBuilder.Kind` carries no per-kind billboard mode, so every
-    kind goes through the one Y-axis shader: the glows spin upright instead of facing the camera,
-    and they get the SUNLIGHT night dim a light source should be exempt from. Now *detectable*
-    (the shared `SceneBuilder.ClassifyBillboard` distinguishes the two), but fixing it means
-    giving `Kind` a billboard mode and a second material path, and it changes how 139,388 C5
-    sprites look with no reference shot to check against — so it needs an original-game A/B.
-  - **Static collider probe is off by 6 (C4) and 11 (C5).** The probe replicated the world walk
-    and reproduced the runtime collider counts *exactly* in 6 of 8 chapters, but predicted
-    slightly more billboard exemptions than the game applies in those two. The safety conclusion
-    is unaffected (the probe's candidate list is a superset and contains nothing solid), but the
-    gap is unexplained rather than benign-by-proof. **⚠ Corrected 2026-07-22:
-    `.scratch/probe_exempt.py` NO LONGER EXISTS** — `CleanScratch.ps1` swept it and `.scratch/` is
-    gitignored, so there is no copy in git either. **Picking this up means rewriting the probe
-    first**, which is why it was considered and dropped from polish run 4. When rewritten, the
-    surface it must match is `WorldBuilder.NoCollisionNode` (`WorldBuilder.cs:69-70`) =
-    `MeshUsesTexture(n, IsNonSolidSkyTexture) || IsBillboardNode(n)`; the likeliest source of the
-    divergence is `IsBillboardNode` (`:99-109`), which does a node→`MeshIndex` hop and falls back
-    to a 1-polygon flare-texture test, **plus the fact that the exemption is inherited by the whole
-    subtree** (`SceneBuilder.cs:337` region, via `BuildSubtree` at `WorldBuilder.cs:353`). Two
-    later changes a rewritten probe must also model: clutter collision was removed outright, and
-    city-block clutter uses merged/shared shapes.
+- `BL-070` **C5's `poleflare` clutter renders with the wrong billboard axis** (one of two residuals
+  from polish-3 item 5, 2026-07-22; the other — the static collider probe's off-by-6/11 — closed
+  2026-08-04, `docs/HISTORY.md` "M3 polish-6 C22", with a rewritten probe now committed at
+  `analysis/collider-probe/`). The `cblock*` templates ship `lightpole` (`CylindricalY`) posts
+  *and* `poleflare` (`SphericalY`) glows — 33,682 of each in `cblock1` alone. `ClutterBuilder.Kind`
+  carries no per-kind billboard mode, so every kind goes through the one Y-axis shader: the glows
+  spin upright instead of facing the camera, and they get the SUNLIGHT night dim a light source
+  should be exempt from. Now *detectable* (the shared `SceneBuilder.ClassifyBillboard` distinguishes
+  the two), but fixing it means giving `Kind` a billboard mode and a second material path, and it
+  changes how 139,388 C5 sprites look with no reference shot to check against — so it needs an
+  original-game A/B.
 
 - `BL-071` **Skybox colour grading.** No tint, grade or tonemap is applied to the skydome anywhere —
   `WorldBuilder.BuildHorizon` only disables shadows, billboards the moon and disables light

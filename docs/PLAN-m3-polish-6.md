@@ -92,7 +92,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — instruments
 
 21. ☑ C21 `BL-039` — make the silent golden-run exit-1 capturable
-22. ☐ C22 `BL-070` — rewrite the static collider probe; explain the off-by-6/11
+22. ☑ C22 `BL-070` — rewrite the static collider probe; explain the off-by-6/11 *(rewritten, gap measured gone)*
 
 ### Wave D — decisions
 
@@ -463,7 +463,7 @@ attempt's `.log`/`.log.out`/`.log.err` plus `report.txt` (`exit=-1 png=False las
 1.4.341 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce RTX 5080`) — the next shot's own
 `.log` did not touch it. New rule `docs/verification.md` **GOLD-7**.
 
-## C22 ☐ `BL-070` — rewrite the static collider probe; explain the off-by-6/11
+## C22 ☑ `BL-070` — rewrite the static collider probe; explain the off-by-6/11
 
 **Goal.** The collider probe (swept from `.scratch/`, no copy anywhere) exists again as a
 committed `analysis/` instrument, reproduces the runtime collider counts in all 8 chapters, and
@@ -492,6 +492,23 @@ build; cite the log line), and the C4/C5 divergence either reproduced-and-explai
 (`PLAN-planeviewer-split` moved builder code) — re-locate `NoCollisionNode`/`IsBillboardNode` by
 name, not by line. `--freecam` and golden modes build **no world colliders at all**
 (`SessionSpec.BuildsCollision`) — probe against a mode that builds them.
+
+**Landed 2026-08-04.** `analysis/collider-probe/probe.py`, a from-scratch rewrite against
+`extracted/` JSON (the old `.scratch/probe_exempt.py` had no copy anywhere, including git
+history). Re-derives `WorldBuilder.NoCollisionNode`'s subtree-inherited exemption AND
+`SceneBuilder.CollidersForMesh`'s per-surface-class split (the detail a node-count-only probe
+would miss). Verified against a fresh `--freecam --collision` run (`RunProbe.ps1`) per chapter:
+**exact match on all 8** (C1 1991, C1B 1046, C1C 1324, C2 1239, C2B 957, C3 1730, C4 1852, C5
+3569). The C4/C5 gap is the Verify step's "measured gone" outcome, not reproduced-and-explained —
+the 2026-07-22 baseline predates several collision-affecting changes (the per-surface-class
+collider split itself, `intersect_surface` honouring, marker-gizmo mesh suppression, this plan's
+own Wave A), and one candidate (marker gizmos) was checked and only partially fits (3/1 vs 6/11),
+so no single cause is claimed. Confirmed by reading both code paths, not assumed: `ClutterBuilder`
+collision never touches `SceneBuilder.ColliderCount` (clutter's decoration subtrees are parentless,
+so `WorldBuilder`'s walk never reaches them) — the probe correctly doesn't model it. Full record:
+`analysis/collider-probe/FINDINGS.md`. `docs/architecture.md`'s `WorldBuilder.cs` entry gets a
+pointer to the probe. `BL-070`'s collider-probe bullet deleted from `backlog.md`; its `poleflare`
+billboard-axis bullet (an unrelated TUNE needing an original-game A/B) stays open under the same ID.
 
 # Wave D — decisions
 
