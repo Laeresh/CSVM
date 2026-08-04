@@ -354,31 +354,48 @@ extracted data before being logged, so the mechanism is recorded here and not re
      so any global name binding can grab the wrong nodes.
   Also authored on the death and worth confirming while in there: the `air_mixed_exp_sg` one-shot
   (D31 death audio is still stubbed engine-wide).
-- `BL-254` **`gate1`/`gate2` die in one stage instead of the original's two — the archway swaps to
-  its wreck at t=0 and the passage opens immediately.** In the original the studio-gate death is
-  staged: the doors fall (rotate 88° over ~1 s, fade 5.5 s) and the fires start, and only later
-  does the archway explode — split into seven tumbling pieces that fly away. The data authors
-  exactly that for **gate2**: `gate2_doorblast` ends with `CALL_ANIMATION blockit2 START_TIME
-  EVENT_OFFSET 28.5` (`extracted/C2/zrdr/studiogate_doors.zrd.json`; the compiled
-  `gate2-gate2_doorblast-doors.json` carries the call), and `blockit2`'s `states_effects` is where
-  the healthy→destroyed swap lives, alongside `large_fireball` and `fly_part1`–`fly_part7`.
-  `gate?_doorblast` itself authors **no swap** — so `AnimRuntime.RunDeathSequence`
-  (`AnimRuntime.cs:2953`) unconditionally runs the `ApplyDeathSwap` RESET-derived fallback and
-  swaps healthy→destroyed **at t=0**: the C25 `col[off 1, on 8]` measurement is this fallback
-  firing, the archway stops blocking flight the moment the gate dies (the user flew through with
-  only the doors down), and the `blockit2` explosion — if its +28.5 s call runs at all — plays
-  against an already-swapped wreck. Fix shape: the fallback must not fire when the death *chain*
-  authors the swap in a called def; the swap, wreck colliders, fireball and flying parts should
-  all arrive together when `blockit2` runs (verify the engine honours the 28.5 s `EVENT_OFFSET`
-  on a `CallAnimation`, and that `blockit2`'s OnCall def is reachable on the world runtime).
-  ⚠ **Traps.** (a) `gate1` has NO `blockit` counterpart anywhere in the shipped C2 data —
-  `gate1_doorblast` calls only its two `large_30sec_fire`s. The user recalls both gates exploding
-  their archway in the original; either the original derives gate1's stage two some other way or
-  the recollection conflates the gates — needs an original A/B before touching gate1, and until
-  then removing the fallback for chain-authored swaps must not leave gate1 with no swap at all.
-  (b) `gate2`'s death also calls `go_get_her` (mission scripting) — leave it to whatever handles
-  it today; this item is the swap timing only. (c) The 28.5 s offset reads long but is what is
-  authored — A/B the original's timing rather than "fixing" the number.
+- `BL-254` **`gate2`'s staged death landed (2026-08-04); the in-cockpit playtest and the gate1
+  original-A/B question are still owed.** Was: the archway swapped to its wreck at t=0 and the
+  passage opened immediately, instead of the authored two-stage death (doors fall, fires start,
+  and only 28.5 s later does the archway explode into seven tumbling pieces). Root cause was two
+  bugs, not one: (1) `AnimRuntime.RunDeathSequence`'s `ApplyDeathSwap` RESET-derived fallback fired
+  unconditionally, pre-empting `blockit2`'s authored swap; (2) `gate2_doorblast`'s own
+  `INVALIDATE_ANIMATION gate2_doorblast` (a self-reference — the data's "consume the trigger"
+  idiom) tore its OWN instance down mid-construction, which orphaned the pending `CALL_ANIMATION
+  blockit2 START_TIME EVENT_OFFSET 28.5` before it could ever fire AND discarded the door/fire
+  motions the sequences below it had just registered in the same t=0 burst — so even the doors
+  never actually animated. Fixed: `ChainedSwapTarget` (`AnimRuntime.cs`) resolves one level of
+  `CALL_ANIMATION` targets the same way the dispatcher itself does and skips `ApplyDeathSwap` when
+  a target authors the swap (`AuthorsSwap`, matching the exact role words `ApplyDeathSwap` already
+  used); `Start` gained an opt-in `protectSelfInvalidate` flag (`_startingInstances`, a stack
+  pushed/popped around its own t=0 burst) that makes a same-name SELF
+  `STOP_ANIMATION`/`INVALIDATE_ANIMATION` a no-op while that exact instance is still
+  mid-construction — only `RunDeathSequence`'s own `Start` call asks for it, so the cross-instance
+  case (a nested `CALL_ANIMATION` stopping its caller) and the ambient world boot's own
+  self-invalidating startup anims are untouched (first cut scoped the guard to every `Start` call
+  and moved the `c2-city` golden — C2's boat/car `*_start` anims self-invalidate too — narrowing it
+  to opt-in brought the golden back byte-identical). `ResetDestructible` now also stops and
+  restores the rest pose of the chained def (`Instance.ChainedDeathDef`), so a reset before OR
+  after the 28.5 s point is still idempotent. Verified headlessly (`--debug-damage`) on C2: killing
+  `gate2` leaves the archway `swap[healthy shown]`/`col[off 0, on 0]` (deferred, by design) and the
+  doors visibly fading/rotating uninterrupted; advancing past 28.5 s produces
+  `debris[+7]`/`sounds[+1]` (the swap, `large_fireball` and the seven flying pieces firing
+  together); reset before and after 28.5 s returns it to healthy and re-kills in the same hit
+  count. `gate1` (no `blockit` counterpart, untouched code path) and `kkgate` still swap
+  immediately and unchanged (`col[off 2, on 13]` / `col[off 4, on 0]`); the C1 water tower and
+  `m_build01` are covered by the `damage-hd` suite, which stayed green. `.\RunTests.ps1`: build,
+  423 unit tests, 22 engine suites, all 13 goldens hash-identical.
+  ⚠ **Still open.** (a) The in-cockpit playtest of the staged death — flying gate2 in `--fly` to
+  confirm the doors visibly fall before the archway blows, and that the passage only truly opens
+  once the wreck's colliders replace the healthy ones. (b) `gate1` has NO `blockit` counterpart
+  anywhere in the shipped C2 data — `gate1_doorblast` calls only its two `large_30sec_fire`s, and
+  keeps the immediate RESET-derived fallback (unchanged by this fix, deliberately — see the plan's
+  trap). The user recalls both gates exploding their archway in the original; either the original
+  derives gate1's stage two some other way or the recollection conflates the gates — needs an
+  original A/B before touching gate1. (c) `gate2`'s death also calls `go_get_her` (mission
+  scripting) — left to whatever handles it today; this item was the swap timing only. (d) The
+  28.5 s offset reads long but is what is authored — A/B the original's timing rather than "fixing"
+  the number.
 
 ### Surfaces, colliders and inspect tools (from the Wave D playtest, 2026-07-25)
 

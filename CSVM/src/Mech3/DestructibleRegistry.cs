@@ -167,5 +167,13 @@ public sealed class DestructibleRegistry
         /// increases (C22 escalates, never heals), so a stage effect fires exactly once; a reset
         /// (C28) puts it back to 0.</summary>
         public int DamageStage { get; set; }
+
+        /// <summary>Set when the death CHAIN authors the healthy→destroyed swap in a
+        /// <c>CALL_ANIMATION</c> target (gate2's <c>blockit2</c>) rather than in this def's own
+        /// sequences — so <c>ApplyDeathSwap</c>'s fallback yielded and the swap, wreck colliders,
+        /// fireball and flying debris all arrive when the chained call fires. A reset (C28) must
+        /// stop this def too (its own pending scheduled call, or its already-run motions) and
+        /// restore the pose of whatever it moved.</summary>
+        public AnimDefinition? ChainedDeathDef { get; set; }
     }
 }

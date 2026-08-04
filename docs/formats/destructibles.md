@@ -224,6 +224,17 @@ which pieces that covers. A format reader should know the current wiring:
     declares a `destroyed` node, so an object with no destroyed variant (a mission gun that dies by
     effect alone, `noseballgun`) is left intact rather than blanked. It reads the def's explicit
     RESET targets, never a world-wide name scan (the `ref_tank_dest` trap below).
+    - **The fallback yields when the death CHAIN authors the swap one level down, in a
+      `CALL_ANIMATION` target.** C2's `gate2` is the example: `gate2_doorblast` authors no swap
+      itself and ends with `CALL_ANIMATION blockit2 START_TIME EVENT_OFFSET 28.5`, and `blockit2`
+      (an OnCall def) is where the swap, `large_fireball` and the seven flying archway pieces
+      actually live. Firing the RESET-derived fallback at t=0 there blanked the wreck 28.5 s before
+      the authored explosion got to run against it (`BL-254`); `AnimRuntime` now resolves one level
+      of `CALL_ANIMATION` targets the same way the dispatcher itself does and skips the fallback
+      when a target authors the swap, so it arrives with the rest of `blockit2`'s effects instead.
+      `gate1` has **no** such target — `gate1_doorblast` calls only its two fires — so it keeps the
+      immediate RESET-derived fallback; the two studio gates are deliberately asymmetric in the
+      shipped data.
   - `reng11`'s wreck is a separately-`CALL_ANIMATION`'d template (`mp1reng_destroyed.flt`), not a
     child of the anchor — it stages correctly, alongside its `large_fireball`.
 - **The debris tumbles (C26).** The wreck pieces fly: on death the def's `OBJECT_MOTION` events —
@@ -286,10 +297,14 @@ which pieces that covers. A format reader should know the current wiring:
   `SetSubtreeActive`, which disables/enables the subtree's *colliders* alongside its visibility — so
   the death that hides the healthy geometry also stops it blocking flight, and the wreck it shows
   becomes solid, with **no separate collider code**. Measured on the C2 (Hollywood) gates: killing
-  `gate1`/`gate2` (the studio doors) switches **off 1** healthy collider and **on 8** wreck ones;
-  killing `kkgate` switches off 4 and on 12 (it also chains the bridge fires). C1 buildings match
-  (`m_build01`: off 1, on 10). The one caveat is the **owed in-flight playtest**: the destroyed
-  variant re-adds its own colliders, so whether a blown-open door actually leaves a clear passage is
+  `gate1` switches **off** its healthy collider and **on** the wreck ones immediately; killing
+  `kkgate` does the same (it also chains the bridge fires). C1 buildings match (`m_build01`).
+  **`gate2` is the one exception, since `BL-254` (2026-08-04):** its swap — and so its collider
+  flip — is deferred to `blockit2`, the `CALL_ANIMATION` `gate2_doorblast` schedules 28.5 s into
+  the death; a census taken at kill time reads no change at all (`off 0, on 0`), by design — see
+  the RESET_STATE-fallback bullet above. The one caveat for the rest is the **owed in-flight
+  playtest**: the destroyed variant re-adds its own colliders, so whether a blown-open door
+  actually leaves a clear passage is
   the original data's call, not something the swap can decide — fly through one to confirm.
   - **The propane→door chain works end to end.** Hollywood's `kkgate` is a WeaponHit destructible
     whose `ANIMATION_ROOT_NAME` is the **`propane` tank** (a collidable, therefore shootable node),

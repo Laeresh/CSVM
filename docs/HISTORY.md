@@ -14165,3 +14165,35 @@ dispatch lag re-deferred with a fresh measurement (B12), the silent golden-run e
 capturable (C21), the static collider probe rewritten and its C4/C5 gap measured gone (C22), and
 this decision (D31). Archived under `docs/plans/`; its row is in
 [`docs/plans/plans.md`](plans/plans.md).
+
+**`BL-254`: C2 gate2's two-stage death lands (2026-08-04).** Was: killing the studio gates opened
+the passage in one stage instead of the authored two — the archway swapped to its wreck at t=0
+(`AnimRuntime.ApplyDeathSwap`'s RESET-derived fallback firing unconditionally), pre-empting
+`blockit2` (`gate2_doorblast`'s `CALL_ANIMATION blockit2 START_TIME EVENT_OFFSET 28.5`), the
+OnCall def that actually carries the swap, `large_fireball` and the seven flying archway pieces.
+Diagnosis turned up a second bug behind the first: `gate2_doorblast`'s own `INVALIDATE_ANIMATION
+gate2_doorblast` (a same-name self-reference — the data's "consume the trigger" idiom) tore its
+own instance out of `AnimRuntime`'s live-instance list mid-construction, which orphaned the
+pending `blockit2` call before it could ever fire *and* discarded the door/fire motions the
+sequences below it had just registered in the same t=0 burst — so even the doors never actually
+animated. Fixed both: `ChainedSwapTarget` resolves one level of `CALL_ANIMATION` targets (the
+same lookup the dispatcher itself uses) and skips `ApplyDeathSwap` when a target authors the swap;
+a `Start`-scoped `protectSelfInvalidate` opt-in (`_startingInstances`, a stack) makes a same-name
+self stop a no-op while that exact instance is still mid-burst, without touching the
+cross-instance case (a nested `CALL_ANIMATION` stopping its caller) or the ambient world boot's
+own self-invalidating startup anims — the guard defaults off, and only the death path
+(`RunDeathSequence`) opts in. `ResetDestructible` now also stops and restores the rest pose of the
+chained def (`DestructibleRegistry.Instance.ChainedDeathDef`), so a reset before or after the
+28.5 s point stays idempotent. Verified headlessly (`--debug-damage` on C2): killing `gate2`
+leaves the archway `swap[healthy shown]`/`col[off 0, on 0]` (deferred, by design) and the doors
+visibly fading/rotating uninterrupted; advancing past 28.5 s produces `debris[+7]`/`sounds[+1]`
+(the swap, `large_fireball` and the seven flying pieces firing together); reset before and after
+28.5 s returns it to healthy and re-kills in the same hit count. `gate1` (no `blockit`
+counterpart) and `kkgate` still swap immediately, unchanged (`col[off 2, on 13]` /
+`col[off 4, on 0]`). First attempt at the self-invalidate fix scoped the guard to every `Start`
+call, which moved the `c2-city` golden (the C2 boat/car `*_start` startup anims are ALSO
+self-invalidating, and the guard let their motions run when they previously didn't) — narrowed to
+opt-in and the golden came back byte-identical. `.\RunTests.ps1`: build, 423 unit tests, 22 engine
+suites and all 13 goldens green. Still owed: the in-cockpit playtest of the staged death, and an
+original A/B on whether `gate1` derives its own stage two some other way (`gate1_doorblast` calls
+only its two fires in the shipped data) — `BL-254` stays open for both.

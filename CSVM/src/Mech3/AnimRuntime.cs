@@ -341,6 +341,24 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private readonly List<AnimInstance> _instances = new();
 
+    // The instance whose OWN t=0 burst is directly dispatching right now, one entry per nested
+    // CALL_ANIMATION level (bounded by MaxStartDepth), paired with whether THIS Start call opted
+    // into self-invalidate protection (<see cref="Start"/>'s <c>protectSelfInvalidate</c>) — so a
+    // same-name SELF STOP_ANIMATION/INVALIDATE_ANIMATION authored early in that exact burst (the
+    // data's "consume the trigger" idiom — harmless on its own, since DamageAt already guards
+    // re-entry) cannot tear its own still-unwinding instance down mid-construction: gate2's death
+    // schedules its CALL_ANIMATION blockit2 28.5 s out in the SAME sequence as an earlier self
+    // INVALIDATE_ANIMATION gate2_doorblast, and removing the instance orphans that pending call
+    // (and discards the door/fire motions the sequences below it just registered) before any of
+    // it ever runs. Opt-in, not the default: the ambient world boot relies on today's tolerate-it
+    // behaviour for its own self-invalidating startup anims (the C2 boat/car `*_start` routes among
+    // them — verified unmoved: flipping the default moved the `c2-city` golden), so only the death
+    // path (<see cref="RunDeathSequence"/>) asks for the guard. Scoped to the exact top-of-stack
+    // instance, not every instance currently mid-burst anywhere up the call chain, so a nested
+    // CALL_ANIMATION stopping its CALLER (a different, real cross-instance case existing data
+    // already relies on) is untouched even when protected.
+    private readonly Stack<(AnimInstance Inst, bool Protect)> _startingInstances = new();
+
     private readonly Dictionary<string, int> _unhandled = new(StringComparer.Ordinal);
 
     private readonly DestructibleRegistry _destructibles = new();
@@ -913,8 +931,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary>Starts a definition on one anchor (null = resolve its node names globally),
     /// running every sequence that is not ACTIVATION ON_CALL. Starting a def that is already
     /// live on the same anchor RESTARTS it â€” CALL_ANIMATION deliberately does not take this
-    /// path for a running animation (see its case in <see cref="Dispatch"/>).</summary>
-    public void Start(AnimDefinition def, Node3D? anchor)
+    /// path for a running animation (see its case in <see cref="Dispatch"/>). <paramref
+    /// name="protectSelfInvalidate"/> is the death path's opt-in (<see cref="RunDeathSequence"/>)
+    /// against a same-name self STOP_ANIMATION/INVALIDATE_ANIMATION tearing this burst's own
+    /// instance down before it finishes â€” off by default, since the ambient world boot's own
+    /// self-invalidating startup anims rely on today's tolerate-it behaviour (see
+    /// <see cref="_startingInstances"/>).</summary>
+    public void Start(AnimDefinition def, Node3D? anchor, bool protectSelfInvalidate = false)
     {
         // CALL_ANIMATION chains are data, and the data can (and in some chapters does) form
         // cycles: A calls B calls A. Starting an instance fires its t=0 events immediately,
@@ -942,17 +965,20 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // Fire whatever is due at t=0 immediately, so instantaneous sequences (zepstate's
         // active-state roster) settle during the build rather than one frame later.
         _startDepth++;
+        _startingInstances.Push((inst, protectSelfInvalidate));
         try
         {
             inst.Advance(this, 0f);
         }
         finally
         {
+            _startingInstances.Pop();
             _startDepth--;
         }
-        // Its t=0 events can finish the instance â€” or a t=0 STOP_ANIMATION can already have
-        // removed it â€” so only notify a finish that actually removed something, keeping the
-        // start/finish notifications balanced against the live count for the timeline.
+        // Its t=0 events can finish the instance â€” or a nested CALL_ANIMATION's own t=0 burst can
+        // have stopped it (a same-name SELF stop no longer can, see _startingInstances) â€” so only
+        // notify a finish that actually removed something, keeping the start/finish notifications
+        // balanced against the live count for the timeline.
         if (Retirable(inst) && _instances.Remove(inst))
         {
             FinishInputGoverned(def, anchor);
@@ -1154,11 +1180,19 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// and hide the <c>destroyed</c> one (<see cref="SetSubtreeActive"/> restores colliders with
     /// visibility, C25), undoing both the death swap and the <see cref="ApplyDeathSwap"/> fallback; and
     /// (4) restore the live HP pool. Idempotent â€” destroyâ†’resetâ†’destroy produces the same result each
-    /// time.</summary>
+    /// time, whether the reset lands before or after a chained death call (<see
+    /// cref="ChainedSwapTarget"/>) fires: Stop cancels it while still pending, and tears down /
+    /// restores its own moved nodes (the flying archway pieces) once it has run.</summary>
     public void ResetDestructible(DestructibleRegistry.Instance inst)
     {
         var def = inst.Def;
         Stop(def.AnimName, inst.Anchor);
+        if (inst.ChainedDeathDef is { } chained)
+        {
+            Stop(chained.AnimName, inst.Anchor);
+            RestoreRestPoses(chained, inst.Anchor);
+            inst.ChainedDeathDef = null;
+        }
         // The damage-stage effects live on the EXTERNAL runtime and loop for as long as the
         // healthy node stays active â€” which a heal never interrupts, so the reset itself must
         // stop them. The names come from the def's own DAMAGE_SEQUENCE calls, never a hardcoded
@@ -1282,6 +1316,28 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             _ => null,
         };
     }
+
+    /// <summary>The role an <c>OBJECT_ACTIVE_STATE</c> event names â€” <c>node</c> for the compiled
+    /// shape, <c>name</c> for the hand-authored one. Matches the exact role words
+    /// (healthy/destroyed/dbase), never a <c>_dest</c> suffix (docs/formats/destructibles.md).</summary>
+    private static string RoleName(AnimEvent ev) => ev.Data.Str("node") ?? ev.Data.Str("name") ?? "";
+
+    /// <summary>Does <paramref name="target"/>'s own sequences author the healthy/destroyed
+    /// swap — an <c>OBJECT_ACTIVE_STATE</c> that activates a <c>destroyed</c>/<c>dbase</c>-role
+    /// node or deactivates a <c>healthy</c>-role one? Used by <see cref="ChainedSwapTarget"/> to
+    /// find a CALL_ANIMATION target that owns the swap the caller's own RESET-derived fallback
+    /// would otherwise fire early.</summary>
+    private static bool AuthorsSwap(AnimDefinition target) =>
+        target.Sequences.Any(seq => seq.Events.Any(ev =>
+        {
+            if (ev.Kind != "ObjectActiveState")
+                return false;
+            var name = RoleName(ev);
+            bool active = ev.Data.Bool("state");
+            return (active && (name.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
+                                || name.Contains("dbase", StringComparison.OrdinalIgnoreCase)))
+                || (!active && name.Contains("healthy", StringComparison.OrdinalIgnoreCase));
+        }));
 
     private static string Describe(object? value) => value switch
     {
@@ -1728,6 +1784,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             if (!string.Equals(inst.Def.AnimName, animName, StringComparison.OrdinalIgnoreCase))
                 continue;
             if (anchor != null && inst.Anchor != anchor)
+                continue;
+            if (_startingInstances.Count > 0 && _startingInstances.Peek() is { Protect: true } top
+                && ReferenceEquals(top.Inst, inst))
                 continue;
             _instances.RemoveAt(i);
             if (tearDown)
@@ -2949,11 +3008,41 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// healthy/destroyed node pair but author NO swap in their sequences, so Start alone leaves
     /// them standing. The swap is derived from the def's own RESET_STATE â€” the base state that
     /// declared the pair â€” flipping the healthy/destroyed/dbase roles it named; idempotent for the
-    /// 90% Start already swapped.</para></summary>
+    /// 90% Start already swapped.</para>
+    ///
+    /// <para>The fallback yields instead when the death CHAIN authors the swap one level down, in
+    /// a <c>CALL_ANIMATION</c> target (<see cref="ChainedSwapTarget"/>) â€” C2's studio gate2, whose
+    /// <c>gate2_doorblast</c> ends with <c>CALL_ANIMATION blockit2 START_TIME EVENT_OFFSET 28.5</c>
+    /// and <c>blockit2</c> is where the swap, fireball and flying archway pieces actually live.
+    /// Firing the RESET-derived fallback at t=0 there would blank the wreck 28.5 s before the
+    /// authored explosion gets to run against it. <c>gate1</c> has no such target â€” its
+    /// <c>gate1_doorblast</c> calls only its two fires â€” so it keeps the immediate fallback.</para></summary>
     private void RunDeathSequence(DestructibleRegistry.Instance inst)
     {
-        Start(inst.Def, inst.Anchor);
+        Start(inst.Def, inst.Anchor, protectSelfInvalidate: true);
+        if (ChainedSwapTarget(inst.Def) is { } chained)
+        {
+            inst.ChainedDeathDef = chained;
+            return;
+        }
         ApplyDeathSwap(inst);
+    }
+
+    /// <summary>The first <c>CALL_ANIMATION</c> target, one level down from <paramref name="def"/>'s
+    /// own Initial sequences, whose OWN sequences author the healthy/destroyed swap â€” an
+    /// <c>OBJECT_ACTIVE_STATE</c> that activates a <c>destroyed</c>/<c>dbase</c>-role node or
+    /// deactivates a <c>healthy</c>-role one. Resolved via the same <c>_program.ByAnimName</c> the
+    /// CALL_ANIMATION dispatch itself uses. Null for the ~90%/~10% cases the def's own
+    /// sequences/RESET_STATE already cover (gate1, the AA guns, everything else).</summary>
+    private AnimDefinition? ChainedSwapTarget(AnimDefinition def)
+    {
+        foreach (var seq in def.Sequences.Where(s => !s.OnCallOnly))
+            foreach (var ev in seq.Events)
+                if (ev.Kind == "CallAnimation" && ev.Data.Str("name") is { } callName)
+                    foreach (var target in _program.ByAnimName(callName))
+                        if (AuthorsSwap(target))
+                            return target;
+        return null;
     }
 
     /// <summary>The generic healthyâ†’destroyed swap, for destructibles that declare the pair but
@@ -2967,7 +3056,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         if (inst.Def.ResetState is not { } reset)
             return;
-        static string RoleName(AnimEvent ev) => ev.Data.Str("node") ?? ev.Data.Str("name") ?? "";
         bool hasDestroyed = reset.Events.Any(ev => ev.Kind == "ObjectActiveState"
             && RoleName(ev).Contains("destroyed", StringComparison.OrdinalIgnoreCase));
         if (!hasDestroyed)
