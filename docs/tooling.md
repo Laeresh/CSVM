@@ -289,3 +289,9 @@ args>`.** It forwards every argument verbatim (no build step — build first), r
 desktop (`csvm-probe`, falling back to a *visible but still redirected* run if the OS refuses one),
 parks the streams beside the run's `--log-file` when one is passed (else
 `.scratch/logs/probe-<stamp>.out/.err`), prints where they went, and exits with Godot's exit code.
+The wait is bounded: `-TimeoutSec` (default **300**, `0` = wait forever) kills the run when it
+expires and exits **124** (the GNU timeout convention), so a probe that never quits — a flag
+combination with no auto-quit, a stuck boot — cannot hang an agent session; the partial
+`.out`/`.err` streams survive the kill and show where it hung. A deliberately long run
+(`--frames=` beyond ~5 min of sim) needs an explicit larger value. `RunTests.ps1` is unaffected
+(its `Invoke-Godot` keeps the unbounded wait).

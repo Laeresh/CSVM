@@ -167,5 +167,24 @@ public sealed class DestructibleRegistry
         /// increases (C22 escalates, never heals), so a stage effect fires exactly once; a reset
         /// (C28) puts it back to 0.</summary>
         public int DamageStage { get; set; }
+
+        /// <summary>Set when the death CHAIN authors the healthy→destroyed swap in a
+        /// <c>CALL_ANIMATION</c> target (gate2's <c>blockit2</c>) rather than in this def's own
+        /// sequences — so <c>ApplyDeathSwap</c>'s fallback yielded and the swap, wreck colliders,
+        /// fireball and flying debris all arrive when the chained call fires. A reset (C28) must
+        /// stop this def too (its own pending scheduled call, or its already-run motions) and
+        /// restore the pose of whatever it moved.</summary>
+        public AnimDefinition? ChainedDeathDef { get; set; }
+
+        /// <summary>Every <c>CALL_ANIMATION</c> target this death dispatched directly onto its OWN
+        /// anchor (C2's facade panels calling the shared <c>facade_parts</c> template; also covers
+        /// <see cref="ChainedDeathDef"/>'s target, redundantly but harmlessly) — populated at
+        /// dispatch time, not by re-deriving it from the data, so it only ever names what actually
+        /// ran. Carries the anchor <c>Start</c> actually used, not necessarily THIS instance's own
+        /// (a pooled library-root call — <c>BL-253</c> — anchors on its own copy, not the call
+        /// site), since that is what <c>Stop</c>/<c>RestoreRestPoses</c> need to find it again. A
+        /// reset (C28) stops and restores each of these too, or a called def's own motions (a
+        /// flying debris piece still mid-flight) can outlive the reset.</summary>
+        public HashSet<(AnimDefinition Def, Node3D Anchor)> LocalCallTargets { get; } = new();
     }
 }

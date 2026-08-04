@@ -11,8 +11,11 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-254`.**
-When adding a new item, take the next number and bump this line.
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-256`.**
+When adding a new item, take the next number and bump this line. ⚠ One ID was minted twice in
+concurrent sessions on 2026-08-04 — `BL-253` (the C2 facade log debris, this file's holder) and a
+"nose view" finding merged the same day; the nose-view item was renumbered to `BL-255` at the
+merge, so commit `11c22cc`'s message cites it under the old number.
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
 
@@ -327,6 +330,148 @@ rotations, the focus-loss mute and the C2 Seaplane Hangar objective are all sche
 with the diagnosis that verification pass produced. **Do not re-add them here**; if one is closed
 without landing, its record goes to `docs/HISTORY.md`. What remains below is what is still
 unscheduled.
+
+### C2 destruction animations (at-the-controls findings, 2026-08-04)
+
+Two in-flight findings against the C2 Hollywood destructibles; both diagnosed against the
+extracted data before being logged, so the mechanism is recorded here and not re-derived.
+
+- `BL-253` **The C2 facade panels' log debris landed (2026-08-04); only the in-cockpit playtest is
+  owed.** Was: every one of the 39 `fcpan01`–`39` deaths (`WeaponOrCollideHit`, health 0.01)
+  authors `CALL_ANIMATION facade_parts AT_NODE fcpanNN` — the shared `facdsticks` template
+  (`extracted/C2/cam_anim/facdsticks-facade_parts.json`) whose `fly_part1`–`fly_part4` activate and
+  ballistically launch four wooden sticks ("logs") — but no logs appeared on any panel in the
+  cockpit; only the authored `dustcloud` puffer showed. The four candidate causes, checked against
+  the data and the engine rather than assumed:
+  1. **Confirmed, and worse than hypothesized.** `PlaceCalledTemplates` relocation is indeed gated
+     off in the ambient world (anim-lab/crash runtime only) — but the deeper cause is that
+     `facdsticks` was never BUILT into the live world AT ALL: it is parentless and outside the
+     world's spatial-partition grid, the same shape as the crash/effect template roots
+     `WorldEffectsFactory` stages separately, so `WorldBuilder`'s own gamez walk never reaches it
+     (confirmed: the node lab's name index, 2999 nodes, had no `facdsticks` entry). Even with
+     relocation enabled this launched debris but resolved zero motion targets (`Targets()` found no
+     built `part1`–`4` to move). Generalized past `facdsticks` itself once the shape was understood:
+     `GameZ.IsLibraryRoot` (`docs/formats/gamez.md`) tests any node's `parent_indices`/spatial-partition
+     membership rather than naming `facade_parts` specifically, so `WorldSession`'s
+     `ResolveLibraryRoot` lazily builds ANY death-triggered call's library-root target on first use
+     — this incidentally also fixed `mp1reng_destroyed.flt` (the zeppelin wreck), found to be the
+     same unbuilt-root bug during the sweep, not a separately-handled path as first assumed.
+     `AnimRuntime`'s `CallAnimation` dispatch relocates onto the call site only when
+     `_deathCallDepth > 0` (never ambient world boot) and the call is not an `OPERAND_NODE`
+     redirect (genx12→kkgate's own subtree, which must stay unbuilt — its `Targets` rescue depends
+     on that).
+  2. **Confirmed, and pooled, not left as a floor.** One shared, unpooled `facdsticks` template
+     serving 39 call sites meant two panels broken in succession showed only the LATER kill's
+     debris — `PlaceTemplateAt`/`MotionSet.Add` (same-channel eviction) collapsed the earlier kill's
+     flying pieces onto the new site. First landed as a documented floor (each break still launched
+     its own fresh 4-piece count, just not simultaneously with another in-flight set); the user's
+     same-day A/B against the original game (`CAP-24`, 2026-08-04, closed same day) settled that the
+     original shows PARALLEL debris, not latest-wins — so `ResolveLibraryRoot` now keeps a per-caller
+     POOL of built copies (`WorldSession.cs`), each indexed via the new `AnimRuntime.IndexPooledCopy`
+     (skips `_byIndex` registration so multiple copies of the same source node don't collide on the
+     first copy's binding; each pooled copy is disambiguated by anchor-scoped name lookup instead,
+     the same resolution shape `genx12` already used). Pool membership is the same data-driven
+     `IsLibraryRoot` test as point 1; pool SIZE prefers the gamez's own authored duplicate-copy count
+     where the data has one (several effect templates ship N same-shape sibling records — a real,
+     decoded format fact, `docs/formats/gamez.md`), and falls back to `CSVM/data/effect_pools.json`'s
+     new `localCallRoots`/`localCallDefault` section (the `BL-231` TUNE mechanism) when it does not —
+     `facdsticks` ships exactly one record, so its cap (6) is an invented number there, not a decode.
+  3. **Investigated, not a live bug.** `Targets()` resolves `part1`–`4` through the CALLEE's own
+     compiled symbol table (`facdsticks`' `NodeRefs`, ptrs 1710/1730/1723/1715) before any name
+     fallback, and `blockit2`'s `part1`–`7` carry their OWN distinct ptrs (1127–1133) in their own
+     def — the two never share a lookup, so the name collision the trap warned about does not
+     reach a binding path in practice. Left named here as a trap for the next person who adds a
+     name-based rescue near this code (docs/formats/destructibles.md's `⚠` on symbol-table
+     binding).
+  4. **Ruled out.** `facade_parts` is one of the 22 `LOCAL_CHOREOGRAPHY` names
+     `analysis/death-effect-closure/` deliberately keeps off the world-effects runtime
+     (`ExternalEffect`) — confirmed absent from `EffectAnimNames` — so it was never intercepted and
+     rendering nothing there.
+  **Collateral found and fixed during the work, not part of the original diagnosis:** the first cut
+  gated relocation on `_deathCallDepth` alone (any death-triggered call, not just `facade_parts`),
+  which measurably moved `kkgate`'s own `tbridg1_fire` — real, already correctly positioned bridge
+  geometry — onto `kkgate` itself; and an equally unscoped C28 reset-tracking pass stopped/restored
+  C5's shared `small_yellow_sparks` template on an unrelated destructible's reset, cross-contaminating
+  sibling defs' (`rfspt4`–`6`, `lfspt1`–`3`, `w_lite1`–`5`) debris counts mid-sweep. Both were first
+  fixed by narrowing to a curated `LocalCallTemplateNames` allow-list, then superseded entirely
+  (2026-08-04) by `GameZ.IsLibraryRoot` — the user pushed back that a hardcoded name list "must have
+  something in the data" backing it instead, and the parentless/unpartitioned-node test does the
+  same job data-driven, naturally excluding `tbridg1a` (parented, so never a library root) and
+  `small_yellow_sparks`'s own family with no curated list at all. `DestructibleRegistry`'s
+  `LocalCallTargets` reset-bookkeeping carries the pooled copy's own anchor per entry (not just the
+  dying instance's anchor) so a reset only tears down the specific copy that instance built.
+  Verified headlessly (`--damage-test=facade` / `fcpan01`/`fcpan02`): a single kill launches 4 debris
+  pieces from the struck panel's own position (confirmed via a position probe: the built copy moves
+  from its build-time origin `(0,0,0)` to the exact panel centre); panels broken in succession each
+  keep their OWN in-flight debris set (pooled, up to 6 concurrent — see point 2) rather than the
+  earlier kill's pieces collapsing onto the new site; a reset restores the panel and re-kills in the
+  same hit count, and RESET_STATE deactivates each copy's `part1`–`4` so a reset before the flight
+  finishes does not leave pieces visibly flown. Collateral sweep across C1/C2/C5 `--damage-hd`: only
+  the `fcpan01`–`06` rows changed; `gate1`/`gate2` retain BL-254's behaviour, `kkgate` unchanged
+  (`debris[12]` isolated / `[13]` in the full unfiltered sweep — a pre-existing sweep-context
+  artifact reproduced identically on the unmodified baseline, not caused by this change), and every
+  other def (`m_build01`, the C1 water tower, `agyrobus`, the C5 facade/window family) measured
+  byte-identical. `.\RunTests.ps1`: build, 423 unit tests, 22 engine suites, all 13 goldens
+  hash-identical.
+  ⚠ **Still open.** (a) The in-cockpit playtest: fly a row of facade panels and confirm logs visibly
+  launch from each struck panel, with several rows' debris flying in parallel rather than the earlier
+  fix's per-row floor. (b) The `air_mixed_exp_sg` one-shot authored on the same death is unconfirmed
+  audible — D31 death audio is still stubbed engine-wide, unrelated to this item's scope.
+- `BL-254` **Both C2 studio gates' deaths now match the original (2026-08-04); only the in-cockpit
+  playtest is owed.** Was: both gates' archways swapped to their wreck at t=0 — wrong for gate2
+  (which should stage the swap 28.5 s into the death) AND wrong for gate1 (whose archway the
+  original never destroys at all — the user's recall, 2026-08-04, settling the trap this item
+  opened with: gate1 has only destructible doors, no archway wreck, ever).
+  - **gate2** authors the swap in `blockit2`, a `CALL_ANIMATION` `gate2_doorblast` schedules 28.5 s
+    out — `AnimRuntime.RunDeathSequence`'s `ApplyDeathSwap` RESET-derived fallback fired
+    unconditionally and pre-empted it. A second bug sat behind the first:
+    `gate2_doorblast`'s own `INVALIDATE_ANIMATION gate2_doorblast` (a self-reference — the data's
+    "consume the trigger" idiom) tore its OWN instance down mid-construction, which orphaned the
+    pending `blockit2` call before it could ever fire AND discarded the door/fire motions the
+    sequences below it had just registered in the same t=0 burst — so even the doors never
+    animated. Fixed: `ChainedSwapTarget` resolves one level of `CALL_ANIMATION` targets the same
+    way the dispatcher itself does and skips `ApplyDeathSwap` when a target authors the swap
+    (`AuthorsSwap`); `Start` gained an opt-in `protectSelfInvalidate` flag (`_startingInstances`, a
+    stack pushed/popped around its own t=0 burst) that makes a same-name SELF
+    `STOP_ANIMATION`/`INVALIDATE_ANIMATION` a no-op while that exact instance is mid-construction —
+    only `RunDeathSequence`'s own `Start` call asks for it, so the cross-instance case (a nested
+    `CALL_ANIMATION` stopping its caller) and the ambient world boot's own self-invalidating
+    startup anims are untouched (first cut scoped the guard to every `Start` call and moved the
+    `c2-city` golden — C2's boat/car `*_start` anims self-invalidate too — narrowing it to opt-in
+    brought the golden back byte-identical). `ResetDestructible` now also stops and restores the
+    rest pose of the chained def (`Instance.ChainedDeathDef`), so a reset before OR after the
+    28.5 s point stays idempotent.
+  - **gate1** has no chained swap target — `gate1_doorblast` calls only its two fires — so the
+    RESET-derived fallback kept firing at t=0, same as the C1 AA guns' shape it exists to rescue.
+    But gate1's data shape and the AA guns' are otherwise identical (RESET declares `destroyed`,
+    no swap authored anywhere, no chained def), so a name check couldn't tell them apart. The real
+    discriminator, verified against the data: **the fallback should only rescue a death that would
+    otherwise show nothing.** The AA guns' (`aagun32`–`36`) only Initial sequence is
+    `DAMAGE_SEQUENCE` — pure `If`/`CallAnimation` puffer calls (`sputter_fire_smoke_obj` /
+    `sputter_black_smoke_obj`), no `ObjectMotionFromTo`/`ObjectMotion`/opacity/active-state event
+    at all; without the fallback they die with literally nothing switching off. `gate1_doorblast`,
+    by contrast, authors `door1`/`door2`'s own visible destruction directly — rotate, fade,
+    deactivate — a deliberate choice to give the doors a death and leave the archway alone. Fixed:
+    `AuthorsVisibleDeath` scans a def's own Initial sequences for exactly that shape (a
+    move/fade/deactivate on a node outside the healthy/destroyed/dbase role set) and withholds
+    `ApplyDeathSwap` when it finds one. `gate1` (a `swap[healthy shown]`/`col[off 0, on 0]` census
+    at kill, permanently) is the only def either the C1/C2/C5 `damage-hd` sweep or a name-by-name
+    read flipped — `aagun32`/`kkgate`/`gate2`/`m_build01`/the C1 water tower/`agyrobus`/the C5
+    facade family/windows all measured byte-identical to before.
+  - Verified headlessly: killing `gate2` leaves the archway `swap[healthy shown]`/`col[off 0, on
+    0]` (deferred, by design) and the doors visibly fading/rotating uninterrupted; advancing past
+    28.5 s produces `debris[+7]`/`sounds[+1]` (the swap, `large_fireball` and the seven flying
+    pieces firing together); reset before and after 28.5 s returns it to healthy and re-kills in
+    the same hit count. Killing `gate1` now leaves `swap[healthy shown]`/`col[off 0, on 0]`
+    permanently (no tick ever swaps it) and resets/re-kills idempotently in the same hit count
+    (`kkgate` unchanged at `col[off 4, on 0]`). `.\RunTests.ps1`: build, 423 unit tests, 22 engine
+    suites, all 13 goldens hash-identical.
+  ⚠ **Still open.** (a) The in-cockpit playtest, now covering both gates: fly gate2 to confirm the
+  doors fall before the archway blows and the passage only truly opens once the wreck's colliders
+  replace the healthy ones; fly gate1 to confirm the doors open but the archway stays solid — no
+  passage. (b) `gate2`'s death also calls `go_get_her` (mission scripting) — left to whatever
+  handles it today; this item was the swap timing/authorship only. (c) The 28.5 s offset reads long
+  but is what is authored — A/B the original's timing rather than "fixing" the number.
 
 ### Surfaces, colliders and inspect tools (from the Wave D playtest, 2026-07-25)
 
@@ -680,8 +825,10 @@ unscheduled.
   a prototype, unfair as a race. Options: spawn everyone abreast from one point (the
   `--pos` `SpawnAbreast` fan already does this), or rank on a per-player-normalised time.
 
-- `BL-253` **A third main view — "nose view" — exists in the original and we do not have it**
-  (user, 2026-08-04, while handing over `CAP-17`). Alongside cockpit and third-person there is a
+- `BL-255` **A third main view — "nose view" — exists in the original and we do not have it**
+  (user, 2026-08-04, while handing over `CAP-17`; minted as `BL-253` in a concurrent session and
+  renumbered at the same-day merge — commit `11c22cc` cites the old number; `BL-253` is the C2
+  facade log debris). Alongside cockpit and third-person there is a
   view with **no cockpit drawn, the camera sitting at the front of the plane, and the same instrument
   set as third-person** (the free-floating ALT/MPH/GUNS/ROCKETS dials, not the cockpit panel).
   `CAP-17 C2 south.mp4` is filmed in it throughout and is the reference footage — the dials sit at
@@ -1966,6 +2113,16 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   raising them belongs with removing that throttle (its own step, its own emitter-count check).
   Sizing a root **0** is not a way to disable pooling — it clamps to 1, because staging no template
   at all reads in-game as a broken effect.
+  **Extended 2026-08-04 (`BL-253`) with a second, smaller pool in the same file** —
+  `localCallRoots`/`localCallDefault`, for `AnimRuntime.ResolveLibraryRoot`'s death-triggered
+  library-root call templates (`docs/formats/gamez.md`), kept apart from `roots` because that map
+  is validated against `WorldEffectsFactory.EffectStageRoots` and these names never are one. Same
+  invented-number caveat, narrower scope: `facdsticks` (C2's facade-panel debris template) is the
+  one entry, **base 6**, no per-player term (world geometry, not per-player ordnance) — sized
+  against a facade row breaking panels ~0.2–0.5 s apart with each set's flight lasting 4–5 s, so a
+  10-panel row can want 8–10 concurrent sets; 6 covers most passes and wraps (recycles the oldest,
+  still-flying set) on a longer one. Unmeasured against an actual in-cockpit pass — the playtest
+  this pool wants is the same one `BL-253`'s own owed playtest already asks for.
 - `BL-230` **Near-miss trigger distance (B7, 2026-08-02).** `WarningShotCue.PassRadius` = **15 m**,
   the distance a round's swept step must pass within to sound `bullet_warning_sg`. Chosen, not read:
   the shipped `warning_shot_*` block rates the cue but says nothing about how close is close, and the

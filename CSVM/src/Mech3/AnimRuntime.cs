@@ -232,6 +232,25 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// as its host stays active, so the reset itself must end it.</summary>
     public Action<string>? ExternalEffectStop;
 
+    /// <summary>Lazily builds (and indexes via <see cref="IndexPooledCopy"/>, and RESET_STATE-poses)
+    /// a POOLED copy of a named "library root" gamez node â€” one <see cref="GameZ.IsLibraryRoot"/>
+    /// would say the game stages with the world but never PLACES in it (docs/formats/gamez.md) â€”
+    /// the first time a death-triggered <c>CALL_ANIMATION</c> actually needs it, and returns the
+    /// copy this exact caller (<paramref name="callAnchor"/>, the second parameter) owns: the same
+    /// caller reusing the name gets its OWN prior copy back; a DIFFERENT caller gets a fresh one up
+    /// to the configured pool size, then the oldest-owned copy recycles (<c>BL-253</c>'s CAP-24
+    /// A/B: the original runs several call sites' copies of one template in parallel, not one
+    /// shared "latest wins"). Null when the name is not a library root at all. Set by the session
+    /// build (<c>WorldSession</c>), which owns the raw <see cref="GameZ"/>/<see cref="SceneBuilder"/>
+    /// this runtime deliberately has no reference to. Null on every runtime that never needs this â€”
+    /// the anim-lab/crash runtime already stages its own templates eagerly via
+    /// <see cref="PlaceCalledTemplates"/>, and a headless/testing runtime with no session behind it
+    /// leaves relocation permission simply always false (see the <c>CallAnimation</c> case).
+    /// Deliberately returns the exact Node3D to relocate/re-anchor onto, not just a permission
+    /// bool: the caller must drive THIS pooled copy specifically, never the def's name-wide
+    /// <see cref="TemplateRootsFor"/> set, which would touch every copy at once.</summary>
+    public Func<string, Node3D, Node3D?>? ResolveLibraryRoot;
+
     /// <summary>This runtime does not own audio â€” its SOUND / SOUND_NODE events are no-ops, not
     /// late-failure reports. Set on the D32 world-effects runtime: it renders an effect def's
     /// puffers, but the same effect's impact/death SOUND is already played by the projectile pool
@@ -340,6 +359,34 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private readonly Dictionary<Node3D, Transform3D> _rest = new(); // authored pose per touched node
 
     private readonly List<AnimInstance> _instances = new();
+
+    // The destructible whose death is directly dispatching right now, paired with
+    // _deathCallDepth (a stack for the same reason: nested). Lets a death-triggered
+    // CALL_ANIMATION that lands on the SAME anchor as the dying instance (facade_parts on its own
+    // fcpanNN, blockit2 on its own gate2 — the same idiom AT_NODE/no-site calls back onto the
+    // caller's own site) register itself on that instance's <see
+    // cref="DestructibleRegistry.Instance.LocalCallTargets"/>, so a reset (C28) can Stop and
+    // restore it too — otherwise a reset before the called def's own motions finish (facade_parts'
+    // 8 s flight) leaves its pieces flown and never returns them to RESET (BL-253).
+    private readonly Stack<DestructibleRegistry.Instance> _dyingInstances = new();
+
+    // The instance whose OWN t=0 burst is directly dispatching right now, one entry per nested
+    // CALL_ANIMATION level (bounded by MaxStartDepth), paired with whether THIS Start call opted
+    // into self-invalidate protection (<see cref="Start"/>'s <c>protectSelfInvalidate</c>) — so a
+    // same-name SELF STOP_ANIMATION/INVALIDATE_ANIMATION authored early in that exact burst (the
+    // data's "consume the trigger" idiom — harmless on its own, since DamageAt already guards
+    // re-entry) cannot tear its own still-unwinding instance down mid-construction: gate2's death
+    // schedules its CALL_ANIMATION blockit2 28.5 s out in the SAME sequence as an earlier self
+    // INVALIDATE_ANIMATION gate2_doorblast, and removing the instance orphans that pending call
+    // (and discards the door/fire motions the sequences below it just registered) before any of
+    // it ever runs. Opt-in, not the default: the ambient world boot relies on today's tolerate-it
+    // behaviour for its own self-invalidating startup anims (the C2 boat/car `*_start` routes among
+    // them — verified unmoved: flipping the default moved the `c2-city` golden), so only the death
+    // path (<see cref="RunDeathSequence"/>) asks for the guard. Scoped to the exact top-of-stack
+    // instance, not every instance currently mid-burst anywhere up the call chain, so a nested
+    // CALL_ANIMATION stopping its CALLER (a different, real cross-instance case existing data
+    // already relies on) is untouched even when protected.
+    private readonly Stack<(AnimInstance Inst, bool Protect)> _startingInstances = new();
 
     private readonly Dictionary<string, int> _unhandled = new(StringComparer.Ordinal);
 
@@ -457,6 +504,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private int? _seed;
 
     private int _startDepth;
+
+    // Nonzero while a death's own Start burst (RunDeathSequence) is on the call stack, including
+    // any CALL_ANIMATION it dispatches directly (a counter, not a bool: a chained call can itself
+    // call again). Lets a death-triggered CALL_ANIMATION relocate its callee's effect-template
+    // root the same way the anim-lab/crash runtime's PlaceCalledTemplates does, WITHOUT turning
+    // that on for the ambient world boot (byte-identical goldens) or RESET_STATE — a struck C2
+    // facade panel's facade_parts call needs its shared template moved onto the panel, not left at
+    // its gamez origin (BL-253), and nothing about that should touch ON_STARTUP/mission-setup
+    // calls, which never run through RunDeathSequence.
+    private int _deathCallDepth;
 
     private int _soundsUnknown, _soundsAfterBuild;
 
@@ -839,14 +896,27 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         IndexWorld(subtree);   // appends the subtree's nodes to _index / _byIndex
         _findCache.Clear();    // drop stale "resolves to nothing" results cached during bootstrap
-        foreach (var def in _program.Defs)
-        {
-            if (def.ResetState == null)
-                continue;
-            foreach (var a in Anchors(def))
-                if (a != null && (a == subtree || subtree.IsAncestorOf(a)))
-                    ApplyInstant(def.ResetState.Events, def, a);
-        }
+        ApplyResetStatesWithin(subtree);
+    }
+
+    /// <summary>Indexes one POOLED copy of a library-root call template (<c>AnimRuntime.
+    /// ResolveLibraryRoot</c>, <c>BL-253</c>) — everything <see cref="IndexStage"/> does, EXCEPT
+    /// <c>_byIndex</c>: every copy is built from the SAME source <c>GameZNode</c>, so they all
+    /// carry the SAME compiled node indices, and <c>_byIndex</c> (a runtime-wide, index-keyed
+    /// dictionary) can hold only the first copy that ever claims each index — a second copy's
+    /// events would silently resolve onto the FIRST copy's nodes, defeating the whole pool. Name
+    /// resolution has no such collision: <see cref="Targets"/>'s <c>_byIndex</c> miss already falls
+    /// through to an anchor-SCOPED name search (the same rescue <c>genx12</c> relies on to bind
+    /// onto whichever site re-anchored it), so a copy this method indexes always resolves against
+    /// itself as long as it is passed as the anchor. <see cref="NameResolveFallback"/> is the
+    /// crash/effects runtimes' own (coarser, whole-runtime) answer to the identical problem; this
+    /// is the per-subtree version for a runtime — the ambient world — that needs `_byIndex` for
+    /// everything else.</summary>
+    public void IndexPooledCopy(Node3D subtree)
+    {
+        IndexWorld(subtree, indexByPointer: false);
+        _findCache.Clear();
+        ApplyResetStatesWithin(subtree);
     }
 
     // ---- ISequenceHost: the sequence interpreter's 3-point view of this runtime, satisfied by
@@ -913,8 +983,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary>Starts a definition on one anchor (null = resolve its node names globally),
     /// running every sequence that is not ACTIVATION ON_CALL. Starting a def that is already
     /// live on the same anchor RESTARTS it â€” CALL_ANIMATION deliberately does not take this
-    /// path for a running animation (see its case in <see cref="Dispatch"/>).</summary>
-    public void Start(AnimDefinition def, Node3D? anchor)
+    /// path for a running animation (see its case in <see cref="Dispatch"/>). <paramref
+    /// name="protectSelfInvalidate"/> is the death path's opt-in (<see cref="RunDeathSequence"/>)
+    /// against a same-name self STOP_ANIMATION/INVALIDATE_ANIMATION tearing this burst's own
+    /// instance down before it finishes â€” off by default, since the ambient world boot's own
+    /// self-invalidating startup anims rely on today's tolerate-it behaviour (see
+    /// <see cref="_startingInstances"/>).</summary>
+    public void Start(AnimDefinition def, Node3D? anchor, bool protectSelfInvalidate = false)
     {
         // CALL_ANIMATION chains are data, and the data can (and in some chapters does) form
         // cycles: A calls B calls A. Starting an instance fires its t=0 events immediately,
@@ -942,17 +1017,20 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // Fire whatever is due at t=0 immediately, so instantaneous sequences (zepstate's
         // active-state roster) settle during the build rather than one frame later.
         _startDepth++;
+        _startingInstances.Push((inst, protectSelfInvalidate));
         try
         {
             inst.Advance(this, 0f);
         }
         finally
         {
+            _startingInstances.Pop();
             _startDepth--;
         }
-        // Its t=0 events can finish the instance â€” or a t=0 STOP_ANIMATION can already have
-        // removed it â€” so only notify a finish that actually removed something, keeping the
-        // start/finish notifications balanced against the live count for the timeline.
+        // Its t=0 events can finish the instance â€” or a nested CALL_ANIMATION's own t=0 burst can
+        // have stopped it (a same-name SELF stop no longer can, see _startingInstances) â€” so only
+        // notify a finish that actually removed something, keeping the start/finish notifications
+        // balanced against the live count for the timeline.
         if (Retirable(inst) && _instances.Remove(inst))
         {
             FinishInputGoverned(def, anchor);
@@ -1154,11 +1232,39 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// and hide the <c>destroyed</c> one (<see cref="SetSubtreeActive"/> restores colliders with
     /// visibility, C25), undoing both the death swap and the <see cref="ApplyDeathSwap"/> fallback; and
     /// (4) restore the live HP pool. Idempotent â€” destroyâ†’resetâ†’destroy produces the same result each
-    /// time.</summary>
+    /// time, whether the reset lands before or after a chained death call (<see
+    /// cref="ChainedSwapTarget"/>) fires: Stop cancels it while still pending, and tears down /
+    /// restores its own moved nodes (the flying archway pieces) once it has run.</summary>
     public void ResetDestructible(DestructibleRegistry.Instance inst)
     {
         var def = inst.Def;
         Stop(def.AnimName, inst.Anchor);
+        // Undoes a called def's own live death, exactly like the outer Stop/RestoreRestPoses
+        // below but for a def that is not `inst.Def` itself, on whatever anchor its own call
+        // actually ran on (a pooled library-root copy — BL-253 — not necessarily `inst.Anchor`):
+        // tears down its motions (a called template's own ballistic pieces), restores their rest
+        // pose, and — since a called template's RESET_STATE is its own, never inherited from the
+        // caller's — re-applies it, so an ACTIVE_STATE the call flipped (facade_parts' part1-4 ON)
+        // goes back OFF rather than sitting inert-but-still-shown at its rest pose.
+        void ResetCalled(AnimDefinition called, Node3D calledAnchor)
+        {
+            Stop(called.AnimName, calledAnchor);
+            RestoreRestPoses(called, calledAnchor);
+            if (called.ResetState != null)
+                ApplyInstant(called.ResetState.Events, called, calledAnchor);
+        }
+        if (inst.ChainedDeathDef is { } chained)
+        {
+            ResetCalled(chained, inst.Anchor);
+            inst.ChainedDeathDef = null;
+        }
+        // Every CALL_ANIMATION target the death dispatched onto its OWN anchor (facade_parts on
+        // its own fcpanNN; also re-covers ChainedDeathDef's target, harmlessly) — reset the same
+        // way, so a reset lands the same whether it comes before or after the called def's own
+        // motions finish (BL-253).
+        foreach (var (local, localAnchor) in inst.LocalCallTargets)
+            ResetCalled(local, localAnchor);
+        inst.LocalCallTargets.Clear();
         // The damage-stage effects live on the EXTERNAL runtime and loop for as long as the
         // healthy node stays active â€” which a heal never interrupts, so the reset itself must
         // stop them. The names come from the def's own DAMAGE_SEQUENCE calls, never a hardcoded
@@ -1282,6 +1388,63 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             _ => null,
         };
     }
+
+    /// <summary>The node name an event targets — <c>node</c> for most compiled kinds
+    /// (<c>ObjectMotion</c>), <c>name</c> for others (<c>ObjectActiveState</c>'s hand-authored
+    /// shape, <c>ObjectMotionFromTo</c>, <c>ObjectOpacityFromTo</c>/<c>ObjectOpacityState</c>).
+    /// Matches the exact healthy/destroyed/dbase role words where that matters, never a
+    /// <c>_dest</c> suffix (docs/formats/destructibles.md).</summary>
+    private static string RoleName(AnimEvent ev) => ev.Data.Str("node") ?? ev.Data.Str("name") ?? "";
+
+    /// <summary>Does <paramref name="target"/>'s own sequences author the healthy/destroyed
+    /// swap — an <c>OBJECT_ACTIVE_STATE</c> that activates a <c>destroyed</c>/<c>dbase</c>-role
+    /// node or deactivates a <c>healthy</c>-role one? Used by <see cref="ChainedSwapTarget"/> to
+    /// find a CALL_ANIMATION target that owns the swap the caller's own RESET-derived fallback
+    /// would otherwise fire early.</summary>
+    private static bool AuthorsSwap(AnimDefinition target) =>
+        target.Sequences.Any(seq => seq.Events.Any(ev =>
+        {
+            if (ev.Kind != "ObjectActiveState")
+                return false;
+            var name = RoleName(ev);
+            bool active = ev.Data.Bool("state");
+            return (active && (name.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
+                                || name.Contains("dbase", StringComparison.OrdinalIgnoreCase)))
+                || (!active && name.Contains("healthy", StringComparison.OrdinalIgnoreCase));
+        }));
+
+    /// <summary>Does <paramref name="def"/>'s own Initial sequences author a visible death on a
+    /// node OUTSIDE the healthy/destroyed/dbase role set — a piece moved/tumbled
+    /// (<c>ObjectMotionFromTo</c>/<c>ObjectMotion</c>), faded (<c>ObjectOpacityFromTo</c>/
+    /// <c>ObjectOpacityState</c>), or switched off (<c>ObjectActiveState … false</c>)? gate1's
+    /// door1/door2 are exactly this: the doors falling and fading over ~1–6.7 s IS the authored
+    /// death, and the data simply never gives the archway a destroyed variant to swap to (BL-254,
+    /// 2026-08-04 — the user's recall of the original: gate1's archway is not destructible at
+    /// all). Used by <see cref="RunDeathSequence"/> to withhold <see cref="ApplyDeathSwap"/>'s
+    /// RESET-derived rescue from a def whose death look was a deliberate choice, reserving the
+    /// rescue for the C1 AA guns' shape: a <c>DAMAGE_SEQUENCE</c> of puffer calls only, nothing
+    /// that would otherwise make the kill visible at all.</summary>
+    private static bool AuthorsVisibleDeath(AnimDefinition def) =>
+        def.Sequences.Where(s => !s.OnCallOnly).Any(seq => seq.Events.Any(ev =>
+        {
+            bool isDeathKind = ev.Kind is "ObjectMotionFromTo" or "ObjectMotion"
+                or "ObjectOpacityFromTo" or "ObjectOpacityState"
+                or "ObjectActiveState";
+            if (!isDeathKind)
+                return false;
+            var name = RoleName(ev);
+            if (name.Length == 0)
+                return false;
+            bool isRoleNode = name.Contains("healthy", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("dbase", StringComparison.OrdinalIgnoreCase);
+            if (isRoleNode)
+                return false;
+            // An ACTIVE_STATE only counts switching a piece OFF — turning one ON authors
+            // nothing visible on its own (and would otherwise flag every def with an
+            // unrelated startup toggle).
+            return ev.Kind != "ObjectActiveState" || !ev.Data.Bool("state");
+        }));
 
     private static string Describe(object? value) => value switch
     {
@@ -1692,7 +1855,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
     }
 
-    private void IndexWorld(Node3D worldRoot)
+    // indexByPointer=false is IndexPooledCopy's own case: a second (third, …) copy of the SAME
+    // source GameZNode carries the SAME compiled indices as the first, and _byIndex can only ever
+    // hold one winner per index — see that method's remark for why skipping it is correct, not a
+    // loss (Targets' own _byIndex-miss rescue is anchor-scoped by name instead).
+    private void IndexWorld(Node3D worldRoot, bool indexByPointer = true)
     {
         void Walk(Node3D n)
         {
@@ -1701,13 +1868,27 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             // The scoped crash runtime resolves purely by name (see NameResolveFallback): it mixes
             // two gamez index spaces that collide, so a shared _byIndex would misresolve. Leaving it
             // empty makes every index lookup miss and fall through to the unique name.
-            if (!NameResolveFallback && n.HasMeta(IndexMeta))
+            if (indexByPointer && !NameResolveFallback && n.HasMeta(IndexMeta))
                 _byIndex.TryAdd((int)n.GetMeta(IndexMeta), n);
             foreach (var child in n.GetChildren())
                 if (child is Node3D c)
                     Walk(c);
         }
         Walk(worldRoot);
+    }
+
+    // Re-runs the quiet-stage RESET_STATE posing pass (bootstrap pass 1) for whatever now anchors
+    // within a subtree added after the fact — IndexStage's (BL-253's IndexPooledCopy's) own tail.
+    private void ApplyResetStatesWithin(Node3D subtree)
+    {
+        foreach (var def in _program.Defs)
+        {
+            if (def.ResetState == null)
+                continue;
+            foreach (var a in Anchors(def))
+                if (a != null && (a == subtree || subtree.IsAncestorOf(a)))
+                    ApplyInstant(def.ResetState.Events, def, a);
+        }
     }
 
     /// <summary>Is this definition already running on this anchor? (Instance identity is
@@ -1728,6 +1909,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             if (!string.Equals(inst.Def.AnimName, animName, StringComparison.OrdinalIgnoreCase))
                 continue;
             if (anchor != null && inst.Anchor != anchor)
+                continue;
+            if (_startingInstances.Count > 0 && _startingInstances.Peek() is { Protect: true } top
+                && ReferenceEquals(top.Inst, inst))
                 continue;
             _instances.RemoveAt(i);
             if (tearDown)
@@ -2122,30 +2306,121 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         if (ExternalEffect(callName, VisualOriginOf(callAnchor) + siteXform.Basis * siteOffset, siteNode))
                             return true;
                     }
+                    // OPERAND_NODE is a DIFFERENT idiom from AT_NODE/WITH_NODE: it redirects the
+                    // callee's OWN node resolution onto the CALLER's own subtree instead of the
+                    // callee's (genx12's `pt1..12` are meshless placeholders standing in for the
+                    // call site's own same-named pieces — kkgate's `destroyed` wreck children) — a
+                    // call shaped that way must never relocate or lazily build the callee's own
+                    // (deliberately unbuilt) root, or the callee's OWN just-built placeholders
+                    // would outrank the rescue that redirects onto the caller's subtree, and the
+                    // wreck it should be driving goes untouched (`docs/formats/destructibles.md`'s
+                    // `genx12` bullet; `Targets`' own genx12 rescue comment).
+                    bool operandRedirect = ev.Data.Str("operand_node") != null;
                     foreach (var target in _program.ByAnimName(callName))
-                        // A placed template called at a DIFFERENT site restarts even while live:
-                        // one shared template can only be in one place, so a second rocket landing
-                        // inside the first explosion's 2.5 s run was skipped by the live guard and
-                        // showed no trails at all. On a pooled runtime the two calls hold two
-                        // different copies (BL-225) and "a different site" is asked of the caller's
-                        // OWN copy, so this is the wrap case only; unpooled it still collapses the
-                        // first call onto the new site, which beats the second blast having nothing.
+                    {
+                        // Relocation is allowed here — moving a callee's template root onto the
+                        // call site — either from the anim-lab/crash runtime's
+                        // PlaceCalledTemplates, or because this call is death-triggered and the
+                        // callee's own anchor resolves to a "library root" gamez node: staged with
+                        // the world but never PLACED in it (docs/formats/gamez.md,
+                        // GameZ.IsLibraryRoot) — so it has no meaningful position of its own and
+                        // MUST be moved onto whichever site called it. `ResolveLibraryRoot` also
+                        // lazily builds (and, per its own pool config, clones) that root the first
+                        // time a given caller needs it (BL-253: `facdsticks`), returning the exact
+                        // POOLED COPY this call owns — the original runs several call sites' copies
+                        // of one template in parallel, not one shared "latest wins" (CAP-24 A/B).
+                        // Never every death call: most LOCAL_CHOREOGRAPHY targets (kkgate's
+                        // `tbridg1_fire`) sit at a meaningful, already-PLACED authored position, and
+                        // `IsLibraryRoot` correctly refuses those (measured: an earlier, name-based
+                        // cut of this fix moved `tbridg1_fire` onto `kkgate` before this data-driven
+                        // rule replaced it). Gated + non-instant so it never touches the ambient
+                        // world boot (byte-identical goldens) or RESET_STATE — those run neither
+                        // path.
+                        Node3D? libraryCopy = null;
+                        bool relocate = false;
+                        if (!instant && callAnchor != null)
+                        {
+                            if (PlaceCalledTemplates)
+                            {
+                                relocate = true;
+                            }
+                            else if (_deathCallDepth > 0 && !operandRedirect && ResolveLibraryRoot != null)
+                            {
+                                libraryCopy = ResolveLibraryRoot(
+                                    string.IsNullOrEmpty(target.Name) ? target.RootName ?? "" : target.Name,
+                                    callAnchor);
+                                relocate = libraryCopy != null;
+                            }
+                        }
+                        // A pooled copy is Start's own anchor, not the call site: Targets' NodeRefs
+                        // lookup for it skips _byIndex (IndexPooledCopy — every copy shares the same
+                        // compiled indices) and falls to the name rescue scoped to ITS OWN subtree,
+                        // so the copy has to BE the anchor for that scope to find anything (the same
+                        // shape genx12 uses, anchored on the call site instead). PlaceCalledTemplates'
+                        // un-pooled templates keep the old shape (anchored on the call site, resolved
+                        // by the def-wide TemplateRootsFor/_byIndex as always).
+                        var startAnchor = libraryCopy ?? callAnchor;
+                        Vector3 wantSite = default;
+                        bool movedAway = false;
+                        if (relocate)
+                        {
+                            wantSite = callAnchor!.GlobalTransform.Origin + callAnchor.GlobalTransform.Basis * siteOffset;
+                            // A placed template called at a DIFFERENT site restarts even while
+                            // live: one shared template can only be in one place, so a second
+                            // rocket landing inside the first explosion's 2.5 s run was skipped by
+                            // the live guard and showed no trails at all. Pooled (BL-225 on the
+                            // effects side, BL-253's own pool here), overlapping calls each hold
+                            // their own copy and this is the wrap case only — the pool exhausted,
+                            // recycling its oldest copy exactly like the single-copy path always
+                            // collapsed onto the newest call.
+                            movedAway = libraryCopy != null
+                                ? libraryCopy.GlobalTransform.Origin.DistanceSquaredTo(wantSite) > 0.25f
+                                : !TemplateIsAt(target, callAnchor, siteOffset);
+                        }
                         // Gated on the site actually having moved, so the data's poll idiom
                         // (`If … CallAnimation; Endif; Loop{-1}`) keeps hitting the guard and does
                         // not restart its callee every frame.
-                        if (!IsLive(target, callAnchor)
-                            || (PlaceCalledTemplates && !instant && callAnchor != null
-                                && !TemplateIsAt(target, callAnchor, siteOffset)))
+                        if (!IsLive(target, startAnchor) || movedAway)
                         {
                             // Re-anchoring alone is not enough for an effect template: its puffers
                             // ride the template's OWN root, so unless that root is MOVED to the call
-                            // site the effect emits at its gamez origin. Relocate it here. Gated +
-                            // non-instant so it touches only the animation debugger / crash runtime,
-                            // never the ambient world boot (byte-identical regression) or RESET_STATE.
-                            if (PlaceCalledTemplates && !instant && callAnchor != null)
-                                PlaceTemplateAt(target, callAnchor, siteOffset);
-                            Start(target, callAnchor);
+                            // site the effect emits at its gamez origin. Relocate it here.
+                            if (relocate)
+                            {
+                                if (libraryCopy != null)
+                                    PlaceTemplateOn(new[] { (Node3D?)libraryCopy }, wantSite);
+                                else
+                                    PlaceTemplateAt(target, callAnchor!, siteOffset);
+                            }
+                            Start(target, startAnchor);
+                            // A death-triggered call whose relocation was permitted, landing on the
+                            // SAME anchor as the dying instance, is the caller's own choreography
+                            // (facade_parts on its own fcpanNN) — a reset (C28) has to stop and
+                            // restore it too, or its motions (facade_parts' 8 s flight) can leave
+                            // pieces flown past the reset (BL-253). Tracked against the actual
+                            // Start anchor (the pooled copy, not the call site), since that is what
+                            // Stop/RestoreRestPoses need to find this specific copy again. Scoped
+                            // to the SAME test as relocation, not every death call landing on the
+                            // same anchor: a shared, WORLD-PLACED template several unrelated
+                            // destructibles all call (C5's `small_yellow_sparks`) is not this def's
+                            // own private choreography, and stopping/restoring it on THIS def's
+                            // reset tore down a sibling destructible's still-flying pieces
+                            // mid-sweep, moving their debris counts for no authored reason
+                            // (measured: `lfspt`/`rfspt`/`w_lite` shifted) — the same mistake
+                            // relocation's own test already guards against. A pool wrap that
+                            // recycles a copy still tracked by its ORIGINAL owner leaves that
+                            // owner's entry stale (its pieces are already gone, overwritten by the
+                            // recycle) — accepted, not fixed: it only bites once the pool is
+                            // genuinely exhausted, and a stale Stop/RestoreRestPoses on an
+                            // already-reassigned copy is a harmless no-op-ish reset of whatever is
+                            // there now, never a crash.
+                            if (relocate && startAnchor != null && _dyingInstances.Count > 0
+                                && ReferenceEquals(_dyingInstances.Peek().Anchor, callAnchor))
+                            {
+                                _dyingInstances.Peek().LocalCallTargets.Add((target, startAnchor));
+                            }
                         }
+                    }
                 }
                 return true;
 
@@ -2949,11 +3224,68 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// healthy/destroyed node pair but author NO swap in their sequences, so Start alone leaves
     /// them standing. The swap is derived from the def's own RESET_STATE â€” the base state that
     /// declared the pair â€” flipping the healthy/destroyed/dbase roles it named; idempotent for the
-    /// 90% Start already swapped.</para></summary>
+    /// 90% Start already swapped.</para>
+    ///
+    /// <para>The fallback yields instead when the death CHAIN authors the swap one level down, in
+    /// a <c>CALL_ANIMATION</c> target (<see cref="ChainedSwapTarget"/>) â€” C2's studio gate2, whose
+    /// <c>gate2_doorblast</c> ends with <c>CALL_ANIMATION blockit2 START_TIME EVENT_OFFSET 28.5</c>
+    /// and <c>blockit2</c> is where the swap, fireball and flying archway pieces actually live.
+    /// Firing the RESET-derived fallback at t=0 there would blank the wreck 28.5 s before the
+    /// authored explosion gets to run against it.</para>
+    ///
+    /// <para>It also yields when the def's OWN Initial sequences already author a visible death
+    /// on a node outside the healthy/destroyed/dbase role set (<see
+    /// cref="AuthorsVisibleDeath"/>) â€” gate1's studio doors, whose fall-and-fade over ~1â€“6.7 s IS
+    /// the authored death; the data simply never gives its archway a destroyed variant, because in
+    /// the original gate1's archway is not destructible at all (BL-254, 2026-08-04). Firing the
+    /// fallback there swapped the healthy archway for a wreck it does not own and opened a passage
+    /// that should stay solid. The AA guns are the opposite shape the fallback still has to
+    /// rescue: their only Initial sequence is a <c>DAMAGE_SEQUENCE</c> of puffer calls, so without
+    /// it they would die with nothing at all switching off â€” invisibly.</para>
+    ///
+    /// <para><see cref="_deathCallDepth"/> brackets the whole burst so a <c>CALL_ANIMATION</c> the
+    /// death dispatches (C2's facade panels calling the shared <c>facade_parts</c> template,
+    /// `BL-253`) can relocate its callee's effect-template root onto the call site, exactly as the
+    /// anim-lab/crash runtime's <see cref="PlaceCalledTemplates"/> does â€” without turning that on
+    /// for the ambient world boot.</para></summary>
     private void RunDeathSequence(DestructibleRegistry.Instance inst)
     {
-        Start(inst.Def, inst.Anchor);
+        _deathCallDepth++;
+        _dyingInstances.Push(inst);
+        try
+        {
+            Start(inst.Def, inst.Anchor, protectSelfInvalidate: true);
+        }
+        finally
+        {
+            _dyingInstances.Pop();
+            _deathCallDepth--;
+        }
+        if (ChainedSwapTarget(inst.Def) is { } chained)
+        {
+            inst.ChainedDeathDef = chained;
+            return;
+        }
+        if (AuthorsVisibleDeath(inst.Def))
+            return;
         ApplyDeathSwap(inst);
+    }
+
+    /// <summary>The first <c>CALL_ANIMATION</c> target, one level down from <paramref name="def"/>'s
+    /// own Initial sequences, whose OWN sequences author the healthy/destroyed swap â€” an
+    /// <c>OBJECT_ACTIVE_STATE</c> that activates a <c>destroyed</c>/<c>dbase</c>-role node or
+    /// deactivates a <c>healthy</c>-role one. Resolved via the same <c>_program.ByAnimName</c> the
+    /// CALL_ANIMATION dispatch itself uses. Null for the ~90%/~10% cases the def's own
+    /// sequences/RESET_STATE already cover (gate1, the AA guns, everything else).</summary>
+    private AnimDefinition? ChainedSwapTarget(AnimDefinition def)
+    {
+        foreach (var seq in def.Sequences.Where(s => !s.OnCallOnly))
+            foreach (var ev in seq.Events)
+                if (ev.Kind == "CallAnimation" && ev.Data.Str("name") is { } callName)
+                    foreach (var target in _program.ByAnimName(callName))
+                        if (AuthorsSwap(target))
+                            return target;
+        return null;
     }
 
     /// <summary>The generic healthyâ†’destroyed swap, for destructibles that declare the pair but
@@ -2967,7 +3299,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         if (inst.Def.ResetState is not { } reset)
             return;
-        static string RoleName(AnimEvent ev) => ev.Data.Str("node") ?? ev.Data.Str("name") ?? "";
         bool hasDestroyed = reset.Events.Any(ev => ev.Kind == "ObjectActiveState"
             && RoleName(ev).Contains("destroyed", StringComparison.OrdinalIgnoreCase));
         if (!hasDestroyed)

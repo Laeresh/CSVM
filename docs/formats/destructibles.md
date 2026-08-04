@@ -224,6 +224,29 @@ which pieces that covers. A format reader should know the current wiring:
     declares a `destroyed` node, so an object with no destroyed variant (a mission gun that dies by
     effect alone, `noseballgun`) is left intact rather than blanked. It reads the def's explicit
     RESET targets, never a world-wide name scan (the `ref_tank_dest` trap below).
+    - **The fallback yields when the death CHAIN authors the swap one level down, in a
+      `CALL_ANIMATION` target.** C2's `gate2` is the example: `gate2_doorblast` authors no swap
+      itself and ends with `CALL_ANIMATION blockit2 START_TIME EVENT_OFFSET 28.5`, and `blockit2`
+      (an OnCall def) is where the swap, `large_fireball` and the seven flying archway pieces
+      actually live. Firing the RESET-derived fallback at t=0 there blanked the wreck 28.5 s before
+      the authored explosion got to run against it (`BL-254`); `AnimRuntime` now resolves one level
+      of `CALL_ANIMATION` targets the same way the dispatcher itself does and skips the fallback
+      when a target authors the swap, so it arrives with the rest of `blockit2`'s effects instead.
+    - **The fallback also yields when the def's own death already authors a visible destruction
+      that simply omits the swap — the rescue is for a death that would otherwise show NOTHING.**
+      `gate1` looked exactly like the AA-gun shape the fallback exists for (RESET declares
+      `destroyed`, no swap authored anywhere, no chained def), but in the original gate1's archway
+      is not destructible at all — only its doors are (`BL-254`, 2026-08-04, user recall). The two
+      cases are told apart by what the def's OWN Initial sequences author: the AA guns'
+      (`aagun32`–`36`) only sequence is a `DAMAGE_SEQUENCE` of pure `If`/`CallAnimation` puffer
+      calls — no `ObjectMotionFromTo`/`ObjectMotion`/opacity/active-state event at all, so without
+      the fallback they die invisibly. `gate1_doorblast` authors `door1`/`door2`'s own rotate,
+      fade and deactivate directly — a deliberate, complete death that happens to leave the
+      archway alone. `AnimRuntime.AuthorsVisibleDeath` scans for that shape (a move/fade/deactivate
+      on a node outside the healthy/destroyed/dbase role set) and withholds the fallback when it
+      finds one, so `gate1`'s archway now stays visible and solid permanently while its doors still
+      fall and fade; `gate2` (chained swap, handled above), `kkgate`, `m_build01`, the C1 water
+      tower, `agyrobus` and the C5 facade/window family all measured unchanged by this rule.
   - `reng11`'s wreck is a separately-`CALL_ANIMATION`'d template (`mp1reng_destroyed.flt`), not a
     child of the anchor — it stages correctly, alongside its `large_fireball`.
 - **The debris tumbles (C26).** The wreck pieces fly: on death the def's `OBJECT_MOTION` events —
@@ -280,17 +303,23 @@ which pieces that covers. A format reader should know the current wiring:
   collidable, destroyed hidden — undoing both the swap and the `ApplyDeathSwap` fallback), and restores
   the instance's HP/status/stage. It is idempotent: **destroy → reset → destroy produces identical
   results.** Verified across C1/C2/C5 — every type (buildings, towers, the AA gun's RESET-derived swap,
-  the doors' rotated leaves, the propane gate, agyrobus, the facades) returns `healthy=✓` and re-kills
-  in the same hit count.
+  the doors' rotated leaves, the propane gate, agyrobus, the facades, and `gate1`'s permanently-solid
+  archway) returns `healthy=✓` and re-kills in the same hit count.
 - **Collision follows the swap for free (C25).** The `OBJECT_ACTIVE_STATE` swap toggles
   `SetSubtreeActive`, which disables/enables the subtree's *colliders* alongside its visibility — so
   the death that hides the healthy geometry also stops it blocking flight, and the wreck it shows
   becomes solid, with **no separate collider code**. Measured on the C2 (Hollywood) gates: killing
-  `gate1`/`gate2` (the studio doors) switches **off 1** healthy collider and **on 8** wreck ones;
-  killing `kkgate` switches off 4 and on 12 (it also chains the bridge fires). C1 buildings match
-  (`m_build01`: off 1, on 10). The one caveat is the **owed in-flight playtest**: the destroyed
-  variant re-adds its own colliders, so whether a blown-open door actually leaves a clear passage is
-  the original data's call, not something the swap can decide — fly through one to confirm.
+  `kkgate` switches its healthy collider **off** and the wreck ones **on** immediately (it also
+  chains the bridge fires). C1 buildings match (`m_build01`). The studio gates are each an
+  exception, in opposite directions, since `BL-254` (2026-08-04): **`gate2`'s** swap — and so its
+  collider flip — is deferred to `blockit2`, the `CALL_ANIMATION` `gate2_doorblast` schedules
+  28.5 s into the death; a census taken at kill time reads no change at all (`off 0, on 0`), by
+  design. **`gate1`'s** archway never swaps at all — its collider census reads `off 0, on 0` at
+  every kill, permanently — only its doors' own collider drop (on their own ~1–6.7 s rotate/fade
+  timeline, unrelated to the swap) removes anything solid; see the RESET_STATE-fallback bullet
+  above for both. The one caveat for the rest is the **owed in-flight playtest**: the destroyed
+  variant re-adds its own colliders, so whether a blown-open door actually leaves a clear passage
+  is the original data's call, not something the swap can decide — fly through one to confirm.
   - **The propane→door chain works end to end.** Hollywood's `kkgate` is a WeaponHit destructible
     whose `ANIMATION_ROOT_NAME` is the **`propane` tank** (a collidable, therefore shootable node),
     HEALTH 10; shooting *it* runs the gate's death — the healthy→destroyed swap plus `CallAnimation`
@@ -303,10 +332,34 @@ which pieces that covers. A format reader should know the current wiring:
     children are meshless; a death calls it with `operand_node=<wreck node>` (kkgate:
     `destroyed`, whose 12 children are ALSO named `pt1..pt12`, authored in the closed-gate pose),
     and the template's `ObjectMotion` launches / opacity fades / `ObjectActiveState` offs are
-    meant to bind to the *call-site's* same-named pieces. The pieces fly (6 s ballistic), fade
-    over 3 s, then deactivate — which is what finally drops their colliders and opens the
-    passage; for the first ~3 s the tumbling wreck is still solid, by the data. The same idiom
-    drives `facade_parts` and C1's `air_gen` chain.
+    meant to bind to the *call-site's* same-named pieces — resolved via `AnimRuntime.Targets`'
+    narrow `genx12` rescue (`FindAll` scoped strictly inside the caller's own anchor subtree, never
+    a world-wide name scan), so `genx12`'s own template root never needs to exist as a real,
+    built node at all. The pieces fly (6 s ballistic), fade over 3 s, then deactivate — which is
+    what finally drops their colliders and opens the passage; for the first ~3 s the tumbling
+    wreck is still solid, by the data. C1's `air_gen` chain uses the same `operand_node` idiom.
+    `facade_parts` (below) is a DIFFERENT idiom — a genuinely separate template, resolved and
+    relocated rather than redirected onto the caller's own subtree; do not conflate the two.
+  - **`facade_parts` needed its template BUILT, pooled, and resolved data-driven, not by name
+    (`BL-253`, 2026-08-04, extended same day).** The 39 `fcpanNN` deaths each `CALL_ANIMATION
+    facade_parts AT_NODE fcpanNN` — no `operand_node`, so unlike `genx12` this is a real, separate
+    template (`facdsticks`, four wooden "log" sticks) that needs to exist and be moved. It is
+    parentless and outside the world's spatial-partition grid — the same shape `genx12` and (also
+    found via this bug) `mp1reng_destroyed.flt` share — so `WorldBuilder`'s own gamez walk never
+    reaches it. `GameZ.IsLibraryRoot` tests exactly that shape (empty `Children` membership, absent
+    from the World node's spatial partition) — a data-driven rule, not a curated name list — and a
+    death-triggered `CALL_ANIMATION` (`_deathCallDepth > 0`, never the ambient world boot, and
+    never an `operand_node` redirect) to any node passing that test builds it lazily on first use
+    (`WorldSession.ResolveLibraryRoot`) and relocates it onto the call site. It is also POOLED, not
+    single-shared: the original shows several panels' debris flying in parallel (confirmed
+    same-day, original-game A/B), so each caller gets its own built copy, up to
+    `EffectPools.LocalCallPoolSize("facdsticks")` (6, `CSVM/data/effect_pools.json`'s
+    `localCallRoots`, an invented `BL-231` TUNE number — `facdsticks` ships only one node record, so
+    unlike a few effect templates that ship an authored N-copy set, its pool size is not decodable
+    from the data). Pooled copies are indexed via `AnimRuntime.IndexPooledCopy`, which skips
+    `_byIndex` registration so multiple copies of the same source node don't collide on the first
+    copy's binding — each is instead disambiguated via the same anchor-scoped name rescue
+    `genx12`'s own `Targets()` fallback uses.
   - ⚠ **Colliders exist only in the flight build.** `WorldSession.Options.Collision` is `_fly`
     (plus `_damageTest`); `--freecam` builds the world with **no** collision at all, so any collider
     census run there reads zero and lies. See `docs/verification.md`.

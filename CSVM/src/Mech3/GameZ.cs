@@ -52,6 +52,11 @@ public sealed class GameZ
 
     private int[]? _parent; // flat index → parent flat index (−1 for roots), built lazily
 
+    // Every node index WorldBuilder's own walk reaches — someone's child_indices, or a World
+    // node's spatial-partition reference (the same two places WorldBuilder.cs's class doc says
+    // "world content lives"). Built lazily; see IsLibraryRoot.
+    private HashSet<int>? _placed;
+
     private bool[]? _markerGizmo; // mesh index → single flat-coloured triangle, built lazily
 
     public List<GameZNode> Nodes { get; } = new();
@@ -122,6 +127,26 @@ public sealed class GameZ
             if (string.Equals(n.Name, name, StringComparison.OrdinalIgnoreCase))
                 return n;
         return null;
+    }
+
+    /// <summary>Is <paramref name="node"/> staged template-library content — built with the game
+    /// but never PLACED anywhere in it, left inert until an animation calls it by name? (docs/
+    /// formats/gamez.md). The census: 166 C2 nodes carry an empty <c>parent_indices</c> and are
+    /// not referenced by the World node's spatial-partition grid either — every world-placed node
+    /// instead has one or the other. Beyond the handful of engine roots (<c>world1</c>,
+    /// <c>display</c>, <c>camera1</c>, …, none of them <c>Object3d</c>), that set IS the library:
+    /// every effect template, weapon/projectile model, zeppelin wreck template, clutter template,
+    /// cutscene prop — and both call-template roots BL-253 diagnosed (<c>facdsticks</c>,
+    /// <c>genx12</c>). <c>zone_id == -1</c> and Object3d's own <c>signs == 128</c> are the
+    /// corroborating bits (world-placed nodes carry a real zone and <c>signs == 4108</c>); this
+    /// method tests only placement, the load-bearing signal, and <c>Kind == "Object3d"</c> (every
+    /// engine root is a different <c>Kind</c>). The two <c>active: false</c> library members
+    /// (<c>letterbox</c>, <c>sunlight</c>) are excluded too — their own data says never to summon
+    /// them.</summary>
+    public bool IsLibraryRoot(GameZNode node)
+    {
+        EnsurePlaced();
+        return node.Kind == "Object3d" && node.Active && !_placed!.Contains(node.Index);
     }
 
     /// <summary>The world-space transform of a node, accumulated up its parent chain (the
@@ -213,6 +238,22 @@ public sealed class GameZ
                 if (c >= 0 && c < parent.Length)
                     parent[c] = n.Index;
         _parent = parent;
+    }
+
+    private void EnsurePlaced()
+    {
+        if (_placed != null)
+            return;
+        var placed = new HashSet<int>();
+        foreach (var n in Nodes)
+        {
+            foreach (var c in n.Children)
+                placed.Add(c);
+            if (n.Kind == "World" && n.PartitionNodes != null)
+                foreach (var p in n.PartitionNodes)
+                    placed.Add(p);
+        }
+        _placed = placed;
     }
 
     private void ParseNodes(Stream stream)

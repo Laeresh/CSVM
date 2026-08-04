@@ -48,6 +48,7 @@ public class CSVMHiddenDesktop
                                      out PROCESS_INFORMATION pi);
     [DllImport("kernel32.dll", SetLastError=true)] static extern uint WaitForSingleObject(IntPtr h, uint ms);
     [DllImport("kernel32.dll", SetLastError=true)] static extern bool GetExitCodeProcess(IntPtr h, out uint code);
+    [DllImport("kernel32.dll", SetLastError=true)] static extern bool TerminateProcess(IntPtr h, uint code);
     [DllImport("kernel32.dll", SetLastError=true)] static extern bool CloseHandle(IntPtr h);
 
     const uint GENERIC_ALL = 0x10000000, GENERIC_READ = 0x80000000, GENERIC_WRITE = 0x40000000;
@@ -80,6 +81,14 @@ public class CSVMHiddenDesktop
     /// launching console and prints past every redirection (SHELL-10).</summary>
     public static int Run(string exe, string cmdLine, string cwd, string outPath, string errPath)
     {
+        return Run(exe, cmdLine, cwd, outPath, errPath, 0xFFFFFFFF);
+    }
+
+    /// <summary>Same, but the wait is bounded: after timeoutMs the process is terminated and 124
+    /// is returned (the GNU timeout convention), so a probe that never quits cannot hang its
+    /// caller forever. 0xFFFFFFFF (INFINITE) preserves the unbounded wait.</summary>
+    public static int Run(string exe, string cmdLine, string cwd, string outPath, string errPath, uint timeoutMs)
+    {
         if (_desk == IntPtr.Zero) { throw new InvalidOperationException("hidden desktop not open"); }
 
         SECURITY_ATTRIBUTES sa = new SECURITY_ATTRIBUTES();
@@ -103,9 +112,17 @@ public class CSVMHiddenDesktop
         CloseHandle(hOut); CloseHandle(hErr); CloseHandle(hIn);
         if (!ok) { throw new Exception("CreateProcess failed, win32 error " + err); }
 
-        WaitForSingleObject(pi.hProcess, 0xFFFFFFFF);
         uint code;
-        GetExitCodeProcess(pi.hProcess, out code);
+        if (WaitForSingleObject(pi.hProcess, timeoutMs) == 0x102 /* WAIT_TIMEOUT */)
+        {
+            TerminateProcess(pi.hProcess, 124);
+            WaitForSingleObject(pi.hProcess, 5000);   // let the kill land before the caller reads streams
+            code = 124;
+        }
+        else
+        {
+            GetExitCodeProcess(pi.hProcess, out code);
+        }
         CloseHandle(pi.hThread);
         CloseHandle(pi.hProcess);
         return (int)code;
@@ -133,9 +150,13 @@ function Invoke-OnHiddenDesktop {
         [Parameter(Mandatory=$true)][string]$CommandLine,
         [Parameter(Mandatory=$true)][string]$WorkingDirectory,
         [Parameter(Mandatory=$true)][string]$StdOut,
-        [Parameter(Mandatory=$true)][string]$StdErr
+        [Parameter(Mandatory=$true)][string]$StdErr,
+        # 0 = wait forever (the pre-timeout behaviour); > 0 kills the process after that many
+        # seconds and returns 124.
+        [int]$TimeoutSec = 0
     )
-    return [CSVMHiddenDesktop]::Run($Exe, $CommandLine, $WorkingDirectory, $StdOut, $StdErr)
+    $timeoutMs = if ($TimeoutSec -gt 0) { [uint32]($TimeoutSec * 1000) } else { [uint32]::MaxValue }
+    return [CSVMHiddenDesktop]::Run($Exe, $CommandLine, $WorkingDirectory, $StdOut, $StdErr, $timeoutMs)
 }
 
 <#

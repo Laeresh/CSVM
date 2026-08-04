@@ -14449,7 +14449,8 @@ airframe, one session.
 
 One take, `OriginalScreenshots/Videos/CAP-17 C2 south.mp4` — 2560×1440, 67.61 s, 2027 frames,
 filmed in the original's **nose view** (no cockpit, third-person instrument set, camera at the
-nose — logged separately as `BL-253`). Straight flight south along C2's coast, land east, water
+nose — logged separately as `BL-255`, minted as `BL-253` in a concurrent session and renumbered
+at the same-day merge). Straight flight south along C2's coast, land east, water
 west. Everything below is in `playtest/CAP-17/`, method and traps in its README.
 
 **The instrument is a spatio-temporal strip, not the frames.** For a fixed screen row, that row
@@ -14500,3 +14501,222 @@ pull-up around frame 875).
 
 **Verified.** Docs, backlog and analysis scripts, plus one code-comment correction in
 `MapEdgeExtender.cs` — no behaviour change, no build or test run.
+**`BL-254`: C2 gate2's two-stage death lands (2026-08-04).** Was: killing the studio gates opened
+the passage in one stage instead of the authored two — the archway swapped to its wreck at t=0
+(`AnimRuntime.ApplyDeathSwap`'s RESET-derived fallback firing unconditionally), pre-empting
+`blockit2` (`gate2_doorblast`'s `CALL_ANIMATION blockit2 START_TIME EVENT_OFFSET 28.5`), the
+OnCall def that actually carries the swap, `large_fireball` and the seven flying archway pieces.
+Diagnosis turned up a second bug behind the first: `gate2_doorblast`'s own `INVALIDATE_ANIMATION
+gate2_doorblast` (a same-name self-reference — the data's "consume the trigger" idiom) tore its
+own instance out of `AnimRuntime`'s live-instance list mid-construction, which orphaned the
+pending `blockit2` call before it could ever fire *and* discarded the door/fire motions the
+sequences below it had just registered in the same t=0 burst — so even the doors never actually
+animated. Fixed both: `ChainedSwapTarget` resolves one level of `CALL_ANIMATION` targets (the
+same lookup the dispatcher itself uses) and skips `ApplyDeathSwap` when a target authors the swap;
+a `Start`-scoped `protectSelfInvalidate` opt-in (`_startingInstances`, a stack) makes a same-name
+self stop a no-op while that exact instance is still mid-burst, without touching the
+cross-instance case (a nested `CALL_ANIMATION` stopping its caller) or the ambient world boot's
+own self-invalidating startup anims — the guard defaults off, and only the death path
+(`RunDeathSequence`) opts in. `ResetDestructible` now also stops and restores the rest pose of the
+chained def (`DestructibleRegistry.Instance.ChainedDeathDef`), so a reset before or after the
+28.5 s point stays idempotent. Verified headlessly (`--debug-damage` on C2): killing `gate2`
+leaves the archway `swap[healthy shown]`/`col[off 0, on 0]` (deferred, by design) and the doors
+visibly fading/rotating uninterrupted; advancing past 28.5 s produces `debris[+7]`/`sounds[+1]`
+(the swap, `large_fireball` and the seven flying pieces firing together); reset before and after
+28.5 s returns it to healthy and re-kills in the same hit count. `gate1` (no `blockit`
+counterpart) and `kkgate` still swap immediately, unchanged (`col[off 2, on 13]` /
+`col[off 4, on 0]`). First attempt at the self-invalidate fix scoped the guard to every `Start`
+call, which moved the `c2-city` golden (the C2 boat/car `*_start` startup anims are ALSO
+self-invalidating, and the guard let their motions run when they previously didn't) — narrowed to
+opt-in and the golden came back byte-identical. `.\RunTests.ps1`: build, 423 unit tests, 22 engine
+suites and all 13 goldens green. Still owed: the in-cockpit playtest of the staged death, and an
+original A/B on whether `gate1` derives its own stage two some other way (`gate1_doorblast` calls
+only its two fires in the shipped data) — `BL-254` stays open for both.
+
+## 2026-08-04 -- `RunProbe.ps1` gained `-TimeoutSec` (default 300): a hung probe kills itself
+
+**What was wrong.** A probe that never exits -- a flag combination with no auto-quit, a stuck
+boot -- blocked its caller forever: `CSVMHiddenDesktop.Run` waited `WaitForSingleObject(...,
+INFINITE)` and the visible-fallback path used an unbounded `WaitForExit()`. An agent-driven
+session sat on such probes for the full tool timeout, repeatedly (reported from the BL-254 work).
+
+**What changed.** `RunProbe.ps1` takes `-TimeoutSec` (named-only; `CmdletBinding
+PositionalBinding=$false` so the first `--flag` cannot bind to it), **default 300 s**, `0` = wait
+forever. On expiry the run is terminated and the script exits **124** (GNU timeout convention,
+distinct red `TIMEOUT` line) with the partial `.out`/`.err` streams intact as evidence of where it
+hung. `HiddenDesktop.ps1` carries the mechanism as a new `Run(..., uint timeoutMs)` overload
+(`TerminateProcess` on `WAIT_TIMEOUT`); the old 5-arg signature delegates with INFINITE, and
+`Invoke-OnHiddenDesktop`'s new `-TimeoutSec` parameter defaults to 0, so `RunTests.ps1` keeps its
+unbounded wait untouched. Godot args still forward verbatim via a `ValueFromRemainingArguments`
+catcher. Docs: the `RunProbe` paragraph in `docs/tooling.md`.
+
+**How verified.** `-TimeoutSec 1 --freecam --chapter=C1` (a run that never quits): killed at 1 s,
+exit 124, no orphaned Godot process (`Get-Process` clean). Normal path: `--stage=empty
+--plane=player_bhawk --screenshot=...` exits 0 under the default timeout with the screenshot
+written. `RunTests.ps1` call site confirmed unchanged (passes no `-TimeoutSec`).
+
+## 2026-08-04 -- `BL-254` follow-up: `gate1`'s archway is not destructible at all -- the RESET
+fallback now tells that apart from the C1 AA guns it exists to rescue
+
+**What was wrong.** The user answered the gate1 original-A/B question the first `BL-254` landing
+left open: in the original, gate1 has only destructible doors -- its archway never explodes or
+swaps to a wreck. Our `ApplyDeathSwap` RESET-derived fallback fired unconditionally for gate1 (as
+it does for the ~10% of destructibles that need it, the C1 AA guns), so killing gate1 swapped its
+healthy archway to a wreck at t=0 and dropped its collider -- wrong in the opposite direction from
+the gate2 bug the same item had just fixed. The trap: gate1's data shape (RESET declares
+`destroyed`, no swap authored anywhere, no chained def) is identical to the AA guns', so a name
+check could not tell them apart.
+
+**What changed.** Read the actual AA-gun defs (`aagun32`-`36`, C1) before committing to a rule: each
+one's only Initial sequence is `DAMAGE_SEQUENCE`, pure `If`/`CallAnimation` puffer calls
+(`sputter_fire_smoke_obj`/`sputter_black_smoke_obj`) -- no `ObjectMotionFromTo`/`ObjectMotion`/
+opacity/active-state event anywhere, so without the fallback they would die with literally nothing
+switching off. `gate1_doorblast`, by contrast, authors `door1`/`door2`'s own rotate, fade and
+deactivate directly in its own Initial sequences -- a complete, deliberate death that simply never
+gives the archway a destroyed variant. `AnimRuntime.AuthorsVisibleDeath` (`CSVM/src/Mech3/
+AnimRuntime.cs`) scans a def's own Initial sequences for that shape -- a move/fade/deactivate on a
+node outside the healthy/destroyed/dbase role set -- and `RunDeathSequence` withholds
+`ApplyDeathSwap` when it finds one, after the existing chained-swap check (gate2's `blockit2`)
+still runs first. Docs: `docs/formats/destructibles.md`'s RESET-fallback and C25 collider bullets
+amended to state both gates' asymmetry; `backlog.md`'s `BL-254` entry rewritten to record both
+fixes, closing the gate1 A/B question.
+
+**How verified.** `--damage-test=gate --chapter=C2 --damage-hd=25`: `gate1` now reads
+`swap[healthy shown]`/`col[off 0, on 0]` at kill (was `col[off 2, on 13]`) and stays that way
+permanently -- no tick ever swaps it -- while resetting and re-killing in the same hit count;
+`gate2` unchanged from its prior fix (`swap[healthy shown]` at kill, `debris[+7]`/`sounds[+1]` past
+28.5 s); `kkgate` unchanged (`col[off 4, on 0]`). Swept the full `--damage-test`/`damage-hd` report
+across C1, C2 and C5: `gate1` is the only def either sweep or a name-by-name read flipped --
+`aagun32` (rescued, as before), `m_build01`, the C1 water tower, `agyrobus`, the C5 facade/window
+family and every other def measured byte-identical to before this change. `.\RunTests.ps1`: build,
+423 unit tests, 22 engine suites, all 13 goldens hash-identical.
+
+## 2026-08-04 -- `BL-253`: C2 facade panels' log debris lands -- `facdsticks` was never built in
+the live world at all
+
+**What was wrong.** All 39 `fcpan01`-`39` deaths author `CALL_ANIMATION facade_parts AT_NODE
+fcpanNN`, the shared `facdsticks` template whose `fly_part1`-`4` launch four wooden "log" sticks
+ballistically -- but no logs ever appeared in the cockpit, only the `dustcloud` puffer. Checked all
+four candidate causes against the data and the engine rather than assuming: (1) confirmed, and
+worse than hypothesized -- `PlaceCalledTemplates` relocation is indeed gated off in the ambient
+world, but `facdsticks` was never BUILT into the live world at all (parentless, outside the
+spatial-partition grid, the same shape as the crash/effect template roots `WorldEffectsFactory`
+stages separately -- confirmed via the node lab's 2999-node name index having no `facdsticks`
+entry), so even with relocation on, `Targets()` resolved zero motion targets; (2) confirmed, and
+accepted as a documented floor -- one shared, unpooled template serving 39 call sites means two
+panels broken in succession show only the LATER kill's debris; (3) investigated, not a live bug --
+`Targets()` resolves through the CALLEE's own compiled symbol table (`facdsticks`' ptrs
+1710/1730/1723/1715 vs `blockit2`'s 1127-1133), so the `part1`-`4` name collision with gate2's
+archway pieces never reaches a binding path; (4) ruled out -- `facade_parts` is correctly one of
+the 22 `LOCAL_CHOREOGRAPHY` names `analysis/death-effect-closure/` keeps off the world-effects
+runtime.
+
+**What changed.** `WorldSession.Build` (`CSVM/src/Mech3/WorldSession.cs`) now builds `facdsticks`
+as an ordinary hidden child of the world root before `Bind` -- a no-op everywhere but C2, since its
+own RESET_STATE already keeps `part1`-`4` inactive. `AnimRuntime`'s `CallAnimation` dispatch gained
+a `_deathCallDepth` counter (bracketing `RunDeathSequence`'s own `Start` burst) and a curated
+`LocalCallTemplateNames` allow-list (currently just `facade_parts`) that together let a
+death-triggered call relocate its callee's template root onto the call site, exactly like
+`PlaceCalledTemplates` but scoped to the death path only. `DestructibleRegistry.Instance` gained
+`LocalCallTargets`, populated at dispatch time (same allow-list gate) so a reset (C28) also stops
+and restores a called template's own motions/RESET_STATE, not just the dying def's own.
+
+**Two over-broad first cuts, caught before landing.** Gating relocation on `_deathCallDepth` alone
+(any death-triggered call, not just `facade_parts`) measurably moved `kkgate`'s own `tbridg1_fire`
+-- real, already correctly positioned bridge geometry -- onto `kkgate` itself the moment its death
+ran. An equally unscoped `LocalCallTargets` reset-tracking pass stopped/restored C5's shared
+`small_yellow_sparks` template on whichever destructible's reset happened to dispatch it,
+tearing down a SIBLING destructible's still-flying pieces mid-sweep and shifting `rfspt4`-`6`/
+`lfspt1`-`3`/`w_lite1`-`5`'s debris counts for no authored reason. Both were narrowed to the same
+curated allow-list the relocation fix already needed, which is also the reason the allow-list
+exists as a curated set rather than "every death call."
+
+**How verified.** `--damage-test=fcpan01`/`fcpan02` (`--damage-hd=25`): a single kill now launches
+4 debris pieces; a position probe confirmed `facdsticks` moves from its build-time origin
+`(0, 0, 0)` to the struck panel's exact world position; two panels broken in succession each
+launch a fresh 4-piece count (the documented latest-wins floor); a reset restores the panel and
+re-kills in the same hit count, with `facdsticks`' own RESET_STATE deactivating `part1`-`4` so a
+reset before the 8 s flight finishes does not leave pieces visibly flown. Swept the full
+`--damage-test`/`damage-hd` report across C1, C2 and C5: only the `fcpan01`-`06` rows changed;
+`gate1`/`gate2` retained BL-254's exact behaviour, `kkgate` unchanged (`debris[12]` isolated,
+`[13]` in the full unfiltered sweep -- reproduced identically on the unmodified baseline, a
+pre-existing sweep-context artifact unrelated to this change), and every other def (`m_build01`,
+the C1 water tower, `agyrobus`, the C5 facade/window family, the C5 `rfspt`/`lfspt`/`w_lite` set)
+measured byte-identical. `.\RunTests.ps1`: build, 423 unit tests, 22 engine suites, all 13 goldens
+hash-identical. Still owed: the in-cockpit playtest of the visible debris and the two-panels floor.
+
+## 2026-08-04 -- `BL-253` follow-up: the curated allow-list is replaced by a data-driven rule, and
+the single-copy floor is replaced by a per-caller pool
+
+**What was wrong.** The first `BL-253` landing gated relocation on a hardcoded
+`LocalCallTemplateNames` array (`{"facade_parts"}`) rather than anything the data itself said --
+the user pushed back that "there must be something in the data" distinguishing a relocatable
+library-root template from a real, already-placed node like `tbridg1a`, and asked for a rule
+instead of a name list. Separately, the same-day A/B against the original game (`CAP-24`,
+2026-08-04, closed same day) settled the point `BL-253`'s point 2 had left as a "documented floor":
+the original shows several panels' debris flying in PARALLEL, not the latest kill's set alone --
+the single shared `facdsticks` copy was a real behavioral gap, not just an unmeasured cosmetic one.
+
+**What changed.** `GameZ.IsLibraryRoot` (`CSVM/src/Mech3/GameZ.cs`) replaces the name list: a node
+is a library root when it is nowhere in any node's `Children` list and nowhere in the World node's
+spatial-partition grid -- "staged with the game but never placed," the same shape `facdsticks`,
+`genx12` and (newly found during the sweep) `mp1reng_destroyed.flt` all share. `WorldSession`'s
+`ResolveLibraryRoot` (`CSVM/src/Mech3/WorldSession.cs`) now builds a called library root LAZILY,
+on the first death-triggered call that needs it, rather than `WorldSession.Build` eagerly building
+`facdsticks` by name up front -- eager building was retired because a generic rule can't special-
+case which library roots to skip, and several (the effects/crash-runtime templates
+`WorldEffectsFactory` stages itself, and `Projectile`'s weapon models) must not be double-built,
+while `genx12` must stay unbuilt entirely (its own `Targets` rescue depends on that). Relocation
+still requires `_deathCallDepth > 0` (never ambient world boot) and now also excludes any call
+carrying `operand_node` (the genx12-to-kkgate idiom, which redirects the CALLER's own subtree
+rather than naming a separate template -- relocating it would double the kkgate wreck).
+
+`ResolveLibraryRoot` also now returns a POOLED copy rather than the single shared instance:
+each caller keeps its own built copy (keyed by call-site anchor), sized by
+`EffectPools.LocalCallPoolSize` (`CSVM/src/Utils/EffectPools.cs`, moved out of `CSVM.Session` so
+both `WorldEffectsFactory` and `WorldSession` -- one layer down -- can use it without breaking the
+established Session-depends-on-Mech3-never-the-reverse rule). Pool SIZE is decided in three layers:
+(1) pool MEMBERSHIP is the same data-driven `IsLibraryRoot` test as above; (2) pool size prefers the
+gamez's own authored duplicate-copy count where the data has one -- several effect templates ship
+N same-shape sibling node records (verified against `sonic_ring`/`sonic_flare` and
+`flame_ball_01`-`03`/`muzzle_burst`, `docs/formats/gamez.md`) -- a real, decoded format fact; (3)
+`facdsticks` ships exactly ONE record, so its cap is not decodable from the data and lives instead
+in `CSVM/data/effect_pools.json`'s new `localCallRoots`/`localCallDefault` section (the `BL-231`
+TUNE-list mechanism, base 6, invented number, `backlog.md`), deliberately separate from the
+existing `roots` map (validated against `WorldEffectsFactory.EffectStageRoots`, which these names
+are never a member of).
+
+Building multiple copies of the same source node exposed a latent collision: `AnimRuntime`'s
+`_byIndex` map (`TryAdd`) keeps only the FIRST copy's binding for each compiled node index, so a
+second pooled copy would silently resolve through the first copy's nodes. Fixed with a new
+`indexByPointer` parameter on `IndexWorld` and a new `IndexPooledCopy` entry point that skips
+`_byIndex` registration entirely, forcing every pooled copy through the same anchor-scoped
+name-rescue path `genx12` already used (`Targets()`'s fallback), which correctly disambiguates by
+which specific copy is passed as the call's anchor. This in turn required `Start(target,
+startAnchor)` to run against the pooled copy itself, so `DestructibleRegistry.LocalCallTargets`
+changed from `HashSet<AnimDefinition>` to `HashSet<(AnimDefinition Def, Node3D Anchor)>` -- a
+reset now tears down/restores exactly the pooled copy its own dying instance owns, not whichever
+copy happened to be built first.
+
+**What this found for free.** `mp1reng_destroyed.flt` (the C2 zeppelin wreck) turned out to share
+the exact same never-built bug as `facdsticks` -- the coordinator's original brief assumed a
+separate staging path already handled it correctly; `--debug-damage="node=mp1reng_destroyed.flt"`
+showed it was not built either. The generic `IsLibraryRoot` fix resolves it without any
+zeppelin-specific code.
+
+**How verified.** `--damage-test=facade`/`fcpan01`/`fcpan02`: a single kill still launches 4 debris
+pieces from the struck panel's own position; two-plus panels broken in succession now each keep
+their own in-flight debris set (pooled, up to 6 concurrent) instead of the earlier kill's pieces
+collapsing onto the new site; a reset restores the panel and re-kills in the same hit count, and
+each pooled copy's own RESET_STATE deactivates its `part1`-`4` so a reset mid-flight never leaves
+pieces visibly flown. Swept the full `--damage-test`/`damage-hd` report across C1, C2 and C5: only
+the `fcpan01`-`06` rows changed from the pre-pooling baseline; `gate1`/`gate2` retain `BL-254`'s
+behaviour; `kkgate` unchanged (the `debris[12]`/`[13]` split is the same pre-existing
+sweep-context artifact `BL-253`'s first pass already found, reproduced identically on the
+unmodified baseline via a `git stash` A/B, not caused by this change); every other def
+(`m_build01`, the C1 water tower, `agyrobus`, the C5 facade/window family) measured byte-identical.
+`.\RunTests.ps1`: build, 423 unit tests, 22 engine suites, all 13 goldens hash-identical. Docs:
+`docs/formats/gamez.md` gained the parentless/unpartitioned-node decode bullet (with the C2 census
+and the authored-duplicate-pooling sub-bullet); `backlog.md`'s `BL-231` entry gained the
+`localCallRoots` paragraph and `BL-253`'s own entry was rewritten to drop the retired
+hardcoded-list and single-copy-floor language.

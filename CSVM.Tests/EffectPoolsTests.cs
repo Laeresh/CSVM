@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text;
 using CSVM.Session;
+using CSVM.Utils;
 using Xunit;
 
 namespace CSVM.Tests;
