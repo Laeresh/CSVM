@@ -63,7 +63,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Gauges and warnings (`GaugeCluster.cs` cluster — sequential, same file)
 
-1. ☐ `BL-184` Tween the ammo/hardpoint gauge arrow at 168.7 °/sim-s with shortest-way wrap
+1. ☑ `BL-184` Tween the ammo/hardpoint gauge arrow at 168.7 °/sim-s with shortest-way wrap
 2. ☐ `BL-148` Stall warning: blink-rate ramp + split the 0.30 warn / 0.25 nose-drop thresholds
 3. ☐ `BL-142` Re-tune `IndicatorLowFrac` for guns on its own merits
 
@@ -132,6 +132,12 @@ intermediate angles exist and the 90° step spans ~633 ms sim. A/B against `CAP-
 39% fast. Do not ease as smoothstep. Do not derive the hardpoint ring size from the loadout — 8 is
 fixed (user-confirmed 2026-08-04; `docs/formats/markers.md`). Acceptance is a capture A/B, which
 is why this item was deliberately kept out of the code-verifiable-only quickwins plan.
+
+**Landed 2026-08-04.** Constant-rate tween implemented per Approach (no ease — the measured ~97 ms
+end-cap ease has no positive shape beyond "not a smoothstep", so it stays unimplemented and
+recorded, not guessed). `gauge-arrow-tween` suite added; full `.\RunTests.ps1` green, goldens
+unmoved. Capture A/B against `CAP-18` still owed at the controls — `PT-31`. Details:
+`docs/HISTORY.md` 2026-08-04, `docs/formats/hud.md`.
 
 ## A2 ☐ `BL-148` Stall warning blink-rate ramp + threshold split
 

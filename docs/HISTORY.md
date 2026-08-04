@@ -14883,3 +14883,35 @@ Swept with the close: `StuntMission.Update`'s doc comment still described the pr
 test and now describes the crossing test; `DzRadius`'s own doc and `GeometryAnchor`'s hangar-slit
 note no longer imply the radius scores. Docs and comments only — no behaviour change; build run
 for the comment edits.
+
+## 2026-08-04 — PLAN-m3-polish-7 A1 `BL-184`: the weapon-gauge arrow now sweeps instead of snapping
+
+`GaugeCluster` used to redraw the gun/missile-gauge pointer straight from the selected belt slot
+every frame — an instant snap. `CAP-18` (decoded earlier the same day) measured the original as a
+tween: one constant rate shared by both gauges, **168.7 ± 1.6 °/sim-s**, routed the shortest way
+round, with the numeric readout still snapping on the sweep's first frame.
+
+**Implementation.** `_Process` now advances a per-gauge angle (`_gunArrowAngle`/
+`_missileArrowAngle`) toward the selected slot's target angle at `ArrowSweepDegPerSimS` × the sim
+frame delta (`GameClock.Current.FrameDt`, not the raw `_Process` delta), wrapped the shortest way
+(`Mathf.PosMod(target − current + 180, 360) − 180`, CAP-18's own routing rule). `_Draw` reads the
+already-advanced angle instead of computing it from `Selected`. A `NaN` angle (gauge just appeared,
+or `Reset()` on respawn) snaps instead of sweeping in from an undefined pose — respawn state resets
+are instant elsewhere in `GaugeCluster`/`FlightController`, so the arrow matches that convention.
+
+**What was deliberately left out.** CAP-18 also measured ~2 frames (~97 ms sim) of ease at each end
+of the sweep, explicitly "not a smoothstep" but with no positive shape given — a lead, not a
+finding, per the plan's own evidence-confidence rule. The Approach this item was scheduled with
+describes a constant-rate tween only, so that's what landed; a pure 168.7 °/sim-s sweep runs a 90°
+step in ~533 ms sim against CAP-18's end-to-end ~633 ms. Recorded as an open gap (also in
+`docs/formats/hud.md`) rather than guessed at, since inventing the ease's shape is exactly the trap
+this project falls into most often.
+
+**Verify.** New in-engine suite `gauge-arrow-tween` (`Suites.cs`) asserts the target-angle mapping,
+the shortest-way wrap direction across the ±180° seam, the NaN-snap, the per-step rate, and that a
+90° sweep lands in ~533 ms sim — all internal-static so the suite can call the math directly, the
+same convention `GunIndicatorColor`/`HardpointIndicatorColor` already use. Full `.\RunTests.ps1`
+passes (`build`/`units`/`engine` 23/23/`goldens` 13/13, all hash-identical — a draw-time-only tween
+does not move any `--det` capture). **The capture A/B against `CAP-18` this item's acceptance
+criterion calls for is still owed** — it needs eyes on a live sweep, not something a headless run
+can confirm.

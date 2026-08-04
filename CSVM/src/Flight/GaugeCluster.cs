@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight;
@@ -52,6 +53,10 @@ public sealed partial class GaugeCluster : Control
     // A gun belt indicator's colour by remaining fraction: green healthy, yellow low, red empty.
     // Gun-only (BL-024): hardpoints/pylons never show this intermediate tier. TUNE.
     internal const float IndicatorLowFrac = 0.34f;
+    // Weapon-gauge arrow sweep rate, shared by both gauges (BL-184, CAP-18: 168.7 ± 1.6 °/sim-s,
+    // linear — the measured ~2-frame ease at each end is within noise and NOT a smoothstep).
+    // Internal (not private) so the run-tests suite can assert the rate directly.
+    internal const float ArrowSweepDegPerSimS = 168.7f;
     private const float LowAltAglM = 50f;     // LOW ALT below this height over ground (user spec)
     private const float WarnBlinkPeriod = 0.4f;  // s per on/off cycle of LOW ALT / STALL (TUNE)
     private const float DamageBlinkTime = 5f;    // s a hit part blinks (user-observed in the original)
@@ -113,6 +118,11 @@ public sealed partial class GaugeCluster : Control
     private GaugePoly? _altHundreds, _altThousands;
     private GaugePoly? _spdNeedle;
     private double _time;
+    // Live sweep angle of each weapon-gauge pointer (degrees, same convention as DrawGaugePoly's
+    // rotDeg); NaN means "not yet drawn" — the next update snaps to target instead of sweeping in
+    // from zero.
+    private float _gunArrowAngle = float.NaN;
+    private float _missileArrowAngle = float.NaN;
 
     private bool WarnPhaseOn => Mathf.PosMod((float)_time, WarnBlinkPeriod) < WarnBlinkPeriod * 0.5f;
     private bool DamagePhaseOn => Mathf.PosMod((float)_time, DamageBlinkPeriod) < DamageBlinkPeriod * 0.5f;
@@ -188,6 +198,8 @@ public sealed partial class GaugeCluster : Control
     {
         foreach (var z in _zones)
             z.BlinkLeft = 0f;
+        _gunArrowAngle = float.NaN;
+        _missileArrowAngle = float.NaN;
     }
 
     /// <summary>A part took damage: its fill + border blink for the next few seconds
@@ -202,6 +214,11 @@ public sealed partial class GaugeCluster : Control
     public override void _Process(double delta)
     {
         _time += delta;
+        float simDt = GameClock.Current?.FrameDt ?? (float)delta;
+        if (GunGauge is { } gg)
+            _gunArrowAngle = TweenArrow(_gunArrowAngle, TargetArrowAngle(_gunGaugeGeom.Positions, gg.Selected), simDt);
+        if (MissileGauge is { } mg)
+            _missileArrowAngle = TweenArrow(_missileArrowAngle, TargetArrowAngle(_missileGaugeGeom.Positions, mg.Selected), simDt);
         foreach (var z in _zones)
             z.BlinkLeft = Mathf.Max(0f, z.BlinkLeft - (float)delta);
         QueueRedraw();
@@ -261,12 +278,12 @@ public sealed partial class GaugeCluster : Control
         if (MissileGauge is { } mg && _missileGaugeGeom.HasGeometry)
         {
             var c = new Vector2(MissileCenter.X * s, FromBottom(MissileCenter.Y, s, vp.Y));
-            DrawWeaponGauge(_missileGaugeGeom, mg, c, MissileRadius * s, isGun: false);
+            DrawWeaponGauge(_missileGaugeGeom, mg, c, MissileRadius * s, isGun: false, _missileArrowAngle);
         }
         if (GunGauge is { } gg && _gunGaugeGeom.HasGeometry)
         {
             var c = new Vector2(vp.X - GunCenterFromRight * s, FromBottom(GunCenterY, s, vp.Y));
-            DrawWeaponGauge(_gunGaugeGeom, gg, c, GunRadius * s, isGun: true);
+            DrawWeaponGauge(_gunGaugeGeom, gg, c, GunRadius * s, isGun: true, _gunArrowAngle);
         }
     }
 
@@ -289,6 +306,22 @@ public sealed partial class GaugeCluster : Control
     // assert the sequence directly.
     internal static int DamageZoneColor(float frac, float yellowAt, float orangeAt, float redAt) =>
         frac > yellowAt ? 0 : frac > orangeAt ? 1 : frac > redAt ? 2 : 3;
+
+    // Internal (not private) so the run-tests suite can assert the sweep math directly.
+    internal static float TargetArrowAngle(int positions, int selected) =>
+        positions > 0 ? -(360f / positions) * selected : 0f;
+
+    /// <summary>Advances a weapon-gauge arrow angle at most <see cref="ArrowSweepDegPerSimS"/> ×
+    /// simDt toward target, routed the shortest way round (BL-184). NaN snaps instead of sweeping
+    /// in from an undefined pose (gauge just appeared, or a respawn cleared it via Reset).</summary>
+    internal static float TweenArrow(float current, float target, float simDt)
+    {
+        if (float.IsNaN(current))
+            return target;
+        float delta = Mathf.PosMod(target - current + 180f, 360f) - 180f;
+        float maxStep = ArrowSweepDegPerSimS * simDt;
+        return Mathf.Abs(delta) <= maxStep ? target : current + Mathf.Sign(delta) * maxStep;
+    }
 
     // ---- extraction ----
 
@@ -559,8 +592,10 @@ public sealed partial class GaugeCluster : Control
     /// <summary>Draws one weapon gauge: the labelled face, the belt lights for the slots the plane
     /// actually has — guns step green/yellow/red by remaining fraction, hardpoints step green/red
     /// with no intermediate colour — the right-aligned digit count, the left-aligned type name,
-    /// then the pointer rotated to the selected belt slot.</summary>
-    private void DrawWeaponGauge(GaugeGeom geom, WeaponGauge state, Vector2 center, float radius, bool isGun)
+    /// then the pointer at its animated sweep angle (tweened toward the selected belt slot in
+    /// <see cref="_Process"/>; the readout above still snaps).</summary>
+    private void DrawWeaponGauge(GaugeGeom geom, WeaponGauge state, Vector2 center, float radius, bool isGun,
+        float arrowAngle)
     {
         foreach (var p in geom.Face)
             DrawGaugePoly(p, center, radius);
@@ -578,7 +613,7 @@ public sealed partial class GaugeCluster : Control
         DrawGlyphs(geom.Digits, FormatCount(state.Count, geom.Digits.Count), center, radius);
         DrawGlyphs(geom.TypeChars, FormatType(state.Type, geom.TypeChars.Count), center, radius);
         if (geom.Arrow != null && geom.Positions > 0)
-            DrawGaugePoly(geom.Arrow, center, radius, -(360f / geom.Positions) * state.Selected);
+            DrawGaugePoly(geom.Arrow, center, radius, arrowAngle);
     }
 
     /// <summary>Draws each fixed glyph quad with the atlas texture for its character; a space or an

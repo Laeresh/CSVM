@@ -78,6 +78,9 @@ public static class Suites
         into.Add(new TestHarness.Suite("gauge-colours",
             "the belt indicator's yellow tier is gun-only; hardpoints step green→red; a damage " +
             "zone's four bands walk armor-first over the combined pool (BL-085/BL-173)", GaugeColours));
+        into.Add(new TestHarness.Suite("gauge-arrow-tween",
+            "the weapon-gauge pointer sweeps at CAP-18's measured 168.7 °/sim-s the shortest way " +
+            "round, and snaps rather than sweeping in from an undefined pose (BL-184)", GaugeArrowTween));
         into.Add(new TestHarness.Suite("weapons-defs",
             "every weapons.json BALLISTICS entry reads through the typed reader", WeaponsDefs));
         into.Add(new TestHarness.Suite("weapon-blast",
@@ -505,6 +508,54 @@ public static class Suites
             $"60% airframe gone lands on the shipped red threshold, frac={zoneState.Fraction:0.000}");
         ctx.Check(GaugeCluster.DamageZoneColor(zoneState.Fraction, yellowAt, orangeAt, redAt) == 3,
             $"60% airframe gone is red");
+    }
+
+    /// <summary>BL-184 (CAP-18): the weapon-gauge pointer sweeps at a single measured constant
+    /// rate — 168.7 °/sim-s — toward the selected belt slot, routed the shortest way round, and
+    /// snaps instead of sweeping in when it has no prior pose (NaN: gauge just appeared, or a
+    /// respawn cleared it via GaugeCluster.Reset).</summary>
+    private static void GaugeArrowTween(TestContext ctx)
+    {
+        ctx.Check(Mathf.IsEqualApprox(GaugeCluster.TargetArrowAngle(4, 0), 0f),
+            $"gun slot 0 targets 0°");
+        ctx.Check(Mathf.IsEqualApprox(GaugeCluster.TargetArrowAngle(4, 1), -90f),
+            $"gun slot 1 targets -90° (4 positions, 90° apart)");
+        ctx.Check(Mathf.IsEqualApprox(GaugeCluster.TargetArrowAngle(8, 1), -45f),
+            $"missile slot 1 targets -45° (8 positions, 45° apart)");
+        ctx.Check(GaugeCluster.TargetArrowAngle(0, 0) == 0f, $"no positions targets 0°, never NaN/inf");
+
+        ctx.Check(GaugeCluster.TweenArrow(float.NaN, -90f, 0.5f) == -90f,
+            $"a NaN pose snaps to target instead of sweeping in from an undefined angle");
+
+        // A 90° step at 168.7 °/sim-s is 533 ms of pure interior-rate sim time; one 16.6 ms
+        // sim-step (1/60 s) advances it by exactly the rate — neither clamped early nor
+        // overshooting. CAP-18's end-to-end capture reads ~633 ms for the same step because it
+        // also carries a ~97 ms ease unimplemented here — the Approach was a constant-rate tween
+        // with no easing, and the ease's own shape is only known as "not a smoothstep", not
+        // measured well enough to build (a lead, not a finding); the gap is real and owed a
+        // follow-up if the capture A/B this item still owes reads as visibly wrong at the ends.
+        float step = GaugeCluster.ArrowSweepDegPerSimS * (1f / 60f);
+        float afterOneStep = GaugeCluster.TweenArrow(0f, 90f, 1f / 60f);
+        ctx.Check(Mathf.IsEqualApprox(afterOneStep, step),
+            $"one sim-step advances by rate×dt, angle={afterOneStep:0.000} expected={step:0.000}");
+
+        float angle = 0f;
+        int steps = 0;
+        while (!Mathf.IsEqualApprox(angle, 90f) && steps < 200)
+        {
+            angle = GaugeCluster.TweenArrow(angle, 90f, 1f / 60f);
+            steps++;
+        }
+        float simMs = steps * (1000f / 60f);
+        ctx.Check(Mathf.IsEqualApprox(angle, 90f), $"a 90° sweep reaches its target, angle={angle:0.000}");
+        ctx.Check(simMs is > 510f and < 560f,
+            $"a 90° sweep at a pure 168.7°/sim-s interior rate spans ~533 ms sim, got {simMs:0}ms (CAP-18's own end-to-end capture reads ~633 ms — the ~97ms unimplemented ease, see above)");
+
+        // Shortest-way wrap: 170° → -170° is only 20° apart going UP through the ±180° seam, 340°
+        // apart going down through 0° — the step must move toward 180°, not back toward 0°.
+        float wrapped = GaugeCluster.TweenArrow(170f, -170f, 1f / 60f);
+        ctx.Check(wrapped > 170f,
+            $"the shortest-way wrap steps up through the ±180° seam rather than back through 0°, got {wrapped:0.00}");
     }
 
     private static void WeaponsDefs(TestContext ctx)

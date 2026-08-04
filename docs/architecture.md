@@ -1517,6 +1517,12 @@ colour per zone.
 ⚠ The weapon-gauge 4-digit readout is per-GROUP for guns, per-PYLON for rockets — NOT a total; the
   belt-indicator yellow tier is likewise GUN-ONLY (hardpoint/pylon indicators go green→red, never
   yellow — confirmed against the original).
+⚠ The gun/missile arrow SWEEPS to the selected slot at a shared constant 168.7 °/sim-s
+  (`ArrowSweepDegPerSimS`, `BL-184`/`CAP-18`), tweened in `_Process` (`TweenArrow`, shortest-way
+  wrap) from sim dt (`GameClock.Current.FrameDt`), not drawn straight from `Selected` — `_Draw`
+  only reads the already-advanced `_gunArrowAngle`/`_missileArrowAngle`. `Reset()` clears both to
+  NaN so a respawn snaps instead of sweeping in from the previous plane's pose. The readout digits/
+  type name still snap on the sweep's first frame — do not tween those too.
 ⚠ The gungauge/missilegauge face is on a generic child (`g815`/`g819`) on ALL planes (no Bloodhawk
   special case, unlike the damage dial) — "any unrecognised child = face" is the extraction rule.
 

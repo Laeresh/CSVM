@@ -177,7 +177,15 @@ The functional children, and how `cockpit.gw` drives each:
   the **selected gun group**, the missile arrow to the **next pylon that will fire**.
   Unlike the dial needles, the arrow's shape IS its mesh: a single 5-vertex polygon
   (pointed tip at +y, two shoulders, a base) whose wrapping UVs (u 0.98–2.02,
-  v 0.50–3.10) smear the tiny 16×16 texture across it.
+  v 0.50–3.10) smear the tiny 16×16 texture across it. **The pointer sweeps, it does
+  not snap** (`BL-184`, `CAP-18`, decoded 2026-08-04): a single constant rate shared
+  by both gauges, **168.7 ± 1.6 °/sim-s**, routed the shortest way round
+  (`GaugeCluster.TweenArrow`); the numeric readout above still snaps on the sweep's
+  first frame. CAP-18's own end-to-end capture also carries a ~97 ms sim ease at each
+  end (not a smoothstep) that the remake does not reproduce — its shape is unmeasured
+  beyond "not a smoothstep", so a pure constant-rate sweep runs a 90° step in ~533 ms
+  against the capture's ~633 ms; owed a follow-up if the still-outstanding capture A/B
+  reads as visibly off at the sweep's ends.
 
 ⚠ The digit/letter/indicator textures (`zero.tif`…, `A.tif`…, `greenindicator.tif`,
 `greenhilite.tif`, `smallneedle.tif`, `gungauge.tif`, `missilegauge.tif`) live in
