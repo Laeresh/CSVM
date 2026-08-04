@@ -252,6 +252,41 @@ sweep lines — the fit locks at **NCC 0.7684** and lands **0.05 px** from that 
 now carries an `NCC_FLOOR` and `fitdial` stores each NCC beside its affine, so `load_affine` refuses
 an unlocked fit instead of handing back a plausible-looking wrong centre.
 
+**The chase camera's distance moves with speed AND with acceleration — measured 2026-08-04 from
+`CAP-21`.** Four Bloodhawk chase takes driven by `analysis/capture-rigs/ThrottleSweep.ahk`: two 5 s
+staircases 0/8↔8/8 and two single-jump runs, so the same speed range is traversed with completely
+different throttle histories. With the camera untouched and the FOV fixed, the aircraft's **span in
+frame** is 1/distance, and the speedometer in the same frame is the abscissa (`chasesize.py` keys
+the airframe's crimson; `run2chase.py` supplies the speed). All four clips register to the chase
+pooled median at dx = dy = 0 (peaks 0.73–0.80) and the two dials fit at NCC 0.990/0.990.
+
+| what | measurement |
+|---|---|
+| span at plateau, 118.0 mph | **454.00 ± 0.23 px** |
+| span at plateau, 296–299 mph | **436.00 / 436.50 / 435.50 / 437.50 px** — the four takes, 0.46% apart |
+| speed term | `d(V)/d(0) = 1 + 5.65e-4·V(m/s)`; **+4.13%** over 118 → 299 mph |
+| implied `dist_factor` (Bloodhawk `dist` 18.5) | **0.0105** fitted, 0.00945 from the two extreme plateaux — shipped value **0.01** |
+| acceleration term | **+0.28% of `d` per (mph/sim-s)** = 0.105 units per (m/s²), corr −0.79…−0.85 in all four clips |
+| peak excursion | **+15.2%** at +38 mph/sim-s; **−6.9%** at −33 mph/sim-s — ~4× the speed term, and far faster |
+| relaxation once acceleration stops | **τ = 1.11 wall s = 1.55 sim s**, i.e. **0.65 /sim-s** |
+
+So the shipped `dist_factor` 0.01 is confirmed to 5%, and **the game's internal speed unit is
+metres per sim second** — the same metric world the altimeter established.
+
+⚠ **The steady term and a camera position lag are the same shape, and only the magnitude separates
+them.** A first-order world-space follower `ẋ_cam = c(x_target − x_cam)` leaves a steady lag `V/c`,
+also linear in `V`. Fitting the observed coefficient as a lag needs **c = 96 /s**, which is no
+constant in `camparam.zrd.json`; fitting it as `dist_factor` lands on a shipped 0.01. That also
+**excludes `pos_catch_up` 2.0 as a world-space position lag** — at c = 2 the camera would trail
+66 m at 300 mph, 3.6× the whole chase radius, and the footage shows nothing of the kind. The
+original must smooth the *offset*, not the world position.
+
+⚠ **The clip-to-clip systematic is ~1%, and it is the floor under every number here.** Two plateaux
+that should agree do not: 118.0 mph reads 454.00 px and 134.9 mph reads 458.50 — bigger at the
+higher speed. The span/height aspect differs 3% between those takes, so the viewing angle onto the
+wing differed and the red-key edge moved with it. Within one take the plateau sd is 0.2–0.8 px
+(0.05–0.18%), so the *shape* of a curve is far better determined than any cross-clip offset.
+
 ## Two HUDs, one pipeline
 
 The original draws the instruments two ways and they are different measurement problems. `hud.py`
@@ -326,7 +361,12 @@ python analysis/video-flight-calibration/run2chase.py cap10chase cap10dive   # a
 python analysis/video-flight-calibration/enginepitch.py             # pair alt/mph to CAP-10 audio
 python analysis/video-flight-calibration/dutysweep.py               # scripted-rig takes (F13/F14)
 python analysis/video-flight-calibration/recovery.py                # the dive-recovery take
+python analysis/video-flight-calibration/chasesize.py               # apparent size -> chase distance
 ```
+
+`chasesize.py` is the one chase stage that does **not** read the cached panel strip: it needs the
+full colour frame, because the measurement is the aircraft itself rather than an instrument. It
+still normalises to canonical game px, so its numbers are comparable across capture geometries.
 
 ⚠ **The chase decode does not use `LKRegistrar`, and must not.** The chase HUD is a screen-space
 sprite pinned by construction — `pool.py` registers every chase clip at dx = dy = 0 — so there is no

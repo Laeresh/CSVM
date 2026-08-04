@@ -145,6 +145,25 @@ is a staircase of taps rather than a held axis.
   F16 and treat F14's last step or two as expendable.
 - **Key `0` is not bound to throttle** (user-confirmed, 2026-08-04) — the set is `1`–`9`, nine keys
   for nine notches. Recorded rather than assumed, as `BL-150`(e) records `Kp5`.
+- ✅ **Flown 2026-08-04, four takes, and the control paid for itself.** The staircase and the
+  two-point runs agree at ~296 mph to **0.46%** across both directions and two altitudes, which is
+  what pinned the distance to *speed* rather than throttle setting; the two-point runs' ~10× larger
+  acceleration is what exposed the second term, a **+15%** transient relaxing at 0.65 /sim-s that a
+  gentle hand-flown sweep would have folded invisibly into the speed law. Decoded by
+  `analysis/video-flight-calibration/chasesize.py`; result on `BL-248` and in `docs/HISTORY.md`
+  (2026-08-04 (f)).
+- **The logs were not needed, and that is a property of this capture rather than of the rig.** The
+  speedometer is in every frame, so the abscissa comes off the footage and no clock alignment
+  against `throttle-*-log.txt` is required — unlike `CAP-08`, where recovering that alignment from
+  motion alone was the hard part. Keep writing them anyway: they cost nothing and they are the only
+  record of *which* mode a take was.
+- **What is in the shot is the recorder's FPS counter** (top-left, `FPS 120 …`), not the rig's
+  tooltip. It sits well clear of the aircraft and of both chase dial columns, so it cost nothing
+  here — but it would land inside a **cockpit** capture's panel ROI, so turn it off before
+  re-recording anything that goes through `extract.py`'s cockpit path. Incidentally it records that
+  these takes ran at **120 fps in-game** while captured at 30: the sim-clock factor k = 1.390 was
+  measured on an earlier session, so any figure quoted here in *sim* seconds inherits that
+  assumption. The wall-clock figures do not.
 - ⚠ **Do not touch the camera** — no numpad key, no `+`/`−` distance trim, no view change. Apparent
   size *is* the measurement. This is also why the rig uses main-row scancodes (`sc002`–`sc00A`) and
   why numpad scancodes must never appear in it.

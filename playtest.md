@@ -70,13 +70,18 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
-| `CAP-21` | Chase distance against airspeed | One aircraft, external chase view, a slow full-throttle acceleration from near-stall to top speed and back, held level, with the **airspeed readable in frame throughout**. The plane's apparent size is the measurement, so keep the view unchanged and do not touch the +/− trim. Names the aircraft in the filename — the distance is per-plane | `BL-248` |
 
 *(The numpad +/− distance trim needs no capture — you already have video of it.)*
 
-*(`CAP-21` decides whether the original's chase distance moves at all. If the plane's apparent size
-is constant across the whole speed range, `dist_factor`/`dist_vary` do not drive distance from
-speed, and `BL-248`(a) is disproved rather than implemented — a correct disproof closes it.)*
+*(`CAP-21` is **done — four takes, nothing further owed** (2026-08-04), and its ID is retired. The
+original's chase distance **is** dynamic, in two terms. (a) A **speed** term: at plateau the
+Bloodhawk draws 454.00 ± 0.23 px of span at 118 mph and 436.0–437.5 px at 296–299 mph, i.e.
+distance +4.13%, which fits `d = dist + dist_factor·V(m/s)` at `dist_factor` **0.0105** against the
+shipped 0.01. (b) An **acceleration** transient ~4× larger and far faster — +15.2% distance at 38 mph/sim-s,
+relaxing at **0.65 /sim-s** — which is the part the eye actually reads. The scripted two-point
+takes were the control and they worked: all four takes agree at ~296 mph to 0.46%, so the distance
+tracks speed and not throttle setting. Details, traps and the surviving unknowns
+(`dist_vary`, the catch-up units) are on `BL-248`; evidence in `playtest/CAP-21/`.)*
 
 ### Audio
 

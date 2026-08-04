@@ -102,6 +102,16 @@ CLIPS = {
     # The pull-out. Nine takes in, no clip yet held a dive THROUGH the recovery, which
     # is the one thing BL-109's "~1.05 overshoot at pull-out" claim needs to be tested.
     "cap10rec": ("CAP-10 Dive Recovery.mp4", "chase"),
+    # 2026-08-04 CAP-21, driven by capture-rigs/ThrottleSweep.ahk. Chase view, the
+    # camera untouched throughout, so the aircraft's apparent size in frame is the
+    # measurement and the speedometer is the abscissa (BL-248). The two `full` takes
+    # are the CONTROL: same speeds, a completely different throttle history, so a
+    # size that tracks speed must agree across the pair and one that tracks throttle
+    # setting or acceleration cannot.
+    "cap21up": ("CAP-21 0 to 100 Stepped.mp4", "chase"),
+    "cap21down": ("CAP-21 100 to 0 Stepped.mp4", "chase"),
+    "cap21upfull": ("CAP-21 0 to 100 Full.mp4", "chase"),
+    "cap21downfull": ("CAP-21 100 to 0 Full.mp4", "chase"),
 }
 
 

@@ -14186,3 +14186,84 @@ for the alias. The clip is VFR (16.67-41.70 ms intervals), so every time is a PT
 both clocks here are wall clocks, so the sim-clock factor does not enter.
 
 **Verified.** Docs only - no build or test run.
+
+## 2026-08-04 (f) — `CAP-21` flown: the original's chase distance is dynamic in two terms, and `dist_factor` 0.01 is confirmed
+
+`BL-248` inherited an undecoded block from `BL-149`: `dist_factor` 0.01, `dist_vary` 0.1,
+`dist_min`/`dist_max`, and the catch-up triplet. `CAP-21` was filmed to decide the first question —
+whether the shipped chase distance moves with speed **at all**, with a flat result explicitly
+accepted as a disproof. It moves, and the law is readable.
+
+**The capture.** Four Bloodhawk chase takes driven by `analysis/capture-rigs/ThrottleSweep.ahk`,
+2560×1440, camera untouched throughout: two 5 s-per-step staircases (`0/8→8/8` and `8/8→0/8`) and
+two single-jump runs over the same range. The two-point runs are the control the rig was written
+for — the same speeds traversed with a completely different throttle history and ~10× the
+acceleration.
+
+**The measurement.** With the FOV fixed, apparent size is 1/distance, so the aircraft's span in
+frame is the ordinate and the speedometer in the *same frame* is the abscissa. New stage
+`analysis/video-flight-calibration/chasesize.py` keys the airframe's crimson (`R − max(G, B) > 45`
+inside a window that sits between the two chase dial columns, so no instrument art can enter the
+key) and reports a 0.5%-trimmed column-weighted span in canonical game px; `run2chase.py` supplies
+altitude and mph. All four clips register to the chase pooled median at dx = dy = 0 (peaks
+0.73–0.80) and the altimeter/speedometer fit at NCC 0.9900/0.9898 — the published chase figures,
+reproduced.
+
+**(a) A speed term, and it is `dist_factor`.** At true plateaux (|dV/dt| < 0.3 mph/wall-s) the
+aircraft draws **454.00 ± 0.23 px at 118.0 mph** and **436.00 / 436.50 / 435.50 / 437.50 px at
+296–299 mph** — distance +4.13%. Weighted over eight plateau bins, `d(V)/d(0) = 1 + 5.65e-4·V(m/s)`,
+which against the Bloodhawk's own `dist` 18.5 implies **`dist_factor` = 0.0105** (0.00945 from the
+two extreme plateaux with no fit at all) against the shipped **0.01**. So the law is
+`d = dist + dist_factor·V`, with `V` in **metres per sim second** — the same metric world the
+altimeter established, now confirmed from the camera side.
+
+**The control worked.** Those four ~296 mph readings are 0.46% apart across two throttle histories,
+two altitudes (673 ft and 3351 ft) and opposite sweep directions. A distance that tracked throttle
+*setting* or *acceleration* alone could not produce that agreement; one that tracks speed must, and
+does.
+
+**(b) An acceleration transient ~4× larger, and far faster — it is what the eye actually sees.** The residual
+against the plateau law correlates with `dV/dt` at **−0.79 to −0.85 in every one of the four clips**,
+slope **+0.28% of `d` per (mph/sim-s)** = 0.105 camparam units per (m/s²). The single-jump take
+stretches the shot to **+15.2%** at 38 mph/sim-s (realised `d` ≈ 22.5) and the deceleration closes it
+to **−6.9%** (`d` ≈ 18.3). The staircase takes render this as a clean sawtooth — one dip per throttle
+step, relaxing before the next.
+
+**A settling time, which is the other half of what `BL-248` wanted.** Fitted on the one window in
+the set where the aircraft stops accelerating and is then left alone, the excess decays
+exponentially at **τ = 1.11 wall s = 1.55 sim s (0.65 /sim-s)**, log-residual sd 0.108. Nearest
+shipped constant is `dist_catch_up` **1.0**; `pos_catch_up` 2.0 is 3× too fast and `look_catch_up`
+3.0 is 4.6× too fast to be this rate. The sim-second figures here carry k = 1.390, measured in an
+*earlier* session — the recorder's own overlay records these takes running at **120 fps in-game** —
+so τ = 1.11 **wall** s is the raw number. The `dist_factor` result above involves no clock at all:
+the speedometer reads the game's own speed.
+
+**A constraint on `pos_catch_up` that the footage settles outright.** A first-order world-space
+position follower `ẋ_cam = c(x_target − x_cam)` leaves a steady lag `V/c` — at c = 2 /s that is
+**66 m at 300 mph**, 3.6× the whole chase radius. Apparent size at 300 mph is instead within 0.5% of
+its 118 mph value once `dist_factor` is accounted for. So the original smooths the **offset** (or
+feeds the aircraft's velocity forward), not the world position, and our `CamSmooth` must do the same
+or it inherits exactly this at speed. Note the same ambiguity cuts the other way and had to be
+excluded deliberately: a steady position lag is *also* linear in `V`, so it could have produced the
+4.13%; fitting it that way needs c = 96 /s, which is no constant in the file, where `dist_factor`
+lands on one to 5%.
+
+**What `CAP-21` does not settle.** `dist_vary` 0.1 is untouched by this capture. `dist_max` 25.0 is
+**never reached** — the speed law alone takes the Bloodhawk only 18.5 → 19.9, and even the hardest
+throttle slam peaks at ~22.5 — so whatever `dist_max` is for, it is not level-flight speed. The
+realised distance does dip to 18.3, 1.2% under `dist_min` 18.5, but that is inside this
+measurement's systematic and is in any case a camera lag on top of `d` rather than a smaller `d`, so
+the `default` block's `dist_min` > `dist` puzzle stands unresolved.
+
+**The honest limit.** The clip-to-clip systematic is **~1%**, and it shows: 118.0 mph reads 454.00 px
+while 134.9 mph reads 458.50 — bigger at the higher speed, the wrong way round. The span/height
+aspect ratio differs 3% between those two takes, so the viewing angle onto the wing differed and the
+red-key edge moved with it. Within a take the plateau sd is 0.2–0.8 px (0.05–0.18%), so a curve's
+*shape* is far better determined than any cross-clip offset. The 4.13% speed effect is 4× the
+systematic and survives; nothing at the 1% level should be claimed off this data. Four takes, one
+airframe, one session.
+
+`CAP-21` is discharged and its ID retired. `BL-248` stays open for the implementation and for
+`dist_vary`.
+
+**Verified.** Docs and analysis scripts only — no build or test run.
