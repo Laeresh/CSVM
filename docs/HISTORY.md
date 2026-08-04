@@ -14197,3 +14197,25 @@ opt-in and the golden came back byte-identical. `.\RunTests.ps1`: build, 423 uni
 suites and all 13 goldens green. Still owed: the in-cockpit playtest of the staged death, and an
 original A/B on whether `gate1` derives its own stage two some other way (`gate1_doorblast` calls
 only its two fires in the shipped data) — `BL-254` stays open for both.
+
+## 2026-08-04 -- `RunProbe.ps1` gained `-TimeoutSec` (default 300): a hung probe kills itself
+
+**What was wrong.** A probe that never exits -- a flag combination with no auto-quit, a stuck
+boot -- blocked its caller forever: `CSVMHiddenDesktop.Run` waited `WaitForSingleObject(...,
+INFINITE)` and the visible-fallback path used an unbounded `WaitForExit()`. An agent-driven
+session sat on such probes for the full tool timeout, repeatedly (reported from the BL-254 work).
+
+**What changed.** `RunProbe.ps1` takes `-TimeoutSec` (named-only; `CmdletBinding
+PositionalBinding=$false` so the first `--flag` cannot bind to it), **default 300 s**, `0` = wait
+forever. On expiry the run is terminated and the script exits **124** (GNU timeout convention,
+distinct red `TIMEOUT` line) with the partial `.out`/`.err` streams intact as evidence of where it
+hung. `HiddenDesktop.ps1` carries the mechanism as a new `Run(..., uint timeoutMs)` overload
+(`TerminateProcess` on `WAIT_TIMEOUT`); the old 5-arg signature delegates with INFINITE, and
+`Invoke-OnHiddenDesktop`'s new `-TimeoutSec` parameter defaults to 0, so `RunTests.ps1` keeps its
+unbounded wait untouched. Godot args still forward verbatim via a `ValueFromRemainingArguments`
+catcher. Docs: the `RunProbe` paragraph in `docs/tooling.md`.
+
+**How verified.** `-TimeoutSec 1 --freecam --chapter=C1` (a run that never quits): killed at 1 s,
+exit 124, no orphaned Godot process (`Get-Process` clean). Normal path: `--stage=empty
+--plane=player_bhawk --screenshot=...` exits 0 under the default timeout with the screenshot
+written. `RunTests.ps1` call site confirmed unchanged (passes no `-TimeoutSec`).

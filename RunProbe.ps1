@@ -20,12 +20,31 @@
     .scratch/logs/probe-<stamp>.out/.err; the script prints both paths and exits with
     Godot's exit code.
 
+.PARAMETER TimeoutSec
+    Kill the run if it has not exited after this many seconds and exit 124 (the GNU
+    timeout convention, so "hung and killed" is distinguishable from "ran and failed").
+    Defaults to 300 -- a probe is a scripted run that quits by itself, and an
+    agent-driven session must never block forever on one that doesn't (a flag
+    combination with no auto-quit, a stuck boot). Pass 0 for a deliberate open-ended
+    run. The partial .out/.err streams survive the kill and are the evidence of where
+    it hung.
+
 .EXAMPLE
     .\RunProbe.ps1 --stage=empty --plane=player_bhawk --screenshot=Z:\CSVM\.scratch\probe.png
 
 .EXAMPLE
-    .\RunProbe.ps1 --run-tests=weapons-fire
+    .\RunProbe.ps1 -TimeoutSec 60 --run-tests=weapons-fire
 #>
+
+# PositionalBinding=$false, or the first Godot flag would bind positionally to -TimeoutSec.
+[CmdletBinding(PositionalBinding = $false)]
+param(
+    [int]$TimeoutSec = 300,
+    # Everything else -- the Godot/CSVM arguments, forwarded verbatim. `--flag=value`
+    # tokens never collide with the named parameter above (PowerShell only binds
+    # single-dash names), so callers that pass no -TimeoutSec are untouched.
+    [Parameter(ValueFromRemainingArguments = $true)][string[]]$GodotArgs = @()
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -51,7 +70,7 @@ if (-not (Test-Path $LogDir)) { $null = New-Item -ItemType Directory -Path $LogD
 . (Join-Path $PSScriptRoot "HiddenDesktop.ps1")
 $HiddenDesktop = Open-HiddenDesktop -Name "csvm-probe"
 
-$Launch = @("--path", $ProjectDir, "res://scenes/Main.tscn", "--") + @($args)
+$Launch = @("--path", $ProjectDir, "res://scenes/Main.tscn", "--") + @($GodotArgs)
 
 # SHELL-1: the argument string is re-split by the callee, and a path may carry a space, so
 # any argument carrying one is quoted here or Godot receives it split. Same rule as
@@ -73,14 +92,15 @@ for ($i = 0; $i -lt $Launch.Count - 1; $i++) {
     if ($Launch[$i] -eq "--log-file") { $streamBase = $Launch[$i + 1] }
 }
 
-Write-Host ("probe: {0}" -f ($args -join " ")) -ForegroundColor Cyan
+Write-Host ("probe: {0}" -f ($GodotArgs -join " ")) -ForegroundColor Cyan
 if ($HiddenDesktop) {
     Write-Host ("desktop: {0}   streams: {1}.out / .err" -f [CSVMHiddenDesktop]::Name, $streamBase) -ForegroundColor DarkGray
     # CreateProcess takes ONE command line and it must carry argv[0] itself.
     $cmdLine = ('"{0}" {1}' -f $GodotExe, ($quoted -join " "))
     $code = Invoke-OnHiddenDesktop -Exe $GodotExe -CommandLine $cmdLine `
                                    -WorkingDirectory $RepoRoot `
-                                   -StdOut "$streamBase.out" -StdErr "$streamBase.err"
+                                   -StdOut "$streamBase.out" -StdErr "$streamBase.err" `
+                                   -TimeoutSec $TimeoutSec
 } else {
     # Refused a desktop: run visibly, but STILL with real std handles -- the console
     # scribble is the part that must never degrade back (SHELL-10).
@@ -97,11 +117,25 @@ if ($HiddenDesktop) {
     # ~4 KB buffer and deadlocks.
     $outRead = $p.StandardOutput.ReadToEndAsync()
     $errRead = $p.StandardError.ReadToEndAsync()
-    $p.WaitForExit()
+    if ($TimeoutSec -gt 0) {
+        if (-not $p.WaitForExit($TimeoutSec * 1000)) {
+            $p.Kill()
+            $p.WaitForExit()
+            $code = 124
+        } else {
+            $code = $p.ExitCode
+        }
+    } else {
+        $p.WaitForExit()
+        $code = $p.ExitCode
+    }
     [System.IO.File]::WriteAllText("$streamBase.out", $outRead.Result)
     [System.IO.File]::WriteAllText("$streamBase.err", $errRead.Result)
-    $code = $p.ExitCode
 }
 
-Write-Host ("exit: {0}" -f $code) -ForegroundColor $(if ($code -eq 0) { "Green" } else { "Red" })
+if ($code -eq 124) {
+    Write-Host ("TIMEOUT after {0}s -- killed; partial streams: {1}.out / .err" -f $TimeoutSec, $streamBase) -ForegroundColor Red
+} else {
+    Write-Host ("exit: {0}" -f $code) -ForegroundColor $(if ($code -eq 0) { "Green" } else { "Red" })
+}
 exit $code
