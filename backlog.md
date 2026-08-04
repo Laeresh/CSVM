@@ -347,19 +347,32 @@ extracted data before being logged, so the mechanism is recorded here and not re
      `WorldEffectsFactory` stages separately, so `WorldBuilder`'s own gamez walk never reaches it
      (confirmed: the node lab's name index, 2999 nodes, had no `facdsticks` entry). Even with
      relocation enabled this launched debris but resolved zero motion targets (`Targets()` found no
-     built `part1`–`4` to move). Fixed two ways: `WorldSession.Build` now builds `facdsticks` as an
-     ordinary hidden child of the world root (RESET_STATE already keeps `part1`–`4` inactive, so
-     nothing renders until called) — a no-op everywhere but C2; and `AnimRuntime`'s `CallAnimation`
-     dispatch relocates a death-triggered call's template root onto the call site when the callee
-     name is in a new curated `LocalCallTemplateNames` allow-list (currently just `facade_parts`),
-     scoped by a `_deathCallDepth` counter bracketing `RunDeathSequence`'s own `Start` burst — never
-     the ambient world boot.
-  2. **Confirmed, and left as the documented floor.** One shared, unpooled `facdsticks` template
-     serving 39 call sites means two panels broken in succession show the LATER kill's debris —
-     `PlaceTemplateAt`/`MotionSet.Add` (same-channel eviction) collapse the earlier kill's flying
-     pieces onto the new site. A full per-call pool (`WorldEffectsFactory`'s `PooledTemplates`
-     mechanism, `BL-225`) is disproportionate for four wooden sticks; verified this is at least a
-     *floor*, not a total miss — each break launches its own fresh 4-piece debris count.
+     built `part1`–`4` to move). Generalized past `facdsticks` itself once the shape was understood:
+     `GameZ.IsLibraryRoot` (`docs/formats/gamez.md`) tests any node's `parent_indices`/spatial-partition
+     membership rather than naming `facade_parts` specifically, so `WorldSession`'s
+     `ResolveLibraryRoot` lazily builds ANY death-triggered call's library-root target on first use
+     — this incidentally also fixed `mp1reng_destroyed.flt` (the zeppelin wreck), found to be the
+     same unbuilt-root bug during the sweep, not a separately-handled path as first assumed.
+     `AnimRuntime`'s `CallAnimation` dispatch relocates onto the call site only when
+     `_deathCallDepth > 0` (never ambient world boot) and the call is not an `OPERAND_NODE`
+     redirect (genx12→kkgate's own subtree, which must stay unbuilt — its `Targets` rescue depends
+     on that).
+  2. **Confirmed, and pooled, not left as a floor.** One shared, unpooled `facdsticks` template
+     serving 39 call sites meant two panels broken in succession showed only the LATER kill's
+     debris — `PlaceTemplateAt`/`MotionSet.Add` (same-channel eviction) collapsed the earlier kill's
+     flying pieces onto the new site. First landed as a documented floor (each break still launched
+     its own fresh 4-piece count, just not simultaneously with another in-flight set); the user's
+     same-day A/B against the original game (`CAP-24`, 2026-08-04, closed same day) settled that the
+     original shows PARALLEL debris, not latest-wins — so `ResolveLibraryRoot` now keeps a per-caller
+     POOL of built copies (`WorldSession.cs`), each indexed via the new `AnimRuntime.IndexPooledCopy`
+     (skips `_byIndex` registration so multiple copies of the same source node don't collide on the
+     first copy's binding; each pooled copy is disambiguated by anchor-scoped name lookup instead,
+     the same resolution shape `genx12` already used). Pool membership is the same data-driven
+     `IsLibraryRoot` test as point 1; pool SIZE prefers the gamez's own authored duplicate-copy count
+     where the data has one (several effect templates ship N same-shape sibling records — a real,
+     decoded format fact, `docs/formats/gamez.md`), and falls back to `CSVM/data/effect_pools.json`'s
+     new `localCallRoots`/`localCallDefault` section (the `BL-231` TUNE mechanism) when it does not —
+     `facdsticks` ships exactly one record, so its cap (6) is an invented number there, not a decode.
   3. **Investigated, not a live bug.** `Targets()` resolves `part1`–`4` through the CALLEE's own
      compiled symbol table (`facdsticks`' `NodeRefs`, ptrs 1710/1730/1723/1715) before any name
      fallback, and `blockit2`'s `part1`–`7` carry their OWN distinct ptrs (1127–1133) in their own
@@ -376,23 +389,30 @@ extracted data before being logged, so the mechanism is recorded here and not re
   which measurably moved `kkgate`'s own `tbridg1_fire` — real, already correctly positioned bridge
   geometry — onto `kkgate` itself; and an equally unscoped C28 reset-tracking pass stopped/restored
   C5's shared `small_yellow_sparks` template on an unrelated destructible's reset, cross-contaminating
-  sibling defs' (`rfspt4`–`6`, `lfspt1`–`3`, `w_lite1`–`5`) debris counts mid-sweep. Both are now
-  scoped to the same curated `LocalCallTemplateNames` allow-list as the relocation fix.
-  Verified headlessly (`--damage-test=facade` / `fcpan01`/`fcpan02`): a single kill now launches 4
-  debris pieces from the struck panel's own position (confirmed via a position probe: `facdsticks`
-  moves from its build-time origin `(0,0,0)` to the exact panel centre); two panels broken in
-  succession each launch a fresh 4-piece debris (the documented floor); a reset restores the panel
-  and re-kills in the same hit count, and `facdsticks`' RESET_STATE deactivates `part1`–`4` so a
-  reset before the 8 s flight finishes does not leave pieces visibly flown. Collateral sweep across
-  C1/C2/C5 `--damage-hd`: only the `fcpan01`–`06` rows changed; `gate1`/`gate2` retain BL-254's
-  behaviour, `kkgate` unchanged (`debris[12]` isolated / `[13]` in the full unfiltered sweep — a
-  pre-existing sweep-context artifact reproduced identically on the unmodified baseline, not caused
-  by this change), and every other def (`m_build01`, the C1 water tower, `agyrobus`, the C5
-  facade/window family) measured byte-identical. `.\RunTests.ps1`: build, 423 unit tests, 22 engine
-  suites, all 13 goldens hash-identical.
-  ⚠ **Still open.** (a) The in-cockpit playtest: fly a row of facade panels and confirm logs
-  visibly launch from each struck panel, with the documented latest-wins floor when two break in
-  quick succession. (b) The `air_mixed_exp_sg` one-shot authored on the same death is unconfirmed
+  sibling defs' (`rfspt4`–`6`, `lfspt1`–`3`, `w_lite1`–`5`) debris counts mid-sweep. Both were first
+  fixed by narrowing to a curated `LocalCallTemplateNames` allow-list, then superseded entirely
+  (2026-08-04) by `GameZ.IsLibraryRoot` — the user pushed back that a hardcoded name list "must have
+  something in the data" backing it instead, and the parentless/unpartitioned-node test does the
+  same job data-driven, naturally excluding `tbridg1a` (parented, so never a library root) and
+  `small_yellow_sparks`'s own family with no curated list at all. `DestructibleRegistry`'s
+  `LocalCallTargets` reset-bookkeeping carries the pooled copy's own anchor per entry (not just the
+  dying instance's anchor) so a reset only tears down the specific copy that instance built.
+  Verified headlessly (`--damage-test=facade` / `fcpan01`/`fcpan02`): a single kill launches 4 debris
+  pieces from the struck panel's own position (confirmed via a position probe: the built copy moves
+  from its build-time origin `(0,0,0)` to the exact panel centre); panels broken in succession each
+  keep their OWN in-flight debris set (pooled, up to 6 concurrent — see point 2) rather than the
+  earlier kill's pieces collapsing onto the new site; a reset restores the panel and re-kills in the
+  same hit count, and RESET_STATE deactivates each copy's `part1`–`4` so a reset before the flight
+  finishes does not leave pieces visibly flown. Collateral sweep across C1/C2/C5 `--damage-hd`: only
+  the `fcpan01`–`06` rows changed; `gate1`/`gate2` retain BL-254's behaviour, `kkgate` unchanged
+  (`debris[12]` isolated / `[13]` in the full unfiltered sweep — a pre-existing sweep-context
+  artifact reproduced identically on the unmodified baseline, not caused by this change), and every
+  other def (`m_build01`, the C1 water tower, `agyrobus`, the C5 facade/window family) measured
+  byte-identical. `.\RunTests.ps1`: build, 423 unit tests, 22 engine suites, all 13 goldens
+  hash-identical.
+  ⚠ **Still open.** (a) The in-cockpit playtest: fly a row of facade panels and confirm logs visibly
+  launch from each struck panel, with several rows' debris flying in parallel rather than the earlier
+  fix's per-row floor. (b) The `air_mixed_exp_sg` one-shot authored on the same death is unconfirmed
   audible — D31 death audio is still stubbed engine-wide, unrelated to this item's scope.
 - `BL-254` **Both C2 studio gates' deaths now match the original (2026-08-04); only the in-cockpit
   playtest is owed.** Was: both gates' archways swapped to their wreck at t=0 — wrong for gate2
@@ -2058,6 +2078,16 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   raising them belongs with removing that throttle (its own step, its own emitter-count check).
   Sizing a root **0** is not a way to disable pooling — it clamps to 1, because staging no template
   at all reads in-game as a broken effect.
+  **Extended 2026-08-04 (`BL-253`) with a second, smaller pool in the same file** —
+  `localCallRoots`/`localCallDefault`, for `AnimRuntime.ResolveLibraryRoot`'s death-triggered
+  library-root call templates (`docs/formats/gamez.md`), kept apart from `roots` because that map
+  is validated against `WorldEffectsFactory.EffectStageRoots` and these names never are one. Same
+  invented-number caveat, narrower scope: `facdsticks` (C2's facade-panel debris template) is the
+  one entry, **base 6**, no per-player term (world geometry, not per-player ordnance) — sized
+  against a facade row breaking panels ~0.2–0.5 s apart with each set's flight lasting 4–5 s, so a
+  10-panel row can want 8–10 concurrent sets; 6 covers most passes and wraps (recycles the oldest,
+  still-flying set) on a longer one. Unmeasured against an actual in-cockpit pass — the playtest
+  this pool wants is the same one `BL-253`'s own owed playtest already asks for.
 - `BL-230` **Near-miss trigger distance (B7, 2026-08-02).** `WarningShotCue.PassRadius` = **15 m**,
   the distance a round's swept step must pass within to sound `bullet_warning_sg`. Chosen, not read:
   the shipped `warning_shot_*` block rates the cue but says nothing about how close is close, and the

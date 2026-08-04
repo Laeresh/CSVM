@@ -180,8 +180,11 @@ public sealed class DestructibleRegistry
         /// anchor (C2's facade panels calling the shared <c>facade_parts</c> template; also covers
         /// <see cref="ChainedDeathDef"/>'s target, redundantly but harmlessly) — populated at
         /// dispatch time, not by re-deriving it from the data, so it only ever names what actually
-        /// ran. A reset (C28) stops and restores each of these too, or a called def's own motions
-        /// (a flying debris piece still mid-flight) can outlive the reset.</summary>
-        public HashSet<AnimDefinition> LocalCallTargets { get; } = new();
+        /// ran. Carries the anchor <c>Start</c> actually used, not necessarily THIS instance's own
+        /// (a pooled library-root call — <c>BL-253</c> — anchors on its own copy, not the call
+        /// site), since that is what <c>Stop</c>/<c>RestoreRestPoses</c> need to find it again. A
+        /// reset (C28) stops and restores each of these too, or a called def's own motions (a
+        /// flying debris piece still mid-flight) can outlive the reset.</summary>
+        public HashSet<(AnimDefinition Def, Node3D Anchor)> LocalCallTargets { get; } = new();
     }
 }

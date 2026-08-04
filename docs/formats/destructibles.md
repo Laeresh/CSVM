@@ -340,19 +340,26 @@ which pieces that covers. A format reader should know the current wiring:
     wreck is still solid, by the data. C1's `air_gen` chain uses the same `operand_node` idiom.
     `facade_parts` (below) is a DIFFERENT idiom — a genuinely separate template, resolved and
     relocated rather than redirected onto the caller's own subtree; do not conflate the two.
-  - **`facade_parts` needed its template BUILT, not just relocated (`BL-253`, 2026-08-04).** The
-    39 `fcpanNN` deaths each `CALL_ANIMATION facade_parts AT_NODE fcpanNN` — no `operand_node`, so
-    unlike `genx12` this is a real, separate template (`facdsticks`, four wooden "log" sticks) that
-    needs to exist and be moved. It is parentless and outside the world's spatial-partition grid —
-    `WorldBuilder`'s own gamez walk never reaches it, the same shape as the crash/effect template
-    roots `WorldEffectsFactory` stages separately — so `WorldSession.Build` now builds it as an
-    ordinary hidden child of the world root (its own RESET_STATE already keeps `part1`–`4`
-    inactive), and a death-triggered `CALL_ANIMATION` to a curated `AnimRuntime.LocalCallTemplateNames`
-    allow-list (currently just `facade_parts`) relocates it onto the call site — the same mechanism
-    `PlaceCalledTemplates` gives the anim-lab/crash runtime, scoped to the death path only so the
-    ambient world boot stays untouched. One shared, unpooled template serving 39 call sites means
-    two panels broken in succession show only the LATER kill's debris (the documented floor, not a
-    miss — each break still launches its own fresh 4-piece count).
+  - **`facade_parts` needed its template BUILT, pooled, and resolved data-driven, not by name
+    (`BL-253`, 2026-08-04, extended same day).** The 39 `fcpanNN` deaths each `CALL_ANIMATION
+    facade_parts AT_NODE fcpanNN` — no `operand_node`, so unlike `genx12` this is a real, separate
+    template (`facdsticks`, four wooden "log" sticks) that needs to exist and be moved. It is
+    parentless and outside the world's spatial-partition grid — the same shape `genx12` and (also
+    found via this bug) `mp1reng_destroyed.flt` share — so `WorldBuilder`'s own gamez walk never
+    reaches it. `GameZ.IsLibraryRoot` tests exactly that shape (empty `Children` membership, absent
+    from the World node's spatial partition) — a data-driven rule, not a curated name list — and a
+    death-triggered `CALL_ANIMATION` (`_deathCallDepth > 0`, never the ambient world boot, and
+    never an `operand_node` redirect) to any node passing that test builds it lazily on first use
+    (`WorldSession.ResolveLibraryRoot`) and relocates it onto the call site. It is also POOLED, not
+    single-shared: the original shows several panels' debris flying in parallel (confirmed
+    same-day, original-game A/B), so each caller gets its own built copy, up to
+    `EffectPools.LocalCallPoolSize("facdsticks")` (6, `CSVM/data/effect_pools.json`'s
+    `localCallRoots`, an invented `BL-231` TUNE number — `facdsticks` ships only one node record, so
+    unlike a few effect templates that ship an authored N-copy set, its pool size is not decodable
+    from the data). Pooled copies are indexed via `AnimRuntime.IndexPooledCopy`, which skips
+    `_byIndex` registration so multiple copies of the same source node don't collide on the first
+    copy's binding — each is instead disambiguated via the same anchor-scoped name rescue
+    `genx12`'s own `Targets()` fallback uses.
   - ⚠ **Colliders exist only in the flight build.** `WorldSession.Options.Collision` is `_fly`
     (plus `_damageTest`); `--freecam` builds the world with **no** collision at all, so any collider
     census run there reads zero and lies. See `docs/verification.md`.

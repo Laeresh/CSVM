@@ -4,7 +4,7 @@ using System.IO;
 using System.Text.Json;
 using Godot;
 
-namespace CSVM.Session;
+namespace CSVM.Utils;
 
 /// <summary>The parsed <c>CSVM/data/effect_pools.json</c> — how many copies of each world-effects
 /// template the stage builds, per effect template ROOT, scaled by the session's player count
@@ -14,8 +14,11 @@ namespace CSVM.Session;
 /// <c>const</c>.
 ///
 /// <para>Pure data — it answers "how many copies of this root" and nothing else.
-/// <see cref="WorldEffectsFactory"/> builds the slots and <see cref="Mech3.AnimRuntime"/> hands one
-/// out per call.</para>
+/// <c>Session.WorldEffectsFactory</c> builds the slots and <c>Mech3.AnimRuntime</c> hands one out
+/// per call; <c>Mech3.WorldSession</c> uses the SAME file's <see cref="LocalCallPoolSize"/> for its
+/// own, unrelated library-root call-template pool (BL-253) — the reason this class lives in
+/// <c>CSVM.Utils</c> rather than <c>CSVM.Session</c>: both a Session-layer and a Mech3-layer
+/// consumer need it, and Session already depends on Mech3, never the reverse.</para>
 ///
 /// <para>A missing or unreadable file is a warning, not a session failure: the built-in
 /// <see cref="Fallback"/> (the same values the shipped file carries) applies, exactly as
@@ -36,11 +39,23 @@ public sealed class EffectPools
             ["mag_gunhit"] = new Entry(1, 0),
             ["partial_damage_obj"] = new Entry(8, 1),
         },
+        _localCallDefault = new Entry(1, 0),
+        _localCallRoots =
+        {
+            ["facdsticks"] = new Entry(6, 0),
+        },
     };
 
     private readonly Dictionary<string, Entry> _roots = new(StringComparer.OrdinalIgnoreCase);
 
+    // The separate, smaller pool for library-root call templates (BL-253) — see the file's own
+    // "_localCallAbout" for why this is not just another entry in _roots (that map is validated
+    // against WorldEffectsFactory.EffectStageRoots, and these names never are one).
+    private readonly Dictionary<string, Entry> _localCallRoots = new(StringComparer.OrdinalIgnoreCase);
+
     private Entry _default = new(4, 1);
+
+    private Entry _localCallDefault = new(1, 0);
 
     /// <summary>The committed config's default location (res://), independent of
     /// <c>--data-root</c>: it is engine config, not extracted game data.</summary>
@@ -101,6 +116,14 @@ public sealed class EffectPools
                 if (ReadEntry(r.Value) is { } e)
                     pools._roots[r.Name] = e;
         }
+        if (root.TryGetProperty("localCallDefault", out var lcDef) && ReadEntry(lcDef) is { } lcd)
+            pools._localCallDefault = lcd;
+        if (root.TryGetProperty("localCallRoots", out var lcRoots) && lcRoots.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var r in lcRoots.EnumerateObject())
+                if (ReadEntry(r.Value) is { } e)
+                    pools._localCallRoots[r.Name] = e;
+        }
         return pools;
     }
 
@@ -114,6 +137,20 @@ public sealed class EffectPools
         var e = _roots.TryGetValue(rootName, out var hit) ? hit : _default;
         int extra = Math.Max(0, players - 1);
         return Math.Clamp(e.Base + (e.PerExtraPlayer * extra), 1, MaxSlots);
+    }
+
+    /// <summary>How many copies of a death-triggered library-root call template
+    /// (<c>AnimRuntime.ResolveLibraryRoot</c>, <c>BL-253</c>) to keep — the SAME clamp as
+    /// <see cref="SlotsFor"/> but against <c>localCallRoots</c>/<c>localCallDefault</c>, never
+    /// <c>roots</c>/<c>default</c> (those are validated against
+    /// <c>WorldEffectsFactory.EffectStageRoots</c>, which these names are never a member of). A
+    /// name with no entry stays single-copy — today's behaviour, and correct for a template like
+    /// <c>genx12</c> that must not be widened here (its own <c>Targets</c> rescue depends on
+    /// staying unbuilt, and it never overlaps itself in the shipped data regardless).</summary>
+    public int LocalCallPoolSize(string rootName)
+    {
+        var e = _localCallRoots.TryGetValue(rootName, out var hit) ? hit : _localCallDefault;
+        return Math.Clamp(e.Base, 1, MaxSlots);
     }
 
     /// <summary>The pool DEPTH for a set of stage roots — the largest per-root count, i.e. how many

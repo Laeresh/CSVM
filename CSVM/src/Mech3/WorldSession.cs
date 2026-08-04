@@ -238,24 +238,79 @@ public sealed class WorldSession
             o.EffectsParent.AddChild(worldSounds);
             worldSounds.SetListener(o.PlayerPosition);
         }
-        // C2's facade panels each CALL_ANIMATION the shared `facade_parts` template to launch four
-        // wooden-stick debris pieces — but its root, `facdsticks`, is parentless and outside the
-        // world's spatial-partition grid, so WorldBuilder's own walk never reaches it (`BL-253`,
-        // the same shape as the crash/effect template roots WorldEffectsFactory stages
-        // separately — see its EffectTemplateRoots remark). facade_parts stays on the WORLD
-        // runtime (it is LOCAL_CHOREOGRAPHY, not routed to the effects runtime), so its template
-        // has to be built here, as an ordinary hidden child of the world root, for the ambient
-        // AnimRuntime to resolve and drive like any other gamez node; AnimRuntime's
-        // death-triggered CallAnimation relocation then moves it onto the struck panel. No
-        // colliders (a flying stick needs none — the effect-template convention). A no-op in
-        // every chapter but C2 (FindByName finds nothing) and skipped for `--node=`, which
-        // deliberately builds only the requested subtree.
-        if (o.NodeSubtree == null
-            && gamez.FindByName("facdsticks") is { } facdsticksNode
-            && builder.Scene.BuildSubtree(facdsticksNode, collisionSkip: _ => true) is { } facdsticks)
+        // A death-triggered CALL_ANIMATION whose callee anchors on a "library root" gamez node —
+        // staged with the game but never PLACED in it (docs/formats/gamez.md; GameZ.IsLibraryRoot)
+        // — needs that root built before AnimRuntime can drive it: WorldBuilder's own walk never
+        // reaches it (`BL-253`: C2's facade panels' shared `facdsticks` template is exactly this
+        // shape). Built LAZILY, the first time a call actually needs it, rather than eagerly with
+        // the rest of the ~150-member library: eager construction has no reliable way to also
+        // exclude every OTHER subsystem that already claims some of these same roots by name — the
+        // effects/crash runtimes' own `EffectStageRoots`/`EffectTemplateRoots` staging, and
+        // `Projectile`'s own on-demand weapon-model `BuildSubtree` calls — and at least one library
+        // root (`genx12`) must stay UNBUILT on purpose (its own `Targets` rescue redirects onto the
+        // caller's subtree instead; see `AnimRuntime`'s `CallAnimation` case). Lazy-on-call is
+        // naturally scoped to exactly the defs an anim actually calls, so it can never duplicate or
+        // pre-empt any of them — observationally identical to the original's own loading strategy
+        // from the cockpit either way (every library root starts parked and inert regardless of
+        // when its node is constructed).
+        //
+        // POOLED, not one shared copy: the original runs several call sites' copies of one
+        // template in parallel (`BL-253`'s CAP-24 A/B, 2026-08-04 — several broken facade panels'
+        // four-log sets airborne at once, not "latest wins"). Pool SIZE is the same three-layer
+        // answer `EffectPools`/`effect_pools.json` already gives the effects-runtime side: the
+        // gamez census is checked FIRST for an authored duplicate-copy count (several effect
+        // templates ship exactly that — sonic_ring/sonic_flare x5, flame_ball_01-_03, etc. — see
+        // docs/formats/gamez.md), and only when a template ships exactly one record (facdsticks
+        // does) does the count fall to `effect_pools.json`'s own `localCallRoots` TUNE entry, one
+        // config surface for every pool this engine invents rather than one number per subsystem.
+        // No authored-duplicate lookup is wired here YET because nothing today calls a
+        // multi-record library root through this path — see that file's own remark before adding
+        // one. Each caller (keyed by its own anchor) keeps its OWN copy across repeat calls (a
+        // re-killed panel gets its copy back, not a fresh one) and a pool at capacity recycles its
+        // oldest — the same "later call wins" collapse the single-copy path always had, now
+        // bounded to the wrap instead of every call. `IndexPooledCopy` both indexes the new
+        // subtree by NAME only (never `_byIndex` — every copy shares the source's compiled
+        // indices, so a second copy claiming `_byIndex` would silently steal the first copy's
+        // node references, see that method's own remark) and RESET_STATE-poses whatever anchors
+        // on it — the same "arrives hidden until summoned" pass the anim-lab's own effect-template
+        // stage gets via `IndexStage`. A no-op for `--node=`, which deliberately builds only the
+        // requested subtree.
+        if (o.NodeSubtree == null)
         {
-            facdsticks.Transform = Transform3D.Identity;
-            root.AddChild(facdsticks);
+            var pools = EffectPools.Load();
+            var libraryPools = new Dictionary<string, List<(Node3D Copy, ulong Owner)>>(StringComparer.OrdinalIgnoreCase);
+            animRuntime.ResolveLibraryRoot = (name, callAnchor) =>
+            {
+                if (!libraryPools.TryGetValue(name, out var copies))
+                {
+                    if (gamez.FindByName(name) is not { } firstLookup || !gamez.IsLibraryRoot(firstLookup))
+                        return null;
+                    copies = new List<(Node3D, ulong)>();
+                    libraryPools[name] = copies;
+                }
+                ulong ownerId = callAnchor.GetInstanceId();
+                foreach (var (copy, owner) in copies)
+                    if (owner == ownerId)
+                        return copy; // this caller's own prior copy — reuse it, not a fresh one
+                if (gamez.FindByName(name) is not { } gzNode)
+                    return null; // unreachable past the first successful lookup above
+                if (copies.Count < pools.LocalCallPoolSize(name))
+                {
+                    if (builder.Scene.BuildSubtree(gzNode, collisionSkip: _ => true) is not { } subtree)
+                        return null;
+                    subtree.Transform = Transform3D.Identity;
+                    root.AddChild(subtree);
+                    animRuntime.IndexPooledCopy(subtree);
+                    copies.Add((subtree, ownerId));
+                    return subtree;
+                }
+                // Pool at capacity: recycle the oldest-owned copy (round-robin), same wrap the
+                // single-copy path always had.
+                var (recycled, _) = copies[0];
+                copies.RemoveAt(0);
+                copies.Add((recycled, ownerId));
+                return recycled;
+            };
         }
         mark = StartupProfile.Mark();
         animRuntime.Bind(root, animProgram);

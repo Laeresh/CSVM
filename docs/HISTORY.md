@@ -14309,3 +14309,79 @@ pre-existing sweep-context artifact unrelated to this change), and every other d
 the C1 water tower, `agyrobus`, the C5 facade/window family, the C5 `rfspt`/`lfspt`/`w_lite` set)
 measured byte-identical. `.\RunTests.ps1`: build, 423 unit tests, 22 engine suites, all 13 goldens
 hash-identical. Still owed: the in-cockpit playtest of the visible debris and the two-panels floor.
+
+## 2026-08-04 -- `BL-253` follow-up: the curated allow-list is replaced by a data-driven rule, and
+the single-copy floor is replaced by a per-caller pool
+
+**What was wrong.** The first `BL-253` landing gated relocation on a hardcoded
+`LocalCallTemplateNames` array (`{"facade_parts"}`) rather than anything the data itself said --
+the user pushed back that "there must be something in the data" distinguishing a relocatable
+library-root template from a real, already-placed node like `tbridg1a`, and asked for a rule
+instead of a name list. Separately, the same-day A/B against the original game (`CAP-24`,
+2026-08-04, closed same day) settled the point `BL-253`'s point 2 had left as a "documented floor":
+the original shows several panels' debris flying in PARALLEL, not the latest kill's set alone --
+the single shared `facdsticks` copy was a real behavioral gap, not just an unmeasured cosmetic one.
+
+**What changed.** `GameZ.IsLibraryRoot` (`CSVM/src/Mech3/GameZ.cs`) replaces the name list: a node
+is a library root when it is nowhere in any node's `Children` list and nowhere in the World node's
+spatial-partition grid -- "staged with the game but never placed," the same shape `facdsticks`,
+`genx12` and (newly found during the sweep) `mp1reng_destroyed.flt` all share. `WorldSession`'s
+`ResolveLibraryRoot` (`CSVM/src/Mech3/WorldSession.cs`) now builds a called library root LAZILY,
+on the first death-triggered call that needs it, rather than `WorldSession.Build` eagerly building
+`facdsticks` by name up front -- eager building was retired because a generic rule can't special-
+case which library roots to skip, and several (the effects/crash-runtime templates
+`WorldEffectsFactory` stages itself, and `Projectile`'s weapon models) must not be double-built,
+while `genx12` must stay unbuilt entirely (its own `Targets` rescue depends on that). Relocation
+still requires `_deathCallDepth > 0` (never ambient world boot) and now also excludes any call
+carrying `operand_node` (the genx12-to-kkgate idiom, which redirects the CALLER's own subtree
+rather than naming a separate template -- relocating it would double the kkgate wreck).
+
+`ResolveLibraryRoot` also now returns a POOLED copy rather than the single shared instance:
+each caller keeps its own built copy (keyed by call-site anchor), sized by
+`EffectPools.LocalCallPoolSize` (`CSVM/src/Utils/EffectPools.cs`, moved out of `CSVM.Session` so
+both `WorldEffectsFactory` and `WorldSession` -- one layer down -- can use it without breaking the
+established Session-depends-on-Mech3-never-the-reverse rule). Pool SIZE is decided in three layers:
+(1) pool MEMBERSHIP is the same data-driven `IsLibraryRoot` test as above; (2) pool size prefers the
+gamez's own authored duplicate-copy count where the data has one -- several effect templates ship
+N same-shape sibling node records (verified against `sonic_ring`/`sonic_flare` and
+`flame_ball_01`-`03`/`muzzle_burst`, `docs/formats/gamez.md`) -- a real, decoded format fact; (3)
+`facdsticks` ships exactly ONE record, so its cap is not decodable from the data and lives instead
+in `CSVM/data/effect_pools.json`'s new `localCallRoots`/`localCallDefault` section (the `BL-231`
+TUNE-list mechanism, base 6, invented number, `backlog.md`), deliberately separate from the
+existing `roots` map (validated against `WorldEffectsFactory.EffectStageRoots`, which these names
+are never a member of).
+
+Building multiple copies of the same source node exposed a latent collision: `AnimRuntime`'s
+`_byIndex` map (`TryAdd`) keeps only the FIRST copy's binding for each compiled node index, so a
+second pooled copy would silently resolve through the first copy's nodes. Fixed with a new
+`indexByPointer` parameter on `IndexWorld` and a new `IndexPooledCopy` entry point that skips
+`_byIndex` registration entirely, forcing every pooled copy through the same anchor-scoped
+name-rescue path `genx12` already used (`Targets()`'s fallback), which correctly disambiguates by
+which specific copy is passed as the call's anchor. This in turn required `Start(target,
+startAnchor)` to run against the pooled copy itself, so `DestructibleRegistry.LocalCallTargets`
+changed from `HashSet<AnimDefinition>` to `HashSet<(AnimDefinition Def, Node3D Anchor)>` -- a
+reset now tears down/restores exactly the pooled copy its own dying instance owns, not whichever
+copy happened to be built first.
+
+**What this found for free.** `mp1reng_destroyed.flt` (the C2 zeppelin wreck) turned out to share
+the exact same never-built bug as `facdsticks` -- the coordinator's original brief assumed a
+separate staging path already handled it correctly; `--debug-damage="node=mp1reng_destroyed.flt"`
+showed it was not built either. The generic `IsLibraryRoot` fix resolves it without any
+zeppelin-specific code.
+
+**How verified.** `--damage-test=facade`/`fcpan01`/`fcpan02`: a single kill still launches 4 debris
+pieces from the struck panel's own position; two-plus panels broken in succession now each keep
+their own in-flight debris set (pooled, up to 6 concurrent) instead of the earlier kill's pieces
+collapsing onto the new site; a reset restores the panel and re-kills in the same hit count, and
+each pooled copy's own RESET_STATE deactivates its `part1`-`4` so a reset mid-flight never leaves
+pieces visibly flown. Swept the full `--damage-test`/`damage-hd` report across C1, C2 and C5: only
+the `fcpan01`-`06` rows changed from the pre-pooling baseline; `gate1`/`gate2` retain `BL-254`'s
+behaviour; `kkgate` unchanged (the `debris[12]`/`[13]` split is the same pre-existing
+sweep-context artifact `BL-253`'s first pass already found, reproduced identically on the
+unmodified baseline via a `git stash` A/B, not caused by this change); every other def
+(`m_build01`, the C1 water tower, `agyrobus`, the C5 facade/window family) measured byte-identical.
+`.\RunTests.ps1`: build, 423 unit tests, 22 engine suites, all 13 goldens hash-identical. Docs:
+`docs/formats/gamez.md` gained the parentless/unpartitioned-node decode bullet (with the C2 census
+and the authored-duplicate-pooling sub-bullet); `backlog.md`'s `BL-231` entry gained the
+`localCallRoots` paragraph and `BL-253`'s own entry was rewritten to drop the retired
+hardcoded-list and single-copy-floor language.
