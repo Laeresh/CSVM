@@ -702,9 +702,15 @@ unscheduled.
   instant snap, no smoothing, shares the chase camera's `ViewDist`); `--view=N` is the scripted,
   machine-verifiable twin. Cockpit testing (2026-07-30) overturned the "layout is settled" claim this
   whole scheme was built on and found five more open questions:
-  (a) **Layout is wrong.** 8 and 2 are swapped; 7 and **0** are both 45°-underside-*front*; 1 and 3
-  are 45°-*back* (not the above/below-flank split the code assumes). **The original binds 0**; we bind
-  none. Screenshots owed (numbered stills of each key) before recoding the table.
+  (a) **Layout is wrong.** 8 and 2 are swapped; 7 is 45°-underside-*front*; 1 and 3 are 45°-*back*
+  (not the above/below-flank split the code assumes). Screenshots owed (numbered stills of each key)
+  before recoding the table.
+  ⚠ **Correction, 2026-08-04: `Kp0` is rudder-left, not a camera view.** The 2026-07-30 cockpit
+  session read it as a second 45°-underside-front view alongside 7 and concluded "the original binds
+  0; we bind none" — that was a misattribution, and the *camera* half of it is withdrawn. Our
+  omission of `Kp0` from `Views[]` is therefore **correct** and needs no change; the camera set is
+  `Kp1`–`Kp9`. (Whether `Kp0`/`Kp.` should drive rudder at all is a separate input question this
+  entry does not own.) The underside-front position stands for 7 on its own.
   (b) **Motion is wrong in kind, not just speed.** The original eases to AND from each position
   holding cam distance/radius constant, and the ease reads linear, not smoothstepped; ours snaps both
   ways (`ApplyFixedView` has no smoothing branch at all).
@@ -725,7 +731,19 @@ unscheduled.
   *Fix shape:* a rebuilt `Views` table (order + the missing 0), an eased position/orientation update
   on top of `CameraController`'s existing per-plane radius, a small state machine for the
   interrupt/combination behaviour in (d), and the +/− trim as a new input.
-  *Blocked on `CAP-07`/`CAP-08`* (`playtest.md` §0).
+  *Blocked on `CAP-07`/`CAP-08`* (`playtest.md` §0). ⚠ **`CAP-07` take 1 was analysed 2026-08-04 and
+  rejected — it settles neither (a) nor (b).** The presses overlap: 10 camera transitions for 8 keys
+  in 20.9 s, with direct position-to-position lerps that never pass through base, so only 6–7 of the
+  8 holds ever come to rest and the filename's key order cannot be mapped onto them one-to-one. No
+  move begins from a settled base either, which is what (b)'s ease law would have to be measured
+  from. A rig for the re-record is committed at `analysis/capture-rigs/NumpadViewSweep.ahk` — one key held
+  alone at a time, base between, with a timestamped press/release log. `CAP-08` has its counterpart
+  in `NumpadComboSweep.ahk`, which **staggers** each combination — first key alone until it settles,
+  then the rest added on top — so the footage answers (d)'s actual question, whether a second key
+  blends, replaces, or is ignored, rather than only showing the end state. Take 1 does contribute one
+  usable control: the aircraft holds a constant heading throughout (compass ribbon drifts < 1 px in
+  20.9 s), so on a straight-and-level re-record the camera angles can be read directly off the
+  horizon and the moon without solving for the aircraft's own attitude.
   ⚠ **Traps.** (a) **Only `--view=` is machine-verifiable** — live held-key input cannot be scripted
   here, so any fix to (b)/(d) is correct-by-construction only until played; do not close this off a
   passing `--view=` capture alone. (b) **The layout (a) cannot be fixed before the owed screenshots pin

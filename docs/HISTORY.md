@@ -13060,3 +13060,61 @@ frames a few apart cancels the text and brings the pivot to within 1.8 px of the
 New tool: `ammoarrow.py` (arrow angle per frame, plus the pivot solve), which takes a HUD and so
 works on either. All rates are sim seconds at k = 1.390 — implementing 218 °/s would run the sweep
 39% fast.
+
+## 2026-08-04 — `CAP-07` take 1 rejected, and `Kp0` turns out to be rudder, not a camera
+
+Two results, one negative and one that corrects the record.
+
+**`Kp0` is rudder-left, not a camera view.** `BL-150`(a) had carried, from the 2026-07-30 cockpit
+session, the claim that "7 and **0** are both 45°-underside-front" and that "the original binds 0;
+we bind none" — filed as a gap in our `Views[]` table. It was a misattribution: `Kp0` is a flight
+control. The camera set is `Kp1`–`Kp9`, which is exactly what `FlightController.cs:286-303` already
+covers, so our omission of `Kp0` is **correct** and that part of the layout rebuild evaporates. The
+underside-front position stands for 7 alone. `playtest.md`'s `CAP-07` row no longer asks for a
+still of 0.
+
+**The take itself does not settle the layout.** `CAP-07 Numpad 1,2,3,6,9,8,7,4.mp4` (20.9 s,
+2560×1440, night, external chase over water) is genuine footage of the fixed views, but the presses
+overlap. Frame-differencing the central region against the opening baseline (630 frames at real
+PTS; the clip is near-CFR, dt 0.0167–0.0334 s) finds **10 camera transitions for 8 keys**, and the
+camera repeatedly lerps straight from one fixed position to the next without passing through base.
+Only **6–7** plateaus ever come to rest — frame-to-frame motion under 0.55 units — and two of those
+drift monotonically through the "hold" rather than settling (deviation falling 6.3 → 4.0 over 1.4 s
+from t=10.15). So the eight keys named in the filename cannot be mapped one-to-one onto the
+plateaus, and no single frame is trustworthy as "this is where key N puts the camera". It is also
+useless for `BL-150`(b)'s ease law, since no move begins from a settled base.
+
+Incidentally this is itself weak corroboration of `BL-150`(d) — pressing a key mid-ease goes
+somewhere new rather than snapping back to base first — but it is corroboration from a clip flown
+by hand, not a measurement, and (d) still wants `CAP-08`.
+
+**One thing the take does establish, and it is a method note worth keeping.** The aircraft holds a
+constant heading for the entire clip: the HUD compass ribbon (game x 1100–1460, y 10–70) drifts
+**under 1 px in 20.9 s**, at NCC ≥ 0.984 frame-to-frame under a ×8-upsampled subpixel correlation.
+The ribbon tracks the *aircraft's* heading, not the camera's — it does not move when the camera
+swings. A straight-and-level subject means body axes equal world axes, so on such a clip the camera
+angles can be read straight off the horizon and the moon without first solving for the aircraft's
+own attitude. The opening 5.2 s bear this out: horizon y = 241.5 ± 0.9 px at 640×360 with roll ≈ 0.
+The horizon tracker is *not* usable once the views engage, and not because of noise — most of the
+positions are from below the plane, so there is no horizon in frame at all; the 20–56° "rolls" it
+reported are it latching onto the aircraft silhouette or a cloud band.
+
+**Re-record rig:** `analysis/capture-rigs/NumpadViewSweep.ahk` (AutoHotkey v2, F13). 3 s baseline, then
+each of `Kp1`–`Kp9` held **alone** for 3.5 s with a 3.5 s return to base between, ~69 s total. It
+sends scancodes rather than `{NumpadN}` so NumLock state cannot change what the game reads, writes
+a timestamped `sweep-log.txt` of every press and release next to itself — so the analysis need not
+infer event boundaries from motion at all — and labels the active key with an on-screen ToolTip
+(windowed / borderless only). `Kp5` is in the sweep deliberately: `BL-150`(e) records it as unbound
+on the strength of assumption, and a held-with-no-movement clip is what turns that into evidence.
+
+A second rig, `analysis/capture-rigs/NumpadComboSweep.ahk`, covers `CAP-08`. It **staggers** each
+combination rather than pressing it flat: the first key goes down alone for 2.5 s so the camera
+reaches *that key's own* position, then the rest are added on top for 3.5 s, then all release and
+the camera eases back to base. Pressing a combination simultaneously would only show where it ends
+up; arriving at a single key's position first and then adding the second, in one continuous shot,
+shows what adding it *does* — blend toward a further position, replace the first outright, or be
+ignored while the first is still down. That is the open question in `BL-150`(d), and no still of
+the end state can answer it. The stagger also makes every step a second, independent single-key
+observation to cross-check `CAP-07` against. `STEPS` covers the eight camera keys as a ring
+(7 8 9 6 3 2 1 4 clockwise): the eight adjacent pairs, the four opposite pairs (the contradictory
+case — cancel, first-wins, or something else), and two triples. About two minutes.
