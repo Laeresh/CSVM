@@ -13637,3 +13637,38 @@ channel's RATE" section (plus three now-wrong statements corrected elsewhere on 
 `docs/architecture.md`'s `src/Mech3/Anim/` entry, and a new transferable rule
 `docs/verification.md` **SRC-5** ("a field you don't read may be redundant, not dropped").
 `BL-050` closes (deleted from `backlog.md`).
+## 2026-08-04 — C1B shoreline hairline: the unit-square clamp goes per-axis
+
+**Symptom (user-reported).** A gray hairline in the water tracing the shore contour in C1B, at
+`--freecam --pos=-7080.472,101.976,-5425.099 --direction=-0.48394,-0.86708,-0.11825`
+(`Screenshots/Shoreline texture wrap artifact.png`). The 2026-07-22 hairline fix
+(`UvsWithinUnitSquare` → `repeat_disable`) did not catch it.
+
+**Mechanism, data-confirmed.** The line is the animated surf strip (`srf0001.tif` + its 16-frame
+cycle, located via `--tex-census`): 32×64 with **column 0 fully opaque foam and column 31 fully
+transparent**, mapped U 0→1 across the strip while **V tiles 0→3.91 along the shore** (measured
+over all 375 srf polygons in C1B's gamez). The unit-square test demands *both* axes inside [0,1],
+so the V tiling disqualified the surface, the sampler stayed `repeat_enable`, and the bilinear tap
+at the transparent seaward edge wrapped to the opaque opposite column — one texel of gray foam
+drawn out in the water. The census screenshot still showed the line (census flattens RGB but keeps
+alpha), which is what pinned it to the texture's alpha edge rather than shading.
+
+**Fix — per-axis (`SceneBuilder.UvAxesWithinUnitSquare`, new `UvClampAxes` flags).** Both axes fit
+and no scroll → the existing sampler-level `repeat_disable`, byte-identical shader text as before.
+One axis fits while the other tiles or scrolls → a new partial variant: the sampler keeps
+`repeat_enable` for the tiling axis (Godot samplers have no per-axis wrap) and the fragment clamps
+the fitting axis's coordinate to `[inset, 1-inset]`, `uv_edge_inset` = half a texel of that
+texture, so no bilinear tap can cross the edge — safe by the same all-UVs-inside construction,
+and it crops nothing (the inset returns the pure edge texel). A scrolled axis is never clamped;
+material cache key + shader key gain the axes; the load line now prints uv-clamped + edge-clamped
+counts.
+
+**Verification.** Deterministic seam detector (median-filtered luminance outliers over dark water,
+`--no-fog` probe at the report pose): **846 → 3 px** (the 3 are sub-threshold noise at the foam
+edge); the line is gone by eye in the fogged shot too. `.\RunTests.ps1`: 422 units (6 new
+`UvClampTests` on the per-axis classifier), 22/22 engine suites, goldens re-pinned — **11 of 13
+moved, every mover A/B'd against the pre-change build** (old build reproduced all 13 old hashes
+first, so the moves are this change alone): all are thin strip-edge lines — c2-city the largest at
+1.42 % (the city's street/lot strip seams disappearing), aircraft shots 42–89 px of texture-band
+edges, c1-crash max delta 4 — and the rain pair is bit-identical (fog swallows every seam at those
+poses). Per-shot numbers in `analysis/goldens/manifest.json`.

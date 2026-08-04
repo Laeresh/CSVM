@@ -204,17 +204,40 @@ $LaunchArgs = @("--path", ('"' + $ProjectDir + '"'), "res://scenes/Main.tscn", "
 Add-Type -Name FgWin -Namespace CsvmLaunch -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
 [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+[DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+public delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
+[DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr lParam);
+public static IntPtr FindForPid(uint target) {
+    IntPtr found = IntPtr.Zero;
+    EnumWindows((h, l) => { uint pid; GetWindowThreadProcessId(h, out pid);
+        if (pid == target) { found = h; return false; } return true; }, IntPtr.Zero);
+    return found;
+}
 '@ -ErrorAction SilentlyContinue
 
-$proc = Start-Process -FilePath $GodotExe -ArgumentList $LaunchArgs -PassThru
+# -WindowStyle Normal: a launcher whose own window is hidden (an agent shell, a scheduled
+# task) otherwise passes SW_HIDE down via STARTUPINFO and the game boots invisible.
+# Streams go to files, not the console: given no stdout handle the plain exe calls
+# AttachConsole and prints its whole engine chatter over whatever terminal (or chat
+# transcript) launched it. The engine's own categorized log always lands in
+# .scratch/logs/ regardless; these files catch what only raw stdout/stderr sees.
+$Stamp   = Get-Date -Format "yyyyMMdd-HHmmss"
+$LogDir  = Join-Path $RepoRoot ".scratch\logs"
+New-Item -ItemType Directory -Force $LogDir | Out-Null
+$OutFile = Join-Path $LogDir "game-$Stamp.out"
+$ErrFile = Join-Path $LogDir "game-$Stamp.err"
+$proc = Start-Process -FilePath $GodotExe -ArgumentList $LaunchArgs -WindowStyle Normal -PassThru `
+    -RedirectStandardOutput $OutFile -RedirectStandardError $ErrFile
 # The main window does not exist at spawn; poll briefly rather than guessing a sleep.
+# Found via EnumWindows by pid, NOT Process.MainWindowHandle -- that property is zero for a
+# HIDDEN window, which is exactly the case this rescue exists for.
 for ($i = 0; $i -lt 200; $i++) {
     Start-Sleep -Milliseconds 50
     if ($proc.HasExited) { break }
-    $proc.Refresh()
-    if ($proc.MainWindowHandle -ne [IntPtr]::Zero) {
-        [void][CsvmLaunch.FgWin]::ShowWindow($proc.MainWindowHandle, 5)   # SW_SHOW
-        [void][CsvmLaunch.FgWin]::SetForegroundWindow($proc.MainWindowHandle)
+    $hwnd = [CsvmLaunch.FgWin]::FindForPid([uint32]$proc.Id)
+    if ($hwnd -ne [IntPtr]::Zero) {
+        [void][CsvmLaunch.FgWin]::ShowWindow($hwnd, 5)   # SW_SHOW
+        [void][CsvmLaunch.FgWin]::SetForegroundWindow($hwnd)
         break
     }
 }

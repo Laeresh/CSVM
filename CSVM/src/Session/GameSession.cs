@@ -1494,7 +1494,8 @@ public partial class GameSession : Node3D
     {
         GD.Print($"loaded {state.What}: {state.Gamez.Nodes.Count} gamez nodes, " +
                  $"{state.MeshInstances} mesh instances, {state.Colliders} colliders, " +
-                 $"{Mech3.SceneBuilder.ClampedSurfaceTotal} uv-clamped surfaces, {sw.ElapsedMilliseconds} ms");
+                 $"{Mech3.SceneBuilder.ClampedSurfaceTotal} uv-clamped + " +
+                 $"{Mech3.SceneBuilder.EdgeClampedSurfaceTotal} edge-clamped surfaces, {sw.ElapsedMilliseconds} ms");
         if (_rigs.Count > 1)
             foreach (var rig in _rigs)
                 GD.Print($"view P{rig.Index + 1}: layer {Mathf.Log(rig.VisualLayer) / Mathf.Log(2) + 1:0} " +
