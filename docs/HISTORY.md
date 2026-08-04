@@ -13548,3 +13548,297 @@ capture before anything is concluded. It does not weaken the Doppler finding —
 barely panned and barely attenuated is certainly not being pitch-shifted.
 
 Verify: read-only analysis, no engine code touched, no `RunTests.ps1` run required.
+
+## 2026-08-04 — `CAP-10` analysed: the dive drop confirmed, the pull-out overshoot disproved (`BL-109`)
+
+`BL-109` has carried one sentence since 2026-07-19: the original's engine "drops ~12% through a dive
+and overshoots ~1.05 at pull-out". `CAP-10`'s four takes confirm the first half at a smaller
+magnitude and **disprove the second half as stated** — the overshoot exists, but it is not at the
+pull-out.
+
+**Method.** The engine is a looped sample, so its whole spectrum translates rigidly in
+log-frequency and no f0 estimate is needed: whiten each frame's log-spectrum, cross-correlate it
+against level flight, and the peak's sub-bin position *is* the playback-rate multiplier
+(`playtest/CAP-10/scale.py`). An f0 tracker was tried first and abandoned — harmonic product
+spectrum octave-hopped between 45.6 and 77 Hz on the same clip.
+
+**Result** (wall-clock seconds into each clip, *not* sim seconds — k=1.390 applies):
+
+| take | view | span | dive plateau | overshoot |
+|---|---|---|---|---|
+| `CAP-10.mp4` | cockpit | 1.002 | — | — |
+| `CAP-10 2.mp4` | cockpit | 1.003 | — | — |
+| `CAP-10 3 3rd Person.mp4` | external | 1.106 | ×0.934–0.938, 10.5 s | ×1.032 @ t=4.37 |
+| `Bloodhawk Dive Sound.mp4` | external | 1.136 | ×0.903, 6.8 s | ×1.025 @ t=2.97 |
+
+The drop is **−6.5% and −9.7%**, not −12%, and it arrives as a long plateau rather than a transient,
+which is the part worth trusting. The overshoot is at the **push-over**, 1–1.5 s *ahead* of the
+descent, at +2.5%/+3.2%. At the pull-out (`Bloodhawk Dive Sound.mp4`, t=16.0→16.4 s) the note snaps
+from ×0.903 back to ×0.986 — up to level, never above it. **A model that overshoots above 1.0 on
+recovery reproduces something the footage does not contain.** The two takes plateau at different
+depths (0.903 vs 0.935), which a fixed offset cannot produce and a term scaling with dive steepness
+can — that is the evidence for feeding climb rate into `EnginePitch.Eval`'s input.
+
+**The cockpit takes are damped, not broken.** They read flat to ±0.1%, which initially looked like a
+dead recording. They are not: both carry a +2 to +4 dB broadband 400–900 Hz swell locked to the
+visual screen-shake window (`CAP-10.mp4` t≈6.5–12.0, `CAP-10 2.mp4` t≈8.0–17.5; r≈+0.5 against a
+frame-difference shake trace), and the user confirms the in-cockpit mix is damped relative to the
+chase view. A median-subtracted spectrogram settles it — clear bending harmonic traces at
+~230/400/660 Hz in the external takes, **none** in either cockpit take. So the original's cockpit
+engine note carries no measurable pitch modulation, and what becomes audible as the shaking starts
+is **broadband rush, not a pitch change** — it is the wind/overspeed layer, which we already model
+as `prop_sound`. It is tracked separately as `BL-252`, not folded into `BL-109`.
+
+**The overspeed sound's gating is confirmed, and it is `fd_speed`-relative.** User test 2026-08-04
+(Hoplite and autogyro): hold level at 100% throttle — which settles at max speed by definition —
+then dive, and the sound starts exactly as the speed passes it. That is `1.0× fd_speed`, the foot of
+the shipped `prop_sound` curve (volume 0→0.5 over 1.0→1.1× `fd_speed`), so **the gating needs no
+change**; only its volume is open. The Bloodhawk footage times the edges and agrees — the 400–900 Hz
+band steps up at t≈5.2 s and back down at t≈11.7 s in `CAP-10.mp4`, with the needle crossing the
+corresponding dial position at t≈5.0–5.5 and t≈11.5–12.0, both edges inside ~0.3 s and sharp rather
+than a continuous swell. ⚠ **The airspeed gauge art is identical for every plane**, red arc and `300`
+mark included, so no per-plane threshold can be read off the dial — only off `fd_speed`.
+
+⚠ **Recorded limits.** Two usable takes is not a distribution. **Climb rate was not decoded**, so
+there is still no ft/min to fit a coefficient against — the external HUD's green ball is a roll
+symbol, not a pitch ball, and a quick annulus tracker on the altimeter was defeated by its two
+needles (it returned +205 ft net across a clip that visibly descends through cloud to terrain; the
+numbers it produced are not reported anywhere). **Throttle was pinned at 100% throughout all four
+dives** (user), so none of the swing belongs to the throttle term. The user's reading of the
+mechanism is *strain on the engine* rather than speed as such, which fits the measured sign: nose
+down and unloaded, the note **falls**. ⚠ Engine note and overspeed whine move together in a dive —
+a frequency-domain measurement that does not separate them will attribute one to the other.
+`CAP-10` therefore stays open in `playtest.md` for the correlation half of its brief.
+
+Verify: read-only analysis, no engine code touched, no `RunTests.ps1` run required.
+
+## 2026-08-04 (b) — `CAP-10` re-analysed against the gauge calibration: climb rate wins, the pull-out was never filmed
+
+Corrects the entry above, which was written from the audio alone. The chase-HUD half of
+`analysis/video-flight-calibration` already supports these clips — `cap10chase` was **already
+registered** in `extract.py`'s `CLIPS`, and FINDINGS.md records the chase altimeter fitting at NCC
+0.9900 — so the "climb rate was not decoded" limit recorded above was a failure to read the harness
+first, not a property of the footage. `Bloodhawk Dive Sound.mp4` is now registered too (`cap10dive`).
+
+**Decoding chase clips end-to-end needed two small changes, both additive.** `reader2.Dial` and
+`reader2.LKRegistrar` hardcoded the cockpit pool; they now take `sfx=""`, so every existing caller
+and published cockpit number is untouched. And the chase path skips LK registration entirely — the
+HUD is a screen-space sprite pinned by construction (`pool.py` registers both chase clips at
+dx=dy=0), and its dials sit hard against the screen edge where the registrar's padded ROI runs
+negative, which is why the chase needle decode had never been run. `run2chase.py` is `run2.py`'s
+decode with those two differences; `enginepitch.py` pairs it to the audio on PTS.
+
+Decode quality matches the cockpit path: `cap10chase` alt 1447..6523 ft (2nd-difference sd 6.27 ft),
+mph 279.4..355.6 (sd 0.55); `cap10dive` alt 1384..4066 ft (sd 5.61), mph 278.9..354.7 (sd 0.82).
+
+**The result — it is climb rate, not airspeed:**
+
+| take | γ range | R² vs climb rate | R² vs airspeed | R² vs γ |
+|---|---|---|---|---|
+| `CAP-10 3 3rd Person.mp4` | +4.5°..−64.1° | **0.949** | 0.746 | 0.942 |
+| `Bloodhawk Dive Sound.mp4` (t<16 s) | +3.1°..−28.6° | **0.972** | 0.772 | 0.968 |
+
+That is the question `CAP-10` was filmed to answer, and it rules a speed/RPM term out as the primary
+driver of the note. The push-over overshoot is confirmed as a real feature and confirmed to happen
+while climb rate is **still positive** (×1.032 at t=4.37 s, climb +1585 ft/min).
+
+⚠ **Two corrections to the entry above.**
+
+1. **No take contains a pull-out**, so "overshoots ~1.05 at pull-out" is *untested*, not relocated.
+   Both clips are still descending at their last decoded frame (−13,807 and −24,924 ft/min). The
+   ×0.905→×0.985 jump at t≈16.0–16.4 in `Bloodhawk Dive Sound.mp4`, read as a pull-out from the
+   audio and the horizon re-entering frame, is contradicted by the flight state: altitude, climb
+   rate, γ and airspeed are all unchanged across it. Unexplained; it alone drags that take's R² from
+   0.972 to 0.576, so it is excluded rather than modelled.
+2. **The coefficient must not be fitted from these two takes** — they disagree by 2.6×
+   (×0.00111/deg vs ×0.00294/deg of γ), and the *shallower* dive shows the *deeper* drop (−26.9° →
+   0.905 against −60.3° → 0.936), which no single monotone law in γ or climb rate gives. Within a
+   take γ, climb rate and airspeed are collinear so the fit cannot separate them. The likeliest
+   confound is the `prop_sound` whine moving with the engine note and being blended into a
+   single-shift measurement — `Bloodhawk Dive Sound.mp4` is 3.4× louder overall (RMS 0.348 vs 0.114).
+
+The cockpit-vs-chase and overspeed-gating findings in the entry above are unaffected.
+
+Verify: read-only analysis plus the three analysis scripts noted; no engine code touched, no
+`RunTests.ps1` run required. Cockpit re-run not needed — `sfx` defaults preserve those paths.
+
+## 2026-08-04 (c) — `CAP-10` re-record: climb rate is out, the driver is the elevator input itself
+
+Corrects entry (b) above. That entry reported engine pitch tracking climb rate at R² 0.949/0.972 on
+the two plain dives, with airspeed a distant second. The user's three new takes — flown precisely
+because they suspected pitch *input* rather than climb rate — show that result was **collinearity**.
+In a plain dive climb rate, flight-path angle, airspeed and elevator all move together, so a high R²
+against any one of them is not evidence it is the driver.
+
+| take | what it varies | climb | speed | γ | dHe |
+|---|---|---|---|---|---|
+| `CAP-10 3 3rd Person.mp4` | plain dive | 0.949 | 0.746 | 0.942 | 0.384 |
+| `Bloodhawk Dive Sound.mp4` (t<16 s) | plain dive | 0.576 | 0.335 | 0.611 | 0.007 |
+| `…Dive 100% Thrust variable climb rate.mp4` | **climb rate** | **0.188** | 0.130 | 0.191 | 0.056 |
+| `…90° Banked Pith Up Down.mp4` | **elevator at γ≈0** | **0.159** | 0.206 | 0.120 | 0.081 |
+| `…Variable Climp Pitch up.mp4` | climb + pull | 0.442 | 0.237 | 0.416 | 0.055 |
+
+The clip flown specifically to vary climb rate scores **0.188** against it. The 90°-banked take is
+the discriminator and it is decisive: at 90° of bank the elevator swings the nose in azimuth rather
+than in altitude, so the take holds **altitude to 168 ft across 15 s** (γ −5.7°..+0.7°, climb
+−2159..+235 ft/min) while the engine note still swings **6.2%**, peaking at ×1.0608. A driver that
+is near-zero for the whole clip cannot produce a 6% excursion.
+
+Energy-height rate (`dHe = d/dt(alt + v²/2g)`, which with throttle pinned at 100% is how hard the
+airframe is being worked) was added as a candidate precisely because it does *not* vanish in a
+horizontal manoeuvre. It fails too — ≤0.384 everywhere, 0.081 on the banked take.
+
+**The positive evidence for elevator input.** `…Variable Climp Pitch up.mp4` drives the note *up* to
+**×1.1126** under a pull — the first take to show a rise at all, the earlier dives having only shown
+drops — so the relationship is signed and symmetric: pull raises the note, push lowers it. And in
+the banked take the note **holds at ×1.029–1.035 for as long as the stick is held**, at near-zero
+climb rate, instead of decaying the way a response to a *rate* would. That is the user's "strain on
+the engine" reading of the mechanism, now with the state variables excluded.
+
+⚠ **This is where gauge decoding runs out.** Elevator deflection is a stick position, not a state:
+no instrument in the footage carries it, and in the chase view there is no stick in frame either. It
+cannot be measured off any recording of a hand-flown take — it has to be *scripted* to be known.
+`analysis/capture-rigs/ElevatorDutySweep.ahk` is that rig: it alternates nose-up/nose-down at a fixed
+400 ms period, which pins the mean pitch rate (and hence altitude, speed and γ) while stepping the
+**duty cycle** of the input through 0, ¼, ½, ¾, 1 and back. Every step has the same flight state and
+a different amount of deflection, so a note that steps with duty reads the coefficient off directly,
+and a note that stays flat kills the input hypothesis too. It deliberately does **not** beep, unlike
+`pitch_cadence.ahk` — on this capture the audio is the measurement.
+
+⚠ **Do not fit a coefficient from any take so far.** The two plain dives disagree by 2.6×
+(×0.00111/deg vs ×0.00294/deg of γ) and the *shallower* dive shows the *deeper* drop, which no
+monotone law in any decoded variable produces.
+
+Unaffected by this correction: the cockpit-vs-chase finding, the `prop_sound` gating result
+(`BL-252`), and entry (b)'s finding that **no take contains a pull-out**, which still stands — the
+three new takes do not contain one either.
+
+Verify: read-only analysis plus `enginepitch.py` (energy-rate candidates added) and three new `CLIPS`
+entries; no engine code touched, no `RunTests.ps1` run required.
+
+## 2026-08-04 (d) — `CAP-10` scripted run: the engine note follows the elevator input, and it integrates
+
+Entry (c) concluded the driver had to be the elevator input, by elimination, and said the only way
+to prove it was to script the input. `capture-rigs/ElevatorDutySweep.ahk` did that and it confirms.
+
+**The rig.** F13 steps the input duty cycle — the fraction of each 300 ms half-cycle the key is
+held — through 0, ¼, ½, ¾, 1 and back down, nine 6 s steps, alternating nose-up/nose-down so the
+mean pitch rate is nominally zero. Every key edge is logged with a QPC timestamp, so the elevator is
+*known* rather than inferred. `dutysweep.py` solves the one log-to-video offset (capture-rigs rule 1)
+by matching the drive-frequency amplitude in the altimeter against the logged duty, then averages
+the note over each step, dropping 1.5 s of settling at each step's start.
+
+| duty | 0.00 | 0.25 | 0.50 | 0.75 | 1.00 | 0.75 | 0.50 | 0.25 | 0.00 |
+|---|---|---|---|---|---|---|---|---|---|
+| note | 1.0000 | 1.0024 | 1.0058 | 1.0108 | **1.0169** | 1.0132 | 1.0074 | 1.0043 | 1.0025 |
+| climb ft/min | −23 | +96 | +366 | +600 | +1273 | **+1679** | +1092 | +911 | +874 |
+| mph | 297.8 | 297.5 | 296.6 | 295.9 | 285.0 | 284.6 | 293.2 | 294.6 | 294.9 |
+
+`note ≈ 1.0002 + 0.0154·duty`, **R² 0.931**. Across the nine steps the note tracks **duty (0.931)**
+better than airspeed (0.719) or climb rate (0.543).
+
+**The descending leg is what settles it.** At the run's *highest* climb rate, +1679 ft/min, the note
+reads 1.0132 — **lower** than at duty 1.00, where climb was only +1273 and the note 1.0169. And at
+the final duty-0 step the note has returned to 1.0025 while the aircraft is **still climbing at
++874 ft/min**. The stick stops moving and the note returns to baseline irrespective of climb rate.
+Climb rate is not a weaker predictor here; it is dissociated.
+
+**The response integrates.** F14's held-pull ladder gives **+1.5 / +4.7 / +8.0 / +8.9 %** for holds
+of 250 / 500 / 1000 / 1500 ms, saturating near +9%, while F13's rapid 300 ms alternation reaches only
++1.7% at *full* duty. So the note is not an instantaneous function of stick position: `EnginePitch`
+wants the elevator **low-passed**, time constant of order **0.5–0.7 s**. That reconciles the whole
+capture set — sustained dives and pulls reach ±10% (the hand-flown takes) while brief inputs barely
+register.
+
+⚠ **Limits.** The log-to-video offset is only loosely determined: R² sits on a broad plateau across
+offsets 3.0–6.5 s, every one of which gives slope +0.015 ± 0.002 and span +1.6–1.9%. The conclusion
+is robust to the alignment; the exact offset is not resolved, and no number here should be quoted to
+better than its plateau spread. The rig's zero-mean-pitch-rate goal was **not** met — the aircraft
+gained 680 ft across the run, and duty correlates with climb at R² 0.343 and with airspeed at 0.512,
+which is precisely why the argument rests on the descending leg rather than the ascending one.
+Airspeed was held to ~1% (297.8 → 294.5) except at the two highest-duty steps, where it dipped to
+285. F14 is materially weaker than F13: its gauge decode is poor (`d2 sd` 19.2, airspeed bottoming at
+0.0), its offset was solved from the note itself rather than independently, and its 2000 ms row's gap
+window falls past the end of the run into the dead zone — that row must not be quoted.
+
+⚠ Still open, unchanged by this: **no take in the set contains a pull-out**, so `BL-109`'s original
+"~1.05 overshoot at pull-out" remains untested. The `prop_sound` gating (`BL-252`) and the
+cockpit-is-damped finding are also unaffected.
+
+Verify: read-only analysis plus `dutysweep.py` and two new `CLIPS` entries; no engine code touched,
+no `RunTests.ps1` run required.
+
+## 2026-08-04 (e) — `CAP-10` dive recovery: the pull-out overshoot is real, and it is not about pull-outs
+
+Entry (d) closed the elevator question but left one thing untested: none of the ten takes then in
+hand contained a pull-out, so `BL-109`'s "~1.05 overshoot at pull-out" had never been measured.
+`CAP-10 Dive Recovery.mp4` is the eleventh take and the first held *through* the recovery — level at
+5,180 ft / 296 mph, pushover at t≈4.4 s, near-vertical descent to −32,600 ft/min and 355 mph,
+recovery t≈12.6–14.3 s, then five seconds of near-level flight back at 296 mph. It decodes better
+than anything else in the set (alt `d2 sd` **4.61**, mph **1.14**, against F14's 19.2), so for once
+the flight state is not the weak link. `recovery.py` pairs it to the note curve on PTS.
+
+**Both halves of the original claim are confirmed in direction, at about half the stated size.**
+
+| | claim | measured | where |
+|---|---|---|---|
+| drop through the dive | ~0.88 (−12%) | **0.9370** (−6.3%) | t=6.57 s |
+| overshoot at pull-out | ~1.05 | **1.0296** (+3.0%) | t=13.74 s |
+
+The overshoot clears both the level-flight baseline (1.0000) and the post-recovery settle (0.9985),
+so it is a genuine overshoot and not a drift; and it decays back to baseline within ~1 s of the
+recovery finishing, so it is transient rather than a new steady state.
+
+**The surprise is at the other end of the dive.** The same bump appears at the **pushover**, where
+the stick goes the opposite way:
+
+| t (s) | 4.20 | 4.40 | 4.60 | 4.80 | 5.20 | 5.40 |
+|---|---|---|---|---|---|---|
+| note | 1.0004 | 1.0113 | **1.0301** | **1.0336** | 1.0048 | 0.9907 |
+| climb ft/min | +670 | +554 | +125 | −836 | −4,662 | −7,407 |
+| mph | 296.2 | 296.2 | 296.1 | 297.3 | 295.5 | 284.5 |
+
+At t=4.60 the note is already +3.0% while the aircraft sits at its peak altitude, at its
+level-flight airspeed, with climb rate moved by only −545 ft/min. In the established dive a
+−30,000 ft/min change buys −6.3%; here −545 ft/min comes with **+3.0%** — roughly 55× the
+sensitivity and the opposite sign. A third instance sits mid-dive at t≈7.7 s, where the note jumps
+0.9528 → 0.9942 while climb rate is still *steepening*. All three bumps carry tracker NCC 0.62–0.68,
+i.e. level-flight confidence, so none is a tracking artifact.
+
+**So the note wants two terms, not one.** (a) An unsigned transient on stick movement — the F13/F14
+effect, up for push and pull alike, which is also why F13's rig read a monotone staircase in duty
+despite alternating nose-up and nose-down inside every step. (b) A slow level that sits ~6% low
+through a sustained near-vertical dive and returns to baseline when level. `BL-109`'s "overshoot at
+pull-out" is (a) firing at the recovery; its "12% drop" is (b). One input into `EnginePitch.Eval`
+cannot produce both, which corrects the implicit assumption in entries (c) and (d) that a single
+driver had to win.
+
+⚠ This also **disproves one line of entry (c)**: "pull → note rises, push → note falls". The push
+half is wrong — a pushover raises the note by +3.4%. The transient is unsigned.
+
+⚠ **Do not use this take's whole-take R² to re-rank the drivers against F13.** Over the 493
+γ-unclipped frames it reads climb 0.519 / γ 0.511 / airspeed 0.314 / |dγ/dt| 0.052, apparently
+reversing the scripted result. It does not, for two reasons. This take has no logged input, so
+`dγ/dt` is the only elevator proxy available and it is a poor one — γ **saturates at −90°** through
+most of the dive because the descent rate genuinely reaches airspeed, and the frames where it unpins
+throw ±60 °/s clipping artifacts. And a whole-take R² weights one long sustained dive against three
+~1 s bumps, so it is measuring term (b) almost alone. The dissociations above are event-level and
+rest on no R² at all.
+
+⚠ The dive floor is not the overspeed whine (`BL-252`) leaking into the pitch tracker: the note
+reads 0.9381 at 301 mph and 0.9415 at 351 mph — 50 mph apart, 0.3% of note apart — and the floor is
+reached at t=6.57 s, before the high-speed regime begins. Tracker NCC does sag in the dive
+(0.48–0.51 vs 0.64 level), so the floor's depth is good to about ±1%, not better. Three ~10 mph step
+glitches in the speedometer decode (t≈6.6, 12.1, 16.9) are needle-wrap artifacts, used for nothing.
+
+An attempt to read pitch attitude off the chase HUD's green instrument was abandoned: it is a
+**roll-only plan-view indicator**, not an ADI — its green fraction is flat to 4% across a vertical
+dive. The chase HUD carries no pitch attitude, which is why `dγ/dt` was the only proxy on offer.
+This trap was **already written down** in `playtest/CAP-10/README.md` from entry (a) and got re-hit
+anyway; it is now also in `analysis/video-flight-calibration/FINDINGS.md`, next to the rest of the
+chase-decode rules, which is where it should have been to be found in time.
+
+`CAP-10` is now complete at eleven takes and owes nothing further.
+
+Verify: read-only analysis plus `recovery.py` and one new `CLIPS` entry; no engine code touched, no
+`RunTests.ps1` run required.

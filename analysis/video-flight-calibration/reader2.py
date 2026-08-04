@@ -25,7 +25,10 @@ DEG = 360.0 / NTH
 class LKRegistrar:
     """Sub-pixel translation of one dial against the pooled median."""
 
-    def __init__(self, affine, r_out=1.02, pad=6):
+    def __init__(self, affine, r_out=1.02, pad=6, sfx=""):
+        # `sfx` selects the pooled reference: "" is the cockpit pool (the historical
+        # default, so every existing caller and published number is untouched),
+        # "_chase" the chase one. Same convention as pool.py / fitdial.py.
         cx, cy, a, b, c, d = affine
         xs = [cx + a * sx + b * (-sy) for sx in (-r_out, r_out) for sy in (-r_out, r_out)]
         ys = [cy + c * sx + d * (-sy) for sx in (-r_out, r_out) for sy in (-r_out, r_out)]
@@ -33,8 +36,8 @@ class LKRegistrar:
         self.y0 = int(np.floor(min(ys))) - pad
         self.x1 = int(np.ceil(max(xs))) + pad
         self.y1 = int(np.ceil(max(ys))) + pad
-        med = np.load(f"{CACHE}/pool_med.npy").astype(np.float32)
-        sd = np.load(f"{CACHE}/pool_std.npy").astype(np.float32)
+        med = np.load(f"{CACHE}/pool_med{sfx}.npy").astype(np.float32)
+        sd = np.load(f"{CACHE}/pool_std{sfx}.npy").astype(np.float32)
         self.ref = med[self.y0:self.y1, self.x0:self.x1]
         s = sd[self.y0:self.y1, self.x0:self.x1]
         # weight: trust pixels that hold still, and that carry a gradient
@@ -115,9 +118,9 @@ def circ_centroid(prof, i0, half=14):
 
 
 class Dial:
-    def __init__(self, affine, bands, match=(0.12, 0.58)):
+    def __init__(self, affine, bands, match=(0.12, 0.58), sfx=""):
         self.affine = np.asarray(affine, float)
-        med = np.load(f"{CACHE}/pool_med.npy").astype(np.float32)
+        med = np.load(f"{CACHE}/pool_med{sfx}.npy").astype(np.float32)
         self.gx, self.gy, self.r = polar_xy(self.affine, 0.10, 1.00)
         self.med = bilin(med, self.gx, self.gy)
         self.bands = bands

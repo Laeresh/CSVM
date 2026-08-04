@@ -73,5 +73,45 @@ pairs** around it, most likely to blend into intermediate positions; the **four 
 which test the contradictory case (cancel, first-wins, or something else); and **two triples**, to
 show whether whatever rule governs pairs extends past two keys. No `5` (unbound), no `0` (rudder).
 
-⚠ The two rigs must not be run in the same take — both bind F13, and the analysis keys off one log
+## `ElevatorDutySweep.ahk` — `CAP-10` re-record
+
+AutoHotkey v2. **F13** runs the duty sweep (~54 s), **F14** the sustained-hold ladder (~28 s),
+**Esc** aborts and releases. Writes `elevator-<mode>-<stamp>-log.txt` next to the script.
+
+`CAP-10`'s five hand-flown takes ruled climb rate out as the driver of the engine note (the take
+flown to vary climb rate correlates at R² 0.188; the 90°-banked take swings the note 6.2% while
+holding altitude to 168 ft). What is left is the **elevator input**, which is a stick position and
+so appears on no gauge — the only way to correlate against it is to script it.
+
+The sweep alternates nose-up/nose-down at a fixed 600 ms period, which holds the **mean pitch rate
+at zero** so altitude, speed and flight-path angle stay put, and steps the **duty cycle** — the
+fraction of each half-cycle the key is held — through 0, ¼, ½, ¾, 1 and back down, 6 s per step.
+Every step therefore has the same flight state and a different amount of elevator deflection. If the
+note steps with duty, the input is the driver and the staircase reads the coefficient directly; if
+it stays flat, the input is not the driver either, which is equally a result. Running the sweep up
+and back down makes ordering and hysteresis visible instead of assumed.
+
+- **Fly straight and level at 100% throttle, in an external/chase view.** The cockpit view is
+  useless for this capture — its engine mix is damped and carries no moving harmonic
+  (`docs/HISTORY.md`, 2026-08-04).
+- **Beeps mark start (1.2 kHz) and end (two at 600 Hz)**, as in `pitch_cadence.ahk`. Normally
+  unacceptable here — on this capture the audio *is* the measurement — but the user's rig records
+  the **game's audio only, not the system mixer**, so they never reach the file. ⚠ **Set
+  `BEEP := false` if the capture setup ever changes to desktop/system audio**: 1.2 kHz sits in the
+  band this analysis reads and would be indistinguishable from engine harmonics at exactly the step
+  boundaries where the measurement is taken. Alignment does not depend on them either way (rule 1).
+- ⚠ **`SendMode "Event"` is load-bearing — this is rule 3.** The first version used `SendInput` and
+  typed perfectly into Notepad while doing **nothing** in the game. `SendInput` delivers a batch
+  atomically with no gap between events; the original samples key state once per frame, so both
+  edges land inside one sample and are never seen. Event mode goes through `keybd_event` one event
+  at a time with a real `SetKeyDelay`, which is why the two numpad rigs work. For the same reason
+  the shortest hold in a rig must clear a frame with margin — hence the 600 ms period here, whose
+  lowest non-zero duty is 75 ms (~2.3 frames at 30 fps).
+- ⚠ **`pitch_cadence.ahk` (`CAP-04`) uses `SendInput` and may have this bug.** Its header records it
+  as verified *"with the key sending stubbed out so the test could not type into anything"* — so its
+  timing is proven and its delivery into the game never was. Check it before trusting a re-record.
+- Arrow-key scancodes are extended (`sc148`/`sc150`), deliberately not numpad 8/2 — those are the
+  camera, and would swing the view mid-measurement.
+
+⚠ The rigs must not be run in the same take — they all bind F13, and the analysis keys off one log
 per recording.

@@ -85,6 +85,23 @@ CLIPS = {
     # because the instruments are somewhere else entirely (hud.py).
     "cap18": ("CAP-18.mp4", "chase"),                   # weapon-switch arrow
     "cap10chase": ("CAP-10 3 3rd Person.mp4", "chase"),
+    # The fourth CAP-10 take, named for its subject rather than the capture. Was once
+    # believed to hold a pull-out; the decoded state says it does not (HISTORY (b)).
+    "cap10dive": ("Bloodhawk Dive Sound.mp4", "chase"),
+    # 2026-08-04 re-record, to separate elevator input from climb rate. `cap10bank` is
+    # the discriminator: at 90 deg of bank the elevator swings the nose in azimuth, so
+    # pitch input is large while climb rate stays near zero.
+    "cap10var": ("CAP-10 Dive 100% Thrust variable climb rate.mp4", "chase"),
+    "cap10bank": ("CAP-10 90° Banked Pith Up Down.mp4", "chase"),
+    "cap10climb": ("CAP-10 Variable Climp Pitch up.mp4", "chase"),
+    # 2026-08-04 SCRIPTED runs, driven by capture-rigs/ElevatorDutySweep.ahk, which
+    # logs every key edge - so for these two the elevator input is known rather than
+    # inferred. F13 = duty staircase at zero mean pitch rate; F14 = held-pull ladder.
+    "cap10f13": ("CAP-10 F13 scripted run.mp4", "chase"),
+    "cap10f14": ("CAP-10 F14.mp4", "chase"),
+    # The pull-out. Nine takes in, no clip yet held a dive THROUGH the recovery, which
+    # is the one thing BL-109's "~1.05 overshoot at pull-out" claim needs to be tested.
+    "cap10rec": ("CAP-10 Dive Recovery.mp4", "chase"),
 }
 
 
