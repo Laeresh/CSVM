@@ -672,7 +672,10 @@ can't even measure its presence, so its data curve stands). The WAV-choice re-ch
 clean: an all-archive comb sweep found no better prop_sound candidate — the extra dive-window
 combs are the original's ~5%-detuned dual engine stack plus Doppler-shifted IA-traffic engines
 (details, dead ends, and the item-12 dive-envelope datum ≈1.27×fd_speed in HISTORY
-2026-07-19). Build + scripted dive smoke clean; **user A/B dive pending.**
+2026-07-19). ⚠ **The "Doppler-shifted" half of that reading no longer stands** — `CAP-09`
+(HISTORY 2026-08-04) measured the original applying no Doppler to world emitters at all. The
+combs are real; their cause is open. Build + scripted dive smoke clean; **user A/B dive
+pending.**
 
 ## 12. Turn rates — per-axis calibration
 

@@ -10,7 +10,9 @@ bugs" section and its neighbours** — test infrastructure, surfaces/colliders, 
 working the capture-blocked items themselves. Also excluded by the user: the newly-unblocked
 flight-model pair `BL-092`/`BL-247` (deserves its own focused plan — both touch the guarded
 `flight-envelope` suite). Excluded during selection: `BL-047` (ruled capture-blocked 2026-07-30,
-`docs/HISTORY.md`), `BL-160` (blocked on `CAP-09`), `BL-161` (out of scope until a cockpit-audio
+`docs/HISTORY.md`), `BL-160` (blocked on `CAP-09` at selection time; since answered 2026-08-04
+outside this plan — the original applies no Doppler, so there was nothing to build,
+`docs/HISTORY.md`), `BL-161` (out of scope until a cockpit-audio
 feature), `BL-048` (judged a future Hi-Def-mode invention at selection time; since closed 2026-08-04 outside
 this plan — the needle shape shipped in the `rtexture*` tiers' alpha, `docs/HISTORY.md`).
 
