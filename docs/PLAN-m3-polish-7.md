@@ -65,7 +65,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ `BL-184` Tween the ammo/hardpoint gauge arrow at 168.7 °/sim-s with shortest-way wrap
 2. ☑ `BL-148` Stall warning: blink-rate ramp + split the 0.30 warn / 0.25 nose-drop thresholds
-3. ☐ `BL-142` Re-tune `IndicatorLowFrac` for guns on its own merits
+3. ☑ `BL-142` Re-tune `IndicatorLowFrac` for guns on its own merits
 
 ### Wave B — Flight and audio quick wins
 
@@ -185,7 +185,7 @@ deceleration reads onset 0.299 fd / 90.3 mph, exit 0.302 / 91.1 with no hysteres
 `.\RunTests.ps1` green, goldens unmoved. Capture A/B against `CAP-06` still owed at the controls —
 `PT-32`. Details: `docs/HISTORY.md` 2026-08-04, `docs/formats/hud.md`.
 
-## A3 ☐ `BL-142` Re-tune `IndicatorLowFrac` for guns
+## A3 ☑ `BL-142` Re-tune `IndicatorLowFrac` for guns
 
 **Goal.** The gun group's low-ammo colour step reads well against a real gun belt draining from
 full to empty — judged on its own merits, not inherited from the 3-round rocket-pylon coincidence.
@@ -208,6 +208,17 @@ gauge draw path — confirm no golden moves, or that a move is the intended colo
 
 **⚠ Traps.** Don't skip because `BL-024` "already tunes it" — `BL-024` only split the code path;
 nobody has watched a gun belt drain past 0.34 with intent to judge the colour step.
+
+**Landed 2026-08-04.** No original capture exists for this cue, so the eyeball tune was done via a
+`RunProbe.ps1 --ammo=200 --gun-select=0 --fire --frames=<N> --screenshot=<path>` sweep (a 1/14-scale
+stand-in for the real 2800-round `CLUSTER_SIZE`) across seven remaining fractions, full to 5%. At
+the old 0.34 the light already read yellow with two-thirds of the belt still left (~119 sim s of
+sustained fire at real scale); retuned to **0.15** (~53 sim s left), which reads as genuinely low
+without doubling as an empty-warning. `GunIndicatorColor`'s literal-zero-only red tier is unchanged
+— out of this item's scope. Full `.\RunTests.ps1` green, goldens unmoved (no `--det` capture flies a
+gun group into either threshold's band). An eyes-on judgement at the controls is still owed —
+`PT-33` — since there is no original clip to A/B against. Details: `docs/HISTORY.md` 2026-08-04,
+`docs/formats/hud.md`.
 
 # Wave B — Flight and audio quick wins
 

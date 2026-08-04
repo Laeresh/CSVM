@@ -10,7 +10,7 @@ here means the work is queued, not forgotten. Deep evidence and traps live in
 Cite them from `backlog.md` and in conversation the way `BL-nnn` is cited. IDs are permanent: when
 an item closes its ID retires with it and is never reused, so numbering gaps are expected.
 Retired IDs disappear from this file, so never mint a new ID by scanning the entries below — take
-it from this counter and bump it here: **next free IDs `CAP-25` and `PT-33`.** (`CAP-17` and
+it from this counter and bump it here: **next free IDs `CAP-25` and `PT-34`.** (`CAP-17` and
 `CAP-14` and `CAP-24` retired 2026-08-04 — IDs are never reused.)
 
 **Captures staged for an item live in `playtest/<ID>/`** — git-ignored (they are renders of the
@@ -351,6 +351,17 @@ not need new footage of the original, so no capture is owed for it.)*
   threshold reads right, since the sim/wall conversion is the live trap (a wall implementation would
   blink 39% fast). The deep end below 0.15 fd is asserted in the `stall-warning` suite but was never
   flown in a scripted run — that band is the one worth watching.
+
+- `PT-33` **Gun belt low-ammo colour step, own-merits judgement (A3 / `BL-142` landed 2026-08-04).**
+  The gun gauge's belt light now turns yellow at 15% of the group's ammo remaining, down from 34% —
+  there is no original capture to A/B against (the thresholds were never measured from the original,
+  `docs/formats/hud.md`), so this is a judgement call on our own remake, not a fidelity check. Fire
+  one gun group down from full (`./RunGame.ps1 --plane=player_bhawk --chapter=C1 --gun-select=0
+  --fire`, or hold the trigger manually) and watch the belt light. *Look for:* (a) does yellow still
+  feel too early or too late against a real magazine's length of sustained fire; (b) does the light
+  sit yellow for a satisfying "getting low, plan around it" stretch rather than flickering on right
+  before empty; (c) whether red-only-at-literal-zero (no separate "critical" tier) reads as a gap —
+  that would be a new item, not a re-tune of this constant.
 
 ---
 

@@ -56,8 +56,17 @@ public sealed partial class GaugeCluster : Control
 
     // ---- tuning ----
     // A gun belt indicator's colour by remaining fraction: green healthy, yellow low, red empty.
-    // Gun-only (BL-024): hardpoints/pylons never show this intermediate tier. TUNE.
-    internal const float IndicatorLowFrac = 0.34f;
+    // Gun-only (BL-024): hardpoints/pylons never show this intermediate tier. TUNE (BL-142,
+    // re-tuned 2026-08-04): the prior 0.34 was inherited from the unrelated 3-round rocket-pylon
+    // coincidence (1/3), never watched against a real gun belt. A screenshot sweep
+    // (`--ammo=200 --gun-select=0 --fire`, a scaled-down stand-in for the 30-cal's real 2800-round
+    // CLUSTER_SIZE) drained the belt from full to empty: at 0.34 the light turned yellow with 68 of
+    // 200 rounds left — at the real capacity that's ~950 rounds, ~119 sim s of sustained fire at
+    // the weapon's 8 rounds/s, so the cue lit while the belt was still nearly two-thirds full.
+    // Lowered to 0.15 (~420 rounds / ~53 sim s at real capacity) so yellow reads as genuinely low
+    // rather than "still comfortably stocked"; still pending an eyes-on playtest against the
+    // original (no capture exists to trace this to).
+    internal const float IndicatorLowFrac = 0.15f;
     // Weapon-gauge arrow sweep rate, shared by both gauges (BL-184, CAP-18: 168.7 ± 1.6 °/sim-s,
     // linear — the measured ~2-frame ease at each end is within noise and NOT a smoothstep).
     // Internal (not private) so the run-tests suite can assert the rate directly.

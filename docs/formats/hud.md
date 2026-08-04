@@ -197,7 +197,15 @@ The functional children, and how `cockpit.gw` drives each:
   2-gun plane's slots 2–3; turret gun groups are inert, so they don't count) reads
   **red**, indistinguishable from a fitted-but-spent slot — that is what the original
   shows. The
-  green/yellow/red **thresholds are a TUNE** pending an original playtest.
+  green/yellow/red **thresholds are a TUNE** pending an original playtest. Guns are the only class
+  with a yellow tier at all (`GunIndicatorColor`, `BL-024`) — hardpoints/pylons step straight
+  green→red. The gun yellow threshold (`GaugeCluster.IndicatorLowFrac`) was retuned 2026-08-04
+  (`BL-142`) from 0.34 — a value inherited from the unrelated 3-round rocket-pylon coincidence
+  (1/3), never watched against a real gun belt — to **0.15**, judged from a screenshot sweep of a
+  scaled belt drain (`--ammo=200 --gun-select=0 --fire`): at 0.34 yellow lit with ~119 sim s of
+  sustained fire still left at the real 2800-round `CLUSTER_SIZE`/8 rounds-per-s, reading as
+  premature; 0.15 (~53 sim s left) reads as genuinely low. Still no capture to trace either number
+  to — an eyes-on playtest against the original remains owed.
 - **`ggarrow`/`mgarrow`** — a `smallneedle.tif` pointer (priority 49, rest points
   up at slot 0) rotated about the dial centre to the selected slot: the gun arrow to
   the **selected gun group**, the missile arrow to the **next pylon that will fire**.

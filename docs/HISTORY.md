@@ -14992,3 +14992,37 @@ Re-verified on the merge into `main`, which brought `BL-184`'s arrow tween and `
 lamp in alongside: full `RunTests.ps1` green (436 units, **24** engine suites, 13 goldens) and all
 thirteen shots hash-identical to the four hashes re-pinned above — the tween does not move a
 `--det` frame, so the two changes to the same dial are pixel-independent.
+
+## 2026-08-04 — PLAN-m3-polish-7 A3 `BL-142`: the gun belt's low-ammo colour step re-tuned on its own merits
+
+`GaugeCluster.IndicatorLowFrac` (the gun belt light's green→yellow threshold) held 0.34 —a value
+picked so a 3-round rocket pylon steps green→yellow→red, exactly the case `BL-024` removed from the
+gun code path on 2026-07-30. Nobody had watched a gun's own hundreds-to-thousands-round belt drain
+with intent to judge the step, which this item's own evidence line flagged as the constant's only
+remaining, unverified justification.
+
+**Approach.** Since no original capture exists for this cue (`docs/formats/hud.md`'s belt-light
+thresholds are recorded as "a TUNE pending an original playtest," with none owed against a specific
+clip), the drain was watched via a screenshot sweep rather than a live flight: `RunProbe.ps1
+--plane=player_bhawk --ammo=200 --gun-select=0 --fire --frames=<N> --screenshot=<path>` at seven
+frame counts spanning full to 5% remaining (the 30-cal's measured 8 rounds/s and `--det`'s exact
+sim-frame clock make the remaining count at any `--frames=N` predictable in advance). `--ammo=200`
+stands in for the real 2800-round `CLUSTER_SIZE` at 1/14 scale — the fraction, not the absolute
+count, is what the indicator reads.
+
+**Finding.** At the old 0.34, the light already read yellow with 68 of 200 rounds left (scaled:
+~950 of 2800, ~119 sim s of sustained fire remaining at 8 rounds/s) — the cue lit while the belt
+was still nearly two-thirds full, reading as premature rather than "low." Lowered to **0.15**
+(~420 of 2800 at real scale, ~53 sim s of sustained fire remaining), which reads as genuinely low
+without cutting it so close it doubles as an empty-warning.
+
+**Not changed.** `GunIndicatorColor` still only reaches red at literal zero — no separate
+"critical" tier below yellow. The Approach scoped this item to retuning the one existing threshold,
+not adding a new colour step; a red-band gap, if the eyes-on playtest below judges there is one, is
+a separate item.
+
+**Verify.** `gauge-colours` (`Suites.cs`) already asserted `GunIndicatorColor` symbolically off
+`IndicatorLowFrac`, so the constant change needed no suite edit. Full `RunTests.ps1` green (436
+units, 24 engine suites, 13 goldens, all hash-identical — no `--det` capture flies a gun group down
+into either threshold's band, so nothing moved). **An eyes-on judgement at the controls is still
+owed** — `PT-33` — since this is a remake-only feel call with no original clip to trace it to.
