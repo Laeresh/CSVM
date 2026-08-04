@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-253`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-255`.**
 When adding a new item, take the next number and bump this line.
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
@@ -327,6 +327,58 @@ rotations, the focus-loss mute and the C2 Seaplane Hangar objective are all sche
 with the diagnosis that verification pass produced. **Do not re-add them here**; if one is closed
 without landing, its record goes to `docs/HISTORY.md`. What remains below is what is still
 unscheduled.
+
+### C2 destruction animations (at-the-controls findings, 2026-08-04)
+
+Two in-flight findings against the C2 Hollywood destructibles; both diagnosed against the
+extracted data before being logged, so the mechanism is recorded here and not re-derived.
+
+- `BL-253` **The C2 facade panels don't throw their log debris when destroyed.** Every one of the
+  39 `fcpan01`–`39` deaths (`WeaponOrCollideHit`, health 0.01) authors
+  `CALL_ANIMATION facade_parts AT_NODE fcpanNN` — the shared `facdsticks` template
+  (`extracted/C2/cam_anim/facdsticks-facade_parts.json`) whose `fly_part1`–`fly_part4` activate and
+  ballistically launch four wooden sticks ("logs"). In the cockpit no logs appear on any panel; the
+  authored `dustcloud` puffer is the only visible death. Candidate causes, in likelihood order —
+  all in `AnimRuntime`'s `CallAnimation` handler (`AnimRuntime.cs:2088`):
+  1. **Template relocation is gated off in the live world.** `PlaceCalledTemplates` relocation
+     ("Re-anchoring alone is not enough for an effect template … unless that root is MOVED to the
+     call site the effect emits at its gamez origin") is deliberately restricted to the anim
+     debugger / crash runtime, never the ambient world — so the one shared `facdsticks` root's
+     parts fly at their gamez origin, not at the struck panel. The `--damage-hd` measurement
+     `fcpan01 debris[0→1]` (docs/HISTORY.md 2026-08-01, template re-anchor fix) proves the launch
+     *fires*; where the pieces appear in flight is the open half.
+  2. **One template, 39 call sites** — the live-guard/`TemplateIsAt` wrap logic means a second
+     panel broken while the first's 4–5 s launch runs collapses or skips; breaking a row of
+     facades (the normal way to hit them) would show logs once at most.
+  3. **Name collision:** `part1`–`part4` also name `gate2`'s archway pieces (the `blockit2` def),
+     so any global name binding can grab the wrong nodes.
+  Also authored on the death and worth confirming while in there: the `air_mixed_exp_sg` one-shot
+  (D31 death audio is still stubbed engine-wide).
+- `BL-254` **`gate1`/`gate2` die in one stage instead of the original's two — the archway swaps to
+  its wreck at t=0 and the passage opens immediately.** In the original the studio-gate death is
+  staged: the doors fall (rotate 88° over ~1 s, fade 5.5 s) and the fires start, and only later
+  does the archway explode — split into seven tumbling pieces that fly away. The data authors
+  exactly that for **gate2**: `gate2_doorblast` ends with `CALL_ANIMATION blockit2 START_TIME
+  EVENT_OFFSET 28.5` (`extracted/C2/zrdr/studiogate_doors.zrd.json`; the compiled
+  `gate2-gate2_doorblast-doors.json` carries the call), and `blockit2`'s `states_effects` is where
+  the healthy→destroyed swap lives, alongside `large_fireball` and `fly_part1`–`fly_part7`.
+  `gate?_doorblast` itself authors **no swap** — so `AnimRuntime.RunDeathSequence`
+  (`AnimRuntime.cs:2953`) unconditionally runs the `ApplyDeathSwap` RESET-derived fallback and
+  swaps healthy→destroyed **at t=0**: the C25 `col[off 1, on 8]` measurement is this fallback
+  firing, the archway stops blocking flight the moment the gate dies (the user flew through with
+  only the doors down), and the `blockit2` explosion — if its +28.5 s call runs at all — plays
+  against an already-swapped wreck. Fix shape: the fallback must not fire when the death *chain*
+  authors the swap in a called def; the swap, wreck colliders, fireball and flying parts should
+  all arrive together when `blockit2` runs (verify the engine honours the 28.5 s `EVENT_OFFSET`
+  on a `CallAnimation`, and that `blockit2`'s OnCall def is reachable on the world runtime).
+  ⚠ **Traps.** (a) `gate1` has NO `blockit` counterpart anywhere in the shipped C2 data —
+  `gate1_doorblast` calls only its two `large_30sec_fire`s. The user recalls both gates exploding
+  their archway in the original; either the original derives gate1's stage two some other way or
+  the recollection conflates the gates — needs an original A/B before touching gate1, and until
+  then removing the fallback for chain-authored swaps must not leave gate1 with no swap at all.
+  (b) `gate2`'s death also calls `go_get_her` (mission scripting) — leave it to whatever handles
+  it today; this item is the swap timing only. (c) The 28.5 s offset reads long but is what is
+  authored — A/B the original's timing rather than "fixing" the number.
 
 ### Surfaces, colliders and inspect tools (from the Wave D playtest, 2026-07-25)
 
