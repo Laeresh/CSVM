@@ -14963,3 +14963,32 @@ asserted in the suite, not flown. Full `.\RunTests.ps1` passes (build / units 43
 / goldens 13 of 13 hash-identical — no `--det` capture flies below 0.30 fd, so neither the lamp nor
 the lowered nose-drop threshold moves a shot). **The A/B against `CAP-06` itself is still owed** —
 it needs eyes on the original beside a live stall.
+
+## 2026-08-04 — Unfitted weapon-belt positions light red (user-reported)
+
+The GUNS / ROCKETS dials left every belt position the airframe does not carry **dark** — a Bloodhawk lit 2 of 4 gun
+slots and 2 of 8 pylon slots, the rest blank. The user reports the original lights all of them:
+an unset slot shows the same **red star + red bezel bar** as a fitted-but-spent one, so the dial
+always reads as a full ring. `GaugeCluster.DrawWeaponGauge` used to `continue` past any indicator
+index beyond `WeaponGauge.Slots`; the skip is gone and the colour choice moved into
+`GaugeCluster.SlotIndicatorColor(slots, i, isGun)`, which returns colour tier 2 (`redindicator` /
+`redhilite`) for an out-of-range index and otherwise defers to the existing
+`GunIndicatorColor` / `HardpointIndicatorColor` split (BL-024's gun-only yellow tier is
+untouched). Extracting the helper is what makes the case assertable: the in-engine `gauge-colours`
+suite now walks a 2-gun plane across all four gun positions (0 green, 1 spent red, 2-3 unfitted
+red) and checks an empty pylon list at index 7. Verified: `RunTests.ps1` green end to end
+(436 units, 22 engine suites, 13 goldens); a 6x crop of the re-rendered `c1-flight` shot shows
+both dials with red stars on every unfitted position and green on the carried ones. The four
+goldens that show the gauge cluster moved and were re-pinned in the same commit — **2495 px
+(0.27 %), max delta 248, rows 423-495** on `empty-stage` / `c1-flight` / `c1-destroy-effects` and
+2494 px on `c1-crash` (its fireball already owned one of them); the identical footprint on shots
+with nothing else in common, plus nine bit-identical shots with no gauge cluster, localises the
+change to the belt rings (GOLD-5). Not addressed: an airframe with **zero** guns or zero pylons
+still hides that dial entirely (`FlightController` only binds a `WeaponGauge` for a system the
+plane carries), so an all-red dial for a system the plane lacks is not implemented — no evidence
+yet on what the original shows there.
+
+Re-verified on the merge into `main`, which brought `BL-184`'s arrow tween and `BL-148`'s stall
+lamp in alongside: full `RunTests.ps1` green (436 units, **24** engine suites, 13 goldens) and all
+thirteen shots hash-identical to the four hashes re-pinned above — the tween does not move a
+`--det` frame, so the two changes to the same dial are pixel-independent.

@@ -471,6 +471,19 @@ public static class Suites
             $"gun colour green just above the low threshold");
         ctx.Check(GaugeCluster.GunIndicatorColor(0f) == 2, $"gun colour red at empty");
 
+        // An unfitted belt position (index past the end of the loadout) reads red, not dark — the
+        // original lights every position on the dial. A 2-gun plane on a 4-position gun dial:
+        // slots 0-1 follow their ammo, 2-3 are red.
+        float[] twoGuns = { 1f, 0f };
+        for (int i = 0; i < 4; i++)
+        {
+            int want = i == 0 ? 0 : 2; // slot 0 full → green; slot 1 spent and slots 2-3 unfitted → red
+            ctx.Check(GaugeCluster.SlotIndicatorColor(twoGuns, i, isGun: true) == want,
+                $"gun belt slot {i} colour {want} on a 2-gun plane");
+        }
+        ctx.Check(GaugeCluster.SlotIndicatorColor(new float[0], 7, isGun: false) == 2,
+            $"unfitted pylon slot red");
+
         // BL-085/BL-173 (PLAN-armour-layer C21): a damage zone's colour is the COMBINED armor+health
         // fraction (PlaneDamage.PartState.Fraction), armor spent first, against the shipped
         // thresholds (docs/formats/hud.md "Thresholds") — never a synthetic split from one pool.

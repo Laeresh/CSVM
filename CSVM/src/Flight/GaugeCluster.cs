@@ -340,6 +340,14 @@ public sealed partial class GaugeCluster : Control
     // BL-024). Never reuse IndicatorLowFrac here.
     internal static int HardpointIndicatorColor(float frac) => frac <= 0f ? 2 : 0;
 
+    // The colour of belt indicator i, including positions past the end of the loadout: an unfitted
+    // slot reads RED, the same as a fitted-but-spent one. In the original every belt light on the
+    // dial is lit — a plane with fewer guns/pylons than the dial has positions shows the surplus in
+    // red, it does not leave them dark. Internal so the run-tests suite can assert that directly.
+    internal static int SlotIndicatorColor(IReadOnlyList<float> slots, int i, bool isGun) =>
+        i >= slots.Count ? 2
+        : isGun ? GunIndicatorColor(slots[i]) : HardpointIndicatorColor(slots[i]);
+
     // Damage zones: green > yellow > orange > red, over the zone's COMBINED armor+health fraction
     // (BL-085's PartState.Fraction) against thresholds MINED per-part from the data's own
     // *_damage_green/yellow/red injure_anims (never hand-authored — BL-173's refuted fix shape was
@@ -667,11 +675,12 @@ public sealed partial class GaugeCluster : Control
         }
     }
 
-    /// <summary>Draws one weapon gauge: the labelled face, the belt lights for the slots the plane
-    /// actually has — guns step green/yellow/red by remaining fraction, hardpoints step green/red
-    /// with no intermediate colour — the right-aligned digit count, the left-aligned type name,
-    /// then the pointer at its animated sweep angle (tweened toward the selected belt slot in
-    /// <see cref="_Process"/>; the readout above still snaps).</summary>
+    /// <summary>Draws one weapon gauge: the labelled face, every belt light — guns step
+    /// green/yellow/red by remaining fraction, hardpoints step green/red with no intermediate
+    /// colour, and a position this airframe does not fit at all reads red like a spent one — the
+    /// right-aligned digit count, the left-aligned type name, then the pointer at its animated
+    /// sweep angle (tweened toward the selected belt slot in <see cref="_Process"/>; the readout
+    /// above still snaps).</summary>
     private void DrawWeaponGauge(GaugeGeom geom, WeaponGauge state, Vector2 center, float radius, bool isGun,
         float arrowAngle)
     {
@@ -679,9 +688,7 @@ public sealed partial class GaugeCluster : Control
             DrawGaugePoly(p, center, radius);
         for (int i = 0; i < geom.Indicators.Count; i++)
         {
-            if (i >= state.Slots.Count)
-                continue; // a belt position this airframe does not use stays dark
-            int color = isGun ? GunIndicatorColor(state.Slots[i]) : HardpointIndicatorColor(state.Slots[i]);
+            int color = SlotIndicatorColor(state.Slots, i, isGun);
             foreach (var p in geom.Indicators[i])
             {
                 bool bar = p.TexName.Contains("hilite", StringComparison.OrdinalIgnoreCase);
@@ -738,7 +745,8 @@ public sealed partial class GaugeCluster : Control
 
     /// <summary>Live state for one weapon gauge (gun or rocket), pushed by the FlightController each
     /// frame. Positions map 1:1 onto the gauge's belt indicators: <see cref="Slots"/>[i] drives
-    /// <c>ggindicator</c>/<c>mgindicator</c> i (green &gt; low &gt; empty), the arrow points at
+    /// <c>ggindicator</c>/<c>mgindicator</c> i (green &gt; low &gt; empty); an indicator past the end
+    /// of <see cref="Slots"/> is a position the airframe does not fit and reads red. The arrow points at
     /// <see cref="Selected"/>, <see cref="Count"/> fills the 4-digit readout and <see cref="Type"/>
     /// the 6-char name. Left null (the default) hides that gauge — the static viewer has no loadout.</summary>
     public sealed class WeaponGauge
