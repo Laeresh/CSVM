@@ -15,6 +15,14 @@ Every claim must cite a timestamp, a frame number, or a decoded number you actua
 the footage does not show the thing, the finding is "the clip does not settle this" — which is a
 real result and must be reported as one.
 
+## 0. Work in a worktree
+
+Enter a git worktree with `EnterWorktree` before touching anything else — name it after the
+capture (e.g. `worktree-cap-08`). The skill edits `backlog.md`, `playtest.md`, and
+`docs/HISTORY.md` and can span several sessions, so isolating the work keeps `main` clean and lets
+other captures run in parallel. Exit with `action: "keep"` when you report (Section 8), so the user
+can review and merge the branch themselves — never merge or push it yourself.
+
 ## 1. Resolve the capture
 
 Argument may be `CAP-16`, a bare `16`, or a phrase like "the crash one".
@@ -165,9 +173,16 @@ value you feed them — re-read them before declaring a match.
 
 ## 8. Report
 
+Before reporting, re-read the capture's `CAP-nn` row in `playtest.md` §0 and check it against what
+you actually found. If the row still carries prose describing the shot as owed, unanalysed, or
+open — and Section 7 discharged it or moved every open question onto the `BL-NNN` entries — that
+prose is stale and must be updated or removed so the row doesn't contradict the backlog it points
+to. Do not silently leave a discharged row reading as if the capture is still needed.
+
 Give the user: which files were analysed (with the gate verdict for each gauge clip), the finding
 per `BL-NNN` in plain prose with its evidence cited by timestamp or frame, what remains open, and
 the files touched. Quote real numbers and real command output — never a summary of what a run
 "should" produce.
 
-Then stop. **Do not commit** unless asked; offer it in one line.
+Then stop. **Do not commit** unless asked; offer it in one line. If you entered a worktree, leave it
+in place (`keep`) — mention its path and branch so the user can review and merge it.
