@@ -74,7 +74,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — Effects and destruction
 
-6. ☐ `BL-221` Settle the `AT_NODE` position axis order by census (graze sparks 8 m too high)
+6. ☑ `BL-221` Settle the `AT_NODE` position axis order by census (graze sparks 8 m too high)
 7. ☐ `BL-229` Splash emitter killed on its start tick by its own caller
 8. ☐ `BL-061` World-effects template MESH half renders at the call site
 
@@ -318,7 +318,7 @@ entry.
 
 # Wave C — Effects and destruction
 
-## C6 ☐ `BL-221` Settle the `AT_NODE` position axis order by census
+## C6 ☑ `BL-221` Settle the `AT_NODE` position axis order by census
 
 **Goal.** A settled, evidenced convention for which axis order an anim-def `AT_NODE`/`PufferState`
 position uses — fixing the graze sparks that render 8 m above the plane without moving the
@@ -349,6 +349,34 @@ currently-right cases didn't move. Full `.\RunTests.ps1` with golden baseline ta
 — it cannot break the tie; don't cite it. (c) The graze staging site (`graze.siteAtContact`) is a
 different question with the same symptom family — it decides where offsets are measured *from*,
 not the axis order; settling one does not settle the other.
+
+**Landed 2026-08-05 — settled as reading A (verbatim), so the flip is DISPROVEN and no code
+changed.** `analysis/at-node-axis-order/` censuses all **6,728** `AT_NODE`-style positions in the
+install across both front-ends and all six event kinds that carry one (trap (a) — this was never a
+touchdown-only question): 5,910 are exactly zero, 48 are pure-X and blind, **770 discriminate**, in
+539 distinct authored shapes. Three instruments agree. The decisive one is a **paired sign**:
+`wv_turrets.zrd`'s `wvutur*`/`wvctur*` are the same definition differing only in the sign of the
+middle component (`+2`/`−2`), bound to turrets at local y +42.7…+56.5 on the gasbags versus
+y −81.8…−30.0 under a parent named `underneath` — the middle component tracks up/down, so it is the
+vertical, and no judgement about "sane placement" enters. **Sibling spread** (the spread of a host's
+own offsets against its bbox, invariant to a constant offset) runs 8 : 1 for A, and **known
+placements** — a muzzle flash 1 m out of the barrel, a fireball 12 m over a 0.1 m-thick ground
+ring, a crane hook below its jib, the pinned `c1-waterfall` golden — all read A. Trap (b) held:
+`world_velocity` was never cited.
+
+⚠ **One instrument had to be thrown away and is now `docs/verification.md` INSTR-9.** Scoring each
+reading by how far outside the host's bbox it lands, normalised per axis, reported **63 : 101
+against the right answer** — effects legitimately sit above flat hosts, and a flat host's vertical
+extent is ~0, so the normalisation decides the question. Kept behind `census.py --rejected`.
+
+Per trap (c), this leaves the graze symptom entirely with `graze.siteAtContact`:
+`touchdown_default`'s 8 m is authored, the def is staged at the contact point, and in our runtime
+its `MAIN_ROOT_NODE` host collapses onto the same relocated `spark_touchdown` anchor — so that flag
+is now the only remaining lever, and it is a capture question. `PT-24` (c) is restated accordingly.
+Verified by the census itself plus a full `.\RunTests.ps1` with no code delta — 436 units, 24/24
+suites, 13/13 goldens hash-identical, `c1-waterfall`/`c1-destroy-effects`/`c1-crash` among them.
+Details: `docs/HISTORY.md` 2026-08-05, `analysis/at-node-axis-order/FINDINGS.md`,
+`docs/formats/anim-definitions.md`.
 
 ## C7 ☐ `BL-229` Splash emitter killed on its start tick
 

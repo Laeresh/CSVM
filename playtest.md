@@ -273,8 +273,10 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   density verdict is now measuring size and count together (`BL-218`); (b) that dirt and a building
   wall give the *same* smoke is correct and needs no report — the two puffers are byte-identical in
   the data, and only the building adds the yellow sparks; (c) the sparks are **still expected to
-  read high/delayed** — that is `BL-221`, an unsettled axis-order question covering every def's
-  `AT_NODE` offsets, so a "still floating" verdict just confirms it and is not a new bug.
+  read high** — the def authors them 8 m above its host and that is not a parsing error: `BL-221`
+  settled the `AT_NODE` axis order by census (2026-08-05, verbatim — no swap). What is left is
+  **where** the def is staged, i.e. `graze.siteAtContact` above, so judge the sparks against that
+  A/B rather than reporting "floating" as a bug.
   `./RunGame.ps1 --plane=player_bhawk --chapter=C1` (water and dirt both within reach of the C1
   spawn), `--chapter=C2` for walls. ⚠ The `C` collider overlay you wanted for picking surfaces is
   broken — `BL-220`.

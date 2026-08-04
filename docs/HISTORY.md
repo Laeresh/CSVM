@@ -15152,3 +15152,67 @@ item's trap) logs `audio: engine=snd_bloodhawkengine (dual voice, 5% detune) …
 touches no golden's pixels). A listen A/B against the reference dive video is still owed at the
 controls, since no capture card renders sound. Details: `docs/PLAN-m3-polish-7.md` B5,
 `docs/architecture.md`'s `FlightAudio.cs` entry.
+
+## 2026-08-05 — PLAN-m3-polish-7 C6 `BL-221`: the `AT_NODE` axis order is settled by census — no flip
+
+**A disproof that lands no code.** The question was whether an anim-def `AT_NODE`/`PUFFER_STATE`
+position triple is `(x, y, z)` in the engine's frame (right-handed, Y up, nose −Z) or a Z-up
+authoring convention needing a swap — opened because `touchdown_default`'s five
+`small_yellow_sparks` calls sit 8 m above their host, which under the swap would instead read as
+five sources 8 m *ahead*, across the wing. The census says verbatim, and the engine already does
+verbatim, so nothing in `CSVM/src` changed.
+
+`analysis/at-node-axis-order/census.py` collects every `AT_NODE`-style position in the install from
+both anim front-ends and all six event kinds that carry one — `CALL_ANIMATION`'s
+`parameters.AtNode.position`, `PUFFER_STATE`'s `translate`, `LIGHT_STATE`/`SOUND_NODE`'s
+`translate.AtNode.pos`, `SOUND`/`DETONATE_WEAPON`'s `at_node.pos`, and the reader's flat
+`AT_NODE [name, dx, dy, dz]`. **6,728 positions: 5,910 exactly zero, 48 pure-X (blind — both
+readings give the same point), 770 discriminating**, in 539 distinct authored shapes. Three
+instruments, all agreeing:
+
+1. **Paired sign (decisive).** `wv_turrets.zrd`'s `wvutur*` and `wvctur*` are the same definition
+   — same health, same reset, same `destroyit` sequence — differing only in the SIGN of the middle
+   component (`+2` vs `−2`). `utur*` are 10 nodes at local y +42.7…+56.5 parented to the gasbags;
+   `ctur*` are 21 nodes at y −81.8…−30.0 under a parent literally named `underneath`. The middle
+   component flips with above-vs-below, so it is the vertical. This test needs no notion of what a
+   "sane" placement looks like, which is why it carries the verdict.
+2. **Sibling spread**, 8 : 1 for verbatim over 9 deduplicated groups. `shipsink` spreads seven
+   explosions over 165 m of `redcross`'s 231 m hull at constant height; the swap stacks them over a
+   165 m vertical range on a hull 62 m tall. `zep_splashes` is the same shape at zeppelin scale.
+   The single dissent (`tankerfreightNN`, three fires 1/3/5 m up a 2 m crate) is recorded, not
+   dropped — a blaze climbing a cargo stack is an ordinary reason to author it that way.
+3. **Known placement**: `muzzle_burst_*` 1 m along −Z out of the barrel; `he_ground_effect`'s
+   fireball 12 m over a ring mesh 0.1 m thick; `cghookup`'s hook 8 m below a jib modelled
+   y −50.4…0; `volcano1` at altitude 390 m rather than 6.4 km under the sea. The C1 waterfall's
+   three splash puffers are the case already settled from outside — the `c1-waterfall` golden
+   renders them under the verbatim read and is pinned, so a flip would have moved it.
+
+**An instrument had to be thrown away, and that is the transferable lesson.** The obvious
+mechanical test — score each reading by how far outside the host's bbox it lands, normalised per
+axis — reported **63 : 101 against the right answer**, headed by an `escapeA` of 11,900 that is a
+division by a ground ring's 0.0 m thickness. Effects legitimately sit above flat hosts, so any
+per-axis normalisation rules against whichever reading is vertical. Now `docs/verification.md`
+INSTR-9; kept in the script behind `--rejected` so nobody rebuilds it.
+
+**What this does not settle**, per the item's own trap (c): where the offsets are measured *from*.
+`touchdown_default`'s 8 m is authored, and `FlightController.GrazeReaction` stages the def at the
+contact point (`graze.siteAtContact`, default true), so the sparks land 8 m above the contact —
+exactly the `PT-24` symptom. In our runtime the def's two named hosts collapse to one:
+`MAIN_ROOT_NODE`/`INPUT_NODE` are "the node this def was invoked on" sentinels that
+`AnimRuntime.IsSelfNodeRef` resolves to the anchor, which is the relocated `spark_touchdown` root.
+So `graze.siteAtContact` is now the only remaining lever on that symptom, and it is a capture
+question. `PT-24` (c) is updated accordingly: a "sparks read high" verdict is no longer "confirms
+an unsettled axis order".
+
+**How verified.** The census is the evidence (the item's Verify step says so). Full
+`.\RunTests.ps1` green with no code delta: 436 units, 24/24 engine suites, **13/13 goldens
+hash-identical** — including `c1-waterfall`, `c1-destroy-effects` and `c1-crash`, the three that
+render `AT_NODE`-placed effects, which is a stronger statement that the currently-right cases did
+not move than the before/after screenshots the Verify step asked for. A scripted C1 graze
+(`RunProbe.ps1 --chapter=C1 "--pos=-4600,150,-6416" "--direction=1,0,0" "--hold=0,0,0,0"`) confirms
+the reaction path still fires and stages at the contact point (`graze reaction
+effect=touchdown_dirt surface=Default into=g306/col contact=(-4488,142,-6415)
+site=(-4488,142,-6415)`); `g306` classifies `Default`, so reaching the spark variant needs a
+`Buildings`-tagged collider and belongs to the staging-site question, not this one. Details:
+`docs/PLAN-m3-polish-7.md` C6, `analysis/at-node-axis-order/FINDINGS.md`,
+`docs/formats/anim-definitions.md`, `docs/formats/gotchas.md`.

@@ -440,6 +440,20 @@ host origin). The original instantiates by *copying* the template mesh; a consum
 the single shared template instead must expect overlapping same-template calls to collapse onto
 the last site.
 
+**The offset triple needs no axis swap: it is already `(x, y, z)` in the mesh frame** — right-handed,
+Y up, nose −Z, exactly the convention [gotchas.md](gotchas.md) settles for coordinates. Censused
+over all 6,728 `AT_NODE`-style positions in the install (`analysis/at-node-axis-order/`), across
+every event kind that carries one: `CALL_ANIMATION`'s `parameters.AtNode.position`, `PUFFER_STATE`'s
+`translate`, `LIGHT_STATE`/`SOUND_NODE`'s `translate.AtNode.pos`, `SOUND`/`DETONATE_WEAPON`'s
+`at_node.pos`, and the reader's flat `AT_NODE [name, dx, dy, dz]`. 770 of them can tell a Y-up read
+apart from a Z-up one, and the data is one-sided: `wv_turrets.zrd`'s `wvutur*`/`wvctur*` are the
+same definition differing only in the sign of the middle component, applied to turrets sitting at
+y ≈ +43…+57 on the gasbags versus y ≈ −30…−82 under a parent named `underneath` — the middle
+component tracks up/down. `he_ground_effect` lifts its fireball 12 m over a ring whose mesh is
+0.1 m thick; `muzzle_burst_*` puts its flash 1 m along −Z, out of the barrel; `shipsink` spreads
+seven explosions over 165 m of a 231 m hull at constant height. **A reading that is 8 m too high is
+therefore authored, not mis-parsed** — look at where the def's host was staged, not at the axes.
+
 ## `STOP_SEQUENCE` halts the named running sequence — or calls it (the stopper idiom)
 
 Decoded 2026-08-01 from an install-wide survey of every site (94 raw occurrences across the
