@@ -1333,7 +1333,9 @@ off one number, and never recompute the margin beside them.
   number with a guess. Keep it above every airframe's emergent terminal — worst is the Balmoral,
   1.678 in a 71° dive (`--dump-flight=player_balmoral`) and ~1.71 vertical.
 ⚠ Accepted artifacts, not bugs: loop energy pump, steep-climb equilibrium, stall hang. Known
-  MISSING, both measured: no induced drag (a hard pull costs no speed) and no altitude limit.
+  MISSING, measured: no induced drag (a hard pull costs no speed). A hard altitude clamp (2003 m,
+  `BL-094`/`CAP-03`) deletes climbing velocity at/above the cap rather than fading thrust/lift/drag
+  toward it — traced to one mission (C1B IA1) only, not assumed global/per-chapter/per-aircraft.
 
 ## src/Flight/PropAnimator.cs
 Spins the flying aircraft's prop/rotor blur discs: Build collects every node PropParts classifies

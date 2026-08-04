@@ -69,7 +69,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — Flight and audio quick wins
 
-4. ☐ `BL-094` Hard altitude clamp at the measured 2003 m (absorbs the `BL-073` stub)
+4. ☑ `BL-094` Hard altitude clamp at the measured 2003 m (absorbs the `BL-073` stub)
 5. ☐ `BL-078` Engine loop as the original's ~5%-detuned pair
 
 ### Wave C — Effects and destruction
@@ -222,7 +222,7 @@ gun group into either threshold's band). An eyes-on judgement at the controls is
 
 # Wave B — Flight and audio quick wins
 
-## B4 ☐ `BL-094` Hard altitude clamp at 2003 m
+## B4 ☑ `BL-094` Hard altitude clamp at 2003 m
 
 **Goal.** The aircraft cannot climb past the original's resting cap (~2003 m true altitude, with
 ~140 ft of ballistic overshoot allowed), while aerodynamics below the cap are untouched. Absorbs
@@ -252,6 +252,31 @@ it. (c) 6571.6 ft is measured in **one mission** (C1B IA1); whether the cap is g
 chapter/zone, or per aircraft is untested — make the constant configurable/visible rather than a
 buried world literal, and don't claim generality in docs. (d) The altimeter scale is proven
 (λ = 1.000 ± 0.004) — do not re-open it.
+
+**Landed 2026-08-04.** Implemented as a clamp on altitude, not thrust/lift/drag: once
+`FlightModel.Position.Y` is at or above `AltitudeCapM` (2003 m, Config-overridable
+`flightModel.altitudeCapM`), the climbing share of that frame's velocity is deleted outright
+(`VelocityDir.Y` zeroed and `Speed` recomputed from the remaining horizontal vector) rather than
+redirected into more horizontal speed — a no-op below the cap by construction, so thrust/lift/drag
+and every earlier branch of `Step` are untouched. A `flightModel.altitudeCapOvershootM` (42.8 m ≈
+140 ft) backstop bounds `Position.Y` the same way `MaxDiveSpeedFrac` bounds a runaway dive — it
+catches a stray frame, it does not model the original's ballistic-overshoot *shape*, which the
+Approach explicitly left optional. No "auto stall" code was added, per trap (b).
+
+Measured against the new `altitude-cap` scenario (22° nose-up hold from level cruise, full
+throttle): altitude settles at **6571.89 ft**, 0.3 ft from CAP-03's 6571.60 ft resting cap —
+`FlightScenarios` 6 → 8, both new rows asserted and green. The Approach's hope that "the existing
+stall model produces the bleed-to-173-mph symptom for free" does **not** hold in this scenario:
+speed settles at 301.8 mph, barely below the unclamped baseline, because each frame's `align`
+re-tilt toward the held nose is small enough that the clamp's per-frame vertical-KE loss is
+second-order and never compounds into a real bleed — the plane never gets close to
+`StallSpeedFrac`, so the stall block never engages. Recorded here rather than hidden: the altitude
+half of `CAP-03` is traced and now matches to noise; the speed-bleed half is an open, disclosed gap,
+not required by this item's Verify step (altitude settling + an unchanged 1988 m level speed,
+`level-speed-near-cap`: 301.99 mph, unmoved from the 301.99 mph `level-top-speed` baseline). Full
+`.\RunTests.ps1` green (8/8 flight-envelope rows ok, 24/24 engine suites, 436/436 unit tests),
+goldens unmoved (no golden shot flies near the cap). Details: `docs/HISTORY.md` 2026-08-04,
+`docs/architecture.md`'s `FlightModel.cs` entry.
 
 ## B5 ☐ `BL-078` Engine dual-stack chorus
 

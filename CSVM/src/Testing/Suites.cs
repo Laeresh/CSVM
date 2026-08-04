@@ -30,7 +30,7 @@ public static class Suites
 
     /// <summary>How many flight scenarios carry a measured target to assert. Pinned so that
     /// silently demoting one to informational cannot read as a green run.</summary>
-    private const int FlightScenarios = 6;
+    private const int FlightScenarios = 8;
 
     /// <summary>Destructible instances / distinct node groups per chapter, at each chapter's
     /// default mission. Instances exceed node groups where a reader wildcard def and its compiled

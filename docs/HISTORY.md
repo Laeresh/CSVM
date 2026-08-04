@@ -15093,3 +15093,35 @@ deficit may be sprite *density* or alpha rather than size — and the knob is pe
 `CAP-16` is discharged and its ID retired. **No future capture can add to this** — the burn-out is
 unobservable by design — so what remains on `BL-122` is the A/B at the controls, which now has
 reference numbers to judge against.
+
+## 2026-08-04 — PLAN-m3-polish-7 B4 `BL-094`: the hard altitude clamp lands at the measured 2003 m
+
+Implemented `CAP-03`'s reading directly: a **clamp on altitude, not an energy limit**. In
+`FlightModel.Step`, once `Position.Y` is at or above `AltitudeCapM` (2003 m, Config-overridable
+`flightModel.altitudeCapM`) and the frame's `VelocityDir.Y` is positive, that climbing share of
+velocity is deleted outright — `VelocityDir`/`Speed` are recomputed from the vertical-zeroed vector
+rather than redirecting the lost component into more horizontal speed. Below the cap this is a
+no-op by construction: nothing upstream (thrust, lift, drag, the stall/knife-edge blocks) is
+touched, which is what the level runs (flat to ±0.3 mph to within 15 m of the cap) require.
+A `flightModel.altitudeCapOvershootM` (42.8 m ≈ 140 ft) backstop bounds `Position.Y` the same way
+`MaxDiveSpeedFrac` bounds a runaway dive — a numerical catch for a stray frame, not a model of the
+original's ballistic-overshoot shape (the Approach explicitly allowed skipping that shape). No
+"auto stall" mechanism was added, per the item's own trap.
+
+Two new asserted `flight-envelope` rows (`Suites.FlightScenarios` 6 → 8): `altitude-cap` (a fixed
+22° nose-up hold from level cruise at full throttle — attitude set once via `Pitched`, not a
+continuous pitch input, so the scenario climbs instead of looping) settles at **6571.89 ft**, 0.3 ft
+from CAP-03's 6571.60 ft resting cap — asserted at ±100 ft and green. `level-speed-near-cap`
+(full-throttle equilibrium at 1988 m, 15 m under the cap) lands on 301.99 mph, unmoved from the
+`level-top-speed` baseline — the clamp does not leak below the line. **The Approach's hoped-for
+"bleed to 173.7 mph falls out for free" does NOT hold**, and is recorded rather than hidden: in the
+measured scenario speed settles at 301.8 mph, essentially unbled, because each frame's `align`
+re-tilt toward the held nose is small enough that the clamp's per-frame vertical-KE loss is
+second-order and never compounds — the plane never nears `StallSpeedFrac`, so the stall block never
+engages. The altitude half of `CAP-03` is now traced and matched; the speed-bleed half is an open,
+disclosed gap, not required by this item's Verify step. Full `.\RunTests.ps1` green (8/8
+flight-envelope rows ok, 24/24 engine suites, 436/436 unit tests), goldens unmoved (no golden shot
+flies near the cap altitude). `BL-073`'s duplicate stub is absorbed, per the plan. Open per trap
+(c): 2003 m was measured on one mission (C1B IA1) only — whether the cap is global, per
+chapter/zone, or per aircraft remains untested, and nothing in the implementation or docs claims
+otherwise. Details: `docs/PLAN-m3-polish-7.md` B4, `docs/architecture.md`'s `FlightModel.cs` entry.

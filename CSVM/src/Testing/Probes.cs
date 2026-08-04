@@ -878,6 +878,26 @@ public static class Probes
         Row("yaw-360", "full rudder from 290 mph, 360°", "s", tYaw, 28.6, 3.0,
             samples > 0 ? $"mean speed {sumSpeed / samples / Mph:0.0} mph" : "");
 
+        // --- altitude cap (BL-094/CAP-03). A fixed 22° nose-up hold from level cruise (pitch input
+        // stays at 0 throughout — the attitude is set once via Pitched, matching the original clip's
+        // fixed pull rather than a continuous full-elevator input, which would loop instead of climb).
+        // Without the clamp this settles into the model's accepted "steep-climb equilibrium" artifact
+        // and never stops climbing; with it, altitude must stop at the resting cap.
+        m = Fresh(stats, Pitched(22f), fd, 1f);
+        Run(m, 1f, 240f, pitch: 0f);
+        Row("altitude-cap", "22° nose-up hold at full throttle, altitude settled against the clamp", "ft",
+            m.Position.Y / Ft, 6571.6, 100.0,
+            $"{m.Speed / Mph:0.0} mph at settle (original 173.7 mph — the existing stall model owns "
+            + "whatever bleed shape follows the clamp, not asserted here)");
+
+        // --- level speed 15 m under the cap (BL-094/CAP-03): the clamp must be a no-op this close to
+        // the line — CAP-03 measured level equilibrium flat to ±0.3 mph right up to 1988 m.
+        m = Fresh(stats, Level(), 0.5f * fd, 1f);
+        m.Position = new Vector3(0f, 1988f, 0f);
+        Run(m, 1f, 180f, pitch: 0f);
+        Row("level-speed-near-cap", "level full throttle at 1988 m, held to equilibrium", "mph",
+            m.Speed / Mph, 300.4, 4.0, "altitude clamp must not leak below the cap");
+
         // --- 1/8 throttle. Both rows are INFORMATIONAL: the original's throttle→thrust curve is
         // undecoded, so a miss here indicts that curve or the low-speed drag blend and cannot say
         // which. Asserting it would fail the build over an unscoped question.

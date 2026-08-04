@@ -71,6 +71,18 @@ public sealed class FlightModel
                                                   // dive (--dump-flight=player_balmoral) and ~1.71
                                                   // vertical — so it only ever catches the loop
                                                   // energy pump or a dt spike.
+                                                  // Measured resting altitude cap — CAP-03 (2026-08-03), C1B IA1, Bloodhawk only. NOT an energy
+                                                  // limit: level full-throttle equilibrium is flat to ±0.3 mph right up to 15 m under this line,
+                                                  // and holding a 22° nose-up pull against it gains no altitude at all (sub-foot over the clip's
+                                                  // last 5 s) while airspeed bleeds instead — so the clamp deletes climbing velocity outright
+                                                  // rather than fading thrust/lift/drag toward it.
+                                                  // ⚠ Traced to ONE mission — do not assume this is global, per-chapter/zone, or per-aircraft.
+    private const float AltitudeCapM = 2003f;
+    // Numerical backstop (~140 ft), NOT a modelled spring — same role as MaxDiveSpeedFrac below.
+    // CAP-03's zoom entries coast past the resting cap on their own pre-existing momentum before the
+    // clamp above ever catches them, so this only needs to be at least as generous as the measured
+    // 6712 ft apex; it exists to bound a runaway frame, not to shape the overshoot.
+    private const float AltitudeCapOvershootM = 42.8f;
     private const float StallNoseRate = 1.0f;     // TUNE: rad/s toward world-down at full stall depth (× stall_mag)
     private const float ClimbGravityScale = 0.6f; // TUNE: climb retention — a climb bleeds less speed than
                                                   // plain energy exchange (the original holds speed better)
@@ -177,6 +189,8 @@ public sealed class FlightModel
         float lowSpeedDragBlend = Config.GetFloat("flightModel.lowSpeedDragBlend", LowSpeedDragBlend);
         float liftSpeedFrac = Config.GetFloat("flightModel.liftSpeedFrac", LiftSpeedFrac);
         float alignRate = Config.GetFloat("flightModel.alignRate", AlignRate);
+        float altitudeCapM = Config.GetFloat("flightModel.altitudeCapM", AltitudeCapM);
+        float altitudeCapOvershootM = Config.GetFloat("flightModel.altitudeCapOvershootM", AltitudeCapOvershootM);
 
         // --- rotation: torque·recInertia vs momentum damping (all from the dynamics block).
         // Control surfaces bite proportionally to airspeed; return_rate adds extra
@@ -349,7 +363,27 @@ public sealed class FlightModel
                 : VelocityDir.Slerp(nose, t)).Normalized();
         }
 
+        // hard altitude clamp (BL-094/CAP-03): once at or above the resting cap, this frame's
+        // climbing velocity is deleted outright rather than redirected into more horizontal speed —
+        // a clamp on altitude, not an energy limit, so a sustained pull against it bleeds airspeed
+        // instead of gaining height. A no-op below the cap by construction: thrust/lift/drag and
+        // every branch above are untouched. Whatever follows once that bleed reaches the existing
+        // stall thresholds is the model's own consequence, not a mechanism built here.
+        if (Position.Y >= altitudeCapM && VelocityDir.Y > 0f)
+        {
+            var levelVel = VelocityDir * Speed;
+            levelVel.Y = 0f;
+            Speed = levelVel.Length();
+            if (Speed > 1e-6f)
+            {
+                VelocityDir = levelVel.Normalized();
+            }
+        }
+
         Position += VelocityDir * Speed * dt;
+        // Backstop, not a modelled spring (same role as MaxDiveSpeedFrac): bounds a runaway frame to
+        // the measured ballistic overshoot rather than ever reproducing its shape.
+        Position.Y = Mathf.Min(Position.Y, altitudeCapM + altitudeCapOvershootM);
     }
 
     /// <summary>Below the nose-drop threshold (0.25 fd) — the aerodynamic stall the flight model
