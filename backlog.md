@@ -1058,11 +1058,59 @@ extracted data before being logged, so the mechanism is recorded here and not re
   *Fix shape:* add a restitution impulse along the contact normal scaled by `bounce_factor`, alongside
   the existing tangential slide — this turns "invent a pushback mechanic" into "bind the shipped
   constant." *Blocks:* the collision-feel sign-off.
+  ⚠ **`bounce_factor` 0.6 IS a restitution along the contact normal — measured 2026-08-04 from
+  `CAP-14`** (eight clips, `playtest/CAP-14/`; two airframes, Bloodhawk and a max-armour Balmoral;
+  **seven** contacts, three surface orientations, 139–302 mph; every clip's altimeter and speedometer
+  registering to the chase pooled median at dx = dy = 0, peaks 0.82–0.97; altitude d2 sd 0.34–0.84 ft).
+  `v0` is the vertical speed at the contact instant from a free parabola over the N frames after it,
+  `e = −v0/v_before`:
+
+  | surface | normal | mph | v_before | v0 (N=9) | v0 (N=12) | accel | e |
+  |---|---|---|---|---|---|---|---|
+  | cliff face | **vertical** | 216 | −45.9 | +8.0 | +3.0 | −86 | **0.06–0.18** |
+  | building wall | **vertical** | 145 | −21.7 | +1.4 | +1.8 | −107 | **0.06–0.08** |
+  | flat, wingtip #1 | **flat** | 143 | −14.2 | +10.6 | +12.3 | −66 | **0.75–0.86** |
+  | flat, belly (slide) | **flat** | 302 | −44.9 | +17.5 | +21.9 | −73 | **0.39–0.49** |
+  | flat, wingtip #2 | flat | 139 | −5.4 | +1.7 | +0.4 | +8 | pull-up |
+  | flat, nose | flat | 146 | −31.9 | −23.6 | −15.1 | +342 | pull-up |
+  | flat, belly | flat | 302 | −39.7 | +80.3 | +83.4 | +88 | pull-up |
+
+  (ft/wall-s; accel ft/wall-s².) **Vertical surfaces e = 0.10 ± 0.05; flat ground e = 0.62 ± 0.19,
+  against a shipped 0.60.** That split is the signature of a normal-direction restitution and nothing
+  else gives it: on a vertical wall the sink is *tangential*, so a normal bounce puts nothing into the
+  altimeter — and the altimeter sees nothing; on flat ground the sink *is* the normal component, and
+  it comes back at 0.6 of itself. So this item's original fix shape is **confirmed, not overturned**.
+  **Speed loss is set by incidence, not speed** — 302 mph belly-flat costs **0.11 mph**; 216 mph along
+  a cliff costs 11.64 in one frame; 145 mph along a building wall costs 23.15 in the contact frame and
+  then keeps scraping to **−40% (144.5 → 86.7 mph over 0.47 s)**, the only multi-frame contact in the
+  set — so an oblique wall scrape is a sustained several-tick event, not an impulse.
+  **Buildings behave like terrain, and survival is geometry not speed:** the Balmoral grazed a C5
+  skyscraper at 144.5 mph and flew on, and died against one at 144.2 mph; a Bloodhawk survived flat
+  ground at 302 mph twice, once holding altitude within 2.6 ft for 0.40 s while sparking.
+  *Fix shape, confirmed and sharpened:* add the restitution impulse along the contact normal scaled by
+  `bounce_factor`, replacing the fixed 0.15 m `GrazePushOut`; leave tangential speed almost untouched
+  for a flat skim; and make an oblique scrape a *sustained multi-tick* drag rather than a single
+  impulse.
   *Playtest after fix:* grazes vs crashes should feel fair against the original, including behaviour
   against building corners (`CAP-14`).
   ⚠ **Traps.** (a) `bounce_factor`'s units are unverified — `BL-095` flags the whole `player.json`
-  physics block as needing its own decode pass; do not assume it is a plain coefficient of restitution
-  without checking the range against a measured graze. (b) The receiving side is no longer the
+  physics block as needing its own decode pass. `CAP-14` now supports reading it as a plain
+  coefficient of restitution on the contact normal, but **0.6 is *consistent with* that footage, not
+  measured from it.** Only two of five flat-ground contacts are readable at all; of those, the belly
+  slide's `v0` still walks with the fit window (+3.2/+11.8/+17.5/+21.9 at N = 5/7/9/12, so e is really
+  0.07–0.49) and only wingtip #1 is window-stable (+10.6…+12.3 over N = 7–15, residual 0.07–0.09 ft
+  against 0.20 ft noise) — and it reads **above** 0.6, at 0.75–0.86. Two contacts bracketing 0.6 is
+  agreement, not a measurement; do not quote ±0.19 as a precision.
+  ⚠ (a2) **A post-contact climb is not evidence of a bounce; the SIGN of the post-contact acceleration
+  is the discriminator.** In `CAP-14 Bloodhawk  Hard Graze.mp4` the climb rate keeps *growing* for a
+  second (accel **+88 to +228** ft/wall-s², upward, nose visibly rising in the stills) and reads as
+  e = 2.0 if fitted as restitution — impossible. A real rebound decays at −127 ft/wall-s² under
+  `nom_gravity` 20. Read `e` only where the fitted acceleration is negative.
+  ⚠ (a3) **Restitution alone will not reproduce the vertical-surface clips.** On *both* of them the
+  sink is killed as well (−45.9 → +8.0, −21.7 → +1.4) even though on a vertical wall the sink is
+  tangential — while the flat-ground contacts show tangential speed almost perfectly preserved
+  (302 mph belly-flat costs 0.11 mph). Something removes vertical speed on contact regardless of the
+  surface's orientation, on top of the normal-direction bounce, and it is unexplained. (b) The receiving side is no longer the
   blocker: `PLAN-armour-layer.md` (`docs/plans/`, complete 2026-08-04, `BL-173` closed as part of it)
   landed the two-pool `PlaneDamage.Apply(part, healthDamage, armorDamage)`, armour first with 1:1
   overflow — but it deliberately left the `crash` block itself (`armor_damage_range`/

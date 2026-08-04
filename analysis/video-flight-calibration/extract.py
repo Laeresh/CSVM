@@ -39,6 +39,16 @@ OUT = ".scratch/vidcal/cache"
 LAYOUTS = {
     (2560, 720): (640, 0, 1),
     (2560, 1440): (0, 0, 2),
+    # 2560x728: the 32:9 layout with EIGHT extra captured rows - six above the game
+    # rect and two below. Measured, not assumed: registering the altimeter and the
+    # speedometer independently against the chase pooled median walks dy 1:1 with the
+    # trial origin and both dials land at dx = dy = 0 at gy = 6 (peaks 0.893/0.823 and
+    # 0.896/0.897 on the two CAP-14 building clips, against 0.886/0.901 for a
+    # known-geometry control). The whole-panel correlation is NOT usable here - it
+    # peaks at 0.20, because the airframe is a Balmoral (so the damage silhouette and
+    # weapon readouts are not the pooled median's) and an 8 s city pass does not smear
+    # the world away.
+    (2560, 728): (640, 6, 1),
 }
 
 CLIPS = {
@@ -112,6 +122,30 @@ CLIPS = {
     "cap21down": ("CAP-21 100 to 0 Stepped.mp4", "chase"),
     "cap21upfull": ("CAP-21 0 to 100 Full.mp4", "chase"),
     "cap21downfull": ("CAP-21 100 to 0 Full.mp4", "chase"),
+    # 2026-08-04 CAP-14, graze vs crash (BL-172). Chase view, so the compass tape
+    # is available as well as alt/mph - the graze is against a near-VERTICAL cliff
+    # face, where a normal-direction restitution shows up in heading, not altitude.
+    # The graze clip also carries CAP-15 (the burn-down to a red wing) after 8 s.
+    "cap14graze": ("CAP-14 Graze and CAP 15 wing to red.mp4", "chase"),
+    "cap14crash": ("CAP-14 Crash.mp4", "chase"),
+    # Named for their subject rather than a CAP id, but they are the same question:
+    # both end in a fatal contact with near-FLAT ground, where the graze clip's
+    # cliff face gives the altimeter no normal component to read.
+    "c1crash1": ("C1 IA1 Crash.mp4", "chase"),
+    "c1crash2": ("C1 IA1 Crash 2.mp4", "chase"),
+    # 2026-08-04 CAP-14 re-record: the contacts the first pair could not give. The
+    # first CAP-14 graze was against a near-VERTICAL cliff, where the contact normal
+    # is horizontal and the altimeter cannot see it; these are shallow contacts with
+    # near-FLAT ground, which put the normal on the altimeter's own axis. Two
+    # airframes on purpose - Bloodhawk, and a max-armour Balmoral.
+    "cap14bhhard": ("CAP-14 Bloodhawk  Hard Graze.mp4", "chase"),
+    "cap14bhgc": ("CAP-14 Bloodhawk Graze and Crash.mp4", "chase"),
+    "cap14balnose": ("CAP-14 Balmoral nose Graze.mp4", "chase"),
+    "cap14balwing": ("CAP-14 Balmoral Wing Graze x2.mp4", "chase"),
+    # C5 downtown - the building-corner pair playtest.md's CAP-14 row has always
+    # asked for. Recorded at 2560x728, a geometry that needed its own LAYOUTS row.
+    "cap14bldgraze": ("CAP-14 Building Hard graze Balmoral.mp4", "chase"),
+    "cap14bldcrash": ("CAP-14 Building crash Balmoral.mp4", "chase"),
 }
 
 
