@@ -19,7 +19,7 @@ from numpy.lib.stride_tricks import sliding_window_view
 
 from decode import CACHE
 
-AUD = 'C:/Users/gunmu/.claude/jobs/c8ed147d/tmp/cap10'
+AUD = 'playtest/CAP-10/audio'
 KEY, AKEY = 'cap10rec', 'rec'
 LEVEL = (0.5, 4.0)          # steady 296 mph, +650 ft/min, before the stick moves
 MPH_FPS = 5280.0 / 3600.0

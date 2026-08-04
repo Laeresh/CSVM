@@ -18,7 +18,7 @@ from scipy.signal import butter, filtfilt, hilbert
 
 from decode import CACHE
 
-AUD = 'C:/Users/gunmu/.claude/jobs/c8ed147d/tmp/cap10'
+AUD = 'playtest/CAP-10/audio'
 RIG = 'analysis/capture-rigs'
 
 

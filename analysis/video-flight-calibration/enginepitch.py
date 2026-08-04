@@ -9,7 +9,7 @@ from numpy.lib.stride_tricks import sliding_window_view
 
 from decode import CACHE
 
-AUD = 'C:/Users/gunmu/.claude/jobs/c8ed147d/tmp/cap10'
+AUD = 'playtest/CAP-10/audio'
 # clip key -> (audio-curve key, display name). The audio key names a <key>_scale.npy
 # written by playtest/CAP-10/scale.py for the same clip.
 PAIRS = [('cap10chase', 'c', 'CAP-10 3 3rd Person.mp4'),
