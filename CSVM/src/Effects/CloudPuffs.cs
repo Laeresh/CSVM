@@ -58,7 +58,7 @@ public sealed partial class CloudPuffs : Node3D
         shader_type spatial;
         render_mode blend_mix, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
 
-        uniform sampler2D atlas : source_color, filter_linear;
+        uniform sampler2D atlas : source_color, filter_linear, repeat_disable;
         uniform float frame_count = 2.0;
 
         // Same global distance-fog params as SceneBuilder's world shader (registered by

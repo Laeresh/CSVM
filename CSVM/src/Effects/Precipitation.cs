@@ -75,7 +75,7 @@ public sealed partial class Precipitation : Node3D
 
         #include "res://shaders/csky_time.gdshaderinc"
 
-        uniform sampler2D sprite : filter_linear;
+        uniform sampler2D sprite : filter_linear, repeat_disable;
         uniform vec3 tint = vec3(0.5);      // already sRGB→linear (set on the CPU, like the fog colour)
         uniform vec3 box_half = vec3(40.0);
         uniform vec3 fall_vel = vec3(0.0, -10.0, 0.0);  // world fall + wind (m/s)

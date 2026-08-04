@@ -51,7 +51,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         shader_type spatial;
         render_mode BLEND_MODE, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
 
-        uniform sampler2D atlas : source_color, filter_linear;
+        uniform sampler2D atlas : source_color, filter_linear, repeat_disable;
         uniform float frame_count = 1.0;
         uniform sampler2D depth_texture : hint_depth_texture, filter_nearest;
 

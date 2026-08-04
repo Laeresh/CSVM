@@ -364,11 +364,11 @@ public sealed class ClutterBuilder
     // meaningful normal to light — so the sprites stop being dimmed by the mission SUNLIGHT,
     // exactly as the placed world's self-lit models now are. Emitted as shader VARIANTS, so a
     // lit, fogged kind's code is byte-for-byte what it always was.
-    private static string ShaderCode(bool lit, bool fogged) => $$"""
+    private static string ShaderCode(bool lit, bool fogged, bool clampUv) => $$"""
         shader_type spatial;
         render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled;
 
-        uniform sampler2D albedo_tex : source_color, filter_linear_mipmap;
+        uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, {{(clampUv ? "repeat_disable" : "repeat_enable")}};
 
         // Fog globals + csky_world_light, and the DX7 gamma-space vertex modulate (trees share
         // the world's baked-lighting model). Both were once duplicated verbatim from
@@ -663,11 +663,11 @@ public sealed class ClutterBuilder
 
     // ---------------------------------------------------------------- rendering
 
-    private Shader SpriteShader(bool lit, bool fogged)
+    private Shader SpriteShader(bool lit, bool fogged, bool clampUv)
     {
-        int key = (lit ? 1 : 0) | (fogged ? 2 : 0);
+        int key = (lit ? 1 : 0) | (fogged ? 2 : 0) | (clampUv ? 4 : 0);
         if (!_shaders.TryGetValue(key, out var shader))
-            _shaders[key] = shader = new Shader { Code = ShaderCode(lit, fogged) };
+            _shaders[key] = shader = new Shader { Code = ShaderCode(lit, fogged, clampUv) };
         return shader;
     }
 
@@ -675,7 +675,11 @@ public sealed class ClutterBuilder
     private MultiMeshInstance3D BuildKindInstance(Kind kind)
     {
         var tex = _textures.Find(kind.Label);
-        var mat = new ShaderMaterial { Shader = SpriteShader(kind.Lit, kind.Fogged) };
+        // Clamp when the card's UVs never leave the unit square — the same data-driven rule as
+        // SceneBuilder's world surfaces; wrapping bleeds the texture's opposite edge in at the
+        // UV border (the hairline-seam / tracer-tail artifact).
+        bool clampUv = SceneBuilder.UvsWithinUnitSquare(_gamez.Meshes[kind.MeshIndex].Polygons, pass: 0);
+        var mat = new ShaderMaterial { Shader = SpriteShader(kind.Lit, kind.Fogged, clampUv) };
         if (tex != null)
             mat.SetShaderParameter("albedo_tex", tex);
 

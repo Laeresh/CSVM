@@ -771,11 +771,12 @@ public sealed class TextureArchive : IDisposable
     public bool LastHadAlpha { get; private set; }
 
     /// <summary>
-    /// True if the last texture's alpha is "soft": a 1-bit scissor cutout at the usual 0.5
-    /// threshold would erase it entirely or reduce it to a crude stencil. True for the
-    /// original's translucent overlays — baked shadow decals (max alpha ~125/255), cloud
-    /// and prop-blur sprites, waterfalls, smoke — which the original engine alpha-blends;
-    /// false for genuine cutouts (fences, trees, railings), which scissor correctly.
+    /// True if the last texture's alpha is "soft": its ink is mostly partial alpha, which a
+    /// 1-bit scissor cutout at 0.5 misrepresents — erasing what sits below the threshold and
+    /// solidifying what sits above it. True for the original's translucent art — baked shadow
+    /// decals, cloud/prop-blur/fire sprites, waterfalls, glow flares, neon, semi-transparent
+    /// lattices — which the original engine alpha-blends; false for genuine cutouts (fences,
+    /// trees, railings), whose ink is opaque fill plus AA edges and scissors correctly.
     /// </summary>
     public bool LastAlphaIsSoft { get; private set; }
 
@@ -862,10 +863,16 @@ public sealed class TextureArchive : IDisposable
             ? archiveBaseName[^1] - '0'
             : 0;
 
-    // Classifies the alpha channel (see LastAlphaIsSoft). Soft when scissoring at 0.5
-    // would show (almost) nothing — max alpha below ~140/255 — or when partial alpha
-    // dominates and nearly-opaque texels are rare (soft sprites like clouds and smoke,
-    // whose scissor cutout is a shredded stencil of only their densest texels).
+    // Classifies the alpha channel (see LastAlphaIsSoft). A 1-bit scissor at 0.5
+    // misrepresents a texture in both directions — it erases ink below the threshold AND
+    // solidifies partial alpha above it (a 60%-alpha waterfall sheet scissors to a solid
+    // wall, not to nothing) — so the question is not "would anything survive" but "is the
+    // ink essentially binary". Classify by the fraction of ink texels (a >= 32) that are
+    // truly opaque (a >= 200): genuine cutouts (fences, trees, railings) are AA edges on
+    // opaque fill and sit near 1; authored translucents (clouds, fire, flares, shadows,
+    // lattices, neon, decals) are mostly partial and sit near 0. The 0.45 threshold is
+    // measured install-wide (analysis/alpha-classification/): it flips nothing that
+    // blends today back to scissor, and the tightest genuine cutout (bush2) sits at 0.49.
     private static bool AlphaIsSoft(Image img)
     {
         var rgba = img;
@@ -875,23 +882,98 @@ public sealed class TextureArchive : IDisposable
             rgba.Convert(Image.Format.Rgba8);
         }
         var data = rgba.GetData();
-        int max = 0, mid = 0, opaque = 0, total = data.Length / 4;
-        if (total == 0)
-            return false;
+        int ink = 0, opaque = 0;
         for (int i = 3; i < data.Length; i += 4)
         {
             int a = data[i];
-            if (a > max) max = a;
-            if (a >= 200) opaque++;
-            else if (a >= 32) mid++;
+            if (a >= 32)
+            {
+                ink++;
+                if (a >= 200)
+                    opaque++;
+            }
         }
-        if (max < 140)
-            return true;
-        return opaque < total * 0.30f && mid > total * 0.35f;
+        // No ink at all draws nothing either way; call it soft, as the old rule did.
+        return opaque < ink * 0.45f || ink == 0;
     }
 
     private static bool ImageHasAlpha(Image img) =>
         img.GetFormat() is Image.Format.Rgba8 or Image.Format.La8 or Image.Format.Rgba4444 && img.DetectAlpha() != Image.AlphaMode.None;
+
+    // Alpha-coverage-preserving mips for scissor cutouts: rescales each generated level's alpha
+    // so the share of texels passing the 0.5 scissor matches the BASE level's share, instead of
+    // letting the box filter's averaging erode it (the fix for lattices/foliage thinning and
+    // vanishing at distance). Per level: find the alpha value v where this level's own
+    // count(a > v) reaches the base's coverage, then scale all alphas by 127.5/v so exactly that
+    // population crosses the threshold. Boost-only — a level whose coverage already holds (v ≥ 128)
+    // stays byte-identical — and the scale is capped so near-invisible dust is never blown solid.
+    // Blend-class textures never come here: with no scissor there is no threshold to preserve.
+    private static void ScissorMipsKeepCoverage(Image img)
+    {
+        int mips = img.GetMipmapCount();
+        if (img.GetFormat() != Image.Format.Rgba8 || mips < 1)
+        {
+            return;
+        }
+        var data = img.GetData();
+        int baseW = img.GetWidth(), baseH = img.GetHeight();
+        long basePixels = (long)baseW * baseH;
+        long covered = 0;
+        for (long i = 3; i < basePixels * 4; i += 4)
+        {
+            if (data[i] > 127)
+            {
+                covered++;
+            }
+        }
+        if (covered == 0)
+        {
+            return; // nothing passes the scissor even at full resolution; leave the chain alone
+        }
+        double coverage = (double)covered / basePixels;
+        var hist = new int[256];
+        bool changed = false;
+        for (int level = 1; level <= mips; level++)
+        {
+            long offset = img.GetMipmapOffset(level);
+            long end = level < mips ? img.GetMipmapOffset(level + 1) : data.Length;
+            System.Array.Clear(hist, 0, hist.Length);
+            for (long i = offset + 3; i < end; i += 4)
+            {
+                hist[data[i]]++;
+            }
+            long want = (long)System.Math.Round(coverage * ((end - offset) / 4));
+            if (want <= 0)
+            {
+                continue;
+            }
+            long above = 0;
+            int v = 0;
+            for (int a = 255; a >= 0; a--)
+            {
+                above += hist[a];
+                if (above >= want)
+                {
+                    v = a;
+                    break;
+                }
+            }
+            if (v >= 128)
+            {
+                continue; // this level already keeps the base's coverage
+            }
+            float scale = System.Math.Min(127.5f / System.Math.Max(v, 1), 8f);
+            for (long i = offset + 3; i < end; i += 4)
+            {
+                data[i] = (byte)System.Math.Min((int)(data[i] * scale + 0.5f), 255);
+            }
+            changed = true;
+        }
+        if (changed)
+        {
+            img.SetData(baseW, baseH, true, Image.Format.Rgba8, data);
+        }
+    }
 
     // Decodes one texture and builds its whole mip chain. `resolved` says whether the name found a
     // PNG at all, so a decode failure is not reported as a missing texture.
@@ -926,6 +1008,14 @@ public sealed class TextureArchive : IDisposable
         // Box-filter the whole chain first either way: it allocates the levels and fixes their
         // offsets, and levels 3-and-below have no authored sibling to take their place.
         img.GenerateMipmaps();
+        // Scissor cutouts only: the box filter averages a sparse cutout's alpha toward its
+        // coverage, which sinks below the 0.5 scissor threshold a level or two down and the
+        // object thins, then vanishes, at distance (eiffel1: 27 % coverage ⇒ mip alpha ~0.27).
+        // Runs BEFORE the authored siblings install so the artists' levels keep shipped alpha.
+        if (LastHadAlpha && !LastAlphaIsSoft)
+        {
+            ScissorMipsKeepCoverage(img);
+        }
         if (Mips == MipSource.Authored)
         {
             authoredLevels = InstallAuthoredMips(img, Path.GetFileNameWithoutExtension(name!), flat);

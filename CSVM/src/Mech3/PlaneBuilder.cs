@@ -249,6 +249,10 @@ public sealed class PlaneBuilder
         DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled,
         BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled,
         BillboardKeepScale = true,
+        // The flare quad draws its texture exactly once; with the engine-default repeat on,
+        // bilinear filtering at the UV border bleeds the opposite edge in (the tracer-tail
+        // artifact, BL-202).
+        TextureRepeat = false,
     };
 
     private bool Skip(GameZNode node)

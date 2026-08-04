@@ -216,7 +216,7 @@ void fragment() {
     private readonly Dictionary<(float Size, float MaxPx, float Range), ShaderMaterial> _lightMaterialCache = new();
     // Billboard glow material for a flare sprite quad: always alpha-blended (the soft ramp
     // must never scissor into a hard star cutout), no night dimming (it's a light source).
-    private readonly Dictionary<(int Material, bool Fogged), Material> _glowMaterialCache = new();
+    private readonly Dictionary<(int Material, bool Fogged, bool ClampUv), Material> _glowMaterialCache = new();
     // Cylindrical (Y- or X-axis) billboard material: unlike glow flares this respects the
     // texture's own alpha classification (trees/cables are hard-edge cutouts — Clutter's
     // tiled trees already scissor, and these individually-placed Facade trees should read
@@ -225,7 +225,7 @@ void fragment() {
     // predicate — the same delegate the legacy spherical fallback uses, so one rule governs
     // every light-vs-scenery billboard in the renderer; WorldBuilder widened it
     // to also catch the refinery's own gas flame, fire101.tif, which isn't "*flare*"-named).
-    private readonly Dictionary<(int Material, int Axis, bool Lit, bool Fogged), Material> _cylindricalMaterialCache = new();
+    private readonly Dictionary<(int Material, int Axis, bool Lit, bool Fogged, bool ClampUv), Material> _cylindricalMaterialCache = new();
     // Every textured material this builder made, paired with the texture name it resolved
     // from — the registry a live repaint needs (the viewer's livery lab re-runs the paint
     // and swaps each material's albedo in place, instead of rebuilding the whole aircraft
@@ -416,6 +416,48 @@ void fragment() {
         return new Shader { Code = code[..close] + $"    ALPHA = col.a{OpacityTerm};\n" + code[close..] };
     }
 
+    /// <summary>
+    /// True when every UV of this surface lies inside the unit square, i.e. the texture is
+    /// mapped once and never tiled — which is what makes a CLAMPed sampler safe for it.
+    /// <para>
+    /// This is the hairline-seam fix. The terrain's UVs are a
+    /// <b>mirrored triangle wave</b>: U rises to exactly 1.0 and folds back rather than
+    /// wrapping to 0, which is how the artists tiled non-seamless textures seamlessly (it is
+    /// also the mirror symmetry visible across C4's river). Under <c>repeat_enable</c> the
+    /// bilinear filter's second tap at the fold wraps to texel 0 — the opposite edge of the
+    /// texture — and blends it in over a band one texel wide. On C4's <c>river3.tif</c>
+    /// (column 0 tan, column 63 blue-green) that is the tan hairline crossing blue water.
+    /// Measured: the seam peaks at exactly the 50/50 blend of the two edge columns
+    /// (predicted (86.5, 91.0, 74.0), measured (89.5, 92.5, 77.2)), and the background is
+    /// identical on both sides of it — the signature of a fold, not of a texture
+    /// discontinuity, which would have to step.
+    /// </para>
+    /// <para>
+    /// Clamping is safe <b>by construction</b> when this returns true: with no UV outside
+    /// [0,1] the wrap is never exercised, so CLAMP and REPEAT can only differ within half a
+    /// texel of the edge — exactly the artifact. A blanket clamp is NOT safe and was measured
+    /// to be wrong: 54% of this install's surfaces genuinely tile (U reaches 407), and
+    /// forcing clamp on them changes 80% of the C5 city pose.
+    /// </para>
+    /// </summary>
+    internal static bool UvsWithinUnitSquare(List<GameZPolygon> polys, int pass)
+    {
+        bool any = false;
+        foreach (var poly in polys)
+        {
+            if (PassUvs(poly, pass) is not { } uvs)
+                continue;
+            foreach (var uv in uvs)
+            {
+                any = true;
+                if (uv.X < -UvEpsilon || uv.X > 1f + UvEpsilon ||
+                    uv.Y < -UvEpsilon || uv.Y > 1f + UvEpsilon)
+                    return false;
+            }
+        }
+        return any; // no UVs at all ⇒ nothing to clamp; keep the surface on the old path
+    }
+
     /// <summary>The built <see cref="ArrayMesh"/> for one gamez model index, from this
     /// builder's shared cache and carrying this builder's materials (so a world builder hands
     /// back fullbright, fogged, correctly depth-biased world geometry).
@@ -446,48 +488,6 @@ void fragment() {
             || t.Contains("filmblock") || t.StartsWith("empire") || t.StartsWith("chrysler"))
             return "buildings";
         return null;
-    }
-
-    /// <summary>
-    /// True when every UV of this surface lies inside the unit square, i.e. the texture is
-    /// mapped once and never tiled — which is what makes a CLAMPed sampler safe for it.
-    /// <para>
-    /// This is the hairline-seam fix. The terrain's UVs are a
-    /// <b>mirrored triangle wave</b>: U rises to exactly 1.0 and folds back rather than
-    /// wrapping to 0, which is how the artists tiled non-seamless textures seamlessly (it is
-    /// also the mirror symmetry visible across C4's river). Under <c>repeat_enable</c> the
-    /// bilinear filter's second tap at the fold wraps to texel 0 — the opposite edge of the
-    /// texture — and blends it in over a band one texel wide. On C4's <c>river3.tif</c>
-    /// (column 0 tan, column 63 blue-green) that is the tan hairline crossing blue water.
-    /// Measured: the seam peaks at exactly the 50/50 blend of the two edge columns
-    /// (predicted (86.5, 91.0, 74.0), measured (89.5, 92.5, 77.2)), and the background is
-    /// identical on both sides of it — the signature of a fold, not of a texture
-    /// discontinuity, which would have to step.
-    /// </para>
-    /// <para>
-    /// Clamping is safe <b>by construction</b> when this returns true: with no UV outside
-    /// [0,1] the wrap is never exercised, so CLAMP and REPEAT can only differ within half a
-    /// texel of the edge — exactly the artifact. A blanket clamp is NOT safe and was measured
-    /// to be wrong: 54% of this install's surfaces genuinely tile (U reaches 407), and
-    /// forcing clamp on them changes 80% of the C5 city pose.
-    /// </para>
-    /// </summary>
-    private static bool UvsWithinUnitSquare(List<GameZPolygon> polys, int pass)
-    {
-        bool any = false;
-        foreach (var poly in polys)
-        {
-            if (PassUvs(poly, pass) is not { } uvs)
-                continue;
-            foreach (var uv in uvs)
-            {
-                any = true;
-                if (uv.X < -UvEpsilon || uv.X > 1f + UvEpsilon ||
-                    uv.Y < -UvEpsilon || uv.Y > 1f + UvEpsilon)
-                    return false;
-            }
-        }
-        return any; // no UVs at all ⇒ nothing to clamp; keep the surface on the old path
     }
 
     private static CylAxis GetCylindricalAxis(GameZMesh mesh) => ClassifyBillboard(mesh) switch
@@ -960,8 +960,8 @@ void fragment() {
             bool clampUv = scroll == Vector2.Zero && UvsWithinUnitSquare(polys, pass);
             if (clampUv)
                 ClampedSurfaceTotal++;
-            st.SetMaterial(glowSprite ? GetGlowMaterial(materialIndex, fogged)
-                : cylAxis != CylAxis.None ? GetCylindricalMaterial(materialIndex, cylAxis, lit, fogged)
+            st.SetMaterial(glowSprite ? GetGlowMaterial(materialIndex, fogged, clampUv)
+                : cylAxis != CylAxis.None ? GetCylindricalMaterial(materialIndex, cylAxis, lit, fogged, clampUv)
                 : GetMaterial(materialIndex, priority, rank, subface, doubleSided, scroll, clampUv, lit, fogged, pass));
             st.Commit(arrayMesh);
         }
@@ -1025,23 +1025,23 @@ void fragment() {
 
     // A glow flare is a light source: its shader never applied csky_world_light in the first
     // place, so the model's `lighting` flag has no term to gate here and is not part of the key.
-    private Material GetGlowMaterial(int materialIndex, bool fogged)
+    private Material GetGlowMaterial(int materialIndex, bool fogged, bool clampUv)
     {
-        var key = (materialIndex, fogged);
+        var key = (materialIndex, fogged, clampUv);
         if (_glowMaterialCache.TryGetValue(key, out var cached))
             return cached;
         var texName = _gamez.Materials[materialIndex].TextureName;
         var tex = texName != null ? Resolve(texName) : null;
         Material mat = tex != null
-            ? BillboardMaterial(tex, blend: true, scissor: false, glow: true, lit: true, fogged: fogged)
+            ? BillboardMaterial(tex, blend: true, scissor: false, glow: true, lit: true, fogged: fogged, clampUv: clampUv)
             : GetMaterial(materialIndex, 0, 0, subface: false, doubleSided: true, lit: true, fogged: fogged);
         _glowMaterialCache[key] = mat;
         return mat;
     }
 
-    private Material GetCylindricalMaterial(int materialIndex, CylAxis axis, bool lit, bool fogged)
+    private Material GetCylindricalMaterial(int materialIndex, CylAxis axis, bool lit, bool fogged, bool clampUv)
     {
-        var key = (materialIndex, (int)axis, lit, fogged);
+        var key = (materialIndex, (int)axis, lit, fogged, clampUv);
         if (_cylindricalMaterialCache.TryGetValue(key, out var cached))
             return cached;
         var texName = _gamez.Materials[materialIndex].TextureName;
@@ -1052,7 +1052,7 @@ void fragment() {
             bool blend = _textures.LastHadAlpha && _textures.LastAlphaIsSoft;
             bool scissor = _textures.LastHadAlpha && !blend;
             bool glow = texName != null && _glowTexture != null && _glowTexture(texName);
-            mat = CylindricalBillboardMaterial(tex, axis, blend, scissor, glow, lit, fogged);
+            mat = CylindricalBillboardMaterial(tex, axis, blend, scissor, glow, lit, fogged, clampUv);
         }
         else
         {
@@ -1141,7 +1141,7 @@ void fragment() {
             // branch here — their billboard treatment is per-MESH, see BuildMesh: the same
             // flare texture also skins polys inside regular geometry, which must stay put.)
             if (_billboardTexture != null && _billboardTexture(texName))
-                return BillboardMaterial(tex, blend, scissor, glow: false, lit: lit, fogged: fogged);
+                return BillboardMaterial(tex, blend, scissor, glow: false, lit: lit, fogged: fogged, clampUv: clampUv);
             var textured = BiasMaterial(priority, rank, subface, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass);
             _texturedMaterials.Add((textured, texName)); // for a live repaint, see Repaint()
             RegisterCycle(src, textured);
@@ -1368,18 +1368,20 @@ void fragment() {{");
     // nothing coplanar to fight) but carries the identical cylindrical distance-fog term, so
     // distant sprites fade into the fog wall in step with the terrain they float over. blend /
     // scissor follow the alpha classification (cloud1/cloud2 are soft-alpha ⇒ blend).
-    private ShaderMaterial BillboardMaterial(ImageTexture tex, bool blend, bool scissor, bool glow, bool lit, bool fogged)
+    private ShaderMaterial BillboardMaterial(ImageTexture tex, bool blend, bool scissor, bool glow, bool lit, bool fogged,
+        bool clampUv)
     {
-        var mat = new ShaderMaterial { Shader = GetBillboardShader(blend, scissor, glow, lit, fogged) };
+        var mat = new ShaderMaterial { Shader = GetBillboardShader(blend, scissor, glow, lit, fogged, clampUv) };
         mat.SetShaderParameter("albedo_tex", tex);
         return mat;
     }
 
-    private Shader GetBillboardShader(bool blend, bool scissor, bool glow, bool lit, bool fogged)
+    private Shader GetBillboardShader(bool blend, bool scissor, bool glow, bool lit, bool fogged, bool clampUv)
     {
         // A glow variant already ignores csky_world_light, so `lit` cannot split its key.
         lit |= glow;
-        int key = (blend ? 1 : 0) | (scissor ? 2 : 0) | (glow ? 4 : 0) | (lit ? 0 : 8) | (fogged ? 0 : 16);
+        int key = (blend ? 1 : 0) | (scissor ? 2 : 0) | (glow ? 4 : 0) | (lit ? 0 : 8) | (fogged ? 0 : 16)
+            | (clampUv ? 32 : 0);
         if (_billboardShaderCache.TryGetValue(key, out var cached))
             return cached;
 
@@ -1393,7 +1395,11 @@ void fragment() {{");
         if (blend)
             sb.Append(", blend_mix, depth_draw_never");
         sb.AppendLine(";");
-        sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap;");
+        // A sprite whose UVs never leave the unit square never needs the sampler to wrap, and
+        // wrapping it bleeds the texture's opposite edge in at the UV border — the same
+        // hairline artifact UvsWithinUnitSquare exists for (and BL-202's tracer-tail streak).
+        sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, "
+            + (clampUv ? "repeat_disable;" : "repeat_enable;"));
         // Same global distance-fog params as GetBiasShader's world shader. Clouds always fog,
         // so this shader never reads csky_fog_on — and an OPAQUE cloud sprite therefore declares
         // no instance uniform at all, which deliberately keeps it off the instance-uniform buffer
@@ -1455,18 +1461,19 @@ void fragment() {
     // as its own generator rather than shared code because the two differ in fog/dim/
     // instancing details already (Clutter is a MultiMesh with no per-mesh pivot cache).
     private ShaderMaterial CylindricalBillboardMaterial(ImageTexture tex, CylAxis axis, bool blend, bool scissor,
-        bool glow, bool lit, bool fogged)
+        bool glow, bool lit, bool fogged, bool clampUv)
     {
-        var mat = new ShaderMaterial { Shader = GetCylindricalShader(axis, blend, scissor, glow, lit, fogged) };
+        var mat = new ShaderMaterial { Shader = GetCylindricalShader(axis, blend, scissor, glow, lit, fogged, clampUv) };
         mat.SetShaderParameter("albedo_tex", tex);
         return mat;
     }
 
-    private Shader GetCylindricalShader(CylAxis axis, bool blend, bool scissor, bool glow, bool lit, bool fogged)
+    private Shader GetCylindricalShader(CylAxis axis, bool blend, bool scissor, bool glow, bool lit, bool fogged,
+        bool clampUv)
     {
         lit |= glow; // a glow variant already ignores csky_world_light — same key
         int key = (axis == CylAxis.X ? 1 : 0) | (blend ? 2 : 0) | (scissor ? 4 : 0) | (glow ? 8 : 0)
-            | (lit ? 0 : 16) | (fogged ? 0 : 32);
+            | (lit ? 0 : 16) | (fogged ? 0 : 32) | (clampUv ? 64 : 0);
         if (_cylindricalShaderCache.TryGetValue(key, out var cached))
             return cached;
 
@@ -1476,7 +1483,9 @@ void fragment() {
         if (blend)
             sb.Append(", blend_mix, depth_draw_never");
         sb.AppendLine(";");
-        sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap;");
+        // Clamp when the facade's UVs never leave the unit square — see GetBillboardShader.
+        sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, "
+            + (clampUv ? "repeat_disable;" : "repeat_enable;"));
         // csky_world_light arrives with the atmosphere include and is READ only when !glow
         // (a light source does not dim with the mission's SUNLIGHT); declaring it either way
         // costs nothing, since a global uniform is project-wide rather than per-instance.

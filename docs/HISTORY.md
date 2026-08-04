@@ -13105,3 +13105,68 @@ hash-identical. **Limit of the evidence:** which tier the original picks on a gi
 inferred from the MB-budget naming, not traced in the exe — but all tiers carry the needle alpha,
 so the needle conclusion is tier-independent. The user still owes an at-the-controls look at the
 new needles against the original (the standing cockpit re-tests PT-13–PT-30 cover the area).
+
+## 2026-08-04 — Material policy: blend-vs-scissor from binary ink, sprite samplers stop wrapping
+
+The generic answer to two recurring per-site bug families (the BL-202 tracer tail was the
+first instance of one; "the Eiffel replica is nearly invisible" the loudest of the other).
+The gamez material record carries no wrap or blend flags, so both settings are the engine's
+decision, and each material-construction site had been re-deciding them ad hoc.
+
+**Alpha class.** `TextureArchive.AlphaIsSoft` now classifies by how binary the ink is —
+soft (alpha-blend) when opaque(a≥200)/ink(a≥32) < 0.45, else scissor. A 0.5 scissor
+misrepresents partial alpha in BOTH directions: it erases ink below the threshold (eiffel2
+kept 7.7 % of its texels) and solidifies ink above it (the falls waterfall sheet, 100 %
+survival at ~55–80 % alpha, would render as a solid wall — which is why a survival-only
+metric was rejected). Measured install-wide (`analysis/alpha-classification/`, census over
+the same rtextureN tier the engine loads, 604 alpha textures): the old-soft population sits
+at binary ≤ 0.34 (95th pct), the old-hard at ≥ 0.24 (5th pct), tightest genuine cutout
+bush2 = 0.49. At 0.45: 67 textures flip scissor→blend (eiffel2, fire101–112 flame facades,
+every flare/indicator glow, hotel neon, noselogos, ripple, skid decals, zeppelin windows),
+**zero** flip blend→scissor.
+
+**Wrap.** The `UvsWithinUnitSquare` clamp rule (safe by construction; blanket clamp
+measured wrong — 54 % of surfaces tile) is now applied by every SceneBuilder material path,
+not just the bias shader: the glow/cylindrical/cloud billboard samplers take a clampUv
+variant, Clutter's card shader computes it from the kind's own UVs, PlaneBuilder's
+wing-light flare quad and the Precipitation/EmitterRenderer/CloudPuffs atlas samplers set
+repeat off (their UVs never leave the unit square). This retires the class of the water-
+splash sprite edge bleed rather than the third instance of it.
+
+**Verified:** 414 units + 22 in-engine suites green, engine errors clean. Goldens: 11 of 13
+moved, every mover diffed against a stash-regenerated baseline (which reproduced all 13
+pinned hashes exactly) and explained in the manifest — the largest movement is c1b-night-sea
+at 1.19 % / max delta 5 (cloud card borders); viewer-bhawk's 439 px are exactly the
+noselogo decal patch; c5-city-night and empty-stage are pixel-identical. The C2 film-set
+golden now shows the Eiffel lattice. Still owed: an at-the-controls look at the reclassified
+translucents (zeppelin windows, depot04/dockhouse02 buildings, cockpit_braces stayed
+scissor at 0.46) against the original.
+
+## 2026-08-04 — Alpha-coverage-preserving mips: scissor cutouts stop vanishing at distance
+
+The second half of the material-policy work (same day, above): eiffel1 is a genuine cutout
+(binary 0.64) and stays scissor-class, but the box filter averages a 27 %-coverage lattice
+toward alpha ~0.27, below the 0.5 scissor threshold — its generated mip levels L3–L5
+measure coverage **zero** where the base holds 27 %, which is the tower thinning to
+nothing at flight distance.
+
+**What changed:** `TextureArchive.ScissorMipsKeepCoverage` — for scissor-class textures
+only, after `GenerateMipmaps` and BEFORE the authored `_1`/`_2` install (shipped artist
+levels keep their alpha), each generated level's alpha is rescaled so the share of texels
+passing 0.5 matches the base level's share (per level: find the alpha value where the
+level's own count(a > v) reaches base coverage, scale by 127.5/v, capped at 8×).
+Boost-only: a level whose coverage already holds stays byte-identical, so the change is
+inert on well-covered cutouts near the camera. Blend-class textures never enter (no
+threshold to preserve).
+
+**Verified:** python simulation of the exact algorithm on real pixels first — eiffel1
+L3–L5 restore 0 → 0.25–0.28 against base 0.272; firtree1/dougfirtree1 touch only their
+8×8-and-below levels. Then 414 units + 22 suites green; goldens 11 of 13 moved, every
+mover diffed against the pre-change baseline and explained in the manifest — c2-city is
+the headline (0.15 %, max delta 172: the Eiffel lattice reads as a solid silhouette at
+distance now), the rest are ≤ 246 px of distant cutout texels, and this change's two
+unmoved shots are the rain pair (blend-class sprites; fog hides every cutout mip band) —
+the complement of the previous change's unmoved pair, which is itself evidence the two
+mechanisms are disjoint. **Limit of the evidence:** whether the original's renderer kept
+distant cutouts dense (lower alpha-test reference? authored-mip alpha?) is unmeasured —
+the at-the-controls comparison against the original covers it.

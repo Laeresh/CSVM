@@ -231,15 +231,19 @@ as extra surfaces — 619 polygons install-wide, none in planes.zbd (docs/format
 Texture lookup over an unzbd texture zip or unpacked PNG dir; absorbs the stored-name quirks
 (20-char truncation prefix match, legacy `.-N` renames, the fork's trailing doubled period — see
 docs/formats/gamez.md) and classifies each texture's alpha channel via LastHadAlpha /
-LastAlphaIsSoft ("soft" = a 0.5 scissor cutout would erase or shred it; drives blend-vs-scissor).
+LastAlphaIsSoft ("soft" = the ink is mostly partial alpha: opaque/ink < 0.45, measured install-wide
+in `analysis/alpha-classification/`; drives blend-vs-scissor — scissor both erases sub-0.5 ink AND
+solidifies partial alpha above it, so only essentially-binary ink scissors faithfully).
 `Build` is the one construction path — decode, classify, drop-in, mip chain — and `Find` caches
 its result; `BuildMipped` hands the same Image to `--dump-mips` un-cached.
 ⚠ Unresolved names are reported ONCE via plain GD.Print (MissingTextures), never GD.PushWarning —
   Godot .NET prints a full managed stack trace per PushWarning call and buries real errors.
 ⚠ **Mip levels 1/2 are the archive's authored `_1`/`_2` siblings** (`Mips`, `--mips=`), installed
   over an already-generated chain — so ordering is load-bearing: the alpha-softness read needs raw
-  base pixels and runs BEFORE any of it, and a sibling is refused unless it is exactly half/quarter
-  the base's size. `MipSource.Generated` restores the pure box filter bit-for-bit (verified: it
+  base pixels and runs BEFORE any of it, the scissor-cutout alpha-coverage rescale
+  (`ScissorMipsKeepCoverage`, boost-only — the fix for lattices vanishing at distance) runs on the
+  generated chain BEFORE the authored install so shipped levels keep artist alpha, and a sibling is
+  refused unless it is exactly half/quarter the base's size. `MipSource.Generated` restores the pure box filter bit-for-bit (verified: it
   reproduces the pre-2026-08-02 hashes of all three goldens the change moved).
 ⚠ `TextureDropIn` (the `--tex-override`/`--tex-census` hook, at Find because it is the one resolve
   point) swaps **RGB bytes only** — size, format and alpha stay the original's, so alpha class /
@@ -389,7 +393,8 @@ Stamps the boot-script clutter templates across placed polygons carrying the tem
 texture, on a fixed world-space X/Z grid of the template period; sprites → one fullbright Y-billboard
 MultiMesh per kind, solids → `SceneBuilder.SharedMesh`; the split is `SceneBuilder.ClassifyBillboard`.
 The sprite shader takes the decoration model's own `lighting`/`fog` flags as variants (every tree and
-bush card in the install is `lighting: false`, so clutter does not dim with the mission SUNLIGHT).
+bush card in the install is `lighting: false`, so clutter does not dim with the mission SUNLIGHT),
+plus a UV-clamp variant from `SceneBuilder.UvsWithinUnitSquare` over the kind's own card UVs.
 ⚠ Sprites are NOT collidable — no tree-destruction anim exists in the install (`spruce_destroy*`
   is the Spruce Goose; docs/formats/clutter.md). Solid decorations ARE collidable.
 ⚠ Collision shapes are SHARED, never expanded per placement (that costs seconds of BVH build): one

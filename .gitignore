@@ -80,3 +80,6 @@ playtest-notes.md
 # pitch_cadence.ahk writes its edge logs next to itself; the ones that belong to a
 # capture are kept with it under playtest/<ID>/, so this is scratch output only.
 /analysis/video-flight-calibration/cadence-logs/
+
+# alpha_census.py regenerates this from extracted/; FINDINGS.md carries the conclusions.
+/analysis/alpha-classification/alpha_census.json
