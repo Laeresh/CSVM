@@ -96,6 +96,15 @@ a bug in the reader.
 from 11 distinct models; each is stamped at every 256 m grid cell whose terrain carries
 `cblock1.tif`.
 
+**Confirmed 2026-08-04 (`BL-250`, `analysis/bl-058-clutter-doubling/`): C5 places two disjoint
+building districts on top of each other.** `cblock4/5/6` are the *base* ground layer and
+`cblock1/2/3` are OpenFlight subface overlays laid directly on top of them at 88.5–100% footprint
+overlap (see `analysis/item9-depth-bias/CBLOCK-LOD.md`), and `ClutterBuilder.PlaceOnMesh` matches a
+template to a polygon by **texture name only** — it never reads the polygon's `Subface` flag. So a
+live build stamps `cblock1/2/3`'s district (`cb00a`–`cb11a`, measured 43,873 placements) *and*
+`cblock4/5/6`'s disjoint district (`cb12a`–`cb24a`, measured 35,433 placements) at the same C5 city
+blocks. The fix mechanism is not decided — `BL-250` tracks it.
+
 **`cbNNa` and `cbNNdet01` are co-located halves of one building, not a LOD pair.** Every
 `det` decoration in `cblock1` sits at the *exact* same local origin as its `a` sibling, but
 with a different footprint and a different texture family (`roof01`/`bldg*` for `a`,

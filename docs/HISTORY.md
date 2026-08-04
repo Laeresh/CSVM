@@ -13105,3 +13105,46 @@ hash-identical. **Limit of the evidence:** which tier the original picks on a gi
 inferred from the MB-budget naming, not traced in the exe — but all tiers carry the needle alpha,
 so the needle conclusion is tier-independent. The user still owes an at-the-controls look at the
 new needles against the original (the standing cockpit re-tests PT-13–PT-30 cover the area).
+
+**M3 polish-6 A3 answered: the C5 doubled-buildings question (2026-08-04).**
+`BL-058` asked whether C5 draws doubled clutter buildings now that the subface fix (landed
+2026-08-01) hides the base ground layer's texture in favour of its overlay. **Answer: yes,
+confirmed, and it is not new behaviour the subface fix caused** — `ClutterBuilder.PlaceOnMesh`
+(`CSVM/src/Mech3/Clutter.cs:632-661`) has always matched a clutter template to a polygon by texture
+name only, never reading `GameZPolygon.Subface`, so it was never affected by which layer wins the
+depth-bias fight. `analysis/item9-depth-bias/CBLOCK-LOD.md` (2026-07-22/23, the original subface
+investigation) had already measured that `cblock4/5/6` is C5's base ground layer and `cblock1/2/3`
+its subface overlay at 88.5–100% footprint overlap, with **disjoint** building sets
+(`cb00a`–`cb11a` vs `cb12a`–`cb24a`) — this item ran the missing measurement: a live
+`--freecam --chapter=C5` build's `ClutterBuilder.Summary` log shows **both** districts stamped in
+the same build, 43,873 `cblock1/2/3`-district placements and 35,433 `cblock4/5/6`-district
+placements, visually confirmed at the item9 repro pose (interpenetrating building silhouettes at
+non-grid-aligned angles). No code changed — per the plan, a bounded measurement with a written
+verdict. `BL-058` closes (question answered); the fix mechanism is genuinely undecided (which layer
+the original actually shows is not established by this measurement, and no data field marks a base
+polygon as "has a covering subface" the way `Subface` marks the overlay), so it is **not** guessed
+here — tracked as new item `BL-250`. Full record: `analysis/bl-058-clutter-doubling/FINDINGS.md`.
+Docs: `docs/formats/clutter.md`'s city-block section and the `Clutter.cs` `docs/architecture.md`
+bullet both get the confirmed-doubling note. Verify: read-only item, no `RunTests.ps1` run required
+(no engine code touched).
+
+**Same-day follow-up: a strong candidate fix for `BL-250`, gated on a capture, not landed.** Also
+checked and ruled out: `BL-036`'s `zone_id` (the repro node carries one `zone_id` value for both its
+`cblock1` and `cblock4` polygons — a node-level flag cannot separate two polygons on the same node),
+addended to `BL-036`. Prompted by a direct look at the actual `cblockN.tif` art: `cblock1/2/3`
+(256², night, individually distinguishable rooftops + lit windows) and `cblock4/5/6` (64², blurry,
+no readable building shapes) are not unrelated content — `CBLOCK-LOD.md`'s own §1a structural
+correlation (`1`↔`4` r=+0.704, `2`↔`5` r=+0.720, `3`↔`6` r=+0.702) was independently reproduced here
+(grayscale cross-correlation, `cblock1` downsampled to 64² vs `cblock4`: **r=0.705**) — each pair is
+the same painted city-block scene at two fidelities. Since `CBLOCK-LOD.md` already showed no live
+state ever picks between the two passes (the high-res one always wins the ground z-fight, so the
+low-res one is *always* buried, 97.0/99.9/100.0% overlapped), the low-res district is a strong
+candidate for "never meant to place its buildings either" — a named, cited exemption from
+`ClutterBuilder`'s template set, mirroring `TextureArchive.KnownAbsentFromGameData`. A footprint
+positional match (do the buildings respect the texture's painted street gap) was attempted and came
+back inconclusive — not trusted without first verifying the ground quad's UV/world alignment, so it
+is not part of the evidence base. Per the ground rules, this stays an inference (the ground layer's
+fate, not an observed original screenshot of the buildings) — **held for the user's own playtest,
+not implemented.** `playtest.md` `CAP-22` (C5 city building density) now queues the capture that
+settles it. `backlog.md` `BL-250` and `analysis/bl-058-clutter-doubling/FINDINGS.md` both carry the
+full candidate-fix writeup and the playtest gate.

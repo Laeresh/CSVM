@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-250`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-251`.**
 When adding a new item, take the next number and bump this line.
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
@@ -250,6 +250,12 @@ work is below.
   zone2-dominant; C1 and C5 zone1-dominant. **Nothing in `CSVM/src` reads the field** — we render
   every zone's geometry at once. Plausible source of artifacts; not yet shown to cause a specific
   one (checked and ruled out for the C5 ground z-fight, where both surfaces are `zone_id=1`).
+  **Also checked and ruled out for `BL-250`'s C5 doubled clutter (2026-08-04):** the repro node
+  (`g4664`, `analysis/item9-depth-bias/CBLOCK-LOD.md`'s clean case) carries `zone_id=1` for the
+  *whole* node while hosting both the `cblock1` subface polygon and the `cblock4` base polygon —
+  one node-level value cannot separate two polygons on the same node. Broader: C5's `cblock1/2/3`
+  nodes span `zone_id` −1/1/3, `cblock4/5/6` nodes are only −1/1 (never 3) — no clean split between
+  the two districts either way, so `zone_id` is not the missing filter there.
   **Documented 2026-07-22** (polish-3 item 2) in `docs/formats/world-structure.md`, counts
   re-verified against `nodes.json`. **Blocked on the same unknown as the fog zone:** which zone a
   mission activates is in no file in the install (exhaustive negative result now written up in
@@ -372,12 +378,38 @@ unscheduled.
   weather-zone membership list (C5 uses 1 and 3). Not a ground selector — that was checked and
   ruled out — but a real unparsed field, and the per-polygon granularity is interesting given
   weather zones are otherwise handled per chapter.
-- `BL-058` **Open question, do NOT act on it from the subface report:** `cblock4/5/6` carry their own
-  **disjoint** clutter building templates (`cb12a`–`cb24a`) versus `cblock1/2/3`'s
-  (`cb00a`–`cb11a`). That is most likely *why* a fully-buried base ground layer exists at all. Once
-  the subface fix lands, the base layer will be correctly hidden while **its clutter presumably
-  still spawns** — check whether C5 draws doubled buildings, but treat this as a question, not a
-  finding (the report flags it as an open question, not a measurement).
+- `BL-250` **C5 draws doubled clutter buildings — confirmed, strong candidate fix, blocked on
+  `CAP-22`.** Answers the question the subface report (`analysis/item9-depth-bias/CBLOCK-LOD.md`)
+  left open: `cblock4/5/6` carry their own **disjoint** clutter building templates (`cb12a`–`cb24a`)
+  versus `cblock1/2/3`'s (`cb00a`–`cb11a`), and `ClutterBuilder.PlaceOnMesh`
+  (`CSVM/src/Mech3/Clutter.cs:632-661`) matches a template to a polygon by **texture name only** — it
+  never reads `GameZPolygon.Subface`. Since `cblock1/2/3`'s subface polygons sit on top of
+  `cblock4/5/6`'s base polygons at 88.5–100% footprint overlap (`CBLOCK-LOD.md` §2), both districts
+  stamp buildings at the same C5 build: measured 43,873 `cblock1/2/3`-district placements and 35,433
+  `cblock4/5/6`-district placements in one `--freecam --chapter=C5` run (`ClutterBuilder.Summary`),
+  visually confirmed at the item9 repro pose. Full record: `analysis/bl-058-clutter-doubling/FINDINGS.md`.
+  **Candidate fix, not yet landed:** `cblock1`/`cblock4` (r=0.705, independently reproduced),
+  `cblock2`/`cblock5` and `cblock3`/`cblock6` are each the *same* painted city-block scene at two
+  fidelities — a crisp 256² night pass (`cblock1/2/3`) and a blurry 64² pass of the identical layout
+  (`cblock4/5/6`, `CBLOCK-LOD.md` §1a's r≈0.70-0.72 pairing). `CBLOCK-LOD.md` already ruled out any
+  live selector between the two passes (no day/night/zone/LOD state picks one) — the high-res pass
+  wins the ground z-fight unconditionally, so the low-res pass is **always** buried (97.0/99.9/100.0%
+  overlapped, never merely "sometimes"). That is a principled basis to treat `cblock4/5/6` as a
+  named, cited exemption from `ClutterBuilder`'s template set — mirroring
+  `TextureArchive.KnownAbsentFromGameData`'s pattern (a curated, measured list, not a runtime
+  overlap computation) — rather than a guess.
+  ⚠ **Traps.** Do not land the candidate fix without `CAP-22` first — the inference is from "its
+  ground never wins", not from an observed original screenshot showing `cb12a`–`cb24a`-style
+  buildings absent; the plan/backlog rule against guessing what to hide applies here exactly as it
+  does to `BL-036`. **`zone_id` (`BL-036`) is not the filter** — checked: the repro node carries one
+  `zone_id` for both its `cblock1` and `cblock4` polygons, and the two districts' nodes don't split
+  cleanly by `zone_id` either. **`Subface` is a property of the overlay polygon, not the base** — a
+  general runtime rule would need the same coplanar-overlap computation `CBLOCK-LOD.md` used, which
+  is why the candidate fix is a cited exemption list, not a live filter.
+  *Playtest after fix:* `CAP-22` (C5 city building density, `playtest.md`) decides it — if the
+  original's downtown reads as one consistent skyline, the exemption list lands; if it shows visible
+  overlap too, that is itself worth a HISTORY note (the doubling would be authentic, not a bug) and
+  the item closes ❌-for-now instead.
 
 - `BL-160` **No Doppler on any 3D emitter today — open whether the original has one.** Godot's
   `AudioStreamPlayer3D` exposes `DopplerTracking`, but nothing in `CSVM/src` sets it: `WorldSounds.cs`
