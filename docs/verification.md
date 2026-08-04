@@ -172,6 +172,12 @@ and leave gaps when retiring old ones.
 - **SRC-1** — **Validate whether bytes are meaningful before numeric sanity checks.**
 - **SRC-3** — **Use design documents for intent; retail evidence decides shipped details.**
 - **SRC-4** — **When a fact is duplicated, name one description of record.**
+- **SRC-5** — **A field you don't read may be REDUNDANT, not dropped — try to derive it from the
+  fields you already read before deciding what it means.** A field with a shape your parser
+  silently rejects looks identical to a missing feature, and the invented reading then doubles
+  the effect. Measured: all 51 `OBJECT_MOTION_FROM_TO` `*_delta` vectors are exactly
+  `(to − from) / run_time` of the sibling channel already implemented (worst residual 4e-6), so
+  the "dropped" relative motion was the same tween's precomputed rate.
 
 ## What this project cannot verify itself
 

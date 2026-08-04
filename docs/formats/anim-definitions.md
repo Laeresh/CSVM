@@ -67,7 +67,7 @@ bare flag (`LOCAL_NODES_ONLY`).
 | `OBJECT_ACTIVE_STATE` | `NAME` [node…], `STATE` [`ACTIVE`\|`INACTIVE`] | Show/hide a subtree (and its collidability). A multi-entry NAME is a parent→child path (`["piratezep","interior"]`). |
 | `OBJECT_TRANSLATE_STATE` | `NAME`, `STATE` [x,y,z], `RELATIVE` | **Absolute** position in the node's parent frame (see below). `RELATIVE` is `false` in all 1143 uses in this install. |
 | `OBJECT_ROTATE_STATE` | `NAME`, `STATE` [x,y,z], `BASIS` | **Absolute** orientation in the parent frame — **radians compiled, degrees in the zrdr sources** (see "rotations" below). `BASIS` is `"Absolute"` in 6430 of ~6600 uses; the rest are `AtNodeXYZ`/`AtNodeMatrix` look-at forms (zeppelins, cameras). |
-| `OBJECT_MOTION_FROM_TO` | `NAME`, `TRANSLATE`/`ROTATE`/`SCALE` `{from,to}` (+ `*_DELTA` variants), `RUN_TIME` [s] | Timed motion between two **absolute** parent-frame poses (C1 hangar 3: four `h3_dr*` doors over 9–10 s). The rotate channel shares `OBJECT_ROTATE_STATE`'s unit split. |
+| `OBJECT_MOTION_FROM_TO` | `NAME`, `TRANSLATE`/`ROTATE`/`SCALE` `{from,to}`, `RUN_TIME` [s] | Timed motion between two **absolute** parent-frame poses (C1 hangar 3: four `h3_dr*` doors over 9–10 s). The rotate channel shares `OBJECT_ROTATE_STATE`'s unit split. |
 | `OBJECT_MOTION` | `NAME`, `XYZ_ROTATION` [ix,iy,iz,dx,dy,dz], optional `RUN_TIME` [s] — plus the `GRAVITY`/`TRANSLATION[_RANGE]`/`FORWARD_ROTATION`/`SCALE`/`BOUNCE_SEQUENCE` channels | Two ops in one: a **steady spin** (`XYZ_ROTATION` alone, at `initial` rad/s — deg/s in the reader — endless without `RUN_TIME`; the zeppelin nacelle props) OR a **ballistic body** (translate/launch + scale ramp + tumble under gravity; the crash pieces and debris arcs). See "`OBJECT_MOTION` is two ops sharing one event". |
 
 ### `OBJECT_OPACITY_STATE` is translucency, not visibility
@@ -91,7 +91,8 @@ per-instance `csky_opacity` parameter `OBJECT_OPACITY_STATE` writes. ⚠ **The e
 flag does NOT invert the value** — surveyed across all 9,917, `(state=false, opacity=0)` fades to
 invisible and `(state=false, opacity=1)` to opaque — so it is a literal lerp of the opacity, not
 the "false → render normally (1.0)" rule `OBJECT_OPACITY_STATE` uses. `opacity_delta` is null in
-100% of them (the dead relative form, like `OBJECT_MOTION_FROM_TO`'s `*_delta`). Opacity is a
+100% of them, so nothing here says what it would have meant (unlike
+`OBJECT_MOTION_FROM_TO`'s `*_delta`, which ships values and is decoded below). Opacity is a
 separate channel from the transform, so a fade coexists with a live motion on the same node (the
 crash `dust` scales and fades at once). **Only ONE of the 9,917 is ever reached at bootstrap** —
 C3's `spiderweb_gone` (`ON_STARTUP`, fades `spiderweb` 1→0 over 0.7 s so the web is gone by
@@ -231,8 +232,8 @@ ambiguous angle unit got in `interp.md`.
 
 **Every transform channel — `translate`, `rotate`, `scale`, in both the `*_STATE` events and
 `OBJECT_MOTION_FROM_TO` — is an absolute value in the node's own parent frame, not an offset
-from its authored rest pose.** The `*_DELTA` channels (`translate_delta`, `rotate_delta`,
-`scale_delta` — 29 uses across the whole install) are the genuinely relative ones.
+from its authored rest pose.** Nothing in this data is relative: the `*_delta` channels that
+look like they would be are the same tween's rate — see the `*_delta` section just below.
 
 Evidence, surveyed over all 8 chapters (2026-07-21):
 
@@ -272,10 +273,30 @@ and yachts (up to `sailboat1`'s 300 s leg held 180° from rest). Seeded from res
 `black_car1` (one ROTSTATE 180° then a single 16 s translate-only loop) drives its whole
 route exactly sideways.
 
-The compiled `*_delta` channels arrive as a bare `{x,y,z}` vector, **not** a `{from,to}`
-pair — 26 events install-wide (15 translate, 6 rotate, 5 scale); the reader front-end emits
-no delta channels at all. A `{from,to}`-shaped parser reads every one as (null, null), i.e.
-the relative form is currently dead in CSVM (tracked in `backlog.md`).
+### `*_delta` is the same channel's RATE, not a second motion
+
+Decoded 2026-08-04 from an install-wide census of all 16,114 compiled anim files
+(`analysis/bl-050-fromto-delta/`). The compiled `*_delta` channels arrive as a bare `{x,y,z}`
+vector, **not** a `{from,to}` pair, on **51** events (15 `translate_delta`, 17 `rotate_delta`,
+19 `scale_delta`; 29 in `cam_anim`, 22 in `mis_anim`; 33 distinct authored signatures). The
+reader sources spell no `*_DELTA` token at all — 0 of 1,355 reader JSON files contain the
+substring — so this is a compiled-form-only field.
+
+**`*_delta == (channel.to − channel.from) / run_time`**, i.e. the sibling absolute channel's
+per-second rate, precomputed by the original's compiler. Verified against all 51: zero
+mismatches, worst relative residual 4e-6 (float32 rounding), and **every one of the 51 ships
+the absolute channel it is the rate of** — there is no event the delta alone describes. It
+holds on the awkward cases too, which is what settles it: C3's `studebaker4` swerve carries a
+non-axis-aligned rotate `(−0.7156, 0.8552, 0) → (−0.5236, −0.5236, 0)` over 0.35 s and a delta
+of `(0.5485, −3.9395, 0)`; C5's `litemast_dest`/`wire2` scales `(1,1,1) → (0.7, 0.1, 8)` over
+2.2 s with a delta of `(−0.1364, −0.4091, 3.1818)`.
+
+⚠ **So a consumer must NOT read it.** It carries no information the tween does not already
+have, and composing it as an extra offset — the reading a bare vector invites, "the `to` with
+an implied zero `from`" — runs every one of these 51 motions at double speed. CSVM reads the
+three absolute channels only (`FromToMotion`); the delta plumbing was removed 2026-08-04 so a
+later reader who notices a `{from,to}` parser returning `(null, null)` on a bare vector does
+not "fix" it back.
 
 ### `IF`/`ELSEIF` conditions are all evaluable
 

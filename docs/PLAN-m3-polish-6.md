@@ -86,7 +86,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — animation runtime: dropped data and late dispatch
 
-11. ☐ B11 `BL-050` — the 26 dead `FROM_TO` `*_delta` channels: census, decide, implement
+11. ☑ B11 `BL-050` — the 26 dead `FROM_TO` `*_delta` channels: census, decide, implement
 12. ☐ B12 `BL-135` — the one-frame `CallSequence` dispatch lag: bounded same-pass drain or measured re-deferral
 
 ### Wave C — instruments
@@ -317,7 +317,7 @@ lead. No rendering change lands — nothing reads `ZoneSet`. Docs: `docs/formats
 
 # Wave B — animation runtime: dropped data and late dispatch
 
-## B11 ☐ `BL-050` — the 26 dead `FROM_TO` `*_delta` channels
+## B11 ☑ `BL-050` — the 26 dead `FROM_TO` `*_delta` channels
 
 **Goal.** The 26 delta channels (15 `translate_delta`, 6 `rotate_delta`, 5 `scale_delta`
 install-wide) that ship as bare `{x, y, z}` vectors — and are therefore silently dropped by
@@ -350,6 +350,23 @@ backlog's explicit rejected fix. (b) The `FromToMotion` docstring's "deltas comp
 pose" has **never been observed** — whoever revives them owns confirming or correcting it.
 (c) If the census is ambiguous, the honest outcome is a documented open question + this item
 closed as ❌-for-now, not an invented reading.
+
+**Landed 2026-08-04 (decode + a deletion; no feature).** The census answered it outright:
+**`*_delta == (channel.to − channel.from) / run_time`** — the sibling absolute channel's
+per-second rate, precomputed by the original's compiler, carrying nothing `FromToMotion` does not
+already have. Verified against **all 51** (not 26 — the inherited figure counted the `cam_anim`
+half's translate and rotate and undercounted scale): zero mismatches, worst relative residual
+4e-6, and every one ships the absolute channel it is the rate of. The item's own "most plausible"
+reading would have run all 51 motions at double speed, so the delta plumbing is **removed** and
+the docstring's never-observed "deltas compose on the HELD pose" **corrected** (trap (b), owned as
+required). `RunTests.ps1` green with **13/13 goldens hash-identical**, plus a clean 8-chapter
+`--freecam` regression — and that is a real exercise, not a vacuous one: **13 of the 51 events run
+in a plain ambient build** (`--debug-anim` shows C5's six `m_gerter` hooks tweening and C1's
+`police_car` driving `start_walkin`), so the neutrality is measured as well as provable from every
+deleted field being unconditionally null. No capture could have shown the delta either way,
+though — the absolute channels always drove all 51 motions correctly, which is why the census had
+to carry the decision. New rule `docs/verification.md` **SRC-5**. Full record:
+`analysis/bl-050-fromto-delta/FINDINGS.md` and `docs/HISTORY.md` 2026-08-04.
 
 ## B12 ☐ `BL-135` — the one-frame `CallSequence` dispatch lag
 

@@ -34,12 +34,14 @@ namespace CSVM.Mech3.Anim;
 /// node's scale. They are seeded ONCE per event rather than re-read per frame, so a tween
 /// cannot compound into itself.</para>
 ///
-/// The separate <c>*_delta</c> channels are the genuinely relative ones and compose on top
-/// of the held pose. ⚠ **They are unreachable today**: the compiled form ships all 26 of
-/// them (15 translate, 6 rotate, 5 scale) as a bare <c>{x,y,z}</c> vector, not as the
-/// <c>{from,to}</c> pair <c>Channel</c> looks for, so every one parses to (null, null) and
-/// is dropped; the reader front-end emits no delta channel at all. Fixing that is its own
-/// change with its own regression — see `backlog.md`.
+/// The compiled <c>*_delta</c> channels are deliberately not read, because they carry
+/// nothing this class does not already have: each is the sibling absolute channel's
+/// per-second RATE, <c>(to - from) / run_time</c>. Verified over every one of the 51 in
+/// the install (15 translate, 17 rotate, 19 scale) — zero mismatches, worst relative
+/// residual 4e-6, i.e. float32 rounding — and each of the 51 ships the sibling channel it
+/// is the rate of. Composing them as an extra offset on top of the tween would run every
+/// one of those motions at double speed. The reader sources spell no <c>*_DELTA</c> token
+/// at all (0 of 1,355 files), so <c>AnimDefs</c> has nothing to emit either.
 ///
 /// Rotations arrive here as RADIANS from both front-ends. The COMPILED data is radians
 /// natively (its extremes settle it: maximum 15.708 = 5π, 99.93% of values ≤ 2π, 228 on
@@ -49,9 +51,9 @@ namespace CSVM.Mech3.Anim;
 /// XYZ_ROTATION. Unconverted they spun C2's roadblock cars ~9 turns through a 35° swerve.
 ///
 /// A missing FROM means "from where the node already is" — the held component, which is
-/// what <c>AnimDefs.AddFromTo</c> has always documented as the intent — or "from no offset"
-/// for the delta channels. Every absolute channel in the compiled data ships both ends
-/// (919/919 rotate, 401/401 translate, 663/663 scale), so this only bites the reader path.
+/// what <c>AnimDefs.AddFromTo</c> has always documented as the intent. Every channel in the
+/// compiled data ships both ends (919/919 rotate, 401/401 translate, 663/663 scale), so this
+/// only bites the reader path.
 /// </summary>
 internal sealed class FromToMotion : IAnimMotion
 {
@@ -68,8 +70,6 @@ internal sealed class FromToMotion : IAnimMotion
 
     private Vector3? _tFrom, _tTo, _rFrom, _rTo, _sFrom, _sTo;
 
-    private Vector3? _tdFrom, _tdTo, _rdFrom, _rdTo, _sdFrom, _sdTo;
-
     private float _t, _runTime;
 
     public Node3D Target { get; private init; } = null!;
@@ -78,9 +78,7 @@ internal sealed class FromToMotion : IAnimMotion
 
     public bool Finished => _t >= _runTime;
 
-    private bool HasAnyChannel =>
-        _tTo != null || _rTo != null || _sTo != null ||
-        _tdTo != null || _rdTo != null || _sdTo != null;
+    private bool HasAnyChannel => _tTo != null || _rTo != null || _sTo != null;
 
     public static FromToMotion? Create(AnimRuntime rt, Node3D target, AnimData data, float runTime)
     {
@@ -109,9 +107,6 @@ internal sealed class FromToMotion : IAnimMotion
         (m._tFrom, m._tTo) = Channel(data, "translate");
         (m._rFrom, m._rTo) = Channel(data, "rotate");
         (m._sFrom, m._sTo) = Channel(data, "scale");
-        (m._tdFrom, m._tdTo) = Channel(data, "translate_delta");
-        (m._rdFrom, m._rdTo) = Channel(data, "rotate_delta");
-        (m._sdFrom, m._sdTo) = Channel(data, "scale_delta");
         return m.HasAnyChannel ? m : null;
     }
 
@@ -122,25 +117,18 @@ internal sealed class FromToMotion : IAnimMotion
         _t = t;
         float u = _runTime <= 0f ? 1f : Mathf.Clamp(t / _runTime, 0f, 1f);
 
-        // Each channel either drives its component or leaves the held value alone; the
-        // deltas then compose on top of whichever of the two won.
+        // Each channel either drives its component or leaves the held value alone.
         var origin = _heldOrigin;
         if (_tTo is { } tTo)
             origin = (_tFrom ?? _heldOrigin).Lerp(tTo, u);
-        if (_tdTo is { } tdTo)
-            origin += (_tdFrom ?? Vector3.Zero).Lerp(tdTo, u);
 
         var rot = _heldRot;
         if (_rTo is { } rTo)
             rot = Euler((_rFrom ?? _heldEuler).Lerp(rTo, u));
-        if (_rdTo is { } rdTo)
-            rot *= Euler((_rdFrom ?? Vector3.Zero).Lerp(rdTo, u));
 
         var scale = _heldScale;
         if (_sTo is { } sTo)
             scale = (_sFrom ?? _heldScale).Lerp(sTo, u);
-        if (_sdTo is { } sdTo)
-            scale *= (_sdFrom ?? Vector3.One).Lerp(sdTo, u);
 
         Target.Transform = new Transform3D(rot.Scaled(AnimRuntime.NonSingularScale(scale)), origin);
     }

@@ -1915,9 +1915,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     // invert the value: (state=false, opacity=0) fades to invisible and
                     // (state=false, opacity=1) fades to opaque â€” surveyed across all 9,917 events
                     // (the two dominant combos), so this is a literal lerp of the two opacity
-                    // numbers through SetSubtreeOpacity. `opacity_delta` is null in 100% of them
-                    // (the relative form, like FromToMotion's dead *_delta channels); report it if
-                    // one ever appears rather than silently ignoring it.
+                    // numbers through SetSubtreeOpacity. `opacity_delta` is null in 100% of them,
+                    // so nothing says what it would mean (FromToMotion's *_delta siblings do ship
+                    // values, and are the tween's own rate); report it if one ever appears rather
+                    // than silently ignoring it.
                     float runTime = ev.Data.Num("run_time") ?? 0f;
                     var from = ev.Data.Obj("opacity_from");
                     var to = ev.Data.Obj("opacity_to");

@@ -13590,3 +13590,50 @@ without that answer would risk deleting visible content, same as `zone_id`. Docs
 all green, 13/13 golden hashes unchanged (nothing consumes the new field, so no build output can
 move); 8-chapter `--freecam` regression shows identical mesh/node counts in every chapter. `BL-057`
 closes (deleted from `backlog.md`).
+
+## 2026-08-04 — M3 polish-6 B11 (`BL-050`): the `FROM_TO` `*_delta` channels are the tween's RATE — decoded, disproved, deleted
+
+Plan item B11. **Verdict: no motion semantics were missing, and the honest outcome is a code
+deletion rather than a feature.** Full record: `analysis/bl-050-fromto-delta/FINDINGS.md`.
+
+Census first, per the item. Scanned all 16,114 compiled `mis_anim`/`cam_anim` files: **51**
+`ObjectMotionFromTo` events carry a non-null `*_delta` — 15 `translate_delta`, 17 `rotate_delta`,
+19 `scale_delta`, across 39 files and 33 distinct authored signatures (29 in `cam_anim`, 22 in
+`mis_anim`). That supersedes the inherited "26 install-wide (15/6/5)", which reproduces the
+`cam_anim` half's translate and rotate counts exactly and undercounts scale. The reader sources
+spell no `*_DELTA` token at all — 0 of 1,355 reader JSON files contain the substring — so the
+field is compiled-form-only, the first hint that it is computed rather than authored.
+
+The decode: **`*_delta == (channel.to − channel.from) / run_time`**, the sibling absolute
+channel's per-second rate. Tested against all 51 (`verify-rate.ps1`): **zero mismatches, worst
+relative residual 4e-6** — float32 rounding — and **every one of the 51 ships the absolute
+channel it is the rate of**, so no event is described by the delta alone. It holds on the cases
+that could have broken it, not only the axis-aligned ones: C3's `studebaker4` swerve
+(non-axis-aligned rotate, 0.35 s), C5's `litemast_dest`/`wire2` (mixed-sign scale to `(0.7,
+0.1, 8)` over 2.2 s), C3's `barracuda` (40 s), C5's `man_cranes` hook (12 m over 6 s).
+
+So `BL-050`'s "most plausible" reading — a bare vector is the `to` with an implied zero `from`,
+composed on the held pose — is **disproved**: under it `man_cranes`' hook tweens 12 m down and
+accumulates another 12 m over the same 6 s. `FromToMotion`'s dead delta plumbing (six fields,
+three `Channel` calls, three composition lines in `Seek`, and the delta half of `HasAnyChannel`)
+is **removed** rather than left as a landmine for the next reader who notices `Channel` returns
+`(null, null)` on a bare vector; the docstring's never-observed claim that "deltas compose on the
+HELD pose" is corrected, which trap (b) of the item made this change's job. The removal is
+provably behaviour-neutral — all 51 shipped delta channels are bare vectors, so every one of
+those six fields was unconditionally null.
+
+Verified: `.\RunTests.ps1` green — build, 416 units, 22 engine suites, **13/13 goldens
+hash-identical**; plus an 8-chapter `--freecam` regression, all exit 0, zero errors, counts
+recorded in `FINDINGS.md` §4. **13 of the 51 events run in a plain ambient build**, so that
+regression and the C1/C5 goldens exercise them and the neutrality is measured, not just argued:
+`--debug-anim` shows C5's six `m_gerter` crane hooks tweening (Y 297.5→299.6, 345.7→347.8,
+305.9→308.0) and C1's `police_car` driving `start_walkin`, the delta-bearing sequence itself.
+(A first pass wrote these off as unreachable on the belief that `cam_anim` is cutscene-only —
+it is the **chapter-level** archive, loaded for every mission in the chapter by
+`AnimProgram.Load`, and 15 of the 51 are `OnStartup`.) What no capture could have shown either
+way is the delta: the absolute channels always drove all 51 motions correctly, so there was
+never a missing animation to film, only a redundant field to explain. Docs: `docs/formats/anim-definitions.md`'s new "`*_delta` is the same
+channel's RATE" section (plus three now-wrong statements corrected elsewhere on that page),
+`docs/architecture.md`'s `src/Mech3/Anim/` entry, and a new transferable rule
+`docs/verification.md` **SRC-5** ("a field you don't read may be redundant, not dropped").
+`BL-050` closes (deleted from `backlog.md`).

@@ -664,6 +664,9 @@ OFFSET from unit scale (`1 + initial + delta·u`), unlike the absolute `PoseScal
   `PoseScale`): the data ends scale channels at exact 0 ("shrink away" — 217 FROM_TOs + 216
   SCALE_STATEs install-wide), and an un-clamped singular basis makes the physics server's
   `affine_inverse` spam native `det == 0` for every StaticBody3D under the node (BL-007).
+⚠ `FromToMotion` reads NO `*_delta` channel and must not start: all 51 compiled ones are the
+  sibling absolute channel's rate, `(to − from) / run_time` (0 mismatches, worst residual 4e-6,
+  `analysis/bl-050-fromto-delta/`), so composing one doubles the motion.
 
 ## src/Mech3/Anim/MotionSet.cs
 `AnimRuntime`'s live motions as a module: `Add` (owner stamp + `(Target, Channel)` eviction +

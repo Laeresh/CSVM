@@ -349,23 +349,6 @@ unscheduled.
   hit — `FlightController.Crash()` touches audio, fireball, breakup and visibility and never calls
   into `Gauges`. So the all-red state is not a crash behaviour being mis-fired; it is the ordinary
   damage path left latched. Check what the original shows on a crash before wiring anything.
-- `BL-050` **`OBJECT_MOTION_FROM_TO`'s `*_delta` channels are silently dropped — all 26 of them.**
-  `FromToMotion.Channel` reads a channel as `data.Obj(name)` and then looks for `from`/`to` keys.
-  The absolute channels ship that shape (919/919 `rotate`, 401/401 `translate`, 663/663 `scale` all
-  carry both ends). **The delta channels do not**: the compiled form ships them as a bare
-  `{x, y, z}` vector — 15 `translate_delta`, 6 `rotate_delta`, 5 `scale_delta` install-wide — so
-  `Channel` returns `(null, null)` for every one and the delta is dropped. The reader front-end
-  (`AnimDefs.AddFromTo`) emits no delta channel at all. So the handler's delta arithmetic has
-  **never executed**. Found 2026-07-22 while landing polish-4 item 2; deliberately not folded in,
-  because it changes behaviour on 26 events and needs its own regression.
-  ⚠ **Traps.** Do **not** "fix" it by making `Channel` fall back to `Vec3` without first deciding
-  what a bare vector *means* — a `{from,to}` pair is a tween; a bare vector is most plausibly the
-  `to` with an implied zero `from`, but that is a guess, and inventing semantics is this project's
-  most-repeated trap. Read `docs/formats/anim-definitions.md` and the 26 actual payloads first.
-  The `FromToMotion` docstring now says deltas compose on the HELD pose, which is coherent with the
-  hold rule but **has never been observed**, precisely because they are dead — whoever revives them
-  owns confirming that. And a live one is the only way `Seek`'s `rot *= Euler(...)` / `scale *= ...`
-  lines get exercised at all, so a regression that never reaches one proves nothing about them.
 - `BL-251` **Does the original draw water over the shoreline, or the shoreline over the water?
   Blocked on `CAP-23`.** Our cross-node draw order is "the later gamez node wins" — `nodes.json` is
   a depth-first serialization, which is the original engine's own draw order — and the dense
