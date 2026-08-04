@@ -2042,11 +2042,12 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
     world-down, so "rad/s toward world-down at full stall depth" is the wrong target as well as the
     wrong rate. The break is wings-level and clean: the compass turns **0.0°** across the whole
     24.8 sim s, no wing drop. ⚠ Note `StallSpeedFrac` **0.30** is implicated too — the original breaks
-    at 0.25 fd, not 0.30 — but that constant is outside this entry; raise it with `BL-148`.
-    **Resolved 2026-08-04 by `CAP-06`: the constant is `split`, not moved.** The original's *warning*
-    lights at 0.299 fd (four clips) — 0.30 is correct there — while the *nose-drop* is at 0.25 fd,
-    measured in the same frames of the same clip. So the nose-drop needs its own threshold and
-    `StallSpeedFrac` 0.30 stays where it is for the warning; `BL-148` owns the split.
+    at 0.25 fd, not 0.30 — but that constant is outside this entry; it was `BL-148`'s.
+    **Closed 2026-08-04 by `CAP-06` and landed the same day (`BL-148`, polish-7 A2): the constant is
+    `split`, not moved.** The original's *warning* lights at 0.299 fd (four clips) — 0.30 is correct
+    there — while the *nose-drop* is at 0.25 fd, measured in the same frames of the same clip.
+    `StallSpeedFrac` is now the nose-drop at **0.25** and `StallWarnFrac` the lamp at 0.30, so the
+    rate/target question in this bullet is the only part of the stall model still open.
   - **`LowSpeedDragBlend` 0.35 gives 4–6× too much drag below cruise.** The same clip is a
     thrust-free drag probe: measured `D` is **0.36 / 1.11 / 2.82 / 3.74 m/s²** at x = 0.25 / 0.35 /
     0.46 / 0.50 against our **7.69 / 12.13 / 17.91 / 20.25**. The ratio survives every `(g, C)` pair

@@ -64,7 +64,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Gauges and warnings (`GaugeCluster.cs` cluster — sequential, same file)
 
 1. ☑ `BL-184` Tween the ammo/hardpoint gauge arrow at 168.7 °/sim-s with shortest-way wrap
-2. ☐ `BL-148` Stall warning: blink-rate ramp + split the 0.30 warn / 0.25 nose-drop thresholds
+2. ☑ `BL-148` Stall warning: blink-rate ramp + split the 0.30 warn / 0.25 nose-drop thresholds
 3. ☐ `BL-142` Re-tune `IndicatorLowFrac` for guns on its own merits
 
 ### Wave B — Flight and audio quick wins
@@ -139,7 +139,7 @@ recorded, not guessed). `gauge-arrow-tween` suite added; full `.\RunTests.ps1` g
 unmoved. Capture A/B against `CAP-18` still owed at the controls — `PT-31`. Details:
 `docs/HISTORY.md` 2026-08-04, `docs/formats/hud.md`.
 
-## A2 ☐ `BL-148` Stall warning blink-rate ramp + threshold split
+## A2 ☑ `BL-148` Stall warning blink-rate ramp + threshold split
 
 **Goal.** The `STALL` plate blinks at a speed-dependent rate (slow at onset, fast deep in the
 stall), lighting at 0.30 fd while the nose-drop keeps its own 0.25 fd threshold.
@@ -174,6 +174,16 @@ landing. Full `.\RunTests.ps1`.
 is legitimately binary. (d) The measured periods are **sim ms**; wall figures are 1/1.390 of them
 — implementing wall numbers makes our blink 39% quick. (e) The lit plate carries an orange bezel
 glow — if reproduced by texture swap, that glow is part of the lit art.
+
+**Landed 2026-08-04.** All three halves in: the threshold split (`StallSpeedFrac` 0.25 nose-drop /
+`StallWarnFrac` 0.30 lamp, both over the one `FlightModel.StallFraction` margin), the proportional
+blink-rate law in sim ms, and the phase integrator that carries it (`GaugeCluster.AdvanceStallLamp`).
+The graded-opacity shape the item was opened on is **disproved and unbuilt**; the original's integer
+game-frame lattice is recorded as its frame rate, not part of the law. `stall-warning` suite added;
+two new `flight` debug log lines make the cue measurable from a scripted run — a zero-throttle
+deceleration reads onset 0.299 fd / 90.3 mph, exit 0.302 / 91.1 with no hysteresis. Full
+`.\RunTests.ps1` green, goldens unmoved. Capture A/B against `CAP-06` still owed at the controls —
+`PT-32`. Details: `docs/HISTORY.md` 2026-08-04, `docs/formats/hud.md`.
 
 ## A3 ☐ `BL-142` Re-tune `IndicatorLowFrac` for guns
 

@@ -111,6 +111,13 @@ and leave gaps when retiring old ones.
 - **DET-8** — **`--det` ignores `config.json`; use committed or CLI inputs.**
 - **DET-9** — **Keep pure baselines free of clocks, absolute paths, and machine state.**
 - **DET-10** — **Fixed-step captures cannot reveal realtime cadence artifacts.**
+- **DET-11** — **A rate decoded from video of the original is quoted in SIM seconds (k = 1.390);
+  implementing the wall figure runs it 39% fast.** The two numbers look equally plausible in a
+  constant and neither a build nor a golden can tell them apart — only a dwell/duration logged in
+  sim time can. Two cues have been landed against the sim figure (`BL-184`'s 168.7 °/sim-s arrow
+  sweep, `BL-148`'s 643 ms stall-lamp half-period), each carrying the wall figure beside it in the
+  source so the next reader cannot re-derive the wrong one; `CamSmooth` 8 is a known wall-rate still
+  awaiting the conversion.
 
 ## PERF — performance
 

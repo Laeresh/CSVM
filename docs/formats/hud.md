@@ -85,6 +85,29 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   needles): the lit window quad (`lowalt.tif` / `stall.tif`, 64×32, red) **plus two
   red bezel slashes** (`redhilite.tif` quads at the dial edge, left+right of the
   window's side). The whole node toggles/blinks.
+- **The STALL lamp's blink is a RATE ramp on its own threshold** (`BL-148`, `CAP-06`
+  + the two `CAP-05` stall clips, decoded 2026-08-04). Three separate facts, each
+  measured across four clips:
+  - **Brightness is binary** — the lit plate reads 211.0 ± 0.2 red and the unlit one
+    41.7 ± 0.2 at *every* speed, and the duty cycle is 0.50 throughout. There is no
+    opacity ramp; the graded-fade reading the item was opened on is disproved.
+  - **The rate ramps with airspeed, not with time since onset**, and with no
+    hysteresis: the blink half-period is **643 ms sim at the 0.30 fd threshold**
+    falling to **296 ms at 0.15 fd**, and it rises again if the aircraft accelerates
+    back. The remake implements it as a half-period **proportional to the fd
+    fraction** (`GaugeCluster.StallBlinkHalfPeriodS`, 2.10 sim s per unit), held flat
+    below 0.15 fd — the capture's own alternative fit (`5.9·V(mph) − 62` ms wall)
+    lands within one game frame of it everywhere and neither form extrapolates below
+    ~43 mph. ⚠ These are **sim** ms; the wall figures are 1/1.390 of them.
+    The original also toggles on integer 33.37 ms game frames — its frame rate showing
+    through the law, not part of it, so the remake runs the law continuously.
+  - **The lamp's threshold is not the stall's.** It lights at **0.30 fd**
+    (0.2989–0.2996 across four clips) while the nose-drop is at **0.25 fd**; inside a
+    single clip the lamp leads the break by 2.64 sim s / 14.9 mph. The remake carries
+    both (`FlightModel.StallWarnFrac` / `StallSpeedFrac`) over one margin,
+    `FlightModel.StallFraction`.
+  The LOW ALT cue beside it is a plain fixed 400 ms blink — it has never been
+  measured against the original, and nothing here applies to it.
 - **Damage display**: the dial's face is a single untextured 12-gon (the dark backing
   disc). ⚠ **Where it is parented differs per aircraft** — verified across the whole
   roster 2026-07-19: on `player_bhawk` it is the `damageindicator` node's *own* mesh,

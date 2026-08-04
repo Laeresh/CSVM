@@ -10,7 +10,7 @@ here means the work is queued, not forgotten. Deep evidence and traps live in
 Cite them from `backlog.md` and in conversation the way `BL-nnn` is cited. IDs are permanent: when
 an item closes its ID retires with it and is never reused, so numbering gaps are expected.
 Retired IDs disappear from this file, so never mint a new ID by scanning the entries below — take
-it from this counter and bump it here: **next free IDs `CAP-25` and `PT-32`.** (`CAP-17` and
+it from this counter and bump it here: **next free IDs `CAP-25` and `PT-33`.** (`CAP-17` and
 `CAP-14` and `CAP-24` retired 2026-08-04 — IDs are never reused.)
 
 **Captures staged for an item live in `playtest/<ID>/`** — git-ignored (they are renders of the
@@ -340,6 +340,17 @@ not need new footage of the original, so no capture is owed for it.)*
   **no** ease (CAP-18's own ~97 ms sim ease at each end was left unimplemented, its shape unmeasured
   beyond "not a smoothstep"; see `docs/formats/hud.md`) — if that reads wrong at the controls, the
   ease is the follow-up, not a re-tune of the rate.
+
+- `PT-32` **Stall-warning blink A/B against `CAP-06` (A2 / `BL-148` landed 2026-08-04).** The `STALL`
+  plate now blinks at a speed-dependent rate — 643 ms sim half-period at the 0.30 fd threshold, 296
+  at 0.15 — and lights 0.05 fd before the nose breaks. Fly a level deceleration to the stall and back
+  out (`./RunGame.ps1 --plane=player_bhawk --chapter=C1`) beside `CAP-06 2.mp4`. *Look for:* (a) the
+  lamp lights while the nose is still flying, and the break comes noticeably later; (b) the blink
+  visibly speeds up as the stall deepens and slows again on recovery; (c) the plate is fully lit or
+  fully dark, never dim — brightness is binary and any fade is a bug; (d) whether the rate at the
+  threshold reads right, since the sim/wall conversion is the live trap (a wall implementation would
+  blink 39% fast). The deep end below 0.15 fd is asserted in the `stall-warning` suite but was never
+  flown in a scripted run — that band is the one worth watching.
 
 ---
 

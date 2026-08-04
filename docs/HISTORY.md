@@ -14915,3 +14915,51 @@ passes (`build`/`units`/`engine` 23/23/`goldens` 13/13, all hash-identical — a
 does not move any `--det` capture). **The capture A/B against `CAP-18` this item's acceptance
 criterion calls for is still owed** — it needs eyes on a live sweep, not something a headless run
 can confirm.
+
+## 2026-08-04 — PLAN-m3-polish-7 A2 `BL-148`: the stall warning ramps by blink rate, on its own threshold
+
+`CAP-06` (decoded earlier the same day) settled three things about the original's `STALL` plate that
+our single fixed-period, single-threshold cue could not express. All three landed.
+
+**The threshold split.** `FlightModel` drove the lamp and the nose-drop off one `StallSpeedFrac`
+0.30. The capture puts the lamp at 0.30 fd (0.2989–0.2996 across four clips) and the nose-drop at
+0.25, confirmed inside a single clip where the lamp leads the break by 2.64 sim s / 14.9 mph. There
+are now two constants over ONE margin — `StallFraction` (speed/fd_speed) — with `isStalled()` the
+nose-drop at 0.25 and `IsStallWarned()` the lamp at 0.30; no second margin calculation exists beside
+them, which was the item's own trap (b). `StallSpeedFrac` keeps its name and config key and means
+the nose-drop; `flightModel.stallWarnFrac` is new (registered from `Step` so `--dump-config` and the
+orphan check stay complete on a launch that never flies).
+
+**The blink-rate ramp.** Brightness is binary in the original at every speed and the duty cycle 0.50
+— the graded-opacity fix the item was originally opened on is disproved and was NOT built. What
+ramps is the rate: half-period 643 ms sim at the 0.30 fd threshold falling to 296 ms at 0.15 fd.
+Implemented as a half-period proportional to the fd fraction (`StallBlinkHalfPeriodPerFrac` 2.10 sim
+s per unit, `GaugeCluster.StallBlinkHalfPeriodS`), which reproduces both measured anchors to 13 and
+19 ms — under half a game frame. The capture's other admissible fit (`5.9·V(mph) − 62` ms wall) fits
+the same data within one frame and was declined for two stated reasons, not by preference: it goes
+negative at low speed, and it is in mph, where a fraction generalises to an airframe with another
+`fd_speed` (only the Bloodhawk was filmed, so that generalisation is a judgement and is recorded as
+one). Below 0.15 fd — the deepest speed the capture reaches — the law HOLDS rather than
+extrapolating to a strobe. The blink is INTEGRATED (`AdvanceStallLamp`, a phase accumulator on
+`GameClock.Current.FrameDt`) rather than read off a clock with `PosMod`, because a period that
+changes mid-dwell must shorten the remainder instead of jumping the lamp. `LowAltAglM`'s cue keeps
+its fixed 400 ms blink — trap (c): it is legitimately binary, and nothing here generalises onto it.
+
+**Not reproduced, deliberately.** The original toggles on integer 33.37 ms game frames (lattice
+residual ≤ 8 ms over 105 dwells). That is its frame rate showing through the underlying continuous
+law, not part of the law, so the remake runs the law continuously. The lit plate's orange bezel glow
+(trap (e)) needed nothing: our lit overlay is the shipped `stallwarning_on` node, slashes included.
+
+**Verify.** New in-engine suite `stall-warning` asserts the split across the 0.25–0.30 lead band, the
+law against both of CAP-06's anchors, monotonicity, the deep-end hold, and the integrator itself —
+including the case the fixed-period predecessor could not express, a dwell whose length changes
+while the lamp is already lit. Both new `Log.Debug("flight", …)` lines make the cue measurable from
+a scripted run: a zero-throttle `--stage=empty` deceleration
+(`--hold=0,0,0,0@12;0.35,0,0,0@8;0,0,0,1`, 2100 frames) logs the warning arriving at **frac=0.299 /
+90.3 mph** and leaving at **0.302 / 91.1 mph** — CAP-06's onset with no hysteresis either way — and
+36 dwells whose lengths track the law from 617 ms at 0.29 fd down to 433 ms at 0.204 and back up as
+the aircraft re-accelerates. The live run reaches 0.204 fd, not 0.15: the deep end of the ramp is
+asserted in the suite, not flown. Full `.\RunTests.ps1` passes (build / units 436 / engine 24 of 24
+/ goldens 13 of 13 hash-identical — no `--det` capture flies below 0.30 fd, so neither the lamp nor
+the lowered nose-drop threshold moves a shot). **The A/B against `CAP-06` itself is still owed** —
+it needs eyes on the original beside a live stall.

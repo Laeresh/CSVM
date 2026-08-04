@@ -916,7 +916,10 @@ public partial class FlightController : Node3D
             Gauges.AltitudeFt = ft;
             // A held plane sits at 0 m/s, which is below every stall speed — but it is pinned, not
             // stalling, so the gauge (and the HUD line below) stay quiet in the lab.
-            Gauges.Stalled = !_crashed && !halted && !_held && _model.isStalled();
+            // The lamp is the WARNING (0.30 fd), which leads the nose-drop the model flies at 0.25;
+            // the fraction beside it is what ramps its blink rate.
+            Gauges.StallWarning = !_crashed && !halted && !_held && _model.IsStallWarned();
+            Gauges.StallFrac = _model.StallFraction;
         }
         // Feeds the E35 gauges (if built) and the E36 readout (if built) — both draw from the live
         // loadout, so this runs whenever there is one, independent of the dial cluster.

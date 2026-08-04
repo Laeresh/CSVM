@@ -39,7 +39,12 @@ public sealed partial class GaugeCluster : Control
     public float AltitudeFt;               // above sea level (the dial is in feet)
     public float AglMeters = float.MaxValue; // above ground (physics ray) — LOW ALT
     public float SpeedMph;
-    public bool Stalled;
+    /// <summary>STALL lamp gate — the flight model's stall WARNING (0.30 fd), which lights well
+    /// before the nose-drop the model flies at 0.25 fd.</summary>
+    public bool StallWarning;
+    /// <summary>Airspeed as a fraction of fd_speed (FlightModel.StallFraction): the STALL lamp's
+    /// blink RATE ramps over it. Only read while StallWarning is set.</summary>
+    public float StallFrac = 1f;
     /// <summary>Part HP source for the damage display: name → fraction (1 = pristine).
     /// Flight binds PlaneDamage, the damage lab binds its sliders. Null = all green.</summary>
     public Func<string, float>? PartFraction;
@@ -57,8 +62,24 @@ public sealed partial class GaugeCluster : Control
     // linear — the measured ~2-frame ease at each end is within noise and NOT a smoothstep).
     // Internal (not private) so the run-tests suite can assert the rate directly.
     internal const float ArrowSweepDegPerSimS = 168.7f;
+    // The STALL lamp is a blink-RATE ramp (BL-148, CAP-06 + the two CAP-05 stall clips): brightness
+    // is BINARY at every speed and the duty cycle 0.50, while the half-period shortens in proportion
+    // to airspeed — 643 ms sim at the 0.30 fd threshold down to 296 ms at 0.15 fd. Fitted through
+    // the origin over the five measured speed bins; the affine `5.9·V(mph) − 62` ms wall form fits
+    // the same data just as well (the residual is one game frame either way, so the capture cannot
+    // separate them) and was declined because it goes negative at low speed. Keyed to the fd
+    // FRACTION rather than to mph so a slower airframe blinks at the same rate at its own threshold;
+    // only the Bloodhawk (fd_speed 135 m/s) was filmed, so that generalisation is a judgement.
+    // ⚠ SIM seconds — the wall figures are 1/1.390 of these and would blink 39% fast.
+    // Not reproduced: the original toggles on integer 33.37 ms game frames, which is its frame rate
+    // showing through the underlying continuous law, not part of the law.
+    internal const float StallBlinkHalfPeriodPerFrac = 2.10f;  // sim s of half-period per unit fd fraction
+    // The measurement spans 0.143–0.30 fd and neither fitted form extrapolates below ~43 mph, so the
+    // law HOLDS at its deepest measured value rather than ramping on toward a strobe at zero speed.
+    internal const float StallBlinkFracFloor = 0.15f;
     private const float LowAltAglM = 50f;     // LOW ALT below this height over ground (user spec)
-    private const float WarnBlinkPeriod = 0.4f;  // s per on/off cycle of LOW ALT / STALL (TUNE)
+    private const float WarnBlinkPeriod = 0.4f;  // s per on/off cycle of LOW ALT (TUNE) — the LOW ALT
+                                                 // cue is a plain fixed blink, not a ramp
     private const float DamageBlinkTime = 5f;    // s a hit part blinks (user-observed in the original)
     private const float DamageBlinkPeriod = 0.32f; // s per on/off cycle of the hit part (TUNE)
     // Four color states (user-confirmed in the original: green/yellow/orange/red, the
@@ -123,6 +144,17 @@ public sealed partial class GaugeCluster : Control
     // from zero.
     private float _gunArrowAngle = float.NaN;
     private float _missileArrowAngle = float.NaN;
+    // The STALL lamp's blink, integrated rather than read off a clock: its period changes with
+    // airspeed, so PosMod over accumulated time would jump the lamp mid-dwell whenever the rate
+    // moved. _stallBlinkPhase is the fraction of the current half-period elapsed.
+    private double _stallBlinkPhase;
+    private float _stallDwellS;   // sim time the current dwell has run, for the toggle log
+    private bool _stallLampOn = true;
+    private bool _stallWarnPrev;  // last frame's StallWarning, so the crossing logs once
+
+    /// <summary>Whether the lit STALL overlay draws this frame. Internal so the run-tests suite can
+    /// read the blink out of a live cluster rather than re-deriving it.</summary>
+    internal bool StallLampLit => StallWarning && _stallLampOn;
 
     private bool WarnPhaseOn => Mathf.PosMod((float)_time, WarnBlinkPeriod) < WarnBlinkPeriod * 0.5f;
     private bool DamagePhaseOn => Mathf.PosMod((float)_time, DamageBlinkPeriod) < DamageBlinkPeriod * 0.5f;
@@ -200,6 +232,10 @@ public sealed partial class GaugeCluster : Control
             z.BlinkLeft = 0f;
         _gunArrowAngle = float.NaN;
         _missileArrowAngle = float.NaN;
+        _stallBlinkPhase = 0.0;
+        _stallDwellS = 0f;
+        _stallLampOn = true;
+        _stallWarnPrev = false;
     }
 
     /// <summary>A part took damage: its fill + border blink for the next few seconds
@@ -219,6 +255,7 @@ public sealed partial class GaugeCluster : Control
             _gunArrowAngle = TweenArrow(_gunArrowAngle, TargetArrowAngle(_gunGaugeGeom.Positions, gg.Selected), simDt);
         if (MissileGauge is { } mg)
             _missileArrowAngle = TweenArrow(_missileArrowAngle, TargetArrowAngle(_missileGaugeGeom.Positions, mg.Selected), simDt);
+        AdvanceStallLamp(simDt);
         foreach (var z in _zones)
             z.BlinkLeft = Mathf.Max(0f, z.BlinkLeft - (float)delta);
         QueueRedraw();
@@ -248,7 +285,7 @@ public sealed partial class GaugeCluster : Control
         float spdR = SpdRadius * s;
         foreach (var p in _spdFace)
             DrawGaugePoly(p, spdC, spdR);
-        if (Stalled && WarnPhaseOn)
+        if (StallWarning && _stallLampOn)
             foreach (var p in _spdWarn)
                 DrawGaugePoly(p, spdC, spdR);
         if (_spdNeedle != null)
@@ -287,6 +324,13 @@ public sealed partial class GaugeCluster : Control
         }
     }
 
+    /// <summary>Half of the STALL lamp's blink period, in SIM seconds, at an airspeed of
+    /// <paramref name="stallFrac"/> × fd_speed — proportional to speed, held flat below the deepest
+    /// speed the capture reached. Duty is 0.50, so the full period is twice this. Internal so the
+    /// run-tests suite can assert the law against CAP-06's two anchors directly.</summary>
+    internal static float StallBlinkHalfPeriodS(float stallFrac) =>
+        StallBlinkHalfPeriodPerFrac * Mathf.Max(stallFrac, StallBlinkFracFloor);
+
     // Guns: green > low > empty, indexing the 3 indicator colour variants. The low tier is
     // gun-only — see IndicatorLowFrac's comment. Internal (not private) so the run-tests suite can
     // assert both colour paths directly.
@@ -321,6 +365,40 @@ public sealed partial class GaugeCluster : Control
         float delta = Mathf.PosMod(target - current + 180f, 360f) - 180f;
         float maxStep = ArrowSweepDegPerSimS * simDt;
         return Mathf.Abs(delta) <= maxStep ? target : current + Mathf.Sign(delta) * maxStep;
+    }
+
+    /// <summary>Integrates the STALL lamp's blink one sim step. The lamp lights the instant the
+    /// warning does and its phase restarts when the warning clears — the original shows no
+    /// hysteresis at the threshold (on at 89.9/90.0 mph decelerating, 90.0/89.9 accelerating).
+    /// Internal so the run-tests suite can drive it on its own clock.</summary>
+    internal void AdvanceStallLamp(float simDt)
+    {
+        if (StallWarning != _stallWarnPrev)
+        {
+            // The threshold crossing itself, with the fraction it happened at — the other half of
+            // what a scripted run needs to check the cue against the capture.
+            Log.Debug("flight", $"stall warning {(StallWarning ? "on" : "off")} frac={StallFrac:0.000} mph={SpeedMph:0.0}");
+            _stallWarnPrev = StallWarning;
+        }
+        if (!StallWarning)
+        {
+            _stallBlinkPhase = 0.0;
+            _stallDwellS = 0f;
+            _stallLampOn = true;
+            return;
+        }
+        _stallDwellS += simDt;
+        _stallBlinkPhase += simDt / StallBlinkHalfPeriodS(StallFrac);
+        while (_stallBlinkPhase >= 1.0)
+        {
+            _stallBlinkPhase -= 1.0;
+            _stallLampOn = !_stallLampOn;
+            // The dwell that just ended, in sim ms — the one number the blink law is measured in,
+            // so a run can be checked against CAP-06 without eyes on the lamp. Carries its own
+            // times as values: the log has no timestamp column by design.
+            Log.Debug("flight", $"stall lamp {(_stallLampOn ? "lit" : "dark")} dwell_ms={_stallDwellS * 1000f:0} frac={StallFrac:0.000} half_ms={StallBlinkHalfPeriodS(StallFrac) * 1000f:0}");
+            _stallDwellS = 0f;
+        }
     }
 
     // ---- extraction ----

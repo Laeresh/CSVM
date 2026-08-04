@@ -1321,7 +1321,10 @@ a public `Camera` accessor — all inert in plain `--freecam`. Rates TUNE.
 Velocity-vector arcade flight model: body rates = control torque × reciprocal inertia vs
 ang_momentum_damp, scaled per axis (PitchTune/YawTune/RollTune). Thrust/drag/gravity integrate on
 the velocity vector (speed passes through zero); lift cancels gravity's cross-path share; drag is
-normalized so drag(fd_speed) = max thrust.
+normalized so drag(fd_speed) = max thrust. The stall is TWO measured thresholds over one margin
+(`StallFraction` = speed/fd_speed): `isStalled()` is the nose-drop at 0.25 fd, `IsStallWarned()` the
+STALL lamp at 0.30 — the lamp leads the break by 2.64 sim s (`BL-148`/`CAP-06`); never drive both
+off one number, and never recompute the margin beside them.
 ⚠ ThrustConst and the three *Tune rates are NOT free TUNEs — they are pinned to the original,
   measured off cockpit-gauge video, and `--run-tests`' flight-envelope suite fails if they move.
   Retune by feel and you are overwriting a measurement (`analysis/video-flight-calibration/`).
@@ -1517,12 +1520,17 @@ colour per zone.
 ⚠ The weapon-gauge 4-digit readout is per-GROUP for guns, per-PYLON for rockets — NOT a total; the
   belt-indicator yellow tier is likewise GUN-ONLY (hardpoint/pylon indicators go green→red, never
   yellow — confirmed against the original).
-⚠ The gun/missile arrow SWEEPS to the selected slot at a shared constant 168.7 °/sim-s
-  (`ArrowSweepDegPerSimS`, `BL-184`/`CAP-18`), tweened in `_Process` (`TweenArrow`, shortest-way
-  wrap) from sim dt (`GameClock.Current.FrameDt`), not drawn straight from `Selected` — `_Draw`
-  only reads the already-advanced `_gunArrowAngle`/`_missileArrowAngle`. `Reset()` clears both to
-  NaN so a respawn snaps instead of sweeping in from the previous plane's pose. The readout digits/
-  type name still snap on the sweep's first frame — do not tween those too.
+⚠ Both animated cues advance in `_Process` on **sim** dt (`GameClock.Current.FrameDt`), never the
+  raw frame delta or `_time` — their rates are video-decoded in sim seconds and the wall figures
+  would run them 39% fast. (1) The gun/missile arrow SWEEPS at a shared constant 168.7 °/sim-s
+  (`ArrowSweepDegPerSimS`, `BL-184`/`CAP-18`, `TweenArrow`, shortest-way wrap), not drawn from
+  `Selected` — `_Draw` reads the already-advanced `_gunArrowAngle`/`_missileArrowAngle`, and the
+  readout digits/type name still snap on the sweep's first frame; do not tween those too. (2) The
+  STALL lamp's blink is a RATE ramp (`AdvanceStallLamp`, `BL-148`/`CAP-06`): binary brightness, duty
+  0.50, half-period ∝ the fd fraction the controller feeds as `StallFrac`. It is INTEGRATED, not
+  read off a clock — a period that changes mid-dwell must shorten the remainder, not jump the lamp.
+  `Reset()` clears the arrows to NaN and re-arms the lamp lit, so a respawn snaps. The LOW ALT cue
+  is legitimately a plain fixed blink (`WarnBlinkPeriod`) — do not generalise the ramp onto it.
 ⚠ The gungauge/missilegauge face is on a generic child (`g815`/`g819`) on ALL planes (no Bloodhawk
   special case, unlike the damage dial) — "any unrecognised child = face" is the extraction rule.
 

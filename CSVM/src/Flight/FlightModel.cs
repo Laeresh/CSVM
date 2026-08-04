@@ -52,7 +52,15 @@ public sealed class FlightModel
     private const float MaxControlEff = 1.15f;    // TUNE: authority ceiling in a dive
     private const float LiftSpeedFrac = 0.40f;    // TUNE: full lift at/above this fraction of fd_speed
                                                   // (0.40·135 = 54 m/s keeps the 120 mph spawn fully lifted)
-    private const float StallSpeedFrac = 0.30f;   // TUNE: nose-drop begins below this fraction
+
+    // The two stall thresholds are DIFFERENT numbers and both are measured, not TUNEs. The nose does
+    // not break until 0.25 fd (CAP-05 "Stall 0% Thrust no input": the nose holds +4.2° all the way
+    // down to 76 mph, then falls), while the STALL lamp lights at 0.30 fd (CAP-06 + CAP-05,
+    // 0.2989–0.2996 across four clips). Confirmed inside a single clip — the warning leads the break
+    // by 2.64 sim s / 14.9 mph — so any model driving both cues off one number is wrong by
+    // construction.
+    private const float StallSpeedFrac = 0.25f;   // nose-drop begins below this fraction of fd_speed
+    private const float StallWarnFrac = 0.30f;    // STALL lamp lights below this fraction of fd_speed
     private const float MaxDiveSpeedFrac = 1.75f; // numerical backstop, NOT a terminal speed. The
                                                   // terminal dive is emergent from the drag curve
                                                   // and lands within 0.3% of the original, so a cap
@@ -127,6 +135,11 @@ public sealed class FlightModel
 
     public PlaneStats Stats { get; }
 
+    /// <summary>Airspeed as a fraction of fd_speed — the single stall-proximity scale both stall
+    /// thresholds are measured on, and the one the STALL lamp's blink rate ramps over. Every stall
+    /// cue derives from this; nothing recomputes its own margin.</summary>
+    public float StallFraction => Stats.FdSpeed > 0f ? Speed / Stats.FdSpeed : 0f;
+
     public void Reset(Vector3 position, Basis attitude, float speed, float throttle)
     {
         Position = position;
@@ -153,6 +166,9 @@ public sealed class FlightModel
         float yawTune = Config.GetFloat("flightModel.yawTune", YawTune);
         float rollTune = Config.GetFloat("flightModel.rollTune", RollTune);
         float stallSpeedFrac = Config.GetFloat("flightModel.stallSpeedFrac", StallSpeedFrac);
+        // Read here as well as at its own site (IsStallWarned, which Step never calls) purely so the
+        // key registers on a launch that never flies — --dump-config's template and the orphan check.
+        _ = Config.GetFloat("flightModel.stallWarnFrac", StallWarnFrac);
         float stallNoseRate = Config.GetFloat("flightModel.stallNoseRate", StallNoseRate);
         float climbGravityScale = Config.GetFloat("flightModel.climbGravityScale", ClimbGravityScale);
         float knifeAlignFloor = Config.GetFloat("flightModel.knifeAlignFloor", KnifeAlignFloor);
@@ -336,9 +352,13 @@ public sealed class FlightModel
         Position += VelocityDir * Speed * dt;
     }
 
-    public bool isStalled()
-    {
-        float stallSpeed = Config.GetFloat("flightModel.stallSpeedFrac", StallSpeedFrac) * Stats.FdSpeed;
-        return Speed < stallSpeed;
-    }
+    /// <summary>Below the nose-drop threshold (0.25 fd) — the aerodynamic stall the flight model
+    /// flies. NOT the cue the STALL lamp shows: that one lights earlier, see IsStallWarned.</summary>
+    public bool isStalled() =>
+        StallFraction < Config.GetFloat("flightModel.stallSpeedFrac", StallSpeedFrac);
+
+    /// <summary>Below the warning threshold (0.30 fd) — the STALL lamp, which leads the break by a
+    /// measured 2.64 sim s / 14.9 mph.</summary>
+    public bool IsStallWarned() =>
+        StallFraction < Config.GetFloat("flightModel.stallWarnFrac", StallWarnFrac);
 }
