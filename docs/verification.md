@@ -78,6 +78,15 @@ and leave gaps when retiring old ones.
   A change that should touch one subsystem should move exactly the shots exercising it and no
   others. Per-plane chase distance moved all four flown-aircraft shots and none of the nine
   without an aircraft, which localises the change far better than any single image diff.
+- **GOLD-6** — **A pure TIMING change moves pixels, and a particle shot amplifies it without
+  limit.** Nothing appears, disappears or ends up elsewhere, so "behaviour-neutral" feels safe —
+  but a capture is one instant, and an emitter's output is an integral over frames, so shifting a
+  start by one tick shifts every particle in the frame. Measured: making a called sequence's first
+  event fire in the calling tick (`BL-135`, 1/60 s earlier) left 7 of 8 chapter captures
+  bit-identical and every runtime total unchanged, yet moved `c1-crash` by **79.7 % of its pixels**
+  — the crash fireball covers the frame. So judge a timing change by what the moved shots *are*
+  (all four movers were particle shots) before concluding either that it broke something or that it
+  is harmless.
 
 ## DET — determinism and randomness
 

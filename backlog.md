@@ -2262,13 +2262,37 @@ all, so the regression is inert here by construction (`docs/verification.md` DIA
 is the *other* defect that investigation turned up — real, engine-wide, and deliberately left
 unfixed because it was not what silenced anything.
 
-**The mechanism.** `CallSequence` appends to `AnimInstance.Runners` (`AnimRuntime.cs:998`) while
-`AnimInstance.Advance` walks that list **descending** (`AnimRuntime.cs:1485`). An appended runner
+**⚠ Re-measured and RE-DEFERRED 2026-08-04** (`PLAN-m3-polish-6` B12). The bounded drain was
+built, measured across the whole install and then taken back out. Read
+[`analysis/bl-135-callsequence-lag/FINDINGS.md`](analysis/bl-135-callsequence-lag/FINDINGS.md)
+before touching this again — the implementation, the sized bound and the full measurement are
+there, and the "behaviour-neutral" claim below is superseded. Summary of what changed:
+
+- **It is no longer behaviour-neutral.** 4 of the 13 goldens move, deterministically:
+  `c1-crash` 79.7 % of pixels, `c1-destroy-effects` 0.228 %, `c3-island` 0.029 %,
+  `c5-city-night` 0.015 %. All four are particle shots and the difference is phase — same camera,
+  same terrain, the effect one tick further along (C5 877 → 927 live particles at frame 120).
+  7 of the 8 `--freecam --det` chapter captures stay pixel-identical.
+- **Nothing observable is repaired.** No content appears or disappears; every runtime total is
+  unchanged. What moves is the bootstrap CENSUS (C1 35 → 53 lights, C5 9 → 37 puffer emitters),
+  which is trap 3 below — those objects already existed one tick later.
+- **The bound is sized, not guessed.** The deepest same-tick CALL fan-out authored anywhere is
+  **15** (every zeppelin's `main_altitude_check` → `rotatezep` → `breakupzep` → 13 `break*`
+  pieces), so the cap was 64. It is load-bearing: C2/M02's `marypickford` really does ring
+  (`randomloop → mpickford_bob → randomloop`), and it is instantaneous in THIS engine because
+  `OBJECT_MOTION_SI_SCRIPT_ALL_NAMES` has no handler and reports duration 0.
+- **The blocking question is not capture-answerable**, so no `CAP-nn` was minted: the difference is
+  one tick per hop over chains at most 3 hops deep (≈50 ms) off a trigger that is not on screen.
+
+**The mechanism.** `AnimInstance.CallSequence` appends to `Runners` (`SequenceRunner.cs:84`) while
+`AnimInstance.Advance` walks that list **descending** (`SequenceRunner.cs:67`). An appended runner
 therefore lands at an index the loop has already passed, so **every called sequence's first event
-fires one frame late** — not just the siren's.
+fires one frame late** — not just the siren's. Scale: 22,391 compiled `CallSequence` events across
+3,434 defs, plus 1,865 in the reader files.
 
 **Why it was not fixed with the siren.** Draining same-pass-appended runners was implemented and
-measured **behaviour-neutral** (exactly one number moved across all 8 chapters). But it repairs
+measured behaviour-neutral at the time (exactly one number moved across all 8 chapters) — a claim
+the 2026-08-04 re-measurement above **supersedes**. But it repairs
 the siren only because the sound loader *happens* to still be alive at that instant, and leaves
 the other 947 late `SOUND_NODE` events broken. The loader lifetime was the real defect and is
 fixed; this lag is a separate question about dispatch timing fidelity.
@@ -2280,6 +2304,7 @@ fixed; this lag is a separate question about dispatch timing fidelity.
 2. **Any same-pass drain needs a bound.** A sequence that calls itself would spin within a single
    frame. (The siren's own `siren_police` is safe — 3 zero-delay events, no `Loop`, so its runner
    completes and is removed in one pass — but that is a property of that data, not a guarantee.)
+   Confirmed 2026-08-04: `marypickford` is the def that proves it, and 64 is the sized cap.
 3. **Do not measure this with the bootstrap emitter census.** `anim: N ambient sound emitter(s)`
    is printed inside `Bootstrap`, so it is a snapshot that cannot see anything created afterwards
    — which is exactly how the siren's real cause stayed hidden through a full investigation
@@ -2287,5 +2312,8 @@ fixed; this lag is a separate question about dispatch timing fidelity.
 
 **Open question this should answer:** does the original dispatch a called sequence in the same
 tick? If yes, every `CallSequence` in the install is currently a frame late and the fix is a
-fidelity improvement rather than a no-op. Nobody has checked; the measured behaviour-neutrality
-above only says *our* observable output does not change.
+fidelity improvement rather than a no-op. Nobody has checked, and as of 2026-08-04 nobody can from
+film — the difference is below a capture's resolution (see the re-deferral note above). Until it is
+settled from the original's code, the drain buys a golden rebaseline for an unverified direction,
+which is why it is not landed. Measured behaviour movement says only that *our* observable output
+changes; it is still not evidence about the original.

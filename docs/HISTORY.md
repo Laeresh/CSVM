@@ -13672,3 +13672,59 @@ first, so the moves are this change alone): all are thin strip-edge lines — c2
 1.42 % (the city's street/lot strip seams disappearing), aircraft shots 42–89 px of texture-band
 edges, c1-crash max delta 4 — and the rain pair is bit-identical (fog swallows every seam at those
 poses). Per-shot numbers in `analysis/goldens/manifest.json`.
+
+
+## 2026-08-04 - M3 polish-6 B12 (`BL-135`): the same-tick `CALL_SEQUENCE` drain, built and measured, is re-deferred
+
+`BL-135` says every called sequence's first event fires one frame late: `AnimInstance.CallSequence`
+appends to `Runners` (`SequenceRunner.cs:84`) while `Advance` walks that list descending
+(`:67`), so an appended runner lands past the cursor. The item allowed two outcomes - a bounded
+same-pass drain lands, or the item is re-deferred with a fresh measured reason. **It is the second,
+and this entry is the reason.** Instruments and the full record:
+`analysis/bl-135-callsequence-lag/` (`census.ps1`, `same-tick.ps1`, `sweep.ps1`,
+`compare-shots.ps1`, `FINDINGS.md`).
+
+**The bound came from the data, not from a guess.** 22,391 compiled `CallSequence` events across
+3,434 defs (plus 1,865 in the reader files). Walking every definition for the calls that fire
+before the clock moves, the deepest same-tick fan-out authored anywhere is **15** - every
+zeppelin's `main_altitude_check` -> `rotatezep` -> `breakupzep` -> its 13 `break*` pieces - so the
+cap was set at 64. Trap 2 of the backlog entry ("any same-pass drain needs a bound") is not
+hypothetical: restricted to CALL edges the graph rings in exactly one def, C2/M02's
+`marypickford` (`randomloop -> mpickford_bob -> randomloop`), and that ring is *instantaneous in
+this engine* because `OBJECT_MOTION_SI_SCRIPT_ALL_NAMES` has no handler and so reports duration 0.
+Unbounded, it spins until memory runs out.
+
+**The drain worked.** ~40 lines in `AnimInstance`: record runners appended during a pass, drain
+them after the descending walk with `0f` (not `dt` - the sequence did not exist for that slice of
+time; the same contract `AnimRuntime.Start` already gives a fresh definition), stop at the cap and
+report it once per def. 22 in-engine suites green, engine errors clean. The single unit failure
+was the defect being asserted: `StopSequenceWithNoRunningTargetCallsItLikeCallSequence` expected
+`["on", "trail"]` and got `["on", "trail", "emit"]`.
+
+**And then the stop rule fired.** The prior "behaviour-neutral, exactly one number moved" claim no
+longer holds. Deterministically (both hash sets reproduce), **4 of the 13 goldens move**:
+`c1-crash` **79.7 % of its pixels**, `c1-destroy-effects` 0.228 %, `c3-island` 0.029 %,
+`c5-city-night` 0.015 %. All four are particle shots and all four are pure phase - side by side,
+`c1-crash` has the same camera, terrain, HUD and gauges, and its fireball is one tick further
+along; because that fireball covers the frame, one tick is 79.7 % of the pixels (GOLD-6, new).
+
+**Nothing observable is repaired in exchange.** 7 of the 8 `--freecam --det` chapter captures stay
+pixel-identical at frame 120, and every runtime total is unchanged (C3 11 live puffers before and
+after, C4 15, C5 36). What moves is the bootstrap CENSUS - C1 35 -> 53 point lights, C5 9 -> 37
+puffer emitters, C1 2 -> 3 sound emitters - which is `docs/verification.md` LOG-2, the trap the
+backlog entry itself names ("C1 legitimately reports 38 while 39 emitters exist"). Those objects
+already existed; only the snapshot missed them. C1's frame-120 image is bit-identical, which is
+what proves it.
+
+So landing would rebaseline 4 of 13 goldens, one of them nearly the whole frame, to buy a 1/60 s
+shift whose *direction* nobody has verified. Trap (c) of the item holds symmetrically, and is
+worth stating in both directions: the old behaviour-neutrality was never evidence about the
+original, and neither is this movement. **No `CAP-nn` was minted** - deliberately: the difference
+is one tick per hop over chains at most 3 hops deep (~50 ms), off a trigger that is not on screen,
+which is below what a video capture of the original resolves. Filing it would file a capture
+nobody can satisfy; this gets settled from the original's code or not at all.
+
+The patch is not kept behind a flag - a disabled drain is a landmine for the next reader, the
+lesson `BL-050` taught this week. It lives in `FINDINGS.md` section 3, complete, with the bound and
+the expected measurement beside it. `RunTests.ps1` green on the reverted tree: 422 units, 22
+suites, 13/13 goldens hash-identical, engine errors clean.

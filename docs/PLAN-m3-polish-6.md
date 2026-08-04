@@ -87,7 +87,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — animation runtime: dropped data and late dispatch
 
 11. ☑ B11 `BL-050` — the 26 dead `FROM_TO` `*_delta` channels: census, decide, implement
-12. ☐ B12 `BL-135` — the one-frame `CallSequence` dispatch lag: bounded same-pass drain or measured re-deferral
+12. ☑ B12 `BL-135` — the one-frame `CallSequence` dispatch lag: bounded same-pass drain or measured re-deferral *(re-deferred, measured)*
 
 ### Wave C — instruments
 
@@ -368,7 +368,7 @@ though — the absolute channels always drove all 51 motions correctly, which is
 to carry the decision. New rule `docs/verification.md` **SRC-5**. Full record:
 `analysis/bl-050-fromto-delta/FINDINGS.md` and `docs/HISTORY.md` 2026-08-04.
 
-## B12 ☐ `BL-135` — the one-frame `CallSequence` dispatch lag
+## B12 ☑ `BL-135` — the one-frame `CallSequence` dispatch lag
 
 **Goal.** Every called sequence's first event currently fires one frame late (`CallSequence`
 appends to `AnimInstance.Runners` at `AnimRuntime.cs:998` while `Advance` walks descending at
@@ -399,6 +399,29 @@ LOG-2, learned on this exact bug).
 iterating forwards. (b) The siren is already fixed (loader lifetime) — this item must not touch
 that. (c) Behaviour-neutrality last time only says *our* output didn't change — it is not evidence
 about the original; say so in the HISTORY entry either way.
+
+**Landed 2026-08-04 (a measured re-deferral; the second of this item's two allowed outcomes).**
+The bounded drain was built, measured install-wide, and taken back out — the item's own stop rule
+fired. Full record: `analysis/bl-135-callsequence-lag/FINDINGS.md` (census, sizing, patch,
+measurement), the rewritten `BL-135` head note, the new ⚠ on `docs/architecture.md`'s
+`SequenceRunner.cs` entry, and `docs/verification.md` GOLD-6.
+
+- **The bound is sized, not guessed:** the deepest same-tick CALL fan-out authored anywhere is 15
+  (every zeppelin's `main_altitude_check` → `rotatezep` → `breakupzep` → 13 `break*` pieces), so
+  the cap was 64. It is load-bearing — C2/M02's `marypickford` rings
+  (`randomloop → mpickford_bob → randomloop`) and is instantaneous in this engine because
+  `OBJECT_MOTION_SI_SCRIPT_ALL_NAMES` has no handler and reports duration 0.
+- **The stop rule fired:** the drain is no longer behaviour-neutral. 4 of 13 goldens move,
+  deterministically — `c1-crash` 79.7 % of pixels, `c1-destroy-effects` 0.228 %, `c3-island`
+  0.029 %, `c5-city-night` 0.015 %, all four particle shots, all four pure phase (same camera,
+  effect one tick further along). Trap (c) holds both ways: 7 of 8 chapter captures stayed
+  pixel-identical and every runtime total was unchanged, so nothing observable is repaired either.
+  The census deltas (C1 35 → 53 lights, C5 9 → 37 emitters) are LOG-2, not new content.
+- **No `CAP-nn` minted, deliberately:** one tick per hop over chains at most 3 hops deep (≈50 ms)
+  off an invisible trigger is below a capture's resolution. This gets settled from the original's
+  code or not at all.
+- The patch is not kept behind a flag — a disabled drain is a landmine (the `BL-050` lesson).
+  `RunTests.ps1` green on the reverted tree (422 units, 22 suites, 13/13 goldens hash-identical).
 
 # Wave C — instruments
 

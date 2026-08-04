@@ -742,6 +742,15 @@ interpreter never dereferences them.
   pre-fix code reached for an early `return`, and that return *was* the frame lock. Below 60 Hz the
   loop catches up within the frame (the 256 guard bounds it); at 1/60 it is one pass per step,
   bit-identical, which is why no `--det` capture moved.
+⚠ **A called sequence's first event fires one tick LATE, and that is a known, measured, deliberate
+  non-fix** (`BL-135`): `CallSequence` appends past the descending walk's cursor. A bounded
+  same-pass drain was built and measured install-wide on 2026-08-04 and NOT kept — it repairs
+  nothing observable (7 of 8 chapter captures pixel-identical, every runtime total unchanged; only
+  the bootstrap censuses move, which is LOG-2) yet moves 4 of the 13 goldens, `c1-crash` by 79.7 %
+  of its pixels. Before re-implementing it read `analysis/bl-135-callsequence-lag/FINDINGS.md`: it
+  carries the implementation, the cap sized from the data (deepest authored same-tick fan-out 15,
+  so 64) and the one def that makes a bound mandatory (`marypickford` rings, instantaneously,
+  because `OBJECT_MOTION_SI_SCRIPT_ALL_NAMES` has no handler and reports duration 0).
 ⚠ `OnEventDispatched` is a get-only nullable delegate on the seam ON PURPOSE — the null-conditional
   at the fire site short-circuits the `EventDispatch` construction when no debugger is attached, the
   documented zero-cost contract on the hot dispatch path. Making it a method breaks that.
