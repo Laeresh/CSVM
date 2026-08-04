@@ -14219,3 +14219,39 @@ catcher. Docs: the `RunProbe` paragraph in `docs/tooling.md`.
 exit 124, no orphaned Godot process (`Get-Process` clean). Normal path: `--stage=empty
 --plane=player_bhawk --screenshot=...` exits 0 under the default timeout with the screenshot
 written. `RunTests.ps1` call site confirmed unchanged (passes no `-TimeoutSec`).
+
+## 2026-08-04 -- `BL-254` follow-up: `gate1`'s archway is not destructible at all -- the RESET
+fallback now tells that apart from the C1 AA guns it exists to rescue
+
+**What was wrong.** The user answered the gate1 original-A/B question the first `BL-254` landing
+left open: in the original, gate1 has only destructible doors -- its archway never explodes or
+swaps to a wreck. Our `ApplyDeathSwap` RESET-derived fallback fired unconditionally for gate1 (as
+it does for the ~10% of destructibles that need it, the C1 AA guns), so killing gate1 swapped its
+healthy archway to a wreck at t=0 and dropped its collider -- wrong in the opposite direction from
+the gate2 bug the same item had just fixed. The trap: gate1's data shape (RESET declares
+`destroyed`, no swap authored anywhere, no chained def) is identical to the AA guns', so a name
+check could not tell them apart.
+
+**What changed.** Read the actual AA-gun defs (`aagun32`-`36`, C1) before committing to a rule: each
+one's only Initial sequence is `DAMAGE_SEQUENCE`, pure `If`/`CallAnimation` puffer calls
+(`sputter_fire_smoke_obj`/`sputter_black_smoke_obj`) -- no `ObjectMotionFromTo`/`ObjectMotion`/
+opacity/active-state event anywhere, so without the fallback they would die with literally nothing
+switching off. `gate1_doorblast`, by contrast, authors `door1`/`door2`'s own rotate, fade and
+deactivate directly in its own Initial sequences -- a complete, deliberate death that simply never
+gives the archway a destroyed variant. `AnimRuntime.AuthorsVisibleDeath` (`CSVM/src/Mech3/
+AnimRuntime.cs`) scans a def's own Initial sequences for that shape -- a move/fade/deactivate on a
+node outside the healthy/destroyed/dbase role set -- and `RunDeathSequence` withholds
+`ApplyDeathSwap` when it finds one, after the existing chained-swap check (gate2's `blockit2`)
+still runs first. Docs: `docs/formats/destructibles.md`'s RESET-fallback and C25 collider bullets
+amended to state both gates' asymmetry; `backlog.md`'s `BL-254` entry rewritten to record both
+fixes, closing the gate1 A/B question.
+
+**How verified.** `--damage-test=gate --chapter=C2 --damage-hd=25`: `gate1` now reads
+`swap[healthy shown]`/`col[off 0, on 0]` at kill (was `col[off 2, on 13]`) and stays that way
+permanently -- no tick ever swaps it -- while resetting and re-killing in the same hit count;
+`gate2` unchanged from its prior fix (`swap[healthy shown]` at kill, `debris[+7]`/`sounds[+1]` past
+28.5 s); `kkgate` unchanged (`col[off 4, on 0]`). Swept the full `--damage-test`/`damage-hd` report
+across C1, C2 and C5: `gate1` is the only def either sweep or a name-by-name read flipped --
+`aagun32` (rescued, as before), `m_build01`, the C1 water tower, `agyrobus`, the C5 facade/window
+family and every other def measured byte-identical to before this change. `.\RunTests.ps1`: build,
+423 unit tests, 22 engine suites, all 13 goldens hash-identical.

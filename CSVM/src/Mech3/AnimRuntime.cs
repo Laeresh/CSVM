@@ -1317,9 +1317,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         };
     }
 
-    /// <summary>The role an <c>OBJECT_ACTIVE_STATE</c> event names â€” <c>node</c> for the compiled
-    /// shape, <c>name</c> for the hand-authored one. Matches the exact role words
-    /// (healthy/destroyed/dbase), never a <c>_dest</c> suffix (docs/formats/destructibles.md).</summary>
+    /// <summary>The node name an event targets — <c>node</c> for most compiled kinds
+    /// (<c>ObjectMotion</c>), <c>name</c> for others (<c>ObjectActiveState</c>'s hand-authored
+    /// shape, <c>ObjectMotionFromTo</c>, <c>ObjectOpacityFromTo</c>/<c>ObjectOpacityState</c>).
+    /// Matches the exact healthy/destroyed/dbase role words where that matters, never a
+    /// <c>_dest</c> suffix (docs/formats/destructibles.md).</summary>
     private static string RoleName(AnimEvent ev) => ev.Data.Str("node") ?? ev.Data.Str("name") ?? "";
 
     /// <summary>Does <paramref name="target"/>'s own sequences author the healthy/destroyed
@@ -1337,6 +1339,39 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return (active && (name.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
                                 || name.Contains("dbase", StringComparison.OrdinalIgnoreCase)))
                 || (!active && name.Contains("healthy", StringComparison.OrdinalIgnoreCase));
+        }));
+
+    /// <summary>Does <paramref name="def"/>'s own Initial sequences author a visible death on a
+    /// node OUTSIDE the healthy/destroyed/dbase role set — a piece moved/tumbled
+    /// (<c>ObjectMotionFromTo</c>/<c>ObjectMotion</c>), faded (<c>ObjectOpacityFromTo</c>/
+    /// <c>ObjectOpacityState</c>), or switched off (<c>ObjectActiveState … false</c>)? gate1's
+    /// door1/door2 are exactly this: the doors falling and fading over ~1–6.7 s IS the authored
+    /// death, and the data simply never gives the archway a destroyed variant to swap to (BL-254,
+    /// 2026-08-04 — the user's recall of the original: gate1's archway is not destructible at
+    /// all). Used by <see cref="RunDeathSequence"/> to withhold <see cref="ApplyDeathSwap"/>'s
+    /// RESET-derived rescue from a def whose death look was a deliberate choice, reserving the
+    /// rescue for the C1 AA guns' shape: a <c>DAMAGE_SEQUENCE</c> of puffer calls only, nothing
+    /// that would otherwise make the kill visible at all.</summary>
+    private static bool AuthorsVisibleDeath(AnimDefinition def) =>
+        def.Sequences.Where(s => !s.OnCallOnly).Any(seq => seq.Events.Any(ev =>
+        {
+            bool isDeathKind = ev.Kind is "ObjectMotionFromTo" or "ObjectMotion"
+                or "ObjectOpacityFromTo" or "ObjectOpacityState"
+                or "ObjectActiveState";
+            if (!isDeathKind)
+                return false;
+            var name = RoleName(ev);
+            if (name.Length == 0)
+                return false;
+            bool isRoleNode = name.Contains("healthy", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("dbase", StringComparison.OrdinalIgnoreCase);
+            if (isRoleNode)
+                return false;
+            // An ACTIVE_STATE only counts switching a piece OFF — turning one ON authors
+            // nothing visible on its own (and would otherwise flag every def with an
+            // unrelated startup toggle).
+            return ev.Kind != "ObjectActiveState" || !ev.Data.Bool("state");
         }));
 
     private static string Describe(object? value) => value switch
@@ -3015,8 +3050,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <c>gate2_doorblast</c> ends with <c>CALL_ANIMATION blockit2 START_TIME EVENT_OFFSET 28.5</c>
     /// and <c>blockit2</c> is where the swap, fireball and flying archway pieces actually live.
     /// Firing the RESET-derived fallback at t=0 there would blank the wreck 28.5 s before the
-    /// authored explosion gets to run against it. <c>gate1</c> has no such target â€” its
-    /// <c>gate1_doorblast</c> calls only its two fires â€” so it keeps the immediate fallback.</para></summary>
+    /// authored explosion gets to run against it.</para>
+    ///
+    /// <para>It also yields when the def's OWN Initial sequences already author a visible death
+    /// on a node outside the healthy/destroyed/dbase role set (<see
+    /// cref="AuthorsVisibleDeath"/>) â€” gate1's studio doors, whose fall-and-fade over ~1â€“6.7 s IS
+    /// the authored death; the data simply never gives its archway a destroyed variant, because in
+    /// the original gate1's archway is not destructible at all (BL-254, 2026-08-04). Firing the
+    /// fallback there swapped the healthy archway for a wreck it does not own and opened a passage
+    /// that should stay solid. The AA guns are the opposite shape the fallback still has to
+    /// rescue: their only Initial sequence is a <c>DAMAGE_SEQUENCE</c> of puffer calls, so without
+    /// it they would die with nothing at all switching off â€” invisibly.</para></summary>
     private void RunDeathSequence(DestructibleRegistry.Instance inst)
     {
         Start(inst.Def, inst.Anchor, protectSelfInvalidate: true);
@@ -3025,6 +3069,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             inst.ChainedDeathDef = chained;
             return;
         }
+        if (AuthorsVisibleDeath(inst.Def))
+            return;
         ApplyDeathSwap(inst);
     }
 

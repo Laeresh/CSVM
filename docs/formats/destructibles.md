@@ -232,9 +232,21 @@ which pieces that covers. A format reader should know the current wiring:
       the authored explosion got to run against it (`BL-254`); `AnimRuntime` now resolves one level
       of `CALL_ANIMATION` targets the same way the dispatcher itself does and skips the fallback
       when a target authors the swap, so it arrives with the rest of `blockit2`'s effects instead.
-      `gate1` has **no** such target — `gate1_doorblast` calls only its two fires — so it keeps the
-      immediate RESET-derived fallback; the two studio gates are deliberately asymmetric in the
-      shipped data.
+    - **The fallback also yields when the def's own death already authors a visible destruction
+      that simply omits the swap — the rescue is for a death that would otherwise show NOTHING.**
+      `gate1` looked exactly like the AA-gun shape the fallback exists for (RESET declares
+      `destroyed`, no swap authored anywhere, no chained def), but in the original gate1's archway
+      is not destructible at all — only its doors are (`BL-254`, 2026-08-04, user recall). The two
+      cases are told apart by what the def's OWN Initial sequences author: the AA guns'
+      (`aagun32`–`36`) only sequence is a `DAMAGE_SEQUENCE` of pure `If`/`CallAnimation` puffer
+      calls — no `ObjectMotionFromTo`/`ObjectMotion`/opacity/active-state event at all, so without
+      the fallback they die invisibly. `gate1_doorblast` authors `door1`/`door2`'s own rotate,
+      fade and deactivate directly — a deliberate, complete death that happens to leave the
+      archway alone. `AnimRuntime.AuthorsVisibleDeath` scans for that shape (a move/fade/deactivate
+      on a node outside the healthy/destroyed/dbase role set) and withholds the fallback when it
+      finds one, so `gate1`'s archway now stays visible and solid permanently while its doors still
+      fall and fade; `gate2` (chained swap, handled above), `kkgate`, `m_build01`, the C1 water
+      tower, `agyrobus` and the C5 facade/window family all measured unchanged by this rule.
   - `reng11`'s wreck is a separately-`CALL_ANIMATION`'d template (`mp1reng_destroyed.flt`), not a
     child of the anchor — it stages correctly, alongside its `large_fireball`.
 - **The debris tumbles (C26).** The wreck pieces fly: on death the def's `OBJECT_MOTION` events —
@@ -291,21 +303,23 @@ which pieces that covers. A format reader should know the current wiring:
   collidable, destroyed hidden — undoing both the swap and the `ApplyDeathSwap` fallback), and restores
   the instance's HP/status/stage. It is idempotent: **destroy → reset → destroy produces identical
   results.** Verified across C1/C2/C5 — every type (buildings, towers, the AA gun's RESET-derived swap,
-  the doors' rotated leaves, the propane gate, agyrobus, the facades) returns `healthy=✓` and re-kills
-  in the same hit count.
+  the doors' rotated leaves, the propane gate, agyrobus, the facades, and `gate1`'s permanently-solid
+  archway) returns `healthy=✓` and re-kills in the same hit count.
 - **Collision follows the swap for free (C25).** The `OBJECT_ACTIVE_STATE` swap toggles
   `SetSubtreeActive`, which disables/enables the subtree's *colliders* alongside its visibility — so
   the death that hides the healthy geometry also stops it blocking flight, and the wreck it shows
   becomes solid, with **no separate collider code**. Measured on the C2 (Hollywood) gates: killing
-  `gate1` switches **off** its healthy collider and **on** the wreck ones immediately; killing
-  `kkgate` does the same (it also chains the bridge fires). C1 buildings match (`m_build01`).
-  **`gate2` is the one exception, since `BL-254` (2026-08-04):** its swap — and so its collider
-  flip — is deferred to `blockit2`, the `CALL_ANIMATION` `gate2_doorblast` schedules 28.5 s into
-  the death; a census taken at kill time reads no change at all (`off 0, on 0`), by design — see
-  the RESET_STATE-fallback bullet above. The one caveat for the rest is the **owed in-flight
-  playtest**: the destroyed variant re-adds its own colliders, so whether a blown-open door
-  actually leaves a clear passage is
-  the original data's call, not something the swap can decide — fly through one to confirm.
+  `kkgate` switches its healthy collider **off** and the wreck ones **on** immediately (it also
+  chains the bridge fires). C1 buildings match (`m_build01`). The studio gates are each an
+  exception, in opposite directions, since `BL-254` (2026-08-04): **`gate2`'s** swap — and so its
+  collider flip — is deferred to `blockit2`, the `CALL_ANIMATION` `gate2_doorblast` schedules
+  28.5 s into the death; a census taken at kill time reads no change at all (`off 0, on 0`), by
+  design. **`gate1`'s** archway never swaps at all — its collider census reads `off 0, on 0` at
+  every kill, permanently — only its doors' own collider drop (on their own ~1–6.7 s rotate/fade
+  timeline, unrelated to the swap) removes anything solid; see the RESET_STATE-fallback bullet
+  above for both. The one caveat for the rest is the **owed in-flight playtest**: the destroyed
+  variant re-adds its own colliders, so whether a blown-open door actually leaves a clear passage
+  is the original data's call, not something the swap can decide — fly through one to confirm.
   - **The propane→door chain works end to end.** Hollywood's `kkgate` is a WeaponHit destructible
     whose `ANIMATION_ROOT_NAME` is the **`propane` tank** (a collidable, therefore shootable node),
     HEALTH 10; shooting *it* runs the gate's death — the healthy→destroyed swap plus `CallAnimation`
