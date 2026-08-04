@@ -383,10 +383,6 @@ unscheduled.
   swapping winner on 1.76% of the frame under a 1 mm camera move (`verification.md` INSTR-8), so
   screenshots taken before 2026-08-04 show an arbitrary winner, not a decision.
   *Playtest after fix:* `CAP-23` (water vs shoreline order, `playtest.md`).
-- `BL-057` **`zone_set` is parsed by nothing** (`grep zone_set CSVM/src` → 0 hits). It is a **per-polygon**
-  weather-zone membership list (C5 uses 1 and 3). Not a ground selector — that was checked and
-  ruled out — but a real unparsed field, and the per-polygon granularity is interesting given
-  weather zones are otherwise handled per chapter.
 - `BL-250` **C5 draws doubled clutter buildings — confirmed, strong candidate fix, blocked on
   `CAP-22`.** Answers the question the subface report (`analysis/item9-depth-bias/CBLOCK-LOD.md`)
   left open: `cblock4/5/6` carry their own **disjoint** clutter building templates (`cb12a`–`cb24a`)

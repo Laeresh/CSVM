@@ -31,6 +31,42 @@ Part of the [format documentation](README.md) (see also [gamez.md](gamez.md), [c
   every zone's geometry simultaneously; which zone is active is not in any data file (see
   weather.md), which is why this stays unimplemented rather than guessed. Note `zone_id` does
   *not* explain the C5 coarse/fine ground pair — those are all `zone_id=1`.
+- **`zone_set` — every polygon carries one (decoded 2026-08-04, `BL-057`, parse+census only, no
+  rendering change).** A per-**polygon** list field (unified extraction shape `zone_set`; upstream's
+  current Polygon struct spelling, absent on a legacy v0.6.1 tree) — finer-grained than `zone_id`,
+  which is per-node. Every polygon in the install carries **at most one** value where the array is
+  non-empty (verified: zero polygons with 2+ entries in all 8 chapters + planes.zbd), so
+  `GameZPolygon.ZoneSet` keeps just that value (`int?`, null when the array is empty or the field is
+  absent). Counts per chapter (polygons whose `zone_set` is non-empty, broken out by value; the
+  remainder ship an empty array):
+
+  | | total polys | empty `[]` | `-1` | `0` | `1` | `2` | `3` |
+  |---|---|---|---|---|---|---|---|
+  | C1 | 18,277 | 3,396 | 8,875 | 10 | 5,623 | 373 | — |
+  | C1B | 8,323 | 3,107 | 3,336 | 14 | 1,866 | — | — |
+  | C1C | 8,040 | 3,262 | 3,698 | — | 586 | 494 | — |
+  | C2 | 12,645 | 4,320 | 4,277 | 26 | 4,022 | — | — |
+  | C2B | 7,008 | 2,869 | 3,234 | — | 587 | 318 | — |
+  | C3 | 16,087 | 5,466 | 4,975 | 10 | 5,636 | — | — |
+  | C4 | 19,661 | 5,259 | 6,217 | 2 | 6,122 | 2,061 | — |
+  | C5 | 22,493 | 6,616 | 10,558 | 44 | 3,307 | — | 1,968 |
+  | planes.zbd | 16,200 | 15,327 | 873 | — | — | — | — |
+
+  The `-1`/`1`/`2`/`3` values and their per-chapter availability line up exactly with `zone_id`'s
+  numbering above (C5 has no `zone2` and carries `3` instead, C1C/C2B/C4 have a `zone2` and carry
+  `2`, everyone else tops out at `1`) — the same reasonable read is that `-1` means "no zone
+  restriction", by analogy with `zone_id`'s "always" value, but that is not established by this
+  item and is not acted on. **`0` is unexplained** — it is not one of `zone_id`'s or `weather.md`'s
+  zone numbers, appears only in five chapters (C1, C1B, C2, C3, C4 — never C1C/C2B/C5), and is rare
+  everywhere (2–44 polygons per chapter that has it at all) — a lead for a future item, not guessed
+  here. `planes.zbd` carries the field too, but only ever `-1`, on a small minority (873/16,200) of
+  its polygons.
+
+  **Not a ground selector — checked and ruled out** (the original backlog evidence): this is *not*
+  what picks between coarse/fine ground variants or any other content swap. **Which zone is active
+  is not in any data file** (the same unresolved question as `zone_id`, see weather.md) — nothing in
+  `CSVM/src` reads `ZoneSet`, and per the plan's ground rules a wrong guess here would delete visible
+  content, so no rendering consequence is drawn from it in this item.
 - **Authoring gizmos: a lone untextured triangle is a marker, never scenery (decoded 2026-08-01).**
   Mission and AI anchors are mesh-less empty nodes, but many carry one **single-polygon,
   three-vertex mesh whose only material is `Colored`** — the level editor's visual mark for the

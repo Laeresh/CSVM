@@ -13548,3 +13548,45 @@ capture before anything is concluded. It does not weaken the Doppler finding —
 barely panned and barely attenuated is certainly not being pitch-shifted.
 
 Verify: read-only analysis, no engine code touched, no `RunTests.ps1` run required.
+
+## 2026-08-04 — M3 polish-6 A5
+
+**M3 polish-6 A5 landed: `zone_set` is parsed and censused, docs-only (2026-08-04).** `BL-057`
+flagged a per-polygon weather-zone membership list that nothing in `CSVM/src` read. `GameZ.ParseMeshes`
+now reads the unified-shape `zone_set` array into `GameZPolygon.ZoneSet` (`int?`; null when the field
+is absent — a legacy v0.6.1 tree — or the array is empty). Every non-empty array in the install holds
+exactly one value (verified: zero polygons with 2+ entries, checked across all 8 chapters + planes.zbd
+by scanning the raw extracted JSON), so only the first element is kept.
+
+**Census** (112,534 world polygons across the 8 chapters, plus planes.zbd's 16,200):
+
+| | total | empty | `-1` | `0` | `1` | `2` | `3` |
+|---|---|---|---|---|---|---|---|
+| C1 | 18,277 | 3,396 | 8,875 | 10 | 5,623 | 373 | — |
+| C1B | 8,323 | 3,107 | 3,336 | 14 | 1,866 | — | — |
+| C1C | 8,040 | 3,262 | 3,698 | — | 586 | 494 | — |
+| C2 | 12,645 | 4,320 | 4,277 | 26 | 4,022 | — | — |
+| C2B | 7,008 | 2,869 | 3,234 | — | 587 | 318 | — |
+| C3 | 16,087 | 5,466 | 4,975 | 10 | 5,636 | — | — |
+| C4 | 19,661 | 5,259 | 6,217 | 2 | 6,122 | 2,061 | — |
+| C5 | 22,493 | 6,616 | 10,558 | 44 | 3,307 | — | 1,968 |
+| planes.zbd | 16,200 | 15,327 | 873 | — | — | — | — |
+
+The `-1`/`1`/`2`/`3` values and which chapters carry which line up exactly with the existing
+`zone_id` node-level numbering (`world-structure.md`) — C5 has no `zone2` and carries `3` instead,
+C1C/C2B/C4 have a `zone2` and carry `2`, everyone else tops out at `1` — so `-1` reads plausibly as
+"no zone restriction" by the same analogy `zone_id` already documents, but that reading is not
+established here and is not acted on. **`0` is a new, unexplained value**: it is not one of
+`zone_id`'s or `weather.md`'s zone numbers, appears only in C1/C1B/C2/C3/C4 (never C1C/C2B/C5), and
+is rare wherever it appears (2-44 polygons) — left as a documented lead, not guessed. Not a ground
+selector, checked and ruled out (the backlog's own evidence, reconfirmed here — nothing in the
+census correlates with the C5 coarse/fine ground pair).
+
+**No rendering change lands, by design** — the plan scoped this item docs-first, and `BL-036`'s rule
+still stands: which zone a mission activates is in no file in the install, so acting on `ZoneSet`
+without that answer would risk deleting visible content, same as `zone_id`. Docs:
+`docs/formats/world-structure.md`'s new `zone_set` bullet (full table + the reasoning above),
+`docs/architecture.md`'s `GameZ.cs` bullet. Verified: `.\RunTests.ps1` — build/units/engine/goldens
+all green, 13/13 golden hashes unchanged (nothing consumes the new field, so no build output can
+move); 8-chapter `--freecam` regression shows identical mesh/node counts in every chapter. `BL-057`
+closes (deleted from `backlog.md`).

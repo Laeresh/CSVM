@@ -82,7 +82,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☑ A2 `BL-056` — render the per-polygon second material pass
 3. ☑ A3 `BL-058` — answer the C5 doubled-buildings question (post-subface check)
 4. ☑ A4 `BL-053` — dense cross-node conflict rank for the depth bias
-5. ☐ A5 `BL-057` — parse + census `zone_set`, document it
+5. ☑ A5 `BL-057` — parse + census `zone_set`, document it
 
 ### Wave B — animation runtime: dropped data and late dispatch
 
@@ -281,7 +281,7 @@ moved and were rebaselined, the two with no world build hash-identical. The fide
 the analysis raised is written back as `BL-251`/`CAP-23`, not assumed. Full record:
 `analysis/bl-053-dense-rank/FINDINGS.md` and `docs/HISTORY.md` 2026-08-04.
 
-## A5 ☐ `BL-057` — parse + census `zone_set`, document it
+## A5 ☑ `BL-057` — parse + census `zone_set`, document it
 
 **Goal.** `zone_set` — the per-polygon weather-zone membership list nothing parses (zero hits in
 `CSVM/src`, re-verified 2026-08-03) — is parsed into the reader model, censused across chapters,
@@ -304,6 +304,16 @@ deliverable.
 
 **⚠ Traps.** Do not act on the parsed values — `BL-036`'s rule stands: which zone a mission
 activates is in no file in the install, and a wrong guess deletes visible content.
+
+**Landed 2026-08-04.** `GameZ.ParseMeshes` reads the unified-shape `zone_set` list into
+`GameZPolygon.ZoneSet` (`int?`; null on a legacy tree or an empty array). Every polygon in the
+install carries at most one value where non-empty (verified zero 2+-element arrays across all 8
+chapters + planes.zbd). Census (112,534 world polygons + 16,200 plane polygons): the `-1`/`1`/`2`/`3`
+values and their per-chapter availability line up with `zone_id`'s existing `-1`/zone1/zone2/zone3
+numbering; `0` is a new, unexplained, rare (2-44/chapter) value absent from C1C/C2B/C5, left as a
+lead. No rendering change lands — nothing reads `ZoneSet`. Docs: `docs/formats/world-structure.md`'s
+`zone_set` bullet (full table) + `docs/architecture.md`'s `GameZ.cs` bullet. Full record:
+`docs/HISTORY.md` 2026-08-04.
 
 # Wave B — animation runtime: dropped data and late dispatch
 

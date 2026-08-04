@@ -357,6 +357,13 @@ public sealed class GameZ
                 // since identified and renamed it to "priority" — accept both spellings.
                 if (p.TryGetProperty("unk04", out var pr) || p.TryGetProperty("priority", out pr))
                     poly.Priority = pr.GetInt32();
+                // Per-polygon weather-zone membership list (unified-shape only; absent on a
+                // legacy tree, where ZoneSet stays null). Every polygon in this install carries
+                // at most one value — see the docs/formats/world-structure.md census — so only
+                // the first element is kept; an empty array also leaves ZoneSet null.
+                if (p.TryGetProperty("zone_set", out var zsArr) && zsArr.ValueKind == JsonValueKind.Array
+                    && zsArr.GetArrayLength() > 0)
+                    poly.ZoneSet = zsArr[0].GetInt32();
                 if (p.TryGetProperty("vertex_colors", out var vcs) && vcs.ValueKind == JsonValueKind.Array)
                 {
                     // Baked per-corner lighting (RGB 0-255); the original engine renders
@@ -613,6 +620,13 @@ public sealed class GameZPolygon
     // SubfaceBias. Carried by terrain patches (terpat*), cliff/river transitions, piers
     // and C5's cblock street layer — 658 polygons in C5, none at all in C1B.
     public bool Subface;
+    // Per-polygon weather-zone membership (unified-shape "zone_set"; decoded 2026-08-04,
+    // BL-057). Null when the field is absent (legacy tree) or the array is empty; every
+    // polygon in this install carries at most one value where present, matching the
+    // node-level zone_id's -1/1/2/3 numbering (see docs/formats/world-structure.md's
+    // census). Nothing reads this yet — which zone is active is not in any data file
+    // (see zone_id), so this stays parse-only per the plan's ground rules.
+    public int? ZoneSet;
 
     public List<int> VertexIndices { get; } = new();
 }

@@ -227,6 +227,9 @@ Parses the WHOLE per-polygon `materials` list: element 0 is the base skin, the r
 as extra surfaces — 619 polygons install-wide, none in planes.zbd (docs/formats/gamez.md).
 ⚠ ModelType/FacadeMode/TextureScroll are unified-only: null/zero on a legacy tree, SceneBuilder
   falls back to its texture-name heuristic. Reading both shapes keeps a v0.6.1 rollback data-only.
+Parses the per-polygon `zone_set` list into `GameZPolygon.ZoneSet` (`int?`, unified-only; at most
+one value per polygon install-wide — docs/formats/world-structure.md's census); nothing reads it
+yet, parse+census only (`BL-057`).
 
 ## src/Mech3/TextureArchive.cs
 Texture lookup over an unzbd texture zip or unpacked PNG dir; absorbs the stored-name quirks
