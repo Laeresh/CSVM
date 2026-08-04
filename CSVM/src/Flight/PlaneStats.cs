@@ -21,16 +21,20 @@ public readonly struct SoundCurve
 
 /// <summary>One entry of a vehicle def's 'destroyable_parts' block:
 /// a damageable airframe section — nose / tail / leftwing / rightwing for the
-/// player planes — with its hit points and state-change anims. 'critical' means
-/// the plane is destroyed when this part's HP reaches 0; the tail additionally
-/// carries 'engine' (power loss on destruction — flight-handling penalties are
-/// not modeled yet, recorded only). InjureAnims maps descending
+/// player planes — with its hit points, its armor pool, and state-change anims.
+/// The pair is (hit points, armor) — armor is spent first (`BL-085`,
+/// docs/formats/vehicle.md "The hp pair: armor + hit points"); a def with only one
+/// float carries no armor (`MaxArmor` stays 0), it is not duplicated from MaxHp.
+/// 'critical' means the plane is destroyed when this part's HP reaches 0; the tail
+/// additionally carries 'engine' (power loss on destruction — flight-handling
+/// penalties are not modeled yet, recorded only). InjureAnims maps descending
 /// HP fractions to anim names: the *_damage_green/yellow/red cockpit-indicator
 /// cycle plus the pdpanelN torn-skin panel flips (DamageVisuals wires the panels).</summary>
 public sealed class DestroyablePart
 {
     public string Name = "";
     public float MaxHp = 20f;
+    public float MaxArmor;
     public bool Critical;
     public bool Engine;
     public string? GotHitAnim;
@@ -233,9 +237,10 @@ public sealed class PlaneStats
         }
 
         // destroyable_parts: nearest def in the chain that has the block. Each part
-        // is [name, hp, hp, flags…, "got_hit_anim", [anim, root], "injure_anims",
-        // [[frac, anim, root], …]] — the two hp values are identical for the player
-        // defs (AI variants differ); the first is taken as max HP.
+        // is [name, hp, armor, flags…, "got_hit_anim", [anim, root], "injure_anims",
+        // [[frac, anim, root], …]] — the pair is (hit points, armor); the two values
+        // are equal for the stock player defs (AI variants and the armory diverge
+        // them), and a def carrying only one float has no armor.
         foreach (var d in chain)
         {
             if (d.List("destroyable_parts") is not { } partsList)
@@ -245,7 +250,7 @@ public sealed class PlaneStats
                 if (item is not List<object?> p || p.Count == 0 || p[0] is not string partName)
                     continue;
                 var part = new DestroyablePart { Name = partName };
-                bool hpSet = false;
+                bool hpSet = false, armorSet = false;
                 for (int i = 1; i < p.Count; i++)
                 {
                     switch (p[i])
@@ -253,6 +258,10 @@ public sealed class PlaneStats
                         case float hp when !hpSet:
                             part.MaxHp = hp;
                             hpSet = true;
+                            break;
+                        case float armor when !armorSet:
+                            part.MaxArmor = armor;
+                            armorSet = true;
                             break;
                         case "critical":
                             part.Critical = true;

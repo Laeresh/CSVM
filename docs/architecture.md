@@ -1071,8 +1071,8 @@ Typed per-plane stats: vehicle.json `dynamics` (resolved through the `kind_of` d
 engines.json stock engine power + player.json globals (the flight constants and the near-miss cue's
 `warning_shot_*` block), the `engine_sound` def name with its
 volume/pitch `SoundCurve`s (clamped two-point ramps), `destroyable_parts` → `DestroyablePart`
-records (name, max HP, `critical`/`engine` flags, `got_hit_anim`, per-part `injure_anims`), and
-the def-level `VehicleInjureAnims`. Schema: docs/formats/vehicle.md.
+records (name, max HP, max armor, `critical`/`engine` flags, `got_hit_anim`, per-part
+`injure_anims`), and the def-level `VehicleInjureAnims`. Schema: docs/formats/vehicle.md.
 ⚠ Def-level injure_anims are consumed as ANY-part HP fractions, not per-part — see DamageVisuals.
 ⚠ `damaged_engine_sound` is now parsed (`DamagedEngineSound` + `DamagedEngineGain`); only
   `cockpit_engine_sound` remains unparsed — it needs a cockpit view (`BL-161`).
@@ -1422,22 +1422,27 @@ free camera left the eye.
 ⚠ The stunt/race AllComplete freeze runs BEFORE the crash branch; Respawn never resets a mid-run stunt.
 
 ## src/Flight/PlaneDamage.cs
-Per-part hit points from vehicle.json destroyable_parts (via PlaneStats). MapStruckPart maps a
-struck collider box + plane-local impact to the data part: wing/canard by impact X sign (left =
-−X), fuselage fore/aft of z 0 → nose/tail. Apply subtracts, Reset refills on respawn, Summary
-feeds the HUD DMG line, WorstFraction (lowest part fraction, 1f pristine) feeds whole-plane
-feedback like FlightAudio's damaged-engine loop.
+Per-part armor + hit points from vehicle.json destroyable_parts (via PlaneStats). MapStruckPart
+maps a struck collider box + plane-local impact to the data part: wing/canard by impact X sign
+(left = −X), fuselage fore/aft of z 0 → nose/tail. Apply(part, healthDamage, armorDamage) spends
+armor first and carries the share armor could not absorb into health within the same shot, scaled
+by the round's health magnitude — so a bare zone takes exactly HEALTH_DAMAGE; the one-magnitude
+overload (collisions) spends that amount across both pools. Reset refills both on respawn, Summary
+feeds the HUD DMG line, Fraction/WorstFraction are the COMBINED armor+health progression (the scale
+the injure_anims thresholds are on), feeding whole-plane feedback like FlightAudio's damaged-engine
+loop.
 ⚠ The "tail" arm ignores localImpact and is correct only because PlaneCollider.Relabel hands it
   no outboard boxes — do not fix tail sidedness here; widening the signature was rejected.
 ⚠ The `engine` flag (power loss) is unwired **by design, not deferred** — the original states damage
   never degrades performance; but the shipped data still sets the flag, so retail may have walked
   that back (docs/formats/vehicle.md).
-⚠ There is no armour pool anywhere in the collision path: Apply is a flat subtract on one Hp, and
-  FlightController.Crash never calls in at all (a crash is a boolean destroy). Do not assume armour
-  is spent first on a graze or a crash — it is not modelled.
+⚠ A stock zone's effective pool is DOUBLE its MaxHp (armor == hp on all 88 shipped entries, spent
+  first) — faithful to the original, not a regression to tune away. Armor at 0 is a stripped zone,
+  not a dead one: only Hp ≤ 0 downs a critical part. FlightController.Crash still never calls in
+  (a hard hit is a boolean destroy) and player.json's crash block is still unbound (`BL-172`).
 
 ## src/Flight/DamageVisuals.cs
-Visible damage driven purely by data thresholds: as a part's HP fraction crosses an injure_anims
+Visible damage driven purely by data thresholds: as a part's combined armor+HP fraction crosses an injure_anims
 entry it shows the torn pdpN panel, hides the healthy skin, and assigns a discrete-puff fire trail
 from the emitter pool; def-level player_smoketrail starts the nose smoke/fire pair. UpdateStatic
 burns the trails in place at StaticBurnSpeed for the parked damage lab. A `<part>_damage_effects`
@@ -1456,12 +1461,19 @@ blocked on enemy fire (`BL-222`); do not add the entry to other planes to "fix" 
   vice versa; diagnose them separately.
 
 ## src/Flight/DamageLab.cs
-The damage lab (F5 toggles): one HP slider per destroyable part with threshold readouts, plus a
-mirrored GaugeCluster damage dial in the viewer; presets (--damage=part:frac) land through the same
+The damage lab (F5 toggles): one armor slider (parts the data gives an armor pool) plus one health
+slider per destroyable part, each independent (`BL-085`) — `PartFrac` (Health, Armor, Combined)
+is what an `IDamageLabTarget` reads/writes, `Combined` is `DamageLab`'s own derived (armorFrac×
+MaxArmor + healthFrac×MaxHp)/(MaxArmor+MaxHp), the scale the injure_anims thresholds and the
+mirrored GaugeCluster damage dial are on. Presets (--damage=part:frac) set both of a part's sliders
+to the same fraction (no CLI syntax yet for the two pools independently) and land through the same
 ValueChanged path as a hand drag. One panel, two hosts, chosen by the injected IDamageLabTarget
-(same file): ViewerDamageTarget drives DamageVisuals on a parked plane, FlightDamageTarget writes
-P1's real PlaneDamage while the sim runs. It never reimplements visuals, only decides when to
-rebuild them.
+(same file): ViewerDamageTarget drives DamageVisuals on a parked plane from `Combined` alone (it
+holds no model), FlightDamageTarget writes P1's real PlaneDamage — each pool through its own
+single-pool `PlaneDamage.Apply(part, healthDamage, armorDamage)` call after `Reset` (armor's with
+healthDamage=0, health's with armorDamage=0), which is what lets a slider pair reach armor=0/
+health=full or the reverse; the armor-first shot model a real hit spends through cannot reach
+either extreme on its own. Neither target reimplements visuals, only decides when to rebuild them.
 ⚠ Reapply's crossed-anim set-diff (TargetAnims) is load-bearing twice: it implements repair
   (re-derives from pristine) and keeps a slider drag from restarting the fires at every pixel.
 ⚠ Built in EVERY viewer AND flight session (StartHidden without --damage) so F5 has a receiver; two
@@ -1471,6 +1483,10 @@ rebuild them.
 ⚠ FlightDamageTarget.Tick is deliberately empty and it must not touch Gauges.PartFraction:
   FlightController already drives DamageVisuals from the live pose and binds the dial to the same
   PlaneDamage the sliders write. SyncFromTarget's read-back skips sliders being dragged.
+⚠ `--damage=` forces `DamageLab` (the CLI flag) false whenever `WorldMode` is set (`SessionSpec.cs`
+  ~1024) — a chaptered `--fly --damage=` still builds and presets the panel, just hidden behind F5,
+  not open on launch; only a chapter-less `--viewer --damage=` opens it immediately. Pre-existing,
+  not a B12 change.
 
 ## src/Flight/CompassTape.cs
 The original's top-centre heading tape rebuilt from the game's own compassticks2/compasstxt
@@ -1487,7 +1503,13 @@ The original's cockpit dials as a screen-space HUD: altimeter, speedometer, dama
 the gun + missile weapon gauges (E35), all geometry extracted from the plane's own gauges subtree
 (structure/scales/quirks: docs/formats/hud.md); polys draw by data priority, rest rotations
 ignored; PartFraction binds flight or the lab; dial centres are bottom-anchored (FromBottom) so
-panes keep them on screen.
+panes keep them on screen. `DamageZoneColor(frac, yellowAt, orangeAt, redAt)` (`BL-085`/`BL-173`,
+`PLAN-armour-layer` C21) is the damage-dial band function — `frac` is `PartFraction`'s COMBINED
+armor+health value (both bound sources, flight and the lab, feed that scale; nothing here computes
+it), `yellowAt`/`orangeAt`/`redAt` are mined per-part from the data's own
+`*_damage_green/yellow/red` injure_anims. Both `Border` and `Fill` always take the same colour
+index — `BL-173`'s refuted fix shape was a synthetic per-pool ring split; there is only ever one
+colour per zone.
 ⚠ The gauge textures lie — compare pixel values, never appearances: the faces hold dark UNLIT
   copies of the STALL / LOW ALT windows (~58,0,0 unlit vs 180+,0,0 lit); bitten twice. The needle
   draws its shipped RGBA art untouched (the pointer silhouette is the rtexture-tier alpha, BL-048)

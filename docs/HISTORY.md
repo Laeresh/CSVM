@@ -12133,6 +12133,25 @@ over `--weapon-lab`/`--weapon-mount=`/`--weapon-fire`, `WeaponTestStillRoutesToT
 and stays in `viewer`. `.\RunTests.ps1`: build clean, 395/395 units, 21/21 engine suites, 13/13
 goldens hash-identical — the mode is additive, nothing built by another session moved.
 
+**PLAN-armour-layer A1: `DestroyablePart` gains `MaxArmor`; `PlaneStats` reads both values of the
+pair (2026-08-04).** `PlaneStats.cs`'s `destroyable_parts` parse loop took only the first float of
+each part's `[name, hp, hp, flags…]` entry (`part.MaxHp`, `hpSet` latch) and silently dropped the
+second — `docs/formats/vehicle.md` "The hp pair: armor + hit points" settled that dropped float as
+the zone's armor pool ([1] hit points, [2] armor, armor spent first). `DestroyablePart` now carries
+`MaxArmor` (default 0 — a one-float def means no armor, not equal armor, per the AI `r*` trap); the
+parse loop gained a second `case float when !armorSet` latch capturing it into `MaxArmor`, mirroring
+the existing `hpSet` pattern. No consumer reads `MaxArmor` yet — `PlaneDamage` still spends a single
+`Hp` pool; that is A2's job. `docs/architecture.md` (`PlaneStats.cs` entry) and
+`docs/formats/vehicle.md` (destroyable_parts block + the hp-pair heading, which had the pair
+backwards — "(armor, hit points)" corrected to "(hit points, armor)" to match its own [1]/[2] text
+two lines down) updated to record both fields as read.
+
+**Verified.** New `ExtractedGoldenTests.TheBloodhawkParsesBothHpAndArmorOnAllFourZones`: loads
+`player_bhawk` and asserts all four `DestroyableParts` read 20/20 (`MaxHp`/`MaxArmor`) — the
+canonical stock pair `docs/formats/vehicle.md` cites. `.\RunTests.ps1`: build clean, 423/423 units
+passing (was 422; one new test), 22/22 engine suites, 13/13 goldens hash-identical — no consumer
+reads the new field yet, so behaviour is unchanged as the plan's Verify step requires.
+
 **Note.** The lab does not yet actually build under `--weapon-lab` alone (no `--viewer`) — that is
 expected until A3 relocates its construction into the flight path; A1 only settles which mode the
 flag asks for.
@@ -14130,6 +14149,164 @@ in the build changes; goldens unaffected.
 
 **Verified.** Docs only — no build or test run.
 
+**M3 polish-6 D31: the C3 `cloud1`/`cloud2` magenta call decided (2026-08-04, no code).** `BL-133`
+— C3's gamez references `cloud1`/`cloud2`, which its own `texture.zbd` does not ship, a genuine
+retail-data gap true in both the v0.6.1 and fork extraction trees — was presented to the user both
+ways: suppress to neutral gray via `TextureArchive.KnownAbsentFromGameData` (the one-line addition,
+same treatment as `pir_spinner`/`barngrill`), or keep the diagnostic magenta the project's
+convention reserves for "our bug". **Decision: stays magenta, won't-fix-by-design.** The user has
+never encountered the pair at the controls and can revisit — add the two names to
+`KnownAbsentFromGameData` — if they ever do. No code changed; `KnownAbsentFromGameData` is
+untouched. `BL-133` closes and is deleted from `backlog.md`.
+
+This was the last open item of **M3 polish run 6**
+([`docs/plans/PLAN-m3-polish-6.md`](plans/PLAN-m3-polish-6.md)), now **COMPLETE**: node `active`
+honoured (A1), the per-polygon second material pass rendered (A2), the C5 doubled-buildings
+question answered (A3, `BL-058` closed, mechanism tracked as new `BL-250`), a dense cross-node
+depth-bias conflict rank landed (A4), `zone_set` parsed and censused (A5), the 26 (really 51) dead
+`FROM_TO` delta channels decoded and the dead plumbing removed (B11), the one-frame `CallSequence`
+dispatch lag re-deferred with a fresh measurement (B12), the silent golden-run exit-1 made
+capturable (C21), the static collider probe rewritten and its C4/C5 gap measured gone (C22), and
+this decision (D31). Archived under `docs/plans/`; its row is in
+[`docs/plans/plans.md`](plans/plans.md).
+
+
+**PLAN-armour-layer A2: `PlaneDamage` becomes two pools with an armour-first `Apply` (2026-08-04).**
+`PartState` was a single `float Hp` and `Apply` a flat subtract; it now carries `Hp` **and** `Armor`
+(both filled from the def, refilled by `Reset`), and `Apply(part, healthDamage, armorDamage)` spends
+armour first: `unabsorbed = (armorDamage - armourSpent) / armorDamage`, then
+`Hp -= healthDamage * unabsorbed`. **The overflow rule settled as a share of the round, not a
+carry of leftover points.** Both readings are point-for-point 1:1 whenever the two magnitudes are
+equal (every collision, and 30 of the 48 shipped `BALLISTICS` entries), which is the "1:1" `BL-085`
+and the spec describe; they differ on an unbalanced round, and only the share reading keeps retail
+string 3372 true — a bare zone takes exactly `HEALTH_DAMAGE`, so AP (`wep_32`, 4.5 armour / 1.5
+health) strips armour fast and does little to airframe, whereas spilling leftover *points* would
+have made AP the heaviest round against a stripped zone, re-inverting the ammo tier this item
+exists to fix. No shipped entry pairs `ARMOR_DAMAGE == 0` with a nonzero `HEALTH_DAMAGE` (checked
+over all 48), so a round with no armour magnitude is a definition, not a data case: it passes
+armour untouched. A single-magnitude overload (`Apply(part, damage)`) spends that amount across
+both pools for the collision path, which `player.json`'s `crash` block backs with equal
+`armor_damage_range`/`health_damage_range` — grazes therefore already spend armour first, and a
+stock zone's lifetime doubles, which is the intended faithful 2× (plan Decision 3), not a
+regression. `Critical` still triggers on `Hp <= 0` only: armour at 0 is a stripped zone, not a dead
+one. `Fraction`/`WorstFraction` are now the **combined** `(Hp + Armor) / (MaxHp + MaxArmor)`
+progression, with `HealthFraction`/`ArmorFraction` alongside for B12/C21; `Summary` prints both
+pools (`nose a0% h50%`), and `DamageLab`'s flight target drives the slider against the combined
+max so its readback still round-trips. World destructibles are untouched (health-only).
+
+**Plan Decision 6 settled, as the item required.** The shipped `injure_anims` fracs are on the
+combined scale. The standing worry ("0.72 fits the manual, 0.46 and 0.20 do not") compared the game
+manual's figures to the shipped fracs as if both were boundaries; the manual gives each band's
+*envelope*. At stock, 0.72 falls at 56 % of armour gone (manual yellow: up to 50 % armour — the one
+near-boundary, prose against data), 0.46 just past armour zero at 8 % of the airframe (manual
+orange: armour half-to-fully gone with up to 25 % airframe), 0.20 at 60 % of the airframe (manual
+red: 25–100 % airframe). Every frac lands inside its manual band, so C21 can feed the mined
+thresholds the combined fraction with no hand-authored constants. The health-only reading is dead:
+on it the manual's yellow band is unreachable, since nothing would react while armour is stripped.
+Left for B11's eyeball: the def-level `player_fuelleak` at 0.85 now fires while only armour is
+spent. `docs/architecture.md` (`PlaneDamage`, `PlaneStats`, `DamageVisuals`, `DamageLab` entries)
+and `docs/formats/hud.md` ("Thresholds", which now records the scale) updated.
+
+**Verified.** New `CSVM.Tests/PlaneDamageTests.cs`, 13 cases on hand-authored stock-Bloodhawk defs
+(20/20) driven with the real 30-calibre matrix: armour-first order; the exact boundary shot (four AP
+rounds leave 2 armour, the fifth carries 5/9 of its 1.5 health magnitude across); a stripped zone
+taking full `HEALTH_DAMAGE` and AP hurting it least; a def with no armour pool taking full health
+damage from the first shot; the single-magnitude overload spending exactly 30 across a 20/20 zone;
+neither pool going negative; stripping armour never emptying health; the combined fraction stepping
+0.75 → 0.5 → 0.25; `WorstFraction`; `Reset` refilling both; the two-pool `Summary`.
+`.\RunTests.ps1`: build clean, 436/436 units (was 423; 13 new), 22/22 engine suites, 13/13 goldens
+hash-identical — nothing on a golden path grazes, so the doubled zone lifetime moves no shot yet.
+
+**PLAN-armour-layer B11: the graze path's readouts confirmed two-pool-coherent (2026-08-04).**
+Tracing `FlightController.SurviveHit` before touching it found the routing already done: A2 had
+replaced the flat-subtract call in place with `Damage.Apply(dataPart, dmg)` (the single-magnitude
+overload), and `_damageFlashText` already read `state.Fraction` — the combined armour+health
+progression — so the impact flash and `Visuals?.OnPartDamage`/`FlightAudio`'s `damageFrac` (which
+reads `Damage.WorstFraction`) were coherent with the two-pool model with no code change. The one
+stale readout was the graze log line, which still printed only `hp={state.Hp}/{state.Def.MaxHp}`
+from the single-pool era; it now prints `armor={state.Armor}/{state.Def.MaxArmor}
+hp={state.Hp}/{state.Def.MaxHp}`. `Gauges?.OnPartDamage(dataPart)` (the 5 s dial blink) takes no
+pool value, so it needed nothing. `Crash()` still never consults `PlaneDamage`, per Decision 4.
+`GrazeMaxDamage`/`GrazeStopSpeed`/`GrazeFriction`/`GrazeKick` were left untouched, per the item's
+trap — the doubled zone lifetime is faithful (Decision 3), not something to retune here.
+
+**Verified.** `.\RunTests.ps1`: build clean, 436/436 units, 22/22 engine suites, 13/13 goldens
+hash-identical (no golden path grazes, so none were expected to move). The plan's `--fly` graze
+eyeball (flash/log readouts at the controls, armour depleting before health across repeated grazes,
+a stripped zone visibly degrading faster) is unread this session — no interactive flight was flown;
+flag for a playtest pass.
+
+**2026-08-04: `PLAN-armour-layer` B12 — the damage lab drives and reads both pools.** `PlaneDamage.Summary()`
+and the HUD DMG line already printed both pools (landed with A2/B11), so the only gap was the lab
+itself: one slider per part carried the *combined* armor+HP fraction, spent through the same
+armor-first shot model a real hit uses, which structurally cannot reach "armor 0, health full" or
+the reverse (armor absorbs everything below its own max first). Split each part into an armor
+slider (only for parts the data gives an armor pool) and a health slider, both independent;
+`IDamageLabTarget.Fraction`/`Apply` now carry a `PartFrac` (Health, Armor, Combined) triple instead
+of one float, where `Combined` is `DamageLab`'s own (armorFrac×MaxArmor + healthFrac×MaxHp)/
+(MaxArmor+MaxHp) — the scale the injure_anims thresholds and the mirrored gauge dial are on.
+`FlightDamageTarget.Apply` spends each pool through its own single-pool
+`PlaneDamage.Apply(part, healthDamage, armorDamage)` call after `Reset` (armor's with
+healthDamage=0, health's with armorDamage=0) — two independent single-pool spends is what reaches
+either extreme; a single two-pool `Apply` call, built for one weapon round's own (health, armor)
+magnitudes, cannot (its overflow arithmetic assumes the two magnitudes describe one shot, not two
+independently-dialled targets). The per-part readout now prints "a{armor%} ({armor}/{MaxArmor})
+h{health%} ({health}/{MaxHp})", matching `PlaneDamage.Summary()`'s style. `--damage=part:frac`
+presets both of a part's sliders to the same fraction — there is no CLI syntax yet for the two
+pools independently; recorded as an open TUNE, not chased here since nothing in the plan asked for
+it. `ViewerDamageTarget` (no real model) only ever fed `Combined` to `DamageVisuals`, unchanged in
+spirit.
+
+**Verified.** `.\RunTests.ps1`: build clean (0 warnings after fixing two StyleCop orderings),
+436/436 units, 22/22 engine suites, 13/13 goldens hash-identical. `--viewer --plane=player_bhawk
+--damage=nose:30` screenshot shows both sliders per part and the "a30% (6/20) h30% (6/20)" readout
+for `nose`. `--fly --plane=player_bhawk --damage="nose:0,tail:100"` (a chaptered `--fly`, so the
+panel starts hidden per `SessionSpec`'s pre-existing `--damage`+`WorldMode` rule, unrelated to this
+item) shows the HUD DMG line reading "DMG nose a0% h0%" — `tail:100` leaves that zone pristine, so
+it is correctly omitted — confirming the two independent `Apply` calls land exactly the dialled-in
+values rather than following the armor-first depletion curve. Gauge colour bands are still the
+pre-`C21` single-fraction mapping (unaffected here, in scope for `C21`).
+
+**2026-08-04: `PLAN-armour-layer` C21 — the gauge colour bands, and the plan completes.** A correct
+disproof of most of the item's own `Approach` section, not new plumbing: `GaugeCluster.cs` was
+untouched by every earlier item in this plan, yet both its `PartFraction` sources already fed the
+COMBINED armor+health fraction by the time this item started — `FlightRigAssembler.cs:201-202`
+reads `PlaneDamage.PartState.Fraction`, which A2 silently redefined to the combined scale (Decision
+6) without that call site changing at all, and `DamageLab.cs`'s own gauge binding was fixed in B12
+(`CombinedFractionOf`). So the `Approach`'s proposal — pass the (armourFrac, healthFrac) **pair**
+through `PartFraction` and hand-author a 50%/25% band function over it — was already dead: Decision
+6 (settled during A2) had confirmed the mined per-part thresholds (0.72/0.46/0.20,
+`docs/formats/hud.md` "Thresholds") reproduce the manual's four bands on the combined scale with no
+hand-authored constants, and both flight and the lab were already feeding that scale in. The one
+real gap: the inline `frac > z.YellowAt ? 0 : …` in `GaugeCluster._Draw` had no name and no test,
+unlike `GunIndicatorColor`/`HardpointIndicatorColor` beside it. Extracted it as
+`GaugeCluster.DamageZoneColor(frac, yellowAt, orangeAt, redAt)` (behaviour-identical — `_Draw` now
+calls it) and extended the `gauge-colours` suite to reproduce Decision 6's own arithmetic as a
+regression: on a stock zone (armor == hp == 20), spending armor via
+`PlaneDamage.Apply(part, 0, armorDamage)` then health via `Apply(part, healthDamage, 0)` (two
+independent single-pool spends — the same technique B12's lab uses, since the two-pool `Apply`
+describes one shot's own magnitudes, not two independently-dialled targets) lands the combined
+fraction on **exactly** 0.72 at 56% of the armor gone, 0.46 at armor-zero-plus-8%-airframe, and 0.20
+at 60%-airframe. Both `Border` and `Fill` were already driven by the one `color` value — the
+lockstep-rings structure Decision 5/`BL-173` wanted was never the bug.
+
+**Verified.** `.\RunTests.ps1`: build clean, 436/436 units, 22/22 engine suites (new checkpoint
+assertions pass bit-exact, not approximately), 13/13 goldens hash-identical (no rendering behaviour
+changed — the extraction is a pure refactor). `--viewer --damage="nose:90,tail:60,leftwing:35,
+rightwing:10"` screenshot (cropped/upscaled the damage dial) shows all four bands rendering
+distinctly on one dial: nose green, tail yellow, leftwing orange, rightwing red — matching each
+zone's combined fraction against the shipped thresholds.
+
+**Plan complete.** `PLAN-armour-layer.md` (`BL-085`) is fully landed: `DestroyablePart`/`PlaneStats`
+carry both floats (A1), `PlaneDamage` holds two pools with an armour-first 1:1-overflow `Apply`
+(A2), the graze path and the damage lab read/write both pools coherently (B11/B12), and the gauge's
+zone colour derives from the combined progression with both rings in lockstep (C21) — closing
+`BL-173` in its corrected form. Moved to `docs/plans/` with a `COMPLETE` banner, indexed in
+`docs/plans/plans.md`; `BL-085`'s `backlog.md` entry is deleted (landed, not marked FIXED), and the
+`BL-172` entry's cross-reference to it is updated to state what `BL-172` still owns (binding the
+`crash` block's own `armor_damage_range`/`health_damage_range` through the new `Apply`, alongside
+the pushback) now that the receiving side is no longer the blocker.
+
 ## 2026-08-04 - `CAP-08` flown: held numpad keys ADD as direction vectors, they do not select
 
 **Documentation only; no code changed.** The combo sweep filed the same day was flown by the user
@@ -14267,3 +14444,4 @@ airframe, one session.
 `dist_vary`.
 
 **Verified.** Docs and analysis scripts only — no build or test run.
+

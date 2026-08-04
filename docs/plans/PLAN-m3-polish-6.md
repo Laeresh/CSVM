@@ -1,8 +1,8 @@
 # M3 polish 6 — open bugs: surfaces, the animation runtime, and the instruments
 
-**ACTIVE PLAN** (written 2026-08-03). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE** (2026-08-04). Archived under `docs/plans/`; all ten items landed or were closed after
+verification (nine landed with code/docs/census, one — D31/`BL-133` — a user decision that lands no
+code).
 
 Ten items selected from `backlog.md` under the user's criteria (2026-08-03): draw from the **"Open
 bugs" section and its neighbours** — test infrastructure, surfaces/colliders, HUD & audio — and
@@ -96,7 +96,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — decisions
 
-31. ☐ D31 `BL-133` — the C3 `cloud1`/`cloud2` magenta call (user decision + one-liner)
+31. ☑ D31 `BL-133` — the C3 `cloud1`/`cloud2` magenta call (user decision + one-liner)
 
 ## Dependency and parallelism notes
 
@@ -512,7 +512,7 @@ billboard-axis bullet (an unrelated TUNE needing an original-game A/B) stays ope
 
 # Wave D — decisions
 
-## D31 ☐ `BL-133` — the C3 `cloud1`/`cloud2` magenta call
+## D31 ☑ `BL-133` — the C3 `cloud1`/`cloud2` magenta call
 
 **Goal.** The user decides whether C3's retail-data gap (gamez references `cloud1`/`cloud2`, which
 C3's own `texture.zbd` does not ship) keeps rendering diagnostic magenta or goes neutral gray via
@@ -536,3 +536,9 @@ chapters' archives). If magenta: the closing HISTORY entry is the deliverable.
 
 **⚠ Traps.** Do not generalize the mechanism — every other magenta in the project stays diagnostic;
 this set is strictly for measured retail gaps.
+
+**Landed 2026-08-04 (decision: stays magenta, won't-fix-by-design; no code).** Presented both ways;
+the user's call: keep the diagnostic magenta — they have never encountered `cloud1`/`cloud2` at the
+controls, and can revisit (add the pair to `KnownAbsentFromGameData`) if they ever do. `BL-133`
+closes; `TextureArchive.KnownAbsentFromGameData` is untouched. Full record: `docs/HISTORY.md`
+2026-08-04.
