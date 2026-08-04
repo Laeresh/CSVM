@@ -702,9 +702,41 @@ unscheduled.
   instant snap, no smoothing, shares the chase camera's `ViewDist`); `--view=N` is the scripted,
   machine-verifiable twin. Cockpit testing (2026-07-30) overturned the "layout is settled" claim this
   whole scheme was built on and found five more open questions:
-  (a) **Layout is wrong.** 8 and 2 are swapped; 7 is 45°-underside-*front*; 1 and 3 are 45°-*back*
-  (not the above/below-flank split the code assumes). Screenshots owed (numbered stills of each key)
-  before recoding the table.
+  (a) **Layout is wrong — MEASURED 2026-08-04 from the `CAP-07` scripted re-take, all nine keys.**
+  The original's layout, read off nine settled stills (method and confidence below):
+
+  | key | camera sits | ours today (`CameraController.cs:53-60`) |
+  |---|---|---|
+  | `Kp1` | **ahead + starboard, below** | left + below flank (no fore/aft term) |
+  | `Kp2` | **dead ahead, level** | straight below |
+  | `Kp3` | **ahead + port, below** | right + below flank (no fore/aft term) |
+  | `Kp4` | **starboard flank, level** | left flank |
+  | `Kp5` | **unbound — confirmed, not assumed** | unbound ✓ |
+  | `Kp6` | **port flank, level** | right flank |
+  | `Kp7` | **astern + starboard, below** | left + *above* flank |
+  | `Kp8` | **directly below (belly plan view)** | ahead of the nose, looking back |
+  | `Kp9` | **astern + port, below** | right + *above* flank |
+
+  Three structural corrections, not a symbol shuffle. (i) **The original has no above-the-aircraft
+  view at all** — every non-level position is below; our 7 and 9 are the only above views and both
+  are wrong. (ii) **The four corners carry a fore/aft term our table has none of**: bottom row
+  (1,2,3) is the forward hemisphere, top row (7,9) is aft. Ours splits them above/below the flanks
+  instead, so this is a different *shape* of layout. (iii) **4/6 and 2/8 are both swapped** — 4 shows
+  the starboard side, and 8 is the belly while 2 is the nose-on view.
+
+  *How it was measured.* Nose-in-image direction plus which surface is visible fixes the quadrant
+  analytically: with image-right = `u × d`, the nose projects with horizontal component ∝ sin φ and
+  vertical ∝ −sin ε · cos φ (φ = azimuth from dead astern toward starboard, ε = camera elevation
+  *below*). The level side views calibrate the sign — a camera to starboard must show the nose
+  pointing image-right, and `Kp4` does. The four corners all show belly, underwing ordnance and the
+  ventral skull fin, so ε > 0 for each; their nose directions are up-right / up-left / down-right /
+  down-left for 1 / 3 / 7 / 9, giving the four quadrants above.
+  ⚠ **Read the limits.** These are *quadrants and signs, not degrees* — no azimuth or elevation has
+  been solved numerically, because that needs a field-of-view calibration this clip has not yet been
+  put through. `Kp8` is the weakest: at a near-vertical elevation the azimuth is degenerate, so
+  "directly below" rests on the plan-form silhouette being unforeshortened plus visible underwing
+  ordnance (occluded from above), not on the nose-direction solve. One take, one aircraft — the
+  layout is a per-key constant so that is fine for the table, but do not read distances off it.
   ⚠ **Correction, 2026-08-04: `Kp0` is rudder-left, not a camera view.** The 2026-07-30 cockpit
   session read it as a second 45°-underside-front view alongside 7 and concluded "the original binds
   0; we bind none" — that was a misattribution, and the *camera* half of it is withdrawn. Our
@@ -723,32 +755,40 @@ unscheduled.
   single-view selector, so "combined" positions don't exist in the current code at all; this is new
   behaviour to design, not a bug in existing logic. Screenshots owed (key-combination stills).
   (e) **No gamepad binding existed in the original** (a right-stick/right-stick+modifier scheme would
-  be invention) and **5 is confirmed unbound** (matches today's deliberate omission,
-  `FlightController.cs:288`, so this one needs no code change — just recording it as confirmed rather
-  than assumed).
+  be invention) and **5 is unbound — now measured, 2026-08-04, not assumed.** Held for 3.5 s in the
+  `CAP-07` re-take, the frame deviation from its own pre-press baseline is **0.310**, *below* the
+  0.348–0.360 a no-key stretch of the same length scores, and against 2.5–10.5 for every key that
+  does move the camera. Kp5 does nothing. Matches today's deliberate omission
+  (`CameraController.cs:51-61`), so no code change — this line is now evidence.
   (f) **Numpad + / − trim camera distance slightly** — wholly new, unimplemented; the user already has
   video evidence for this one.
-  *Fix shape:* a rebuilt `Views` table (order + the missing 0), an eased position/orientation update
-  on top of `CameraController`'s existing per-plane radius, a small state machine for the
+  *Fix shape:* a rebuilt `Views` table (the layout in (a)), an eased position/orientation update on
+  top of `CameraController`'s existing per-plane radius, a small state machine for the
   interrupt/combination behaviour in (d), and the +/− trim as a new input.
-  *Blocked on `CAP-07`/`CAP-08`* (`playtest.md` §0). ⚠ **`CAP-07` take 1 was analysed 2026-08-04 and
-  rejected — it settles neither (a) nor (b).** The presses overlap: 10 camera transitions for 8 keys
-  in 20.9 s, with direct position-to-position lerps that never pass through base, so only 6–7 of the
-  8 holds ever come to rest and the filename's key order cannot be mapped onto them one-to-one. No
-  move begins from a settled base either, which is what (b)'s ease law would have to be measured
-  from. A rig for the re-record is committed at `analysis/capture-rigs/NumpadViewSweep.ahk` — one key held
-  alone at a time, base between, with a timestamped press/release log. `CAP-08` has its counterpart
-  in `NumpadComboSweep.ahk`, which **staggers** each combination — first key alone until it settles,
-  then the rest added on top — so the footage answers (d)'s actual question, whether a second key
-  blends, replaces, or is ignored, rather than only showing the end state. Take 1 does contribute one
-  usable control: the aircraft holds a constant heading throughout (compass ribbon drifts < 1 px in
-  20.9 s), so on a straight-and-level re-record the camera angles can be read directly off the
-  horizon and the moon without solving for the aircraft's own attitude.
+  *`CAP-07` is discharged (2026-08-04) — (a) and (e) are answered above. Still blocked on `CAP-08`
+  for (d)* (`playtest.md` §0), recorded with `analysis/capture-rigs/NumpadComboSweep.ahk`, which
+  **staggers** each combination — first key alone until it settles, then the rest added on top — so
+  the footage answers (d)'s actual question, whether a second key blends, replaces, or is ignored,
+  rather than only showing the end state.
+  ⚠ **`CAP-07` took two takes; the first is rejected and must not be re-analysed.** In
+  `CAP-07 Numpad 1,2,3,6,9,8,7,4.mp4` the presses overlap: 10 camera transitions for 8 keys in
+  20.9 s, with direct position-to-position lerps that never pass through base, so only 6–7 of the 8
+  holds come to rest and the filename's key order cannot be mapped onto them one-to-one. The usable
+  take is `CAP-07 scripted Run.mp4`, driven by `analysis/capture-rigs/NumpadViewSweep.ahk` — one key
+  held alone at a time with a return to base between, and a `sweep-log.txt` that timestamps every
+  press, so key windows are read from the log rather than inferred from motion.
+  **(b) is still open even on the good take.** The ease is now measurable in principle — every move
+  does start from a settled base — but no ease law has been fitted, because a per-frame camera angle
+  needs a field-of-view calibration this clip has not been put through. All nine holds *do* settle:
+  frame-to-frame motion over the last 1.2 s of each is 0.055–0.278 against a 0.090 baseline.
   ⚠ **Traps.** (a) **Only `--view=` is machine-verifiable** — live held-key input cannot be scripted
   here, so any fix to (b)/(d) is correct-by-construction only until played; do not close this off a
-  passing `--view=` capture alone. (b) **The layout (a) cannot be fixed before the owed screenshots pin
-  the exact mapping** — do not guess-swap 8/2 and ship it; the front/back split for 1/3/7/0 is a
-  different shape of layout than today's above/below split, not a two-symbol swap. (c) Don't retune
+  passing `--view=` capture alone. (b) ~~**The layout (a) cannot be fixed before the owed screenshots
+  pin the exact mapping**~~ — **resolved**: (a)'s table is measured. What survives of this trap is
+  the warning it carried: the fix is **not a symbol swap**. The corners gain a fore/aft term they do
+  not have today and every above-the-aircraft view disappears, so recode the table from (a) rather
+  than permuting the existing rows. And the table above is quadrants, not degrees — the exact
+  azimuth/elevation still wants an FOV-calibrated solve. (c) Don't retune
   the chase radius here in isolation — the fixed views and the chase camera share one number in
   `CameraController` by design; a fix landing only in one place desyncs the two cameras again. (d) Combined/multi-key positions are UNDESIGNED,
   not merely unbuilt — resist inferring a formula (e.g. "average the two directions") from a single

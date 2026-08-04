@@ -13118,3 +13118,58 @@ the end state can answer it. The stagger also makes every step a second, indepen
 observation to cross-check `CAP-07` against. `STEPS` covers the eight camera keys as a ring
 (7 8 9 6 3 2 1 4 clockwise): the eight adjacent pairs, the four opposite pairs (the contradictory
 case — cancel, first-wins, or something else), and two triples. About two minutes.
+
+## 2026-08-04 — `CAP-07` re-shot under script: the numpad layout is measured, and it is a different shape from ours
+
+The rejected hand-flown take was replaced the same day by `CAP-07 scripted Run.mp4` (74.8 s,
+2560×1440), driven by `analysis/capture-rigs/NumpadViewSweep.ahk`. The rig's `sweep-log.txt` times
+every press, so segmentation stops being an inference: the video needs exactly one offset, taken
+from the first sustained camera motion (video 7.585 s = the log's `DOWN Numpad1` at 3.047), giving
+sweep t0 = video **4.538 s** and every key window from there. **All nine holds settle** — mean
+frame-to-frame motion over the last 1.2 s of each hold is 0.055–0.278 against a 0.090 pre-sweep
+baseline.
+
+**`Kp5` is unbound — measured, not assumed.** Held 3.5 s, its deviation from its own pre-press
+baseline is **0.310**, which is *below* the **0.348–0.360** that four no-key stretches of the same
+length and lag score on the identical statistic, and against **2.5–10.5** for every key that does
+move the camera. `BL-150`(e) stops being an assumption. Our omission of `Kp5` was already right.
+
+**The layout (`BL-150`(a)).** Quadrant per key, from nine settled stills:
+
+| key | camera sits | ours (`CameraController.cs:53-60`) |
+|---|---|---|
+| `Kp1` | ahead + starboard, below | left + below flank |
+| `Kp2` | dead ahead, level | straight below |
+| `Kp3` | ahead + port, below | right + below flank |
+| `Kp4` | starboard flank, level | left flank |
+| `Kp6` | port flank, level | right flank |
+| `Kp7` | astern + starboard, below | left + *above* flank |
+| `Kp8` | directly below (belly plan) | ahead of the nose, looking back |
+| `Kp9` | astern + port, below | right + *above* flank |
+
+Three structural differences, not a symbol shuffle. **The original has no above-the-aircraft view at
+all** — every non-level position is below, so our 7 and 9 are the only above views and both are
+wrong. **The four corners carry a fore/aft term ours has none of**: bottom row is the forward
+hemisphere, top row is aft, where ours splits them above/below the flanks. And **4/6 and 2/8 are
+both swapped**. The 2026-07-30 cockpit session's "8 and 2 are swapped" was right; its "1 and 3 are
+45°-back" was not — 1 and 3 are the *forward* pair, 7 and 9 the aft one.
+
+**Method.** The quadrant follows analytically from the nose's direction in frame plus which surface
+is visible. With image-right = `u × d`, the nose projects with horizontal component ∝ `sin φ` and
+vertical ∝ `−sin ε · cos φ`, where φ is azimuth from dead astern toward starboard and ε the camera's
+elevation *below* the aircraft. The level side views calibrate the sign independently — a camera to
+starboard must show the nose pointing image-right, and `Kp4` does, which also settles 4/6. The four
+corners all show belly, underwing ordnance and the ventral skull fin, so ε > 0 for each; their nose
+directions are up-right, up-left, down-right, down-left for 1, 3, 7, 9, one per quadrant. The
+aircraft is a pusher, so the propeller disc marks the *rear* — established from the level side views
+and confirmed by the nose-on view of `Kp2`, which shows a plain intake and no blur.
+
+⚠ **Limits.** These are quadrants and signs, **not degrees**: no azimuth or elevation has been
+solved numerically, which needs a field-of-view calibration this clip has not been put through.
+`Kp8` is the weakest of the nine — at a near-vertical elevation the azimuth is degenerate, so
+"directly below" rests on an unforeshortened plan-form silhouette plus visible underwing ordnance
+(which the wing would occlude from above), not on the nose-direction solve. `BL-150`(b)'s ease law
+is *measurable* on this take, since every move now starts from a settled base, but it has not been
+fitted — same missing FOV calibration.
+
+`CAP-07` is discharged. `BL-150` remains blocked on `CAP-08` for the key-combination behaviour (d).

@@ -70,28 +70,24 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
-| `CAP-07` | Numpad view stills | One still per numpad key held, framed wide enough to read the angle and height. **Keys 1–9 only — `0` is rudder-left, not a camera key** (see the note below). Include **5**, held, to turn "5 is unbound" from assumption into evidence. ⚠ **Take 1 (`CAP-07 Numpad 1,2,3,6,9,8,7,4.mp4`) is rejected — re-record with `analysis/capture-rigs/NumpadViewSweep.ahk`** | `BL-150` |
 | `CAP-08` | Numpad key-combination stills | Two or more numpad keys held together. Record with `analysis/capture-rigs/NumpadComboSweep.ahk`, which **staggers** each step — first key alone until it settles, *then* the rest added on top — so the clip shows what adding a second key **does**, not merely where it ends up. Keys 1–9 minus 5; no 0 | `BL-150` |
 | `CAP-21` | Chase distance against airspeed | One aircraft, external chase view, a slow full-throttle acceleration from near-stall to top speed and back, held level, with the **airspeed readable in frame throughout**. The plane's apparent size is the measurement, so keep the view unchanged and do not touch the +/− trim. Names the aircraft in the filename — the distance is per-plane | `BL-248` |
 
 *(The numpad +/− distance trim needs no capture — you already have video of it.)*
 
-*(**`CAP-07` take 1 rejected, 2026-08-04.** The clip is real footage of the fixed views, but the
-presses overlap: over 20.9 s it contains **10** camera transitions for **8** keys, and the camera
-repeatedly lerps straight from one fixed position to the next without passing through base. Frame
-differencing against the opening baseline resolves only **6–7** plateaus that hold still (frame-to-
-frame motion < 0.55 units) against the 8 keys pressed, and two of those drift monotonically rather
-than settling — so no single frame can be trusted as "this is where key N puts the camera", and the
-order in the filename cannot be mapped onto the plateaus one-to-one. It also tells us nothing about
-the **ease law** `BL-150`(b) wants, because no move starts from a settled base. Re-record with
-`analysis/capture-rigs/NumpadViewSweep.ahk` (F13): 3 s baseline, then each key held **alone** for 3.5 s
-with a 3.5 s return to base between, and a timestamped `sweep-log.txt` written next to the script so
-the analysis need not infer event boundaries from motion at all.*
+*(**`CAP-07` discharged 2026-08-04** — retired from this list. The scripted re-take
+(`CAP-07 scripted Run.mp4`, driven by `analysis/capture-rigs/NumpadViewSweep.ahk`) settled the
+numpad layout for all nine keys and confirmed `Kp5` unbound; the measured table lives on `BL-150`(a).
+Its first take is rejected and should not be re-analysed — the presses overlapped and most holds
+never settled. `BL-150` still needs `CAP-08` for the key-combination behaviour, which is why that
+row remains.*
 
-*One thing take 1 does establish, and it is worth keeping: the aircraft holds a **constant heading
-for the whole clip** — the HUD compass ribbon drifts under 1 px in 20.9 s, correlating at NCC ≥ 0.984
-frame-to-frame. A straight-and-level subject means body axes equal world axes, so camera angles read
-off the horizon and the moon are camera-vs-aircraft angles directly. Fly the re-record the same way.)*
+*Two method notes from the pair, worth reusing on any camera capture. (1) **Script the input.** The
+rig's timestamped log removes event segmentation from the analysis entirely — key windows are read
+off the log, aligned to the video by a single offset taken from the first camera move. (2) **Fly
+straight and level and check the compass.** The HUD ribbon tracks the aircraft, not the camera, so a
+ribbon that holds still proves the subject held still; body axes then equal world axes and camera
+angles read off the footage are camera-vs-aircraft angles directly.)*
 
 *(`CAP-21` decides whether the original's chase distance moves at all. If the plane's apparent size
 is constant across the whole speed range, `dist_factor`/`dist_vary` do not drive distance from
