@@ -855,12 +855,13 @@ unscheduled.
   against building corners (`CAP-14`).
   ⚠ **Traps.** (a) `bounce_factor`'s units are unverified — `BL-095` flags the whole `player.json`
   physics block as needing its own decode pass; do not assume it is a plain coefficient of restitution
-  without checking the range against a measured graze. (b) This is coupled to the armour question
-  (`BL-085`; the gauge half is scheduled as `docs/PLAN-armour-layer.md` C21 — `BL-173` closed
-  2026-08-04, see `docs/HISTORY.md`): the same `crash` block also carries the `armor_damage_range`/
-  `health_damage_range` pair that collision damage is supposed to spend, so a full fix likely lands
-  both the pushback and the armour-aware crash/graze damage together rather than as two independent
-  patches. (c) `GrazeStopSpeed`/`GrazeFriction`/`GrazeKick` were tuned against the *current* no-bounce
+  without checking the range against a measured graze. (b) The receiving side is no longer the
+  blocker: `PLAN-armour-layer.md` (`docs/plans/`, complete 2026-08-04, `BL-173` closed as part of it)
+  landed the two-pool `PlaneDamage.Apply(part, healthDamage, armorDamage)`, armour first with 1:1
+  overflow — but it deliberately left the `crash` block itself (`armor_damage_range`/
+  `health_damage_range`/`bounce_factor`) unconsumed on every axis (Decision 4), so this item still
+  owns binding grazes/crashes through that `Apply` overload alongside the pushback, as one coupled
+  change. (c) `GrazeStopSpeed`/`GrazeFriction`/`GrazeKick` were tuned against the *current* no-bounce
   slide — expect them to need re-tuning once a normal-direction impulse is added, not to survive
   unchanged.
 
@@ -908,66 +909,6 @@ the document alone, it says so and marks the value TUNE.
   ⚠ Trap: the comment at `DamageZonePosition` explains why the *detonation centre* is the ray
   contact rather than a collider origin — that reasoning is about the blast's own position and is
   correct; it does not license using an origin for the RECEIVING side too.
-
-- `BL-085` **The armour layer is unimplemented, so 18 of 48 weapon entries are mis-modelled.**
-  `WeaponDef.ArmorDamage` (`WeaponDefs.cs:78,239`) has exactly two consumers and both are display
-  strings — `--dump-weapons` (`Probes.Weapons`) and the weapon lab's panel readout
-  (`WeaponLab.WeaponSummary`, the `dmg h…/a…` field). The
-  receiving side is one pool: `PlaneDamage.PartState` is a single `float Hp` and `Apply` a flat
-  subtract (`PlaneDamage.cs:21,54-60`). Consequence, measured: **18 `BALLISTICS` entries carry
-  `ARMOR_DAMAGE != HEALTH_DAMAGE`**, and that split *is* the player ammo-type system
-  (`docs/formats/weapons.md`, "The player damage matrix") — with only health modelled,
-  armour-piercing is strictly the **worst** round in every calibre (`30 AP` 1.5 health vs `30 DD`
-  4.5), so the tier is inverted, not merely simplified. Wanted: two pools per damage zone, **armour
-  first, with overflow spilling into health 1:1 within the same shot** so a nearly-stripped zone
-  never wastes damage. The armour-then-health *order* is settled twice over: C23's dominance
-  argument (`docs/plans/PLAN-M3-weapons.md`) and, directly, retail string 3372 — "AP rounds tend to
-  punch clean through unarmored surfaces, inflicting very little damage". The overflow rule is the
-  spec's.
-  **Unblocked 2026-08-03 — the pool's origin is now a finding.** The armour pool is
-  `destroyable_parts`' second value. The original's **armory** settles what the shipped data could
-  not: its per-zone allocation is in units that are armour points 1:1, and a **stock** airframe
-  reads the same per-zone numbers the zrdr def carries (stock Bloodhawk ~20 per zone;
-  `pbloodhawk` is 20/20/20/20). Observed at the controls. See
-  `docs/formats/vehicle.md`, "The hp pair: armor + hit points".
-  **`CAP-19` flown and discharged 2026-08-03** — the mechanism is now observed rather than inferred:
-  **armor depletes before health**, the armory's **per-zone cap is 60 units** (uniform across a
-  plane's four zones), and a stripped zone visibly falls faster than an armored one. The capture is
-  retired. It also **refuted** the standing reading that `ARMOR: Standard (N/T/W)` is a per-zone cap
-  — 60 is uniform and far smaller than any blurb triple — so what that triple is went back to open
-  (`docs/formats/vehicle.md`); nothing in this item depends on the answer.
-  ⚠ One sub-question of that capture went **unrecorded** and is not worth its own capture: whether
-  the in-flight `Armor: %1%% Health: %2%%` readout reads 100 % regardless of how many units were
-  bought, or scales against the 60-unit cap. It decides only how an armoury-era damage display
-  normalises its fractions (`docs/PLAN-armour-layer.md` C21; the ring-split reading this used to
-  cite as `BL-173` was refuted by the manual — zone colour is a four-band mapping over the combined
-  armour→health progression, rings always in lockstep) — settle it whenever the armory is next on
-  screen.
-  ⚠ **Traps.** (a) **Do not fold armour into hp.** The two are equal on all 88 shipped entries
-  **at stock only** — armour is a *purchasable* quantity (`BL-067`'s configurator), so equality is
-  a fact about default loadouts, not about the model. `PlaneStats` must read **both** floats
-  (`PlaneStats.cs:249-256` currently takes the first and drops the second) and `PlaneDamage` must
-  carry two independent pools, or this breaks the moment an armory exists. (b) **The 2× is
-  intended, not a regression — and it is entailed, not a pending measurement.** A real armour pool
-  doubles every zone's effective HP against a balanced round; that is what the original does —
-  record it as faithful rather than tuning it away (decided 2026-08-03). ⚠ **Do not file a capture
-  to "measure" the factor.** With armour equal to hp at stock (all 88 entries) and armour spent
-  first with 1:1 overflow (observed, `CAP-19`), the 2× *follows arithmetically* from those two
-  confirmed facts. A live sortie moves ammo type, hit distribution, graze damage and pilot skill at
-  once and cannot isolate a time-to-kill figure; `CAP-19` confirmed the direction (a stripped zone
-  falls far faster) and was discharged on that basis, 2026-08-03. (c) It **supersedes C23's
-  model 1** ("player planes — per-part HP, no armour/health pair"), which is now wrong;
-  `player.json`'s `crash` block spending **`armor_damage_range [50,300]` and
-  `health_damage_range [50,300]`** on the player's own collision damage fits the corrected model.
-  Nothing in `CSVM/src` reads that block. (d) World destructibles carry **health only** (C23,
-  measured over 16,114 defs) — this entry does not touch them.
-  **Collision damage bypasses armour too, not only guns.** `FlightController.SurviveHit`
-  (`FlightController.cs:1455-1456`) computes a hand-authored `GrazeMaxDamage * (vn/CrashSpeed)²` and
-  spends it through the same single-pool `PlaneDamage.Apply` — no armour concept exists on the
-  collision path either. `Crash()` (`FlightController.cs:1309-1335`) doesn't consult `PlaneDamage` at
-  all; a hard hit is a pure boolean destroy. So `player.json`'s `crash` block
-  (`armor_damage_range`/`health_damage_range`/`bounce_factor`) is unconsumed on **every** axis —
-  weapons, grazes, and crashes alike. See `BL-172` for the pushback half of the same block.
 
 - `BL-226` **The incoming-fire cue set's other two halves are blocked on things that do not exist
   yet.** The near-miss third landed (`BL-087`, 2026-08-02); `bullet_hit_sg` (= `snd_ricochet1-4`,

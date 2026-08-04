@@ -14262,3 +14262,43 @@ item) shows the HUD DMG line reading "DMG nose a0% h0%" — `tail:100` leaves th
 it is correctly omitted — confirming the two independent `Apply` calls land exactly the dialled-in
 values rather than following the armor-first depletion curve. Gauge colour bands are still the
 pre-`C21` single-fraction mapping (unaffected here, in scope for `C21`).
+
+**2026-08-04: `PLAN-armour-layer` C21 — the gauge colour bands, and the plan completes.** A correct
+disproof of most of the item's own `Approach` section, not new plumbing: `GaugeCluster.cs` was
+untouched by every earlier item in this plan, yet both its `PartFraction` sources already fed the
+COMBINED armor+health fraction by the time this item started — `FlightRigAssembler.cs:201-202`
+reads `PlaneDamage.PartState.Fraction`, which A2 silently redefined to the combined scale (Decision
+6) without that call site changing at all, and `DamageLab.cs`'s own gauge binding was fixed in B12
+(`CombinedFractionOf`). So the `Approach`'s proposal — pass the (armourFrac, healthFrac) **pair**
+through `PartFraction` and hand-author a 50%/25% band function over it — was already dead: Decision
+6 (settled during A2) had confirmed the mined per-part thresholds (0.72/0.46/0.20,
+`docs/formats/hud.md` "Thresholds") reproduce the manual's four bands on the combined scale with no
+hand-authored constants, and both flight and the lab were already feeding that scale in. The one
+real gap: the inline `frac > z.YellowAt ? 0 : …` in `GaugeCluster._Draw` had no name and no test,
+unlike `GunIndicatorColor`/`HardpointIndicatorColor` beside it. Extracted it as
+`GaugeCluster.DamageZoneColor(frac, yellowAt, orangeAt, redAt)` (behaviour-identical — `_Draw` now
+calls it) and extended the `gauge-colours` suite to reproduce Decision 6's own arithmetic as a
+regression: on a stock zone (armor == hp == 20), spending armor via
+`PlaneDamage.Apply(part, 0, armorDamage)` then health via `Apply(part, healthDamage, 0)` (two
+independent single-pool spends — the same technique B12's lab uses, since the two-pool `Apply`
+describes one shot's own magnitudes, not two independently-dialled targets) lands the combined
+fraction on **exactly** 0.72 at 56% of the armor gone, 0.46 at armor-zero-plus-8%-airframe, and 0.20
+at 60%-airframe. Both `Border` and `Fill` were already driven by the one `color` value — the
+lockstep-rings structure Decision 5/`BL-173` wanted was never the bug.
+
+**Verified.** `.\RunTests.ps1`: build clean, 436/436 units, 22/22 engine suites (new checkpoint
+assertions pass bit-exact, not approximately), 13/13 goldens hash-identical (no rendering behaviour
+changed — the extraction is a pure refactor). `--viewer --damage="nose:90,tail:60,leftwing:35,
+rightwing:10"` screenshot (cropped/upscaled the damage dial) shows all four bands rendering
+distinctly on one dial: nose green, tail yellow, leftwing orange, rightwing red — matching each
+zone's combined fraction against the shipped thresholds.
+
+**Plan complete.** `PLAN-armour-layer.md` (`BL-085`) is fully landed: `DestroyablePart`/`PlaneStats`
+carry both floats (A1), `PlaneDamage` holds two pools with an armour-first 1:1-overflow `Apply`
+(A2), the graze path and the damage lab read/write both pools coherently (B11/B12), and the gauge's
+zone colour derives from the combined progression with both rings in lockstep (C21) — closing
+`BL-173` in its corrected form. Moved to `docs/plans/` with a `COMPLETE` banner, indexed in
+`docs/plans/plans.md`; `BL-085`'s `backlog.md` entry is deleted (landed, not marked FIXED), and the
+`BL-172` entry's cross-reference to it is updated to state what `BL-172` still owns (binding the
+`crash` block's own `armor_damage_range`/`health_damage_range` through the new `Apply`, alongside
+the pushback) now that the receiving side is no longer the blocker.

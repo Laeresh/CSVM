@@ -1,9 +1,8 @@
 # Armour layer — two-pool zone damage (`BL-085`)
 
-**ACTIVE PLAN** (drafted 2026-08-04, activated 2026-08-04). It sits in `docs/`, which by this
-repo's convention makes it a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to
-`docs/plans/` with a `COMPLETE` banner, and add its row to [`plans/plans.md`](plans/plans.md), when
-every item lands.
+**COMPLETE** (drafted 2026-08-04, activated 2026-08-04, completed 2026-08-04). Archived under
+`docs/plans/`; all five items landed. The 2× effective stock pool (Decision 3) and the four-band
+gauge colour ladder (Decision 5, C21) are recorded as faithful, not tuned away.
 
 This plan lands `backlog.md`'s `BL-085`: the receiving side of damage grows a second pool. Every
 damage zone carries (armour, health), incoming damage spends **armour first with 1:1 overflow into
@@ -120,7 +119,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — the gauge colour bands (`BL-173`, corrected)
 
-21. ☐ Zone colour follows the manual's four-band armour→health thresholds; rings stay in lockstep
+21. ☑ Zone colour follows the manual's four-band armour→health thresholds; rings stay in lockstep
 
 ## Dependency and parallelism notes
 
@@ -291,7 +290,30 @@ produce exactly the state a graze would (no parallel bookkeeping).
 
 # Wave C — the gauge colour bands (`BL-173`, corrected)
 
-## C21 ☐ Zone colour follows the manual's four-band armour→health thresholds; rings stay in lockstep
+## C21 ☑ Zone colour follows the manual's four-band armour→health thresholds; rings stay in lockstep
+
+**Landed 2026-08-04 — a correct disproof of most of the Approach section, not new plumbing.**
+`GaugeCluster.cs` was untouched by every earlier item in this plan, yet both its `PartFraction`
+sources already fed the COMBINED armour+health fraction by the time this item started:
+`FlightRigAssembler.cs:201-202` reads `PlaneDamage.PartState.Fraction`, which A2 redefined to the
+combined scale (Decision 6) — no code there changed, the meaning of the value it was already
+reading changed underneath it; `DamageLab.cs`'s own gauge binding was fixed in B12
+(`CombinedFractionOf`). So the `Approach` section's proposal — pass the (armourFrac, healthFrac)
+**pair** through `PartFraction` and hand-author a 50%/25% band function over it — is dead: Decision
+6 already confirmed the mined per-part thresholds (0.72/0.46/0.20) reproduce the manual's bands on
+the combined scale with no hand-authored constants, and both flight and the lab were already
+feeding that scale in. The one real gap: the inline `frac > z.YellowAt ? 0 : …` in `_Draw` had no
+name and no test, unlike `GunIndicatorColor`/`HardpointIndicatorColor` next to it. Extracted it as
+`GaugeCluster.DamageZoneColor(frac, yellowAt, orangeAt, redAt)` (behaviour-identical — `_Draw` now
+just calls it) and added a `gauge-colours` suite case that reproduces Decision 6's own arithmetic as
+a regression: on a stock zone (armor == hp == 20), spending armor via `PlaneDamage.Apply(part, 0,
+armorDamage)` then health via `Apply(part, healthDamage, 0)` (two independent single-pool spends,
+the same technique B12's lab uses, since the two-pool `Apply` describes one shot's own magnitudes,
+not two independently-dialled targets) lands the combined fraction on 0.72 at exactly 56% armor
+gone, 0.46 at armor-zero-plus-8%-airframe, and 0.20 at 60%-airframe — bit-exact, not approximate.
+Boundary convention: `frac > threshold` steps to the worse colour once frac drops **to or below**
+its threshold, matching `DamageVisuals`'/`DamageLab`'s injure_anims crossing rule already in use
+elsewhere — picked for consistency, not derived from the manual.
 
 **Goal.** Each zone's colour is derived from **both** pools per the manual's Crispen Mark V table
 (Decision 5): green = untouched; yellow = up to 50% armour destroyed; orange = 50–100% armour

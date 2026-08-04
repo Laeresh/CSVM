@@ -248,7 +248,7 @@ public sealed partial class GaugeCluster : Control
             if (z.BlinkLeft > 0f && !DamagePhaseOn)
                 continue; // blink-off phase hides the whole zone (fill + outline)
             float frac = PartFraction?.Invoke(z.Part) ?? 1f;
-            int color = frac > z.YellowAt ? 0 : frac > z.OrangeAt ? 1 : frac > z.RedAt ? 2 : 3;
+            int color = DamageZoneColor(frac, z.YellowAt, z.OrangeAt, z.RedAt);
             foreach (var p in z.Border)
                 DrawGaugePoly(p, dmgC, dmgR, 0f, _hilite[color], ZoneFlat[color]);
             foreach (var p in z.Fill)
@@ -278,6 +278,17 @@ public sealed partial class GaugeCluster : Control
     // Hardpoints/pylons: green > empty, no intermediate colour (confirmed against the original —
     // BL-024). Never reuse IndicatorLowFrac here.
     internal static int HardpointIndicatorColor(float frac) => frac <= 0f ? 2 : 0;
+
+    // Damage zones: green > yellow > orange > red, over the zone's COMBINED armor+health fraction
+    // (BL-085's PartState.Fraction) against thresholds MINED per-part from the data's own
+    // *_damage_green/yellow/red injure_anims (never hand-authored — BL-173's refuted fix shape was
+    // an armor-fraction/health-fraction ring split; the manual's four bands fall out of the shipped
+    // combined-scale numbers instead, docs/formats/hud.md "Thresholds"). Crosses to the next
+    // (worse) colour once frac drops TO OR BELOW its threshold, the same convention
+    // DamageVisuals/DamageLab use for injure_anims thresholds. Internal so the run-tests suite can
+    // assert the sequence directly.
+    internal static int DamageZoneColor(float frac, float yellowAt, float orangeAt, float redAt) =>
+        frac > yellowAt ? 0 : frac > orangeAt ? 1 : frac > redAt ? 2 : 3;
 
     // ---- extraction ----
 

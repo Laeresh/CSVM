@@ -76,7 +76,8 @@ public static class Suites
         into.Add(new TestHarness.Suite("puffer-modes",
             "the emitter's burst, distance-trail and sustain modes, driven through a fake renderer with no GPU", PufferModes));
         into.Add(new TestHarness.Suite("gauge-colours",
-            "the belt indicator's yellow tier is gun-only; hardpoints step green→red", GaugeColours));
+            "the belt indicator's yellow tier is gun-only; hardpoints step green→red; a damage " +
+            "zone's four bands walk armor-first over the combined pool (BL-085/BL-173)", GaugeColours));
         into.Add(new TestHarness.Suite("weapons-defs",
             "every weapons.json BALLISTICS entry reads through the typed reader", WeaponsDefs));
         into.Add(new TestHarness.Suite("weapon-blast",
@@ -446,7 +447,9 @@ public static class Suites
     }
 
     /// <summary>BL-024: the belt indicator's yellow tier belongs to guns only — a per-pylon
-    /// hardpoint steps straight from green to red at empty, matching the original.</summary>
+    /// hardpoint steps straight from green to red at empty, matching the original. BL-085/BL-173:
+    /// a damage zone's four colour bands walk the combined armor+health fraction, armor spent
+    /// first, matching the game manual's Crispen Mark V description.</summary>
     private static void GaugeColours(TestContext ctx)
     {
         for (float frac = 0f; frac <= 1f; frac += 0.01f)
@@ -461,6 +464,47 @@ public static class Suites
         ctx.Check(GaugeCluster.GunIndicatorColor(GaugeCluster.IndicatorLowFrac + 0.01f) == 0,
             $"gun colour green just above the low threshold");
         ctx.Check(GaugeCluster.GunIndicatorColor(0f) == 2, $"gun colour red at empty");
+
+        // BL-085/BL-173 (PLAN-armour-layer C21): a damage zone's colour is the COMBINED armor+health
+        // fraction (PlaneDamage.PartState.Fraction), armor spent first, against the shipped
+        // thresholds (docs/formats/hud.md "Thresholds") — never a synthetic split from one pool.
+        // The three checkpoints reproduce Decision 6's own reconciliation with the game manual's
+        // four bands as a regression: on a stock zone (armor == hp), 56% of the armor gone lands
+        // exactly on the shipped yellow threshold, armor-zero-plus-8%-airframe on orange, and
+        // 60%-airframe on red. Each pool is spent through its own single-pool PlaneDamage.Apply
+        // call (armor's with healthDamage=0, health's with armorDamage=0) — the same technique
+        // DamageLab's two independent sliders use — because the two-pool Apply's overflow
+        // arithmetic describes one weapon round's own (health, armor) pair, not two independently
+        // dialled-in targets (see FlightDamageTarget.Apply's doc comment).
+        var zonePart = new DestroyablePart { Name = "nose", MaxHp = 20f, MaxArmor = 20f };
+        var zoneDamage = new PlaneDamage(new[] { zonePart });
+        var zoneState = zoneDamage.Parts["nose"];
+        const float yellowAt = 0.72f, orangeAt = 0.46f, redAt = 0.20f;
+
+        ctx.Check(GaugeCluster.DamageZoneColor(zoneState.Fraction, yellowAt, orangeAt, redAt) == 0,
+            $"a pristine zone is green");
+
+        zoneDamage.Apply("nose", 0f, 11.2f); // 56% of the armor gone, health untouched
+        ctx.Check(Mathf.IsEqualApprox(zoneState.Fraction, yellowAt),
+            $"56% armor gone lands on the shipped yellow threshold, frac={zoneState.Fraction:0.000}");
+        ctx.Check(GaugeCluster.DamageZoneColor(zoneState.Fraction, yellowAt, orangeAt, redAt) == 1,
+            $"56% armor gone is yellow");
+
+        zoneDamage.Reset();
+        zoneDamage.Apply("nose", 0f, 20f);  // armor fully spent...
+        zoneDamage.Apply("nose", 1.6f, 0f); // ...plus 8% of the airframe
+        ctx.Check(Mathf.IsEqualApprox(zoneState.Fraction, orangeAt),
+            $"armor zero + 8% airframe lands on the shipped orange threshold, frac={zoneState.Fraction:0.000}");
+        ctx.Check(GaugeCluster.DamageZoneColor(zoneState.Fraction, yellowAt, orangeAt, redAt) == 2,
+            $"armor zero + 8% airframe is orange");
+
+        zoneDamage.Reset();
+        zoneDamage.Apply("nose", 0f, 20f); // armor fully spent...
+        zoneDamage.Apply("nose", 12f, 0f); // ...plus 60% of the airframe
+        ctx.Check(Mathf.IsEqualApprox(zoneState.Fraction, redAt),
+            $"60% airframe gone lands on the shipped red threshold, frac={zoneState.Fraction:0.000}");
+        ctx.Check(GaugeCluster.DamageZoneColor(zoneState.Fraction, yellowAt, orangeAt, redAt) == 3,
+            $"60% airframe gone is red");
     }
 
     private static void WeaponsDefs(TestContext ctx)

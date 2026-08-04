@@ -1503,7 +1503,13 @@ The original's cockpit dials as a screen-space HUD: altimeter, speedometer, dama
 the gun + missile weapon gauges (E35), all geometry extracted from the plane's own gauges subtree
 (structure/scales/quirks: docs/formats/hud.md); polys draw by data priority, rest rotations
 ignored; PartFraction binds flight or the lab; dial centres are bottom-anchored (FromBottom) so
-panes keep them on screen.
+panes keep them on screen. `DamageZoneColor(frac, yellowAt, orangeAt, redAt)` (`BL-085`/`BL-173`,
+`PLAN-armour-layer` C21) is the damage-dial band function — `frac` is `PartFraction`'s COMBINED
+armor+health value (both bound sources, flight and the lab, feed that scale; nothing here computes
+it), `yellowAt`/`orangeAt`/`redAt` are mined per-part from the data's own
+`*_damage_green/yellow/red` injure_anims. Both `Border` and `Fill` always take the same colour
+index — `BL-173`'s refuted fix shape was a synthetic per-pool ring split; there is only ever one
+colour per zone.
 ⚠ The gauge textures lie — compare pixel values, never appearances: the faces hold dark UNLIT
   copies of the STALL / LOW ALT windows (~58,0,0 unlit vs 180+,0,0 lit); bitten twice. The needle
   draws its shipped RGBA art untouched (the pointer silhouette is the rtexture-tier alpha, BL-048)
