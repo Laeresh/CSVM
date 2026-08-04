@@ -85,6 +85,25 @@ speed, and `BL-248`(a) is disproved rather than implemented — a correct dispro
 |---|---|---|---|
 | `CAP-10` | Engine note through a dive | A full-throttle dive to pull-out, with enough HUD and stick visible to correlate the pitch change against **climb rate and elevator input** — the two you identified as driving it | `BL-109` |
 
+*(`CAP-10` is **done — eleven takes, nothing further owed** (2026-08-04). **The note takes two
+terms, not one.** (a) An **unsigned transient on stick movement**: the scripted F13 run
+(`analysis/capture-rigs/ElevatorDutySweep.ahk`, every key edge logged) steps input duty 0→1→0 and
+reads a monotone staircase, `note ≈ 1.0002 + 0.0154·duty`, R² **0.931** — against 0.543 for climb
+rate and 0.719 for airspeed; the descending leg dissociates them outright, since at the run's
+*highest* climb (+1679 ft/min) the note is lower than at full duty, and at the final duty-0 step it
+is back to baseline while the aircraft still climbs +874 ft/min. F14's hold ladder adds that it
+**integrates** (+1.5/+4.7/+8.0/+8.9% for 250/500/1000/1500 ms holds, saturating ~+9%), so the input
+wants low-passing with τ ≈ 0.5–0.7 s. (b) A **slow level** that sits ~6% low in a sustained
+near-vertical dive and returns to baseline when level. **The pull-out is now measured** —
+`CAP-10 Dive Recovery.mp4` is the first take held through the recovery, and confirms both halves of
+`BL-109`'s claim in direction at about half the stated size: drop **0.9370** (claim ~0.88), pull-out
+overshoot **1.0296** (claim ~1.05). But an equal bump appears at the **pushover** (1.0336, nose-down,
+while still at level-flight altitude and airspeed), so the overshoot is term (a) firing at the
+recovery rather than anything specific to pull-outs. The **cockpit view is useless** here (damped
+engine mix, no moving harmonic) — record external/chase. Method:
+`analysis/video-flight-calibration/{dutysweep,enginepitch,recovery}.py`, artifacts in
+`playtest/CAP-10/`.)*
+
 ### Weather & visuals
 
 | ID | Capture | What must be in frame | Unblocks |

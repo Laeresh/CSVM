@@ -318,11 +318,35 @@ A clip flown in the **chase** view names its HUD in `extract.py`'s `CLIPS` and t
 order with `--hud=chase` on the pooling and fitting stages:
 
 ```
-python analysis/video-flight-calibration/extract.py cap18 cap10chase
+python analysis/video-flight-calibration/extract.py cap18 cap10chase cap10dive
 python analysis/video-flight-calibration/pool.py --hud=chase
 python analysis/video-flight-calibration/fitdial.py --hud=chase
 python analysis/video-flight-calibration/ammoarrow.py cap18 chase   # selector arrow
+python analysis/video-flight-calibration/run2chase.py cap10chase cap10dive   # alt + mph, on PTS
+python analysis/video-flight-calibration/enginepitch.py             # pair alt/mph to CAP-10 audio
+python analysis/video-flight-calibration/dutysweep.py               # scripted-rig takes (F13/F14)
+python analysis/video-flight-calibration/recovery.py                # the dive-recovery take
 ```
+
+⚠ **The chase decode does not use `LKRegistrar`, and must not.** The chase HUD is a screen-space
+sprite pinned by construction — `pool.py` registers every chase clip at dx = dy = 0 — so there is no
+shake to solve, and its dials sit hard against the screen edge, where the registrar's padded ROI
+runs to negative indices and `np.gradient` dies on the empty slice. `run2chase.py` therefore passes
+(0, 0) directly. This is why the chase path had dial *fits* long before it had needle *readings*.
+
+⚠ **The chase HUD carries no pitch attitude.** Its green bottom-left instrument looks like an ADI
+but is a **roll-only plan-view indicator** — a fixed top-down aircraft silhouette against a rotating
+ring. Its green-fill fraction is flat to 4% across a fully vertical dive, so it cannot be read for
+pitch, and the cockpit `adi.py` crop landing on it returns a constant. The only pitch proxy available
+on a chase clip is the flight-path angle γ = asin(climb/v) from the altimeter and speedometer — and
+γ **saturates at ±90°** in a genuinely vertical dive (descent rate reaches airspeed), so `dγ/dt`
+there is a clipping artifact, not a pitch rate. Drop those frames before using it
+(`recovery.py` gates on `|climb/v| < 0.98`).
+
+⚠ **`Dial` and `LKRegistrar` take `sfx=""`** to choose the pooled reference (`""` cockpit,
+`"_chase"` chase). The default is the cockpit pool, so every cockpit caller and every published
+cockpit number above stays valid without a re-run — the same convention `pool.py` and `fitdial.py`
+already use for their cache names.
 
 The cockpit path is unchanged:
 
