@@ -480,6 +480,9 @@ and the SI-script pool — `Script(index)` parses lazily, ordered by `metadata.j
 The zrdr front-end: ANIMATION_DEFINITIONS reader files normalized into CompiledAnim's
 `AnimDefinition` model (op key SNAKE_CASE→PascalCase IS the compiled tag; unclaimed bodies stay
 under `raw`). Exists because compiled archives are incomplete: `zepstate`/`startanims` are reader-only.
+Unit normalization happens HERE so handlers see one convention: reader rotations are DEGREES
+(ROTATE_STATE, FROM_TO rotate, XYZ_ROTATION → radians), PLAYER_RANGE metres (→ m²), ANIMATION_LOD
+tokens (→ numbers) — see docs/formats/anim-definitions.md.
 ⚠ `ParseDef` defaults `AnimName ??= Name` — without it a reader def misses its compiled twin in
   AnimProgram's dedupe key and runs as a second, independently-anchored copy.
 ⚠ `AddCallTarget` must NOT touch `data["node"]`/`data["name"]` — for CALL_ANIMATION those hold the CALLED animation's name.
@@ -1710,6 +1713,9 @@ resolved, and `MergedAabb(Node3D)` merges a subtree's world-space mesh AABBs (sh
 The `--anim-lab` debugger: a quiet `WorldSession` stage (`AutoStart=false`, seed pinned), fixed-dt
 clock, transport button panel, def picker, `AnimTimeline`, `SpectatorCamera` freecam following the
 shared selection, and a staged effect/crash anchor set so placeless on-call defs play at the camera.
+Interactive (FixedAccum) frames draw each live transform-motion target interpolated between its
+last two SIM poses (`GameClock.StepFraction`); sim poses are restored before any step runs, so
+render smoothing never leaks into event held-pose seeding and FixedStep stays byte-identical.
 ⚠ On `SelectionService.Changed`: **frame + follow on a fresh pick, re-follow WITHOUT re-framing on
   a ladder walk** — re-framing every rung would fling the camera out to the zeppelin's radius.
 ⚠ Ordering is load-bearing: `Play` sets the timeline focus BEFORE `AnimRuntime.Play` (t=0 events

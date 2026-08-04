@@ -66,8 +66,8 @@ bare flag (`LOCAL_NODES_ONLY`).
 |---|---|---|
 | `OBJECT_ACTIVE_STATE` | `NAME` [node…], `STATE` [`ACTIVE`\|`INACTIVE`] | Show/hide a subtree (and its collidability). A multi-entry NAME is a parent→child path (`["piratezep","interior"]`). |
 | `OBJECT_TRANSLATE_STATE` | `NAME`, `STATE` [x,y,z], `RELATIVE` | **Absolute** position in the node's parent frame (see below). `RELATIVE` is `false` in all 1143 uses in this install. |
-| `OBJECT_ROTATE_STATE` | `NAME`, `STATE` [x,y,z], `BASIS` | **Absolute** orientation in the parent frame, **radians**. `BASIS` is `"Absolute"` in 6430 of ~6600 uses; the rest are `AtNodeXYZ`/`AtNodeMatrix` look-at forms (zeppelins, cameras). |
-| `OBJECT_MOTION_FROM_TO` | `NAME`, `TRANSLATE`/`ROTATE`/`SCALE` `{from,to}` (+ `*_DELTA` variants), `RUN_TIME` [s] | Timed motion between two **absolute** parent-frame poses (C1 hangar 3: four `h3_dr*` doors over 9–10 s). |
+| `OBJECT_ROTATE_STATE` | `NAME`, `STATE` [x,y,z], `BASIS` | **Absolute** orientation in the parent frame — **radians compiled, degrees in the zrdr sources** (see "rotations" below). `BASIS` is `"Absolute"` in 6430 of ~6600 uses; the rest are `AtNodeXYZ`/`AtNodeMatrix` look-at forms (zeppelins, cameras). |
+| `OBJECT_MOTION_FROM_TO` | `NAME`, `TRANSLATE`/`ROTATE`/`SCALE` `{from,to}` (+ `*_DELTA` variants), `RUN_TIME` [s] | Timed motion between two **absolute** parent-frame poses (C1 hangar 3: four `h3_dr*` doors over 9–10 s). The rotate channel shares `OBJECT_ROTATE_STATE`'s unit split. |
 | `OBJECT_MOTION` | `NAME`, `XYZ_ROTATION` [ix,iy,iz,dx,dy,dz], optional `RUN_TIME` [s] — plus the `GRAVITY`/`TRANSLATION[_RANGE]`/`FORWARD_ROTATION`/`SCALE`/`BOUNCE_SEQUENCE` channels | Two ops in one: a **steady spin** (`XYZ_ROTATION` alone, at `initial` rad/s — deg/s in the reader — endless without `RUN_TIME`; the zeppelin nacelle props) OR a **ballistic body** (translate/launch + scale ramp + tumble under gravity; the crash pieces and debris arcs). See "`OBJECT_MOTION` is two ops sharing one event". |
 
 ### `OBJECT_OPACITY_STATE` is translucency, not visibility
@@ -227,7 +227,7 @@ could equally be a random spread, which this data uses elsewhere. Nothing reacha
 it is counted as `ObjectMotion(rotation delta)` and reported — the same call `Object3DRotate`'s
 ambiguous angle unit got in `interp.md`.
 
-### Transform channels are absolute, and rotations are radians
+### Transform channels are absolute; rotations are radians compiled, degrees in the sources
 
 **Every transform channel — `translate`, `rotate`, `scale`, in both the `*_STATE` events and
 `OBJECT_MOTION_FROM_TO` — is an absolute value in the node's own parent frame, not an offset
@@ -250,9 +250,18 @@ Evidence, surveyed over all 8 chapters (2026-07-21):
   places them (C2's `sailboat2`, C1's `car_go_home`) rest at their parent's origin and
   legitimately don't match. Absolute-in-parent-frame is the rule that covers both families.
 
-Rotations are **radians**, not degrees: the maximum magnitude in the data is `15.708 = 5π`,
-99.93% of values are ≤ 2π, and 228 sit on exact π/2 multiples. Converting them with
-`DegToRad` makes every rotation ~57× too small — visually, nothing turns.
+Rotation units differ between the two spellings (2026-08-04, the C2 roadblock spin):
+
+- **Compiled** archives are **radians**: the maximum magnitude in that data is `15.708 = 5π`,
+  99.93% of values are ≤ 2π, and 228 sit on exact π/2 multiples. Converting them with
+  `DegToRad` makes every rotation ~57× too small — visually, nothing turns.
+- **Reader (zrdr) sources** are **degrees** — the same reader↔compiled divergence as
+  `XYZ_ROTATION`, `PLAYER_RANGE` (m vs m²) and `ANIMATION_LOD` (`HIGH` vs `2`). Surveyed over
+  every `.zrd.json` in the install: 1,388 of 1,428 nonzero `OBJECT_ROTATE_STATE`/`ROTATE_FROM`/
+  `ROTATE_TO` values exceed 2π, maximum 900, on clean multiples of 5°/15°/45°. C2
+  `police_blockade`'s `[0,135,0]` against its compiled `mis_anim` twin's `2.3561945` (= 135°)
+  settles it — fed through unconverted, the roadblock swerve spun each car ~9 turns. The
+  remake's reader front-end (`AnimDefs`) converts at parse, so handlers see radians from both.
 
 **An absent `OBJECT_MOTION_FROM_TO` channel means HOLD the node's current value**, not
 "return to the authored rest pose" — the reader spelling's "a missing FROM means from
