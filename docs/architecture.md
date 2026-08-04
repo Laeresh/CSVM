@@ -1073,8 +1073,6 @@ engines.json stock engine power + player.json globals (the flight constants and 
 volume/pitch `SoundCurve`s (clamped two-point ramps), `destroyable_parts` → `DestroyablePart`
 records (name, max HP, max armor, `critical`/`engine` flags, `got_hit_anim`, per-part
 `injure_anims`), and the def-level `VehicleInjureAnims`. Schema: docs/formats/vehicle.md.
-⚠ `MaxArmor` is read (`BL-085` A1) but not yet consumed — `PlaneDamage` still spends a single HP
-  pool; the armour-first two-pool `Apply` lands with A2.
 ⚠ Def-level injure_anims are consumed as ANY-part HP fractions, not per-part — see DamageVisuals.
 ⚠ `damaged_engine_sound` is now parsed (`DamagedEngineSound` + `DamagedEngineGain`); only
   `cockpit_engine_sound` remains unparsed — it needs a cockpit view (`BL-161`).
@@ -1424,22 +1422,27 @@ free camera left the eye.
 ⚠ The stunt/race AllComplete freeze runs BEFORE the crash branch; Respawn never resets a mid-run stunt.
 
 ## src/Flight/PlaneDamage.cs
-Per-part hit points from vehicle.json destroyable_parts (via PlaneStats). MapStruckPart maps a
-struck collider box + plane-local impact to the data part: wing/canard by impact X sign (left =
-−X), fuselage fore/aft of z 0 → nose/tail. Apply subtracts, Reset refills on respawn, Summary
-feeds the HUD DMG line, WorstFraction (lowest part fraction, 1f pristine) feeds whole-plane
-feedback like FlightAudio's damaged-engine loop.
+Per-part armor + hit points from vehicle.json destroyable_parts (via PlaneStats). MapStruckPart
+maps a struck collider box + plane-local impact to the data part: wing/canard by impact X sign
+(left = −X), fuselage fore/aft of z 0 → nose/tail. Apply(part, healthDamage, armorDamage) spends
+armor first and carries the share armor could not absorb into health within the same shot, scaled
+by the round's health magnitude — so a bare zone takes exactly HEALTH_DAMAGE; the one-magnitude
+overload (collisions) spends that amount across both pools. Reset refills both on respawn, Summary
+feeds the HUD DMG line, Fraction/WorstFraction are the COMBINED armor+health progression (the scale
+the injure_anims thresholds are on), feeding whole-plane feedback like FlightAudio's damaged-engine
+loop.
 ⚠ The "tail" arm ignores localImpact and is correct only because PlaneCollider.Relabel hands it
   no outboard boxes — do not fix tail sidedness here; widening the signature was rejected.
 ⚠ The `engine` flag (power loss) is unwired **by design, not deferred** — the original states damage
   never degrades performance; but the shipped data still sets the flag, so retail may have walked
   that back (docs/formats/vehicle.md).
-⚠ There is no armour pool anywhere in the collision path: Apply is a flat subtract on one Hp, and
-  FlightController.Crash never calls in at all (a crash is a boolean destroy). Do not assume armour
-  is spent first on a graze or a crash — it is not modelled.
+⚠ A stock zone's effective pool is DOUBLE its MaxHp (armor == hp on all 88 shipped entries, spent
+  first) — faithful to the original, not a regression to tune away. Armor at 0 is a stripped zone,
+  not a dead one: only Hp ≤ 0 downs a critical part. FlightController.Crash still never calls in
+  (a hard hit is a boolean destroy) and player.json's crash block is still unbound (`BL-172`).
 
 ## src/Flight/DamageVisuals.cs
-Visible damage driven purely by data thresholds: as a part's HP fraction crosses an injure_anims
+Visible damage driven purely by data thresholds: as a part's combined armor+HP fraction crosses an injure_anims
 entry it shows the torn pdpN panel, hides the healthy skin, and assigns a discrete-puff fire trail
 from the emitter pool; def-level player_smoketrail starts the nose smoke/fire pair. UpdateStatic
 burns the trails in place at StaticBurnSpeed for the parked damage lab. A `<part>_damage_effects`
@@ -1458,7 +1461,8 @@ blocked on enemy fire (`BL-222`); do not add the entry to other planes to "fix" 
   vice versa; diagnose them separately.
 
 ## src/Flight/DamageLab.cs
-The damage lab (F5 toggles): one HP slider per destroyable part with threshold readouts, plus a
+The damage lab (F5 toggles): one slider per destroyable part over its combined armor+HP pool (spent
+armor first, as a graze spends it) with threshold readouts, plus a
 mirrored GaugeCluster damage dial in the viewer; presets (--damage=part:frac) land through the same
 ValueChanged path as a hand drag. One panel, two hosts, chosen by the injected IDamageLabTarget
 (same file): ViewerDamageTarget drives DamageVisuals on a parked plane, FlightDamageTarget writes

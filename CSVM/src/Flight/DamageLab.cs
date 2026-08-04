@@ -63,8 +63,9 @@ public sealed class ViewerDamageTarget : IDamageLabTarget
 
 /// <summary>The flown aircraft (--fly/--stunt): the sliders write the real per-part HP, so the
 /// HUD's DMG line, the damaged-engine mix and the gauge dial all follow — and a critical part at
-/// 0 leaves the plane one hit from down, exactly as a graze would. PlaneDamage only spends HP
-/// (the data has no repair), so an absolute slider state is expressed as Reset + spend.
+/// 0 leaves the plane one hit from down, exactly as a graze would. The slider is the zone's
+/// combined armor+health fraction, spent as a graze spends it — armor first (the data has no
+/// repair), so an absolute slider state is expressed as Reset + spend.
 /// Nothing to tick: FlightController drives the visuals with the plane's live pose every frame,
 /// and UpdateStatic would fight it.</summary>
 public sealed class FlightDamageTarget : IDamageLabTarget
@@ -91,7 +92,7 @@ public sealed class FlightDamageTarget : IDamageLabTarget
         damage.Reset();
         foreach (var (name, frac) in fractions)
             if (damage.Parts.TryGetValue(name, out var state))
-                damage.Apply(name, (1f - frac) * state.Def.MaxHp);
+                damage.Apply(name, (1f - frac) * (state.Def.MaxHp + state.Def.MaxArmor));
         if (rebuildVisuals && _controller.Visuals is { } visuals)
         {
             visuals.Reset();

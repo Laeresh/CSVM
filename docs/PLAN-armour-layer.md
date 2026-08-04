@@ -51,7 +51,7 @@ exist today. World destructibles stay health-only (measured over 16,114 defs) �
 | 3 | The 2× effective pool at stock | **Intended — record as faithful, do not tune away, do not file a capture to "measure" it** — it follows arithmetically from armour==hp at stock plus armour-first 1:1 overflow (decided 2026-08-03). |
 | 4 | `crash` block binding (grazes/crashes spending `armor_damage_range`/`health_damage_range`) | **Out of scope — deferred to `BL-172`** — the pushback (`bounce_factor`) and the armour-aware crash damage are one coupled change; grazes here keep the hand-authored `GrazeMaxDamage` magnitude but spend it through the new two-pool `Apply`. |
 | 5 | How the gauge shows two pools | **The rings are NOT split — both always show the same colour** (user, 2026-08-04, from the game manual's Crispen Mark V description). Zone colour comes from the combined sequential progression: green = untouched; yellow = up to 50% of the zone's armour destroyed; orange = 50–100% of armour destroyed and 0–25% of airframe destroyed; red = 25–100% of airframe destroyed. |
-| 6 | What drives the damage-anim thresholds (`injure_anims`: pdpanel flips, smoke/fire, the cockpit colour cycle) | **Draft: the combined sequential fraction — (armour+health remaining) / (armour+health max)** — the colour-cycle anims and the torn-skin flips share one undifferentiated `injure_anims` list, so the original fed them one scalar; the manual's yellow band (armour damage only) confirms visuals react before health is touched. ⚠ The shipped fracs are already measured — 0.72 / 0.46 / 0.20 (`docs/formats/hud.md`, "Thresholds") — and on the combined scale the manual's boundaries would be 0.75 / 0.375: 0.72≈0.75 fits, 0.46 and 0.20 do **not** cleanly. Reconcile in A2 before B11 builds on this (manual prose is approximate; or the fracs aren't combined-scale; or the band count differs — orange exists on screen but not as its own manual band). Combined-scale thresholds coincide with the manual's piecewise definition only while armour == health max; diverges once the armory (`BL-067`) exists — moot at stock, recorded. |
+| 6 | What drives the damage-anim thresholds (`injure_anims`: pdpanel flips, smoke/fire, the cockpit colour cycle) | **Settled in A2 (2026-08-04): the combined sequential fraction — (armour+health remaining) / (armour+health max)**, and `PartState.Fraction` is that. The colour-cycle anims and the torn-skin flips share one undifferentiated `injure_anims` list, so the original fed them one scalar; the manual's yellow band (armour damage only) confirms visuals react before health is touched. **Reconciliation of the shipped 0.72 / 0.46 / 0.20 (`docs/formats/hud.md`, "Thresholds") with the manual: they agree.** The earlier worry compared the manual's figures to the shipped fracs as if both were boundaries. They are not — the manual gives each band's *envelope*. On the combined scale at stock, 0.72 falls at 56 % of armour gone (manual yellow: ≤ 50 % armour — the one near-boundary, prose vs data), 0.46 just past armour zero at 8 % of the airframe (manual orange: armour half-to-fully gone, ≤ 25 % airframe ✓), 0.20 at 60 % of the airframe (manual red: 25–100 % airframe ✓). Every shipped frac lands inside its manual band, so C21 can feed the mined thresholds the combined fraction with no hand-authored constants. On a health-only scale the manual's yellow band is unreachable — that reading is dead. ⚠ Left standing for B11's eyeball: the def-level `player_fuelleak` at 0.85 now fires while only armour is spent (30 % of the armour gone, airframe untouched). Combined-scale thresholds coincide with the manual's piecewise definition only while armour == health max; diverges once the armory (`BL-067`) exists — moot at stock, recorded. |
 
 ## ⚠ Read this before implementing anything
 
@@ -111,7 +111,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — the data reads both floats
 
 1. ☑ `DestroyablePart` gains `MaxArmor`; `PlaneStats` reads both values of the pair
-2. ☐ `PlaneDamage` becomes two pools with armour-first 1:1-overflow `Apply` (unit-tested)
+2. ☑ `PlaneDamage` becomes two pools with armour-first 1:1-overflow `Apply` (unit-tested)
 
 ### Wave B — every existing consumer speaks two-pool
 
@@ -158,7 +158,19 @@ parts; goldens hash-identical (no behaviour change yet).
 one-float def means no armour, not equal armour. AI `r*` variants carry *unequal* pairs; they're the
 regression case proving the two fields are read independently.
 
-## A2 ☐ `PlaneDamage` becomes two pools with armour-first 1:1-overflow `Apply` (unit-tested)
+## A2 ☑ `PlaneDamage` becomes two pools with armour-first 1:1-overflow `Apply` (unit-tested)
+
+**Landed 2026-08-04.** The overflow arithmetic settled as the **share of the round armour could
+not absorb, carried into health at the round's health magnitude** — `unabsorbed = (armorDamage −
+armourSpent) / armorDamage`, `Hp -= healthDamage * unabsorbed`. Point-for-point 1:1 whenever the
+two magnitudes are equal (every collision, 30 of 48 ballistics entries), which is what the "1:1"
+in `BL-085` and the spec describes; for an unbalanced round it is 1:1 in *shot share*, the only
+generalisation that keeps retail string 3372 true — a bare zone takes exactly `HEALTH_DAMAGE`, so
+AP (4.5 armour / 1.5 health) strips armour fast and does little to airframe, while the rejected
+"leftover armour points spill as health points" reading would have made AP the *heaviest* round
+against a stripped zone. No shipped entry has `ARMOR_DAMAGE == 0` with a nonzero `HEALTH_DAMAGE`
+(checked over all 48), so the armour-less-round case is a definition, not a data case: it passes
+armour untouched. Decision 6 settled above — `Fraction`/`WorstFraction` are the combined pool.
 
 **Goal.** `PartState` holds independent `Hp` and `Armor`; a single `Apply` call spends armour
 first, overflows 1:1 into health **within the same shot**, and never wastes damage on a

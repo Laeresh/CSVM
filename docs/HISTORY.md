@@ -14165,3 +14165,50 @@ dispatch lag re-deferred with a fresh measurement (B12), the silent golden-run e
 capturable (C21), the static collider probe rewritten and its C4/C5 gap measured gone (C22), and
 this decision (D31). Archived under `docs/plans/`; its row is in
 [`docs/plans/plans.md`](plans/plans.md).
+
+
+**PLAN-armour-layer A2: `PlaneDamage` becomes two pools with an armour-first `Apply` (2026-08-04).**
+`PartState` was a single `float Hp` and `Apply` a flat subtract; it now carries `Hp` **and** `Armor`
+(both filled from the def, refilled by `Reset`), and `Apply(part, healthDamage, armorDamage)` spends
+armour first: `unabsorbed = (armorDamage - armourSpent) / armorDamage`, then
+`Hp -= healthDamage * unabsorbed`. **The overflow rule settled as a share of the round, not a
+carry of leftover points.** Both readings are point-for-point 1:1 whenever the two magnitudes are
+equal (every collision, and 30 of the 48 shipped `BALLISTICS` entries), which is the "1:1" `BL-085`
+and the spec describe; they differ on an unbalanced round, and only the share reading keeps retail
+string 3372 true — a bare zone takes exactly `HEALTH_DAMAGE`, so AP (`wep_32`, 4.5 armour / 1.5
+health) strips armour fast and does little to airframe, whereas spilling leftover *points* would
+have made AP the heaviest round against a stripped zone, re-inverting the ammo tier this item
+exists to fix. No shipped entry pairs `ARMOR_DAMAGE == 0` with a nonzero `HEALTH_DAMAGE` (checked
+over all 48), so a round with no armour magnitude is a definition, not a data case: it passes
+armour untouched. A single-magnitude overload (`Apply(part, damage)`) spends that amount across
+both pools for the collision path, which `player.json`'s `crash` block backs with equal
+`armor_damage_range`/`health_damage_range` — grazes therefore already spend armour first, and a
+stock zone's lifetime doubles, which is the intended faithful 2× (plan Decision 3), not a
+regression. `Critical` still triggers on `Hp <= 0` only: armour at 0 is a stripped zone, not a dead
+one. `Fraction`/`WorstFraction` are now the **combined** `(Hp + Armor) / (MaxHp + MaxArmor)`
+progression, with `HealthFraction`/`ArmorFraction` alongside for B12/C21; `Summary` prints both
+pools (`nose a0% h50%`), and `DamageLab`'s flight target drives the slider against the combined
+max so its readback still round-trips. World destructibles are untouched (health-only).
+
+**Plan Decision 6 settled, as the item required.** The shipped `injure_anims` fracs are on the
+combined scale. The standing worry ("0.72 fits the manual, 0.46 and 0.20 do not") compared the game
+manual's figures to the shipped fracs as if both were boundaries; the manual gives each band's
+*envelope*. At stock, 0.72 falls at 56 % of armour gone (manual yellow: up to 50 % armour — the one
+near-boundary, prose against data), 0.46 just past armour zero at 8 % of the airframe (manual
+orange: armour half-to-fully gone with up to 25 % airframe), 0.20 at 60 % of the airframe (manual
+red: 25–100 % airframe). Every frac lands inside its manual band, so C21 can feed the mined
+thresholds the combined fraction with no hand-authored constants. The health-only reading is dead:
+on it the manual's yellow band is unreachable, since nothing would react while armour is stripped.
+Left for B11's eyeball: the def-level `player_fuelleak` at 0.85 now fires while only armour is
+spent. `docs/architecture.md` (`PlaneDamage`, `PlaneStats`, `DamageVisuals`, `DamageLab` entries)
+and `docs/formats/hud.md` ("Thresholds", which now records the scale) updated.
+
+**Verified.** New `CSVM.Tests/PlaneDamageTests.cs`, 13 cases on hand-authored stock-Bloodhawk defs
+(20/20) driven with the real 30-calibre matrix: armour-first order; the exact boundary shot (four AP
+rounds leave 2 armour, the fifth carries 5/9 of its 1.5 health magnitude across); a stripped zone
+taking full `HEALTH_DAMAGE` and AP hurting it least; a def with no armour pool taking full health
+damage from the first shot; the single-magnitude overload spending exactly 30 across a 20/20 zone;
+neither pool going negative; stripping armour never emptying health; the combined fraction stepping
+0.75 → 0.5 → 0.25; `WorstFraction`; `Reset` refilling both; the two-pool `Summary`.
+`.\RunTests.ps1`: build clean, 436/436 units (was 423; 13 new), 22/22 engine suites, 13/13 goldens
+hash-identical — nothing on a golden path grazes, so the doubled zone lifetime moves no shot yet.

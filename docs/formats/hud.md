@@ -109,7 +109,15 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   cycle colors** (orange user-confirmed in the original, 2026-07-19) — each anim
   threshold steps to the *next* color: green > 0.72, yellow ≤ 0.72, orange ≤ 0.46,
   red ≤ 0.20 (red on a still-flying plane matches the damage reference shot; the
-  anim names lag their effect by one state). Blink: the original blinks a zone
+  anim names lag their effect by one state). **The scale is the zone's COMBINED
+  armor+health pool** (`BL-085`), not health alone: at stock (armor == hp) 0.72
+  falls while 56 % of the armor is gone, 0.46 just past armor zero (8 % of the
+  airframe), 0.20 at 60 % of the airframe — each inside the band the game manual's
+  Crispen Mark V description gives it (yellow ≤ 50 % armor gone; orange = armor
+  half-to-fully gone with ≤ 25 % airframe gone; red = 25–100 % airframe gone). The
+  manual's figures are each band's envelope, not its boundary; the shipped fracs are
+  the boundaries, and they sit inside. On health alone the manual's yellow band
+  would be unreachable — nothing would react while armor is being stripped. Blink: the original blinks a zone
   (fill + border) for ~5 s after it takes a hit, even inside green (user-observed).
 - **Scales** (measured off the face textures): altimeter 0–9 clockwise from top, 36°
   per digit — long needle 360°/1,000 ft, short 360°/10,000 ft; speedometer labels
