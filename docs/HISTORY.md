@@ -13173,3 +13173,59 @@ is *measurable* on this take, since every move now starts from a settled base, b
 fitted — same missing FOV calibration.
 
 `CAP-07` is discharged. `BL-150` remains blocked on `CAP-08` for the key-combination behaviour (d).
+
+## 2026-08-04 — `CAP-07`, second pass: the numpad ease is EXPONENTIAL, not linear; the FOV self-calibration fails
+
+A follow-up pass on `CAP-07 scripted Run.mp4` to turn the layout quadrants into degrees and to fit
+the ease law. One of the two landed.
+
+**The ease law (`BL-150`(b)) — settled, and it overturns what the entry claimed.** The entry carried
+"the ease reads linear, not smoothstepped" from by-eye observation. It is neither. Camera travel was
+tracked as the cumulative frame-to-frame displacement of matched star points — a monotone proxy for
+rotation that needs no field-of-view calibration — over all 16 transitions (a press and a release
+for each of the eight moving keys). Normalised, the profile is heavily front-loaded: **33% of the
+travel inside the first 10% of the move, 93% by the halfway point.** Fitting `v(t) = 1 − e^(−kt)`
+gives rms **0.012–0.080**, against **0.37–0.50** for a linear ramp, on every single transition;
+smoothstep is worse than linear. The ease is an asymptotic approach — exactly the
+`pos += (target − pos)·k·dt` form the chase camera already uses — so the fix for (b) is to route
+`ApplyFixedView` through that existing law, not to author an ease curve.
+
+Rate: **k = 7.50 ± 1.62 /s on the press and 7.70 ± 3.20 /s on the release** (wall seconds). The two
+agree well inside their spread, so the ease is **symmetric out and back** — the part of the original
+claim that survives. ⚠ Those are wall seconds and the original's clock runs fast (k = 1.390): in sim
+seconds the constant is **≈ 5.4 /s**, 90% of the way in ≈ 0.43 s sim. Implementing 7.5 would run the
+ease 39% quick, the same trap `BL-148` documents for the stall blink. Our hand-picked `CamSmooth` 8
+is in the right region but is a wall-rate.
+
+⚠ `k` is a **lower bound**; the shape is not. The tracker undercounts the fastest 1–2 frames of each
+slew, and undercounting the early fast part biases `k` down and makes the curve look *less*
+front-loaded than it truly is — so the exponential-vs-linear verdict only strengthens under its own
+bias, while the constant wants a re-measure once an FOV calibration exists.
+
+**The FOV self-calibration fails — recorded so it is not attempted again.** The method was sound in
+principle. The night sky's stars are world-fixed points; they are detectable (200 per frame at ≥55
+counts over a 25 px local background); they are genuinely sky and not screen-space artefacts — when
+the camera returns to base after a hold, **181 of 200** base points come back within 3 px, while at
++2 s / +4 s / +10 s into a hold almost none survive; and a pure-rotation homography `K R K⁻¹` fitted
+across a large swing would pin `f`. It fails on the *size* of the swing. Base and hold frames share
+essentially no sky, so the fit needs the rotation chained frame-to-frame through the transition, and
+the chain loses the fast core: star displacement is 0.01 px settled but 17 px median and 255 px peak
+while slewing, and in the fastest frames the matcher locks onto a spurious near-identity consensus
+rather than the true shift. Chaining from frame 0 also accumulates drift over 2000 frames; chaining
+locally per key fixed that without fixing the core problem. The residual-vs-`f` curve is flat above
+~1300 px (1.759 → 1.732 px rms out to `f` → ∞), so **`f` is bounded from below only: wider than ~84°
+vertical is excluded and nothing more.** Recovered per-key angles were self-evidently wrong —
+azimuth within ±40° of dead astern for every key, when the stills show `Kp2` nose-on and `Kp8`
+near-vertical — with the reprojection check at 5.8–19 px against 0.57 px for the one key that does
+not move.
+
+*What would fix it:* not a slower slew — that is the thing being measured. Either a capture that
+pans the camera slowly across the sky once, purely for calibration, or a known-geometry object in
+frame. The aircraft's own wingspan from its mesh at the shipped `dist` (`camparam.zrd.json`, read by
+`CamParams`/`CameraController` since `BL-149`) would give `f` directly and needs no new footage —
+the cheaper route, and the one to take next. Note `BL-248`(a) leaves open whether that distance is
+dynamic, which has to be settled first or the calibration inherits the same doubt.
+
+`Kp5` picked up a third independent confirmation on the way: across the whole 3.5 s hold, 52 star
+tracks survive end-to-end at 0.78 px rms, and 178–184 star inliers hold at every trial focal length.
+Nothing moves.

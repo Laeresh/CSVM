@@ -731,9 +731,24 @@ unscheduled.
   pointing image-right, and `Kp4` does. The four corners all show belly, underwing ordnance and the
   ventral skull fin, so ε > 0 for each; their nose directions are up-right / up-left / down-right /
   down-left for 1 / 3 / 7 / 9, giving the four quadrants above.
-  ⚠ **Read the limits.** These are *quadrants and signs, not degrees* — no azimuth or elevation has
-  been solved numerically, because that needs a field-of-view calibration this clip has not yet been
-  put through. `Kp8` is the weakest: at a near-vertical elevation the azimuth is degenerate, so
+  ⚠ **Read the limits.** These are *quadrants and signs, not degrees.* Getting degrees needs the
+  render's field of view, and **a self-calibration attempt on this clip failed — do not repeat it.**
+  The method was sound in principle: the night sky's stars are world-fixed points, they are
+  detectable (200 per frame at ≥55 counts over a 25 px local background), they are genuinely sky
+  rather than screen artefacts (when the camera returns to base after a hold, **181 of 200** base
+  points come back within 3 px, while at +2 s / +4 s / +10 s into a hold almost none survive), and a
+  pure-rotation homography `K R K⁻¹` fitted across a large swing would pin `f`. It fails on the
+  *size* of the swing: base and hold frames share essentially no sky, so the fit needs the rotation
+  chained frame-to-frame through the transition, and the chain loses the fast core. Frame-to-frame
+  star displacement is 0.01 px settled but 17 px median and 255 px peak while slewing, and in those
+  few fastest frames the matcher locks onto a spurious near-identity consensus instead of the true
+  shift. The residual-vs-`f` curve is consequently flat above ~1300 px (1.759 → 1.732 px rms out to
+  `f` → ∞), so `f` is bounded from below only: **wider than ~84° vertical is excluded, nothing
+  else.** *What would fix it:* a slower slew is not available (it is the thing being measured), so
+  either a capture that pans the camera slowly across the sky once for calibration, or a
+  known-geometry object in frame — the aircraft's own wingspan from the mesh at the known shipped
+  `dist` would do it directly, which is the cheaper route and needs no new footage.
+  `Kp8` is the weakest of the nine: at a near-vertical elevation the azimuth is degenerate, so
   "directly below" rests on the plan-form silhouette being unforeshortened plus visible underwing
   ordnance (occluded from above), not on the nose-direction solve. One take, one aircraft — the
   layout is a per-key constant so that is fine for the table, but do not read distances off it.
@@ -743,9 +758,30 @@ unscheduled.
   omission of `Kp0` from `Views[]` is therefore **correct** and needs no change; the camera set is
   `Kp1`–`Kp9`. (Whether `Kp0`/`Kp.` should drive rudder at all is a separate input question this
   entry does not own.) The underside-front position stands for 7 on its own.
-  (b) **Motion is wrong in kind, not just speed.** The original eases to AND from each position
-  holding cam distance/radius constant, and the ease reads linear, not smoothstepped; ours snaps both
-  ways (`ApplyFixedView` has no smoothing branch at all).
+  (b) **Motion is wrong in kind, not just speed** — ours snaps both ways (`ApplyFixedView` has no
+  smoothing branch at all). **Measured 2026-08-04 from the `CAP-07` scripted re-take, 16 transitions
+  (a press and a release for each of the eight moving keys).**
+  ⚠ **The "ease reads linear" claim this entry carried is WRONG — the ease is exponential.** Sky
+  travel was tracked as the cumulative frame-to-frame displacement of matched star points, which is
+  a monotone proxy for camera rotation and needs no FOV. Normalised, the profile is heavily
+  front-loaded: **33% of the travel in the first 10% of the move, 93% by the halfway point.** Fitting
+  `v(t) = 1 − e^(−kt)` gives rms **0.012–0.080** against **0.37–0.50** for a linear ramp — the wrong
+  model by a factor of 6–40, on every one of the 16 transitions. A smoothstep is worse than linear.
+  - **Rate `k` = 7.50 ± 1.62 /s on the press, 7.70 ± 3.20 /s on the release** (wall seconds) — the
+    two agree well inside their spread, so **the ease is symmetric out and back**, which is the one
+    part of this entry's original claim that survives. 90% of the way in ~0.30 s wall.
+  - ⚠ **Those are WALL seconds and the original's clock runs fast (k = 1.390, `FINDINGS.md`).** In
+    sim seconds the constant is **≈ 5.4 /s**, 90% in ≈ 0.43 s. Implementing 7.5 would run the ease
+    39% quick — the same trap `BL-148` documents for the stall blink.
+  - **The form is exactly the smoothing our chase camera already uses** — `pos += (target − pos)·k·dt`
+    (`CamSmooth` 8 /s, `CamRotSmooth` 7 /s) — so (b) is a matter of routing `ApplyFixedView` through
+    that existing law rather than inventing an ease curve. Our hand-picked 8 /s is in the right
+    region but is a *wall*-rate; the measured sim-rate is ≈ 5.4 /s.
+  - ⚠ **`k` is a lower bound, the shape is not.** The tracker undercounts the fastest 1–2 frames of
+    each slew (see the calibration note in (a)), and undercounting the early, fast part biases `k`
+    *down* and makes the curve look *less* front-loaded than it is. The exponential-vs-linear verdict
+    therefore only strengthens under the bias; the constant itself wants a re-measure once an FOV
+    calibration exists and the rotation can be integrated as an angle rather than a pixel proxy.
   (c) ~~**Distance is a TUNE hand-copied from the chase camera.**~~ **Resolved** — the fixed views
   now take the per-plane shipped distance with the chase camera (`CameraController`); the Bloodhawk's
   radius is its own 18.5, not 16.62. Nothing left to do here.
