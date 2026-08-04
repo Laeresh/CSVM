@@ -78,7 +78,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ A1 `BL-051` — honour the gamez node `active` flag
 2. ☑ A2 `BL-056` — render the per-polygon second material pass
-3. ☐ A3 `BL-058` — answer the C5 doubled-buildings question (post-subface check)
+3. ☑ A3 `BL-058` — answer the C5 doubled-buildings question (post-subface check)
 4. ☐ A4 `BL-053` — dense cross-node conflict rank for the depth bias
 5. ☐ A5 `BL-057` — parse + census `zone_set`, document it
 
@@ -193,7 +193,7 @@ by git-stash A/B: the C5 **NYPD** sign now renders (1,550 px, bbox on the sign a
 control shows blank steel. All captures taken with A4 unlanded. Full record: `docs/HISTORY.md`
 2026-08-04.
 
-## A3 ☐ `BL-058` — answer the C5 doubled-buildings question
+## A3 ☑ `BL-058` — answer the C5 doubled-buildings question
 
 **Goal.** A measured yes/no: with the subface fix landed (base ground layer hidden), does C5 draw
 doubled clutter buildings — the base layer's own disjoint clutter templates (`cb12a`–`cb24a` on
@@ -218,6 +218,18 @@ closes `BL-058` per the ground rules (delete from backlog, HISTORY entry).
 
 **⚠ Traps.** Treat it as a question, not a finding — do not pre-emptively "fix" clutter spawning.
 If doubling exists, the fix is its own future item with its own regression, not a rider here.
+
+**Landed 2026-08-04 (verdict, no code).** Confirmed yes: `ClutterBuilder.PlaceOnMesh` matches a
+clutter template to a polygon by texture name only and never reads `GameZPolygon.Subface`, so it was
+never affected by the subface fix. `analysis/item9-depth-bias/CBLOCK-LOD.md` had already measured
+`cblock4/5/6` (base) and `cblock1/2/3` (subface overlay) at 88.5–100% footprint overlap with disjoint
+building sets; a live `--freecam --chapter=C5` build's `ClutterBuilder.Summary` shows both districts
+stamped at once — 43,873 `cblock1/2/3`-district placements, 35,433 `cblock4/5/6`-district placements
+— visually confirmed at the item9 repro pose. `BL-058` closes (question answered); the fix mechanism
+is undecided (no data field marks a base polygon as covered, and which layer the original actually
+shows is not established here) and is **not** guessed — tracked as new item `BL-250`. Docs:
+`docs/formats/clutter.md`, `docs/architecture.md`'s `Clutter.cs` bullet. Full record:
+`analysis/bl-058-clutter-doubling/FINDINGS.md` and `docs/HISTORY.md` 2026-08-04.
 
 ## A4 ☐ `BL-053` — dense cross-node conflict rank for the depth bias
 

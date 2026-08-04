@@ -10,7 +10,7 @@ here means the work is queued, not forgotten. Deep evidence and traps live in
 Cite them from `backlog.md` and in conversation the way `BL-nnn` is cited. IDs are permanent: when
 an item closes its ID retires with it and is never reused, so numbering gaps are expected.
 Retired IDs disappear from this file, so never mint a new ID by scanning the entries below — take
-it from this counter and bump it here: **next free IDs `CAP-22` and `PT-31`.**
+it from this counter and bump it here: **next free IDs `CAP-23` and `PT-31`.**
 
 **Captures staged for an item live in `playtest/<ID>/`** — git-ignored (they are renders of the
 player's own game files) and, unlike `.scratch/`, **not swept by `CleanScratch.ps1`**, so they
@@ -107,6 +107,7 @@ speed, and `BL-248`(a) is disproved rather than implemented — a correct dispro
 | `CAP-11` | `SunIncidence` per chapter | World brightness framed like `OriginalScreenshots/C1 IA1 Zone1 environment Spawn3.png`, for every chapter, plus a few seconds of video each. **Priority pair: a C1B night mission and a C1C bright-day mission** — the two extremes the self-scaling model predicts (0.43 / clamp 1.0) and is riskiest on | `BL-110` |
 | `CAP-12` | Cloud-deck pass-through | A climb from below the cloud band, through it, and out above, **altimeter visible throughout** so puff density can be correlated against altitude | `BL-118` |
 | `CAP-13` | Lens flare | The sun at several screen positions — centred, near-edge, and partially occluded by terrain — to read the streak count, colour and fade | `BL-165` |
+| `CAP-22` | C5 city building density | A low pass through C5's downtown city blocks (IA1), close enough to street level to tell whether buildings sit as one consistent skyline or visibly overlap/interpenetrate each other. Our build currently draws two disjoint building districts on the same footprint (`cb00a`–`cb11a` over `cb12a`–`cb24a`) — this settles whether the original shows only one | `BL-250` |
 
 ### Damage & collision
 

@@ -403,6 +403,13 @@ plus a UV-clamp variant from `SceneBuilder.UvsWithinUnitSquare` over the kind's 
   `_update_shapes()` and clear them; `SharedShapeMeta` on the clutter root anchors them against the GC.
 ⚠ Sprites drop basis + local Y at placement; an upright render is NOT proof the basis is consumed
   (authored bases ≈ identity) — the evidence is docs/formats/clutter.md.
+⚠ **`PlaceOnMesh` matches a template to a polygon by TEXTURE NAME ONLY — it never reads
+  `GameZPolygon.Subface`.** In C5, `cblock1/2/3`'s subface polygons sit directly on top of
+  `cblock4/5/6`'s base polygons (88.5–100% footprint overlap, `analysis/item9-depth-bias/CBLOCK-LOD.md`),
+  and the two districts name disjoint building sets, so today's build stamps BOTH — confirmed doubled
+  clutter buildings (`BL-250`, `analysis/bl-058-clutter-doubling/`). The subface depth-bias fix
+  (`SceneBuilder.SubfaceBias`) only resolves which ground TEXTURE wins the z-fight; it has no effect
+  on this file, which walks the same gamez tree independently.
 
 ## src/Mech3/Zrdr.cs
 Zrdr extraction reader (zip or unpacked dir): `LoadFile`, content-sniffing `LoadMatchingFiles`,
