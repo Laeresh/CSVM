@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Mech3.Anim;
 using CSVM.Utils;
 using Godot;
 
@@ -84,6 +85,16 @@ public sealed partial class AnimLab : Node
     private readonly SoundArchive? _sounds;
     // ItemList row → index into _program.Defs (the filtered view).
     private readonly List<int> _rows = new();
+
+    // Render-pose smoothing for the interactive FixedAccum clock: the sim advances in whole
+    // 1/60 s steps while the lab renders faster, so a moving target's transform used to freeze
+    // on the rendered frames between steps — the same cadence stutter the flown plane had
+    // before its _renderPose fix, visible as ghosted/jittery cars on any FromTo drive. Each
+    // live transform-motion target keeps its last two SIM poses; every rendered frame draws it
+    // at the clock's sub-step fraction between them. Sim purity is kept by restoring the true
+    // sim pose before any step runs, so event held-pose seeding never reads a render pose; in
+    // FixedStep (scripted) the fraction is pinned to 1, an identity rewrite of the sim pose.
+    private readonly Dictionary<Node3D, (Transform3D Prev, Transform3D Curr)> _renderPoses = new();
 
     private Label? _status;
     private AnimTimeline? _timeline;
@@ -184,10 +195,16 @@ public sealed partial class AnimLab : Node
         // each one is a separate Advance, because the event scheduler resolves per step.
         if (Clock is { } clock)
         {
-            for (int i = 0; i < clock.Steps; i++)
+            if (clock.Steps > 0)
             {
-                Step(clock.Dt);
+                RestoreSimPoses();
+                for (int i = 0; i < clock.Steps; i++)
+                {
+                    Step(clock.Dt);
+                }
+                SnapshotSimPoses();
             }
+            ApplyRenderPoses(clock.StepFraction);
         }
         _timeline?.SetPlayhead(PlayheadTime);
         UpdateStatus();
@@ -245,6 +262,59 @@ public sealed partial class AnimLab : Node
         var label = new Label { Text = text, Modulate = new Color(1, 1, 1, 0.65f) };
         label.AddThemeFontSizeOverride("font_size", 11);
         return label;
+    }
+
+    // ---- render-pose smoothing (see the _renderPoses field note) -----------------------------
+
+    /// <summary>Puts every smoothed target back on its exact sim pose, so the steps about to run
+    /// — and any event they fire that seeds a held pose from the live transform — never see an
+    /// interpolated render pose. Sim state stays a function of the step count alone.</summary>
+    private void RestoreSimPoses()
+    {
+        foreach (var (target, pair) in _renderPoses)
+        {
+            if (IsInstanceValid(target))
+            {
+                target.Transform = pair.Curr;
+            }
+        }
+    }
+
+    /// <summary>Rolls the pose pairs after this frame's steps: each live transform-motion
+    /// target's Curr becomes Prev and its fresh sim pose becomes Curr. A target whose motion
+    /// ended leaves the set at its final sim pose (just restored, never re-interpolated).</summary>
+    private void SnapshotSimPoses()
+    {
+        var live = new Dictionary<Node3D, (Transform3D, Transform3D)>();
+        foreach (var motion in _runtime.Motions.Live)
+        {
+            if (motion.Channel != MotionChannel.Transform || !IsInstanceValid(motion.Target))
+            {
+                continue;
+            }
+            var now = motion.Target.Transform;
+            live[motion.Target] = (_renderPoses.TryGetValue(motion.Target, out var prev) ? prev.Curr : now, now);
+        }
+        _renderPoses.Clear();
+        foreach (var (target, pair) in live)
+        {
+            _renderPoses[target] = pair;
+        }
+    }
+
+    /// <summary>Draws each smoothed target between its last two sim poses at the clock's
+    /// sub-step fraction. FixedStep pins the fraction to 1 — an identity rewrite — so scripted
+    /// captures stay byte-identical; while halted the fraction holds still, so a paused frame
+    /// cannot wobble between stale poses.</summary>
+    private void ApplyRenderPoses(float fraction)
+    {
+        foreach (var (target, pair) in _renderPoses)
+        {
+            if (IsInstanceValid(target))
+            {
+                target.Transform = pair.Prev.InterpolateWith(pair.Curr, fraction);
+            }
+        }
     }
 
     private void Step(float dt)
@@ -321,6 +391,9 @@ public sealed partial class AnimLab : Node
             _runtime.Stop(_defName);
         }
         _runtime.Reseed();
+        // A replay re-poses its targets outside the step loop; a stale render pair would put
+        // the old pose back on top of the fresh RESET_STATE.
+        _renderPoses.Clear();
         _steps = 0;
         _playhead = 0f;
         if (Clock is { } clock)
@@ -406,6 +479,9 @@ public sealed partial class AnimLab : Node
             return;
         }
         _runtime.Stop(_defName);
+        // The stop tears the def's motions down mid-flight; without this the stale render
+        // pairs would keep re-writing the last interpolated pose every frame.
+        _renderPoses.Clear();
         _stopped = true;
         GD.Print($"anim-lab: stopped '{_defName}'");
     }

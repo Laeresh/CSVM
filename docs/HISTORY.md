@@ -13382,3 +13382,39 @@ fate, not an observed original screenshot of the buildings) — **held for the u
 not implemented.** `playtest.md` `CAP-22` (C5 city building density) now queues the capture that
 settles it. `backlog.md` `BL-250` and `analysis/bl-058-clutter-doubling/FINDINGS.md` both carry the
 full candidate-fix writeup and the playtest gate.
+
+## 2026-08-04 — C2 roadblock cars: reader rotations are degrees (the end-of-anim spin), and the interactive anim-lab gets render interpolation (the jitter)
+
+**Symptom (user, in the anim-lab): the C2 `roadblock1-3` cars (a) jitter like the pre-fix plane
+— "duplicated in the same frame" — and (b) spin multiple times at the end of the animation.**
+
+**(b) The spin is a reader-front-end unit bug, reproduced deterministically.** Played WITH
+`--mission=M02` the anims are served from the compiled `mis_anim` (radians) and every one of the
+15 cars tracks its authored heading exactly (per-frame yaw probe over all three roadblocks; the
+end swerve is 35–70°). Played WITHOUT the mission — the natural `--anim-lab --chapter=C2` launch —
+the same anim names resolve to the chapter-zrdr `police_blockade*.zrd.json` defs, whose rotations
+are **degrees**: `OBJECT_ROTATE_STATE [0,135,0]` reached `PoseRotate` as 135 rad (7,735°) and the
+0.25 s swerve leg swept police1 through 3,151° ≈ 9 turns — exactly "spins multiple times at the
+end", since only the end legs carry rotate channels. Surveyed install-wide: 1,388 of 1,428 nonzero
+zrdr rotation values exceed 2π (max 900), so the sources are degrees throughout — the same
+reader↔compiled unit divergence `XYZ_ROTATION` already documented and converted. Fix in
+`AnimDefs`: `ObjectRotateState` STATE and the FROM_TO rotate channel now `DegToRad` at parse (the
+`Spin()` precedent), so handlers see radians from both front-ends. Regression tests: two new
+`AnimDefsTests` units on the extended `demo_anims.json` fixture (rotate state converts, FROM_TO
+rotate converts while translate stays metres). Verified red→green on the original repro: the
+no-mission run's rotate channels now arrive as `2.3561945` — byte-identical values to the compiled
+twin. `docs/formats/anim-definitions.md` corrected (title row + the "rotations are radians"
+section now states the split).
+
+**(a) The jitter is the plane's 2026-07-30 cadence split, recurring in the interactive lab.** The
+lab's FixedAccum clock emits whole 1/60 s sim steps while the machine renders ~120 fps, so a
+driven node's transform froze on the rendered frames between steps. Fix in `AnimLab`: each live
+transform-motion target keeps its last two SIM poses and is drawn at the clock's new
+`GameClock.StepFraction` between them, restored to the exact sim pose before any step runs (event
+held-pose seeding never reads a render pose — sim results stay a function of step count). Stale
+pairs are dropped on Play/Restart/Stop. FixedStep pins the fraction to 1, an identity rewrite:
+verified by a byte-identical scripted probe md5 before/after, and the full gate (416 units, 22
+engine suites, 13/13 goldens hash-identical) is green. Interactive verification: an instrumented
+25 s FixedAccum run logged 2,010 sub-step interpolations on the driving cars. **User at-the-controls
+re-check of both symptoms still owed** (the jitter fix has no automated wall-clock seam — same
+limitation as the plane fix, DET-10).
