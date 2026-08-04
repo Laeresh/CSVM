@@ -14125,3 +14125,24 @@ entry. Forward-pointers stapled onto the three 2026-08-03 entries above that sti
 in the build changes; goldens unaffected.
 
 **Verified.** Docs only — no build or test run.
+
+**M3 polish-6 D31: the C3 `cloud1`/`cloud2` magenta call decided (2026-08-04, no code).** `BL-133`
+— C3's gamez references `cloud1`/`cloud2`, which its own `texture.zbd` does not ship, a genuine
+retail-data gap true in both the v0.6.1 and fork extraction trees — was presented to the user both
+ways: suppress to neutral gray via `TextureArchive.KnownAbsentFromGameData` (the one-line addition,
+same treatment as `pir_spinner`/`barngrill`), or keep the diagnostic magenta the project's
+convention reserves for "our bug". **Decision: stays magenta, won't-fix-by-design.** The user has
+never encountered the pair at the controls and can revisit — add the two names to
+`KnownAbsentFromGameData` — if they ever do. No code changed; `KnownAbsentFromGameData` is
+untouched. `BL-133` closes and is deleted from `backlog.md`.
+
+This was the last open item of **M3 polish run 6**
+([`docs/plans/PLAN-m3-polish-6.md`](plans/PLAN-m3-polish-6.md)), now **COMPLETE**: node `active`
+honoured (A1), the per-polygon second material pass rendered (A2), the C5 doubled-buildings
+question answered (A3, `BL-058` closed, mechanism tracked as new `BL-250`), a dense cross-node
+depth-bias conflict rank landed (A4), `zone_set` parsed and censused (A5), the 26 (really 51) dead
+`FROM_TO` delta channels decoded and the dead plumbing removed (B11), the one-frame `CallSequence`
+dispatch lag re-deferred with a fresh measurement (B12), the silent golden-run exit-1 made
+capturable (C21), the static collider probe rewritten and its C4/C5 gap measured gone (C22), and
+this decision (D31). Archived under `docs/plans/`; its row is in
+[`docs/plans/plans.md`](plans/plans.md).

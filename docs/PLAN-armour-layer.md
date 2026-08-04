@@ -1,10 +1,9 @@
 # Armour layer — two-pool zone damage (`BL-085`)
 
-**SCAFFOLDED, NOT YET ACTIVE** (drafted 2026-08-04). This plan sits in `docs/` but is deliberately
-**not** the current plan: PROJECT_CONTEXT.md's "Current status" does not name it, and no item may
-start until it is activated. To activate: reword this banner to **ACTIVE PLAN** and point
-PROJECT_CONTEXT.md's "Current status" at it. Move it to `docs/plans/` with a `COMPLETE` banner, and
-add its row to [`plans/plans.md`](plans/plans.md), when every item lands.
+**ACTIVE PLAN** (drafted 2026-08-04, activated 2026-08-04). It sits in `docs/`, which by this
+repo's convention makes it a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to
+`docs/plans/` with a `COMPLETE` banner, and add its row to [`plans/plans.md`](plans/plans.md), when
+every item lands.
 
 This plan lands `backlog.md`'s `BL-085`: the receiving side of damage grows a second pool. Every
 damage zone carries (armour, health), incoming damage spends **armour first with 1:1 overflow into

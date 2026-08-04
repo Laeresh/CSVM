@@ -2285,20 +2285,6 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   than closing it: a drag there competes with a per-frame read-back and nothing scripted can prove
   that feels right. `PT-29` is the owed test.
 
-## C3 ships gamez references to textures its texture.zbd does not contain
-
-**ID: `BL-133`**
-
-Surfaced 2026-07-21 during the extraction cutover and deliberately left alone. C3's gamez
-references `cloud1`/`cloud2`, which its own `texture.zbd` does not ship — a **retail-data gap**,
-true in both the v0.6.1 and fork extraction trees, so not something the cutover caused.
-
-The fix is a one-line addition to `TextureArchive.KnownAbsentFromGameData`, which would render
-them neutral gray instead of magenta. It is left to the user because it is a **visible** change
-and it deliberately gives up the magenta signal that means "our bug" for those two names — the
-project's convention is that magenta is diagnostic, so suppressing it is a judgement call, not a
-cleanup.
-
 ## Cutscene player — the missing consumer (M04's zeppelin, `letterbox`, `CALLBACK`)
 
 **ID: `BL-134`**
