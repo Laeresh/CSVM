@@ -1,0 +1,197 @@
+{
+ "step": 1.2e-05,
+ "rows": [
+  {
+   "chapter": "C1",
+   "nodes": 5938,
+   "parked": 2562,
+   "tris": 70317,
+   "maxrank": 7,
+   "today": {
+    "conflict": 513,
+    "conflict_wrong": 204,
+    "conflict_tied": 0,
+    "hierarchy": 249,
+    "hierarchy_wrong": 0,
+    "hierarchy_tied": 0
+   },
+   "dense": {
+    "conflict": 513,
+    "conflict_wrong": 0,
+    "conflict_tied": 0,
+    "hierarchy": 249,
+    "hierarchy_wrong": 0,
+    "hierarchy_tied": 0
+   },
+   "secs": 1.2
+  },
+  {
+   "chapter": "C1B",
+   "nodes": 4723,
+   "parked": 2634,
+   "tris": 32694,
+   "maxrank": 2,
+   "today": {
+    "conflict": 16,
+    "conflict_wrong": 6,
+    "conflict_tied": 0,
+    "hierarchy": 15,
+    "hierarchy_wrong": 0,
+    "hierarchy_tied": 0
+   },
+   "dense": {
+    "conflict": 16,
+    "conflict_wrong": 0,
+    "conflict_tied": 0,
+    "hierarchy": 15,
+    "hierarchy_wrong": 0,
+    "hierarchy_tied": 0
+   },
+   "secs": 0.6
+  },
+  {
+   "chapter": "C1C",
+   "nodes": 4774,
+   "parked": 3339,
+   "tris": 34773,
+   "maxrank": 0,
+   "today": {
+    "conflict": 0,
+    "conflict_wrong": 0,
+    "conflict_tied": 0,
+    "hierarchy": 0,
+    "hierarchy_wrong": 0,
+    "hierarchy_tied": 0
+   },
+   "dense": {
+    "conflict": 0,
+    "conflict_wrong": 0,
+    "conflict_tied": 0,
+    "hierarchy": 0,
+    "hierarchy_wrong": 0,
+    "hierarchy_tied": 0
+   },
+   "secs": 0.6
+  },
+  {
+   "chapter": "C2",
+   "nodes": 2977,
+   "parked": 2223,
+   "tris": 38756,
+   "maxrank": 3,
+   "today": {
+    "conflict": 69,
+    "conflict_wrong": 10,
+    "conflict_tied": 0,
+    "hierarchy": 11,
+    "hierarchy_wrong": 0,
+    "hierarchy_tied": 0
+   },
+   "dense": {
+    "conflict": 69,
+    "conflict_wrong": 0,
+    "conflict_tied": 0,
+    "hierarchy": 11,
+    "hierarchy_wrong": 0,
+    "hierarchy_tied": 0
+   },
+   "secs": 0.7
+  },
+  {
+   "chapter": "C2B",
+   "nodes": 4108,
+   "parked": 2550,
+   "tris": 28313,
+   "maxrank": 0,
+   "today": {
+    "conflict": 0,
+    "conflict_wrong": 0,
+    "conflict_tied": 0,
+    "hierarchy": 0,
+    "hierarchy_wrong": 0,
+    "hierarchy_tied": 0
+   },
+   "dense": {
+    "conflict": 0,
+    "conflict_wrong": 0,
+    "conflict_tied": 0,
+    "hierarchy": 0,
+    "hierarchy_wrong": 0,
+    "hierarchy_tied": 0
+   },
+   "secs": 0.5
+  },
+  {
+   "chapter": "C3",
+   "nodes": 4143,
+   "parked": 2493,
+   "tris": 48165,
+   "maxrank": 4,
+   "today": {
+    "conflict": 513,
+    "conflict_wrong": 119,
+    "conflict_tied": 0,
+    "hierarchy": 752,
+    "hierarchy_wrong": 0,
+    "hierarchy_tied": 0
+   },
+   "dense": {
+    "conflict": 513,
+    "conflict_wrong": 0,
+    "conflict_tied": 0,
+    "hierarchy": 752,
+    "hierarchy_wrong": 0,
+    "hierarchy_tied": 0
+   },
+   "secs": 0.8
+  },
+  {
+   "chapter": "C4",
+   "nodes": 6826,
+   "parked": 3911,
+   "tris": 79249,
+   "maxrank": 4,
+   "today": {
+    "conflict": 354,
+    "conflict_wrong": 114,
+    "conflict_tied": 0,
+    "hierarchy": 84,
+    "hierarchy_wrong": 0,
+    "hierarchy_tied": 0
+   },
+   "dense": {
+    "conflict": 354,
+    "conflict_wrong": 0,
+    "conflict_tied": 0,
+    "hierarchy": 84,
+    "hierarchy_wrong": 0,
+    "hierarchy_tied": 0
+   },
+   "secs": 1.2
+  },
+  {
+   "chapter": "C5",
+   "nodes": 8873,
+   "parked": 6056,
+   "tris": 115083,
+   "maxrank": 2,
+   "today": {
+    "conflict": 453,
+    "conflict_wrong": 213,
+    "conflict_tied": 0,
+    "hierarchy": 32,
+    "hierarchy_wrong": 0,
+    "hierarchy_tied": 0
+   },
+   "dense": {
+    "conflict": 453,
+    "conflict_wrong": 0,
+    "conflict_tied": 0,
+    "hierarchy": 32,
+    "hierarchy_wrong": 0,
+    "hierarchy_tied": 0
+   },
+   "secs": 1.9
+  }
+ ]
+}

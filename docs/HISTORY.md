@@ -13382,3 +13382,62 @@ fate, not an observed original screenshot of the buildings) — **held for the u
 not implemented.** `playtest.md` `CAP-22` (C5 city building density) now queues the capture that
 settles it. `backlog.md` `BL-250` and `analysis/bl-058-clutter-doubling/FINDINGS.md` both carry the
 full candidate-fix writeup and the playtest gate.
+
+**M3 polish-6 A4 landed: a dense cross-node conflict rank for the depth bias (2026-08-04).**
+`BL-053` reported that `node_bias = node.Index x NodeOrderBias` spends the whole flat index range
+on an equal-priority tie-break, spanning 1.22-2.86 priority levels per chapter, so a within-mesh
+surface rank could out-bid it. Re-measured against today's build, the defect is bigger than the
+inherited "2-16% of cross-node conflicting pairs": exactly, over the surfaces that actually
+overlap and excluding the hidden origin-parked pile, **666 of 1,918 visible conflicting pairs (35%)
+resolve the wrong way round** - 47% in C5, 40% in C1. Three reasons the old numbers moved: the
+subface fix and A1 both removed pairs from the graph, item9's Section 5 table used each node's MAX
+surface rank rather than the conflicting one, and `item9_lib.built_nodes` **never dropped far-LOD
+levels** (it reads `range_near`/`range_min`; the extraction ships `data.Lod.range.min`, so the
+lookup returned None and kept every level the engine refuses to build).
+
+The fix is `ConflictRank.cs`: bucket every built triangle by its world plane, pair the cross-node
+ones that are coplanar, same-priority, same-subface and genuinely overlap (clipped area, never an
+AABB touch), and layer that DAG by longest path. Every edge runs low node index -> high, so the
+layering is a topological order of the original's own draw order and cannot invert authored
+layering by construction. `WorldBuilder.RankConflicts` runs it before the build;
+`SceneBuilder.NodeBiasOf` is now the single source of every `node_bias`, including clutter
+decorations and map-edge tiles. Cost 11-45 ms per chapter (C5 45 ms of a 2,437 ms world load).
+
+**The step was boxed in from both sides, and the item9 proposal of 5e-6 would not have worked.**
+It must exceed `SurfaceRankCap x SurfaceRankBias` = 1e-5 or within-mesh rank still out-bids it,
+and `maxRank x step + 1e-5` must stay under `SubfaceBias` so subface + tie-break keeps inside one
+priority level - which caps it at 1.29e-5 given the measured worst chain of 7. A new capture
+instrument settled the other half: a coplanar pair's winner is **unstable**, so the two contested
+textures were flattened to loud colours and the same pose shot three times with the camera moved
+1 mm. At the C1B pair item9 recorded, pixels swapping winner ran **16,260 at today's 1.35e-6,
+1,774 at 5e-6, 0 at 1.2e-5, and 0 at a 10x control** - so 1.2e-5 is the only admissible value and
+it is not a compromise. That instrument is now `verification.md` INSTR-8.
+
+The longest chain is 27-28 with the origin-parked pile counted and 7 without, and no step fits
+inside a priority level at 28 - so the pile is excluded from the graph. That is sound rather than
+convenient: `HideUnplacedEntities` switches every one of those entities off at bootstrap, and
+anything a mission later moves has left the heap by then.
+
+Two things measured that were expected to be worse: **`architecture.md`'s old "accepted corner
+case"** (a prio-0 node far down the list out-biasing a prio-1 overlay) has **zero** instances -
+across 1,143 cross-node coplanar pairs of differing priority or subface, none resolves against the
+authored layering, today or after. And the C3 pair with the largest inverted area (49,152 m2)
+changes only 146 px on screen: **the pair census bounds what CAN fight, it does not count visible
+defects.**
+
+Verified: `RunTests.ps1` green (414 units, 22 in-engine suites, errors clean). **11 of 13 goldens
+moved and were rebaselined; `viewer-bhawk` and `empty-stage` are hash-identical** - the two shots
+with no world build, exactly as predicted, since a build with no conflict map keeps the old flat
+index. The pre-change build was re-run from a `git stash` and reproduced all 13 original hashes,
+which is what makes the A/B attributable; pixel diffs of the 11 are 0.05-1.73% of frame, scattered
+speckle at contested surfaces, nothing structural. 8-chapter `--freecam` regression: 0 errors and
+identical build composition (C1B before and after both 5603 gamez nodes / 3095 mesh instances /
+614 uv-clamped surfaces). Targeted A/B captures: C1B water/shoreline 16,260 -> 0 swapping pixels;
+C1's lake-shadow decal is no longer clipped by its tile's own rank-5 grass surface (27,773 px);
+C5's warehouse roof mottling resolves (6,438 px).
+
+**Not established: that "the later node wins" is what the original shows.** Every scheme here
+preserves node-index order, which is the documented rule - but at the C1B pose it means water keeps
+drawing over the shoreline, now more decisively. The data cannot settle it and no capture covers
+it, so it is filed as `BL-251` / `CAP-23` rather than assumed. Full record:
+`analysis/bl-053-dense-rank/FINDINGS.md`.

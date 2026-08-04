@@ -27,6 +27,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/GameZ.cs` — GameZ extraction loader (zip or dir): nodes/models/materials/textures JSON → C# objects, either extraction shape.
 - `src/Mech3/TextureArchive.cs` — texture lookup (zip or dir): resolves the name quirks, classifies each texture's alpha (soft vs hard).
 - `src/Mech3/SceneBuilder.cs` — shared GameZ-subtree → MeshInstance3D builder: triangulation, LOD, depth bias, billboards, fog, UV scroll.
+- `src/Mech3/ConflictRank.cs` — the world's cross-node draw-order tie-break: ranks nodes by their conflict graph, one slot per coplanar layer.
 - `src/Mech3/WorldCollision.cs` — derives every world collider's `Disabled` flag from its owner's tree visibility (+ the fade channel), so hiding anything drops its collision.
 - `src/Mech3/PlaneBuilder.cs` — builds one aircraft from its GameZ subtree (shaded, backface-culled); `Repaint` re-liveries it in place.
 - `src/Mech3/PaintScheme.cs` — one aircraft livery: pattern + 3 colours + 3 decals, parsed from vehicle.json or drawn at random.
@@ -254,8 +255,11 @@ its result; `BuildMipped` hands the same Image to `--dump-mips` un-cached.
 
 ## src/Mech3/SceneBuilder.cs
 Shared GameZ-subtree → MeshInstance3D builder: triangulation, material/mesh
-caches, nearest-LOD only, skip predicate. Replicates the original's draw order
-as depth bias (priority × surface rank × node index → polygon offset). `CollidersForMesh`
+caches, nearest-LOD only, skip predicate. Replicates the original's draw order as depth bias:
+priority, then subface, then overlay pass, then within-mesh surface rank, with the cross-node
+tie-break coming from `NodeBiasOf` — the world's `ConflictRank` map where the caller set one, the
+flat node index otherwise (aircraft, `--node=`). Every `node_bias` in the project goes through
+that one method. `CollidersForMesh`
 splits a mesh's colliding geometry into one trimesh per surface class actually present
 (water/buildings/untagged, each polygon's own texture deciding) rather than forcing the
 whole mesh under one dominant-class vote — a coastal tile is mostly beach by area, so the
@@ -277,6 +281,25 @@ still built with its transform — animations attach puffers and sounds to those
   the rank cap, where an appended group would share its base's rank and z-fight it. Declined on
   sprite/facade meshes (no biasable material); `OverlayPassDeclinedCount` is the tripwire and is 0
   across the install.
+
+## src/Mech3/ConflictRank.cs
+The world's cross-node draw-order tie-break. Buckets every built triangle by its world plane,
+finds the cross-node pairs that are coplanar, same-priority, same-subface and genuinely overlap
+(clipped area > 1 m², never an AABB touch), and layers that DAG by longest path — so a node's rank
+counts conflicting layers beneath it, not nodes before it. Every edge runs low node index → high,
+so the layering is a topological order of the original's own draw order and cannot invert authored
+layering. `WorldBuilder.RankConflicts` runs it before the build; 11–45 ms per chapter.
+⚠ The step (`SceneBuilder.ConflictRankBias`, 1.2e-5) is boxed in from both sides and is the only
+  value that fits: it must exceed `SurfaceRankCap × SurfaceRankBias` = 1e-5 or within-mesh rank
+  out-bids it, and `ConflictRankCap × it + 1e-5` must stay under `SubfaceBias` so subface +
+  tie-break keeps inside one priority level. Measured in Godot: 5e-6 leaves a coplanar pair
+  swapping winner on 1,774 px under a 1 mm camera move, 1.2e-5 leaves 0 (analysis/bl-053-dense-rank).
+⚠ The origin-parked pile is EXCLUDED from the graph — it is hidden at bootstrap
+  (`WorldBuilder.HideUnplacedEntities`) so nothing in it is on screen to fight, and it alone
+  stretches the longest chain from 7 to 28, which no admissible step fits inside a priority level.
+⚠ Plane bucketing is float and pairs each bucket with the next offset up. That is deliberate: the
+  float geometry is what the GPU renders, so it is the right question to ask, and the neighbour
+  pass recovers pairs a quantisation boundary splits (C5 294 → 326).
 
 ## src/Mech3/WorldCollision.cs
 Owns every `SceneBuilder`-built collider's `Disabled` flag and derives it: enabled exactly while the
@@ -370,6 +393,10 @@ honouring it is what lets the plane fly through the web and wreck debris as the 
 `Add` skips a world-build root outright when gamez `flags.active` is false (default true when
 absent) — the build script's own `NodeSetActive` record; `BuildNode` (`--node=`) deliberately does
 not check it, since the caller named the subtree explicitly.
+`RankConflicts` runs `ConflictRank` over the same walk before building and hands the map to the
+scene builder — the `active`/skip/nearest-LOD filters are repeated there deliberately, so the graph
+covers exactly the geometry `Add` will build; `WrapsOrigin` is `IsParkedAtOrigin`'s geometry half
+taken from the gamez meshes, before there is a built tree to measure.
 ⚠ `HideUnplacedEntities` is HALF the rule — motion targets still at origin (OBJECT_MOTION_FROM_TO)
   need `RestorePlacedEntities`, the other half; a one-shot sweep breaks them.
 ⚠ `BuildNode` (the `--node=` stage) is deliberately unlike `Build` in three ways, each of which

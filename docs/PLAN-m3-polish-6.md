@@ -79,7 +79,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ A1 `BL-051` — honour the gamez node `active` flag
 2. ☑ A2 `BL-056` — render the per-polygon second material pass
 3. ☑ A3 `BL-058` — answer the C5 doubled-buildings question (post-subface check)
-4. ☐ A4 `BL-053` — dense cross-node conflict rank for the depth bias
+4. ☑ A4 `BL-053` — dense cross-node conflict rank for the depth bias
 5. ☐ A5 `BL-057` — parse + census `zone_set`, document it
 
 ### Wave B — animation runtime: dropped data and late dispatch
@@ -231,7 +231,7 @@ shows is not established here) and is **not** guessed — tracked as new item `B
 `docs/formats/clutter.md`, `docs/architecture.md`'s `Clutter.cs` bullet. Full record:
 `analysis/bl-058-clutter-doubling/FINDINGS.md` and `docs/HISTORY.md` 2026-08-04.
 
-## A4 ☐ `BL-053` — dense cross-node conflict rank for the depth bias
+## A4 ☑ `BL-053` — dense cross-node conflict rank for the depth bias
 
 **Goal.** Cross-node conflicting surface pairs stop resolving the wrong way round: replace the
 sparse `node_bias` term (which already spans 1.22–2.86 priority levels per chapter, letting
@@ -265,6 +265,19 @@ the known conflict sites the analysis names.
 cross-node span) — do not fold it in. (b) The C5 ground z-fight is already fixed by the subface
 flag — do not re-attribute it here (`BL-037`'s correction). (c) Golden movement makes every other
 in-flight change ambiguous — land this alone, nothing else in the same commit window.
+
+**Landed 2026-08-04.** `ConflictRank.cs` + `WorldBuilder.RankConflicts`, with
+`SceneBuilder.NodeBiasOf` as the one source of every `node_bias`. Re-measured first: the defect is
+**666 of 1,918 visible conflicting pairs (35%)**, not 2–16% — and part of the gap is an instrument
+defect, `item9_lib` never dropped far-LOD levels. The step is boxed in to a single admissible value
+(> 1e-5 to beat within-mesh rank, ≤ 1.29e-5 to keep subface + tie-break inside one level), and a new
+millimetre-jitter capture instrument (now `verification.md` INSTR-8) brackets it independently:
+16,260 → 1,774 → 0 pixels swapping winner at 1.35e-6 → 5e-6 → 1.2e-5, matching a 10× control. **The
+item's own proposed 5e-6 would not have worked.** Inversions 666 → 0; the "accepted corner case"
+measures **zero** instances across 1,143 hierarchy pairs. `RunTests.ps1` green; 11 of 13 goldens
+moved and were rebaselined, the two with no world build hash-identical. The fidelity question §7 of
+the analysis raised is written back as `BL-251`/`CAP-23`, not assumed. Full record:
+`analysis/bl-053-dense-rank/FINDINGS.md` and `docs/HISTORY.md` 2026-08-04.
 
 ## A5 ☐ `BL-057` — parse + census `zone_set`, document it
 

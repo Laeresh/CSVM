@@ -220,7 +220,7 @@ public sealed class ClutterBuilder
                     Mesh = (ArrayMesh)mmi.Multimesh!.Mesh,
                     Material = mmi.MaterialOverride,
                     Solid = kind.Solid,
-                    NodeBias = kind.NodeIndex * SceneBuilder.NodeOrderBias,
+                    NodeBias = NodeBiasOf(kind),
                     Width = kind.Width,
                     Height = kind.Height,
                     Placements = kind.Instances,
@@ -707,10 +707,17 @@ public sealed class ClutterBuilder
     // camera-facing term at all — so a 45 m city block stands still while a tree card beside
     // it turns, which is the whole point of the split.
     //
-    // `node_bias` is the world's cross-node draw-order tie-break (SceneBuilder). Every instance
-    // of a kind necessarily shares one value, since a MultiMesh has a single instance-uniform
-    // set; the decoration node's own gamez index is the honest choice and keeps these layered
-    // against the terrain the same way the placed world's nodes are against each other.
+    // `node_bias` is the world's cross-node draw-order tie-break (SceneBuilder.NodeBiasOf). Every
+    // instance of a kind necessarily shares one value, since a MultiMesh has a single
+    // instance-uniform set; the decoration node's own gamez index is the honest thing to ask
+    // about, and keeps these layered against the terrain the same way the placed world's nodes
+    // are against each other.
+    // Through SceneBuilder so a decoration and the world node it was stamped from land on the
+    // same cross-node tie-break — the conflict rank where the world build computed one, the flat
+    // node index otherwise.
+    private float NodeBiasOf(Kind kind)
+        => _scene?.NodeBiasOf(kind.NodeIndex) ?? (kind.NodeIndex * SceneBuilder.NodeOrderBias);
+
     private MultiMeshInstance3D? BuildSolidInstance(Kind kind)
     {
         var mesh = _scene?.SharedMesh(kind.MeshIndex);
@@ -731,7 +738,7 @@ public sealed class ClutterBuilder
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             Name = Sanitize(kind.Label),
         };
-        mmi.SetInstanceShaderParameter("node_bias", kind.NodeIndex * SceneBuilder.NodeOrderBias);
+        mmi.SetInstanceShaderParameter("node_bias", NodeBiasOf(kind));
         return mmi;
     }
 

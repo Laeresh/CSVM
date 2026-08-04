@@ -159,6 +159,12 @@ and leave gaps when retiring old ones.
 - **INSTR-4** — **An observer must not change the state it reports.**
 - **INSTR-5** — **Log resolved outputs as well as lookup inputs.**
 - **INSTR-6** — **An able-to-fail control over randomised state must sweep seeds, not pin one.** A pinned seed makes one draw, and a bug that fires on some draws is invisible on the rest. Measured: with the BL-240 retirement hold removed, the recorded `--destroy=m_build` probe reports 0 misses at seed 1 but 2/1/1/1 at seeds 4/7/9/10 — the control that a single run was recorded as passing.
+- **INSTR-8** — **Z-fighting is instability, not appearance: measure it as pixels that SWAP WINNER
+  between captures a millimetre apart, never by looking at one frame.** Flatten the two contested
+  textures to loud colours (`--tex-override`), shoot the same pose with the camera moved 1 mm, and
+  count. Measured at the C1B water/shoreline pair: a single frame looks settled, yet 16,260 px
+  (1.76 % of frame) swap winner under a 1 mm move at the shipped separation, 1,774 at 5e-6, and 0
+  at 1.2e-5 — which is how the separation got bracketed at all.
 - **INSTR-7** — **"Not decidable from this data" is a fact about the instrument, not the question — when a census comes back uniform, ask what else varies the quantity.** A degenerate reading blocks the *inference*, not the *answer*. Measured: all 88 `destroyable_parts` pairs ship equal, which correctly made (armor, hp) undecidable from `extracted/`, and the reading sat blocked for nine days — the original's armory varies armor independently of health and settled it in one screen.
 
 ## SRC — sources and documents
