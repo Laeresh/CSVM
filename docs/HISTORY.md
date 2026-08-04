@@ -14915,3 +14915,70 @@ passes (`build`/`units`/`engine` 23/23/`goldens` 13/13, all hash-identical — a
 does not move any `--det` capture). **The capture A/B against `CAP-18` this item's acceptance
 criterion calls for is still owed** — it needs eyes on a live sweep, not something a headless run
 can confirm.
+
+## 2026-08-04 — `CAP-16` analysed: the original's ground crash is one big fireball, its wreck tumble is a total angle, and its two crash sounds are ~1.3 sim-s apart (`BL-122`)
+
+`CAP-16.mp4` (2560×1440, 13.49 s) gave a full ground crash close enough to read every sub-effect
+`BL-122` was blocked on, corroborated by two further ground crashes (`C1 IA1 Crash.mp4`,
+`CAP-14 Crash.mp4` — same signature) and contrasted against a building strike
+(`CAP-14 Building crash Balmoral.mp4`). Stills in `playtest/CAP-16/`. ⚠ Times are **wall-clock** off
+container PTS; multiply by k = 1.390 for sim-seconds before comparing against authored `run_time`.
+
+What this changes about our reading of the original:
+
+- **`forward_rotation`'s clean π multiples are a total sweep, not a rate.** A wing panel detaches at
+  ignition and stays legible across 8 sampled frames, t = 6.13 → 6.60 (0.47 s wall / 0.65 sim-s),
+  rotating only ~10–15° — order 20–30 °/s. A π-rad/s rate would have turned it ~85° in that window.
+  The competing "it's a rate" hypothesis is ruled out. *Limit:* one piece, near edge-on under camera
+  motion, so only rotation about the view axis is observable.
+- **Crash intensity is surface-dependent, and "one big fireball" is right for ground.** The dirt
+  crash reads as a granular yellow sprite cluster at ignition (t = 6.27) resolving into a single
+  dominant fireball with a white-hot core (t = 7.40), still at full intensity when the clip ends at
+  t = 12.50. The standing worry that our additive stack (fireball + cluster + debris fire + wreck
+  fire) over-reads is **not supported for ground crashes**. But the Balmoral building strike
+  (t ≈ 5.0) is a spread of small discrete orange puffs with no large fireball and no dark halo — the
+  two surfaces must not be tuned to one look.
+- **The "black" smokeball is dark red-brown**, in all three ground crashes (t = 8.00–12.50).
+- **The dirt burst is a separate, lower, ground-coloured cluster** — three pale-cream puffs at the
+  ground line beneath the fireball at t = 7.40, not fire-tinted.
+- **The two crash sounds are sequential, not stacked.** Two spectrally distinct onsets: t = 6.15
+  (+4.5 dB, centroid 958 Hz, mid-dominant 55.8% — airborne breakup) and t = 7.09 (+5.3 dB, centroid
+  711 Hz, low-dominant 55.7% — ground explosion, coincident with the dirt burst appearing), **0.94 s
+  apart wall-clock = 1.31 sim-s**, near-equal peaks (−15.1 / −15.2 dBFS). Layering both is right;
+  firing them together is not. The mix is modest — the crash peaks only ~+5 dB over the engine bed
+  (−19.1 dBFS median) and never clips. ⚠ Sound identity is inferred from timing against the visuals,
+  not decoded, so which onset is `snd_exp_ground_a` vs `plane_destroy_sg` remains an assumption.
+- **Wreck pieces inherit travel velocity** — the panel moves on a straight shallow down-and-forward
+  path, never popping upward, and by t = 12.50 the burning chunks lie scattered laterally at rest
+  with no lofted arcs. `WreckMomentum` 0.4 is the right shape; the footage cannot pin the fraction.
+
+- **The effect's burn-out is unobservable, so the target is a hold time instead.** A fatal crash
+  returns the original to the menu, so no single-player capture can ever show the fire go out — the
+  game takes the scene away first. `CAP-16` catches exactly that: mean frame luma holds *flat* at 50
+  from impact until t = 12.65, then fades to black by t = 13.00 (~0.35 s fade, the return to menu),
+  with the fireball at **full intensity when the fade begins**. So the figure to build against is a
+  **hold time — 6.52 s wall / 9.06 sim-s from ignition to the fade** — during which the effect must
+  not visibly thin out, not a burn-out duration. The other two ground clips contain no black frame
+  (recording simply stopped while lit), so `CAP-16` is the only one that captures the cut.
+- **The crash audio ends naturally 5.47 s wall / 7.60 sim-s after ignition**, ~1.1 s *before* the
+  visual fade — the last second of the burning wreck is silent. The envelope decays smoothly
+  (−20 → −25 → −32 → −41 dBFS across t = 9.1 → 11.55) to digital zero at t = 11.60; an interrupted
+  recording would have truncated at a non-trivial level. (An earlier draft of this entry called that
+  silence a capture artifact — it is not.)
+
+A follow-up size A/B off the same footage did part of that A/B on the desk. Using the Bloodhawk as
+an in-frame ruler (full span ≈ 11.6 m from the mesh AABB in `PlaneCollider.cs` — no wingspan field
+exists in data) in the t = 6.27 frame, where the still-attached wing and the fireball share a camera
+depth: scale ≈ 37 px/m, fireball ≈ 361 px ⇒ **≈ 9.7 m across, 0.19 sim-s after ignition**. Simulating
+our own `fierypuffer` burst at dt = 1/60 puts the *particle cloud* at 8.9 m at that instant — the
+authored ±65 m/s / friction-9 spread is right — but the drawn burst spans 27 m, because
+`Puffer.SizeScaleDefault` is **4**, an admitted stand-in for a missing engine constant rather than a
+decode. At ×1 the burst is 13.2 m, within ~35% of the footage before allowing for the sprite's soft
+alpha edge. So the footage puts that constant near 1 for the crash burst. ⚠ It is not a
+one-line revert: ×4 was settled at the controls because ×1 read as a thin scatter of specks, so the
+deficit may be sprite *density* or alpha rather than size — and the knob is per-path, so only
+`puffer.burstSizeScale` is implicated. Recorded on `BL-122`; nothing changed in code.
+
+`CAP-16` is discharged and its ID retired. **No future capture can add to this** — the burn-out is
+unobservable by design — so what remains on `BL-122` is the A/B at the controls, which now has
+reference numbers to judge against.
