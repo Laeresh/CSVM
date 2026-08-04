@@ -43,6 +43,13 @@ The slug defs' only other authored duration is their debris `OBJECT_MOTION` `RUN
 `bit1`, 2 s (3040) or 4 s (5060/70) for `bit2`/`bit3`/`chunk` — which does not gate emission. Those
 nodes carry no geometry in this install anyway (`bit1`–`bit3` 0 vertices; `chunk` one quad).
 
+**Addendum (2026-08-04): the `chunk` quad renders, and its texture is `gun_barrel`.** Seen in a
+freeze-frame zoom of our build (`Screenshots/Mystery debris.png`): gamez model 27's one polygon uses
+material 4 → `gun_barrel.tif`, UVs u 1→2 / v ≈0.29–0.66 — with repeat, exactly the perforated
+shroud's dot band. Almost certainly a stale material index in the shipped data; at gameplay zoom the
+~0.5 m scrap is a sub-pixel speck for ≤`GunEffectTtl`. Kept as authored; `CAP-25` (playtest.md) is
+owed to check whether the original ever shows it.
+
 ## Two things that make a probe of this lie
 
 ⚠ **`PLAYER_RANGE 500` gates the puffer** (logged as `cond PlayerRange(250000)`). A strafing probe
