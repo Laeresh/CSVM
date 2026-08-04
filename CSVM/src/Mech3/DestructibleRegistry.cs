@@ -175,5 +175,13 @@ public sealed class DestructibleRegistry
         /// stop this def too (its own pending scheduled call, or its already-run motions) and
         /// restore the pose of whatever it moved.</summary>
         public AnimDefinition? ChainedDeathDef { get; set; }
+
+        /// <summary>Every <c>CALL_ANIMATION</c> target this death dispatched directly onto its OWN
+        /// anchor (C2's facade panels calling the shared <c>facade_parts</c> template; also covers
+        /// <see cref="ChainedDeathDef"/>'s target, redundantly but harmlessly) — populated at
+        /// dispatch time, not by re-deriving it from the data, so it only ever names what actually
+        /// ran. A reset (C28) stops and restores each of these too, or a called def's own motions
+        /// (a flying debris piece still mid-flight) can outlive the reset.</summary>
+        public HashSet<AnimDefinition> LocalCallTargets { get; } = new();
     }
 }

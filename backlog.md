@@ -333,27 +333,67 @@ unscheduled.
 Two in-flight findings against the C2 Hollywood destructibles; both diagnosed against the
 extracted data before being logged, so the mechanism is recorded here and not re-derived.
 
-- `BL-253` **The C2 facade panels don't throw their log debris when destroyed.** Every one of the
-  39 `fcpan01`–`39` deaths (`WeaponOrCollideHit`, health 0.01) authors
-  `CALL_ANIMATION facade_parts AT_NODE fcpanNN` — the shared `facdsticks` template
+- `BL-253` **The C2 facade panels' log debris landed (2026-08-04); only the in-cockpit playtest is
+  owed.** Was: every one of the 39 `fcpan01`–`39` deaths (`WeaponOrCollideHit`, health 0.01)
+  authors `CALL_ANIMATION facade_parts AT_NODE fcpanNN` — the shared `facdsticks` template
   (`extracted/C2/cam_anim/facdsticks-facade_parts.json`) whose `fly_part1`–`fly_part4` activate and
-  ballistically launch four wooden sticks ("logs"). In the cockpit no logs appear on any panel; the
-  authored `dustcloud` puffer is the only visible death. Candidate causes, in likelihood order —
-  all in `AnimRuntime`'s `CallAnimation` handler (`AnimRuntime.cs:2088`):
-  1. **Template relocation is gated off in the live world.** `PlaceCalledTemplates` relocation
-     ("Re-anchoring alone is not enough for an effect template … unless that root is MOVED to the
-     call site the effect emits at its gamez origin") is deliberately restricted to the anim
-     debugger / crash runtime, never the ambient world — so the one shared `facdsticks` root's
-     parts fly at their gamez origin, not at the struck panel. The `--damage-hd` measurement
-     `fcpan01 debris[0→1]` (docs/HISTORY.md 2026-08-01, template re-anchor fix) proves the launch
-     *fires*; where the pieces appear in flight is the open half.
-  2. **One template, 39 call sites** — the live-guard/`TemplateIsAt` wrap logic means a second
-     panel broken while the first's 4–5 s launch runs collapses or skips; breaking a row of
-     facades (the normal way to hit them) would show logs once at most.
-  3. **Name collision:** `part1`–`part4` also name `gate2`'s archway pieces (the `blockit2` def),
-     so any global name binding can grab the wrong nodes.
-  Also authored on the death and worth confirming while in there: the `air_mixed_exp_sg` one-shot
-  (D31 death audio is still stubbed engine-wide).
+  ballistically launch four wooden sticks ("logs") — but no logs appeared on any panel in the
+  cockpit; only the authored `dustcloud` puffer showed. The four candidate causes, checked against
+  the data and the engine rather than assumed:
+  1. **Confirmed, and worse than hypothesized.** `PlaceCalledTemplates` relocation is indeed gated
+     off in the ambient world (anim-lab/crash runtime only) — but the deeper cause is that
+     `facdsticks` was never BUILT into the live world AT ALL: it is parentless and outside the
+     world's spatial-partition grid, the same shape as the crash/effect template roots
+     `WorldEffectsFactory` stages separately, so `WorldBuilder`'s own gamez walk never reaches it
+     (confirmed: the node lab's name index, 2999 nodes, had no `facdsticks` entry). Even with
+     relocation enabled this launched debris but resolved zero motion targets (`Targets()` found no
+     built `part1`–`4` to move). Fixed two ways: `WorldSession.Build` now builds `facdsticks` as an
+     ordinary hidden child of the world root (RESET_STATE already keeps `part1`–`4` inactive, so
+     nothing renders until called) — a no-op everywhere but C2; and `AnimRuntime`'s `CallAnimation`
+     dispatch relocates a death-triggered call's template root onto the call site when the callee
+     name is in a new curated `LocalCallTemplateNames` allow-list (currently just `facade_parts`),
+     scoped by a `_deathCallDepth` counter bracketing `RunDeathSequence`'s own `Start` burst — never
+     the ambient world boot.
+  2. **Confirmed, and left as the documented floor.** One shared, unpooled `facdsticks` template
+     serving 39 call sites means two panels broken in succession show the LATER kill's debris —
+     `PlaceTemplateAt`/`MotionSet.Add` (same-channel eviction) collapse the earlier kill's flying
+     pieces onto the new site. A full per-call pool (`WorldEffectsFactory`'s `PooledTemplates`
+     mechanism, `BL-225`) is disproportionate for four wooden sticks; verified this is at least a
+     *floor*, not a total miss — each break launches its own fresh 4-piece debris count.
+  3. **Investigated, not a live bug.** `Targets()` resolves `part1`–`4` through the CALLEE's own
+     compiled symbol table (`facdsticks`' `NodeRefs`, ptrs 1710/1730/1723/1715) before any name
+     fallback, and `blockit2`'s `part1`–`7` carry their OWN distinct ptrs (1127–1133) in their own
+     def — the two never share a lookup, so the name collision the trap warned about does not
+     reach a binding path in practice. Left named here as a trap for the next person who adds a
+     name-based rescue near this code (docs/formats/destructibles.md's `⚠` on symbol-table
+     binding).
+  4. **Ruled out.** `facade_parts` is one of the 22 `LOCAL_CHOREOGRAPHY` names
+     `analysis/death-effect-closure/` deliberately keeps off the world-effects runtime
+     (`ExternalEffect`) — confirmed absent from `EffectAnimNames` — so it was never intercepted and
+     rendering nothing there.
+  **Collateral found and fixed during the work, not part of the original diagnosis:** the first cut
+  gated relocation on `_deathCallDepth` alone (any death-triggered call, not just `facade_parts`),
+  which measurably moved `kkgate`'s own `tbridg1_fire` — real, already correctly positioned bridge
+  geometry — onto `kkgate` itself; and an equally unscoped C28 reset-tracking pass stopped/restored
+  C5's shared `small_yellow_sparks` template on an unrelated destructible's reset, cross-contaminating
+  sibling defs' (`rfspt4`–`6`, `lfspt1`–`3`, `w_lite1`–`5`) debris counts mid-sweep. Both are now
+  scoped to the same curated `LocalCallTemplateNames` allow-list as the relocation fix.
+  Verified headlessly (`--damage-test=facade` / `fcpan01`/`fcpan02`): a single kill now launches 4
+  debris pieces from the struck panel's own position (confirmed via a position probe: `facdsticks`
+  moves from its build-time origin `(0,0,0)` to the exact panel centre); two panels broken in
+  succession each launch a fresh 4-piece debris (the documented floor); a reset restores the panel
+  and re-kills in the same hit count, and `facdsticks`' RESET_STATE deactivates `part1`–`4` so a
+  reset before the 8 s flight finishes does not leave pieces visibly flown. Collateral sweep across
+  C1/C2/C5 `--damage-hd`: only the `fcpan01`–`06` rows changed; `gate1`/`gate2` retain BL-254's
+  behaviour, `kkgate` unchanged (`debris[12]` isolated / `[13]` in the full unfiltered sweep — a
+  pre-existing sweep-context artifact reproduced identically on the unmodified baseline, not caused
+  by this change), and every other def (`m_build01`, the C1 water tower, `agyrobus`, the C5
+  facade/window family) measured byte-identical. `.\RunTests.ps1`: build, 423 unit tests, 22 engine
+  suites, all 13 goldens hash-identical.
+  ⚠ **Still open.** (a) The in-cockpit playtest: fly a row of facade panels and confirm logs
+  visibly launch from each struck panel, with the documented latest-wins floor when two break in
+  quick succession. (b) The `air_mixed_exp_sg` one-shot authored on the same death is unconfirmed
+  audible — D31 death audio is still stubbed engine-wide, unrelated to this item's scope.
 - `BL-254` **Both C2 studio gates' deaths now match the original (2026-08-04); only the in-cockpit
   playtest is owed.** Was: both gates' archways swapped to their wreck at t=0 — wrong for gate2
   (which should stage the swap 28.5 s into the death) AND wrong for gate1 (whose archway the

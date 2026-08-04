@@ -333,6 +333,20 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// nodes anyway (OBJECT_ACTIVE_STATE off / opacity fade).</summary>
     private const float MinPoseScale = 1e-3f;
 
+    /// <summary>Death-triggered <c>CALL_ANIMATION</c> targets whose template root a death may
+    /// relocate onto the call site (<see cref="_deathCallDepth"/>), by name — a curated
+    /// allow-list, not "every death call", because most LOCAL_CHOREOGRAPHY targets already sit at
+    /// a meaningful authored world position and relocating them onto the unrelated death's site is
+    /// wrong, not a fix. The first (over-broad) cut of this change let `_deathCallDepth` alone
+    /// gate it, and `kkgate`'s own death measurably moved `tbridg1_fire`'s real, already-built
+    /// bridge-fire template onto `kkgate` itself (`TemplateRootsFor` found it, since — unlike
+    /// `facade_parts`' template — it is ordinary built world geometry, not an unreferenced root).
+    /// `facade_parts` is the one proven case needing this: its shared `facdsticks` template is
+    /// parentless and outside the world's spatial-partition grid (WorldSession stages it hidden at
+    /// the world origin — see its remark), so it has no meaningful position of its own and MUST be
+    /// moved onto whichever panel called it (`BL-253`).</summary>
+    private static readonly string[] LocalCallTemplateNames = { "facade_parts" };
+
     private readonly List<(Node3D Node, string SrcName)> _index = new();
 
     private readonly Dictionary<string, Func<string, bool>> _matcherCache = new(StringComparer.OrdinalIgnoreCase);
@@ -340,6 +354,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private readonly Dictionary<Node3D, Transform3D> _rest = new(); // authored pose per touched node
 
     private readonly List<AnimInstance> _instances = new();
+
+    // The destructible whose death is directly dispatching right now, paired with
+    // _deathCallDepth (a stack for the same reason: nested). Lets a death-triggered
+    // CALL_ANIMATION that lands on the SAME anchor as the dying instance (facade_parts on its own
+    // fcpanNN, blockit2 on its own gate2 — the same idiom AT_NODE/no-site calls back onto the
+    // caller's own site) register itself on that instance's <see
+    // cref="DestructibleRegistry.Instance.LocalCallTargets"/>, so a reset (C28) can Stop and
+    // restore it too — otherwise a reset before the called def's own motions finish (facade_parts'
+    // 8 s flight) leaves its pieces flown and never returns them to RESET (BL-253).
+    private readonly Stack<DestructibleRegistry.Instance> _dyingInstances = new();
 
     // The instance whose OWN t=0 burst is directly dispatching right now, one entry per nested
     // CALL_ANIMATION level (bounded by MaxStartDepth), paired with whether THIS Start call opted
@@ -475,6 +499,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private int? _seed;
 
     private int _startDepth;
+
+    // Nonzero while a death's own Start burst (RunDeathSequence) is on the call stack, including
+    // any CALL_ANIMATION it dispatches directly (a counter, not a bool: a chained call can itself
+    // call again). Lets a death-triggered CALL_ANIMATION relocate its callee's effect-template
+    // root the same way the anim-lab/crash runtime's PlaceCalledTemplates does, WITHOUT turning
+    // that on for the ambient world boot (byte-identical goldens) or RESET_STATE — a struck C2
+    // facade panel's facade_parts call needs its shared template moved onto the panel, not left at
+    // its gamez origin (BL-253), and nothing about that should touch ON_STARTUP/mission-setup
+    // calls, which never run through RunDeathSequence.
+    private int _deathCallDepth;
 
     private int _soundsUnknown, _soundsAfterBuild;
 
@@ -1187,12 +1221,31 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         var def = inst.Def;
         Stop(def.AnimName, inst.Anchor);
+        // Undoes a called def's own live death, exactly like the outer Stop/RestoreRestPoses
+        // below but for a def that is not `inst.Def` itself: tears down its motions (a called
+        // template's own ballistic pieces), restores their rest pose, and — since a called
+        // template's RESET_STATE is its own, never inherited from the caller's — re-applies it,
+        // so an ACTIVE_STATE the call flipped (facade_parts' part1-4 ON) goes back OFF rather
+        // than sitting inert-but-still-shown at its rest pose.
+        void ResetCalled(AnimDefinition called)
+        {
+            Stop(called.AnimName, inst.Anchor);
+            RestoreRestPoses(called, inst.Anchor);
+            if (called.ResetState != null)
+                ApplyInstant(called.ResetState.Events, called, inst.Anchor);
+        }
         if (inst.ChainedDeathDef is { } chained)
         {
-            Stop(chained.AnimName, inst.Anchor);
-            RestoreRestPoses(chained, inst.Anchor);
+            ResetCalled(chained);
             inst.ChainedDeathDef = null;
         }
+        // Every CALL_ANIMATION target the death dispatched onto its OWN anchor (facade_parts on
+        // its own fcpanNN; also re-covers ChainedDeathDef's target, harmlessly) — reset the same
+        // way, so a reset lands the same whether it comes before or after the called def's own
+        // motions finish (BL-253).
+        foreach (var local in inst.LocalCallTargets)
+            ResetCalled(local);
+        inst.LocalCallTargets.Clear();
         // The damage-stage effects live on the EXTERNAL runtime and loop for as long as the
         // healthy node stays active â€” which a heal never interrupts, so the reset itself must
         // stop them. The names come from the def's own DAMAGE_SEQUENCE calls, never a hardcoded
@@ -2216,6 +2269,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         if (ExternalEffect(callName, VisualOriginOf(callAnchor) + siteXform.Basis * siteOffset, siteNode))
                             return true;
                     }
+                    // Relocation is allowed here — moving a callee's template root onto the call
+                    // site — either from the anim-lab/crash runtime's PlaceCalledTemplates, or
+                    // because this call is itself part of a death's own burst AND names one of the
+                    // curated LocalCallTemplateNames (BL-253) — never every death call, see that
+                    // field's remark. Gated + non-instant so it never touches the ambient world
+                    // boot (byte-identical goldens) or RESET_STATE — those run neither path.
+                    bool relocate = (PlaceCalledTemplates
+                        || (_deathCallDepth > 0 && Array.Exists(LocalCallTemplateNames,
+                            n => string.Equals(n, callName, StringComparison.OrdinalIgnoreCase))))
+                        && !instant && callAnchor != null;
                     foreach (var target in _program.ByAnimName(callName))
                         // A placed template called at a DIFFERENT site restarts even while live:
                         // one shared template can only be in one place, so a second rocket landing
@@ -2223,22 +2286,40 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         // showed no trails at all. On a pooled runtime the two calls hold two
                         // different copies (BL-225) and "a different site" is asked of the caller's
                         // OWN copy, so this is the wrap case only; unpooled it still collapses the
-                        // first call onto the new site, which beats the second blast having nothing.
+                        // first call onto the new site, which beats the second blast having nothing
+                        // — the documented floor for two facade panels broken in succession (one
+                        // shared, unpooled `facdsticks` template): the later kill's debris is what
+                        // shows, the earlier kill's pieces are evicted mid-flight (`BL-253`).
                         // Gated on the site actually having moved, so the data's poll idiom
                         // (`If … CallAnimation; Endif; Loop{-1}`) keeps hitting the guard and does
                         // not restart its callee every frame.
                         if (!IsLive(target, callAnchor)
-                            || (PlaceCalledTemplates && !instant && callAnchor != null
-                                && !TemplateIsAt(target, callAnchor, siteOffset)))
+                            || (relocate && !TemplateIsAt(target, callAnchor!, siteOffset)))
                         {
                             // Re-anchoring alone is not enough for an effect template: its puffers
                             // ride the template's OWN root, so unless that root is MOVED to the call
-                            // site the effect emits at its gamez origin. Relocate it here. Gated +
-                            // non-instant so it touches only the animation debugger / crash runtime,
-                            // never the ambient world boot (byte-identical regression) or RESET_STATE.
-                            if (PlaceCalledTemplates && !instant && callAnchor != null)
-                                PlaceTemplateAt(target, callAnchor, siteOffset);
+                            // site the effect emits at its gamez origin. Relocate it here.
+                            if (relocate)
+                                PlaceTemplateAt(target, callAnchor!, siteOffset);
                             Start(target, callAnchor);
+                            // A death-triggered call to one of the curated LocalCallTemplateNames,
+                            // landing on the SAME anchor as the dying instance, is the caller's own
+                            // choreography (facade_parts on its own fcpanNN) — a reset (C28) has to
+                            // stop and restore it too, or its motions (facade_parts' 8 s flight)
+                            // can leave pieces flown past the reset (BL-253). Scoped to the SAME
+                            // allow-list as relocation, not every death call landing on the same
+                            // anchor: a shared, WORLD-BUILT template several unrelated destructibles
+                            // all call (C5's `small_yellow_sparks`) is not this def's own private
+                            // choreography, and stopping/restoring it on THIS def's reset tore down
+                            // a sibling destructible's still-flying pieces mid-sweep, moving their
+                            // debris counts for no authored reason (measured: `lfspt`/`rfspt`/
+                            // `w_lite` shifted) — the same over-broad mistake relocation's own
+                            // allow-list already guards against.
+                            if (relocate && _dyingInstances.Count > 0
+                                && ReferenceEquals(_dyingInstances.Peek().Anchor, callAnchor))
+                            {
+                                _dyingInstances.Peek().LocalCallTargets.Add(target);
+                            }
                         }
                 }
                 return true;
@@ -3060,10 +3141,26 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// fallback there swapped the healthy archway for a wreck it does not own and opened a passage
     /// that should stay solid. The AA guns are the opposite shape the fallback still has to
     /// rescue: their only Initial sequence is a <c>DAMAGE_SEQUENCE</c> of puffer calls, so without
-    /// it they would die with nothing at all switching off â€” invisibly.</para></summary>
+    /// it they would die with nothing at all switching off â€” invisibly.</para>
+    ///
+    /// <para><see cref="_deathCallDepth"/> brackets the whole burst so a <c>CALL_ANIMATION</c> the
+    /// death dispatches (C2's facade panels calling the shared <c>facade_parts</c> template,
+    /// `BL-253`) can relocate its callee's effect-template root onto the call site, exactly as the
+    /// anim-lab/crash runtime's <see cref="PlaceCalledTemplates"/> does â€” without turning that on
+    /// for the ambient world boot.</para></summary>
     private void RunDeathSequence(DestructibleRegistry.Instance inst)
     {
-        Start(inst.Def, inst.Anchor, protectSelfInvalidate: true);
+        _deathCallDepth++;
+        _dyingInstances.Push(inst);
+        try
+        {
+            Start(inst.Def, inst.Anchor, protectSelfInvalidate: true);
+        }
+        finally
+        {
+            _dyingInstances.Pop();
+            _deathCallDepth--;
+        }
         if (ChainedSwapTarget(inst.Def) is { } chained)
         {
             inst.ChainedDeathDef = chained;

@@ -14255,3 +14255,57 @@ across C1, C2 and C5: `gate1` is the only def either sweep or a name-by-name rea
 `aagun32` (rescued, as before), `m_build01`, the C1 water tower, `agyrobus`, the C5 facade/window
 family and every other def measured byte-identical to before this change. `.\RunTests.ps1`: build,
 423 unit tests, 22 engine suites, all 13 goldens hash-identical.
+
+## 2026-08-04 -- `BL-253`: C2 facade panels' log debris lands -- `facdsticks` was never built in
+the live world at all
+
+**What was wrong.** All 39 `fcpan01`-`39` deaths author `CALL_ANIMATION facade_parts AT_NODE
+fcpanNN`, the shared `facdsticks` template whose `fly_part1`-`4` launch four wooden "log" sticks
+ballistically -- but no logs ever appeared in the cockpit, only the `dustcloud` puffer. Checked all
+four candidate causes against the data and the engine rather than assuming: (1) confirmed, and
+worse than hypothesized -- `PlaceCalledTemplates` relocation is indeed gated off in the ambient
+world, but `facdsticks` was never BUILT into the live world at all (parentless, outside the
+spatial-partition grid, the same shape as the crash/effect template roots `WorldEffectsFactory`
+stages separately -- confirmed via the node lab's 2999-node name index having no `facdsticks`
+entry), so even with relocation on, `Targets()` resolved zero motion targets; (2) confirmed, and
+accepted as a documented floor -- one shared, unpooled template serving 39 call sites means two
+panels broken in succession show only the LATER kill's debris; (3) investigated, not a live bug --
+`Targets()` resolves through the CALLEE's own compiled symbol table (`facdsticks`' ptrs
+1710/1730/1723/1715 vs `blockit2`'s 1127-1133), so the `part1`-`4` name collision with gate2's
+archway pieces never reaches a binding path; (4) ruled out -- `facade_parts` is correctly one of
+the 22 `LOCAL_CHOREOGRAPHY` names `analysis/death-effect-closure/` keeps off the world-effects
+runtime.
+
+**What changed.** `WorldSession.Build` (`CSVM/src/Mech3/WorldSession.cs`) now builds `facdsticks`
+as an ordinary hidden child of the world root before `Bind` -- a no-op everywhere but C2, since its
+own RESET_STATE already keeps `part1`-`4` inactive. `AnimRuntime`'s `CallAnimation` dispatch gained
+a `_deathCallDepth` counter (bracketing `RunDeathSequence`'s own `Start` burst) and a curated
+`LocalCallTemplateNames` allow-list (currently just `facade_parts`) that together let a
+death-triggered call relocate its callee's template root onto the call site, exactly like
+`PlaceCalledTemplates` but scoped to the death path only. `DestructibleRegistry.Instance` gained
+`LocalCallTargets`, populated at dispatch time (same allow-list gate) so a reset (C28) also stops
+and restores a called template's own motions/RESET_STATE, not just the dying def's own.
+
+**Two over-broad first cuts, caught before landing.** Gating relocation on `_deathCallDepth` alone
+(any death-triggered call, not just `facade_parts`) measurably moved `kkgate`'s own `tbridg1_fire`
+-- real, already correctly positioned bridge geometry -- onto `kkgate` itself the moment its death
+ran. An equally unscoped `LocalCallTargets` reset-tracking pass stopped/restored C5's shared
+`small_yellow_sparks` template on whichever destructible's reset happened to dispatch it,
+tearing down a SIBLING destructible's still-flying pieces mid-sweep and shifting `rfspt4`-`6`/
+`lfspt1`-`3`/`w_lite1`-`5`'s debris counts for no authored reason. Both were narrowed to the same
+curated allow-list the relocation fix already needed, which is also the reason the allow-list
+exists as a curated set rather than "every death call."
+
+**How verified.** `--damage-test=fcpan01`/`fcpan02` (`--damage-hd=25`): a single kill now launches
+4 debris pieces; a position probe confirmed `facdsticks` moves from its build-time origin
+`(0, 0, 0)` to the struck panel's exact world position; two panels broken in succession each
+launch a fresh 4-piece count (the documented latest-wins floor); a reset restores the panel and
+re-kills in the same hit count, with `facdsticks`' own RESET_STATE deactivating `part1`-`4` so a
+reset before the 8 s flight finishes does not leave pieces visibly flown. Swept the full
+`--damage-test`/`damage-hd` report across C1, C2 and C5: only the `fcpan01`-`06` rows changed;
+`gate1`/`gate2` retained BL-254's exact behaviour, `kkgate` unchanged (`debris[12]` isolated,
+`[13]` in the full unfiltered sweep -- reproduced identically on the unmodified baseline, a
+pre-existing sweep-context artifact unrelated to this change), and every other def (`m_build01`,
+the C1 water tower, `agyrobus`, the C5 facade/window family, the C5 `rfspt`/`lfspt`/`w_lite` set)
+measured byte-identical. `.\RunTests.ps1`: build, 423 unit tests, 22 engine suites, all 13 goldens
+hash-identical. Still owed: the in-cockpit playtest of the visible debris and the two-panels floor.

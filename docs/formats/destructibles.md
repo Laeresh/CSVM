@@ -332,10 +332,27 @@ which pieces that covers. A format reader should know the current wiring:
     children are meshless; a death calls it with `operand_node=<wreck node>` (kkgate:
     `destroyed`, whose 12 children are ALSO named `pt1..pt12`, authored in the closed-gate pose),
     and the template's `ObjectMotion` launches / opacity fades / `ObjectActiveState` offs are
-    meant to bind to the *call-site's* same-named pieces. The pieces fly (6 s ballistic), fade
-    over 3 s, then deactivate — which is what finally drops their colliders and opens the
-    passage; for the first ~3 s the tumbling wreck is still solid, by the data. The same idiom
-    drives `facade_parts` and C1's `air_gen` chain.
+    meant to bind to the *call-site's* same-named pieces — resolved via `AnimRuntime.Targets`'
+    narrow `genx12` rescue (`FindAll` scoped strictly inside the caller's own anchor subtree, never
+    a world-wide name scan), so `genx12`'s own template root never needs to exist as a real,
+    built node at all. The pieces fly (6 s ballistic), fade over 3 s, then deactivate — which is
+    what finally drops their colliders and opens the passage; for the first ~3 s the tumbling
+    wreck is still solid, by the data. C1's `air_gen` chain uses the same `operand_node` idiom.
+    `facade_parts` (below) is a DIFFERENT idiom — a genuinely separate template, resolved and
+    relocated rather than redirected onto the caller's own subtree; do not conflate the two.
+  - **`facade_parts` needed its template BUILT, not just relocated (`BL-253`, 2026-08-04).** The
+    39 `fcpanNN` deaths each `CALL_ANIMATION facade_parts AT_NODE fcpanNN` — no `operand_node`, so
+    unlike `genx12` this is a real, separate template (`facdsticks`, four wooden "log" sticks) that
+    needs to exist and be moved. It is parentless and outside the world's spatial-partition grid —
+    `WorldBuilder`'s own gamez walk never reaches it, the same shape as the crash/effect template
+    roots `WorldEffectsFactory` stages separately — so `WorldSession.Build` now builds it as an
+    ordinary hidden child of the world root (its own RESET_STATE already keeps `part1`–`4`
+    inactive), and a death-triggered `CALL_ANIMATION` to a curated `AnimRuntime.LocalCallTemplateNames`
+    allow-list (currently just `facade_parts`) relocates it onto the call site — the same mechanism
+    `PlaceCalledTemplates` gives the anim-lab/crash runtime, scoped to the death path only so the
+    ambient world boot stays untouched. One shared, unpooled template serving 39 call sites means
+    two panels broken in succession show only the LATER kill's debris (the documented floor, not a
+    miss — each break still launches its own fresh 4-piece count).
   - ⚠ **Colliders exist only in the flight build.** `WorldSession.Options.Collision` is `_fly`
     (plus `_damageTest`); `--freecam` builds the world with **no** collision at all, so any collider
     census run there reads zero and lies. See `docs/verification.md`.

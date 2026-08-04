@@ -238,6 +238,25 @@ public sealed class WorldSession
             o.EffectsParent.AddChild(worldSounds);
             worldSounds.SetListener(o.PlayerPosition);
         }
+        // C2's facade panels each CALL_ANIMATION the shared `facade_parts` template to launch four
+        // wooden-stick debris pieces — but its root, `facdsticks`, is parentless and outside the
+        // world's spatial-partition grid, so WorldBuilder's own walk never reaches it (`BL-253`,
+        // the same shape as the crash/effect template roots WorldEffectsFactory stages
+        // separately — see its EffectTemplateRoots remark). facade_parts stays on the WORLD
+        // runtime (it is LOCAL_CHOREOGRAPHY, not routed to the effects runtime), so its template
+        // has to be built here, as an ordinary hidden child of the world root, for the ambient
+        // AnimRuntime to resolve and drive like any other gamez node; AnimRuntime's
+        // death-triggered CallAnimation relocation then moves it onto the struck panel. No
+        // colliders (a flying stick needs none — the effect-template convention). A no-op in
+        // every chapter but C2 (FindByName finds nothing) and skipped for `--node=`, which
+        // deliberately builds only the requested subtree.
+        if (o.NodeSubtree == null
+            && gamez.FindByName("facdsticks") is { } facdsticksNode
+            && builder.Scene.BuildSubtree(facdsticksNode, collisionSkip: _ => true) is { } facdsticks)
+        {
+            facdsticks.Transform = Transform3D.Identity;
+            root.AddChild(facdsticks);
+        }
         mark = StartupProfile.Mark();
         animRuntime.Bind(root, animProgram);
         StartupProfile.Record("bind", mark);
