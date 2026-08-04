@@ -167,10 +167,13 @@ The functional children, and how `cockpit.gw` drives each:
   lights**, one per gun slot / pylon, arranged around the ring: index 0 at the top
   (90°) and running **counter-clockwise** (gun 90° apart, missile 45°). Each is a
   `Xhilite.tif` bezel bar + a `Xindicator.tif` light, both carrying a **3-frame**
-  cycle green→yellow→red (`CycleTextureSet` 3). The remake lights only the slots the
-  airframe actually has (turret gun groups are inert, so a 2-gun plane lights 2) and
-  **steps the colour by that slot's remaining fraction** — green healthy, yellow low,
-  red empty; a per-pylon HE rocket (3 rounds) steps green(3/2)→yellow(1)→red(0). The
+  cycle green→yellow→red (`CycleTextureSet` 3). **Every belt light is always lit** —
+  none stays dark — and **steps the colour by that slot's remaining fraction**: green
+  healthy, yellow low, red empty; a per-pylon HE rocket (3 rounds) steps
+  green(3/2)→yellow(1)→red(0). A position the airframe **does not fit at all** (a
+  2-gun plane's slots 2–3; turret gun groups are inert, so they don't count) reads
+  **red**, indistinguishable from a fitted-but-spent slot — that is what the original
+  shows. The
   green/yellow/red **thresholds are a TUNE** pending an original playtest.
 - **`ggarrow`/`mgarrow`** — a `smallneedle.tif` pointer (priority 49, rest points
   up at slot 0) rotated about the dial centre to the selected slot: the gun arrow to
