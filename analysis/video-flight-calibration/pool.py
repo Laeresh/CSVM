@@ -21,10 +21,25 @@ import sys
 
 import numpy as np
 
+import hud as hudlib
+
 CACHE = ".scratch/vidcal/cache"
 
-# The pixel-locked 2026-07 set. 2,529 frames total (FINDINGS.md).
-POOL = ["pitch", "roll", "yaw", "dive", "accel", "decel"]
+# Which clips build each HUD's reference frame.
+#
+# COCKPIT: the pixel-locked 2026-07 set, 2,529 frames (FINDINGS.md). The needles
+# average away because the panel art is identical in every frame of every clip.
+#
+# CHASE: the opposite reasoning gets to the same place. The HUD is a screen-space
+# overlay, so it is the only thing that holds still while the sea, the horizon
+# and the aircraft slide past - a median over a chase clip renders the
+# instruments crisp and smears the world into a flat wash. Fewer frames are
+# needed than the cockpit case because there is no shake to average out.
+POOLS = {
+    "cockpit": ["pitch", "roll", "yaw", "dive", "accel", "decel"],
+    "chase": ["cap18", "cap10chase"],
+}
+POOL = POOLS["cockpit"]      # kept: callers that predate the HUD split
 
 
 def _offset(a, b):
@@ -40,9 +55,9 @@ def _offset(a, b):
     return int(dx), int(dy), float(c.max())
 
 
-def build():
+def build(hud=hudlib.DEFAULT_HUD):
     frames, n, s1, s2 = [], 0, None, None
-    for s in POOL:
+    for s in POOLS[hud]:
         a = np.load(f"{CACHE}/{s}_lum.npy")
         frames.append(a)
         f = a.astype(np.float64)
@@ -54,29 +69,45 @@ def build():
     med = np.median(np.concatenate(frames), axis=0)
     # per-pixel spread: high where a needle sweeps, ~0 on the painted panel
     std = np.sqrt(np.maximum(s2 / n - (s1 / n) ** 2, 0.0))
-    np.save(f"{CACHE}/pool_med.npy", med)
-    np.save(f"{CACHE}/pool_std.npy", std)
-    print(f"pool_med/pool_std {med.shape} from {n} frames")
+    np.save(hudlib.med_path(hud, CACHE), med)
+    np.save(hudlib.std_path(hud, CACHE), std)
+    print(f"{hudlib.med_path(hud, CACHE)} {med.shape} from {n} frames")
     return med
 
 
-def check(med=None):
-    """Every cached clip's panel offset against the median. Must be 0, 0."""
+def check(med=None, hud=hudlib.DEFAULT_HUD):
+    """Every cached clip's panel offset against the median. Must be 0, 0.
+
+    Only clips of the SAME HUD are comparable - a chase clip's ROI is a
+    different size and shape, so it is skipped rather than reported as
+    misregistered."""
     import glob
     import os
 
+    from extract import clip_hud
+
     if med is None:
-        med = np.load(f"{CACHE}/pool_med.npy")
+        med = np.load(hudlib.med_path(hud, CACHE))
     for p in sorted(glob.glob(f"{CACHE}/*_lum.npy")):
         s = os.path.basename(p)[: -len("_lum.npy")]
+        try:
+            if clip_hud(s)[1] != hud:
+                continue
+        except KeyError:
+            continue        # a region cache or a clip no longer in CLIPS
         a = np.load(p).astype(float)
+        if a.shape[1:] != med.shape:
+            print(f"  {s:12s} SKIPPED - ROI {a.shape[1:]} != median {med.shape}")
+            continue
         dx, dy, peak = _offset(np.median(a, 0), med)
         flag = "" if (dx, dy) == (0, 0) else "   <-- NOT pixel-locked"
         print(f"  {s:12s} dx={dx:+d} dy={dy:+d} peak={peak:.3f}{flag}")
 
 
 if __name__ == "__main__":
+    which = next((a.split("=", 1)[1] for a in sys.argv[1:]
+                  if a.startswith("--hud=")), hudlib.DEFAULT_HUD)
     if "--check" in sys.argv:
-        check()
+        check(hud=which)
     else:
-        check(build())
+        check(build(which), which)

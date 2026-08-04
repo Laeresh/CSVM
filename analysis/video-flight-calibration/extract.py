@@ -1,4 +1,4 @@
-"""Pull the cockpit-panel strip out of each clip into a .npy cache.
+"""Pull the instrument region out of each clip into a .npy cache.
 
 The game always renders 16:9; only the *capture region* around it varies by
 session, so every clip is normalised to canonical game (1280x720) coords here
@@ -14,6 +14,14 @@ peaks at dx=dy=0 (peak 0.64), so the pooled median, the ROI and the fitted dial
 ellipses all carry over unchanged.  Re-run that check (see `checkclip.report`)
 before trusting a third capture geometry; FINDINGS.md's "pooled median is only
 usable because the panel is pixel-locked" trap applies to every new session.
+
+WHICH HUD a clip was flown in is a separate axis from its capture geometry, and
+it has to be declared per clip because it cannot be inferred from the frame
+size: cockpit and chase put the instruments in completely different places.
+`hud.py` owns those layouts; a clip names its HUD in CLIPS and everything
+downstream reads the layout from there.  Cache names are unchanged for cockpit
+clips, so every artifact and published number from the earlier sessions stays
+valid.
 """
 import os
 import sys
@@ -21,11 +29,10 @@ import sys
 import imageio_ffmpeg as iio
 import numpy as np
 
+import hud as hudlib
+
 VID = "OriginalScreenshots/Videos"
 OUT = ".scratch/vidcal/cache"
-
-# panel strip in game (1280x720) coords: compass tape down to the frame bottom
-ROI = (295, 355, 985, 720)  # x0, y0, x1, y1
 
 # capture (w, h) -> game rect origin + integer downscale to reach 1280x720.
 # Unknown geometry is an error, not a guess: a wrong origin decodes silently.
@@ -74,7 +81,19 @@ CLIPS = {
     # duty-mode control: pulses the pull key alone at 50%, so it measures a MEAN
     # rate rather than a ripple - the test of whether short presses reach the game.
     "pt230duty": "playtest/CAP-04/Pitch Test 230ms duty.mp4",
+    # --- CHASE view. A bare string above means cockpit; these say so explicitly
+    # because the instruments are somewhere else entirely (hud.py).
+    "cap18": ("CAP-18.mp4", "chase"),                   # weapon-switch arrow
+    "cap10chase": ("CAP-10 3 3rd Person.mp4", "chase"),
 }
+
+
+def clip_hud(short):
+    """A CLIPS entry is either a path (cockpit, the historical default) or a
+    (path, hud) pair. Kept permissive on purpose: every pre-existing entry keeps
+    working untouched."""
+    v = CLIPS[short]
+    return (v, hudlib.DEFAULT_HUD) if isinstance(v, str) else (v[0], v[1])
 
 
 def layout(w, h):
@@ -87,7 +106,7 @@ def layout(w, h):
     return LAYOUTS[(w, h)]
 
 
-def extract(short, fname):
+def extract(short, fname, hud=hudlib.DEFAULT_HUD, region="panel"):
     # Normally a path under VID. A clip still staged in playtest/<ID>/ (captures
     # owned by an open item, git-ignored and not swept) is given repo-relative
     # instead, so it can be decoded without being moved in among the user's own
@@ -99,7 +118,7 @@ def extract(short, fname):
     meta = next(g)
     w, h = meta["size"]
     gx, gy, k = layout(w, h)
-    x0, y0, x1, y1 = ROI
+    x0, y0, x1, y1 = hudlib.region(hud, region)
     # crop in capture coords, then block-mean down to canonical game coords
     cx0, cy0, cx1, cy1 = gx + x0 * k, gy + y0 * k, gx + x1 * k, gy + y1 * k
     frames = []
@@ -114,14 +133,22 @@ def extract(short, fname):
         frames.append(lum.astype(np.uint8))
     g.close()
     a = np.stack(frames)
-    np.save(f"{OUT}/{short}_lum.npy", a)
-    np.save(f"{OUT}/{short}_meta.npy", np.array([meta["fps"], meta["duration"], len(a)]))
-    print(f"{short:12s} {a.shape} {w}x{h}/{k}x fps={meta['fps']:.3f} dur={meta['duration']:.2f}")
+    tag = "" if region == "panel" else f"_{region}"
+    np.save(f"{OUT}/{short}{tag}_lum.npy", a)
+    np.save(f"{OUT}/{short}{tag}_meta.npy",
+            np.array([meta["fps"], meta["duration"], len(a)]))
+    print(f"{short:12s} {a.shape} {w}x{h}/{k}x hud={hud}/{region} "
+          f"fps={meta['fps']:.3f} dur={meta['duration']:.2f}")
     return a
 
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
-    want = sys.argv[1:] or list(CLIPS)
+    # `--region=<name>` pulls a non-default region (e.g. chase's compass tape)
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    reg = next((a.split("=", 1)[1] for a in sys.argv[1:]
+                if a.startswith("--region=")), "panel")
+    want = args or list(CLIPS)
     for s in want:
-        extract(s, CLIPS[s])
+        path, h = clip_hud(s)
+        extract(s, path, h, reg)

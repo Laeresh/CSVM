@@ -1463,16 +1463,77 @@ needs one of them to move needs a new measurement first.
   the offsets are measured FROM, not which axis each component is. Settling one does not settle the
   other, and the site currently defaults to the contact point on feel, against what the data argues.
 
-- `BL-184` **Does the original animate the ammo-gauge arrow on weapon switch?** Our gauge already
-  draws the pointer (`gg`/`mgarrow`) rotated to the selected belt slot, but the rotation is applied
-  instantly — `DrawWeaponGauge` recomputes `-(360°/Positions) * Selected` per frame with no tween
-  (`GaugeCluster.cs:613-614`). The user recalls the original's pointer visibly *moving* to the
-  next/previous gun/hardpoint slot when switching (2026-07-30). Blocked on `CAP-18`
-  (`playtest.md`): film G/H switching in the original with the gauge readable — sweep vs snap, and
-  if a sweep, roughly how long it takes. If confirmed, the fix is a short tween of the arrow angle;
-  acceptance is a capture A/B, so it is deliberately **not** in `PLAN-m3-polish-quickwins`
-  (code-verifiable-only criteria) — land it in a later look-and-feel pass, after `BL-024`/`BL-025`
-  so the gauge draw path has stopped moving.
+- `BL-184` **The original DOES animate the ammo-gauge arrow — a constant-rate sweep at 157 °/sim-s.**
+  Our gauge already draws the pointer (`gg`/`mgarrow`) rotated to the selected belt slot, but the
+  rotation is applied instantly — `DrawWeaponGauge` recomputes `-(360°/Positions) * Selected` per
+  frame with no tween (`GaugeCluster.cs:613-614`). The user's recollection that the original's
+  pointer visibly *moves* (2026-07-30) is **confirmed and measured — `CAP-18` decoded 2026-08-04.**
+  The clip is third-person, so it was decoded through the new `chase` HUD layout (`hud.py`); the
+  gun gauge's geometry is confirmed two independent ways — its texture fit and a pivot solved from
+  the arrow's own sweep lines agree to **1.8 px**.
+  **The numbers, from 5 clean slot steps** (`analysis/video-flight-calibration/ammoarrow.py`):
+  - **It sweeps, unambiguously.** Frame-by-frame at 15 fps the arrow passes through every
+    intermediate angle: from 12 o'clock at 7.49 s wall through −7°, −18°, −33°, −48°, −67°, −82° to
+    −90° at 7.96 s. Not a snap, and not a fast blend — a visible traverse.
+  - **Rate 218.1 ± 3.9 °/wall-s = 156.9 ± 2.8 °/sim-s**, spread 1.8% across the five steps.
+  - **One 90° slot step takes 413 ms wall = 574 ms sim** from the fitted rate (455 ± 15 ms wall
+    end-to-end including the near-stationary frames at each end — quote the rate, not the duration,
+    since the duration depends on where you threshold the start).
+  - **The sweep is LINEAR, not eased.** A straight-line fit over a 90° traverse leaves a residual of
+    **1.95°** — a smoothstep would leave many times that. Implement as a constant angular rate.
+  - **The readout does not animate with it.** `40 SLUG`/`2400` → `30 SLUG`/`2800` flips on a single
+    frame at the *start* of the sweep, while the arrow is still leaving the old slot. So the value
+    snaps and only the pointer tweens.
+  - The gun gauge has **4 slots at 90°**, marked on the face (green at 12 and 9, red at 3 and 6);
+    every measured step was 89.8°.
+  **The hardpoint (ROCKETS) gauge is answered too, and it is the one that reveals the routing rule.**
+  It has **8 slots at 45°** — its three resting angles (359.50°, 180.17°, 314.36°, i.e. slots 0, 4
+  and 7) fit a 45° lattice to **0.64° max / 0.44° mean**, against 14.4° for a 6-slot lattice, 35.8°
+  for 5 and 44.4° for 4. The clip repeats one three-move cycle four times, identically:
+
+  Slots are numbered as `GaugeCluster` already numbers them — **0 at the top, increasing
+  counterclockwise** (`Indicators`, "0 = top, CCW"), which is also what our arrow rotation
+  `-(360/Positions) * Selected` assumes. The three rests decode to slots **0** (359.50°), **4**
+  (180.17°) and **1** (314.36° = 45° counterclockwise of top), and the clip cycles 0 → 4 → 1 → 0:
+
+  | move | Δindex | measured | shortest way? |
+  |---|---|---|---|
+  | 0 → 4 | +4 = 180° | **−179.4°** (counterclockwise) | tie — both ways are 180° |
+  | 4 → 1 | −3 | **+134.1°** clockwise | ✅ yes (135° cw against 225° ccw) |
+  | 1 → 0 | −1 | **+45.2°** clockwise | ✅ yes (45° cw against 315° ccw) |
+
+  **So the needle takes the shortest way round, and does not simply follow the index direction.** Two
+  of the three moves discriminate — walking the indices the "long" way would have swept 225° and 315°
+  where the original sweeps 135° and 45°. ⚠ **At the exact 180° antipode it goes counterclockwise**,
+  consistently across all four repetitions. That needs no special case to reproduce: the standard
+  shortest-path wrap `delta = ((target − current + 180) mod 360) − 180` returns **−180** at exactly
+  +180, which is precisely the observed direction. Implement that one expression and all four move
+  types fall out.
+  **Both gauges sweep at the same rate.** Fitting only the interior of each sweep (dropping 2 frames
+  at each end, where the run detector keeps barely-moving frames) the gun gauge gives 235.6 ± 1.8 and
+  the hardpoint gauge 233.7 ± 2.2 °/wall-s — **0.8% apart**, so it is one constant:
+  **234.5 ± 2.3 °/wall-s = 168.7 ± 1.6 °/sim-s**. On top of that each move carries about **70 ms
+  wall (~97 ms sim) of ramp**, consistent across 90°/135°/180° moves, which is why the end-to-end
+  average rate reads lower (218–226 °/wall-s) the more end frames you include. So: a constant-rate
+  traverse with roughly two frames of ease at each end, *not* a smoothstep — the interior residual to
+  a straight line is **1.1°** over traverses of 90–180°.
+  End-to-end durations, for A/B: **90° = 455 ± 15 ms wall = 633 ms sim**, 135° = 634 ms wall =
+  881 ms sim, 180° = 856 ms wall = 1190 ms sim.
+  *Wanted:* tween the arrow angle at **168.7 °/sim-s**, routed by the shortest-way wrap above, with
+  the ammo readout still snapping. Acceptance is a capture A/B, so it is deliberately **not** in
+  `PLAN-m3-polish-quickwins` (code-verifiable-only criteria) — land it in a later look-and-feel
+  pass, after `BL-024`/`BL-025` so the gauge draw path has stopped moving.
+  ⚠ Rate quoted in **sim** seconds (k = 1.390); the wall figure is what the original showed on the
+  recording machine, and implementing 234 °/s would run the sweep 39% fast.
+  **The ring size and the slot mapping are already right in our code — only the tween is missing.**
+  The hardpoint ring is a fixed **8** and does not follow the loadout (user-confirmed 2026-08-04: 8
+  is the maximum any plane has and the loadout only decides which are *filled*; corroborated by the
+  shipped marker rig, `docs/formats/markers.md` — `pylon1`…`pylon8`, "Every player plane has 8",
+  extracted from `planes.zbd`). We do not derive it from the loadout: `geom.Positions =
+  geom.Indicators.Count` (`GaugeCluster.cs:571`) counts the gauge model's own belt-indicator quads,
+  so it is 4/8 by construction whatever is loaded. And the measured rest angles land exactly where
+  `-(360/Positions) * Selected` puts them for slots 0/4/1, so the static mapping is confirmed
+  against the original too. The whole delta for this item is the animation.
 
 - `BL-099` **C1's fuel depot: what did you actually see, and in which mission? — ANSWERED
   2026-08-02, nothing to implement.** The report was: in the original, C1 IA1's depot sometimes

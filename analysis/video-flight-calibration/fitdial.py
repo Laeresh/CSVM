@@ -47,10 +47,12 @@ def sample(tex, alpha, U, V):
     return bl(tex), bl(alpha) * ok
 
 
-def fit(texname, c0, m0, box, rmax=1.02, verbose=True):
+def fit(texname, c0, m0, box, rmax=1.02, verbose=True, hud=None):
+    import hud as hudlib
+    hud = hud or hudlib.DEFAULT_HUD
     tex, alpha = load_tex(texname)
-    med = np.load(f"{CACHE}/pool_med.npy")
-    sd = np.load(f"{CACHE}/pool_std.npy")
+    med = np.load(hudlib.med_path(hud, CACHE))
+    sd = np.load(hudlib.std_path(hud, CACHE))
     x0, y0, x1, y1 = box
     img = med[y0:y1, x0:x1]
     wgt = 1.0 / (1.0 + sd[y0:y1, x0:x1])
@@ -108,19 +110,36 @@ def fit(texname, c0, m0, box, rmax=1.02, verbose=True):
 
 
 if __name__ == "__main__":
-    # Start points and search boxes are the dial centres measured off pool_std's
-    # needle-sweep fans (`pool.py` writes it), not guesses - the optimiser has no
-    # basin to climb if the box clips the dial, and it fails at NCC ~0 rather than
-    # loudly.  The two flat dials must reach NCC ~0.98 with mirror-symmetric shear
-    # (-6.54 / +6.67 px); anything less means the fit did not lock.
+    # Start points and search boxes come from `hud.py`, measured off pool_std's
+    # needle-sweep fans (cockpit) or a static-and-structured map (chase), not
+    # guesses - the optimiser has no basin to climb if the box clips the dial,
+    # and it fails at NCC ~0 rather than loudly.  The cockpit's two flat dials
+    # must reach NCC ~0.98 with mirror-symmetric shear (-6.54 / +6.67 px);
+    # anything less means the fit did not lock.
+    #
+    # The ADI is a gyro *ball*, so a flat-quad affine tops out near NCC 0.65 on
+    # either HUD - that fit supplies the aperture only; attitude comes from
+    # adi.py's area fraction.
+    import sys
+
+    import hud as hudlib
+
+    which = next((a.split("=", 1)[1] for a in sys.argv[1:]
+                  if a.startswith("--hud=")), hudlib.DEFAULT_HUD)
+    table = hudlib.dials(which)
     res = {}
-    res["altimeter"] = fit("altimeter", (78.0, 214.0), [[46.0, 0.0], [0.0, 46.0]],
-                           (20, 155, 140, 275))
-    res["speedometer"] = fit("speedometer", (612.0, 216.0), [[46.0, 0.0], [0.0, 46.0]],
-                             (550, 155, 675, 275))
-    # The ADI is a gyro *ball*, so a flat-quad affine tops out near NCC 0.65 - this
-    # fit supplies the aperture only; attitude comes from adi.py's area fraction.
-    res["horizonindicator"] = fit("horizonindicator", (348.0, 270.0), [[46.0, 0.0], [0.0, 50.0]],
-                                  (285, 210, 410, 335))
-    np.save(f"{CACHE}/dial_affines.npy",
-            np.array([res[k][0] for k in ["altimeter", "speedometer", "horizonindicator"]]))
+    for name, ((cx, cy), (au, av), box, tex) in table.items():
+        print(f"--- {which}/{name}  (texture {tex}.png)")
+        res[name] = fit(tex, (cx, cy), [[au, 0.0], [0.0, av]], box, hud=which)
+    order = [k for k in hudlib.affine_order(which) if k in res]
+    np.save(hudlib.affines_path(which, CACHE),
+            np.array([res[k][0] for k in order]))
+    # Store the NCC beside the affine so `hud.load_affine` can refuse a fit that
+    # did not lock. Without this a failed fit is indistinguishable from a good
+    # one downstream, and a wrong dial centre skews angles silently.
+    np.save(hudlib.ncc_path(which, CACHE), np.array([res[k][1] for k in order]))
+    print(f"\n{hudlib.affines_path(which, CACHE)}: {order}")
+    for k in order:
+        bad = "   <-- DID NOT LOCK, falling back to hud.DIALS" \
+            if res[k][1] < hudlib.NCC_FLOOR else ""
+        print(f"  {k:18s} NCC {res[k][1]:.4f}{bad}")

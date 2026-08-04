@@ -12968,3 +12968,95 @@ read in *colour* directly from the video, since the panel-strip cache is luma-on
 red-on-dark-red. `anchor.py` margins were 2.25× (`cap06`) and 6.14× (`cap06b`); nothing here depends
 on absolute altitude. All periods are quoted in sim seconds at k = 1.390 with the wall figures
 alongside — implementing the wall numbers would run our blink 39% fast.
+
+## 2026-08-04 — `CAP-18`: the weapon-gauge arrow sweeps, and the decoder learns a second HUD
+
+`CAP-18.mp4` (22.9 s, 2560×1440) is the first capture flown in the **third-person** view, so the
+instruments are nowhere near where six sessions of tooling expected them. The decoder now carries
+both layouts (`analysis/video-flight-calibration/hud.py`) and the cockpit path is untouched.
+
+**`BL-184` is answered: the original tweens the pointer, and routes it by the shortest way round.**
+The user's 2026-07-30 recollection was right. Frame by frame at 15 fps the arrow passes through every
+intermediate angle — 12 o'clock at 7.49 s wall, then −7°, −18°, −33°, −48°, −67°, −82°, reaching −90°
+at 7.96 s. Both weapon gauges sweep at **one constant rate**: fitting sweep interiors (dropping the
+2 frames at each end where a run detector keeps barely-moving frames) gives 235.6 ± 1.8 °/wall-s on
+the gun gauge and 233.7 ± 2.2 on the hardpoint gauge — 0.8% apart, so **234.5 ± 2.3 °/wall-s =
+168.7 ± 1.6 °/sim-s**. Each move carries ~70 ms wall of ramp on top, consistent across 90°/135°/180°
+moves, which is why an end-to-end fit reads lower the more end frames it includes; the interior is
+straight to **1.1°**, so this is a constant-rate traverse with about two frames of ease, not a
+smoothstep. End-to-end: 90° = 455 ± 15 ms wall = **633 ms sim**, 135° = 881 ms sim, 180° = 1190 ms
+sim. The readout does not animate with it — `40 SLUG`/`2400` → `30 SLUG`/`2800` flips on a single
+frame at the *start* of the sweep, so the value snaps while only the pointer tweens.
+
+**The routing rule came out of the hardpoint gauge, on a user hypothesis.** The gun gauge has 4 slots
+at 90° and only ever steps to a neighbour, so it cannot discriminate any routing policy. The
+hardpoint gauge has **8 slots at 45°** — its three resting angles (359.50°, 180.17°, 314.36°) fit a
+45° lattice to 0.64° max / 0.44° mean, against 14.4° for a 6-slot ring, 35.8° for 5 and 44.4° for 4.
+Numbered as `GaugeCluster` numbers them (0 at the top, increasing counterclockwise) those are slots
+**0**, **4** and **1**, and the clip repeats the cycle **0 → 4 → 1 → 0** four times — which is
+exactly the sequence the user predicted before it was measured. Two of the three moves discriminate:
+4 → 1 sweeps **+134.1°** clockwise where walking the indices the other way round the ring would sweep
+225°, and 1 → 0 sweeps **+45.2°** against 315°. So the needle takes the shortest way. At the exact
+**180°** antipode (0 → 4) it goes **counterclockwise**, consistently over all four repetitions,
+and that needs no special case: the standard shortest-path wrap
+`delta = ((target − current + 180) mod 360) − 180` returns −180 at exactly +180. One expression
+reproduces all four move types.
+
+**⚠ A correction, recorded because the wrong version was written down first.** The hardpoint gauge
+was initially reported here as *unmeasurable*: its fit came back at NCC 0.10 with the centre 9.5 px
+out, no slot lattice appeared at any ring size, and its moves read −171°/+145°, which failed an
+out-and-back symmetry check. Two things were wrong with that. The symmetry check itself assumed the
+sequence was A → B → A, which was an assumption introduced by the analysis and not something
+measured — the actual sequence is a three-slot cycle, which has no reason to be symmetric. And the
+fit had failed only because the start point it was given was 9.5 px off with a radius 5.6 px small,
+leaving `fitdial` no basin to climb, exactly as its own docstring warns. Re-seeded from a centre
+measured two independent ways — the left column's x from the altimeter fit plus the right column's
+row spacing (gungauge → speedometer, 92.85 px), and separately a pivot solved from the arrow's own
+sweep lines — the fit locks at **NCC 0.7684**, 0.05 px from that measurement, and the 8-slot lattice
+falls straight out. `hud.py` now carries an `NCC_FLOOR` and `fitdial` stores each NCC beside its
+affine so `load_affine` refuses an unlocked fit rather than returning a plausible wrong centre.
+`CAP-18` is discharged and its `playtest.md` row retired.
+
+**Nothing in the gauge needs changing except the animation.** The hardpoint ring is a fixed 8 —
+user-confirmed (8 is the maximum any airframe carries; the loadout only decides which are *filled*)
+and corroborated by the extracted marker rig, where `docs/formats/markers.md` already records
+`pylon1`…`pylon8`, "Every player plane has 8". We never derived it from the loadout anyway:
+`geom.Positions = geom.Indicators.Count` (`GaugeCluster.cs:571`) counts the gauge model's own belt
+quads, so it is 4/8 by construction. And the measured rest angles land exactly where
+`-(360/Positions) * Selected` already puts slots 0/4/1, so the static mapping is now confirmed
+against the original as well. The entire outstanding delta for `BL-184` is the tween.
+
+**The two HUDs are genuinely different measurement problems, and the difference is now measured
+rather than assumed.** In the cockpit the dials are painted on a 3-D panel under a fixed camera, so
+they reach the screen through a homography — a real shear, mirror-symmetric at −6.54/+6.67 px — and
+the panel can translate with shake or rotate under auto head turn. In chase view the same dials are
+screen-space sprites in two edge columns, and the fits come back with **zero shear** (u^v angle
+89.88°/89.96°, rotation 0.01°): pinned by construction, so `checkclip`'s head-turn gate has nothing
+to test there. The reference frame inverts too — the cockpit median works because the panel is
+pixel-locked across clips and the needles average away, while the chase median works because the HUD
+is the only thing holding still and the *world* smears away instead. Dial radius comes out **47.1 px
+on both**, so it is the same art, differently placed. Chase NCC: altimeter **0.9900**, speedometer
+**0.9898** — both clear the 0.98 bar the cockpit set — gun gauge 0.7360 (readout boxes painted over
+the face, geometry confirmed independently by the sweep pivot to 1.8 px), ADI 0.5753 (a ball, as on
+the cockpit), rockets 0.1031 (failed). `CAP-18` (2560×1440) and `CAP-10 3 3rd Person` (2560×720) both
+register to the chase median at **dx = dy = 0**, peaks 0.94 and 0.73 — the same cross-geometry
+pixel-lock the cockpit set has.
+
+**Nothing in the cockpit pipeline moved.** `hud.py` keeps the bare legacy cache names for the cockpit
+so every artifact and every published number from the earlier sessions stays valid without a re-run;
+a bare string in `CLIPS` still means cockpit. Re-checked after the change: `checkclip.report('cap06')`
+returns byte-identical output to the CAP-06 session, and `pool.py --check` still puts all **29**
+cockpit clips at dx = dy = 0 while skipping the chase clips by ROI rather than reporting them as
+misregistered.
+
+Two traps found the hard way and now recorded in `FINDINGS.md`: **a dial's role name is not its
+texture name** (the rockets gauge draws from `missilegauge.png`; assuming role == filename crashed
+the first chase fit), and **difference against a neighbouring frame, not the clip median, when a
+readout can change** — on a switch the text changes, so a median-difference leaves a bright
+*horizontal* residual across the face for as long as the new value shows, and horizontal residual
+fits horizontal lines. That dragged the first arrow-pivot solve 10 px sideways; differencing two
+frames a few apart cancels the text and brings the pivot to within 1.8 px of the texture fit.
+
+New tool: `ammoarrow.py` (arrow angle per frame, plus the pivot solve), which takes a HUD and so
+works on either. All rates are sim seconds at k = 1.390 — implementing 218 °/s would run the sweep
+39% fast.

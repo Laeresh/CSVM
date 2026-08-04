@@ -65,7 +65,6 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
-| `CAP-18` | Weapon-switch gauge arrow | Cycle gun groups (G) and hardpoints several times each way with the ammo gauge readable — does the pointer **sweep** to the new slot or snap instantly, and if it sweeps, over roughly how long? | `BL-184` |
 
 ### Camera
 
