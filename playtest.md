@@ -70,7 +70,6 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
-| `CAP-08` | Numpad key-combination stills | Two or more numpad keys held together. Record with `analysis/capture-rigs/NumpadComboSweep.ahk`, which **staggers** each step — first key alone until it settles, *then* the rest added on top — so the clip shows what adding a second key **does**, not merely where it ends up. Keys 1–9 minus 5; no 0 | `BL-150` |
 | `CAP-21` | Chase distance against airspeed | One aircraft, external chase view, a slow full-throttle acceleration from near-stall to top speed and back, held level, with the **airspeed readable in frame throughout**. The plane's apparent size is the measurement, so keep the view unchanged and do not touch the +/− trim. Names the aircraft in the filename — the distance is per-plane | `BL-248` |
 
 *(The numpad +/− distance trim needs no capture — you already have video of it.)*

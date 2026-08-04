@@ -13200,7 +13200,9 @@ useless for `BL-150`(b)'s ease law, since no move begins from a settled base.
 
 Incidentally this is itself weak corroboration of `BL-150`(d) — pressing a key mid-ease goes
 somewhere new rather than snapping back to base first — but it is corroboration from a clip flown
-by hand, not a measurement, and (d) still wants `CAP-08`.
+by hand, not a measurement, and (d) still wants `CAP-08`. *(Forward pointer, 2026-08-04: `CAP-08`
+was flown and (d) is answered — held keys sum as numpad-direction vectors. The mid-ease guess here
+was right in direction; see the `CAP-08` entry at the bottom of this file.)*
 
 **One thing the take does establish, and it is a method note worth keeping.** The aircraft holds a
 constant heading for the entire clip: the HUD compass ribbon (game x 1100–1460, y 10–70) drifts
@@ -13287,6 +13289,8 @@ is *measurable* on this take, since every move now starts from a settled base, b
 fitted — same missing FOV calibration.
 
 `CAP-07` is discharged. `BL-150` remains blocked on `CAP-08` for the key-combination behaviour (d).
+*(Forward pointer, 2026-08-04: `CAP-08` has since been flown and discharged — see the entry at the
+bottom of this file. What is still open on `BL-150` is (b)'s constant and (f)'s +/− trim.)*
 
 ## 2026-08-04 — `CAP-07`, second pass: the numpad ease is EXPONENTIAL, not linear; the FOV self-calibration fails
 
@@ -14125,3 +14129,60 @@ entry. Forward-pointers stapled onto the three 2026-08-03 entries above that sti
 in the build changes; goldens unaffected.
 
 **Verified.** Docs only — no build or test run.
+
+## 2026-08-04 - `CAP-08` flown: held numpad keys ADD as direction vectors, they do not select
+
+**Documentation only; no code changed.** The combo sweep filed the same day was flown by the user
+with `analysis/capture-rigs/NumpadComboSweep.ahk`, discharging `CAP-08` and answering `BL-150`(d).
+Method is version-controlled in `analysis/numpad-combo-views/`.
+
+**What was measured.** Fourteen staggered combinations - eight adjacent pairs around the numpad
+ring, four opposite pairs, two triples - each holding the first key alone until the camera settled,
+then adding the rest, then releasing. Per frame, the aircraft is segmented by redness (it is the
+only strongly red thing in frame) and reduced to its silhouette's moments, which makes the
+comparison immune to the world moving underneath across a 143 s hand-flown take. Identity is mask
+IoU, and the yardstick is empirical: the same key held alone in two *different* steps, up to 90 s
+apart, repeats at IoU **0.833-0.978**, so that band is what "the same view" means here.
+
+**The finding.** (1) **The second key is never ignored** - all 14 combinations differ from the first
+key's own settled view at IoU 0.096-0.530, nowhere near the floor. (2) **Opposite pairs cancel to
+the default chase view** - `1+9`, `3+7`, `2+8`, `4+6` match that step's base frame at 0.992 / 0.986 /
+0.995 / 0.988; on two of them, releasing the keys produced no camera motion at all, because the
+camera was already there. (3) **Triples collapse onto their middle key** - `7+8+9` = `Kp8` (0.891),
+`1+2+3` = `Kp2` (0.955), confirmed by eye as the belly plan-form and the nose-on view. (4)
+**Adjacent pairs are genuine third positions** - best match to any single view or base is only
+0.077-0.445.
+
+**One law covers all fourteen.** Take each key's 2-D offset from `Kp5` on the numpad grid, **sum the
+offsets of the held keys, and let the resultant's direction pick the camera position; a zero
+resultant is the chase camera.** Opposite pairs sum to (0,0); `7+8+9` sums to (0,+3) which is
+parallel to `Kp8`; `1+2+3` to (0,-3), parallel to `Kp2`; adjacent pairs land halfway between two
+keys and so match nothing. This is *summing*, not the "average the two directions" formula
+`BL-150`'s trap (d) warned against inferring - averaging cannot produce a cancellation.
+
+**Why this is more than a missing feature.** Our `ActiveView()` is a single-view selector that takes
+the first array match, so it can only ever return one of eight positions. The original reaches a
+continuum our code cannot express, and reaches the *base* view from two keys that individually move
+the camera. The fix shape in `BL-150` is rewritten accordingly: sum the held offsets and let the
+existing ease carry the camera to the resultant, which also gives the no-snap-to-base behaviour for
+free.
+
+**Honest limits, recorded on the entry.** Mask IoU certifies identity but saturates into noise past
+about a quadrant of separation, so the eight blended positions are bounded ("not any key, not base")
+rather than located; the law rests on its six *exact* predictions, all of which hold. Getting a
+blend's actual azimuth still needs the FOV calibration `BL-150`(a) failed to obtain. Mid-ease
+interrupt on *release* remains untested - the rig's 3.5 s gap lets every ease-back finish - though a
+mid-ease *press* is covered, since the triples' third key arrives 15 ms after the second and the
+endpoint is still exactly the held-set resultant. One take, one aircraft.
+
+**A trap worth keeping.** The rig's on-screen tooltip did not survive the capture, so the log had to
+be aligned to the video from motion alone. Whole-frame difference energy is the wrong signal - its
+p99 is 100x its median, so a passing cloud outweighs a camera slew - and the schedule is
+quasi-periodic, so an offset ~5.9 s off drops every press onto a release and scores nearly as well.
+What worked: build the signal from the *aircraft silhouette* rather than the frame, and anchor only
+on edges whose motion is not itself the question (press-alone and release-all, 28 of them). Result
+**video_t = log_t + 3.978 s**, 26/28 anchors within 350 ms at sd 27 ms, against 15/28 at sd 54 ms
+for the alias. The clip is VFR (16.67-41.70 ms intervals), so every time is a PTS, never frame/fps;
+both clocks here are wall clocks, so the sim-clock factor does not enter.
+
+**Verified.** Docs only - no build or test run.

@@ -770,11 +770,56 @@ unscheduled.
   (c) ~~**Distance is a TUNE hand-copied from the chase camera.**~~ **Resolved** — the fixed views
   now take the per-plane shipped distance with the chase camera (`CameraController`); the Bloodhawk's
   radius is its own 18.5, not 16.62. Nothing left to do here.
-  (d) **Mid-ease interrupt behaviour is unmodelled.** In the original, pressing another key while
-  easing back from a position goes straight to the new position (no snap to base first); holding
-  several keys at once yields further, blended positions. Ours has neither concept — `ActiveView` is a
-  single-view selector, so "combined" positions don't exist in the current code at all; this is new
-  behaviour to design, not a bug in existing logic. Screenshots owed (key-combination stills).
+  (d) **Combined keys ADD as numpad-direction vectors — MEASURED 2026-08-04 from the `CAP-08`
+  scripted combo sweep, 14 staggered combinations.** Ours has no concept of this at all: `ActiveView`
+  is a single-view selector that takes the first array match, so it can only ever return one of the
+  eight positions. That is not a near-miss — the original reaches positions our code cannot express.
+  - **The second key is never ignored.** In all 14 steps the silhouette after adding the second key
+    differs from the first key's own settled silhouette at mask IoU **0.096–0.530**, against a
+    repeatability floor of **0.833–0.978** measured from the same key held alone in two different
+    steps (7 such pairs, up to 90 s of hand-flown drift apart). Nothing is close to the floor, so
+    "the first key wins while it is down" is refuted outright.
+  - **The four OPPOSITE pairs return the camera to the base chase view**: `1+9`, `3+7`, `2+8`, `4+6`
+    give IoU **0.992 / 0.986 / 0.995 / 0.988** against that step's own settled base frame — at or
+    above the floor, i.e. *the same view*. Independently corroborated on two of them: releasing
+    `2+8` and `4+6` produced no camera motion at all (0.7 and 3.2 MAD of silhouette rate, against
+    33.6–102.1 for the 14 unambiguous press-alone slews), because the camera was already at base.
+  - **The two TRIPLES collapse onto their middle key**: `7+8+9` matches `Kp8` at IoU **0.891** and
+    `1+2+3` matches `Kp2` at **0.955** — both inside the floor band, and both confirmed by eye
+    (`7+8+9` is Kp8's unforeshortened belly plan-form; `1+2+3` is Kp2's nose-on).
+  - **The eight ADJACENT pairs are genuine third positions**: their best match to *any* single-key
+    view or to base runs only **0.077–0.445**, far under the floor. So `blend` is the answer to (d)'s
+    question, not `replace` and not `ignore`.
+  - **One law explains all fourteen with no exceptions.** Treat each key as its 2-D offset from `Kp5`
+    on the numpad grid (`Kp8`=(0,+1), `Kp6`=(+1,0), `Kp9`=(+1,+1), …); **sum the offsets of the held
+    keys; the resultant's direction selects the camera position, and a zero resultant is the default
+    chase camera.** Opposite pairs sum to (0,0) → base ✓ (4/4). `7+8+9` sums to (0,+3) ∥ `Kp8` ✓ and
+    `1+2+3` to (0,−3) ∥ `Kp2` ✓. Adjacent pairs sum to directions halfway between two keys, which
+    are not any key ✓ (8/8).
+  - **The route does not pass through base**, confirming the claim this entry already carried: across
+    each add-second-key transition the silhouette's distance from the settled base view never dips
+    below the nearer endpoint. The camera goes straight from the old combined position to the new one.
+  - **The combined position is a settled position, not a moment in transit.** Median silhouette rate
+    over the last 1.2 s of each hold is **2.1–19.6 px/s** against a no-key baseline of **6.1** and
+    slew peaks in the hundreds; the elevation over baseline is the pilot's own manoeuvring, which
+    moves the A-alone windows just as much (4.5–38.2).
+  ⚠ **Read the limits.** (i) **The law is confirmed where it is testable and merely unfalsified
+  elsewhere.** Mask IoU certifies *identity* but saturates into noise once two views differ by more
+  than roughly a quadrant, so it cannot say *which* intermediate position an adjacent pair reaches —
+  the 8 blends confirm only "not any key, not base". What carries the law is its six *exact*
+  predictions (four cancellations, two triples), all six of which hold. Pinning a blend's actual
+  azimuth needs the FOV calibration (a) is still missing. (ii) **Mid-ease interrupt on RELEASE is
+  still untested** — the rig leaves a 3.5 s gap, so every ease-back completes before the next press.
+  What *is* tested is a mid-ease *press*: the triples' third key lands 15 ms after the second, while
+  the camera is still slewing, and the endpoint is exactly the held-set's resultant — so an arriving
+  key re-targets rather than restarting. (iii) One take, one aircraft; the layout is a per-key
+  constant so that is fine, but do not read distances or degrees off it.
+  *Method:* `analysis/numpad-combo-views/` (`pass1` → `sync` → `events` → `decide` → `match` →
+  `settle` → `stills`). The clip is VFR (frame intervals 16.67–41.70 ms), so everything is placed on
+  PTS, never `frame/fps`. The rig's tooltip did not survive the capture, so the log was aligned to the
+  video by detecting slews and matching the schedule's asymmetric cadence: **video_t = log_t + 3.978 s**,
+  26/28 anchors within 350 ms at sd 27 ms, against 15/28 at sd 54 ms for the press/release alias.
+  Both clocks are wall clocks, so the sim-clock factor does not enter.
   (e) **No gamepad binding existed in the original** (a right-stick/right-stick+modifier scheme would
   be invention) and **5 is unbound — now measured, 2026-08-04, not assumed.** Held for 3.5 s in the
   `CAP-07` re-take, the frame deviation from its own pre-press baseline is **0.310**, *below* the
@@ -784,13 +829,13 @@ unscheduled.
   (f) **Numpad + / − trim camera distance slightly** — wholly new, unimplemented; the user already has
   video evidence for this one.
   *Fix shape:* a rebuilt `Views` table (the layout in (a)), an eased position/orientation update on
-  top of `CameraController`'s existing per-plane radius, a small state machine for the
-  interrupt/combination behaviour in (d), and the +/− trim as a new input.
-  *`CAP-07` is discharged (2026-08-04) — (a) and (e) are answered above. Still blocked on `CAP-08`
-  for (d)* (`playtest.md` §0), recorded with `analysis/capture-rigs/NumpadComboSweep.ahk`, which
-  **staggers** each combination — first key alone until it settles, then the rest added on top — so
-  the footage answers (d)'s actual question, whether a second key blends, replaces, or is ignored,
-  rather than only showing the end state.
+  top of `CameraController`'s existing per-plane radius, and the +/− trim as a new input. (d) is no
+  longer a state machine to design: replace `ActiveView`'s first-match selector with a **sum of the
+  held keys' numpad offsets**, map the resultant direction onto the (a) layout, and treat a zero
+  resultant as "no fixed view" — the existing ease then carries the camera there, and the
+  no-snap-to-base behaviour falls out for free because only the target changes.
+  *Both captures are discharged (2026-08-04): `CAP-07` answered (a) and (e), `CAP-08` answered (d).*
+  What remains open is (b)'s constant (wants an FOV calibration) and (f)'s +/− trim.
   ⚠ **`CAP-07` took two takes; the first is rejected and must not be re-analysed.** In
   `CAP-07 Numpad 1,2,3,6,9,8,7,4.mp4` the presses overlap: 10 camera transitions for 8 keys in
   20.9 s, with direct position-to-position lerps that never pass through base, so only 6–7 of the 8
@@ -811,9 +856,14 @@ unscheduled.
   than permuting the existing rows. And the table above is quadrants, not degrees — the exact
   azimuth/elevation still wants an FOV-calibrated solve. (c) Don't retune
   the chase radius here in isolation — the fixed views and the chase camera share one number in
-  `CameraController` by design; a fix landing only in one place desyncs the two cameras again. (d) Combined/multi-key positions are UNDESIGNED,
-  not merely unbuilt — resist inferring a formula (e.g. "average the two directions") from a single
-  set of screenshots; get the key-combo captures first.
+  `CameraController` by design; a fix landing only in one place desyncs the two cameras again.
+  (d) ~~**Combined/multi-key positions are UNDESIGNED** — resist inferring a formula (e.g. "average
+  the two directions") from a single set of screenshots; get the key-combo captures first.~~ —
+  **resolved**: the captures were flown and the law is *summing*, not averaging (see (d)). The
+  warning that survives is the mirror image of the old one: the law is pinned by six exact
+  predictions but the eight blended positions are only bounded, so **do not quote a blend's azimuth**
+  as if it had been measured, and re-check the implementation against the four cancellations and the
+  two triples — those are the cases with a right answer to check against.
 
 - `BL-165` **The sun renders no lens flare; the original does.** Confirmed absent: `Launcher.cs:569`
   builds only a plain `DirectionalLight3D` (`Sun`) + a `WorldEnvironment` with no glow/bloom
