@@ -1,6 +1,6 @@
 """Regress the measured engine playback-rate against the decoded flight state.
 
-Pairs the audio pitch curve (playtest/CAP-10/scale.py) with this harness's decoded
+Pairs the audio pitch curve (analysis/engine-note/scale.py) with this harness's decoded
 altimeter/speedometer for the same clip, on the same wall-clock PTS base, and asks
 which candidate drives the note: climb rate, airspeed, or flight-path angle.
 """
@@ -11,7 +11,7 @@ from decode import CACHE
 
 AUD = 'playtest/CAP-10/audio'
 # clip key -> (audio-curve key, display name). The audio key names a <key>_scale.npy
-# written by playtest/CAP-10/scale.py for the same clip.
+# written by analysis/engine-note/scale.py for the same clip.
 PAIRS = [('cap10chase', 'c', 'CAP-10 3 3rd Person.mp4'),
          ('cap10dive', 'd', 'Bloodhawk Dive Sound.mp4'),
          ('cap10var', 'nvar', 'CAP-10 Dive 100% Thrust variable climb rate.mp4'),

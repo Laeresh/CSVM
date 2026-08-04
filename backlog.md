@@ -1753,7 +1753,7 @@ needs one of them to move needs a new measurement first.
   Audio: the engine is a looped
   sample, so its spectrum translates rigidly in log-frequency, and cross-correlating each frame's
   whitened log-spectrum against level flight gives the playback-rate multiplier without an f0
-  estimate (`playtest/CAP-10/scale.py`). Flight state: both external takes decode through the
+  estimate (`analysis/engine-note/scale.py`). Flight state: both external takes decode through the
   existing chase-HUD calibration (`analysis/video-flight-calibration`, altimeter fit NCC 0.9900),
   paired to the audio on PTS by `enginepitch.py`.
 

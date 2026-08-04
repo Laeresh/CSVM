@@ -13802,7 +13802,7 @@ pull-out.
 **Method.** The engine is a looped sample, so its whole spectrum translates rigidly in
 log-frequency and no f0 estimate is needed: whiten each frame's log-spectrum, cross-correlate it
 against level flight, and the peak's sub-bin position *is* the playback-rate multiplier
-(`playtest/CAP-10/scale.py`). An f0 tracker was tried first and abandoned — harmonic product
+(`analysis/engine-note/scale.py`). An f0 tracker was tried first and abandoned — harmonic product
 spectrum octave-hopped between 45.6 and 77 Hz on the same clip.
 
 **Result** (wall-clock seconds into each clip, *not* sim seconds — k=1.390 applies):
