@@ -75,20 +75,6 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 
 *(The numpad +/− distance trim needs no capture — you already have video of it.)*
 
-*(**`CAP-07` discharged 2026-08-04** — retired from this list. The scripted re-take
-(`CAP-07 scripted Run.mp4`, driven by `analysis/capture-rigs/NumpadViewSweep.ahk`) settled the
-numpad layout for all nine keys and confirmed `Kp5` unbound; the measured table lives on `BL-150`(a).
-Its first take is rejected and should not be re-analysed — the presses overlapped and most holds
-never settled. `BL-150` still needs `CAP-08` for the key-combination behaviour, which is why that
-row remains.*
-
-*Two method notes from the pair, worth reusing on any camera capture. (1) **Script the input.** The
-rig's timestamped log removes event segmentation from the analysis entirely — key windows are read
-off the log, aligned to the video by a single offset taken from the first camera move. (2) **Fly
-straight and level and check the compass.** The HUD ribbon tracks the aircraft, not the camera, so a
-ribbon that holds still proves the subject held still; body axes then equal world axes and camera
-angles read off the footage are camera-vs-aircraft angles directly.)*
-
 *(`CAP-21` decides whether the original's chase distance moves at all. If the plane's apparent size
 is constant across the whole speed range, `dist_factor`/`dist_vary` do not drive distance from
 speed, and `BL-248`(a) is disproved rather than implemented — a correct disproof closes it.)*

@@ -8,6 +8,25 @@ on-screen motion.
 These are recording aids for `playtest.md` §0 captures. They drive the original, not our build —
 nothing here is part of the game or the test suite.
 
+## Two rules that make a capture analysable
+
+Both were learned the expensive way on `CAP-07`, whose first, hand-flown take had to be thrown out
+(`docs/HISTORY.md`, 2026-08-04). They generalise past the numpad rigs, so apply them to any new rig
+here.
+
+**1 · Script the input, and log it.** A rig's timestamped log removes event segmentation from the
+analysis entirely. Instead of inferring "when did the thing happen" from on-screen motion — which
+fails exactly when the motion is fast, i.e. when it matters — the event windows are read off the
+log and aligned to the video by a **single offset**, taken from the first frame that visibly moves.
+Everything downstream inherits that one alignment. A hand-flown take gives you neither the
+boundaries nor a way to check them.
+
+**2 · Hold the aircraft straight and level, and use the compass to prove it.** A steady subject
+means its body axes equal world axes, so angles measured off the footage are angles relative to the
+aircraft directly, with no attitude solve in between. The HUD compass ribbon is the check, and a
+good one: it tracks the *aircraft's* heading and does **not** move when the camera swings, so a
+ribbon that holds still is proof the subject held still — independent of whatever the camera did.
+
 ## `NumpadViewSweep.ahk` — `CAP-07`
 
 AutoHotkey v2. Press **F13** to sweep the numpad camera views: 3 s of straight-and-level baseline,
@@ -16,11 +35,8 @@ About 69 s. **Esc** aborts and releases whatever is held.
 
 Writes `sweep-log.txt` next to the script — one timestamped line per press and release.
 
-- **Fly straight and level throughout.** The measurement wants the aircraft's body axes to equal
-  world axes, so that camera angles read off the horizon and the moon are camera-vs-aircraft angles
-  directly, with no attitude solve in between. The HUD compass ribbon is the check: it tracks the
-  *aircraft's* heading and does not move when the camera swings, so a ribbon that holds still is
-  proof the subject held still.
+- **Fly straight and level throughout** — rule 2 above. The whole point of this capture is angles
+  measured against the airframe.
 - **One key at a time is the whole point.** `CAP-07` take 1 was rejected because the presses
   overlapped — the camera lerped straight from one fixed position to the next without passing
   through base, and most holds never settled. See `docs/HISTORY.md`, 2026-08-04.
