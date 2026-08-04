@@ -119,7 +119,6 @@ engine mix, no moving harmonic) — record external/chase. Method:
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
 | `CAP-14` | Graze vs crash | At least one shallow graze that survives and one outright crash; a building-corner clip if you can get one | `BL-172` |
-| `CAP-24` | Facade log debris — sequential or parallel? | In C2 Hollywood, fly through a facade **row** breaking several `fcpan` panels in quick succession, filmed from a view that keeps 2–3 broken panels in frame at once. The question: does the original show each panel's four flying logs **simultaneously** (several debris sets airborne in parallel), or only the newest panel's (one set at a time)? Our build has a single shared `facdsticks` template, so overlapping breaks show only the latest kill's debris — a documented floor that is either faithful (original is also one-at-a-time) or needs per-call pooling (original shows them in parallel). One clean fly-through answers it | `BL-253` |
 | `CAP-15` | Visible damage stages | A graze sequence slow enough to watch a part cross each damage threshold and reach ≤10% HP **without dying** — the mechanism is confirmed working (`docs/HISTORY.md` 2026-07-31); this capture judges whether the panel-flip/smoke-trail look and timing feel right | `BL-121` |
 | `CAP-16` | Crash puffs | A full crash sequence, close enough to judge sparks, fireball cluster, black smokeball, dirt burst and debris arcs | `BL-122` |
 
