@@ -12133,6 +12133,25 @@ over `--weapon-lab`/`--weapon-mount=`/`--weapon-fire`, `WeaponTestStillRoutesToT
 and stays in `viewer`. `.\RunTests.ps1`: build clean, 395/395 units, 21/21 engine suites, 13/13
 goldens hash-identical — the mode is additive, nothing built by another session moved.
 
+**PLAN-armour-layer A1: `DestroyablePart` gains `MaxArmor`; `PlaneStats` reads both values of the
+pair (2026-08-04).** `PlaneStats.cs`'s `destroyable_parts` parse loop took only the first float of
+each part's `[name, hp, hp, flags…]` entry (`part.MaxHp`, `hpSet` latch) and silently dropped the
+second — `docs/formats/vehicle.md` "The hp pair: armor + hit points" settled that dropped float as
+the zone's armor pool ([1] hit points, [2] armor, armor spent first). `DestroyablePart` now carries
+`MaxArmor` (default 0 — a one-float def means no armor, not equal armor, per the AI `r*` trap); the
+parse loop gained a second `case float when !armorSet` latch capturing it into `MaxArmor`, mirroring
+the existing `hpSet` pattern. No consumer reads `MaxArmor` yet — `PlaneDamage` still spends a single
+`Hp` pool; that is A2's job. `docs/architecture.md` (`PlaneStats.cs` entry) and
+`docs/formats/vehicle.md` (destroyable_parts block + the hp-pair heading, which had the pair
+backwards — "(armor, hit points)" corrected to "(hit points, armor)" to match its own [1]/[2] text
+two lines down) updated to record both fields as read.
+
+**Verified.** New `ExtractedGoldenTests.TheBloodhawkParsesBothHpAndArmorOnAllFourZones`: loads
+`player_bhawk` and asserts all four `DestroyableParts` read 20/20 (`MaxHp`/`MaxArmor`) — the
+canonical stock pair `docs/formats/vehicle.md` cites. `.\RunTests.ps1`: build clean, 423/423 units
+passing (was 422; one new test), 22/22 engine suites, 13/13 goldens hash-identical — no consumer
+reads the new field yet, so behaviour is unchanged as the plan's Verify step requires.
+
 **Note.** The lab does not yet actually build under `--weapon-lab` alone (no `--viewer`) — that is
 expected until A3 relocates its construction into the flight path; A1 only settles which mode the
 flag asks for.

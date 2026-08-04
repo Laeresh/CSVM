@@ -110,7 +110,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the data reads both floats
 
-1. ☐ `DestroyablePart` gains `MaxArmor`; `PlaneStats` reads both values of the pair
+1. ☑ `DestroyablePart` gains `MaxArmor`; `PlaneStats` reads both values of the pair
 2. ☐ `PlaneDamage` becomes two pools with armour-first 1:1-overflow `Apply` (unit-tested)
 
 ### Wave B — every existing consumer speaks two-pool
@@ -133,7 +133,7 @@ drive the two pools independently while confirming the colour ladder.
 
 # Wave A — the data reads both floats
 
-## A1 ☐ `DestroyablePart` gains `MaxArmor`; `PlaneStats` reads both values of the pair
+## A1 ☑ `DestroyablePart` gains `MaxArmor`; `PlaneStats` reads both values of the pair
 
 **Goal.** Every parsed part carries (MaxHp, MaxArmor) from the `destroyable_parts` pair; no
 consumer change yet — the second float stops being dropped.

@@ -187,6 +187,20 @@ public class ExtractedGoldenTests
     }
 
     [ExtractedDataFact]
+    public void TheBloodhawkParsesBothHpAndArmorOnAllFourZones()
+    {
+        // BL-085 A1: the destroyable_parts pair is (hit points, armor); pbloodhawk is the
+        // canonical stock example — 20/20 on every zone, not a dropped second float.
+        var stats = PlaneStats.Load(SharedZrdr, "player_bhawk");
+        Assert.Equal(4, stats.DestroyableParts.Count);
+        foreach (var part in stats.DestroyableParts)
+        {
+            Assert.Equal(20f, part.MaxHp);
+            Assert.Equal(20f, part.MaxArmor);
+        }
+    }
+
+    [ExtractedDataFact]
     public void EveryChapterAnimDefinitionMirrorsItsNameForDedupe()
     {
         // A reader def whose AnimName is left null instantiates a second copy alongside its

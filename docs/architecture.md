@@ -1071,8 +1071,10 @@ Typed per-plane stats: vehicle.json `dynamics` (resolved through the `kind_of` d
 engines.json stock engine power + player.json globals (the flight constants and the near-miss cue's
 `warning_shot_*` block), the `engine_sound` def name with its
 volume/pitch `SoundCurve`s (clamped two-point ramps), `destroyable_parts` → `DestroyablePart`
-records (name, max HP, `critical`/`engine` flags, `got_hit_anim`, per-part `injure_anims`), and
-the def-level `VehicleInjureAnims`. Schema: docs/formats/vehicle.md.
+records (name, max HP, max armor, `critical`/`engine` flags, `got_hit_anim`, per-part
+`injure_anims`), and the def-level `VehicleInjureAnims`. Schema: docs/formats/vehicle.md.
+⚠ `MaxArmor` is read (`BL-085` A1) but not yet consumed — `PlaneDamage` still spends a single HP
+  pool; the armour-first two-pool `Apply` lands with A2.
 ⚠ Def-level injure_anims are consumed as ANY-part HP fractions, not per-part — see DamageVisuals.
 ⚠ `damaged_engine_sound` is now parsed (`DamagedEngineSound` + `DamagedEngineGain`); only
   `cockpit_engine_sound` remains unparsed — it needs a cockpit view (`BL-161`).
