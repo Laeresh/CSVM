@@ -1,8 +1,8 @@
 # Milestone 4 — Artificial Intelligence (scoping study)
 
-> **⚠ SCOPED, NOT STARTED, NOT SCHEDULED — written 2026-07-25.**
-> This is **not** a live plan. The active plan is [`PLAN-testing.md`](PLAN-testing.md), and
-> PROJECT_CONTEXT.md's "Current status" names it. This file is deliberately **not** called
+> **⚠ SCOPED, NOT STARTED, NOT SCHEDULED — written 2026-07-25; premises re-checked 2026-08-04.**
+> This is **not** a live plan. The active plan is whatever PROJECT_CONTEXT.md's "Current status"
+> names (`PLAN-m3-polish-6.md` at re-check time). This file is deliberately **not** called
 > `PLAN-M4-ai.md`, because this repo's convention is that a `PLAN-*.md` sitting in `docs/` *is
 > live* — a second one here would read as scheduled work. It carries the plan **shape** (waves,
 > IDs, per-item Goal/Evidence/Approach/Verify) so that scheduling it is a rename to
@@ -26,6 +26,75 @@ local text extraction at `tools/cs_gdd_extracted/cs_gdd.txt` (git-ignored, not r
 prose from that document is reproduced here** — field names, enumerations and numeric values are
 recorded as facts; everything else is restated in our own words. Where the source is internally
 inconsistent this document says so rather than picking a reading.
+
+---
+
+## Premise re-check — 2026-08-04
+
+Every claim below was re-verified against the tree at `04d2dfc` (~60 commits after this document
+was written). **Every architectural premise and the wave ordering survive.** What follows is the
+complete list of deltas; the body text is left as written — read it through this lens.
+
+**Citation drift (mechanical, tracked as `BL-030` — re-point when M4 is scheduled):**
+
+- `PlaneViewer.cs` no longer exists — PLAN-planeviewer-split (2026-07-30) moved it to
+  `Session/GameSession.cs`, `Launcher.cs`, `FlightRigAssembler.cs` and friends. Every
+  `PlaneViewer.cs:<line>` citation below is dead; the *claims* they anchor were all re-verified
+  true at the new sites. `DriveSimSteps` lives in `GameSession.cs`.
+- The source root is `CSVM/src/`, not `src/`; `AnimRuntime`'s motions moved to `Mech3/Anim/`
+  (`MotionRuntime.cs`, `EmitterDirector.cs`, …). All other cited files exist with line drift only.
+- Archive opening is centralised in `SessionArchives.OpenFor(intent)` — semantics unchanged, but
+  note `SoundsOutliveBuild` is true only for `ArchiveIntent.Lab`; B8's prewarm work happens under
+  whatever intent the flight session opens with.
+
+**Premises that materially improved:**
+
+- **A2's "single biggest unknown" now has a demonstrated answer.** `AnimRuntime.IndexStage`
+  appends to `_index` post-bootstrap and invalidates `_findCache` — a working, gated precedent for
+  exactly the invalidation A2 needs. (The `FindAll` doc comment still claims the index is never
+  added to; that comment is now stale in the code itself.)
+- **The A2/C9 seam is no longer hypothetical.** `Flight/IncomingFire.cs` is a non-player fire
+  source registered in `DriveSimSteps` ahead of the pool, honouring the `GameClock` contract and
+  passing its own `ShooterId` — the exact controller shape this document proposes.
+- **`ProjectilePool.Spawn` already carries a firer:** the signature is now
+  `Spawn(weapon, muzzle, inheritVel, int shooterId = NoShooter)` (BL-087). The id is used only for
+  near-miss audio self-exclusion and **never reaches the physics query**, so wrong-claim #12's
+  substance stands (exclusion must still be added; the shared `_ray` still assigns only
+  `From`/`To`) — only the "no owner info anywhere" framing is dated.
+- **B8's "unprewarmed clip silently never plays" blocker is largely closed.** `WorldSounds.Prewarm`
+  now decodes every name the loaded program can reference while the archive is open. A genuinely
+  novel name after build still returns null, so the voice set must still join the prewarm set —
+  but the failure is no longer the silent default.
+- **Effect templates gained a pooled mode** (BL-225): simultaneous hits no longer collapse onto
+  one site. Still true: a placed effect snaps to an absolute world point and does not track a
+  moving host — the zeppelin constraint stands.
+- **`AnimRuntime.PlayerPositions`** (nearest-of-a-set) now exists, but only the
+  `EXECUTION_BY_RANGE` gate uses it; `PLAYER_RANGE` conditions, `ProjectilePool.Listener` and the
+  `WorldSounds` listener are still player-one singletons.
+
+**Premises that eroded:**
+
+- **A3 shrinks from five families to three.** `docs/formats/mission-entities.md` now documents
+  `zeppelins.json` and `egen.json`. Nets (`ne`/`neindex`), `aiv` rosters and `ai.zrd.json`
+  turrets remain the gap.
+- The banner's active-plan pointer was stale (fixed above); treat PROJECT_CONTEXT.md as the only
+  authority on what is live.
+
+**New fact M4's damage items must absorb:** the `destroyable_parts` pair is **(hit points,
+armor)**, not two identical hp values (`a499e89`), and CAP-19 observed armour-first ordering with
+a per-zone cap of 60. Neither is implemented, and `PlaneStats.cs` still carries the refuted
+"identical values" comment and discards the second value. D14 / A4 / F18 inherit this.
+
+**Verified unchanged (the load-bearing set):** aircraft still have no physics body; zero
+`CollisionLayer`/`CollisionMask` assignments repo-wide; `ClassifySurface` still tops out at three
+classes (and gained a second consumer, `FlightController`'s touchdown pick, blocked by the same
+gap); `FlightModel.Step`/`FlightInput` still headless and AI-ready; four-rig splitscreen with zero
+mutable statics in `Flight/` (including the post-doc `CameraController` and weapon-lab files);
+`DestructibleRegistry` still single-scalar-health with no zone concept (A4 stands);
+`Anchors` still refuses empty-NAME multi-target definitions (F18); dialogue-chain sound groups
+still parsed-then-discarded; `DamagesZeppelin` still parsed-never-consumed; still no
+subtitle/voice-line path. All data-side measurements are untouched (`extracted/` is static;
+`analysis/m4-ai-data/` intact).
 
 ---
 
