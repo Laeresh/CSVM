@@ -4,6 +4,18 @@ using Godot;
 
 namespace CSVM.Mech3;
 
+/// <summary>Which UV axes of a surface stay inside [0,1] — see
+/// <see cref="SceneBuilder.UvAxesWithinUnitSquare"/>. A fitting axis never exercises the
+/// sampler wrap, so clamping it is free and removes the wrap's edge-bleed hairline.</summary>
+[Flags]
+public enum UvClampAxes
+{
+    None = 0,
+    U = 1,
+    V = 2,
+    Both = U | V,
+}
+
 /// <summary>
 /// Turns GameZ node subtrees into renderable Godot node trees: recursion over the
 /// node hierarchy, n-gon triangulation, and a shared material cache. Callers
@@ -35,6 +47,12 @@ public sealed class SceneBuilder
     /// (the hairline-seam fix — see <see cref="UvsWithinUnitSquare"/>). Process-wide across every
     /// builder, purely for the load log; it is also what tells a capture which build made it.</summary>
     public static int ClampedSurfaceTotal;
+
+    /// <summary>Surfaces given the shader-side single-axis edge clamp instead — one UV axis
+    /// fits the unit square while the other tiles or scrolls (see
+    /// <see cref="UvAxesWithinUnitSquare"/>). Same load-log role as
+    /// <see cref="ClampedSurfaceTotal"/>.</summary>
+    public static int EdgeClampedSurfaceTotal;
 
     /// <summary>Where a material's own texture flipbook (the gamez `cycle` block) is delivered.
     /// Set by the caller before building; null leaves cycling materials static.</summary>
@@ -201,7 +219,7 @@ void fragment() {
     // pass (both would otherwise share a cached material at the base's bias, putting the overlay
     // back where it z-fights): C5's fadedsign01 is a base skin on one wall and an overlay on
     // another.
-    private readonly Dictionary<(int Material, int Priority, int Rank, bool Subface, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv, bool Lit, bool Fogged, int Pass), Material> _materialCache = new();
+    private readonly Dictionary<(int Material, int Priority, int Rank, bool Subface, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv, UvClampAxes EdgeClamp, bool Lit, bool Fogged, int Pass), Material> _materialCache = new();
     private readonly Dictionary<int, Shader> _biasShaderCache = new(); // keyed by feature bits
     private readonly Dictionary<int, Shader> _billboardShaderCache = new(); // cloud sprites, keyed by blend/scissor bits
     private readonly Dictionary<int, Shader> _cylindricalShaderCache = new(); // Y/X-axis facades, keyed by axis/blend/scissor/glow bits
@@ -374,6 +392,63 @@ void fragment() {
         };
     }
 
+    /// <summary>
+    /// Which UV axes of this surface stay inside the unit square, i.e. map the texture once
+    /// on that axis and never tile it — which is what makes a CLAMPed edge safe for it.
+    /// <para>
+    /// This is the hairline-seam fix. The terrain's UVs are a
+    /// <b>mirrored triangle wave</b>: U rises to exactly 1.0 and folds back rather than
+    /// wrapping to 0, which is how the artists tiled non-seamless textures seamlessly (it is
+    /// also the mirror symmetry visible across C4's river). Under <c>repeat_enable</c> the
+    /// bilinear filter's second tap at the fold wraps to texel 0 — the opposite edge of the
+    /// texture — and blends it in over a band one texel wide. On C4's <c>river3.tif</c>
+    /// (column 0 tan, column 63 blue-green) that is the tan hairline crossing blue water.
+    /// Measured: the seam peaks at exactly the 50/50 blend of the two edge columns
+    /// (predicted (86.5, 91.0, 74.0), measured (89.5, 92.5, 77.2)), and the background is
+    /// identical on both sides of it — the signature of a fold, not of a texture
+    /// discontinuity, which would have to step.
+    /// </para>
+    /// <para>
+    /// Clamping a fitting axis is safe <b>by construction</b>: with no UV outside [0,1] the
+    /// wrap is never exercised, so CLAMP and REPEAT can only differ within half a texel of
+    /// the edge — exactly the artifact. A blanket clamp is NOT safe and was measured to be
+    /// wrong: 54% of this install's surfaces genuinely tile (U reaches 407), and forcing
+    /// clamp on them changes 80% of the C5 city pose.
+    /// </para>
+    /// <para>
+    /// Since the C1B shoreline seam, the test is per-axis: a surface can tile along one
+    /// axis and map the other exactly once — C1B's animated surf strip runs V 0→3.9 along
+    /// the shore while U spans [0,1] across it, from srf0001.tif's opaque foam column to its
+    /// fully transparent seaward column, and the both-axes test left that U wrap live to
+    /// bleed the opaque column back in as a gray hairline out in the water. Each fitting
+    /// axis is safe to clamp by the same construction; the tiling axis must keep repeating,
+    /// so the partial case is applied as a shader-side coordinate clamp rather than a
+    /// sampler mode (Godot samplers have no per-axis wrap).
+    /// </para>
+    /// </summary>
+    public static UvClampAxes UvAxesWithinUnitSquare(List<GameZPolygon> polys, int pass)
+    {
+        bool any = false, uFits = true, vFits = true;
+        foreach (var poly in polys)
+        {
+            if (PassUvs(poly, pass) is not { } uvs)
+                continue;
+            foreach (var uv in uvs)
+            {
+                any = true;
+                if (uv.X < -UvEpsilon || uv.X > 1f + UvEpsilon)
+                    uFits = false;
+                if (uv.Y < -UvEpsilon || uv.Y > 1f + UvEpsilon)
+                    vFits = false;
+                if (!uFits && !vFits)
+                    return UvClampAxes.None;
+            }
+        }
+        // No UVs at all ⇒ nothing to clamp; keep the surface on the old path.
+        return !any ? UvClampAxes.None
+            : (uFits ? UvClampAxes.U : UvClampAxes.None) | (vFits ? UvClampAxes.V : UvClampAxes.None);
+    }
+
     /// <summary>Builds the subtree rooted at <paramref name="node"/>; null if skipped entirely.</summary>
     /// <param name="skip">Subtrees to drop entirely (not rendered, no collision).</param>
     /// <param name="collisionSkip">Subtrees to render but exempt from collision (e.g. clouds);
@@ -396,6 +471,9 @@ void fragment() {
                 mat.SetShaderParameter("albedo_tex", tex);
     }
 
+    internal static bool UvsWithinUnitSquare(List<GameZPolygon> polys, int pass) =>
+        UvAxesWithinUnitSquare(polys, pass) == UvClampAxes.Both;
+
     /// <summary>The translucent twin of a generated opaque shader: the same code with the blend
     /// variants' <c>ALPHA</c> line emitted at the end of <c>fragment()</c>, so a runtime fade
     /// (an <c>OBJECT_OPACITY_FROM_TO</c> landing on an opaque-pass world piece) has an alpha
@@ -414,48 +492,6 @@ void fragment() {
         if (close < 0)
             return null;
         return new Shader { Code = code[..close] + $"    ALPHA = col.a{OpacityTerm};\n" + code[close..] };
-    }
-
-    /// <summary>
-    /// True when every UV of this surface lies inside the unit square, i.e. the texture is
-    /// mapped once and never tiled — which is what makes a CLAMPed sampler safe for it.
-    /// <para>
-    /// This is the hairline-seam fix. The terrain's UVs are a
-    /// <b>mirrored triangle wave</b>: U rises to exactly 1.0 and folds back rather than
-    /// wrapping to 0, which is how the artists tiled non-seamless textures seamlessly (it is
-    /// also the mirror symmetry visible across C4's river). Under <c>repeat_enable</c> the
-    /// bilinear filter's second tap at the fold wraps to texel 0 — the opposite edge of the
-    /// texture — and blends it in over a band one texel wide. On C4's <c>river3.tif</c>
-    /// (column 0 tan, column 63 blue-green) that is the tan hairline crossing blue water.
-    /// Measured: the seam peaks at exactly the 50/50 blend of the two edge columns
-    /// (predicted (86.5, 91.0, 74.0), measured (89.5, 92.5, 77.2)), and the background is
-    /// identical on both sides of it — the signature of a fold, not of a texture
-    /// discontinuity, which would have to step.
-    /// </para>
-    /// <para>
-    /// Clamping is safe <b>by construction</b> when this returns true: with no UV outside
-    /// [0,1] the wrap is never exercised, so CLAMP and REPEAT can only differ within half a
-    /// texel of the edge — exactly the artifact. A blanket clamp is NOT safe and was measured
-    /// to be wrong: 54% of this install's surfaces genuinely tile (U reaches 407), and
-    /// forcing clamp on them changes 80% of the C5 city pose.
-    /// </para>
-    /// </summary>
-    internal static bool UvsWithinUnitSquare(List<GameZPolygon> polys, int pass)
-    {
-        bool any = false;
-        foreach (var poly in polys)
-        {
-            if (PassUvs(poly, pass) is not { } uvs)
-                continue;
-            foreach (var uv in uvs)
-            {
-                any = true;
-                if (uv.X < -UvEpsilon || uv.X > 1f + UvEpsilon ||
-                    uv.Y < -UvEpsilon || uv.Y > 1f + UvEpsilon)
-                    return false;
-            }
-        }
-        return any; // no UVs at all ⇒ nothing to clamp; keep the surface on the old path
     }
 
     /// <summary>The built <see cref="ArrayMesh"/> for one gamez model index, from this
@@ -957,12 +993,30 @@ void fragment() {
             // and wrapping it is what produces the hairline seams (see UvsWithinUnitSquare).
             // A scrolling surface is excluded: its UVs deliberately run past 1 and rely on
             // repeat to come back round.
-            bool clampUv = scroll == Vector2.Zero && UvsWithinUnitSquare(polys, pass);
+            var unitAxes = UvAxesWithinUnitSquare(polys, pass);
+            bool clampUv = scroll == Vector2.Zero && unitAxes == UvClampAxes.Both;
+            // The partial case — one axis fits the unit square while the other tiles or
+            // scrolls (C1B's surf strip: U spans [0,1] across the shore, V tiles along it).
+            // The sampler must keep repeating for the other axis, so the fitting,
+            // non-scrolling axis is clamped in the shader instead (see UvAxesWithinUnitSquare).
+            var edgeClamp = UvClampAxes.None;
+            if (!clampUv)
+            {
+                if (unitAxes.HasFlag(UvClampAxes.U) && scroll.X == 0)
+                    edgeClamp |= UvClampAxes.U;
+                if (unitAxes.HasFlag(UvClampAxes.V) && scroll.Y == 0)
+                    edgeClamp |= UvClampAxes.V;
+            }
+
             if (clampUv)
                 ClampedSurfaceTotal++;
+            else if (edgeClamp != UvClampAxes.None)
+                EdgeClampedSurfaceTotal++;
+            // The glow/cylindrical paths take only the full clamp: their quads' UVs are
+            // authored inside the unit square, so the partial case cannot arise there.
             st.SetMaterial(glowSprite ? GetGlowMaterial(materialIndex, fogged, clampUv)
                 : cylAxis != CylAxis.None ? GetCylindricalMaterial(materialIndex, cylAxis, lit, fogged, clampUv)
-                : GetMaterial(materialIndex, priority, rank, subface, doubleSided, scroll, clampUv, lit, fogged, pass));
+                : GetMaterial(materialIndex, priority, rank, subface, doubleSided, scroll, clampUv, lit, fogged, pass, edgeClamp));
             st.Commit(arrayMesh);
         }
         return arrayMesh;
@@ -1063,13 +1117,14 @@ void fragment() {
     }
 
     private Material GetMaterial(int materialIndex, int priority, int rank, bool subface, bool doubleSided,
-        Vector2 scroll = default, bool clampUv = false, bool lit = true, bool fogged = true, int pass = 0)
+        Vector2 scroll = default, bool clampUv = false, bool lit = true, bool fogged = true, int pass = 0,
+        UvClampAxes edgeClamp = UvClampAxes.None)
     {
         rank = Math.Min(rank, SurfaceRankCap);
-        var key = (materialIndex, priority, rank, subface, doubleSided, scroll.X, scroll.Y, clampUv, lit, fogged, pass);
+        var key = (materialIndex, priority, rank, subface, doubleSided, scroll.X, scroll.Y, clampUv, edgeClamp, lit, fogged, pass);
         if (_materialCache.TryGetValue(key, out var cached))
             return cached;
-        var mat = BuildMaterial(materialIndex, priority, rank, subface, doubleSided, scroll, clampUv, lit, fogged, pass);
+        var mat = BuildMaterial(materialIndex, priority, rank, subface, doubleSided, scroll, clampUv, lit, fogged, pass, edgeClamp);
         _materialCache[key] = mat;
         return mat;
     }
@@ -1109,7 +1164,7 @@ void fragment() {
     }
 
     private Material BuildMaterial(int materialIndex, int priority, int rank, bool subface, bool doubleSided,
-        Vector2 scroll, bool clampUv, bool lit, bool fogged, int pass)
+        Vector2 scroll, bool clampUv, bool lit, bool fogged, int pass, UvClampAxes edgeClamp = UvClampAxes.None)
     {
         var src = materialIndex >= 0 && materialIndex < _gamez.Materials.Count
             ? _gamez.Materials[materialIndex]
@@ -1142,7 +1197,7 @@ void fragment() {
             // flare texture also skins polys inside regular geometry, which must stay put.)
             if (_billboardTexture != null && _billboardTexture(texName))
                 return BillboardMaterial(tex, blend, scissor, glow: false, lit: lit, fogged: fogged, clampUv: clampUv);
-            var textured = BiasMaterial(priority, rank, subface, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass);
+            var textured = BiasMaterial(priority, rank, subface, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp);
             _texturedMaterials.Add((textured, texName)); // for a live repaint, see Repaint()
             RegisterCycle(src, textured);
             return textured;
@@ -1175,14 +1230,17 @@ void fragment() {
     // eye (or pushes it away, negative priority) by a fraction of its view distance.
     // The per-node draw-order term is added at instance level (see BuildSubtree).
     private ShaderMaterial BiasMaterial(int priority, int rank, bool subface, bool doubleSided, ImageTexture? tex,
-        Color? color, bool blend, bool scissor, Vector2 scroll, bool clampUv, bool lit, bool fogged, int pass = 0)
+        Color? color, bool blend, bool scissor, Vector2 scroll, bool clampUv, bool lit, bool fogged, int pass = 0,
+        UvClampAxes edgeClamp = UvClampAxes.None)
     {
         // Only a textured surface can scroll its UVs (a Colored material has no sampler).
         bool scrolls = tex != null && scroll != Vector2.Zero;
+        if (tex == null)
+            edgeClamp = UvClampAxes.None;
         var mat = new ShaderMaterial
         {
             Shader = GetBiasShader(shaded: !_fullbright, textured: tex != null, blend, scissor, doubleSided,
-                scrolls, clampUv && tex != null, lit, fogged),
+                scrolls, clampUv && tex != null, lit, fogged, edgeClamp),
         };
         float bias = Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) + rank * SurfaceRankBias;
         if (subface)
@@ -1197,6 +1255,12 @@ void fragment() {
             mat.SetShaderParameter("albedo_color", c);
         if (scrolls)
             mat.SetShaderParameter("scroll_rate", scroll);
+        // Half a texel keeps every bilinear tap inside the texture without cropping any
+        // visible content: sampling at exactly the inset returns the pure edge texel.
+        if (tex != null && edgeClamp != UvClampAxes.None)
+            mat.SetShaderParameter("uv_edge_inset", new Vector2(
+                edgeClamp.HasFlag(UvClampAxes.U) ? 0.5f / tex.GetWidth() : 0f,
+                edgeClamp.HasFlag(UvClampAxes.V) ? 0.5f / tex.GetHeight() : 0f));
         return mat;
     }
 
@@ -1205,10 +1269,11 @@ void fragment() {
     // the shader text it always did, so honouring the flags cannot perturb the overwhelming
     // majority of the world through float rounding in a mix().
     private Shader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
-        bool scroll, bool clampUv, bool lit, bool fogged)
+        bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None)
     {
         int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0)
-            | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256);
+            | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256)
+            | ((int)edgeClamp << 9);
         if (_biasShaderCache.TryGetValue(key, out var cached))
             return cached;
 
@@ -1262,6 +1327,11 @@ void fragment() {
             sb.AppendLine(TimeInclude);
             sb.AppendLine("uniform vec2 scroll_rate = vec2(0.0);");
         }
+        // Single-axis edge clamp (see UvAxesWithinUnitSquare): the sampler stays repeat_enable
+        // for the tiling axis, so the fitting axis is clamped on the coordinate instead —
+        // inset by half a texel so no bilinear tap can cross the edge and wrap.
+        if (textured && edgeClamp != UvClampAxes.None)
+            sb.AppendLine("uniform vec2 uv_edge_inset = vec2(0.0);");
         if (!textured)
             sb.AppendLine("uniform vec4 albedo_color : source_color = vec4(1.0);");
         // Fullbright world only: the DX7 fixed-function pipeline multiplied texture × baked
@@ -1300,9 +1370,22 @@ void fragment() {{");
         // The surface's own albedo is kept separately from the modulated result: a point light's
         // spill is light falling ON the surface, so it must be modulated by the same albedo
         // rather than added to the final colour (an unlit black texture stays black under a lamp).
-        sb.AppendLine(!textured ? "    vec4 base_col = albedo_color;"
-            : scroll ? "    vec4 base_col = texture(albedo_tex, UV + scroll_rate * csky_time);"
-            : "    vec4 base_col = texture(albedo_tex, UV);");
+        if (textured && edgeClamp != UvClampAxes.None)
+        {
+            sb.AppendLine(scroll ? "    vec2 suv = UV + scroll_rate * csky_time;"
+                : "    vec2 suv = UV;");
+            if (edgeClamp.HasFlag(UvClampAxes.U))
+                sb.AppendLine("    suv.x = clamp(suv.x, uv_edge_inset.x, 1.0 - uv_edge_inset.x);");
+            if (edgeClamp.HasFlag(UvClampAxes.V))
+                sb.AppendLine("    suv.y = clamp(suv.y, uv_edge_inset.y, 1.0 - uv_edge_inset.y);");
+            sb.AppendLine("    vec4 base_col = texture(albedo_tex, suv);");
+        }
+        else
+        {
+            sb.AppendLine(!textured ? "    vec4 base_col = albedo_color;"
+                : scroll ? "    vec4 base_col = texture(albedo_tex, UV + scroll_rate * csky_time);"
+                : "    vec4 base_col = texture(albedo_tex, UV);");
+        }
         sb.AppendLine($"    vec4 col = {vcol} * base_col;");
         sb.AppendLine("    ALBEDO = col.rgb;");
         // Per-mission SUNLIGHT dimming (world/deck/clutter). Skipped for a model authored
