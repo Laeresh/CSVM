@@ -15125,3 +15125,30 @@ flies near the cap altitude). `BL-073`'s duplicate stub is absorbed, per the pla
 (c): 2003 m was measured on one mission (C1B IA1) only — whether the cap is global, per
 chapter/zone, or per aircraft remains untested, and nothing in the implementation or docs claims
 otherwise. Details: `docs/PLAN-m3-polish-7.md` B4, `docs/architecture.md`'s `FlightModel.cs` entry.
+
+## 2026-08-04 — PLAN-m3-polish-7 B5 `BL-078`: the engine loop is now a detuned dual voice
+
+Implemented the Approach as written: `FlightAudio` builds a second `AudioStreamPlayer` off the
+same `stats.EngineSound` clip (`_engine2`), and `Update` splits each frame's throttle-driven
+`EnginePitch.Eval` ±half of a new `EngineDetuneRatio` (0.05, TUNE — the 2026-07-19 dive-sound
+entry only bounds the original's comb spacing at "~5%", never resolves an exact ratio or which
+voice leads; `flightAudio.engineDetuneRatio`, Config-wired, registered in
+`Config.WarmTuningRegistry`) around that shared centre, so the pair's average pitch tracks
+exactly where the single loop sat. The "with Doppler" half of that same entry stays withdrawn
+per its 2026-08-04 `CAP-09` retraction — no Doppler term was added here, per the item's trap.
+
+Loudness: each voice is held at a fixed `EngineVoiceGain` = 1/√2 (equal-power split, not a TUNE —
+it is the algebra that keeps two near-identical, slowly-decorrelating tones summing to the same
+RMS power the single full-gain loop had, the same convention `MixGain` already uses for
+splitscreen). `_engine2` is driven through every lifecycle hook the first voice already had
+(`StartEngine`, `SetPaused`, `OnCrash`, `OnEngineStop`, the respawn re-fire in `Update`) so the
+two voices never drift out of lockstep on state changes.
+
+Verified: `RunProbe.ps1 --fly --chapter=C1 --mission=IA1 --volume=0` (not `--mute`, per the
+item's trap) logs `audio: engine=snd_bloodhawkengine (dual voice, 5% detune) …` from
+`FlightRigAssembler`, confirming both voices build and the configured ratio reads through;
+`--dump-config` shows `engineDetuneRatio: 0.05` in the 32-key tuning template (up from 31). Full
+`.\RunTests.ps1` green (436 unit / 24 engine suites / 13 goldens hash-identical — the audio path
+touches no golden's pixels). A listen A/B against the reference dive video is still owed at the
+controls, since no capture card renders sound. Details: `docs/PLAN-m3-polish-7.md` B5,
+`docs/architecture.md`'s `FlightAudio.cs` entry.

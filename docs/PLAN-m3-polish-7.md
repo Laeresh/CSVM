@@ -70,7 +70,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — Flight and audio quick wins
 
 4. ☑ `BL-094` Hard altitude clamp at the measured 2003 m (absorbs the `BL-073` stub)
-5. ☐ `BL-078` Engine loop as the original's ~5%-detuned pair
+5. ☑ `BL-078` Engine loop as the original's ~5%-detuned pair
 
 ### Wave C — Effects and destruction
 
@@ -278,7 +278,7 @@ not required by this item's Verify step (altitude settling + an unchanged 1988 m
 goldens unmoved (no golden shot flies near the cap). Details: `docs/HISTORY.md` 2026-08-04,
 `docs/architecture.md`'s `FlightModel.cs` entry.
 
-## B5 ☐ `BL-078` Engine dual-stack chorus
+## B5 ☑ `BL-078` Engine dual-stack chorus
 
 **Goal.** The engine loop plays as the original's ~5%-detuned pair rather than a single loop.
 
@@ -298,6 +298,23 @@ gain level with today's single loop.
 
 **⚠ Traps.** Do not add Doppler while in there — `BL-160` closed against it. Keep the summed
 loudness constant or every engine-audio TUNE judgement shifts.
+
+**Landed 2026-08-04.** A second `AudioStreamPlayer` (`_engine2`) plays the same
+`stats.EngineSound` clip, pitch-split ±half of a new `EngineDetuneRatio` (0.05, TUNE —
+the 2026-07-19 entry only bounds the comb spacing at "~5%", no exact ratio or leading voice was
+resolved; Config-wired `flightAudio.engineDetuneRatio`) around the shared `EnginePitch.Eval`
+centre each frame, so the pair's average pitch is unchanged from the single loop's. No Doppler
+added, per the trap. Loudness: each voice held at a fixed `EngineVoiceGain` = 1/√2 (equal-power
+split, not a TUNE), keeping the pair's summed RMS power at the single loop's level — the same
+convention `MixGain` already uses for splitscreen. `_engine2` is driven through every lifecycle
+hook the first voice already had (start, pause, crash, engine-stop, respawn re-fire) so the two
+never drift out of lockstep on state changes. Verified: `RunProbe.ps1 --fly --chapter=C1
+--mission=IA1 --volume=0` logs both voices building (`audio: engine=snd_bloodhawkengine (dual
+voice, 5% detune) …`); `--dump-config` shows `engineDetuneRatio: 0.05` in the tuning template.
+Full `.\RunTests.ps1` green (436/436 units, 24/24 engine suites, 13/13 goldens hash-identical —
+the audio path touches no pixel). A listen A/B against the reference dive video is still owed at
+the controls. Details: `docs/HISTORY.md` 2026-08-04, `docs/architecture.md`'s `FlightAudio.cs`
+entry.
 
 # Wave C — Effects and destruction
 

@@ -1233,6 +1233,10 @@ crash variant's boom (`snd_exp_ground_a` off the dirt def itself, `snd_exp_water
 (touchdown.zrd; rate-limited by `FlightController`, not here). `OnWarningShot` draws one
 `bullet_warning_sg` variant per near miss (player.json `warning_shot_sound` is a SOUND_GROUPS name, so
 `Setup` takes the group table too; rate-limited by `FlightController`'s `WarningShotCue`, same split).
+The engine loop (`BL-078`) is two voices of the same clip, pitch-split ±half of `EngineDetuneRatio`
+(0.05 TUNE, `flightAudio.engineDetuneRatio`) around `EnginePitch.Eval`; each voice is held at the
+fixed equal-power `EngineVoiceGain` (1/√2, not a TUNE) so the pair sums to the old single loop's
+loudness.
 ⚠ `WhineMixGain` 0.12 (TUNE), `Config`-wired (`flightAudio.whineMixGain`): don't raise it back —
   reader "volume" is not a linear mix gain (the original's whine sits 12–18 dB below the raw curve
   cap); re-derive from a new reference. `DamagedEngineMixGain` 1.0 is the same shape

@@ -223,6 +223,9 @@ public static class Config
             // Same reason as whineMixGain: the damaged-engine loop is only read from a live
             // FlightAudio.Update with damage data, which the warmup never drives.
             GetFloat("flightAudio.damagedEngineMixGain", FlightAudio.DamagedEngineMixGain);
+            // Same reason: the engine dual-stack detune ratio (BL-078) is only read from a live
+            // FlightAudio.Update, which the warmup never drives.
+            GetFloat("flightAudio.engineDetuneRatio", FlightAudio.EngineDetuneRatio);
             // Puffer emitters read these at Init, which the warmup never reaches (an emitter needs
             // a texture archive) — register them here so --dump-config still documents them.
             GetFloat("puffer.burstSizeScale", Effects.Puffer.SizeScaleDefault);

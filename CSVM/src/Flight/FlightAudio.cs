@@ -7,10 +7,10 @@ namespace CSVM.Flight;
 
 /// <summary>
 /// Own-plane sound, all from the player's own game data: the plane's engine loop
-/// (per-plane WAV via vehicle.json 'engine_sound', throttle-driven pitch/volume),
-/// the overspeed whine (player.json 'prop_sound' curves — silent until past
-/// fd_speed in a dive), the airframe rattle (player.json 'rattle' block), plus the
-/// prop start/stop one-shots (snd_propstart/snd_propstop). Non-positional players:
+/// (per-plane WAV via vehicle.json 'engine_sound', throttle-driven pitch/volume, played as a
+/// detuned dual voice per BL-078), the overspeed whine (player.json 'prop_sound' curves —
+/// silent until past fd_speed in a dive), the airframe rattle (player.json 'rattle' block),
+/// plus the prop start/stop one-shots (snd_propstart/snd_propstop). Non-positional players:
 /// these are what the pilot hears; positional 3D emitters are for other aircraft, later.
 /// </summary>
 public partial class FlightAudio : Node
@@ -32,13 +32,28 @@ public partial class FlightAudio : Node
     // without a rebuild.
     internal const float DamagedEngineMixGain = 1f;
 
+    // BL-078: the original plays its engine loop as a detuned dual stack (the 2026-07-19
+    // dive-sound analysis found combs consistent with ~5% separation between two voices; the
+    // Doppler half of that entry's reading was later retracted, the detune half was not — see
+    // docs/HISTORY.md 2026-07-19 and 2026-08-04). No exact ratio was measured, only "~5%", so
+    // this is a TUNE seeded from that figure. Config-wired so it can move without a rebuild.
+    internal const float EngineDetuneRatio = 0.05f;
+
+    // Splitting one engine voice into two changes nothing about total loudness only if each
+    // voice is attenuated to keep summed *power* (not amplitude) constant — the two voices are
+    // near-identical waveforms a few percent apart in pitch, so they add closer to
+    // uncorrelated (power) than correlated (amplitude) once they drift out of phase. 1/sqrt(2)
+    // per voice keeps the pair at the same RMS power as today's single full-gain loop, the same
+    // equal-power convention MixGain already uses for splitscreen.
+    private const float EngineVoiceGain = 0.70710678f;
+
     private const float SilenceThreshold = 0.002f;
     private const float EngineStartRamp = 1.8f; // s for the loop to fade to full behind snd_propstart
 
     private readonly List<(string name, AudioStreamWav stream, float volume)> _crashSounds = new();
 
     private PlaneStats _stats = null!;
-    private AudioStreamPlayer? _engine, _whine, _rattle, _damagedEngine;
+    private AudioStreamPlayer? _engine, _engine2, _whine, _rattle, _damagedEngine;
     private float _engineVol = 1f, _whineVol = 1f, _rattleVol = 1f, _damagedEngineVol = 1f; // sounds.json VOLUME base gain
     private AudioStreamPlayer? _crash;
     private AudioStreamPlayer? _groundExp, _waterExp;
@@ -76,6 +91,10 @@ public partial class FlightAudio : Node
         // The shared empty-clip cue (weapons.json NO_AMMO_WARNING = snd_emptyclip).
         _emptyClip = MakeOneShot(archive, defs, "snd_emptyclip", out _emptyClipVol);
         _engine = MakeLoop(archive, defs, stats.EngineSound, out _engineVol);
+        // BL-078: a second voice of the same loop, detuned a few percent off the first in Update,
+        // reproduces the original's dual-stack chorus. Same def/stream, its own player so the two
+        // voices run independent playback positions.
+        _engine2 = MakeLoop(archive, defs, stats.EngineSound, out _);
         _whine = MakeLoop(archive, defs, stats.WhineSound, out _whineVol);
         _rattle = MakeLoop(archive, defs, stats.RattleSound, out _rattleVol);
         // damaged_engine_sound: a second engine loop blended in as the airframe takes damage.
@@ -184,9 +203,19 @@ public partial class FlightAudio : Node
         {
             if (!_engine.Playing)
                 StartEngine(); // respawn after a crash: propstart + fresh volume ramp-in
-            _engine.PitchScale = Mathf.Max(0.01f, _stats.EnginePitch.Eval(throttle));
-            _engine.VolumeDb = Mathf.LinearToDb(Mathf.Max(
-                SilenceThreshold, _stats.EngineVolume.Eval(throttle) * _engineVol * _engineRamp * MixGain));
+            float pitch = Mathf.Max(0.01f, _stats.EnginePitch.Eval(throttle));
+            float halfDetune = Config.GetFloat("flightAudio.engineDetuneRatio", EngineDetuneRatio) * 0.5f;
+            float voiceGain = Mathf.Max(SilenceThreshold,
+                _stats.EngineVolume.Eval(throttle) * _engineVol * _engineRamp * MixGain) * EngineVoiceGain;
+            _engine.PitchScale = pitch * (1f - halfDetune);
+            _engine.VolumeDb = Mathf.LinearToDb(voiceGain);
+            if (_engine2 != null)
+            {
+                if (!_engine2.Playing)
+                    _engine2.Play();
+                _engine2.PitchScale = pitch * (1f + halfDetune);
+                _engine2.VolumeDb = Mathf.LinearToDb(voiceGain);
+            }
         }
         UpdateLoop(_whine, _stats.WhineVolume.Eval(speedFrac) * _whineVol
             * Config.GetFloat("flightAudio.whineMixGain", WhineMixGain) * MixGain,
@@ -205,6 +234,10 @@ public partial class FlightAudio : Node
         if (_engine != null)
         {
             _engine.StreamPaused = paused;
+        }
+        if (_engine2 != null)
+        {
+            _engine2.StreamPaused = paused;
         }
         if (_whine != null)
         {
@@ -225,6 +258,7 @@ public partial class FlightAudio : Node
     public void OnCrash()
     {
         _engine?.Stop();
+        _engine2?.Stop();
         _whine?.Stop();
         _rattle?.Stop();
         _damagedEngine?.Stop();
@@ -283,6 +317,7 @@ public partial class FlightAudio : Node
     public void OnEngineStop()
     {
         _engine?.Stop();
+        _engine2?.Stop();
         _whine?.Stop();
         _rattle?.Stop();
         _damagedEngine?.Stop();
@@ -356,6 +391,7 @@ public partial class FlightAudio : Node
     {
         _engineRamp = 0f;
         _engine?.Play();
+        _engine2?.Play();
         PlayOneShot(_propStart, _propStartVol);
     }
 }
