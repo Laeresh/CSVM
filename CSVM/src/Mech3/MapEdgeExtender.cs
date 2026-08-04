@@ -19,11 +19,16 @@ namespace CSVM.Mech3;
 /// to its border cell, repeated forever and <b>alternately reflected</b> so every seam is
 /// a shared mirror plane (heights match exactly; straight repetition would step). That
 /// also keeps the continuation type-matched to the local edge — sea edge → sea forever,
-/// forest edge → forest — as user-observed in the original. NOTE: the alternating
-/// reflection is OUR seam-free construction, not verified original behavior — the user
-/// believes the original does NOT mirror (NOTES.md: plain repetition, possibly sharing the
-/// map-edge vertex row); an in-game A/B of a recognizable asymmetric border feature would
-/// settle it. Open fidelity question, cheap to swap (see MirrorAxis).</para>
+/// forest edge → forest — as user-observed in the original.
+/// <b>The alternating reflection is CONFIRMED original behavior (2026-08-04, `CAP-17`)</b> —
+/// 67 s of straight flight south off C2's coast, read as a spatio-temporal strip: reflection
+/// seams recur every 240 ± 2 frames at NCC 0.89–0.94, with a translational period of exactly
+/// twice that (471 frames, NCC +0.90…+0.95). Do NOT swap this to plain repetition; the older
+/// "the user believes the original does not mirror" note is withdrawn (`BL-105`).
+/// ⚠ What is still wrong here is the <b>unit</b>: the measured mirror period is ~3.2 cells
+/// (3.3 km), not the one border cell this class clamps to, and C2's south border row is nearly
+/// all water — repeating it southward would give a coastline invariant in z, which the footage
+/// contradicts. See `BL-105` before trusting the one-cell clamp.</para>
 ///
 /// <para>The window covers all cells within <see cref="Rings"/> of the focus (the camera),
 /// excluding in-map cells (the real world renders those). It re-diffs only when the focus

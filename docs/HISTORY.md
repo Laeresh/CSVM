@@ -14445,3 +14445,58 @@ airframe, one session.
 
 **Verified.** Docs and analysis scripts only — no build or test run.
 
+## 2026-08-04 — `CAP-17` decoded: the original's map-edge continuation **mirrors** (`BL-105`)
+
+One take, `OriginalScreenshots/Videos/CAP-17 C2 south.mp4` — 2560×1440, 67.61 s, 2027 frames,
+filmed in the original's **nose view** (no cockpit, third-person instrument set, camera at the
+nose — logged separately as `BL-253`). Straight flight south along C2's coast, land east, water
+west. Everything below is in `playtest/CAP-17/`, method and traps in its README.
+
+**The instrument is a spatio-temporal strip, not the frames.** For a fixed screen row, that row
+from all 2027 frames is stacked into an image: time down, screen-x across, so the land/water
+boundary (keyed `R − B > 15`) draws the coastline along the entire flight path. Read at rows
+900/1000/1100/1200/1300 — five different ground distances ahead, which doubles as a physical check.
+
+**Controls first.** The coastline's swing is only evidence if the aircraft is not the thing moving.
+Compass tape shifts **4 px total** over the clip (sd 0.58 px), correlating **−0.067** with the
+coast trace; airspeed is flat at **295–302** units/sim-s (sd 2.7, against FINDINGS' 299.0–300.4
+level-max equilibrium); altitude excursion is **218 ft** total and flat ±25 ft after frame 800,
+correlating **+0.19**. The altitude control is the one that matters — at a fixed screen row a
+*straight* coast's screen-x scales as 1/h, so a porpoising aircraft alone can manufacture a swing.
+
+**Result.** Translational period **471 ± 5 frames**, NCC **+0.90…+0.95**, with consecutive periods
+identical copies (as-is +0.899…+0.949 vs time-reversed −0.086…+0.080). Reflection seams recur every
+**240 ± 2 frames** at NCC **0.89–0.94** — row 1200 at 896/1138/1378/1619 (spacings 242, 240, 241),
+row 1300 at 916/1157/1398/1637 (241, 241, 239). The translational period is exactly twice the seam
+spacing, which is what alternating reflection produces and plain repetition cannot. The seam also
+crosses **later on nearer screen rows** (row 900 → 1300: frame 1250 → 1398, monotone) — the
+signature of a real ground feature, which no camera artefact can fake.
+
+So the long-standing user belief that the original plain-repeats (NOTES.md) is **withdrawn**, and
+`MapEdgeExtender`'s alternating reflection is confirmed original behaviour rather than merely our
+seam-free construction. Its class doc caveat is struck.
+
+**What the clip also shows: the unit is not one cell.** Seam spacing 240 frames = 8.006 wall s =
+11.13 sim s at k = 1.390 → **3.28–3.36 km ≈ 3.2 × 1024 m cells**. A one-cell unit is excluded by
+~3× and directly — translation NCC decays smoothly through the lag a 1024 m cell would occupy
+(lag 74 = +0.353, lag 111 = −0.038) with no peak there. Independently, C2's own south border row is
+nearly all water (its 12×12 × 1024 m grid puts the coast between cols 8 and 9), so clamping to it
+and repeating southward would give a coastline **invariant in z** — a straight line, not the
+observed swing. `BL-105` stays open on the unit size; the metre figure inherits V and k, so it is
+"about three cells, definitely not one", not an exact integer. Extent: ~28 km ≈ **2.3 × the map**,
+tiling undegraded to the last frame.
+
+**Four dead ends, recorded so they are not re-run.** (1) A zigzag coastline is locally
+reflection-symmetric about every headland and bay, so a reflection scan with too small a half-width
+returns symmetry everywhere — half-widths 30/37/55 give spurious seam spacings of 31/31/90 against
+the true 240; only a full half-period window (120, 235) recovers it. (2) Whole-image NCC on the land
+mask cannot discriminate at all, being dominated by the gross land/water half-plane split: 0.956
+(mirror) vs 0.957 (repeat). (3) Per-frame image NCC on the suburb blocks decorrelates within ~60
+frames and gave flatly contradictory answers between its block-pair and seam-centred variants. (4)
+The fog wall's distance looked like a tile-reload signal but is dominated by the flight path (a
+pull-up around frame 875).
+
+`CAP-17` is discharged and its ID retired; the World section of `playtest.md` now owes nothing.
+
+**Verified.** Docs, backlog and analysis scripts, plus one code-comment correction in
+`MapEdgeExtender.cs` — no behaviour change, no build or test run.

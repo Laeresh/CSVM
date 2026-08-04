@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-253`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-254`.**
 When adding a new item, take the next number and bump this line.
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
@@ -680,6 +680,16 @@ unscheduled.
   a prototype, unfair as a race. Options: spawn everyone abreast from one point (the
   `--pos` `SpawnAbreast` fan already does this), or rank on a per-player-normalised time.
 
+- `BL-253` **A third main view — "nose view" — exists in the original and we do not have it**
+  (user, 2026-08-04, while handing over `CAP-17`). Alongside cockpit and third-person there is a
+  view with **no cockpit drawn, the camera sitting at the front of the plane, and the same instrument
+  set as third-person** (the free-floating ALT/MPH/GUNS/ROCKETS dials, not the cockpit panel).
+  `CAP-17 C2 south.mp4` is filmed in it throughout and is the reference footage — the dials sit at
+  the third-person positions (altimeter hub ≈ (1092, 412), speedometer ≈ (1092, 2148) at 2560×1440,
+  mirror-symmetric about screen centre) over an otherwise unobstructed forward view.
+  Unknown and not investigated here: which key selects it, where it sits in the cycle, and the exact
+  eye offset along the nose. Distinct from `BL-150`, which is about the *held-numpad* views around
+  the aircraft, not the main view set.
 - `BL-150` **plan-sized — not a TUNE. Numpad camera views — the whole scheme needs a rebuild, not a
   retune.** Current implementation: `FlightController.cs:286-303` (`Views[]` table, keys
   Kp1/2/3/4/6/7/8/9 only — **no Kp0**), `:1653-1676` (`ActiveView()` — held key beats the scripted
@@ -1697,19 +1707,48 @@ needs one of them to move needs a new measurement first.
   the same way `docs/formats/hud.md` records for the cockpit damage dial ("the anim names lag
   their effect by one state"). Measured 2026-07-22 while planning M3.
 
-- `BL-105` **Map-edge continuation**: ours alternately *reflects* the border tiles (seam-free by
-  construction); the original likely plain-repeats them, possibly sharing the edge vertex row.
-  **Not answerable from extracted resources (checked 2026-07-30):** `nodes.json`/the gamez area grid
-  only describe the in-map 12×12 (C1) tile set; nothing in the shipped data encodes what the
-  original's *own* engine does for cells outside it — that continuation is emergent runtime behaviour
-  in the original executable, not a stored asset, so no amount of terrain/texture mining here can
-  settle mirror-vs-repeat or the tile-count question. **User observation (2026-07-22): the tile
-  borders do match, so it may not be mirrored — and the original may extend by more than one tile**;
-  that check was almost certainly inconclusive because a symmetric border tile (open ocean) cannot
-  discriminate mirror from repeat. The A/B needs a genuinely **asymmetric** border feature, filmed
-  continuously for 4+ tile-crossings: the silhouette flips on a mirror and stays identical on a
-  repeat, and counting tiles out to any change settles the extent (`CAP-17`). One-line swap in
-  `MapEdgeExtender.MirrorAxis` once it answers.
+- `BL-105` **Map-edge continuation — the mirror half is ANSWERED 2026-08-04 from `CAP-17`; the unit
+  size is not.** **The original mirrors.** Our alternating reflection in `MapEdgeExtender.MirrorAxis`
+  is correct and must NOT be swapped to plain repetition — the long-standing user belief that it
+  plain-repeats (NOTES.md) is withdrawn, and the class doc's "user believes the original does NOT
+  mirror" caveat with it.
+  **How it was measured** (`playtest/CAP-17/`, method and traps in its README). One take,
+  `CAP-17 C2 south.mp4`, 67.6 s of straight nose-view flight south over the C2 coast. For a fixed
+  screen row, that row from all 2027 frames is stacked into a **spatio-temporal strip**, so the
+  land/water boundary (keyed `R − B > 15`) draws the coastline along the whole flight path. Read at
+  five rows (900–1300):
+  - **Translational period 471 ± 5 frames**, NCC **+0.90…+0.95**; consecutive periods are identical
+    copies (as-is +0.899…+0.949 vs time-reversed −0.086…+0.080).
+  - **Reflection seams every 240 ± 2 frames** at NCC **0.89–0.94** — row 1200 at 896/1138/1378/1619
+    (spacings 242, 240, 241), row 1300 at 916/1157/1398/1637 (241, 241, 239). Translational period =
+    2 × seam spacing, which is exactly what alternating reflection produces and plain repetition
+    cannot.
+  - The seam crosses **later on nearer screen rows** (row 900 → 1300: frame 1250 → 1398, monotone) —
+    the signature of a real ground feature, which no camera artefact can fake.
+  Heading, speed and altitude were ruled out first: compass tape moves **4 px total** over the clip
+  (corr with the coast trace −0.067), airspeed is flat at **295–302** units/sim-s (sd 2.7, matching
+  the 299.0–300.4 level max), altitude excursion is **218 ft** total and flat after frame 800 (corr
+  +0.19). That matters because a straight coast's screen-x scales as 1/h.
+  **What is still open: the size of the mirrored unit — it is NOT one 1024 m cell.** The seam
+  spacing is 240 frames = 8.006 wall s = 11.13 sim s at k = 1.390, i.e. **3.28–3.36 km ≈ 3.2 cells**
+  at the measured speed. A one-cell unit is excluded by ~3×, and directly: translation NCC decays
+  smoothly through the lag a 1024 m cell would occupy (lag 74 = +0.353, lag 111 = −0.038) with no
+  peak there. Two independent supports that our per-axis *border-cell* clamp is wrong: C2's own south
+  border row is nearly all water (coast between cols 8 and 9 of the 12×12 × 1024 m grid), so
+  repeating it southward would give a coastline **invariant in z** — a straight line, not the
+  observed 471-frame swing.
+  ⚠ **The cell count is the soft number, the mirroring is the hard one.** The metre conversion
+  inherits both V and k, and k = 1.390 is a machine/session property measured on *other* clips, so
+  read the unit as "about three cells, definitely not one" rather than an exact integer. Settling it
+  needs either a level constant-altitude pass with a known start position, or an A/B against our own
+  build once `Rings`/the clamp granularity is changed.
+  **Extent:** the clip covers ~28 km ≈ **2.3 × the 12,288 m map** and the mirrored tiling continues
+  undegraded to the last frame — no limit, no change, no fade found within that range.
+  ⚠ **A symmetric border feature cannot discriminate mirror from repeat, and a zigzag coast is
+  locally symmetric about every headland.** The 2026-07-22 open-ocean check was inconclusive for the
+  first reason; a reflection scan with too small a half-width fails for the second (half-widths
+  30/37/55 return spurious seam spacings of 31/31/90 against the true 240). Use a half-width of a
+  full half-period.
 - `BL-108` **The yaw `eff` speed shape** (`1.4 − clamp(v/fd)`) is an unvalidated interim model away from
   cruise: the 360° rudder turn matches the original to 4%, but that is one speed. The original's
   own version of this ships as `player.json`'s `yaw_*` fade set — see "Flight-model gaps the video

@@ -10,7 +10,8 @@ here means the work is queued, not forgotten. Deep evidence and traps live in
 Cite them from `backlog.md` and in conversation the way `BL-nnn` is cited. IDs are permanent: when
 an item closes its ID retires with it and is never reused, so numbering gaps are expected.
 Retired IDs disappear from this file, so never mint a new ID by scanning the entries below — take
-it from this counter and bump it here: **next free IDs `CAP-24` and `PT-31`.**
+it from this counter and bump it here: **next free IDs `CAP-24` and `PT-31`.** (`CAP-17` retired
+2026-08-04 — IDs are never reused.)
 
 **Captures staged for an item live in `playtest/<ID>/`** — git-ignored (they are renders of the
 player's own game files) and, unlike `.scratch/`, **not swept by `CleanScratch.ps1`**, so they
@@ -98,9 +99,10 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 
 ### World
 
-| ID | Capture | What must be in frame | Unblocks |
-|---|---|---|---|
-| `CAP-17` | Map-edge continuation | Fly to a map edge over a **genuinely asymmetric** border tile — a coastline bend, an isolated building or rock; open ocean cannot discriminate mirror from repeat — then continue straight for **4+ tile crossings, filming continuously**. The silhouette flips on a mirror and repeats identically on a plain repeat, and the crossing count answers how far out the world continues | `BL-105` |
+*(none owed — `CAP-17` discharged 2026-08-04: the map-edge continuation **mirrors**, measured off
+`CAP-17 C2 south.mp4`; evidence and method in `playtest/CAP-17/`, finding on `BL-105`. The residual
+question there — the size of the mirrored unit, ~3 cells rather than the 1 our code clamps to — does
+not need new footage of the original, so no capture is owed for it.)*
 
 ---
 
