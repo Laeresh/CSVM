@@ -11,7 +11,7 @@ Cite them from `backlog.md` and in conversation the way `BL-nnn` is cited. IDs a
 an item closes its ID retires with it and is never reused, so numbering gaps are expected.
 Retired IDs disappear from this file, so never mint a new ID by scanning the entries below — take
 it from this counter and bump it here: **next free IDs `CAP-25` and `PT-34`.** (`CAP-17` and
-`CAP-14` and `CAP-24` retired 2026-08-04 — IDs are never reused.)
+`CAP-14` and `CAP-24` and `CAP-16` retired 2026-08-04 — IDs are never reused.)
 
 **Captures staged for an item live in `playtest/<ID>/`** — git-ignored (they are renders of the
 player's own game files) and, unlike `.scratch/`, **not swept by `CleanScratch.ps1`**, so they
@@ -94,7 +94,15 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
 | `CAP-15` | Visible damage stages | A graze sequence slow enough to watch a part cross each damage threshold and reach ≤10% HP **without dying** — the mechanism is confirmed working (`docs/HISTORY.md` 2026-07-31); this capture judges whether the panel-flip/smoke-trail look and timing feel right | `BL-121` |
-| `CAP-16` | Crash puffs | A full crash sequence, close enough to judge sparks, fireball cluster, black smokeball, dirt burst and debris arcs | `BL-122` |
+
+*(`CAP-16` discharged 2026-08-04: `CAP-16.mp4` gave a full ground crash close enough to read the
+fireball cluster, dirt burst, smokeball colour, debris scatter and wreck tumble, corroborated by two
+further ground crashes and contrasted against a building strike. Measurements and their limits are
+on `BL-122`; evidence in `playtest/CAP-16/`. What remains on `BL-122` is an A/B at the controls, not
+more footage. ⚠ **Do not film a longer crash hoping to time the fire out — it cannot be done.** A
+fatal crash returns the original to the menu, so the burn-out is unobservable in single player;
+`CAP-16` captures the cut itself (full intensity until t = 12.65, faded to black by t = 13.00), which
+makes the usable figure a **hold time of 6.52 s wall / 9.06 sim-s from ignition**, not a lifetime.)*
 
 ### World
 

@@ -2209,7 +2209,93 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   whole against the original); and `snd_exp_ground_a` mix level + whether it should layer over
   `plane_destroy_sg` (the dirt def's only Sound is `snd_exp_ground_a`; we keep both). The retired
   bespoke crash on branch `bespoke-crash-animation` is the A/B reference for these.
-  *Blocked on `CAP-16`* (`playtest.md` §0).
+  **`CAP-16` analysed 2026-08-04** (`CAP-16.mp4`, 2560×1440, 13.49 s; corroborated by
+  `C1 IA1 Crash.mp4` and `CAP-14 Crash.mp4`, two further ground crashes with the same signature;
+  stills in `playtest/CAP-16/`). ⚠ All times below are **wall-clock** off container PTS — multiply
+  by k = 1.390 for sim-seconds before comparing against any authored `run_time`.
+  - **Tumble is a total angle, not a rate — the reading in the entry above is confirmed.** A wing
+    panel detaches at ignition and stays legible for 8 sampled frames, t = 6.13 → 6.60
+    (0.47 s wall / 0.65 sim-s; `wing-tumble-strip-6.13-6.60.png`). Its long axis rotates only
+    **~10–15° over that span** — order 20–30 °/s wall-clock. A π-rad-per-second *rate* would have
+    turned it ~85° in the same window, which is not what the footage shows. So `forward_rotation`'s
+    clean π multiples read as the piece's **total** sweep over `run_time`. *Limit:* one piece, seen
+    near edge-on under camera motion, so only rotation about the view axis is observable.
+  - **`WreckMomentum` — direction confirmed, magnitude not pinned.** The same panel travels on a
+    straight shallow down-and-forward path along the flight direction (t = 6.13, 6.27); it does not
+    pop upward. At t = 12.50 the burning chunks lie **scattered laterally on the ground**, at rest,
+    either side of the impact — no lofted arcs. Consistent with a substantial travel-velocity
+    inheritance, i.e. 0.4 is the right *shape*; the footage cannot pin the fraction without a known
+    impact speed and piece velocity, so 0.4 stays a TUNE.
+  - **Overall crash intensity — "one big fireball" is correct for ground, and is surface-dependent.**
+    The dirt crash genuinely reads as a single dominant fireball: granular yellow sprite cluster at
+    ignition (t = 6.27), white-hot core with orange body by t = 7.40, still at full intensity at
+    t = 12.50 when the clip ends. The concern that the additive stack over-reads is **not supported
+    for ground crashes** — the original looks like that. ⚠ But `CAP-14 Building crash Balmoral.mp4`
+    (t ≈ 5.0) shows a *building* strike as a spread of small discrete orange puffs with **no** large
+    fireball and **no** dark halo. Do not tune the two surfaces to one look.
+  - **The smokeball is dark red-brown, not black** (t = 8.00–12.50), in all three ground crashes.
+  - **Dirt burst reads as a separate, lower, ground-coloured cluster** — three distinct pale-cream
+    puffs sitting at the ground line beneath the fireball at t = 7.40, clearly not fire-tinted.
+  - **Audio: the two sounds are sequential, not stacked.** Two spectrally distinct onsets — one at
+    t = 6.15 (+4.5 dB, spectral centroid **958 Hz**, mid-band dominant 55.8%: the airborne breakup)
+    and a deeper one at t = 7.09 (+5.3 dB, centroid **711 Hz**, low-band dominant 55.7%: the ground
+    explosion, coincident with the dirt burst appearing). They are **0.94 s apart wall-clock
+    (1.31 sim-s)**, with near-equal peaks (−15.1 / −15.2 dBFS). So layering both is right, but they
+    should be **offset ~1.3 sim-s**, not triggered together. Mix level is modest: the crash peaks
+    only **~+5 dB over the engine bed** (bed −19.1 dBFS median) and never clips. ⚠ Sound *identity*
+    is inferred from timing against the visuals, not decoded — the footage cannot prove which onset
+    is `snd_exp_ground_a` vs `plane_destroy_sg`.
+  - **Duration: the effect never visibly ends, and it never can — the game takes the scene away.**
+    A fatal crash returns the original to the menu, so there is no single-player vantage from which
+    the fire burns out on screen. `CAP-16` catches that cut: mean frame luma holds *flat* at 50 from
+    impact until **t = 12.65**, then fades to black by t = 13.00 (a ~0.35 s fade, the return to
+    menu). The fireball is at **full intensity when the fade starts** — it is not decaying. So the
+    number to build against is not a burn-out time but a **hold time: 6.52 s wall / 9.06 sim-s from
+    ignition to the fade**, during which the effect must not visibly thin out. The other two ground
+    clips have no black frame at all (recording simply stopped while lit), so `CAP-16` is the only
+    one that captures the cut.
+  - **Crash audio ends naturally at 5.47 s wall / 7.60 sim-s after ignition** — i.e. ~1.1 s *before*
+    the visual fade begins, so the last second of the burning wreck is silent. The envelope decays
+    smoothly (−20 → −25 → −32 → −41 dBFS across t = 9.1 → 11.55) and reaches digital zero at
+    t = 11.60; an interrupted recording would have truncated at a non-trivial level instead.
+  - **Fireball SIZE, measured against the plane as an in-frame ruler — our burst is ~2.5–3× too
+    big, and the `SizeScaleDefault` ×4 stand-in is the reason.** ⚠ Estimate, not a decode. Method:
+    the Bloodhawk (`player_bhawk`, the plane in `CAP-16.mp4`) has no wingspan field anywhere in
+    data, so the reference is the mesh-AABB figure recorded in `PlaneCollider.cs:31-34,56-60` —
+    **full span ≈ 11.6 m** (half-span 5.8 m, cross-checked off `WingBandFrac 0.35` × half-span =
+    2.03 m). At t = 6.27 (0.14 s wall / 0.19 sim-s after ignition) the *still-attached* wing and the
+    fireball are in the same frame at the same camera depth, so no cross-frame distance assumption
+    is needed: wing root→tip ≈ 215.6 px for 5.8 m ⇒ **≈ 37 px/m**; the fireball's fire-keyed pixel
+    span is 380 × 342 px ⇒ **diameter ≈ 361 px ≈ 9.7 m**. Sources of imprecision: the "root" point
+    is the visible fuselage seam, not the true centreline (under-measures half-span, so the 9.7 m
+    is if anything a slight over-estimate), and it is one sample from one frame.
+    - Against our build, simulating `flame_ball_01-large_fireball`'s `fierypuffer` verbatim
+      (SIZE_RANGE 2–4, GROWTH 1→3, ±65 m/s, friction 9, number 18, 2 bursts, life 0.8–1.0) through
+      `Puffer.SpawnBatch`/`_Process` at dt = 1/60: the **particle cloud** (centres only) is **8.9 m**
+      across at t = 0.14 and settles at ~12.7 m — i.e. the authored velocity/friction spread matches
+      the footage almost exactly, and needs no change.
+    - What does not match is the **sprite size**. `Puffer.SizeScaleDefault` is **4** — explicitly a
+      judged stand-in for a missing engine constant, not a decode (`Puffer.cs:276-281`, TUNE settled
+      at the controls 2026-08-01) — and the quad side is that size in metres (`QuadMesh` 1×1 scaled
+      by it, `EmitterRenderer.cs:134,150-156`). At ×4 the mean sprite is 15.8 m across at t = 0.14
+      and the whole burst spans **27 m**, reaching **54 m** by end of life. At ×1 (authored verbatim)
+      it is **13.2 m** at t = 0.14 — within ~35% of the footage's 9.7 m, and the gap closes further
+      once the fire sprite's soft alpha edge is allowed for (visible fire is well inside the quad).
+      **So the footage puts the missing constant near 1, not 4** — for the crash burst at least.
+    - ⚠ Tension, not a verdict: ×4 was chosen because at ×1 the emitters "read as a thin scatter of
+      specks against the original's volume." Both observations can be true — the deficit at ×1 may
+      be *density* (18 sprites) or sprite alpha rather than size, in which case the fix is more/
+      denser particles at authored size, not bigger ones. The knob is per-path, so this bears only
+      on **`puffer.burstSizeScale`**, not on the trail/sustain scales that were judged alongside it.
+    - Limit: the ruler only exists near ignition (the airframe is gone within ~0.5 s and no known
+      length survives in frame), so this is an *early-frame* comparison. Our burst is dead by ~1.0 s
+      while the original is still at full intensity 9 sim-s later — that gap is the hold time above,
+      a separate matter from size.
+  *Residual.* The player's **own** crash can never show the burn-out — the game cuts to menu — so do
+  not re-film one hoping for it. The one untried vantage is an **enemy** plane crashing while the
+  player stays alive, which would keep the scene up; worth a capture only if the hold time above
+  turns out to be the binding constraint when tuning. Otherwise what remains is the **A/B against
+  our build at the controls**, with the reference numbers above to judge against.
 - `BL-123` **Audio (Run-2 item 11)** — `WhineMixGain` 0.12; A/B'd against the original 2026-07-30:
   close, but "could be a bit louder." `flightAudio.whineMixGain` is now config-wired
   (`FlightAudio.cs:145`). *Playtest after fix:* nudge `flightAudio.whineMixGain` up from 0.12 via
