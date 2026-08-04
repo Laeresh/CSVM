@@ -11,11 +11,18 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-256`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-257`.**
 When adding a new item, take the next number and bump this line. ⚠ One ID was minted twice in
 concurrent sessions on 2026-08-04 — `BL-253` (the C2 facade log debris, this file's holder) and a
 "nose view" finding merged the same day; the nose-view item was renumbered to `BL-255` at the
 merge, so commit `11c22cc`'s message cites it under the old number.
+
+**Ten items moved into [`docs/PLAN-m3-polish-7.md`](docs/PLAN-m3-polish-7.md) on 2026-08-04**
+(`BL-184`, `BL-148`, `BL-142`, `BL-094` + its `BL-073` stub, `BL-078`, `BL-221`, `BL-229`,
+`BL-061`, `BL-228`, `BL-239`) — their evidence and traps travelled with them; do not re-add them
+here. A cross-reference to one of those IDs now resolves in that plan. `BL-088` was deleted the
+same day as **stale**: it had already landed 2026-08-01 ("M3 Wave C C9", `docs/HISTORY.md`) but
+its entry survived here; the user caught it during plan review.
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
 
@@ -104,19 +111,6 @@ work is below.
     — that reading was considered and disproven by the same census.
     *Playtest after fix:* look for wreck pieces arcing along a correct trajectory, not just moving
     further. `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`.
-**Test / debug affordances (findings 6, 14).**
-20. `BL-142` **Re-tune `IndicatorLowFrac` for guns on its own merits, not the pylon coincidence.**
-    The 0.34 threshold (`GaugeCluster.cs:76`) was picked so a 3-round rocket pylon steps
-    green(3/2)→yellow(1)→red(0) — exactly the case that must now show NO yellow (see `BL-024`). Once
-    hardpoints stop consulting this constant, its only remaining justification is "a gun group only
-    warns near empty" (`GaugeCluster.cs:75`), which was never independently verified against a real gun
-    belt's ammo curve (guns hold hundreds of rounds, not 3). *Fix shape:* after `BL-024` lands, re-tune
-    `IndicatorLowFrac` by eye against a gun group draining from full to empty in flight — the
-    pylon-derived value may or may not still be right.
-    ⚠ **Traps.** Don't skip this because `BL-024` "already tunes it" — `BL-024` only splits the code
-    path; it does not re-examine whether 0.34 reads well for a gun belt, since nobody has watched one
-    drain past that fraction with intent to judge the colour step.
-
 ## Blocked / deferred
 
 - `BL-245` **The other 379 bounce-terminated `OBJECT_MOTION`s are FALLS, not launches — no apex to
@@ -543,6 +537,14 @@ extracted data before being logged, so the mechanism is recorded here and not re
 
 ## Feature backlog
 
+- `BL-256` **Stunt screenshot feature, triggered off `DzRadius` — much later, by user decision
+  (2026-08-04, minted when `BL-125` was dropped).** `DzRadius` (15 m, user-hand-tuned) is settled
+  as the **marker-centre radius**: scoring crosses the authored `dzpathN` gate pair
+  (`docs/HISTORY.md` 2026-08-01 "M3 Wave C C9"), and the constant's remaining roles are the `dzN`
+  marker centre and, eventually, the trigger for a stunt screenshot feature. No design beyond
+  this sentence exists yet — recorded so the constant's purpose and the feature intent survive.
+  ⚠ Do not retune or delete `DzRadius` as dead code — it is reserved, and the 15 m is the user's.
+
 - `BL-059` **Data-driven crash — the remaining variants/follow-ups (PLAN-data-driven-crash COMPLETE for the
   dirt crash, default since Wave 4 2026-07-23).** The dirt/ground crash plays `player_crash_dirt`
   end-to-end through the per-player scoped `AnimRuntime` — sparks, fireball cluster, black smokeball,
@@ -562,36 +564,6 @@ extracted data before being logged, so the mechanism is recorded here and not re
      body*. ⚠ Do not wire it off a low-HP test on the collision path — that is the ground crash with a
      different def. Data: `extracted/C1/cam_anim/player-player_crash_default.json`; the water half
      landed 2026-08-02 (`docs/HISTORY.md`), full decode there under 2026-07-23.
-- `BL-228` **Schedule the `WAIT_FOR_COMPLETION` dependency — there is finally a reachable case
-  (2026-08-02, from `BL-059` item 2).** The field is decoded (`docs/formats/anim-definitions.md`:
-  flag `0x10` + an index into the caller's own `anim_refs`, always naming the call's own `name`;
-  3,731 flagged events install-wide) and the runtime ignores it — every `CallAnimation` returns to
-  the caller immediately. The sea dive is now the clean case: `player_crash_water`'s `destroy_crash`
-  flags its `plane_big_splash` call and then calls `large_steam_spray`, and a capture shows both
-  retargeting on the **same tick**, where the splash's own choreography runs 3.0 s. Implementing it
-  means the sequence scheduler holds the caller until the callee's instance completes.
-  ⚠ **Traps.** (a) 3,731 flagged events install-wide, all `OnCall`/`WeaponHit` — turning the wait on
-  globally changes timing far beyond the crash and will move goldens; scope and measure before
-  believing a screenshot. (b) `0` and `null` are **different authored states** (3,639 vs 53,019) —
-  `0` waits on ref zero, `null` has no flag. (c) `wait_for_raw` is the fork's separate exposure of
-  **unflagged stale values** (525 events); it is not a wait and must not be read as one.
-  (d) "Completes" needs a definition for a def with no terminating event — decide it from the data,
-  not from what makes the crash look right.
-- `BL-229` **A splash emitter is killed on the tick it starts, by its own caller (2026-08-02, from
-  `BL-059` item 2).** `plane_big_splash`'s `plane_puff_splash1` is three offset-less events:
-  `ObjectActiveState sp_1 true` → `CallAnimation hg_splasher WithNode sp_1` → `ObjectActiveState
-  sp_1 false`. Our runtime runs all three in one tick and logs `host 'sp_1' deactivated — emitter
-  stopped`, so the `splasher` puffer emits nothing — yet `hg_splasher` authors a 0.5 s run
-  (`StopSequence` at `Animation+0.5`, plus a `PufferState active_state 0` at `Event+0.1`), which is
-  only reachable if the emitter survives its host's deactivation or the events do not share a tick.
-  So either the host-deactivation→stop rule is wrong for an already-emitting puffer, or same-tick
-  ordering is. The rest of the sea dive renders (splash mesh, ripples, steam, trails), so this is one
-  missing emitter, not a broken variant.
-  ⚠ **Traps.** (a) Do not "fix" it by dropping the host-deactivation stop wholesale — that rule is
-  what stops emitters when a destructible's subtree is swapped out. (b) The same shape may exist
-  elsewhere; census the offset-less activate/call/deactivate triple before choosing a rule, or the
-  fix is tuned to one def. (c) Related to but not the same as `BL-228` — these events carry **no**
-  `WAIT_FOR_COMPLETION` flag, so a wait would not explain them.
 - `BL-060` **Improve on the original crash — the bespoke "breaking apart" (branch `bespoke-crash-animation`).**
   User's call (2026-07-23): the retired bespoke `CrashBreakup` wreck-scatter looked *better* than the
   faithful data-driven crash, so it was preserved on that branch rather than deleted. **The A/B playtest
@@ -651,33 +623,6 @@ extracted data before being logged, so the mechanism is recorded here and not re
      which is M4 work (nothing else flies in M3).
   **When it comes back**, the fuse branch must carry its struck body into `Impact` instead of
   `null`, or it re-breaks per-surface effect selection the moment it is switched on.
-
-- `BL-061` **World-effects runtime follow-ups (from M3 D32, 2026-07-24).** The world-effects runtime
-  (`PlaneViewer.BuildWorldEffectsRuntime`) renders the impact/destruction **puffers**; one thread
-  still open (numbering kept — other entries cite `item 2`; **item 3 disproven, M3 polish-5 B5,
-  2026-08-02** — see `analysis/death-effect-closure/biggun-flying-parts.md`: `biggun_flying_parts`
-  resolves cleanly onto the already-staged `zep_ng_dstry1.flt` and its callee is pure
-  `OBJECT_MOTION` debris with zero `PUFFER_STATE` events; `fly_trail1..5`/`spurtpuffer1..5` belong to
-  the unrelated rocket-trail/player-crash-trail effect family and were never reachable from this
-  call. "started, built no puffer" is the correct result, the same bucket `flash_effect`/
-  `rear_flash_effect` sit in):
-  2. **The template MESH half.** The effects stage is hidden, so only the puffers render; the
-     `gunhit` debris bits (`bit1`/`bit2`/`chunk` + their `OBJECT_MOTION`), the `he_ring` ground
-     shockwave, and the `huge_splash_model`/`zep_ng_dstry1.flt` models do **not** show. Rendering them
-     needs the mesh visible-at-the-site without flashing at the stage origin (per-def visibility, or a
-     copied instance per call rather than a hidden shared template).
-  ⚠ **Traps.** The `--effects-test` census is only reproducible **seeded** — several gun `*_gunhit`
-  variants gate their puffer behind `RANDOM_WEIGHT`, so an unseeded run reports a different set each
-  time (a manufactured answer). These effects **share puffer names** (`trailpuffer2` across
-  `small_fireball`/`great_balls_of_fire`/`large_black_smokeball`) — since A1 (2026-07-31) the effects
-  runtime keys emitters per-def (`DefScopedPufferKeys`), which unmasked 7 gun-variant builds
-  (census 18 → 25 of 30); the WORLD runtime deliberately keeps the collapsed `(name, host)` key
-  (see the `_puffers` field comment — def-scoping it stacked C5's six `m_crane_go` spark defs on
-  one node and moved the c5 golden). The related "one live instance per effect def" limitation —
-  a second damaged object's sputter restarting the shared def — **is closed for up to
-  `EffectPoolSlots` (4) concurrent objects** by the template pool (`BL-225`, landed 2026-08-02,
-  measured: 5 simultaneous `ap_h2otwr` kills serve 4 and recycle the 5th, which the runtime names).
-  Beyond the pool the old collapse returns; the size is `BL-231` in the TUNE list.
 
 - `BL-062` **Rocket firing order — drain the selected hardpoint, not round-robin (M3 polish, user
   2026-07-24) — the round-robin fix merged as `bea7947`.** The original fires **only the
@@ -779,9 +724,6 @@ extracted data before being logged, so the mechanism is recorded here and not re
     randomizes per player. Decide from playtest whether the menu should offer it.
   - **AI/ace liveries.** `ia.json` `ace_*` and the AI defs' own `paint_*` are parsed into the
     catalog but nothing flies them — there are no AI aircraft yet.
-- `BL-073` **An altitude limit** — none is modelled, and the original's is a hard *clamp* on altitude
-  at ~2003 m (measured, not the data's `flight_ceiling` 2500); see `BL-094` below for the
-  measurement and for why a thrust fade is the wrong shape.
 - `BL-074` **PLAYER_INIT fields [3]/[4] semantics + per-plane spawn speed** — story-mission spawns
   currently assume the IA convention (0.5 throttle / 53.6 m/s).
 - `BL-075` **Sky UV scroll** (`h_zone*scroll`) — scroll rate unknown, not implemented.
@@ -790,8 +732,6 @@ extracted data before being logged, so the mechanism is recorded here and not re
 - `BL-077` **Visual prop spin-up/down** (`startprops`/`stopprops` disc crossfade) — spawning mid-air
   already turning is by design; becomes relevant with a landing/shutdown flow
   (`FlightAudio.OnEngineStop` is already wired for the audio half).
-- `BL-078` **Engine dual-stack chorus**: the original plays the engine loop as a ~5%-detuned pair
-  (measured in the dive-video analysis, HISTORY 2026-07-19); ours is a single loop.
 - `BL-079` **Positional 3D audio for other aircraft** — all sound is own-plane non-positional today;
   the original's IA traffic is clearly audible in the reference video.
   ⚠ **The "with Doppler" half of that claim is now suspect and must not be built against.** This
@@ -1136,35 +1076,6 @@ zone hit points, the crash fireball's timing, and shell ejection's calibre gate 
 data or an `OriginalScreenshots/` capture wherever either exists.** Where an entry below rests on
 the document alone, it says so and marks the value TUNE.
 
-- `BL-239` **Blast falloff measures to a body's transform ORIGIN, not to the geometry the blast
-  actually went off against — so a big body soaks up less splash than a small one, or none
-  (found 2026-08-02 while reading `ApplyDamage` for `BL-233`).** `ProjectilePool.ApplyDamage` sweeps
-  a sphere of `IMPACT_PROXIMITY` around the detonation point, then scores each caught body by
-  `BlastDamage(full, radius, zonePoint.DistanceTo(point))` where `zonePoint` is
-  `DamageZonePosition(body, shapeIndex)` = `(GlobalTransform * ShapeOwnerGetTransform(owner)).Origin`
-  — a single point, the shape owner's transform origin. For a compact damage zone that reads right.
-  For a **large** body it does not: a rocket detonating against one end of a long mesh scores its
-  distance from that mesh's origin, which can be tens of metres away, so the body takes a fraction
-  of the damage it should — or falls outside the sphere entirely and takes **none**, despite the
-  blast going off on its skin.
-  **Two things keep it from being visible today**, and both are load-bearing to check before
-  believing a fix: (a) the **directly struck** body is exempt — it takes full `HEALTH_DAMAGE` and is
-  then excluded from the sweep (`body == struck` → `continue`), which is correct (the ray contact IS
-  the detonation centre) and means a plain aimed hit is unaffected; only *splash onto neighbours*
-  is wrong. (b) `MaxBlastBodies` is 4096 and the radii are 15-100 m, so nothing is being silently
-  dropped for capacity.
-  **Expected to bite on** zeppelin gasbags and the large chapter building/terrain meshes — exactly
-  where splash matters most and where `DAMAGES_ZEPPELIN` (`wep_14`/`wep_28`) points. Not measured
-  against a case yet: that is step one.
-  *Fix shape:* score against the nearest point on the body's collision shape rather than its origin
-  (Godot's `GetRestInfo`/`CollideShape` on the blast sphere returns contact points), or per damage
-  **zone** where a rig has them. ⚠ Do **not** just widen the radius to compensate — `IMPACT_PROXIMITY`
-  is authored data (and its falloff SHAPE is already the open TUNE `BL-227`); inflating it to paper
-  over a distance-measurement bug would corrupt both.
-  ⚠ Trap: the comment at `DamageZonePosition` explains why the *detonation centre* is the ray
-  contact rather than a collider origin — that reasoning is about the blast's own position and is
-  correct; it does not license using an origin for the RECEIVING side too.
-
 - `BL-226` **The incoming-fire cue set's other two halves are blocked on things that do not exist
   yet.** The near-miss third landed (`BL-087`, 2026-08-02); `bullet_hit_sg` (= `snd_ricochet1-4`,
   `player.json`'s `bullet_hit_sound`) and `window_hit_sg` (= `snd_windowhit1-3`, non-3D) did not.
@@ -1182,33 +1093,6 @@ the document alone, it says so and marks the value TUNE.
   firing the hit cue on a wall scrape conflates "I was shot" with "I hit something", the trap
   `BL-222` records. (d) Only `snd_warningshot1-3` are true orphans (in no `SOUND_GROUPS` entry and
   named nowhere) — do not conflate the four groups.
-
-- `BL-088` **Danger Zone scoring uses one sphere where the original used two gate volumes.**
-  `StuntMission.Update` tests one point against `DzRadius` 15 m, order-free
-  (`StuntMission.cs:65,293-301`). The `dzpathN` mesh's two identically-materialled polygons are the
-  zone's **entry and exit apertures** — the spec confirms both must be crossed, specifically so a
-  tangential clip cannot score. A faithful test is therefore an **ordered pair of polygon-plane
-  crossings**, not an extent-derived radius; that is the fix for the "you fly *around* the danger and
-  still score it" half of the `DzRadius` TUNE (see "TUNE constants pending playtest" → Stunt mode for
-  the three measured leads — do not re-derive them).
-  **Data-confirmed across all 15 C4 `dzpathN` meshes** (model indices 863–877): every one is exactly
-  3 polygons. The gate pair always shares one material (index 427, solid red 243/0/0); the
-  route/approach-exit line is the odd one out on material 84 (solid white). ⚠ **The route is NOT
-  reliably polygon index 0** — that holds for only 2 of the 15 C4 zones (`dzpath1`, `dzpath9`); in the
-  other 13 the route is polygon index 2. **Identify by material class, not by index**, when writing
-  the crossing test.
-  ⚠ **Traps.** `DzRadius`'s docstring claims "the original has no gate geometry" — **false**;
-  delete that line when this lands. Under a gate-pair test the `dzN` marker becomes a **HUD anchor
-  only**, so the recorded marker↔gate-midpoint discrepancy (826 m on C1 dz2) **stops mattering** —
-  it is not a blocker, and the marker must not be "fixed" onto the gates: `MarkerHud.cs:144,145,158,212`
-  and the scoreboard still consume the marker point. Do not retune `DzRadius` here (hand-tuned by
-  the user). **Ordering is a separate, unsupported case:** the spec says at least one original
-  mission required its zones in strict order, but shipped `dzones` is a bare `[dzpathN, dzN]` pair
-  list with no order field (checked C1/IA1), so any ordering was mission-scripted or engine-side —
-  untestable until campaign missions exist, and our model is order-free.
-  *Playtest after fix:* gates trigger where the danger is, no score on a clean miss, no zone that
-  cannot be gated fairly. `./RunGame.ps1 --stunt --chapter=C4 --plane=player_fury`. *Blocks:* signing
-  off the gate implementation.
 
 - `BL-089` **Nitro booster — scoped, low priority (the user's standing call).** Recorded because the data is
   complete and waiting, not as a discovery. Shipped: `MSG_CMD_NITROUS` ("Use Nitro-Booster") is a
@@ -1460,39 +1344,6 @@ needs one of them to move needs a new measurement first.
   fix has to come from the *shape* (a steeper exponent, so drag still bites approaching fd) and be
   re-playtested against that report specifically.
 
-- `BL-094` **No altitude limit at all, and the original's is a hard altitude clamp — not a
-  performance ceiling and not `flight_ceiling`.** Settled by `CAP-03` (four clips, decoded
-  2026-08-03; all four gate rigid, dx corr +1.00). **There is no performance fade below the
-  clamp:** level full-throttle equilibrium is **299.71 ± 0.32 mph at 5492 ft**, **299.80 ± 0.56 at
-  6001 ft**, **300.00 ± 0.52 at 6520 ft** — flat to ±0.3 mph across 1674–1988 m, and equal to the
-  298.96 ± 0.20 measured low down. The clip that goes higher (`CAP-03 Stall at max Alt.mp4`,
-  Bloodhawk, C1B IA1) then shows the mechanism directly: the aircraft holds level flight at
-  **6570.4 ± 1.04 ft at 297.3 mph**, and when the nose is pulled up ~22° (ADI sin θ −0.13 → +0.24,
-  against −0.135 at level in all three reference clips) it **does not climb one foot** —
-  6571.6 ± 0.39 ft over the last 5 s while airspeed bleeds at 13.0 mph/sim-s to a new equilibrium
-  of **173.74 ± 0.60 mph** with the speedometer's stall window lit. Altitude held to sub-foot at a
-  22° nose-up attitude is a **clamp**, not an energy limit; the low equilibrium is what full
-  throttle buys against the induced drag of sitting pinned against it. Earlier zoom attempts in the
-  same clip overshoot the clamp ballistically to **6712 ft (2046 m)** and sag back, which is what
-  the old "five apexes at 2010–2109 m" reading was seeing. So: resting cap **6571.6 ft = 2003 m**;
-  transient overshoot ~+140 ft; 80% of the data's `flight_ceiling` 2500, which
-  `PlaneStats.FlightCeiling` parses and nothing reads (two hits: the field and the assignment).
-  ⚠ **Traps.** (a) **Do not implement this as a thrust or lift fade under the ceiling** — the three
-  level runs rule a fade out to within 0.3 mph right up to 1988 m, 15 m under the cap. What is
-  needed is a clamp on *altitude* (or on climb rate, with enough lag to allow the measured ~140 ft
-  of ballistic overshoot), leaving the aerodynamics untouched below it. (b) **The "auto stall" is a
-  consequence, not the mechanism.** The aircraft is not stalled when it reaches the cap — it is at
-  297 mph — it stalls because holding the nose up against the clamp bleeds it to 173 mph. Build the
-  clamp and our existing stall model should produce the same symptom for free.
-  (c) **6571.6 ft may be per-mission, and only one mission was flown.** This is C1B IA1; the
-  2026-07 `Ceiling` clip touched 2109 m in a different session. Whether the cap is global, per
-  chapter/zone, or per aircraft is untested — do not hardcode 2003 m as a world constant without
-  one more mission's worth of evidence. (d) These are true altitudes: the altimeter was proved a
-  straight feet conversion (λ = 1.000 ± 0.004) against four spawn-point readings, so do not
-  re-open the scale. The three reference clips decode to 5492/6001/6520 ft against the user's own
-  5500/6000/6500 ft targets, which independently confirms the 1,000 ft band pick (`anchor.py`
-  margins are soft on level clips: 41×, 1.61×, 2.46×, 1.66×).
-
 - `BL-095` **`player.json` ships a physics block we consume almost none of.** Alongside the used
   `nom_gravity 20.0` / `stall_mag 1.25`: `maxAOA 46.0`, `liftAOAs [5,9]`, `lift_accel_rate 0.75`,
   `highGs [9,15]`, `lowGs [-6,-9]`, `drag_factor 1.5`, `drag_fade_speed 40`, `turn_fade_in 10`,
@@ -1703,99 +1554,6 @@ needs one of them to move needs a new measurement first.
   should carry, the second should not).
 
 ## Open fidelity questions (answerable by testing the original)
-
-- `BL-221` **Which axis order does an anim-def `AT_NODE` *position* use? The graze reaction is the
-  first def whose offsets are nonzero and visually judgeable, and they read wrong (user, 2026-08-01,
-  `PT-24`).** Mesh coordinates are settled right-handed Y-up, nose at −Z (`docs/formats/gotchas.md`),
-  and the engine applies `AT_NODE`/`PufferState` offsets in that frame. `touchdown_default`'s five
-  `small_yellow_sparks` calls sit at `(0, 8, −2)`, `(±1.5, 8, 0)`, `(±4, 8, 0)`. Read as Y-up that is
-  five sparks in a horizontal rake **8 m above** the plane, spread across the span — which is what
-  the user saw ("sparks start above and inside the building"). Read as the game's Z-up world
-  (x, y = forward, z = up) it is five sources **across the wing, 8 m ahead**, the centre one 2 m
-  low — exactly a nose/leading-edge scrape. The ±1.5/±4 lateral spread matching a wingspan is the
-  strongest single clue that the *first* component is spanwise and the constant 8.0 is not height.
-  ⚠ **Traps.** (a) This is not a touchdown-only fix — every `AT_NODE` position in every def goes
-  through the same read, so flipping it globally would move the rocket/crash effects that currently
-  look right. Settle it by finding defs with nonzero offsets whose correct placement is already
-  known (turret muzzle points, zeppelin nacelle fires) and testing both readings against them —
-  a census in `analysis/`, not a guess. (b) `small_yellow_sparks` emits with
-  `world_velocity (0, 10, 0)`, which reads plausibly under BOTH conventions (sparks fly up / stream
-  forward), so it cannot break the tie — don't cite it as evidence. (c) The graze def's staging site
-  (`graze.siteAtContact`) is a *different* question with the same symptom family — it decides where
-  the offsets are measured FROM, not which axis each component is. Settling one does not settle the
-  other, and the site currently defaults to the contact point on feel, against what the data argues.
-
-- `BL-184` **The original DOES animate the ammo-gauge arrow — a constant-rate sweep at 157 °/sim-s.**
-  Our gauge already draws the pointer (`gg`/`mgarrow`) rotated to the selected belt slot, but the
-  rotation is applied instantly — `DrawWeaponGauge` recomputes `-(360°/Positions) * Selected` per
-  frame with no tween (`GaugeCluster.cs:613-614`). The user's recollection that the original's
-  pointer visibly *moves* (2026-07-30) is **confirmed and measured — `CAP-18` decoded 2026-08-04.**
-  The clip is third-person, so it was decoded through the new `chase` HUD layout (`hud.py`); the
-  gun gauge's geometry is confirmed two independent ways — its texture fit and a pivot solved from
-  the arrow's own sweep lines agree to **1.8 px**.
-  **The numbers, from 5 clean slot steps** (`analysis/video-flight-calibration/ammoarrow.py`):
-  - **It sweeps, unambiguously.** Frame-by-frame at 15 fps the arrow passes through every
-    intermediate angle: from 12 o'clock at 7.49 s wall through −7°, −18°, −33°, −48°, −67°, −82° to
-    −90° at 7.96 s. Not a snap, and not a fast blend — a visible traverse.
-  - **Rate 218.1 ± 3.9 °/wall-s = 156.9 ± 2.8 °/sim-s**, spread 1.8% across the five steps.
-  - **One 90° slot step takes 413 ms wall = 574 ms sim** from the fitted rate (455 ± 15 ms wall
-    end-to-end including the near-stationary frames at each end — quote the rate, not the duration,
-    since the duration depends on where you threshold the start).
-  - **The sweep is LINEAR, not eased.** A straight-line fit over a 90° traverse leaves a residual of
-    **1.95°** — a smoothstep would leave many times that. Implement as a constant angular rate.
-  - **The readout does not animate with it.** `40 SLUG`/`2400` → `30 SLUG`/`2800` flips on a single
-    frame at the *start* of the sweep, while the arrow is still leaving the old slot. So the value
-    snaps and only the pointer tweens.
-  - The gun gauge has **4 slots at 90°**, marked on the face (green at 12 and 9, red at 3 and 6);
-    every measured step was 89.8°.
-  **The hardpoint (ROCKETS) gauge is answered too, and it is the one that reveals the routing rule.**
-  It has **8 slots at 45°** — its three resting angles (359.50°, 180.17°, 314.36°, i.e. slots 0, 4
-  and 7) fit a 45° lattice to **0.64° max / 0.44° mean**, against 14.4° for a 6-slot lattice, 35.8°
-  for 5 and 44.4° for 4. The clip repeats one three-move cycle four times, identically:
-
-  Slots are numbered as `GaugeCluster` already numbers them — **0 at the top, increasing
-  counterclockwise** (`Indicators`, "0 = top, CCW"), which is also what our arrow rotation
-  `-(360/Positions) * Selected` assumes. The three rests decode to slots **0** (359.50°), **4**
-  (180.17°) and **1** (314.36° = 45° counterclockwise of top), and the clip cycles 0 → 4 → 1 → 0:
-
-  | move | Δindex | measured | shortest way? |
-  |---|---|---|---|
-  | 0 → 4 | +4 = 180° | **−179.4°** (counterclockwise) | tie — both ways are 180° |
-  | 4 → 1 | −3 | **+134.1°** clockwise | ✅ yes (135° cw against 225° ccw) |
-  | 1 → 0 | −1 | **+45.2°** clockwise | ✅ yes (45° cw against 315° ccw) |
-
-  **So the needle takes the shortest way round, and does not simply follow the index direction.** Two
-  of the three moves discriminate — walking the indices the "long" way would have swept 225° and 315°
-  where the original sweeps 135° and 45°. ⚠ **At the exact 180° antipode it goes counterclockwise**,
-  consistently across all four repetitions. That needs no special case to reproduce: the standard
-  shortest-path wrap `delta = ((target − current + 180) mod 360) − 180` returns **−180** at exactly
-  +180, which is precisely the observed direction. Implement that one expression and all four move
-  types fall out.
-  **Both gauges sweep at the same rate.** Fitting only the interior of each sweep (dropping 2 frames
-  at each end, where the run detector keeps barely-moving frames) the gun gauge gives 235.6 ± 1.8 and
-  the hardpoint gauge 233.7 ± 2.2 °/wall-s — **0.8% apart**, so it is one constant:
-  **234.5 ± 2.3 °/wall-s = 168.7 ± 1.6 °/sim-s**. On top of that each move carries about **70 ms
-  wall (~97 ms sim) of ramp**, consistent across 90°/135°/180° moves, which is why the end-to-end
-  average rate reads lower (218–226 °/wall-s) the more end frames you include. So: a constant-rate
-  traverse with roughly two frames of ease at each end, *not* a smoothstep — the interior residual to
-  a straight line is **1.1°** over traverses of 90–180°.
-  End-to-end durations, for A/B: **90° = 455 ± 15 ms wall = 633 ms sim**, 135° = 634 ms wall =
-  881 ms sim, 180° = 856 ms wall = 1190 ms sim.
-  *Wanted:* tween the arrow angle at **168.7 °/sim-s**, routed by the shortest-way wrap above, with
-  the ammo readout still snapping. Acceptance is a capture A/B, so it is deliberately **not** in
-  `PLAN-m3-polish-quickwins` (code-verifiable-only criteria) — land it in a later look-and-feel
-  pass, after `BL-024`/`BL-025` so the gauge draw path has stopped moving.
-  ⚠ Rate quoted in **sim** seconds (k = 1.390); the wall figure is what the original showed on the
-  recording machine, and implementing 234 °/s would run the sweep 39% fast.
-  **The ring size and the slot mapping are already right in our code — only the tween is missing.**
-  The hardpoint ring is a fixed **8** and does not follow the loadout (user-confirmed 2026-08-04: 8
-  is the maximum any plane has and the loadout only decides which are *filled*; corroborated by the
-  shipped marker rig, `docs/formats/markers.md` — `pylon1`…`pylon8`, "Every player plane has 8",
-  extracted from `planes.zbd`). We do not derive it from the loadout: `geom.Positions =
-  geom.Indicators.Count` (`GaugeCluster.cs:571`) counts the gauge model's own belt-indicator quads,
-  so it is 4/8 by construction whatever is loaded. And the measured rest angles land exactly where
-  `-(360/Positions) * Selected` puts them for slots 0/4/1, so the static mapping is confirmed
-  against the original too. The whole delta for this item is the animation.
 
 - `BL-099` **C1's fuel depot: what did you actually see, and in which mission? — ANSWERED
   2026-08-02, nothing to implement.** The report was: in the original, C1 IA1's depot sometimes
@@ -2315,59 +2073,6 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   (the shipped camera data — landed; its residue is `BL-248`) and `BL-150` (the plan-sized rebuild
   covering layout, easing, interrupts, and the +/− trim). Kept as a retired ID, not deleted, per this
   file's permanent-ID rule.
-- `BL-148` **Stall warning: the ramp is real, but it is a BLINK-RATE ramp and it needs a second
-  threshold.** `GaugeCluster.cs:247` gates the blink on `Stalled && WarnPhaseOn` — `Stalled` is a hard
-  boolean from `FlightModel.isStalled()` (`FlightModel.cs:328-332`, a single `Speed < stallSpeed`
-  threshold with no margin state) and `WarnPhaseOn` is a fixed 50%-duty blink at `WarnBlinkPeriod`
-  **0.4 s** (`GaugeCluster.cs:51,130`) — so the cue snaps on at one fixed rate the instant the boolean
-  flips, and never changes again however deep the stall goes.
-  **Measured 2026-08-04 from `CAP-06` (two clips) plus the two `CAP-05` stall clips — four clips, all
-  gating rigid.** The `STALL` plate is the red window above the speedometer hub (game x 892–918,
-  y 548–558); it was read in colour straight from the video, per frame.
-  - **Brightness is BINARY — do not build an opacity ramp.** Lit R = **211.0 ± 0.2**, unlit
-    **41.7 ± 0.2**, and those two levels are identical in every speed bin from 43 to 90 mph and in all
-    four clips. There is no intermediate state at any speed. Duty cycle is **0.50** throughout.
-  - **The RATE is the ramp.** The blink half-period shortens monotonically with stall depth:
-
-    | speed | fd | half-period (game frames) | full period, sim |
-    |---|---|---|---|
-    | 88–91 mph | 0.30 | 13.9 | **1285 ms** |
-    | 78–84 mph | 0.27 | 12.7 | 1182 ms |
-    | 66–72 mph | 0.23 | 10.1 | 932 ms |
-    | 60–66 mph | 0.21 | 9.0 | 834 ms |
-    | 40–50 mph | 0.15 | 6.4 | **592 ms** |
-
-    105 dwells pooled. **Every dwell is an integer number of 33.37 ms game frames** (lattice residual
-    ≤ 8 ms), so the lamp toggles on a frame counter. Half-period ≈ **5.9 × V(mph) − 62 ms wall**, or
-    **5.1 × V** through the origin; the residual is 36 ms either way — one frame — so the data cannot
-    separate those two forms, and neither should be extrapolated below ~43 mph.
-  - **It tracks speed, not time-since-onset.** In `CAP-06.mp4` the speed dips to 65 mph and recovers;
-    the blink rate falls and then rises again symmetrically, and the on-threshold is the same
-    decelerating (89.9/90.0 mph) as accelerating (90.0/89.9) — **no hysteresis**.
-  - ⚠ **The warning and the nose-drop are TWO thresholds, and this is the answer to the question this
-    entry was blocked on.** The lamp lights at **0.2992 / 0.2994 / 0.2989 / 0.2996 fd** across the
-    four clips — i.e. exactly **0.30 fd, our `StallSpeedFrac`, which is therefore right for the
-    warning**. The nose-drop is at **0.25 fd** (`CAP-05`). Verified *inside one clip*, so no
-    cross-clip assumption is involved: in `CAP-05 Stall 0% Thrust no input` the lamp lights at
-    t = 7.96 sim s / 89.9 mph while the nose is still held at +4.3°, and the nose only breaks at
-    t = 10.60 sim s / 75.0 mph — the lamp **leads the stall by 2.64 sim s and 14.9 mph (0.050 fd)**.
-    So `StallSpeedFrac` must be **split, not moved**: keep 0.30 for the warning, give the nose-drop
-    its own 0.25. Our single `isStalled()` boolean currently drives both from one number.
-  *Wanted:* a proximity fraction driving **blink rate** (not opacity), a warn threshold at 0.30 fd, a
-  separate stall threshold at 0.25 fd, and `WarnBlinkPeriod` replaced by a speed-dependent period —
-  ours is a fixed 400 ms against the original's 1285 ms at the threshold falling to ~590 ms deep in
-  the stall, so we are **~3× too fast where it matters most** and flat where the original ramps.
-  ⚠ **Traps.** (a) This needs a code change before it needs a magnitude — do not treat it as a retune
-  of `WarnBlinkPeriod` alone. *Playtest after fix:* once the ramp lands, A/B its rate against
-  `CAP-06`. (b) `isStalled()` currently returns only a boolean — adding a continuous margin changes
-  its signature/call sites (`FlightController.cs:734,757`); don't bolt a second parallel margin
-  calculation on top instead. (c) Don't reuse `LowAltAglM`'s pattern uncritically — the low-alt cue is
-  legitimately binary (a fixed AGL gate, no spec claim of a ramp there), so a shared "warning"
-  abstraction that ramps both would over-apply the fix. (d) ⚠ **The periods above are SIM ms** and the
-  wall figures are 1/1.390 of them; the original's clock runs fast, so implementing the wall numbers
-  would make our blink 39% quicker than the original was designed to be. (e) The lit plate also
-  carries an orange bezel glow that the unlit state has not — if the blink is ever reproduced by
-  swapping a texture rather than tinting, that glow is part of the lit art.
 - `BL-248` **The original's chase distance is DYNAMIC in two terms, and `CAP-21` measured both
   (2026-08-04): a small SPEED term that reproduces `dist_factor` 0.01, and a much larger
   ACCELERATION transient that relaxes at 0.65 /sim-s.** `BL-149` shipped the reader and wired
@@ -2509,36 +2214,6 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   (`FlightAudio.cs:145`). *Playtest after fix:* nudge `flightAudio.whineMixGain` up from 0.12 via
   `config.json`, re-A/B a dive, then delete the override (`docs/verification.md` DET-8 applies here
   too).
-- `BL-125` **Stunt mode** — `DzRadius` **15 m — user-tuned by hand 2026-07-22, and this is the current
-  value** (an earlier "30 m, tightened from 60" note here was stale; the source is right).
-  **Still wanted: a per-zone radius from the data, because one global constant does not fit** —
-  the user reports 15 m is too tight at some zones while 30 m was too loose at others, the loose
-  case being that you fly *around* the danger and still score it. **The leads were all checked
-  2026-07-22 (polish-4 item 5) and the answer is `dzpathN`:**
-  - ✅ **`dzpathN` carries real gate geometry — this is the route.** It is not the "AI route
-    ribbon" it was documented as. Each is a 3-polygon model under `dzpaths`: **polygon 0 is the
-    approach/exit polyline** (7–8 points: dive-in → thread → climb-out), **polygons 1 and 2 are the
-    two gate outlines** — 3- to 18-point planar rings bracketing the thing you fly through.
-    Measured across all 54 zones in C1/C1B/C2/C3/C4/C5. So the implementation is either "cleared
-    when the plane crosses the prism between the two rings", or the cheaper "per-zone radius from
-    each ring's own extent". **Settled 2026-07-25 in favour of the first** — the two rings are the
-    entry and exit apertures and both must be crossed; the cheap radius reading does not stop the
-    tangential clip. Mechanism, traps and what stops mattering: "Danger Zone scoring uses one
-    sphere…" under Feature backlog. `DzRadius` stays a TUNE until that lands.
-  - ❌ **`dzN`'s `RotateTranslateScale.scale` is a dead end** — measured **unit on all 53** markers.
-  - ❌ **`node_bbox`/`child_bbox` are a dead end for `dzN`** — measured **all-zero on all 53** (they
-    are `model_index -1` point nodes). They carry real values only on `sghangar`, the one
-    geometry-node zone, which is why that item did not need them either. Still unparsed into
-    `GameZNode`.
-  - ⚠ **Do not derive a marker position from its dzpath.** The tempting rule "the `dzN` marker sits
-    at the midpoint of the two gate centres" is **exact** on some zones (C2 dz7/8/9, C5 dz14/15, to
-    ≤0.04 m) and wildly wrong on others (**C1 dz2 is 826 m off**; C5 dz2 266 m; C1 dz1 225 m). The
-    markers are hand-placed. An *extent* is also a new concept for every consumer of the zone point
-    (`MarkerHud.cs:144,145,158,212`, `StuntMission`'s completion test).
-  - ⚠ **Do not retune `DzRadius` as part of this** — 15 m is the user's hand-tuned value.
-
-  Marker-HUD placement, font and distance units, and scoreboard fonts and placement were playtested
-  2026-07-30 and read fine for now — see `BL-181` for the provisional, pending-menu-hub caveat.
 - `BL-126` **Splitscreen** — the `HudMetrics` sqrt pane damping, `MixGain`, `SpawnAbreast`, join/lock
   feel, tag-gutter widths.
 - **Gun-impact looks (A2/`BL-203`, landed 2026-08-01)** — `Projectile.cs`: dirt chips

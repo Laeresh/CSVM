@@ -64,8 +64,9 @@ public sealed class StuntGate
 /// </summary>
 public sealed class StuntMission
 {
-    /// <summary>Legacy marker-radius tuning value, retained for existing config/UI consumers.
-    /// Danger Zone scoring uses authored gate geometry instead.</summary>
+    /// <summary>Radius about the <c>dzN</c> marker centre (user-tuned). Not a scoring value —
+    /// completion crosses the authored gate pair; retained for the marker's non-scoring
+    /// consumers.</summary>
     public const float DzRadius = 15f;
 
     /// <summary>Prefix for this run's log lines ("P2 " in a splitscreen race). Empty in a
@@ -216,8 +217,9 @@ public sealed class StuntMission
         return new StuntMission(zones) { IntroLine = IntroLine };
     }
 
-    /// <summary>Physics-frame test: complete any incomplete zone the plane is now within
-    /// <see cref="DzRadius"/> of (order-free — several can complete in one pass).</summary>
+    /// <summary>Physics-frame test: record any gate the plane's movement segment crossed this
+    /// frame, and complete a zone once both its gates have been crossed (order-free — several
+    /// can complete in one pass).</summary>
     public void Update(Vector3 planePos)
     {
         if (AllComplete)
@@ -351,8 +353,8 @@ public sealed class StuntMission
     /// matched pair of door leaves the gap between them is that aperture, so those are anchored on
     /// alone: the hangar's <c>sgh_door1</c>/<c>sgh_door2</c> are retracted to either side of the
     /// front wall leaving a 20 m slit centred on their union centre (−5770.4, 23.5, −5623.9), and
-    /// <see cref="DzRadius"/> = 15 m about that point covers the whole slit — you cannot thread the
-    /// doors without scoring. Independently corroborated by <c>dzpath1</c>, whose (otherwise unread)
+    /// <see cref="DzRadius"/> = 15 m about that point covers the whole slit.
+    /// Independently corroborated by <c>dzpath1</c>, whose (otherwise unread)
     /// second polygon is the front aperture outline, centred 1.9 m away at (−5770.4, 23.5, −5622.0).
     /// The whole-structure centre would instead sit 129 m deep inside the hangar, reachable from the
     /// open rear but missable off-centre. Structures with no door pair fall back to that centre.</summary>

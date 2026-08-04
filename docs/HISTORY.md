@@ -3532,6 +3532,8 @@ all: 15 m is too tight at some zones while 30 m was loose enough to fly *around*
 still score it. The open lead is a **per-zone extent from the data** — the `dzones` record is two
 strings with no size, so it would have to come off the marker node's `RotateTranslateScale` scale or
 its `node_bbox`/`child_bbox`, neither of which is parsed into `GameZNode` today.
+**→ Closed 2026-08-04: the per-zone-radius want was dropped (`BL-125` retired) — gate-pair scoring
+landed 2026-08-01 and made the radius a non-scoring value; see that day's entry below.**
 
 No code changed. The verification that matters is that every moved entry's evidence exists in the
 plan and every cross-reference still resolves — checked, including `CLAUDE.md`'s "Known issues"
@@ -14857,3 +14859,27 @@ plane's ammo text painted over its face — which is also why its NCC has always
 
 **Verified.** Docs, backlog, `playtest.md`, one `LAYOUTS` row and six `CLIPS` entries — no behaviour
 change, no build or test run.
+
+## 2026-08-04 — `BL-125` dropped: `DzRadius` is the marker centre, not a scoring value to refine
+
+`BL-125` (the "per-zone Danger Zone radius from the data" want) is retired by the user's call, not
+by new code. The ground under it moved on 2026-08-01 when gate-pair scoring landed ("M3 Wave C
+C9"): completion is a crossing of both authored `dzpathN` apertures, so the one thing the per-zone
+radius was wanted for — the tangential clip / fly-around-and-score failure — is handled by
+geometry, and a radius refinement would refine a value scoring no longer reads. What remains of
+`DzRadius` (15 m, user-hand-tuned 2026-07-22) is the `dzN` marker centre and, much later, the
+trigger for a stunt screenshot feature — recorded as the new `BL-256` so the intent survives.
+
+What the deleted entry established stays true and is preserved where it matters: the `dzpathN`
+3-polygon decode is in `docs/formats/missions.md`; the "do not derive a marker position from its
+dzpath midpoint" trap (exact on some zones, **826 m off** on C1 dz2 — the markers are hand-placed)
+is restated in `StuntMission.GeometryAnchor`'s doc comment; and `dzN`'s
+`RotateTranslateScale.scale` (unit on all 53) and `node_bbox`/`child_bbox` (all-zero on all 53,
+still unparsed into `GameZNode`) remain measured dead ends for a marker extent. The honest limit:
+whether 15 m reads well as the marker/screenshot radius was never separately judged — that
+judgement rides the future feature, not a reopened `BL-125`.
+
+Swept with the close: `StuntMission.Update`'s doc comment still described the pre-gate radius
+test and now describes the crossing test; `DzRadius`'s own doc and `GeometryAnchor`'s hangar-slit
+note no longer imply the radius scores. Docs and comments only — no behaviour change; build run
+for the comment edits.
