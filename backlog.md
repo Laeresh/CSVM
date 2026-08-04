@@ -411,20 +411,42 @@ unscheduled.
   overlap too, that is itself worth a HISTORY note (the doubling would be authentic, not a bug) and
   the item closes ❌-for-now instead.
 
-- `BL-160` **No Doppler on any 3D emitter today — open whether the original has one.** Godot's
+- `BL-160` ✅ **Answered by `CAP-09` (2026-08-04): the original applies no Doppler to world emitters,
+  so our `DopplerTracking = DISABLED` default is already correct — no change to make.** Godot's
   `AudioStreamPlayer3D` exposes `DopplerTracking`, but nothing in `CSVM/src` sets it: `WorldSounds.cs`
   constructs every ambient emitter (`:162-169`) and one-shot (`:211-218`) with only
   `Stream`/`UnitSize`/`MaxDistance`/`VolumeDb`/`AttenuationModel`, so `DopplerTracking` stays at
   Godot's default `DISABLED`. Own-ship engine/whine/rattle (`FlightAudio.cs`) are plain non-positional
-  `AudioStreamPlayer`, which has no Doppler concept at all regardless. Distinct from `BL-079`
-  (other-aircraft audio doesn't exist yet) — this is about the world's own moving `SOUND_NODE`
-  emitters that **already play today**, e.g. the C1 train and `snd_police` on the police car.
-  *Fix shape:* once a recording settles whether the original pitch-bends a fast pass, enable
-  `DopplerTracking` (idle-tracking is enough for anim-driven hosts) on mover-hosted emitters only — a
-  stationary host doing so would be a silent no-op, so gating by host motion is cheap.
-  *Playtest after fix:* re-listen to a fast C1 pass (the waterfall for a pure-listener-motion test, the
-  police car / train for an emitter-motion test) with `--debug-anim` running to correlate host speed
-  against any audible pitch shift. *Blocked on `CAP-09`* (`playtest.md` §0).
+  `AudioStreamPlayer`, which has no Doppler concept at all regardless.
+  **Evidence.** `OriginalScreenshots/Videos/CAP-09 Policecar.mp4` — a Devastator pass over the C1
+  town at ~250–280 mph indicated. `snd_police` (`extracted/soundsh/siren_police1.wav`, MS-ADPCM,
+  22050 Hz mono, 1.6063 s, five yelps) is a hard tonal target: its yelp plateaus on a single tone, so
+  any resampling shows up directly. Measured in the recording's audio track (8192-pt STFT, parabolic
+  peak interpolation, 18 bursts spanning 10.21–15.68 s): plateau tone **1224.65 ± 0.88 Hz** against
+  the source asset's **1224.56 Hz** — a ratio of **1.00008 (+0.008 %)**. Burst period **0.32083 s**
+  against the asset's **1.6063 s / 5 = 0.32127 s**, ratio **−0.14 %**. Pitch *and* playback rate are
+  the source asset's, unshifted, straight through the pass. For scale, a head-on/tail Doppler at
+  250 mph (112 m/s) would swing that tone between **1817 Hz and 924 Hz** — a 33 % excursion that is
+  not remotely present. The pass is real, not a null geometry: the siren's excess-over-floor level
+  climbs **14 dB between 8.6 s and 10.2 s** (hard closure) and falls away after 15.0 s, with the
+  energy-weighted centre of the pass at 12.3 s — i.e. closest approach sits in the middle of the
+  window over which the tone did not move.
+  `CAP-09 Waterfall.mp4` corroborates weakly with the fixed-emitter/listener-motion case: the
+  waterfall's broadband hiss rises ~5 dB in the 1.6–6.4 kHz bands from t≈6 s, and a log-frequency
+  cross-correlation of its residual spectrum (loud window minus a quiet t=0.5–3.0 s reference)
+  between 7.0–8.5 s and 9.5–11.0 s gives a shift of **0 to 1 bin, |Δf/f| ≤ 0.08 %**. That method was
+  validated by injecting known shifts into one window and recovering them (2 % → 2.0 %, 5 % → 4.8 %,
+  10 % → 9.1 %), so it would have caught a Doppler an order of magnitude below the expected one.
+  ⚠ **Limits, stated honestly.** One take each, one aircraft, one speed. The waterfall arm is the
+  weaker instrument (broadband source, engine masking, and the hiss never clearly falls away, so no
+  closest-approach instant can be pinned) — the police arm is what carries the finding. **Secondary
+  observation, not a conclusion:** across the 10.2–15.0 s plateau the siren's level stays within 3 dB
+  and its stereo pan within ±0.13 while the aircraft covers ~500 m, so the original's positioning of
+  this emitter is far weaker than a 1/r + hard-pan model would give. That could equally be a clamped
+  attenuation curve or several police cars in the town handing over; it wants its own capture before
+  anything is built on it. It does **not** weaken the Doppler result — an emitter that is barely
+  panned and barely attenuated is certainly not being pitch-shifted.
+  Related: `BL-079` (other-aircraft audio) — see the Doppler caveat now on that entry.
 
 - `BL-161` **`cockpit_engine_sound` / `damaged_engine_sound` ship per plane, unparsed.**
   `extracted/zrdr/vehicle.zrd.json` carries both alongside `engine_sound` for every plane def
@@ -703,7 +725,15 @@ unscheduled.
 - `BL-078` **Engine dual-stack chorus**: the original plays the engine loop as a ~5%-detuned pair
   (measured in the dive-video analysis, HISTORY 2026-07-19); ours is a single loop.
 - `BL-079` **Positional 3D audio for other aircraft** — all sound is own-plane non-positional today;
-  the original's IA traffic is clearly audible with Doppler in the reference video.
+  the original's IA traffic is clearly audible in the reference video.
+  ⚠ **The "with Doppler" half of that claim is now suspect and must not be built against.** This
+  entry originally read "clearly audible with Doppler"; that was an impression off a listen, never a
+  measurement. `CAP-09` (2026-08-04, `BL-160`) measured the original's *world* emitters and found
+  **no Doppler at all** — `snd_police` plays at its source pitch to within 0.008 % straight through a
+  250 mph overflight. `CAP-09` contains no other aircraft, so it does not settle the IA-traffic case
+  on its own; but the engine that declines to pitch-shift a police siren is unlikely to pitch-shift a
+  passing plane. Treat Doppler on IA traffic as **unverified**, and measure it (same method: track a
+  tonal component against the source WAV) before implementing it.
 - `BL-080` **Future cockpit view** would consume a mix of already-parsed and still-raw data: `pcdpN`
   cockpit damage panels and the `*_damage_green/yellow/red` indicator anims are already parsed
   (PlaneStats parses them, DamageVisuals skips them). `cockpit_engine_sound` (`*_cp` WAVs, e.g.
@@ -1789,7 +1819,8 @@ needs one of them to move needs a new measurement first.
   rate and elevator input**, not throttle alone, and reads noticeably less constant than ours. Camera
   Doppler is ruled out as the mechanism — own-ship engine audio is a plain `AudioStreamPlayer`
   (`FlightAudio.cs`), non-positional by design, so no Doppler shift applies to it regardless of
-  whether `AudioStreamPlayer3D.DopplerTracking` is ever enabled elsewhere (see `BL-160`). Left
+  whether `AudioStreamPlayer3D.DopplerTracking` is ever enabled elsewhere — and `BL-160` has since
+  measured that the original applies no Doppler to *any* emitter (`CAP-09`, 2026-08-04). Left
   standing: a speed/RPM term, or wiring climb-rate/elevator directly into `EnginePitch.Eval`'s input
   instead of throttle. Needs a controlled full-throttle-dive recording (HISTORY 2026-07-19; recording
   still owed) (`CAP-10`).

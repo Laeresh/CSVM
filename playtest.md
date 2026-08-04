@@ -83,7 +83,6 @@ speed, and `BL-248`(a) is disproved rather than implemented — a correct dispro
 
 | ID | Capture | What must be audible | Unblocks |
 |---|---|---|---|
-| `CAP-09` | Doppler pass-by | A fast close pass by the C1 waterfall (a fixed emitter — isolates listener motion, the cleanest Doppler signature); the moving police car is the harder emitter-motion case | `BL-160`, scopes `BL-079` |
 | `CAP-10` | Engine note through a dive | A full-throttle dive to pull-out, with enough HUD and stick visible to correlate the pitch change against **climb rate and elevator input** — the two you identified as driving it | `BL-109` |
 
 ### Weather & visuals

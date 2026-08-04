@@ -13382,3 +13382,64 @@ fate, not an observed original screenshot of the buildings) — **held for the u
 not implemented.** `playtest.md` `CAP-22` (C5 city building density) now queues the capture that
 settles it. `backlog.md` `BL-250` and `analysis/bl-058-clutter-doubling/FINDINGS.md` both carry the
 full candidate-fix writeup and the playtest gate.
+
+## 2026-08-04 — `CAP-09` analysed: the original applies **no Doppler** to world sound emitters (`BL-160` answered, no code change)
+
+`BL-160` asked whether the original pitch-bends a fast pass over one of the world's own `SOUND_NODE`
+emitters, and gated the answer on `CAP-09`. It does not, and our `DopplerTracking = DISABLED`
+default is therefore already faithful — the item closes with **nothing to implement**.
+
+**Method — the police-siren arm carries the result.** `OriginalScreenshots/Videos/CAP-09
+Policecar.mp4` (17.5 s, 2560×720) is a Devastator overflight of the C1 town at ~250–280 mph
+indicated. `snd_police` is the ideal probe because the source asset is tonal:
+`extracted/soundsh/siren_police1.wav` is MS-ADPCM, 22050 Hz mono, 1.6063 s, five yelps, each yelp
+plateauing on one steady tone. Any resampling — Doppler, or anything else — moves that plateau. The
+recording's audio track was tracked with an 8192-point STFT and parabolic peak interpolation over
+the 1190–1260 Hz band, and 18 siren bursts were isolated across 10.21–15.68 s.
+
+| quantity | recording | source asset | ratio |
+|---|---|---|---|
+| yelp plateau tone | 1224.65 ± 0.88 Hz | 1224.56 Hz | **1.00008 (+0.008 %)** |
+| yelp repeat period | 0.32083 s | 0.32127 s (1.6063 / 5) | **0.9986 (−0.14 %)** |
+
+Pitch *and* playback rate are the asset's own, unshifted, straight through the pass. For scale, a
+head-on/tail Doppler at 250 mph (112 m/s) would swing that tone between **1817 Hz approaching and
+924 Hz receding** — a 33 % excursion. Nothing of the sort is present; the measured spread across all
+18 bursts is 3.15 Hz (0.26 %), which is the per-burst measurement noise.
+
+**The pass is real, not a null geometry.** Measuring the siren tone's excess over a local spectral
+floor: the level climbs **14 dB between 8.6 s and 10.2 s** (hard closure), plateaus within 3 dB to
+15.0 s, then falls away; the energy-weighted centre of the pass is **12.34 s**. Closest approach
+therefore sits in the middle of the window over which the tone did not move. Airspeed was read off
+the cockpit MPH dial at t=12.5 s.
+
+**Waterfall arm — corroborating, but the weaker instrument.** `CAP-09 Waterfall.mp4` (13.5 s) was
+filmed for the pure-listener-motion case against a fixed emitter. `waterfall.wav` is broadband
+(no tonal component), so the test is a log-frequency cross-correlation of the *residual* spectrum
+(loud window minus a quiet t=0.5–3.0 s reference) between 7.0–8.5 s and 9.5–11.0 s. Result: a shift
+of **0 to 1 bin, |Δf/f| ≤ 0.08 %**, in both a 300–6000 Hz and a hiss-dominated 2000–9000 Hz band.
+That method was validated rather than trusted — known shifts injected into one window were recovered
+(2 % → 2.0 %, 5 % → 4.8 %, 10 % → 9.1 %, 20 % → 16.7 %), so it would have caught a Doppler an order
+of magnitude smaller than the expected one. It stays corroboration only: the hiss never clearly
+falls away, so no closest-approach instant can be pinned, and the engine partially masks the source.
+
+**Consequences.** `BL-160` closes ✅ answered-no-change. `BL-079` (positional 3D audio for other
+aircraft) carried the line "the original's IA traffic is clearly audible **with Doppler** in the
+reference video" — that was an impression off a listen, never a measurement, and it is now flagged
+as unverified on the entry. `CAP-09` contains no other aircraft so it cannot settle the IA case
+outright, but an engine that declines to pitch-shift a police siren during a 250 mph overflight is
+unlikely to pitch-shift a passing plane; the same measurement (track a tonal component against the
+source WAV) should be run before any Doppler is implemented for traffic. `BL-109`'s standing note
+that camera Doppler cannot explain the original's dive engine-note behaviour is strengthened, not
+changed. The `CAP-09` row retires from `playtest.md` §0.
+
+⚠ **Recorded limit.** One take each, one aircraft, one speed — this is evidence that the original
+does not Doppler these emitters, not a measured constant. **One loose end, deliberately not built
+on:** across the 10.2–15.0 s plateau the siren's level stays within 3 dB and its stereo pan within
+±0.13 while the aircraft covers ~500 m, so the original's spatialisation of this emitter is much
+weaker than a 1/r + hard-pan model predicts. That is equally explicable by a clamped attenuation
+curve or by several police cars in the town handing over to one another, and it wants its own
+capture before anything is concluded. It does not weaken the Doppler finding — an emitter that is
+barely panned and barely attenuated is certainly not being pitch-shifted.
+
+Verify: read-only analysis, no engine code touched, no `RunTests.ps1` run required.
