@@ -34,7 +34,17 @@
               "TEXTURES", ["probe_smoke1", "probe_smoke2"]
             ],
             "OBJECT_ADD_CHILD", ["PARENT_CHILD", ["probe_tower_root", "probe_emitter"]],
-            "SOUND", ["NAME", ["snd_probe_hum"], "AT_NODE", ["probe_tower_root", 1, 2, 3]]
+            "SOUND", ["NAME", ["snd_probe_hum"], "AT_NODE", ["probe_tower_root", 1, 2, 3]],
+            "OBJECT_ROTATE_STATE", ["NAME", ["probe_car"], "STATE", [0, 135, 0]],
+            "OBJECT_MOTION_FROM_TO",
+            [
+              "NAME", ["probe_car"],
+              "TRANSLATE_FROM", [-5860, 8, -4226],
+              "TRANSLATE_TO", [-5862, 8, -4229],
+              "ROTATE_FROM", [0, 135, 0],
+              "ROTATE_TO", [0, 100, 0],
+              "RUN_TIME", [0.25]
+            ]
           ],
           "DAMAGE_SEQUENCE",
           [

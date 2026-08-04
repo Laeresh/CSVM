@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-251`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-252`.**
 When adding a new item, take the next number and bump this line.
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
@@ -366,14 +366,23 @@ unscheduled.
   hold rule but **has never been observed**, precisely because they are dead — whoever revives them
   owns confirming that. And a live one is the only way `Seek`'s `rot *= Euler(...)` / `scale *= ...`
   lines get exercised at all, so a regression that never reaches one proves nothing about them.
-- `BL-053` **`node_bias` already spans 1.22–2.86 priority levels per chapter** (C1 1.77, C1B 1.40,
-  C1C 1.41, C2 1.24, C2B 1.22, C3 1.35, C4 2.07, **C5 2.86**). `docs/architecture.md` recorded
-  this as an accepted corner case ("a prio-0 node >~4000 indices later can out-bias a prio-1
-  overlay; no such pair observed in C1") — measured, the real span is **up to nearly three levels
-  and is the normal state of the chapter**, not a corner case. Consequence: today **2–16% of
-  cross-node conflicting pairs already resolve the wrong way round**, because within-mesh surface
-  rank can out-bid the cross-node term. A dense conflict rank would fix this as a side effect
-  (28 × 5e-6 = 1.4e-4 = 0.7 levels). Measured 2026-07-22, `analysis/item9-depth-bias/`.
+- `BL-251` **Does the original draw water over the shoreline, or the shoreline over the water?
+  Blocked on `CAP-23`.** Our cross-node draw order is "the later gamez node wins" — `nodes.json` is
+  a depth-first serialization, which is the original engine's own draw order — and the dense
+  conflict rank (`BL-053`, landed 2026-08-04) now enforces that decisively where it used to be a
+  near-tie. At the C1B pose `analysis/item9-depth-bias/FINDINGS.md` §7 recorded, that means
+  `wtr00000` (node 743) draws **in front of** `srf0001` (node 716), and it now wins by 9× the
+  margin it used to. The rule itself is well evidenced; what is NOT evidenced is that this
+  particular pair looks right — §7 flagged it as the case where "the flicker metric improves while
+  the picture gets worse" would be invisible to us.
+  ⚠ **Traps.** (a) The data cannot settle it: "later node wins" is the documented rule and it says
+  water. Only a capture of the original decides. (b) If the capture says surf-over-water, the fix is
+  **not** to invert the tie-break — that would break every other pair the rank now gets right
+  (666 install-wide); it would mean the two nodes' authored order carries something we are not
+  reading. (c) Do not judge it from our own render at a single frame — before the fix this pair was
+  swapping winner on 1.76% of the frame under a 1 mm camera move (`verification.md` INSTR-8), so
+  screenshots taken before 2026-08-04 show an arbitrary winner, not a decision.
+  *Playtest after fix:* `CAP-23` (water vs shoreline order, `playtest.md`).
 - `BL-057` **`zone_set` is parsed by nothing** (`grep zone_set CSVM/src` → 0 hits). It is a **per-polygon**
   weather-zone membership list (C5 uses 1 and 3). Not a ground selector — that was checked and
   ruled out — but a real unparsed field, and the per-polygon granularity is interesting given

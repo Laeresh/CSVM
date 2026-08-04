@@ -218,6 +218,7 @@ public sealed class WorldBuilder
             roots.AddRange(world.PartitionNodes);
 
         FindCloudDeck(world, roots);
+        RankConflicts(roots);
         foreach (var idx in roots)
             Add(root, deck, idx);
 
@@ -613,6 +614,90 @@ public sealed class WorldBuilder
     // terrain/water/building is ever false, and no false node has a collidable-flagged mesh
     // descendant — so inheriting the exemption down the subtree (like the other two rules) is
     // safe.
+    /// <summary>
+    /// Ranks this world's nodes by its conflict graph and hands the result to the scene builder,
+    /// which reads it for every <c>node_bias</c> it sets from here on. Runs before the build
+    /// because the rank is an input to it, like the polygon priority.
+    ///
+    /// <para>The walk mirrors <see cref="Add"/> + <see cref="SceneBuilder.BuildSubtree"/> exactly
+    /// — the <c>active</c> flag, <see cref="SkipWorldNode"/>, and nearest-LOD-only — so the graph
+    /// is over the geometry that will actually be built. The origin-parked pile is left out: those
+    /// entities are switched off a moment later (<see cref="HideUnplacedEntities"/>) so nothing in
+    /// it is on screen to fight, and it is also what makes the ranking affordable — it is a single
+    /// interpenetrating heap that alone stretches the longest conflict chain from 7 to 27, which
+    /// no step size fits inside one priority level.</para>
+    /// </summary>
+    private void RankConflicts(List<int> roots)
+    {
+        var start = Time.GetTicksMsec();
+        var nodes = new List<(GameZNode Node, Transform3D World)>();
+        var subtree = new List<(GameZNode Node, Transform3D World)>();
+        int excluded = 0;
+        foreach (int idx in roots)
+        {
+            if (idx < 0 || idx >= _gamez.Nodes.Count)
+                continue;
+            var rootNode = _gamez.Nodes[idx];
+            if (!rootNode.Active || SkipWorldNode(rootNode))
+                continue;
+            subtree.Clear();
+            Collect(rootNode, Transform3D.Identity, subtree);
+            if (rootNode.Local == null && WrapsOrigin(subtree))
+            {
+                excluded++;
+                continue;
+            }
+            nodes.AddRange(subtree);
+        }
+
+        var report = ConflictRank.Compute(_gamez, nodes, excluded);
+        _scene.ConflictRanks = report.Ranks;
+        GD.Print($"draw order: {report.Pairs} conflicting node pair(s) over {nodes.Count} node(s) / "
+                 + $"{report.Triangles} triangle(s) -> {report.MaxRank + 1} rank(s), {excluded} "
+                 + $"origin-parked root(s) excluded, {Time.GetTicksMsec() - start} ms");
+        if (report.MaxRank > SceneBuilder.ConflictRankCap)
+        {
+            GD.PushWarning($"draw order: conflict chain {report.MaxRank + 1} exceeds the "
+                           + $"{SceneBuilder.ConflictRankCap + 1}-rank budget; the deepest layers "
+                           + "share a bias and can z-fight");
+        }
+    }
+
+    private void Collect(GameZNode node, Transform3D parent, List<(GameZNode, Transform3D)> into)
+    {
+        if (SkipWorldNode(node) || (node.Kind == "Lod" && node.LodRangeMin != 0f))
+            return;
+        var world = node.Local is { } local ? parent * local : parent;
+        into.Add((node, world));
+        foreach (int child in node.Children)
+        {
+            if (child >= 0 && child < _gamez.Nodes.Count)
+                Collect(_gamez.Nodes[child], world, into);
+        }
+    }
+
+    // The geometry half of IsParkedAtOrigin, from the gamez meshes instead of the built tree —
+    // the same union of the same vertices, taken before there is a tree to walk.
+    private bool WrapsOrigin(List<(GameZNode Node, Transform3D World)> subtree)
+    {
+        var min = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
+        var max = new Vector3(float.MinValue, float.MinValue, float.MinValue);
+        bool any = false;
+        foreach (var (node, world) in subtree)
+        {
+            if (node.MeshIndex < 0 || node.MeshIndex >= _gamez.Meshes.Count)
+                continue;
+            foreach (var v in _gamez.Meshes[node.MeshIndex].Vertices)
+            {
+                var p = world * v;
+                min = min.Min(p);
+                max = max.Max(p);
+                any = true;
+            }
+        }
+        return any && min.X < 0f && max.X > 0f && min.Z < 0f && max.Z > 0f;
+    }
+
     private Node3D BuildDzPathTree(GameZNode node)
     {
         var built = new Node3D { Name = node.Name };

@@ -82,6 +82,12 @@ public sealed class GameClock
     /// <summary>Total sim seconds this rendered frame — what a once-per-frame consumer wants.</summary>
     public float FrameDt => Dt * Steps;
 
+    /// <summary>How far the wall clock has run into the NEXT sim step, 0..1 — the render
+    /// interpolation fraction for a consumer drawing between fixed steps. Meaningful only in
+    /// FixedAccum (the interactive animation lab); the other modes report 1, "draw the current
+    /// sim pose exactly", so a scripted FixedStep frame stays byte-identical.</summary>
+    public float StepFraction => Mode == RunMode.FixedAccum ? Mathf.Clamp(_accum / FixedDt, 0f, 1f) : 1f;
+
     /// <summary>True when <see cref="PhysicsDt"/> returns 0 for everyone, i.e. the session must
     /// drive the physics-stepped consumers itself, <see cref="Steps"/> times, in tree order.</summary>
     public bool ParentDriven => Halted || Mode != RunMode.Realtime;

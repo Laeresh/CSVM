@@ -41,9 +41,12 @@ namespace CSVM.Mech3.Anim;
 /// is dropped; the reader front-end emits no delta channel at all. Fixing that is its own
 /// change with its own regression — see `backlog.md`.
 ///
-/// Rotations are RADIANS. The data's extremes settle it: the maximum is 15.708 = 5π,
-/// 99.93% of values are ≤ 2π, and 228 sit on exact π/2 multiples. Running them through
-/// DegToRad made every rotation ~57× too small, i.e. visually nothing turned.
+/// Rotations arrive here as RADIANS from both front-ends. The COMPILED data is radians
+/// natively (its extremes settle it: maximum 15.708 = 5π, 99.93% of values ≤ 2π, 228 on
+/// exact π/2 multiples — DegToRad-ing those made every rotation ~57× too small). The READER
+/// sources are degrees (1,388 of 1,428 nonzero values exceed 2π, max 900) and
+/// <c>AnimDefs</c> converts them at parse — the same reader↔compiled unit divergence as
+/// XYZ_ROTATION. Unconverted they spun C2's roadblock cars ~9 turns through a 35° swerve.
 ///
 /// A missing FROM means "from where the node already is" — the held component, which is
 /// what <c>AnimDefs.AddFromTo</c> has always documented as the intent — or "from no offset"

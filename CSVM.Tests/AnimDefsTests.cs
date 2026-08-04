@@ -61,7 +61,11 @@ public class AnimDefsTests
             kinds.Add(e.Kind);
         }
         Assert.Equal(
-            new[] { "ObjectMotion", "If", "ObjectOpacityState", "Elseif", "PufferState", "ObjectAddChild", "Sound" },
+            new[]
+            {
+                "ObjectMotion", "If", "ObjectOpacityState", "Elseif", "PufferState",
+                "ObjectAddChild", "Sound", "ObjectRotateState", "ObjectMotionFromTo",
+            },
             kinds);
     }
 
@@ -89,6 +93,31 @@ public class AnimDefsTests
         Assert.Equal(Mathf.DegToRad(90f), spin.Obj("delta")!.Num("z")!.Value, 5);
         Assert.Equal(3f, motion.Num("run_time"));
         Assert.Equal("probe_rotor", motion.Str("node"));
+    }
+
+    [Fact]
+    public void ObjectRotateStateDegreesBecomeRadians()
+    {
+        // Reader rotations are degrees against the compiled form's radians. Unconverted,
+        // C2's police_blockade [0,135,0] reached PoseRotate as 135 rad ≈ 21.5 turns.
+        var rotate = Event(Sequence(Def("probe_tower"), "probe_spin"), "ObjectRotateState").Data;
+        Assert.Equal(Mathf.DegToRad(135f), rotate.Vec3("state").Y, 5);
+        Assert.Equal("probe_car", rotate.Str("node"));
+    }
+
+    [Fact]
+    public void FromToRotateChannelDegreesBecomeRadiansButTranslateStaysMetres()
+    {
+        // The C2 roadblock swerve: ROTATE 135→100 must arrive as 2.356→1.745 rad, while the
+        // translate channel is metres and must pass through untouched.
+        var motion = Event(Sequence(Def("probe_tower"), "probe_spin"), "ObjectMotionFromTo").Data;
+        var rotate = motion.Obj("rotate")!;
+        Assert.Equal(Mathf.DegToRad(135f), rotate.Vec3("from").Y, 5);
+        Assert.Equal(Mathf.DegToRad(100f), rotate.Vec3("to").Y, 5);
+        var translate = motion.Obj("translate")!;
+        Assert.Equal(new Vector3(-5860f, 8f, -4226f), translate.Vec3("from"));
+        Assert.Equal(new Vector3(-5862f, 8f, -4229f), translate.Vec3("to"));
+        Assert.Equal(0.25f, motion.Num("run_time"));
     }
 
     [Fact]

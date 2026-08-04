@@ -207,16 +207,26 @@ public static class AnimDefs
                     StringComparison.OrdinalIgnoreCase);
                 break;
             case "ObjectTranslateState":
-            case "ObjectRotateState":
             case "ObjectScaleState":
                 if (Vec(fields, "STATE") is { } pose)
                     data["state"] = pose;
+                break;
+            case "ObjectRotateState":
+                // Reader rotations are DEGREES against the compiled form's radians — the same
+                // reader↔compiled unit divergence OBJECT_MOTION's XYZ_ROTATION documents below.
+                // Unconverted, C2's police_blockade OBJECT_ROTATE_STATE [0,135,0] reached
+                // PoseRotate as 135 rad ≈ 21.5 turns.
+                if (Vec(fields, "STATE", degToRad: true) is { } rotPose)
+                    data["state"] = rotPose;
                 break;
             case "ObjectMotionFromTo":
                 if (Num(fields, "RUN_TIME") is { } rt)
                     data["run_time"] = rt;
                 AddFromTo(data, fields, "translate", "TRANSLATE_FROM", "TRANSLATE_TO");
-                AddFromTo(data, fields, "rotate", "ROTATE_FROM", "ROTATE_TO");
+                // ROTATE_FROM/TO are degrees in the reader (survey: 1,388 of 1,428 nonzero
+                // values exceed 2π, max 900) — the C2 roadblock swerve spun cars ~9 turns
+                // when 135° reached FromToMotion as 135 rad.
+                AddFromTo(data, fields, "rotate", "ROTATE_FROM", "ROTATE_TO", degToRad: true);
                 AddFromTo(data, fields, "scale", "SCALE_FROM", "SCALE_TO");
                 break;
             case "ObjectMotion":
@@ -534,10 +544,11 @@ public static class AnimDefs
     }
 
     private static void AddFromTo(Dictionary<string, object?> data,
-        Dictionary<string, List<object?>?> fields, string channel, string fromKey, string toKey)
+        Dictionary<string, List<object?>?> fields, string channel, string fromKey, string toKey,
+        bool degToRad = false)
     {
-        var from = Vec(fields, fromKey);
-        var to = Vec(fields, toKey);
+        var from = Vec(fields, fromKey, degToRad);
+        var to = Vec(fields, toKey, degToRad);
         if (from == null && to == null)
             return;
         var ch = new Dictionary<string, object?>(StringComparer.Ordinal);
@@ -566,13 +577,20 @@ public static class AnimDefs
         AnimData.AsNum(First(fields, key));
 
     // A vec3 in the compiled payload shape, so both front-ends hand handlers the same thing.
-    private static Dictionary<string, object?>? Vec(Dictionary<string, List<object?>?> fields, string key)
+    private static Dictionary<string, object?>? Vec(Dictionary<string, List<object?>?> fields, string key,
+        bool degToRad = false)
     {
         if (!fields.TryGetValue(key, out var v) || v is not { Count: >= 3 })
             return null;
         if (AnimData.AsNum(v[0]) is not { } x || AnimData.AsNum(v[1]) is not { } y
             || AnimData.AsNum(v[2]) is not { } z)
             return null;
+        if (degToRad)
+        {
+            x = Mathf.DegToRad(x);
+            y = Mathf.DegToRad(y);
+            z = Mathf.DegToRad(z);
+        }
         return new Dictionary<string, object?>(StringComparer.Ordinal)
         { ["x"] = x, ["y"] = y, ["z"] = z };
     }

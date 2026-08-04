@@ -1,0 +1,1130 @@
+[
+ {
+  "chapter": "C1",
+  "nodes": 5938,
+  "inactive": 2,
+  "tris": 70290,
+  "parked_roots": 18,
+  "parked_nodes": 2562,
+  "pairs_all": 2122,
+  "pairs_kept": 385,
+  "chain_all": 27,
+  "chain_kept": 8,
+  "secs": 1.2,
+  "maxrank_all": 26,
+  "maxrank_kept": 7,
+  "today": {
+   "pairs": 2122,
+   "inverted": 168,
+   "tied": 0,
+   "surfaces": 3051,
+   "inv_surf": 258,
+   "tie_surf": 0
+  },
+  "today_kept": {
+   "pairs": 385,
+   "inverted": 130,
+   "tied": 0,
+   "surfaces": 513,
+   "inv_surf": 204,
+   "tie_surf": 0
+  },
+  "by_step": {
+   "2.0e-06": {
+    "all": {
+     "pairs": 2122,
+     "inverted": 95,
+     "tied": 86,
+     "surfaces": 3051,
+     "inv_surf": 135,
+     "tie_surf": 147
+    },
+    "kept": {
+     "pairs": 385,
+     "inverted": 66,
+     "tied": 68,
+     "surfaces": 513,
+     "inv_surf": 92,
+     "tie_surf": 116
+    }
+   },
+   "5.0e-06": {
+    "all": {
+     "pairs": 2122,
+     "inverted": 55,
+     "tied": 0,
+     "surfaces": 3051,
+     "inv_surf": 67,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 385,
+     "inverted": 49,
+     "tied": 0,
+     "surfaces": 513,
+     "inv_surf": 57,
+     "tie_surf": 0
+    }
+   },
+   "1.0e-05": {
+    "all": {
+     "pairs": 2122,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 3051,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 385,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 513,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "1.5e-05": {
+    "all": {
+     "pairs": 2122,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 3051,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 385,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 513,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "2.0e-05": {
+    "all": {
+     "pairs": 2122,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 3051,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 385,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 513,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "2.5e-05": {
+    "all": {
+     "pairs": 2122,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 3051,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 385,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 513,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   }
+  }
+ },
+ {
+  "chapter": "C1B",
+  "nodes": 4723,
+  "inactive": 0,
+  "tris": 32687,
+  "parked_roots": 6,
+  "parked_nodes": 2634,
+  "pairs_all": 1612,
+  "pairs_kept": 13,
+  "chain_all": 10,
+  "chain_kept": 3,
+  "secs": 0.6,
+  "maxrank_all": 9,
+  "maxrank_kept": 2,
+  "today": {
+   "pairs": 1612,
+   "inverted": 23,
+   "tied": 0,
+   "surfaces": 2161,
+   "inv_surf": 27,
+   "tie_surf": 0
+  },
+  "today_kept": {
+   "pairs": 13,
+   "inverted": 6,
+   "tied": 0,
+   "surfaces": 16,
+   "inv_surf": 6,
+   "tie_surf": 0
+  },
+  "by_step": {
+   "2.0e-06": {
+    "all": {
+     "pairs": 1612,
+     "inverted": 18,
+     "tied": 18,
+     "surfaces": 2161,
+     "inv_surf": 24,
+     "tie_surf": 29
+    },
+    "kept": {
+     "pairs": 13,
+     "inverted": 0,
+     "tied": 5,
+     "surfaces": 16,
+     "inv_surf": 0,
+     "tie_surf": 5
+    }
+   },
+   "5.0e-06": {
+    "all": {
+     "pairs": 1612,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 2161,
+     "inv_surf": 3,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 13,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 16,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "1.0e-05": {
+    "all": {
+     "pairs": 1612,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 2161,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 13,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 16,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "1.5e-05": {
+    "all": {
+     "pairs": 1612,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 2161,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 13,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 16,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "2.0e-05": {
+    "all": {
+     "pairs": 1612,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 2161,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 13,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 16,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "2.5e-05": {
+    "all": {
+     "pairs": 1612,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 2161,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 13,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 16,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   }
+  }
+ },
+ {
+  "chapter": "C1C",
+  "nodes": 4774,
+  "inactive": 0,
+  "tris": 34770,
+  "parked_roots": 5,
+  "parked_nodes": 3339,
+  "pairs_all": 1556,
+  "pairs_kept": 0,
+  "chain_all": 16,
+  "chain_kept": 0,
+  "secs": 0.6,
+  "maxrank_all": 15,
+  "maxrank_kept": 0,
+  "today": {
+   "pairs": 1556,
+   "inverted": 20,
+   "tied": 0,
+   "surfaces": 2021,
+   "inv_surf": 24,
+   "tie_surf": 0
+  },
+  "today_kept": {
+   "pairs": 0,
+   "inverted": 0,
+   "tied": 0,
+   "surfaces": 0,
+   "inv_surf": 0,
+   "tie_surf": 0
+  },
+  "by_step": {
+   "2.0e-06": {
+    "all": {
+     "pairs": 1556,
+     "inverted": 15,
+     "tied": 17,
+     "surfaces": 2021,
+     "inv_surf": 24,
+     "tie_surf": 33
+    },
+    "kept": {
+     "pairs": 0,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 0,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "5.0e-06": {
+    "all": {
+     "pairs": 1556,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 2021,
+     "inv_surf": 1,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 0,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 0,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "1.0e-05": {
+    "all": {
+     "pairs": 1556,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 2021,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 0,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 0,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "1.5e-05": {
+    "all": {
+     "pairs": 1556,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 2021,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 0,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 0,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "2.0e-05": {
+    "all": {
+     "pairs": 1556,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 2021,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 0,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 0,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "2.5e-05": {
+    "all": {
+     "pairs": 1556,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 2021,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 0,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 0,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   }
+  }
+ },
+ {
+  "chapter": "C2",
+  "nodes": 2977,
+  "inactive": 1,
+  "tris": 38741,
+  "parked_roots": 45,
+  "parked_nodes": 2223,
+  "pairs_all": 1641,
+  "pairs_kept": 56,
+  "chain_all": 16,
+  "chain_kept": 4,
+  "secs": 0.7,
+  "maxrank_all": 15,
+  "maxrank_kept": 3,
+  "today": {
+   "pairs": 1641,
+   "inverted": 106,
+   "tied": 0,
+   "surfaces": 2149,
+   "inv_surf": 136,
+   "tie_surf": 0
+  },
+  "today_kept": {
+   "pairs": 56,
+   "inverted": 7,
+   "tied": 0,
+   "surfaces": 69,
+   "inv_surf": 10,
+   "tie_surf": 0
+  },
+  "by_step": {
+   "2.0e-06": {
+    "all": {
+     "pairs": 1641,
+     "inverted": 22,
+     "tied": 65,
+     "surfaces": 2149,
+     "inv_surf": 40,
+     "tie_surf": 78
+    },
+    "kept": {
+     "pairs": 56,
+     "inverted": 3,
+     "tied": 5,
+     "surfaces": 69,
+     "inv_surf": 3,
+     "tie_surf": 8
+    }
+   },
+   "5.0e-06": {
+    "all": {
+     "pairs": 1641,
+     "inverted": 1,
+     "tied": 0,
+     "surfaces": 2149,
+     "inv_surf": 3,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 56,
+     "inverted": 1,
+     "tied": 0,
+     "surfaces": 69,
+     "inv_surf": 1,
+     "tie_surf": 0
+    }
+   },
+   "1.0e-05": {
+    "all": {
+     "pairs": 1641,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 2149,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 56,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 69,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "1.5e-05": {
+    "all": {
+     "pairs": 1641,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 2149,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 56,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 69,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "2.0e-05": {
+    "all": {
+     "pairs": 1641,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 2149,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 56,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 69,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "2.5e-05": {
+    "all": {
+     "pairs": 1641,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 2149,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 56,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 69,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   }
+  }
+ },
+ {
+  "chapter": "C2B",
+  "nodes": 4108,
+  "inactive": 0,
+  "tris": 28311,
+  "parked_roots": 4,
+  "parked_nodes": 2550,
+  "pairs_all": 1536,
+  "pairs_kept": 0,
+  "chain_all": 10,
+  "chain_kept": 0,
+  "secs": 0.6,
+  "maxrank_all": 9,
+  "maxrank_kept": 0,
+  "today": {
+   "pairs": 1536,
+   "inverted": 18,
+   "tied": 0,
+   "surfaces": 2028,
+   "inv_surf": 22,
+   "tie_surf": 0
+  },
+  "today_kept": {
+   "pairs": 0,
+   "inverted": 0,
+   "tied": 0,
+   "surfaces": 0,
+   "inv_surf": 0,
+   "tie_surf": 0
+  },
+  "by_step": {
+   "2.0e-06": {
+    "all": {
+     "pairs": 1536,
+     "inverted": 19,
+     "tied": 24,
+     "surfaces": 2028,
+     "inv_surf": 30,
+     "tie_surf": 54
+    },
+    "kept": {
+     "pairs": 0,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 0,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "5.0e-06": {
+    "all": {
+     "pairs": 1536,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 2028,
+     "inv_surf": 2,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 0,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 0,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "1.0e-05": {
+    "all": {
+     "pairs": 1536,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 2028,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 0,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 0,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "1.5e-05": {
+    "all": {
+     "pairs": 1536,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 2028,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 0,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 0,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "2.0e-05": {
+    "all": {
+     "pairs": 1536,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 2028,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 0,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 0,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "2.5e-05": {
+    "all": {
+     "pairs": 1536,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 2028,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 0,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 0,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   }
+  }
+ },
+ {
+  "chapter": "C3",
+  "nodes": 4143,
+  "inactive": 1,
+  "tris": 48149,
+  "parked_roots": 13,
+  "parked_nodes": 2493,
+  "pairs_all": 1299,
+  "pairs_kept": 359,
+  "chain_all": 13,
+  "chain_kept": 5,
+  "secs": 0.8,
+  "maxrank_all": 12,
+  "maxrank_kept": 4,
+  "today": {
+   "pairs": 1299,
+   "inverted": 97,
+   "tied": 0,
+   "surfaces": 1747,
+   "inv_surf": 144,
+   "tie_surf": 0
+  },
+  "today_kept": {
+   "pairs": 359,
+   "inverted": 76,
+   "tied": 0,
+   "surfaces": 513,
+   "inv_surf": 119,
+   "tie_surf": 0
+  },
+  "by_step": {
+   "2.0e-06": {
+    "all": {
+     "pairs": 1299,
+     "inverted": 80,
+     "tied": 96,
+     "surfaces": 1747,
+     "inv_surf": 137,
+     "tie_surf": 137
+    },
+    "kept": {
+     "pairs": 359,
+     "inverted": 64,
+     "tied": 82,
+     "surfaces": 513,
+     "inv_surf": 115,
+     "tie_surf": 116
+    }
+   },
+   "5.0e-06": {
+    "all": {
+     "pairs": 1299,
+     "inverted": 20,
+     "tied": 0,
+     "surfaces": 1747,
+     "inv_surf": 44,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 359,
+     "inverted": 20,
+     "tied": 0,
+     "surfaces": 513,
+     "inv_surf": 41,
+     "tie_surf": 0
+    }
+   },
+   "1.0e-05": {
+    "all": {
+     "pairs": 1299,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 1747,
+     "inv_surf": 0,
+     "tie_surf": 1
+    },
+    "kept": {
+     "pairs": 359,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 513,
+     "inv_surf": 0,
+     "tie_surf": 1
+    }
+   },
+   "1.5e-05": {
+    "all": {
+     "pairs": 1299,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 1747,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 359,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 513,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "2.0e-05": {
+    "all": {
+     "pairs": 1299,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 1747,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 359,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 513,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "2.5e-05": {
+    "all": {
+     "pairs": 1299,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 1747,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 359,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 513,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   }
+  }
+ },
+ {
+  "chapter": "C4",
+  "nodes": 6826,
+  "inactive": 0,
+  "tris": 79241,
+  "parked_roots": 7,
+  "parked_nodes": 3911,
+  "pairs_all": 2911,
+  "pairs_kept": 215,
+  "chain_all": 20,
+  "chain_kept": 5,
+  "secs": 1.3,
+  "maxrank_all": 19,
+  "maxrank_kept": 4,
+  "today": {
+   "pairs": 2911,
+   "inverted": 75,
+   "tied": 0,
+   "surfaces": 4025,
+   "inv_surf": 143,
+   "tie_surf": 0
+  },
+  "today_kept": {
+   "pairs": 215,
+   "inverted": 55,
+   "tied": 0,
+   "surfaces": 354,
+   "inv_surf": 114,
+   "tie_surf": 0
+  },
+  "by_step": {
+   "2.0e-06": {
+    "all": {
+     "pairs": 2911,
+     "inverted": 53,
+     "tied": 40,
+     "surfaces": 4025,
+     "inv_surf": 120,
+     "tie_surf": 114
+    },
+    "kept": {
+     "pairs": 215,
+     "inverted": 31,
+     "tied": 25,
+     "surfaces": 354,
+     "inv_surf": 69,
+     "tie_surf": 45
+    }
+   },
+   "5.0e-06": {
+    "all": {
+     "pairs": 2911,
+     "inverted": 15,
+     "tied": 0,
+     "surfaces": 4025,
+     "inv_surf": 33,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 215,
+     "inverted": 15,
+     "tied": 0,
+     "surfaces": 354,
+     "inv_surf": 31,
+     "tie_surf": 0
+    }
+   },
+   "1.0e-05": {
+    "all": {
+     "pairs": 2911,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 4025,
+     "inv_surf": 0,
+     "tie_surf": 1
+    },
+    "kept": {
+     "pairs": 215,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 354,
+     "inv_surf": 0,
+     "tie_surf": 1
+    }
+   },
+   "1.5e-05": {
+    "all": {
+     "pairs": 2911,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 4025,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 215,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 354,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "2.0e-05": {
+    "all": {
+     "pairs": 2911,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 4025,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 215,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 354,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "2.5e-05": {
+    "all": {
+     "pairs": 2911,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 4025,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 215,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 354,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   }
+  }
+ },
+ {
+  "chapter": "C5",
+  "nodes": 8873,
+  "inactive": 0,
+  "tris": 115078,
+  "parked_roots": 12,
+  "parked_nodes": 6056,
+  "pairs_all": 5799,
+  "pairs_kept": 337,
+  "chain_all": 28,
+  "chain_kept": 3,
+  "secs": 1.8,
+  "maxrank_all": 27,
+  "maxrank_kept": 2,
+  "today": {
+   "pairs": 5799,
+   "inverted": 174,
+   "tied": 0,
+   "surfaces": 7671,
+   "inv_surf": 261,
+   "tie_surf": 0
+  },
+  "today_kept": {
+   "pairs": 337,
+   "inverted": 140,
+   "tied": 0,
+   "surfaces": 453,
+   "inv_surf": 213,
+   "tie_surf": 0
+  },
+  "by_step": {
+   "2.0e-06": {
+    "all": {
+     "pairs": 5799,
+     "inverted": 101,
+     "tied": 115,
+     "surfaces": 7671,
+     "inv_surf": 164,
+     "tie_surf": 199
+    },
+    "kept": {
+     "pairs": 337,
+     "inverted": 62,
+     "tied": 78,
+     "surfaces": 453,
+     "inv_surf": 99,
+     "tie_surf": 114
+    }
+   },
+   "5.0e-06": {
+    "all": {
+     "pairs": 5799,
+     "inverted": 42,
+     "tied": 0,
+     "surfaces": 7671,
+     "inv_surf": 59,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 337,
+     "inverted": 41,
+     "tied": 0,
+     "surfaces": 453,
+     "inv_surf": 55,
+     "tie_surf": 0
+    }
+   },
+   "1.0e-05": {
+    "all": {
+     "pairs": 5799,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 7671,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 337,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 453,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "1.5e-05": {
+    "all": {
+     "pairs": 5799,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 7671,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 337,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 453,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "2.0e-05": {
+    "all": {
+     "pairs": 5799,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 7671,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 337,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 453,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   },
+   "2.5e-05": {
+    "all": {
+     "pairs": 5799,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 7671,
+     "inv_surf": 0,
+     "tie_surf": 0
+    },
+    "kept": {
+     "pairs": 337,
+     "inverted": 0,
+     "tied": 0,
+     "surfaces": 453,
+     "inv_surf": 0,
+     "tie_surf": 0
+    }
+   }
+  }
+ }
+]

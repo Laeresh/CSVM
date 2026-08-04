@@ -27,9 +27,25 @@ public sealed class SceneBuilder
     public const string TintParam = "csky_tint";
 
     // Equal-priority tie-break applied per-instance (nodes.json DFS order = draw order):
-    // the airfield's apron detail over its base tile, road decals over rail decals. 2000x
-    // smaller than DepthBiasPerLevel below, so it never competes with a real priority step.
+    // the airfield's apron detail over its base tile, road decals over rail decals. Spending
+    // the whole flat index range on that spans 1.22-2.86 priority levels per chapter, which is
+    // why a WORLD build ranks by the conflict graph instead (see ConflictRankBias); this is what
+    // a build with no such graph — an aircraft, the --node= viewer — still uses.
     public const float NodeOrderBias = 5e-8f;
+
+    // The world's cross-node tie-break: one slot per conflicting layer, not per node
+    // (ConflictRank). Sized by two measurements, both in analysis/bl-053-dense-rank/:
+    //  - it must DOMINATE the within-mesh rank, or a surface rank of 5 still out-bids a
+    //    one-slot cross-node step, which is the defect this replaces: > 5 x SurfaceRankBias.
+    //  - a millimetre-jitter capture at the C1B water/shoreline pair brackets the separation
+    //    that actually stops the fight between 5e-6 (1,774 pixels still swap winner) and
+    //    1.2e-5 (0, matching a 10x-larger control).
+    public const float ConflictRankBias = 1.2e-5f;
+    // Measured worst across all eight chapters is 7. The cap keeps the whole tie-break
+    // (7 x 1.2e-5 + 5 x SurfaceRankBias = 9.4e-5) below SubfaceBias, so subface + tie-break
+    // stays inside one priority level; a chapter that ever needs more is logged, not silently
+    // collapsed.
+    public const int ConflictRankCap = 7;
 
     /// <summary>Surfaces given a CLAMPed sampler because their UVs never leave the unit square
     /// (the hairline-seam fix — see <see cref="UvsWithinUnitSquare"/>). Process-wide across every
@@ -105,6 +121,12 @@ public sealed class SceneBuilder
     /// the include). <c>mix(x, t, 0.0)</c> is exactly <c>x</c>, so carrying this line changes no
     /// pixel while the overlay is off.</para></summary>
     internal const string TintLine = "    ALBEDO = mix(ALBEDO, csky_tint.rgb, csky_tint.a);";
+
+    /// <summary>The world's conflict ranks (<see cref="ConflictRank"/>), set by the caller before
+    /// building. Null — every aircraft, every <c>--node=</c> subtree, any build with no conflict
+    /// graph — leaves the cross-node tie-break on the flat node index, which is what those builds
+    /// have always used and keeps them byte-identical.</summary>
+    internal IReadOnlyDictionary<int, int>? ConflictRanks;
 
     private const string LightShaderCode = @"
 shader_type spatial;
@@ -470,6 +492,18 @@ void fragment() {
     internal ArrayMesh? SharedMesh(int meshIndex) =>
         meshIndex >= 0 && meshIndex < _gamez.Meshes.Count ? GetMesh(meshIndex) : null;
 
+    /// <summary>The cross-node draw-order tie-break for one gamez node. Every instance uniform
+    /// named <c>node_bias</c> — placed world, clutter decorations, map-edge tiles — comes from
+    /// here, so the three cannot drift apart.</summary>
+    internal float NodeBiasOf(int nodeIndex)
+    {
+        if (ConflictRanks == null)
+            return nodeIndex * NodeOrderBias;
+        // Absent = this node conflicts with nothing, which is rank 0 by construction.
+        ConflictRanks.TryGetValue(nodeIndex, out int rank);
+        return Math.Min(rank, ConflictRankCap) * ConflictRankBias;
+    }
+
     private static string? ClassifySurface(string? texture)
     {
         if (string.IsNullOrEmpty(texture))
@@ -655,9 +689,7 @@ void fragment() {
             if (mesh != null)
             {
                 var mi = new MeshInstance3D { Mesh = mesh, Name = "mesh" };
-                // Cross-node draw-order tie-break for equal-priority coplanar surfaces:
-                // the node's flat index is the original's draw order (later = on top).
-                mi.SetInstanceShaderParameter("node_bias", node.Index * NodeOrderBias);
+                mi.SetInstanceShaderParameter("node_bias", NodeBiasOf(node.Index));
                 // Billboard meshes were recentered on their quad center; put the instance
                 // there so the material's billboard pivots at the center, not the node origin.
                 if (_meshPivotCache.TryGetValue(node.MeshIndex, out var pivot))
