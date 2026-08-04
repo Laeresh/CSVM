@@ -72,8 +72,6 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
 
-*(The numpad +/− distance trim needs no capture — you already have video of it.)*
-
 ### Audio
 
 | ID | Capture | What must be audible | Unblocks |
@@ -95,21 +93,10 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 |---|---|---|---|
 | `CAP-15` | Visible damage stages | A graze sequence slow enough to watch a part cross each damage threshold and reach ≤10% HP **without dying** — the mechanism is confirmed working (`docs/HISTORY.md` 2026-07-31); this capture judges whether the panel-flip/smoke-trail look and timing feel right | `BL-121` |
 
-*(`CAP-16` discharged 2026-08-04: `CAP-16.mp4` gave a full ground crash close enough to read the
-fireball cluster, dirt burst, smokeball colour, debris scatter and wreck tumble, corroborated by two
-further ground crashes and contrasted against a building strike. Measurements and their limits are
-on `BL-122`; evidence in `playtest/CAP-16/`. What remains on `BL-122` is an A/B at the controls, not
-more footage. ⚠ **Do not film a longer crash hoping to time the fire out — it cannot be done.** A
-fatal crash returns the original to the menu, so the burn-out is unobservable in single player;
-`CAP-16` captures the cut itself (full intensity until t = 12.65, faded to black by t = 13.00), which
-makes the usable figure a **hold time of 6.52 s wall / 9.06 sim-s from ignition**, not a lifetime.)*
-
 ### World
 
-*(none owed — `CAP-17` discharged 2026-08-04: the map-edge continuation **mirrors**, measured off
-`CAP-17 C2 south.mp4`; evidence and method in `playtest/CAP-17/`, finding on `BL-105`. The residual
-question there — the size of the mirrored unit, ~3 cells rather than the 1 our code clamps to — does
-not need new footage of the original, so no capture is owed for it.)*
+| ID | Capture | What must be in frame | Unblocks |
+|---|---|---|---|
 
 ---
 
