@@ -83,3 +83,6 @@ playtest-notes.md
 
 # alpha_census.py regenerates this from extracted/; FINDINGS.md carries the conclusions.
 /analysis/alpha-classification/alpha_census.json
+
+# Capture-rig run logs - one per recording, they belong with the footage
+analysis/capture-rigs/*-log.txt

@@ -13170,3 +13170,172 @@ the complement of the previous change's unmoved pair, which is itself evidence t
 mechanisms are disjoint. **Limit of the evidence:** whether the original's renderer kept
 distant cutouts dense (lower alpha-test reference? authored-mip alpha?) is unmeasured —
 the at-the-controls comparison against the original covers it.
+
+## 2026-08-04 — `CAP-07` take 1 rejected, and `Kp0` turns out to be rudder, not a camera
+
+Two results, one negative and one that corrects the record.
+
+**`Kp0` is rudder-left, not a camera view.** `BL-150`(a) had carried, from the 2026-07-30 cockpit
+session, the claim that "7 and **0** are both 45°-underside-front" and that "the original binds 0;
+we bind none" — filed as a gap in our `Views[]` table. It was a misattribution: `Kp0` is a flight
+control. The camera set is `Kp1`–`Kp9`, which is exactly what `FlightController.cs:286-303` already
+covers, so our omission of `Kp0` is **correct** and that part of the layout rebuild evaporates. The
+underside-front position stands for 7 alone. `playtest.md`'s `CAP-07` row no longer asks for a
+still of 0.
+
+**The take itself does not settle the layout.** `CAP-07 Numpad 1,2,3,6,9,8,7,4.mp4` (20.9 s,
+2560×1440, night, external chase over water) is genuine footage of the fixed views, but the presses
+overlap. Frame-differencing the central region against the opening baseline (630 frames at real
+PTS; the clip is near-CFR, dt 0.0167–0.0334 s) finds **10 camera transitions for 8 keys**, and the
+camera repeatedly lerps straight from one fixed position to the next without passing through base.
+Only **6–7** plateaus ever come to rest — frame-to-frame motion under 0.55 units — and two of those
+drift monotonically through the "hold" rather than settling (deviation falling 6.3 → 4.0 over 1.4 s
+from t=10.15). So the eight keys named in the filename cannot be mapped one-to-one onto the
+plateaus, and no single frame is trustworthy as "this is where key N puts the camera". It is also
+useless for `BL-150`(b)'s ease law, since no move begins from a settled base.
+
+Incidentally this is itself weak corroboration of `BL-150`(d) — pressing a key mid-ease goes
+somewhere new rather than snapping back to base first — but it is corroboration from a clip flown
+by hand, not a measurement, and (d) still wants `CAP-08`.
+
+**One thing the take does establish, and it is a method note worth keeping.** The aircraft holds a
+constant heading for the entire clip: the HUD compass ribbon (game x 1100–1460, y 10–70) drifts
+**under 1 px in 20.9 s**, at NCC ≥ 0.984 frame-to-frame under a ×8-upsampled subpixel correlation.
+The ribbon tracks the *aircraft's* heading, not the camera's — it does not move when the camera
+swings. A straight-and-level subject means body axes equal world axes, so on such a clip the camera
+angles can be read straight off the horizon and the moon without first solving for the aircraft's
+own attitude. The opening 5.2 s bear this out: horizon y = 241.5 ± 0.9 px at 640×360 with roll ≈ 0.
+The horizon tracker is *not* usable once the views engage, and not because of noise — most of the
+positions are from below the plane, so there is no horizon in frame at all; the 20–56° "rolls" it
+reported are it latching onto the aircraft silhouette or a cloud band.
+
+**Re-record rig:** `analysis/capture-rigs/NumpadViewSweep.ahk` (AutoHotkey v2, F13). 3 s baseline, then
+each of `Kp1`–`Kp9` held **alone** for 3.5 s with a 3.5 s return to base between, ~69 s total. It
+sends scancodes rather than `{NumpadN}` so NumLock state cannot change what the game reads, writes
+a timestamped `sweep-log.txt` of every press and release next to itself — so the analysis need not
+infer event boundaries from motion at all — and labels the active key with an on-screen ToolTip
+(windowed / borderless only). `Kp5` is in the sweep deliberately: `BL-150`(e) records it as unbound
+on the strength of assumption, and a held-with-no-movement clip is what turns that into evidence.
+
+A second rig, `analysis/capture-rigs/NumpadComboSweep.ahk`, covers `CAP-08`. It **staggers** each
+combination rather than pressing it flat: the first key goes down alone for 2.5 s so the camera
+reaches *that key's own* position, then the rest are added on top for 3.5 s, then all release and
+the camera eases back to base. Pressing a combination simultaneously would only show where it ends
+up; arriving at a single key's position first and then adding the second, in one continuous shot,
+shows what adding it *does* — blend toward a further position, replace the first outright, or be
+ignored while the first is still down. That is the open question in `BL-150`(d), and no still of
+the end state can answer it. The stagger also makes every step a second, independent single-key
+observation to cross-check `CAP-07` against. `STEPS` covers the eight camera keys as a ring
+(7 8 9 6 3 2 1 4 clockwise): the eight adjacent pairs, the four opposite pairs (the contradictory
+case — cancel, first-wins, or something else), and two triples. About two minutes.
+
+## 2026-08-04 — `CAP-07` re-shot under script: the numpad layout is measured, and it is a different shape from ours
+
+The rejected hand-flown take was replaced the same day by `CAP-07 scripted Run.mp4` (74.8 s,
+2560×1440), driven by `analysis/capture-rigs/NumpadViewSweep.ahk`. The rig's `sweep-log.txt` times
+every press, so segmentation stops being an inference: the video needs exactly one offset, taken
+from the first sustained camera motion (video 7.585 s = the log's `DOWN Numpad1` at 3.047), giving
+sweep t0 = video **4.538 s** and every key window from there. **All nine holds settle** — mean
+frame-to-frame motion over the last 1.2 s of each hold is 0.055–0.278 against a 0.090 pre-sweep
+baseline.
+
+**`Kp5` is unbound — measured, not assumed.** Held 3.5 s, its deviation from its own pre-press
+baseline is **0.310**, which is *below* the **0.348–0.360** that four no-key stretches of the same
+length and lag score on the identical statistic, and against **2.5–10.5** for every key that does
+move the camera. `BL-150`(e) stops being an assumption. Our omission of `Kp5` was already right.
+
+**The layout (`BL-150`(a)).** Quadrant per key, from nine settled stills:
+
+| key | camera sits | ours (`CameraController.cs:53-60`) |
+|---|---|---|
+| `Kp1` | ahead + starboard, below | left + below flank |
+| `Kp2` | dead ahead, level | straight below |
+| `Kp3` | ahead + port, below | right + below flank |
+| `Kp4` | starboard flank, level | left flank |
+| `Kp6` | port flank, level | right flank |
+| `Kp7` | astern + starboard, below | left + *above* flank |
+| `Kp8` | directly below (belly plan) | ahead of the nose, looking back |
+| `Kp9` | astern + port, below | right + *above* flank |
+
+Three structural differences, not a symbol shuffle. **The original has no above-the-aircraft view at
+all** — every non-level position is below, so our 7 and 9 are the only above views and both are
+wrong. **The four corners carry a fore/aft term ours has none of**: bottom row is the forward
+hemisphere, top row is aft, where ours splits them above/below the flanks. And **4/6 and 2/8 are
+both swapped**. The 2026-07-30 cockpit session's "8 and 2 are swapped" was right; its "1 and 3 are
+45°-back" was not — 1 and 3 are the *forward* pair, 7 and 9 the aft one.
+
+**Method.** The quadrant follows analytically from the nose's direction in frame plus which surface
+is visible. With image-right = `u × d`, the nose projects with horizontal component ∝ `sin φ` and
+vertical ∝ `−sin ε · cos φ`, where φ is azimuth from dead astern toward starboard and ε the camera's
+elevation *below* the aircraft. The level side views calibrate the sign independently — a camera to
+starboard must show the nose pointing image-right, and `Kp4` does, which also settles 4/6. The four
+corners all show belly, underwing ordnance and the ventral skull fin, so ε > 0 for each; their nose
+directions are up-right, up-left, down-right, down-left for 1, 3, 7, 9, one per quadrant. The
+aircraft is a pusher, so the propeller disc marks the *rear* — established from the level side views
+and confirmed by the nose-on view of `Kp2`, which shows a plain intake and no blur.
+
+⚠ **Limits.** These are quadrants and signs, **not degrees**: no azimuth or elevation has been
+solved numerically, which needs a field-of-view calibration this clip has not been put through.
+`Kp8` is the weakest of the nine — at a near-vertical elevation the azimuth is degenerate, so
+"directly below" rests on an unforeshortened plan-form silhouette plus visible underwing ordnance
+(which the wing would occlude from above), not on the nose-direction solve. `BL-150`(b)'s ease law
+is *measurable* on this take, since every move now starts from a settled base, but it has not been
+fitted — same missing FOV calibration.
+
+`CAP-07` is discharged. `BL-150` remains blocked on `CAP-08` for the key-combination behaviour (d).
+
+## 2026-08-04 — `CAP-07`, second pass: the numpad ease is EXPONENTIAL, not linear; the FOV self-calibration fails
+
+A follow-up pass on `CAP-07 scripted Run.mp4` to turn the layout quadrants into degrees and to fit
+the ease law. One of the two landed.
+
+**The ease law (`BL-150`(b)) — settled, and it overturns what the entry claimed.** The entry carried
+"the ease reads linear, not smoothstepped" from by-eye observation. It is neither. Camera travel was
+tracked as the cumulative frame-to-frame displacement of matched star points — a monotone proxy for
+rotation that needs no field-of-view calibration — over all 16 transitions (a press and a release
+for each of the eight moving keys). Normalised, the profile is heavily front-loaded: **33% of the
+travel inside the first 10% of the move, 93% by the halfway point.** Fitting `v(t) = 1 − e^(−kt)`
+gives rms **0.012–0.080**, against **0.37–0.50** for a linear ramp, on every single transition;
+smoothstep is worse than linear. The ease is an asymptotic approach — exactly the
+`pos += (target − pos)·k·dt` form the chase camera already uses — so the fix for (b) is to route
+`ApplyFixedView` through that existing law, not to author an ease curve.
+
+Rate: **k = 7.50 ± 1.62 /s on the press and 7.70 ± 3.20 /s on the release** (wall seconds). The two
+agree well inside their spread, so the ease is **symmetric out and back** — the part of the original
+claim that survives. ⚠ Those are wall seconds and the original's clock runs fast (k = 1.390): in sim
+seconds the constant is **≈ 5.4 /s**, 90% of the way in ≈ 0.43 s sim. Implementing 7.5 would run the
+ease 39% quick, the same trap `BL-148` documents for the stall blink. Our hand-picked `CamSmooth` 8
+is in the right region but is a wall-rate.
+
+⚠ `k` is a **lower bound**; the shape is not. The tracker undercounts the fastest 1–2 frames of each
+slew, and undercounting the early fast part biases `k` down and makes the curve look *less*
+front-loaded than it truly is — so the exponential-vs-linear verdict only strengthens under its own
+bias, while the constant wants a re-measure once an FOV calibration exists.
+
+**The FOV self-calibration fails — recorded so it is not attempted again.** The method was sound in
+principle. The night sky's stars are world-fixed points; they are detectable (200 per frame at ≥55
+counts over a 25 px local background); they are genuinely sky and not screen-space artefacts — when
+the camera returns to base after a hold, **181 of 200** base points come back within 3 px, while at
++2 s / +4 s / +10 s into a hold almost none survive; and a pure-rotation homography `K R K⁻¹` fitted
+across a large swing would pin `f`. It fails on the *size* of the swing. Base and hold frames share
+essentially no sky, so the fit needs the rotation chained frame-to-frame through the transition, and
+the chain loses the fast core: star displacement is 0.01 px settled but 17 px median and 255 px peak
+while slewing, and in the fastest frames the matcher locks onto a spurious near-identity consensus
+rather than the true shift. Chaining from frame 0 also accumulates drift over 2000 frames; chaining
+locally per key fixed that without fixing the core problem. The residual-vs-`f` curve is flat above
+~1300 px (1.759 → 1.732 px rms out to `f` → ∞), so **`f` is bounded from below only: wider than ~84°
+vertical is excluded and nothing more.** Recovered per-key angles were self-evidently wrong —
+azimuth within ±40° of dead astern for every key, when the stills show `Kp2` nose-on and `Kp8`
+near-vertical — with the reprojection check at 5.8–19 px against 0.57 px for the one key that does
+not move.
+
+*What would fix it:* not a slower slew — that is the thing being measured. Either a capture that
+pans the camera slowly across the sky once, purely for calibration, or a known-geometry object in
+frame. The aircraft's own wingspan from its mesh at the shipped `dist` (`camparam.zrd.json`, read by
+`CamParams`/`CameraController` since `BL-149`) would give `f` directly and needs no new footage —
+the cheaper route, and the one to take next. Note `BL-248`(a) leaves open whether that distance is
+dynamic, which has to be settled first or the calibration inherits the same doubt.
+
+`Kp5` picked up a third independent confirmation on the way: across the whole 3.5 s hold, 52 star
+tracks survive end-to-end at 0.78 px rms, and 178–184 star inliers hold at every trial focal length.
+Nothing moves.

@@ -1,0 +1,61 @@
+# Capture rigs
+
+Input-automation scripts for recording **the original game**, where a capture's value depends on
+the inputs being repeatable rather than flown by hand. Each rig writes a timestamped log of what it
+pressed, so the analysis reads event boundaries out of the log instead of inferring them from
+on-screen motion.
+
+These are recording aids for `playtest.md` §0 captures. They drive the original, not our build —
+nothing here is part of the game or the test suite.
+
+## `NumpadViewSweep.ahk` — `CAP-07`
+
+AutoHotkey v2. Press **F13** to sweep the numpad camera views: 3 s of straight-and-level baseline,
+then `Kp1`–`Kp9` each held **alone** for 3.5 s with a 3.5 s return to base between, 3 s tail.
+About 69 s. **Esc** aborts and releases whatever is held.
+
+Writes `sweep-log.txt` next to the script — one timestamped line per press and release.
+
+- **Fly straight and level throughout.** The measurement wants the aircraft's body axes to equal
+  world axes, so that camera angles read off the horizon and the moon are camera-vs-aircraft angles
+  directly, with no attitude solve in between. The HUD compass ribbon is the check: it tracks the
+  *aircraft's* heading and does not move when the camera swings, so a ribbon that holds still is
+  proof the subject held still.
+- **One key at a time is the whole point.** `CAP-07` take 1 was rejected because the presses
+  overlapped — the camera lerped straight from one fixed position to the next without passing
+  through base, and most holds never settled. See `docs/HISTORY.md`, 2026-08-04.
+- **`Kp5` is in the sweep deliberately.** `BL-150`(e) records it as unbound on the strength of
+  assumption; a held-with-no-movement clip is what makes that evidence.
+- **`Kp0` is not**, and should not be added: it is rudder-left, not a camera key.
+- Scancodes are sent rather than `{NumpadN}`, so NumLock state cannot change what the game reads.
+- The on-screen key label is a ToolTip, so it needs **windowed or borderless-windowed** mode — it
+  will not draw over an exclusive-fullscreen game. The log covers you either way; set
+  `SHOW_TOOLTIP := false` if it is in the shot.
+
+## `NumpadComboSweep.ahk` — `CAP-08`
+
+AutoHotkey v2, **F13**, same conventions (scancodes, ToolTip, Esc to abort). Writes `combo-log.txt`.
+14 steps at ~9.5 s each, a little over two minutes. Trim `STEPS` if that is too long.
+
+Each step is **staggered on purpose**, and that is the design:
+
+| | |
+|---|---|
+| press the first key | `SETTLE_MS` 2.5 s — the camera reaches *that key's own* position, alone |
+| add the rest | `HOLD_MS` 3.5 s — the combined position |
+| release all | `GAP_MS` 3.5 s — ease back to base |
+
+Pressing a combination simultaneously would only show where it ends up. Arriving at a single key's
+position first and *then* adding the second, in one continuous shot, shows what adding it actually
+does — blend toward a further position, replace the first outright, or be ignored while the first
+is still down. That is the open question in `BL-150`(d), and it cannot be read off a still of the
+end state alone. The stagger also means every step doubles as a second, independent single-key
+observation to cross-check `CAP-07` against.
+
+`STEPS` covers the eight camera keys as a ring (7 8 9 6 3 2 1 4 clockwise): the **eight adjacent
+pairs** around it, most likely to blend into intermediate positions; the **four opposite pairs**,
+which test the contradictory case (cancel, first-wins, or something else); and **two triples**, to
+show whether whatever rule governs pairs extends past two keys. No `5` (unbound), no `0` (rudder).
+
+⚠ The two rigs must not be run in the same take — both bind F13, and the analysis keys off one log
+per recording.
