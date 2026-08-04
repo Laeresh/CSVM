@@ -263,6 +263,12 @@ of them; perf draw counts are identical to a visible run. Evidence and the rejec
 unchanged. That grab lives in the launcher and not in the engine because Windows' foreground lock
 no-ops `SetForegroundWindow` from a process the user is not interacting with; the console you typed
 into is that process, so it is allowed to give the foreground away (verification SHELL-5, SHELL-9).
+The window is found by pid via `EnumWindows`, not `Process.MainWindowHandle` — that property is
+zero for a hidden window, and a launcher whose own window is hidden (an agent shell, a scheduled
+task) passes `SW_HIDE` down via `STARTUPINFO`, which is also why the launch asks for
+`-WindowStyle Normal` explicitly. Godot's stdout/stderr go to `.scratch/logs/game-<stamp>.out`/
+`.err`: with no stdout handle the plain exe attaches the launcher's console and prints its whole
+engine chatter over it (the engine's categorized log lands in `.scratch/logs/` regardless).
 
 `RunTests.ps1` also uses the **non-console** Godot binary, whose console twin opens its own
 `Godot Engine (Console)` window. A GUI-subsystem binary does not block PowerShell and, started
