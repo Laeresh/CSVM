@@ -14212,3 +14212,22 @@ neither pool going negative; stripping armour never emptying health; the combine
 0.75 → 0.5 → 0.25; `WorstFraction`; `Reset` refilling both; the two-pool `Summary`.
 `.\RunTests.ps1`: build clean, 436/436 units (was 423; 13 new), 22/22 engine suites, 13/13 goldens
 hash-identical — nothing on a golden path grazes, so the doubled zone lifetime moves no shot yet.
+
+**PLAN-armour-layer B11: the graze path's readouts confirmed two-pool-coherent (2026-08-04).**
+Tracing `FlightController.SurviveHit` before touching it found the routing already done: A2 had
+replaced the flat-subtract call in place with `Damage.Apply(dataPart, dmg)` (the single-magnitude
+overload), and `_damageFlashText` already read `state.Fraction` — the combined armour+health
+progression — so the impact flash and `Visuals?.OnPartDamage`/`FlightAudio`'s `damageFrac` (which
+reads `Damage.WorstFraction`) were coherent with the two-pool model with no code change. The one
+stale readout was the graze log line, which still printed only `hp={state.Hp}/{state.Def.MaxHp}`
+from the single-pool era; it now prints `armor={state.Armor}/{state.Def.MaxArmor}
+hp={state.Hp}/{state.Def.MaxHp}`. `Gauges?.OnPartDamage(dataPart)` (the 5 s dial blink) takes no
+pool value, so it needed nothing. `Crash()` still never consults `PlaneDamage`, per Decision 4.
+`GrazeMaxDamage`/`GrazeStopSpeed`/`GrazeFriction`/`GrazeKick` were left untouched, per the item's
+trap — the doubled zone lifetime is faithful (Decision 3), not something to retune here.
+
+**Verified.** `.\RunTests.ps1`: build clean, 436/436 units, 22/22 engine suites, 13/13 goldens
+hash-identical (no golden path grazes, so none were expected to move). The plan's `--fly` graze
+eyeball (flash/log readouts at the controls, armour depleting before health across repeated grazes,
+a stripped zone visibly degrading faster) is unread this session — no interactive flight was flown;
+flag for a playtest pass.

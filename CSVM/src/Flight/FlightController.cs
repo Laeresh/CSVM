@@ -1641,7 +1641,7 @@ public partial class FlightController : Node3D
                 _damageFlash = DamageFlashTime;
                 GD.Print($"graze ({part}→{dataPart}): {hitName} " +
                          $"vn={vn:0.0} m/s dmg={dmg:0.0} " +
-                         $"hp={state.Hp:0.0}/{state.Def.MaxHp:0}");
+                         $"armor={state.Armor:0.0}/{state.Def.MaxArmor:0} hp={state.Hp:0.0}/{state.Def.MaxHp:0}");
             }
         }
 

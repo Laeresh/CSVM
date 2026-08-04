@@ -115,7 +115,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — every existing consumer speaks two-pool
 
-11. ☐ Graze path spends through the new `Apply`; flash/log/gauge-blink stay coherent
+11. ☑ Graze path spends through the new `Apply`; flash/log/gauge-blink stay coherent
 12. ☐ Damage lab drives and reads both pools; probes/summaries print both
 
 ### Wave C — the gauge colour bands (`BL-173`, corrected)
@@ -209,7 +209,16 @@ remaining armour); zero-armour part takes full health damage; `Reset` restores b
 
 # Wave B — every existing consumer speaks two-pool
 
-## B11 ☐ Graze path spends through the new `Apply`; flash/log/gauge-blink stay coherent
+## B11 ☑ Graze path spends through the new `Apply`; flash/log/gauge-blink stay coherent
+
+**Landed 2026-08-04.** `SurviveHit` already called A2's single-magnitude `Apply(dataPart, dmg)`
+overload (A2 replaced the flat-subtract call in place) and the flash text already read
+`state.Fraction` — the combined armour+health progression — so both were two-pool-coherent before
+this item started. The one stale readout was the graze log line, which still printed only
+`hp={state.Hp}/{state.Def.MaxHp}`; it now prints `armor={state.Armor}/{state.Def.MaxArmor}
+hp={state.Hp}/{state.Def.MaxHp}`. `Gauges?.OnPartDamage(dataPart)` takes no pool value (it's a
+by-name 5 s blink trigger) and `FlightAudio`'s `damageFrac` already reads `Damage.WorstFraction` —
+neither needed a change. `Crash()` still never consults `PlaneDamage` (unchanged, per Decision 4).
 
 **Goal.** `SurviveHit` spends its severity-scaled damage through the two-pool model; the impact
 flash, the graze log line and the gauge blink report something truthful about a zone that now has
