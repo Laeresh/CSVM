@@ -91,7 +91,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — instruments
 
-21. ☐ C21 `BL-039` — make the silent golden-run exit-1 capturable
+21. ☑ C21 `BL-039` — make the silent golden-run exit-1 capturable
 22. ☐ C22 `BL-070` — rewrite the static collider probe; explain the off-by-6/11
 
 ### Wave D — decisions
@@ -425,7 +425,7 @@ measurement), the rewritten `BL-135` head note, the new ⚠ on `docs/architectur
 
 # Wave C — instruments
 
-## C21 ☐ `BL-039` — make the silent golden-run exit-1 capturable
+## C21 ☑ `BL-039` — make the silent golden-run exit-1 capturable
 
 **Goal.** If the unreproduced one-off recurs (a `c1-flight` golden built its world, rendered its
 first frame, then exited 1 before frame 120 with no PNG, no exception, nothing in any log), the
@@ -449,6 +449,19 @@ evidence folder appears with the streams intact; a normal `RunTests.ps1` pass is
 
 **⚠ Traps.** Don't attribute the original failure to the concurrent-run collision — that failure
 mode is instant (0.9 s, `docs/verification.md` LOG-13); this one died seconds in, alone.
+
+**Landed 2026-08-04.** `RunTests.ps1`'s golden-shot loop now treats "exited nonzero, no PNG" as a
+distinct case: one automatic retry with Godot's own `--verbose`, and every attempt's full
+`.log`/`.log.out`/`.log.err` (+ PNG if any) copied into a dated `.scratch\goldens-failures\
+<timestamp>\` folder with a `report.txt` line (`exit=… png=… last-log-line: …`) before the next
+shot's launch can overwrite them — which is exactly what erased the original one-off's evidence.
+No engine code touched, per the item's own discipline. **Verified live, not just read**: forced
+the exact symptom by killing a shot's Godot process mid-render (nonzero exit, no PNG) —
+`RunTests.ps1` printed `RETRY c1-waterfall: exited -1 with no PNG -- re-running with --verbose`,
+the retry produced a clean hash, and `.scratch\goldens-failures\20260804-130136\` held the killed
+attempt's `.log`/`.log.out`/`.log.err` plus `report.txt` (`exit=-1 png=False last-log-line: Vulkan
+1.4.341 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce RTX 5080`) — the next shot's own
+`.log` did not touch it. New rule `docs/verification.md` **GOLD-7**.
 
 ## C22 ☐ `BL-070` — rewrite the static collider probe; explain the off-by-6/11
 

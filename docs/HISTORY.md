@@ -13728,3 +13728,30 @@ The patch is not kept behind a flag - a disabled drain is a landmine for the nex
 lesson `BL-050` taught this week. It lives in `FINDINGS.md` section 3, complete, with the bound and
 the expected measurement beside it. `RunTests.ps1` green on the reverted tree: 422 units, 22
 suites, 13/13 goldens hash-identical, engine errors clean.
+
+## 2026-08-04 — M3 polish-6 C21 landed: the silent golden-run exit-1 is now capturable, closing `BL-039`
+
+**What landed.** `RunTests.ps1`'s `goldens` stage used to overwrite `.scratch\goldens\<shot>.log`
+(and its `.out`/`.err`) on every shot, so the one unreproduced `c1-flight` silent exit-1
+(2026-07-30, `BL-039`: world built, first frame rendered, then the process died before frame 120
+with no PNG, no exception, nothing in any log) left nothing behind for the very reason it needed
+evidence — the next shot's launch erased it before anyone looked. The shot loop now distinguishes
+that exact symptom (nonzero exit, no PNG — not the instant ~0.9 s concurrent-run collision,
+`docs/verification.md` LOG-13, which `Stop-StrayGodots` already guards against): one automatic
+retry with Godot's own `--verbose` engine flag, and every attempt's full `.log`/`.log.out`/
+`.log.err` (plus the PNG, if one exists) copied into a dated `.scratch\goldens-failures\
+<timestamp>\` folder with a `report.txt` line (`exit=… png=… last-log-line: …`) *before* the retry
+or the next shot can touch them. A shot that dies once and recovers on retry still passes the
+stage — the summary's `Add-Unchecked` line names it — since the goal is evidence for a recurrence,
+not a stricter verdict on this run. No engine code changed, per the item's own scope.
+
+**Verified live, not just read.** Forced the exact symptom by killing a shot's live Godot process
+mid-render (nonzero exit, no PNG): the harness printed `RETRY c1-waterfall: exited -1 with no PNG
+-- re-running with --verbose`, the retry produced a clean hash, and
+`.scratch\goldens-failures\20260804-130136\` held the killed attempt's `c1-waterfall.attempt1.log`
++ `.log.out` + `.log.err` plus `report.txt` (`exit=-1 png=False last-log-line: Vulkan 1.4.341 -
+Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce RTX 5080`) — untouched by the following shots'
+own logs. A separate full `RunTests.ps1 -SkipUnits -SkipEngine` pass confirmed the normal path is
+unchanged. New rule `docs/verification.md` **GOLD-7**. `BL-039` deleted from `backlog.md` (no fix
+to the original engine mystery — the deliverable was making a recurrence diagnosable, which it now
+is).

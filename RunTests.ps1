@@ -551,6 +551,36 @@ function Write-GoldenManifest {
     [System.IO.File]::WriteAllText($Path, $text, (New-Object System.Text.UTF8Encoding($false)))
 }
 
+# The last non-empty line of a log -- often the only clue a silent death leaves (BL-039).
+function Get-LastLogLine {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) {
+        return ""
+    }
+    $lines = @(Get-Content -Path $Path | Where-Object { $_.Trim().Length -gt 0 })
+    if ($lines.Count -eq 0) {
+        return ""
+    }
+    return $lines[$lines.Count - 1]
+}
+
+# Copies one attempt's full evidence (.log/.log.out/.log.err, and the PNG if one exists) into a
+# dated failure folder, keyed by shot name and attempt number, so it survives both the next shot
+# in this same loop and the next `RunTests.ps1` run -- both of which reuse $GoldenDir and would
+# otherwise silently overwrite it. BL-039: an unreproduced silent exit-1 left nothing behind
+# specifically because nothing preserved the one run that saw it.
+function Save-GoldenFailureEvidence {
+    param([string]$FailureDir, [string]$ShotName, [int]$Attempt, [string]$ShotLog, [string]$Png)
+    $null = New-Item -ItemType Directory -Path $FailureDir -Force
+    $prefix = Join-Path $FailureDir "$ShotName.attempt$Attempt"
+    foreach ($pair in @(@($ShotLog, "$prefix.log"), @("$ShotLog.out", "$prefix.log.out"),
+                        @("$ShotLog.err", "$prefix.log.err"), @($Png, "$prefix.png"))) {
+        if (Test-Path $pair[0]) {
+            Copy-Item -Path $pair[0] -Destination $pair[1] -Force
+        }
+    }
+}
+
 if ($SkipGoldens) {
     Add-Stage -Name "goldens" -Status "SKIP" -Seconds 0 -Detail "-SkipGoldens"
     Add-Unchecked "the golden-image shots did not run (-SkipGoldens): pixel regressions are not caught by this run"
@@ -581,38 +611,84 @@ if ($SkipGoldens) {
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     $moved      = @()      # shots whose hash differs from the manifest
     $broken     = @()      # shots that did not render, or rendered the wrong frame/size
+    $retried    = @()      # shots that died silently and were re-run once with --verbose
     $adapters   = @{}
+    # Lazily created: most runs never touch it, and BL-039's whole point is that a silent
+    # exit-1 must leave something behind instead of being overwritten by the next shot or run.
+    $failureRoot  = $null
+    $failureStamp = Get-Date -Format "yyyyMMdd-HHmmss"
     foreach ($shot in @($manifest.shots)) {
         $png = Join-Path $GoldenDir "$($shot.name).png"
         $shotLog = Join-Path $GoldenDir "$($shot.name).log"
-        foreach ($stale in @($png, $shotLog)) {
+        foreach ($stale in @($png, $shotLog, "$shotLog.out", "$shotLog.err")) {
             if (Test-Path $stale) {
                 Remove-Item -Path $stale -Force
             }
         }
-        $shotArgs = @($shot.args) + @("--frames=$([int]$shot.frame)", "--screenshot=$png")
-        $ErrorActionPreference = "Continue"
-        $shotCode = Invoke-Godot (@("--path", $ProjectDir, "--log-file", $shotLog,
-                                    "res://scenes/Main.tscn", "--") + $shotArgs)
-        $ErrorActionPreference = "Stop"
 
-        # SHOT-10: --screenshot exits 0 even when the save fails, so the file's existence is the
-        # only proof it wrote anything.
-        if (-not (Test-Path $png)) {
-            $broken += "$($shot.name): no PNG written (Godot exited $shotCode) -- see $shotLog"
-            Write-Host "  FAIL $($shot.name): no PNG at $png" -ForegroundColor Red
-            continue
-        }
+        $attempt = 1
+        $verbose = $false
         $hash = ""; $size = ""; $gpu = ""; $simFrame = -1
-        if (Test-Path $shotLog) {
-            foreach ($line in (Get-Content -Path $shotLog)) {
-                if ($line -match 'shot pixmd5=(\w+) size=(\S+) gpu=(.*)$') {
-                    $hash = $Matches[1]; $size = $Matches[2]; $gpu = $Matches[3].Trim()
-                }
-                if ($line -match 'screenshot saved: .* sim_frame=(\d+)') {
-                    $simFrame = [int]$Matches[1]
+        while ($true) {
+            $shotArgs = @($shot.args) + @("--frames=$([int]$shot.frame)", "--screenshot=$png")
+            $godotArgs = @("--path", $ProjectDir, "--log-file", $shotLog)
+            if ($verbose) {
+                # Godot's own engine flag, so it must sit before the "--" that hands the rest to
+                # the game's arg parser -- inside $shotArgs it would just be an unread user arg.
+                $godotArgs += "--verbose"
+            }
+            $ErrorActionPreference = "Continue"
+            $shotCode = Invoke-Godot ($godotArgs + @("res://scenes/Main.tscn", "--") + $shotArgs)
+            $ErrorActionPreference = "Stop"
+
+            # SHOT-10: --screenshot exits 0 even when the save fails, so the file's existence is
+            # the only proof it wrote anything.
+            $hasPng = Test-Path $png
+            $hash = ""; $size = ""; $gpu = ""; $simFrame = -1
+            if ($hasPng -and (Test-Path $shotLog)) {
+                foreach ($line in (Get-Content -Path $shotLog)) {
+                    if ($line -match 'shot pixmd5=(\w+) size=(\S+) gpu=(.*)$') {
+                        $hash = $Matches[1]; $size = $Matches[2]; $gpu = $Matches[3].Trim()
+                    }
+                    if ($line -match 'screenshot saved: .* sim_frame=(\d+)') {
+                        $simFrame = [int]$Matches[1]
+                    }
                 }
             }
+
+            # BL-039: a golden shot exiting nonzero with no PNG at all, silently, is the
+            # unreproduced symptom this item exists for -- not the instant concurrent-run
+            # collision (LOG-13, ~0.9s), which this loop's own Stop-StrayGodots already guards
+            # against. One retry with the engine's own --verbose before giving up, and every
+            # attempt's evidence is preserved -- it used to be overwritten by the very next shot.
+            $silentDeath = ((-not $hasPng) -and $shotCode -ne 0)
+            if ($silentDeath) {
+                if ($failureRoot -eq $null) {
+                    $failureRoot = Join-Path $ScratchDir "goldens-failures\$failureStamp"
+                }
+                Save-GoldenFailureEvidence -FailureDir $failureRoot -ShotName $shot.name `
+                    -Attempt $attempt -ShotLog $shotLog -Png $png
+                $lastLine = Get-LastLogLine -Path $shotLog
+                Add-Content -Path (Join-Path $failureRoot "report.txt") -Value (
+                    "$($shot.name) attempt $attempt : exit=$shotCode png=$hasPng " +
+                    "last-log-line: $lastLine")
+                if ($attempt -eq 1) {
+                    $retried += $shot.name
+                    Write-Host "  RETRY $($shot.name): exited $shotCode with no PNG -- re-running with --verbose" -ForegroundColor DarkYellow
+                    $attempt++
+                    $verbose = $true
+                    continue
+                }
+            }
+            break
+        }
+
+        if (-not (Test-Path $png)) {
+            $detail = "$($shot.name): no PNG written (Godot exited $shotCode) -- see $shotLog"
+            if ($failureRoot) { $detail = "$detail; evidence preserved in $failureRoot" }
+            $broken += $detail
+            Write-Host "  FAIL $($shot.name): no PNG at $png" -ForegroundColor Red
+            continue
         }
         if ($hash.Length -eq 0) {
             $broken += "$($shot.name): no 'shot pixmd5=' line -- see $shotLog"
@@ -643,6 +719,9 @@ if ($SkipGoldens) {
         $shot.hash = $hash
     }
     $watch.Stop()
+    if ($retried.Count -gt 0) {
+        Add-Unchecked "$($retried.Count) golden shot(s) died silently on the first attempt and were retried with --verbose: $($retried -join ', ') -- evidence preserved in $failureRoot"
+    }
 
     # The one legitimate reason for every hash to move at once. Printed whether or not anything
     # failed, because "the adapter also changed" is the difference between regenerate and

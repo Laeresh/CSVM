@@ -328,18 +328,6 @@ with the diagnosis that verification pass produced. **Do not re-add them here**;
 without landing, its record goes to `docs/HISTORY.md`. What remains below is what is still
 unscheduled.
 
-### Test infrastructure
-
-- `BL-039` **One `c1-flight` golden run exited 1 silently, unreproduced (2026-07-30, during B7).** The shot
-  built its world, rendered its first frame ([perf] startup line emitted), then the process ended
-  with exit 1 before frame 120 — no PNG, no exception, nothing in `--log-file`, `.out` or `.err`
-  beyond the known pre-existing `snd_police` warning. 3 of 4 full gates that day passed with the
-  identical pinned hash; the only in-code `Quit(1)` (build-failure-with-pending-capture) cannot
-  fire after a successful build. If it recurs, capture the run under a debugger or with
-  `--verbose` before touching code.
-  ⚠ Traps: don't attribute it to the concurrent-run collision — that failure mode is instant
-  (0.9 s, LOG-13); this one died seconds in, with nothing else running.
-
 ### Surfaces, colliders and inspect tools (from the Wave D playtest, 2026-07-25)
 
 ### HUD & audio

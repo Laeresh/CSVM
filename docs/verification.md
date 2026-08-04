@@ -87,6 +87,18 @@ and leave gaps when retiring old ones.
   — the crash fireball covers the frame. So judge a timing change by what the moved shots *are*
   (all four movers were particle shots) before concluding either that it broke something or that it
   is harmless.
+- **GOLD-7** — **A golden shot that exits nonzero with no PNG is retried once, with evidence kept
+  either way.** `RunTests.ps1`'s `goldens` stage reuses `.scratch\goldens\` every run, so a silent
+  exit-1 (`BL-039`: a `c1-flight` shot once built its world, rendered a frame, then died with no
+  PNG, no exception, nothing in any log) left nothing behind — the next shot's launch overwrote its
+  `.log`/`.out`/`.err` before anyone could look. The stage now re-runs that exact shot once with
+  Godot's own `--verbose`, and copies every attempt's full `.log`/`.log.out`/`.log.err` (plus the
+  PNG, if any) into a dated `.scratch\goldens-failures\<timestamp>\` folder with a `report.txt`
+  line recording the exit code and the log's last line, before the retry can overwrite them. A
+  shot that dies silently but recovers on retry still passes the stage (its `Add-Unchecked` line
+  says so) — the point is evidence for the *next* silent death, not a stricter pass/fail. Confirmed
+  live 2026-08-04: killing a shot's Godot process mid-flight produced `exit=-1 png=False` evidence
+  in the failure folder and a clean `ok` on the `--verbose` retry.
 
 ## DET — determinism and randomness
 
