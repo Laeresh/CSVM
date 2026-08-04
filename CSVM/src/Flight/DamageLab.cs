@@ -17,17 +17,24 @@ public interface IDamageLabTarget
     /// is only one thing it could mean.</summary>
     string? Subtitle { get; }
 
-    /// <summary>The model's own fraction for a part, which the sliders mirror — null from a
+    /// <summary>The model's own pools for a part, which the sliders mirror — null from a
     /// target that holds no state of its own (then the sliders are the only truth).</summary>
-    float? Fraction(string part);
+    PartFrac? Fraction(string part);
 
     /// <summary>Writes the slider state through. <paramref name="rebuildVisuals"/> is set only
     /// when the crossed-threshold set changed, so a mid-band drag doesn't restart the fires.</summary>
-    void Apply(IReadOnlyDictionary<string, float> fractions, bool rebuildVisuals);
+    void Apply(IReadOnlyDictionary<string, PartFrac> fractions, bool rebuildVisuals);
 
     /// <summary>Per-frame work the target owns.</summary>
     void Tick(float dt);
 }
+
+/// <summary>One part's dialled-in state: the two pools' own fractions (armor 1f for a part the
+/// data gives no armor pool) plus the combined armor+HP fraction the injure_anims thresholds and
+/// the gauge dial key off — <see cref="DamageLab"/> derives <see cref="Combined"/> from the part's
+/// (MaxHp, MaxArmor) once per read, so every consumer of "how hurt is this zone as one number"
+/// agrees.</summary>
+public readonly record struct PartFrac(float Health, float Armor, float Combined);
 
 /// <summary>The parked plane (--viewer): the sliders are the state and the visuals are the whole
 /// effect. The trails burn in place at a virtual speed because a parked plane travels no distance
@@ -46,26 +53,28 @@ public sealed class ViewerDamageTarget : IDamageLabTarget
 
     public string? Subtitle => null;
 
-    public float? Fraction(string part) => null;
+    public PartFrac? Fraction(string part) => null;
 
-    public void Apply(IReadOnlyDictionary<string, float> fractions, bool rebuildVisuals)
+    public void Apply(IReadOnlyDictionary<string, PartFrac> fractions, bool rebuildVisuals)
     {
         if (!rebuildVisuals)
             return;
         _visuals.Reset();
-        foreach (var (name, frac) in fractions)
-            _visuals.OnPartDamage(name, frac);
+        foreach (var (name, f) in fractions)
+            _visuals.OnPartDamage(name, f.Combined);
     }
 
     public void Tick(float dt) =>
         _visuals.UpdateStatic(dt, _plane.GlobalPosition, _plane.GlobalTransform.Basis);
 }
 
-/// <summary>The flown aircraft (--fly/--stunt): the sliders write the real per-part HP, so the
-/// HUD's DMG line, the damaged-engine mix and the gauge dial all follow — and a critical part at
-/// 0 leaves the plane one hit from down, exactly as a graze would. The slider is the zone's
-/// combined armor+health fraction, spent as a graze spends it — armor first (the data has no
-/// repair), so an absolute slider state is expressed as Reset + spend.
+/// <summary>The flown aircraft (--fly/--stunt): the sliders write the real per-part armor and HP
+/// independently, so the HUD's DMG line, the damaged-engine mix and the gauge dial all follow —
+/// and a critical part's HP at 0 leaves the plane one hit from down, exactly as a graze would.
+/// Each pool is set through a dedicated single-pool <see cref="PlaneDamage.Apply(string,float,float)"/>
+/// call (armor's with healthDamage=0, health's with armorDamage=0) after a <see cref="PlaneDamage.Reset"/>,
+/// which is what lets the lab drive armor to 0 with health untouched or vice versa — the
+/// armor-first shot model a real hit uses cannot reach either extreme on its own.
 /// Nothing to tick: FlightController drives the visuals with the plane's live pose every frame,
 /// and UpdateStatic would fight it.</summary>
 public sealed class FlightDamageTarget : IDamageLabTarget
@@ -80,24 +89,30 @@ public sealed class FlightDamageTarget : IDamageLabTarget
 
     public string? Subtitle { get; }
 
-    public float? Fraction(string part) =>
+    public PartFrac? Fraction(string part) =>
         _controller.Damage is { } damage && damage.Parts.TryGetValue(part, out var state)
-            ? state.Fraction
+            ? new PartFrac(state.HealthFraction, state.ArmorFraction, state.Fraction)
             : null;
 
-    public void Apply(IReadOnlyDictionary<string, float> fractions, bool rebuildVisuals)
+    public void Apply(IReadOnlyDictionary<string, PartFrac> fractions, bool rebuildVisuals)
     {
         if (_controller.Damage is not { } damage)
             return;
         damage.Reset();
-        foreach (var (name, frac) in fractions)
+        var applied = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, f) in fractions)
             if (damage.Parts.TryGetValue(name, out var state))
-                damage.Apply(name, (1f - frac) * (state.Def.MaxHp + state.Def.MaxArmor));
+            {
+                if (state.Def.MaxArmor > 0f)
+                    damage.Apply(name, 0f, (1f - f.Armor) * state.Def.MaxArmor);
+                var after = damage.Apply(name, (1f - f.Health) * state.Def.MaxHp, 0f);
+                applied[name] = after?.Fraction ?? f.Combined;
+            }
         if (rebuildVisuals && _controller.Visuals is { } visuals)
         {
             visuals.Reset();
-            foreach (var (name, frac) in fractions)
-                visuals.OnPartDamage(name, frac);
+            foreach (var (name, combined) in applied)
+                visuals.OnPartDamage(name, combined);
         }
     }
 
@@ -107,25 +122,29 @@ public sealed class FlightDamageTarget : IDamageLabTarget
 }
 
 /// <summary>
-/// The damage lab: one HP slider per destroyable part (vehicle.json destroyable_parts)
-/// driving the <see cref="DamageVisuals"/> pipeline through an <see cref="IDamageLabTarget"/>.
-/// Dragging a part's HP below an injure_anims threshold plays the visual — the pdpanelN
-/// torn-skin flip with its panel fire — and ≤ 10 % on any part starts the nose dense_firetrail
-/// smoke/fire pair. Raising a slider back above a threshold restores the healthy skin: the
-/// visuals are rebuilt from scratch whenever the set of crossed thresholds changes (rebuilding
-/// only on set changes keeps a slider drag from restarting the fires at every pixel of travel).
+/// The damage lab: one armor slider (parts the data gives an armor pool) plus one health slider
+/// per destroyable part (vehicle.json destroyable_parts), driving the <see cref="DamageVisuals"/>
+/// pipeline through an <see cref="IDamageLabTarget"/> off their combined fraction. Dragging a
+/// part below an injure_anims threshold plays the visual — the pdpanelN torn-skin flip with its
+/// panel fire — and ≤ 10 % combined on any part starts the nose dense_firetrail smoke/fire pair.
+/// Raising a slider back above a threshold restores the healthy skin: the visuals are rebuilt
+/// from scratch whenever the set of crossed thresholds changes (rebuilding only on set changes
+/// keeps a slider drag from restarting the fires at every pixel of travel).
 ///
 /// Two hosts, one panel. In --viewer the sliders ARE the damage state on a parked plane
 /// (ViewerDamageTarget). In --fly/--stunt they write P1's real PlaneDamage
 /// (FlightDamageTarget) while the sim keeps running, so a dialled-in state can be flown, and
-/// they mirror it back — a graze moves the sliders, and a respawn returns them to 100 %.
+/// they mirror it back — a graze moves the sliders, and a respawn returns them to 100 %. The two
+/// sliders are independent (BL-085): armor can be driven to 0 with health untouched, or the
+/// reverse, which the armor-first shot model a real hit spends through cannot reach on its own.
 ///
 /// F5 toggles the lab — panel AND gauges together, so it is genuinely present or absent
 /// (clean F12 shots). Every viewer and flight session builds one: with --damage it opens
 /// straight away, otherwise it waits hidden behind F5, which is what makes F5 mean something in
 /// a plain launch (previously the lab only existed when --damage was passed, so the key
-/// silently did nothing — user-reported). --damage=part:frac,… presets the sliders, so
-/// --screenshot runs capture damage states deterministically in either mode.
+/// silently did nothing — user-reported). --damage=part:frac,… presets both sliders to the same
+/// fraction (there is no CLI syntax yet for the two pools independently), so --screenshot runs
+/// capture damage states deterministically in either mode.
 /// </summary>
 public sealed partial class DamageLab : Node
 {
@@ -134,9 +153,10 @@ public sealed partial class DamageLab : Node
     private readonly IReadOnlyList<(string Part, float Frac)> _preset;
     private readonly GaugeCluster? _gauges;
 
-    private readonly Dictionary<string, HSlider> _sliders = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, HSlider> _healthSliders = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, HSlider> _armorSliders = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Label> _readouts = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, float> _lastFractions = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, float> _lastFractions = new(StringComparer.OrdinalIgnoreCase); // combined, for the blink-on-decrease check
     private CanvasLayer _ui = null!;
     private CanvasLayer? _gaugeLayer;
     private HashSet<string> _applied = new(StringComparer.OrdinalIgnoreCase);
@@ -171,18 +191,23 @@ public sealed partial class DamageLab : Node
         // Altimeter/speedometer draw at rest (no flight data). Toggled from the panel.
         if (_gauges != null)
         {
-            _gauges.PartFraction = name =>
-                _sliders.TryGetValue(name, out var s) ? (float)(s.Value / 100.0) : 1f;
+            _gauges.PartFraction = name => CombinedFractionOf(name);
             _gaugeLayer = new CanvasLayer { Layer = 0 };
             _gaugeLayer.AddChild(_gauges);
             AddChild(_gaugeLayer);
         }
         BuildUi();
         foreach (var (part, frac) in _preset)
-            if (_sliders.TryGetValue(part, out var slider))
-                slider.Value = frac * 100.0; // fires ValueChanged → Reapply
-            else
+        {
+            if (!_healthSliders.TryGetValue(part, out var health))
+            {
                 GD.Print($"damage lab: --damage names unknown part '{part}'");
+                continue;
+            }
+            health.Value = frac * 100.0; // fires ValueChanged → Reapply
+            if (_armorSliders.TryGetValue(part, out var armor))
+                armor.Value = frac * 100.0;
+        }
         // presets are an initial state, not fresh hits — cancel the blink their
         // slider moves triggered so --screenshot damage shots stay deterministic
         _gauges?.Reset();
@@ -225,6 +250,17 @@ public sealed partial class DamageLab : Node
         return label;
     }
 
+    /// <summary>Moves one slider to match the model's own value, no-op (and reports no movement)
+    /// when it is already there — the tolerance keeps a settled read-back from chattering.</summary>
+    private static bool SyncSlider(HSlider slider, float frac)
+    {
+        double want = Math.Round(frac * 100.0);
+        if (Math.Abs(slider.Value - want) < 0.5)
+            return false;
+        slider.SetValueNoSignal(want); // no Reapply — this IS the model's state
+        return true;
+    }
+
     /// <summary>Pulls the target's own damage state back into the sliders — in flight that is
     /// every hit taken while the panel is up, and the respawn that repairs them. Sliders under
     /// the mouse are left alone: a drag that fights the read-back is unusable. The visuals are
@@ -235,22 +271,20 @@ public sealed partial class DamageLab : Node
         if (_dragging > 0)
             return;
         bool moved = false;
-        foreach (var (name, slider) in _sliders)
+        foreach (var (name, slider) in _healthSliders)
         {
-            if (_target.Fraction(name) is not float frac)
+            if (_target.Fraction(name) is not { } f)
                 continue;
-            double want = Math.Round(frac * 100.0);
-            if (Math.Abs(slider.Value - want) < 0.5)
-                continue;
-            slider.SetValueNoSignal(want); // no Reapply — this IS the model's state
-            moved = true;
+            moved |= SyncSlider(slider, f.Health);
+            if (_armorSliders.TryGetValue(name, out var armorSlider))
+                moved |= SyncSlider(armorSlider, f.Armor);
         }
         if (!moved)
             return;
         var fractions = ReadSliders();
         UpdateReadouts(fractions);
-        foreach (var (name, frac) in fractions)
-            _lastFractions[name] = frac; // a live hit already blinked the dial; don't blink twice
+        foreach (var (name, f) in fractions)
+            _lastFractions[name] = f.Combined; // a live hit already blinked the dial; don't blink twice
         _applied = TargetAnims(fractions);
     }
 
@@ -293,7 +327,7 @@ public sealed partial class DamageLab : Node
             Text = $"DAMAGE LAB — {_stats.DefName}" +
                    (_target.Subtitle is { } who ? $"  ·  {who}" : ""),
         });
-        box.AddChild(Small("drag a part's HP over its thresholds · F5 hides this panel"));
+        box.AddChild(Small("drag a part's armor/health over its thresholds · F5 hides this panel"));
 
         foreach (var part in _stats.DestroyableParts)
         {
@@ -301,21 +335,13 @@ public sealed partial class DamageLab : Node
             _readouts[part.Name] = readout;
             box.AddChild(readout);
 
-            var slider = new HSlider
+            if (part.MaxArmor > 0f)
             {
-                MinValue = 0,
-                MaxValue = 100,
-                Step = 1,
-                Value = 100,
-                TickCount = 11,
-                TicksOnBorders = true,
-                CustomMinimumSize = new Vector2(250, 0),
-            };
-            slider.ValueChanged += _ => Reapply();
-            slider.DragStarted += () => _dragging++;
-            slider.DragEnded += _ => _dragging--;
-            _sliders[part.Name] = slider;
-            box.AddChild(slider);
+                box.AddChild(Small("armor"));
+                _armorSliders[part.Name] = AddPartSlider(box, part.Name);
+            }
+            box.AddChild(Small("health"));
+            _healthSliders[part.Name] = AddPartSlider(box, part.Name);
 
             // The part's thresholds, high→low: pN = the wired pdpanelN torn-skin flip,
             // green/yellow/red = the unwired cockpit-indicator cycle (listed for context).
@@ -330,7 +356,7 @@ public sealed partial class DamageLab : Node
         var repair = new Button { Text = "repair all" };
         repair.Pressed += () =>
         {
-            foreach (var slider in _sliders.Values)
+            foreach (var slider in _healthSliders.Values.Concat(_armorSliders.Values))
                 slider.Value = 100;
         };
         box.AddChild(repair);
@@ -351,36 +377,75 @@ public sealed partial class DamageLab : Node
         UI.PanelFocus.Strip(_ui, "damage lab: panel built");
     }
 
-    private Dictionary<string, float> ReadSliders()
+    /// <summary>One slider, the shape shared by a part's armor and health controls.</summary>
+    private HSlider AddPartSlider(VBoxContainer box, string partName)
     {
-        var fractions = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (name, slider) in _sliders)
-            fractions[name] = (float)(slider.Value / 100.0);
+        var slider = new HSlider
+        {
+            MinValue = 0,
+            MaxValue = 100,
+            Step = 1,
+            Value = 100,
+            TickCount = 11,
+            TicksOnBorders = true,
+            CustomMinimumSize = new Vector2(250, 0),
+        };
+        slider.ValueChanged += _ => Reapply();
+        slider.DragStarted += () => _dragging++;
+        slider.DragEnded += _ => _dragging--;
+        box.AddChild(slider);
+        return slider;
+    }
+
+    /// <summary>The combined armor+HP fraction the gauge dial key off (used before the panel
+    /// exists, e.g. GaugeCluster's own PartFraction callback assigned in _Ready — safe because
+    /// it only ever runs once BuildUi has populated the sliders).</summary>
+    private float CombinedFractionOf(string partName) =>
+        _healthSliders.ContainsKey(partName) ? ReadSliders()[partName].Combined : 1f;
+
+    private Dictionary<string, PartFrac> ReadSliders()
+    {
+        var fractions = new Dictionary<string, PartFrac>(StringComparer.OrdinalIgnoreCase);
+        foreach (var part in _stats.DestroyableParts)
+        {
+            float healthFrac = (float)(_healthSliders[part.Name].Value / 100.0);
+            float armorFrac = _armorSliders.TryGetValue(part.Name, out var a) ? (float)(a.Value / 100.0) : 1f;
+            float combined = part.MaxHp + part.MaxArmor > 0f
+                ? (healthFrac * part.MaxHp + armorFrac * part.MaxArmor) / (part.MaxHp + part.MaxArmor)
+                : 0f;
+            fractions[part.Name] = new PartFrac(healthFrac, armorFrac, combined);
+        }
         return fractions;
     }
 
-    private void UpdateReadouts(Dictionary<string, float> fractions)
+    private void UpdateReadouts(Dictionary<string, PartFrac> fractions)
     {
         foreach (var part in _stats.DestroyableParts)
             if (_readouts.TryGetValue(part.Name, out var readout))
-                readout.Text = $"{part.Name}  {fractions[part.Name] * 100:0}%  " +
-                               $"({fractions[part.Name] * part.MaxHp:0.#}/{part.MaxHp:0} hp)";
+            {
+                var f = fractions[part.Name];
+                string text = part.Name + "  ";
+                if (part.MaxArmor > 0f)
+                    text += $"a{f.Armor * 100:0}% ({f.Armor * part.MaxArmor:0.#}/{part.MaxArmor:0})  ";
+                text += $"h{f.Health * 100:0}% ({f.Health * part.MaxHp:0.#}/{part.MaxHp:0})";
+                readout.Text = text;
+            }
     }
 
     /// <summary>Writes the sliders through to the target. The visual rebuild (Reset +
     /// re-crossing every threshold) only runs when the set of crossed anims actually
-    /// changed — mid-band drags just move HP and update the readouts.</summary>
+    /// changed — mid-band drags just move a pool and update the readouts.</summary>
     private void Reapply()
     {
         var fractions = ReadSliders();
 
-        // a slider going DOWN = the part "took damage" — start its gauge blink,
+        // a part's combined fraction going DOWN = it "took damage" — start its gauge blink,
         // exactly like a flight hit (repairs don't blink)
-        foreach (var (name, frac) in fractions)
+        foreach (var (name, f) in fractions)
         {
-            if (_lastFractions.TryGetValue(name, out float prev) && frac < prev)
+            if (_lastFractions.TryGetValue(name, out float prev) && f.Combined < prev)
                 _gauges?.OnPartDamage(name);
-            _lastFractions[name] = frac;
+            _lastFractions[name] = f.Combined;
         }
 
         UpdateReadouts(fractions);
@@ -392,19 +457,19 @@ public sealed partial class DamageLab : Node
     }
 
     /// <summary>The anim set the current fractions demand — mirrors DamageVisuals'
-    /// crossing rule (an entry applies when the fraction ≤ its threshold; the
+    /// crossing rule (an entry applies when the combined fraction ≤ its threshold; the
     /// def-level anims read the worst part).</summary>
-    private HashSet<string> TargetAnims(Dictionary<string, float> fractions)
+    private HashSet<string> TargetAnims(Dictionary<string, PartFrac> fractions)
     {
         var target = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var part in _stats.DestroyableParts)
-            if (fractions.TryGetValue(part.Name, out float frac))
+            if (fractions.TryGetValue(part.Name, out var f))
                 foreach (var (thresh, anim) in part.InjureAnims)
-                    if (frac <= thresh)
+                    if (f.Combined <= thresh)
                         target.Add(anim);
         if (fractions.Count > 0)
         {
-            float worst = fractions.Values.Min();
+            float worst = fractions.Values.Min(f => f.Combined);
             foreach (var (thresh, anim) in _stats.VehicleInjureAnims)
                 if (worst <= thresh)
                     target.Add(anim);

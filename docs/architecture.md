@@ -1461,13 +1461,19 @@ blocked on enemy fire (`BL-222`); do not add the entry to other planes to "fix" 
   vice versa; diagnose them separately.
 
 ## src/Flight/DamageLab.cs
-The damage lab (F5 toggles): one slider per destroyable part over its combined armor+HP pool (spent
-armor first, as a graze spends it) with threshold readouts, plus a
-mirrored GaugeCluster damage dial in the viewer; presets (--damage=part:frac) land through the same
+The damage lab (F5 toggles): one armor slider (parts the data gives an armor pool) plus one health
+slider per destroyable part, each independent (`BL-085`) — `PartFrac` (Health, Armor, Combined)
+is what an `IDamageLabTarget` reads/writes, `Combined` is `DamageLab`'s own derived (armorFrac×
+MaxArmor + healthFrac×MaxHp)/(MaxArmor+MaxHp), the scale the injure_anims thresholds and the
+mirrored GaugeCluster damage dial are on. Presets (--damage=part:frac) set both of a part's sliders
+to the same fraction (no CLI syntax yet for the two pools independently) and land through the same
 ValueChanged path as a hand drag. One panel, two hosts, chosen by the injected IDamageLabTarget
-(same file): ViewerDamageTarget drives DamageVisuals on a parked plane, FlightDamageTarget writes
-P1's real PlaneDamage while the sim runs. It never reimplements visuals, only decides when to
-rebuild them.
+(same file): ViewerDamageTarget drives DamageVisuals on a parked plane from `Combined` alone (it
+holds no model), FlightDamageTarget writes P1's real PlaneDamage — each pool through its own
+single-pool `PlaneDamage.Apply(part, healthDamage, armorDamage)` call after `Reset` (armor's with
+healthDamage=0, health's with armorDamage=0), which is what lets a slider pair reach armor=0/
+health=full or the reverse; the armor-first shot model a real hit spends through cannot reach
+either extreme on its own. Neither target reimplements visuals, only decides when to rebuild them.
 ⚠ Reapply's crossed-anim set-diff (TargetAnims) is load-bearing twice: it implements repair
   (re-derives from pristine) and keeps a slider drag from restarting the fires at every pixel.
 ⚠ Built in EVERY viewer AND flight session (StartHidden without --damage) so F5 has a receiver; two
@@ -1477,6 +1483,10 @@ rebuild them.
 ⚠ FlightDamageTarget.Tick is deliberately empty and it must not touch Gauges.PartFraction:
   FlightController already drives DamageVisuals from the live pose and binds the dial to the same
   PlaneDamage the sliders write. SyncFromTarget's read-back skips sliders being dragged.
+⚠ `--damage=` forces `DamageLab` (the CLI flag) false whenever `WorldMode` is set (`SessionSpec.cs`
+  ~1024) — a chaptered `--fly --damage=` still builds and presets the panel, just hidden behind F5,
+  not open on launch; only a chapter-less `--viewer --damage=` opens it immediately. Pre-existing,
+  not a B12 change.
 
 ## src/Flight/CompassTape.cs
 The original's top-centre heading tape rebuilt from the game's own compassticks2/compasstxt

@@ -1341,7 +1341,7 @@ public partial class GameSession : Node3D
             };
             _worldRoot!.AddChild(_damageLab);
             GD.Print($"damage lab: {p1Stats.DestroyableParts.Count} part sliders on the flown " +
-                     "plane's HP" + (_spec.DamageLab ? "" : " (hidden — F5)"));
+                     "plane's armor+HP" + (_spec.DamageLab ? "" : " (hidden — F5)"));
             state.What += _spec.DamageLab ? " + damage lab" : " + damage lab (F5)";
         }
         else if (_spec.DamageLab)

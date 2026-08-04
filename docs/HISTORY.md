@@ -14231,3 +14231,34 @@ hash-identical (no golden path grazes, so none were expected to move). The plan'
 eyeball (flash/log readouts at the controls, armour depleting before health across repeated grazes,
 a stripped zone visibly degrading faster) is unread this session — no interactive flight was flown;
 flag for a playtest pass.
+
+**2026-08-04: `PLAN-armour-layer` B12 — the damage lab drives and reads both pools.** `PlaneDamage.Summary()`
+and the HUD DMG line already printed both pools (landed with A2/B11), so the only gap was the lab
+itself: one slider per part carried the *combined* armor+HP fraction, spent through the same
+armor-first shot model a real hit uses, which structurally cannot reach "armor 0, health full" or
+the reverse (armor absorbs everything below its own max first). Split each part into an armor
+slider (only for parts the data gives an armor pool) and a health slider, both independent;
+`IDamageLabTarget.Fraction`/`Apply` now carry a `PartFrac` (Health, Armor, Combined) triple instead
+of one float, where `Combined` is `DamageLab`'s own (armorFrac×MaxArmor + healthFrac×MaxHp)/
+(MaxArmor+MaxHp) — the scale the injure_anims thresholds and the mirrored gauge dial are on.
+`FlightDamageTarget.Apply` spends each pool through its own single-pool
+`PlaneDamage.Apply(part, healthDamage, armorDamage)` call after `Reset` (armor's with
+healthDamage=0, health's with armorDamage=0) — two independent single-pool spends is what reaches
+either extreme; a single two-pool `Apply` call, built for one weapon round's own (health, armor)
+magnitudes, cannot (its overflow arithmetic assumes the two magnitudes describe one shot, not two
+independently-dialled targets). The per-part readout now prints "a{armor%} ({armor}/{MaxArmor})
+h{health%} ({health}/{MaxHp})", matching `PlaneDamage.Summary()`'s style. `--damage=part:frac`
+presets both of a part's sliders to the same fraction — there is no CLI syntax yet for the two
+pools independently; recorded as an open TUNE, not chased here since nothing in the plan asked for
+it. `ViewerDamageTarget` (no real model) only ever fed `Combined` to `DamageVisuals`, unchanged in
+spirit.
+
+**Verified.** `.\RunTests.ps1`: build clean (0 warnings after fixing two StyleCop orderings),
+436/436 units, 22/22 engine suites, 13/13 goldens hash-identical. `--viewer --plane=player_bhawk
+--damage=nose:30` screenshot shows both sliders per part and the "a30% (6/20) h30% (6/20)" readout
+for `nose`. `--fly --plane=player_bhawk --damage="nose:0,tail:100"` (a chaptered `--fly`, so the
+panel starts hidden per `SessionSpec`'s pre-existing `--damage`+`WorldMode` rule, unrelated to this
+item) shows the HUD DMG line reading "DMG nose a0% h0%" — `tail:100` leaves that zone pristine, so
+it is correctly omitted — confirming the two independent `Apply` calls land exactly the dialled-in
+values rather than following the armor-first depletion curve. Gauge colour bands are still the
+pre-`C21` single-fraction mapping (unaffected here, in scope for `C21`).

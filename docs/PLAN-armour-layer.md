@@ -116,7 +116,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — every existing consumer speaks two-pool
 
 11. ☑ Graze path spends through the new `Apply`; flash/log/gauge-blink stay coherent
-12. ☐ Damage lab drives and reads both pools; probes/summaries print both
+12. ☑ Damage lab drives and reads both pools; probes/summaries print both
 
 ### Wave C — the gauge colour bands (`BL-173`, corrected)
 
@@ -254,7 +254,21 @@ golden that grazes will move, and that movement is the intended 2× (Decision 3)
 compensate for the doubled lifetime — the 2× is faithful; those constants are `BL-172`'s to revisit
 alongside `bounce_factor`.
 
-## B12 ☐ Damage lab drives and reads both pools; probes/summaries print both
+## B12 ☑ Damage lab drives and reads both pools; probes/summaries print both
+
+**Landed 2026-08-04.** `PlaneDamage.Summary()` and the HUD DMG line already printed both pools —
+that landed as part of A2/B11 (`PoolText`'s "a{armor%} h{health%}" and `FlightController.cs:949`'s
+`Damage?.Summary()`), so the only gap was the lab itself: one slider per part represented the
+*combined* fraction, spent through the armor-first shot model, which structurally cannot reach
+"armor 0, health full" or the reverse (armor absorbs everything below its own max first). Split
+each part into an armor slider (parts the data gives an armor pool) and a health slider, both
+independent; `DamageLab` derives the combined fraction the injure_anims thresholds and the gauge
+dial key off from the two, and `IDamageLabTarget.Apply`/`Fraction` now carry a `PartFrac`
+(Health, Armor, Combined) triple instead of one float. `FlightDamageTarget.Apply` spends each pool
+through its own single-pool `PlaneDamage.Apply(part, healthDamage, armorDamage)` call after
+`Reset` — armor's call with healthDamage=0, health's with armorDamage=0 — which is what reaches
+either extreme. `--damage=part:frac` presets both of a part's sliders to the same fraction; there
+is no CLI syntax yet for the two pools independently, recorded as a TUNE, not chased here.
 
 **Goal.** The lab's sliders write and read the two-pool state (armour and health independently per
 zone) so C21 can be confirmed on screen; `PlaneDamage.Summary` and any probe dump show both pools.
