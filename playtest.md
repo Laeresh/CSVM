@@ -10,8 +10,10 @@ here means the work is queued, not forgotten. Deep evidence and traps live in
 Cite them from `backlog.md` and in conversation the way `BL-nnn` is cited. IDs are permanent: when
 an item closes its ID retires with it and is never reused, so numbering gaps are expected.
 Retired IDs disappear from this file, so never mint a new ID by scanning the entries below — take
-it from this counter and bump it here: **next free IDs `CAP-24` and `PT-31`.** (`CAP-17` retired
-2026-08-04 — IDs are never reused.)
+it from this counter and bump it here: **next free IDs `CAP-25` and `PT-31`.** (`CAP-17` and
+`CAP-14` retired 2026-08-04 — IDs are never reused. `CAP-24` is spoken for: the counter had handed
+it out and `OriginalScreenshots/Videos/CAP-24 multi sticks.mp4` was filmed against it on 2026-08-04,
+so it is skipped here even though no row for it has landed in this file yet.)
 
 **Captures staged for an item live in `playtest/<ID>/`** — git-ignored (they are renders of the
 player's own game files) and, unlike `.scratch/`, **not swept by `CleanScratch.ps1`**, so they
@@ -93,7 +95,6 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
-| `CAP-14` | Graze vs crash | At least one shallow graze that survives and one outright crash; a building-corner clip if you can get one | `BL-172` |
 | `CAP-15` | Visible damage stages | A graze sequence slow enough to watch a part cross each damage threshold and reach ≤10% HP **without dying** — the mechanism is confirmed working (`docs/HISTORY.md` 2026-07-31); this capture judges whether the panel-flip/smoke-trail look and timing feel right | `BL-121` |
 | `CAP-16` | Crash puffs | A full crash sequence, close enough to judge sparks, fireball cluster, black smokeball, dirt burst and debris arcs | `BL-122` |
 

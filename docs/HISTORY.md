@@ -14500,3 +14500,140 @@ pull-up around frame 875).
 
 **Verified.** Docs, backlog and analysis scripts, plus one code-comment correction in
 `MapEdgeExtender.cs` — no behaviour change, no build or test run.
+
+## 2026-08-04 (g) — `CAP-14` decoded: a graze on a vertical cliff face shows no rebound at all (`BL-172`)
+
+`BL-172` proposed binding `player.json`'s shipped `crash: bounce_factor 0.6` as a restitution
+impulse along the contact normal, on the reasoning that the constant ships unread and the remake's
+`FlightController.SurviveHit` has no normal-direction term at all. `CAP-14`'s first pair of clips was
+filmed to check that against the original.
+
+Two clips, both Bloodhawk, chase view, 2560x720 (`OriginalScreenshots/Videos/`): `CAP-14 Graze and
+CAP 15 wing to red.mp4` (37.45 s; the graze, plus CAP-15's burn-down after it) and `CAP-14
+Crash.mp4` (13.12 s). Both register to the chase pooled median at **dx = dy = 0** (peaks 0.826 and
+0.834), which is the gate that applies to a chase clip — `checkclip`'s auto-head-turn test does not,
+the chase HUD being a screen-space sprite (`hud.py`). Dial fits unchanged at NCC 0.9900 (altimeter)
+/ 0.9898 (speedometer); decode quality on the graze clip, altitude second-difference sd **0.84 ft**,
+airspeed **0.54 mph**. Working notes and stills: `playtest/CAP-14/`.
+
+**The graze is one frame, and it is the same frame the sparks appear in.** An orange-pixel count run
+independently of the gauges first lights at **t = 5.8857 s** (0 -> 352 px). On that frame:
+
+| | before contact | at/after contact |
+|---|---|---|
+| airspeed | 215.79 mph, decaying 8.63 mph/wall-s | **204.15 mph — a −11.64 mph (−5.39%) step in ONE frame** |
+| largest \|d mph\| over the 60 neighbouring frames | | **1.41 mph** |
+| sink | **−51.29 ± 1.34 ft/wall-s** (−36.9 ft/sim-s), 0.50 s fit, residual sd 0.72 ft | 0.00 ft across the next three frames; **−9.28 ± 1.35 ft/wall-s** over the following 0.39 s |
+| altitude gained after contact | | **+0.00 ft** |
+
+Not a small rebound — none, against 0.84 ft of second-difference noise, over the whole second after
+contact. The aircraft simply flies on: speed bottoms at 200.3 mph, re-accelerates at
++7.80 mph/wall-s and is back through 215.8 mph 2.3 s later, wings level, still alongside the same
+cliff. The whole cost of the graze is ~5% of speed, the sink, and a wing set on fire (the damage
+gauge's right-wing segment goes grey then red within ~0.2 s — that part is `CAP-15`/`BL-121`).
+
+**The crash half is blunt.** `CAP-14 Crash.mp4` flies level — 2218 ft, 266.7 mph, sink ~0 — into a
+near-vertical face, and the HUD stops updating on the contact frame (t ≈ 9.05 s, which is how the
+impact is dated: the decoder locks to garbage thereafter). No slide, no bounce, no survival.
+`C1 IA1 Crash.mp4` — a different airframe, found by subject name rather than a CAP id — corroborates
+with a ~333 mph dive into rolling ground, destroyed on contact; its decode is noisy (d2 sd 37 ft /
+43 mph) so it is corroboration only. `C1 IA1 Crash 2.mp4` will not register at all (peak 0.009), being
+almost entirely fireball.
+
+⚠ **What this does not settle, and it turned out to be everything — see entry (h).** The graze is
+against a **near-vertical** cliff face, so the contact normal is horizontal and the altimeter is
+blind to it. A purely lateral repulsion would leave no trace in these numbers. The clip that would
+test restitution on the altimeter's own axis is a shallow belly-skim over **flat** ground; it was
+owed at the time of writing, and was recorded the same evening.
+
+**Verified.** Docs, backlog, `playtest.md`, and four `CLIPS` entries — no behaviour change, no build
+or test run.
+
+## 2026-08-04 (h) — `CAP-14` re-recorded: `bounce_factor` 0.6 IS a restitution along the contact normal — entry (g)'s headline was an artifact of its only surface being vertical (`BL-172`)
+
+**This entry corrects (g), a few hours old.** That entry measured one graze, against a **vertical**
+cliff face, found no rebound whatever, and headlined "the original does not bounce a grazing
+aircraft". It also flagged, correctly, that the contact normal there is horizontal so the altimeter
+could not see a normal-direction rebound at all — and asked for a flat-ground skim. Six new clips
+delivered it, and **the caveat was the whole story: on flat ground the original bounces, at
+e = 0.62 ± 0.19 against a shipped `bounce_factor` of 0.60.** `CAP-14` is discharged, its ID retired.
+
+Eight clips, two airframes (Bloodhawk and a **max-armour Balmoral**), seven contacts, three surface
+orientations, 139–302 mph. Every clip's **altimeter and speedometer** register to the chase pooled
+median at dx = dy = 0 (peaks 0.82–0.97); altitude second-difference sd 0.34–0.84 ft. Working notes,
+per-contact traces and plots: `playtest/CAP-14/`.
+
+`v0` is the vertical speed at the contact instant, from a free parabola fitted to the N frames after
+it; `e = -v0 / v_before`.
+
+| airframe | surface | normal | mph | v_before | v0 (N=9) | v0 (N=12) | accel | e |
+|---|---|---|---|---|---|---|---|---|
+| Bloodhawk | cliff face | **vertical** | 216 | −45.9 | +8.0 | +3.0 | −86 | **0.06–0.18** |
+| Balmoral | building wall | **vertical** | 145 | −21.7 | +1.4 | +1.8 | −107 | **0.06–0.08** |
+| Balmoral | wingtip #1 | **flat** | 143 | −14.2 | +10.6 | +12.3 | −66 | **0.75–0.86** |
+| Bloodhawk | belly (slide) | **flat** | 302 | −44.9 | +17.5 | +21.9 | −73 | **0.39–0.49** |
+| Balmoral | wingtip #2 | flat | 139 | −5.4 | +1.7 | +0.4 | +8 | pull-up |
+| Balmoral | nose | flat | 146 | −31.9 | −23.6 | −15.1 | +342 | pull-up |
+| Bloodhawk | belly | flat | 302 | −39.7 | +80.3 | +83.4 | +88 | pull-up |
+
+ft/wall-s; accel ft/wall-s². **Vertical surfaces e = 0.10 ± 0.05; flat ground e = 0.62 ± 0.19.**
+
+**That split is the signature of a restitution along the CONTACT NORMAL, and nothing else produces
+it.** On a vertical wall the sink is a *tangential* component, so a normal-direction bounce puts
+nothing into the altimeter — and the altimeter sees nothing. On flat ground the sink *is* the normal
+component, and it comes back at 0.6 of itself. Both readings are from the same instrument, the same
+pipeline and (for the Balmoral) the same clip pair.
+
+⚠ **0.6 is *consistent with* this footage, not measured from it, and the difference matters.** Only
+two of the five flat-ground contacts are readable at all — on the other three an aerodynamic pull-up
+sets in within a few frames and adds climb that has nothing to do with the impact. Of the two, the
+belly slide's `v0` still walks with the fit window (+3.2 / +11.8 / +17.5 / +21.9 at N = 5 / 7 / 9 / 12,
+so its `e` is really 0.07–0.49); only wingtip #1 has a window-stable fit (+10.6…+12.3 over N = 7–15,
+residual 0.07–0.09 ft against 0.20 ft of noise) and it reads **above** 0.6, at 0.75–0.86. Two
+contacts bracketing 0.6 is agreement, not a measurement. Do not quote ±0.19 as a precision.
+
+⚠ **The discriminator for a readable contact is the SIGN of the post-contact acceleration**, and this
+set contains the trap that motivated the rule. In `CAP-14 Bloodhawk  Hard Graze.mp4` the climb rate
+keeps *growing* for a second after contact — fitted acceleration **+88 to +228 ft/wall-s², upward**,
+nose visibly rising in the stills — and reads as e = 2.0 if taken as restitution, which is
+impossible. A real rebound decays at −127 ft/wall-s² under `nom_gravity` 20. Read `e` only where the
+fitted acceleration is negative.
+
+⚠ **An open oddity the restitution does not explain: on BOTH vertical-surface contacts the sink is
+killed as well** (−45.9 → +8.0 and −21.7 → +1.4), even though on a vertical wall the sink is
+tangential — and the flat-ground contacts show tangential speed being almost *perfectly preserved*
+(302 mph belly-flat costs **0.11 mph**). So something removes vertical speed on contact regardless of
+the surface's orientation, over and above the normal-direction bounce. `bounce_factor` alone does not
+reproduce it, and an implementation that only adds restitution will not match the cliff and building
+clips.
+
+**Speed loss is set by incidence, not by speed.** 302 mph belly-flat onto the ground costs
+**0.11 mph**; 216 mph along a cliff face costs **11.64 mph** in one frame; 145 mph along a building
+wall costs **23.15 mph** in the contact frame and then keeps scraping, 144.5 → 86.7 mph over 0.47 s
+(**−40%**) — the only multi-frame contact in the set, so an oblique wall scrape is a sustained
+several-tick event and not an impulse.
+
+**Buildings behave like terrain, and survival is geometry rather than speed.** The Balmoral grazed a
+C5 skyscraper at 144.5 mph and flew on; in the other clip it died against a skyscraper at 144.2 mph.
+Same airframe, same speed, opposite outcome. From the other end, a Bloodhawk survived flat ground at
+302 mph, twice — once holding altitude **within 2.6 ft for 0.40 s** while sparks poured off it.
+
+**A new capture geometry, measured rather than guessed.** The two building clips record at
+**2560×728** — the 32:9 layout with eight extra rows, **six above the game rect and two below** — so
+`LAYOUTS` gains `(2560, 728): (640, 6, 1)`. `extract.py` raises on an unlisted size for good reason,
+and this one had to be solved: registering the altimeter and the speedometer *independently* against
+the chase pooled median while sweeping the trial origin walks dy 1:1 with it, and both dials reach
+dx = dy = 0 at gy = 6 on both clips (0.893/0.823 and 0.896/0.897, against 0.886/0.901 for a
+known-geometry control).
+
+⚠ **`pool.py` flags those two clips "NOT pixel-locked" (whole-panel peak 0.23/0.26) and that is a
+false alarm.** The panel ROI carries the damage silhouette and the weapon readouts, which belong to a
+**Balmoral** and not to the Bloodhawk pool, and an 8 s city pass does not smear the world away the
+way a longer take does. The two round dials are shared art across airframes and are the part that has
+to match; they lock. The gungauge reads dy = −1 on those clips for the same reason — a different
+plane's ammo text painted over its face — which is also why its NCC has always been 0.736.
+
+`extract.py`'s `CLIPS` gains the six new keys, so the whole decode reproduces from a cold `.scratch`.
+
+**Verified.** Docs, backlog, `playtest.md`, one `LAYOUTS` row and six `CLIPS` entries — no behaviour
+change, no build or test run.
