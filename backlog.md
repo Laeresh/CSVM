@@ -856,29 +856,13 @@ unscheduled.
   ⚠ **Traps.** (a) `bounce_factor`'s units are unverified — `BL-095` flags the whole `player.json`
   physics block as needing its own decode pass; do not assume it is a plain coefficient of restitution
   without checking the range against a measured graze. (b) This is coupled to the armour question
-  (`BL-085`/`BL-173`): the same `crash` block also carries the `armor_damage_range`/
+  (`BL-085`; the gauge half is scheduled as `docs/PLAN-armour-layer.md` C21 — `BL-173` closed
+  2026-08-04, see `docs/HISTORY.md`): the same `crash` block also carries the `armor_damage_range`/
   `health_damage_range` pair that collision damage is supposed to spend, so a full fix likely lands
   both the pushback and the armour-aware crash/graze damage together rather than as two independent
   patches. (c) `GrazeStopSpeed`/`GrazeFriction`/`GrazeKick` were tuned against the *current* no-bounce
   slide — expect them to need re-tuning once a normal-direction impulse is added, not to survive
   unchanged.
-
-- `BL-173` **The damage-gauge outer/inner rings are synced because there is only one value to drive
-  them — splitting them has nothing to split yet. Plan-sized — not a TUNE.** `GaugeCluster.Draw`
-  computes one `frac = PartFraction?.Invoke(z.Part)` per zone and feeds the **same** `color` index to
-  both `z.Border` (outer ring) and `z.Fill` (inner hatch) (`GaugeCluster.cs:263-268`) — there is
-  structurally one number per zone, not an armour/health pair. **The data does ship a real pair** —
-  `destroyable_parts` is (hit points, armour), settled 2026-08-03 against the original's armory
-  (`docs/formats/vehicle.md`, "The hp pair: armor + hit points"). So the two rings have something
-  distinct to bind to; what is missing is the receiving model. **Blocked on `BL-085` landing a
-  two-pool `PlaneDamage`** — not on an open question, and not an independent TUNE. *Fix shape:*
-  drive `Border` from the armour pool's fraction and `Fill` from health's (or vice versa — confirm
-  against `MSG_HUD_HEALTH` = "Armor: %1%% Health: %2%%").
-  ⚠ **Traps.** (a) Do not fabricate a synthetic armour/health split from the single existing `Hp` pool
-  (e.g. armour = first N%, health = remainder) — the real second number is in the data and
-  `BL-085` is what surfaces it; a synthetic split would encode a balance guess instead. (b)
-  `GaugeCluster.cs` is at its 3-⚠ cap in `docs/architecture.md` — this entry records the gap, it does
-  not schedule a `GaugeCluster.cs` doc change.
 
 
 ### Combat-fidelity gaps found by a design cross-check (2026-07-25)
@@ -954,8 +938,11 @@ the document alone, it says so and marks the value TUNE.
   (`docs/formats/vehicle.md`); nothing in this item depends on the answer.
   ⚠ One sub-question of that capture went **unrecorded** and is not worth its own capture: whether
   the in-flight `Armor: %1%% Health: %2%%` readout reads 100 % regardless of how many units were
-  bought, or scales against the 60-unit cap. It decides only how `BL-173` normalises the gauge's
-  outer ring — settle it whenever the armory is next on screen.
+  bought, or scales against the 60-unit cap. It decides only how an armoury-era damage display
+  normalises its fractions (`docs/PLAN-armour-layer.md` C21; the ring-split reading this used to
+  cite as `BL-173` was refuted by the manual — zone colour is a four-band mapping over the combined
+  armour→health progression, rings always in lockstep) — settle it whenever the armory is next on
+  screen.
   ⚠ **Traps.** (a) **Do not fold armour into hp.** The two are equal on all 88 shipped entries
   **at stock only** — armour is a *purchasable* quantity (`BL-067`'s configurator), so equality is
   a fact about default loadouts, not about the model. `PlaneStats` must read **both** floats

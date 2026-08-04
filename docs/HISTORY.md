@@ -11935,7 +11935,8 @@ its own wave, and `PLAN-deepening` forbids behaviour change. Its trap list now c
 that matter: do not fold armour into hp (they are equal *at stock only*, and armour is
 purchasable), and the 2× effective HP a real armour pool gives is intended rather than a
 regression to tune away. `BL-173` is no longer blocked on an open question, only on `BL-085`
-landing. `PlaneStats.cs:249-256` still drops the second float — now a recorded gap, not an
+landing. **(2026-08-04: `BL-173` closed — its ring-split fix shape was refuted by the game manual;
+the corrected gauge work is `docs/PLAN-armour-layer.md` C21. See the 2026-08-04 entry.)** `PlaneStats.cs:249-256` still drops the second float — now a recorded gap, not an
 undecoded field. New rule `INSTR-7` in `docs/verification.md`: *"not decidable from this data" is
 a fact about the instrument, not the question.*
 
@@ -12098,13 +12099,16 @@ measured 60 replaces an absurdity with a figure the weight model can carry.
 `Armor: %1%% Health: %2%%` readout shows 100 % regardless of units bought, or scales against the
 60-unit cap. It decides only how `BL-173` normalises the damage gauge's outer ring, so it is logged
 as a ⚠ on `BL-085` rather than re-filed as a capture — settle it whenever the armory is next on
-screen.
+screen. **(2026-08-04: `BL-173`'s ring-split reading was refuted and the item closed — the rings
+are never independent; see the 2026-08-04 entry. The normalisation sub-question survives, reworded
+on `BL-085`.)**
 
 **Outcome.** `CAP-19` is retired from `playtest.md` (IDs never reused; `next free` stays `CAP-20`).
 `BL-085` remains **unblocked, schedulable and unscheduled** — this capture calibrated it, it did not
 implement anything; the armour layer is still plan-sized and `PlaneStats.cs:249-256` still drops the
 second float. `BL-173` is unaffected: still blocked only on `BL-085` landing a two-pool
-`PlaneDamage`.
+`PlaneDamage`. **(2026-08-04: `BL-173` closed as superseded — its fix shape was refuted by the game
+manual; the corrected gauge work is `docs/PLAN-armour-layer.md` C21. See the 2026-08-04 entry.)**
 
 **Verified.** No code touched — `.\RunTests.ps1` not run for this entry (documentation only; the
 2026-08-03 armory entry above records the last full pass: 393 unit tests, 20/20 engine suites,
@@ -14085,3 +14089,39 @@ chase-decode rules, which is where it should have been to be found in time.
 
 Verify: read-only analysis plus `recovery.py` and one new `CLIPS` entry; no engine code touched, no
 `RunTests.ps1` run required.
+
+## 2026-08-04 — `BL-173` closed: the damage-gauge rings are never independent; zone colour is a four-band map over the combined armour→health progression
+
+**Documentation only; no code changed.** Closure kind: **superseded** — the item's *problem*
+survives as `docs/PLAN-armour-layer.md` C21; its proposed *mechanism* is dead.
+
+**What settled it.** The game manual's description of the Crispen Mark V damage indicator (user,
+2026-08-04): the aircraft outline's four sections are colour-coded green (untouched), yellow (up to
+50% of the section's armor destroyed), orange (50–100% of armor destroyed and 0–25% of the airframe
+destroyed), red (25–100% of the airframe destroyed). The bands are drawn over the **combined**
+sequential progression of both pools — exactly what a strictly armour-first depletion model
+produces. So the border bar and the hatch fill always show the **same** colour; there is no
+armour-ring/health-ring split to build.
+
+**What that rules out.** `BL-173`'s fix shape — "drive `z.Border` from the armour pool's fraction
+and `z.Fill` from health's (or vice versa — confirm against `MSG_HUD_HEALTH`)" — is refuted.
+`GaugeCluster.Draw` feeding one colour index to both `Border` and `Fill` was never the bug; the gap
+is only that today's `frac` is a single-pool fraction, so the bands cannot span the armour phase.
+The corrected work — a band function over both pools per the manual's table — is scheduled as
+**`docs/PLAN-armour-layer.md` C21** (plan drafted 2026-08-04, deliberately not yet active), behind
+the two-pool `PlaneDamage` (`BL-085`, that plan's A2).
+
+**Limit of the evidence.** The manual is prose, not measurement: the exact boundary values are not
+taken from it as fact. The shipped `injure_anims` thresholds (0.72 / 0.46 / 0.20,
+`docs/formats/hud.md` "Thresholds") remain the authoritative numbers `GaugeCluster` already mines;
+how they sit on the combined scale is the plan's Decision 6 check, not part of this closure. The
+`CAP-19` normalisation sub-question (readout 100% vs the 60-unit cap) survives, reworded on
+`BL-085` — it was never `BL-173`-specific.
+
+**Changed.** `backlog.md`: the `BL-173` entry deleted (IDs never reused); `BL-172` trap (b) and
+`BL-085`'s ⚠ sub-question rewritten to carry the corrected reading instead of pointing at the dead
+entry. Forward-pointers stapled onto the three 2026-08-03 entries above that still described
+`BL-173` as live. `playtest.md` owed nothing (`CAP-19` was `BL-085`'s and already retired). Nothing
+in the build changes; goldens unaffected.
+
+**Verified.** Docs only — no build or test run.
