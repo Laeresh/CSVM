@@ -64,7 +64,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the engine runs outside the repo
 
-1. ☐ Export-aware root resolution: exe-adjacent defaults when not running from the editor
+1. ☑ Export-aware root resolution: exe-adjacent defaults when not running from the editor
 2. ☐ Extraction version stamp: scripts write it, the engine checks it at boot
 
 ### Wave B — the package
@@ -85,7 +85,7 @@ File contention: none between items except B13, which only consumes the others' 
 
 # Wave A — the engine runs outside the repo
 
-## A1 ☐ Export-aware root resolution: exe-adjacent defaults when not running from the editor
+## A1 ☑ Export-aware root resolution: exe-adjacent defaults when not running from the editor
 
 **Goal.** An exported release build, sitting in a bare folder with an `extracted/` directory beside
 the exe, finds all its data and writes its logs somewhere valid — with `--data-root=` /

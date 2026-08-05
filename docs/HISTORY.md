@@ -15733,3 +15733,23 @@ restored, green.
 
 `BL-262` stays open and untouched — staging `ballflare.flt`/`apassengers` moves goldens, and this
 plan stopped rather than repinned. The plan is archived at `docs/plans/PLAN-effect-catalogue.md`.
+
+## 2026-08-05 — PLAN-friends-release A1: export-aware root resolution
+
+`Launcher.cs` derived `_repoRoot` unconditionally from `GlobalizePath("res://") + "/.."` — correct
+in the editor, where `res://` is the `CSVM/` project dir on disk, but degenerate in an exported
+build, where `res://` lives inside the pck and Godot documents `GlobalizePath` as editor-only for
+it. The one assignment now branches on `OS.HasFeature("editor")`: editor (and editor-run builds)
+keep the old computation byte-for-byte; an exported build uses `OS.GetExecutablePath()`'s
+directory, so `extracted/` beside the exe is found and `.scratch/` output lands beside the exe.
+The override chain (default → `CSVM_DATA_ROOT` → `--data-root=`) is untouched, and every consumer
+(`Log.Open`, the extraction paths, `TextureDropIn`, `ProbeRunner`, the config dump,
+`LauncherContext.RepoRoot`) flows from the assignment unchanged.
+
+**Verified.** `dotnet test` 450/450 green. Deterministic golden A/B
+(`--plane=player_bhawk --stage=empty --det --screenshot`): two pre-change baselines and the
+post-change shot all MD5-identical (`DD3CDF1C40FEE12F8A1E42151CDF715A`) — zero same-build noise,
+zero drift, so the edit stayed load-time-only. Foreign-CWD probe (CWD set to an unrelated temp
+dir): boots, same screenshot MD5, and the fly log lands in the worktree's `.scratch\logs`, so
+nothing leans on the CWD. The exported branch cannot run until B11 produces the first export;
+it is correct by construction here and B11's bare-folder smoke test is the empirical proof.

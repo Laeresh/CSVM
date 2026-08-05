@@ -2208,6 +2208,9 @@ threaded through the other path: `SetFocusMuted` owns the bus's mute FLAG (alt-t
 `ApplyMasterVolume` writes its VOLUME once per launch from `--volume=`, else the `audio.volume`
 config key. Separate properties, so neither disturbs the other — and unlike `--mute`, a zero volume
 still loads and plays everything, so the sound counters and log lines stay intact.
+The default root is export-aware: editor (and editor-run builds) → the repo checkout
+(`res://`'s parent — `GlobalizePath("res://")` maps to disk only there), exported build → the
+exe's own directory; `CSVM_DATA_ROOT`/`--data-root=` override either.
 `LaunchSession()` instantiates a `GameSession` per
 launch; `ReturnToMenu` `QueueFree`s it; a menu launch derives its spec via
 `SessionSpec.FromMenu(_cli, …)`, never from the outgoing spec.
