@@ -1415,8 +1415,10 @@ state, catch-up capped); `DriveAt` is the animation runtime's per-frame drive, d
 authored state — DISTANCE_INTERVAL trails per interval of actual host motion (CAP-15's density,
 `BL-259`; TrailPool-sized even on the sustained path, since the time-cadence pool floor silently
 dropped ~85% of a flight-speed trail), a still host keeps the time cadence (the static building
-sputters, whose distance can never elapse); `PufferState.FromAnimEvent` parses the compiled anim
-payloads.
+sputters, whose distance can never elapse), and the runtime's stop ends the trail as well as the
+emission (`PufferEmitter.SustainEnd` → `TrailEnd`), so a revived emitter re-homes rather than
+drawing a puff line from its pooled slot's previous call site (the rocket ghost trails);
+`PufferState.FromAnimEvent` parses the compiled anim payloads.
 Three config knobs scale `BaseSize` per spawn path — `puffer.burstSizeScale` /
 `puffer.trailSizeScale` / `puffer.sustainSizeScale` (`SizeScaleDefault` **1**, the authored
 SIZE_RANGE verbatim; the knobs remain for deliberate per-path tuning — the cull margin scales with

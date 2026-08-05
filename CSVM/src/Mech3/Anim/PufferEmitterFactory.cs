@@ -92,7 +92,14 @@ internal sealed class PufferEmitter : IEmitter
     public void SustainAt(Vector3 worldPos, Basis worldBasis, float dt) =>
         _puffer.DriveAt(worldPos, worldBasis, dt); // distance states trail; time states sustain
 
-    public void SustainEnd() => _puffer.SustainEnd();
+    public void SustainEnd()
+    {
+        _puffer.SustainEnd();
+        // The trail must end with the emission: pooled effect-template slots teleport their
+        // hosts between calls, and a trail origin kept across the pause would interpolate a
+        // puff line from the old site on revival. Live puffs still decay naturally.
+        _puffer.TrailEnd();
+    }
 
     public void Clear() => _puffer.Clear();
 
