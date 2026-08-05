@@ -15833,6 +15833,33 @@ failure accounting; skip-with-note when the DLL is absent). Verified: dev-tree r
 (`messages.json (up to date)`, 185 up to date), scratch-package run produces it byte-identical
 to the dev tree's.
 
+## 2026-08-05 — friends-release B13: zip assembled; Windows Sandbox clean-machine test passes the friend journey
+
+The release zip (71.5 MB, 194 entries) was assembled per `packaging/MANIFEST.md` and passed all
+its pre-zip checks: bundled fork `unzbd.exe` SHA-256 equals the `VERSION.json` stamp value, both
+extractor scripts and both license texts byte-identical to their sources, zero game data. The
+clean-machine test ran the whole friend journey scripted-verbatim from the package README inside
+Windows Sandbox (fresh ephemeral Windows 11, host install mapped read-only): unzip →
+`powershell -ExecutionPolicy Bypass -File Extract.ps1` → launchscreen → free flight over C1 →
+stunt over C1 → 2-player splitscreen.
+
+**What the clean machine proved.** No .NET SDK present and no standard VC++ redist
+(`vcruntime140.dll` absent from System32) — the self-contained export ran regardless, so the
+feared missing-runtime class is empty. Extraction via the package's own tools: 27 s, 578 MB,
+stamp written with both fields (`unzbdCommit` correctly absent — the bare-exe path, exercised
+for real). All modes rendered correctly: full C1 world with fog/buildings/river, HUD font and
+gun reticle live (the rimage unpack), resolved HUD/briefing strings (the messages.json fix,
+verified in the second run after the first run exposed it), both splitscreen panes. Three
+sandbox cycles total: defect-find, fix-verify, and a run-order experiment for BL-283.
+
+**Known residue.** `BL-283`: the scripted free-flight `--screenshot` process completes all work
+but never exits — sandbox-only (3/3 there, 0/anywhere on the host), mode-specific (stunt/menu/
+splitscreen exit cleanly 5/5), run-order-independent. Judged a non-blocker for hand-off; full
+evidence in the backlog entry.
+
+**Remaining, user-owned:** review `packaging/README.md` (flags listed in the B12 entry), then
+the first hand-off. The friend's first-session report seeds the public-release backlog.
+
 ## 2026-08-05 — friends-release B11: export preset lands; the first hand export flies from a bare folder, pixel-identical to the dev tree
 
 `CSVM/export_presets.cfg` is committed — one preset, **"Windows Desktop"** (release, x86_64,

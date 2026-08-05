@@ -71,7 +71,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ Export preset + first hand export, smoke-tested from a bare folder
 12. ☑ Friend extraction kit: one-command `Extract.ps1`, bundled fork `unzbd.exe`, README, licenses
-13. ☐ Assemble the zip, clean-machine test, first hand-off
+13. ◐ Assemble the zip, clean-machine test, first hand-off — zip built + Sandbox-proven; README review and hand-off are the user's
 
 ## Dependency and parallelism notes
 
@@ -237,7 +237,7 @@ or the very first command fails cryptically. Don't fold the extraction logic int
 simplify" — two diverging extractors is the maintenance trap. The user owns hand-off
 communication (standing rule): the README is drafted for them to review, not published.
 
-## B13 ☐ Assemble the zip, clean-machine test, first hand-off
+## B13 ◐ Assemble the zip, clean-machine test, first hand-off
 
 **Goal.** One zip — export + `Extract.ps1` + `tools\unzbd.exe` + README + licenses — proven on an
 environment without dev tools, and handed to the first friend with a way for their problems to

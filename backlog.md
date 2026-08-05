@@ -325,6 +325,28 @@ with the diagnosis that verification pass produced. **Do not re-add them here**;
 without landing, its record goes to `docs/HISTORY.md`. What remains below is what is still
 unscheduled.
 
+### BL-283 — exported build: free-flight `--screenshot` run never exits in Windows Sandbox (2026-08-05)
+
+In the B13 clean-machine tests (Windows Sandbox, vGPU paravirtualized RTX 5080 via D3D12 12_0),
+the scripted free-flight run — `-- --plane=player_bhawk --chapter=C1 --det --screenshot=…` —
+finished all its work (world loaded, shot saved, `pixmd5` logged as the final line, exactly like
+a clean run) but the process never exited: killed at 300 s and 600 s in three runs out of three.
+At kill time: 39 threads, 103.9 s CPU accumulated, 1.1 GB working set, message pump alive
+(`Responding=True`) — it looks parked in normal frame flow with the quit never taking effect,
+not deadlocked. **Mode-specific, environment-specific:** stunt over the same C1 world, the
+launchscreen, and `--stage=empty` splitscreen exited cleanly in every sandbox run (5/5), and the
+same free-flight command exits cleanly on the host (B11 smoke + goldens). Run order ruled out:
+the hang reproduces when free flight is the first process ever started in the sandbox.
+
+*Why it can wait:* friends run real Windows — no hang has ever been seen outside the sandbox —
+and the affected path is the scripted auto-quit, not the UI quit a friend uses. Evidence:
+`docs/HISTORY.md` 2026-08-05 B13 entry.
+
+**⚠ Traps.** Do not chase this with the sandbox timeout knob — 600 s changed nothing; it is a
+hang, not slowness. The kill-the-predecessor theory is already disproven (reorder run), don't
+re-derive it. A dev-machine repro attempt needs the *exported* build, not the editor run — the
+editor path exits fine everywhere.
+
 ### C2 destruction animations (at-the-controls findings, 2026-08-04)
 
 Two in-flight findings against the C2 Hollywood destructibles; both diagnosed against the
