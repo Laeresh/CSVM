@@ -1005,17 +1005,24 @@ the session log distinguishes "the data says 13" from "we guessed 13".
   `MarkerRig.PlayerAirframes`. `PlaneRoster.PlaneDisplayName` strips a leading `p` and title-cases,
   which yields "Fbrand" for `player_fbrand` — it would silently drop the Firebrand's override
   rather than fail. `CamParamsTests` pins that case.
-⚠ Only `Dist` is applied. The dynamic-distance keys and the catch-up triplet are parsed and
-  deliberately DORMANT: in the `default` block `dist_min` (15.7) exceeds `dist` (13.0), so the
-  obvious clamp reading is wrong, and the catch-up units could be 1/s, frames or seconds-to-settle.
-  Both need a capture of the original, not a plausible-looking constant — see the format page.
+⚠ `Dist` and `DistFactor` drive the chase radius (`d = Dist + DistFactor·V`, CAP-21-decoded,
+  BL-248); everything else is parsed and deliberately DORMANT. `dist_min`/`dist_max` is NOT a
+  clamp — in the `default` block `dist_min` (15.7) exceeds `dist` (13.0) and CAP-21 never reaches
+  `dist_max` — and the catch-up triplet's units are still undecoded (the one measured rate,
+  0.65 /sim-s, matches none of the three). See the format page before wiring more.
 
 ## src/Flight/CameraController.cs
 The flown aircraft's camera, split out of `FlightController`: the roll-following chase camera, the
-numpad fixed views (`Views`, `ActiveView`, `FixedView`, `LogView`) and the free orbit used while the
-debug freeze holds the world. Steers a `Camera3D` it does not own, as `UI/OrbitCamera` does for the
-static viewer. The chase RADIUS is `CamParams.Dist`, per plane; the offset's DIRECTION (behind and
-above at ~15.7° elevation) is not in the data and stays hand-picked. Collaborators: `FlightController`
+numpad fixed views (`Views`, `ActiveView`, `FixedView`, `LogView`), the look-behind view
+(`BackView`, numpad 0 / `--view=back`, at the chase radius bounded into the authored
+`back_dist_min/max`), the authored crash camera (`CrashView`, a hard cut to a static elevated
+vantage `crash_horiz` behind / `crash_y` above the impact, held until respawn — framing decoded
+off the original's crash footage; `crash_elev`/`crash_chord_y` stay capture-gated on `BL-260`,
+as do the death and flyby cameras) and the free orbit used while the debug freeze holds the
+world. Steers a `Camera3D` it does not own, as `UI/OrbitCamera` does for the static viewer. The chase RADIUS is dynamic per plane (BL-248): `d = Dist + DistFactor·V` (both
+authored) plus a first-order acceleration transient relaxing at the MEASURED 0.65 /sim-s
+(`UpdateDynamics`, host-called once per sim step); the offset's DIRECTION (behind and above at
+~15.7° elevation) is not in the data and stays hand-picked. Collaborators: `FlightController`
 (the only host) and `CamParams`.
 ⚠ Deliberately passive — no clock, no input devices. The host passes the dt, because which clock a
   camera runs on is behaviour: `Chase` takes the SIM clock's dt so a scripted capture is frame-rate
@@ -1025,11 +1032,14 @@ above at ~15.7° elevation) is not in the data and stays hand-picked. Collaborat
 ⚠ The chase camera slerps its BASIS, never a re-derived LookAt — that is what lets inverted flight
   render upside down. On the realtime clock the DRAWN pose is `_renderPose`, interpolated between
   the last two sim poses (DET-10), and anything bolted to the plane (the rigid numpad views) must
-  read it, never the raw sim pose.
-⚠ The fixed views share the chase radius, so a distance change moves BOTH cameras. That is
-  intended (they are one number; moving one desyncs them) — and it is why the four golden shots
-  with a flown plane moved when the per-plane distances landed, while the eight `--freecam` shots
-  and `viewer-bhawk` did not. `BL-150`'s rebuild of the view LAYOUT is still open.
+  read it, never the raw sim pose. `Chase` smooths the plane→camera OFFSET, never the world
+  position — a world-position follower trails by V/rate at speed, which CAP-21's speed-flat
+  apparent size rules out (BL-248).
+⚠ The fixed views share the chase radius, so a distance change moves BOTH cameras — including the
+  dynamic terms, by design (they are one number; moving one desyncs them) — and it is why the four
+  golden shots with a flown plane moved when the per-plane distances landed (and again when the
+  dynamics did), while the eight `--freecam` shots and `viewer-bhawk` did not. `BL-150`'s rebuild
+  of the view LAYOUT is still open.
 
 ## src/Flight/ImpactOutcome.cs
 "What should happen when this weapon hits this surface" as a value — `EffectName` (the class's
@@ -1522,7 +1532,9 @@ one OR two parallel planes per axis (the double cut separates bilateral pairs li
 ## src/Flight/FlightController.cs
 The flying-aircraft node: input → FlightModel → transform, text HUD + telemetry, weapon
 firing/selection, crash and respawn. The camera is `CameraController`'s — this node only feeds it
-the pose, the dt and the mixed orbit axes (`OrbitInput`). Sweeps the
+the pose, the dt and the mixed orbit axes (`OrbitInput`); on a crash it cuts to `CrashView` once,
+writes nothing to the camera until respawn, and hides the HUD layer (the original's crash camera
+shows no HUD — footage), restoring it on respawn. Sweeps the
 PlaneCollider boxes via CastMotion each physics frame; the sim half is `SimStep(dt)`, called by
 `_PhysicsProcess` (realtime clock) or by `GameSession` (fixed/halted clock). Collaborators:
 FlightModel, CameraController + CamParams, Loadout + ProjectilePool (guns/rockets),

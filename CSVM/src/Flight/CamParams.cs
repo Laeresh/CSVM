@@ -11,32 +11,38 @@ namespace CSVM.Flight;
 /// airframes overriding their own chase distance on top. See
 /// <see href="../../../docs/formats/camparam.md">camparam.md</see>.
 ///
-/// <para><b>Only <see cref="Dist"/> currently drives anything</b> (<see cref="CameraController"/>
-/// takes it as the chase radius). Everything else is decoded and carried here so the next reader
-/// does not have to re-derive it, but is deliberately dormant — the mechanisms behind those keys
-/// are not settled:</para>
+/// <para><b><see cref="Dist"/> and <see cref="DistFactor"/> drive the chase radius</b>
+/// (<see cref="CameraController"/>: <c>d = Dist + DistFactor·V</c>, V in m per sim-second —
+/// CAP-21-decoded, BL-248). Everything else is decoded and carried here so the next reader does
+/// not have to re-derive it, but is deliberately dormant — the mechanisms behind those keys are
+/// not settled:</para>
 ///
-/// <para>⚠ <b>The dynamic-distance law is not decoded.</b> In the <c>default</c> block
-/// <see cref="Dist"/> is 13.0 while <see cref="DistMin"/> is 15.7 — the minimum is LARGER than the
-/// base — so the rule cannot be "clamp Dist into [DistMin, DistMax]". For all seven per-plane
-/// overrides the two are equal instead. <see cref="DistFactor"/> and <see cref="DistVary"/> have no
-/// identified input (speed? throttle? load factor?). Do not invent one.</para>
+/// <para>⚠ <b><see cref="DistMin"/>/<see cref="DistMax"/> is NOT a clamp, and their mechanism is
+/// still undecoded.</b> In the <c>default</c> block <see cref="Dist"/> is 13.0 while
+/// <see cref="DistMin"/> is 15.7 — the minimum is LARGER than the base — and CAP-21's realised
+/// distances never reach <see cref="DistMax"/>. For all seven per-plane overrides min equals the
+/// base instead. Do not wire a clamp. <see cref="DistVary"/> has no identified input either
+/// (CAP-21 does not touch it).</para>
 ///
 /// <para>⚠ <b>The catch-up triplet's units are undecoded.</b>
 /// <see cref="PosCatchUp"/>/<see cref="LookCatchUp"/>/<see cref="DistCatchUp"/> read plausibly as
 /// the 1/s exponential rates <see cref="CameraController"/> already uses, but could as easily be
-/// frame counts or seconds-to-settle. Wiring them on the plausible reading would slow the camera
-/// roughly fourfold if the reading is wrong, and nothing would look obviously broken — confirm the
-/// shape against a capture first.</para>
+/// frame counts or seconds-to-settle. CAP-21's one measured rate — the throttle transient's
+/// 0.65 /sim-s — matches none of them (DistCatchUp 1.0 is the nearest, 1.54× it), so the
+/// transient is wired as that measured figure, not through this triplet. Confirm any further
+/// reading against a capture first.</para>
 /// </summary>
 public sealed class CamParams
 {
-    /// <summary>Chase distance in metres — the one applied field. 13.0 is the shipped default,
-    /// which the four airframes with no override of their own take.</summary>
+    /// <summary>Base chase distance in metres. 13.0 is the shipped default, which the four
+    /// airframes with no override of their own take.</summary>
     public float Dist = 13f;
 
-    // The dynamic-distance block. Undecoded — see the type's second ⚠.
+    /// <summary>Metres of extra chase distance per m/s of speed (CAP-21 measured the Bloodhawk's
+    /// slope as 0.0105 against this shipped 0.01 — 5% agreement).</summary>
     public float DistFactor = 0.01f;
+
+    // The rest of the dynamic-distance block. Undecoded — see the type's second ⚠.
     public float DistVary = 0.1f;
     public float DistMin = 15.7f;
     public float DistMax = 25f;

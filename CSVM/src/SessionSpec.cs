@@ -302,8 +302,9 @@ public sealed record SessionSpec
     public Vector3? CamDir { get; private set; }
     public float? Yaw { get; private set; }
     public float? Pitch { get; private set; }
-    /// <summary><b>Resolved.</b> The <c>--view=</c> numpad digit (0 = chase). The numpad views orbit
-    /// a FLYING plane, so one asked for outside flight is dropped.</summary>
+    /// <summary><b>Resolved.</b> The <c>--view=</c> numpad digit (0 = chase;
+    /// <see cref="Flight.CameraController.PinnedBackView"/> = the look-behind, <c>--view=back</c>).
+    /// The numpad views orbit a FLYING plane, so one asked for outside flight is dropped.</summary>
     public int View { get; private set; }
     /// <summary>Deprecated spellings seen, first-seen order, deduplicated, with their replacement.</summary>
     public IReadOnlyList<(string Old, string New)> Deprecated { get; private set; }
@@ -709,7 +710,7 @@ public sealed record SessionSpec
                 s.View = ParseView(want);
                 if (s.View == 0)
                 {
-                    notes.Add(new Note("core", $"--view={want} is not a numpad view (1-4, 6-9) — using the chase camera"));
+                    notes.Add(new Note("core", $"--view={want} is not a numpad view (1-4, 6-9) or 'back' — using the chase camera"));
                 }
             }
         }
@@ -776,11 +777,16 @@ public sealed record SessionSpec
         return new Vector3(Flt(parts[0]), Flt(parts[1]), Flt(parts[2]));
     }
 
-    /// <summary>The numpad view digit for <c>--view=</c>. 5 has no perspective of its own (the
-    /// middle of the pad is the chase camera), and anything outside 1–9 is a typo — both give 0,
-    /// the chase camera, which the caller reports.</summary>
+    /// <summary>The numpad view digit for <c>--view=</c>, or the look-behind
+    /// (<c>--view=back</c> → <see cref="Flight.CameraController.PinnedBackView"/>). 5 has no
+    /// perspective of its own (the middle of the pad is the chase camera), and anything outside
+    /// 1–9/back is a typo — both give 0, the chase camera, which the caller reports.</summary>
     public static int ParseView(string s)
     {
+        if (string.Equals(s, "back", StringComparison.OrdinalIgnoreCase))
+        {
+            return Flight.CameraController.PinnedBackView;
+        }
         if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n)
             && n >= 1 && n <= 9 && n != 5)
         {
