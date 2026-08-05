@@ -523,10 +523,14 @@ extracted data before being logged, so the mechanism is recorded here and not re
   `analysis/effect-anchor-roots/FINDINGS.md` listed it among the crash rig's 11 roots and the table
   shipped with a different 11.
   ⚠ Staging either is a **behaviour change**, not a table typo — B2 deliberately did not make it, so
-  the goldens stayed hash-identical. Both are named in `WorldEffectsFactory`'s
-  `WorldStageRootGaps`/`CrashTemplateRootGaps`, and the equality tripwire reports them as KNOWN gaps;
+  the goldens stayed hash-identical. Both are named in `EffectCatalogue`'s
+  `WorldStageRootGaps`/`CrashTemplateRootGaps`;
   closing this item means deleting the name from that list in the same commit that stages it, and
   re-pinning whatever moves (the census tallies, `c1-destroy-effects`, `c1-crash`).
+  ⚠ Since B3 the hand tables are **gone** — both binds stage `EffectCatalogue.WorldStageRoots`/
+  `CrashStageRoots`, i.e. the closure MINUS these two lists, so deleting a name here is the whole
+  fix: the root stages itself. `effects-census` fails in both directions if a listed gap stops being
+  asked for or turns up staged, so the marker cannot rot.
   ⚠ The offline instrument is blind to (a): `analysis/effect-anchor-roots/anchor_roots.py` keys defs
   by `ANIMATION_NAME`, and `ballflare.flt` declares only a `NAME`, so it never entered that closure.
   Fix the script when this lands, or the next re-run repeats the miss.

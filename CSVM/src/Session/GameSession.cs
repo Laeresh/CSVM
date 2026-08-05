@@ -840,8 +840,13 @@ public partial class GameSession : Node3D
         // the (in-front-of-camera) call site. IndexStage runs the reset states, hiding
         // the templates.
         var labStage = new Node3D { Name = "lab_stage_anchor" };
-        int effectRoots = WorldEffectsFactory.BuildEffectStage(state.Gamez, session.Builder.Scene, labStage);
-        labStage.AddChild(WorldEffectsFactory.BuildCrashAnchorSet());
+        // Which template roots: derived from the crash/damage defs themselves against this stage's
+        // own scope — the crash-anchor set, built first and parented after, so the lab stages
+        // exactly what BuildFlightCrashRuntime derives without changing this subtree's child order.
+        var labAnchors = WorldEffectsFactory.BuildCrashAnchorSet();
+        int effectRoots = WorldEffectsFactory.BuildEffectStage(state.Gamez, session.Builder.Scene,
+            labStage, WorldEffectsFactory.CrashStageRootNames(session.Program, state.Gamez, labAnchors));
+        labStage.AddChild(labAnchors);
         session.Root.AddChild(labStage);
         session.Runtime.IndexStage(labStage);
         session.Runtime.PlaceCalledTemplates = true;

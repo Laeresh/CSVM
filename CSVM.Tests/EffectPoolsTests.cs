@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using CSVM.Mech3;
 using CSVM.Session;
 using CSVM.Utils;
 using Xunit;
@@ -96,19 +98,19 @@ public class EffectPoolsTests
         Assert.Equal(new[] { "he_rong" }, pools.UnknownRoots(new[] { "he_ring", "he_trails" }));
     }
 
-    [Fact]
+    [ExtractedDataFact]
     public void TheShippedFileNamesOnlyRealStageRoots()
     {
-        // The committed file is checked against the live stage-root table, so a rename on either
-        // side fails here rather than in a silently unsized session.
-        Assert.Empty(Load().UnknownRoots(WorldEffectsFactory.EffectStageRootNames));
+        // The committed file is checked against the roots a bound chapter really stages, so a
+        // rename on either side fails here rather than in a silently unsized session.
+        Assert.Empty(Load().UnknownRoots(StageRoots()));
     }
 
-    [Fact]
+    [ExtractedDataFact]
     public void TheStageDepthIsTheDeepestRootNotTheDefault()
     {
         var pools = Load();
-        var roots = WorldEffectsFactory.EffectStageRootNames;
+        var roots = StageRoots();
         int depth = pools.DepthFor(roots, players: 1);
         Assert.Equal(pools.SlotsFor("partial_damage_obj", 1), depth);
         Assert.True(depth > pools.Default.Base);
@@ -117,4 +119,22 @@ public class EffectPoolsTests
     private static byte[] Json(string s) => Encoding.UTF8.GetBytes(s);
 
     private static EffectPools Load() => EffectPools.Parse(File.ReadAllBytes(ConfigPath));
+
+    /// <summary>The stage-root set the shipped config is sized against — derived from C1's bound
+    /// program and gamez by exactly the call the world-effects build makes
+    /// (<c>PLAN-effect-catalogue</c> B3: the hand table is gone, so the answer is chapter data and
+    /// these two checks need the player's extraction). No Godot node is built: the resolver is
+    /// asked with no scope, and the closure walk is engine-free.</summary>
+    private static IReadOnlyList<string> StageRoots()
+    {
+        const string chapter = "C1";
+        const string mission = "IA1";
+        string dataRoot = TestData.DataRoot!;
+        string shared = SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+        var (chapterAnim, missionAnim) = AnimProgram.ArchivePaths(dataRoot, chapter, mission);
+        var program = AnimProgram.Load(shared, SessionPaths.ChapterZrdr(dataRoot, chapter),
+            SessionPaths.MissionZrdr(dataRoot, chapter, mission), chapterAnim, missionAnim);
+        return WorldEffectsFactory.EffectStageRootNames(program,
+            GameZ.Load(SessionPaths.ChapterGamez(dataRoot, chapter)));
+    }
 }

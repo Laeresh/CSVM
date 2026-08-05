@@ -1880,7 +1880,10 @@ public static class Suites
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var names = Session.EffectCatalogue.EffectAnimNames;
-            var roots = Session.WorldEffectsFactory.EffectStageRootNames;
+            // The staged set is DERIVED (PLAN-effect-catalogue B3), so this census stages what the
+            // real world-effects build stages, from the same call — a root the closure gains and
+            // this chapter's gamez cannot supply throws here, naming the def and the anchor.
+            var roots = Session.WorldEffectsFactory.EffectStageRootNames(world.Session.Program, world.Gamez);
             var stage = new Node3D { Name = "EffectCensusStage" };
             var pool = new Node3D { Name = "pool0" };
             pool.SetMeta(AnimRuntime.PoolSlotMeta, 0);
@@ -1930,24 +1933,32 @@ public static class Suites
                 stage.Free();
             }
 
-            // The derivation equality tripwire (world half). The census above proves the CURRENT
-            // names resolve; it cannot notice a NEW effect whose anchor root nobody staged, because
-            // that row simply resolves and the tallies do not move (INSTR-11). This asks the other
-            // question: does the anchor-root closure of the bound names still equal the hand table?
-            // Chapter data decides it, so it runs on whatever chapter the run was given.
-            var worldDrift = Session.WorldEffectsFactory.WorldStageRootDrift(world.Session.Program, world.Gamez);
-            ctx.Check(worldDrift is null,
-                $"the staged root set still equals the closure the bound effect names need — {ctx.Chapter}{Detail(worldDrift)}");
+            // The derivation IS the staged set now (B3), so "derived == hand table" is gone with
+            // the table. What still needs saying, per chapter, because chapter data decides it:
+            // (1) the pool config sizes the set that is really staged — a root renamed on one side
+            // sizes nothing, silently; (2) `BL-262`'s two gaps are still exactly what the bind
+            // holds back, so the marker cannot rot into "the derivation stopped asking for them".
+            var unsized = Utils.EffectPools.Load().UnknownRoots(roots);
+            ctx.Check(unsized.Count == 0,
+                $"effect_pools.json sizes only roots this bind stages — {ctx.Chapter}{(unsized.Count == 0 ? "" : $" — sizes nothing: {string.Join(", ", unsized)}")}");
+
+            var wanted = Session.EffectCatalogue.StageRootsFor(world.Session.Program, names,
+                Session.WorldEffectsFactory.StageRootResolver(world.Gamez));
+            ctx.Check(GapsHeldBack(wanted, roots, Session.EffectCatalogue.WorldStageRootGaps, out var world262),
+                $"the closure still needs `BL-262`'s world gap(s) and the bind still holds them back — {ctx.Chapter}{Detail(world262)}");
 
             CrashStageRootTripwire(ctx, world);
         });
     }
 
-    /// <summary>The crash half of the same tripwire, on a replica of the crash rig's own bind scope
-    /// (the <c>player</c> crash root, the plane model, its <c>destroyed</c> wreck) — the scope
-    /// <c>BuildFlightCrashRuntime</c> resolves names in, minus the runtime itself, which the anchor
-    /// question does not need. Per-plane on purpose: the wreck and part subtrees vary by airframe,
-    /// and the Devastator is the one whose own model root a crash def names.</summary>
+    /// <summary>The crash half, on a replica of the crash rig's own bind scope (the <c>player</c>
+    /// crash root, the plane model, its <c>destroyed</c> wreck) — the scope
+    /// <c>BuildFlightCrashRuntime</c> derives its template roots in, minus the runtime itself,
+    /// which the anchor question does not need. Per-plane on purpose: the wreck and part subtrees
+    /// vary by airframe, and the Devastator is the one whose own model root a crash def names.
+    /// Asserts what the world half asserts: the rig's derived roots all BUILD from this chapter's
+    /// gamez (a root the closure asks for that the chapter cannot supply is the silent-miss
+    /// failure), and `BL-262`'s crash gap is still needed and still held back.</summary>
     private static void CrashStageRootTripwire(TestContext ctx, TestWorld world)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -1969,10 +1980,21 @@ public static class Suites
                         rigScope.AddChild(wreck);
                     }
                     ctx.Host.AddChild(rigScope);
-                    var drift = Session.WorldEffectsFactory.CrashStageRootDrift(
-                        world.Session.Program, world.Gamez, rigScope);
-                    ctx.Check(drift is null,
-                        $"{model}: the crash rig's template set still equals its closure — {world.Chapter}{Detail(drift)}");
+                    var resolve = Session.WorldEffectsFactory.StageRootResolver(world.Gamez, rigScope);
+                    var rigRoots = Session.EffectCatalogue.CrashStageRoots(world.Session.Program, resolve);
+                    var built = new Node3D { Name = "crash_template_replica" };
+                    ctx.Host.AddChild(built);
+                    int n = Session.WorldEffectsFactory.BuildEffectStage(world.Gamez,
+                        world.Session.Builder.Scene, built, rigRoots);
+                    built.Free();
+                    ctx.Check(n == rigRoots.Count,
+                        $"{model}: the crash rig stages every root its bound defs anchor on ({n}/{rigRoots.Count}) — {world.Chapter}");
+
+                    var wanted = Session.EffectCatalogue.StageRootsFor(world.Session.Program,
+                        Session.EffectCatalogue.CrashRigAnimNames, resolve);
+                    ctx.Check(GapsHeldBack(wanted, rigRoots, Session.EffectCatalogue.CrashTemplateRootGaps,
+                            out var crash262),
+                        $"{model}: the closure still needs `BL-262`'s crash gap(s) and the rig still holds them back — {world.Chapter}{Detail(crash262)}");
                 }
                 finally
                 {
@@ -1984,6 +2006,28 @@ public static class Suites
         {
             textures.Dispose();
         }
+    }
+
+    /// <summary>`BL-262`'s guard, both binds: every named gap is a root the closure genuinely
+    /// asks for (<paramref name="wanted"/>) and that the bind deliberately does not stage
+    /// (<paramref name="staged"/>). Fails in BOTH directions — a gap the closure stopped asking for
+    /// is a stale marker to delete, and a gap that turned up staged means the behaviour change
+    /// `BL-262` owns happened by accident, with goldens to re-pin.</summary>
+    private static bool GapsHeldBack(IReadOnlyList<string> wanted, IReadOnlyList<string> staged,
+        IReadOnlyList<string> gaps, out string? detail)
+    {
+        var need = new HashSet<string>(wanted, System.StringComparer.OrdinalIgnoreCase);
+        var have = new HashSet<string>(staged, System.StringComparer.OrdinalIgnoreCase);
+        var bad = new List<string>();
+        foreach (var gap in gaps)
+        {
+            if (!need.Contains(gap))
+                bad.Add($"{gap}: no bound def anchors on it any more");
+            if (have.Contains(gap))
+                bad.Add($"{gap}: staged after all");
+        }
+        detail = bad.Count == 0 ? null : string.Join("; ", bad);
+        return bad.Count == 0;
     }
 
     private static string Detail(string? drift) => drift is null ? "" : $" — {drift}";

@@ -75,10 +75,16 @@ public static class EffectCatalogue
     public static readonly string[] PlaneDamageEffectAnims =
         { "nose_damage_effects", "tail_damage_effects", "leftwing_damage_effects", "rightwing_damage_effects" };
 
+    // Everything the per-player crash rig binds — both crash variants plus the four damage shims,
+    // i.e. every def that plays ON one aircraft — and therefore the name set whose anchor-root
+    // closure that rig's own template stage must satisfy (<see cref="CrashStageRoots"/>).
+    public static readonly string[] CrashRigAnimNames = Concat(CrashDefNames, PlaneDamageEffectAnims);
+
     // Anchors the mechanical closure below reports that no bind stages, because the CALL that
     // reaches the definition supplies its anchor instead of its own NAME. Curation, not derivation:
-    // the closure walks NAMEs and cannot see either of these, which is why both root tables are
-    // still hand-written and this derivation only cross-validates them.
+    // the closure walks NAMEs and cannot see either of these, so they are dropped before the
+    // resolver is asked. This list is where a future "the derivation asks for a root the game
+    // supplies another way" goes — never the mechanical walk itself.
     //
     // `zep_can_dstry1.flt` is `dblcannon_flying_parts`' NAME, and every call reaching it carries an
     // AT_NODE — `zep_ng_dstry1.flt` (from `biggun_flying_parts`), `zep_main_dstry1.flt`,
@@ -95,6 +101,28 @@ public static class EffectCatalogue
     // template to stage either way.
     public static readonly string[] AirframeScopedAnchors = { "player_pfighter" };
 
+    // ⚠ `BL-262` — the two roots the closure genuinely NEEDS that nothing stages, so two authored
+    // effects play nothing at all today. Subtracted from what the binds stage
+    // (<see cref="WorldStageRoots"/>/<see cref="CrashStageRoots"/>), which is the only reason
+    // deleting the hand tables moved no golden: staging either is a real behaviour change, and
+    // this plan stops rather than repins. These two lists ARE the marker of what `BL-262` deletes
+    // — closing it means removing the name here, in the same commit that accepts the moved
+    // census tallies and crash/effect goldens. Unlike CallSuppliedAnchors above, these are NOT
+    // curation: the derivation is right and the game is missing the template.
+    //
+    // `ballflare.flt` is the torpedo explosion's flare, called by torpedo_ground_effect and
+    // torpedo_water_effect (`AT_NODE torp_effects +0,5,0`). A single parentless root in all 8
+    // chapters, and its only node is itself — unlike the AT_NODE case above, the retarget target's
+    // subtree cannot supply it. The offline instrument was blind to it: anchor_roots.py keys
+    // definitions by ANIMATION_NAME and this one declares only a NAME.
+    public static readonly string[] WorldStageRootGaps = { "ballflare.flt" };
+
+    // `rem_pas` (anchor `apassengers`) is called by both crash variants with NO AT_NODE, so it
+    // anchors on its own template root — which the crash rig has never staged, so the crash's
+    // passenger-removal step plays nothing. Listed by analysis/effect-anchor-roots/FINDINGS.md
+    // among the 11 roots the crash closure needs; the shipped table carried a different 11.
+    public static readonly string[] CrashTemplateRootGaps = { "apassengers" };
+
     /// <summary>The graze reaction's per-surface touchdown def (<c>FlightController.GrazeReaction</c>):
     /// sparks off a hard building surface, dust off unclassified terrain, a splash off water — the
     /// same three names in <see cref="EffectAnimNames"/>' graze-reaction entries above. Pure, so the
@@ -105,6 +133,22 @@ public static class EffectCatalogue
         SurfaceClass.Buildings => "touchdown_default",
         _ => "touchdown_dirt",
     };
+
+    /// <summary>What the world-effects bind stages: the anchor-root closure of
+    /// <see cref="EffectAnimNames"/> against the bound world program, less the
+    /// <see cref="WorldStageRootGaps"/> nothing stages yet (`BL-262`). This IS the stage's source —
+    /// <c>WorldEffectsFactory</c> builds a copy of every name it returns, per pool slot.</summary>
+    public static IReadOnlyList<string> WorldStageRoots(AnimProgram program,
+        Func<string, AnchorPlacement> resolveRoot) =>
+        Without(StageRootsFor(program, EffectAnimNames, resolveRoot), WorldStageRootGaps);
+
+    /// <summary>The same for the per-player crash rig: the closure of
+    /// <see cref="CrashRigAnimNames"/> against that rig's own scope, less
+    /// <see cref="CrashTemplateRootGaps"/>. The rig's <paramref name="resolveRoot"/> is scoped to
+    /// the bound controller, so a name its plane/wreck already carries needs no template.</summary>
+    public static IReadOnlyList<string> CrashStageRoots(AnimProgram program,
+        Func<string, AnchorPlacement> resolveRoot) =>
+        Without(StageRootsFor(program, CrashRigAnimNames, resolveRoot), CrashTemplateRootGaps);
 
     /// <summary>The anchor-root closure of <paramref name="names"/> against a bound program — what a
     /// bind must stage for every definition those names can reach to have something to anchor on.
@@ -155,6 +199,31 @@ public static class EffectCatalogue
         if (missing.Count > 0)
             throw new EffectAnchorException(missing);
         return staged;
+    }
+
+    private static string[] Concat(string[] first, string[] second)
+    {
+        var all = new string[first.Length + second.Length];
+        Array.Copy(first, all, first.Length);
+        Array.Copy(second, 0, all, first.Length, second.Length);
+        return all;
+    }
+
+    /// <summary>The closure less the roots a bind knowingly does not stage — order preserved, so
+    /// the result is still the sorted list <see cref="StageRootsFor"/> returned.</summary>
+    private static IReadOnlyList<string> Without(IReadOnlyList<string> roots, string[] gaps)
+    {
+        var kept = new List<string>(roots.Count);
+        foreach (var root in roots)
+        {
+            bool skip = false;
+            foreach (var gap in gaps)
+                if (string.Equals(gap, root, StringComparison.OrdinalIgnoreCase))
+                    skip = true;
+            if (!skip)
+                kept.Add(root);
+        }
+        return kept;
     }
 
     private static bool SuppliedElsewhere(string anchor)

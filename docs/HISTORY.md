@@ -15679,3 +15679,57 @@ green. The first C1 run was red on `ballflare.flt` before it was named a gap —
 control in one. Full `.\RunTests.ps1` PASS, exit 0: 450 unit tests, 29/29 in-engine suites, 13/13
 goldens hash-identical. A live `--chapter=C1 --players=2 --plane=player_bhawk,player_pfighter` run
 binds both crash rigs with no drift warning, so the real bind and the suite replica agree.
+
+## 2026-08-05 — the effect root-tables die: both binds stage the derivation, an unstageable anchor fails the build
+
+`PLAN-effect-catalogue` B3, and the plan closes with it. `WorldEffectsFactory.EffectStageRoots` (38
+world roots) and `EffectTemplateRoots` (the crash rig's 11) are **deleted**. Each bind now stages
+what `EffectCatalogue` derives from the very names it is about to bind — `WorldStageRoots`
+(the closure of `EffectAnimNames`) and `CrashStageRoots` (the closure of `CrashRigAnimNames`: both
+crash variants plus the four damage shims) — **minus** the two `BL-262` gap lists, which moved into
+the catalogue and are now that item's authoritative marker. That subtraction reproduces the shipped
+staged set exactly, which is what B2's equality tripwire had already proven on all 8 chapters, so
+this is a no-behaviour-change refactor by construction. An anchor that resolves nowhere throws
+`EffectAnchorException` naming the definition and the node: `EnsureWorldEffects` turns it into its
+"runtime could not be built" warning carrying that list, the crash rig lets it propagate. The
+`Drift` helpers went with the tables they compared against; `EffectStageRootNames` survives as a
+forward taking `(program, gamez)`, and `CrashStageRootNames` is its crash-side twin.
+
+**The ordering trap turned out not to be one.** Slot assignment is not a function of the root
+list's order: `AnimRuntime` reads a call's slot off the `PoolSlotMeta` of the container above its
+anchor, and `NextPooledAnchors`/`TemplateRootsFor` pick by slot NUMBER, never by index into the
+list; the order only decides sibling order inside one `pool<N>`, and every root name is distinct.
+So the derivation's sorted order was taken as-is and the goldens judged it — `c5-city-night`
+(`BL-225`'s named trap), `c1-crash`, `c1-destroy-effects` and `c1-flight` all hash-identical. The
+world build's own line is unchanged against this item's starting HEAD: `147/147 effect template(s)
+staged over 8 pool slot(s) for 1 player(s)`, `33 effect name(s) bound`, and `--effects-test` still
+reads `33/33 resolved, 30 built a puffer; 17 showed template mesh(es)`. The only difference is
+cosmetic — the size-group listing sorts (`1× dum_gunhit/gunhit/mag_gunhit`).
+
+**One real find, from the structured error firing on the wiring.** Deriving the crash rig's roots
+needs the crash scaffold in scope: `player` is the crash defs' own anchor and exists in no
+chapter's gamez, so a first cut that asked with the bare controller declared the whole rig
+unanchorable and failed the three plane-bearing goldens outright. `BuildFlightCrashRuntime` now
+parents its `player` crash root **before** deriving, leaving both subtrees' child order untouched
+(templates before the wreck; the crash root between the plane model and the runtime). The anim lab
+does the same in reverse — its crash-anchor set is built first and parented after the templates.
+
+`effects-census` stages the derivation instead of a table and asserts what is still chapter data:
+every derived root builds, `effect_pools.json` sizes only roots the bind stages, and `BL-262`'s
+gaps are still both asked-for and held back (failing in **both** directions, so the marker cannot
+rot into "the derivation stopped asking"). `EffectPoolsTests`' two root-list checks are re-pointed
+at the derived set and became `ExtractedDataFact`s — without a bound chapter there is no root list
+to read, so they skip rather than pass on a checkout without `extracted/`.
+
+**Verified.** Full `.\RunTests.ps1` PASS, exit 0: 450 unit tests, 29/29 in-engine suites, **13/13
+goldens hash-identical**, engine errors clean. `RunProbe.ps1 --run-tests=effects-census
+--chapter=<X>` re-proved on all 8 chapters — C1, C1B, C1C, C2, C2B, C3, C4, C5 each exit 0 with
+`pass=1 fail=0 errors=clean`, so the derived staging, the pool cross-check, the 30/17 tallies and
+both crash airframes hold everywhere the hand tables used to. **Structured error seen once**: with
+`zep_can_dstry1.flt` dropped from `CallSuppliedAnchors`, a C2 `--effects-test` reported `WARN
+[anim] world-effects runtime could not be built: effect anchor(s) resolve nowhere:
+'zep_can_dstry1.flt' (anchors dblcannon_flying_parts)` and the census went red on the same line;
+restored, green.
+
+`BL-262` stays open and untouched — staging `ballflare.flt`/`apassengers` moves goldens, and this
+plan stopped rather than repinned. The plan is archived at `docs/plans/PLAN-effect-catalogue.md`.

@@ -1,11 +1,22 @@
 # Effect catalogue — one record of what is a playable effect, and what it needs staged
 
-**DRAFTED PLAN** (written 2026-08-05, from that day's architecture review, candidate 1; decisions
-settled in the same day's grilling session). It sits in `docs/`, which by this repo's convention
-makes it live; PROJECT_CONTEXT.md's "Current status" still names `PLAN-m3-polish-7` as the active
-plan, so treat this as a self-contained handoff for its own session (a parallel worktree is fine —
-see the file-ownership note). Move it to `docs/plans/` with a `COMPLETE` banner, and add its row to
-[`plans/plans.md`](plans/plans.md), when every item lands.
+**COMPLETE** (written 2026-08-05 from that day's architecture review, candidate 1; decisions settled
+in the same day's grilling session; completed the same day). Archived under `docs/plans/`; all three
+items landed, the middle one as **Decision 1's documented fallback** — which turned out to be the
+find of the plan rather than a detour. `A1` moved the names into `EffectCatalogue`; `B2` built
+`StageRootsFor` and proved it against the hand tables on all 8 chapters at both binds, where derived
+≠ hand table three ways: two are knowledge the tables encoded and the closure cannot see (now
+`CallSuppliedAnchors`/`AirframeScopedAnchors`), and one is a genuine miss — `ballflare.flt` and
+`apassengers` are roots the bound defs anchor on that **nothing stages**, so the torpedo explosion's
+flare and the crash's passenger removal play nothing at all (`BL-262`). `B3` then deleted both hand
+tables anyway: each bind stages the derivation **minus those two named gaps**, which reproduces the
+shipped set exactly, and an anchor that resolves nowhere now fails the build naming the definition
+and the node instead of playing nothing silently.
+
+**Left open, deliberately: `BL-262`.** Staging either gap is a behaviour change with goldens to
+re-pin, and this plan's rule was that an item which cannot keep 13/13 hash-identical stops rather
+than repins. The gap lists in `EffectCatalogue` are that item's authoritative marker — deleting a
+name there is now the whole fix — and `effects-census` fails in both directions if one rots.
 
 One authored effect is currently five string tables, one JSON file, and string literals in three
 caller modules, with nothing linking them: `WorldEffectsFactory.EffectAnimNames` (33 names,
@@ -94,7 +105,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 2. ☑ `StageRootsFor` + the equality tripwire at both binds, proven across all 8 chapters —
    **landed as Decision 1's guarded-table fallback**, see B2's Outcome
-3. ☐ The hand root-tables die; the derivation becomes the stage's source
+3. ☑ The hand root-tables die; the derivation becomes the stage's source — **the derived set minus
+   the named `BL-262` gaps**, see B3's Outcome
 
 ## Dependency and parallelism notes
 
@@ -202,7 +214,7 @@ with them. B3's shape is now (a) close `BL-262` (stage both roots, re-pin whatev
 exclusions. The derived set is returned **sorted**, so `_pools.DepthFor`/`SlotsFor` iterating it will
 not see the hand tables' authored order — B3's own ⚠ about slot assignment applies.
 
-## B3 ☐ The hand root-tables die; the derivation becomes the stage's source
+## B3 ☑ The hand root-tables die; the derivation becomes the stage's source
 
 **Goal.** `EffectStageRoots` and `EffectTemplateRoots` are deleted; `WorldEffectsFactory` stages
 what `StageRootsFor` returns; an unresolvable anchor fails the build with a structured error naming
@@ -225,3 +237,41 @@ table; make staging order-insensitive or sort, because slot assignment must not 
 move `c5-city-night`, the golden `BL-225`'s trap named). Docs sweep in the same turn:
 `architecture.md` entries for `EffectCatalogue` (new, with the vocabulary line) and
 `WorldEffectsFactory` (tables gone), HISTORY entry citing the 8-chapter proof.
+
+**Outcome (2026-08-05) — landed as written, with B2's gap sets doing the work.** Both tables are
+deleted. `EffectCatalogue.WorldStageRoots`/`CrashStageRoots` are the two bind-facing derivations —
+the closure of the names each bind is about to bind, **minus** `WorldStageRootGaps`/
+`CrashTemplateRootGaps` (moved into the catalogue, where they are now `BL-262`'s authoritative
+marker) — and that subtraction reproduces the shipped staged set exactly, which is what B2's
+tripwire had already proven. `WorldEffectsFactory` owns no root list at all: `BuildEffectStage`
+takes what it is handed, `EffectStageRootNames(program, gamez)` and `CrashStageRootNames(program,
+gamez, rigScope)` are thin forwards, and `WorldStageRootDrift`/`CrashStageRootDrift` (with their
+`Drift` helper) are gone with the tables they compared against.
+
+**The ordering trap: no shift, and the goldens are the proof.** Slot assignment turns out not to be
+a function of list order at all — `AnimRuntime` reads a call's slot off the `PoolSlotMeta` of the
+container above the anchor (`SlotOf`), and `NextPooledAnchors`/`TemplateRootsFor` pick by *slot
+number*, never by index into the root list. The list order only decides sibling order inside one
+`pool<N>` container, and every staged root name is distinct. So the sorted derived order was taken
+as-is; the world build's own numbers are unchanged (`147/147` templates over `8` pool slots,
+`33` names bound) and all 13 goldens — `c5-city-night`, `c1-crash`, `c1-destroy-effects`,
+`c1-flight` included — stayed hash-identical. The only visible difference is cosmetic: the boot
+line's size-group listing now reads `1× dum_gunhit/gunhit/mag_gunhit` instead of the authored
+`1× gunhit/dum_gunhit/mag_gunhit`.
+
+**One real find while wiring the crash bind.** Deriving the rig's roots needs the crash scaffold in
+scope: `player` is the crash defs' own anchor and exists in no chapter's gamez, so the first
+attempt (scope = the bare controller) reported the whole rig unanchorable and failed the three
+plane-bearing goldens outright — the structured error working exactly as intended, on the wiring
+rather than on the data. `BuildFlightCrashRuntime` now parents its `player` crash root **before**
+deriving; both subtrees' child order is untouched (templates still before the wreck, crash root
+still between the plane model and the runtime). The anim lab does the same trick in reverse — its
+crash-anchor set is built first and parented after the templates.
+
+`EffectPoolsTests`' two root-list checks are re-pointed at the derived set and are now
+`ExtractedDataFact`s (they load C1's program + gamez and call the same forward), because there is no
+hand table left to read without a bound chapter; they skip rather than pass on a checkout without
+`extracted/`. `effects-census` stages the derivation instead of a table and asserts what still has
+chapter-dependent content: every derived root builds, `effect_pools.json` sizes only roots this bind
+stages, and `BL-262`'s gaps are still both asked-for and held back — the last one failing in **both**
+directions, so the marker cannot rot into "the derivation stopped asking".

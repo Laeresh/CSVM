@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Effects;
 using CSVM.Flight;
 using CSVM.Mech3;
@@ -35,47 +36,6 @@ public sealed class WorldEffectsFactory
     // without a rebuild. Recorded in backlog.md's TUNE list; the runtime counts (and names once)
     // every call that wraps onto a live slot — AnimRuntime.PoolRecycles is what to size against.
 
-    // The crash/effect template roots (world-gamez nodes WorldBuilder skips, because the world
-    // never renders them ambiently — they exist to be instanced onto a kill/crash site). Built into
-    // the anim lab's stage so a played effect def resolves the puffer host that rides its own root.
-    // This is the FULL anchor-root set both crash variants' call closures need: the first seven are
-    // the dirt crash's, the last four the sea dive's (analysis/effect-anchor-roots/, re-run for
-    // player_crash_water — each a single parentless root in all 8 chapters). A root left out leaves
-    // every def anchored on it unanchored, so it plays nothing at all and says nothing about it.
-    private static readonly string[] EffectTemplateRoots =
-    {
-        "yellow_spark_01", "yellow_spark_02", "flame_ball_01", "black_smoke_ball_01", "fire_here",
-        "carnage_trails", "flydirt",
-        // the sea dive: plane_big_splash's model, its hg_splasher puffer host and plane_big_ripple's
-        // ring set, plus large_steam_spray's own root
-        "huge_splash_model", "hg_splash", "ripple", "white_water_impact",
-    };
-
-    // The gamez template roots those effects' meshes and puffers ride — staged under the
-    // world-effects stage so a PlayEffectAt relocates one onto the hit/death point. This is the
-    // FULL set of anchor roots the EffectCatalogue.EffectAnimNames call closure needs (derived from the reader
-    // defs by analysis/effect-anchor-roots/); a root left out leaves every def anchored on it
-    // unanchored, so it plays nothing at all — which is how the rocket explosion lost its
-    // per-type rings (ring_ap/ring_he/ring_sonic), its trail columns and the torpedo ripple.
-    // All present as a single parentless root in every chapter's gamez (checked, all 8).
-    private static readonly string[] EffectStageRoots =
-    {
-        "gunhit", "dum_gunhit", "mag_gunhit", "flame_ball_01", "flame_ball_02", "he_ring",
-        "ap_effect", "flak_control", "flash_control", "sonic_effect", "scatter_trails",
-        "torp_effects", "rear_flash_control", "fire_here", "moving_fire_ball_01",
-        "black_smoke_ball_01", "zep_ng_dstry1.flt", "huge_splash_model", "partial_damage_obj",
-        // the rocket-explosion rings and their companions (D31): the HE upper ring, the four
-        // rising sonic rings + the falling one, the AP/HE/flak/torpedo smoke-trail columns, the
-        // sonic puff clusters, and the torpedo ring/ripple/splash.
-        "he_ring1", "sonic_ring1", "sonic_ring2", "sonic_ring3", "sonic_ring4", "sonic_ring5",
-        "ap_trails", "he_trails", "flak_trails", "carnage_trails", "carnage_ring",
-        "sonic_puff1", "sonic_puff2", "hg_splash", "ripple",
-        // the graze reaction's three anchor roots plus the spark cluster `touchdown_default`
-        // CALL_ANIMATIONs (small_yellow_sparks anchors on `yellow_spark_01`). All four exist as a
-        // single parentless root in every chapter (analysis/effect-anchor-roots/).
-        "spark_touchdown", "dust_touchdown", "splash_touchdown", "yellow_spark_01",
-    };
-
     // The player crash-anchor set: meshless nodes named exactly the crash def's targets (its
     // anim_root 'player' plus healthy/destroyed/pieces). Built into the lab stage so a played crash
     // def anchors to this 'player' and resolves 'healthy'/'destroyed' HERE — locally, in front of
@@ -84,25 +44,6 @@ public sealed class WorldEffectsFactory
     // plan's Layer-2 work.
     private static readonly string[] CrashAnchorNodes =
         { "healthy", "destroyed", "dontmove", "markers", "piece1", "piece2", "piece3", "piece4", "shadow", "cockpit1" };
-
-    // Roots the derivation asks for that the tables above do not stage — real silent misses, each
-    // named so the equality tripwire reports a KNOWN gap instead of drifting, and each a behaviour
-    // change to close rather than a table typo to fix.
-    //
-    // `ballflare.flt` is the torpedo explosion's flare, called by torpedo_ground_effect and
-    // torpedo_water_effect. The offline instrument could not see it: it keys definitions by
-    // ANIMATION_NAME, and this definition declares only a NAME, so it sat in that script's null
-    // bucket and never entered the closure. A single parentless root in all 8 chapters, and its
-    // only node is itself — unlike the AT_NODE case in EffectCatalogue.CallSuppliedAnchors, the
-    // retarget target's subtree cannot supply it, so today the flare plays nothing at all.
-    private static readonly string[] WorldStageRootGaps = { "ballflare.flt" };
-
-    // `rem_pas` (anchor `apassengers`) is called by both crash variants with NO AT_NODE, so it
-    // anchors on its own template root — which this rig has never staged, so the crash's
-    // passenger-removal step plays nothing. Listed by analysis/effect-anchor-roots/FINDINGS.md
-    // among the 11 roots the crash closure needs; the table shipped with 11 that swapped it for
-    // `yellow_spark_02`.
-    private static readonly string[] CrashTemplateRootGaps = { "apassengers" };
 
     private readonly SessionSpec _spec;
     private readonly Node3D _worldRoot;
@@ -121,26 +62,31 @@ public sealed class WorldEffectsFactory
         _playerPosition = playerPosition;
     }
 
-    /// <summary>The effect-template ROOT names the world-effects stage builds — the set
-    /// <see cref="EffectPools"/> sizes, exposed read-only so the committed pool config can be
-    /// checked against the live table (a root renamed on one side and not the other would
-    /// otherwise size nothing, silently).</summary>
-    public static IReadOnlyList<string> EffectStageRootNames => EffectStageRoots;
-
-    /// <summary>The world-effects template stage — the subtree <see cref="EffectStageRoots"/> is
-    /// built into, one <c>pool&lt;N&gt;</c> container per slot. Null until
+    /// <summary>The world-effects template stage — the subtree
+    /// <see cref="EffectCatalogue.WorldStageRoots"/>' roots are built into, one
+    /// <c>pool&lt;N&gt;</c> container per slot. Null until
     /// <see cref="EnsureWorldEffects"/> has built the runtime. Exposed so the <c>--effects-test</c>
     /// census can report the MESH half (`BL-061`): a puffer count says nothing about whether the
     /// template's meshes are visible, and they are half of what an effect looks like. Observation
     /// only — the stage is owned here and hangs under the world root.</summary>
     public Node3D? EffectStage { get; private set; }
 
-    /// <summary>Builds the <see cref="EffectTemplateRoots"/> from the world gamez as children of
-    /// <paramref name="parent"/> (the lab stage), each reset to sit at the stage origin — a
-    /// CALL_ANIMATION relocates them onto the call site. Returns how many built.</summary>
-    public static int BuildEffectStage(GameZ gamez, SceneBuilder scene, Node3D parent) =>
-        BuildEffectStage(gamez, scene, parent, EffectTemplateRoots);
+    /// <summary>The effect-template ROOT names the world-effects stage builds — the set
+    /// <see cref="EffectPools"/> sizes, exposed so the committed pool config can be checked
+    /// against what a bound chapter actually stages (a root renamed on one side and not the other
+    /// would otherwise size nothing, silently). Forwards to
+    /// <see cref="EffectCatalogue.WorldStageRoots"/>: there is no hand table left to read, so the
+    /// answer needs the bound program and that chapter's gamez, exactly as the build does.</summary>
+    public static IReadOnlyList<string> EffectStageRootNames(AnimProgram program, GameZ gamez) =>
+        EffectCatalogue.WorldStageRoots(program, StageRootResolver(gamez));
 
+    /// <summary>Builds the named template ROOTS from the world gamez as children of
+    /// <paramref name="parent"/> (a pool slot, the crash root, the lab stage), each reset to sit at
+    /// the stage origin — a CALL_ANIMATION relocates them onto the call site. Returns how many
+    /// built. The roots are always a derivation's output
+    /// (<see cref="EffectCatalogue.WorldStageRoots"/>/<see cref="EffectCatalogue.CrashStageRoots"/>),
+    /// never a hand list, so a def anchored on a root nobody stages fails the build instead of
+    /// playing nothing.</summary>
     public static int BuildEffectStage(GameZ gamez, SceneBuilder scene, Node3D parent,
         IEnumerable<string> roots)
     {
@@ -194,30 +140,13 @@ public sealed class WorldEffectsFactory
         };
     }
 
-    /// <summary>The world-effects bind's equality tripwire: does the derivation still say what
-    /// <see cref="EffectStageRoots"/> says, up to <see cref="WorldStageRootGaps"/>? Null when it
-    /// agrees, else the difference, named — a root the hand table would have to gain, or one it
-    /// carries that nothing anchors on. Run as an <c>effects-census</c> condition, per chapter,
-    /// because the answer is chapter data.</summary>
-    public static string? WorldStageRootDrift(AnimProgram program, GameZ gamez) =>
-        Drift("EffectStageRoots", EffectStageRoots,
-            () => EffectCatalogue.StageRootsFor(program, EffectCatalogue.EffectAnimNames,
-                StageRootResolver(gamez)),
-            WorldStageRootGaps);
-
-    /// <summary>The crash bind's half of the same tripwire, against
-    /// <see cref="EffectTemplateRoots"/>. Per-plane: <paramref name="rigScope"/> is the bound
-    /// controller subtree, whose wreck and part names vary by airframe.
-    /// <see cref="CrashTemplateRootGaps"/> is subtracted — a root the derivation asks for that the
-    /// rig knowingly does not stage.</summary>
-    public static string? CrashStageRootDrift(AnimProgram program, GameZ gamez, Node3D rigScope)
-    {
-        var rigAnims = new List<string>(EffectCatalogue.CrashDefNames);
-        rigAnims.AddRange(EffectCatalogue.PlaneDamageEffectAnims);
-        return Drift("EffectTemplateRoots", EffectTemplateRoots,
-            () => EffectCatalogue.StageRootsFor(program, rigAnims, StageRootResolver(gamez, rigScope)),
-            CrashTemplateRootGaps);
-    }
+    /// <summary>What the per-player crash rig stages, for a scope it has not built yet — the same
+    /// call <see cref="BuildFlightCrashRuntime"/> makes, exposed so the <c>effects-census</c> suite
+    /// can ask it on a replica rig (the wreck and part names vary by airframe, so the answer is
+    /// per-plane).</summary>
+    public static IReadOnlyList<string> CrashStageRootNames(AnimProgram program, GameZ gamez,
+        Node3D rigScope) =>
+        EffectCatalogue.CrashStageRoots(program, StageRootResolver(gamez, rigScope));
 
     /// <summary>Builds the meshless <see cref="CrashAnchorNodes"/> under a 'player' root — the crash
     /// def's local anchor set (see the field remark).</summary>
@@ -295,8 +224,19 @@ public sealed class WorldEffectsFactory
             crashRoot.Transform = controller.PlaneModel.Transform;
 
         // Effect-template roots (world gamez nodes WorldBuilder skips) — one instance per player, so
-        // splitscreen crashes do not collide. Hidden by their reset states at bind.
-        int effectRoots = BuildEffectStage(gamez, worldScene, crashRoot);
+        // splitscreen crashes do not collide. Hidden by their reset states at bind. Derived from
+        // the defs this rig is about to bind, against this aircraft's own scope: an anchor that
+        // resolves nowhere throws EffectAnchorException naming the def and the node, which is the
+        // whole point — the failure it replaces was a def silently anchored on nothing. Asked
+        // BEFORE the templates and the wreck go in, so the answer cannot depend on what a previous
+        // step of this same build happened to add. ⚠ The crash root is parented FIRST for exactly
+        // this: `player` is the crash defs' own anchor and lives nowhere in a chapter's gamez, so a
+        // scope without it reports the whole rig unanchorable. Parenting it here rather than after
+        // the wreck leaves both subtrees' child order untouched — the templates still go in before
+        // the wreck, and the crash root still sits between the plane model and the runtime.
+        controller.AddChild(crashRoot);
+        var rootNames = CrashStageRootNames(crashProgram, gamez, controller);
+        int effectRoots = BuildEffectStage(gamez, worldScene, crashRoot, rootNames);
 
         // The plane's destroyed wreck (pieceN meshes), built hidden; the crash def shows + flings it.
         var destroyed = planeBuilder.BuildDestroyed(planeName);
@@ -309,7 +249,6 @@ public sealed class WorldEffectsFactory
             // re-poses only what it names, and the pieces have no reset event).
             CollectRestPoses(destroyed, restPoses);
         }
-        controller.AddChild(crashRoot);
 
         // The scoped crash runtime: no ambient start (nothing runs until the crash Plays the def),
         // puffers baked lazily via the session textures (kept open above), effect templates
@@ -344,11 +283,8 @@ public sealed class WorldEffectsFactory
         if (controller.PlaneModel != null)
             CollectVisibility(controller.PlaneModel, planeVis);
         controller.CrashPlaneVisibility = planeVis;
-        // The staged set against the one the bound defs actually ask for, per plane (the wreck and
-        // part names vary by airframe). A silent drift here is the failure mode EffectTemplateRoots'
-        // own remark names, so it is said out loud at the bind rather than left to a suite.
-        if (CrashStageRootDrift(crashProgram, gamez, controller) is { } drift)
-            Log.Warn("anim", $"crash rig '{planeName}': {drift}");
+        if (effectRoots != rootNames.Count)
+            Log.Warn("anim", $"crash rig '{planeName}': staged {effectRoots} of {rootNames.Count} template root(s) the bound defs anchor on — the rest built nothing from this chapter's gamez, so their defs play nothing");
         if (verbose)
             GD.Print($"data-crash: {effectRoots} effect template(s) + {restPoses.Count} wreck node(s) — "
                      + "crash runtime bound (scoped, no auto-start)");
@@ -371,42 +307,6 @@ public sealed class WorldEffectsFactory
                 queue.Enqueue(child);
         }
         return names;
-    }
-
-    /// <summary>Derived vs hand table, as one line or null. The derivation's own structured error is
-    /// reported rather than thrown: this is a tripwire, and a chapter whose data cannot satisfy an
-    /// anchor is exactly what it exists to say.</summary>
-    private static string? Drift(string table, IEnumerable<string> hand,
-        Func<IReadOnlyList<string>> derive, IEnumerable<string> knownGaps)
-    {
-        IReadOnlyList<string> derived;
-        try
-        {
-            derived = derive();
-        }
-        catch (EffectAnchorException e)
-        {
-            return $"{table}: derivation failed — {e.Message}";
-        }
-        var staged = new HashSet<string>(hand, StringComparer.OrdinalIgnoreCase);
-        var wanted = new HashSet<string>(derived, StringComparer.OrdinalIgnoreCase);
-        var gaps = new HashSet<string>(knownGaps, StringComparer.OrdinalIgnoreCase);
-        var missing = new List<string>();
-        foreach (var name in derived)
-            if (!staged.Contains(name) && !gaps.Contains(name))
-                missing.Add(name);
-        var spare = new List<string>();
-        foreach (var name in hand)
-            if (!wanted.Contains(name))
-                spare.Add(name);
-        if (missing.Count == 0 && spare.Count == 0)
-            return null;
-        var parts = new List<string>();
-        if (missing.Count > 0)
-            parts.Add($"needs but does not stage: {string.Join(", ", missing)}");
-        if (spare.Count > 0)
-            parts.Add($"stages but nothing anchors on: {string.Join(", ", spare)}");
-        return $"{table}: {string.Join("; ", parts)}";
     }
 
     private static void CollectRestPoses(Node3D node, List<(Node3D, Transform3D)> into)
@@ -464,8 +364,14 @@ public sealed class WorldEffectsFactory
         // anchor a call runs on. Sizes differ per root, so the deeper slots hold only the roots
         // sized that deep (the shared gun family lives in slot 0 alone); a def whose root has no
         // copy in its slot falls back to one that exists.
+        // What to stage is DERIVED from the names about to be bound (PLAN-effect-catalogue B3):
+        // every definition their call closure reaches, anchored on the gamez root its NAME names.
+        // An anchor that resolves nowhere throws here, naming the def and the node, instead of
+        // leaving that def anchored on nothing and playing nothing at all — EnsureWorldEffects
+        // turns the throw into its "runtime could not be built" warning, carrying the anchor list.
+        var roots = EffectCatalogue.WorldStageRoots(worldProgram, StageRootResolver(gamez));
         int players = Math.Max(1, _spec.Players);
-        int depth = _pools.DepthFor(EffectStageRoots, players);
+        int depth = _pools.DepthFor(roots, players);
         int staged = 0;
         for (int slot = 0; slot < depth; slot++)
         {
@@ -474,7 +380,7 @@ public sealed class WorldEffectsFactory
             stage.AddChild(pool);
             int at = slot;
             staged += BuildEffectStage(gamez, worldScene, pool,
-                Array.FindAll(EffectStageRoots, r => _pools.SlotsFor(r, players) > at));
+                roots.Where(r => _pools.SlotsFor(r, players) > at));
             foreach (var child in pool.GetChildren())
                 if (child is Node3D root)
                     root.Visible = false;
@@ -497,14 +403,14 @@ public sealed class WorldEffectsFactory
         effects.Bind(stage, worldProgram.Subset(EffectCatalogue.EffectAnimNames));
         _worldRoot.AddChild(effects);
         int wanted = 0;
-        foreach (var r in EffectStageRoots)
+        foreach (var r in roots)
             wanted += _pools.SlotsFor(r, players);
         // Name the sizes, not just the total: "143 staged" cannot say whether a root the tester
         // just re-sized actually got its copies. Grouped by size so the line stays one line.
         var bySize = new SortedDictionary<int, List<string>>();
-        foreach (var r in EffectStageRoots)
+        foreach (var r in roots)
             bySize.TryAdd(_pools.SlotsFor(r, players), new List<string>());
-        foreach (var r in EffectStageRoots)
+        foreach (var r in roots)
             bySize[_pools.SlotsFor(r, players)].Add(r);
         var sizes = new List<string>();
         foreach (var (size, names) in bySize)
@@ -516,7 +422,7 @@ public sealed class WorldEffectsFactory
         GD.Print($"world-effects runtime: {staged}/{wanted} effect template(s) staged over "
                  + $"{depth} pool slot(s) for {players} player(s) [{string.Join(", ", sizes)}], "
                  + $"{EffectCatalogue.EffectAnimNames.Length} effect name(s) bound");
-        foreach (var unknown in _pools.UnknownRoots(EffectStageRoots))
+        foreach (var unknown in _pools.UnknownRoots(roots))
             Log.Warn("anim", $"effect pools: '{unknown}' is not an effect stage root — it sizes nothing");
         return effects;
     }
