@@ -176,6 +176,7 @@ clusters they delegate to.
 - `src/Session/LiveryResolver.cs` — resolves each player's livery against a `SessionSpec`: the paint catalog, the pattern-mask library, and the per-player scheme pick.
 - `src/Session/SpawnPicker.cs` — resolves each player's flight spawn against a `SessionSpec`: the shared spawn-list index and the per-player point (or the `--spawn-at=` override).
 - `src/Session/PlaneRoster.cs` — pure lookups over a `SessionSpec`'s plane roster: which plane a player flies, and its display name.
+- `src/Session/EffectCatalogue.cs` — the record of which authored anims are playable effects, and what their defs need staged: the effect/crash/damage-shim name tables and the pure `TouchdownFor` graze pick.
 - `src/Session/EffectPools.cs` — the `data/effect_pools.json` reader: how many copies of each effect template the stage builds, per ROOT, scaled by player count.
 - `src/Session/FlightRigAssembler.cs` — assembles one player's flight rig: painted plane, `FlightController`, loadout/ordnance, HUD instruments, damage visuals, audio, stunt run, spawn, crash runtime.
 
@@ -2288,22 +2289,47 @@ of `Loadout.Bind`, so the lab panel can arm a mount the stock file never names.
   local graph, made explicit. A value that differs per player is a local in `Assemble`, not a field
   here; a new shared load belongs in `GameSession.BuildFlightRigs` and a new `Inputs` field.
 
+## src/Session/EffectCatalogue.cs
+The record of which authored anims are playable effects, and what their defs need staged: the name
+tables every effect producer must stay inside, static and engine-free. Owns `EffectAnimNames` (the
+33 impact/destruction/graze names, with the curation comments naming every exclusion —
+`b_steamtrail`, `random_gun_impact`, the LOCAL_CHOREOGRAPHY fail-closed set — as the load-bearing
+knowledge), the crash-rig's own name sets (`CrashDefNames`: `player_crash_dirt`/`_water`;
+`PlaneDamageEffectAnims`: the four `<part>_damage_effects` shims), and the pure
+`TouchdownFor(SurfaceClass)` the graze reaction's three-way pick routes through.
+`WorldEffectsFactory` consumes these names to build and stage the runtime; it no longer owns the
+naming itself. Every producer of a name here — `ImpactOutcome`'s gunhit lookup, `TouchdownFor`,
+`PlaneDamageEffectAnims` against every plane's real `injure_anims` data — carries a producer-range
+unit tripwire in `CSVM.Tests` (`ImpactOutcomeTests`'s B5 battery, `EffectCatalogueTests`) asserting
+its whole producible range resolves inside `EffectAnimNames`/`PlaneDamageEffectAnims`.
+⚠ Strings, not typed entries, cross every play seam (`GrazeEffectSink`, `ExternalEffect`,
+  `ProjectilePool.EffectSink`) on purpose — a typed catalogue entry would thread this module's types
+  through the deliberately engine-free `ImpactOutcome`. The producer-range tripwires close the drift
+  a typo would otherwise open, at far less churn than four delegate signatures.
+⚠ `StageRootsFor`, the anchor-root closure the names still need staged, does not live here yet —
+  `EffectStageRoots`/`EffectTemplateRoots` stay hand-authored on `WorldEffectsFactory` until that
+  derivation lands (`PLAN-effect-catalogue` B2/B3). This module only fixes *what* plays, not *what
+  gets staged for it*.
+
 ## src/Session/WorldEffectsFactory.cs
 Builds the impact/destruction effect stages and the per-player crash runtime: the world-effects runtime (D32) and
 `BuildFlightCrashRuntime` — which despite the name binds every def that plays ON one aircraft: BOTH
-crash variants' closures (`player_crash_dirt` + `player_crash_water`; the surface is only known at
-impact, so both are bound and `FlightController.ClassifySurface` picks) **plus**
-`PlaneDamageEffectAnims` (the four `<part>_damage_effects` shims →
+crash variants' closures (`EffectCatalogue.CrashDefNames`: `player_crash_dirt` + `player_crash_water`;
+the surface is only known at impact, so both are bound and `FlightController.ClassifySurface` picks)
+**plus** `EffectCatalogue.PlaneDamageEffectAnims` (the four `<part>_damage_effects` shims →
 `random_gun_impact` → `yellow_sparks_follow`), because those need exactly what it already has — the
-`player` anim root, the plane's own `pdpN` panels as INPUT_NODEs, and a live emitter factory.
-`EffectAnimNames` binds impact + death effects — including the 12 gun `*_gunhit` variants, which a
-gun hit plays throttled and time-bounded (C8) — **and** the
-`DAMAGE_SEQUENCE` stage pair `sputter_black_smoke_obj`/`sputter_fire_smoke_obj` (root
-`partial_damage_obj`, staged via `EffectStageRoots`) **and** the airframe's three graze reactions
+`player` anim root, the plane's own `pdpN` panels as INPUT_NODEs, and a live emitter factory. The
+names it binds now live in `EffectCatalogue` (its own entry) — `EffectAnimNames` covers impact +
+death effects, including the 12 gun `*_gunhit` variants (a gun hit plays throttled and
+time-bounded, C8), the `DAMAGE_SEQUENCE` stage pair `sputter_black_smoke_obj`/`sputter_fire_smoke_obj`
+(root `partial_damage_obj`, staged via `EffectStageRoots`), and the airframe's three graze reactions
 (`touchdown_default`/`_dirt`/`_water`, roots `spark_touchdown`/`dust_touchdown`/`splash_touchdown`
-+ `yellow_spark_01`, played by `FlightController.GrazeReaction`). Its `Subset` handles 8/30 destruction targets; 22 live-object choreography names remain local (`analysis/death-effect-closure/`).
-The stage-call closure excludes C4's train-anchored `b_steamtrail`. Constructed once per session (`_worldEffectsFactory`, same lifetime as
-`LiveryResolver`/`SpawnPicker`) from `(SessionSpec, Node3D worldRoot, Func<Vector3> playerPosition)`.
++ `yellow_spark_01`, played by `FlightController.GrazeReaction` through `EffectCatalogue.TouchdownFor`).
+This module still does the staging: `Subset` handles 8/30 destruction targets; 22 live-object
+choreography names remain local (`analysis/death-effect-closure/`), and the stage-call closure
+excludes C4's train-anchored `b_steamtrail`. Constructed once per session (`_worldEffectsFactory`,
+same lifetime as `LiveryResolver`/`SpawnPicker`) from
+`(SessionSpec, Node3D worldRoot, Func<Vector3> playerPosition)`.
 The effects runtime's puffer factory passes `softParticles: false` for MIX-ramp states — these effects
 emit at ground-level sites, where the depth fade zeroes fresh dark puffs against the terrain (the
 crash-smokeball lesson; the damage-stage smoke measured near-invisible with it on) — and keeps the
@@ -2322,7 +2348,7 @@ root someone just re-sized actually got its copies.
 `EffectStage` exposes that stage node read-only, for `--effects-test`'s mesh census (`BL-061`) —
 a puffer count cannot see whether a template's geometry drew, and the two halves fail independently
 (`docs/verification.md` INSTR-11).
-⚠ `EffectStageRoots` must stay the WHOLE anchor-root set of `EffectAnimNames`' call closure, and
+⚠ `EffectStageRoots` must stay the WHOLE anchor-root set of `EffectCatalogue.EffectAnimNames`' call closure, and
   `EffectTemplateRoots` the same for the crash rig's two variants — a def anchors on the node its
   NAME names, so an omitted root leaves it unanchored and it plays nothing, silently. Staging 19 of
   28 cost the rings, all four trail columns, the sonic puffs and the torpedo ripple; regenerate
@@ -2339,9 +2365,10 @@ a puffer count cannot see whether a template's geometry drew, and the two halves
   same session found the cache empty and built a second runtime. `EnsureWorldEffects` is now the only
   way in, and it also wires `ProjectilePool.EffectSink` when a pool is passed (gated on "unset", same
   as `ExternalEffect`) — the wiring `GameSession`'s raw call used to do inline.
-⚠ `BuildEffectStage`, `BuildCrashAnchorSet` and `EffectAnimNames` are `public static` (no session
-  state) — `GameSession`'s anim-lab stage and `--effects-test`'s `ProbeRunner.RunEffectsTest` call
-  them as `Session.WorldEffectsFactory.X`, not through the instance.
+⚠ `BuildEffectStage` and `BuildCrashAnchorSet` are `public static` (no session state) —
+  `GameSession`'s anim-lab stage calls them as `Session.WorldEffectsFactory.X`, not through the
+  instance. `EffectAnimNames` moved to `EffectCatalogue` — `--effects-test`'s
+  `ProbeRunner.RunEffectsTest` and the `effects-census` suite now read it from there.
 
 ## src/Session/WeatherRig.cs
 Loads/applies the flown mission's weather and drives its per-frame rig state: `LoadWeather`/`SetupWeather` become

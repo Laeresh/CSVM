@@ -334,7 +334,7 @@ public sealed class ProbeRunner
     /// census the <c>effect-template-mesh</c> suite counts through.
     /// Plays every effect at the camera point so range-gated ones (gunhit's PLAYER_RANGE) pass;
     /// <paramref name="effectAnimNames"/> is the caller's static name table
-    /// (<c>WorldEffectsFactory.EffectAnimNames</c>), <paramref name="stage"/> its template stage
+    /// (<c>EffectCatalogue.EffectAnimNames</c>), <paramref name="stage"/> its template stage
     /// for the MESH half (`BL-061`). Reports to stdout and <c>./.scratch/effects_test.txt</c>.</summary>
     public void RunEffectsTest(SessionSpec spec, Camera3D camera, Mech3.AnimRuntime effects,
         string[] effectAnimNames, Node3D? stage = null)

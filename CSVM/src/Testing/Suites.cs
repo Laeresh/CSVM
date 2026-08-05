@@ -1862,7 +1862,7 @@ public static class Suites
     // ---- the full effects sweep as suite verdicts ----------------------------------------------
 
     /// <summary>The whole `--effects-test` sweep, asserted instead of read: every one of
-    /// <c>WorldEffectsFactory.EffectAnimNames</c> played through <see cref="Probes.Effects"/> on a
+    /// <c>EffectCatalogue.EffectAnimNames</c> played through <see cref="Probes.Effects"/> on a
     /// full replica stage. The census's two sweep-wide verdicts sat in `.scratch` text while the
     /// probe "read 33/33 resolved for months" (INSTR-11); this makes them fail a build. The play
     /// point is a fixed spot ~180 m from the stage origin, so the distance column discriminates:
@@ -1879,7 +1879,7 @@ public static class Suites
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            var names = Session.WorldEffectsFactory.EffectAnimNames;
+            var names = Session.EffectCatalogue.EffectAnimNames;
             var roots = Session.WorldEffectsFactory.EffectStageRootNames;
             var stage = new Node3D { Name = "EffectCensusStage" };
             var pool = new Node3D { Name = "pool0" };

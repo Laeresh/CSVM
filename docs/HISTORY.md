@@ -15618,3 +15618,21 @@ red-critical wing, not one puff from the nose; noted on `BL-121` and `BL-246`). 
 `BL-121` gained the verdict, `BL-246` the reframing (one graze puts on the whole show — the
 panel-level burn, not the near-death nose trail, is the drama the player sees), and `CAP-15`'s
 `playtest.md` §0 row is retired. No code or behaviour change; nothing built or tested.
+
+## 2026-08-05 — `EffectCatalogue` extracted: the effect/crash/damage-shim names move to one static, engine-free module
+
+`WorldEffectsFactory.EffectAnimNames` (with its curation comments), `PlaneDamageEffectAnims`, and
+the crash rig's `player_crash_dirt`/`_water` literal now live in a new `CSVM/src/Session/EffectCatalogue.cs`;
+`WorldEffectsFactory` consumes them (forwarding calls, no behaviour change). `FlightController
+.GrazeReaction`'s three-way switch is now `EffectCatalogue.TouchdownFor(SurfaceClass)`, a pure
+function the switch's own ⚠ block (the BL-061 one-instance-per-def caveat) sits beside unchanged.
+`EffectStageRoots`/`EffectTemplateRoots` and the sealed builder stay on `WorldEffectsFactory`,
+untouched — this item only moved names, not the staging derivation (that is `PLAN-effect-catalogue`
+B2/B3). Three producer-range tripwires now guard the catalogue: `ImpactOutcomeTests`' existing
+48-weapon B5 battery gained a check that every `*_gunhit` name the gun IMPACT lookup produces
+resolves in `EffectAnimNames`; a new `EffectCatalogueTests.cs` checks `TouchdownFor`'s whole
+`SurfaceClass` range, and every player airframe's real `injure_anims` data for a `*_damage_effects`
+entry (only the Devastator, node name `player_pfighter`, carries one) against `PlaneDamageEffectAnims`.
+Verified: `.\RunTests.ps1` green (450 unit tests, 29/29 in-engine suites, 13/13 goldens
+hash-identical against this item's starting HEAD — pure motion, as intended); each of the three
+tripwires independently confirmed red (a name dropped from the catalogue/array) then restored green.

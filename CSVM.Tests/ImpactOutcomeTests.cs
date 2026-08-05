@@ -1,7 +1,10 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Session;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -207,7 +210,16 @@ public class ImpactOutcomeTests
     /// <summary>The rule, not a snapshot: every one of the 48 shipped weapons, at every reachable
     /// surface, resolves an outcome that is coherent by three checks that hold regardless of which
     /// weapon or surface it is — never a table of expected per-row values, which is exactly the
-    /// form the plan's trap warns would break on the next weapon-polish item.</summary>
+    /// form the plan's trap warns would break on the next weapon-polish item.
+    ///
+    /// <para>This loop is also the producer-range guard for the gun IMPACT family: whichever
+    /// outcome names a <c>*_gunhit</c> effect (caliber × ammo, e.g. <c>3040slug_gunhit</c>) must
+    /// resolve inside <see cref="EffectCatalogue.EffectAnimNames"/>, so a caliber/ammo combination
+    /// the catalogue does not know breaks here instead of silently playing nothing. Not every
+    /// <see cref="ImpactOutcome.EffectName"/> qualifies: several resolve to a gamez MESH name
+    /// instead (e.g. the slug's own <c>splash1.flt</c>/<c>bld_damage.flt</c>), which is a model to
+    /// instance, never a catalogue entry — the gunhit family is the one whose name is always
+    /// handed to the effects runtime.</para></summary>
     [ExtractedDataFact]
     public void Every48WeaponsResolvesACoherentOutcomeAtEveryReachableSurface()
     {
@@ -242,6 +254,12 @@ public class ImpactOutcomeTests
 
                 if (outcome.HasBlastDamage != expectedBlast)
                     violations.Add($"{where}: HasBlastDamage was {outcome.HasBlastDamage}, expected {expectedBlast}");
+
+                // The gun-effect range this loop also guards (see the method doc): a *_gunhit
+                // name must resolve in the catalogue.
+                if (outcome.EffectName is { } gunhit && gunhit.EndsWith("_gunhit", StringComparison.Ordinal)
+                    && !EffectCatalogue.EffectAnimNames.Contains(gunhit))
+                    violations.Add($"{where}: gun effect '{gunhit}' is not in EffectCatalogue.EffectAnimNames");
             }
         }
 

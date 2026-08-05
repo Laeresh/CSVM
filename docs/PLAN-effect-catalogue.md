@@ -88,7 +88,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the module, engine-free half
 
-1. ☐ Extract `EffectCatalogue`: names, crash name sets, `TouchdownFor`, producer-range tripwires
+1. ☑ Extract `EffectCatalogue`: names, crash name sets, `TouchdownFor`, producer-range tripwires
 
 ### Wave B — the derivation, and the tables die
 
@@ -119,7 +119,7 @@ region) — avoid running the two in the same worktree, nothing more.
 
 # Wave A — the module, engine-free half
 
-## A1 ☐ Extract `EffectCatalogue`: names, crash name sets, `TouchdownFor`, producer-range tripwires
+## A1 ☑ Extract `EffectCatalogue`: names, crash name sets, `TouchdownFor`, producer-range tripwires
 
 **Goal.** The names and their producers' obligations live in one module; a name typo or a producer
 emitting an uncatalogued name is a red unit test, engine-free.
