@@ -1,0 +1,405 @@
+# Milestone 3 — Polish 8: Authored animations — play the defs
+
+**ACTIVE PLAN** (written 2026-08-05). It sits in `docs/`, which by this repo's convention makes it
+a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
+`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+
+Ten items from the 2026-08-05 hand-coded-vs-authored and invented-behaviour audits, selected by the
+user under one criterion: **declared animations that are missing or wrongly implemented in CSVM,
+and hand-coded behaviours whose authored counterpart exists**. Every item replaces an invented
+stand-in with the original's own animation-definition data — or deletes an invention the data
+disowns. All ten backlog entries (`BL-119`, `BL-259`, `BL-261`–`BL-267`, `BL-270`) were filed or
+reframed 2026-08-05 from direct code+data reads in the same session, so they are trivially
+still-open; none appears in `docs/HISTORY.md` as landed.
+
+## Milestone goal
+
+- Every particle effect renders at its **authored size** (the global 4× stand-in is gone; the
+  config knobs remain for deliberate tuning).
+- The gun's secondaries — muzzle smoke, muzzle flash, casing — are **exactly what `muzzle_burst`
+  and `gunshell` author**: no invented eject-puff cluster, no invented flash triad.
+- Wing lights, prop spin, water splash, and engine start/stop play **their defs** instead of
+  hand-rolled duty cycles, rotate loops, and dropped fades.
+- The player plane's damage stages are **the authored menu** — `player_fuelleak`, `pdpanelN`,
+  `player_damage_trail` — with only the HP thresholds chosen by us.
+
+**No new feel laws get invented in this plan.** Where a def leaves a gap (a threshold, an energy,
+a unit), the gap is named as TUNE in `backlog.md` — not filled with a guess. Excluded by the same
+user criterion: `BL-260` (authored cameras), `BL-268`/`BL-269` (audio mix), `BL-271` (graze feel
+laws), `BL-272` (precipitation calibration) — none of them is animation-def work.
+
+## Decisions (2026-08-05)
+
+| # | Question | Decision |
+|---|---|---|
+| 1 | Selection criterion for the ten items | **Authored/declared animations missing or wrong in CSVM** — user's words: "declared animations that are not or wrongly in CSVM and hardcoded animations that should be authored ones. The ejector puffs too." |
+| 2 | First item | **`Puffer.SizeScaleDefault` 4 → 1** — user-fixed opener; every later visual judgement is conditioned on it |
+| 3 | Do the `puffer.*SizeScale` config keys survive the revert? | **Yes** — the keys stay as tuning knobs; only the *default* reverts to the authored 1× |
+| 4 | Code changes before the plan? | **No** — a same-day attempt to land BL-261 directly was rolled back on user instruction; everything goes through this plan |
+
+## Ground rules
+
+- **Original-game data drives everything.** Read the reader/compiled JSON before writing a handler;
+  never guess a value. Inventing content is the trap this project falls into most often.
+- **Evidence is a lead to verify, not a finding to implement.** Confirm every claim against the
+  data/code before building on it; **a correct disproof that lands no code is a success here**, not a
+  failure. Mark each item's Evidence with its confidence (traced-to-code / direction-sound-magnitude-
+  TUNE / lead-only).
+- **`PROJECT_CONTEXT.md` + `docs/architecture.md` / `docs/formats/` are updated in the same turn** as each
+  landed item; a landed item gets a dated entry in `docs/HISTORY.md` and is **deleted** from
+  `backlog.md` (not marked FIXED there). New decodes land with their `docs/formats/` page.
+- **Read `docs/verification.md` before measuring anything** — the instruments here mislead; cite the
+  rule that bites per item.
+- **Verify against a full 8-chapter `--freecam --chapter=<X>` regression** (zero errors, same
+  mesh/node counts unless the change is meant to add coverage) plus a targeted capture at the
+  location the report came from.
+- **Read the module's entry in `docs/architecture.md` before modifying it.** Dead ends are recorded
+  there precisely so they are not re-chased.
+
+## Checklist
+
+Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Keep this in sync as items land.**
+
+### Wave A — the gun line and the global baseline (`Projectile.cs`/`Puffer.cs`, sequential)
+
+1. ☐ `BL-262` — `Puffer.SizeScaleDefault` 4 → 1; config knobs stay
+2. ☐ `BL-261` — render the authored `muzzlepuffer`, delete the eject-puff cluster
+3. ☐ `BL-263` — muzzle flash as the authored single `mb_spinflame` discrete roll
+
+### Wave B — airframe fixtures
+
+4. ☐ `BL-119` — play `wing_lights_blink`: the def's duty cycle, `LIGHT_STATE` point lights, LOD gate
+5. ☐ `BL-264` — prop/rotor spin through the runtime's `XYZ_ROTATION` semantics
+
+### Wave C — effect choreography
+
+6. ☐ `BL-265` — water splash: authored opacity fades + `splash01→03` flipbook; re-judge the 8× width
+7. ☐ `BL-267` — engine start/stop: `snd_propstop` wired, start ramp sourced, `engine_start_smoke` checked
+8. ☐ `BL-266` — camera shake: find the authored law (`shakes.zrd.json`/`damage_shakes.zrd.json`), then implement or re-scope
+
+### Wave D — the damage menu (after PLAN-effect-catalogue's runtime capability)
+
+9. ☐ `BL-259` — play the authored damage animations: `player_fuelleak` / `pdpanelN` / `player_damage_trail`
+10. ☐ `BL-270` — healthy↔torn panel pairing from the defs, not AABB proximity
+
+## Dependency and parallelism notes
+
+**A1 lands first and alone** — it changes the rendered size of every effect in the game, so every
+later "does this look right" judgement in Waves A–D is conditioned on it. A1→A2→A3 then run
+sequentially: all three edit `Projectile.cs`/`Puffer.cs`. Waves B and C are independent of each
+other and of Wave A (different files) but every visual verify should happen post-A1.
+
+**D9/D10 are gated on `PLAN-effect-catalogue`** (in flight in a concurrent session as of
+2026-08-05, items B2/B3 landed): they need the runtime to `CALL_ANIMATION` into an `ON_CALL` def
+with an `INPUT_NODE` binding. **Do not start Wave D while that plan has uncommitted work in
+`AnimRuntime.cs` / the effect-template pool** — coordinate via the user. D10 sequences after D9
+(same defs, same wiring). File contention within this plan: A-wave items share `Projectile.cs`;
+D-wave items share `DamageVisuals.cs`/`FlightRigAssembler.cs` — never in parallel worktrees.
+
+---
+
+# Wave A — the gun line and the global baseline
+
+## A1 ☐ `BL-262` — `Puffer.SizeScaleDefault` 4 → 1; config knobs stay
+
+**Goal.** Every `PUFFER_STATE` renders at its authored `SIZE_RANGE`. The three `puffer.*SizeScale`
+config keys remain, defaulting to 1, for deliberate tuning.
+
+**Evidence (confidence: traced).** `Puffer.cs:281` — `public const float SizeScaleDefault = 4f`,
+commented "a judged stand-in for a missing engine constant, not a decode … settled at the controls
+(TUNE, 2026-08-01)". Applied per emission mode at `Puffer.cs:700,721,757` via
+`_burst/_trail/_sustainSizeScale`, read from config at `:654-656` (`Config.cs:231-233` registers
+the keys). Every authored effect — crash fireball, trails, splash puffers, gunhit — passes through
+it.
+
+**Approach.** Change the const to `1f`; nothing else. The config keys and their plumbing stay
+untouched (Decision 3). Do not compensate individual effects in the same change — the point is to
+see the authored sizes plainly, then tune per effect via config only where the user judges it.
+
+**Model recommendation.** medium, low effort — a one-line change; the work is in the verify.
+
+**Verify.** Take BEFORE captures at 4× first (an unchanged baseline you've seen able to fail):
+the crash fireball (`--crash` pose), a sustained gunhit into dirt, and the touchdown scrape puff.
+Repeat at 1×, same poses, and hand the pairs to the user for the A/B — expect everything to read
+markedly smaller; that is the intended outcome, not a regression. Then the standard 8-chapter
+`--freecam` regression (zero errors; counts unchanged — this change cannot alter geometry).
+
+**⚠ Traps.** (a) `FlightController.cs:1744` — the graze reaction's contact-point staging leans on
+the 4× scale to lift the touchdown puffer's authored −0.5 Y offset clear of the struck surface; at
+1× those puffs may emit half a metre UNDER the ground. If they vanish, that is this known
+interaction, not a new bug — the recorded alternative is `graze.siteAtContact=false` (stage on the
+aircraft, which the data argues for anyway). (b) Do not "fix" small-looking effects by editing
+their defs — the defs are authored truth; if 1× is genuinely wrong game-wide the answer is one
+config value, and `BL-262`'s backlog text names the capture that would prove it. (c) 2026-08-01's
+"settled at the controls" judgement was made *with* the invented eject-puff cluster and 0-count
+muzzle smoke on screen — the world it tuned against no longer exists once A2 lands; judge fresh.
+
+## A2 ☐ `BL-261` — render the authored `muzzlepuffer`, delete the eject-puff cluster
+
+**Goal.** Gun smoke is `muzzle_burst`'s `muzzlepuffer` playing as authored; the casing flies bare,
+as `gunshell` authors it. The invented 5-puff eject cluster is gone.
+
+**Evidence (confidence: traced).** `extracted/zrdr/gunshell.zrd.json` is motion-only —
+`OBJECT_MOTION` (±10° bearing, −75…−85° elevation, 1.5–1.8 m/s, 1200 °/s tumble, `RUN_TIME` 2 s)
+then deactivate; **no `PUFFER_STATE`** (read 2026-08-05). `Projectile.cs:119` has the authored
+muzzle smoke transcribed verbatim but `MuzzleSmokePuffs = 0`; `:126-135` + `SpawnCasing`'s loop
+spawn the invented cluster whose own comment admits it "matched no shipped def". User-confirmed
+reading: the white puffs near falling brass in the captures are muzzle smoke misattributed.
+
+**Approach.** Set the muzzle smoke to the authored window (6 puffs / 0.3 s — the per-shot count is
+the gloss of `TIME_INTERVAL 0.05` over the window; keep the transcribed ranges as-is), delete the
+`EjectPuffs` constant block, `EjectPuffTint`, and the cluster loop in `SpawnCasing`, and update the
+comments that mention the cluster (`_smoke` field doc, the `AddMultiMesh("smoke101", …)` comment,
+the C22 secondaries comment). The pooled casing path itself is already faithful — do not touch it.
+A reverted 2026-08-05 attempt at exactly this change exists in this conversation's history; the
+shape is known-good, it was rolled back only because the user wants it landed through this plan.
+
+**Model recommendation.** medium, low effort — mechanical deletion plus one constant; the verify is
+a look-check.
+
+**Verify.** Sustained gun fire in chase view: smoke sits on the gun line and drifts aft; casings
+tumble bare. A/B against the original's gun-fire captures (`C1B IA1 Bloodhawk tracer and
+ejection.png` and its sibling show the reference). 8-chapter freecam regression unchanged.
+
+**⚠ Traps.** (a) Run after A1 — at 4× the six authored 0.3–0.6 m puffs read as a wall of smoke and
+the judgement will be wrong. (b) `MaxSmoke = 256` was sized "the persisting eject puffs dominate
+this pool"; the muzzlepuffer's 0.1–0.2 s lives need far less — leave the cap alone, it is a cap.
+(c) The authored emission is 6 puffs *over a 0.3 s window from the moving muzzle node*; the
+per-shot instant spawn is an accepted gloss (sustained fire fills the streak) — do not build a
+windowed emitter here; if the single-shot look bothers the user, that is a named TUNE, not a bug.
+
+## A3 ☐ `BL-263` — muzzle flash as the authored single `mb_spinflame` discrete roll
+
+**Goal.** The muzzle flash is one quad rolled to the def's discrete random angle per shot — or, if
+the at-the-controls A/B says the authored form doesn't reproduce the reference stills, the triad
+stays with the reason recorded.
+
+**Evidence (confidence: direction-sound, outcome a judgement).** `muzzle_burst.zrd.json` authors
+ONE `mb_spinflame` node with `RANDOM_WEIGHT` over 30/80/140° of Z roll per shot.
+`Projectile.cs:98-104` draws three quads 120° apart sharing one continuous roll, justified by the
+3-lobed reading of `MuzzleFlash1-3.png` — but those lobes may be the flash *texture's own art*, in
+which case the authored single node already produces them and the triad triples it.
+
+**Approach.** Implement the authored form behind the existing constants (`MuzzleFlashCount = 1` +
+a discrete 3-bucket roll), capture both forms at the same pose against `MuzzleFlash1-3.png`, and
+let the user pick at the controls. Whichever loses is deleted, not flagged off.
+
+**Model recommendation.** medium — small code, but the A/B framing has to be honest (same ammo
+type, same pose, freeze-frame).
+
+**Verify.** Freeze-frame captures (pause + `.` step) of single shots, both forms, against the
+three reference stills; then sustained fire for the in-motion read. No regression surface beyond
+the gun line.
+
+**⚠ Traps.** The per-ammo flash *textures* (`{slug,dum,ap,mag}_muzzle1`) and their tints are a
+separate, data-sourced axis — don't conflate the lobe-count question with the texture selection.
+Run post-A1 like everything visual.
+
+# Wave B — airframe fixtures
+
+## B4 ☐ `BL-119` — play `wing_lights_blink`: the def's duty cycle, point lights, LOD gate
+
+**Goal.** The wingtip lights blink by the authored def: `RESET_STATE` off, the `blink_lights`
+sequence looping at the authored 1.5 s, the two `LIGHT_STATE` point lights emitted alongside the
+flare sprites, gated by `ANIMATION_LOD` HIGH.
+
+**Evidence (confidence: traced, one named TUNE remains).** `wing_light.zrd.json` (read
+2026-08-05): per-plane `ON_CALL` defs; `LIGHT_STATE`s at `wing_flare1/2`, range 0.5–1.25 m, colour
+0.88/0.78/0.36; an `ANIMATION_LOD HIGH` gate with an explicit else-branch turning the flares off.
+`WingLightBlinker.cs:19` hand-widens the authored one-frame ON window to 0.08 s (`FlashDuration`,
+the known TUNE — 0.0001 s is imperceptible); `WingLights.cs:18-20` deliberately drops the point
+lights; `PlaneBuilder.cs:204-249` re-skins the one-sided flare quad as an additive both-sides
+billboard.
+
+**Approach.** Drive the blink from the def's sequence timing rather than the re-implemented duty
+cycle, emit the two `OmniLight3D`s with the authored range/colour, and honour the LOD gate (map it
+to a config/quality flag; the else-branch means OFF is the authored low-LOD behaviour, not
+"always blink"). Keep `FlashDuration` as the one declared widening (it stays a TUNE — the authored
+literal is unusable). Leave the billboard re-skin in place but record it on the entry: the
+original may show the flare only from behind, and the backlog names the one clip (orbit a lit
+plane) that settles it — don't churn the material twice.
+
+**Model recommendation.** medium — runtime wiring with a settled def in hand.
+
+**Verify.** Night-ish pose, chase orbit: flares + point lights blink together at 1.5 s with the
+0.08 s window; low-LOD path shows them dark. 8-chapter freecam regression (AI planes carry the
+same defs — watch counts stay flat).
+
+**⚠ Traps.** `BL-119`'s entry documents that the 0.0001 s ON literal is unusable as-is — do not
+"faithfully" implement it and ship invisible lights; the widening is deliberate and stays. The
+point lights were skipped as "negligible at chase distance" — that judgement predates the 1×
+revert and the A/B should re-test it, not inherit it.
+
+## B5 ☐ `BL-264` — prop/rotor spin through the runtime's `XYZ_ROTATION` semantics
+
+**Goal.** Props and rotors spin with the authored `XYZ_ROTATION` values under the runtime's
+settled unit semantics — the hand `RotateObjectLocal` loop and its "degrees/second" guess are gone.
+
+**Evidence (confidence: traced values, unit via the runtime).** `PropParts.cs:25-28` carries the
+authored triples (`plane_props.json` `spinprops`, `autogyro.json` `agyro_rotors`) with "source
+units are undecoded; we treat them as degrees/second (a visual TUNE)". `AnimRuntime`'s
+`SpinMotion.cs` already decodes `XYZ_ROTATION` events with settled semantics — two implementations
+of one authored concept, and only the hand one guesses.
+
+**Approach.** Resolve the spin through the same decode `SpinMotion` uses (share the code path or
+the conversion, whichever `docs/architecture.md`'s AnimRuntime entry sanctions — read it first;
+PLAN-effect-catalogue is actively refactoring nearby). Keep the throttle/windmill modulation
+(`PropIdleSpin`, the ghost-disc swap) as the engine-side part layered on top, exactly as `BL-259`
+keeps thresholds engine-side.
+
+**Model recommendation.** medium — the risk is coordination with the concurrent plan, not the code.
+
+**Verify.** Side-by-side of a Bloodhawk at idle and full throttle vs the current build (the rate
+should only change if the runtime's unit semantics disagree with the deg/s guess — if it changes,
+that IS the finding; record the factor). Autogyro rotor same. Freecam regression for the AI/parked
+planes.
+
+**⚠ Traps.** (a) **File contention with PLAN-effect-catalogue** — it is landing changes around
+`AnimRuntime` right now; check with the user before touching shared files. (b) If the runtime's
+semantics produce an absurd rate, the answer is a disproof recorded on `BL-264` ("the props do NOT
+use XYZ_ROTATION semantics"), not a compensating constant.
+
+# Wave C — effect choreography
+
+## C6 ☐ `BL-265` — water splash: authored fades + flipbook; re-judge the 8× width
+
+**Goal.** The gun-round water splash plays its authored 0.05 s opacity fade-in / 1 s fade-out and
+the `splash01→03` `OBJECT_CYCLE_TEXTURE` flipbook; the 8× column widening is re-judged against the
+reference once the fades exist.
+
+**Evidence (confidence: traced).** `Projectile.cs:173-189`: values "verbatim from the defs"
+(`splash1.zrd.json`/`bsplsh.zrd.json`) except the fades and flipbook are unimplemented
+(comment at `:177-179`) and `SplashColumnWidthScale = 8f` was judged against `Water Splash.png` —
+plausibly *because* the missing fade left the thin authored column reading as "an invisible grey
+sliver".
+
+**Approach.** Implement the fade envelope and the flipbook (reuse `TextureCycler`'s frame-list
+machinery if it fits — read its architecture entry). Then capture the column at 1× width against
+`Water Splash.png` and let the user set the width knob; the 8× only survives as a config-visible
+TUNE if the authored width still reads wrong *with* fades.
+
+**Model recommendation.** medium.
+
+**Verify.** Slug fire into C1B water at the reference pose vs `Water Splash.png`; the fade-in
+should kill the current pop-in. Freecam regression.
+
+**⚠ Traps.** Post-A1 judging only — the splash puffers also lose their 4×. Don't fold the rocket
+water column (`SplashColumnScale 100`, a different constant with its own justification) into this
+item; it is not part of the finding.
+
+## C7 ☐ `BL-267` — engine start/stop: the authored cues wired
+
+**Goal.** Engine death plays `snd_propstop`; engine start's loop ramp is sourced or named as TUNE;
+`engine_start_smoke` (the authored puff of the start moment) is played if the data binds it.
+
+**Evidence (confidence: direction-sound; one lead).** `FlightAudio.cs:317-325` — `OnEngineStop()`
+fully implemented, zero production callers; `:51` — `EngineStartRamp = 1.8f` bare literal, no
+source, no TUNE marker. Lead: `engines.zrd.json` and the per-plane defs have not been read for a
+start/stop sequence; `engine_start_smoke` sits authored and unplayed in `pufftrails.zrd.json`
+(noted on `BL-259`'s neighbourhood 2026-08-05).
+
+**Approach.** First the read: `engines.zrd.json` + one plane def for an authored start/stop
+choreography (this may settle the 1.8 s ramp too). Then wire `OnEngineStop` to the paths that kill
+the engine — crash, destruction, wreck — and play `engine_start_smoke` at the authored moment if a
+binding exists; if nothing binds it, record that as the finding and leave it unplayed.
+
+**Model recommendation.** medium — half investigation, half wiring.
+
+**Verify.** A crash and a scripted destruction both end with the wind-down cue instead of a cut
+loop; spawn plays the start smoke if wired. Listen A/B is the user's; the regression surface is
+`RunTests.ps1` (FlightAudio has suite coverage) + freecam.
+
+**⚠ Traps.** The ×0.2 "Temporary fix" volume scale (`BL-268`, deliberately out of this plan) sits
+on these same paths — do not "fix the mix" while wiring the cue; if the stop cue sounds wrong at
+×0.2, note it on `BL-268` and move on.
+
+## C8 ☐ `BL-266` — camera shake: find the authored law, then implement or re-scope
+
+**Goal.** Either weapons flagged `SHAKES_CAMERA` shake the camera by an authored law found in the
+data, or the item is re-scoped with the finding "only the flag is authored" and the law named as
+TUNE on `BL-266`.
+
+**Evidence (confidence: lead-only).** `WeaponDefs.cs:103,258` parses the flag; `Probes.cs:151`
+dumps it; zero consumers. `shakes.zrd.json` and `damage_shakes.zrd.json` exist in
+`extracted/zrdr/` and have never been read — the law (amplitude/frequency/decay, possibly a
+`cockpit_bulletholes`-adjacent damage shake too) may be authored there.
+
+**Approach.** Read both files first — this item's shape depends entirely on what they hold. If a
+law is authored: implement it on the flagged weapons' fire path. If not: implement nothing,
+record the disproof, and downgrade `BL-266` to a TUNE-gated item awaiting original footage of the
+heaviest flagged weapon.
+
+**Model recommendation.** medium — investigation-first; escalate only if the decode is rich.
+
+**Verify.** If implemented: fire the heaviest `SHAKES_CAMERA` weapon, chase and cockpit-ish views,
+and A/B the feel against original footage if any exists. `--incoming` and scripted runs must stay
+shake-free unless their weapons carry the flag.
+
+**⚠ Traps.** A shake law has a screenshot-instrument interaction: scripted screenshot verification
+poses will jitter — take stills with the shake settled or gate shake off under `--screenshot`,
+and say so in the item's landing notes.
+
+# Wave D — the damage menu
+
+## D9 ☐ `BL-259` — play the authored damage animations
+
+**Goal.** The player plane's visible damage progression is the authored menu playing as data:
+`player_fuelleak` (partial damage — the vapor leak we currently render nothing for), `pdpanelN`
+(torn panel + `gimmeflakes` debris + `short_firetrail` at the panel; `pdpanel3` uses
+`loop_short_firetrail`), `player_damage_trail` (`short_firetrail` at `prop1` + the `fire_lt` nose
+light). Only the HP thresholds that *call* each stage are ours.
+
+**Evidence (confidence: traced; thresholds are the named gap).** `BL-259`'s entry (filed
+2026-08-05) carries the full decode: `player-1.zrd.json`'s `ON_CALL` defs, the two corrections to
+current assumptions (heavy trail authored at **`prop1`**, and it is `short_firetrail`, **not** the
+`dense_firetrail` pair `FlightRigAssembler.cs:241-249` wires — nothing in the player defs calls
+`dense_firetrail`), and CAP-15's footage (`playtest/CAP-15/`, HISTORY 2026-08-05) as the timing
+reference: the burn is `short_firetrail` verbatim, staged 4/6/8 s, sputtering past 31 wall-s.
+
+**Approach.** Replace the four bare `firepuffer`s (`FlightRigAssembler.cs:246-248`) and the
+`dense_firetrail` pair with `CALL_ANIMATION` invocations of the authored defs through the effect
+runtime landed by PLAN-effect-catalogue, bound `WITH_NODE` to the real `pdpN`/`prop1` nodes.
+Thresholds: start from the damage-gauge tiers the `*_damage_yellow/red` defs key to (the tier
+flips are themselves authored — `OBJECT_CYCLE_TEXTURE` on the gauge silhouette) and CAP-15's
+timeline; every chosen number is recorded as TUNE on the entry. Before deleting the
+`dense_firetrail` wiring, grep the full def corpus for who *does* call it — the entry demands that
+check.
+
+**Model recommendation.** high — highest blast radius in the plan: choreography, thresholds, and
+the deletion of a shipped behaviour, judged against reference footage.
+
+**Verify.** The F5 damage lab drives each stage on demand: leak at the partial tier, panel burn
+matching CAP-15's staging (fire ~12 wall-s → black smoke → sputter), heavy stage at `prop1` with
+the light. A real graze reproduces the CAP-15 look end-to-end. `trail-world-anchor` suite +
+`damage-hd` suite + freecam regression.
+
+**⚠ Traps.** (a) **Gated on PLAN-effect-catalogue's `CALL_ANIMATION`-with-`INPUT_NODE` capability
+— confirm it has landed and the concurrent session is not mid-refactor before starting.** (b)
+`BL-246` stays open and separate: *when* the heavy stage fires organically is a reachability/
+design question this item must not solve by inventing generous thresholds. (c) The smoke/fire
+trail's `TopLevel` anchor bug history (HISTORY 2026-08-03) — verify at a real mission spawn and
+heading, not the identity pose; that trap has bitten twice. (d) CAP-15 timing is wall-clock ×1.390
+sim — use sim seconds when comparing def offsets, the same trap BL-148 documents.
+
+## D10 ☐ `BL-270` — panel pairing from the defs, not AABB proximity
+
+**Goal.** The healthy↔torn skin mapping is derived from the authored data (`pdpanelN`'s named
+`pdpN` targets, `player_destruct_reset`'s re-ACTIVE list) instead of the mesh-AABB proximity guess.
+
+**Evidence (confidence: traced defs; guess admitted in code).** `DamageVisuals.cs:22-27,57,60` —
+`MaxPairDistance = 1.0`, `MirrorMinX = 0.15`, comment conceding the original pairs "by some rule
+of its own". The defs name the relationship explicitly; no geometry needed.
+
+**Approach.** Build the pairing table from the defs at rig-assembly time (D9's wiring already
+resolves the same nodes — reuse it); keep the geometric pairing as a logged fallback for any plane
+whose defs miss a panel, and log loudly when it engages. Delete the two constants if nothing falls
+back across all 11 aircraft.
+
+**Model recommendation.** medium — mechanical once D9's node resolution exists.
+
+**Verify.** All 11 aircraft through the F5 lab: every panel flips its own skin, no mirror-side
+mispair (the failure the AABB guess risked). Freecam + `damage-hd` regression.
+
+**⚠ Traps.** Sequenced strictly after D9 — same files, same def wiring; doing it first builds the
+table twice. The fallback must log, not silently engage, or a def gap on one plane hides for
+months.
