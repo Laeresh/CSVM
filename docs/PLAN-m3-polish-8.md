@@ -76,8 +76,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — airframe fixtures
 
-4. ☐ `BL-119` — play `wing_lights_blink`: the def's duty cycle, `LIGHT_STATE` point lights, LOD gate
-5. ☐ `BL-264` — prop/rotor spin through the runtime's `XYZ_ROTATION` semantics
+4. ☑ `BL-119` — play `wing_lights_blink`: the def's duty cycle, `LIGHT_STATE` point lights, LOD gate (landed 2026-08-05; follow-up → `BL-284`)
+5. ☑ `BL-264` — prop/rotor spin through the runtime's `XYZ_ROTATION` semantics (landed 2026-08-05; units were already exact)
 
 ### Wave C — effect & camera choreography
 
@@ -313,6 +313,18 @@ planes.
 `AnimRuntime` right now; check with the user before touching shared files. (b) If the runtime's
 semantics produce an absurd rate, the answer is a disproof recorded on `BL-264` ("the props do NOT
 use XYZ_ROTATION semantics"), not a compensating constant.
+
+**B4 Outcome (2026-08-05) — landed.** Def-driven flash (~2 sim ticks, PT-03's measured bound),
+`OmniLight3D`s at the authored range/colour (visible at chase distance — the "negligible"
+judgement was stale), `ANIMATION_LOD` gate on `SessionSpec.AnimLod`, authored one-sided quad
+restored. Corrected en route: only `piratefighter`/`brigand` carry the def; the Bloodhawk has no
+flare nodes. No goldens moved. Residual star-burst/view-dependence question → `BL-284`.
+
+**B5 Outcome (2026-08-05) — landed; the premise was disproven.** The deg/s constants match the
+authored triples bit-for-bit and the conversion already equalled `AnimDefs.Spin`'s — no rate
+change anywhere. The real gain: `PropAnimator` now composes absolute poses from rest via the
+extracted `SpinMotion.ComposeSpin` (drift-free) instead of integrating `RotateObjectLocal`.
+`empty-stage`/`c1-destroy-effects` re-pinned (1–3 px prop-hub, integration method only).
 
 # Wave C — effect & camera choreography
 

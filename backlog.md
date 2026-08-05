@@ -2032,14 +2032,6 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   read as a 3-lobed burst. Decide at the controls whether the authored single-node discrete
   roll reproduces the stills (the 3 lobes may be the flipbook frame's own art, not three
   quads) — if it does, play the def; the current triad is a shape invented from three frames.
-- `BL-264` **Prop spin bypasses `AnimRuntime` and re-implements `XYZ_ROTATION` with invented
-  units** (`PropParts.cs:25-28`, `PropAnimator.cs:39`). The spin rates are verbatim
-  `XYZ_ROTATION` triples from `plane_props.json` (`spinprops`) / `autogyro.json`
-  (`agyro_rotors`), but a hand `RotateObjectLocal` loop replays them under the guess
-  "degrees/second (a visual TUNE)" — while `AnimRuntime` already decodes `XYZ_ROTATION`
-  (`SpinMotion.cs`) with settled semantics. Route the prop/rotor spin through the runtime and
-  the unit guess dissolves; keep the throttle/windmill modulation (`PropIdleSpin`) as the
-  engine-side part, like `BL-259`'s thresholds.
 - `BL-265` **Water splash: the authored fades and flipbook are dropped, the column is
   hand-widened 8×** (`Projectile.cs:173-189`). Values are verbatim from
   `splash1.zrd.json`/`bsplsh.zrd.json` except: the authored 0.05 s opacity fade-in / 1 s
@@ -2135,31 +2127,19 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   opaque core may be intentional (real cloud decks have wisps outside the solid layer, which is the
   whole reason this field exists) — a capture matched to `C1 IA1 Cloud Puffs and Moon.png`'s altitude
   would settle whether today's margins are too generous or roughly right.
-- `BL-119` **Wing lights** — `FlashDuration`. **Resources re-check (2026-07-30):**
-  `piratefighter-wing_lights_blink.json`/`brigand-wing_lights_brigand.json` confirm the blink sequence
-  turns the flares + point lights on, then off again after **0.0001 s**, looping every **1.5 s**
-  (already `WingLights.BlinkPeriod`, itself data-sourced). The period is data-exact; the on-duration
-  is not a usable literal — 0.0001 s is imperceptible at any real frame rate — so `FlashDuration`
-  0.08 s stays a deliberate hand-widening with no better data source to replace it. Only *how long* to
-  widen it remains an open TUNE.
-  **Reframed 2026-08-05 (hand-coded-vs-authored audit):** the real item is *play the
-  `wing_lights_blink` def* rather than re-tune the hand duty cycle (`WingLightBlinker.cs:19`) —
-  the def also carries two things we drop entirely: the `LIGHT_STATE` point lights (warm
-  0.88/0.78/0.36, 1.25 m range) that `WingLights.cs:18-20` deliberately never emits, and an
-  `ANIMATION_LOD` gate (lights blink only at HIGH). And `PlaneBuilder.cs:204-249` re-skins the
-  authored one-sided flare quad as an additive both-sides billboard — the original may genuinely
-  show the flare only from behind; an orbit of a lit plane in the original settles both the
-  widening and the billboard deviation in one clip.
-  **Playtest evidence 2026-08-05 (`PT-03`, closed into this item).** Two measurements against the
-  original, staged in `playtest/PT-03/Light Original New.png` (an A/B still — original above,
-  ours below): (a) **our flash is twice as long** — at 30 fps the original's light occupies **one**
-  frame, ours **two**, i.e. `FlashDuration` 0.08 s ≈ 2 frames against the original's ~0.033 s. That
-  is the first real bound anyone has put on the widening, and it points at ~1 frame rather than the
-  current guess. (b) **the flare's orientation is wrong** — ours additionally draws a large flat
-  yellow wedge at the wing, where the original shows a compact camera-facing star burst. That is
-  the `PlaneBuilder.cs:204-249` re-skin above showing itself, so the billboard deviation is not
-  merely "possibly wrong": it has a screenshot against it. Both are inside this item's scope; no
-  separate entry was minted.
+- `BL-284` **Wing-light flare: soft round glow vs the original's sharp star burst; view-dependence
+  unproven.** Follow-up from `BL-119` (landed 2026-08-05): with the authored one-sided quad restored
+  and the blink at the measured ~1 frame, the flare reads as a compact soft amber glow — much closer
+  than the old billboard blob, but the PT-03 reference still shows sharp radiating star points that
+  our plain radial `oil_liteflare` sprite does not produce. Whether the original draws the flare
+  from every angle (a one-sided quad is roughly chase-view-only) is also unmeasured — one orbit
+  clip of a lit plane in the original settles both (piratefighter or brigand: the only airframes
+  whose defs wire `wing_lights_blink`; the Bloodhawk carries no flare nodes at all). Also riding
+  here: `WingLightBlinker.LightEnergy = 1.0` is a declared TUNE — the def authors the point
+  lights' range/colour only, no intensity.
+  ⚠ Traps: (a) re-adding the billboard is the rejected fix — PT-03's screenshot is against it.
+  (b) don't edit or swap the sprite to fake the star: the star points may be the original engine's
+  flare *rendering* (a cross-flare pass), not the texture asset — the orbit clip decides first.
 - `BL-120` **Collision feel** — behaviour against building corners.
 - `BL-121` **Damage (Run-2 item 10)** — `CrashSpeed` 25, graze friction + attitude kick,
   `GrazeStopSpeed`, breakup scatter, and whether the 10c panel-flip and smoke-trail look right in

@@ -16062,3 +16062,31 @@ the footage cannot name the def.
 **Verified.** Docs only — no build or test run. `HANDOFF-cap21-throttle-smoke.md` (disk-only,
 never committed) is deleted from the main checkout alongside this entry, per its own
 instruction.
+
+## 2026-08-05 — PLAN-m3-polish-8 B4 `BL-119`: the wing lights play their authored blink
+
+`WingLightBlinker` now gates on the session's `ANIMATION_LOD` flag (the def's else-branch: below
+HIGH the flares never come on), flashes for ~0.033 s — PT-03's measured ~1 frame @ 30 fps, i.e.
+2 ticks of the 60 Hz sim clock, nudged past the tick boundary a strict float comparison was
+dropping — and emits a matching `OmniLight3D` per flare at the authored range/colour
+(0.5–1.25 m, 0.88/0.78/0.36; intensity is a declared TUNE, the def authors none). Confirmed
+clearly visible at chase distance at 1×, overturning the stale "negligible" judgement.
+`PlaneBuilder`'s flare material drops the billboard/double-sided re-skin for the authored
+one-sided quad — the billboard is what turned PT-03's compact star burst into a flat blob. Def
+confirmed against `wing_light.zrd.json`: only `piratefighter`/`brigand` wire `wing_lights_blink`;
+the Bloodhawk has no flare nodes. Verified: live chase captures on/off-tick + `--anim-lod=1`
+dark, `RunTests.ps1` green, 13/13 goldens hash-identical (no golden poses a def-carrying plane).
+Evidence: `.scratch/plan8/B4/`. Residual star-burst shape + view-dependence question → `BL-284`.
+
+## 2026-08-05 — PLAN-m3-polish-8 B5 `BL-264`: prop/rotor spin shares `SpinMotion`'s decode — and the unit "guess" was already exact
+
+Disproof plus refactor, no rate change: the hand deg/s constants in `PropParts.cs` match
+`plane_props.zrd.json`/`autogyro.zrd.json`'s `XYZ_ROTATION` triples bit-for-bit, and the
+`DegToRad` conversion was already identical to `AnimDefs.Spin`'s — the "invented units" premise
+was wrong, now corrected in the module docs. `PropAnimator` now recomputes each disc's absolute
+pose via the new `SpinMotion.ComposeSpin` (accumulate-from-rest, extracted static — `PropAnimator`
+still never constructs a motion, preserving the `src/Mech3/Anim/` invariant) instead of stepping
+`RotateObjectLocal`, so a long session cannot drift. Verified: `RunTests.ps1` green; `empty-stage`
+and `c1-destroy-effects` goldens moved 1–3 px (max delta 1, the prop hub — the integration-method
+switch alone) and were re-pinned after reproducing both pre-change hashes on unchanged code;
+`c1-flight`/`viewer-bhawk` stayed bit-identical. Evidence: `.scratch/plan8/B5/`.
