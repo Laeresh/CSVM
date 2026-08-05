@@ -6,13 +6,21 @@ using System.Text.RegularExpressions;
 namespace CSVM.Mech3.Anim;
 
 /// <summary>Name → node resolution: the index, the wildcard matcher, the memoized <see
-/// cref="FindAll"/>, <see cref="ResolvePath"/>, the symbol-table authority (<see
-/// cref="SymbolClaims"/>, the by-index map <see cref="Add"/> builds), the anchoring rules
-/// (<see cref="Anchors"/>: NAME match, symbol narrowing, the ANIMATION_ROOT_NAME lift) and the
-/// bind-time resolution census (<see cref="ResolutionLines"/>) — generic over the node type so the
-/// whole rule set is testable without an engine (a plain token type in <c>CSVM.Tests</c>) and
-/// shared, unchanged, by the one engine instantiation (<c>AnimRuntime</c>'s
-/// <c>NameResolver&lt;Node3D&gt;</c>).
+/// cref="FindAll"/>, the scoped tier chain (<see cref="Resolve"/>/<see cref="ResolveScoped"/>),
+/// the symbol-table authority (<see cref="SymbolClaims"/>, the by-index map <see cref="Add"/>
+/// builds), the anchoring rules (<see cref="Anchors"/>: NAME match, symbol narrowing, the
+/// ANIMATION_ROOT_NAME lift) and the bind-time resolution census (<see cref="ResolutionLines"/>)
+/// — generic over the node type so the whole rule set is testable without an engine (a plain
+/// token type in <c>CSVM.Tests</c>) and shared, unchanged, by the one engine instantiation
+/// (<c>AnimRuntime</c>'s <c>NameResolver&lt;Node3D&gt;</c>).
+///
+/// <para>⚠ The three-tier scope order — call anchor's subtree, then the definition's OWN template
+/// roots (the constructor's <c>ownRootsOf</c> hook), then global unless <c>LOCAL_NODES_ONLY</c> —
+/// is structural here: <see cref="ResolvePath"/> is private, so no consumer can compose the
+/// primitives in a different order. It once diverged caller-side (the motion targets and the
+/// puffer host took different routes to the same name and landed on different copies, so an
+/// authored stop never reached its emitter); every consumer resolves through
+/// <see cref="Resolve"/>/<see cref="ResolveScoped"/> by construction.</para>
 ///
 /// <para>Rows enter through <see cref="Add"/> and are never removed — most build during one
 /// bootstrap walk and every later query reads that as a fixed snapshot, including ancestry: <see
@@ -85,6 +93,13 @@ public sealed class NameResolver<TNode>
 
     private readonly IEqualityComparer<TNode> _identity;
 
+    // The middle tier: the definition's own template roots, resolved by the OWNER (the pool and
+    // its slot arithmetic stay AnimRuntime's — the resolver sees only the resolved root list).
+    private readonly Func<AnimDefinition, TNode?, IReadOnlyList<TNode>> _ownRootsOf;
+
+    // Liveness of an anchor node (the engine passes Godot's IsInstanceValid; tests pass _ => true).
+    private readonly Func<TNode, bool> _isLive;
+
     // The compiled gamez index -> built node map SymbolClaims and NarrowToSymbolRoot read. See
     // Add for the two population rules (never on a fallback runtime, never for a pooled copy).
     private readonly Dictionary<int, TNode> _byIndex = new();
@@ -104,9 +119,24 @@ public sealed class NameResolver<TNode>
 
     private int _censusAnchored, _censusNarrowed, _censusLifted, _censusSuppressed, _censusUnanchored, _censusMissing;
 
-    public NameResolver(IEqualityComparer<TNode>? identity = null)
+    /// <summary>
+    /// <paramref name="ownRootsOf"/> supplies the tier chain's middle tier: the copies of a
+    /// definition's own template root(s) that belong with the given anchor's pool slot. It runs
+    /// per event on poll loops, so it must resolve through <see cref="FindAll"/> — never <see
+    /// cref="Anchors"/>, whose once-per-definition census it would re-enter — and must not
+    /// allocate beyond what a <see cref="FindAll"/> call already does. Null means "no own roots"
+    /// (the tier always misses). <paramref name="isLive"/> answers whether an anchor node is
+    /// still valid; a dead anchor drops the scoped tiers entirely (see
+    /// <see cref="ResolveScoped"/>).
+    /// </summary>
+    public NameResolver(
+        IEqualityComparer<TNode>? identity = null,
+        Func<AnimDefinition, TNode?, IReadOnlyList<TNode>>? ownRootsOf = null,
+        Func<TNode, bool>? isLive = null)
     {
         _identity = identity ?? EqualityComparer<TNode>.Default;
+        _ownRootsOf = ownRootsOf ?? ((_, _) => Array.Empty<TNode>());
+        _isLive = isLive ?? (_ => true);
         _parentOf = new Dictionary<TNode, TNode?>(_identity);
         _findCache = new Dictionary<(string, TNode?), List<TNode>>(new ScopeKeyComparer(_identity));
     }
@@ -185,33 +215,53 @@ public sealed class NameResolver<TNode>
         return result;
     }
 
-    /// <summary>Resolves a parent→child NAME path: the first element within <paramref
-    /// name="scope"/> (falling back to the whole index when that misses and <paramref
-    /// name="localOnly"/> is false), then each further element inside the previous matches.
-    /// </summary>
-    public List<TNode> ResolvePath(IReadOnlyList<string> path, TNode? scope, bool localOnly)
+    /// <summary>Resolves a single node name for one definition — the compiled symbol table first
+    /// (<see cref="SymbolClaims"/>), then the scoped tier chain. A name the symbol table claims
+    /// but binds to nothing (index not built) still falls through to <see cref="ResolveScoped"/>:
+    /// the caller decides what an unbuilt claim means (see <c>AnimRuntime.Targets</c>' strictly
+    /// anchor-scoped rescue) — this convenience form keeps the pre-existing fall-through.</summary>
+    public TNode? Resolve(string name, AnimDefinition def, TNode? anchor)
     {
-        var candidates = FindAll(path[0], scope);
-        if (candidates.Count == 0 && scope is not null && !localOnly)
+        if (SymbolClaims(def, name, out var bound) && bound != null)
         {
-            candidates = FindAll(path[0], null);
+            return bound;
         }
-        for (int i = 1; i < path.Count && candidates.Count > 0; i++)
+        var found = ResolveScoped(new List<string> { name }, def, anchor);
+        return found.Count > 0 ? found[0] : null;
+    }
+
+    /// <summary>Resolves a NAME path for one definition, narrowest scope first: the call anchor's
+    /// subtree, then the DEFINITION'S OWN template root(s) (the constructor's <c>ownRootsOf</c>
+    /// hook), then — unless the definition carries <c>LOCAL_NODES_ONLY</c> — the whole index. A
+    /// null or dead anchor (the <c>isLive</c> predicate) skips the scoped tiers and resolves
+    /// against the whole index directly, regardless of <c>LOCAL_NODES_ONLY</c>.
+    ///
+    /// <para>The middle tier exists because the anchor is not always where the def's own nodes
+    /// live: an effect callee is re-anchored onto the CALL SITE (<c>call_hetrails_up</c> onto
+    /// <c>he_ring</c>) while its nodes ride its own template root, which the owner relocated to
+    /// that site. Effect templates staged side by side reuse node names — <c>fly_trail1</c>-<c>5</c>
+    /// belongs to <c>he_trails</c>, <c>ap_trails</c> AND <c>carnage_trails</c> — so falling
+    /// straight to the global index animated every copy, two of them still parked at the stage
+    /// origin, i.e. the world origin.</para>
+    ///
+    /// <para>Callers must treat the returned list as read-only — a single-element path hands back
+    /// the memoized <see cref="FindAll"/> list itself.</para></summary>
+    public List<TNode> ResolveScoped(IReadOnlyList<string> path, AnimDefinition def, TNode? anchor)
+    {
+        if (anchor == null || !_isLive(anchor))
         {
-            var next = new List<TNode>();
-            foreach (var c in candidates)
-            {
-                foreach (var n in FindAll(path[i], c))
-                {
-                    if (!_identity.Equals(n, c))
-                    {
-                        next.Add(n);
-                    }
-                }
-            }
-            candidates = next;
+            return ResolvePath(path, null, localOnly: true);
         }
-        return candidates;
+        var found = ResolvePath(path, anchor, localOnly: true);
+        if (found.Count == 0)
+        {
+            found = ResolveInOwnRoot(path, def, anchor);
+        }
+        if (found.Count == 0 && !def.LocalNodesOnly)
+        {
+            found = ResolvePath(path, null, localOnly: true);
+        }
+        return found;
     }
 
     /// <summary>The world nodes a definition anchors to: NAME matches (wildcards = one per
@@ -344,8 +394,73 @@ public sealed class NameResolver<TNode>
     private static string Sample(List<string> shown, int total) =>
         string.Join(", ", shown) + (total > shown.Count ? $", â€¦ (+{total - shown.Count} more)" : "");
 
-    // The census-free anchor computation Anchors wraps — the internal path a future tier caller
-    // uses when it must not re-enter the census (⚠ class remarks).
+    // A parent->child NAME path: the first element within scope (falling back to the whole index
+    // when that misses and localOnly is false), then each further element inside the previous
+    // matches. Private on purpose — the tier order above is the ONLY route to it (⚠ class
+    // remarks); every tier call passes localOnly: true, the global step being a tier of its own.
+    private List<TNode> ResolvePath(IReadOnlyList<string> path, TNode? scope, bool localOnly)
+    {
+        var candidates = FindAll(path[0], scope);
+        if (candidates.Count == 0 && scope is not null && !localOnly)
+        {
+            candidates = FindAll(path[0], null);
+        }
+        for (int i = 1; i < path.Count && candidates.Count > 0; i++)
+        {
+            var next = new List<TNode>();
+            foreach (var c in candidates)
+            {
+                foreach (var n in FindAll(path[i], c))
+                {
+                    if (!_identity.Equals(n, c))
+                    {
+                        next.Add(n);
+                    }
+                }
+            }
+            candidates = next;
+        }
+        return candidates;
+    }
+
+    // The middle tier: the path resolved inside the definition's own template root(s) — the same
+    // copies the owner places at a call site — de-duplicated in first-seen order. Census-free by
+    // construction: the hook and this method go through FindAll only (⚠ class remarks).
+    private List<TNode> ResolveInOwnRoot(IReadOnlyList<string> path, AnimDefinition def, TNode? anchor)
+    {
+        var found = new List<TNode>();
+        if (string.IsNullOrEmpty(def.Name))
+        {
+            return found;
+        }
+        foreach (var root in _ownRootsOf(def, anchor))
+        {
+            foreach (var node in ResolvePath(path, root, localOnly: true))
+            {
+                if (!ContainsIdentity(found, node))
+                {
+                    found.Add(node);
+                }
+            }
+        }
+        return found;
+    }
+
+    private bool ContainsIdentity(List<TNode> list, TNode node)
+    {
+        foreach (var n in list)
+        {
+            if (_identity.Equals(n, node))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // The census-free anchor computation Anchors wraps — the internal path for anything that must
+    // not re-enter the census (⚠ class remarks); the tier chain stays census-free the same way,
+    // through FindAll/ResolvePath only.
     private (List<TNode?> Anchors, AnchorKind How) ComputeAnchors(AnimDefinition def)
     {
         var anchors = FindAll(def.Name, null).Cast<TNode?>().ToList();
