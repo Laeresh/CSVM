@@ -55,7 +55,7 @@ previews, debug dumps, golden-test captures, etc. — always write them into
 
 ## Architecture & key decisions
 
-- **Engine:** Godot 4 .NET (C#). Consumes extraction output via mech3ax / Mech3DotNet (strongly-typed C# wrapper).
+- **Engine:** Godot 4 .NET (C#). Consumes mech3ax extraction output (JSON/zip) via its own readers in `CSVM/src/Mech3/` — no Mech3DotNet or other package dependency.
 - **Format reverse engineering:** happens in a fork of [mech3ax](https://github.com/TerranMechworks/mech3ax) (Rust) at `tools/mech3ax/`. Their byte-identical round-trip test harness (extract→repack) is the correctness standard. **The CS work stays in the fork, not upstream** (upstream dropped CS for maintenance reasons and is dormant) — remotes, branch roles and the sync procedure are in `docs/tooling.md`.
 - **Flight model:** data-driven approximation — parameterized by plane stats from extracted zrdr reader files, hand-tuned against the original game. No exe decompilation.
 - **Division of labor:** the AI agent writes the Rust parsers, Godot code, and docs; the user reviews, playtests flight feel, and owns upstream/community communication.
