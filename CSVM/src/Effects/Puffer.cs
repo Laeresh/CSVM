@@ -280,6 +280,25 @@ public sealed partial class Puffer : Node3D
     /// documents the keys.</summary>
     public const float SizeScaleDefault = 1f;
 
+    /// <summary>`BL-275` TUNE defaults (config.json <c>puffer.fireRiseScale</c> /
+    /// <c>puffer.fireLifetimeScale</c>): multiply the fire puffer's world-vertical spawn velocity
+    /// and its per-puff lifetime. INVENTED against the original's footage, not decoded — the
+    /// authored numbers integrate to a ~10–12 m column for the 30 s fire under FRICTION 0.6,
+    /// while the original's tank/destruction fire columns read as an unbroken ~3+
+    /// building-height plume (`OriginalScreenshots/C1 IA1 Burning Fuel Tanks.png`, the
+    /// `C1 IA1 Destruction.mp4` t≈176 s columns). 2.5×/1.5× puts the 30 s fire's apex at
+    /// ~30–45 m and lets particles live to it. Recorded in backlog.md's TUNE list.</summary>
+    public const float FireRiseScaleDefault = 2.5f;
+    public const float FireLifetimeScaleDefault = 1.5f;
+
+    /// <summary>The authored fire-column family — the crash fire (<c>large_10sec_fire</c>), the
+    /// destruction fires (<c>large_30sec_fire</c>/<c>huge_30sec_fire</c>) and the burning fuel
+    /// tanks all emit a sustained puffer of exactly this name, and it is the family the user
+    /// judged "climbs but not as high as the original" (`BL-275`, PT-04/PT-22). The two scales
+    /// above apply only to it, so gun smoke, trails, sputters and the ambient
+    /// steam/torch/waterfall emitters keep their authored numbers.</summary>
+    private const string FirePufferName = "fire_n_smoke";
+
     /// <summary>Alpha-weighted mean luminance (0–1) below which the sprite a particle dies on
     /// counts as smoke, so the emitter alpha-blends instead of adding. The measured population
     /// separates cleanly either side of it: fire_f06 0.018 and thickblksmoke 0.004 below,
@@ -309,6 +328,11 @@ public sealed partial class Puffer : Node3D
     private float _burstSizeScale = SizeScaleDefault;
     private float _trailSizeScale = SizeScaleDefault;
     private float _sustainSizeScale = SizeScaleDefault;
+
+    // The BL-275 fire-column scales — 1 (inert) unless this emitter IS the fire puffer family
+    // (FirePufferName), which only ever spawns on the sustained path.
+    private float _fireRiseScale = 1f;
+    private float _fireLifeScale = 1f;
 
     private PufferState _state = null!;
     private IEmitterRenderer _renderer = null!;
@@ -674,6 +698,11 @@ public sealed partial class Puffer : Node3D
         _burstSizeScale = Config.GetFloat("puffer.burstSizeScale", SizeScaleDefault);
         _trailSizeScale = Config.GetFloat("puffer.trailSizeScale", SizeScaleDefault);
         _sustainSizeScale = Config.GetFloat("puffer.sustainSizeScale", SizeScaleDefault);
+        if (string.Equals(state.Name, FirePufferName, StringComparison.OrdinalIgnoreCase))
+        {
+            _fireRiseScale = Config.GetFloat("puffer.fireRiseScale", FireRiseScaleDefault);
+            _fireLifeScale = Config.GetFloat("puffer.fireLifetimeScale", FireLifetimeScaleDefault);
+        }
         if (state.DistanceInterval > 0f)
         {
             // Distance states use the trail pool even on the sustained (runtime) path: their
@@ -685,7 +714,9 @@ public sealed partial class Puffer : Node3D
         }
         else if (sustained)
         {
-            int steady = Mathf.CeilToInt(state.Number * state.LifetimeMax
+            // The scaled lifetime raises the steady-state population with it, or the tuned fire
+            // would silently drop its extra puffs at the old pool's edge.
+            int steady = Mathf.CeilToInt(state.Number * state.LifetimeMax * _fireLifeScale
                                          / Mathf.Max(state.TimeInterval, 1e-3f)) + state.Number;
             _particles = new Particle[Mathf.Clamp(steady, SustainPoolMin, SustainPoolMax)];
         }
@@ -718,12 +749,20 @@ public sealed partial class Puffer : Node3D
         float d = _state.DeviationDistance;
         for (int k = 0; k < _state.Number && _liveCount < _particles.Length; k++)
         {
+            // Draw order (pos → vel → size → life) is deliberately the historical one: every
+            // sustained emitter shares it, and reordering the draws re-scatters ALL of them —
+            // measured as the c1-waterfall golden moving with the fire tune inert there.
+            var pos = origin + new Vector3(Rand(-d, d), Rand(-d, d), Rand(-d, d));
+            var vel = baseVel + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z));
+            // The BL-275 fire tune: scale the world-vertical rise (and the puff's lifetime below)
+            // of the fire family only — 1 for every other emitter, so this is the identity there.
+            vel.Y *= _fireRiseScale;
             _particles[_liveCount++] = new Particle
             {
-                Pos = origin + new Vector3(Rand(-d, d), Rand(-d, d), Rand(-d, d)),
-                Vel = baseVel + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z)),
+                Pos = pos,
+                Vel = vel,
                 BaseSize = Rand(_state.SizeMin, _state.SizeMax) * _sustainSizeScale,
-                Life = Rand(_state.LifetimeMin, _state.LifetimeMax),
+                Life = Rand(_state.LifetimeMin, _state.LifetimeMax) * _fireLifeScale,
                 Age = 0f,
                 Frame = _state.TextureSequence.Count > 0 ? 0f
                     : Mathf.Min(_state.Textures.Count - 1,

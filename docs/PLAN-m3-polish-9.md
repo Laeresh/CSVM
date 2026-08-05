@@ -71,8 +71,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — the crash and fire scene
 
 4. ☑ `BL-274` Anchor the crash ground splash at the impact point instead of the sliding wreck
-5. ☐ `BL-276` `large_30sec_fire` burns 30 s again — find and fix the suspected `BL-212` regression
-6. ☐ `BL-275` Fire plumes climb to the original's height (rise speed or per-puff lifetime)
+5. ☑ `BL-276` `large_30sec_fire` burns 30 s again — find and fix the suspected `BL-212` regression
+6. ☑ `BL-275` Fire plumes climb to the original's height (rise speed or per-puff lifetime)
 
 ### Wave C — authored effects and world data
 
@@ -192,7 +192,7 @@ suite and `c1-crash` golden guard the regression surface; run `.\RunTests.ps1`.
 **⚠ Traps.** Anchor at the **impact point**, not the plane centre — `BL-060`'s trap about anchoring
 at `pose.Origin` applies to the *breakup*, not this splash.
 
-## B5 ☐ `BL-276` `large_30sec_fire` stops at ~5 s instead of 30
+## B5 ☑ `BL-276` `large_30sec_fire` stops at ~5 s instead of 30
 
 **Goal.** The fire behind ~1,035 death call sites burns its authored 30 seconds again.
 
@@ -218,7 +218,7 @@ something to be measured against.
 early (user's call, 2026-08-05) — those are `PLAN-m3-polish-8` Wave D's authored-data rework. Do
 not merge the two; a shared "puffers stop early" item would hide a regression inside planned work.
 
-## B6 ☐ `BL-275` Fire plumes do not rise high enough
+## B6 ☑ `BL-275` Fire plumes do not rise high enough
 
 **Goal.** The crash fire and the destruction fire both climb to the original's height.
 

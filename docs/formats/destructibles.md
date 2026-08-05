@@ -111,6 +111,15 @@ there varies — for the water tower it is the second puffer sequence (`h2twr_pu
 actual death swap `destroy_h2twr` sits in the regular `sequences` array. Do not treat
 `unknown_seq` as a reliable pointer to the death swap.
 
+**The slot is loaded and dispatched at death (`BL-276`, 2026-08-05).** `CompiledAnim` parses it
+into `AnimDefinition.DeathSlot` — deliberately OFF `Sequences`, so bootstrap and the
+sequence-walking derivations never see it — and `AnimRuntime.RunDeathSequence` runs it as an
+extra runner on the death's own instance. The 2026-08-05 census over all 12,693 compiled defs:
+every non-empty slot sits on a `health > 0` destructible (none elsewhere), and 1,429 of the
+1,430 mission-archive slots dispatch calls no listed sequence reaches — this block is where
+~all of `large_30sec_fire`'s 1,035 death calls live, so before it dispatched, the game's
+most-called death fire never played from a compiled death site at all.
+
 ## Binding a def to its object(s)
 
 A destructible def anchors to scene nodes exactly like any animation definition (full rules in
