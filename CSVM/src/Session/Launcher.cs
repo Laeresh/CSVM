@@ -35,9 +35,16 @@ public partial class Launcher : Node3D
     /// and everything (both audio paths) is on it by default.</summary>
     private const int MasterBus = 0;
 
-    /// <summary>Master output gain, linear. 1 is the engine's own default (0 dB), so a stock launch
-    /// never touches the bus at all — see <see cref="ApplyMasterVolume"/>.</summary>
-    private const float MasterVolumeDefault = 1f;
+    /// <summary>Master output gain, linear, when neither <c>--volume=</c> nor the
+    /// <c>audio.volume</c> config key says otherwise. 0 since 2026-08-05: launches are silent
+    /// unless someone asks for sound (the Run scripts pass <c>--volume=1.0</c>), so a scripted
+    /// or agent run never sounds by accident — see <see cref="ApplyMasterVolume"/>.</summary>
+    private const float MasterVolumeDefault = 0f;
+
+    /// <summary>The bus's own resting gain (0 dB). A launch resolving to this leaves the bus
+    /// untouched, keeping it byte-identical in output and console log to a launch that never
+    /// had a volume path at all.</summary>
+    private const float MasterVolumeUnattenuated = 1f;
 
     /// <summary>Gain floor for the dB conversion, since <c>LinearToDb(0)</c> is negative infinity.
     /// -80 dB is inaudible, which is the whole point of <c>--volume=0</c>.</summary>
@@ -699,7 +706,7 @@ public partial class Launcher : Node3D
     }
 
     /// <summary>Settles the master output gain for the launch: <c>--volume=</c> if it was given,
-    /// else the <c>audio.volume</c> config key, else unattenuated.
+    /// else the <c>audio.volume</c> config key, else silent.
     ///
     /// <para>This is the knob for running the game next to something else, and it is deliberately
     /// NOT <c>--mute</c>: at volume 0 both audio paths still load and play, so every sound counter
@@ -720,9 +727,9 @@ public partial class Launcher : Node3D
             volume = asked;
             source = "--volume";
         }
-        // The default is the bus's own resting state, so leaving it alone keeps a stock launch
-        // byte-identical in both output and console log.
-        if (Mathf.IsEqualApprox(volume, MasterVolumeDefault))
+        // Full volume is the bus's own resting state, so leaving it alone keeps a full-volume
+        // launch byte-identical in both output and console log.
+        if (Mathf.IsEqualApprox(volume, MasterVolumeUnattenuated))
         {
             return;
         }

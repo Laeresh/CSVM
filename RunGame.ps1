@@ -75,10 +75,18 @@ if (-not $env:SDL_JOYSTICK_DIRECTINPUT) { $env:SDL_JOYSTICK_DIRECTINPUT = "0" }
 $UserArgs = @()
 if ($args.Count -gt 0) { $UserArgs += $args }
 
-if ($UserArgs.Count -gt 0) {
+# The engine's own default is silent (--volume=0, since 2026-08-05) so scripted runs never
+# sound by accident. This is the "play the game" entry point, so it asks for sound explicitly
+# -- unless you set a volume yourself, or passed --mute (which loads no audio for a gain to
+# attenuate, and would draw the conflict WARN).
+if (@($UserArgs | Where-Object { $_ -like '--volume=*' -or $_ -eq '--mute' }).Count -eq 0) {
+    $UserArgs = @('--volume=1.0') + $UserArgs
+}
+
+if ($args.Count -gt 0) {
     Write-Host "Launching Godot: $($UserArgs -join ' ')" -ForegroundColor Cyan
 } else {
-    Write-Host "Launching Godot: launchscreen (no args)" -ForegroundColor Cyan
+    Write-Host "Launching Godot: launchscreen ($($UserArgs -join ' '))" -ForegroundColor Cyan
 }
 # SHELL-1: -ArgumentList quotes nothing itself and this repo path contains a space.
 $LaunchArgs = @("--path", ('"' + $ProjectDir + '"'), "res://scenes/Main.tscn", "--") + $UserArgs
