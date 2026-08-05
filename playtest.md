@@ -105,6 +105,16 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 
 ## 1 · Actionable now (`PT-nn`)
 
+- `PT-40` **Belly-slide the ground splash stays put at the impact point (`BL-274`).** The crash's
+  `flydirt_plane` splash/dust used to inherit the same forward momentum
+  `FlightController.Crash` gives the wreck pieces so they scatter — dragging the splash along with
+  the slide instead of staying planted where the plane hit; it now sinks/fades in place, exempted
+  by name (`EffectCatalogue.GroundSplashAnimNames`). Sound, piece tumble and the fireball are
+  untouched. `--fly --chapter=C1 --plane=player_bhawk`, belly-slide into terrain (or
+  `--crash` to force it). *Look for:* the dust/scorch mark stays at the touchdown point while the
+  wreck slides/tumbles past it, instead of drifting off in the same direction as the debris.
+  *Blocks:* `BL-274` close.
+
 - `PT-39` **The gun line after plan-8 A2/A3: smoke at the gun line, bare casings, and pick the
   muzzle-flash form (`BL-263`).** The invented eject-puff cluster is deleted and the authored
   `muzzlepuffer` renders (6 puffs / 0.3 s, drifting aft); the muzzle flash defaults to the authored

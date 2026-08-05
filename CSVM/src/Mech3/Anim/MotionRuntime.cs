@@ -111,7 +111,8 @@ internal sealed class MotionRuntime : IAnimMotion
     /// </summary>
     public string? PendingBounce { get; private set; }
 
-    public static MotionRuntime? Create(AnimRuntime rt, Node3D target, AnimData data, float runTime)
+    public static MotionRuntime? Create(AnimRuntime rt, Node3D target, AnimData data, float runTime,
+        bool inheritVelocity = true)
     {
         var rest = rt.RestOf(target); // records the authored pose; the fallback for a bad live basis
         var held = target.Transform;
@@ -137,9 +138,13 @@ internal sealed class MotionRuntime : IAnimMotion
         // The plane's momentum (world-space), carried by the launched pieces so they scatter
         // along its travel instead of just popping up in place. Converted into the node's parent
         // frame, where the launch velocity lives (v0 drives Target.Transform, a local pose).
+        // `inheritVelocity` opts a caller's node OUT (BL-274): a ground-planted effect (the crash
+        // splash) authors the exact same near-zero-horizontal, vertical-only translation shape as a
+        // launched piece, so the data alone cannot tell "debris" from "a decal that must stay put"
+        // apart — only the caller (which knows which def this is) can.
         Vector3 InheritedLocal()
         {
-            if (rt.InheritedWorldVelocity == Vector3.Zero)
+            if (!inheritVelocity || rt.InheritedWorldVelocity == Vector3.Zero)
                 return Vector3.Zero;
             var parentBasis = (target.GetParent() as Node3D)?.GlobalTransform.Basis ?? Basis.Identity;
             return parentBasis.Inverse() * rt.InheritedWorldVelocity;
