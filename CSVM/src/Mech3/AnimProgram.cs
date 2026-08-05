@@ -250,6 +250,18 @@ public sealed class AnimProgram
                     }
                 }
             }
+            // The compiled destruction slot is dispatched at death (RunDeathSequence) — same
+            // reachability rule as the death/damage sequences above it.
+            if (def.DeathSlot is { } slot)
+            {
+                foreach (var name in NamesIn(new[] { slot }, kind))
+                {
+                    if (seen.Add(name))
+                    {
+                        yield return name;
+                    }
+                }
+            }
         }
 
         static IEnumerable<string> NamesIn(IEnumerable<AnimSequence> sequences, string kind)

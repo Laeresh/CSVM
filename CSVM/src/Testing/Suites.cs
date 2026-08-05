@@ -110,6 +110,8 @@ public static class Suites
             "weapon hits destroy, swap, drop colliders, and survive destroy→reset→destroy", DamageHd));
         into.Add(new TestHarness.Suite("stop-sequence",
             "authored STOP_SEQUENCE stops run: the fireball's 0.3 s stopper and the 30 s fire's halt", StopSequenceStops));
+        into.Add(new TestHarness.Suite("death-slot",
+            "a killed destructible dispatches its compiled destruction slot — the block carrying the 30 s fire's 1,035 death calls (BL-276)", DeathSlotDispatches));
         into.Add(new TestHarness.Suite("wait-for-completion",
             "a WAIT_FOR_COMPLETION call holds the caller's next event for its callee, and an unflagged one beside it does not (BL-228)", WaitForCompletion));
         into.Add(new TestHarness.Suite("emitter-host-deactivation",
@@ -1478,6 +1480,71 @@ public static class Suites
         });
     }
 
+    // ---- BL-276: the compiled destruction slot dispatches at death ------------------------------
+
+    /// <summary>The live-path start check the direct-Start <c>stop-sequence</c> suite cannot make:
+    /// a real kill must dispatch the def's compiled destruction slot
+    /// (<see cref="AnimDefinition.DeathSlot"/> — mech3ax's <c>unknown_seq</c>), the block that
+    /// carries ~all of <c>large_30sec_fire</c>'s 1,035 death calls. Before `BL-276` the block was
+    /// never parsed, every one of those calls silently no-oped, and every "the fire ends on time"
+    /// check read the absence as a pass — an effect that never starts satisfies any stop assertion.
+    /// Subject: a C1 AA gun, whose slot is the healthy/destroyed swap plus
+    /// <c>CallAnimation genx12</c>. Able to fail: with <c>RunDeathSlot</c> deleted, no
+    /// <c>destruction_slot</c> lane ever dispatches.</summary>
+    private static void DeathSlotDispatches(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var runtime = world.Runtime;
+            DestructibleRegistry.Instance? gun = null;
+            foreach (var inst in runtime.Destructibles.All)
+            {
+                if (inst.Def.DeathSlot is { } s && s.Events.Any(e => e.Kind == "CallAnimation"))
+                {
+                    gun = inst;
+                    break;
+                }
+            }
+            ctx.Check(gun != null, $"chapter ships a destructible with a calling destruction slot chapter={ctx.Chapter}");
+            if (gun == null)
+            {
+                return;
+            }
+            if (gun.Status == DestructibleRegistry.State.Destroyed)
+            {
+                runtime.ResetDestructible(gun);
+            }
+
+            var gunDef = gun.Def;
+            var slotDispatches = new List<(string Kind, string? Name)>();
+            var previous = runtime.OnEventDispatched;
+            try
+            {
+                runtime.OnEventDispatched = d =>
+                {
+                    if (d.Def == gunDef && d.Sequence == "destruction_slot")
+                    {
+                        slotDispatches.Add((d.EventKind, d.EventName));
+                    }
+                };
+                runtime.DamageAt(gun.Anchor, gun.MaxHealth + 1f);
+                for (int i = 0; i < 30; i++)
+                {
+                    runtime.Advance(1f / 60f);
+                }
+            }
+            finally
+            {
+                runtime.OnEventDispatched = previous;
+            }
+
+            ctx.Check(slotDispatches.Count > 0,
+                $"the destruction slot dispatched on death def={gunDef.AnimName} events={slotDispatches.Count}");
+            ctx.Check(slotDispatches.Any(e => e.Kind == "CallAnimation"),
+                $"the slot's CALL_ANIMATION dispatched targets=[{string.Join(",", slotDispatches.Where(e => e.Kind == "CallAnimation").Select(e => e.Name))}]");
+        });
+    }
+
     // ---- BL-228: WAIT_FOR_COMPLETION ------------------------------------------------------------
 
     /// <summary>`BL-228` on the authored case, with its own control beside it in the same sequence.
@@ -2139,14 +2206,25 @@ public static class Suites
                 runtime.UnhandledEventCounts.TryGetValue(lateBounce, out int n) ? n : 0;
 
             var timeline = new List<(float T, string Seq, string Kind, string? Name)>();
+            // Only the tank's OWN dispatches: on a shared cached world, another suite's earlier
+            // kill can still be running its authored death (the AA guns' destruction slot calls
+            // genx12, whose staggered great_balls_of_fire launches ballistic fireballs), and a
+            // runtime-wide read here would count that neighbour's launch against this death
+            // (INSTR-10 — a selector coarser than the subject asserts about something else).
+            var tankDef = tank.Def;
             float clock = 0f;
             var previous = runtime.OnEventDispatched;
-            int launchesBefore = runtime.BallisticMotionsLaunched;
             int missedBefore = Missed();
             bool everOwed = false;
             try
             {
-                runtime.OnEventDispatched = d => timeline.Add((clock, d.Sequence, d.EventKind, d.EventName));
+                runtime.OnEventDispatched = d =>
+                {
+                    if (d.Def == tankDef)
+                    {
+                        timeline.Add((clock, d.Sequence, d.EventKind, d.EventName));
+                    }
+                };
                 runtime.DamageAt(tank.Anchor, tank.MaxHealth + 1f);
                 for (int i = 0; i < 600; i++)   // 10 s, comfortably past the 5.5 s worst-case flight
                 {
@@ -2164,10 +2242,12 @@ public static class Suites
             ctx.Check(!runtime.Motions.OwesBounce(tank.Def, tank.Anchor),
                 $"nothing is still owed once every piece has landed");
 
-            // part1/part2 (authored RUN_TIME) plus part3/part4 (solved) — four, measured. The
-            // called fireball defs carry no ballistic motion of their own, so this is the whole
-            // count and a fifth would mean the death grew a launch nobody authored.
-            int launched = runtime.BallisticMotionsLaunched - launchesBefore;
+            // part1/part2 (authored RUN_TIME) plus part3/part4 (solved) — four, measured, and all
+            // four are this def's own ObjectMotion events (the called fireball defs carry no
+            // ballistic motion of their own). Counted from the def-scoped timeline, not the
+            // runtime-wide BallisticMotionsLaunched: see the hook's remark for the neighbour
+            // launch a shared world can bleed into this window.
+            int launched = timeline.Count(e => e.Kind == "ObjectMotion");
             ctx.Same(4, launched, $"ballistic launches on one {tank.Def.AnimName} death");
 
             float LaunchAt(string node) => timeline
@@ -2209,9 +2289,19 @@ public static class Suites
             timeline.Clear();
             clock = 0f;
             missedBefore = Missed();
+            // Same def scoping as the refuel hook: the yard buildings' own sparkout3/sparkout4
+            // sequence names repeat on the refuel def, so an unscoped read would also count a
+            // neighbour's late bounce.
+            var yardDefs = new HashSet<AnimDefinition>(yard.Select(b => b.Def));
             try
             {
-                runtime.OnEventDispatched = d => timeline.Add((clock, d.Sequence, d.EventKind, d.EventName));
+                runtime.OnEventDispatched = d =>
+                {
+                    if (yardDefs.Contains(d.Def))
+                    {
+                        timeline.Add((clock, d.Sequence, d.EventKind, d.EventName));
+                    }
+                };
                 foreach (var b in yard)
                 {
                     if (b.Status == DestructibleRegistry.State.Destroyed)

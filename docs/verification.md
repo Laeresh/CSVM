@@ -47,6 +47,13 @@ and leave gaps when retiring old ones.
 - **DIAG-19** — **Scripted repros inherit identity defaults (-Z heading, near-origin spawn); a
   pose-dependent symptom needs an off-axis heading AND a far-from-origin placement in the matrix,
   and a repro that works where the report fails means the poses differ, not that the report is wrong.**
+- **DIAG-20** — **An effect that never starts passes every "it ends correctly" check — prove the
+  START from the production call path before diagnosing the stop.** A suite that `Start`s the def
+  directly verifies the halt but cannot see a call site that never dispatches, and "the fire ended"
+  reads identically whether the stop fired or the fire never began. Measured: `large_30sec_fire`'s
+  ~1,035 death calls sat in the unparsed `unknown_seq` block for the project's whole life while the
+  direct-Start `stop-sequence` suite and two cockpit passes all read the absence as a working stop
+  (`BL-276`).
 
 ## SHOT — screenshots and pixel evidence
 
