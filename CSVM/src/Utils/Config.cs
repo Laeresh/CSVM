@@ -231,6 +231,8 @@ public static class Config
             GetFloat("puffer.burstSizeScale", Effects.Puffer.SizeScaleDefault);
             GetFloat("puffer.trailSizeScale", Effects.Puffer.SizeScaleDefault);
             GetFloat("puffer.sustainSizeScale", Effects.Puffer.SizeScaleDefault);
+            GetFloat("puffer.fireRiseScale", Effects.Puffer.FireRiseScaleDefault);
+            GetFloat("puffer.fireLifetimeScale", Effects.Puffer.FireLifetimeScaleDefault);
         }
         catch (Exception e)
         {

@@ -16492,3 +16492,38 @@ itself, (c) the raw e24 offset was already in anim-definitions.md's struct layou
 rule DIAG-20 added (an effect that never starts passes every "it ends correctly" check);
 destructibles.md / anim-definitions.md updated to record the slot as loaded. Cockpit re-test owed:
 the fire now burns 30 s at real death sites — fold into `BL-275`'s height playtest.
+
+## 2026-08-05 — B6 `BL-275`: the fire plumes climb — name-scoped rise/lifetime scales on the `fire_n_smoke` family (TUNE 2.5×/1.5×)
+
+**What landed.** Two config-keyed scales, applied ONLY to the `fire_n_smoke` puffer family — the
+crash `large_10sec_fire`, the destruction `large_30sec_fire`/`huge_30sec_fire`, and the burning
+fuel tanks; every other emitter is untouched: `puffer.fireRiseScale` (default **2.5**) multiplies
+the world-vertical spawn velocity on the sustained path, `puffer.fireLifetimeScale` (default
+**1.5**) the per-puff lifetime (old → new for the 30 s fire: net rise ≈9 m/s → ≈22.5 m/s, life
+3.5–5.5 s → 5.25–8.25 s; the sustain pool is sized by the scaled lifetime so the extra puffs are
+not dropped at the old pool's edge). Both registered in `Config.WarmTuningRegistry`; recorded in
+backlog.md's TUNE list as `BL-275`, **not signed off at the controls**.
+
+**A/B basis.** The authored numbers integrate to a ~10–12 m column for the 30 s fire
+(`FRICTION 0.6` exponential damping, `WORLD_ACCELERATION -1`), while the original's fire columns
+read as unbroken plumes several building-heights tall: `OriginalScreenshots/C1 IA1 Burning Fuel
+Tanks.png` (two tank fires, flame base → dark column ≈3× the neighbouring hangar) and
+`C1 IA1 Destruction.mp4` t≈176 s (two ground-fire columns climbing to near the frame top from the
+air). Headless A/B at the C2 gate2 kill, same framing/seed both sides
+(`.scratch/bl275/ours_before_10s/25s.png` vs `ours_after_10s/25s.png`): before, the flames never
+left the ~15 m archway in 25 s; after, a flame base with a dark smoke column tops out at ≈3× the
+gate's height — the reference's read. Magnitude is judged-by-eye TUNE; the cockpit sign-off rides
+the TUNE entry (destroy a building + crash a plane in one flight).
+
+**A found-and-fixed on the way.** The first cut computed the spawn velocity before the position,
+which reordered `SpawnSustained`'s RNG draws and re-scattered EVERY sustained emitter — exactly
+the five puffer-bearing goldens moved (`c1-waterfall`/`c3-island`/`c5-city-night`/
+`c1-destroy-effects`/`c1-crash`) with the fire tune inert in all of them (GOLD-5's pattern read).
+Draw order restored (pos → vel → size → life) and pinned with a ⚠ in the module entry.
+
+**Verified.** `.\RunTests.ps1` green: 475 units, 30/30 engine suites, goldens 12/13 held with
+`c1-crash` re-pinned `b9c1cbac2d4ad912f9dd0ccec00b8af1` → `5280d89d82ae616b4dcd82e5dc774dbe` —
+the crash fire (`large_10sec_fire` → `fire_n_smoke`) is live at that shot's frame 20, so the
+tuned rise/lifetime moves its pixels by design; the other four puffer-bearing goldens held,
+confirming the name scoping. Full clean re-run after the re-pin: 13/13. `BL-275` deleted from
+the open backlog; its TUNE entry carries the two numbers and the sign-off playtest.

@@ -316,17 +316,6 @@ shape as `BL-259`/`BL-261`.
   Everything else about the crash was judged **right** in the same sitting: sound and piece tumble
   rate both confirmed good, so this is the one visual defect left in that scene.
   *Playtest after fix:* belly-slide a crash and watch the splash stay put.
-- `BL-275` **Fire plumes do not rise high enough — velocity or lifetime is too low.** Two
-  independent sightings the same sitting, judged as one defect (user, 2026-08-05): the crash fire
-  "burns higher" in the original (`PT-04`), and the destruction fire's flames "climb but not as
-  high as the original" with the dark plume "right but not high enough" (`PT-22` a/c). The suspect
-  is the puffer's rise speed or per-puff lifetime, not its size or count. ⚠ **Trap:** this
-  supersedes `PT-22`'s original question, which asked whether the plume read too *thin* (the
-  `NUMBER` default, `BL-218`) — the answer at the controls was about **height**, so do not fold a
-  density re-tune into this. Judge at the authored 1× sizes — `BL-282` landed 2026-08-05, so
-  height reads are no longer inflated by the 4× scale.
-  *Playtest after fix:* destroy a building and crash a plane in one flight; both plumes should
-  climb to the original's height.
 - `BL-277` **`SkyZone` hard-codes `zone2`, which has no horizon geometry at all in C1B, C2 and
   C3.** Found by checking `PT-23`'s "skydome/fog in C1B and C3 are not correct, perhaps only wrong
   zone" against the data (2026-08-05), and it is a bug, not a fidelity preference:
@@ -1765,6 +1754,21 @@ The live list (moved here from CLAUDE.md 2026-07-22). Each is a hand-tuned const
 plausible but unvalidated against the original — they need the user in the cockpit, not another
 scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.md).**
 
+- `BL-275` **Fire-plume rise/lifetime scales (B6, landed 2026-08-05).** `puffer.fireRiseScale`
+  **2.5** and `puffer.fireLifetimeScale` **1.5** — config keys, defaults in
+  `Puffer.FireRiseScaleDefault`/`FireLifetimeScaleDefault`, applied ONLY to the `fire_n_smoke`
+  puffer family (the crash `large_10sec_fire`, the destruction `large_30sec_fire`/
+  `huge_30sec_fire`, the burning fuel tanks) on the sustained spawn path — every other emitter
+  keeps its authored numbers. INVENTED against footage, not decoded: the authored velocities
+  integrate to a ~10–12 m column for the 30 s fire under `FRICTION 0.6`, while the original's fire
+  columns read as unbroken ~3+ building-height plumes (`OriginalScreenshots/C1 IA1 Burning Fuel
+  Tanks.png`; `C1 IA1 Destruction.mp4` t≈176 s). Headless A/B at the C2 gate2 kill: before, the
+  flames never left the ~15 m archway; after, a dark column climbs to ~3× the gate's height.
+  ⚠ **Trap:** do not fold a density re-tune into these — `NUMBER`/thin-ness is `BL-218`'s
+  superseded question; these two knobs are height only.
+  *Playtest to sign off:* destroy a building (C2's gate2, a C5 crate, or — since `BL-276` — any
+  zeppelin engine/cannon) and crash a plane in one flight; both plumes should now climb to the
+  original's height. Keep or move the two numbers.
 - `BL-285` **Engine start/stop residues from `BL-267` (landed 2026-08-05)** — two constants
   pending the user, both in the same cockpit sitting. (a) `ThrottleSlamSmoke.SlamThreshold`
   0.25: the CAP-21 footage only bounds the slam gate to "a single 1/8 step never fires,

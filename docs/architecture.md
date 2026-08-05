@@ -1423,11 +1423,17 @@ payloads.
 Three config knobs scale `BaseSize` per spawn path — `puffer.burstSizeScale` /
 `puffer.trailSizeScale` / `puffer.sustainSizeScale` (`SizeScaleDefault` **1**, the authored
 SIZE_RANGE verbatim; the knobs remain for deliberate per-path tuning — the cull margin scales with
-the largest). Read at `Init`; registered in `Config.WarmTuningRegistry` for `--dump-config`. Moving
+the largest). Two more scale the `fire_n_smoke` family ONLY — `puffer.fireRiseScale` /
+`puffer.fireLifetimeScale` (`BL-275` TUNE, defaults 2.5/1.5): vertical spawn velocity + puff
+lifetime of the crash/destruction/tank fires, identity for every other emitter. All read at
+`Init`; registered in `Config.WarmTuningRegistry` for `--dump-config`. Moving
 `SizeScaleDefault` re-pins every puffer-bearing golden and only those (measured on the 4->1 revert:
 `c1-waterfall`, `c3-island`, `c5-city-night`, `c1-destroy-effects`, `c1-crash`; the other 8 carry no
 live emitter).
 ⚠ TEXTURE_SEQUENCE times are FRACTIONS of a particle's lifetime, not seconds (effects.md).
+⚠ `SpawnSustained`'s draw order (pos → vel → size → life) is shared determinism: reordering the
+  `Rand` calls re-scatters EVERY sustained emitter — measured as five goldens moving with the
+  fire tune inert in all of them.
 ⚠ The blend is derived, never authored: a COLORS ramp or a near-black dying sprite (measured off
   the atlas, `SmokeLuminance`) ⇒ blend_mix + no depth fade, else blend_add (effects.md).
   `Create`'s `blend`/`softParticles` force the verdict for a caller that knows better.
