@@ -209,7 +209,10 @@ public sealed class WorldEffectsFactory
     /// (the wreck) and the effect hosts, all scoped to this one plane where every name is unique.
     /// <see cref="AnimRuntime.NameResolveFallback"/> handles the crash def's non-portable node
     /// ptrs (they index planes.zbd at slots this build never uses); reset states (run at bind) hide
-    /// the wreck + templates until <see cref="FlightController.Crash"/> plays the def.</summary>
+    /// the wreck + templates until <see cref="FlightController.Crash"/> plays the def. The same
+    /// runtime also carries <c>startprops</c>/<c>stopprops</c> (<see cref="EffectCatalogue.PropChoreographyAnims"/>)
+    /// — their own NAME never resolves on any airframe, so <c>FlightController</c>'s direct
+    /// <c>Play</c> calls pass the plane model itself as the fallback anchor.</summary>
     public void BuildFlightCrashRuntime(FlightController controller, PlaneBuilder planeBuilder,
         string planeName, GameZ gamez, SceneBuilder worldScene, TextureArchive textures,
         AnimProgram crashProgram, bool verbose)
@@ -272,6 +275,7 @@ public sealed class WorldEffectsFactory
         // (FlightController.ClassifySurface); Air stays out, having no trigger.
         var rigAnims = new List<string>(EffectCatalogue.CrashDefNames);
         rigAnims.AddRange(EffectCatalogue.PlaneDamageEffectAnims);
+        rigAnims.AddRange(EffectCatalogue.PropChoreographyAnims);
         crashRuntime.Bind(controller, crashProgram.Subset(rigAnims));
         controller.AddChild(crashRuntime);
         controller.CrashRuntime = crashRuntime;

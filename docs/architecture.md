@@ -97,6 +97,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/SpectatorCamera.cs` — the `--freecam`/`--anim-lab` observation camera: RMB-look + WASD/QE, no roll; `Frame`/`FollowNode` track an object.
 - `src/Flight/FlightModel.cs` — the arcade velocity-vector flight physics: thrust/drag/gravity/lift, stall, calibrated control rates.
 - `src/Flight/PropAnimator.cs` — spins the collected prop/rotor discs about their local axes, throttle-scaled (idle floor 0.4); `--fly` only.
+- `src/Flight/ThrottleSlamSmoke.cs` — a large throttle jump streams dark exhaust trail smoke for a few seconds; a single notch or a decrease shows nothing.
 - `src/Flight/ControlSurfaceAnimator.cs` — deflects ailerons/elevators/rudders to an absolute pose from slewed stick input; `--fly` only.
 - `src/Flight/WingLightBlinker.cs` — blinks the wingtip flares 0.08 s every 1.5 s, reset off on respawn; `--fly` only.
 - `src/Flight/PylonOrdnance.cs` — the rockets under the wings: one FLYOUT-model body per loaded pylon, hidden as its ammo depletes; `--fly` only.
@@ -325,6 +326,10 @@ Builds one aircraft from its GameZ subtree (shaded, cullBackfaces: true — inte
 backface-culled or it paints over the skin), skipping cockpit/destroyed/shadow/*_hook subtrees.
 Repaint(scheme) re-liveries the built plane in place; BuildDestroyed builds the wreck subtree with
 the plane-root→destroyed transform chain baked in; WingFlares/DamagePanels expose collected nodes.
+Flight (`spinningProps`) now builds the static `staticpropN` disc alongside the spinning blur discs
+it always built, not just one or the other — the startprops/stopprops choreography cross-fades
+between them at spawn/engine-stop (`FlightController`), so both must exist. `staticrotorN` (the
+autogyro) is unaffected and stays skipped in flight — that def only names propeller nodes.
 ⚠ Skip pdpN/pcdpN torn panels (or build hidden under spinningProps/damagePanels) but always render
   the pdpN_h healthy twins — skipping all of player_damage_on amputates real airframe sections.
 ⚠ nitropropN stays hidden in flight: a NON-spinning blur disc overlaid on spinning ones shimmers.
@@ -1345,9 +1350,12 @@ trapezoid), `WIND`, and precipitation → `PrecipData`. Schema + colours + zone 
 Own-plane non-positional loops (engine with throttle-driven pitch, overspeed whine, rattle,
 damaged-engine blend keyed to `Update`'s `damageFrac` via `PlaneStats.DamagedEngineGain`) +
 one-shots: `StartEngine`/`EngineStartRamp` prop-start fade (re-fired via the loop-restart hook
-in `Update`), `OnCrash` → `snd_exp_plane1..4`, `OnGroundExplosion`/`OnWaterExplosion` layering the
-crash variant's boom (`snd_exp_ground_a` off the dirt def itself, `snd_exp_water_a` from the
+in `Update`; `EngineStartRamp` 2.0 s is sourced from startprops' authored prop cross-fade duration,
+not a bare literal), `OnCrash` → `snd_exp_plane1..4`, `OnGroundExplosion`/`OnWaterExplosion` layering
+the crash variant's boom (`snd_exp_ground_a` off the dirt def itself, `snd_exp_water_a` from the
 `plane_big_splash` inside the sea dive — the crash runtime renders effects, never sound),
+`OnEngineStop` → `snd_propstop`, called right after the explosion one-shots on every crash/destruction
+(`FlightController.Crash`) so the loops end on the authored wind-down cue instead of a cut,
 `OnGraze(water)` → the survivable scrape's authored `snd_exp_water_b`/`snd_exp_ground_b`
 (touchdown.zrd; rate-limited by `FlightController`, not here). `OnWarningShot` draws one
 `bullet_warning_sg` variant per near miss (player.json `warning_shot_sound` is a SOUND_GROUPS name, so
@@ -1360,8 +1368,10 @@ loudness.
   reader "volume" is not a linear mix gain (the original's whine sits 12–18 dB below the raw curve
   cap); re-derive from a new reference. `DamagedEngineMixGain` 1.0 is the same shape
   (`flightAudio.damagedEngineMixGain`) with no reference recording yet to derive a value from.
-⚠ `OnEngineStop` is deliberately NOT called on crash; a future shutdown flow must also stop
-  driving `Update`, or the restart hook re-fires propstart.
+⚠ The visual start/stop choreography (`startprops`/`stopprops`, the static-blade-prop cross-fade +
+  startup smokepuff burst) is a SEPARATE per-plane `AnimRuntime` play (`FlightController`
+  `Respawn`/`Crash`), not this class — `StartEngine`/`OnEngineStop` are audio-only; keep both halves
+  in step by hand, there is no shared trigger.
 ⚠ `MixGain` (1/√N in splitscreen, TUNE) covers the four loops and the per-player cues
   (`PlayEmptyClip`, `OnGraze`); the crash/prop one-shots are deliberately left unscaled.
 
@@ -1469,6 +1479,25 @@ its stored rest pose through `SpinMotion.ComposeSpin` — the same accumulate-fr
 throttle-scaled with a PropIdleSpin 0.4 floor (0 while crashed). --fly only — the static viewer
 keeps the still disc.
 
+## src/Flight/ThrottleSlamSmoke.cs
+The throttle-slam exhaust smoke (`CAP-21` re-read): a large sudden throttle increase streams the
+`nitro_boost` def's own `nitropuffN` puffers (AT_NODE `exhaust1..4`) from the plane's exhaust marker
+nodes for a few sim-seconds, reused WITHOUT the rest of that def (no `nitropropN` discs, no
+`snd_nitrostart`) — the capture shows the same trail-smoke shape on a plain throttle jump with no
+boost. `Update(dt, throttle)` runs an edge-triggered gate: it tracks the throttle at the start of the
+current unbroken climb and fires once per climb the instant the cumulative rise crosses
+`SlamThreshold`, never again for that climb and never on a flat or falling throttle — so tapping one
+notch at a time (each tap separated by a flat/falling frame) evaluates fresh every time. Drives the
+puffers via `Puffer.TrailAdvance`/`TrailEnd` (DISTANCE_INTERVAL, the same mechanism `DamageVisuals`
+uses for the nose smoke trail), not `SustainAt` — the authored def is a distance-triggered trail, not
+a time-interval burst. `Reset(throttle)` (crash/respawn) hard-stops any plume and re-anchors the
+climb tracker so the throttle jump those moments make is never itself read as a slam.
+⚠ `SlamThreshold` 0.25 (TUNE): the capture only bounds it between a firing idle→5/8 (0.625) and a
+  silent single 1/8 (0.125) — 2/8-4/8 is unobserved. 0.25 is the smallest round two-notch jump
+  consistent with both endpoints.
+⚠ `DurationSimSeconds` (≈3.89 s = 2.8 wall-s × 1.390) is TUNE within the capture's "~2-3 wall-s"
+  dissipation estimate, not a measured edge.
+
 ## src/Flight/ControlSurfaceAnimator.cs
 Deflects ailerons/elevators/rudders to an absolute pose: each surface stores its build-time local
 basis and gets Basis = base · Rot(hingeAxis, angle); three channels slew toward the stick at
@@ -1525,6 +1554,11 @@ FlightModel, CameraController + CamParams, Loadout + ProjectilePool (guns/rocket
 here maps it to `CrashSurface`) to pick the variant: a `water`-tagged body plays
 `player_crash_water` + `snd_exp_water_a`, everything else `player_crash_dirt` + `snd_exp_ground_a`;
 `Air` is the no-impact destruct and has no trigger. `--crash` has no struck body, so it forces dirt.
+It also fires `Audio.OnEngineStop` (the wind-down cue, layered over the explosion) and plays
+`stopprops` on `CrashRuntime` — the one call site every engine-death path shares, whether the
+collision resolver called it for a full-speed impact or for a critical part reaching 0 HP on a
+survivable-speed graze (`SurviveHit` returning false). `Respawn` plays `startprops` back and resets
+`ThrottleSmoke`, which `Update` otherwise drives every frame off the live throttle.
 A survivable graze also plays touchdown.zrd's per-surface reaction (`GrazeReaction`): the struck
 collider classified through the same call picks `touchdown_default` (buildings,
 sparks) / `touchdown_dirt` / `touchdown_water`, staged at the contact point via `GrazeEffectSink`
@@ -2335,14 +2369,19 @@ extraction) and as an `effects-census` condition on whatever chapter the run was
 ## src/Session/FlightRigAssembler.cs
 Assembles one player's flight rig: the painted plane model, the `FlightController` and everything hung
 on it — loadout/ordnance, compass, gauges, HUD font test/weapon readout/reticle, damage visuals,
-audio, this player's stunt run + marker/scoreboard/race entry, the spawn placement, and the crash
-runtime built after the controller joins the tree. Constructed once per session build from
+audio, the throttle-slam exhaust smoke (`ThrottleSlamSmoke.Build`, after `Setup` so it can seed its
+climb tracker from the live spawn throttle), this player's stunt run + marker/scoreboard/race entry,
+the spawn placement, and the crash runtime built after the controller joins the tree. Constructed
+once per session build from
 `(SessionSpec, LiveryResolver, SpawnPicker, WorldEffectsFactory, worldRoot, Inputs)`, then
 `Assemble(pi, rig)` once per rig; `MeshInstances`/`WhatSuffix` accumulate across the rigs for the
 caller's build summary. `--weapon-lab` sets `FlightController.Held` on every rig right after `Setup`
 (which places the plane) — the pin is captured at the first held sim step, so it takes the spawn pose
 — and binds `Loadout.ForRig` (every firepoint + every pylon, seeded from the same stock fit) in place
-of `Loadout.Bind`, so the lab panel can arm a mount the stock file never names.
+of `Loadout.Bind`, so the lab panel can arm a mount the stock file never names. `Setup` itself already
+called `Respawn` (which plays `startprops` on `CrashRuntime` if one exists) before the crash runtime
+is built below — so this method plays `startprops` once more right after
+`BuildFlightCrashRuntime`, the only way the very first spawn's choreography is not silently skipped.
 ⚠ **Call it in ascending player order.** `Inputs.PaintRng` and `SpawnBase` are shared streams — the
   livery draw and the spawn index wrap are order-dependent, so reordering or parallelising the rigs
   silently repaints and respawns the whole field.
@@ -2360,7 +2399,8 @@ tables every effect producer must stay inside, static and engine-free. Owns `Eff
 33 impact/destruction/graze names, with the curation comments naming every exclusion —
 `b_steamtrail`, `random_gun_impact`, the LOCAL_CHOREOGRAPHY fail-closed set — as the load-bearing
 knowledge), the crash-rig's own name sets (`CrashDefNames`: `player_crash_dirt`/`_water`;
-`PlaneDamageEffectAnims`: the four `<part>_damage_effects` shims), and the pure
+`PlaneDamageEffectAnims`: the four `<part>_damage_effects` shims; `PropChoreographyAnims`:
+`startprops`/`stopprops`, played directly by `FlightController` rather than through a CALL), and the pure
 `TouchdownFor(SurfaceClass)` the graze reaction's three-way pick routes through. It also derives what
 those names need staged: `StageRootsFor(program, names, resolveRoot)` walks `AnimProgram.Subset`'s
 CALL_ANIMATION closure, takes each reached definition's NAME (the gamez node its instance anchors on),
@@ -2383,11 +2423,13 @@ its whole producible range resolves inside `EffectAnimNames`/`PlaneDamageEffectA
   `ProjectilePool.EffectSink`) on purpose — a typed catalogue entry would thread this module's types
   through the deliberately engine-free `ImpactOutcome`. The producer-range tripwires close the drift
   a typo would otherwise open, at far less churn than four delegate signatures.
-⚠ **Two anchors the closure reports are knowledge the mechanical walk cannot derive**, and they are
-  curated out before `resolveRoot` is asked: a definition every call re-sites with `AT_NODE` onto a
-  subtree that already supplies it (`CallSuppliedAnchors`: `zep_can_dstry1.flt`, absent from C2's
-  gamez entirely) and one authored against the Devastator's own model root (`AirframeScopedAnchors`:
-  `player_pfighter`). Extend those lists, never the walk (`PLAN-effect-catalogue` B2's Outcome).
+⚠ **Anchors the closure reports that are knowledge the mechanical walk cannot derive** are curated
+  out before `resolveRoot` is asked: a definition every call re-sites with `AT_NODE` onto a subtree
+  that already supplies it, or whose own `Play` caller always supplies the anchor directly
+  (`CallSuppliedAnchors`: `zep_can_dstry1.flt`, absent from C2's gamez entirely; `warhawk`,
+  `startprops`/`stopprops`' own NAME — a shared authoring label no real airframe carries) and one
+  authored against the Devastator's own model root (`AirframeScopedAnchors`: `player_pfighter`).
+  Extend those lists, never the walk (`PLAN-effect-catalogue` B2's Outcome).
 ⚠ **`WorldStageRootGaps` (`ballflare.flt`) / `CrashTemplateRootGaps` (`apassengers`) are the
   opposite case and are NOT curation**: roots the closure genuinely needs and nothing stages, so the
   torpedo flare and the crash's passenger removal play nothing at all today (`BL-262`). They are
@@ -2403,8 +2445,13 @@ Builds the impact/destruction effect stages and the per-player crash runtime: th
 crash variants' closures (`EffectCatalogue.CrashDefNames`: `player_crash_dirt` + `player_crash_water`;
 the surface is only known at impact, so both are bound and `FlightController.ClassifySurface` picks)
 **plus** `EffectCatalogue.PlaneDamageEffectAnims` (the four `<part>_damage_effects` shims →
-`random_gun_impact` → `yellow_sparks_follow`), because those need exactly what it already has — the
+`random_gun_impact` → `yellow_sparks_follow`) **plus** `EffectCatalogue.PropChoreographyAnims`
+(`startprops`/`stopprops`), because those need exactly what it already has — the
 `player` anim root, the plane's own `pdpN` panels as INPUT_NODEs, and a live emitter factory. The
+prop choreography's own defs resolve their `staticpropN`/`propN`/`propNb` node names against the
+plane model directly (`LOCAL_NODES_ONLY`) — `FlightController.Respawn`/`Crash` call
+`CrashRuntime.Play("startprops"/"stopprops", PlaneModel, applyReset: false)` themselves, since
+nothing else calls them. The
 names it binds now live in `EffectCatalogue` (its own entry) — `EffectAnimNames` covers impact +
 death effects, including the 12 gun `*_gunhit` variants (a gun hit plays throttled and
 time-bounded, C8), the `DAMAGE_SEQUENCE` stage pair `sputter_black_smoke_obj`/`sputter_fire_smoke_obj`

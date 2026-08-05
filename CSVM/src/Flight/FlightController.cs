@@ -68,6 +68,10 @@ public partial class FlightController : Node3D
     /// each frame. Null if the model has no wing-flare nodes.</summary>
     public WingLightBlinker? WingLights;
 
+    /// <summary>The throttle-slam exhaust smoke; advanced each frame. Null if the model has no
+    /// exhaust nodes.</summary>
+    public ThrottleSlamSmoke? ThrottleSmoke;
+
     /// <summary>Deflects the plane's ailerons/elevators/rudders with stick input;
     /// advanced each frame. Null if the model has no control-surface nodes.</summary>
     public ControlSurfaceAnimator? Surfaces;
@@ -380,6 +384,11 @@ public partial class FlightController : Node3D
         }
     }
 
+    /// <summary>Current throttle (0-1), the live flight model's own value — exposed so the rig
+    /// assembler can seed <see cref="ThrottleSmoke"/> at build time, after <see cref="Setup"/> has
+    /// already placed the plane at its spawn throttle.</summary>
+    public float Throttle => _model.Throttle;
+
     /// <summary>The weapon lab's free camera (D8): while set, this controller writes NOTHING to the
     /// camera — no chase, no fixed view, no orbit, and <see cref="SnapCamera"/> is a no-op — because
     /// the lab has handed the same <see cref="Camera3D"/> to a <see cref="SpectatorCamera"/> so the
@@ -565,6 +574,15 @@ public partial class FlightController : Node3D
         if (PlaneModel != null)
             PlaneModel.Visible = true;
         _throttle = SpawnThrottle;
+        // The start choreography (snd_propstart already re-fires from FlightAudio's own
+        // loop-restart hook): the static blade prop cross-fades to its spinning blur disc with
+        // the startup smokepuffN burst. CrashRuntime does not exist yet for the very first spawn
+        // (Setup calls this before FlightRigAssembler builds it) — FlightRigAssembler plays it
+        // once more there for that one case.
+        CrashRuntime?.Play("startprops", PlaneModel, applyReset: false);
+        // A fresh engine has no in-flight plume, and the spawn throttle jump (0 → SpawnThrottle)
+        // must never itself read as a slam.
+        ThrottleSmoke?.Reset(_throttle);
         _model.Reset(_spawnPos, _spawnAttitude, SpawnSpeed, _throttle);
         _simPrev = _simCurr = _renderPose = new Transform3D(_model.Attitude, _model.Position);
         GlobalTransform = _simCurr;
@@ -970,6 +988,9 @@ public partial class FlightController : Node3D
         {
             Audio?.Update(simDt, _model.Throttle, _model.Speed / _model.Stats.FdSpeed,
                 1f - (Damage?.WorstFraction ?? 1f));
+            // The throttle-slam gate needs the live value every frame, not just while its plume
+            // is active, so it can tell a fresh climb from one already in progress.
+            ThrottleSmoke?.Update(simDt, _model.Throttle);
         }
 
         // Spin the propeller/rotor blur discs: they keep turning even at idle (windmilling)
@@ -1487,6 +1508,11 @@ public partial class FlightController : Node3D
             Audio?.OnWaterExplosion();
         else
             Audio?.OnGroundExplosion();
+        // The engine wind-down cue layers over the explosion, replacing the loops' abrupt cut with
+        // snd_propstop.
+        Audio?.OnEngineStop();
+        // No plume survives a dead engine.
+        ThrottleSmoke?.Reset(_throttle);
         if (CrashRuntime != null)
         {
             // Data-driven crash: PLAY the compiled def on this plane's scoped crash
@@ -1504,6 +1530,10 @@ public partial class FlightController : Node3D
             // burst and the fireball cluster.
             CrashRuntime.InheritedWorldVelocity = _model.VelocityDir * _model.Speed * WreckMomentum;
             CrashRuntime.Play(water ? "player_crash_water" : "player_crash_dirt", CrashAnchor, applyReset: false);
+            // The prop wind-down (staticpropN fades back in as prop1..3 fade out) — inert the
+            // instant PlaneModel above hides, but keeps the def's own state consistent for
+            // whatever plays next, and matters once a shutdown can leave the airframe visible.
+            CrashRuntime.Play("stopprops", PlaneModel, applyReset: false);
         }
         GD.Print($"CRASH into {hitName} ({part}) surface={surface} impact=({impact.X:0},{impact.Y:0},{impact.Z:0}) " +
                  $"pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) " +
