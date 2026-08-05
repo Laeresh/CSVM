@@ -16551,3 +16551,86 @@ Verified: `.\RunTests.ps1` green — build, 475/475 units, 29/29 engine suites (
 expected to). The interactive drag (health to 0, watch armor read 0; R restores both) is the user's
 own sign-off — no scripted CLI path exists to move only one of the two per-part sliders, so this is
 left to the controls per `docs/verification.md`'s "what this project cannot verify itself."
+
+## 2026-08-05 — B5 `BL-276`: the 30 s fire never STARTED from its death sites — the destruction slot was never parsed; `BL-212` cleared, `BL-258` landed
+
+**Diagnosed cause — not the `BL-212` halt.** The playtest's "quits at ~5 s" was read as the
+`STOP_SEQUENCE` halt firing early. Measured instead: wherever `large_30sec_fire` actually starts
+from a loaded call site, it burns its authored 30 s exactly — `--destroy=crtsk01` (C5 crate) and
+`--destroy=gate2` (C2 gate) both show `fire_n_smoke` in 29 consecutive one-second `--debug-anim`
+censuses, gone at ~30 s. But on the ~1,035 death call sites the item names, the fire **never
+started at all**: baseline `--destroy=leng11` (C1C/M01 zeppelin engine) logs **zero** `fire_n_smoke`
+lines in 35 s of sim. The call lives in the compiled defs' `unknown_seq` — the destruction slot
+`AnimDefinition.Parse` never read (`BL-258`) — so every one of those calls silently no-oped. What
+the user watched for ~5 s was the death's OTHER effects (`large_fireball`'s 0.3 s ball + trails,
+`great_balls_of_fire`'s 4 s flight, particles' 3.5–5.5 s `LIFETIME_RANGE`) reading as "the fire".
+Not a regression: those sites never played it; earlier passes (`PT-19` "the oil-tank kill reads
+right") judged fires by ENDING, which a fire that never begins satisfies trivially.
+
+**Census before loading (BL-258's own trap).** Over all 12,693 compiled defs: 1,544 non-empty
+`unknown_seq` blocks (1,430 mis_anim + 114 cam_anim), **every one on a HEALTH > 0 destructible,
+zero elsewhere**, and 1,429 of the 1,430 mission-archive blocks dispatch calls no listed sequence
+reaches (the lone overlap is
+gate1's idempotent `big_splash`/`big_ripple` pair). Kinds: CallAnimation 2,360, ObjectActiveState
+2,028, StopAnimation/InvalidateAnimation 2,546 (32 self-references — the consume-the-trigger
+idiom), Sound 307, PufferState 148, Loop 86, ObjectMotion 16. So the block is exclusively
+destruction-time content and the bootstrap-runner fear in `BL-258` was unfounded by measurement.
+
+**Fix.** `CompiledAnim` parses `unknown_seq` into `AnimDefinition.DeathSlot` (kept OFF `Sequences`
+so bootstrap, RESET application and the sequence-walking derivations are untouched);
+`AnimRuntime.RunDeathSequence` dispatches it as a runner on the death's own live instance
+(`RunDeathSlot`) inside the death bracket, under the same self-invalidate protection as Start's
+burst. `AnimProgram`'s sound-prewarm reachability walk includes the slot. Baseline → fixed on the
+same probe: `fire_n_smoke` 0 → 29 one-second censuses (~30 s, the authored stop), with the slot's
+`zeppelin_rocksright`/`zeppelin_rocksleft` lurch choreography now also playing.
+
+**Verified.** `.\RunTests.ps1` green: 475 units, 30/30 engine suites, 13 goldens hash-identical
+(the fix is death-path-only; nothing pinned destroys a slot-carrying def). New `death-slot` suite
+asserts a real kill dispatches the `destruction_slot` lane (C1 AA gun → `genx12`), and FAILS with
+`RunDeathSlot` deleted (deliberate perturbation, restored). One suite fix with cause traced:
+`bounce-launch` counted launches via the runtime-wide `BallisticMotionsLaunched`, and on the shared
+cached world the AA guns' now-dispatching slot (killed earlier by `damage-hd`) bled a `genx12`
+fireball launch into its window — the count is now scoped to the subject def's own dispatches
+(INSTR-10), and the suite alone-on-a-fresh-world passed both before and after.
+
+**Bookkeeping.** `BL-276` and `BL-258` deleted from backlog (the block is loaded and dispatched;
+of BL-258's questions, (a) no duplication — censused, (b) moot — the dispatch is the death path
+itself, (c) the raw e24 offset was already in anim-definitions.md's struct layout). Verification
+rule DIAG-20 added (an effect that never starts passes every "it ends correctly" check);
+destructibles.md / anim-definitions.md updated to record the slot as loaded. Cockpit re-test owed:
+the fire now burns 30 s at real death sites — fold into `BL-275`'s height playtest.
+
+## 2026-08-05 — B6 `BL-275`: the fire plumes climb — name-scoped rise/lifetime scales on the `fire_n_smoke` family (TUNE 2.5×/1.5×)
+
+**What landed.** Two config-keyed scales, applied ONLY to the `fire_n_smoke` puffer family — the
+crash `large_10sec_fire`, the destruction `large_30sec_fire`/`huge_30sec_fire`, and the burning
+fuel tanks; every other emitter is untouched: `puffer.fireRiseScale` (default **2.5**) multiplies
+the world-vertical spawn velocity on the sustained path, `puffer.fireLifetimeScale` (default
+**1.5**) the per-puff lifetime (old → new for the 30 s fire: net rise ≈9 m/s → ≈22.5 m/s, life
+3.5–5.5 s → 5.25–8.25 s; the sustain pool is sized by the scaled lifetime so the extra puffs are
+not dropped at the old pool's edge). Both registered in `Config.WarmTuningRegistry`; recorded in
+backlog.md's TUNE list as `BL-275`, **not signed off at the controls**.
+
+**A/B basis.** The authored numbers integrate to a ~10–12 m column for the 30 s fire
+(`FRICTION 0.6` exponential damping, `WORLD_ACCELERATION -1`), while the original's fire columns
+read as unbroken plumes several building-heights tall: `OriginalScreenshots/C1 IA1 Burning Fuel
+Tanks.png` (two tank fires, flame base → dark column ≈3× the neighbouring hangar) and
+`C1 IA1 Destruction.mp4` t≈176 s (two ground-fire columns climbing to near the frame top from the
+air). Headless A/B at the C2 gate2 kill, same framing/seed both sides
+(`.scratch/bl275/ours_before_10s/25s.png` vs `ours_after_10s/25s.png`): before, the flames never
+left the ~15 m archway in 25 s; after, a flame base with a dark smoke column tops out at ≈3× the
+gate's height — the reference's read. Magnitude is judged-by-eye TUNE; the cockpit sign-off rides
+the TUNE entry (destroy a building + crash a plane in one flight).
+
+**A found-and-fixed on the way.** The first cut computed the spawn velocity before the position,
+which reordered `SpawnSustained`'s RNG draws and re-scattered EVERY sustained emitter — exactly
+the five puffer-bearing goldens moved (`c1-waterfall`/`c3-island`/`c5-city-night`/
+`c1-destroy-effects`/`c1-crash`) with the fire tune inert in all of them (GOLD-5's pattern read).
+Draw order restored (pos → vel → size → life) and pinned with a ⚠ in the module entry.
+
+**Verified.** `.\RunTests.ps1` green: 475 units, 30/30 engine suites, goldens 12/13 held with
+`c1-crash` re-pinned `b9c1cbac2d4ad912f9dd0ccec00b8af1` → `5280d89d82ae616b4dcd82e5dc774dbe` —
+the crash fire (`large_10sec_fire` → `fire_n_smoke`) is live at that shot's frame 20, so the
+tuned rise/lifetime moves its pixels by design; the other four puffer-bearing goldens held,
+confirming the name scoping. Full clean re-run after the re-pin: 13/13. `BL-275` deleted from
+the open backlog; its TUNE entry carries the two numbers and the sign-off playtest.
