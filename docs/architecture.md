@@ -53,6 +53,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/Anim/` — `AnimRuntime`'s motion + light value types (`IAnimMotion` and its four implementations, `AnimLight`, the bind-census enums), split out of `AnimRuntime.cs` into their own files/namespace for size.
 - `src/Mech3/Anim/MotionSet.cs` — the live motion collection: the two registration rules, the per-frame sweep, and the pending-bounce predicate the instance walk retires on.
 - `src/Mech3/Anim/EmitterDirector.cs` — every PUFFER_STATE emitter's whole life on one runtime: the keying rule, the start, all four stops, the respawn wipe, the per-frame follow, and the census. Plus `IEmitter`/`IEmitterFactory` and the real/retired adapters.
+- `src/Mech3/Anim/NameResolver.cs` — name→node resolution: the index, wildcard matcher, memoized `FindAll`, `ResolvePath`, the symbol authority, `Anchors` (narrowing + root lift) and the bind census; generic over the node type, off-engine testable.
 - `src/Mech3/SequenceRunner.cs` — the engine-free sequence interpreter (event clock / LOOP / IF-ELSEIF), extracted behind the 3-member `ISequenceHost` seam; headlessly testable.
 - `src/Mech3/DestructibleRegistry.cs` — live per-instance HP for `HEALTH>0` anim defs, one pool per `(def,anchor)`; `Resolve` maps a struck collider back.
 - `src/Mech3/WorldSession.cs` — builds a chapter world + binds its `AnimProgram` (load→WorldBuilder→clutter→bind→sound-prewarm); `--node=` slices it to one subtree.
@@ -574,15 +575,13 @@ satisfies its `ISequenceHost` seam by explicit interface implementation (`Dispat
 ⚠ `SetSubtreeActive` writes ONLY `Visible`, and the fade path only `WorldCollision.SetFaded` —
   collision is DERIVED from both. Never write `CollisionShape3D.Disabled` from here again: a
   recursive walk re-solidifies activations landing inside an already-hidden subtree.
-`Targets` prefers the compiled symbol table; an index the build skipped falls back to a strictly
-anchor-scoped name match (never global) — how a re-anchored exploder template (`genx12`) binds its
-meshless `pt*` parameter nodes onto the call-site wreck's same-named pieces (D31).
-`Anchors` obeys that same authority: a multi-match NAME narrows to the instance holding the def's
-symbol-table ROOT node (`NarrowToSymbolRoot`). The compiler expands one object into a def per
-instance but leaves them sharing a NAME — C1's two hangars are both `air_gen`, telling themselves
-apart only by their symbol tables — so name matching alone hands every twin every anchor and they
-cross-bind, which is how destroying `eairg31` used to explode `eairg32`. It narrows only: a reader
-def, an unbuilt index or a root outside every candidate leaves the name match standing.
+`Targets` reads the event payloads and resolves through the resolver's symbol authority
+(`SymbolClaims`); a claimed-but-unbuilt index falls back to a strictly anchor-scoped name match
+(never global) — how a re-anchored exploder template (`genx12`) binds its meshless `pt*` parameter
+nodes onto the call-site wreck's same-named pieces (D31). Anchoring, twin narrowing, root lift and
+the bind census are resolver-owned (`NameResolver.Anchors`/`ResolutionLines` — its entry); this
+class hands its `NameResolveFallback`/`SuppressRootLift`/`ReportResolution` flags over at `Bind`
+and projects `ResolutionLines` as a one-line forward.
 Every name→node lookup routes through `ResolveScoped` — call anchor, then the def's OWN root, then
 global — because staged effect templates reuse node names (`fly_trail1`-`5` is `he_trails` AND
 `ap_trails` AND `carnage_trails`) and the unplaced copies sit at the stage origin (`BL-219`).
@@ -659,9 +658,9 @@ return path to poll the effects runtime's.
 ⚠ The bind degrades silently two ways on a partial world — unanchored (`Anchors() == []`) vs
   target-missing (`_opsUnresolved`) — both leave a still object; the `ReportResolution` bind
   census is the only tell (C1 `--node=hk_zep`: 50 anchored, 763 unanchored, 134 target-missing).
-⚠ `MaxRootLift`'s 16-match cap assumes WHOLE-WORLD node counts — a partial `--node=` build drops
-  under the cap and anchors phantom defs, so it must set `SuppressRootLift` (measured on C1's
-  `ap_radiotwr`: 95 lifted defs / 91 phantom instances vs 1 / 2 with the lift refused).
+⚠ The resolver's `MaxRootLift` 16-match cap assumes WHOLE-WORLD node counts — a partial `--node=`
+  build drops under the cap and anchors phantom defs, so it must set `SuppressRootLift` (measured
+  on C1's `ap_radiotwr`: 95 lifted defs / 91 phantom instances vs 1 / 2 with the lift refused).
 ⚠ **Do not re-propose splitting the modes into three interfaces** — decided **no** by
   `PLAN-deepening` `G18` (design-it-twice, 2026-08-03; `G19` closed `❌` with it). The 65-public-
   declaration surface survives D/E unshrunk, but a per-caller census showed the width is NOT mode
@@ -682,8 +681,8 @@ return path to poll the effects runtime's.
 `AnimRuntime`'s private nested types promoted to top-level `internal` types in their own
 namespace, purely for file size — not an independently-owned subsystem, still driven entirely by
 `AnimRuntime`. `IAnimMotion` (`ScriptPlayback`/`SpinMotion`/`FromToMotion`/`OpacityFade`/
-`MotionRuntime`), `AnimLight`, and the bind-census `AnchorKind` enum. `MotionSet` and `EmitterDirector` share the
-namespace but ARE independently owned — their own entries below.
+`MotionRuntime`), `AnimLight`, and the bind-census `AnchorKind` enum. `MotionSet`, `EmitterDirector`
+and `NameResolver` share the namespace but ARE independently owned — their own entries below.
 `MotionRuntime`'s `translation_range` is a SPHERICAL launch — `xz` azimuth, `y` elevation, both in
 degrees, `initial` the speed (`analysis/object-motion-range/`, decoded 2026-08-01) — and a launch
 seeds from the node's authored rest pose, since a shared effect template's children are re-homed by
@@ -762,6 +761,40 @@ A `PUFFER_STATE 1` re-assert REVIVES a `SustainEnd`ed emitter (the `puffit` sput
 forever), and the re-asserting instance takes ownership. `EndOn` is NOT expressible as an
 `IsVisibleInTree` gate the way `TickLights` is: the effects stage keeps template roots hidden while
 their world-space particles show.
+
+## src/Mech3/Anim/NameResolver.cs
+Name→node resolution as a public module, generic over the node type (`NameResolver<TNode>`,
+PLAN-name-resolver A1+A2): the index (`Add(node, srcName, parent, gamezIndex?, indexByPointer)`),
+the wildcard `Matcher` (`*` any run, `#` a digit run including zero, case-insensitive, the `.flt`
+suffix double match), the memoized `FindAll`, `ResolvePath`, the **symbol authority**
+(`SymbolClaims` over the by-index map `Add` builds; `NarrowToSymbolRoot` — the `air_gen`/`eairg31`
+cross-bind fix, tri-state: null means undecidable and leaves the name match standing, never
+conflate it with an empty narrowing), **`Anchors`** (NAME match → symbol narrowing → root lift,
+with `NameResolveFallback`/`SuppressRootLift`/`MaxRootLift` as its documented policy inputs — the
+runtime copies its flags over at `Bind`), and the **bind census** (`OpenCensus`/`CloseCensus`
+bracket the bootstrap; `--debug-anim`/`--node=` project `ResolutionLines` through
+`AnimRuntime.ResolutionLines`, never re-derive it). The by-index map obeys two refusals inside
+`Add`: empty under `NameResolveFallback` (colliding index spaces) and skipped for
+`indexByPointer:false` rows (a pooled copy shares its source's indices — `IndexPooledCopy`).
+`AnimRuntime`'s `FindAll`/`ResolvePath`/`Anchors` are one-line forwards; the engine-free
+instantiation over a plain token type (plus plain `AnimDefinition`s) is `CSVM.Tests`' suite.
+⚠ **No node an `Add` has already indexed may be reparented afterwards.** Ancestry is a snapshot
+  (each row's `parent`, walked once at index time), not a live tree query — `FindAll`'s scope
+  filter, `NarrowToSymbolRoot`'s containment test and the root lift's parent step all read it and
+  silently misread it if a node moves. A subtree staged after the bootstrap (an effect template, a
+  pooled copy) may still `Add` more rows, but the caller must also call `ClearFindCache()`.
+⚠ Node identity is constructor-supplied (`IEqualityComparer<TNode>`), never the type's inherited
+  `Equals` — Godot object equality is unreliable inside a dictionary/tuple key across proxy
+  instances of the same native node, so the `Node3D` instantiation keys explicitly on
+  `GetInstanceId()` (`AnimRuntime.Node3DIdentity`).
+⚠ `Anchors` is the ONE census-recording resolution call (once per def identity — the bootstrap asks
+  on several passes). `FindAll`/`ResolvePath` and the private census-free `ComputeAnchors` record
+  nothing; per-event callers (`ResolveInOwnRoot`, `TemplateRootsFor`) must keep resolving through
+  those, never through a second recording path.
+`FindAll`'s memoized result must be treated as read-only — the same list instance is returned on
+every repeat query, which is what makes it cheap for C5's ~400 live poll loops re-dispatching every
+frame. This is not the declined G18 split (`architecture.md`'s `AnimRuntime` entry): one concept
+moves out, not a per-mode interface — all three runtime modes still share this one resolver.
 
 ## src/Mech3/SequenceRunner.cs
 The engine-free sequence interpreter, extracted from `AnimRuntime` behind the `ISequenceHost` seam

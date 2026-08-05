@@ -4,13 +4,15 @@
 a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
 `COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
 
-Ten items from the 2026-08-05 hand-coded-vs-authored and invented-behaviour audits, selected by the
-user under one criterion: **declared animations that are missing or wrongly implemented in CSVM,
-and hand-coded behaviours whose authored counterpart exists**. Every item replaces an invented
-stand-in with the original's own animation-definition data — or deletes an invention the data
-disowns. All ten backlog entries (`BL-119`, `BL-259`, `BL-261`–`BL-267`, `BL-270`) were filed or
-reframed 2026-08-05 from direct code+data reads in the same session, so they are trivially
-still-open; none appears in `docs/HISTORY.md` as landed.
+Twelve items, selected by the user from the 2026-08-05 hand-coded-vs-authored and
+invented-behaviour audits under one criterion — **declared animations that are missing or wrongly
+implemented in CSVM, and hand-coded behaviours whose authored counterpart exists** — plus the two
+CamParams items (`BL-248`, `BL-260`) the user added 2026-08-05: authored camera *parameters*
+rather than anim defs, but the same disease (shipped data we parse and don't drive with). Ten of
+the backlog entries (`BL-119`, `BL-259`, `BL-261`–`BL-267`, `BL-270`) were filed or reframed
+2026-08-05 from direct code+data reads in the same session, so they are trivially still-open;
+`BL-248` (filed 2026-08-04 with CAP-21's measurements) and `BL-260` were re-checked open the same
+day. None appears in `docs/HISTORY.md` as landed.
 
 ## Milestone goal
 
@@ -22,20 +24,26 @@ still-open; none appears in `docs/HISTORY.md` as landed.
   hand-rolled duty cycles, rotate loops, and dropped fades.
 - The player plane's damage stages are **the authored menu** — `player_fuelleak`, `pdpanelN`,
   `player_damage_trail` — with only the HP thresholds chosen by us.
+- The chase camera breathes with speed and throttle by the **CAP-21-measured law**, and the
+  authored special cameras exist — the crash camera at minimum, the rest as far as their units
+  decode.
 
 **No new feel laws get invented in this plan.** Where a def leaves a gap (a threshold, an energy,
-a unit), the gap is named as TUNE in `backlog.md` — not filled with a guess. Excluded by the same
-user criterion: `BL-260` (authored cameras), `BL-268`/`BL-269` (audio mix), `BL-271` (graze feel
-laws), `BL-272` (precipitation calibration) — none of them is animation-def work.
+a unit), the gap is named as TUNE in `backlog.md` — not filled with a guess. For the camera items
+that rule bites hardest: `BL-260`'s undecoded field units mean the item may deliberately land
+*partially*, with the un-decodable cameras recorded as capture-gated rather than guessed.
+Excluded by the user's criterion: `BL-268`/`BL-269` (audio mix), `BL-271` (graze feel laws),
+`BL-272` (precipitation calibration).
 
 ## Decisions (2026-08-05)
 
 | # | Question | Decision |
 |---|---|---|
-| 1 | Selection criterion for the ten items | **Authored/declared animations missing or wrong in CSVM** — user's words: "declared animations that are not or wrongly in CSVM and hardcoded animations that should be authored ones. The ejector puffs too." |
+| 1 | Selection criterion for the audit items | **Authored/declared animations missing or wrong in CSVM** — user's words: "declared animations that are not or wrongly in CSVM and hardcoded animations that should be authored ones. The ejector puffs too." |
 | 2 | First item | **`Puffer.SizeScaleDefault` 4 → 1** — user-fixed opener; every later visual judgement is conditioned on it |
 | 3 | Do the `puffer.*SizeScale` config keys survive the revert? | **Yes** — the keys stay as tuning knobs; only the *default* reverts to the authored 1× |
 | 4 | Code changes before the plan? | **No** — a same-day attempt to land BL-261 directly was rolled back on user instruction; everything goes through this plan |
+| 5 | Are the CamParams items in scope? | **Yes, added by the user 2026-08-05** — `BL-248` and `BL-260` join as C8/C9, ahead of camera shake; authored parameters count as "authored counterpart exists" |
 
 ## Ground rules
 
@@ -62,7 +70,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the gun line and the global baseline (`Projectile.cs`/`Puffer.cs`, sequential)
 
-1. ☐ `BL-262` — `Puffer.SizeScaleDefault` 4 → 1; config knobs stay
+1. ☐ `BL-282` — `Puffer.SizeScaleDefault` 4 → 1; config knobs stay
 2. ☐ `BL-261` — render the authored `muzzlepuffer`, delete the eject-puff cluster
 3. ☐ `BL-263` — muzzle flash: authored single-node roll + the unplayed `_muzzle2` flipbook frame
 
@@ -71,16 +79,18 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 4. ☐ `BL-119` — play `wing_lights_blink`: the def's duty cycle, `LIGHT_STATE` point lights, LOD gate
 5. ☐ `BL-264` — prop/rotor spin through the runtime's `XYZ_ROTATION` semantics
 
-### Wave C — effect choreography
+### Wave C — effect & camera choreography
 
 6. ☐ `BL-265` — water splash: authored opacity fades + `splash01→03` flipbook; re-judge the 8× width
 7. ☐ `BL-267` — engine start/stop: play `startprops`/`stopprops`; throttle-step smoke stays a named open half
-8. ☐ `BL-266` — camera shake: find the authored law (`shakes.zrd.json`/`damage_shakes.zrd.json`), then implement or re-scope
+8. ☐ `BL-248` — dynamic chase distance: implement the two CAP-21-measured terms
+9. ☐ `BL-260` — the four authored cameras: crash first; un-decodable ones recorded, not guessed
+10. ☐ `BL-266` — camera shake: find the authored law (`shakes.zrd.json`/`damage_shakes.zrd.json`), then implement or re-scope
 
 ### Wave D — the damage menu (after PLAN-effect-catalogue's runtime capability)
 
-9. ☐ `BL-259` — play the authored damage animations: `player_fuelleak` / `pdpanelN` / `player_damage_trail`
-10. ☐ `BL-270` — healthy↔torn panel pairing from the defs, not AABB proximity
+11. ☐ `BL-259` — play the authored damage animations: `player_fuelleak` / `pdpanelN` / `player_damage_trail`
+12. ☐ `BL-270` — healthy↔torn panel pairing from the defs, not AABB proximity
 
 ## Dependency and parallelism notes
 
@@ -89,18 +99,21 @@ later "does this look right" judgement in Waves A–D is conditioned on it. A1�
 sequentially: all three edit `Projectile.cs`/`Puffer.cs`. Waves B and C are independent of each
 other and of Wave A (different files) but every visual verify should happen post-A1.
 
-**D9/D10 are gated on `PLAN-effect-catalogue`** (in flight in a concurrent session as of
+**D11/D12 are gated on `PLAN-effect-catalogue`** (in flight in a concurrent session as of
 2026-08-05, items B2/B3 landed): they need the runtime to `CALL_ANIMATION` into an `ON_CALL` def
 with an `INPUT_NODE` binding. **Do not start Wave D while that plan has uncommitted work in
-`AnimRuntime.cs` / the effect-template pool** — coordinate via the user. D10 sequences after D9
-(same defs, same wiring). File contention within this plan: A-wave items share `Projectile.cs`;
-D-wave items share `DamageVisuals.cs`/`FlightRigAssembler.cs` — never in parallel worktrees.
+`AnimRuntime.cs` / the effect-template pool** — coordinate via the user. D12 sequences after D11
+(same defs, same wiring). Within Wave C, C8→C9 run in order (both edit
+`CameraController.cs`/`CamParams.cs`, and C9's crash camera should be judged with C8's dynamic
+distance already in). File contention within this plan: A-wave items share `Projectile.cs`;
+C8/C9/C10 share the camera files; D-wave items share
+`DamageVisuals.cs`/`FlightRigAssembler.cs` — never in parallel worktrees.
 
 ---
 
 # Wave A — the gun line and the global baseline
 
-## A1 ☐ `BL-262` — `Puffer.SizeScaleDefault` 4 → 1; config knobs stay
+## A1 ☐ `BL-282` — `Puffer.SizeScaleDefault` 4 → 1; config knobs stay
 
 **Goal.** Every `PUFFER_STATE` renders at its authored `SIZE_RANGE`. The three `puffer.*SizeScale`
 config keys remain, defaulting to 1, for deliberate tuning.
@@ -140,7 +153,7 @@ the 4× scale to lift the touchdown puffer's authored −0.5 Y offset clear of t
 interaction, not a new bug — the recorded alternative is `graze.siteAtContact=false` (stage on the
 aircraft, which the data argues for anyway). (b) Do not "fix" small-looking effects by editing
 their defs — the defs are authored truth; if 1× is genuinely wrong game-wide the answer is one
-config value, and `BL-262`'s backlog text names the capture that would prove it. (c) 2026-08-01's
+config value, and `BL-282`'s backlog text names the capture that would prove it. (c) 2026-08-01's
 "settled at the controls" judgement was made *with* the invented eject-puff cluster and 0-count
 muzzle smoke on screen — the world it tuned against no longer exists once A2 lands; judge fresh.
 
@@ -292,7 +305,7 @@ planes.
 semantics produce an absurd rate, the answer is a disproof recorded on `BL-264` ("the props do NOT
 use XYZ_ROTATION semantics"), not a compensating constant.
 
-# Wave C — effect choreography
+# Wave C — effect & camera choreography
 
 ## C6 ☐ `BL-265` — water splash: authored fades + flipbook; re-judge the 8× width
 
@@ -356,7 +369,74 @@ loop; spawn plays the start smoke if wired. Listen A/B is the user's; the regres
 on these same paths — do not "fix the mix" while wiring the cue; if the stop cue sounds wrong at
 ×0.2, note it on `BL-268` and move on.
 
-## C8 ☐ `BL-266` — camera shake: find the authored law, then implement or re-scope
+## C8 ☐ `BL-248` — dynamic chase distance: implement the two CAP-21-measured terms
+
+**Goal.** The chase camera's distance is dynamic as the original's is: the per-plane authored
+`dist` grows with speed by the `dist_factor` law, and throttle transients pull a lag that relaxes
+at the measured rate.
+
+**Evidence (confidence: measured — the strongest in this plan).** `BL-248`'s entry carries the
+full 2026-08-04 decode from four CAP-21 Bloodhawk staircase clips: the speed term is real and is
+`dist_factor` — `d(V)/d(0) = 1 + 5.65e-4·V(m/s)`, implying `dist_factor` **0.0105** against the
+shipped **0.01** (5% agreement); the acceleration transient relaxes at **0.65 /sim-s**. `BL-149`
+already landed the reader and the fixed per-plane `dist` (`CamParams`/`CameraController`); only
+the two dynamic terms are unwired.
+
+**Approach.** Wire the speed term from the airframe's own `dist_factor` (authored, per plane) and
+the transient as a first-order lag at the measured 0.65 /sim-s — cited as *measured*, not
+authored (the entry shows it matches neither `pos_catch_up` nor `look_catch_up`). Read the full
+`BL-248` entry before starting; its traps section is the map.
+
+**Model recommendation.** medium — the law is handed over; the risk is unit discipline.
+
+**Verify.** Reproduce CAP-21's own numbers in our build: level plateaux at ~118 and ~297 mph
+should show ~4.1% apparent-size change; a full-throttle slam shows the transient relaxing at the
+measured rate in sim-time. `docs/verification.md` first — the ~1% clip-to-clip systematic in the
+entry bounds what a match can claim.
+
+**⚠ Traps.** All inherited from `BL-248`'s entry, restated: (a) `dist_min`/`dist_max` is **not**
+a clamp — the default block's own `dist` 13.0 sits outside its min/max, and CAP-21 never reaches
+`dist_max`; do not wire a clamp. (b) 0.65 /sim-s is a **wall→sim converted** measurement
+(×1.390) — apply it in sim seconds or it runs 39% slow, the exact BL-148 trap. (c) The chase
+radius is shared with the numpad fixed views **by design** — the dynamic terms moving both
+cameras is intended; do not give the views their own copy. (d) `thirdp_pitch` ≈ our hand-picked
+elevation stays a suggestive near-match, not a decode — out of scope here.
+
+## C9 ☐ `BL-260` — the four authored cameras: crash first; un-decodable ones recorded, not guessed
+
+**Goal.** The authored special cameras (`camparam.zrd.json`: death, crash, flyby, look-behind)
+replace the ordinary chase camera at their moments — starting with the crash camera, whose scene
+already exists. Cameras whose field units cannot be decoded without original footage land as
+*recorded gaps*, not invented laws (plan boundary).
+
+**Evidence (confidence: traced fields; units lead-only).** `CamParams.cs:60-84` parses all four
+blocks and is deliberately dormant: death (`DeathInterval`/`DeathZ`/`DeathX`/`DeathAlt`/
+`DeathMinAlt`), crash (`CrashHoriz`/`CrashY`/`CrashChordY`/`CrashElev`), look-behind
+(`BackDistMin`/`BackDistMax`), flyby (12 fields). Today a death or crash plays out on the chase
+camera and no look-behind binding exists at all. Filed as `BL-260` (2026-08-05 audit).
+
+**Approach.** Crash camera first — the data-driven crash rig is the existing scene missing its
+authored framing; its four fields are the smallest decode. Then look-behind (two fields plus a
+key binding to add). Death and flyby are attempted only as far as their units decode from
+geometry/plausibility checks; where they don't, the item records "capture-gated" per camera on
+`BL-260` and stops — that partial landing is the intended shape, not a failure.
+
+**Model recommendation.** high — unit decoding with no reference is judgement-heavy, and the
+discipline to *stop* rather than guess is the point of the item.
+
+**Verify.** A terrain crash cuts to the authored crash framing (A/B against `C1 IA1 Crash.mp4` /
+`Crash 2.mp4` in `OriginalScreenshots\Videos\` — original crash footage already on disk); the
+look-behind key shows the authored back view at `BackDistMin`–`Max`. Regression: the ordinary
+chase camera unchanged when no special camera is active, numpad views unaffected.
+
+**⚠ Traps.** (a) The `BL-248`(d) rule generalises: a near-match between an authored field and a
+hand-picked value is suggestive, never a decode — wire nothing on the strength of one
+coincidence. (b) `C1 IA1 Crash.mp4` was analysed for CAP-14's collision physics (HISTORY
+2026-08-04) — re-read it for *camera framing* this time; the physics read does not answer this.
+(c) Sequenced after C8: judge the crash camera with the dynamic chase distance already landed,
+or its framing will be re-judged twice.
+
+## C10 ☐ `BL-266` — camera shake: find the authored law, then implement or re-scope
 
 **Goal.** Either weapons flagged `SHAKES_CAMERA` shake the camera by an authored law found in the
 data, or the item is re-scoped with the finding "only the flag is authored" and the law named as
@@ -384,7 +464,7 @@ and say so in the item's landing notes.
 
 # Wave D — the damage menu
 
-## D9 ☐ `BL-259` — play the authored damage animations
+## D11 ☐ `BL-259` — play the authored damage animations
 
 **Goal.** The player plane's visible damage progression is the authored menu playing as data:
 `player_fuelleak` (partial damage — the vapor leak we currently render nothing for), `pdpanelN`
@@ -424,7 +504,7 @@ trail's `TopLevel` anchor bug history (HISTORY 2026-08-03) — verify at a real 
 heading, not the identity pose; that trap has bitten twice. (d) CAP-15 timing is wall-clock ×1.390
 sim — use sim seconds when comparing def offsets, the same trap BL-148 documents.
 
-## D10 ☐ `BL-270` — panel pairing from the defs, not AABB proximity
+## D12 ☐ `BL-270` — panel pairing from the defs, not AABB proximity
 
 **Goal.** The healthy↔torn skin mapping is derived from the authored data (`pdpanelN`'s named
 `pdpN` targets, `player_destruct_reset`'s re-ACTIVE list) instead of the mesh-AABB proximity guess.
@@ -433,16 +513,16 @@ sim — use sim seconds when comparing def offsets, the same trap BL-148 documen
 `MaxPairDistance = 1.0`, `MirrorMinX = 0.15`, comment conceding the original pairs "by some rule
 of its own". The defs name the relationship explicitly; no geometry needed.
 
-**Approach.** Build the pairing table from the defs at rig-assembly time (D9's wiring already
+**Approach.** Build the pairing table from the defs at rig-assembly time (D11's wiring already
 resolves the same nodes — reuse it); keep the geometric pairing as a logged fallback for any plane
 whose defs miss a panel, and log loudly when it engages. Delete the two constants if nothing falls
 back across all 11 aircraft.
 
-**Model recommendation.** medium — mechanical once D9's node resolution exists.
+**Model recommendation.** medium — mechanical once D11's node resolution exists.
 
 **Verify.** All 11 aircraft through the F5 lab: every panel flips its own skin, no mirror-side
 mispair (the failure the AABB guess risked). Freecam + `damage-hd` regression.
 
-**⚠ Traps.** Sequenced strictly after D9 — same files, same def wiring; doing it first builds the
+**⚠ Traps.** Sequenced strictly after D11 — same files, same def wiring; doing it first builds the
 table twice. The fallback must log, not silently engage, or a def gap on one plane hides for
 months.

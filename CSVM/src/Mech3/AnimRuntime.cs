@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.RegularExpressions;
 using CSVM.Mech3.Anim;
 using CSVM.Utils;
 using Godot;
@@ -77,17 +76,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <see cref="ResolutionLines"/>. Set before <see cref="Bind"/> by a caller that built only
     /// part of the world (the <c>--node=</c> stage), where "this def did nothing" is the normal
     /// case and needs to be told apart from a defect. Default false: a full-world session collects
-    /// nothing, so this is inert when nobody asks for it.</summary>
+    /// nothing, so this is inert when nobody asks for it. Copied into the resolver — which owns
+    /// the census — when <see cref="Bind"/> runs, like the two flags below.</summary>
     public bool ReportResolution;
 
     /// <summary>
     /// Refuse the <c>ANIMATION_ROOT_NAME</c> anchor lift, however few matches it finds. Set only by
-    /// a caller that built part of the world, because <see cref="MaxRootLift"/>'s premise is a
-    /// WHOLE-WORLD node population: 'healthy' appears 217Ã— in C1, so the cap rejects it there â€” and
-    /// a single-subtree stage drops under the cap, at which point 95 unrelated definitions anchor
-    /// onto whatever generic child the subtree happens to own (measured on C1's 20-node
-    /// <c>ap_radiotwr</c>: 95 lifts and 91 phantom destructible instances). Suppressed lifts are
-    /// counted and reported, never silently dropped.
+    /// a caller that built part of the world, because the resolver's <c>MaxRootLift</c> cap has a
+    /// WHOLE-WORLD node population as its premise: 'healthy' appears 217Ã— in C1, so the cap rejects
+    /// it there â€” and a single-subtree stage drops under the cap, at which point 95 unrelated
+    /// definitions anchor onto whatever generic child the subtree happens to own (measured on C1's
+    /// 20-node <c>ap_radiotwr</c>: 95 lifts and 91 phantom destructible instances). Suppressed
+    /// lifts are counted and reported, never silently dropped.
     /// </summary>
     public bool SuppressRootLift;
 
@@ -205,7 +205,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     public bool DefScopedPufferKeys;
 
     /// <summary>Makes this runtime resolve every node reference by NAME, ignoring the compiled
-    /// gamez-index table (<see cref="_byIndex"/> is not populated â€” see <see cref="IndexWorld"/>).
+    /// gamez-index table (the resolver's by-index map is left empty â€” see <see cref="IndexWorld"/>).
     /// Off by default: the shared world MUST use the index, because name matching resolves C1's
     /// <c>caboose</c> to the real consist AND an unrelated <c>caboose.flt</c>. The per-player crash
     /// runtime turns it on for two reasons that both make the index wrong there: (1) the player
@@ -213,7 +213,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// â€” so the compiled index resolves nothing; and (2) its scoped subtree MIXES two gamez index
     /// spaces (the plane model's plane-gamez indices and the effect templates' world-gamez indices),
     /// which COLLIDE (fly_trail1 is world-index 400, and the plane has a node at plane-index 400),
-    /// so a shared <c>_byIndex</c> would misresolve. Its subtree has one node per name, so name
+    /// so a shared by-index map would misresolve. Its subtree has one node per name, so name
     /// resolution is both unambiguous and the only correct choice.</summary>
     public bool NameResolveFallback;
 
@@ -309,13 +309,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // this same _rng, or a replay stops being identical the day the handler lands.
     internal Random _rng = new();
 
-    /// <summary>ANIMATION_ROOT_NAME matches above this count are generic per-object roots
-    /// ('healthy' appears 217Ã— in C1) â€” those defs belong to game objects (planes, zeppelin
-    /// parts), not to world nodes. The genuine building templates lift â‰¤ 9 instances.</summary>
-    private const int MaxRootLift = 16;
-
-    private const int CensusCap = 12;
-
     private const int MaxStartDepth = 8;
 
     /// <summary>Backstop on a single WAIT_FOR_COMPLETION hold, in seconds — NOT a model of
@@ -363,9 +356,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// nodes anyway (OBJECT_ACTIVE_STATE off / opacity fade).</summary>
     private const float MinPoseScale = 1e-3f;
 
-    private readonly List<(Node3D Node, string SrcName)> _index = new();
-
-    private readonly Dictionary<string, Func<string, bool>> _matcherCache = new(StringComparer.OrdinalIgnoreCase);
+    // Name resolution — the index, wildcard matcher, memoized FindAll, and ResolvePath — lives in
+    // NameResolver.cs; identity is instance id, since Godot object equality is unreliable inside a
+    // dictionary/tuple key across proxy instances of the same native node.
+    private readonly NameResolver<Node3D> _resolver = new(Node3DIdentity.Instance);
 
     private readonly Dictionary<Node3D, Transform3D> _rest = new(); // authored pose per touched node
 
@@ -416,18 +410,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private readonly DestructibleRegistry _destructibles = new();
 
-    private readonly HashSet<(string Name, string Anim)> _censusSeen = new();
-
-    private readonly List<string> _censusUnanchoredNames = new();
-
-    private readonly List<string> _censusLiftedNames = new();
-
-    private readonly List<string> _censusSuppressedNames = new();
-
-    private readonly List<string> _censusMissingTargets = new();
-
-    private readonly Dictionary<int, Node3D> _byIndex = new();
-
     // The call-site node a PlayEffectAt instance was invoked WITH â€” the callee's INPUT_NODE. The
     // local CALL_ANIMATION path expresses this by anchoring the callee on the site node; the
     // external path anchors on the staged template root instead, so the sentinel's referent is
@@ -467,9 +449,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // pool recycles its oldest slot â€” the shared-template behaviour, but only at the wrap.
     private readonly Dictionary<string, int> _poolCursor = new(StringComparer.OrdinalIgnoreCase);
 
-    // Node â†’ its pool slot (-1 = outside the pool), memoized on the same terms as _findCache:
-    // slot containers are built before Bind and nothing is ever reparented. TemplateIsAt asks per
-    // event on a poll loop, so the ancestor walk must not be repeated.
+    // Node â†’ its pool slot (-1 = outside the pool), memoized on the same terms as the resolver's
+    // own FindAll cache: slot containers are built before Bind and nothing is ever reparented.
+    // TemplateIsAt asks per event on a poll loop, so the ancestor walk must not be repeated.
     private readonly Dictionary<ulong, int> _slotOfNode = new();
 
     // Named once per effect, not per wrap: a pool that recycles a slot whose instance is still
@@ -486,11 +468,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private readonly Dictionary<(string Kind, Node3D? Anchor), bool> _condLast = new();
 
     private readonly HashSet<string> _retargetsLogged = new(StringComparer.Ordinal);
-
-    // Memoized for the life of the runtime: results go stale if a node is ever reparented
-    // into or out of a world subtree at runtime, so nothing may do that (pooled sound
-    // emitters and crash puffers live outside the world for this reason).
-    private readonly Dictionary<(string Pattern, ulong Scope), List<Node3D>> _findCache = new();
 
     // Last opacity pushed to each subtree root. These events sit in `Loop{-1}` sequences â€”
     // C1's `cloudparent#` re-asserts its 0.6 every frame â€” so without this the whole subtree
@@ -520,10 +497,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private AnimProgram _program = null!;
 
     private int _opsApplied, _opsUnresolved;
-
-    private bool _censusOpen;
-
-    private int _censusAnchored, _censusNarrowed, _censusLifted, _censusSuppressed, _censusUnanchored, _censusMissing;
 
     // Whether the ambient passes have already run â€” set when Bootstrap runs them inline
     // (AutoStart=true) or when StartAmbient runs them on demand, so StartAmbient is idempotent
@@ -742,59 +715,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         Sounds?.ResetGroupRecency();
     }
 
-    /// <summary>
-    /// The bind-time resolution census, ready to log â€” empty unless <see cref="ReportResolution"/>
-    /// was set. It exists because <b>two different failures look identical from outside</b> a
-    /// partial world: a definition that never instantiated (its NAME/ANIMATION_ROOT_NAME matches
-    /// nothing here, so <i>no handler ever fires</i>) and a definition that IS running but whose
-    /// event names a node <i>this subtree does not contain</i>. Both leave the object still. The
-    /// lines name which happened, per definition.
-    ///
-    /// <para>The line nobody expects is <c>root_lift_suppressed</c>: an <c>ANIMATION_ROOT_NAME</c>
-    /// lift is capped at 16 matches precisely so a generic root like <c>healthy</c> (217Ã— in C1)
-    /// cannot anchor a definition onto every building â€” and a single-subtree stage drops under that
-    /// cap, so defs that never anchor in the full world would anchor here, onto whatever generic
-    /// child the subtree happens to own. <see cref="SuppressRootLift"/> refuses them and this
-    /// reports the refusal, because a silently-different anchor set is the trap.</para>
-    /// </summary>
-    public IReadOnlyList<string> ResolutionLines()
-    {
-        var lines = new List<string>();
-        if (!ReportResolution)
-        {
-            return lines;
-        }
-        int defs = _censusAnchored + _censusNarrowed + _censusLifted + _censusSuppressed
-                   + _censusUnanchored;
-        lines.Add($"bind census defs={defs} anchored_by_name={_censusAnchored} "
-                  + $"narrowed_by_symbol={_censusNarrowed} "
-                  + $"anchored_by_root_lift={_censusLifted} root_lift_suppressed={_censusSuppressed} "
-                  + $"unanchored={_censusUnanchored} target_missing_ops={_censusMissing}");
-        if (_censusUnanchored > 0)
-        {
-            lines.Add($"bind unanchored={_censusUnanchored} â€” no handler ever fires for these: "
-                      + Sample(_censusUnanchoredNames, _censusUnanchored));
-        }
-        if (_censusLifted > 0)
-        {
-            lines.Add($"bind root_lifted={_censusLifted} â€” anchored only because this subtree has "
-                      + $"â‰¤{MaxRootLift} of the def's ANIMATION_ROOT_NAME, which the full world does not: "
-                      + Sample(_censusLiftedNames, _censusLifted));
-        }
-        if (_censusSuppressed > 0)
-        {
-            lines.Add($"bind root_lift_suppressed={_censusSuppressed} â€” these WOULD have anchored on "
-                      + $"this subtree's generic ANIMATION_ROOT_NAME children, which the full world's "
-                      + $"node count rules out; refused so the stage shows only defs that name it: "
-                      + Sample(_censusSuppressedNames, _censusSuppressed));
-        }
-        if (_censusMissing > 0)
-        {
-            lines.Add($"bind target_missing={_censusMissing} â€” the def IS running, the node is not in "
-                      + $"this subtree: " + Sample(_censusMissingTargets, _censusMissing));
-        }
-        return lines;
-    }
+    /// <summary>The bind-time resolution census â€” resolver-owned data, projected here for the
+    /// <c>--node=</c> stage's log and the node lab. Empty unless <see cref="ReportResolution"/>
+    /// was set before <see cref="Bind"/>; see <see cref="NameResolver{TNode}.ResolutionLines"/>
+    /// for what the lines mean and why they exist.</summary>
+    public IReadOnlyList<string> ResolutionLines() => _resolver.ResolutionLines();
 
     /// <summary>Starts every definition carrying this ANIMATION_NAME, exactly the way bootstrap
     /// pass 3 starts a startanim: an anchored def starts once per anchor, an unanchored one gets
@@ -957,28 +882,28 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// mission setup the way a second <see cref="Bind"/> would.</summary>
     public void IndexStage(Node3D subtree)
     {
-        IndexWorld(subtree);   // appends the subtree's nodes to _index / _byIndex
-        _findCache.Clear();    // drop stale "resolves to nothing" results cached during bootstrap
+        IndexWorld(subtree);   // appends the subtree's nodes to the resolver (name + gamez index)
+        _resolver.ClearFindCache();    // drop stale "resolves to nothing" results cached during bootstrap
         ApplyResetStatesWithin(subtree);
     }
 
     /// <summary>Indexes one POOLED copy of a library-root call template (<c>AnimRuntime.
     /// ResolveLibraryRoot</c>, <c>BL-253</c>) — everything <see cref="IndexStage"/> does, EXCEPT
-    /// <c>_byIndex</c>: every copy is built from the SAME source <c>GameZNode</c>, so they all
-    /// carry the SAME compiled node indices, and <c>_byIndex</c> (a runtime-wide, index-keyed
-    /// dictionary) can hold only the first copy that ever claims each index — a second copy's
+    /// the resolver's by-index map: every copy is built from the SAME source <c>GameZNode</c>, so
+    /// they all carry the SAME compiled node indices, and that map (runtime-wide, index-keyed)
+    /// can hold only the first copy that ever claims each index — a second copy's
     /// events would silently resolve onto the FIRST copy's nodes, defeating the whole pool. Name
-    /// resolution has no such collision: <see cref="Targets"/>'s <c>_byIndex</c> miss already falls
+    /// resolution has no such collision: <see cref="Targets"/>'s symbol-lookup miss already falls
     /// through to an anchor-SCOPED name search (the same rescue <c>genx12</c> relies on to bind
     /// onto whichever site re-anchored it), so a copy this method indexes always resolves against
     /// itself as long as it is passed as the anchor. <see cref="NameResolveFallback"/> is the
     /// crash/effects runtimes' own (coarser, whole-runtime) answer to the identical problem; this
-    /// is the per-subtree version for a runtime — the ambient world — that needs `_byIndex` for
-    /// everything else.</summary>
+    /// is the per-subtree version for a runtime — the ambient world — that needs the by-index map
+    /// for everything else.</summary>
     public void IndexPooledCopy(Node3D subtree)
     {
         IndexWorld(subtree, indexByPointer: false);
-        _findCache.Clear();
+        _resolver.ClearFindCache();
         ApplyResetStatesWithin(subtree);
     }
 
@@ -1418,9 +1343,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             Count("ObjectOpacityState(no alpha path)");
     }
 
-    private static string Sample(List<string> shown, int total) =>
-        string.Join(", ", shown) + (total > shown.Count ? $", â€¦ (+{total - shown.Count} more)" : "");
-
     /// <summary>How many of a <c>DAMAGE_SEQUENCE</c>'s health thresholds <paramref name="hp"/> has
     /// fallen at or below â€” the object's current damage stage. Monotonic in falling HP, so it is a
     /// safe escalation gate.</summary>
@@ -1670,9 +1592,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         var sw = System.Diagnostics.Stopwatch.StartNew();
         _root = worldRoot;
         _program = program;
-        // The census covers the bootstrap passes only â€” after this method a miss is a runtime
-        // event with its own reporting, not a statement about what the bind could reach.
-        _censusOpen = ReportResolution;
+        // The resolver owns anchoring, symbol authority and the census; these flags are
+        // construction-time facts about THIS runtime, handed over once before the first
+        // Add/Anchors call. The census covers the bootstrap passes only â€” after this method a
+        // miss is a runtime event with its own reporting, not a statement about what the bind
+        // could reach.
+        _resolver.NameResolveFallback = NameResolveFallback;
+        _resolver.SuppressRootLift = SuppressRootLift;
+        _resolver.ReportResolution = ReportResolution;
+        _resolver.OpenCensus();
         IndexWorld(worldRoot);
         long indexMs = sw.ElapsedMilliseconds;
 
@@ -1771,65 +1699,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         ReportRetargets();
         ReportWaits();
         ReportUnhandled();
-        _censusOpen = false;
-    }
-
-    // One census entry per definition identity (anchor name + animation name â€” AnimProgram's own
-    // dedupe key), because the bootstrap asks for a def's anchors on more than one pass.
-    private void RecordAnchoring(AnimDefinition def, AnchorKind how)
-    {
-        if (!_censusOpen || !_censusSeen.Add((def.Name, def.AnimName ?? "")))
-        {
-            return;
-        }
-        string label = def.AnimName is { Length: > 0 } anim ? $"{anim}@{def.Name}" : def.Name;
-        switch (how)
-        {
-            case AnchorKind.ByName:
-                _censusAnchored++;
-                break;
-            case AnchorKind.BySymbol:
-                _censusNarrowed++;
-                break;
-            case AnchorKind.ByRootLift:
-                _censusLifted++;
-                if (_censusLiftedNames.Count < CensusCap)
-                {
-                    _censusLiftedNames.Add($"{label}â†’{def.RootName}");
-                }
-                break;
-            case AnchorKind.LiftSuppressed:
-                _censusSuppressed++;
-                if (_censusSuppressedNames.Count < CensusCap)
-                {
-                    _censusSuppressedNames.Add($"{label}â†’{def.RootName}");
-                }
-                break;
-            default:
-                _censusUnanchored++;
-                if (_censusUnanchoredNames.Count < CensusCap)
-                {
-                    _censusUnanchoredNames.Add(label);
-                }
-                break;
-        }
-    }
-
-    // An event that named a node the bind could not reach. `why` separates the two causes, which
-    // otherwise read the same: the compiled symbol table bound the name to a gamez node this build
-    // never created, versus name resolution finding no match at all.
-    private void RecordMissingTarget(AnimDefinition def, string refName, string why)
-    {
-        if (!_censusOpen)
-        {
-            return;
-        }
-        _censusMissing++;
-        if (_censusMissingTargets.Count < CensusCap)
-        {
-            string label = def.AnimName is { Length: > 0 } anim ? $"{anim}@{def.Name}" : def.Name;
-            _censusMissingTargets.Add($"{label} ref={refName} why={why}");
-        }
+        _resolver.CloseCensus();
     }
 
     /// <summary>Runs the two ambient-playback bootstrap passes â€” pass 2 (ACTIVATION ON_STARTUP
@@ -1923,25 +1793,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     }
 
     // indexByPointer=false is IndexPooledCopy's own case: a second (third, …) copy of the SAME
-    // source GameZNode carries the SAME compiled indices as the first, and _byIndex can only ever
-    // hold one winner per index — see that method's remark for why skipping it is correct, not a
-    // loss (Targets' own _byIndex-miss rescue is anchor-scoped by name instead).
+    // source GameZNode carries the SAME compiled indices as the first, and an index-keyed map can
+    // only ever hold one winner per index — see that method's remark for why skipping it is
+    // correct, not a loss (Targets' own symbol-miss rescue is anchor-scoped by name instead). The
+    // resolver applies the flag, together with its own NameResolveFallback refusal, inside Add.
     private void IndexWorld(Node3D worldRoot, bool indexByPointer = true)
     {
-        void Walk(Node3D n)
+        void Walk(Node3D n, Node3D? parent)
         {
             var srcName = n.HasMeta(NameMeta) ? n.GetMeta(NameMeta).AsString() : n.Name.ToString();
-            _index.Add((n, srcName));
-            // The scoped crash runtime resolves purely by name (see NameResolveFallback): it mixes
-            // two gamez index spaces that collide, so a shared _byIndex would misresolve. Leaving it
-            // empty makes every index lookup miss and fall through to the unique name.
-            if (indexByPointer && !NameResolveFallback && n.HasMeta(IndexMeta))
-                _byIndex.TryAdd((int)n.GetMeta(IndexMeta), n);
+            int? gamezIndex = n.HasMeta(IndexMeta) ? (int)n.GetMeta(IndexMeta) : null;
+            _resolver.Add(n, srcName, parent, gamezIndex, indexByPointer);
             foreach (var child in n.GetChildren())
                 if (child is Node3D c)
-                    Walk(c);
+                    Walk(c, n);
         }
-        Walk(worldRoot);
+        Walk(worldRoot, worldRoot.GetParent() as Node3D);
     }
 
     // Re-runs the quiet-stage RESET_STATE posing pass (bootstrap pass 1) for whatever now anchors
@@ -2501,13 +2368,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                                 relocate = libraryCopy != null;
                             }
                         }
-                        // A pooled copy is Start's own anchor, not the call site: Targets' NodeRefs
-                        // lookup for it skips _byIndex (IndexPooledCopy — every copy shares the same
-                        // compiled indices) and falls to the name rescue scoped to ITS OWN subtree,
-                        // so the copy has to BE the anchor for that scope to find anything (the same
-                        // shape genx12 uses, anchored on the call site instead). PlaceCalledTemplates'
-                        // un-pooled templates keep the old shape (anchored on the call site, resolved
-                        // by the def-wide TemplateRootsFor/_byIndex as always).
+                        // A pooled copy is Start's own anchor, not the call site: Targets' symbol
+                        // lookup for it misses the by-index map (IndexPooledCopy — every copy shares
+                        // the same compiled indices) and falls to the name rescue scoped to ITS OWN
+                        // subtree, so the copy has to BE the anchor for that scope to find anything
+                        // (the same shape genx12 uses, anchored on the call site instead).
+                        // PlaceCalledTemplates' un-pooled templates keep the old shape (anchored on
+                        // the call site, resolved by the def-wide TemplateRootsFor/by-index map as
+                        // always).
                         var startAnchor = libraryCopy ?? callAnchor;
                         // Added whether or not the Start below actually fires. A call onto an
                         // ALREADY-LIVE callee is skipped by the live guard (the poll idiom's
@@ -2996,7 +2864,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// first, then the reader-style name/wildcard match within the anchor's scope.</summary>
     private Node3D? ResolveOne(string name, AnimDefinition def, Node3D? anchor)
     {
-        if (def.NodeRefs.TryGetValue(name, out int idx) && _byIndex.TryGetValue(idx, out var bound))
+        if (_resolver.SymbolClaims(def, name, out var bound) && bound != null)
             return bound;
         var found = ResolveScoped(new List<string> { name }, def, anchor);
         return found.Count > 0 ? found[0] : null;
@@ -3762,76 +3630,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
     }
 
-    // ---- node resolution (unchanged from the start-state applier) ----
-    /// <summary>World nodes a definition anchors to: NAME matches (wildcards = one per
-    /// building/vehicle instance); else ANIMATION_ROOT_NAME matches lifted to their parent
-    /// (the instance root, so sibling healthy/destroyed both resolve locally â€” needed where
-    /// instance roots have free names: `m_build**` instances are `apbuild01.flt`â€¦).</summary>
-    private List<Node3D?> Anchors(AnimDefinition def)
-    {
-        // Multi-target NAME1 definitions (zeppelin nacelles/turrets) parse with an empty
-        // NAME; they animate per-object sub-parts and are object-wiring scope â€” never anchor
-        // them (their generic ROOT names would anchor them onto every building in the world).
-        if (string.IsNullOrEmpty(def.Name))
-            return new List<Node3D?>();
-        var anchors = FindAll(def.Name, null).Cast<Node3D?>().ToList();
-        var how = anchors.Count > 0 ? AnchorKind.ByName : AnchorKind.None;
-        if (NarrowToSymbolRoot(def, anchors) is { } only)
-        {
-            anchors = only;
-            how = AnchorKind.BySymbol;
-        }
-        if (anchors.Count == 0 && def.RootName != null)
-        {
-            var roots = FindAll(def.RootName, null);
-            if (roots.Count > 0 && roots.Count <= MaxRootLift)
-            {
-                if (SuppressRootLift)
-                {
-                    how = AnchorKind.LiftSuppressed;
-                }
-                else
-                {
-                    anchors = roots
-                        .Select(n => n.GetParent() as Node3D)
-                        .Where(p => p != null)
-                        .Distinct()
-                        .ToList();
-                    how = anchors.Count > 0 ? AnchorKind.ByRootLift : AnchorKind.None;
-                }
-            }
-        }
-        RecordAnchoring(def, how);
-        return anchors;
-    }
-
-    /// <summary>Picks the one instance a compiled definition actually belongs to, when its NAME
-    /// matches several. The compiler expands a multi-instance object into one def per instance but
-    /// leaves them all sharing a NAME — C1's two airfield hangars are both <c>air_gen</c>, telling
-    /// them apart only by their symbol tables (<c>air_gen</c> names the nodes under
-    /// <c>eairg32</c>, <c>air_gen#1</c> those under <c>eairg31</c>). Name matching hands BOTH defs
-    /// BOTH anchors, so the pair cross-binds: shooting one hangar resolved to the other def, whose
-    /// events then target its own hangar by exact index — destroy <c>eairg31</c> and
-    /// <c>eairg32</c> explodes.
-    ///
-    /// <para>So resolve the def's ANIMATION_ROOT_NAME through the symbol table — the same
-    /// authority <see cref="Targets"/> already prefers for every event — and keep only the
-    /// anchors containing that exact node. Returns null when it cannot decide: a reader def (no
-    /// symbol table), an index the builder never built, or a root outside every candidate — all of
-    /// which leave the name match standing. The scoped crash runtime gets null for free, since
-    /// <see cref="NameResolveFallback"/> leaves <see cref="_byIndex"/> empty.</para></summary>
-    private List<Node3D?>? NarrowToSymbolRoot(AnimDefinition def, List<Node3D?> anchors)
-    {
-        if (anchors.Count < 2
-            || def.RootName is not { } root
-            || !def.NodeRefs.TryGetValue(root, out int idx)
-            || !_byIndex.TryGetValue(idx, out var exact))
-        {
-            return null;
-        }
-        var kept = anchors.Where(a => a != null && (a == exact || a.IsAncestorOf(exact))).ToList();
-        return kept.Count > 0 && kept.Count < anchors.Count ? kept : null;
-    }
+    // ---- node resolution â€” the rules live in NameResolver.cs; these are the forwards ----
+    /// <summary>World nodes a definition anchors to â€” NAME match, symbol narrowing, root lift,
+    /// all resolver-owned (see <see cref="NameResolver{TNode}.Anchors"/>, which also records the
+    /// once-per-def anchoring census).</summary>
+    private List<Node3D?> Anchors(AnimDefinition def) => _resolver.Anchors(def);
 
     /// <summary>The world nodes one event targets. Reader-sourced events may carry a
     /// parentâ†’child path; compiled events name a single node (under "node" or "name",
@@ -3842,9 +3645,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // gamez node index â€” always prefer it. Name matching resolves C1's `caboose` to the
         // real consist AND to an unrelated `caboose.flt` in the rail yard, and drives both.
         if ((ev.Data.Str("node") ?? ev.Data.Str("name")) is { } refName
-            && def.NodeRefs.TryGetValue(refName, out int nodeIndex))
+            && _resolver.SymbolClaims(def, refName, out var bound))
         {
-            if (_byIndex.TryGetValue(nodeIndex, out var bound))
+            if (bound != null)
                 return new List<Node3D> { bound };
             // The index is valid data but that node was not built (LOD levels the builder
             // drops, skipped subtrees). Not an error, and not something to name-match around
@@ -3862,7 +3665,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 if (anchor != null && FindAll(refName, anchor) is { Count: > 0 } scoped)
                     return scoped;
                 _opsUnresolved++;
-                RecordMissingTarget(def, refName, "index-not-built");
+                _resolver.RecordMissingTarget(def, refName, "index-not-built");
                 return new List<Node3D>();
             }
         }
@@ -3884,7 +3687,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (targets.Count == 0)
         {
             _opsUnresolved++;
-            RecordMissingTarget(def, string.Join("/", path), "name-no-match");
+            _resolver.RecordMissingTarget(def, string.Join("/", path), "name-no-match");
         }
         return targets;
     }
@@ -3911,74 +3714,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     }
 
     // NAME paths: resolve the first element in scope (falling back to global for
-    // non-local defs), then each further element inside the previous matches.
-    private List<Node3D> ResolvePath(List<string> path, Node3D? scope, bool localOnly)
-    {
-        var candidates = FindAll(path[0], scope);
-        if (candidates.Count == 0 && scope != null && !localOnly)
-            candidates = FindAll(path[0], null);
-        for (int i = 1; i < path.Count && candidates.Count > 0; i++)
-        {
-            var next = new List<Node3D>();
-            foreach (var c in candidates)
-                next.AddRange(FindAll(path[i], c).Where(n => n != c));
-            candidates = next;
-        }
-        return candidates;
-    }
+    // non-local defs), then each further element inside the previous matches. Forwards to
+    // NameResolver.cs.
+    private List<Node3D> ResolvePath(List<string> path, Node3D? scope, bool localOnly) =>
+        _resolver.ResolvePath(path, scope, localOnly);
 
     /// <summary>Every world node matching a NAME pattern, optionally restricted to one
     /// subtree. A full scan of the node index â€” and the data calls it constantly, because the
     /// poll idiom (<c>If â€¦ CallAnimation; Endif; Loop{-1}</c>) re-dispatches its body every
-    /// frame, so C5's ~400 live poll loops asked for hundreds of resolutions per frame.
-    ///
-    /// The answer is memoized because it cannot change: <see cref="_index"/> is built once
-    /// during the bootstrap and never added to, and the only runtime mutation of the world
-    /// tree is <see cref="SetSubtreeActive"/>, which toggles visibility and colliders without
-    /// reparenting or freeing anything. Callers must treat the returned list as read-only.
-    /// </summary>
-    private List<Node3D> FindAll(string pattern, Node3D? scope)
-    {
-        // Godot object identity is by native pointer, so key on the instance id rather than
-        // relying on GodotObject equality semantics inside a tuple comparer.
-        var key = (pattern, scope?.GetInstanceId() ?? 0UL);
-        if (_findCache.TryGetValue(key, out var hit))
-            return hit;
-        var match = Matcher(pattern);
-        var result = new List<Node3D>();
-        foreach (var (node, srcName) in _index)
-        {
-            // Defs may name a node without its model-file suffix ('ap_radiotwr' for the
-            // gamez node 'ap_radiotwr.flt') â€” try both.
-            var matches = match(srcName)
-                || (srcName.EndsWith(".flt", StringComparison.OrdinalIgnoreCase) && match(srcName[..^4]));
-            if (matches && (scope == null || node == scope || scope.IsAncestorOf(node)))
-                result.Add(node);
-        }
-        _findCache[key] = result;
-        return result;
-    }
-
-    // Wildcard NAME â†’ predicate: '*' (and the '**' template form) match any run of
-    // characters, '#' a run of digits ('air_gen#' covers 'air_gen'). Plain names compare
-    // exactly (case-insensitive, like every reader name lookup).
-    private Func<string, bool> Matcher(string pattern)
-    {
-        if (_matcherCache.TryGetValue(pattern, out var cached))
-            return cached;
-        Func<string, bool> match;
-        if (pattern.Contains('*') || pattern.Contains('#'))
-        {
-            var re = new Regex("^" + Regex.Escape(pattern).Replace("\\*", ".*").Replace("\\#", "[0-9]*") + "$",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-            match = re.IsMatch;
-        }
-        else
-        {
-            match = s => s.Equals(pattern, StringComparison.OrdinalIgnoreCase);
-        }
-        return _matcherCache[pattern] = match;
-    }
+    /// frame, so C5's ~400 live poll loops asked for hundreds of resolutions per frame. Forwards to
+    /// <see cref="NameResolver{TNode}"/>, which owns the index, the wildcard matcher, and the
+    /// memoization. Callers must treat the returned list as read-only.</summary>
+    private List<Node3D> FindAll(string pattern, Node3D? scope) => _resolver.FindAll(pattern, scope);
 
     // The *_STATE poses use the same absolute-in-parent-frame convention as
     // OBJECT_MOTION_FROM_TO â€” see FromToMotion's remarks for the evidence. OBJECT_TRANSLATE_STATE
@@ -4017,7 +3764,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private List<string> HideUncoveredDestroyed()
     {
         var hidden = new List<string>();
-        foreach (var (node, srcName) in _index)
+        foreach (var (node, srcName) in _resolver.Rows)
         {
             if (!srcName.Contains("destroyed", StringComparison.OrdinalIgnoreCase))
                 continue;
@@ -4037,5 +3784,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return false;
     }
 
+    // Godot object identity is by native pointer, not the inherited Equals: two managed proxies
+    // can wrap the same native node, so NameResolver's dictionary/tuple keys need this rather than
+    // trusting Node3D's own equality.
+    private sealed class Node3DIdentity : IEqualityComparer<Node3D>
+    {
+        public static readonly Node3DIdentity Instance = new();
 
+        public bool Equals(Node3D? x, Node3D? y) => (x?.GetInstanceId() ?? 0) == (y?.GetInstanceId() ?? 0);
+
+        public int GetHashCode(Node3D obj) => obj.GetInstanceId().GetHashCode();
+    }
 }

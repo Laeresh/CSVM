@@ -15734,6 +15734,84 @@ restored, green.
 `BL-262` stays open and untouched — staging `ballflare.flt`/`apassengers` moves goldens, and this
 plan stopped rather than repinned. The plan is archived at `docs/plans/PLAN-effect-catalogue.md`.
 
+**PLAN-name-resolver A1: `NameResolver<TNode>` extracted from `AnimRuntime.cs` (2026-08-05).** The
+index rows, the wildcard matcher, memoized `FindAll`, and `ResolvePath` move to a new public
+generic `src/Mech3/Anim/NameResolver.cs`; `AnimRuntime` holds a `NameResolver<Node3D>` and its
+`FindAll`/`ResolvePath` become one-line forwards. `IndexWorld`'s walk calls `Add(node, srcName,
+parent, gamezIndex?)`; ancestry moves from a live `scope.IsAncestorOf(node)` tree touch to a
+snapshot the resolver builds from each row's `parent` (walked once at index time, never re-queried
+live). Identity is explicit, not inherited: `AnimRuntime` supplies a `Node3DIdentity` comparer
+keyed on `GetInstanceId()`, since Godot object equality is unreliable inside a dictionary/tuple key
+across proxy instances of the same native node — the generic resolver never trusts `TNode.Equals`.
+`_byIndex` and the census stay on `AnimRuntime` (A2 scope); `Add`'s `gamezIndex?` parameter already
+makes that expressible without a second indexing pass, and `IndexPooledCopy` still does not feed
+`_byIndex`, now trivially (the resolver does not own one yet). `IndexStage`/`IndexPooledCopy`'s
+post-bootstrap growth (an effect-template stage, a pooled copy) keeps working via a new
+`ClearFindCache()`, replacing the old raw `_findCache.Clear()`. `HideUncoveredDestroyed`, which
+walked the raw `_index` field directly, now reads `NameResolver.Rows`.
+
+New off-engine `CSVM.Tests/NameResolverTests.cs` (10 tests, a plain reference-equality token node
+type, no Godot): `#` matches a digit run including zero, `*`/`**` (checked with a two-character run
+so a single-char regression cannot pass silently), case-insensitivity, the `.flt` suffix double
+match, scope restriction from the Add-time parent snapshot (the `he_trails`/`ap_trails` shared
+`fly_trail1` shape), `FindAll`'s memoized-same-instance semantics, `ClearFindCache`'s invalidation,
+and one `ResolvePath` multi-segment walk. Each assertion was seen failing once: eight of the ten
+(hash/star/double-star/case/`.flt`/both scope tests/`ClearFindCache`/`ResolvePath`) by perturbing
+the corresponding `NameResolver` logic in one batch and confirming exactly that subset went red
+while the other two stayed green; the memoization test and the strengthened star test in a second
+batch (returning a copy on a cache hit; narrowing `*` to one character). All reverted, full green
+restored (`git diff` clean before rebuild).
+
+**Verified.** Full `.\RunTests.ps1` PASS: 460 unit tests (up from 450 — the new suite), 29/29
+in-engine suites, **13/13 goldens hash-identical**, engine errors clean. Census A/B per the plan's
+between-commits instrument (verification.md SHELL-10/SHELL-12): `ResolutionLines()` itself stays
+empty for a `--freecam --chapter=` run (`ReportResolution` is only set for `--node=` runs), so the
+actual A/B used the Bootstrap summary line that IS unconditionally printed and runs through the
+exact code this item moved — `RunProbe.ps1 --debug-anim --freecam --chapter=C5 --screenshot=...`,
+before and after, both logged byte-identically: `anim: 781 defs (592 compiled, 189 reader), 43 SI
+scripts; 383 anchored, 1483 state ops applied, 17 unresolved`. No behaviour change.
+
+
+## 2026-08-05 — PLAN-name-resolver A2: the symbol authority, `Anchors`/root-lift and the bind census move into `NameResolver`
+
+The judgement item of `docs/PLAN-name-resolver.md`: the by-index map (`_byIndex`),
+`NarrowToSymbolRoot`, `Anchors` (NAME match → symbol narrowing → ANIMATION_ROOT_NAME lift) and
+the bind census (`RecordAnchoring`/`RecordMissingTarget`/`ResolutionLines`) leave
+`AnimRuntime` for `NameResolver<TNode>`, ported rule-for-rule. The three policy inputs
+(`NameResolveFallback`/`SuppressRootLift`/`MaxRootLift`) are now the resolver's documented
+knobs; `AnimRuntime` keeps its public flags and hands them over once at `Bind`, before the
+first `Add`. The by-index population refusals moved exactly: never under `NameResolveFallback`
+(colliding index spaces) and never for an `IndexPooledCopy` row (`Add`'s new
+`indexByPointer:false` — every pooled copy shares the source's compiled indices). The ⚠-table
+row-2 discipline is now structural inside the module: `Anchors` is the one census-recording call,
+wrapping a private census-free `ComputeAnchors`; `FindAll`/`ResolvePath` record nothing, so
+the per-event callers (`ResolveInOwnRoot`/`TemplateRootsFor`) cannot re-enter the census.
+`Targets`/`ResolveOne` stay in `AnimRuntime` (they read event payloads) but do their symbol
+lookups through the resolver's new `SymbolClaims` tri-state (not claimed / bound / claimed but
+index-not-built), which preserves the strictly anchor-scoped `genx12` rescue on the
+index-not-built branch. Root-lift now reads the Add-time parent snapshot instead of the live
+`GetParent()` — identical under the no-reparent invariant the module documents.
+
+Nine new off-engine tests (29 total in the file's suite): symbol-beats-name (the `caboose`/
+`caboose.flt` double-match ambiguity vs the exact index), twin narrowing keeps `air_gen`#1 →
+its `eairg31` instance, the narrowing tri-state (reader def / unbuilt index / foreign root each
+leave BOTH twins standing), root-lift lifts to parents / refuses above `MaxRootLift` / refuses
+under `SuppressRootLift`, and `NameResolveFallback` leaves symbol lookups empty while names
+still resolve. Each seen red once via five reverted mutations (symbol lookup never binding;
+narrowing never deciding; null-vs-empty conflation — which exposed and fixed two weak count-only
+assertions that root-lift could satisfy; cap+suppress+parent-lift broken; the fallback gate
+dropped), each failing exactly the expected subset.
+
+**Verified.** Full `.\RunTests.ps1` PASS: build clean (0 warnings), 469 unit tests, 29/29
+in-engine suites, **13/13 goldens hash-identical**, engine errors clean. Census A/B before/after at
+worktree HEAD (SHELL-10/SHELL-12, both probes with `--screenshot` termination): the C5
+`--freecam` Bootstrap summary byte-identical (`anim: 781 defs (592 compiled, 189 reader), 43 SI
+scripts; 383 anchored, 1483 state ops applied, 17 unresolved`), and — since A2 moves the census
+itself — a `--debug-anim --node=ctur1 --chapter=C5` run's full `[anim] bind` block (census
+header `defs=780 anchored_by_name=1 … root_lift_suppressed=108 unanchored=671
+target_missing_ops=4` plus the three sample lines) byte-identical line for line. No behaviour
+change.
+
 ## Playtest triage 2026-08-05 — eighteen `PT` items closed, nine findings banked
 
 One at-the-controls sitting, triaged with the user the same day. Eighteen `PT`s retired: `PT-01`,
@@ -15789,7 +15867,7 @@ slider the user rated "really good"), and `BL-281` (ricochet sounds audible but 
 first real bound on `FlashDuration`'s 0.08 s widening, pointing at ~1 frame — and caught the flare
 rendering as a flat yellow wedge where the original shows a compact camera-facing star burst, which
 puts a screenshot behind the suspected `PlaneBuilder.cs:204-249` billboard deviation
-(`playtest/PT-03/Light Original New.png`). `BL-262`/A1: the user judged 4× **too big** at the
+(`playtest/PT-03/Light Original New.png`). `BL-282`/A1: the user judged 4× **too big** at the
 controls and, more usefully, that the right multiplier differs per puffer — so before splitting into
 per-site constants, check whether the gamez host nodes carry a scale we ignore. `BL-260`: the crash
 camera's capture blocker is retired — "there are enough captures" of the original's crash zoom-out,

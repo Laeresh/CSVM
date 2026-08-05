@@ -16,7 +16,7 @@ never reused. The `PT` counter read `PT-37` while `PT-37` was already in use; co
 on 2026-08-05. **Eighteen `PT`s retired 2026-08-05** in one triage pass — `PT-01`, `PT-02`,
 `PT-03`, `PT-04`, `PT-13`–`PT-18`, `PT-20`–`PT-25`, `PT-29`, `PT-30` — their verdicts are in
 `docs/HISTORY.md` and what they found is in `backlog.md` as `BL-273`–`BL-281` plus evidence added
-to `BL-100`/`BL-118`/`BL-119`/`BL-260`/`BL-262`.)
+to `BL-100`/`BL-118`/`BL-119`/`BL-260`/`BL-282`.)
 
 **Captures staged for an item live in `playtest/<ID>/`** — git-ignored (they are renders of the
 player's own game files) and, unlike `.scratch/`, **not swept by `CleanScratch.ps1`**, so they
