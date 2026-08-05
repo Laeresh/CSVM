@@ -86,7 +86,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the resolver, in three goldens-identical steps
 
-1. ☐ `NameResolver<TNode>`: index + `Matcher` + `FindAll` + `ResolvePath`, with the off-engine suite
+1. ☑ `NameResolver<TNode>`: index + `Matcher` + `FindAll` + `ResolvePath`, with the off-engine suite
 2. ☐ The symbol authority, `Anchors`/root-lift, and the census move in
 3. ☐ `ResolveScoped`'s tiers + the own-roots hook; `ResolveOne` folds into `Resolve`
 
@@ -109,7 +109,7 @@ the census-triple A/B) against the then-HEAD, not against `4e4db08`.
 
 # Wave A — the resolver, in three goldens-identical steps
 
-## A1 ☐ `NameResolver<TNode>`: index + `Matcher` + `FindAll` + `ResolvePath`, with the off-engine suite
+## A1 ☑ `NameResolver<TNode>`: index + `Matcher` + `FindAll` + `ResolvePath`, with the off-engine suite
 
 **Goal.** The index rows, the wildcard matcher, the memoized find, and path resolution live in a
 public generic module; `AnimRuntime` holds a `NameResolver<Node3D>` and delegates; the first

@@ -15733,3 +15733,40 @@ restored, green.
 
 `BL-262` stays open and untouched — staging `ballflare.flt`/`apassengers` moves goldens, and this
 plan stopped rather than repinned. The plan is archived at `docs/plans/PLAN-effect-catalogue.md`.
+
+**PLAN-name-resolver A1: `NameResolver<TNode>` extracted from `AnimRuntime.cs` (2026-08-05).** The
+index rows, the wildcard matcher, memoized `FindAll`, and `ResolvePath` move to a new public
+generic `src/Mech3/Anim/NameResolver.cs`; `AnimRuntime` holds a `NameResolver<Node3D>` and its
+`FindAll`/`ResolvePath` become one-line forwards. `IndexWorld`'s walk calls `Add(node, srcName,
+parent, gamezIndex?)`; ancestry moves from a live `scope.IsAncestorOf(node)` tree touch to a
+snapshot the resolver builds from each row's `parent` (walked once at index time, never re-queried
+live). Identity is explicit, not inherited: `AnimRuntime` supplies a `Node3DIdentity` comparer
+keyed on `GetInstanceId()`, since Godot object equality is unreliable inside a dictionary/tuple key
+across proxy instances of the same native node — the generic resolver never trusts `TNode.Equals`.
+`_byIndex` and the census stay on `AnimRuntime` (A2 scope); `Add`'s `gamezIndex?` parameter already
+makes that expressible without a second indexing pass, and `IndexPooledCopy` still does not feed
+`_byIndex`, now trivially (the resolver does not own one yet). `IndexStage`/`IndexPooledCopy`'s
+post-bootstrap growth (an effect-template stage, a pooled copy) keeps working via a new
+`ClearFindCache()`, replacing the old raw `_findCache.Clear()`. `HideUncoveredDestroyed`, which
+walked the raw `_index` field directly, now reads `NameResolver.Rows`.
+
+New off-engine `CSVM.Tests/NameResolverTests.cs` (10 tests, a plain reference-equality token node
+type, no Godot): `#` matches a digit run including zero, `*`/`**` (checked with a two-character run
+so a single-char regression cannot pass silently), case-insensitivity, the `.flt` suffix double
+match, scope restriction from the Add-time parent snapshot (the `he_trails`/`ap_trails` shared
+`fly_trail1` shape), `FindAll`'s memoized-same-instance semantics, `ClearFindCache`'s invalidation,
+and one `ResolvePath` multi-segment walk. Each assertion was seen failing once: eight of the ten
+(hash/star/double-star/case/`.flt`/both scope tests/`ClearFindCache`/`ResolvePath`) by perturbing
+the corresponding `NameResolver` logic in one batch and confirming exactly that subset went red
+while the other two stayed green; the memoization test and the strengthened star test in a second
+batch (returning a copy on a cache hit; narrowing `*` to one character). All reverted, full green
+restored (`git diff` clean before rebuild).
+
+**Verified.** Full `.\RunTests.ps1` PASS: 460 unit tests (up from 450 — the new suite), 29/29
+in-engine suites, **13/13 goldens hash-identical**, engine errors clean. Census A/B per the plan's
+between-commits instrument (verification.md SHELL-10/SHELL-12): `ResolutionLines()` itself stays
+empty for a `--freecam --chapter=` run (`ReportResolution` is only set for `--node=` runs), so the
+actual A/B used the Bootstrap summary line that IS unconditionally printed and runs through the
+exact code this item moved — `RunProbe.ps1 --debug-anim --freecam --chapter=C5 --screenshot=...`,
+before and after, both logged byte-identically: `anim: 781 defs (592 compiled, 189 reader), 43 SI
+scripts; 383 anchored, 1483 state ops applied, 17 unresolved`. No behaviour change.

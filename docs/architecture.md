@@ -53,6 +53,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/Anim/` — `AnimRuntime`'s motion + light value types (`IAnimMotion` and its four implementations, `AnimLight`, the bind-census enums), split out of `AnimRuntime.cs` into their own files/namespace for size.
 - `src/Mech3/Anim/MotionSet.cs` — the live motion collection: the two registration rules, the per-frame sweep, and the pending-bounce predicate the instance walk retires on.
 - `src/Mech3/Anim/EmitterDirector.cs` — every PUFFER_STATE emitter's whole life on one runtime: the keying rule, the start, all four stops, the respawn wipe, the per-frame follow, and the census. Plus `IEmitter`/`IEmitterFactory` and the real/retired adapters.
+- `src/Mech3/Anim/NameResolver.cs` — name→node resolution: the index, wildcard matcher, memoized `FindAll`, `ResolvePath`; generic over the node type, off-engine testable.
 - `src/Mech3/SequenceRunner.cs` — the engine-free sequence interpreter (event clock / LOOP / IF-ELSEIF), extracted behind the 3-member `ISequenceHost` seam; headlessly testable.
 - `src/Mech3/DestructibleRegistry.cs` — live per-instance HP for `HEALTH>0` anim defs, one pool per `(def,anchor)`; `Resolve` maps a struck collider back.
 - `src/Mech3/WorldSession.cs` — builds a chapter world + binds its `AnimProgram` (load→WorldBuilder→clutter→bind→sound-prewarm); `--node=` slices it to one subtree.
@@ -682,8 +683,8 @@ return path to poll the effects runtime's.
 `AnimRuntime`'s private nested types promoted to top-level `internal` types in their own
 namespace, purely for file size — not an independently-owned subsystem, still driven entirely by
 `AnimRuntime`. `IAnimMotion` (`ScriptPlayback`/`SpinMotion`/`FromToMotion`/`OpacityFade`/
-`MotionRuntime`), `AnimLight`, and the bind-census `AnchorKind` enum. `MotionSet` and `EmitterDirector` share the
-namespace but ARE independently owned — their own entries below.
+`MotionRuntime`), `AnimLight`, and the bind-census `AnchorKind` enum. `MotionSet`, `EmitterDirector`
+and `NameResolver` share the namespace but ARE independently owned — their own entries below.
 `MotionRuntime`'s `translation_range` is a SPHERICAL launch — `xz` azimuth, `y` elevation, both in
 degrees, `initial` the speed (`analysis/object-motion-range/`, decoded 2026-08-01) — and a launch
 seeds from the node's authored rest pose, since a shared effect template's children are re-homed by
@@ -762,6 +763,29 @@ A `PUFFER_STATE 1` re-assert REVIVES a `SustainEnd`ed emitter (the `puffit` sput
 forever), and the re-asserting instance takes ownership. `EndOn` is NOT expressible as an
 `IsVisibleInTree` gate the way `TickLights` is: the effects stage keeps template roots hidden while
 their world-space particles show.
+
+## src/Mech3/Anim/NameResolver.cs
+Name→node resolution as a public module, generic over the node type (`NameResolver<TNode>`,
+PLAN-name-resolver A1): the index (`Add(node, srcName, parent, gamezIndex?)`), the wildcard
+`Matcher` (`*` any run, `#` a digit run including zero, case-insensitive, the `.flt` suffix double
+match), the memoized `FindAll`, and `ResolvePath`. `AnimRuntime` holds one `NameResolver<Node3D>`
+and its own `FindAll`/`ResolvePath` are one-line forwards; a second, engine-free instantiation over
+a plain token type is `CSVM.Tests`' whole suite. `_byIndex`, the symbol authority, root-lift and the
+census stay on `AnimRuntime` for now — `Add`'s `gamezIndex?` only makes them expressible later
+without a second indexing pass.
+⚠ **No node an `Add` has already indexed may be reparented afterwards.** Ancestry is a snapshot
+  (each row's `parent`, walked once at index time), not a live tree query — `FindAll`'s scope filter
+  reads that snapshot and silently misreads it if a node moves. A subtree staged after the bootstrap
+  (an effect template, a pooled copy) may still `Add` more rows, but the caller must also call
+  `ClearFindCache()`, or a pattern already cached as "resolves to nothing" stays stale.
+⚠ Node identity is constructor-supplied (`IEqualityComparer<TNode>`), never the type's inherited
+  `Equals` — Godot object equality is unreliable inside a dictionary/tuple key across proxy
+  instances of the same native node, so the `Node3D` instantiation keys explicitly on
+  `GetInstanceId()` (`AnimRuntime.Node3DIdentity`).
+`FindAll`'s memoized result must be treated as read-only — the same list instance is returned on
+every repeat query, which is what makes it cheap for C5's ~400 live poll loops re-dispatching every
+frame. This is not the declined G18 split (`architecture.md`'s `AnimRuntime` entry): one concept
+moves out, not a per-mode interface — all three runtime modes still share this one resolver.
 
 ## src/Mech3/SequenceRunner.cs
 The engine-free sequence interpreter, extracted from `AnimRuntime` behind the `ISequenceHost` seam
