@@ -76,7 +76,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 6. ☑ `BL-221` Settle the `AT_NODE` position axis order by census (graze sparks 8 m too high)
 7. ☑ `BL-229` Splash emitter killed on its start tick by its own caller
-8. ☐ `BL-061` World-effects template MESH half renders at the call site
+8. ☑ `BL-061` World-effects template MESH half renders at the call site
 
 ### Wave D — Larger mechanisms
 
@@ -417,7 +417,7 @@ bl-229-emitter-host-deactivation/`, `docs/HISTORY.md` 2026-08-05. **Owed: a sea-
 headless water crash exists (`--crash` resolves `Ground`), so the picture is unverified. Re-check
 `D9` against this: the splash's `WAIT_FOR_COMPLETION` ordering question is untouched and still open.
 
-## C8 ☐ `BL-061` World-effects template MESH half
+## C8 ☑ `BL-061` World-effects template MESH half
 
 **Goal.** The template meshes — the `gunhit` debris bits (`bit1`/`bit2`/`chunk` + their
 `OBJECT_MOTION`), the `he_ring` ground shockwave, the `huge_splash_model`/`zep_ng_dstry1.flt`
@@ -447,6 +447,31 @@ the `c5` golden watched specifically (def-scoping puffer keys there moved it onc
 deliberately keeps the collapsed `(name, host)` key — do not def-scope it (stacks C5's six
 `m_crane_go` spark defs, moves the c5 golden). Concurrency beyond `EffectPoolSlots` (4) collapses
 by design — the size is `BL-231`, not this item.
+
+**Landed 2026-08-05.** The Approach's premise was already spent: D31 made the stage visible with
+each ROOT hidden, `BL-225` gave every root its pooled per-call copies, and the `gunhit` bits render
+(`CAP-25` identified the `chunk` quad in a real capture; `bit1`–`bit3` carry 0 vertices). What was
+left is one mechanism, and it is not the stage — **only `PlayEffectAt` revealed anything**, so a
+template reached by `CALL_ANIMATION` was moved to the site and left dark while its puffers, which
+are world-level particles, emitted there and made the effect read as working. That is exactly the
+D31 ring set: `he_ground_effect`'s upper ring (`he_ring1`), `sonic_ground_effect`'s four rising
+rings (`sonic_ring1`–`4`), the torpedo's `huge_splash_model`/`ripple` — staged, placed, animated and
+invisible. The reveal now fires on a relocating call too. The census found the other end as well:
+an ended effect left its mesh **lit** — the ap/dum/mag `dum_gunhit` chunk stayed at the impact point
+for the session, because those hits author an `ACTIVE_STATE 0`, finish inside their own TTL, and
+`Stop` reaches a template only through a live instance (the slug hit, with no authored stop, ran to
+its TTL and looked fine). Hiding is deferred on two measured holds — anything still animating the
+ROOT (a template's pieces are the CALLEE's motions on the CALLER's copy) and any sibling def live on
+the same copy (`rear_flash_effect` finishes on the tick it starts). Neither trap fired: the puffer
+keys were not touched and the pool is unchanged. New in-engine suite `effect-template-mesh` asserts
+both halves on real gamez geometry, and both able-to-fail controls were run (reveal removed → the
+called half fails; hide removed → `1 still lit`). Verified: seeded `--effects-test` on C1 and C5
+(identical — the templates are chapter-invariant), full `.\RunTests.ps1` PASS with 13/13 goldens
+hash-identical, `c5-city-night` and `c1-destroy-effects` among them. **Not verified: the picture** —
+no headless shot fires a rocket, so `PT-35` owes the capture. Found on the way and filed, not fixed:
+`BL-257`, the zeppelin model's eight parts hidden on the tick they launch by a third `OBJECT_MOTION`
+shape carrying neither `RUN_TIME` nor `BOUNCE_SEQUENCE`. Details:
+`analysis/bl-061-template-mesh/FINDINGS.md`, `docs/verification.md` INSTR-11.
 
 # Wave D — Larger mechanisms
 

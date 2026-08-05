@@ -180,6 +180,11 @@ live pose walked every repeat explosion's debris further from the blast than the
   the run time and then holds at rest. The other 152 (150 reachable) LAUNCH upward with an apex, and
   `PLAN-bounce-launch` gave those an analytic landing instead — see `docs/formats/destructibles.md`'s
   "Debris tumbles" bullet for the split and the ⚠ choice it records.
+  ⚠ A third shape exists next to those two: **neither `RUN_TIME` nor `BOUNCE_SEQUENCE`**, where the
+  event's duration is what the sequence's NEXT (null-start) event waits on. `dblcannon_flying_parts`
+  is the reachable case — eight parts, each launched upward (elevation 10–60°, 17–25 m/s) and then
+  switched off by its own following event, so a duration of 0 hides every part on the tick it is
+  thrown. Uncensused and unfixed (`BL-257`); the solve is gated on a named bounce today.
 - `FORWARD_ROTATION.Time.initial` is a tumble **total angle over `RUN_TIME`**, not a rate: divide
   by `RUN_TIME` before integrating (read as rad/s, the crash pieces spin ~15 rad/s, visibly wrong;
   the ÷`RUN_TIME` reading passed the crash A/B playtest and remains a TUNE handle, not a decode).

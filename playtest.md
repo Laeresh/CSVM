@@ -10,7 +10,7 @@ here means the work is queued, not forgotten. Deep evidence and traps live in
 Cite them from `backlog.md` and in conversation the way `BL-nnn` is cited. IDs are permanent: when
 an item closes its ID retires with it and is never reused, so numbering gaps are expected.
 Retired IDs disappear from this file, so never mint a new ID by scanning the entries below — take
-it from this counter and bump it here: **next free IDs `CAP-26` and `PT-35`.** (`CAP-17` and
+it from this counter and bump it here: **next free IDs `CAP-26` and `PT-36`.** (`CAP-17` and
 `CAP-14` and `CAP-24` and `CAP-16` retired 2026-08-04 — IDs are never reused.)
 
 **Captures staged for an item live in `playtest/<ID>/`** — git-ignored (they are renders of the
@@ -110,6 +110,17 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   pipper is *drawn* at. *Look for:* it sits where the rounds actually land in a hard turn.
   `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo --fire`. *Blocks:* retiring the
   TUNE.
+
+- `PT-35` **The rocket rings' template meshes (`BL-061`).** The mesh half landed and is asserted
+  in-engine and in `--effects-test`'s census, but no golden sees it — the rings only appear on a
+  live rocket impact, and all 13 shots stayed hash-identical through the fix. Fly a rocket into
+  terrain: `./RunGame.ps1 --fly --chapter=C1 --infinite-ammo`, and again with
+  `--rocket=wep_08` (the sonic, whose IMPACT names `sonic_ground_effect`) and `--rocket=wep_14`
+  (the torpedo, over water — `torpedo_water_effect`); stock HE is `wep_06`. *Look for:* (a) HE — a
+  SECOND ring above the ground ring (`he_ring1`, ~12 m up), not just the one on the deck; (b) sonic —
+  four rings rising off the impact, which showed nothing at all before; (c) torpedo on water — the
+  splash model and its ripple rings at the hit; (d) after every one of them, nothing left behind:
+  no ring or chunk frozen at the impact point once the effect is over. *Blocks:* `BL-061` sign-off.
 
 - `PT-34` **The sea dive's splash spray (`BL-229`).** The rule landed and is asserted in-engine, but
   the picture is unverified: there is no headless water crash (`--crash` passes no struck body, so

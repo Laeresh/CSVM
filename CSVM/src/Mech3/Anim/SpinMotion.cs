@@ -35,6 +35,11 @@ internal sealed class SpinMotion : IAnimMotion
 
     public bool Finished => _runTime > 0f && _t >= _runTime;
 
+    /// <summary>Whether this spin has no authored end — <c>run_time ?? 0f</c>, which
+    /// <see cref="Finished"/> never satisfies. Read by <see cref="MotionSet.HoldsTemplate"/>, which
+    /// must not let one pin a template revealed for the session.</summary>
+    public bool Endless => _runTime <= 0f;
+
     /// <summary>Whether an incoming registration is this same spin, so a looping sequence
     /// re-asserting it can be left alone instead of restarted.</summary>
     public bool Matches(Vector3 rate, float runTime) =>

@@ -620,9 +620,24 @@ fire, C1's refuel tanks). It cannot reach the ambient emitters: theirs are the 6
 `LOOP {-1}` means the instance never finishes. **Instance-scoped, never sequence-scoped** — a lone
 `PufferState` in a one-tick sequence (`part1_trail`) is the debris-trail idiom.
 `ShowPlacedTemplates` pairs a staged template root's visibility with the EFFECT's life, not its
-instance's: revealed after `Start`, hidden only on teardown (Stop/TTL), because the authored
+instance's: revealed after `Start`, because the authored
 scale/opacity motions outlive the sequence that launched them — hiding on instance-finish would cut
 an explosion ring off mid-expansion (D31). What shows INSIDE the root stays the data's call.
+Both ends are the engine's, and both were half-written (`BL-061`, `analysis/bl-061-template-mesh/`).
+The reveal also fires on a relocating **CALL_ANIMATION**, not only on `PlayEffectAt`: a called
+template used to be moved to the site and left dark while its puffers — world-level particles that
+do not read the root — emitted there, so the whole D31 ring set (`he_ring1`, `sonic_ring1`-`5`, the
+torpedo `ripple`/`huge_splash_model`) was staged, placed, animated and invisible. The hide is
+`HideTemplateWhenIdle`, off the instance-retire walk plus `SweepTemplateHides`: `Stop` reaches a
+template only THROUGH a live instance, so a def that ends by running out of its own events left its
+mesh lit at the site for the session (measured: the ap/dum/mag `dum_gunhit` chunk, whose authored
+`ACTIVE_STATE 0` finishes it inside its own TTL — the slug hit, which ships no stop, was covered by
+the TTL sweep and looked fine). It defers on two holds, each measured: `TemplateStillAnimated`
+(asked of the ROOT, since a template's pieces are driven by the CALLEE's motions on the CALLER's
+copy) and `TemplateSharedWithLiveInstance` (`rear_flash_effect` finishes on the tick it starts and
+its callee is still lighting the same root). A def whose t=0 events complete it never reaches the
+retire walk at all — `Start` drops that instance itself — so `ShowTemplate`'s own reveal schedules
+the hide for it.
 ⚠ `_rng` is the runtime's ONE die (`RANDOM_WEIGHT`, `SOUND_GROUPS` picks, crash-debris scatter) —
   every session sets `Seed` (`Rng.Anim`/`Rng.Crash`/`Rng.Effects`); route new dice through it or a
   replay stops being identical. `Reseed()` also clears the sound groups' recency memory, which
@@ -2001,7 +2016,9 @@ for the next `WithWorld` build — a suite sets it, on a chapter other than `Cha
 default-chapter world built before the set is never reused in its place. `BuildWorld` opens its
 archives through `SessionArchives.OpenFor(ArchiveIntent.Suite, …)`, then `using`s the returned
 `Textures`/`Sounds` itself — `OpenFor` states the (both-false) lifetime flags, it does not own the
-disposal.
+disposal. `TestWorld` also carries the parsed `Gamez` past the build (not disposable, unlike the
+texture archive) so a suite can build real geometry of its own from it — the effect-template stage
+`effect-template-mesh` needs.
 ⚠ **In-engine is the smaller half.** Only checks that need a live Godot belong here; anything
   that runs without the engine goes in `CSVM.Tests` (`dotnet test`) instead.
 ⚠ **Engine-error policy.** Native `ERROR: …` lines are screened out of band against
@@ -2030,7 +2047,7 @@ the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replac
 emitter's own MODES are. Neither covers the other's job.
 
 ## src/Testing/Suites.cs
-The 22 registered in-engine assertion suites cover typed weapon data, blast/fuse rules, the original's
+The 26 registered in-engine assertion suites cover typed weapon data, blast/fuse rules, the original's
 flight envelope, plane/loadout bindings (stock and, since M3 B4, the full-rig `Loadout.ForRig`),
 live weapon fire, destructible stages/death/census, animation
 stops and bounce-terminated launches, emitter lifetime and the emitter's own modes, texture
@@ -2047,6 +2064,12 @@ running first means it builds the shared C1 world while the fake is in effect; `
   `MotionSet.OwesBounce` on every tick of the `refuel*` kill's flight (D11): the retirement hold's
   own mechanism, which the zero-miss checks cannot catch — sampling once right after `DamageAt`
   reads false regardless, since the death's debris motion is scheduled seconds in.
+⚠ `effect-template-mesh` builds REAL geometry — `WorldEffectsFactory.BuildEffectStage` from the
+  chapter gamez (`TestWorld.Gamez`) into one `pool0` slot, under an `AnimRuntime.ForEffects` runtime
+  carrying the production `ShowPlacedTemplates`/`PooledTemplates` pair. Named empty nodes cannot
+  express mesh visibility, which is the whole subject; and the reveal exists only under those flags,
+  so a suite that dropped them would assert nothing. Both halves are asserted (a CALLED template
+  showing, an ended effect leaving nothing lit) because either alone passes a broken runtime.
 ⚠ `puffer-modes` detaches `GameClock.Current` for its duration and drives `_Process` itself. The
   harness's clock is a FixedStep one nothing steps, so `FrameDt` is 0 — left installed, every tick
   advances no sim and every check passes vacuously.
@@ -2074,8 +2097,17 @@ caller's spec between calls, so a cached one would silently answer with a stale 
 ⚠ **No back-reference to the host node.** `RunTestSuites` takes the parent `Node` (to host its
   throwaway `TestHost` world) and the `Camera3D` as parameters and returns the exit code plus the
   fixed-step `GameClock` it created via `out` — the caller assigns its own `_clock` field and
-  calls `GetTree().Quit(code)` itself. `RunEffectsTest` likewise takes the camera and the caller's
-  `EffectAnimNames` table (`WorldEffectsFactory.EffectAnimNames`, passed in per call).
+  calls `GetTree().Quit(code)` itself. `RunEffectsTest` likewise takes the camera, the caller's
+  `EffectAnimNames` table (`WorldEffectsFactory.EffectAnimNames`, passed in per call) and the
+  template stage (`WorldEffectsFactory.EffectStage`).
+⚠ `RunEffectsTest` reports BOTH halves of an effect — the puffers it builds and the template MESHES
+  that become visible, per root, with their distance from the play point (`BL-061`). It sampled only
+  the first for months and read `33/33` while several effects drew no geometry at all
+  (`verification.md` INSTR-11). The mesh half is a per-tick PEAK, not a final reading — the data
+  turns its own meshes off inside the window — plus a residual reading after the stop, which is what
+  catches a template left lit at the last hit site. The stage's base state is printed once from each
+  mesh's own flag (`self-visible`), since visible-in-tree is zero for every hidden root and would say
+  nothing.
 ⚠ `ApplyRocketOverride` and `TriggerDestroy` are static (no instance state) — call them as
   `Testing.ProbeRunner.X(...)`, not through `_probeRunner`.
 ⚠ `WriteScratch` is the one shared write path to `.scratch/<report>.txt`; `GameSession`'s
@@ -2241,6 +2273,9 @@ hold only the roots sized that deep and a def whose root has no copy in its slot
 that exists (`TemplateRootsFor` picks by modulo — never "all of them", which would be the collapse
 again). The build line names the sizes, not just the total, because a bare count cannot say whether a
 root someone just re-sized actually got its copies.
+`EffectStage` exposes that stage node read-only, for `--effects-test`'s mesh census (`BL-061`) —
+a puffer count cannot see whether a template's geometry drew, and the two halves fail independently
+(`docs/verification.md` INSTR-11).
 ⚠ `EffectStageRoots` must stay the WHOLE anchor-root set of `EffectAnimNames`' call closure, and
   `EffectTemplateRoots` the same for the crash rig's two variants — a def anchors on the node its
   NAME names, so an omitted root leaves it unanchored and it plays nothing, silently. Staging 19 of

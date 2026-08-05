@@ -431,6 +431,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private readonly List<(AnimDefinition Def, Node3D? Anchor, float Deadline)> _effectTtls = new();
 
+    // Effects whose instance has ended but whose template copy is still revealed — something is
+    // still animating it, or another def is still playing on it (BL-061 — see
+    // HideTemplateWhenIdle, and SweepTemplateHides for when they drain).
+    private readonly List<(AnimDefinition Def, Node3D? Anchor)> _templateHidesPending = new();
+
     // ---- the effect-template pool (BL-225) ----
     // Which slot each PlayEffectAt call takes next, per template ROOT name (def.Name), not per
     // anim name: two effect defs that anchor on the same root must not both be handed slot 0 and
@@ -962,6 +967,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         TickLights(dt);
         Sounds?.Tick();
         SweepEffectTtls(dt);
+        SweepTemplateHides();
         TickDeferredByRange();
         if (DebugMotions)
             LogMotions(dt);
@@ -975,6 +981,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 _instances.RemoveAt(i);
                 FinishInputGoverned(inst.Def, inst.Anchor);
                 FinishEffectInstance(inst.Def, inst.Anchor);
+                HideTemplateWhenIdle(inst.Def, inst.Anchor);
                 OnInstanceFinished?.Invoke(inst.Def, inst.Anchor);
             }
         }
@@ -2396,6 +2403,20 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                                     PlaceTemplateAt(target, callAnchor!, siteOffset);
                             }
                             Start(target, startAnchor);
+                            // The MESH half (BL-061). Moving the template is only half of placing
+                            // it: on a runtime that stages its templates hidden, a CALLED template
+                            // used to stay dark while its puffers — which draw at world level,
+                            // independent of the root — emitted at the site, so an effect showed
+                            // its particles and none of its authored geometry. Measured on the
+                            // rocket rings the D31 staging exists for: `he_ground_effect` calls
+                            // `call_he_ring1` (root `he_ring1`), `sonic_ground_effect` calls
+                            // `ring_up1`-`4`/`ring_down1` (roots `sonic_ring1`-`5`), and every one
+                            // of those roots carries meshes its own def activates and never showed
+                            // one. Revealed AFTER Start for the same reason PlayEffectAt does it
+                            // there, and hidden again by the effect's end, not its instance's
+                            // (see ShowTemplate and HideTemplateWhenIdle).
+                            if (relocate)
+                                ShowTemplate(target, startAnchor, visible: true);
                             // A death-triggered call whose relocation was permitted, landing on the
                             // SAME anchor as the dying instance, is the caller's own choreography
                             // (facade_parts on its own fcpanNN) — a reset (C28) has to stop and
@@ -3017,12 +3038,49 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         if (!ShowPlacedTemplates)
             return;
-        var roots = PooledTemplates && SlotOf(anchor) >= 0
-            ? TemplateRootsFor(def, anchor).Cast<Node3D?>()
-            : Anchors(def);
-        foreach (var root in roots)
+        // Either direction settles a deferred hide: a replay re-reveals this copy (its old hide is
+        // about an effect that is over), and an explicit hide has already done the job.
+        _templateHidesPending.RemoveAll(p => p.Def == def && p.Anchor == anchor);
+        foreach (var root in TemplateRootsOf(def, anchor))
             if (root != null && IsInstanceValid(root))
                 root.Visible = visible;
+        // A def whose t=0 events complete it never reaches the retire walk — Start removes such an
+        // instance itself — so a reveal for one would stand for the rest of the session.
+        // `biggun_flying_parts` is exactly that shape: one CALL_ANIMATION, finished inside Start.
+        // Scheduling the hide from here covers both entry points (PlayEffectAt and the CALL path)
+        // in one place, and the holds above still apply, so a copy something is still animating
+        // stays lit.
+        if (visible && !IsLive(def, anchor))
+            HideTemplateWhenIdle(def, anchor);
+    }
+
+    /// <summary>The template root(s) a definition's visibility is written through — the call's own
+    /// pooled copy when this runtime pools them and the anchor sits in a slot, else the def's
+    /// anchors.</summary>
+    private IReadOnlyList<Node3D?> TemplateRootsOf(AnimDefinition def, Node3D? anchor) =>
+        PooledTemplates && SlotOf(anchor) >= 0
+            ? TemplateRootsFor(def, anchor).Cast<Node3D?>().ToList()
+            : Anchors(def);
+
+    /// <summary>Whether another LIVE instance is playing on the same template root(s) — the reason
+    /// a hide cannot be a private decision. Caller and callee routinely share one root: the rear
+    /// muzzle flash's own def is two instantaneous events plus a <c>CALL_ANIMATION</c> back onto
+    /// <c>rear_flash_control</c>, so it finishes on the tick it starts, and hiding on its own finish
+    /// blanked the callee's flash mesh that had just been revealed there (measured — the mesh went
+    /// from 1/2 to 0/2 the moment the hide landed, with nothing else changed).</summary>
+    private bool TemplateSharedWithLiveInstance(AnimDefinition def, Node3D? anchor,
+        IReadOnlyList<Node3D?> roots)
+    {
+        foreach (var inst in _instances)
+        {
+            if (inst.Def == def && inst.Anchor == anchor)
+                continue;
+            foreach (var other in TemplateRootsOf(inst.Def, inst.Anchor))
+                if (other != null && roots.Contains(other))
+                    return true;
+        }
+
+        return false;
     }
 
     /// <summary>Whether a placed template already sits where a call wants it. Separates "the data
@@ -3055,6 +3113,84 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             var xf = root.GlobalTransform;
             xf.Origin = origin;
             root.GlobalTransform = xf;
+        }
+    }
+
+    /// <summary>Hides an ended effect's template root — the other half of the reveal
+    /// (<see cref="ShowTemplate"/>), and the reason a staged template does not stay lit at the last
+    /// hit site for the rest of the session. <see cref="Stop"/> already hides what it tears down,
+    /// but an instance that ends by reaching the end of its OWN sequences is removed without one:
+    /// the ap/dum/mag gun hit authors an <c>ACTIVE_STATE 0</c> stop, finishes 0.3 s in and left its
+    /// <c>dum_gunhit</c> chunk mesh visible at the impact point permanently (measured by
+    /// <c>--effects-test</c>'s residual line), while the slug hit — which ships no stop and so runs
+    /// to its TTL — was hidden by the Stop the sweep does and looked fine.
+    ///
+    /// <para>Deferred while the instance's motions still run, because the reveal is paired with the
+    /// EFFECT's life and not its instance's: the ring defs' scale/opacity motions outlive the
+    /// sequence that launched them, and hiding on instance-finish cuts the explosion ring off
+    /// mid-expansion (D31). <see cref="TemplateStillAnimated"/> carries which motions count, and
+    /// <see cref="TemplateSharedWithLiveInstance"/> the other hold.</para></summary>
+    private void HideTemplateWhenIdle(AnimDefinition def, Node3D? anchor)
+    {
+        if (!ShowPlacedTemplates)
+            return;
+        if (ReadyToHide(def, anchor))
+        {
+            ShowTemplate(def, anchor, visible: false);
+            return;
+        }
+
+        if (!_templateHidesPending.Any(p => p.Def == def && p.Anchor == anchor))
+            _templateHidesPending.Add((def, anchor));
+    }
+
+    /// <summary>Whether an ended effect's template may go dark now: nothing is still animating the
+    /// copy, and no other live instance is playing on it.</summary>
+    private bool ReadyToHide(AnimDefinition def, Node3D? anchor)
+    {
+        var roots = TemplateRootsOf(def, anchor);
+        return !TemplateStillAnimated(roots) && !TemplateSharedWithLiveInstance(def, anchor, roots);
+    }
+
+    /// <summary>Whether any live motion is still driving something inside a template copy — the
+    /// hold that keeps a finished effect's root revealed, because the reveal is paired with the
+    /// EFFECT's life and not its instance's: the ring defs' scale/opacity motions outlive the
+    /// sequence that launched them, and hiding on instance-finish cuts the ring off mid-expansion
+    /// (D31).
+    ///
+    /// <para>Asked of the ROOT, never of the def that just finished. What a template flings is
+    /// routinely driven by a CALLEE's motions running on the CALLER's copy —
+    /// <c>biggun_flying_parts</c> is one <c>CALL_ANIMATION</c> onto its own root and finishes
+    /// instantly — so a def-scoped hold would hide the copy out from under the pieces still
+    /// flying in it.</para>
+    ///
+    /// <para>⚠ An unbounded steady spin is excluded, the same narrowness (and for the same reason)
+    /// as <see cref="MotionSet.OwesBounce"/>: <c>SpinMotion.Finished</c> is never true for one, so
+    /// counting it would pin the template revealed for the rest of the session — the leak this hold
+    /// exists to close, with extra steps.</para></summary>
+    private bool TemplateStillAnimated(IReadOnlyList<Node3D?> roots)
+    {
+        foreach (var motion in Motions.Live)
+        {
+            if (motion is SpinMotion { Endless: true } || !IsInstanceValid(motion.Target))
+                continue;
+            foreach (var root in roots)
+                if (root != null && (root == motion.Target || root.IsAncestorOf(motion.Target)))
+                    return true;
+        }
+
+        return false;
+    }
+
+    private void SweepTemplateHides()
+    {
+        for (int i = _templateHidesPending.Count - 1; i >= 0; i--)
+        {
+            var (def, anchor) = _templateHidesPending[i];
+            // ShowTemplate drops the entry itself, so the walk stays backwards and nothing else
+            // touches the list here.
+            if (ReadyToHide(def, anchor))
+                ShowTemplate(def, anchor, visible: false);
         }
     }
 

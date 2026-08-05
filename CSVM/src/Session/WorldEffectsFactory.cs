@@ -149,6 +149,14 @@ public sealed class WorldEffectsFactory
     /// otherwise size nothing, silently).</summary>
     public static IReadOnlyList<string> EffectStageRootNames => EffectStageRoots;
 
+    /// <summary>The world-effects template stage — the subtree <see cref="EffectStageRoots"/> is
+    /// built into, one <c>pool&lt;N&gt;</c> container per slot. Null until
+    /// <see cref="EnsureWorldEffects"/> has built the runtime. Exposed so the <c>--effects-test</c>
+    /// census can report the MESH half (`BL-061`): a puffer count says nothing about whether the
+    /// template's meshes are visible, and they are half of what an effect looks like. Observation
+    /// only — the stage is owned here and hangs under the world root.</summary>
+    public Node3D? EffectStage { get; private set; }
+
     /// <summary>Builds the <see cref="EffectTemplateRoots"/> from the world gamez as children of
     /// <paramref name="parent"/> (the lab stage), each reset to sit at the stage origin — a
     /// CALL_ANIMATION relocates them onto the call site. Returns how many built.</summary>
@@ -353,6 +361,7 @@ public sealed class WorldEffectsFactory
     {
         var stage = new Node3D { Name = "world_effects" };
         _worldRoot.AddChild(stage);
+        EffectStage = stage;
         // The pool (BL-225): each root staged in as many copies as effect_pools.json sizes it for
         // THIS session's player count, one copy per slot container, and AnimRuntime hands the next
         // slot to each call. The containers carry only the slot meta and no cs_name, so they are

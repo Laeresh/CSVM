@@ -204,6 +204,17 @@ and leave gaps when retiring old ones.
   being asserted about is a check on a different object. Its companion is that the deletion control
   must be run for EVERY half of a two-sided rule (METHOD-9/METHOD-10) — one half's control passing
   is what surfaced this.
+- **INSTR-11** — **A probe that reports one half of a compound thing reads as a full pass on the
+  half it can see.** Not a wrong answer — a narrow one, and the narrowness is invisible in the
+  output. Measured: `--effects-test` reported `33/33 resolved, 30 built a puffer` for months while
+  the MESH half of several of those effects never drew at all (`BL-061` — the rocket's called ring
+  templates were placed at the site and left hidden). Nothing in the report was false; "renders" had
+  quietly come to mean "emits particles". Two corollaries, both of which bit while closing it:
+  (a) **sample over the window, not at the end** — the data turns its own meshes off inside it
+  (`large_fireball` deactivates `flame_ball_01` 0.3 s in, before the 0.5 s the puffer count needs),
+  so one final sample reports a working effect as a blank one; (b) **ask what is left behind** —
+  the residual reading after the stop is a different question from the peak, and it is the one that
+  found a mesh lit at the impact point for the rest of the session.
 - **INSTR-7** — **"Not decidable from this data" is a fact about the instrument, not the question — when a census comes back uniform, ask what else varies the quantity.** A degenerate reading blocks the *inference*, not the *answer*. Measured: all 88 `destroyable_parts` pairs ship equal, which correctly made (armor, hp) undecidable from `extracted/`, and the reading sat blocked for nine days — the original's armory varies armor independently of health and settled it in one screen.
 
 ## SRC — sources and documents

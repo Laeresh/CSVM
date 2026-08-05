@@ -694,7 +694,8 @@ public partial class GameSession : Node3D
             if (_worldEffectsFactory.EnsureWorldEffects(state.Gamez, state.WorldScene, state.Textures,
                     session.Program, session.Runtime) is { } effects)
             {
-                _probeRunner.RunEffectsTest(_spec, _camera, effects, WorldEffectsFactory.EffectAnimNames);
+                _probeRunner.RunEffectsTest(_spec, _camera, effects, WorldEffectsFactory.EffectAnimNames,
+                    _worldEffectsFactory.EffectStage);
             }
             GetTree().Quit();
             return false;

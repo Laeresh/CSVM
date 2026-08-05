@@ -108,6 +108,8 @@ public static class Suites
             "authored STOP_SEQUENCE stops run: the fireball's 0.3 s stopper and the 30 s fire's halt", StopSequenceStops));
         into.Add(new TestHarness.Suite("emitter-host-deactivation",
             "a host going inactive spares the emitter that started in its own instant and still ends the one that did not (BL-229)", EmitterHostDeactivation));
+        into.Add(new TestHarness.Suite("effect-template-mesh",
+            "an effect's template meshes show at the call site — including a CALLED template's — and go dark when it ends (BL-061)", EffectTemplateMesh));
         into.Add(new TestHarness.Suite("bounce-launch",
             "a bounce-terminated OBJECT_MOTION flies its solved parabola and fires its BOUNCE_SEQUENCE on landing", BounceLaunch));
         into.Add(new TestHarness.Suite("destructible-census",
@@ -1536,6 +1538,146 @@ public static class Suites
         {
             runtime.Bind(stage, program);
             body(stage, runtime, fake);
+        }
+        finally
+        {
+            runtime.Free();
+            stage.Free();
+        }
+    }
+
+    // ---- BL-061: the template MESH half renders at the call site --------------------------------
+
+    /// <summary>`BL-061`: an effect's template MESHES — half of what it looks like — must be visible
+    /// at the call site while it plays, and dark once it is over. The world-effects stage keeps
+    /// every template ROOT hidden and the engine reveals the one a call lands on
+    /// (<c>ShowPlacedTemplates</c>), so both halves are engine rules and both are asserted here,
+    /// because either alone is satisfied by a broken runtime: revealing and never hiding leaves a
+    /// mesh burning at the last hit point for the session, and hiding eagerly (or never revealing)
+    /// shows nothing at all.
+    ///
+    /// <para>CALLED (`he_ground_effect`). The HE rocket's own def is anchored on <c>he_ring</c> and
+    /// reaches the upper ring through <c>CALL_ANIMATION call_he_ring1</c>, whose def is anchored on
+    /// the separate staged root <c>he_ring1</c>. That call relocated the template and left it
+    /// hidden, so the ring never drew — the same is true of <c>sonic_ground_effect</c>'s four rising
+    /// rings and the torpedo's <c>ripple</c>. Measured with <c>--effects-test</c>'s mesh census.</para>
+    ///
+    /// <para>ENDED (`3040ap_gunhit`). The ap/dum/mag gun hits author an <c>ACTIVE_STATE 0</c> stop
+    /// and finish 0.3 s in, which retires the instance and consumes its TTL entry — so nothing was
+    /// left to hide their <c>dum_gunhit</c> chunk mesh, and it stayed lit at the impact point. The
+    /// slug hit, which ships no stop and runs to its TTL, was hidden by the sweep's Stop and looked
+    /// fine, which is why one half alone proves nothing.</para></summary>
+    private static void EffectTemplateMesh(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            CalledTemplateShowsItsMesh(ctx, world);
+            EndedEffectLeavesNoMeshLit(ctx, world);
+        });
+    }
+
+    private static void CalledTemplateShowsItsMesh(TestContext ctx, TestWorld world)
+    {
+        WithEffectStage(ctx, world, "he_ground_effect", new[] { "he_ring", "he_ring1", "he_trails" },
+            (stage, runtime, point) =>
+        {
+            ctx.Check(VisibleMeshes(stage) == 0, $"the staged templates start hidden ({VisibleMeshes(stage)} visible)");
+            runtime.PlayEffectAt("he_ground_effect", point);
+            int peak = 0;
+            for (int i = 0; i < 30; i++)
+            {
+                runtime.Advance(1f / 60f);
+                peak = Mathf.Max(peak, VisibleMeshes(stage));
+            }
+
+            ctx.Check(VisibleMeshesUnder(stage, "he_ring") > 0,
+                $"he_ground_effect's own template mesh (he_ring) is visible — the PlayEffectAt half ({VisibleMeshesUnder(stage, "he_ring")})");
+            ctx.Check(VisibleMeshesUnder(stage, "he_ring1") > 0,
+                $"the CALLED template's mesh (he_ring1, the upper ring) is visible too — BL-061 ({VisibleMeshesUnder(stage, "he_ring1")})");
+            ctx.Check(peak >= 2, $"both rings drew in the same window (peak {peak} mesh(es))");
+        });
+    }
+
+    private static void EndedEffectLeavesNoMeshLit(TestContext ctx, TestWorld world)
+    {
+        WithEffectStage(ctx, world, "3040ap_gunhit", new[] { "dum_gunhit" }, (stage, runtime, point) =>
+        {
+            runtime.PlayEffectAt("3040ap_gunhit", point, null, 0.3f);
+            runtime.Advance(1f / 60f);
+            ctx.Check(VisibleMeshesUnder(stage, "dum_gunhit") > 0,
+                $"the ap gun hit's chunk mesh is visible while it plays ({VisibleMeshesUnder(stage, "dum_gunhit")})");
+
+            // Past the def's own authored ACTIVE_STATE 0 at +0.1 s, which ends the instance well
+            // inside the 0.3 s TTL — the case that used to leave the mesh lit for the session.
+            for (int i = 0; i < 30; i++)
+            {
+                runtime.Advance(1f / 60f);
+            }
+
+            ctx.Check(VisibleMeshesUnder(stage, "dum_gunhit") == 0,
+                $"and is dark once the effect has ended, without waiting for its TTL — BL-061 ({VisibleMeshesUnder(stage, "dum_gunhit")} still lit)");
+        });
+    }
+
+    private static int VisibleMeshes(Node node)
+    {
+        int n = node is MeshInstance3D { Mesh: not null } mi && mi.IsVisibleInTree()
+                && mi.Mesh.GetSurfaceCount() > 0 ? 1 : 0;
+        foreach (var child in node.GetChildren())
+        {
+            n += VisibleMeshes(child);
+        }
+        return n;
+    }
+
+    /// <summary>Visible meshes under ONE named template root. Exact name match, never a prefix:
+    /// <c>he_ring</c> and <c>he_ring1</c> are two different staged templates and the whole point of
+    /// this suite is telling them apart.</summary>
+    private static int VisibleMeshesUnder(Node3D stage, string rootName)
+    {
+        int n = 0;
+        foreach (var pool in stage.GetChildren())
+            foreach (var root in pool.GetChildren())
+                if (root is Node3D r && r.Name.ToString() == rootName)
+                    n += VisibleMeshes(r);
+        return n;
+    }
+
+    /// <summary>A miniature world-effects stage: the named template roots built from the chapter's
+    /// real gamez into one pool slot, each hidden, under an effects-role runtime bound to the
+    /// subset of the program the effect needs. Real geometry on purpose — this suite is about mesh
+    /// VISIBILITY, which named empty nodes cannot express — and the roles are the production ones
+    /// (<c>ShowPlacedTemplates</c> + <c>PooledTemplates</c>, the pair
+    /// <c>WorldEffectsFactory</c> sets), since the reveal exists only under them.</summary>
+    private static void WithEffectStage(TestContext ctx, TestWorld world, string animName,
+        IEnumerable<string> rootNames, System.Action<Node3D, AnimRuntime, Vector3> body)
+    {
+        var stage = new Node3D { Name = $"EffectStage_{animName}" };
+        var pool = new Node3D { Name = "pool0" };
+        pool.SetMeta(AnimRuntime.PoolSlotMeta, 0);
+        stage.AddChild(pool);
+        int built = Session.WorldEffectsFactory.BuildEffectStage(world.Gamez,
+            world.Session.Builder.Scene, pool, rootNames);
+        ctx.Check(built == rootNames.Count(), $"{animName}: staged {built}/{rootNames.Count()} template root(s)");
+        foreach (var child in pool.GetChildren())
+            if (child is Node3D root)
+            {
+                root.Visible = false;
+            }
+
+        var runtime = AnimRuntime.ForEffects(1, new CountingEmitterFactory(), false, 32f,
+            () => ctx.Camera.GlobalPosition);
+        runtime.ManualAdvance = true;
+        runtime.ShowPlacedTemplates = true;
+        runtime.PooledTemplates = true;
+        ctx.Host.AddChild(stage);
+        ctx.Host.AddChild(runtime);
+        try
+        {
+            runtime.Bind(stage, world.Session.Program.Subset(animName));
+            // The camera point, so the gun family's PLAYER_RANGE 500 condition passes (WORLD-24 —
+            // a probe standing off further than that builds a def that renders nothing).
+            body(stage, runtime, ctx.Camera.GlobalPosition);
         }
         finally
         {

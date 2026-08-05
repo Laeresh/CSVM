@@ -15278,3 +15278,78 @@ There is no headless water crash — `--crash` passes no struck body so `Classif
 owes a capture at the controls. Details: `docs/PLAN-m3-polish-7.md` C7,
 `analysis/bl-229-emitter-host-deactivation/FINDINGS.md`, `docs/formats/anim-definitions.md`,
 `docs/architecture.md`.
+
+## 2026-08-05 — PLAN-m3-polish-7 C8 `BL-061`: a CALLED effect template is revealed at the call site, and an ended one goes dark
+
+Three quarters of the item was already fixed by work that came after it and had never been checked
+back against it. D31 made the world-effects stage visible with each ROOT hidden and had
+`ShowPlacedTemplates` reveal the one a `PlayEffectAt` lands on; `BL-225` turned every root into
+`EffectPoolSlots` pooled copies, which is the "copied instance per call" the item proposed; and the
+`gunhit` bits it names render — `CAP-25` identified the `chunk` quad off a freeze-frame of our own
+build, and `bit1`–`bit3` carry **0 vertices** in this install and never had anything to draw. The
+`--effects-test` census confirms `he_ring`, `ap_effect`, `flash_control`, `carnage_ring`,
+`huge_splash_model` and `dum_gunhit` all showing at the call site before this change.
+
+**What was left is one mechanism, and it is not the stage: only `PlayEffectAt` revealed anything.**
+A template reached through `CALL_ANIMATION` was moved onto the call site and left hidden, so an
+effect whose geometry lives in a *called* def's own template root drew none of it — while its
+puffers, which are world-level particles that never read the root's visibility, emitted at the site
+and made the effect read as working. That is precisely the D31 ring set the stage was extended for:
+`he_ground_effect` reaches its upper ring through `call_he_ring1` (root `he_ring1`),
+`sonic_ground_effect` its four rising rings through `ring_up1`–`4` (roots `sonic_ring1`–`4`), the
+torpedo its `huge_splash_model` and `ripple`. Staged, placed, animated, invisible. Measured
+per effect (C1 and C5 read identically — the templates are chapter-invariant): `he_ground_effect`
+1 → 2 meshes, `sonic_ground_effect` **0 → 5**, `torpedo_water_effect` 1 → 3, `big_splash` 1 → 3.
+
+**The same census found the other end: an ended effect left its mesh LIT.** `dum_gunhit` — the
+ap/dum/mag gun-hit chunk — stayed visible at the impact point for the rest of the session, and every
+effect measured afterwards was read against a stage carrying it. The asymmetry is authored: ap/dum/
+mag ship an `ACTIVE_STATE 0` stop and finish 0.1–0.3 s in, so the instance retires and
+`FinishEffectInstance` consumes its TTL entry, leaving nothing to hide the root (`Stop` reaches a
+template only THROUGH a live instance); the slug hits ship no stop at all, run to their TTL and were
+hidden by the sweep's `Stop`. The family with the *more* complete data was the one that leaked.
+
+**The hide defers on two holds, both found by measurement rather than reasoning.** (1) Not on
+instance-finish alone — the ring defs' scale/opacity motions outlive the sequence that launched
+them, which is D31's own reason for pairing the reveal with the effect's life. (2) The
+"still animating" question is asked of the **ROOT**, never of the def that finished: what a template
+flings is routinely the CALLEE's motions running on the CALLER's copy (`biggun_flying_parts` is one
+`CALL_ANIMATION` onto its own root), so a def-scoped hold would hide the copy out from under the
+pieces still flying in it. (3) Not while a sibling def is live on the same copy — `rear_flash_effect`
+is two instantaneous events plus a `CALL_ANIMATION` back onto `rear_flash_control`, so it finishes
+on the tick it starts, and a private hide blanked the callee's flash mesh that had just been
+revealed there (caught as a 1/2 → 0/2 regression in the census, not by inspection). A def whose t=0
+events complete it never reaches the retire walk at all — `Start` drops that instance itself — so
+the reveal schedules the hide for that shape.
+
+**The instrument is the deliverable half.** `--effects-test` now reports the MESH half beside the
+puffer half: per template root, how many of its meshes became visible out of how many it carries,
+how far the root sat from the play point, the stage's base state read off each mesh's own flag, and
+a residual line for what is still lit after the stop. It had reported `33/33 resolved, 30 built a
+puffer` for months while several of those effects drew no geometry at all — recorded as
+`docs/verification.md` **INSTR-11** (a probe that reports one half of a compound thing reads as a
+full pass on the half it can see), with its two corollaries: sample the whole window as a PEAK,
+because the data turns its own meshes off inside it (`large_fireball` deactivates `flame_ball_01`
+0.3 s in, before the 0.5 s the puffer count needs), and ask separately what is left behind.
+
+**How verified.** New in-engine suite `effect-template-mesh` builds the real template roots from the
+chapter gamez under a production-role effects runtime and asserts BOTH halves — a called template
+showing (`he_ring1`) and an ended effect leaving nothing lit (`dum_gunhit`) — because either alone
+passes a broken runtime. Both able-to-fail controls were run: with the reveal removed the called
+half fails (`he_ring1 … (0)`), with the hide removed the ended half fails (`1 still lit`). Full
+`.\RunTests.ps1` PASS, exit 0 — 436 unit tests, 26/26 suites, engine errors clean, **13/13 goldens
+hash-identical**, `c5-city-night` (the golden `BL-061`'s puffer-key trap names) and
+`c1-destroy-effects` among them: the change is confined to runtimes carrying
+`ShowPlacedTemplates`, which is the world-effects one alone. **Not verified: the picture.** No
+headless shot fires a rocket, so the rings have not been seen — `PT-35` owes that capture.
+
+**Found on the way, filed not fixed.** `zep_ng_dstry1.flt` (the zeppelin destruction model) still
+shows 0 of its 8 meshes, and it is not this mechanism: the parts are `8/8 self-visible` in the gamez
+base state and the root IS revealed. They go dark because `dblcannon_flying_parts` launches each
+part with an `OBJECT_MOTION` carrying **neither `RUN_TIME` nor `BOUNCE_SEQUENCE`** and then switches
+it off with a null-start event — and `MotionRuntime`'s solved-flight path (`BL-240`) is gated on a
+bounce being named, so the launch reports duration 0 and the deactivation lands in the same instant.
+A third launch shape beside `BL-240`'s solved bounce and `BL-245`'s falls; `BL-257`, wanting the same
+install-wide census `BL-240` had. Details: `docs/PLAN-m3-polish-7.md` C8,
+`analysis/bl-061-template-mesh/FINDINGS.md`, `docs/architecture.md`,
+`docs/formats/anim-definitions.md`.

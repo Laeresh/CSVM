@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-257`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-258`.**
 When adding a new item, take the next number and bump this line. ⚠ One ID was minted twice in
 concurrent sessions on 2026-08-04 — `BL-253` (the C2 facade log debris, this file's holder) and a
 "nose view" finding merged the same day; the nose-view item was renumbered to `BL-255` at the
@@ -466,6 +466,25 @@ extracted data before being logged, so the mechanism is recorded here and not re
   passage. (b) `gate2`'s death also calls `go_get_her` (mission scripting) — left to whatever
   handles it today; this item was the swap timing/authorship only. (c) The 28.5 s offset reads long
   but is what is authored — A/B the original's timing rather than "fixing" the number.
+
+### Effect debris that launches with neither a run time nor a bounce (found 2026-08-05)
+
+- `BL-257` **The zeppelin destruction model's eight parts vanish on the tick they are thrown.**
+  Found while landing `BL-061`'s mesh half, and NOT that mechanism: the geometry and the visibility
+  path are both fine (`--effects-test` reads `zep_ng_dstry1.flt` as `8/8 self-visible` in the gamez
+  base state, and its root IS revealed at the call site), yet 0 of the 8 ever draw.
+  `biggun_flying_parts` calls `dblcannon_flying_parts`, whose eight sequences each launch a part
+  with `OBJECT_MOTION` and then switch that part off with a **null-start** event — i.e. one that
+  fires after the motion's own duration. Those launches carry **no `RUN_TIME` and no
+  `BOUNCE_SEQUENCE`**, and `MotionRuntime`'s solved-flight path (`BL-240`) is gated on a bounce
+  being named (`m._hasBallistic && data.Num("run_time") is null && data.Has("bounce_sequence")`), so
+  the event reports duration 0, the deactivation lands in the same instant, and every part is hidden
+  before it moves. A third launch shape beside `BL-240`'s solved bounce and `BL-245`'s falls.
+  ⚠ Do **not** widen the solve on this one case: it needs the same install-wide census `BL-240`
+  had — how many events omit both, whether they all launch upward (this one does: elevation 10–60°,
+  speed 17–25 m/s, so an apex exists), and whether the following event is the piece's own
+  deactivation in every one of them. `analysis/bl-061-template-mesh/FINDINGS.md` records the
+  measurement; `zep_ng_dstry1.flt` is the reachable repro (`--effects-test`, any chapter).
 
 ### Surfaces, colliders and inspect tools (from the Wave D playtest, 2026-07-25)
 
