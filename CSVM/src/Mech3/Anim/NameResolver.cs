@@ -1,13 +1,18 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace CSVM.Mech3.Anim;
 
 /// <summary>Name → node resolution: the index, the wildcard matcher, the memoized <see
-/// cref="FindAll"/>, and <see cref="ResolvePath"/> — generic over the node type so the whole rule
-/// set is testable without an engine (a plain token type in <c>CSVM.Tests</c>) and shared, unchanged,
-/// by the one engine instantiation (<c>AnimRuntime</c>'s <c>NameResolver&lt;Node3D&gt;</c>).
+/// cref="FindAll"/>, <see cref="ResolvePath"/>, the symbol-table authority (<see
+/// cref="SymbolClaims"/>, the by-index map <see cref="Add"/> builds), the anchoring rules
+/// (<see cref="Anchors"/>: NAME match, symbol narrowing, the ANIMATION_ROOT_NAME lift) and the
+/// bind-time resolution census (<see cref="ResolutionLines"/>) — generic over the node type so the
+/// whole rule set is testable without an engine (a plain token type in <c>CSVM.Tests</c>) and
+/// shared, unchanged, by the one engine instantiation (<c>AnimRuntime</c>'s
+/// <c>NameResolver&lt;Node3D&gt;</c>).
 ///
 /// <para>Rows enter through <see cref="Add"/> and are never removed — most build during one
 /// bootstrap walk and every later query reads that as a fixed snapshot, including ancestry: <see
@@ -20,6 +25,13 @@ namespace CSVM.Mech3.Anim;
 /// cref="ClearFindCache"/>, or a pattern <see cref="FindAll"/> already cached as "resolves to
 /// nothing" stays stale even though the new rows would now answer it.</para>
 ///
+/// <para>⚠ <see cref="Anchors"/> records the anchoring census ONCE per definition and is the only
+/// census-recording entry point; everything else here (<see cref="FindAll"/>,
+/// <see cref="ResolvePath"/>, the private census-free anchor computation it wraps) records
+/// nothing, so a per-event caller — the runtime's own-template-root resolution runs per event on
+/// poll loops — can resolve freely without re-entering the census. Keep it that way: a second
+/// recording path double-counts definitions the bootstrap visits on more than one pass.</para>
+///
 /// <para>⚠ Node identity is caller-supplied, not inherited: the constructor takes an <see
 /// cref="IEqualityComparer{T}"/> that answers identity, not value equality. The engine
 /// instantiation keys by instance id — Godot object equality is unreliable inside a dictionary/
@@ -28,6 +40,40 @@ namespace CSVM.Mech3.Anim;
 public sealed class NameResolver<TNode>
     where TNode : class
 {
+    // ---- policy inputs. The owning runtime sets these before its bootstrap calls Add/Anchors;
+    // they are construction-time facts about the runtime, not per-query switches. ----
+
+    /// <summary>Resolve every node reference by NAME, ignoring the compiled gamez index:
+    /// <see cref="Add"/> leaves the by-index map empty, so every <see cref="SymbolClaims"/> lookup
+    /// reports "index not built" and symbol narrowing never decides. Set by a runtime whose
+    /// subtree either carries non-portable node ptrs or MIXES two gamez index spaces that collide
+    /// (the per-player crash rig — see <c>AnimRuntime.NameResolveFallback</c> for the measured
+    /// cases); such a subtree has one node per name, so name resolution is the only correct
+    /// choice.</summary>
+    public bool NameResolveFallback;
+
+    /// <summary>Refuse the <c>ANIMATION_ROOT_NAME</c> anchor lift, however few matches it finds.
+    /// Set only by a caller that built part of the world, because <see cref="MaxRootLift"/>'s
+    /// premise is a WHOLE-WORLD node population: a single-subtree stage drops under the cap, at
+    /// which point unrelated definitions anchor onto whatever generic child the subtree happens to
+    /// own (measured on C1's 20-node <c>ap_radiotwr</c>: 95 lifts and 91 phantom destructible
+    /// instances). Suppressed lifts are counted and reported, never silently dropped.</summary>
+    public bool SuppressRootLift;
+
+    /// <summary>Collect a per-definition census of how the bind RESOLVED, reported through
+    /// <see cref="ResolutionLines"/>. The census window itself is <see cref="OpenCensus"/>/<see
+    /// cref="CloseCensus"/> — the owning runtime brackets its bootstrap passes with them, so a
+    /// runtime miss after the bind reports itself elsewhere instead of restating the bind. Default
+    /// false: a full-world session collects nothing.</summary>
+    public bool ReportResolution;
+
+    /// <summary>ANIMATION_ROOT_NAME matches above this count are generic per-object roots
+    /// ('healthy' appears 217Ã— in C1) â€” those defs belong to game objects (planes, zeppelin
+    /// parts), not to world nodes. The genuine building templates lift â‰¤ 9 instances.</summary>
+    public int MaxRootLift = 16;
+
+    private const int CensusCap = 12;
+
     private readonly List<IndexRow> _index = new();
 
     private readonly Dictionary<TNode, TNode?> _parentOf;
@@ -38,6 +84,25 @@ public sealed class NameResolver<TNode>
     private readonly Dictionary<(string Pattern, TNode? Scope), List<TNode>> _findCache;
 
     private readonly IEqualityComparer<TNode> _identity;
+
+    // The compiled gamez index -> built node map SymbolClaims and NarrowToSymbolRoot read. See
+    // Add for the two population rules (never on a fallback runtime, never for a pooled copy).
+    private readonly Dictionary<int, TNode> _byIndex = new();
+
+    // ---- the bind-time resolution census (see ResolutionLines) ----
+    private readonly HashSet<(string Name, string Anim)> _censusSeen = new();
+
+    private readonly List<string> _censusUnanchoredNames = new();
+
+    private readonly List<string> _censusLiftedNames = new();
+
+    private readonly List<string> _censusSuppressedNames = new();
+
+    private readonly List<string> _censusMissingTargets = new();
+
+    private bool _censusOpen;
+
+    private int _censusAnchored, _censusNarrowed, _censusLifted, _censusSuppressed, _censusUnanchored, _censusMissing;
 
     public NameResolver(IEqualityComparer<TNode>? identity = null)
     {
@@ -62,13 +127,24 @@ public sealed class NameResolver<TNode>
 
     /// <summary>Adds one row to the index: a node's source (gamez) name, its parent — the ancestry
     /// snapshot <see cref="FindAll"/>'s scope filter reads instead of touching the live tree — and
-    /// its compiled gamez-index slot when it has one. <paramref name="gamezIndex"/> is recorded but
-    /// not otherwise consulted by this class; it exists so a symbol-table authority keyed on it has
-    /// somewhere to read from without a second indexing pass.</summary>
-    public void Add(TNode node, string srcName, TNode? parent, int? gamezIndex = null)
+    /// its compiled gamez-index slot when it has one.
+    ///
+    /// <para>⚠ The by-index map <see cref="SymbolClaims"/> reads is populated here, under two
+    /// deliberate refusals ported from the measured bugs behind them: never when <see
+    /// cref="NameResolveFallback"/> is set (that runtime's index spaces collide — every lookup must
+    /// miss and fall through to the unique name), and never for a row added with
+    /// <paramref name="indexByPointer"/> false — a POOLED copy of a staged template carries the
+    /// SAME compiled indices as every other copy, so a shared index-keyed map can hold only the
+    /// first copy that claims each slot and a second copy's events would silently resolve onto the
+    /// first's nodes. Such rows still resolve by name, scoped to their own subtree.</para></summary>
+    public void Add(TNode node, string srcName, TNode? parent, int? gamezIndex = null, bool indexByPointer = true)
     {
         _index.Add(new IndexRow(node, srcName, gamezIndex));
         _parentOf[node] = parent;
+        if (indexByPointer && !NameResolveFallback && gamezIndex is { } gi)
+        {
+            _byIndex.TryAdd(gi, node);
+        }
     }
 
     /// <summary>Drops every memoized <see cref="FindAll"/> answer — needed after <see cref="Add"/>
@@ -138,6 +214,254 @@ public sealed class NameResolver<TNode>
         return candidates;
     }
 
+    /// <summary>The world nodes a definition anchors to: NAME matches (wildcards = one per
+    /// building/vehicle instance), narrowed to the instance holding the def's symbol-table ROOT
+    /// node when the NAME is shared by twins; else ANIMATION_ROOT_NAME matches lifted to their
+    /// parent (the instance root, so sibling healthy/destroyed both resolve locally — needed where
+    /// instance roots have free names: <c>m_build**</c> instances are <c>apbuild01.flt</c>…),
+    /// refused above <see cref="MaxRootLift"/> matches and under <see cref="SuppressRootLift"/>.
+    /// Returns a fresh list each call.
+    ///
+    /// <para>⚠ This is the ONE census-recording resolution call (once per definition identity, see
+    /// the class remarks) — every other query stays census-free by construction.</para></summary>
+    public List<TNode?> Anchors(AnimDefinition def)
+    {
+        // Multi-target NAME1 definitions (zeppelin nacelles/turrets) parse with an empty
+        // NAME; they animate per-object sub-parts and are object-wiring scope â€” never anchor
+        // them (their generic ROOT names would anchor them onto every building in the world).
+        if (string.IsNullOrEmpty(def.Name))
+        {
+            return new List<TNode?>();
+        }
+        var (anchors, how) = ComputeAnchors(def);
+        RecordAnchoring(def, how);
+        return anchors;
+    }
+
+    /// <summary>The symbol-table authority: true when the definition's symbol table CLAIMS
+    /// <paramref name="name"/> — the caller must then not fall back to global name matching, which
+    /// resolves C1's <c>caboose</c> to the real consist AND an unrelated <c>caboose.flt</c>.
+    /// <paramref name="node"/> is the world node the compiled gamez index binds the name to, or
+    /// null when that node was never built (LOD levels the builder drops, skipped subtrees — and
+    /// every lookup on a <see cref="NameResolveFallback"/> runtime, whose by-index map is left
+    /// empty on purpose). False means the name is not the symbol table's to answer (a reader def,
+    /// an unlisted name) and name resolution proceeds as usual.</summary>
+    public bool SymbolClaims(AnimDefinition def, string name, out TNode? node)
+    {
+        node = null;
+        if (!def.NodeRefs.TryGetValue(name, out int idx))
+        {
+            return false;
+        }
+        if (_byIndex.TryGetValue(idx, out var bound))
+        {
+            node = bound;
+        }
+        return true;
+    }
+
+    /// <summary>Opens the bind-census window (a no-op unless <see cref="ReportResolution"/>): the
+    /// owning runtime calls this before its bootstrap passes and <see cref="CloseCensus"/> after
+    /// them, so the census is a statement about what the BIND could reach — a later runtime miss
+    /// has its own reporting and must not restate it.</summary>
+    public void OpenCensus() => _censusOpen = ReportResolution;
+
+    public void CloseCensus() => _censusOpen = false;
+
+    /// <summary>Records an event that named a node the bind could not reach (inside the census
+    /// window only). <paramref name="why"/> separates the two causes, which otherwise read the
+    /// same: the compiled symbol table bound the name to a gamez node this build never created,
+    /// versus name resolution finding no match at all.</summary>
+    public void RecordMissingTarget(AnimDefinition def, string refName, string why)
+    {
+        if (!_censusOpen)
+        {
+            return;
+        }
+        _censusMissing++;
+        if (_censusMissingTargets.Count < CensusCap)
+        {
+            string label = def.AnimName is { Length: > 0 } anim ? $"{anim}@{def.Name}" : def.Name;
+            _censusMissingTargets.Add($"{label} ref={refName} why={why}");
+        }
+    }
+
+    /// <summary>
+    /// The bind-time resolution census, ready to log â€” empty unless <see cref="ReportResolution"/>
+    /// was set. It exists because <b>two different failures look identical from outside</b> a
+    /// partial world: a definition that never instantiated (its NAME/ANIMATION_ROOT_NAME matches
+    /// nothing here, so <i>no handler ever fires</i>) and a definition that IS running but whose
+    /// event names a node <i>this subtree does not contain</i>. Both leave the object still. The
+    /// lines name which happened, per definition.
+    ///
+    /// <para>The line nobody expects is <c>root_lift_suppressed</c>: an <c>ANIMATION_ROOT_NAME</c>
+    /// lift is capped at <see cref="MaxRootLift"/> matches precisely so a generic root like
+    /// <c>healthy</c> (217Ã— in C1) cannot anchor a definition onto every building â€” and a
+    /// single-subtree stage drops under that cap, so defs that never anchor in the full world would
+    /// anchor here, onto whatever generic child the subtree happens to own.
+    /// <see cref="SuppressRootLift"/> refuses them and this reports the refusal, because a
+    /// silently-different anchor set is the trap.</para>
+    /// </summary>
+    public IReadOnlyList<string> ResolutionLines()
+    {
+        var lines = new List<string>();
+        if (!ReportResolution)
+        {
+            return lines;
+        }
+        int defs = _censusAnchored + _censusNarrowed + _censusLifted + _censusSuppressed
+                   + _censusUnanchored;
+        lines.Add($"bind census defs={defs} anchored_by_name={_censusAnchored} "
+                  + $"narrowed_by_symbol={_censusNarrowed} "
+                  + $"anchored_by_root_lift={_censusLifted} root_lift_suppressed={_censusSuppressed} "
+                  + $"unanchored={_censusUnanchored} target_missing_ops={_censusMissing}");
+        if (_censusUnanchored > 0)
+        {
+            lines.Add($"bind unanchored={_censusUnanchored} â€” no handler ever fires for these: "
+                      + Sample(_censusUnanchoredNames, _censusUnanchored));
+        }
+        if (_censusLifted > 0)
+        {
+            lines.Add($"bind root_lifted={_censusLifted} â€” anchored only because this subtree has "
+                      + $"â‰¤{MaxRootLift} of the def's ANIMATION_ROOT_NAME, which the full world does not: "
+                      + Sample(_censusLiftedNames, _censusLifted));
+        }
+        if (_censusSuppressed > 0)
+        {
+            lines.Add($"bind root_lift_suppressed={_censusSuppressed} â€” these WOULD have anchored on "
+                      + $"this subtree's generic ANIMATION_ROOT_NAME children, which the full world's "
+                      + $"node count rules out; refused so the stage shows only defs that name it: "
+                      + Sample(_censusSuppressedNames, _censusSuppressed));
+        }
+        if (_censusMissing > 0)
+        {
+            lines.Add($"bind target_missing={_censusMissing} â€” the def IS running, the node is not in "
+                      + $"this subtree: " + Sample(_censusMissingTargets, _censusMissing));
+        }
+        return lines;
+    }
+
+    private static string Sample(List<string> shown, int total) =>
+        string.Join(", ", shown) + (total > shown.Count ? $", â€¦ (+{total - shown.Count} more)" : "");
+
+    // The census-free anchor computation Anchors wraps — the internal path a future tier caller
+    // uses when it must not re-enter the census (⚠ class remarks).
+    private (List<TNode?> Anchors, AnchorKind How) ComputeAnchors(AnimDefinition def)
+    {
+        var anchors = FindAll(def.Name, null).Cast<TNode?>().ToList();
+        var how = anchors.Count > 0 ? AnchorKind.ByName : AnchorKind.None;
+        if (NarrowToSymbolRoot(def, anchors) is { } only)
+        {
+            anchors = only;
+            how = AnchorKind.BySymbol;
+        }
+        if (anchors.Count == 0 && def.RootName != null)
+        {
+            var roots = FindAll(def.RootName, null);
+            if (roots.Count > 0 && roots.Count <= MaxRootLift)
+            {
+                if (SuppressRootLift)
+                {
+                    how = AnchorKind.LiftSuppressed;
+                }
+                else
+                {
+                    // Lift each ROOT match to its parent (the instance root), de-duplicated in
+                    // first-seen order — parents come from the Add-time snapshot, not the live tree.
+                    var seen = new HashSet<TNode>(_identity);
+                    var lifted = new List<TNode?>();
+                    foreach (var root in roots)
+                    {
+                        if (ParentOf(root) is { } p && seen.Add(p))
+                        {
+                            lifted.Add(p);
+                        }
+                    }
+                    anchors = lifted;
+                    how = anchors.Count > 0 ? AnchorKind.ByRootLift : AnchorKind.None;
+                }
+            }
+        }
+        return (anchors, how);
+    }
+
+    /// <summary>Picks the one instance a compiled definition actually belongs to, when its NAME
+    /// matches several. The compiler expands a multi-instance object into one def per instance but
+    /// leaves them all sharing a NAME — C1's two airfield hangars are both <c>air_gen</c>, telling
+    /// them apart only by their symbol tables (<c>air_gen</c> names the nodes under
+    /// <c>eairg32</c>, <c>air_gen#1</c> those under <c>eairg31</c>). Name matching hands BOTH defs
+    /// BOTH anchors, so the pair cross-binds: shooting one hangar resolved to the other def, whose
+    /// events then target its own hangar by exact index — destroy <c>eairg31</c> and
+    /// <c>eairg32</c> explodes.
+    ///
+    /// <para>So resolve the def's ANIMATION_ROOT_NAME through the symbol table — the same
+    /// authority <see cref="SymbolClaims"/> gives every event — and keep only the anchors
+    /// containing that exact node. Returns null when it cannot decide: a reader def (no symbol
+    /// table), an index the builder never built, or a root outside every candidate — all of which
+    /// leave the name match standing. A <see cref="NameResolveFallback"/> runtime gets null for
+    /// free, since its by-index map is empty. ⚠ Null (undecidable) and an empty narrowing are
+    /// different outcomes — an empty result never leaves this method.</para></summary>
+    private List<TNode?>? NarrowToSymbolRoot(AnimDefinition def, List<TNode?> anchors)
+    {
+        if (anchors.Count < 2
+            || def.RootName is not { } root
+            || !def.NodeRefs.TryGetValue(root, out int idx)
+            || !_byIndex.TryGetValue(idx, out var exact))
+        {
+            return null;
+        }
+        var kept = new List<TNode?>();
+        foreach (var a in anchors)
+        {
+            if (a != null && IsWithin(exact, a))
+            {
+                kept.Add(a);
+            }
+        }
+        return kept.Count > 0 && kept.Count < anchors.Count ? kept : null;
+    }
+
+    // One census entry per definition identity (anchor name + animation name â€” AnimProgram's own
+    // dedupe key), because the bootstrap asks for a def's anchors on more than one pass.
+    private void RecordAnchoring(AnimDefinition def, AnchorKind how)
+    {
+        if (!_censusOpen || !_censusSeen.Add((def.Name, def.AnimName ?? "")))
+        {
+            return;
+        }
+        string label = def.AnimName is { Length: > 0 } anim ? $"{anim}@{def.Name}" : def.Name;
+        switch (how)
+        {
+            case AnchorKind.ByName:
+                _censusAnchored++;
+                break;
+            case AnchorKind.BySymbol:
+                _censusNarrowed++;
+                break;
+            case AnchorKind.ByRootLift:
+                _censusLifted++;
+                if (_censusLiftedNames.Count < CensusCap)
+                {
+                    _censusLiftedNames.Add($"{label}â†’{def.RootName}");
+                }
+                break;
+            case AnchorKind.LiftSuppressed:
+                _censusSuppressed++;
+                if (_censusSuppressedNames.Count < CensusCap)
+                {
+                    _censusSuppressedNames.Add($"{label}â†’{def.RootName}");
+                }
+                break;
+            default:
+                _censusUnanchored++;
+                if (_censusUnanchoredNames.Count < CensusCap)
+                {
+                    _censusUnanchoredNames.Add(label);
+                }
+                break;
+        }
+    }
+
     // node is within scope's subtree, inclusive of scope itself — walks the recorded parent chain
     // rather than the live tree (see the class remarks).
     private bool IsWithin(TNode node, TNode scope)
@@ -151,6 +475,8 @@ public sealed class NameResolver<TNode>
         }
         return false;
     }
+
+    private TNode? ParentOf(TNode node) => _parentOf.TryGetValue(node, out var p) ? p : null;
 
     // Wildcard NAME -> predicate: '*' matches any run of characters, '#' a run of digits (including
     // zero). Plain names compare exactly, case-insensitively.

@@ -87,7 +87,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — the resolver, in three goldens-identical steps
 
 1. ☑ `NameResolver<TNode>`: index + `Matcher` + `FindAll` + `ResolvePath`, with the off-engine suite
-2. ☐ The symbol authority, `Anchors`/root-lift, and the census move in
+2. ☑ The symbol authority, `Anchors`/root-lift, and the census move in
 3. ☐ `ResolveScoped`'s tiers + the own-roots hook; `ResolveOne` folds into `Resolve`
 
 ## Dependency and parallelism notes
@@ -140,7 +140,7 @@ untrustworthy (`:3779-3781`) — the generic version must define identity explic
 constraint), not inherit `Equals`. `IndexPooledCopy` must NOT feed `_byIndex` (⚠ table row 3) —
 that lands in A2, but the `Add` signature must already make it expressible.
 
-## A2 ☐ The symbol authority, `Anchors`/root-lift, and the census move in
+## A2 ☑ The symbol authority, `Anchors`/root-lift, and the census move in
 
 **Goal.** `_byIndex`, `NarrowToSymbolRoot`, `Anchors` (with root-lift and the three policy inputs),
 and the census (`RecordAnchoring`/`RecordMissingTarget`/`ResolutionLines`) are resolver-owned;

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CSVM.Mech3;
 using CSVM.Mech3.Anim;
 using Xunit;
 
@@ -6,13 +7,15 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The off-engine charter for <c>src/Mech3/Anim/NameResolver.cs</c>: the wildcard matcher, the
-/// memoized <c>FindAll</c>, and <c>ResolvePath</c>, asserted against a plain token node type — no
-/// Godot, no chapter world. <see cref="TestNode"/> carries no overridden <c>Equals</c>, so its
-/// default identity is reference equality, the same discipline the engine's <c>Node3D</c>
-/// instantiation gets from an explicit instance-id comparer (⚠ trap: a generic resolver must not
-/// inherit a node type's own equality). Fixture shapes (twin-instance templates sharing a child
-/// name, a model-file suffix) mirror the cases named in the resolver's own doc comments; the
-/// values are invented.
+/// memoized <c>FindAll</c>, <c>ResolvePath</c>, the symbol-table authority
+/// (<c>SymbolClaims</c>/<c>NarrowToSymbolRoot</c>) and the anchoring rules (<c>Anchors</c>' NAME
+/// match, twin narrowing and root lift with its policy inputs), asserted against a plain token
+/// node type — no Godot, no chapter world. <see cref="TestNode"/> carries no overridden
+/// <c>Equals</c>, so its default identity is reference equality, the same discipline the engine's
+/// <c>Node3D</c> instantiation gets from an explicit instance-id comparer (⚠ trap: a generic
+/// resolver must not inherit a node type's own equality). Fixture shapes (twin-instance templates
+/// sharing a child name, a model-file suffix, the <c>caboose</c>/<c>eairg31</c> stories) mirror
+/// the cases named in the resolver's own doc comments; the values are invented.
 /// </summary>
 public class NameResolverTests
 {
@@ -169,7 +172,154 @@ public class NameResolverTests
         Assert.Equal(new[] { hinge }, found);
     }
 
+    // ---- symbol authority: an exact gamez-index binding beats ambiguous name matching ----
+
+    [Fact]
+    public void SymbolLookupBeatsAmbiguousNameMatch()
+    {
+        // C1's `caboose` shape: name matching resolves the real consist AND an unrelated
+        // `caboose.flt` (the .flt double-match); the compiled symbol table names exactly one.
+        var consist = Node("caboose");
+        var decoy = Node("caboose.flt");
+        var resolver = new NameResolver<TestNode>();
+        resolver.Add(consist, "caboose", null, gamezIndex: 7);
+        resolver.Add(decoy, "caboose.flt", null, gamezIndex: 8);
+        var def = Def("train");
+        def.NodeRefs["caboose"] = 7;
+
+        Assert.Equal(2, resolver.FindAll("caboose", null).Count); // the name ambiguity is real
+        Assert.True(resolver.SymbolClaims(def, "caboose", out var node));
+        Assert.Same(consist, node);
+    }
+
+    // ---- twin narrowing: a shared NAME resolves to the instance holding the def's symbol root ----
+
+    [Fact]
+    public void TwinNarrowingKeepsTheDefsOwnInstance()
+    {
+        // C1's two hangars are both `air_gen`; the def whose symbol table roots under eairg31
+        // (`air_gen#1`) must anchor on that instance alone, or the pair cross-binds.
+        var (resolver, a1, _) = TwinHangars(a1Index: 31, a2Index: 42);
+        var def = Def("air_gen", rootName: "air_gen");
+        def.NodeRefs["air_gen"] = 31;
+
+        Assert.Equal(new[] { a1 }, resolver.Anchors(def));
+    }
+
+    // ---- narrowing is tri-state: undecidable (null) leaves the name match standing ----
+
+    [Fact]
+    public void NarrowingLeavesBothTwinsForAReaderDef()
+    {
+        var (resolver, a1, a2) = TwinHangars(a1Index: 31, a2Index: 42);
+        var def = Def("air_gen", rootName: "air_gen"); // reader def: no symbol table
+
+        Assert.Equal(new[] { a1, a2 }, resolver.Anchors(def));
+    }
+
+    [Fact]
+    public void NarrowingLeavesBothTwinsWhenTheIndexWasNeverBuilt()
+    {
+        var (resolver, a1, a2) = TwinHangars(a1Index: 31, a2Index: 42);
+        var def = Def("air_gen", rootName: "air_gen");
+        def.NodeRefs["air_gen"] = 99; // no built node carries this index
+
+        Assert.Equal(new[] { a1, a2 }, resolver.Anchors(def));
+    }
+
+    [Fact]
+    public void NarrowingLeavesBothTwinsWhenTheRootIsOutsideEveryCandidate()
+    {
+        var (resolver, a1, a2) = TwinHangars(a1Index: 31, a2Index: 42);
+        var foreign = Node("elsewhere");
+        resolver.Add(foreign, "elsewhere", null, gamezIndex: 77);
+        var def = Def("air_gen", rootName: "elsewhere");
+        def.NodeRefs["elsewhere"] = 77;
+
+        Assert.Equal(new[] { a1, a2 }, resolver.Anchors(def));
+    }
+
+    // ---- the ANIMATION_ROOT_NAME lift and its policy inputs ----
+
+    [Fact]
+    public void RootLiftAnchorsOnTheParentsOfRootMatches()
+    {
+        var b1 = Node("apbuild01.flt");
+        var b2 = Node("apbuild02.flt");
+        var resolver = Build(
+            (b1, "apbuild01.flt", null), (Node("healthy"), "healthy", b1),
+            (b2, "apbuild02.flt", null), (Node("healthy"), "healthy", b2));
+        var def = Def("m_build**", rootName: "healthy"); // NAME matches nothing here
+
+        Assert.Equal(new[] { b1, b2 }, resolver.Anchors(def));
+    }
+
+    [Fact]
+    public void RootLiftRefusesAboveMaxRootLift()
+    {
+        // Above the cap the root is a generic per-object name ('healthy'): the def belongs to
+        // game objects, not world nodes, and must not anchor at all.
+        var resolver = new NameResolver<TestNode> { MaxRootLift = 2 };
+        for (int i = 0; i < 3; i++)
+        {
+            var parent = Node($"b{i}");
+            resolver.Add(parent, $"b{i}", null);
+            resolver.Add(Node("healthy"), "healthy", parent);
+        }
+        var def = Def("m_build**", rootName: "healthy");
+
+        Assert.Empty(resolver.Anchors(def));
+    }
+
+    [Fact]
+    public void SuppressRootLiftRefusesEvenUnderTheCap()
+    {
+        var parent = Node("b0");
+        var resolver = new NameResolver<TestNode> { SuppressRootLift = true };
+        resolver.Add(parent, "b0", null);
+        resolver.Add(Node("healthy"), "healthy", parent);
+        var def = Def("m_build**", rootName: "healthy");
+
+        Assert.Empty(resolver.Anchors(def));
+    }
+
+    // ---- NameResolveFallback: the by-index map stays empty, name resolution stands alone ----
+
+    [Fact]
+    public void NameResolveFallbackLeavesSymbolLookupsEmpty()
+    {
+        var resolver = new NameResolver<TestNode> { NameResolveFallback = true };
+        var trail = Node("fly_trail1");
+        resolver.Add(trail, "fly_trail1", null, gamezIndex: 400); // colliding index spaces: never mapped
+        var def = Def("he_trails");
+        def.NodeRefs["fly_trail1"] = 400;
+
+        Assert.True(resolver.SymbolClaims(def, "fly_trail1", out var bound)); // the symbol still claims it
+        Assert.Null(bound);                                                   // but binds to nothing
+        Assert.Contains(trail, resolver.FindAll("fly_trail1", null));         // names still resolve
+    }
+
     private static TestNode Node(string label) => new() { Label = label };
+
+    private static AnimDefinition Def(string name, string? rootName = null) =>
+        new() { Name = name, RootName = rootName };
+
+    // C1's twin-hangar shape: two instance roots, each owning a child that shares the NAME
+    // `air_gen`, distinguishable only by gamez index.
+    private static (NameResolver<TestNode> Resolver, TestNode A1, TestNode A2) TwinHangars(
+        int a1Index, int a2Index)
+    {
+        var eairg31 = Node("eairg31");
+        var eairg32 = Node("eairg32");
+        var a1 = Node("air_gen");
+        var a2 = Node("air_gen");
+        var resolver = new NameResolver<TestNode>();
+        resolver.Add(eairg31, "eairg31", null);
+        resolver.Add(a1, "air_gen", eairg31, a1Index);
+        resolver.Add(eairg32, "eairg32", null);
+        resolver.Add(a2, "air_gen", eairg32, a2Index);
+        return (resolver, a1, a2);
+    }
 
     private static NameResolver<TestNode> Build(params (TestNode Node, string Name, TestNode? Parent)[] rows)
     {

@@ -15770,3 +15770,44 @@ actual A/B used the Bootstrap summary line that IS unconditionally printed and r
 exact code this item moved — `RunProbe.ps1 --debug-anim --freecam --chapter=C5 --screenshot=...`,
 before and after, both logged byte-identically: `anim: 781 defs (592 compiled, 189 reader), 43 SI
 scripts; 383 anchored, 1483 state ops applied, 17 unresolved`. No behaviour change.
+
+
+## 2026-08-05 — PLAN-name-resolver A2: the symbol authority, `Anchors`/root-lift and the bind census move into `NameResolver`
+
+The judgement item of `docs/PLAN-name-resolver.md`: the by-index map (`_byIndex`),
+`NarrowToSymbolRoot`, `Anchors` (NAME match → symbol narrowing → ANIMATION_ROOT_NAME lift) and
+the bind census (`RecordAnchoring`/`RecordMissingTarget`/`ResolutionLines`) leave
+`AnimRuntime` for `NameResolver<TNode>`, ported rule-for-rule. The three policy inputs
+(`NameResolveFallback`/`SuppressRootLift`/`MaxRootLift`) are now the resolver's documented
+knobs; `AnimRuntime` keeps its public flags and hands them over once at `Bind`, before the
+first `Add`. The by-index population refusals moved exactly: never under `NameResolveFallback`
+(colliding index spaces) and never for an `IndexPooledCopy` row (`Add`'s new
+`indexByPointer:false` — every pooled copy shares the source's compiled indices). The ⚠-table
+row-2 discipline is now structural inside the module: `Anchors` is the one census-recording call,
+wrapping a private census-free `ComputeAnchors`; `FindAll`/`ResolvePath` record nothing, so
+the per-event callers (`ResolveInOwnRoot`/`TemplateRootsFor`) cannot re-enter the census.
+`Targets`/`ResolveOne` stay in `AnimRuntime` (they read event payloads) but do their symbol
+lookups through the resolver's new `SymbolClaims` tri-state (not claimed / bound / claimed but
+index-not-built), which preserves the strictly anchor-scoped `genx12` rescue on the
+index-not-built branch. Root-lift now reads the Add-time parent snapshot instead of the live
+`GetParent()` — identical under the no-reparent invariant the module documents.
+
+Nine new off-engine tests (29 total in the file's suite): symbol-beats-name (the `caboose`/
+`caboose.flt` double-match ambiguity vs the exact index), twin narrowing keeps `air_gen`#1 →
+its `eairg31` instance, the narrowing tri-state (reader def / unbuilt index / foreign root each
+leave BOTH twins standing), root-lift lifts to parents / refuses above `MaxRootLift` / refuses
+under `SuppressRootLift`, and `NameResolveFallback` leaves symbol lookups empty while names
+still resolve. Each seen red once via five reverted mutations (symbol lookup never binding;
+narrowing never deciding; null-vs-empty conflation — which exposed and fixed two weak count-only
+assertions that root-lift could satisfy; cap+suppress+parent-lift broken; the fallback gate
+dropped), each failing exactly the expected subset.
+
+**Verified.** Full `.\RunTests.ps1` PASS: build clean (0 warnings), 469 unit tests, 29/29
+in-engine suites, **13/13 goldens hash-identical**, engine errors clean. Census A/B before/after at
+worktree HEAD (SHELL-10/SHELL-12, both probes with `--screenshot` termination): the C5
+`--freecam` Bootstrap summary byte-identical (`anim: 781 defs (592 compiled, 189 reader), 43 SI
+scripts; 383 anchored, 1483 state ops applied, 17 unresolved`), and — since A2 moves the census
+itself — a `--debug-anim --node=ctur1 --chapter=C5` run's full `[anim] bind` block (census
+header `defs=780 anchored_by_name=1 … root_lift_suppressed=108 unanchored=671
+target_missing_ops=4` plus the three sample lines) byte-identical line for line. No behaviour
+change.
