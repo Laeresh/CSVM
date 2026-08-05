@@ -774,6 +774,11 @@ public partial class FlightController : Node3D
         _simCurr = _renderPose = new Transform3D(_model.Attitude, _model.Position);
         GlobalTransform = _simCurr;
 
+        // The dynamic chase radius advances on the sim step, not the render frame: the
+        // acceleration derivative needs the fixed dt, and the transient's relaxation is a
+        // SIM-time rate (BL-248). A crash or halt stops the calls, freezing the radius too.
+        _cam.UpdateDynamics(dt, _model.Speed);
+
         // Weapons: cycle the two selectors (edge-detected), then advance the fire clocks and spawn
         // into the shared projectile pool.
         CycleWeaponSelectors();
@@ -1880,7 +1885,7 @@ public partial class FlightController : Node3D
     {
         if (!CameraOwned)
         {
-            _cam.Snap(_model.Position, _model.Attitude, _renderPose);
+            _cam.Snap(_model.Position, _model.Attitude, _model.Speed, _renderPose);
         }
     }
 

@@ -16,10 +16,13 @@ namespace CSVM.Flight;
 /// frame-rate independent, while the orbit keeps WALL time so you can fly around a halted
 /// world.</para>
 ///
-/// <para>The chase RADIUS is the plane's own, from <see cref="CamParams"/> — the Balmoral sits
-/// 25 m back and the Kestrel 14.5 m. The offset's DIRECTION is not in the data and stays the
-/// hand-picked behind-and-above one. Nothing else camparam ships is wired: see
-/// <see cref="CamParams"/>'s warnings on the undecoded dynamics before reaching for them.</para>
+/// <para>The chase RADIUS is dynamic, per plane: the authored base <c>dist</c> plus the authored
+/// speed term (<c>d = dist + dist_factor·V</c>, V in m per sim-second) plus a measured
+/// acceleration transient — see <see cref="UpdateDynamics"/>. The numpad fixed views share the
+/// same radius, so the dynamic terms move both cameras — one number by design. The offset's
+/// DIRECTION is not in the data and stays the hand-picked behind-and-above one. See
+/// <see cref="CamParams"/>'s warnings on the still-undecoded fields before reaching for
+/// them.</para>
 /// </summary>
 public sealed class CameraController
 {
@@ -36,6 +39,22 @@ public sealed class CameraController
     private const float OrbitMinDist = 4f, OrbitMaxDist = 150f;
 
     private const float Diag = 0.70710678f;     // sin/cos 45° — the four diagonal views' components
+
+    // The throttle transient's relaxation rate, in 1/SIM-second. MEASURED off CAP-21's Bloodhawk
+    // staircase clips (BL-248), NOT authored: after a throttle slam the excess distance decays
+    // exponentially with τ = 1.11 wall-s = 1.55 sim-s (wall→sim k = 1.390), i.e. 0.65 /sim-s.
+    // It matches no authored camparam constant — dist_catch_up 1.0 is 1.54× it, pos_catch_up 2.0
+    // is 3× and look_catch_up 3.0 is 4.6× too fast. Applied per SIM dt; using the wall figure
+    // (0.90 /wall-s) here would run the relaxation 39% off (verification DET-11).
+    private const float DistTransientRelax = 0.65f;
+
+    // Steady-state excess distance per unit of along-path acceleration, from the same clips:
+    // +0.28% of d per (mph/sim-s) = 0.105 m per (m/s²), residual-vs-dV/dt correlation −0.79 to
+    // −0.85 in all four takes. MEASURED, not authored — a full-throttle slam peaks ~+15% of the
+    // radius and a full cut ~−7%, which is the term the eye actually sees.
+    private const float DistTransientPerAccel = 0.105f;
+
+    private const float ChaseLogInterval = 0.25f; // sim-s between chase-distance breadcrumb lines
 
     // The offset the direction above works out to at unit... i.e. the length of (BaseBack, BaseUp),
     // ≈ 16.62 m. Only used to normalise that direction against the data's own distance.
@@ -69,10 +88,23 @@ public sealed class CameraController
     // The numpad view held for the whole run (--view=); 0 is the chase camera.
     private readonly int _pinnedView;
 
-    // This airframe's own chase offset: the hand-picked direction above, scaled to the distance
-    // camparam ships for it. The fixed numpad views take the same radius, so a snap changes the
-    // angle and nothing else — they are one number, and moving only one desyncs the two cameras.
-    private readonly float _back, _up, _viewDist;
+    // The authored base distance and speed factor (camparam, per plane). The fixed numpad views
+    // take the same dynamic radius as the chase camera, so a snap changes the angle and nothing
+    // else — they are one number, and moving only one desyncs the two cameras.
+    private readonly float _dist, _distFactor;
+
+    // The dynamic chase radius: _dist + _distFactor·V + the acceleration transient. Advanced by
+    // UpdateDynamics on the sim clock; read by both the chase camera and the fixed views.
+    private float _radius;
+    private float _distExcess;                   // the transient's state, metres beyond d(V)
+    private float _prevSpeed;                    // last sim step's speed (accel derivative)
+    private float _simTime, _logAccum;           // chase breadcrumb bookkeeping
+
+    // The smoothed plane→camera offset, world space. The offset eases, never the world position:
+    // CAP-21 shows the original's apparent size at 300 mph within 0.5% of its 118 mph value once
+    // dist_factor is accounted for, which a first-order WORLD-position follower cannot do — it
+    // would trail by V/rate, several chase radii at speed (BL-248).
+    private Vector3 _offset;
 
     private float _orbitYaw, _orbitPitch, _orbitDist; // free orbit-camera state while paused
     private int _viewPrev = -1;                  // index into Views last applied (-1 = chase camera)
@@ -82,9 +114,9 @@ public sealed class CameraController
         _camera = camera;
         _keyDown = keyDown;
         _pinnedView = pinnedView;
-        _viewDist = cam.Dist;
-        _back = BaseBack * (cam.Dist / BaseDist);
-        _up = BaseUp * (cam.Dist / BaseDist);
+        _dist = cam.Dist;
+        _distFactor = cam.DistFactor;
+        _radius = cam.Dist;
     }
 
     /// <summary>Which fixed view the camera should hold this frame, as an index into
@@ -128,20 +160,57 @@ public sealed class CameraController
         // Rigid views ride the DRAWN pose, not the raw sim pose — the two differ on the realtime
         // clock (render interpolation), and mixing them would jitter the plane inside a view
         // whose whole point is to be bolted to it. Identical on a parent-driven clock.
-        _camera.Position = renderPose.Origin + (renderPose.Basis * (dir * _viewDist));
+        _camera.Position = renderPose.Origin + (renderPose.Basis * (dir * _radius));
         _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, up);
     }
 
-    /// <summary>Chase camera: smooth the position toward the rigid behind-and-above offset
-    /// (expressed in the plane's frame, so it banks with the plane) and slerp the orientation
-    /// toward a look-at of the point ahead of the nose with the plane's own up. Smoothing the
-    /// basis — rather than re-deriving a hard LookAt each frame from a near-world up — lets the
-    /// horizon roll fully through inverted flight, while the rotational lag keeps fast rolls
-    /// reading dynamic instead of glued. Takes the SIM clock's dt.</summary>
+    /// <summary>Advance the dynamic chase radius one SIM step: <c>d = dist + dist_factor·V</c>
+    /// (both authored, per plane — CAP-21 measured the speed slope at 5.65e-4·d(0) per m/s on the
+    /// Bloodhawk, i.e. dist_factor 0.0105 against the shipped 0.01, 5% agreement, so the authored
+    /// value is used as-is), plus a first-order acceleration transient relaxing at the measured
+    /// 0.65 /sim-s. Deliberately NOT clamped into [dist_min, dist_max]: that pair is not a clamp —
+    /// the default block's own dist 13.0 sits below its dist_min 15.7, and CAP-21's realised
+    /// distances never reach dist_max (BL-248). Called by the host once per sim step (never per
+    /// render frame) so the acceleration derivative is clean and the relaxation runs in sim
+    /// time; a halted or crashed sim takes no steps, freezing the radius with everything else.</summary>
+    public void UpdateDynamics(float dt, float speed)
+    {
+        if (dt <= 0f)
+        {
+            return;
+        }
+        float accel = (speed - _prevSpeed) / dt;
+        _prevSpeed = speed;
+        float t = 1f - Mathf.Exp(-DistTransientRelax * dt);
+        _distExcess += ((DistTransientPerAccel * accel) - _distExcess) * t;
+        _radius = _dist + (_distFactor * speed) + _distExcess;
+
+        // Measurement breadcrumb (file sink always writes debug): a sim-time series of the
+        // realized radius, from which a plateau law fit or a transient decay fit can be made
+        // without instrumenting a build (INSTR-5).
+        _simTime += dt;
+        _logAccum += dt;
+        if (_logAccum >= ChaseLogInterval)
+        {
+            _logAccum = 0f;
+            Log.Debug("flight", $"chase t={_simTime:0.00} v={speed:0.00} d={_radius:0.000} excess={_distExcess:0.000}");
+        }
+    }
+
+    /// <summary>Chase camera: ride the plane exactly and smooth only the OFFSET toward the
+    /// behind-and-above direction at the current dynamic radius (expressed in the plane's frame,
+    /// so it banks with the plane), then slerp the orientation toward a look-at of the point
+    /// ahead of the nose with the plane's own up. Smoothing the offset rather than the world
+    /// position is what CAP-21's footage demands — a world-position follower trails by V/rate,
+    /// which the original's speed-flat apparent size rules out (BL-248). Smoothing the basis —
+    /// rather than re-deriving a hard LookAt each frame from a near-world up — lets the horizon
+    /// roll fully through inverted flight, while the rotational lag keeps fast rolls reading
+    /// dynamic instead of glued. Takes the SIM clock's dt.</summary>
     public void Chase(float dt, Vector3 planePos, Basis attitude)
     {
         float tPos = 1f - Mathf.Exp(-CamSmooth * dt);
-        _camera.Position = _camera.Position.Lerp(DesiredCamPos(planePos, attitude, out var camUp), tPos);
+        _offset = _offset.Lerp(DesiredOffset(attitude, out var camUp), tPos);
+        _camera.Position = planePos + _offset;
 
         var toTarget = planePos - (attitude.Z * CamLookAhead) - _camera.Position;
         if (toTarget.LengthSquared() < 1e-6f)
@@ -160,16 +229,21 @@ public sealed class CameraController
     }
 
     /// <summary>Place the camera at its settled pose immediately — spawn, respawn and the weapon
-    /// lab's re-park, where there is nothing to interpolate from.</summary>
-    public void Snap(Vector3 planePos, Basis attitude, in Transform3D renderPose)
+    /// lab's re-park, where there is nothing to interpolate from. Re-bases the dynamic radius on
+    /// the given speed with the transient zeroed: a teleport is not an acceleration.</summary>
+    public void Snap(Vector3 planePos, Basis attitude, float speed, in Transform3D renderPose)
     {
+        _prevSpeed = speed;
+        _distExcess = 0f;
+        _radius = _dist + (_distFactor * speed);
         int view = ActiveView();
         if (view >= 0)
         {
             FixedView(view, renderPose);
             return;
         }
-        _camera.Position = DesiredCamPos(planePos, attitude, out var camUp);
+        _offset = DesiredOffset(attitude, out var camUp);
+        _camera.Position = planePos + _offset;
         _camera.LookAt(planePos - (attitude.Z * CamLookAhead), camUp);
     }
 
@@ -222,11 +296,12 @@ public sealed class CameraController
     }
 
     // Chase from behind and above the nose in the plane's own frame, so the offset (and the
-    // camera) roll fully with the plane — inverted flight shows the world upside down.
-    private Vector3 DesiredCamPos(Vector3 planePos, Basis attitude, out Vector3 camUp)
+    // camera) roll fully with the plane — inverted flight shows the world upside down. The
+    // hand-picked direction (BaseBack, BaseUp), normalised and scaled to the dynamic radius.
+    private Vector3 DesiredOffset(Basis attitude, out Vector3 camUp)
     {
         var nose = -attitude.Z;
         camUp = attitude.Y;
-        return planePos - (nose * _back) + (camUp * _up);
+        return ((nose * -BaseBack) + (camUp * BaseUp)) * (_radius / BaseDist);
     }
 }

@@ -46,9 +46,9 @@ two-turret aircraft — the largest.
 
 | Key | Value | Reading |
 |---|---|---|
-| `dist` | 13.0 | Chase distance, metres. The one field decoded with confidence, and the only one the engine applies. |
-| `dist_factor` | 0.01 | Undecoded — scales the distance by *something*. |
-| `dist_vary` | 0.1 | Undecoded — the amount that scaling may swing. |
+| `dist` | 13.0 | Base chase distance, metres. |
+| `dist_factor` | 0.01 | Metres of extra chase distance per m/s of airspeed: `d = dist + dist_factor·V`, V in metres per **sim** second. Decoded from CAP-21's Bloodhawk staircase clips (2026-08-04, `BL-248`): the measured slope 5.65e-4·d(0) per m/s implies 0.0105 against the shipped 0.01 — 5% agreement. |
+| `dist_vary` | 0.1 | Undecoded — the amount the distance may swing by *something*; CAP-21's takes never move it. |
 | `dist_min` / `dist_max` | 15.7 / 25.0 | The distance's range. ⚠ See below. |
 | `dist_catch_up` | 1.0 | Rate at which distance eases to its target. Units undecoded. |
 | `pos_catch_up` | 2.0 | Rate at which position eases. Units undecoded. |
@@ -70,15 +70,18 @@ two-turret aircraft — the largest.
 ⚠ **`dist_min` (15.7) is LARGER than `dist` (13.0) in the `default` block.** In all seven
 per-plane blocks the two are equal instead. So the rule cannot be "clamp `dist` into
 `[dist_min, dist_max]`" — under that reading no plane would ever sit at the default's own 13.0.
-Either `dist` is a base that something scales up before the clamp applies, or the two serve
-different cameras. Undecided; do not implement a dynamic distance on a guess.
+CAP-21 does not settle it either: the realised distances (18.3–22.5 on the Bloodhawk) never reach
+`dist_max` 25.0, and the one dip under `dist_min` is inside the measurement's ~1% systematic. The
+engine's dynamic distance (`d = dist + dist_factor·V` + a measured throttle transient, `BL-248`)
+is therefore deliberately **unclamped**.
 
 ⚠ **The catch-up triplet's units are unknown.** `pos_catch_up` 2.0 / `look_catch_up` 3.0 /
 `dist_catch_up` 1.0 read plausibly as `1/s` exponential-smoothing rates, which is the shape the
 engine's own camera smoothing uses — but they could equally be frame counts or seconds-to-settle.
-The readings differ by roughly a factor of four in felt lag, and none of them looks broken on
-screen, so this needs a settling-time measurement against the original rather than a code change
-that "looks about right".
+CAP-21's one measured rate — the throttle transient's relaxation, 0.65 /sim-s — matches **none**
+of the three (`dist_catch_up` 1.0 is the nearest at 1.54×), so the engine carries that rate as a
+measured constant rather than reading it from this triplet. Whether `dist_catch_up` is *meant* to
+be that rate (with something else costing the missing 35%) is untested.
 
 ⚠ **`thirdp_height`'s units are unknown**, which is why the engine takes only the *radius* from
 this file and leaves the chase offset's *direction* as a hand-picked value. `thirdp_pitch` 0.29 rad
@@ -87,7 +90,8 @@ not a decode.
 
 ## What the engine reads
 
-`CSVM/src/Flight/CamParams.cs` parses the whole file and exposes every field; only `Dist` is
-applied, as the chase radius in `CSVM/src/Flight/CameraController.cs` (which the numpad fixed views
-share, so both cameras move together). Everything else is carried deliberately dormant behind the
-warnings above.
+`CSVM/src/Flight/CamParams.cs` parses the whole file and exposes every field; `Dist` and
+`dist_factor` drive the dynamic chase radius in `CSVM/src/Flight/CameraController.cs` (which the
+numpad fixed views share, so both cameras move together — dynamics included). The throttle
+transient's 0.65 /sim-s relaxation there is a CAP-21 **measurement**, not a field of this file.
+Everything else is carried deliberately dormant behind the warnings above.
