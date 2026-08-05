@@ -1647,22 +1647,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   by `ANIMATION_NAME`, and `ballflare.flt` declares only a `NAME`, so it never entered that closure.
   Fix the script when this lands, or the next re-run repeats the miss.
 
-- `BL-275` `[Tuning]` `[Owed-playtest]` **Fire-plume rise/lifetime scales (B6, landed 2026-08-05).** `puffer.fireRiseScale`
-  **2.5** and `puffer.fireLifetimeScale` **1.5** — config keys, defaults in
-  `Puffer.FireRiseScaleDefault`/`FireLifetimeScaleDefault`, applied ONLY to the `fire_n_smoke`
-  puffer family (the crash `large_10sec_fire`, the destruction `large_30sec_fire`/
-  `huge_30sec_fire`, the burning fuel tanks) on the sustained spawn path — every other emitter
-  keeps its authored numbers. INVENTED against footage, not decoded: the authored velocities
-  integrate to a ~10–12 m column for the 30 s fire under `FRICTION 0.6`, while the original's fire
-  columns read as unbroken ~3+ building-height plumes (`OriginalScreenshots/C1 IA1 Burning Fuel
-  Tanks.png`; `C1 IA1 Destruction.mp4` t≈176 s). Headless A/B at the C2 gate2 kill: before, the
-  flames never left the ~15 m archway; after, a dark column climbs to ~3× the gate's height.
-  ⚠ **Trap:** do not fold a density re-tune into these — `NUMBER`/thin-ness is `BL-218`'s
-  superseded question; these two knobs are height only.
-  *Playtest to sign off:* destroy a building (C2's gate2, a C5 crate, or — since `BL-276` — any
-  zeppelin engine/cannon) and crash a plane in one flight; both plumes should now climb to the
-  original's height. Keep or move the two numbers.
-
 ## Audio
 
 - `BL-079` `[Feature]` **Positional 3D audio for other aircraft** — all sound is own-plane non-positional today;

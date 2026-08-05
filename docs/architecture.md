@@ -1426,7 +1426,8 @@ Three config knobs scale `BaseSize` per spawn path — `puffer.burstSizeScale` /
 `puffer.trailSizeScale` / `puffer.sustainSizeScale` (`SizeScaleDefault` **1**, the authored
 SIZE_RANGE verbatim; the knobs remain for deliberate per-path tuning — the cull margin scales with
 the largest). Two more scale the `fire_n_smoke` family ONLY — `puffer.fireRiseScale` /
-`puffer.fireLifetimeScale` (`BL-275` TUNE, defaults 2.5/1.5): vertical spawn velocity + puff
+`puffer.fireLifetimeScale` (defaults 2.5/1.5, invented against original footage rather than
+decoded, signed off at the controls 2026-08-06): vertical spawn velocity + puff
 lifetime of the crash/destruction/tank fires, identity for every other emitter. All read at
 `Init`; registered in `Config.WarmTuningRegistry` for `--dump-config`. Moving
 `SizeScaleDefault` re-pins every puffer-bearing golden and only those (measured on the 4->1 revert:
