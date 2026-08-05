@@ -2,7 +2,8 @@
 
 Everything known-but-not-scheduled, so it survives between polish runs. Which plan is active, if
 any, is `PROJECT_CONTEXT.md`'s "Current status" — never restated here. Per-item history/diagnosis
-detail is in `docs/HISTORY.md` (dated entries) and `docs/architecture.md` (module bullets); how to
+detail is in commit messages (`git log --grep=BL-NNN`; pre-2026-08-06 in `docs/HISTORY.md`'s dated
+entries, now frozen) and `docs/architecture.md` (module bullets); how to
 verify a change without fooling yourself is `docs/verification.md`. **The live list of hand-tuned
 constants awaiting playtest is the set of items tagged `[Tuning]`** (consolidated actionable
 index: [`playtest.md`](playtest.md)). When an item gets scheduled into a plan, move it there; when
@@ -45,7 +46,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Standing notes
 
-- **Scheduled items live in their plan — do not re-add them here.**
+- **Scheduled items live in their plan — do not re-add them here.** If one is closed without
+  landing, its record goes in the closing commit's message.
 - **[`playtest.md`](playtest.md) is the actionable, consolidated checklist** for everything
   tagged `[Owed-playtest]` or blocked on a `CAP-nn` — what to look for, the launch command, and
   what each blocks. The backlog keeps the deep evidence/traps; keep the two in step.
@@ -1325,7 +1327,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   is why the candidate fix is a cited exemption list, not a live filter.
   *Playtest after fix:* `CAP-22` (C5 city building density, `playtest.md`) decides it — if the
   original's downtown reads as one consistent skyline, the exemption list lands; if it shows visible
-  overlap too, that is itself worth a HISTORY note (the doubling would be authentic, not a bug) and
+  overlap too, that is itself worth recording in the closing commit's message (the doubling would be authentic, not a bug) and
   the item closes ❌-for-now instead.
 
 - `BL-251` `[Research]` `[Blocked: CAP-23]` **Does the original draw water over the shoreline, or the shoreline over the water?** Our cross-node draw order is "the later gamez node wins" — `nodes.json` is
