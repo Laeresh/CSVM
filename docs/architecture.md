@@ -2456,7 +2456,11 @@ knowledge), the crash-rig's own name sets (`CrashDefNames`: `player_crash_dirt`/
 `startprops`/`stopprops`, played directly by `FlightController` rather than through a CALL;
 `PlayerDamageStageAnims`: the authored damage-stage menu `pdpanelN`/`player_fuelleak`/
 `player_damage_trail` DamageVisuals plays as injure_anims thresholds cross, `BL-259`), and the pure
-`TouchdownFor(SurfaceClass)` the graze reaction's three-way pick routes through. It also derives what
+`TouchdownFor(SurfaceClass)` the graze reaction's three-way pick routes through.
+`GroundSplashAnimNames` (`flydirt_plane`) names the crash's ground-splash def for
+`AnimRuntime.InheritedVelocityExempt` (`BL-274`) — its `ObjectMotion` is authored the same
+vertical-only shape as a launched wreck piece, so only the name can tell "stay planted" from
+"scatter with the crash's momentum" apart. It also derives what
 those names need staged: `StageRootsFor(program, names, resolveRoot)` walks `AnimProgram.Subset`'s
 CALL_ANIMATION closure, takes each reached definition's NAME (the gamez node its instance anchors on),
 and resolves it three ways — a parentless gamez root is **staged**, a name the bind's own scope

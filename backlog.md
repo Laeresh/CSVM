@@ -308,14 +308,6 @@ shape as `BL-259`/`BL-261`.
   survives the reader (user's call, 2026-08-05).
   *Playtest after fix:* fly C1 and a one-sprite chapter (C2 or C3) at several altitudes and past
   the deck — the singles should thin with the data, and the deck should carry its own dense layer.
-- `BL-274` **The crash ground splash tracks the moving wreck instead of anchoring at the impact
-  point.** Seen at the controls (`PT-04`, 2026-08-05): the splash effect drags along with the plane
-  as it slides rather than staying where it hit. Same defect family as `BL-229`'s "puff at the
-  plane's last position" and the `TopLevel` anchor fix that produced the `trail-world-anchor` suite
-  (`docs/HISTORY.md` 2026-08-03) — the effect is parented to the aircraft rather than world-staged.
-  Everything else about the crash was judged **right** in the same sitting: sound and piece tumble
-  rate both confirmed good, so this is the one visual defect left in that scene.
-  *Playtest after fix:* belly-slide a crash and watch the splash stay put.
 - `BL-275` **Fire plumes do not rise high enough — velocity or lifetime is too low.** Two
   independent sightings the same sitting, judged as one defect (user, 2026-08-05): the crash fire
   "burns higher" in the original (`PT-04`), and the destruction fire's flames "climb but not as

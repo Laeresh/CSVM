@@ -276,6 +276,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// the same); a TUNE on the fraction, not a decode.</summary>
     public Vector3 InheritedWorldVelocity;
 
+    /// <summary>Animation names <see cref="InheritedWorldVelocity"/> must not reach — the
+    /// caller-supplied opt-out <see cref="Anim.MotionRuntime.Create"/> needs, since the data shape
+    /// alone cannot distinguish a launched piece from a ground-planted effect (see its own remark).
+    /// Null (the default) means every ballistic motion inherits, unchanged from before this existed.
+    /// The crash rig sets this alongside <see cref="InheritedWorldVelocity"/> so the world-space
+    /// nudge that legitimately scatters wreck pieces does not also drag the crash splash off with
+    /// them (BL-274).</summary>
+    public HashSet<string>? InheritedVelocityExempt;
+
     // ---- PUFFER_STATE ----
     /// <summary>What <see cref="Emitters"/> builds through. Supplied at construction and valid only
     /// DURING the world build: an emitter bakes its texture atlas from the session's
@@ -2165,9 +2174,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         // longest of them is what the sequence waits on (BL-240).
                         float ballTime = authored;
                         bool bounceArmed = false;
+                        // Opt this def's nodes out of InheritedWorldVelocity when the crash rig named
+                        // it exempt (BL-274) — checked once per event, not per target, since every
+                        // target of one event shares the owning def.
+                        bool inheritVelocity = InheritedVelocityExempt == null
+                            || !InheritedVelocityExempt.Contains(def.AnimName ?? def.Name);
                         foreach (var t in Targets(ev, def, anchor))
                         {
-                            var motion = MotionRuntime.Create(this, t, ev.Data, authored);
+                            var motion = MotionRuntime.Create(this, t, ev.Data, authored, inheritVelocity);
                             if (motion == null)
                                 continue;
                             float flight = motion.RunTime;

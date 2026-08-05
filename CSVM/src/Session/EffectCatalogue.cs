@@ -67,6 +67,15 @@ public static class EffectCatalogue
     // the crash chooses between them at play time.
     public static readonly string[] CrashDefNames = { "player_crash_dirt", "player_crash_water" };
 
+    // The belly-slide ground splash (`flydirt_plane`, called AT_NODE `healthy` by
+    // `player_crash_dirt`): its own `ObjectMotion` translation is authored as a near-zero-horizontal
+    // sink (a planted decal fading into the ground), not a launch — but the data shape is
+    // indistinguishable from a wreck piece's own translation (also vertical-only, relying entirely on
+    // `AnimRuntime.InheritedWorldVelocity` for horizontal spread), so only the name tells them apart.
+    // Wired into `InheritedVelocityExempt` so the crash's momentum nudge, which correctly scatters
+    // `piece1..4`, does not also drag this splash off with the sliding wreck (BL-274).
+    public static readonly string[] GroundSplashAnimNames = { "flydirt_plane" };
+
     // The per-player rig's non-crash defs (B4): the four `<part>_damage_effects` shims the
     // Devastator's 0.99 injure_anims entry names. Bound alongside the crash def because they need
     // exactly what the crash rig already has — the `player` anim root, the plane's own `pdpN`

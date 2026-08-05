@@ -267,6 +267,11 @@ public sealed class WorldEffectsFactory
         // splitscreen crashes differ from each other but repeat run to run.
         var crashRuntime = AnimRuntime.ForCrashRig(Rng.NewIntSeed(Rng.Crash),
             new PufferEmitterFactory(textures, _worldRoot), _spec.DebugAnim);
+        // Excuses the ground splash from the momentum nudge FlightController.Crash sets on
+        // InheritedWorldVelocity (BL-274) — set once here, unlike the velocity itself (which is
+        // per-crash), because which defs are exempt never changes across a session.
+        crashRuntime.InheritedVelocityExempt =
+            new HashSet<string>(EffectCatalogue.GroundSplashAnimNames, StringComparer.OrdinalIgnoreCase);
         // Bind only the named defs' transitive CALL_ANIMATION closures (Subset), never the whole
         // world program: the full 800+ defs include ~150 generic-named world defs that would
         // mis-anchor onto this plane's parts and run their reset states on the aircraft. The set
