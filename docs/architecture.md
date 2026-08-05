@@ -1655,9 +1655,13 @@ surface, blocked on `BL-222`), and, for the data's 0.10 `player_smoketrail`, `pl
 (short_firetrail at prop1 + the fire_lt light) — `RigAnimFor` owns that one mapping.
 `DamageEffectStop` (Reset, first) stops the whole stage CLOSURE, derived from the program — a
 stopped pdpanelN cannot reach the trail it CALLed, and prop1's trail has no authored exit.
-⚠ PairHealthySkins pairs torn↔healthy by merged mesh-AABB position, never by name (the _h
-  numbering is crossed on three models — docs/formats/gamez.md) and never by node origin (the
-  placement is baked into mesh space); unpaired _h skins are never hidden.
+⚠ PairHealthySkins' CANDIDATE sets are def-derived (`BL-270`, `PanelPairingSets`: plane_reset's
+  re-ACTIVE list = the hideable _h skins, the pdpanelN targets = the torn set; the viewer loads
+  the two reader files, flight reads the bound program; no def data = a loud Warn + the unscoped
+  fallback). The ASSIGNMENT inside those sets stays positional — no def ever deactivates an _h
+  node, so the pairing itself is not authored anywhere — by merged mesh-AABB position, never by
+  name (the _h numbering is crossed on three models — docs/formats/gamez.md) and never by node
+  origin (the placement is baked into mesh space); unpaired _h skins are never hidden.
 ⚠ Null sinks fall back: the parked viewer keeps stand-in Puffers burning in place (UpdateStatic, at
   the panels + the authored prop1 anchor — a parked plane travels no distance, so the authored
   distance-interval trails would emit nothing); a world-less flight renders panel flips only, logged.

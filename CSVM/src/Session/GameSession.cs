@@ -980,7 +980,13 @@ public partial class GameSession : Node3D
                 for (int i = 0; i < 8; i++) // pool one per pdp panel — the lab can flip all of them
                     if (Effects.Puffer.MakePuffer(state.ZrdrPath, state.Textures, _worldRoot!, "pufftrails.json", "firepuffer") is { } pt)
                         panelTrails.Add(pt);
-                var visuals = new DamageVisuals(builder.DamagePanels, _plane, stats, smoke, fire, panelTrails);
+                // The healthy↔torn candidate sets from the authored defs (BL-270) — the viewer
+                // has no anim program, so the two reader files are loaded directly.
+                var pairingDefs = new List<Mech3.AnimDefinition>();
+                pairingDefs.AddRange(Mech3.AnimDefs.LoadFileDefs(state.ZrdrPath, "player_destruct_reset.json"));
+                pairingDefs.AddRange(Mech3.AnimDefs.LoadFileDefs(state.ZrdrPath, "player-1.json"));
+                var visuals = new DamageVisuals(builder.DamagePanels, _plane, stats, smoke, fire, panelTrails,
+                    DamageVisuals.PanelPairingSets(pairingDefs));
                 // the HUD gauge cluster as a lab toggle (user request): the damage
                 // dial mirrors the sliders, blinks on decreases like a flight hit
                 var labGauges = GaugeCluster.Build(state.Gamez, _spec.PlaneName, state.Textures, stats.DestroyableParts);

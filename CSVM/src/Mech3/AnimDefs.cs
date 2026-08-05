@@ -45,6 +45,31 @@ public static class AnimDefs
         return defs;
     }
 
+    /// <summary>Loads one named reader file's ANIMATION_DEFINITIONs — for a consumer that wants a
+    /// specific family without paying for the whole archive (the parked viewer's panel-pairing
+    /// derivation reads two files where <see cref="LoadArchive"/> parses hundreds). Missing file
+    /// → empty list, same policy as the archive load.</summary>
+    public static List<AnimDefinition> LoadFileDefs(string zrdrPath, string fileName)
+    {
+        var defs = new List<AnimDefinition>();
+        List<object?> root;
+        try
+        {
+            root = Zrdr.LoadFile(zrdrPath, fileName);
+        }
+        catch (System.IO.FileNotFoundException)
+        {
+            return defs;
+        }
+        foreach (var defList in Walk(root, "ANIMATION_DEFINITIONS", "ANIMATION_LIST", "ANIMATION_DEFINITION"))
+        {
+            var def = ParseDef(defList);
+            def.SourceFile = fileName;
+            defs.Add(def);
+        }
+        return defs;
+    }
+
     /// <summary>SNAKE_CASE → PascalCase, the reader↔compiled vocabulary bridge.</summary>
     public static string PascalCase(string snake)
     {

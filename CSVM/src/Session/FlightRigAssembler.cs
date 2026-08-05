@@ -237,9 +237,21 @@ public sealed class FlightRigAssembler
         // Visible damage: torn-skin panel flips + the authored damage-stage anims
         // (player-1.zrd.json's pdpanelN / player_fuelleak / player_damage_trail menu), played
         // through the rig runtime once it exists (the sink wiring below, after the runtime builds).
+        // The healthy↔torn candidate sets come from the same defs (plane_reset's re-ACTIVE list +
+        // the pdpanelN targets, BL-270); a missing program leaves DamageVisuals' geometric
+        // fallback to engage, loudly.
         if (controller.Damage != null)
         {
-            controller.Visuals = new DamageVisuals(planeBuilder.DamagePanels, planeModel, stats);
+            PanelPairing? pairing = null;
+            if (_in.CrashProgram is { } program)
+            {
+                var pairingDefs = new List<AnimDefinition>(program.ByAnimName("plane_reset"));
+                foreach (var n in EffectCatalogue.PlayerDamageStageAnims)
+                    pairingDefs.AddRange(program.ByAnimName(n));
+                pairing = DamageVisuals.PanelPairingSets(pairingDefs);
+            }
+            controller.Visuals = new DamageVisuals(planeBuilder.DamagePanels, planeModel, stats,
+                defPairing: pairing);
             if (verbose)
                 GD.Print($"damage visuals: {controller.Visuals.PanelCount} panels — " +
                          "authored stage anims via the rig runtime");

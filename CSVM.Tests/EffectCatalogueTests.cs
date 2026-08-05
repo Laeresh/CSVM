@@ -132,4 +132,27 @@ public class EffectCatalogueTests
         Assert.True(found > 0, "no plane's data carried a stage entry — the check ran on nothing");
         Assert.Equal("player_damage_trail", DamageVisuals.RigAnimFor("player_smoketrail"));
     }
+
+    /// <summary>`BL-270`: the healthy↔torn candidate sets derive from the authored defs — the
+    /// hideable skins are exactly the two `*_h` nodes `plane_reset` re-ACTIVEs (pdp2_h/pdp3_h,
+    /// one shared def OPERAND_NODE-retargeted at every airframe) and the torn set is exactly the
+    /// eight `pdpN` targets of the `pdpanelN` defs. A parse change that drops either set silently
+    /// re-engages DamageVisuals' geometric fallback; this pins the derivation to the data.</summary>
+    [ExtractedDataFact]
+    public void PanelPairingSetsDeriveFromTheAuthoredDefs()
+    {
+        var zrdr = SharedZrdr;
+        var defs = CSVM.Mech3.AnimDefs.LoadFileDefs(zrdr, "player_destruct_reset.json")
+            .Concat(CSVM.Mech3.AnimDefs.LoadFileDefs(zrdr, "player-1.json"))
+            .ToList();
+        Assert.True(defs.Count > 0, "the two reader files loaded no defs — the check ran on nothing");
+
+        var pairing = DamageVisuals.PanelPairingSets(defs);
+
+        Assert.NotNull(pairing);
+        Assert.Equal(new[] { "pdp2_h", "pdp3_h" },
+            pairing!.HideableHealthy.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+        Assert.Equal(new[] { "pdp1", "pdp2", "pdp3", "pdp4", "pdp5", "pdp6", "pdp7", "pdp8" },
+            pairing.TornTargets.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+    }
 }

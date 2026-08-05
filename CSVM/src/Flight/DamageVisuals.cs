@@ -91,12 +91,16 @@ public sealed class DamageVisuals
     /// <param name="standInFire">its fire half.</param>
     /// <param name="panelTrails">parked-viewer stand-in pool, one firepuffer per flipped
     /// panel — standing in for the authored short_firetrail the flight path plays.</param>
+    /// <param name="pairing">the def-derived panel candidate sets (<see cref="PanelPairingSets"/>)
+    /// — which skins damage may hide and which torn panels participate. Null engages the
+    /// unscoped geometric fallback, loudly.</param>
     public DamageVisuals(IEnumerable<Node3D> panels, Node3D planeRoot, PlaneStats stats,
-        Puffer? standInTrail = null, Puffer? standInFire = null, List<Puffer>? panelTrails = null)
+        Puffer? standInTrail = null, Puffer? standInFire = null, List<Puffer>? panelTrails = null,
+        PanelPairing? defPairing = null)
     {
         foreach (var p in panels)
             _panels[p.Name] = p;
-        PairHealthySkins(planeRoot);
+        PairHealthySkins(planeRoot, defPairing);
         foreach (var part in stats.DestroyableParts)
             _parts[part.Name] = part;
         _vehicleInjure = stats.VehicleInjureAnims;
@@ -107,6 +111,40 @@ public sealed class DamageVisuals
     }
 
     public int PanelCount => _panels.Count;
+
+    /// <summary>The panel candidate sets the authored data names (`BL-270`): the healthy skins
+    /// damage may hide are exactly the `*_h` nodes `plane_reset` re-ACTIVEs on reset (pdp2_h and
+    /// pdp3_h, one shared def OPERAND_NODE-retargeted at every airframe), and the torn panels are
+    /// the `pdpN` nodes the `pdpanelN` defs activate. What the defs do NOT encode is which torn
+    /// panel hides which skin — no def ever deactivates an `_h` node — so the co-location match
+    /// (<see cref="PairHealthySkins"/>) still assigns pairs, scoped to these sets.</summary>
+    public static PanelPairing? PanelPairingSets(IEnumerable<Mech3.AnimDefinition> defs)
+    {
+        var hideable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var torn = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var def in defs)
+        {
+            string animName = def.AnimName ?? def.Name;
+            bool reset = animName.Equals("plane_reset", StringComparison.OrdinalIgnoreCase);
+            bool panel = animName.StartsWith("pdpanel", StringComparison.OrdinalIgnoreCase);
+            if (!reset && !panel)
+                continue;
+            foreach (var seq in def.Sequences)
+                foreach (var ev in seq.Events)
+                {
+                    if (ev.Kind != "ObjectActiveState" || !ev.Data.Bool("state"))
+                        continue;
+                    if ((ev.Data.Str("node") ?? ev.Data.Str("name")) is not { } name)
+                        continue;
+                    if (reset && name.EndsWith("_h", StringComparison.OrdinalIgnoreCase))
+                        hideable.Add(name);
+                    else if (panel && name.StartsWith("pdp", StringComparison.OrdinalIgnoreCase)
+                             && !name.EndsWith("_h", StringComparison.OrdinalIgnoreCase))
+                        torn.Add(name);
+                }
+        }
+        return hideable.Count == 0 && torn.Count == 0 ? null : new PanelPairing(hideable, torn);
+    }
 
     /// <summary>The rig anim an injure_anims entry plays, or null for the entries that are not
     /// rig-runtime work (the cockpit gauge cycles, got_hit_anim). One deliberate mapping: the
@@ -285,10 +323,18 @@ public sealed class DamageVisuals
 
     /// <summary>Pairs every healthy pdpN_h skin with the torn panel occupying the same
     /// spot on the airframe (nearest mesh-AABB center within <see cref="MaxPairDistance"/>,
-    /// same side of the centerline). Name-based pairing is wrong on three planes — see
-    /// the class comment.</summary>
-    private void PairHealthySkins(Node3D planeRoot)
+    /// same side of the centerline). The CANDIDATE sets come from the authored defs when given
+    /// (`BL-270`): only skins `plane_reset` re-ACTIVEs are hideable, only `pdpanelN` targets are
+    /// torn panels — an `_h` node outside the authored list is never hidden, by construction.
+    /// The assignment inside those sets stays positional: the defs never say which torn panel
+    /// hides which skin, and name-based pairing is wrong on three planes — see the class
+    /// comment.</summary>
+    private void PairHealthySkins(Node3D planeRoot, PanelPairing? defPairing)
     {
+        if (defPairing == null)
+        {
+            Utils.Log.Warn("flight", $"damage panels: no authored pairing data (plane_reset/pdpanelN defs unavailable) — geometric AABB pairing over every *_h skin engaged");
+        }
         var torn = new List<(string Name, Vector3 Center)>();
         var healthy = new List<(string Name, Node3D Node, Vector3 Center)>();
         foreach (var (name, node) in _panels)
@@ -296,9 +342,23 @@ public sealed class DamageVisuals
             if (!TryMeshCenter(node, planeRoot, out var c))
                 continue;
             if (name.EndsWith("_h", StringComparison.OrdinalIgnoreCase))
+            {
+                if (defPairing != null && !defPairing.HideableHealthy.Contains(name))
+                {
+                    GD.Print($"damage panels: {name} is not in the authored reset list — never hidden");
+                    continue;
+                }
                 healthy.Add((name, node, c));
+            }
             else
+            {
+                if (defPairing != null && !defPairing.TornTargets.Contains(name))
+                {
+                    GD.Print($"damage panels: {name} is not an authored pdpanelN target — not paired");
+                    continue;
+                }
                 torn.Add((name, c));
+            }
         }
         foreach (var (name, node, c) in healthy)
         {
@@ -328,3 +388,8 @@ public sealed class DamageVisuals
         }
     }
 }
+
+/// <summary>The authored panel candidate sets (<see cref="DamageVisuals.PanelPairingSets"/>):
+/// which healthy `*_h` skins damage may hide (`plane_reset`'s re-ACTIVE list) and which torn
+/// `pdpN` panels participate (the `pdpanelN` defs' targets). Case-insensitive sets.</summary>
+public sealed record PanelPairing(IReadOnlySet<string> HideableHealthy, IReadOnlySet<string> TornTargets);
