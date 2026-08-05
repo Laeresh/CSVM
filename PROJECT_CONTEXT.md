@@ -193,8 +193,8 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Active plan: [`docs/PLAN-m3-polish-8.md`](docs/PLAN-m3-polish-8.md)** — authored animations:
 play the defs (12 items, Waves A–D; `PLAN-friends-release.md` runs in a concurrent session).
-Position: A1, B4, B5 landed 2026-08-05; A2→A3 and C8→C10 in flight.
-**Next:** C7 (`BL-267`), C6 (`BL-265`), then Wave D. Also owed: the cockpit re-tests (`PT-26`–`PT-28`, `PT-31`–`PT-37`,
+Position: A1–A3, B4, B5 landed 2026-08-05 (A3's form pick rides `PT-39`); C7 and C8→C10 in
+flight. **Next:** C6 (`BL-265`), then Wave D. Also owed: the cockpit re-tests (`PT-26`–`PT-28`, `PT-31`–`PT-37`,
 [`playtest.md`](playtest.md)). Verify any change with
 **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read
 [`docs/verification.md`](docs/verification.md) first.

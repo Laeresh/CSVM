@@ -105,6 +105,20 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 
 ## 1 · Actionable now (`PT-nn`)
 
+- `PT-39` **The gun line after plan-8 A2/A3: smoke at the gun line, bare casings, and pick the
+  muzzle-flash form (`BL-263`).** The invented eject-puff cluster is deleted and the authored
+  `muzzlepuffer` renders (6 puffs / 0.3 s, drifting aft); the muzzle flash defaults to the authored
+  single rolled node with the `_muzzle1`→`_muzzle2` frame flip, the old triad reachable by setting
+  `Projectile.cs`'s `MuzzleFlashCount` back to 3. One flight covers it
+  (`./RunGame.ps1 --plane=player_bhawk --chapter=C1B --infinite-ammo`, sustained fire in chase
+  view). *Look for:* (a) smoke sits on the gun line and drifts aft, casings tumble bare — A/B vs
+  `C1B IA1 Bloodhawk tracer and ejection.png`; (b) the flash-form pick: does the authored form
+  reproduce `MuzzleFlash1-3.png`'s burst, or does the triad still read closer? Freeze-frame A/Bs
+  of both forms (slug + AP, same pose) are staged in `playtest/PT-39/` — whichever loses is
+  deleted (`BL-263`). (c) While judging, the muzzle-light magnitudes (`MuzzleLightEnergy` 2.5,
+  `MuzzleLightLife` 0.03 s) are stand-ins — the def authors range/colour only; flag if the light
+  reads wrong. *Blocks:* `BL-263` close.
+
 - `PT-38` **Rocket/gun quick checks left over from the closed 2026-07-24 m3-polishing fixes**
   (`BL-002`/`BL-003`/`BL-005`/`BL-103`, all landed and code-verified; their entries are closed, so
   this is the one place these look-checks survive). One flight covers all four

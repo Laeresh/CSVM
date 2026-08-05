@@ -16090,3 +16090,28 @@ still never constructs a motion, preserving the `src/Mech3/Anim/` invariant) ins
 and `c1-destroy-effects` goldens moved 1–3 px (max delta 1, the prop hub — the integration-method
 switch alone) and were re-pinned after reproducing both pre-change hashes on unchanged code;
 `c1-flight`/`viewer-bhawk` stayed bit-identical. Evidence: `.scratch/plan8/B5/`.
+
+## 2026-08-05 — PLAN-m3-polish-8 A2 `BL-261`: the authored muzzlepuffer renders; the invented eject-puff cluster is deleted
+
+Evidence re-confirmed against the defs before touching code: `gunshell.zrd.json` is motion-only
+(one `OBJECT_MOTION`, no `PUFFER_STATE` anywhere), and `muzzle_burst.zrd.json`'s `muzzlepuffer`
+authors exactly 6 `TIME_INTERVAL 0.05` emissions over its 0.3 s window with every range matching
+the already-transcribed constants verbatim. `MuzzleSmokePuffs` 0 → 6; the `EjectPuffs` block,
+`EjectPuffTint` and the cluster loop in `SpawnCasing` are gone; the pooled casing flies bare and
+unchanged; `MaxSmoke` stays (a cap). Verified: `RunTests.ps1` green, 13/13 goldens hash-identical
+(no golden fires guns); sustained-fire chase captures A/B'd against `C1B IA1 Bloodhawk tracer and
+ejection.png` show the smoke on the gun line drifting aft. The owed at-the-controls look is
+`PT-39`; evidence staged in `playtest/PT-39/`.
+
+## 2026-08-05 — PLAN-m3-polish-8 A3 `BL-263`: the authored muzzle-flash form lands as the default; the pick is the user's
+
+The authored form is implemented and active: `MuzzleFlashCount` 1, a discrete per-shot Z roll
+with equal odds over the def's 30/80/140° `RANDOM_WEIGHT` buckets, and the ammo's
+`_muzzle1`→`_muzzle2` flipbook playing over an even half-life split (the split point is a gloss —
+the def authors none; frame 2 renders through its own MultiMesh pool so the impact spark's
+unrelated `slug_muzzle2` reuse is untouched). The earlier triad stays reachable
+(`MuzzleFlashCount = 3`, non-const so both branches stay compiled) for the at-the-controls A/B —
+whichever form loses is deleted then, not flagged off (`PT-39`; `BL-263` stays open for the
+pick). Verified: `RunTests.ps1` green, goldens unchanged; freeze-frame A/Bs of both forms (slug +
+AP) vs `MuzzleFlash1-3.png` staged in `playtest/PT-39/`. Neither form fully reproduces the
+stills' multi-lobed burst — recorded on the entry.

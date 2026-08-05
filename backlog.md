@@ -2008,30 +2008,18 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   be measured off footage we already hold; no `CAP` is owed for it, and crash-first (already the
   recommended order, since the crash rig is data-driven) is now also the unblocked one. A death and
   a flyby capture are still owed for the other two.
-- `BL-261` **Gun smoke: render the authored `muzzlepuffer`, delete the invented eject-puff
-  cluster — the two are one effect, misattributed** (settled against the data 2026-08-05).
-  `Projectile.cs` currently has it backwards: the authored muzzle smoke (`muzzle_burst`'s
-  `muzzlepuffer` — smoke101–103, aft 20 m/s, 6 puffs over a 0.3 s window from the moving muzzle;
-  all ranges already transcribed verbatim in the constants) is wired but set to
-  `MuzzleSmokePuffs = 0`, while every casing spawns a hand-authored 5-puff white cluster
-  (`EjectPuffs`, `SpawnCasing`) whose own comment admits it matched no shipped def. The data
-  says why: `gunshell.zrd.json` is **motion-only** — `OBJECT_MOTION` (±10° bearing, −75…−85°
-  elevation, 1.5–1.8 m/s, 1200 °/s tumble, `RUN_TIME` 2 s) then deactivate, **no `PUFFER_STATE`**
-  — so the white puffs the reference captures show near falling brass are the muzzlepuffer's
-  smoke misread as a casing effect (user-confirmed reading, 2026-08-05). Fix: set the muzzle
-  smoke to the authored 6-puff window and remove the `EjectPuffs` block + its spawn loop; the
-  pooled casing itself (chapter-gamez `gunshell` mesh flying the authored motion) is already
-  faithful and stays. Riding along as the same judge-at-the-controls residue (was `BL-200`): the
-  muzzle-light stand-in magnitudes — `MuzzleLightEnergy` 2.5 and the 2-frame `MuzzleLightLife`
-  0.03 s; the def carries range/colour only. *Playtest after fix:* sustained gun fire in chase view against the
-  original's captures — the smoke should sit at the gun line, not around the falling shells.
-- `BL-263` **Muzzle flash: three invented lobes vs the authored single rolled node**
-  (`Projectile.cs:98-104`). The `muzzle_burst` def is ONE `mb_spinflame` node rolled to a
-  discrete random Z angle per shot (`RANDOM_WEIGHT` over 30/80/140°); we draw three quads 120°
-  apart sharing one continuous per-shot roll because the reference stills (MuzzleFlash1-3.png)
-  read as a 3-lobed burst. Decide at the controls whether the authored single-node discrete
-  roll reproduces the stills (the 3 lobes may be the flipbook frame's own art, not three
-  quads) — if it does, play the def; the current triad is a shape invented from three frames.
+- `BL-263` **Muzzle flash: pick the authored single-node form or the triad at the controls**
+  (`PT-39`). The authored form is the active default since plan-8 A3 (2026-08-05): one quad
+  rolled to a discrete random Z angle per shot (equal odds over 30/80/140°, `mb_spinflame`)
+  playing the ammo's `_muzzle1`→`_muzzle2` two-frame flipbook over an even half-life split (the
+  split point is a gloss — the def authors none). The earlier hand triad (three quads 120° apart
+  sharing one continuous roll) stays reachable via `Projectile.cs`'s `MuzzleFlashCount = 3` for
+  the A/B; freeze-frame pairs (slug + AP, both forms, same pose) are staged in `playtest/PT-39/`.
+  **Whichever form loses is deleted, not flagged off.** Neither form fully reproduces
+  `MuzzleFlash1-3.png`'s multi-lobed radiating burst in stills — judge in motion too before
+  concluding. Riding along as judge-at-the-controls residue (was `BL-200`): the muzzle-light
+  stand-in magnitudes — `MuzzleLightEnergy` 2.5 and the 2-frame `MuzzleLightLife` 0.03 s; the
+  def carries range/colour only.
 - `BL-265` **Water splash: the authored fades and flipbook are dropped, the column is
   hand-widened 8×** (`Projectile.cs:173-189`). Values are verbatim from
   `splash1.zrd.json`/`bsplsh.zrd.json` except: the authored 0.05 s opacity fade-in / 1 s

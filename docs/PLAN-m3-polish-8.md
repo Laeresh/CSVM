@@ -71,8 +71,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — the gun line and the global baseline (`Projectile.cs`/`Puffer.cs`, sequential)
 
 1. ☑ `BL-282` — `Puffer.SizeScaleDefault` 4 → 1; config knobs stay (landed 2026-08-05)
-2. ☐ `BL-261` — render the authored `muzzlepuffer`, delete the eject-puff cluster
-3. ☐ `BL-263` — muzzle flash: authored single-node roll + the unplayed `_muzzle2` flipbook frame
+2. ☑ `BL-261` — render the authored `muzzlepuffer`, delete the eject-puff cluster (landed 2026-08-05; look-check → `PT-39`)
+3. ◐ `BL-263` — muzzle flash: authored single-node roll + the unplayed `_muzzle2` flipbook frame (authored form landed as default 2026-08-05; the pick between forms is the user's → `PT-39`)
 
 ### Wave B — airframe fixtures
 
@@ -238,6 +238,16 @@ while changing the shape. (b) The impact stand-in spark currently reuses `_muzzl
 bright-flash texture; giving `_muzzle2` back to the flash must not restyle the impact spark in
 the same change — if the shared use grates, that's a separate note on `BL-263`. (c) Run post-A1
 like everything visual.
+
+**A2 Outcome (2026-08-05) — landed.** Defs re-confirmed first (`gunshell` motion-only; the
+`muzzlepuffer` window is exactly 6 × 0.05 s intervals over 0.3 s). Cluster deleted, smoke on,
+casing untouched, goldens unchanged. Look-check rides `PT-39`.
+
+**A3 Outcome (2026-08-05) — authored form landed as default; pick pending.** Discrete 3-bucket
+roll + `_muzzle1`→`_muzzle2` flip over an even half-life split (declared gloss); frame 2 has its
+own MultiMesh pool so the impact spark's `slug_muzzle2` reuse is untouched; triad reachable via
+`MuzzleFlashCount = 3`. Neither form fully reproduces the stills' multi-lobed burst in
+freeze-frame — the pick (and the loser's deletion) is the user's at the controls, `PT-39`.
 
 # Wave B — airframe fixtures
 
