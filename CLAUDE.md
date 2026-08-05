@@ -25,3 +25,10 @@ the "Current status" pointer. This file holds only what's specific to Claude Cod
 - Agent worktrees/workspaces created with `isolation: worktree` land in
   `.claude/worktrees/` / `.claude/workspaces/` — both gitignored, swept by
   `CleanScratch.ps1`.
+- ⚠ **Never create junctions or symlinks from a worktree (or `.scratch/`) into the main
+  checkout.** Git-ignored media (`OriginalScreenshots\`, `playtest\`) is absent from worktrees
+  by design — read it via absolute path (`Z:\CSVM\OriginalScreenshots\...`) instead of linking
+  it in. PowerShell 5.1's recursive delete follows junctions into their *target*, so a link
+  left behind turns any later cleanup into a deletion of irreplaceable original-game footage.
+  `CleanScratch.ps1` unlinks reparse points before sweeping as a backstop, but other tools'
+  recursive deletes have no such guard.

@@ -17,6 +17,15 @@
     Empty directories left behind are removed. Nothing outside .scratch/ is ever
     touched, and the folder itself is kept.
 
+    JUNCTIONS (added 2026-08-05). Windows PowerShell 5.1's recursive enumeration
+    and deletion FOLLOW directory reparse points (junctions, symlinks), so a
+    junction parked in .scratch/ or a worktree -- e.g. one an agent made to
+    OriginalScreenshots\ -- would get its TARGET's files deleted by a naive
+    sweep. This script never recurses through a reparse point: it unlinks the
+    link itself (target untouched) and reports having done so. All enumeration
+    below goes through Get-SweepInventory / Get-ReparseDirectory, which stop at
+    reparse points by construction.
+
     WORKTREES (added 2026-07-22). Subagents run in git worktrees under
     .claude/worktrees/. They are git-ignored, so they survive every sweep and
     accumulate -- ten of them after one plan, each a full checkout that adds
@@ -112,12 +121,63 @@ $BackupPatterns = @('*.bundle', '*.worktree-backup')
 
 $cutoff = if ($OlderThanDays -gt 0) { (Get-Date).AddDays(-$OlderThanDays) } else { $null }
 
-$all      = @()
-if (Test-Path $ScratchDir) {
-    $all = @(Get-ChildItem $ScratchDir -Recurse -File -Force)
+# Enumerates directory reparse points (junctions/symlinks) under $Root without
+# ever descending into one -- PS 5.1's -Recurse would, which is the whole bug.
+function Get-ReparseDirectory([string]$Root) {
+    $found = [System.Collections.Generic.List[object]]::new()
+    if (-not (Test-Path -LiteralPath $Root)) { return , $found }
+    $stack = [System.Collections.Generic.Stack[string]]::new()
+    $stack.Push($Root)
+    while ($stack.Count -gt 0) {
+        foreach ($child in Get-ChildItem -LiteralPath $stack.Pop() -Directory -Force) {
+            if ($child.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+                $found.Add($child)
+            } else {
+                $stack.Push($child.FullName)
+            }
+        }
+    }
+    return , $found
 }
-$doomed   = [System.Collections.Generic.List[object]]::new()
-$spared   = [System.Collections.Generic.List[object]]::new()
+
+# Walks $Root collecting real files and directory reparse points, stopping at
+# every reparse point instead of recursing through it. File symlinks are listed
+# as files: Remove-Item on one deletes only the link, never the target.
+function Get-SweepInventory([string]$Root) {
+    $files     = [System.Collections.Generic.List[object]]::new()
+    $junctions = [System.Collections.Generic.List[object]]::new()
+    $dirs      = [System.Collections.Generic.List[object]]::new()
+    if (Test-Path -LiteralPath $Root) {
+        $stack = [System.Collections.Generic.Stack[string]]::new()
+        $stack.Push($Root)
+        while ($stack.Count -gt 0) {
+            foreach ($child in Get-ChildItem -LiteralPath $stack.Pop() -Force) {
+                if ($child.PSIsContainer) {
+                    if ($child.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+                        $junctions.Add($child)
+                    } else {
+                        $dirs.Add($child)
+                        $stack.Push($child.FullName)
+                    }
+                } else {
+                    $files.Add($child)
+                }
+            }
+        }
+    }
+    return [pscustomobject]@{ Files = $files; Junctions = $junctions; Dirs = $dirs }
+}
+
+# Deletes the link itself; the target directory and its contents are untouched.
+function Remove-ReparseLink([string]$Path) {
+    [System.IO.Directory]::Delete($Path)
+}
+
+$inventory = Get-SweepInventory $ScratchDir
+$all       = @($inventory.Files)
+$junctions = $inventory.Junctions
+$doomed    = [System.Collections.Generic.List[object]]::new()
+$spared    = [System.Collections.Generic.List[object]]::new()
 
 foreach ($f in $all) {
     $reason = $null
@@ -197,10 +257,16 @@ if ($isGitRepo) {
             $dirty  = [bool]$status
         }
 
+        # Junctions inside the worktree are unlinked before removal so no
+        # recursive delete -- git's or anyone's -- can reach their targets.
+        $wtJunctions = if ($exists) { Get-ReparseDirectory $w.Path } else { @() }
+
         if ($dirty -and -not $IncludeDirtyWorktrees) {
             $wtSpared.Add([pscustomobject]@{ WT = $w; Reason = "uncommitted changes" })
         } else {
-            $wtDoomed.Add([pscustomobject]@{ WT = $w; Exists = $exists; Dirty = $dirty })
+            $wtDoomed.Add([pscustomobject]@{
+                WT = $w; Exists = $exists; Dirty = $dirty; Junctions = $wtJunctions
+            })
         }
     }
 }
@@ -262,6 +328,13 @@ if ($wtSpared.Count -gt 0) {
     }
 }
 
+if ($junctions.Count -gt 0) {
+    Write-Host "Junctions in .scratch: unlinking $($junctions.Count) (link only, target untouched)" -ForegroundColor Cyan
+    foreach ($j in $junctions) {
+        Write-Host ("  {0}  ->  {1}" -f $j.FullName.Substring($ScratchDir.Length + 1), ($j.Target -join ', '))
+    }
+}
+
 if ($wtDoomed.Count -gt 0) {
     Write-Host "Worktrees: removing $($wtDoomed.Count)" -ForegroundColor Cyan
     foreach ($d in $wtDoomed) {
@@ -270,6 +343,9 @@ if ($wtDoomed.Count -gt 0) {
         if (-not $d.Exists) { $notes += "already gone, metadata only" }
         if ($d.Dirty)       { $notes += "DIRTY -- uncommitted work will be lost" }
         if ($d.WT.Branch)   { $notes += "branch $($d.WT.Branch)" }
+        if ($d.Junctions.Count -gt 0) {
+            $notes += "$($d.Junctions.Count) junction(s) unlinked first, targets untouched"
+        }
         Write-Host ("  {0,-28} {1}" -f $name, ($notes -join "; "))
     }
 }
@@ -279,7 +355,8 @@ if ($brDoomed.Count -gt 0) {
     foreach ($b in $brDoomed) { Write-Host "  $b" }
 }
 
-if ($doomed.Count -eq 0 -and $wtDoomed.Count -eq 0 -and $brDoomed.Count -eq 0) {
+if ($doomed.Count -eq 0 -and $wtDoomed.Count -eq 0 -and $brDoomed.Count -eq 0 -and
+    $junctions.Count -eq 0) {
     Write-Host "Nothing to delete." -ForegroundColor Green
     exit 0
 }
@@ -290,9 +367,10 @@ if ($doomed.Count -gt 0) {
 
 if (-not $Force -and -not $WhatIfPreference) {
     $what = @()
-    if ($doomed.Count -gt 0)   { $what += "$($doomed.Count) file(s), $(Format-Size $doomedBytes)" }
-    if ($wtDoomed.Count -gt 0) { $what += "$($wtDoomed.Count) worktree(s)" }
-    if ($brDoomed.Count -gt 0) { $what += "$($brDoomed.Count) branch(es)" }
+    if ($doomed.Count -gt 0)    { $what += "$($doomed.Count) file(s), $(Format-Size $doomedBytes)" }
+    if ($junctions.Count -gt 0) { $what += "$($junctions.Count) junction link(s)" }
+    if ($wtDoomed.Count -gt 0)  { $what += "$($wtDoomed.Count) worktree(s)" }
+    if ($brDoomed.Count -gt 0)  { $what += "$($brDoomed.Count) branch(es)" }
     # A non-interactive host (scheduled task, CI, an agent shell) cannot prompt and
     # throws here. Fail CLOSED with an actionable message rather than a raw .NET
     # exception -- deleting on the grounds that nobody could be asked is the wrong
@@ -326,12 +404,27 @@ foreach ($f in $doomed) {
     }
 }
 
+# Unlink junctions parked in .scratch -- the link only, never the target.
+$junctionsUnlinked = 0
+foreach ($j in $junctions) {
+    if ($PSCmdlet.ShouldProcess($j.FullName, "Unlink junction (target untouched)")) {
+        try {
+            Remove-ReparseLink $j.FullName
+            $junctionsUnlinked++
+        } catch {
+            Write-Warning "Could not unlink $($j.FullName): $($_.Exception.Message)"
+        }
+    }
+}
+
 # Drop directories emptied by the sweep, deepest first so parents collapse too.
+# $inventory.Dirs was gathered without descending into reparse points; the
+# emptiness probe below is non-recursive, so it cannot reach through one either.
 $prunedDirs = 0
 if (-not $WhatIfPreference) {
-    foreach ($d in Get-ChildItem $ScratchDir -Recurse -Directory -Force |
-                   Sort-Object { $_.FullName.Length } -Descending) {
-        if (-not (Get-ChildItem $d.FullName -Force)) {
+    foreach ($d in $inventory.Dirs | Sort-Object { $_.FullName.Length } -Descending) {
+        if (-not (Test-Path -LiteralPath $d.FullName)) { continue }
+        if (-not (Get-ChildItem -LiteralPath $d.FullName -Force)) {
             Remove-Item -LiteralPath $d.FullName -Force -Confirm:$false
             $prunedDirs++
         }
@@ -349,6 +442,23 @@ foreach ($d in $wtDoomed) {
     $name = Split-Path $d.WT.Path -Leaf
     if (-not $PSCmdlet.ShouldProcess($d.WT.Path, "Remove worktree")) { continue }
     if ($d.Exists) {
+        # Unlink any junctions first so the removal below cannot follow one
+        # into its target. Skipped on failure: better a leftover worktree than
+        # a recursive delete racing an intact junction.
+        $unlinkFailed = $false
+        foreach ($j in $d.Junctions) {
+            try {
+                Remove-ReparseLink $j.FullName
+                $junctionsUnlinked++
+            } catch {
+                Write-Warning "Could not unlink $($j.FullName): $($_.Exception.Message)"
+                $unlinkFailed = $true
+            }
+        }
+        if ($unlinkFailed) {
+            Write-Warning "Skipping worktree ${name}: junction(s) still in place."
+            continue
+        }
         $args = @('-C', $PSScriptRoot, 'worktree', 'remove', $d.WT.Path)
         if ($d.Dirty) { $args += '--force' }
         $out = & git @args
@@ -395,6 +505,9 @@ if (-not $PruneBranches -and $wtBranches.Count -gt 0) {
 
 Write-Host ""
 Write-Host "Deleted $deleted file(s), $(Format-Size $doomedBytes) freed; $prunedDirs empty dir(s) pruned." -ForegroundColor Green
+if ($junctionsUnlinked -gt 0) {
+    Write-Host "Unlinked $junctionsUnlinked junction(s) -- targets untouched." -ForegroundColor Green
+}
 if ($wtRemoved -gt 0) {
     Write-Host "Removed $wtRemoved worktree(s)." -ForegroundColor Green
 }
