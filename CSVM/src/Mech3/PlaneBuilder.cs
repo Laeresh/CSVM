@@ -75,8 +75,8 @@ public sealed class PlaneBuilder
 
     public int MeshInstanceCount => _scene.MeshInstanceCount;
 
-    /// <summary>The wingtip flare nodes, built hidden (reset state) and re-skinned as
-    /// additive billboards. A <see cref="Flight.WingLightBlinker"/> flashes them in flight;
+    /// <summary>The wingtip flare nodes, built hidden (reset state) and re-skinned with an
+    /// additive amber tint. A <see cref="Flight.WingLightBlinker"/> flashes them in flight;
     /// the static viewer leaves them off. Populated by <see cref="Build"/>.</summary>
     public IReadOnlyList<Node3D> WingFlares => _wingFlares;
 
@@ -203,8 +203,9 @@ public sealed class PlaneBuilder
 
     /// <summary>Finds the wingtip flare nodes in the built tree, hides them (reset state:
     /// the original starts them off and flashes them via wing_light.json's blink anim), and
-    /// re-skins each glow quad as an additive camera-facing billboard so it reads from any
-    /// angle — the source quads are one-sided (only showed from behind). See <see cref="WingLights"/>.
+    /// re-skins each glow quad with an additive amber tint, keeping its authored one-sided
+    /// orientation (no billboard — the source quad only shows from the angle it was
+    /// authored at, which is roughly where a chase camera sits). See <see cref="WingLights"/>.
     /// The same walk collects the flight build's damage panels: torn-skin pdpN hidden
     /// (reset state), healthy pdpN_h twins as built.</summary>
     private void CollectWingFlares(Node node)
@@ -233,10 +234,13 @@ public sealed class PlaneBuilder
             CollectWingFlares(child);
     }
 
-    // Additive glow shared by every flare quad: unshaded, camera-facing, no depth write,
-    // tinted the original's warm amber (wing_light.json LIGHT_STATE COLOR). The soft
-    // oil_liteflare sprite (white core → transparent black) blends additively so its edges
-    // add nothing and the core glows — same treatment as the point-sprite lights.
+    // Additive glow shared by every flare quad: unshaded, no depth write, tinted the
+    // original's warm amber (wing_light.json LIGHT_STATE COLOR). No billboard and default
+    // (one-sided) culling — the quad keeps its authored mesh orientation, since forcing it
+    // to always face the camera turned the original's compact star burst into a large flat
+    // blob. The soft oil_liteflare sprite (white core → transparent black) blends
+    // additively so its edges add nothing and the core glows — same treatment as the
+    // point-sprite lights.
     private StandardMaterial3D FlareMaterial() => _flareMaterial ??= new StandardMaterial3D
     {
         ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
@@ -245,10 +249,7 @@ public sealed class PlaneBuilder
         VertexColorUseAsAlbedo = true,
         Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
         BlendMode = BaseMaterial3D.BlendModeEnum.Add,
-        CullMode = BaseMaterial3D.CullModeEnum.Disabled,
         DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled,
-        BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled,
-        BillboardKeepScale = true,
         // The flare quad draws its texture exactly once; with the engine-default repeat on,
         // bilinear filtering at the UV border bleeds the opposite edge in (the same artifact
         // once seen as a tracer-tail streak).

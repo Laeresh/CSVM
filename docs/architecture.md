@@ -376,10 +376,11 @@ transform places/orients the hinge line; ailerons/elevators hinge about local X,
 ## src/Mech3/WingLights.cs
 Single source of truth for wingtip nav lights: the flare-node predicate (wing_flare1/2), the glow
 texture (oil_liteflare), the warm-amber flash colour (0.88, 0.78, 0.36 = wing_light.json's
-LIGHT_STATE COLOR) and the blink period (1.5 s = its LOOP SEQUENCE_OFFSET). PlaneBuilder hides and
-re-skins the flares; WingLightBlinker flashes them.
-⚠ oil_liteflare also skins a few real airframe meshes — scope the additive-billboard treatment to
-  the flare NODES by name, never through the texture, or those meshes get recentered/billboarded.
+LIGHT_STATE COLOR), the blink period (1.5 s = its LOOP SEQUENCE_OFFSET) and the point-light range
+(0.5-1.25 m, also LIGHT_STATE). PlaneBuilder hides and re-skins the flares (additive tint, one-sided
+as authored, no billboard); WingLightBlinker flashes them and emits a matching OmniLight3D per side.
+⚠ oil_liteflare also skins a few real airframe meshes — scope the additive-tint treatment to the
+  flare NODES by name, never through the texture, or those meshes lose their real shading.
 
 ## src/Mech3/WorldBuilder.cs
 Builds a chapter world (fullbright): World children + partition-referenced subtrees; skips `horizon`
@@ -1467,9 +1468,13 @@ SlewPerSec (TUNE), ±20° per kind. --fly only; frozen while paused/crashed, res
   direction (canard groups mounted yaw-π). Account for all three before touching any sign.
 
 ## src/Flight/WingLightBlinker.cs
-Flashes the wingtip flares for FlashDuration 0.08 s (TUNE — the source flash is a single frame,
-widened so the blink reads) each WingLights.BlinkPeriod; Reset (respawn) restarts the cycle with
-the flares off. Advanced each _Process, frozen while paused or crashed. --fly only.
+Flashes the wingtip flares for FlashDuration ~0.033 s (TUNE — matches the original's own footage at
+~1 frame @ 30 fps; the authored 0.0001 s literal is unusable) each WingLights.BlinkPeriod, and
+toggles a matching OmniLight3D per flare (range/colour from WingLights) on the same window. Gated on
+the session's ANIMATION_LOD quality flag (SessionSpec.AnimLod vs AnimRuntime.HighLod) — below HIGH
+the flares/lights stay off for the instance's life, the def's authored low-detail branch. Reset
+(respawn) restarts the cycle with everything off. Advanced each _Process, frozen while paused or
+crashed. --fly only.
 
 ## src/Flight/PylonOrdnance.cs
 The rockets mounted under a plane's wings (D44): `Build` instances ONE FLYOUT MODEL body per loaded
