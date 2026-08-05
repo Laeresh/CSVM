@@ -95,13 +95,6 @@ public sealed partial class ProjectilePool : Node3D
                                                    // MODEL body (B14): the body is the round, this is its trail
     private const float MuzzleSize = 0.5f;    // m
     private const float MuzzleLife = 0.05f;   // s
-    // The authored flash is one `mb_spinflame` node the def rolls to a random Z angle each shot
-    // (RANDOM_WEIGHT over 30/80/140 degrees, muzzle_burst.zrd.json) rather than a fixed pose — the
-    // reference captures (MuzzleFlash1-3.png) read as a 3-lobed burst, so three quads 120 degrees
-    // apart reproduce that shape, with the whole triad sharing one random per-shot roll (continuous,
-    // not the def's 3-bucket discrete roll — TUNE if the discrete cadence reads better at the
-    // controls).
-    private const int MuzzleFlashCount = 3;
     private const float ImpactSize = 3.0f;    // m
     private const float ImpactLife = 0.14f;   // s
     private const float ImpactModelLife = 0.4f; // s the instanced IMPACT model shows before it is freed
@@ -116,25 +109,14 @@ public sealed partial class ProjectilePool : Node3D
     // muzzle frame, size 0.3–0.6 m, life 0.1–0.2 s, ±0.8 m/s random velocity, 5 cm deviation.
     // The data emits every 0.05 s over a 0.3 s window from the moving muzzle node; the per-shot
     // puff count here is the gloss of that window (TUNE) — the authored ranges are verbatim.
-    private const int MuzzleSmokePuffs = 0;            // TUNE (authored window: 6 puffs / 0.3 s)
+    private const int MuzzleSmokePuffs = 6;            // 0.3 s window / 0.05 s TIME_INTERVAL
     private const float MuzzleSmokeAftSpeed = 20f;     // m/s, local_velocity z
     private const float MuzzleSmokeDeviation = 0.05f;  // m, deviation_distance
     private const float MuzzleSmokeRandVel = 0.8f;     // m/s, min/max_random_velocity
     private const float MuzzleSmokeSizeMin = 0.3f, MuzzleSmokeSizeMax = 0.6f;   // m
     private const float MuzzleSmokeLifeMin = 0.1f, MuzzleSmokeLifeMax = 0.2f;   // s
 
-    // The casing's white puff cluster (the original ejects ~5–6 persisting, aft-drifting white
-    // puffs with each shell — the reference captures). Unmatched to any shipped effect def after
-    // a genuine search (only muzzle_burst references gunshell, and the gunshell def is motion-only,
-    // no puffer), so this cluster is a hand-authored stand-in judged against the captures — TUNE.
-    private const int EjectPuffs = 5;
-    private const float EjectPuffSpread = 0.4f;   // m, cluster radius at spawn
-    private const float EjectPuffDrift = 1.0f;    // m/s random drift
-    private const float EjectPuffSink = 1.5f;     // m/s downward drift
-    private const float EjectPuffSizeMin = 0.5f, EjectPuffSizeMax = 0.9f;  // m
-    private const float EjectPuffLifeMin = 1.2f, EjectPuffLifeMax = 2.0f;  // s — the puffs persist
-
-    private const int MaxSmoke = 256;   // the persisting eject puffs dominate this pool
+    private const int MaxSmoke = 256;   // cap on live muzzlepuffer sprites across every gun (a cap, not a tuned size)
 
     // The ejected shell casing (gunshell): one pooled chapter-gamez instance per shot, flying the
     // def's own OBJECT_MOTION. Per-shot instances so sustained fire never drops an ejection — a
@@ -201,10 +183,22 @@ public sealed partial class ProjectilePool : Node3D
     // it guards must stay compiled and reachable.
     private static readonly bool ProximityFuseEnabled = false;
 
+    // The authored flash (BL-263, the plan-8 A3 default): one `mb_spinflame` node rolled to one of
+    // three DISCRETE Z angles per shot with equal probability (RANDOM_WEIGHT 0.333 each — 30/80/140
+    // degrees, muzzle_burst.zrd.json), playing the ammo's two-frame `_muzzle1`->`_muzzle2` flipbook
+    // over its life (weapon-effects.md "Muzzle & tracer textures"). Set MuzzleFlashCount back to 3
+    // to reach the earlier hand-authored triad this replaces — three quads 120 degrees apart
+    // sharing one continuous per-shot roll, matched to the reference captures' 3-lobed look before
+    // the discrete roll + frame flip were tried — kept reachable for the A/B, not deleted. Not a
+    // `const`: the branch it picks in Spawn() must stay compiled and reachable either way.
+    private static readonly int MuzzleFlashCount = 1;
+    // The def's three discrete Z-roll buckets (RANDOM_WEIGHT 0.333 each); read only when
+    // MuzzleFlashCount == 1.
+    private static readonly float[] MuzzleFlashAngles = { 30f, 80f, 140f };
+
     private static readonly Color RicochetTint = new(1f, 0.95f, 0.6f); // white-hot spark yellow
     private static readonly Color DirtTint = new(1f, 1f, 1f); // the bit textures carry the colour
     private static readonly Color MuzzleSmokeTint = new(0.85f, 0.85f, 0.85f);
-    private static readonly Color EjectPuffTint = new(1f, 1f, 1f);
 
     // Muzzle-flash sprite tint (C24) — unrelated to the tracer tint below, which is a separate,
     // uniform overbright multiplier so each ammo's own tracer texture colour shows through unshifted.
@@ -217,6 +211,11 @@ public sealed partial class ProjectilePool : Node3D
     // `muzzle_burst_slug`/`_dum`/`_ap`/`_mag` name the type directly; the base `muzzle_burst` /
     // heavy-mount `muzzle_burst2` carry no ammo suffix and default to slug, the common case.
     private static readonly string[] MuzzleAmmoTextures = { "slug_muzzle1", "dum_muzzle1", "ap_muzzle1", "mag_muzzle1" };
+    // The flash's second flipbook frame (BL-263, A3) — same ammo axis, `_muzzle2`. Its own
+    // MultiMesh/sprite pool (_muzzleMm2/_muzzleFrame2): the impact stand-in spark's unrelated,
+    // hardcoded use of "slug_muzzle2" (_impactMm) reads the same texture asset through a separate
+    // pool, so giving this frame back to the flash does not restyle the impact spark.
+    private static readonly string[] MuzzleAmmoTextures2 = { "slug_muzzle2", "dum_muzzle2", "ap_muzzle2", "mag_muzzle2" };
 
     // The tracer ammo-type axis (weapon-effects.md "Muzzle & tracer textures", C25): each chapter's
     // texture archive also carries a per-ammo tracer streak (`tracer_slug`/`_dumdum`/`_armorpierce`/
@@ -236,8 +235,12 @@ public sealed partial class ProjectilePool : Node3D
     // One sprite list per muzzle-flash ammo texture (MuzzleAmmoTextures) — a separate MultiMesh per
     // texture, since a MultiMesh's material (and so its texture) is shared across every instance.
     private readonly List<Sprite>[] _muzzle = { new(), new(), new(), new() };
+    // Frame-2 sprite lists (MuzzleAmmoTextures2), authored-form only (BL-263, A3): a pending sprite
+    // (negative Age) is added alongside frame 1 at spawn and becomes visible once its delay elapses
+    // — see RenderSprites.
+    private readonly List<Sprite>[] _muzzleFrame2 = { new(), new(), new(), new() };
     private readonly List<Sprite> _impact = new();
-    private readonly List<Sprite> _smoke = new();   // muzzle smoke + eject puffs (alpha-blended)
+    private readonly List<Sprite> _smoke = new();   // muzzlepuffer smoke (alpha-blended)
     // One sprite list per dirt-debris chip texture (DirtDebrisTextures), same split as _muzzle.
     private readonly List<Sprite>[] _debris = { new(), new(), new(), new() };
 
@@ -303,6 +306,8 @@ public sealed partial class ProjectilePool : Node3D
     private readonly HashSet<string> _flyoutLogged = new();
     // One MultiMesh per muzzle-flash ammo texture (MuzzleAmmoTextures) — built in _Ready.
     private readonly MultiMesh[] _muzzleMm = new MultiMesh[MuzzleAmmoTextures.Length];
+    // One MultiMesh per frame-2 ammo texture (MuzzleAmmoTextures2) — built in _Ready.
+    private readonly MultiMesh[] _muzzleMm2 = new MultiMesh[MuzzleAmmoTextures2.Length];
     // One MultiMesh per tracer texture (TracerTextures) — built in _Ready; one shared per-mesh
     // instance-count scratch array, cleared and refilled every frame in RenderTracers.
     private readonly MultiMesh[] _tracerMm = new MultiMesh[TracerTextures.Length];
@@ -403,9 +408,11 @@ public sealed partial class ProjectilePool : Node3D
             _tracerMm[i] = AddMultiMesh(TracerTextures[i], MaxProjectiles, additive: true, billboard: false, out _);
         for (int i = 0; i < MuzzleAmmoTextures.Length; i++)
             _muzzleMm[i] = AddMultiMesh(MuzzleAmmoTextures[i], MaxFlashes, additive: true, billboard: false, out _);
+        for (int i = 0; i < MuzzleAmmoTextures2.Length; i++)
+            _muzzleMm2[i] = AddMultiMesh(MuzzleAmmoTextures2[i], MaxFlashes, additive: true, billboard: false, out _);
         _impactMm = AddMultiMesh("slug_muzzle2", MaxFlashes, additive: true, billboard: false, out _);
-        // Smoke (the muzzlepuffer puffs + the casing's eject-puff cluster): the authored puffer
-        // textures (smoke101), alpha-blended rather than additive so the puffs read as smoke.
+        // Smoke (the muzzlepuffer puffs): the authored puffer textures (smoke101), alpha-blended
+        // rather than additive so the puffs read as smoke.
         _smokeMm = AddMultiMesh("smoke101", MaxSmoke, additive: false, billboard: false, out _);
         // Dirt-debris chips: the authored bit0N art, alpha-blended so the chips read as debris
         // rather than glowing through the additive flash pool (BL-203).
@@ -505,18 +512,40 @@ public sealed partial class ProjectilePool : Node3D
         var muzzleSprites = _muzzle[ammoIdx];
         if (muzzleSprites.Count + MuzzleFlashCount <= MaxFlashes)
         {
-            // The flash triad rolls with the firing aircraft: its base orientation IS the muzzle's
-            // world basis, which inherits the plane's roll/pitch/yaw — not a fixed world plane. Each
-            // of the three quads is that basis rolled about its own facing normal (Z, unaffected by
-            // the roll) by a shared per-shot random angle plus its 120-degree slot, reproducing the
-            // reference captures' 3-lobed burst (MuzzleFlashCount).
+            // Both forms roll with the firing aircraft: the base orientation IS the muzzle's world
+            // basis, which inherits the plane's roll/pitch/yaw — not a fixed world plane.
             var planeBasis = muzzle.Basis.Orthonormalized();
-            float baseAngle = _rng.Randf() * Mathf.Tau;
-            for (int i = 0; i < MuzzleFlashCount; i++)
+            if (MuzzleFlashCount == 1)
             {
-                float angle = baseAngle + i * (Mathf.Tau / MuzzleFlashCount);
+                // Authored form (BL-263): one quad rolled to a discrete random Z angle (equal odds
+                // over MuzzleFlashAngles), playing the ammo's two-frame muzzle1->muzzle2 flipbook —
+                // frame 1 for the first half of MuzzleLife, frame 2 the second half. The def carries
+                // no authored split point for the flip, so an even one is the gloss (TUNE), the same
+                // class of approximation as the muzzlepuffer's per-shot puff count.
+                float angle = Mathf.DegToRad(MuzzleFlashAngles[_rng.RandiRange(0, MuzzleFlashAngles.Length - 1)]);
                 var orient = RollAroundNormal(planeBasis, angle);
-                muzzleSprites.Add(new Sprite { Pos = muzzle.Origin, Life = MuzzleLife, Size = MuzzleSize, Tint = tint, Orient = orient, AnchorLeft = true });
+                float half = MuzzleLife * 0.5f;
+                muzzleSprites.Add(new Sprite { Pos = muzzle.Origin, Life = half, Size = MuzzleSize, Tint = tint, Orient = orient, AnchorLeft = true });
+                var frame2Sprites = _muzzleFrame2[ammoIdx];
+                if (frame2Sprites.Count < MaxFlashes)
+                {
+                    // Age starts negative: RenderSprites skips a pending sprite while AgeSprites
+                    // still counts it up, so it becomes visible exactly when frame 1's half-life ends.
+                    frame2Sprites.Add(new Sprite { Pos = muzzle.Origin, Age = -half, Life = half, Size = MuzzleSize, Tint = tint, Orient = orient, AnchorLeft = true });
+                }
+            }
+            else
+            {
+                // The earlier hand-authored triad (reachable via MuzzleFlashCount for the A/B):
+                // three quads 120 degrees apart around the facing normal, sharing one continuous
+                // per-shot roll, matched to the reference captures' 3-lobed look.
+                float baseAngle = _rng.Randf() * Mathf.Tau;
+                for (int i = 0; i < MuzzleFlashCount; i++)
+                {
+                    float angle = baseAngle + i * (Mathf.Tau / MuzzleFlashCount);
+                    var orient = RollAroundNormal(planeBasis, angle);
+                    muzzleSprites.Add(new Sprite { Pos = muzzle.Origin, Life = MuzzleLife, Size = MuzzleSize, Tint = tint, Orient = orient, AnchorLeft = true });
+                }
             }
             // Verification breadcrumbs (two, low-volume): the first flash reads a stored sprite's
             // facing normal back and confirms it IS the aircraft basis's at spawn (match≈1.000 — a
@@ -534,9 +563,9 @@ public sealed partial class ProjectilePool : Node3D
             }
         }
 
-        // The gun shot's authored secondaries (C22): the ejected casing with its white puff
-        // cluster, the muzzlepuffer smoke, and the dynamic muzzle-light flash. Guns only — the
-        // muzzle_burst def is bound by the guns; rockets carry their own FIRE effects.
+        // The gun shot's authored secondaries (C22): the ejected casing, the muzzlepuffer smoke,
+        // and the dynamic muzzle-light flash. Guns only — the muzzle_burst def is bound by the
+        // guns; rockets carry their own FIRE effects.
         if (weapon.IsGun)
         {
             SpawnCasing(muzzle);
@@ -661,6 +690,8 @@ public sealed partial class ProjectilePool : Node3D
 
         foreach (var m in _muzzle)
             AgeSprites(m, dt);
+        foreach (var m in _muzzleFrame2)
+            AgeSprites(m, dt);
         AgeSprites(_impact, dt);
         AgeSprites(_smoke, dt);
         foreach (var d in _debris)
@@ -689,6 +720,8 @@ public sealed partial class ProjectilePool : Node3D
         RenderTracers();
         for (int i = 0; i < _muzzle.Length; i++)
             RenderSprites(_muzzleMm[i], _muzzle[i]);
+        for (int i = 0; i < _muzzleFrame2.Length; i++)
+            RenderSprites(_muzzleMm2[i], _muzzleFrame2[i]);
         RenderSprites(_impactMm, _impact);
         RenderSprites(_smokeMm, _smoke);
         for (int i = 0; i < _debris.Length; i++)
@@ -706,6 +739,8 @@ public sealed partial class ProjectilePool : Node3D
         }
         _projHigh = 0;
         foreach (var m in _muzzle)
+            m.Clear();
+        foreach (var m in _muzzleFrame2)
             m.Clear();
         _impact.Clear();
         _smoke.Clear();
@@ -885,6 +920,8 @@ public sealed partial class ProjectilePool : Node3D
         int n = 0;
         foreach (var s in sprites)
         {
+            if (s.Age < 0f)
+                continue; // pending: the authored muzzle flash's frame-2 half-delay, not yet due (BL-263)
             float k = 1f - s.Age / s.Life;            // shrink + fade over life
             float size = s.Size * (0.6f + 0.4f * k);
             var basis = new Basis(s.Orient.X * size, s.Orient.Y * size, s.Orient.Z * size);
@@ -1413,16 +1450,14 @@ public sealed partial class ProjectilePool : Node3D
     /// gunshell def's own <c>OBJECT_MOTION</c> read verbatim from the anim program — the ranged
     /// ballistic drop and the forward-rotation tumble over its <c>RUN_TIME</c>, same semantics as
     /// <c>MotionRuntime</c>. Each casing rides its own transient node, so sustained fire ejects at
-    /// gun rate — nothing shares the <c>gunshell</c> anchor. Alongside the casing goes its white
-    /// puff cluster (a hand-authored stand-in; no shipped def matches it — see EjectPuffs). No-op
-    /// without a world scene/anim program (the weapon lab, the empty stage).</summary>
+    /// gun rate — nothing shares the <c>gunshell</c> anchor. No-op without a world scene/anim
+    /// program (the weapon lab, the empty stage).</summary>
     private void SpawnCasing(Transform3D muzzle)
     {
         var spec = CasingSpecResolve();
         if (spec == null)
             return;
         var slot = AcquireCasing();
-        var puffVel = Vector3.Down * EjectPuffSink; // fallback drift when the casing pool is at cap
         if (slot != null)
         {
             // MotionRuntime's translation_range read, through its own expression so the two
@@ -1440,29 +1475,6 @@ public sealed partial class ProjectilePool : Node3D
             slot.InUse = true;
             slot.Node.Visible = true;
             slot.Node.GlobalTransform = new Transform3D(slot.Basis, slot.Start);
-            puffVel = slot.V0; // the cluster rides with its casing (the reference captures show
-                               // the brass speck inside each falling puff cluster)
-        }
-
-        // The white puff cluster the original shows with every casing: persisting puffs that fall
-        // with the shell while the aircraft flies out of them.
-        var orient = muzzle.Basis.Orthonormalized();
-        for (int i = 0; i < EjectPuffs && _smoke.Count < MaxSmoke; i++)
-        {
-            var off = new Vector3(_rng.Randf() - 0.5f, _rng.Randf() - 0.5f, _rng.Randf() - 0.5f)
-                      * (2f * EjectPuffSpread);
-            var drift = puffVel + new Vector3(_rng.Randf() - 0.5f, _rng.Randf() - 0.5f, _rng.Randf() - 0.5f)
-                        * (2f * EjectPuffDrift);
-            _smoke.Add(new Sprite
-            {
-                Pos = muzzle.Origin + off,
-                Life = RandRange(EjectPuffLifeMin, EjectPuffLifeMax),
-                Size = RandRange(EjectPuffSizeMin, EjectPuffSizeMax),
-                Tint = EjectPuffTint,
-                Orient = orient,
-                Vel = drift,
-                NoGravity = true,
-            });
         }
     }
 
