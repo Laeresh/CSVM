@@ -65,7 +65,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — controls and lab one-liners
 
 1. ☑ `BL-279` Unbind the freecam action from Space so guns and freecam stop sharing the key
-2. ☐ `BL-280` Orbital camera: distance on numpad `+`/`−`, `shift` no longer drives camera and target together
+2. ☑ `BL-280` Orbital camera: distance on numpad `+`/`−`, `shift` no longer drives camera and target together
 3. ☐ `BL-278` The damage lab's health slider takes armor to 0 with it
 
 ### Wave B — the crash and fire scene
@@ -122,7 +122,7 @@ in-engine suites via `.\RunTests.ps1` for regressions.
 **⚠ Traps.** Don't "fix" it by disabling gun fire in freecam wholesale — the weapon lab fires from
 freecam deliberately.
 
-## A2 ☐ `BL-280` Orbital camera distance controls and `shift` coupling
+## A2 ☑ `BL-280` Orbital camera distance controls and `shift` coupling
 
 **Goal.** The orbital camera's distance controls sit on numpad `+` / numpad `−` like the original,
 and `shift` no longer drives the camera and the target point together.

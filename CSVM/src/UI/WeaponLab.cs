@@ -964,7 +964,7 @@ public sealed partial class WeaponLab : Node3D
         _ammoLabel.Text = AmmoLine();
         _cameraLabel.Text = _freeCamera
             ? "V: FREE camera — WASD/QE fly, hold RMB to look; V returns the orbit"
-            : "V: orbit camera (WASD/arrows swing it, Shift/Ctrl zoom) — V frees it";
+            : "V: orbit camera (WASD/arrows swing it, numpad +/- zoom) — V frees it";
         _pickLabel.Text = _pickLine;
         _standoffLabel.Text = $"stand-off {_standoff:0} m";
         _autoFireToggle.ButtonPressed = _autoFire;
