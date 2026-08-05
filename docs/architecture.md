@@ -1365,12 +1365,12 @@ mode with no atlas, no `TextureArchive` and no GPU. Modes: `Burst`, `TrailAdvanc
 `TrailBurnAt` (distance trails), `SustainAt` (continuous at a moving node — pool sized to steady
 state, catch-up capped); `PufferState.FromAnimEvent` parses the compiled anim payloads.
 Three config knobs scale `BaseSize` per spawn path — `puffer.burstSizeScale` /
-`puffer.trailSizeScale` / `puffer.sustainSizeScale` (`SizeScaleDefault` **4**, a TUNE stand-in for a
-missing engine constant settled at the controls — 1 is the authored SIZE_RANGE verbatim, which reads
-as a thin scatter of specks; the cull margin scales with the largest). Read at `Init`; registered in
-`Config.WarmTuningRegistry` for `--dump-config`. Moving `SizeScaleDefault` re-pins every
-puffer-bearing golden and only those (measured: `c1-waterfall`, `c3-island`, `c1-destroy-effects`,
-`c1-crash`; the other 9 carry no live emitter).
+`puffer.trailSizeScale` / `puffer.sustainSizeScale` (`SizeScaleDefault` **1**, the authored
+SIZE_RANGE verbatim; the knobs remain for deliberate per-path tuning — the cull margin scales with
+the largest). Read at `Init`; registered in `Config.WarmTuningRegistry` for `--dump-config`. Moving
+`SizeScaleDefault` re-pins every puffer-bearing golden and only those (measured on the 4->1 revert:
+`c1-waterfall`, `c3-island`, `c5-city-night`, `c1-destroy-effects`, `c1-crash`; the other 8 carry no
+live emitter).
 ⚠ TEXTURE_SEQUENCE times are FRACTIONS of a particle's lifetime, not seconds (effects.md).
 ⚠ The blend is derived, never authored: a COLORS ramp or a near-black dying sprite (measured off
   the atlas, `SmokeLuminance`) ⇒ blend_mix + no depth fade, else blend_add (effects.md).
