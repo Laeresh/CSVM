@@ -26,6 +26,7 @@ Flags are specified in [`cli.md`](cli.md).
 | `R` | | respawn |
 | `Tab` | | cycle stunt target |
 | `numpad 1–9` (not `5`) | | hold a fixed camera view around the plane (P1's keyboard) — `--view=` |
+| `numpad 0` | | hold the look-behind view: ahead of the nose looking back, at the authored `back_dist` range — `--view=back` |
 | `C` | | show the built colliders (see `--collision`) — `--debug-colliders` |
 | `X` | | colour world objects by class (destructible/facade/clutter/scenery) — `--debug-classoverlay` |
 

@@ -304,6 +304,8 @@ public partial class FlightController : Node3D
 
     private FlightModel _model = null!;
     private CameraController _cam = null!;
+    private CanvasLayer _hudCanvas = null!;      // the whole HUD layer; hidden while crashed (the
+                                                 // original's crash camera shows no HUD — footage)
     private Label _hud = null!;
     private float _hudPaneFactor = 1f;            // last applied splitscreen shrink (1 = single player)
     private Vector3 _spawnPos;
@@ -425,6 +427,7 @@ public partial class FlightController : Node3D
     public override void _Ready()
     {
         var canvas = new CanvasLayer();
+        _hudCanvas = canvas;
         _hud = new Label { Position = HudMargin };
         _hud.AddThemeFontSizeOverride("font_size", HudFontSize);
         _hud.AddThemeColorOverride("font_color", new Color(1f, 0.85f, 0.4f));
@@ -562,6 +565,8 @@ public partial class FlightController : Node3D
         _damageCooldown = 0f;
         _grazeReactionCooldown = 0f;
         _damageFlash = 0f;
+        if (_hudCanvas != null)
+            _hudCanvas.Visible = true;  // the crash camera hid it (footage); flying again
         if (PlaneModel != null)
             PlaneModel.Visible = true;
         _throttle = SpawnThrottle;
@@ -877,12 +882,22 @@ public partial class FlightController : Node3D
             var (yawIn, pitchIn, zoomIn) = OrbitInput();
             _cam.Orbit((float)delta, _model.Position, yawIn, pitchIn, zoomIn);
         }
+        else if (_crashed)
+        {
+            // The authored crash camera holds the pose Crash() cut to — the original's camera
+            // does not move after the cut (footage), so nothing is written here until respawn.
+        }
         else
         {
             int view = _cam.ActiveView();
             if (view >= 0)
             {
                 _cam.FixedView(view, _renderPose);
+            }
+            else if (_cam.BackActive())
+            {
+                _cam.BackView(_renderPose);
+                view = CameraController.BackViewLog;
             }
             else
             {
@@ -1510,6 +1525,13 @@ public partial class FlightController : Node3D
             CrashRuntime.InheritedWorldVelocity = _model.VelocityDir * _model.Speed * WreckMomentum;
             CrashRuntime.Play(water ? "player_crash_water" : "player_crash_dirt", CrashAnchor, applyReset: false);
         }
+        // The authored crash camera (BL-260): hard-cut to the static elevated vantage and hide
+        // the HUD — both straight off the original's crash footage. The pose is set once here
+        // and _Process writes nothing to the camera while crashed, so it holds until respawn.
+        if (!CameraOwned)
+            _cam.CrashView(impact, _model.VelocityDir);
+        if (_hudCanvas != null)
+            _hudCanvas.Visible = false;
         GD.Print($"CRASH into {hitName} ({part}) surface={surface} impact=({impact.X:0},{impact.Y:0},{impact.Z:0}) " +
                  $"pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) " +
                  $"spd={_model.Speed:0} m/s — waiting for respawn");

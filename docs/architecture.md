@@ -1004,9 +1004,13 @@ the session log distinguishes "the data says 13" from "we guessed 13".
 
 ## src/Flight/CameraController.cs
 The flown aircraft's camera, split out of `FlightController`: the roll-following chase camera, the
-numpad fixed views (`Views`, `ActiveView`, `FixedView`, `LogView`) and the free orbit used while the
-debug freeze holds the world. Steers a `Camera3D` it does not own, as `UI/OrbitCamera` does for the
-static viewer. The chase RADIUS is dynamic per plane (BL-248): `d = Dist + DistFactor·V` (both
+numpad fixed views (`Views`, `ActiveView`, `FixedView`, `LogView`), the look-behind view
+(`BackView`, numpad 0 / `--view=back`, at the chase radius bounded into the authored
+`back_dist_min/max`), the authored crash camera (`CrashView`, a hard cut to a static elevated
+vantage `crash_horiz` behind / `crash_y` above the impact, held until respawn — framing decoded
+off the original's crash footage; `crash_elev`/`crash_chord_y` stay capture-gated on `BL-260`,
+as do the death and flyby cameras) and the free orbit used while the debug freeze holds the
+world. Steers a `Camera3D` it does not own, as `UI/OrbitCamera` does for the static viewer. The chase RADIUS is dynamic per plane (BL-248): `d = Dist + DistFactor·V` (both
 authored) plus a first-order acceleration transient relaxing at the MEASURED 0.65 /sim-s
 (`UpdateDynamics`, host-called once per sim step); the offset's DIRECTION (behind and above at
 ~15.7° elevation) is not in the data and stays hand-picked. Collaborators: `FlightController`
@@ -1505,7 +1509,9 @@ one OR two parallel planes per axis (the double cut separates bilateral pairs li
 ## src/Flight/FlightController.cs
 The flying-aircraft node: input → FlightModel → transform, text HUD + telemetry, weapon
 firing/selection, crash and respawn. The camera is `CameraController`'s — this node only feeds it
-the pose, the dt and the mixed orbit axes (`OrbitInput`). Sweeps the
+the pose, the dt and the mixed orbit axes (`OrbitInput`); on a crash it cuts to `CrashView` once,
+writes nothing to the camera until respawn, and hides the HUD layer (the original's crash camera
+shows no HUD — footage), restoring it on respawn. Sweeps the
 PlaneCollider boxes via CastMotion each physics frame; the sim half is `SimStep(dt)`, called by
 `_PhysicsProcess` (realtime clock) or by `GameSession` (fixed/halted clock). Collaborators:
 FlightModel, CameraController + CamParams, Loadout + ProjectilePool (guns/rockets),

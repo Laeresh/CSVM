@@ -26,6 +26,13 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed class CameraController
 {
+    /// <summary>The <c>--view=back</c> sentinel (out of the numpad's 1–9 digit range): pin the
+    /// look-behind view for the whole run, the scripted twin of holding numpad 0.</summary>
+    public const int PinnedBackView = 10;
+
+    /// <summary>LogView's marker for the look-behind view (the numpad views log their digit).</summary>
+    public const int BackViewLog = -2;
+
     // The chase offset's DIRECTION: behind and above the nose, at atan2(4.5, 16) ≈ 15.7° of
     // elevation. Hand-picked and still a TUNE — camparam ships a distance per plane, not an angle,
     // so only the radius below comes from the data.
@@ -85,8 +92,13 @@ public sealed class CameraController
     // never learns about pad devices or window focus.
     private readonly Func<Key, bool> _keyDown;
 
-    // The numpad view held for the whole run (--view=); 0 is the chase camera.
+    // The numpad view held for the whole run (--view=); 0 is the chase camera and
+    // PinnedBackView (--view=back) the look-behind.
     private readonly int _pinnedView;
+
+    // The authored special-camera geometry (camparam): the crash camera's offset and the
+    // look-behind view's distance bounds.
+    private readonly float _crashHoriz, _crashY, _backMin, _backMax;
 
     // The authored base distance and speed factor (camparam, per plane). The fixed numpad views
     // take the same dynamic radius as the chase camera, so a snap changes the angle and nothing
@@ -117,7 +129,16 @@ public sealed class CameraController
         _dist = cam.Dist;
         _distFactor = cam.DistFactor;
         _radius = cam.Dist;
+        _crashHoriz = cam.CrashHoriz;
+        _crashY = cam.CrashY;
+        _backMin = cam.BackDistMin;
+        _backMax = cam.BackDistMax;
     }
+
+    /// <summary>The look-behind view is on: numpad 0 held, or the run pinned it with
+    /// <c>--view=back</c>. A held numpad 1–9 key still wins (the host checks
+    /// <see cref="ActiveView"/> first), same rule as the pinned numpad views.</summary>
+    public bool BackActive() => _keyDown(Key.Kp0) || _pinnedView == PinnedBackView;
 
     /// <summary>Which fixed view the camera should hold this frame, as an index into
     /// <see cref="Views"/>, or −1 for the chase camera. A held numpad key beats the scripted
@@ -162,6 +183,57 @@ public sealed class CameraController
         // whose whole point is to be bolted to it. Identical on a parent-driven clock.
         _camera.Position = renderPose.Origin + (renderPose.Basis * (dir * _radius));
         _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, up);
+    }
+
+    /// <summary>The look-behind view (numpad 0 held, or <c>--view=back</c>): ahead of the nose
+    /// looking back at the plane — check your six, with pursuers framed behind the aircraft.
+    /// The distance is the chase camera's own dynamic radius BOUNDED into the authored
+    /// <c>[back_dist_min, back_dist_max]</c> (15.5–55 in the default block). The pair ships with
+    /// no base-distance sibling, so it reads as bounds on the shared radius rather than a law of
+    /// its own: the min bites for the smallest airframes (the Kestrel's 14.5 m radius is lifted
+    /// to 15.5 — looking back past a plane needs clearance) and the max is never reached in
+    /// practice. That reading is the data's shape, not a capture-verified decode — no look-behind
+    /// footage exists (BL-260). Rigid in the plane's frame and instant, like the numpad views and
+    /// for the same scripted-capture reason.</summary>
+    public void BackView(in Transform3D renderPose)
+    {
+        float r = Mathf.Clamp(_radius, _backMin, _backMax);
+        var dir = new Vector3(0f, 0f, -1f);     // ahead of the nose, plane frame
+        _camera.Position = renderPose.Origin + (renderPose.Basis * (dir * r));
+        _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, Vector3.Up);
+    }
+
+    /// <summary>The authored crash camera (camparam <c>crash_horiz</c>/<c>crash_y</c>, BL-260):
+    /// on a fatal crash the original hard-cuts to a STATIC elevated vantage looking down at the
+    /// impact point. Framing decoded off <c>C1 IA1 Crash.mp4</c> / <c>C1 IA1 Crash 2.mp4</c>
+    /// (OriginalScreenshots\Videos): the cut is instant, the HUD disappears, the camera then
+    /// holds still while the wreck plays out, and in the near-vertical dive clip it sits almost
+    /// directly overhead — which is what "crash_horiz metres behind the impact along the flight
+    /// path's horizontal component, crash_y up" degenerates to in a dive. Both read as metres;
+    /// the implied 56° look-down angle matches both clips.
+    ///
+    /// <para>⚠ <c>crash_elev</c> (40) and <c>crash_chord_y</c> (1000) are NOT wired:
+    /// <c>crash_elev</c> duplicates the vertical role <c>crash_y</c> already fills and the
+    /// footage cannot separate 45 from 40 (56° vs 53° of look-down), and <c>chord_y</c>'s
+    /// meaning is unknown. Capture-gated on <c>BL-260</c> — do not guess them into the
+    /// pose.</para></summary>
+    public void CrashView(Vector3 impact, Vector3 travelDir)
+    {
+        var alongH = new Vector3(travelDir.X, 0f, travelDir.Z);
+        Vector3 behind;
+        if (alongH.LengthSquared() > 1e-4f)
+        {
+            behind = -alongH.Normalized();
+        }
+        else
+        {
+            // A perfectly vertical dive has no horizontal flight direction — keep the camera's
+            // current bearing from the impact so the cut still lands behind the approach.
+            var camH = new Vector3(_camera.Position.X - impact.X, 0f, _camera.Position.Z - impact.Z);
+            behind = camH.LengthSquared() > 1e-6f ? camH.Normalized() : Vector3.Back;
+        }
+        _camera.Position = impact + (behind * _crashHoriz) + (Vector3.Up * _crashY);
+        _camera.LookAt(impact, Vector3.Up);
     }
 
     /// <summary>Advance the dynamic chase radius one SIM step: <c>d = dist + dist_factor·V</c>
@@ -242,6 +314,11 @@ public sealed class CameraController
             FixedView(view, renderPose);
             return;
         }
+        if (BackActive())
+        {
+            BackView(renderPose);
+            return;
+        }
         _offset = DesiredOffset(attitude, out var camUp);
         _camera.Position = planePos + _offset;
         _camera.LookAt(planePos - (attitude.Z * CamLookAhead), camUp);
@@ -278,12 +355,13 @@ public sealed class CameraController
         _camera.LookAt(focus, Vector3.Up);
     }
 
-    /// <summary>One line per frame a fixed view is held, plus one on the frame it is released —
-    /// read back off the camera's own transform, so it reports where the camera ENDED UP rather
-    /// than the values that were fed to it. Silent (and free) on an ordinary chase-camera flight.</summary>
+    /// <summary>One line per frame a fixed view (or the look-behind, <see cref="BackViewLog"/>)
+    /// is held, plus one on the frame it is released — read back off the camera's own transform,
+    /// so it reports where the camera ENDED UP rather than the values that were fed to it.
+    /// Silent (and free) on an ordinary chase-camera flight.</summary>
     public void LogView(int view, Vector3 planePos, Basis attitude)
     {
-        if (view < 0 && _viewPrev < 0)
+        if (view == -1 && _viewPrev == -1)
         {
             return;
         }
@@ -291,8 +369,8 @@ public sealed class CameraController
         var toPlane = attitude.Inverse();
         var offset = toPlane * (_camera.Position - planePos);
         var aim = toPlane * -_camera.Basis.Z;   // the camera's forward axis, in the plane's frame
-        int digit = view < 0 ? 0 : Views[view].Digit;
-        Log.Debug("flight", $"view n={digit} offset=({offset.X:0.000},{offset.Y:0.000},{offset.Z:0.000}) dist={offset.Length():0.000} aim=({aim.X:0.000},{aim.Y:0.000},{aim.Z:0.000})");
+        string n = view == BackViewLog ? "back" : (view < 0 ? "0" : Views[view].Digit.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Log.Debug("flight", $"view n={n} offset=({offset.X:0.000},{offset.Y:0.000},{offset.Z:0.000}) dist={offset.Length():0.000} aim=({aim.X:0.000},{aim.Y:0.000},{aim.Z:0.000})");
     }
 
     // Chase from behind and above the nose in the plane's own frame, so the offset (and the
