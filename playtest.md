@@ -117,7 +117,11 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   of both forms (slug + AP, same pose) are staged in `playtest/PT-39/` — whichever loses is
   deleted (`BL-263`). (c) While judging, the muzzle-light magnitudes (`MuzzleLightEnergy` 2.5,
   `MuzzleLightLife` 0.03 s) are stand-ins — the def authors range/colour only; flag if the light
-  reads wrong. *Blocks:* `BL-263` close.
+  reads wrong. (d) Fire into the water: the splash now plays its authored fade + flipbook and
+  defaults to the authored 1× column width — judge 1× vs the old 8× (`water_1x_close_*` /
+  `water_8x_close_*` here, or flip `SplashColumnWidthScale`) against `Water Splash.png`; the 8×
+  survives only as a config TUNE if 1× still reads wrong (`BL-265`). *Blocks:* `BL-263` and
+  `BL-265` close.
 
 - `PT-38` **Rocket/gun quick checks left over from the closed 2026-07-24 m3-polishing fixes**
   (`BL-002`/`BL-003`/`BL-005`/`BL-103`, all landed and code-verified; their entries are closed, so

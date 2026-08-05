@@ -81,7 +81,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — effect & camera choreography
 
-6. ☐ `BL-265` — water splash: authored opacity fades + `splash01→03` flipbook; re-judge the 8× width
+6. ◐ `BL-265` — water splash: authored opacity fades + `splash01→03` flipbook; re-judge the 8× width (fades + flipbook landed 2026-08-05; the width pick rides `PT-39`)
 7. ☐ `BL-267` — engine start/stop: play `startprops`/`stopprops`; throttle-slam smoke wired magnitude-gated (`CAP-21` re-read)
 8. ☑ `BL-248` — dynamic chase distance: implement the two CAP-21-measured terms (landed 2026-08-05)
 9. ☑ `BL-260` — the four authored cameras: crash first; un-decodable ones recorded, not guessed (crash + look-behind landed 2026-08-05; death/flyby capture-gated on the entry)
@@ -363,6 +363,14 @@ should kill the current pop-in. Freecam regression.
 **⚠ Traps.** Post-A1 judging only — the splash puffers also lose their 4×. Don't fold the rocket
 water column (`SplashColumnScale 100`, a different constant with its own justification) into this
 item; it is not part of the finding.
+
+**C6 Outcome (2026-08-05) — fades + flipbook landed; width pick pending.** The fade targets the
+whole model root (base + column — the defs say so; the plan's "column" phrasing corrected), via a
+per-instance fade twin. The flipbook needed manual `TextureCycler` registration — the gun
+splash's polygon binds a non-cycling sibling material (data finding, `materials.json`) — and the
+orchestrator fixed a merge-time defect: the cycle had been registered on the source material
+while the fade twin renders; a deterministic same-frame A/B (differing pixmd5) proves the flip
+now draws. Width defaults to authored 1×, 8× reachable; the pick rides `PT-39`.
 
 ## C7 ☐ `BL-267` — engine start/stop: the authored cues wired
 

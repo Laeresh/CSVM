@@ -1200,13 +1200,18 @@ public sealed partial class ProjectilePool : Node3D
     // time it is seen — see the SplashFlipbookTextures field comment for why this cannot rely on
     // SceneBuilder's automatic per-polygon registration for the gun splash (splash1_splash's own
     // polygon binds to a sibling non-cycling material, confirmed against C1B's materials.json).
+    // The material registered must be the RENDERED one — the fade twin installed as the surface
+    // override (EnsureSplashFade runs first), not the mesh's source material: the cycler swaps
+    // albedo_tex on exactly the material it is handed, and a twin's duplicated parameters never
+    // follow the source, so a cycle on the source advances invisibly behind the override.
     private void EnsureSplashFlipbook(MeshInstance3D mi)
     {
         if (_flyoutScene?.Cycler is not { } cycler)
             return;
         if (mi.Mesh is not { } mesh || mesh.GetSurfaceCount() == 0)
             return;
-        if (mesh.SurfaceGetMaterial(0) is not ShaderMaterial mat || !_splashFlipbookRegistered.Add(mat))
+        var rendered = mi.GetSurfaceOverrideMaterial(0) ?? mesh.SurfaceGetMaterial(0);
+        if (rendered is not ShaderMaterial mat || !_splashFlipbookRegistered.Add(mat))
             return;
         var frames = new List<ImageTexture>(SplashFlipbookTextures.Length);
         foreach (var name in SplashFlipbookTextures)

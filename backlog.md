@@ -1942,14 +1942,15 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   concluding. Riding along as judge-at-the-controls residue (was `BL-200`): the muzzle-light
   stand-in magnitudes — `MuzzleLightEnergy` 2.5 and the 2-frame `MuzzleLightLife` 0.03 s; the
   def carries range/colour only.
-- `BL-265` **Water splash: the authored fades and flipbook are dropped, the column is
-  hand-widened 8×** (`Projectile.cs:173-189`). Values are verbatim from
-  `splash1.zrd.json`/`bsplsh.zrd.json` except: the authored 0.05 s opacity fade-in / 1 s
-  fade-out is not rendered, the `splash01→03` `OBJECT_CYCLE_TEXTURE` flipbook is not played,
-  and `SplashColumnWidthScale = 8f` widens the authored 5 cm quad against one screenshot
-  (`Water Splash.png`). Render the fades and the flipbook as authored; then re-judge whether
-  the 8× width is still needed — the missing fade may be why the thin authored column read as
-  "an invisible grey sliver" in the first place.
+- `BL-265` **Water splash width: judge the authored 1× against the 8× widening now that the
+  fades exist** (`PT-39`; the fade + flipbook half landed 2026-08-05 — `docs/HISTORY.md`). The
+  authored 0.05 s fade-in / 1 s fade-out and the `splash01→03` 4 fps flipbook now render (the
+  fade targets the whole model root — base disc AND column, per the defs — and the gun splash's
+  flipbook needed manual registration: its polygon binds a non-cycling sibling material,
+  confirmed against C1B's `materials.json`). `SplashColumnWidthScale` defaults to the authored
+  1× with the 8× reachable (same pattern as `BL-263`'s flash pick); A/B frame series at both
+  widths in `playtest/PT-39/` (`water_1x_close_*` / `water_8x_close_*`) vs `Water Splash.png`.
+  The 8× survives only as a config-visible TUNE if 1× still reads wrong with the fades in.
 - `BL-266` **Camera shake: the laws ARE authored — the missing pieces are their inputs**
   (re-scoped 2026-08-05 by the first read of `shakes.zrd.json`/`damage_shakes.zrd.json`; the
   decode landed as [`docs/formats/shakes.md`](docs/formats/shakes.md), no code). Six oscillator

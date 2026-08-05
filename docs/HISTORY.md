@@ -16156,3 +16156,21 @@ is a scripted detonation-shake marker, not the fire-path mechanism. Every implem
 crosses an unauthored input (what `magnitude_factor` multiplies; which hit calls which shake
 def), so nothing was wired — the decode landed as `docs/formats/shakes.md` and the gaps are named
 on `BL-266`. All 13 goldens hash-identical.
+
+## 2026-08-05 — PLAN-m3-polish-8 C6 `BL-265`: the water splash plays its authored fade + flipbook; width reverts to 1× pending the pick
+
+The two authored pieces the splash never rendered now play: the 0.05 s opacity fade-in / 1 s
+fade-out (per the defs it targets the whole `splash1.flt`/`bsplsh.flt` root — base disc AND
+column, a plan phrasing caught by re-reading the defs) via a per-instance translucent twin
+(`SceneBuilder.FadeShaderFor`, AnimRuntime''s own derivation), and the `splash01→03` flipbook at
+the material''s 4 fps through the shared `TextureCycler`. The flipbook needed manual
+registration: the gun splash''s polygon binds a non-cycling sibling material (136) of the cycling
+one (135), so `SceneBuilder`''s automatic per-polygon registration never reached it — confirmed
+against C1B''s `materials.json` and an instrumented baseline probe. At merge the orchestrator
+found and fixed a defect in the wiring: the cycle was registered on the mesh''s source material
+while the fade twin — a parameter snapshot installed as a surface override — is what renders, so
+the flip advanced invisibly; the cycler now gets the rendered override material. Proven by a
+deterministic same-frame A/B: pre-fix pixmd5 `13af6918…` vs post-fix `c307aae8…` at sim frame 90
+of the same `--weapon-lab --weapon-surface=water --weapon-fire` run. `SplashColumnWidthScale`
+reverts to the authored 1× (8× reachable; the pick rides `PT-39` with A/B frame series at both
+widths). `RunTests.ps1` green; 13/13 goldens hash-identical (no golden fires into water).
