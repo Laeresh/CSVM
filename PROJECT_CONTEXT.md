@@ -190,10 +190,9 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt mode, or 2–4-player splitscreen, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, and world destructibles that take damage, die, lose collision, throw debris and reset. The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
-**No plan active** — `PLAN-effect-catalogue` completed 2026-08-05, indexed in
-[`docs/plans/plans.md`](docs/plans/plans.md). **Next:** the owed cockpit re-tests (`PT-13`–`PT-37`,
-[`playtest.md`](playtest.md)), `BL-262`, or scope the next plan from `backlog.md` with
-**`/new-plan`**. Verify any change with
+**Active plan: [`docs/PLAN-friends-release.md`](docs/PLAN-friends-release.md)** — a minimal
+shareable build for friends who own the game; Wave A open. **Next:** `A1` (export-aware roots),
+`A2` (extraction stamp), then wave B. Verify any change with
 **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read
 [`docs/verification.md`](docs/verification.md) first.
 
