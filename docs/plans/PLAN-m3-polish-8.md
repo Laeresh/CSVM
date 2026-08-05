@@ -1,8 +1,13 @@
 # Milestone 3 — Polish 8: Authored animations — play the defs
 
-**ACTIVE PLAN** (written 2026-08-05). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE** (written 2026-08-05, completed 2026-08-05). All twelve items landed the same day,
+orchestrated across parallel agent worktrees with per-item verification and serialized merges on
+`main`. Notable outcomes recorded per item below: two items resolved by their alternative
+clauses (A3's authored reading rejected at the controls — the triad stays, now muzzle-anchored;
+C10 re-scoped to a docs-only decode), one premise falsified by its own demanded check (D12), and
+two regressions caught from the cockpit mid-plan and fixed same-day (the chase-camera drawn-pose
+jitter; the world-fixed muzzle flash). Open residues rode out on `BL-284`–`BL-287`, `BL-265`'s
+width pick, and the `PT-39` cockpit flight.
 
 Twelve items, selected by the user from the 2026-08-05 hand-coded-vs-authored and
 invented-behaviour audits under one criterion — **declared animations that are missing or wrongly
@@ -81,7 +86,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — effect & camera choreography
 
-6. ◐ `BL-265` — water splash: authored opacity fades + `splash01→03` flipbook; re-judge the 8× width (fades + flipbook landed 2026-08-05; the width pick rides `PT-39`)
+6. ☑ `BL-265` — water splash: authored opacity fades + `splash01→03` flipbook; re-judge the 8× width (fades + flipbook landed 2026-08-05; the open width pick is booked on `BL-265`/`PT-39` (d))
 7. ☑ `BL-267` — engine start/stop: play `startprops`/`stopprops`; throttle-slam smoke wired magnitude-gated (`CAP-21` re-read) (landed 2026-08-05; TUNE residues → `BL-285`)
 8. ☑ `BL-248` — dynamic chase distance: implement the two CAP-21-measured terms (landed 2026-08-05)
 9. ☑ `BL-260` — the four authored cameras: crash first; un-decodable ones recorded, not guessed (crash + look-behind landed 2026-08-05; death/flyby capture-gated on the entry)
@@ -89,8 +94,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — the damage menu (after PLAN-effect-catalogue's runtime capability)
 
-11. ☐ `BL-259` — play the authored damage animations: `player_fuelleak` / `pdpanelN` / `player_damage_trail`
-12. ☐ `BL-270` — healthy↔torn panel pairing from the defs, not AABB proximity
+11. ☑ `BL-259` — play the authored damage animations: `player_fuelleak` / `pdpanelN` / `player_damage_trail` (landed 2026-08-05; zero invented thresholds; follow-ups → `BL-287`)
+12. ☑ `BL-270` — healthy↔torn panel pairing from the defs, not AABB proximity (landed 2026-08-05 as def-scoped candidates — the "defs assign pairs" premise was false; AABB twin-match stays load-bearing inside the sets)
 
 ## Dependency and parallelism notes
 
@@ -581,6 +586,15 @@ trail's `TopLevel` anchor bug history (HISTORY 2026-08-03) — verify at a real 
 heading, not the identity pose; that trap has bitten twice. (d) CAP-15 timing is wall-clock ×1.390
 sim — use sim seconds when comparing def offsets, the same trap BL-148 documents.
 
+**D11 Outcome (2026-08-05) — landed; zero thresholds invented.** The tiers were already authored
+(`vehicle.zrd.json`); D11 changed what PLAYS at them. The demanded corpus grep falsified the
+entry's "nothing calls dense_firetrail" claim — `player_smoketrail`/`player_firetrail` call it at
+`prop1`; the CAP-15-favoured `short_firetrail` mapping is one pinned string. The fuel leak's
+"renders nothing" turned out authored (`IF NODE_ACTIVE(INPUT_NODE)` gate). `Puffer.DriveAt`
+restored authored `DISTANCE_INTERVAL` density on moving hosts. Burn-down census matches the
+authored 8/6/4/2 sim-s cascade; organic graze at the real spawn fires end-to-end; `BL-246`
+untouched. Follow-ups → `BL-287`.
+
 ## D12 ☐ `BL-270` — panel pairing from the defs, not AABB proximity
 
 **Goal.** The healthy↔torn skin mapping is derived from the authored data (`pdpanelN`'s named
@@ -603,3 +617,11 @@ mispair (the failure the AABB guess risked). Freecam + `damage-hd` regression.
 **⚠ Traps.** Sequenced strictly after D11 — same files, same def wiring; doing it first builds the
 table twice. The fallback must log, not silently engage, or a def gap on one plane hides for
 months.
+
+**D12 Outcome (2026-08-05) — landed with the premise corrected.** The defs scope candidate sets
+(`plane_reset`''s re-ACTIVE `_h` list; `pdpanelN`''s torn targets) but assign no pairs — the corpus
+names `pdpN_h` twice and never deactivates one. `PanelPairingSets` restricts the match to those
+sets; the positional twin criteria (`MaxPairDistance`/`MirrorMinX`) stay load-bearing inside them
+(deleting them would regress the user-verified wrong-wing fix on three planes); an unscoped
+construction WARNs loudly. All 11 aircraft + viewer swept: fallback silent, pairings identical,
+goldens bit-identical.

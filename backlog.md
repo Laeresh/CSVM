@@ -1987,13 +1987,13 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   the original's, hence TUNE"). Low stakes per sound but global: every positional sound's
   audible footprint. A calibrated fly-past recording of one loud fixed emitter (the C1
   refinery flare is a candidate) would trace the real curve.
-- `BL-270` **Healthy↔torn panel pairing is guessed by mesh-AABB proximity; the data encodes
-  the real relationship** (`DamageVisuals.cs:22-27,57,60` — `MaxPairDistance = 1.0`,
-  `MirrorMinX = 0.15`, with the comment conceding the original pairs "by some rule of its
-  own"). `player_destruct_reset` re-ACTIVEs the `_h` nodes and the `pdpanelN` defs name their
-  `pdpN` targets — the pairing is recoverable from the defs instead of geometry. Fold into or
-  sequence after `BL-259` (same defs, same runtime dependency); the geometric guess has
-  worked so far, so this is correctness-by-construction, not a seen bug.
+- `BL-287` **D11 follow-ups: the fuel leak fights the wing lights, and panels 4/6 burn
+  flakes-only as authored** (filed at `BL-259`'s landing, 2026-08-05). (a) `player_fuelleak`'s
+  ELSE branch deactivates `wing_flare2`/`winglight2`, and `WingLightBlinker` re-asserts them
+  every 1.5 s blink cycle — the two fight over the same nodes; harmless-looking but unresolved.
+  (b) `pdpanel4`/`pdpanel6`'s `short_firetrail` calls sit in an `ON_CALL` sequence
+  (`view_result`) nothing calls, so as authored those two panels play flakes + skin flip with no
+  burn — check against the original at the controls if footage ever shows those panels burning.
 - `BL-271` **The survivable-graze and stop laws are invented physics with player-facing
   consequences** (`FlightController.cs:271-295,1652-1672`, header "all TUNE"): attitude kick
   `GrazeKick` 1.2 rad/s, `GrazeFriction` 0.35, quadratic severity damage, "sliding below
@@ -2072,36 +2072,13 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   orange px at t = 6.82), then two pure-black wing plumes, then thinning, sputtering smoke still
   going ≥ 31.5 wall-s after contact at clip end. Our per-panel trails are four bare `firepuffer`s
   (`FlightRigAssembler.cs`) — fire flipbook only: no black-smoke phase, no staged burn-out, no
-  sputter. That is the one concrete 10c gap this capture establishes — the fix is split out as
-  `BL-259` (play the authored player damage animations), 2026-08-05.
+  sputter. **That gap is closed** — `BL-259` landed 2026-08-05: the panels play the authored
+  staged burn (fire → black → sputter), census-matched to this clip's 8/6/4/2 sim-s cascade.
   (c) **Gauge timing confirmed:** the damage silhouette's right-wing segment goes RED (nose
   YELLOW) on the first lit blink ≤ 0.25 s after contact, then blinks lit/dim persistently.
   (d) The clip contains **no nose-anchored trail** even with the wing red-critical for 30 s —
-  negative evidence against `DamageVisuals.NoseOffset` anchoring the whole-plane
-  `dense_firetrail` pair at the nose, though the clip cannot prove that pair ever triggered
-  (its black plumes are indistinguishable from `short_firetrail`'s own black phase; `BL-246`).
-- `BL-259` **Play the authored player damage animations instead of hand-wiring bare puffers**
-  (split out of `BL-121` after `CAP-15`'s footage, 2026-08-05). The original's damage-stage
-  choreography is fully authored, per plane, in `extracted/zrdr/player-1.zrd.json` — a menu of
-  `ON_CALL` defs the exe picks from:
-  - `player_fuelleak` — the *partial-damage* stage: random pick of `pdp1`–`pdp3`, a
-    `3040slug_gunhit` flash there, then `fuel_trail` (`pufftrails.zrd.json`): tiny 0.05–0.1 m
-    white translucent puffs looping only **10 times** — a vapor/fuel stream that peters out, no
-    fire anywhere. We render nothing for this stage today.
-  - `pdpanel1`–`pdpanel8` — the *panel-fire* stage: activate the torn `pdpN` node, `gimmeflakes`
-    debris at it, `CALL_ANIMATION short_firetrail WITH_NODE pdpN`, looping while the panel is
-    active (`pdpanel3` calls `loop_short_firetrail`, the fire-only variant). `short_firetrail`
-    is the staged three-puffer burn `CAP-15`'s footage shows verbatim.
-  - `player_damage_trail` — the *heavy* stage: `short_firetrail` `WITH_NODE prop1` plus a
-    flickering `fire_lt` point light at the nose.
-  Two corrections to assumptions baked into `DamageVisuals`/`FlightRigAssembler.cs`: the
-  whole-plane trail is authored at **`prop1`**, not a synthetic `NoseOffset`; and it is
-  `short_firetrail` again, **not** the `dense_firetrail` pair we wire — nothing in the player
-  defs calls `dense_firetrail`, so check who does before keeping it. Only the **thresholds**
-  (which HP fraction calls which stage) live in the exe (the unrecoverable fire trigger,
-  see "Blocked / deferred") and must be chosen by us — calibrate against `CAP-15`'s timeline
-  and the damage-gauge tiers. Depends on the effect runtime being able to `CALL_ANIMATION`
-  into these `ON_CALL` defs with an `INPUT_NODE` (`PLAN-effect-catalogue` territory).
+  moot in code since `BL-259` landed (2026-08-05): nothing anchors at a synthetic nose offset
+  any more; the heavy stage plays `player_damage_trail` at `prop1` (`BL-246` for *when*).
 - `BL-246` **Smoke/fire trail is effectively unreachable from organic gameplay** (found while
   fixing the trail-anchor bug, 2026-08-03). The whole-plane `player_smoketrail` needs a part at
   ≤ 0.10 HP fraction (`DamageVisuals.cs`), but the only in-game damage source is a terrain graze:
@@ -2119,10 +2096,13 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   end. So the drama the player actually sees at heavy damage is the panel-level burn (reachable
   organically today), and the `player_smoketrail` pair may be rarer in the original than we
   assumed, or anchored at the damage site rather than the nose; the clip cannot separate those.
-  **The data answers the anchor half (2026-08-05):** the authored heavy stage is
-  `player_damage_trail` — `short_firetrail` at `prop1` plus a `fire_lt` nose light — and no
-  player def calls the `dense_firetrail` pair our build wires at ≤ 0.10 (see `BL-259`), so the
-  remaining question is only *when* the exe calls it, not where it sits.
+  **The anchor half is landed (`BL-259`, 2026-08-05):** the build plays `player_damage_trail`
+  (`short_firetrail` at `prop1` + the `fire_lt` light) at the ≤ 0.10 tier. The corpus check made
+  at that landing corrected an earlier claim: the data's own ≤ 0.10 entries (`player_smoketrail`
+  / `player_firetrail`) DO call `dense_firetrail` at `prop1` — CAP-15 favours the
+  `short_firetrail` shape and the mapping is one pinned string in `DamageVisuals.RigAnimFor` if
+  ever revisited. The remaining question here is only *when* the exe calls the heavy stage, not
+  where it sits — do not loosen the 0.10 tier to make it reachable.
 - `BL-122` **Data-driven crash (PLAN-data-driven-crash, default since Wave 4)** — several playtest-gated TUNEs,
   all needing the original at the controls: `WreckMomentum` **0.4** (`FlightController.cs` — the
   fraction of impact velocity the wreck pieces inherit, so they scatter along travel vs. pop straight

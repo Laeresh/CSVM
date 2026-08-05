@@ -16228,3 +16228,39 @@ Verified: breadcrumb `anchored=True` with the world-resolved basis matching the 
 1.000 in an at-speed firing probe; full `RunTests.ps1` green, 13/13 goldens hash-identical (no
 golden fires). `BL-263` retired; residues (muzzle-light magnitudes, the concurrent-roll
 hypothesis) → `BL-286`.
+
+## 2026-08-05 — PLAN-m3-polish-8 D11 `BL-259`: the player plane''s damage visuals are the authored menu playing as data
+
+`FlightRigAssembler`''s four bare firepuffers and the `dense_firetrail` pair at a synthetic
+NoseOffset are gone; `DamageVisuals` routes every injure stage through the per-player rig
+runtime — `pdpanelN` (gimmeflakes + the staged `short_firetrail`/`loop_short_firetrail`
+burn-down), `player_fuelleak` (gunhit flash + vapor, authored-gated on its picked panel being
+ACTIVE — the def itself explains why the leak "rendered nothing" at the pure partial tier), and
+`player_damage_trail` at `prop1` with the `fire_lt` light at the ≤ 0.10 tier. The demanded corpus
+grep falsified the entry''s own claim: `player_smoketrail`/`player_firetrail` DO call
+`dense_firetrail` at `prop1` — the CAP-15-favoured `short_firetrail` mapping is one pinned string
+in `RigAnimFor`. Zero thresholds invented: the tiers are `vehicle.zrd.json`''s authored table
+(0.50/0.40/0.30/0.15 per part, 0.85/0.10 vehicle-level), `BL-246` untouched. `Puffer.DriveAt`
+restores authored `DISTANCE_INTERVAL` density on moving hosts (~160/s vs the 10/s time cadence;
+a silent 16-particle pool floor fixed); static hosts keep time cadence. Verified: burn-down
+census matches the authored 8/6/4/2 sim-s cascade and CAP-15''s wall timeline ×1.390; an organic
+graze at the real C1 spawn fires the stage end-to-end; 8-chapter staging sweep 20/20; a new
+`EveryInjureStageAnimIsBound` unit tripwire (red-checked); `c1-flight`/`c1-destroy-effects`/
+`c1-crash` re-pinned (0.53 %/0.03 %/3.55 % — the Rng.Puffer construction-order cascade plus
+authored debris-trail density; crash physics bit-identical). Follow-ups → `BL-287`. Evidence:
+`.scratch/plan8/D11/`.
+
+## 2026-08-05 — PLAN-m3-polish-8 D12 `BL-270`: panel-pairing candidates derive from the defs; the premise corrected
+
+The corpus names `pdpN_h` exactly twice — `plane_reset`''s re-ACTIVE list — and never deactivates
+one, so the defs scope CANDIDATES but do not assign pairs; "the defs name the relationship
+explicitly" was false. `DamageVisuals.PanelPairingSets` (from the bound program in flight, from
+the two reader files in the viewer via the new `AnimDefs.LoadFileDefs`) restricts hideable skins
+to the re-ACTIVE list and torn panels to the `pdpanelN` targets; the positional twin match
+assigns inside those sets; construction without def data logs a loud WARN before the unscoped
+heuristic runs. Swept all 11 aircraft + the viewer host: the fallback stayed silent and every
+pairing came out byte-identical to the documented positional truth — `MaxPairDistance`/
+`MirrorMinX` stay, still load-bearing as the twin criteria (the sweep shows them rejecting the
+balmoral/brigand/autogyro non-twins; name-pairing would regress the user-verified wrong-wing
+fix). New `PanelPairingSetsDeriveFromTheAuthoredDefs` data tripwire; RunTests green, 13/13
+goldens bit-identical. Evidence: `.scratch/plan8/D12/`.
