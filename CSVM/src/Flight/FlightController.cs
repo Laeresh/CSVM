@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Effects;
 using CSVM.Mech3;
+using CSVM.Session;
 using CSVM.Utils;
 using Godot;
 
@@ -1754,12 +1755,7 @@ public partial class FlightController : Node3D
         var surface = ProjectilePool.ClassifySurface(hitBody);
         // Buildings are the hard surface the spark variant is for; water splashes; everything else
         // (terrain, the unclassified majority) is dirt.
-        string effect = surface switch
-        {
-            SurfaceClass.Water => "touchdown_water",
-            SurfaceClass.Buildings => "touchdown_default",
-            _ => "touchdown_dirt",
-        };
+        string effect = EffectCatalogue.TouchdownFor(surface);
         var site = Config.GetBool("graze.siteAtContact", true) ? impact : _model.Position;
         GrazeEffectSink?.Invoke(effect, site);
         Audio?.OnGraze(surface == SurfaceClass.Water);
