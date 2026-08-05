@@ -64,14 +64,14 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the engine runs outside the repo
 
-1. ☐ Export-aware root resolution: exe-adjacent defaults when not running from the editor
-2. ☐ Extraction version stamp: scripts write it, the engine checks it at boot
+1. ☑ Export-aware root resolution: exe-adjacent defaults when not running from the editor
+2. ☑ Extraction version stamp: scripts write it, the engine checks it at boot
 
 ### Wave B — the package
 
-11. ☐ Export preset + first hand export, smoke-tested from a bare folder
-12. ☐ Friend extraction kit: one-command `Extract.ps1`, bundled fork `unzbd.exe`, README, licenses
-13. ☐ Assemble the zip, clean-machine test, first hand-off
+11. ☑ Export preset + first hand export, smoke-tested from a bare folder
+12. ☑ Friend extraction kit: one-command `Extract.ps1`, bundled fork `unzbd.exe`, README, licenses
+13. ◐ Assemble the zip, clean-machine test, first hand-off — zip built + Sandbox-proven; README review and hand-off are the user's
 
 ## Dependency and parallelism notes
 
@@ -85,7 +85,7 @@ File contention: none between items except B13, which only consumes the others' 
 
 # Wave A — the engine runs outside the repo
 
-## A1 ☐ Export-aware root resolution: exe-adjacent defaults when not running from the editor
+## A1 ☑ Export-aware root resolution: exe-adjacent defaults when not running from the editor
 
 **Goal.** An exported release build, sitting in a bare folder with an `extracted/` directory beside
 the exe, finds all its data and writes its logs somewhere valid — with `--data-root=` /
@@ -128,7 +128,7 @@ instrument here: launched from Explorer it's the exe dir, so a CWD-relative bug 
 deliberately foreign CWD. Don't move the dev default off repo-root — `RunProbe.ps1`, the hooks,
 and `.scratch/` conventions all assume it.
 
-## A2 ☐ Extraction version stamp: scripts write it, the engine checks it at boot
+## A2 ☑ Extraction version stamp: scripts write it, the engine checks it at boot
 
 **Goal.** Every extraction run stamps `extracted/` with what produced it; the engine compares the
 stamp at boot and logs a clear one-line warning (stale, missing, or unknown) naming the fix
@@ -162,7 +162,7 @@ output for the stamp: gigabytes, and `-Unzip` doubles every payload.
 
 # Wave B — the package
 
-## B11 ☐ Export preset + first hand export, smoke-tested from a bare folder
+## B11 ☑ Export preset + first hand export, smoke-tested from a bare folder
 
 **Goal.** `CSVM/export_presets.cfg` exists (committed), and a hand-run Windows export produces a
 folder that — copied to a bare directory with only `extracted/` beside it — boots to the
@@ -198,7 +198,7 @@ stock loadouts silently vanish and every plane flies unarmed. Check that first i
 missing. The first-run `--headless --import` ritual is editor-only; exported builds carry imported
 resources and must not need it.
 
-## B12 ☐ Friend extraction kit: one-command `Extract.ps1`, bundled fork `unzbd.exe`, README, licenses
+## B12 ☑ Friend extraction kit: one-command `Extract.ps1`, bundled fork `unzbd.exe`, README, licenses
 
 **Goal.** A friend runs `.\Extract.ps1 "C:\...\Crimson Skies"` in the unzipped folder and ends up
 with a complete, stamped `extracted/` beside the exe — ZBDs and rof/strings both — with a README
@@ -237,7 +237,7 @@ or the very first command fails cryptically. Don't fold the extraction logic int
 simplify" — two diverging extractors is the maintenance trap. The user owns hand-off
 communication (standing rule): the README is drafted for them to review, not published.
 
-## B13 ☐ Assemble the zip, clean-machine test, first hand-off
+## B13 ◐ Assemble the zip, clean-machine test, first hand-off
 
 **Goal.** One zip — export + `Extract.ps1` + `tools\unzbd.exe` + README + licenses — proven on an
 environment without dev tools, and handed to the first friend with a way for their problems to

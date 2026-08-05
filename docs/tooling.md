@@ -69,6 +69,14 @@ needs **no code change**, because the Godot loaders read either extraction shape
 Idempotent: skips outputs newer than their source unless `-Force`. `-Unzip` also expands each
 `.zip` into a sibling folder; `-Source`/`-Dest` override the roots.
 
+Every failure-free run (including an all-up-to-date one) stamps `<Dest>/VERSION.json` with its
+provenance: the `unzbd --version` line verbatim (the fork's version number is frozen — the build
+timestamp is what distinguishes binaries), the exe's SHA-256, the fork checkout's HEAD when the
+exe sits inside one, the date, and a hand-bumped schema integer the engine compares at boot
+(`src/Session/ExtractionStamp.cs` — one warning line on stale/missing/unreadable, never a block).
+The schema bumps in the same commit as any reader change that invalidates old extractions; the
+extraction output itself is never hashed (gigabytes).
+
 Two output-handling details worth knowing before touching the script:
 
 - unzbd's stderr is captured and judged **by exit code**, because PowerShell 5.1 turns a native
@@ -77,8 +85,11 @@ Two output-handling details worth knowing before touching the script:
   the stored matrix bit-for-bit, informational since the matrix itself is preserved and preferred —
   are counted and summarised rather than printed (155 on a full run).
 
-**`messages.json` is not produced by this script.** It comes from
-`unzbd cs messages CrimsonSkiesGame/strings.dll`.
+**`messages.json`** is produced by a dedicated step after the ZBD walk: `strings.dll` sits at
+the install root (the ZBD tree's parent), so the walk never sees it — the script extracts it
+with `unzbd cs messages` into `<Dest>\messages.json`, skipping with a note when the DLL is
+absent. Without it the engine falls back to raw `MSG_*` keys on the HUD and briefings (how the
+gap was found in the first sandbox clean-machine run).
 
 ## `ExtractRof.ps1` (repo root) — the non-ZBD half
 
@@ -95,7 +106,27 @@ symbol. That last file is where the aircraft names and description text live.
 `-Source`/`-Dest` override the roots. The decode work is an inline C# type (`Add-Type`), so a full
 run is ~1.5 s.
 
+Each run also merges its own `rof` field (script, date, `-Raw`) into the shared
+`VERSION.json` one level above `-Dest` — read-merge-write, so `ExtractAssets.ps1`'s fields
+survive — when `-Dest` follows the canonical `…\extracted\rof` layout; any other `-Dest` skips
+the stamp with a note rather than guessing where the shared file lives.
+
 Formats: [formats/rof.md](formats/rof.md), [formats/strings.md](formats/strings.md).
+
+## `packaging/Extract.ps1` — the friend-facing dispatcher
+
+Ships in the release zip (see `packaging/MANIFEST.md`), never used in the dev tree. It takes
+one argument — the recipient's Crimson Skies install root — validates `ZBD` and
+`GOSDATA\ASSETS` exist with a friendly error, and dispatches to the two UNMODIFIED scripts
+above, shipped next to it: `ExtractAssets.ps1 -Source <install>\ZBD -Dest .\extracted
+-Unzbd .\tools\unzbd.exe`, then `ExtractRof.ps1 -Source <install>\GOSDATA\ASSETS -Dest
+.\extracted\rof` (all `.\` anchored to `$PSScriptRoot`, so the CWD never matters, and the
+`rof` dest keeps the canonical shape the VERSION.json stamp requires). **Keep all extraction
+logic in the two scripts only** — the dispatcher is path plumbing; a package-only extraction
+variant is the divergence trap the plan forbids. Its one post-step: it unpacks the produced
+`rimage.zip` into `extracted\rimage\` (`Expand-Archive`, idempotent) — the HUD-font and
+gun-reticle loaders read loose PNGs from that folder and have no zip fallback, and the dev
+tree only has it unpacked because of a historical `-Unzip` run.
 
 ## Launch scripts
 
@@ -204,6 +235,49 @@ forever when a >255-button DirectInput device disconnects (the 8BitDo Ultimate 2
 disabling the dinput backend removes those phantom views, and real pads keep working via
 XInput/HIDAPI. Direct editor or exe launches don't get the workaround. Removal conditions are in
 `backlog.md` under "Drop the `SDL_JOYSTICK_DIRECTINPUT=0` workaround".
+
+## Exporting a release build
+
+`CSVM/export_presets.cfg` (committed, added 2026-08-05, friends-release B11) holds one preset,
+**"Windows Desktop"**: release export, x86_64, `embed_pck=true` — a single `CSVM.exe` with the
+pck inside, plus the .NET publish output beside it as `data_CSVM_windows_x86_64/`
+(**self-contained**: `coreclr.dll`/`hostfxr.dll` ship in it, so a recipient installs no .NET
+runtime). The exported build resolves every root to the exe's own folder (A1): it reads
+`extracted/` beside the exe and writes its logs to `.scratch/logs/` beside the exe.
+
+**One-time template install.** The Godot export templates are user-global, not part of the
+repo's pinned editor: extract the inner `templates/` FILES of
+`tools/godot-4.7-mono-export-templates.tpz` (an ordinary zip) directly into
+`%APPDATA%\Godot\export_templates\4.7.stable.mono\` (create the version dir; do not keep the
+`templates/` folder level).
+
+**Export by hand** (a fresh tree needs the build + one import pass first):
+
+```powershell
+dotnet build CSVM/CSVM.sln
+& tools\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64_console.exe `
+    --path CSVM --headless --import
+& tools\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64_console.exe `
+    --path CSVM --headless --export-release "Windows Desktop" Z:\CSVM\.scratch\export\CSVM.exe
+```
+
+Output lands at the path given on the command line (the preset's own `export_path` is
+`../.scratch/export/CSVM.exe`, git-ignored, used when exporting from the editor GUI).
+
+Two filters in the preset are load-bearing:
+
+- `include_filter="data/*.json"` — `stock_loadouts.json`/`effect_pools.json` are non-imported
+  resources the default export silently drops; without this every plane flies unarmed. Their
+  loaders read `res://data/*.json` through `Godot.FileAccess` (not `GlobalizePath` + System.IO),
+  which is what makes the pck copies reachable in an export — keep it that way.
+- `exclude_filter="config.json"` — ⚠ the dev box keeps a personal tuning override at
+  `CSVM/config.json` (git-ignored). The exclude guarantees it is never baked into a build even
+  when exporting from the main tree; an exported build logs `config absent … using in-code
+  defaults`, which is correct.
+
+Smoke-test an export from a **bare folder** (exe + data dir + `extracted/` beside it) launched
+with a **foreign CWD** and no `CSVM_DATA_ROOT` — the CWD and the env var can both mask a broken
+default root (verification: A1's traps).
 
 ## `tools/` (git-ignored)
 

@@ -16264,3 +16264,179 @@ pairing came out byte-identical to the documented positional truth — `MaxPairD
 balmoral/brigand/autogyro non-twins; name-pairing would regress the user-verified wrong-wing
 fix). New `PanelPairingSetsDeriveFromTheAuthoredDefs` data tripwire; RunTests green, 13/13
 goldens bit-identical. Evidence: `.scratch/plan8/D12/`.
+
+## 2026-08-05 — PLAN-friends-release A1: export-aware root resolution
+
+`Launcher.cs` derived `_repoRoot` unconditionally from `GlobalizePath("res://") + "/.."` — correct
+in the editor, where `res://` is the `CSVM/` project dir on disk, but degenerate in an exported
+build, where `res://` lives inside the pck and Godot documents `GlobalizePath` as editor-only for
+it. The one assignment now branches on `OS.HasFeature("editor")`: editor (and editor-run builds)
+keep the old computation byte-for-byte; an exported build uses `OS.GetExecutablePath()`'s
+directory, so `extracted/` beside the exe is found and `.scratch/` output lands beside the exe.
+The override chain (default → `CSVM_DATA_ROOT` → `--data-root=`) is untouched, and every consumer
+(`Log.Open`, the extraction paths, `TextureDropIn`, `ProbeRunner`, the config dump,
+`LauncherContext.RepoRoot`) flows from the assignment unchanged.
+
+**Verified.** `dotnet test` 450/450 green. Deterministic golden A/B
+(`--plane=player_bhawk --stage=empty --det --screenshot`): two pre-change baselines and the
+post-change shot all MD5-identical (`DD3CDF1C40FEE12F8A1E42151CDF715A`) — zero same-build noise,
+zero drift, so the edit stayed load-time-only. Foreign-CWD probe (CWD set to an unrelated temp
+dir): boots, same screenshot MD5, and the fly log lands in the worktree's `.scratch\logs`, so
+nothing leans on the CWD. The exported branch cannot run until B11 produces the first export;
+it is correct by construction here and B11's bare-folder smoke test is the empirical proof.
+
+## 2026-08-05 — PLAN-friends-release A2: extraction version stamp (scripts write it, boot checks it)
+
+`extracted/` now carries its provenance. A failure-free `ExtractAssets.ps1` run — including the
+all-up-to-date one — writes `extracted/VERSION.json`: the `unzbd --version` line verbatim (the
+fork self-reports a frozen `v0.0.0-test`; its build timestamp is the distinguishing part), the
+exe's SHA-256, the fork checkout's HEAD when the exe sits inside one (omitted gracefully on a
+bare-exe machine), the date, and a hand-bumped `schema` integer (1). `ExtractRof.ps1` merges its
+own `rof` field (script/date/`-Raw`) into the same file — read-merge-write on both sides, so
+neither clobbers the other; it skips the stamp with a note when `-Dest` leaves the canonical
+`…\extracted\rof` layout rather than guessing where the shared file lives. Engine side: new
+`src/Session/ExtractionStamp.cs` (`Schema` const + `Check`), called once from `Launcher._Ready`
+right after the base paths settle — at most ONE `WARN [core]` line per boot (stale schema /
+missing / unreadable), each naming the fix; warn, never block, since the dev tree's extractions
+predate the stamp. The schema-bump-together rule is written in all three places. The extraction
+output itself is deliberately not hashed (gigabytes).
+
+One surprise: PowerShell 5.1's `-Encoding UTF8` writes a BOM, which `JsonDocument.Parse(byte[])`
+rejects (`JsonReaderException` on the first boot test) — `ExtractionStamp` parses via
+`File.ReadAllText`, whose reader strips it.
+
+**Verified.** Both scripts re-run against the real tree: fully idempotent (extracted 0 / 184 up
+to date; rof archives skipped) AND the stamp still written, fields from both merged into one
+file. Boot via `RunProbe.ps1 --stage=empty --det` with the valid stamp: no warning in the log.
+Schema hand-edited to 999: exactly one `WARN [core] extraction stamp schema=999 but this build
+expects schema=1 … re-run ExtractAssets.ps1 and ExtractRof.ps1` line; file renamed away: the
+missing-stamp variant (`extraction tree has no version stamp … re-run ExtractAssets.ps1`);
+valid stamp restored by re-running both scripts. `dotnet test` green: 450/450.
+
+## 2026-08-05 — PLAN-friends-release B12: friend extraction kit (`packaging/`)
+
+Everything zip-specific now lives in a committed `packaging/` directory: `Extract.ps1` (the
+friend-facing dispatcher), the package `README.md` (a DRAFT — the user owns outward
+communication and reviews it before any hand-off), `LICENSE` (GPL-3, byte-identical to the repo
+root's, hash-verified), `LICENSE-unzbd` (EUPL-1.2, byte-identical to `tools/mech3ax/LICENSE`,
+hash-verified), and `MANIFEST.md` (the zip layout + provenance table for B13's assembler).
+
+`Extract.ps1` is deliberately logic-free: one argument (the install root — the folder holding
+`ZBD` and `GOSDATA`), friendly validation errors (never a stack trace: a `Fail` helper prints
+red and `exit 1`; the two child invocations sit in `try/catch` so even their `throw`s come out
+as one message), then dispatch to the UNMODIFIED sibling `ExtractAssets.ps1`
+(`-Source <install>\ZBD -Dest .\extracted -Unzbd .\tools\unzbd.exe`) and `ExtractRof.ps1`
+(`-Source <install>\GOSDATA\ASSETS -Dest .\extracted\rof`) — every `.\` resolved against
+`$PSScriptRoot`, so the friend's CWD is irrelevant, and the `rof` dest keeps the canonical
+shape A2's stamp gate requires. Child failures are caught by presetting `$global:LASTEXITCODE
+= 0` before each call (a child that completes without `exit` leaves the variable at whatever
+its last native call returned — presetting makes the check sound). One quoting defense: the
+argument is `.Trim().Trim('"').TrimEnd('\', '/')`-ed, because `"...\Crimson Skies\"` — the
+single likeliest friend typo — makes the shell swallow the closing quote into the argument.
+
+**Verified** against a scratch package layout (`b12-pkg`: dispatcher + the two repo scripts +
+the fork `unzbd.exe`), run from a foreign CWD (`C:\Windows`) via the README's own
+`powershell -ExecutionPolicy Bypass -File` spelling. Negative first: no argument → usage +
+friendly error; `C:\Windows` → "Expected a ZBD folder at 'C:\Windows\ZBD'…"; a nonexistent
+path with spaces → clean not-found message; all exit 1, zero stack traces. Positive: full
+extraction in **14.8 s wall**, producing **1,401 files / 555 MB** (the README says "about
+0.6 GB, well under a minute"); `VERSION.json` carries BOTH the `assets` and `rof` fields
+(schema 1; `unzbdCommit` correctly absent — the packaged exe sits outside any git checkout,
+exercising A2's bare-exe path for real); `planes.zip`, `zrdr.zip`, `C1/gamez.zip`,
+`rof/ui_strings.json` all present. Re-run with the trailing-backslash-inside-quotes argument
+via `cmd`: quoting defused, idempotent (all up to date, 1 s), exit 0. No engine code touched,
+so no `RunTests.ps1`. `docs/tooling.md` gained the dispatcher section with the hard rule:
+extraction logic stays in the two scripts only.
+
+Addendum (same day, post-B11): B11's bare-folder smoke found the HUD-font/reticle loaders read
+loose PNGs from `extracted/rimage/` with no zip fallback — the dev tree only has that folder from
+a historical `-Unzip` run, so the friend flow would have lost HUD text and the gun reticle.
+`Extract.ps1` gained one post-step: `Expand-Archive` of the produced `rimage.zip` into
+`extracted/rimage/` (idempotent, ~23 MB). Verified in the scratch package: rerun idempotent,
+`5pointhud.png`/`5pointhudbrite.png`/`impact_point.png` present in the unpacked folder.
+
+Second addendum (same day, post-first-sandbox-run): the Windows Sandbox clean-machine run showed
+raw `MSG_*` keys on the HUD and stunt briefings — `extracted/messages.json` was missing, because
+it comes from `strings.dll` at the INSTALL ROOT (`unzbd cs messages`), which neither script
+covered; the dev tree's copy was a hand-run one-off from 2026-07-21 and tooling.md said so.
+`ExtractAssets.ps1` now extracts it in a dedicated step after the ZBD walk (same idempotence and
+failure accounting; skip-with-note when the DLL is absent). Verified: dev-tree rerun idempotent
+(`messages.json (up to date)`, 185 up to date), scratch-package run produces it byte-identical
+to the dev tree's.
+
+## 2026-08-05 — friends-release B13: zip assembled; Windows Sandbox clean-machine test passes the friend journey
+
+The release zip (71.5 MB, 194 entries) was assembled per `packaging/MANIFEST.md` and passed all
+its pre-zip checks: bundled fork `unzbd.exe` SHA-256 equals the `VERSION.json` stamp value, both
+extractor scripts and both license texts byte-identical to their sources, zero game data. The
+clean-machine test ran the whole friend journey scripted-verbatim from the package README inside
+Windows Sandbox (fresh ephemeral Windows 11, host install mapped read-only): unzip →
+`powershell -ExecutionPolicy Bypass -File Extract.ps1` → launchscreen → free flight over C1 →
+stunt over C1 → 2-player splitscreen.
+
+**What the clean machine proved.** No .NET SDK present and no standard VC++ redist
+(`vcruntime140.dll` absent from System32) — the self-contained export ran regardless, so the
+feared missing-runtime class is empty. Extraction via the package's own tools: 27 s, 578 MB,
+stamp written with both fields (`unzbdCommit` correctly absent — the bare-exe path, exercised
+for real). All modes rendered correctly: full C1 world with fog/buildings/river, HUD font and
+gun reticle live (the rimage unpack), resolved HUD/briefing strings (the messages.json fix,
+verified in the second run after the first run exposed it), both splitscreen panes. Three
+sandbox cycles total: defect-find, fix-verify, and a run-order experiment for BL-283.
+
+**Known residue.** `BL-283`: the scripted free-flight `--screenshot` process completes all work
+but never exits — sandbox-only (3/3 there, 0/anywhere on the host), mode-specific (stunt/menu/
+splitscreen exit cleanly 5/5), run-order-independent. Judged a non-blocker for hand-off; full
+evidence in the backlog entry.
+
+**Remaining, user-owned:** review `packaging/README.md` (flags listed in the B12 entry), then
+the first hand-off. The friend's first-session report seeds the public-release backlog.
+
+## 2026-08-05 — friends-release B11: export preset lands; the first hand export flies from a bare folder, pixel-identical to the dev tree
+
+`CSVM/export_presets.cfg` is committed — one preset, **"Windows Desktop"** (release, x86_64,
+`embed_pck=true`, codesign off, `modify_resources` off, no debug symbols). The headless export
+(`--headless --export-release "Windows Desktop"`, pinned 4.7 editor, templates installed
+one-time from `tools/godot-4.7-mono-export-templates.tpz` into
+`%APPDATA%\Godot\export_templates\4.7.stable.mono\`) produces `CSVM.exe` (~104 MB, pck embedded)
+plus a **self-contained** .NET dir `data_CSVM_windows_x86_64/` (186 files, ~77 MB —
+`coreclr.dll`/`hostfxr.dll` present, so friends install no runtime). Steps documented in
+`docs/tooling.md` ("Exporting a release build").
+
+**A1's exported-branch question is now answered empirically.** In the exported binary
+`GlobalizePath("res://…")` degenerates to the res://-stripped RELATIVE path (observed verbatim:
+`data/effect_pools.json`, resolved against the CWD — the lying instrument), confirming A1's
+decision to derive `_repoRoot` from `OS.GetExecutablePath()`. The exported build, launched from
+a deliberately foreign CWD (`C:\Windows`) with `CSVM_DATA_ROOT` unset, resolved everything to
+the exe's folder: logs in `.scratch/logs/` beside the exe, `extracted/` found beside the exe,
+the A2 stamp check read `extracted/VERSION.json` warning-free.
+
+**One code change the smoke test forced — the pck is not reachable through System.IO.** The plan's
+trap said "get `data/*.json` into the pck" (`include_filter="data/*.json"`, and they do land:
+the savepack log stores both) — but `EffectPools.Load`/`StockLoadouts.Load` read
+`GlobalizePath("res://data/…")` via `File.Exists`/`File.ReadAllBytes`, which cannot see inside a
+pck, so the export still warned `file not found` and would have flown unarmed. Both loaders now
+keep `DefaultPath` as the literal `res://` path and read it through `Godot.FileAccess`
+(`FileExists`/`GetFileAsBytes`) — identical bytes in the editor (res:// is the project dir),
+and the pck copy in an export. The Godot call is gated on the path starting `res://`: an
+explicit disk path stays on System.IO, because three unit-test files call
+`StockLoadouts.Load(<disk path>)` and the xunit host has no Godot runtime — the first cut
+called `Godot.FileAccess` unconditionally and crashed the test host with an
+AccessViolationException *after* every test passed. `exclude_filter="config.json"` guards the dev box's git-ignored
+tuning override out of any future main-tree export (`Config.Load`'s System.IO read makes a
+config.json in the pck unreachable anyway — the exclude makes it structural).
+
+**Verified from a bare folder** (export output + a copied `extracted/` subset, foreign CWD, no
+env var): (a) bare launch reaches the launchscreen (`mode=menu` log beside the exe);
+(b) `--plane=player_bhawk --stage=empty --det --screenshot` flies and lands the PNG;
+(c) `--players=2 --plane=player_bhawk,player_fury` renders both panes (`view P1`/`view P2`);
+(d) **pixel identity** against the same worktree dev-tree shots via `RunProbe.ps1`
+(`CSVM_DATA_ROOT=Z:\CSVM`): single-player `pixmd5 aa0a2099745f4c12b38fe0e0286b3ded`, splitscreen
+`pixmd5 cb4f1f6b5c5323b2ffc89d029711ab70`, both **identical** export-vs-dev (PNG md5s
+`DD3CDF1C…`/`326E047C…` also byte-identical); (e) weapons prove out in the log (`weapons: 2 gun
+group(s), 3 hardpoint(s)`) and in the identical HUD pixels. The bare-folder minimum for
+launchscreen + `--stage=empty` turned out to be: `planes.zip`, `zrdr.zip`, `soundsh.zip`,
+`interp.json`, `messages.json`, `VERSION.json`, `rof/`, **plus `C1/rtexture15.zip`** (the empty
+stage still opens the default chapter's texture tier for plane skins) **and `rimage/`** (HUD
+font `5pointhud.png` + gun reticle `impact_point.png` — without it the HUD text/reticle are off,
+which the log names; B12's extraction kit must produce both). Full `.\RunTests.ps1` green in the
+worktree after the loader change.

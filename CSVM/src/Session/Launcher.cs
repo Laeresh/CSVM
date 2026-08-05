@@ -99,7 +99,9 @@ public partial class Launcher : Node3D
 
     // Base (chapter-independent) paths + parse state, set once in _Ready; each session node
     // receives them via LauncherContext and recomputes the chapter-dependent gamez/texture/mission
-    // paths from its spec.
+    // paths from its spec. In the editor (and editor-run builds) _repoRoot is the repo checkout
+    // root (res://'s parent on disk); in an exported build it is the exe's own directory, since
+    // GlobalizePath("res://") only maps to a real directory inside the editor.
     private string _repoRoot = "";
     // Where extracted/ lives. Defaults to _repoRoot; overridden by --data-root= or CSVM_DATA_ROOT
     // so a git worktree can run the game — /extracted/, /CrimsonSkiesGame/ and /tools/ are
@@ -161,8 +163,19 @@ public partial class Launcher : Node3D
         // Missing/malformed file → in-code defaults (never throws); see src/Config.cs.
         Config.Load();
 
-        var projectDir = ProjectSettings.GlobalizePath("res://");
-        _repoRoot = Path.GetFullPath(Path.Combine(projectDir, ".."));
+        if (OS.HasFeature("editor"))
+        {
+            // res:// is the CSVM/ project dir on disk only while the editor (or an editor-run
+            // build) hosts the game; the repo root is its parent.
+            var projectDir = ProjectSettings.GlobalizePath("res://");
+            _repoRoot = Path.GetFullPath(Path.Combine(projectDir, ".."));
+        }
+        else
+        {
+            // Exported build: res:// lives inside the pck, so the root is the exe's own folder —
+            // extracted/ ships beside the exe, and .scratch/ output lands there too.
+            _repoRoot = Path.GetFullPath(Path.GetDirectoryName(OS.GetExecutablePath())!);
+        }
 
         // Everything the command line settles, parsed AND resolved in one place (see SessionSpec):
         // the mode arbitration, the --det bundle's membership and the placement routing are all
@@ -199,6 +212,9 @@ public partial class Launcher : Node3D
         _interpPath = _spec.Interp ?? Path.Combine(_dataRoot, "extracted", "interp.json");
         _messagesPath = _spec.Messages ?? Path.Combine(_dataRoot, "extracted", "messages.json");
         _rofPath = _spec.Rof ?? Path.Combine(_dataRoot, "extracted", "rof");
+
+        // The extraction tree's provenance check — at most one warning line, never a block.
+        ExtractionStamp.Check(_dataRoot);
 
         // The drop-in writes statics every material built afterwards reads, so it is applied here
         // rather than carried as a session value.
