@@ -81,7 +81,7 @@ public sealed class FlightRigAssembler
             PlayerIndex = pi,
             PlaneModel = planeModel,
             Props = PropAnimator.Build(planeModel), // spin the propeller/rotor blur discs
-            WingLights = WingLightBlinker.Build(planeBuilder.WingFlares), // blink the wingtip flares
+            WingLights = WingLightBlinker.Build(planeBuilder.WingFlares, _spec.AnimLod), // blink the wingtip flares
             Surfaces = ControlSurfaceAnimator.Build(planeModel), // deflect ailerons/elevators/rudders
             Collider = PlaneCollider.Build(planeModel), // swept airframe boxes (wingtip/tail collision)
             // per-part HP from destroyable_parts — collisions below
