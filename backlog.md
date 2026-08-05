@@ -45,8 +45,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Standing notes
 
-- **Scheduled items live in their plan — do not re-add them here.** If one is closed without
-  landing, its record goes to `docs/HISTORY.md`.
+- **Scheduled items live in their plan — do not re-add them here.**
 - **[`playtest.md`](playtest.md) is the actionable, consolidated checklist** for everything
   tagged `[Owed-playtest]` or blocked on a `CAP-nn` — what to look for, the launch command, and
   what each blocks. The backlog keeps the deep evidence/traps; keep the two in step.
