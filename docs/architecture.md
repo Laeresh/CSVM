@@ -883,6 +883,9 @@ the full-rig loadout below instead of the stock one).
   fires a gun from nowhere). Markers resolve by `cs_name` meta from the built tree, like MarkerOverlay.
 ⚠ Gun ammo is per group (Balmoral's two .50s carry 2000 each); rocket ammo is per pylon
   (`CLUSTER_SIZE` each, total = pylons × that) — A9. Config lives at `res://`, NOT under `--data-root`.
+⚠ `Load` reads a `res://` path through `Godot.FileAccess` (the pck copy in an exported build —
+  `GlobalizePath` + System.IO cannot see inside the pck, B11 2026-08-05) and an explicit disk path
+  through System.IO (unit tests run without a Godot runtime; a native call there crashes the host).
 
 `Loadout.ForRig(plane, WeaponDefs, LoadoutDef?)` (M3 B4) synthesizes a lab loadout covering the
 airframe's **whole** rig rather than only what stock names: the 4 gun-group slots the reverse-index
@@ -2270,6 +2273,9 @@ extraction) and as an `effects-census` condition on whatever chapter the run was
   sizing decision is pure and unit-tested without a session, and a missing or malformed file warns
   and falls back to `EffectPools.Fallback` rather than failing the launch — the same policy `Config`'s
   `const` defaults have. Keep the fallback values in step with the shipped file.
+⚠ `Load` reads a `res://` path through `Godot.FileAccess` (the pck copy in an exported build —
+  `GlobalizePath` + System.IO cannot see inside the pck, B11 2026-08-05) and an explicit disk path
+  through System.IO (unit tests run without a Godot runtime; a native call there crashes the host).
 ⚠ The three gun-impact roots are sized **1** on purpose (C8 throttles the family to one play per
   0.1 s per name and bounds each to 0.3 s): pooling them buys copies nothing uses. Raising them
   belongs with removing that throttle, which is its own step with its own emitter-count check.

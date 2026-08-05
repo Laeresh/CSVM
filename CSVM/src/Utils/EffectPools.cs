@@ -58,8 +58,10 @@ public sealed class EffectPools
     private Entry _localCallDefault = new(1, 0);
 
     /// <summary>The committed config's default location (res://), independent of
-    /// <c>--data-root</c>: it is engine config, not extracted game data.</summary>
-    public static string DefaultPath => ProjectSettings.GlobalizePath("res://data/effect_pools.json");
+    /// <c>--data-root</c>: it is engine config, not extracted game data. Kept as a res:// path and
+    /// read through <see cref="Godot.FileAccess"/>, because in an exported build the file lives in
+    /// the pck, where <c>GlobalizePath</c> + System.IO cannot reach it (B11, 2026-08-05).</summary>
+    public static string DefaultPath => "res://data/effect_pools.json";
 
     /// <summary>The hard ceiling on any root's slot count — the memory guard, since each slot is one
     /// more copy of that root's subtree. Raise it before raising a per-player term for a
@@ -79,14 +81,18 @@ public sealed class EffectPools
     public static EffectPools Load(string? path = null)
     {
         path ??= DefaultPath;
-        if (!File.Exists(path))
+        // res:// lives inside the pck in an exported build, where only Godot's own FileAccess
+        // can read it; an explicit disk path (unit tests, tools) stays on System.IO, which the
+        // xunit host can run without a Godot runtime.
+        bool viaGodot = path.StartsWith("res://", StringComparison.Ordinal);
+        if (viaGodot ? !Godot.FileAccess.FileExists(path) : !File.Exists(path))
         {
             GD.PushWarning($"effect pools: file not found, using built-in defaults: {path}");
             return Fallback;
         }
         try
         {
-            return Parse(File.ReadAllBytes(path));
+            return Parse(viaGodot ? Godot.FileAccess.GetFileAsBytes(path) : File.ReadAllBytes(path));
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {

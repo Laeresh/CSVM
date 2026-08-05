@@ -15781,3 +15781,53 @@ Schema hand-edited to 999: exactly one `WARN [core] extraction stamp schema=999 
 expects schema=1 … re-run ExtractAssets.ps1 and ExtractRof.ps1` line; file renamed away: the
 missing-stamp variant (`extraction tree has no version stamp … re-run ExtractAssets.ps1`);
 valid stamp restored by re-running both scripts. `dotnet test` green: 450/450.
+
+## 2026-08-05 — friends-release B11: export preset lands; the first hand export flies from a bare folder, pixel-identical to the dev tree
+
+`CSVM/export_presets.cfg` is committed — one preset, **"Windows Desktop"** (release, x86_64,
+`embed_pck=true`, codesign off, `modify_resources` off, no debug symbols). The headless export
+(`--headless --export-release "Windows Desktop"`, pinned 4.7 editor, templates installed
+one-time from `tools/godot-4.7-mono-export-templates.tpz` into
+`%APPDATA%\Godot\export_templates\4.7.stable.mono\`) produces `CSVM.exe` (~104 MB, pck embedded)
+plus a **self-contained** .NET dir `data_CSVM_windows_x86_64/` (186 files, ~77 MB —
+`coreclr.dll`/`hostfxr.dll` present, so friends install no runtime). Steps documented in
+`docs/tooling.md` ("Exporting a release build").
+
+**A1's exported-branch question is now answered empirically.** In the exported binary
+`GlobalizePath("res://…")` degenerates to the res://-stripped RELATIVE path (observed verbatim:
+`data/effect_pools.json`, resolved against the CWD — the lying instrument), confirming A1's
+decision to derive `_repoRoot` from `OS.GetExecutablePath()`. The exported build, launched from
+a deliberately foreign CWD (`C:\Windows`) with `CSVM_DATA_ROOT` unset, resolved everything to
+the exe's folder: logs in `.scratch/logs/` beside the exe, `extracted/` found beside the exe,
+the A2 stamp check read `extracted/VERSION.json` warning-free.
+
+**One code change the smoke test forced — the pck is not reachable through System.IO.** The plan's
+trap said "get `data/*.json` into the pck" (`include_filter="data/*.json"`, and they do land:
+the savepack log stores both) — but `EffectPools.Load`/`StockLoadouts.Load` read
+`GlobalizePath("res://data/…")` via `File.Exists`/`File.ReadAllBytes`, which cannot see inside a
+pck, so the export still warned `file not found` and would have flown unarmed. Both loaders now
+keep `DefaultPath` as the literal `res://` path and read it through `Godot.FileAccess`
+(`FileExists`/`GetFileAsBytes`) — identical bytes in the editor (res:// is the project dir),
+and the pck copy in an export. The Godot call is gated on the path starting `res://`: an
+explicit disk path stays on System.IO, because three unit-test files call
+`StockLoadouts.Load(<disk path>)` and the xunit host has no Godot runtime — the first cut
+called `Godot.FileAccess` unconditionally and crashed the test host with an
+AccessViolationException *after* every test passed. `exclude_filter="config.json"` guards the dev box's git-ignored
+tuning override out of any future main-tree export (`Config.Load`'s System.IO read makes a
+config.json in the pck unreachable anyway — the exclude makes it structural).
+
+**Verified from a bare folder** (export output + a copied `extracted/` subset, foreign CWD, no
+env var): (a) bare launch reaches the launchscreen (`mode=menu` log beside the exe);
+(b) `--plane=player_bhawk --stage=empty --det --screenshot` flies and lands the PNG;
+(c) `--players=2 --plane=player_bhawk,player_fury` renders both panes (`view P1`/`view P2`);
+(d) **pixel identity** against the same worktree dev-tree shots via `RunProbe.ps1`
+(`CSVM_DATA_ROOT=Z:\CSVM`): single-player `pixmd5 aa0a2099745f4c12b38fe0e0286b3ded`, splitscreen
+`pixmd5 cb4f1f6b5c5323b2ffc89d029711ab70`, both **identical** export-vs-dev (PNG md5s
+`DD3CDF1C…`/`326E047C…` also byte-identical); (e) weapons prove out in the log (`weapons: 2 gun
+group(s), 3 hardpoint(s)`) and in the identical HUD pixels. The bare-folder minimum for
+launchscreen + `--stage=empty` turned out to be: `planes.zip`, `zrdr.zip`, `soundsh.zip`,
+`interp.json`, `messages.json`, `VERSION.json`, `rof/`, **plus `C1/rtexture15.zip`** (the empty
+stage still opens the default chapter's texture tier for plane skins) **and `rimage/`** (HUD
+font `5pointhud.png` + gun reticle `impact_point.png` — without it the HUD text/reticle are off,
+which the log names; B12's extraction kit must produce both). Full `.\RunTests.ps1` green in the
+worktree after the loader change.

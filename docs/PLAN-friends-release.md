@@ -69,7 +69,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — the package
 
-11. ☐ Export preset + first hand export, smoke-tested from a bare folder
+11. ☑ Export preset + first hand export, smoke-tested from a bare folder
 12. ☐ Friend extraction kit: one-command `Extract.ps1`, bundled fork `unzbd.exe`, README, licenses
 13. ☐ Assemble the zip, clean-machine test, first hand-off
 
@@ -162,7 +162,7 @@ output for the stamp: gigabytes, and `-Unzip` doubles every payload.
 
 # Wave B — the package
 
-## B11 ☐ Export preset + first hand export, smoke-tested from a bare folder
+## B11 ☑ Export preset + first hand export, smoke-tested from a bare folder
 
 **Goal.** `CSVM/export_presets.cfg` exists (committed), and a hand-run Windows export produces a
 folder that — copied to a bare directory with only `extracted/` beside it — boots to the
