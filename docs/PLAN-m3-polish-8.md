@@ -74,7 +74,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — effect choreography
 
 6. ☐ `BL-265` — water splash: authored opacity fades + `splash01→03` flipbook; re-judge the 8× width
-7. ☐ `BL-267` — engine start/stop: `snd_propstop` wired, start ramp sourced, `engine_start_smoke` checked
+7. ☐ `BL-267` — engine start/stop: play `startprops`/`stopprops`; throttle-step smoke stays a named open half
 8. ☐ `BL-266` — camera shake: find the authored law (`shakes.zrd.json`/`damage_shakes.zrd.json`), then implement or re-scope
 
 ### Wave D — the damage menu (after PLAN-effect-catalogue's runtime capability)
@@ -304,16 +304,26 @@ item; it is not part of the finding.
 **Goal.** Engine death plays `snd_propstop`; engine start's loop ramp is sourced or named as TUNE;
 `engine_start_smoke` (the authored puff of the start moment) is played if the data binds it.
 
-**Evidence (confidence: direction-sound; one lead).** `FlightAudio.cs:317-325` — `OnEngineStop()`
-fully implemented, zero production callers; `:51` — `EngineStartRamp = 1.8f` bare literal, no
-source, no TUNE marker. Lead: `engines.zrd.json` and the per-plane defs have not been read for a
-start/stop sequence; `engine_start_smoke` sits authored and unplayed in `pufftrails.zrd.json`
-(noted on `BL-259`'s neighbourhood 2026-08-05).
+**Evidence (confidence: traced for the choreography; the trigger is the open half).** The
+authored start/stop choreography exists and is named (`plane_props.zrd.json`, read 2026-08-05):
+**`startprops`** — `snd_propstart`, each static blade prop cross-fades to its spinning prop
+(`OBJECT_OPACITY_FROM_TO`, `RUN_TIME 2.0`), and a `smokepuff1`–`3` burst per engine nacelle —
+with a matching **`stopprops`** (same file, ~line 1233). `engine_start_smoke`
+(`pufftrails.zrd.json`) is the generic 0.5 s `ON_CALL` variant at any `INPUT_NODE`. Also
+authored in the same file: `nitro_boost`/`nitro_decay` — `snd_nitrostart`, the `nitropropN`
+discs fading in over 1 s, and `exhaust1`–`4` trail puffers streaming from the exhaust nodes
+while boosting — the only *sustained* thrust-linked smoke in the corpus. Engine side:
+`FlightAudio.cs:317-325` — `OnEngineStop()` fully implemented, zero production callers; `:51` —
+`EngineStartRamp = 1.8f` bare literal (the `startprops` 2.0 s prop cross-fade is the nearest
+authored duration — check whether the ramp should be it). **No def is keyed to ordinary throttle
+steps** — the user's recollection that the original puffs smoke on a thrust increase is either
+an exe trigger calling `engine_start_smoke`/`smokepuffN`, or a memory of `nitro_boost`; one
+original-game capture (throttle staircase, no nitro) would separate them.
 
-**Approach.** First the read: `engines.zrd.json` + one plane def for an authored start/stop
-choreography (this may settle the 1.8 s ramp too). Then wire `OnEngineStop` to the paths that kill
-the engine — crash, destruction, wreck — and play `engine_start_smoke` at the authored moment if a
-binding exists; if nothing binds it, record that as the finding and leave it unplayed.
+**Approach.** Play `startprops`/`stopprops` as authored at spawn and engine-death (crash,
+destruction, wreck), wiring `OnEngineStop` in the same change; source the audio ramp from the
+authored 2.0 s if the listen A/B agrees. The throttle-step smoke stays out until the capture
+settles its trigger — record it on `BL-267` as the named open half, don't invent a step hook.
 
 **Model recommendation.** medium — half investigation, half wiring.
 
