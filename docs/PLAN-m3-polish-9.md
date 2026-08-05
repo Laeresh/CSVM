@@ -66,7 +66,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ `BL-279` Unbind the freecam action from Space so guns and freecam stop sharing the key
 2. ☑ `BL-280` Orbital camera: distance on numpad `+`/`−`, `shift` no longer drives camera and target together
-3. ☐ `BL-278` The damage lab's health slider takes armor to 0 with it
+3. ☑ `BL-278` The damage lab's health slider takes armor to 0 with it
 
 ### Wave B — the crash and fire scene
 
@@ -144,7 +144,7 @@ sign-off.
 **⚠ Traps.** `BL-150` (the numpad camera rebuild) owns the numpad bindings for the *flight* views —
 check its entry before picking keys so this doesn't collide with the layout it will impose.
 
-## A3 ☐ `BL-278` The damage lab's health slider does not zero armor
+## A3 ☑ `BL-278` The damage lab's health slider does not zero armor
 
 **Goal.** Dragging the health slider to 0 takes armor to 0 with it.
 
