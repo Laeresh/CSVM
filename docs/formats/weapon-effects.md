@@ -50,8 +50,9 @@ already-live gate would drop every ejection but one per 2 s window):
 The **white puff cluster** the retail captures show riding each ejected casing matches **no
 shipped effect def** (only `muzzle_burst` references `gunshell`, and the `gunshell` def carries
 no puffer) — the "cluster" in the captures is the muzzlepuffer's own smoke misread as a casing
-effect (user-confirmed 2026-08-05). The engine's hand-authored stand-in cluster is scheduled for
-removal (`BL-261`).
+effect (user-confirmed 2026-08-05). The engine's hand-authored stand-in cluster has been deleted
+(`BL-261`, A2): the casing now flies bare and the muzzlepuffer plays at its authored 6-puffs/0.3 s
+window instead.
 
 ## Bullet impacts — `gunhit.zrd.json`
 

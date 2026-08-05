@@ -116,25 +116,14 @@ public sealed partial class ProjectilePool : Node3D
     // muzzle frame, size 0.3–0.6 m, life 0.1–0.2 s, ±0.8 m/s random velocity, 5 cm deviation.
     // The data emits every 0.05 s over a 0.3 s window from the moving muzzle node; the per-shot
     // puff count here is the gloss of that window (TUNE) — the authored ranges are verbatim.
-    private const int MuzzleSmokePuffs = 0;            // TUNE (authored window: 6 puffs / 0.3 s)
+    private const int MuzzleSmokePuffs = 6;            // 0.3 s window / 0.05 s TIME_INTERVAL
     private const float MuzzleSmokeAftSpeed = 20f;     // m/s, local_velocity z
     private const float MuzzleSmokeDeviation = 0.05f;  // m, deviation_distance
     private const float MuzzleSmokeRandVel = 0.8f;     // m/s, min/max_random_velocity
     private const float MuzzleSmokeSizeMin = 0.3f, MuzzleSmokeSizeMax = 0.6f;   // m
     private const float MuzzleSmokeLifeMin = 0.1f, MuzzleSmokeLifeMax = 0.2f;   // s
 
-    // The casing's white puff cluster (the original ejects ~5–6 persisting, aft-drifting white
-    // puffs with each shell — the reference captures). Unmatched to any shipped effect def after
-    // a genuine search (only muzzle_burst references gunshell, and the gunshell def is motion-only,
-    // no puffer), so this cluster is a hand-authored stand-in judged against the captures — TUNE.
-    private const int EjectPuffs = 5;
-    private const float EjectPuffSpread = 0.4f;   // m, cluster radius at spawn
-    private const float EjectPuffDrift = 1.0f;    // m/s random drift
-    private const float EjectPuffSink = 1.5f;     // m/s downward drift
-    private const float EjectPuffSizeMin = 0.5f, EjectPuffSizeMax = 0.9f;  // m
-    private const float EjectPuffLifeMin = 1.2f, EjectPuffLifeMax = 2.0f;  // s — the puffs persist
-
-    private const int MaxSmoke = 256;   // the persisting eject puffs dominate this pool
+    private const int MaxSmoke = 256;   // cap on live muzzlepuffer sprites across every gun (a cap, not a tuned size)
 
     // The ejected shell casing (gunshell): one pooled chapter-gamez instance per shot, flying the
     // def's own OBJECT_MOTION. Per-shot instances so sustained fire never drops an ejection — a
@@ -204,7 +193,6 @@ public sealed partial class ProjectilePool : Node3D
     private static readonly Color RicochetTint = new(1f, 0.95f, 0.6f); // white-hot spark yellow
     private static readonly Color DirtTint = new(1f, 1f, 1f); // the bit textures carry the colour
     private static readonly Color MuzzleSmokeTint = new(0.85f, 0.85f, 0.85f);
-    private static readonly Color EjectPuffTint = new(1f, 1f, 1f);
 
     // Muzzle-flash sprite tint (C24) — unrelated to the tracer tint below, which is a separate,
     // uniform overbright multiplier so each ammo's own tracer texture colour shows through unshifted.
@@ -237,7 +225,7 @@ public sealed partial class ProjectilePool : Node3D
     // texture, since a MultiMesh's material (and so its texture) is shared across every instance.
     private readonly List<Sprite>[] _muzzle = { new(), new(), new(), new() };
     private readonly List<Sprite> _impact = new();
-    private readonly List<Sprite> _smoke = new();   // muzzle smoke + eject puffs (alpha-blended)
+    private readonly List<Sprite> _smoke = new();   // muzzlepuffer smoke (alpha-blended)
     // One sprite list per dirt-debris chip texture (DirtDebrisTextures), same split as _muzzle.
     private readonly List<Sprite>[] _debris = { new(), new(), new(), new() };
 
@@ -404,8 +392,8 @@ public sealed partial class ProjectilePool : Node3D
         for (int i = 0; i < MuzzleAmmoTextures.Length; i++)
             _muzzleMm[i] = AddMultiMesh(MuzzleAmmoTextures[i], MaxFlashes, additive: true, billboard: false, out _);
         _impactMm = AddMultiMesh("slug_muzzle2", MaxFlashes, additive: true, billboard: false, out _);
-        // Smoke (the muzzlepuffer puffs + the casing's eject-puff cluster): the authored puffer
-        // textures (smoke101), alpha-blended rather than additive so the puffs read as smoke.
+        // Smoke (the muzzlepuffer puffs): the authored puffer textures (smoke101), alpha-blended
+        // rather than additive so the puffs read as smoke.
         _smokeMm = AddMultiMesh("smoke101", MaxSmoke, additive: false, billboard: false, out _);
         // Dirt-debris chips: the authored bit0N art, alpha-blended so the chips read as debris
         // rather than glowing through the additive flash pool (BL-203).
@@ -534,9 +522,9 @@ public sealed partial class ProjectilePool : Node3D
             }
         }
 
-        // The gun shot's authored secondaries (C22): the ejected casing with its white puff
-        // cluster, the muzzlepuffer smoke, and the dynamic muzzle-light flash. Guns only — the
-        // muzzle_burst def is bound by the guns; rockets carry their own FIRE effects.
+        // The gun shot's authored secondaries (C22): the ejected casing, the muzzlepuffer smoke,
+        // and the dynamic muzzle-light flash. Guns only — the muzzle_burst def is bound by the
+        // guns; rockets carry their own FIRE effects.
         if (weapon.IsGun)
         {
             SpawnCasing(muzzle);
@@ -1413,16 +1401,14 @@ public sealed partial class ProjectilePool : Node3D
     /// gunshell def's own <c>OBJECT_MOTION</c> read verbatim from the anim program — the ranged
     /// ballistic drop and the forward-rotation tumble over its <c>RUN_TIME</c>, same semantics as
     /// <c>MotionRuntime</c>. Each casing rides its own transient node, so sustained fire ejects at
-    /// gun rate — nothing shares the <c>gunshell</c> anchor. Alongside the casing goes its white
-    /// puff cluster (a hand-authored stand-in; no shipped def matches it — see EjectPuffs). No-op
-    /// without a world scene/anim program (the weapon lab, the empty stage).</summary>
+    /// gun rate — nothing shares the <c>gunshell</c> anchor. No-op without a world scene/anim
+    /// program (the weapon lab, the empty stage).</summary>
     private void SpawnCasing(Transform3D muzzle)
     {
         var spec = CasingSpecResolve();
         if (spec == null)
             return;
         var slot = AcquireCasing();
-        var puffVel = Vector3.Down * EjectPuffSink; // fallback drift when the casing pool is at cap
         if (slot != null)
         {
             // MotionRuntime's translation_range read, through its own expression so the two
@@ -1440,29 +1426,6 @@ public sealed partial class ProjectilePool : Node3D
             slot.InUse = true;
             slot.Node.Visible = true;
             slot.Node.GlobalTransform = new Transform3D(slot.Basis, slot.Start);
-            puffVel = slot.V0; // the cluster rides with its casing (the reference captures show
-                               // the brass speck inside each falling puff cluster)
-        }
-
-        // The white puff cluster the original shows with every casing: persisting puffs that fall
-        // with the shell while the aircraft flies out of them.
-        var orient = muzzle.Basis.Orthonormalized();
-        for (int i = 0; i < EjectPuffs && _smoke.Count < MaxSmoke; i++)
-        {
-            var off = new Vector3(_rng.Randf() - 0.5f, _rng.Randf() - 0.5f, _rng.Randf() - 0.5f)
-                      * (2f * EjectPuffSpread);
-            var drift = puffVel + new Vector3(_rng.Randf() - 0.5f, _rng.Randf() - 0.5f, _rng.Randf() - 0.5f)
-                        * (2f * EjectPuffDrift);
-            _smoke.Add(new Sprite
-            {
-                Pos = muzzle.Origin + off,
-                Life = RandRange(EjectPuffLifeMin, EjectPuffLifeMax),
-                Size = RandRange(EjectPuffSizeMin, EjectPuffSizeMax),
-                Tint = EjectPuffTint,
-                Orient = orient,
-                Vel = drift,
-                NoGravity = true,
-            });
         }
     }
 
