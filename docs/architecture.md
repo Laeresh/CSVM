@@ -1047,9 +1047,15 @@ name (e.g. the incendiary rocket's `ground_mixed_exp_sg` default impact) through
 first, same as `WorldSounds.PlayOneShot` — `FIRE.SOUND` is null for every cannon in the data
 (`LOOPED_SOUND_NAME` covers continuous gunfire instead), so the one-shot never doubles up (BL-211).
 Positive-`HEALTH_DAMAGE` blasts linearly fall from full at direct contact to zero at the authored
-`IMPACT_PROXIMITY`, measured from each intersected collision-shape centre; `DAMAGE 0` effect radii
-never damage. A swept `DETONATION_DISTANCE` sphere prevents fuse tunnelling and gates its actual
-contact point through `DETONATION_DOT_PRODUCT`. The linear curve and 1 N·s/HP impulse are TUNE.
+`IMPACT_PROXIMITY`; `DAMAGE 0` effect radii never damage. The struck body always takes full damage
+(`ApplyDamage`'s direct-hit branch, unscaled by falloff); every OTHER body the blast sphere overlaps
+is scored from the nearest point on **its own collision shape**, not its transform origin
+(`NearestBlastPoint`, BL-239) — a `GetRestInfo` query against the same sphere with every other
+candidate body excluded, so a large neighbour (a zeppelin gasbag, a long building mesh) is scored by
+how close the blast actually is to its skin, not by how far the blast is from wherever its origin
+happens to sit. Falls back to the shape owner's transform origin only if that query somehow finds no
+contact. A swept `DETONATION_DISTANCE` sphere prevents fuse tunnelling and gates its actual contact
+point through `DETONATION_DOT_PRODUCT`. The linear curve and 1 N·s/HP impulse are TUNE.
 ⚠ Hit detection is a per-step world raycast vs a body-less plane — a round never hits its own
   launcher, and `player`/`enemy` IMPACT classes are unreachable in M3.
 ⚠ `CANNON_SPREAD` jitter and the stand-in fireball draw from `Rng.Weapons` — a pinned run repeats

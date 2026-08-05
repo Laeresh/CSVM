@@ -100,6 +100,9 @@ public static class Suites
             "Loadout.ForRig covers every firepoint/pylon on all 11 airframes, seeded from stock", LoadoutForRig));
         into.Add(new TestHarness.Suite("warning-shot",
             "the incoming-fire near-miss cue fires on another pilot's round, never on your own", WarningShot));
+        into.Add(new TestHarness.Suite("blast-neighbor-shape",
+            "splash falloff on a neighbour scores to its nearest collision-shape surface, not its " +
+            "transform origin (BL-239)", BlastNeighborShape));
         into.Add(new TestHarness.Suite("damage-stages",
             "each DAMAGE_SEQUENCE def fires its stage effects across an HP sweep", DamageStages));
         into.Add(new TestHarness.Suite("damage-hd",
@@ -1023,6 +1026,96 @@ public static class Suites
         finally
         {
             pool?.Free();
+            textures.Dispose();
+        }
+    }
+
+    /// <summary>BL-239's repro pair, on controlled geometry: a torpedo detonates against a thin
+    /// wall placed right next to one end of a long neighbouring body. The neighbour's transform
+    /// origin sits well OUTSIDE the blast radius (the bug's exact symptom — origin-scored falloff
+    /// reads zero splash), while its near face sits well inside it, so a real fix must score it
+    /// as taking measurable splash. The struck wall's own direct-hit damage must stay byte-identical
+    /// (full, unscaled) either way — this suite is disjoint from `weapon-blast`, which only checks
+    /// the pure falloff curve, not the neighbour-scoring geometry.</summary>
+    private static void BlastNeighborShape(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        if (!weapons.TryGet("wep_14", out var torpedo)
+            || torpedo.HealthDamage is not > 0f || torpedo.ImpactProximity is not > 0f)
+        {
+            ctx.Check(false, $"torpedo (wep_14) carries HEALTH_DAMAGE + IMPACT_PROXIMITY");
+            return;
+        }
+        float fullDamage = torpedo.HealthDamage!.Value;
+        float radius = torpedo.ImpactProximity!.Value;
+        var detonation = new Vector3(0f, 0f, -10f);
+
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        StaticBody3D? wall = null;
+        StaticBody3D? neighbor = null;
+        try
+        {
+            // The struck wall: a thin plate the round's raycast hits almost immediately.
+            wall = new StaticBody3D { Name = "blast-test-wall" };
+            wall.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(10f, 10f, 0.2f) } });
+            wall.GlobalTransform = new Transform3D(Basis.Identity, detonation);
+            ctx.Host.AddChild(wall);
+
+            // The neighbour: a long body (a zeppelin gasbag/long building mesh, per BL-239's
+            // evidence) whose CENTRE (transform origin) sits well past `radius`, while its near
+            // face sits `nearFaceDistance` from the detonation — well inside `radius`.
+            float nearFaceDistance = 2f;
+            float halfLen = radius + 20f;
+            neighbor = new StaticBody3D { Name = "blast-test-neighbor" };
+            neighbor.AddChild(new CollisionShape3D
+            { Shape = new BoxShape3D { Size = new Vector3(halfLen * 2f, 4f, 4f) } });
+            neighbor.GlobalTransform = new Transform3D(Basis.Identity,
+                detonation + new Vector3(nearFaceDistance + halfLen, 0f, 0f));
+            ctx.Host.AddChild(neighbor);
+
+            float originDistance = neighbor.GlobalPosition.DistanceTo(detonation);
+            ctx.Check(originDistance > radius,
+                $"repro precondition: the neighbour's transform origin sits outside the blast radius distance={originDistance:0.#} radius={radius:0.#}");
+
+            var recorded = new List<(Node? Body, float Damage)>();
+            pool = new ProjectilePool(textures, null, null)
+            {
+                DamageSink = (body, damage) => { recorded.Add((body, damage)); return true; },
+            };
+            ctx.Host.AddChild(pool);
+            pool.Spawn(torpedo, new Transform3D(Basis.Identity, Vector3.Zero), Vector3.Zero);
+            for (int i = 0; i < 120 && recorded.Count == 0; i++)
+                pool.SimStep(1f / 60f);
+
+            ctx.Check(recorded.Count > 0, $"the round reached and detonated on the wall");
+
+            var wallHit = recorded.FirstOrDefault(r => r.Body == wall);
+            ctx.Check(wallHit.Body == wall, $"the directly struck wall is in the damage report");
+            if (wallHit.Body == wall)
+            {
+                ctx.Check(Mathf.IsEqualApprox(wallHit.Damage, fullDamage),
+                    $"direct-hit damage stays full and unscaled by the blast falloff damage={wallHit.Damage:0.#} full={fullDamage:0.#}");
+            }
+
+            var neighborHit = recorded.FirstOrDefault(r => r.Body == neighbor);
+            ctx.Check(neighborHit.Body == neighbor,
+                $"a neighbour whose ORIGIN sits outside the blast radius still takes splash damage, scored to its nearest surface (BL-239) — origin-scoring would have read zero here");
+            if (neighborHit.Body == neighbor)
+            {
+                float expected = ProjectilePool.BlastDamage(fullDamage, radius, nearFaceDistance);
+                ctx.Check(neighborHit.Damage > 0f && Mathf.Abs(neighborHit.Damage - expected) < 1f,
+                    $"neighbour damage matches the shape-scored falloff from its near face expected={expected:0.#} actual={neighborHit.Damage:0.#}");
+            }
+        }
+        finally
+        {
+            pool?.Free();
+            wall?.Free();
+            neighbor?.Free();
             textures.Dispose();
         }
     }

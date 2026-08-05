@@ -10,7 +10,7 @@ here means the work is queued, not forgotten. Deep evidence and traps live in
 Cite them from `backlog.md` and in conversation the way `BL-nnn` is cited. IDs are permanent: when
 an item closes its ID retires with it and is never reused, so numbering gaps are expected.
 Retired IDs disappear from this file, so never mint a new ID by scanning the entries below — take
-it from this counter and bump it here: **next free IDs `CAP-26` and `PT-36`.** (`CAP-17` and
+it from this counter and bump it here: **next free IDs `CAP-26` and `PT-37`.** (`CAP-17` and
 `CAP-14` and `CAP-24` and `CAP-16` retired 2026-08-04 — IDs are never reused.)
 
 **Captures staged for an item live in `playtest/<ID>/`** — git-ignored (they are renders of the
@@ -110,6 +110,17 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   pipper is *drawn* at. *Look for:* it sits where the rounds actually land in a hard turn.
   `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo --fire`. *Blocks:* retiring the
   TUNE.
+
+- `PT-36` **Splash falloff onto a large neighbour, e.g. a zeppelin gasbag (`BL-239`).** Blast damage
+  onto a body other than the one struck now scores to the nearest point on that body's own collision
+  shape instead of its transform origin, so a large body — a zeppelin gasbag, a long building mesh —
+  no longer soaks less splash than a small one, or none at all when its origin happens to sit outside
+  the blast radius entirely. Landed against a controlled synthetic repro (the `blast-neighbor-shape`
+  suite); no chapter mission is known to place a rocket-class blast near one end of a real large body,
+  so the in-game picture is unverified. Fly at the C1 zeppelin (`hk_zep`) and put a rocket into one
+  end of a gasbag, away from dead centre: `./RunGame.ps1 --fly --chapter=C1 --infinite-ammo`.
+  *Look for:* the gasbag takes damage from a hit that lands well off its centre, not only from a hit
+  near the middle. *Blocks:* `BL-239` sign-off.
 
 - `PT-35` **The rocket rings' template meshes (`BL-061`).** The mesh half landed and is asserted
   in-engine and in `--effects-test`'s census, but no golden sees it — the rings only appear on a

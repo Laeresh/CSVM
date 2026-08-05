@@ -81,7 +81,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — Larger mechanisms
 
 9. ☐ `BL-228` Implement `WAIT_FOR_COMPLETION` (scoped and measured — it moves goldens)
-10. ☐ `BL-239` Blast falloff measures to a body's transform origin, not its geometry
+10. ☑ `BL-239` Blast falloff measures to a body's transform origin, not its geometry
 
 ## Dependency and parallelism notes
 
@@ -508,7 +508,7 @@ measure before believing a screenshot. (b) `0` and `null` are **different author
 stale values (525 events) — not a wait, must not be read as one. (d) "Completes" is defined from
 the data, not from what makes the crash look right.
 
-## D10 ☐ `BL-239` Blast falloff measures to a body's transform origin, not its geometry
+## D10 ☑ `BL-239` Blast falloff measures to a body's transform origin, not its geometry
 
 **Goal.** Splash damage onto a neighbouring body is scored by the blast's distance to that body's
 *collision shape*, so a large body (a zeppelin gasbag, a long building mesh) no longer soaks less
@@ -544,3 +544,30 @@ falloff *shape* is already the open TUNE `BL-227`; inflating it papers over a
 distance-measurement bug and corrupts both. The comment at `DamageZonePosition` explaining why
 the *detonation centre* is the ray contact is about the blast's own position and is correct — it
 does not license an origin on the receiving side.
+
+**Landed 2026-08-05.** Step one's repro came first, on controlled geometry rather than a lucky
+in-mission placement: a thin wall (the directly struck body) next to one end of a 100+ m
+`StaticBody3D` neighbour whose transform origin sits well past `IMPACT_PROXIMITY`, so the old code's
+`zonePoint.DistanceTo(point)` read a distance beyond the radius and scored **zero** splash onto a
+body only 2 m from the blast on its own skin — the exact "or none, when its origin falls outside the
+sweep sphere entirely" case the Evidence named. `ApplyDamage`'s neighbour loop (every body the blast
+sphere overlaps other than the one directly struck) now calls a new `NearestBlastPoint`: the same
+sphere re-queried through `GetRestInfo`, with every OTHER candidate body from the original
+`IntersectShape` sweep excluded, so the only shape left to resolve against is the one being scored —
+its `"point"` is the contact where the sphere first touches that body's own surface, not its shape
+owner's transform. Falls back to the old origin read only if that query somehow finds nothing (the
+body was already known to overlap the sphere, so this is a defensive fallback, never the expected
+path). The directly-struck body's branch is untouched, per trap: full `HEALTH_DAMAGE`, unscaled by
+falloff, exactly as before. `IMPACT_PROXIMITY` itself was not touched, per the other trap.
+
+The new `blast-neighbor-shape` suite is the repro turned into a permanent, able-to-fail assertion:
+reverting `NearestBlastPoint` to the old `DamageZonePosition` call made it fail (the neighbour is
+missing from the damage report entirely — its origin-scored falloff clamps to zero), confirming the
+suite catches the bug before confirming the fix clears it. Full `.\RunTests.ps1` green: 436/436
+units, 28/28 engine suites (the new one included), 13/13 goldens hash-identical — no golden fires a
+weapon near a large body, so the direct-hit path's byte-identity was never in question, and
+`damage-hd`'s 16 swept destructibles (destroy/reset/rekill) were unaffected, since that suite is
+about direct `HEALTH_DAMAGE` kills, not neighbour splash scoring. **Owed:** an in-game picture — no
+known chapter mission places a rocket-class blast near one end of a real large body (the zeppelin
+gasbags are the candidate), so the fix is verified on synthetic geometry only — `PT-36`. Details:
+`docs/HISTORY.md` 2026-08-05, `docs/architecture.md`'s `Projectile.cs` entry.

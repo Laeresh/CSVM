@@ -15397,3 +15397,37 @@ assertion: reveal disabled → the mesh tally (2 of 17); hide disabled → the r
 disabled → the call-site distance check (ten templates lit `@179 m`, the play point's own distance
 from the stage origin). Full `.\RunTests.ps1` PASS, exit 0 — 27/27 suites, 13/13 goldens
 hash-identical.
+
+## 2026-08-05 — PLAN-m3-polish-7 D10 `BL-239`: blast falloff onto a neighbour now scores to its nearest collision-shape surface, not its transform origin
+
+Step one built the repro before touching the fix, on controlled geometry rather than waiting for a
+lucky in-mission placement: a thin wall (the directly struck body) sits next to one end of a 100+ m
+`StaticBody3D` neighbour whose transform origin sits well past the weapon's `IMPACT_PROXIMITY`. Under
+the old code, `ApplyDamage`'s neighbour loop measured `zonePoint.DistanceTo(point)` from
+`DamageZonePosition` — the shape owner's transform origin — so this neighbour's origin-distance
+exceeded the blast radius and it took **zero** splash damage despite its near face sitting 2 m from
+the detonation. That is exactly the Evidence's "or none, when its origin falls outside the sweep
+sphere entirely" case, now reproduced on demand rather than inferred from reading `ApplyDamage`.
+
+**The fix.** `ApplyDamage`'s neighbour loop (every body the blast sphere overlaps other than the one
+directly struck, which is untouched and still takes full unscaled `HEALTH_DAMAGE`) now calls a new
+`NearestBlastPoint`: the same sphere, re-queried through `GetRestInfo` with every OTHER candidate body
+from the original `IntersectShape` sweep excluded from the query, so the only shape left for the
+engine to resolve a contact against is the one being scored. Its `"point"` is where the sphere first
+touches THAT body's own surface — the nearest point on its collision shape — not the shape owner's
+transform. Falls back to the old origin read only if that query somehow finds nothing (the body was
+already known to overlap the sphere via the initial sweep, so this is a defensive fallback, never the
+expected path). `IMPACT_PROXIMITY` itself and the linear falloff curve (`BlastDamage`) are untouched,
+per the item's trap against widening the radius to compensate.
+
+**How verified.** The repro became a permanent, able-to-fail suite (`blast-neighbor-shape`): with the
+fix reverted to the old `DamageZonePosition` call, the suite fails (the neighbour is missing from the
+damage report — its origin-scored falloff clamps to zero); with the fix in place it passes, and the
+struck wall's direct-hit damage is asserted byte-identical (full, unscaled) either way. Full
+`.\RunTests.ps1` PASS, exit 0 — 436/436 units, 28/28 engine suites (the new one included), 13/13
+goldens hash-identical (no golden fires a weapon near a large body, so the direct-hit path's
+byte-identity was never in question); `damage-hd`'s 16 swept destructibles (destroy/reset/rekill) are
+unaffected, since that suite exercises direct `HEALTH_DAMAGE` kills, not neighbour splash scoring.
+**Owed:** an in-game picture — no known chapter mission places a rocket-class blast near one end of a
+real large body (the C1 zeppelin's gasbags are the candidate), so the fix is verified on synthetic
+geometry only, tracked as `PT-36`.

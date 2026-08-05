@@ -1251,6 +1251,33 @@ public sealed partial class ProjectilePool : Node3D
         }
         return body.GlobalPosition;
     }
+
+    // BL-239: a neighbour's splash falloff distance must be measured to the nearest point on ITS
+    // OWN collision shape, not to the shape owner's transform origin — a large body (a zeppelin
+    // gasbag, a long building mesh) otherwise soaks less splash than a small one, or none at all
+    // when its origin happens to fall outside the sweep sphere entirely even though its skin does
+    // not. `GetRestInfo` against the same blast sphere, with every OTHER body the sweep found
+    // excluded, returns the contact point where the sphere first touches THIS body's surface —
+    // exactly the nearest point the Approach calls for. Falls back to the origin only if that
+    // query somehow finds nothing (the body was already known to overlap the sphere via
+    // `IntersectShape`, so this is a defensive fallback, not the expected path).
+    private Vector3 NearestBlastPoint(PhysicsDirectSpaceState3D space, Vector3 center, float radius,
+        Node3D body, Rid bodyRid, Godot.Collections.Array<Godot.Collections.Dictionary> hits, int shapeIndex)
+    {
+        var exclude = new Godot.Collections.Array<Rid>();
+        foreach (var hit in hits)
+        {
+            var rid = (Rid)hit["rid"];
+            if (rid != bodyRid)
+                exclude.Add(rid);
+        }
+        ConfigureSphereQuery(radius, center);
+        _proximityQuery.Exclude = exclude;
+        var rest = space.GetRestInfo(_proximityQuery);
+        _proximityQuery.Exclude = new Godot.Collections.Array<Rid>();
+        return rest.Count > 0 ? (Vector3)rest["point"] : DamageZonePosition(body, shapeIndex);
+    }
+
     private void ApplyDamage(in ImpactOutcome outcome, Vector3 point, Node? struck)
     {
         float fullDamage = outcome.Damage;
@@ -1278,9 +1305,10 @@ public sealed partial class ProjectilePool : Node3D
             var body = hit["collider"].Obj as Node;
             if (body == struck || body is not Node3D body3D)
                 continue;
+            var rid = (Rid)hit["rid"];
             int shapeIndex = hit["shape"].AsInt32();
-            var zonePoint = DamageZonePosition(body3D, shapeIndex);
-            float damage = BlastDamage(fullDamage, radius, zonePoint.DistanceTo(point));
+            var nearPoint = NearestBlastPoint(space, point, radius, body3D, rid, hits, shapeIndex);
+            float damage = BlastDamage(fullDamage, radius, nearPoint.DistanceTo(point));
             if (damage > 0f)
                 DamageSink(body, damage);
         }
