@@ -11,7 +11,8 @@ Cite them from `backlog.md` and in conversation the way `BL-nnn` is cited. IDs a
 an item closes its ID retires with it and is never reused, so numbering gaps are expected.
 Retired IDs disappear from this file, so never mint a new ID by scanning the entries below — take
 it from this counter and bump it here: **next free IDs `CAP-26` and `PT-37`.** (`CAP-17` and
-`CAP-14` and `CAP-24` and `CAP-16` retired 2026-08-04 — IDs are never reused.)
+`CAP-14` and `CAP-24` and `CAP-16` retired 2026-08-04, `CAP-15` retired 2026-08-05 — IDs are
+never reused.)
 
 **Captures staged for an item live in `playtest/<ID>/`** — git-ignored (they are renders of the
 player's own game files) and, unlike `.scratch/`, **not swept by `CleanScratch.ps1`**, so they
