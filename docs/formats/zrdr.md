@@ -37,4 +37,5 @@ be scanned across all three:
 | `weapons.json` (the shared `BALLISTICS` weapon catalogue) | [weapons.md](weapons.md) |
 | weapon effect readers (`muzzle_burst`, `gunhit`, the `*_control` ordnance bursts) | [weapon-effects.md](weapon-effects.md) |
 | destructible `ANIMATION_DEFINITION`s (`HEALTH` / `DAMAGE_SEQUENCE` / `ACTIVATION`) | [destructibles.md](destructibles.md) |
+| `shakes.json`, `damage_shakes.json` (camera-shake oscillator sources + ON_CALL shake defs) | [shakes.md](shakes.md) |
 | `interp.json` boot scripts (not zrdr, but the same config ecosystem) | [clutter.md](clutter.md) |
