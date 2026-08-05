@@ -50,16 +50,26 @@ internal sealed class SpinMotion : IAnimMotion
     public void Seek(float t)
     {
         _t = _runTime > 0f ? Mathf.Min(t, _runTime) : t;
-        var a = _rate * _t;
+        var xf = Target.Transform;
+        xf.Basis = ComposeSpin(_rest, _rate, _t);
+        Target.Transform = xf;
+    }
+
+    /// <summary>Rotates <paramref name="rest"/> by <paramref name="rateRadPerSec"/>·<paramref name="t"/>
+    /// about the node's own local axes — the accumulate-from-rest math this class applies per frame,
+    /// exposed so <c>PropAnimator</c> can spin the flying aircraft's prop/rotor discs through the same
+    /// decode instead of stepping a separate <c>RotateObjectLocal</c> loop (which drifts over a long
+    /// session; this recomputes an absolute pose every call instead of integrating one).</summary>
+    internal static Basis ComposeSpin(Basis rest, Vector3 rateRadPerSec, float t)
+    {
+        var a = rateRadPerSec * t;
         // Applied X→Y→Z about the local axes. Order is only observable when two axes spin
         // at once, which nothing reachable in this install does (every reached event is
         // single-axis); recheck this if a multi-axis spin ever turns up looking wrong.
-        var b = _rest;
+        var b = rest;
         if (a.X != 0f) b = b.Rotated(b.X.Normalized(), a.X);
         if (a.Y != 0f) b = b.Rotated(b.Y.Normalized(), a.Y);
         if (a.Z != 0f) b = b.Rotated(b.Z.Normalized(), a.Z);
-        var xf = Target.Transform;
-        xf.Basis = b;
-        Target.Transform = xf;
+        return b;
     }
 }

@@ -362,7 +362,10 @@ propN/propNb, rotorN/rotorNb) and supplies each spinning kind's local axis + rat
 XYZ_ROTATION values (deg/s, docs/formats/anim-definitions.md) from plane_props.json (spinprops)
 and autogyro.json (agyro_rotors): props spin about local Z, rotors about local Y.
 ⚠ nitropropN is classified but never spun — no nitro system yet; PlaneBuilder keeps it hidden.
-⚠ The perceived rate is a visual TUNE: a blur disc reads as spinning at any smooth rate.
+⚠ Units are settled fact, not a TUNE (`BL-264`): these are the exact `spin_rotorN`/`spin_rotorNb`
+  authored rates (-220/60/165/-60 deg/s), and `PropAnimator` converts them through the same
+  `Mathf.DegToRad` + accumulate-from-rest decode `AnimDefs.Spin`/`SpinMotion` apply to the ambient
+  world's own `XYZ_ROTATION` spins — verified: same numbers, same conversion, no separate guess.
 
 ## src/Mech3/ControlSurfaces.cs
 Classifies a plane's control-surface mesh nodes + hinge axes: the deflecting node (l/r_aileronN,
@@ -682,7 +685,12 @@ return path to poll the effects runtime's.
 `AnimRuntime`'s private nested types promoted to top-level `internal` types in their own
 namespace, purely for file size — not an independently-owned subsystem, still driven entirely by
 `AnimRuntime`. `IAnimMotion` (`ScriptPlayback`/`SpinMotion`/`FromToMotion`/`OpacityFade`/
-`MotionRuntime`), `AnimLight`, and the bind-census `AnchorKind` enum. `MotionSet`, `EmitterDirector`
+`MotionRuntime`), `AnimLight`, and the bind-census `AnchorKind` enum. `SpinMotion.ComposeSpin` is
+the one member reached from outside this namespace without going through `AnimRuntime` at all —
+`Flight/PropAnimator.cs` calls it directly so a plane's own props spin through the identical
+accumulate-from-rest decode instead of a second hand conversion; it takes a rest `Basis` and a
+rate, no `AnimRuntime`/`MotionSet` state, so the reach-in is inert to everything else here.
+`MotionSet`, `EmitterDirector`
 and `NameResolver` share the namespace but ARE independently owned — their own entries below.
 `MotionRuntime`'s `translation_range` is a SPHERICAL launch — `xz` azimuth, `y` elevation, both in
 degrees, `initial` the speed (`analysis/object-motion-range/`, decoded 2026-08-01) — and a launch
@@ -1453,9 +1461,12 @@ off one number, and never recompute the margin beside them.
 
 ## src/Flight/PropAnimator.cs
 Spins the flying aircraft's prop/rotor blur discs: Build collects every node PropParts classifies
-(local axis + rate), Advance rotates each via RotateObjectLocal so the disc spins in-plane
-regardless of parent orientation. FlightController drives it throttle-scaled with a PropIdleSpin
-0.4 floor (0 while crashed). --fly only — the static viewer keeps the still disc.
+(rest pose + rate, radians/second local axes). Advance recomputes each disc's absolute pose from
+its stored rest pose through `SpinMotion.ComposeSpin` — the same accumulate-from-rest decode
+`AnimRuntime` plays the ambient world's own `XYZ_ROTATION` spins through — rather than stepping
+`RotateObjectLocal`, so a long flight session cannot drift. FlightController drives it
+throttle-scaled with a PropIdleSpin 0.4 floor (0 while crashed). --fly only — the static viewer
+keeps the still disc.
 
 ## src/Flight/ControlSurfaceAnimator.cs
 Deflects ailerons/elevators/rudders to an absolute pose: each surface stores its build-time local

@@ -1,15 +1,19 @@
 using System.Collections.Generic;
 using CSVM.Mech3;
+using CSVM.Mech3.Anim;
 using Godot;
 
 namespace CSVM.Flight;
 
 /// <summary>
 /// Spins a flying aircraft's propeller/rotor blur discs each frame. Cheaper and
-/// simpler than an AnimationPlayer: a flat list of (node, local axis, rate) that the
-/// flight loop advances. Built from a plane model that PlaneBuilder rendered with
-/// <c>spinningProps</c> (the blur layers present, the static disc hidden). See
-/// <see cref="PropParts"/> for what spins and how fast.
+/// simpler than an AnimationPlayer: a flat list of (node, rest pose, rate) that the
+/// flight loop advances through <see cref="SpinMotion.ComposeSpin"/> — the same
+/// accumulate-from-rest decode <c>AnimRuntime</c> plays authored <c>XYZ_ROTATION</c>
+/// spins (zeppelin props, signage) through, so a plane's own props share one settled
+/// unit conversion instead of a second hand one. Built from a plane model that
+/// PlaneBuilder rendered with <c>spinningProps</c> (the blur layers present, the
+/// static disc hidden). See <see cref="PropParts"/> for what spins and how fast.
 /// </summary>
 public sealed class PropAnimator
 {
@@ -36,27 +40,41 @@ public sealed class PropAnimator
         if (dt == 0f)
             return;
         foreach (var s in _spinners)
-            s.Node.RotateObjectLocal(s.Axis, s.RadPerSec * dt);
+            s.Advance(dt);
     }
 
     private static void Collect(Node node, List<Spinner> spinners)
     {
         if (node is Node3D n3d && PropParts.Spin(PropParts.Classify(n3d.Name), out var axis, out var deg))
-            spinners.Add(new Spinner(n3d, axis, Mathf.DegToRad(deg)));
+            spinners.Add(new Spinner(n3d, axis * Mathf.DegToRad(deg)));
         foreach (var child in node.GetChildren())
             Collect(child, spinners);
     }
 
-    private readonly struct Spinner
+    /// <summary>One spinning disc: its rest pose and rate (radians/second, local axes),
+    /// accumulated total time. Recomputes an absolute pose from rest every <see cref="Advance"/>
+    /// via <see cref="SpinMotion.ComposeSpin"/> rather than stepping <c>RotateObjectLocal</c>,
+    /// so a long session cannot drift — same reasoning as <c>SpinMotion</c> itself.</summary>
+    private sealed class Spinner
     {
-        public readonly Node3D Node;
-        public readonly Vector3 Axis;      // unit, in the node's local frame
-        public readonly float RadPerSec;   // base rate; scaled by throttle at runtime
-        public Spinner(Node3D node, Vector3 axis, float radPerSec)
+        private readonly Node3D _node;
+        private readonly Basis _rest;
+        private readonly Vector3 _rate; // radians/second, local axes
+        private float _t;
+
+        public Spinner(Node3D node, Vector3 rateRadPerSec)
         {
-            Node = node;
-            Axis = axis;
-            RadPerSec = radPerSec;
+            _node = node;
+            _rest = node.Transform.Basis;
+            _rate = rateRadPerSec;
+        }
+
+        public void Advance(float dt)
+        {
+            _t += dt;
+            var xf = _node.Transform;
+            xf.Basis = SpinMotion.ComposeSpin(_rest, _rate, _t);
+            _node.Transform = xf;
         }
     }
 }
