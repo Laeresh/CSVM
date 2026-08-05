@@ -17,8 +17,10 @@ namespace CSVM.Mech3;
 /// every plane) and <c>autogyro.json</c> (<c>agyro_rotors</c>): propeller discs turn
 /// about local Z (the nose axis), the autogyro's overhead rotor about local Y. Each
 /// engine layers a fast disc (propN/rotorN) and a slower counter-rotating ghost
-/// (propNb/rotorNb). The source units are undecoded; we treat them as degrees/second
-/// (a visual TUNE — a blur disc reads as spinning at any smooth rate).
+/// (propNb/rotorNb). Units are settled — degrees/second, the same reader convention
+/// <c>docs/formats/anim-definitions.md</c>'s <c>XYZ_ROTATION</c> decode documents and
+/// <c>PropAnimator</c> converts through <c>Mathf.DegToRad</c> exactly as
+/// <c>AnimDefs.Spin</c> does for the ambient world's own steady spins.
 /// </summary>
 public static class PropParts
 {
