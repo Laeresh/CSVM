@@ -2052,10 +2052,14 @@ the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replac
 emitter's own MODES are. Neither covers the other's job.
 
 ## src/Testing/Suites.cs
-The 26 registered in-engine assertion suites cover typed weapon data, blast/fuse rules, the original's
+The 27 registered in-engine assertion suites cover typed weapon data, blast/fuse rules, the original's
 flight envelope, plane/loadout bindings (stock and, since M3 B4, the full-rig `Loadout.ForRig`),
 live weapon fire, destructible stages/death/census, animation
-stops and bounce-terminated launches, emitter lifetime and the emitter's own modes, texture
+stops and bounce-terminated launches, the full effects sweep (`effects-census`: every effect
+resolves, template meshes peak at the CALL SITE not the stage origin, none stays lit after its
+stop — `Probes.Effects` rows asserted; its puffer/mesh tallies are golden counts under the
+suite's own conditions, literal seed 1 + the counting factory, pinned separately from the probe's),
+emitter lifetime and the emitter's own modes, texture
 flattening, glTF round trips, collision/node visibility, and authored stunt gates. `emitter-lifetime` is registered FIRST — it is
 the only suite installing a fake `IEmitterFactory`, and `WithWorld` caches one world per chapter, so
 running first means it builds the shared C1 world while the fake is in effect; `damage-hd`'s

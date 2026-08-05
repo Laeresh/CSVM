@@ -15377,3 +15377,23 @@ pre/post-refactor: line-identical except the decimal separator (distances now re
 `InvariantCulture` per `Probes.cs`'s own convention — `@12.0 m` where the current-culture wrapper
 wrote `@12,0 m` on a de-DE machine). Full `.\RunTests.ps1` PASS, exit 0 — 26/26 suites,
 13/13 goldens hash-identical.
+
+## 2026-08-05 — `effects-census`: the sweep's verdicts fail a build instead of sitting in `.scratch`
+
+The second half of the census unification (previous entry): a new in-engine suite plays the full
+`WorldEffectsFactory.EffectAnimNames` sweep through `Probes.Effects` on a replica stage (all
+template roots via the production `BuildEffectStage`, one pool slot, effects-role runtime) and
+asserts the row verdicts that were previously only report text: every effect resolves; every lit
+template mesh peaked at the CALL SITE, not the stage origin (the play point sits ~180 m from the
+stage origin so a non-relocated template reads >100 m and fails — the runtime's player position IS
+the play point, so PLAYER_RANGE-gated effects pass); and no template mesh stays lit after its stop.
+The puffer/mesh tallies (30/17) are golden counts under the suite's own conditions — literal seed 1
+and the counting emitter factory, not the probe's `--det`-derived seed — pinned by this run's
+measurement, independently of the probe's numbers.
+
+**How verified.** All three able-to-fail controls run and watched failing on their intended
+assertion: reveal disabled → the mesh tally (2 of 17); hide disabled → the residual check
+(`dum_gunhit` left lit from `3040ap_gunhit` onward — the exact `BL-061` signature); relocation
+disabled → the call-site distance check (ten templates lit `@179 m`, the play point's own distance
+from the stage origin). Full `.\RunTests.ps1` PASS, exit 0 — 27/27 suites, 13/13 goldens
+hash-identical.

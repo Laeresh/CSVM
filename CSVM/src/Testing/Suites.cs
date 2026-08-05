@@ -110,6 +110,8 @@ public static class Suites
             "a host going inactive spares the emitter that started in its own instant and still ends the one that did not (BL-229)", EmitterHostDeactivation));
         into.Add(new TestHarness.Suite("effect-template-mesh",
             "an effect's template meshes show at the call site — including a CALLED template's — and go dark when it ends (BL-061)", EffectTemplateMesh));
+        into.Add(new TestHarness.Suite("effects-census",
+            "the full --effects-test sweep as verdicts: every effect resolves, template meshes show at the CALL SITE (not the stage origin), and none stays lit after its stop", EffectsCensus));
         into.Add(new TestHarness.Suite("bounce-launch",
             "a bounce-terminated OBJECT_MOTION flies its solved parabola and fires its BOUNCE_SEQUENCE on landing", BounceLaunch));
         into.Add(new TestHarness.Suite("destructible-census",
@@ -1661,6 +1663,79 @@ public static class Suites
             runtime.Free();
             stage.Free();
         }
+    }
+
+    // ---- the full effects sweep as suite verdicts ----------------------------------------------
+
+    /// <summary>The whole `--effects-test` sweep, asserted instead of read: every one of
+    /// <c>WorldEffectsFactory.EffectAnimNames</c> played through <see cref="Probes.Effects"/> on a
+    /// full replica stage. The census's two sweep-wide verdicts sat in `.scratch` text while the
+    /// probe "read 33/33 resolved for months" (INSTR-11); this makes them fail a build. The play
+    /// point is a fixed spot ~180 m from the stage origin, so the distance column discriminates:
+    /// a template that failed to relocate sits at the origin and reads &gt;100 m, a placed one reads
+    /// the effect's own authored offsets (0–12 m measured). The runtime's player position IS the
+    /// play point, so range-gated effects (the gun family's PLAYER_RANGE 500) pass wherever the
+    /// world camera happens to be.
+    ///
+    /// <para>The puffer/mesh tallies are golden counts under THIS suite's conditions — literal
+    /// seed 1 and the counting emitter factory — which are not the probe's (`--det` derives the
+    /// effects seed from the master, and RANDOM_WEIGHT dice gate several gun puffers), so the two
+    /// are pinned independently, each by its own measurement.</para></summary>
+    private static void EffectsCensus(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var names = Session.WorldEffectsFactory.EffectAnimNames;
+            var roots = Session.WorldEffectsFactory.EffectStageRootNames;
+            var stage = new Node3D { Name = "EffectCensusStage" };
+            var pool = new Node3D { Name = "pool0" };
+            pool.SetMeta(AnimRuntime.PoolSlotMeta, 0);
+            stage.AddChild(pool);
+            int built = Session.WorldEffectsFactory.BuildEffectStage(world.Gamez,
+                world.Session.Builder.Scene, pool, roots);
+            ctx.Check(built == roots.Count, $"staged {built}/{roots.Count} template root(s)");
+            foreach (var child in pool.GetChildren())
+                if (child is Node3D root)
+                {
+                    root.Visible = false;
+                }
+
+            var point = new Vector3(150, 40, 90);
+            var runtime = AnimRuntime.ForEffects(1, new CountingEmitterFactory(), false, 32f,
+                () => point);
+            runtime.ManualAdvance = true;
+            runtime.ShowPlacedTemplates = true;
+            runtime.PooledTemplates = true;
+            ctx.Host.AddChild(stage);
+            ctx.Host.AddChild(runtime);
+            try
+            {
+                runtime.Bind(stage, world.Session.Program.Subset(names));
+                var r = Probes.Effects(runtime, names, point, stage, ctx.Chapter);
+
+                ctx.Check(r.Ok, $"all effects resolve ({r.Resolved}/{names.Length} resolved)");
+                var far = r.Rows.SelectMany(row => row.MeshPeaks
+                        .Where(pk => pk.Visible > 0 && pk.Distance > 100f)
+                        .Select(pk => $"{row.Name}: {pk.Root} @{pk.Distance:0} m"))
+                    .ToList();
+                ctx.Check(far.Count == 0,
+                    $"every lit template mesh peaked at the CALL SITE, not the stage origin{(far.Count == 0 ? "" : $" — {string.Join("; ", far)}")}");
+                var lit = r.Rows.Where(row => row.Residual.Count > 0)
+                    .Select(row => $"{string.Join("/", row.Residual.Select(x => x.Root))} after {row.Name}")
+                    .ToList();
+                ctx.Check(lit.Count == 0,
+                    $"no template mesh left lit after its effect was stopped{(lit.Count == 0 ? "" : $" — {string.Join("; ", lit)}")}");
+                ctx.Check(r.Puffered == 30,
+                    $"the puffer half's tally holds under suite conditions ({r.Puffered} built one, expected 30)");
+                ctx.Check(r.Meshed == 17,
+                    $"the mesh half's tally holds under suite conditions ({r.Meshed} showed meshes, expected 17)");
+            }
+            finally
+            {
+                runtime.Free();
+                stage.Free();
+            }
+        });
     }
 
     // ---- BL-240: bounce-terminated launches fly and land ---------------------------------------
