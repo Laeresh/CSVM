@@ -94,4 +94,42 @@ public class EffectCatalogueTests
         // passing on no evidence, exactly the trap ExtractedDataFact exists to avoid.
         Assert.True(found > 0, "no plane's data carried a *_damage_effects entry — the check ran on nothing");
     }
+
+    /// <summary>The authored damage-stage menu (`BL-259`): across every player airframe's
+    /// injure_anims — per-part AND the vehicle-level list — every entry
+    /// <see cref="DamageVisuals.RigAnimFor"/> maps to a rig anim must be a name the crash rig
+    /// binds (<see cref="EffectCatalogue.PlayerDamageStageAnims"/> or
+    /// <see cref="EffectCatalogue.PlaneDamageEffectAnims"/>), or the threshold crossing would
+    /// play nothing, silently. Also pins the one deliberate mapping: the data's 0.10
+    /// player_smoketrail entry plays player_damage_trail.</summary>
+    [ExtractedDataFact]
+    public void EveryInjureStageAnimIsBoundOnTheRig()
+    {
+        var zrdr = SharedZrdr;
+        var bound = new HashSet<string>(
+            EffectCatalogue.PlayerDamageStageAnims.Concat(EffectCatalogue.PlaneDamageEffectAnims),
+            StringComparer.OrdinalIgnoreCase);
+        var violations = new List<string>();
+        int found = 0;
+
+        foreach (var nodeName in AllPlaneNodeNames)
+        {
+            var stats = PlaneStats.Load(zrdr, nodeName);
+            var entries = stats.DestroyableParts
+                .SelectMany(p => p.InjureAnims.Select(e => (Where: p.Name, e.Anim)))
+                .Concat(stats.VehicleInjureAnims.Select(e => (Where: "(vehicle)", e.Anim)));
+            foreach (var (where, anim) in entries)
+            {
+                if (DamageVisuals.RigAnimFor(anim) is not { } stage)
+                    continue;
+                found++;
+                if (!bound.Contains(stage))
+                    violations.Add($"{nodeName}/{where}: '{anim}' plays '{stage}', which the rig does not bind");
+            }
+        }
+
+        Assert.True(violations.Count == 0, string.Join("\n", violations));
+        Assert.True(found > 0, "no plane's data carried a stage entry — the check ran on nothing");
+        Assert.Equal("player_damage_trail", DamageVisuals.RigAnimFor("player_smoketrail"));
+    }
 }

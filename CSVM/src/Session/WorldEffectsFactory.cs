@@ -269,14 +269,12 @@ public sealed class WorldEffectsFactory
             new PufferEmitterFactory(textures, _worldRoot), _spec.DebugAnim);
         // Bind only the named defs' transitive CALL_ANIMATION closures (Subset), never the whole
         // world program: the full 800+ defs include ~150 generic-named world defs that would
-        // mis-anchor onto this plane's parts and run their reset states on the aircraft. The set is
-        // the crash defs plus the damage-effect shims — every def that plays ON this aircraft.
+        // mis-anchor onto this plane's parts and run their reset states on the aircraft. The set
+        // (EffectCatalogue.CrashRigAnimNames) is the crash defs, the damage-effect shims, the prop
+        // choreography and the authored damage-stage menu — every def that plays ON this aircraft.
         // Both crash variants are bound because the surface is only known at the moment of impact
         // (FlightController.ClassifySurface); Air stays out, having no trigger.
-        var rigAnims = new List<string>(EffectCatalogue.CrashDefNames);
-        rigAnims.AddRange(EffectCatalogue.PlaneDamageEffectAnims);
-        rigAnims.AddRange(EffectCatalogue.PropChoreographyAnims);
-        crashRuntime.Bind(controller, crashProgram.Subset(rigAnims));
+        crashRuntime.Bind(controller, crashProgram.Subset(EffectCatalogue.CrashRigAnimNames));
         controller.AddChild(crashRuntime);
         controller.CrashRuntime = crashRuntime;
         controller.CrashAnchor = crashRoot;

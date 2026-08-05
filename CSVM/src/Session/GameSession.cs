@@ -970,6 +970,10 @@ public partial class GameSession : Node3D
             }
             else
             {
+                // Stand-in puffers for the parked plane: it travels no distance, so the authored
+                // distance-interval trail defs the FLIGHT lab plays would emit nothing here —
+                // these burn in place instead (DamageVisuals.UpdateStatic), the heavy pair at the
+                // authored prop1 anchor.
                 var smoke = Effects.Puffer.MakePuffer(state.ZrdrPath, state.Textures, _worldRoot!, "pufftrails.json", "smokepuffer");
                 var fire = Effects.Puffer.MakePuffer(state.ZrdrPath, state.Textures, _worldRoot!, "pufftrails.json", "firepuffer");
                 var panelTrails = new List<Effects.Puffer>();
@@ -980,7 +984,7 @@ public partial class GameSession : Node3D
                 // the HUD gauge cluster as a lab toggle (user request): the damage
                 // dial mirrors the sliders, blinks on decreases like a flight hit
                 var labGauges = GaugeCluster.Build(state.Gamez, _spec.PlaneName, state.Textures, stats.DestroyableParts);
-                _damageLab = new DamageLab(stats, new ViewerDamageTarget(visuals, _plane),
+                _damageLab = new DamageLab(stats, new ViewerDamageTarget(visuals),
                     _spec.DamagePreset, labGauges)
                 {
                     StartHidden = !_spec.DamageLab, // --damage opens it; plain --viewer waits for F5

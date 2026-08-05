@@ -43,12 +43,10 @@ public readonly record struct PartFrac(float Health, float Armor, float Combined
 public sealed class ViewerDamageTarget : IDamageLabTarget
 {
     private readonly DamageVisuals _visuals;
-    private readonly Node3D _plane;
 
-    public ViewerDamageTarget(DamageVisuals visuals, Node3D plane)
+    public ViewerDamageTarget(DamageVisuals visuals)
     {
         _visuals = visuals;
-        _plane = plane;
     }
 
     public string? Subtitle => null;
@@ -64,8 +62,7 @@ public sealed class ViewerDamageTarget : IDamageLabTarget
             _visuals.OnPartDamage(name, f.Combined);
     }
 
-    public void Tick(float dt) =>
-        _visuals.UpdateStatic(dt, _plane.GlobalPosition, _plane.GlobalTransform.Basis);
+    public void Tick(float dt) => _visuals.UpdateStatic(dt);
 }
 
 /// <summary>The flown aircraft (--fly/--stunt): the sliders write the real per-part armor and HP
@@ -126,7 +123,8 @@ public sealed class FlightDamageTarget : IDamageLabTarget
 /// per destroyable part (vehicle.json destroyable_parts), driving the <see cref="DamageVisuals"/>
 /// pipeline through an <see cref="IDamageLabTarget"/> off their combined fraction. Dragging a
 /// part below an injure_anims threshold plays the visual — the pdpanelN torn-skin flip with its
-/// panel fire — and ≤ 10 % combined on any part starts the nose dense_firetrail smoke/fire pair.
+/// authored panel burn — and ≤ 10 % combined on any part starts the heavy player_damage_trail
+/// stage (short_firetrail at prop1 + the fire_lt nose light; the parked viewer burns stand-ins).
 /// Raising a slider back above a threshold restores the healthy skin: the visuals are rebuilt
 /// from scratch whenever the set of crossed thresholds changes (rebuilding only on set changes
 /// keeps a slider drag from restarting the fires at every pixel of travel).

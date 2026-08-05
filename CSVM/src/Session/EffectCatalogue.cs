@@ -81,12 +81,26 @@ public static class EffectCatalogue
     // above, FlightController plays these directly (spawn/engine-death), never through a CALL.
     public static readonly string[] PropChoreographyAnims = { "startprops", "stopprops" };
 
-    // Everything the per-player crash rig binds — both crash variants, the four damage shims and
-    // the prop choreography, i.e. every def that plays ON one aircraft — and therefore the name
-    // set whose anchor-root closure that rig's own template stage must satisfy
-    // (<see cref="CrashStageRoots"/>).
+    // The authored player damage-stage menu (player-1.zrd.json, `BL-259`): the per-panel burn
+    // (torn pdpN shown + gimmeflakes debris + the staged short_firetrail / loop_short_firetrail
+    // burn-down), the partial-damage fuel vapor leak, and the heavy prop1 trail with the fire_lt
+    // nose light. DamageVisuals plays these through the rig runtime as the vehicle.zrd.json
+    // injure_anims thresholds cross — the tier table is authored, nothing here invents one.
+    // `player_damage_trail` (short_firetrail at prop1) is played for the data's 0.10
+    // `player_smoketrail` entry — see DamageVisuals.RigAnimFor for that one deliberate mapping.
+    public static readonly string[] PlayerDamageStageAnims =
+    {
+        "pdpanel1", "pdpanel2", "pdpanel3", "pdpanel4", "pdpanel5", "pdpanel6", "pdpanel7",
+        "pdpanel8", "player_fuelleak", "player_damage_trail",
+    };
+
+    // Everything the per-player crash rig binds — both crash variants, the four damage shims,
+    // the prop choreography and the authored damage-stage menu, i.e. every def that plays ON one
+    // aircraft — and therefore the name set whose anchor-root closure that rig's own template
+    // stage must satisfy (<see cref="CrashStageRoots"/>).
     public static readonly string[] CrashRigAnimNames =
-        Concat(Concat(CrashDefNames, PlaneDamageEffectAnims), PropChoreographyAnims);
+        Concat(Concat(Concat(CrashDefNames, PlaneDamageEffectAnims), PropChoreographyAnims),
+            PlayerDamageStageAnims);
 
     // Anchors the mechanical closure below reports that no bind stages, because the CALL that
     // reaches the definition supplies its anchor instead of its own NAME. Curation, not derivation:

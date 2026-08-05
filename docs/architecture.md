@@ -1408,7 +1408,12 @@ effects reader; `Puffer.Create` builds the atlas and hands it to an `IEmitterRen
 (`EmitterRenderer.cs`) — the class itself owns only the CPU integration, so `CreateWith` builds any
 mode with no atlas, no `TextureArchive` and no GPU. Modes: `Burst`, `TrailAdvance` /
 `TrailBurnAt` (distance trails), `SustainAt` (continuous at a moving node — pool sized to steady
-state, catch-up capped); `PufferState.FromAnimEvent` parses the compiled anim payloads.
+state, catch-up capped); `DriveAt` is the animation runtime's per-frame drive, dispatching on the
+authored state — DISTANCE_INTERVAL trails per interval of actual host motion (CAP-15's density,
+`BL-259`; TrailPool-sized even on the sustained path, since the time-cadence pool floor silently
+dropped ~85% of a flight-speed trail), a still host keeps the time cadence (the static building
+sputters, whose distance can never elapse); `PufferState.FromAnimEvent` parses the compiled anim
+payloads.
 Three config knobs scale `BaseSize` per spawn path — `puffer.burstSizeScale` /
 `puffer.trailSizeScale` / `puffer.sustainSizeScale` (`SizeScaleDefault` **1**, the authored
 SIZE_RANGE verbatim; the knobs remain for deliberate per-path tuning — the cull margin scales with
@@ -1639,23 +1644,26 @@ loop.
   (a hard hit is a boolean destroy) and player.json's crash block is still unbound (`BL-172`).
 
 ## src/Flight/DamageVisuals.cs
-Visible damage driven purely by data thresholds: as a part's combined armor+HP fraction crosses an injure_anims
-entry it shows the torn pdpN panel, hides the healthy skin, and assigns a discrete-puff fire trail
-from the emitter pool; def-level player_smoketrail starts the nose smoke/fire pair. UpdateStatic
-burns the trails in place at StaticBurnSpeed for the parked damage lab. A `<part>_damage_effects`
-entry (the 0.99 one) goes out through `DamageEffectSink` to the player's own rig runtime, which
-sparks at a `pdpN` panel — **authored on `player_pfighter` alone**, so the other 10 aircraft reach
-this branch never (B4). The same effect's general home is the weapons.json `player` IMPACT surface,
-blocked on enemy fire (`BL-222`); do not add the entry to other planes to "fix" the asymmetry.
+Visible damage driven purely by data thresholds: as a part's combined armor+HP fraction crosses an
+injure_anims entry it shows the torn pdpN panel, hides the healthy skin, and plays the entry's
+AUTHORED anim through `DamageEffectSink` — the player's own rig runtime (`BL-259`): `pdpanelN`
+(gimmeflakes debris + the staged short_firetrail/loop_short_firetrail burn-down at the panel),
+`player_fuelleak` (0.85 — gunhit flash + fuel vapor at a random pdp1–3, its stream authored-gated
+on that panel being ACTIVE, so it renders only once torn), the `<part>_damage_effects` spark shims
+(0.99, `player_pfighter` data alone — B4; their general home is the weapons.json `player` IMPACT
+surface, blocked on `BL-222`), and, for the data's 0.10 `player_smoketrail`, `player_damage_trail`
+(short_firetrail at prop1 + the fire_lt light) — `RigAnimFor` owns that one mapping.
+`DamageEffectStop` (Reset, first) stops the whole stage CLOSURE, derived from the program — a
+stopped pdpanelN cannot reach the trail it CALLed, and prop1's trail has no authored exit.
 ⚠ PairHealthySkins pairs torn↔healthy by merged mesh-AABB position, never by name (the _h
   numbering is crossed on three models — docs/formats/gamez.md) and never by node origin (the
   placement is baked into mesh space); unpaired _h skins are never hidden.
-⚠ player_fuelleak, got_hit_anim's nosedamage blink and the *_damage_green/yellow/red cockpit cycle
-  stay unwired (no cockpit; GaugeCluster.OnPartDamage approximates the blink by hand — do not merge
-  the two, different data and different surface).
-⚠ These smoke/fire puffers are built directly via Puffer.MakePuffer — NOT through the world-effects
-  runtime's fixed name set. Fixing the world-destructible puffer gap does not touch this path, or
-  vice versa; diagnose them separately.
+⚠ Null sinks fall back: the parked viewer keeps stand-in Puffers burning in place (UpdateStatic, at
+  the panels + the authored prop1 anchor — a parked plane travels no distance, so the authored
+  distance-interval trails would emit nothing); a world-less flight renders panel flips only, logged.
+⚠ got_hit_anim's nosedamage blink and the *_damage_green/yellow/red cockpit cycle stay unwired (no
+  cockpit; GaugeCluster.OnPartDamage approximates the blink by hand — do not merge the two,
+  different data and different surface).
 
 ## src/Flight/DamageLab.cs
 The damage lab (F5 toggles): one armor slider (parts the data gives an armor pool) plus one health
@@ -2428,7 +2436,9 @@ tables every effect producer must stay inside, static and engine-free. Owns `Eff
 `b_steamtrail`, `random_gun_impact`, the LOCAL_CHOREOGRAPHY fail-closed set — as the load-bearing
 knowledge), the crash-rig's own name sets (`CrashDefNames`: `player_crash_dirt`/`_water`;
 `PlaneDamageEffectAnims`: the four `<part>_damage_effects` shims; `PropChoreographyAnims`:
-`startprops`/`stopprops`, played directly by `FlightController` rather than through a CALL), and the pure
+`startprops`/`stopprops`, played directly by `FlightController` rather than through a CALL;
+`PlayerDamageStageAnims`: the authored damage-stage menu `pdpanelN`/`player_fuelleak`/
+`player_damage_trail` DamageVisuals plays as injure_anims thresholds cross, `BL-259`), and the pure
 `TouchdownFor(SurfaceClass)` the graze reaction's three-way pick routes through. It also derives what
 those names need staged: `StageRootsFor(program, names, resolveRoot)` walks `AnimProgram.Subset`'s
 CALL_ANIMATION closure, takes each reached definition's NAME (the gamez node its instance anchors on),

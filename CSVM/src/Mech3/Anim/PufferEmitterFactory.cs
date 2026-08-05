@@ -90,7 +90,7 @@ internal sealed class PufferEmitter : IEmitter
     public bool IsValid => GodotObject.IsInstanceValid(_puffer);
 
     public void SustainAt(Vector3 worldPos, Basis worldBasis, float dt) =>
-        _puffer.SustainAt(worldPos, worldBasis, dt);
+        _puffer.DriveAt(worldPos, worldBasis, dt); // distance states trail; time states sustain
 
     public void SustainEnd() => _puffer.SustainEnd();
 
