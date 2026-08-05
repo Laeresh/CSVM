@@ -323,8 +323,8 @@ shape as `BL-259`/`BL-261`.
   is the puffer's rise speed or per-puff lifetime, not its size or count. ⚠ **Trap:** this
   supersedes `PT-22`'s original question, which asked whether the plume read too *thin* (the
   `NUMBER` default, `BL-218`) — the answer at the controls was about **height**, so do not fold a
-  density re-tune into this. Judge after `BL-282` lands (`PLAN-m3-polish-8` A1), since the 4×
-  size scale changes what "high enough" looks like.
+  density re-tune into this. Judge at the authored 1× sizes — `BL-282` landed 2026-08-05, so
+  height reads are no longer inflated by the 4× scale.
   *Playtest after fix:* destroy a building and crash a plane in one flight; both plumes should
   climb to the original's height.
 - `BL-276` **`large_30sec_fire` stops at about 5 s instead of 30 — a suspected `BL-212`
@@ -1858,10 +1858,9 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   the damage-stage sputters and the wreck smoke at once.
   ⚠ Traps: this is not the `puffer.*SizeScale` knobs — those scale sprite size, and trading
   count for size is exactly the substitution that makes a too-sparse plume read as "too small"
-  instead. **That substitution has now partly happened**: `SizeScaleDefault` is **4** (`BL-282`,
-  scheduled polish-8 A1), which makes every unnumbered emitter read fuller without adding a sprite,
-  so a density verdict taken today is measuring the two together. If `NUMBER` is later raised, 4 has
-  to be re-judged in the same session, not left standing. Do not tune it from a single `--screenshot`: sprite count only reads over a time series
+  instead. That substitution shipped for a while as the global 4× `SizeScaleDefault`; `BL-282`
+  reverted it to the authored 1× (2026-08-05), so a density verdict now measures `NUMBER`
+  alone. Do not tune it from a single `--screenshot`: sprite count only reads over a time series
   (SHOT-19). And do not infer the default from the effects readers — the `NUMBER`-carrying states
   are a biased sample, since `PufferState.FindInReader` treats the presence of `NUMBER` as what
   makes a state "fully defined" in the first place.
@@ -2026,14 +2025,6 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   muzzle-light stand-in magnitudes — `MuzzleLightEnergy` 2.5 and the 2-frame `MuzzleLightLife`
   0.03 s; the def carries range/colour only. *Playtest after fix:* sustained gun fire in chase view against the
   original's captures — the smoke should sit at the gun line, not around the falling shells.
-- `BL-282` **Every authored particle size is multiplied by an invented global 4×**
-  (`Puffer.cs:276-281`, `SizeScaleDefault = 4f` — "a judged stand-in for a missing engine
-  constant, not a decode"; at 1 the emitters read as a thin scatter of specks, 4 was settled at
-  the controls 2026-08-01). Every `SIZE_RANGE` in the game — crash fireball, trails, splashes,
-  gunhit — renders through it, so every effect-fidelity judgement is conditioned on it. *The
-  settling evidence exists:* `BL-122`'s frame-matched crash-fireball comparison puts the missing
-  constant **near 1, not 4**, and `PT-24` judged 4× too big at the controls. If the factor changes,
-  every effect changes size at once — re-judge, don't re-tune each effect around the old value.
 - `BL-263` **Muzzle flash: three invented lobes vs the authored single rolled node**
   (`Projectile.cs:98-104`). The `muzzle_burst` def is ONE `mb_spinflame` node rolled to a
   discrete random Z angle per shot (`RANDOM_WEIGHT` over 30/80/140°); we draw three quads 120°

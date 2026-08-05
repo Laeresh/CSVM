@@ -70,7 +70,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the gun line and the global baseline (`Projectile.cs`/`Puffer.cs`, sequential)
 
-1. ☐ `BL-282` — `Puffer.SizeScaleDefault` 4 → 1; config knobs stay
+1. ☑ `BL-282` — `Puffer.SizeScaleDefault` 4 → 1; config knobs stay (landed 2026-08-05)
 2. ☐ `BL-261` — render the authored `muzzlepuffer`, delete the eject-puff cluster
 3. ☐ `BL-263` — muzzle flash: authored single-node roll + the unplayed `_muzzle2` flipbook frame
 
@@ -156,6 +156,15 @@ their defs — the defs are authored truth; if 1× is genuinely wrong game-wide 
 config value, and `BL-282`'s backlog text names the capture that would prove it. (c) 2026-08-01's
 "settled at the controls" judgement was made *with* the invented eject-puff cluster and 0-count
 muzzle smoke on screen — the world it tuned against no longer exists once A2 lands; judge fresh.
+
+**Outcome (2026-08-05) — landed as scoped.** The const is 1; the knobs and every individual
+effect untouched. The follow-on lead is **disproven**: the gamez node `scale` field is unit on 0
+of 4,181 nodes (`GameZ.cs`'s own audit), so no per-puffer host scale is being ignored — the
+"different multiplier per puffer" read is the authored per-effect `SIZE_RANGE`s. Five goldens
+re-pinned (`c5-city-night` was a fifth mover the architecture note had missed). Full
+`RunTests.ps1` green on the merged main; A/B pairs (crash fireball, gunhit-into-dirt, touchdown
+scrape, 4× vs 1×) staged in `.scratch/plan8/A1/` for the user. The touchdown-puff trap (⚠a) did
+not manifest. Still owed: the sparks A/B against `CAP-14`'s footage.
 
 ## A2 ☐ `BL-261` — render the authored `muzzlepuffer`, delete the eject-puff cluster
 

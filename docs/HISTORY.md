@@ -15991,3 +15991,21 @@ Verification: docs-only except four code comments (`Projectile.cs`, `PlaneBuilde
 `SceneBuilder.cs`) and the `pitch_cadence.ahk` header — `dotnet build` clean via the pre-commit
 hook at the commit. Net: `backlog.md` 2,671 → 2,357 lines with zero open questions lost;
 each closed ID's gap is the record, per the file's own ID rule.
+
+## 2026-08-05 — PLAN-m3-polish-8 A1 `BL-282`: the global 4× puffer size stand-in reverts to the authored 1×
+
+`Puffer.SizeScaleDefault` 4 → 1: every `PUFFER_STATE` renders at its authored `SIZE_RANGE`
+verbatim. The three `puffer.*SizeScale` config keys stay, defaulting to 1, as knobs for
+deliberate per-path tuning (plan Decision 3); no individual effect was compensated. The `PT-24`
+"the multiplier is different for different puffers" lead was investigated and disproven: the
+gamez node `scale` field is unit on 0 of 4,181 nodes (`GameZ.cs`'s own audit — the field is
+deliberately ignored because it never varies), so no per-host scale is being dropped; effects
+legitimately differ through their authored `SIZE_RANGE`s. Verified: full `RunTests.ps1` green
+(473 units, 29/29 engine suites, 13/13 goldens) after re-pinning the five puffer-bearing shots —
+`c1-waterfall`, `c3-island`, `c5-city-night`, `c1-destroy-effects`, `c1-crash`; the
+architecture.md movers note had listed only four and was corrected. The worktree's 4× BEFORE
+capture reproduced the pre-change golden hash bit-exact (environment control), and A/B pairs at
+the crash-fireball, gunhit-into-dirt and touchdown-scrape poses are staged in `.scratch/plan8/A1/`
+for the user's judgement. The touchdown-puff-underground trap (plan ⚠a) did not manifest at the
+documented repro pose. Still owed and riding the plan item: the sparks A/B against `CAP-14`'s
+building graze/crash footage.
