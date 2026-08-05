@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-261`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-262`.**
 When adding a new item, take the next number and bump this line. ⚠ One ID was minted twice in
 concurrent sessions on 2026-08-04 — `BL-253` (the C2 facade log debris, this file's holder) and a
 "nose view" finding merged the same day; the nose-view item was renumbered to `BL-255` at the
@@ -2226,7 +2226,23 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   distance + catch-up units) and `BL-150` (numpad fixed views): those cover the *chase* camera;
   this is the cameras that replace it. ⚠ The field units are undecoded — same trap as
   `BL-248`(d): near-matches to hand-picked values are suggestive, not decodes; expect to need
-  original-game captures (a death, a crash, a flyby) before wiring laws. — opacity and density. **Cloud deck** — brightness reads ~40 units lighter
+  original-game captures (a death, a crash, a flyby) before wiring laws.
+- `BL-261` **Gun smoke: render the authored `muzzlepuffer`, delete the invented eject-puff
+  cluster — the two are one effect, misattributed** (settled against the data 2026-08-05).
+  `Projectile.cs` currently has it backwards: the authored muzzle smoke (`muzzle_burst`'s
+  `muzzlepuffer` — smoke101–103, aft 20 m/s, 6 puffs over a 0.3 s window from the moving muzzle;
+  all ranges already transcribed verbatim in the constants) is wired but set to
+  `MuzzleSmokePuffs = 0`, while every casing spawns a hand-authored 5-puff white cluster
+  (`EjectPuffs`, `SpawnCasing`) whose own comment admits it matched no shipped def. The data
+  says why: `gunshell.zrd.json` is **motion-only** — `OBJECT_MOTION` (±10° bearing, −75…−85°
+  elevation, 1.5–1.8 m/s, 1200 °/s tumble, `RUN_TIME` 2 s) then deactivate, **no `PUFFER_STATE`**
+  — so the white puffs the reference captures show near falling brass are the muzzlepuffer's
+  smoke misread as a casing effect (user-confirmed reading, 2026-08-05). Fix: set the muzzle
+  smoke to the authored 6-puff window and remove the `EjectPuffs` block + its spawn loop; the
+  pooled casing itself (chapter-gamez `gunshell` mesh flying the authored motion) is already
+  faithful and stays. *Playtest after fix:* sustained gun fire in chase view against the
+  original's captures — the smoke should sit at the gun line, not around the falling shells.
+- `BL-118` **Cloud puffs** — opacity and density. **Cloud deck** — brightness reads ~40 units lighter
   than the original. **Playtest (2026-07-30), two new specifics + mechanism traced.** (1) The deck
   itself shows dense cloud puffs while flying through it. (2) In C1/IA1, puffs show around the plane
   at *all* height levels rather than a confined band. Root cause: `CloudPuffs.cs`'s
