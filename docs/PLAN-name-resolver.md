@@ -99,6 +99,12 @@ plan owns `Session/` + `Flight`-side tests + `Suites.cs`), so the two may run as
 sessions. It DOES own `AnimRuntime.cs` outright — nothing else may edit that file while this plan
 is in flight.
 
+**⚠ Contention with the active plan's D9 (`PLAN-m3-polish-7`, `BL-228` `WAIT_FOR_COMPLETION`).**
+D9 lands its hold in the sequence scheduler — `AnimRuntime.cs`'s `CallAnimation` path — so it and
+this plan edit the same file and must be **serialized, either order, never parallel**. D9 is also
+the active plan's one goldens-may-move item: whichever runs second takes its baselines (goldens,
+the census-triple A/B) against the then-HEAD, not against `4e4db08`.
+
 ---
 
 # Wave A — the resolver, in three goldens-identical steps

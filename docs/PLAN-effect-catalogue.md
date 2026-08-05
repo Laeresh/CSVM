@@ -104,6 +104,17 @@ Linear: A1 → B2 → B3; no intra-plan parallelism. **File ownership of this wh
 `AnimRuntime.cs`/`Anim/` and adds no `Suites.cs` checks — so the two may run as parallel worktree
 sessions.
 
+**⚠ Baseline sensitivity to the active plan's D9 (`PLAN-m3-polish-7`, `BL-228`
+`WAIT_FOR_COMPLETION`).** D9 expects goldens to move, and its 3,731 flagged events are all
+`OnCall`/`WeaponHit` — largely the effect defs `effects-census` sweeps. A caller held until its
+callee completes changes what happens inside the census's 30-tick window, so the 30/17 tallies
+(and possibly `effect-template-mesh`'s timing assertions) may legitimately move when D9 lands.
+Every "tallies unmoved" verify line in this plan means *unmoved against the HEAD this plan starts
+from* — if D9 landed in between, re-measure the tallies first and treat a moved pinned number as
+D9's doing to confirm, not this plan's to absorb silently. D10 (`BL-239`) is disjoint (owns
+`Projectile.cs` + damage-suite rows; this plan's `Suites.cs` edits stay in the effects-census
+region) — avoid running the two in the same worktree, nothing more.
+
 ---
 
 # Wave A — the module, engine-free half
