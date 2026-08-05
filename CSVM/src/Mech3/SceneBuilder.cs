@@ -1512,7 +1512,7 @@ void fragment() {{");
         sb.AppendLine(";");
         // A sprite whose UVs never leave the unit square never needs the sampler to wrap, and
         // wrapping it bleeds the texture's opposite edge in at the UV border — the same
-        // hairline artifact UvsWithinUnitSquare exists for (and BL-202's tracer-tail streak).
+        // hairline artifact UvsWithinUnitSquare exists for (and the tracer-tail streak once was).
         sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, "
             + (clampUv ? "repeat_disable;" : "repeat_enable;"));
         // Same global distance-fog params as GetBiasShader's world shader. Clouds always fog,

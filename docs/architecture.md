@@ -1117,8 +1117,9 @@ plus the sonic's authored 8.73 rad/s body roll (weapon-effects.md). Gun shots ad
 `muzzle_burst` secondaries (C22): a pooled per-shot `gunshell` casing instance flying the def's
 OBJECT_MOTION verbatim (per-shot nodes on purpose — a shared anchor under `CallAnimation`'s
 already-live gate drops gun-rate ejections), the authored muzzlepuffer smoke plus a hand-authored
-white eject-puff cluster on a gravity-free sprite pool, and a pooled `OmniLight3D` flash from the
-def's `3rdperson_lts` range/colour variants — stand-in magnitudes are `BL-200` TUNE. `PlaySound`
+white eject-puff cluster on a gravity-free sprite pool (scheduled for removal, `BL-261`), and a
+pooled `OmniLight3D` flash from the def's `3rdperson_lts` range/colour variants — the flash's
+stand-in magnitudes are TUNE (`BL-261` rides the same judge). `PlaySound`
 (FIRE's launch bark, played once per `Spawn`; IMPACT's per-surface hit) resolves a `SOUND_GROUPS`
 name (e.g. the incendiary rocket's `ground_mixed_exp_sg` default impact) through `_soundGroups`
 first, same as `WorldSounds.PlayOneShot` — `FIRE.SOUND` is null for every cannon in the data

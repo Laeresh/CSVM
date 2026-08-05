@@ -8902,7 +8902,8 @@ eject-puff cluster the retail captures show is **unmatched to any shipped def** 
 search (only `muzzle_burst` references `gunshell`; the gunshell def is motion-only), so it is a
 hand-authored stand-in riding the casing's launch velocity — recorded as `BL-200` TUNE with the
 light energy and per-shot puff count. Docs: engine-wiring section + corrected footnote in
-`docs/formats/weapon-effects.md`.
+`docs/formats/weapon-effects.md`. **(`BL-200` closed 2026-08-05, superseded by `BL-261`: the
+cluster is scheduled for removal — the captures' "cluster" is muzzle smoke; see that entry.)**
 
 **Verified.** C1 Bloodhawk `--fire --infinite-ammo` captures (`.scratch/c22_fire_chase_f200.png`,
 `_f300.png`): white puff clusters at the wing mounts falling back and below, matching
@@ -8928,7 +8929,9 @@ rotates one flash node to one of three *discrete* angles per shot (30°/80°/140
 1/3 each) — read as a single node whose texture already carries the 3-lobed shape, so the
 continuous 3-quad-triad approach here is a deliberate divergence toward the user's literal read of
 the captures, recorded as `BL-201` TUNE. Docs: `weapon-effects.md` engine-wiring section, this
-module's `architecture.md` entry, the plan goal text.
+module's `architecture.md` entry, the plan goal text. **(`BL-201` closed 2026-08-05, superseded by
+`BL-263` — decide at the controls whether the authored single-node discrete roll reproduces the
+stills.)**
 
 **Verified.** `RunTests.ps1` green (build 0 warnings, 312 units, 12 engine suites, 13 goldens
 byte-identical — no gun-fire pose is a golden). `--viewer --weapon-lab=wep_00 --weapon-fire`
@@ -8968,7 +8971,9 @@ the texture, which is exactly a bright-front/dark-tail streak bleeding a faint l
 end; now off on every sprite material the pool builds, muzzle flash and impact included.
 `TracerLength` 1.0 m (was 3 m), `TracerWidth` 0.10 m (was `0.0782f * 2`), and a new uniform
 overbright tint `TracerBrightness` ×3.0 on the additive quad (the only way to read brighter than
-the texture's own pixel value without a bloom pass) — recorded as `BL-202` TUNE. The tracer now
+the texture's own pixel value without a bloom pass) — recorded as `BL-202` TUNE **(closed
+2026-08-05: length/width/brightness became user-owned `weapons.tracer*` config via `BL-210`;
+nothing left to track)**. The tracer now
 carries the same per-ammo texture axis as the C24 muzzle flash (`tracer_slug`/`_dumdum`/
 `_armorpierce`/`_magnesium`, generic `tracer1` for ordnance, which carries no ammo-type `FIRE`
 binding), reusing `MuzzleAmmoIndex`'s resolution — one `MultiMesh` per texture, replacing the
@@ -15923,3 +15928,66 @@ animation bug), `PT-24`'s per-puffer scale question (already `PLAN-m3-polish-8` 
 puffer rework and left-wing-overrides-right-wing symptom (already found in the data and scheduled in
 `PLAN-m3-polish-8` wave D). The `PT` counter in `playtest.md` also read `PT-37` while `PT-37` was
 already in use; corrected to `PT-38`.
+
+
+## 2026-08-05 — Bookkeeping sweep: eight stale backlog items closed, ~250 lines of landed-work narrative trimmed
+
+A full audit of `backlog.md` (2,671 lines) and `playtest.md` against this file, the plans and the
+current code, prompted by the ID-counter work landing the same day. Closures, by kind:
+
+**Fixed, closed late — the work had landed long ago.** `BL-001`–`BL-005` (the whole "Merged into
+`m3-polishing` — pending playtest" table): the merge (`bea7947`) has been an ancestor of `main`
+since before 2026-08-04 (recorded here twice already), every fix verified present in today's code
+(`FlightController.cs` keep-cursor drain, `Projectile.cs` range-expiry detonation and
+grow-from-muzzle tracers, the `rocketSpeedScale` knob, `SoundHandledElsewhere` on the crash rig),
+and the table's own instruction said to delete it at landing. `BL-004`'s owed A/B was already
+discharged (PT-09 PASS, 2026-07-31; `BL-112` deleted then). `BL-001`'s drain order is asserted by
+the `WeaponCursorTests`. The three surviving cockpit look-checks (`BL-002`/`BL-003`/`BL-005`) plus
+`BL-103`'s cooldown A/B moved to `playtest.md` as **`PT-38`** — minted with `New-ItemId.ps1`, its
+first real use. `BL-103`/`BL-104` (rocket cooldown gate / fire binding, both LANDED B17 2026-07-24,
+plan `COMPLETE`) closed with it; `BL-104` asked for nothing at all.
+
+**Answered.** `BL-099` (the C1 fuel-depot contradiction) — answered 2026-08-02 by the
+`SAVE_LOG`/`PERSIST_LOG` decode (entry above; full decode in `docs/formats/anim-definitions.md`).
+The entry's surviving traps (do not "fix" the depot; do not re-derive the chain analysis) now ride
+`BL-243`, the reproduce-the-log item.
+
+**Answered/landed via another item.** `BL-202` (tracer look): the tail artifact was fixed
+(TextureRepeat off), the per-ammo axis wired, and the length/width/brightness knobs became
+user-owned config via `BL-210` (C23) — nothing left for a backlog entry to hold. Its code comments
+now say "user tunes via `weapons.tracer*`" instead of citing the ID.
+
+**Superseded.** `BL-200` (casing-ejection look) → `BL-261`, which deletes the hand-authored
+eject-puff cluster the entry existed to tune (the "cluster" in the captures is muzzle smoke,
+user-confirmed 2026-08-05); the muzzle-light stand-in magnitudes (`MuzzleLightEnergy` 2.5,
+`MuzzleLightLife` 0.03 s) ride `BL-261` as residue. `BL-201` (muzzle-flash shape) → `BL-263`
+verbatim. `BL-116` (numpad views) → `BL-149`/`BL-150`, recorded as superseded since 2026-07-30 and
+now deleted like every other retired ID. Doc restatements updated: `docs/formats/weapon-effects.md`
+(cluster + triad paragraphs), `docs/architecture.md` (weapons bullet).
+
+**Stale claims corrected in place, not closed.** `BL-062`'s open half claimed the H-selector is
+gated `_ordnanceTypes.Length > 1` — that gate was deleted by `BL-025` (2026-07-30); the entry now
+carries only the real open question (individual-hardpoint vs pylon-order in the original).
+`BL-161`/`BL-080` claimed `damaged_engine_sound` is unparsed — it is parsed and consumed since
+`BL-090` item 1 (B5, 2026-08-01); both now name only `cockpit_engine_sound`. `BL-109`'s "two takes,
+no recovery" limits paragraph contradicted the eleven-take evidence above it — deleted. `BL-282`
+now states its settling evidence exists (`BL-122`'s near-1 measurement, `PT-24`'s verdict) instead
+of asking for it. `BL-115`'s header bullet dropped `KnifeAlignFloor` (moved to `BL-247` per its own
+body).
+
+**History trim.** The landed-fix diagnosis narratives on `BL-253`/`BL-254` (both recorded in full
+in this file, 2026-08-04) shrank to their Still-open playtest blocks plus one kept trap each;
+`BL-147`'s pre-flight rig design notes shrank to a pointer (the non-integer-period rule moved into
+`pitch_cadence.ahk`'s own header); struck-through resolved residue (`BL-150` (c)/traps,
+renumbering parentheticals on `BL-255`/`BL-215`/`BL-213`/`BL-256`, the `BL-035` landed rows, the
+`BL-118` superseded fix shape, the `BL-121` `BL-174` story, section-sweep bookkeeping preambles)
+was deleted — every deleted fact is recorded in this file under its date. `playtest.md` lost its
+retired-ID roll-calls and the stale `BL-088`-era cross-reference list in "Everything else".
+`backlog.md`'s header no longer states whether a plan is active — `PROJECT_CONTEXT.md`'s "Current
+status" is the single owner of that fact (user decision; the `**ACTIVE PLAN**` banner in a plan
+file means active-not-scoped/completed/cancelled, not "the current plan").
+
+Verification: docs-only except four code comments (`Projectile.cs`, `PlaneBuilder.cs`,
+`SceneBuilder.cs`) and the `pitch_cadence.ahk` header — `dotnet build` clean via the pre-commit
+hook at the commit. Net: `backlog.md` 2,671 → 2,357 lines with zero open questions lost;
+each closed ID's gap is the record, per the file's own ID rule.

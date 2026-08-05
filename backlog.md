@@ -1,13 +1,11 @@
 # Backlog — unscheduled future work
 
-Everything known-but-not-scheduled, so it survives between polish runs. **No plan is active** — the testing &
-verification infrastructure, M3 (weapons), the M2/2.5 polish runs and the anim-debugger and
-data-driven-crash plans are all complete and archived in `docs/plans/`. Per-item history/diagnosis
+Everything known-but-not-scheduled, so it survives between polish runs. Which plan is active, if
+any, is `PROJECT_CONTEXT.md`'s "Current status" — never restated here. Per-item history/diagnosis
 detail is in `docs/HISTORY.md` (dated entries) and `docs/architecture.md` (module bullets); how to
 verify a change without fooling yourself is `docs/verification.md`. **The live list of hand-tuned
-constants awaiting playtest lives here** (see "TUNE constants pending playtest" below) — it moved
-out of CLAUDE.md on 2026-07-22, since CLAUDE.md's status section is current-state-and-next-step
-only. When an item gets scheduled into a plan, move it there; when it lands, delete it here.
+constants awaiting playtest lives here** (see "TUNE constants pending playtest" below).
+When an item gets scheduled into a plan, move it there; when it lands, delete it here.
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
@@ -18,23 +16,6 @@ control) and the script increments it under an exclusive file lock, so two concu
 cannot be handed the same number. 
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
-
-A pass of at-the-controls findings from the user (M3 weapons/destruction). **Six localized fixes are
-now merged into `m3-polishing`** (built clean together), each still owing a cockpit playtest; the
-**larger items** follow. The
-fixes were code-only, so this section is their documentation trail. **When `m3-polishing` lands on
-`main`, give each merged fix a `docs/HISTORY.md` entry and delete its row here** — do not let this
-table outlive the landing.
-
-### Merged into `m3-polishing` — pending playtest
-
-| Finding | Branch | Change | Confirm in the cockpit |
-|---|---|---|---|
-| **`BL-001`** Rocket advances to the next pylon after one shot (round-robin) instead of draining the selected pylon | `fix/rocket-drain-pylon` | `FlightController.NextArmedHardpoint`: keep the cursor on the just-fired pylon (`_selectedPylon = idx`) instead of `+1`; the scan skips it once dry | wing empties one pylon fully, in order, before the next starts (see "Rocket firing order" under Feature backlog) |
-| **`BL-002`** A rocket that reaches max range vanishes silently | `fix/rocket-detonate-at-range` | `Projectile._PhysicsProcess`: at range-expiry a **rocket** calls `Impact(weapon, pos, null)` (default-surface effect+sound); guns still expire silently | the `default` IMPACT effect reads acceptably as a mid-air self-destruct (not a ground/water splash floating in the sky) |
-| **`BL-003`** Gun tracers appear behind the plane | `fix/tracer-grow-from-muzzle` | `RenderTracers`: cap the drawn streak to distance travelled (`min(TracerLength, Range−DistLeft)`) so it grows out of the muzzle | tracers start at the muzzle; steady-state tracers (round >14 m out) unchanged |
-| **`BL-004`** Rockets feel too fast | `fix/rocket-speed-tune-hook` | adds a `Config` knob `weapons.rocketSpeedScale` (default **1.0 = data speed, no change**); when set, scales rocket velocity **and** accel so it still despawns at the same range | **value is a TUNE** — set e.g. `0.7` in `config.json` and A/B vs the original (see TUNE list) |
-| **`BL-005`** `WARNING: … SOUND 'snd_exp_ground_a' … no audio session` on every ground crash | `fix/crash-sound-warning` | `PlaneViewer.BuildFlightCrashRuntime`: crash runtime gets `SoundHandledElsewhere = true` (matches the world-effects runtime) | warning gone; ground boom still plays (via `FlightAudio.OnGroundExplosion`) |
 
 ### Larger items — documented, not fixed
 
@@ -80,14 +61,10 @@ table outlive the landing.
 
 ### Playtest pass 2 (2026-07-25) — new findings + verdicts
 
-A second at-the-controls pass (user, answers "by feeling"; the four ambiguous points were grilled and
-settled). Reference shots are in `OriginalScreenshots/` (gitignored — cited by filename). Root causes
-were traced to code before writing. Verdicts on pass-1 items are noted on their rows above; the new
-work is below.
+Reference shots are in `OriginalScreenshots/` (gitignored — cited by filename).
 
 **Impacts & surfaces (findings 3, 4).**
-7. `BL-213` **Open fidelity question (was part of `BL-186`, whose splash look landed with `BL-203`,
-   2026-08-01):** does the original splash when gun rounds range-expire over water? Needs a CAP of the
+7. `BL-213` **Open fidelity question:** does the original splash when gun rounds range-expire over water? Needs a CAP of the
    original (fire out to sea from altitude, watch the 1000 m expiry point). Until answered, our rounds
    expire silently, which METHOD-18 documents as correct-per-data.
 **Destruction & doors (findings 12, 13).**
@@ -223,13 +200,10 @@ work is below.
   |---|---|---|
   | `Callback` | ×8 every chapter | Every dispatch is `def=camera1`, **unanchored**, values 1/2/10/11/14/20/913/914 — engine notifications for the intro **cutscene** camera. This project has no cutscenes, and a callback's whole purpose is to notify mission logic that does not exist here. |
   | `ObjectCycleTexture` | ×1–2 per chapter | Every dispatch is `node=taildamage` with **`targets=0`** — the node never resolves, so there is nothing to cycle. The one real use of this mechanism (the cockpit damage-indicator hilite) is already a build-time material swap in `GaugeCluster.cs`. |
-  | one-shot `Sound` | — | **LANDED M3 D31 (2026-07-24).** `AnimRuntime.HandleSound` fires it as a fire-and-forget `WorldSounds.PlayOneShot`; the 4,378 `OnCall` + 1,650 `WeaponHit` combat audio now sound on deaths/hits, and the 21 `DYNAMIC_WEIGHTS` groups are decoded (`SoundDefs.LoadGroups`). No longer in the report. |
 
   **Pick these up when the thing they depend on exists** — a cutscene player for `Callback` — not
   before. `ObjectCycleTexture` needs neither; it needs a mission that
   actually builds a `taildamage` node, which none of the ones this project defaults to do.
-  The one kind from that list that *was* reachable, `OBJECT_OPACITY_STATE`, landed 2026-07-22
-  (`docs/HISTORY.md`) — which is why it is not in this table.
 
 - `BL-036` **We ignore `zone_id` entirely** (found 2026-07-22). Every gamez node carries a `zone_id`:
   `-1` = always rendered, `1`/`2`/`3` = only when that zone is active. Both zones span the **whole
@@ -256,15 +230,12 @@ work is below.
   not license a *geometry* change. C1–C4 are still unanswered. Do not act on this until the
   remaining chapters are settled and there is a visible artifact it demonstrably fixes.
 
-- `BL-037` **`WorldPartitionSetActive` — ⛔ CORRECTED 2026-07-23. This entry used to claim it was "the real
-  runtime system the original uses to pick between coarse and fine ground", and that claim is
-  FALSE.** Measured: **all 25 uses are `support\c3\*.gw` — C3 only** — and it takes rectangle
-  coordinates, not node names. It never appears in any C5 script, so it cannot be the mechanism in
-  the chapter that actually has the bug. It was briefly promoted to "prime suspect" for the C5
-  ground z-fight on 2026-07-22 and that promotion was wrong; the real mechanism is the **subface
-  flag** (next entry). Kept as a correction rather than deleted because the wrong claim was
-  repeated across three documents. Whatever `WorldPartitionSetActive` does for C3 is still
-  unimplemented and still undescribed — but it is a C3 question, not a ground-LOD one.
+- `BL-037` **`WorldPartitionSetActive` is unimplemented and undescribed — a C3-only mechanism.**
+  Measured: **all 25 uses are `support\c3\*.gw` — C3 only** — and it takes rectangle coordinates,
+  not node names. It never appears in any C5 script, so it is NOT the C5 ground-LOD mechanism —
+  that is the **subface flag** (next entry) — and not "the runtime system that picks between
+  coarse and fine ground", a claim this entry once made and retracted (⛔ 2026-07-23). It is a C3
+  question, not a ground-LOD one.
 
 - `BL-249` **`MissionSetup` does not apply the interp placement verbs — `Object3DTranslate` /
   `Object3DRotate`** (measured 2026-08-04; previously visible only as an aside in `BL-034`).
@@ -303,27 +274,18 @@ work is below.
   *Fix shape:* re-review `MarkerHud.cs`/`StuntScoreboard.cs` placement once the menu hub UI exists,
   against the hub's own type scale/units rather than in isolation.
 
-## Open bugs (moved from NOTES.md 2026-07-22)
+## Open bugs
 
-The user's running issue list, **swept again 2026-07-22 after polish run 3** — the six entries that
-had landed, been disproven, or been measured gone were deleted (their records are in
-`docs/HISTORY.md`), so what is below is live. Where the check pinned a cause it is recorded here so
-it is not re-derived; where it did not, the item says so rather than guessing. Paths are relative
-to the Godot project's `src/`.
+The user's running issue list. Where a check pinned a cause it is recorded here so it is not
+re-derived; where it did not, the item says so rather than guessing. Paths are relative to the
+Godot project's `src/`. Scheduled items live in their plan — **do not re-add them here**; if one
+is closed without landing, its record goes to `docs/HISTORY.md`.
 
-**Most of this section moved into `docs/plans/PLAN-M2-polish-4.md` on 2026-07-22** — the knife-edge nose
-drop, the C5 sunk zeppelin, the C1B z-fighting, the C1 IA1 oil tanks, the bowl sign, the C1 car
-rotations, the focus-loss mute and the C2 Seaplane Hangar objective are all scheduled there, each
-with the diagnosis that verification pass produced. **Do not re-add them here**; if one is closed
-without landing, its record goes to `docs/HISTORY.md`. What remains below is what is still
-unscheduled.
+### Playtest triage 2026-08-05 (at-the-controls findings)
 
-### Playtest triage 2026-08-05 (at-the-controls findings, `PT-01`–`PT-30`)
-
-Nine findings from one sitting, triaged with the user the same day. Eighteen `PT-nn` items closed
-in the pass; what could not be closed is below. Two of them started as tuning complaints and turned
-out to be **unread authored data** once the note was checked against `extracted/` — the same shape
-as `BL-259`/`BL-261`, and the reason each entry below says what was checked, not just what was seen.
+Each entry says what was checked against `extracted/`, not just what was seen — two of these
+started as tuning complaints and turned out to be **unread authored data** once checked, the same
+shape as `BL-259`/`BL-261`.
 
 - `BL-273` **`fogvol.zrd` is never read: the ambient cloud field is authored data we replaced with
   an invented one.** Every chapter ships `extracted/<ch>/zrdr/fogvol.zrd.json` — a fog-volume
@@ -424,136 +386,20 @@ as `BL-259`/`BL-261`, and the reason each entry below says what was checked, not
 Two in-flight findings against the C2 Hollywood destructibles; both diagnosed against the
 extracted data before being logged, so the mechanism is recorded here and not re-derived.
 
-- `BL-253` **The C2 facade panels' log debris landed (2026-08-04); only the in-cockpit playtest is
-  owed.** Was: every one of the 39 `fcpan01`–`39` deaths (`WeaponOrCollideHit`, health 0.01)
-  authors `CALL_ANIMATION facade_parts AT_NODE fcpanNN` — the shared `facdsticks` template
-  (`extracted/C2/cam_anim/facdsticks-facade_parts.json`) whose `fly_part1`–`fly_part4` activate and
-  ballistically launch four wooden sticks ("logs") — but no logs appeared on any panel in the
-  cockpit; only the authored `dustcloud` puffer showed. The four candidate causes, checked against
-  the data and the engine rather than assumed:
-  1. **Confirmed, and worse than hypothesized.** `PlaceCalledTemplates` relocation is indeed gated
-     off in the ambient world (anim-lab/crash runtime only) — but the deeper cause is that
-     `facdsticks` was never BUILT into the live world AT ALL: it is parentless and outside the
-     world's spatial-partition grid, the same shape as the crash/effect template roots
-     `WorldEffectsFactory` stages separately, so `WorldBuilder`'s own gamez walk never reaches it
-     (confirmed: the node lab's name index, 2999 nodes, had no `facdsticks` entry). Even with
-     relocation enabled this launched debris but resolved zero motion targets (`Targets()` found no
-     built `part1`–`4` to move). Generalized past `facdsticks` itself once the shape was understood:
-     `GameZ.IsLibraryRoot` (`docs/formats/gamez.md`) tests any node's `parent_indices`/spatial-partition
-     membership rather than naming `facade_parts` specifically, so `WorldSession`'s
-     `ResolveLibraryRoot` lazily builds ANY death-triggered call's library-root target on first use
-     — this incidentally also fixed `mp1reng_destroyed.flt` (the zeppelin wreck), found to be the
-     same unbuilt-root bug during the sweep, not a separately-handled path as first assumed.
-     `AnimRuntime`'s `CallAnimation` dispatch relocates onto the call site only when
-     `_deathCallDepth > 0` (never ambient world boot) and the call is not an `OPERAND_NODE`
-     redirect (genx12→kkgate's own subtree, which must stay unbuilt — its `Targets` rescue depends
-     on that).
-  2. **Confirmed, and pooled, not left as a floor.** One shared, unpooled `facdsticks` template
-     serving 39 call sites meant two panels broken in succession showed only the LATER kill's
-     debris — `PlaceTemplateAt`/`MotionSet.Add` (same-channel eviction) collapsed the earlier kill's
-     flying pieces onto the new site. First landed as a documented floor (each break still launched
-     its own fresh 4-piece count, just not simultaneously with another in-flight set); the user's
-     same-day A/B against the original game (`CAP-24`, 2026-08-04, closed same day) settled that the
-     original shows PARALLEL debris, not latest-wins — so `ResolveLibraryRoot` now keeps a per-caller
-     POOL of built copies (`WorldSession.cs`), each indexed via the new `AnimRuntime.IndexPooledCopy`
-     (skips `_byIndex` registration so multiple copies of the same source node don't collide on the
-     first copy's binding; each pooled copy is disambiguated by anchor-scoped name lookup instead,
-     the same resolution shape `genx12` already used). Pool membership is the same data-driven
-     `IsLibraryRoot` test as point 1; pool SIZE prefers the gamez's own authored duplicate-copy count
-     where the data has one (several effect templates ship N same-shape sibling records — a real,
-     decoded format fact, `docs/formats/gamez.md`), and falls back to `CSVM/data/effect_pools.json`'s
-     new `localCallRoots`/`localCallDefault` section (the `BL-231` TUNE mechanism) when it does not —
-     `facdsticks` ships exactly one record, so its cap (6) is an invented number there, not a decode.
-  3. **Investigated, not a live bug.** `Targets()` resolves `part1`–`4` through the CALLEE's own
-     compiled symbol table (`facdsticks`' `NodeRefs`, ptrs 1710/1730/1723/1715) before any name
-     fallback, and `blockit2`'s `part1`–`7` carry their OWN distinct ptrs (1127–1133) in their own
-     def — the two never share a lookup, so the name collision the trap warned about does not
-     reach a binding path in practice. Left named here as a trap for the next person who adds a
-     name-based rescue near this code (docs/formats/destructibles.md's `⚠` on symbol-table
-     binding).
-  4. **Ruled out.** `facade_parts` is one of the 22 `LOCAL_CHOREOGRAPHY` names
-     `analysis/death-effect-closure/` deliberately keeps off the world-effects runtime
-     (`ExternalEffect`) — confirmed absent from `EffectAnimNames` — so it was never intercepted and
-     rendering nothing there.
-  **Collateral found and fixed during the work, not part of the original diagnosis:** the first cut
-  gated relocation on `_deathCallDepth` alone (any death-triggered call, not just `facade_parts`),
-  which measurably moved `kkgate`'s own `tbridg1_fire` — real, already correctly positioned bridge
-  geometry — onto `kkgate` itself; and an equally unscoped C28 reset-tracking pass stopped/restored
-  C5's shared `small_yellow_sparks` template on an unrelated destructible's reset, cross-contaminating
-  sibling defs' (`rfspt4`–`6`, `lfspt1`–`3`, `w_lite1`–`5`) debris counts mid-sweep. Both were first
-  fixed by narrowing to a curated `LocalCallTemplateNames` allow-list, then superseded entirely
-  (2026-08-04) by `GameZ.IsLibraryRoot` — the user pushed back that a hardcoded name list "must have
-  something in the data" backing it instead, and the parentless/unpartitioned-node test does the
-  same job data-driven, naturally excluding `tbridg1a` (parented, so never a library root) and
-  `small_yellow_sparks`'s own family with no curated list at all. `DestructibleRegistry`'s
-  `LocalCallTargets` reset-bookkeeping carries the pooled copy's own anchor per entry (not just the
-  dying instance's anchor) so a reset only tears down the specific copy that instance built.
-  Verified headlessly (`--damage-test=facade` / `fcpan01`/`fcpan02`): a single kill launches 4 debris
-  pieces from the struck panel's own position (confirmed via a position probe: the built copy moves
-  from its build-time origin `(0,0,0)` to the exact panel centre); panels broken in succession each
-  keep their OWN in-flight debris set (pooled, up to 6 concurrent — see point 2) rather than the
-  earlier kill's pieces collapsing onto the new site; a reset restores the panel and re-kills in the
-  same hit count, and RESET_STATE deactivates each copy's `part1`–`4` so a reset before the flight
-  finishes does not leave pieces visibly flown. Collateral sweep across C1/C2/C5 `--damage-hd`: only
-  the `fcpan01`–`06` rows changed; `gate1`/`gate2` retain BL-254's behaviour, `kkgate` unchanged
-  (`debris[12]` isolated / `[13]` in the full unfiltered sweep — a pre-existing sweep-context
-  artifact reproduced identically on the unmodified baseline, not caused by this change), and every
-  other def (`m_build01`, the C1 water tower, `agyrobus`, the C5 facade/window family) measured
-  byte-identical. `.\RunTests.ps1`: build, 423 unit tests, 22 engine suites, all 13 goldens
-  hash-identical.
+- `BL-253` **The C2 facade panels' log debris landed (2026-08-04, `docs/HISTORY.md`); only the
+  in-cockpit playtest is owed.**
   ⚠ **Still open.** (a) The in-cockpit playtest: fly a row of facade panels and confirm logs visibly
   launch from each struck panel, with several rows' debris flying in parallel rather than the earlier
-  fix's per-row floor. (b) The `air_mixed_exp_sg` one-shot authored on the same death is unconfirmed
-  audible — D31 death audio is still stubbed engine-wide, unrelated to this item's scope.
-- `BL-254` **Both C2 studio gates' deaths now match the original (2026-08-04); only the in-cockpit
-  playtest is owed.** Was: both gates' archways swapped to their wreck at t=0 — wrong for gate2
-  (which should stage the swap 28.5 s into the death) AND wrong for gate1 (whose archway the
-  original never destroys at all — the user's recall, 2026-08-04, settling the trap this item
-  opened with: gate1 has only destructible doors, no archway wreck, ever).
-  - **gate2** authors the swap in `blockit2`, a `CALL_ANIMATION` `gate2_doorblast` schedules 28.5 s
-    out — `AnimRuntime.RunDeathSequence`'s `ApplyDeathSwap` RESET-derived fallback fired
-    unconditionally and pre-empted it. A second bug sat behind the first:
-    `gate2_doorblast`'s own `INVALIDATE_ANIMATION gate2_doorblast` (a self-reference — the data's
-    "consume the trigger" idiom) tore its OWN instance down mid-construction, which orphaned the
-    pending `blockit2` call before it could ever fire AND discarded the door/fire motions the
-    sequences below it had just registered in the same t=0 burst — so even the doors never
-    animated. Fixed: `ChainedSwapTarget` resolves one level of `CALL_ANIMATION` targets the same
-    way the dispatcher itself does and skips `ApplyDeathSwap` when a target authors the swap
-    (`AuthorsSwap`); `Start` gained an opt-in `protectSelfInvalidate` flag (`_startingInstances`, a
-    stack pushed/popped around its own t=0 burst) that makes a same-name SELF
-    `STOP_ANIMATION`/`INVALIDATE_ANIMATION` a no-op while that exact instance is mid-construction —
-    only `RunDeathSequence`'s own `Start` call asks for it, so the cross-instance case (a nested
-    `CALL_ANIMATION` stopping its caller) and the ambient world boot's own self-invalidating
-    startup anims are untouched (first cut scoped the guard to every `Start` call and moved the
-    `c2-city` golden — C2's boat/car `*_start` anims self-invalidate too — narrowing it to opt-in
-    brought the golden back byte-identical). `ResetDestructible` now also stops and restores the
-    rest pose of the chained def (`Instance.ChainedDeathDef`), so a reset before OR after the
-    28.5 s point stays idempotent.
-  - **gate1** has no chained swap target — `gate1_doorblast` calls only its two fires — so the
-    RESET-derived fallback kept firing at t=0, same as the C1 AA guns' shape it exists to rescue.
-    But gate1's data shape and the AA guns' are otherwise identical (RESET declares `destroyed`,
-    no swap authored anywhere, no chained def), so a name check couldn't tell them apart. The real
-    discriminator, verified against the data: **the fallback should only rescue a death that would
-    otherwise show nothing.** The AA guns' (`aagun32`–`36`) only Initial sequence is
-    `DAMAGE_SEQUENCE` — pure `If`/`CallAnimation` puffer calls (`sputter_fire_smoke_obj` /
-    `sputter_black_smoke_obj`), no `ObjectMotionFromTo`/`ObjectMotion`/opacity/active-state event
-    at all; without the fallback they die with literally nothing switching off. `gate1_doorblast`,
-    by contrast, authors `door1`/`door2`'s own visible destruction directly — rotate, fade,
-    deactivate — a deliberate choice to give the doors a death and leave the archway alone. Fixed:
-    `AuthorsVisibleDeath` scans a def's own Initial sequences for exactly that shape (a
-    move/fade/deactivate on a node outside the healthy/destroyed/dbase role set) and withholds
-    `ApplyDeathSwap` when it finds one. `gate1` (a `swap[healthy shown]`/`col[off 0, on 0]` census
-    at kill, permanently) is the only def either the C1/C2/C5 `damage-hd` sweep or a name-by-name
-    read flipped — `aagun32`/`kkgate`/`gate2`/`m_build01`/the C1 water tower/`agyrobus`/the C5
-    facade family/windows all measured byte-identical to before.
-  - Verified headlessly: killing `gate2` leaves the archway `swap[healthy shown]`/`col[off 0, on
-    0]` (deferred, by design) and the doors visibly fading/rotating uninterrupted; advancing past
-    28.5 s produces `debris[+7]`/`sounds[+1]` (the swap, `large_fireball` and the seven flying
-    pieces firing together); reset before and after 28.5 s returns it to healthy and re-kills in
-    the same hit count. Killing `gate1` now leaves `swap[healthy shown]`/`col[off 0, on 0]`
-    permanently (no tick ever swaps it) and resets/re-kills idempotently in the same hit count
-    (`kkgate` unchanged at `col[off 4, on 0]`). `.\RunTests.ps1`: build, 423 unit tests, 22 engine
-    suites, all 13 goldens hash-identical.
+  fix's per-row floor (the pool cap — 6, `localCallRoots` in `CSVM/data/effect_pools.json` — is an
+  invented number, judged in the same flight; see `BL-231`). (b) The `air_mixed_exp_sg` one-shot
+  authored on the same death is unconfirmed audible — D31 death audio is still stubbed engine-wide,
+  unrelated to this item's scope.
+  ⚠ **Trap kept from the diagnosis:** `facdsticks`' `part1`–`4` bind through the CALLEE's own
+  compiled symbol table, and `blockit2`'s same-named `part1`–`7` carry their own distinct ptrs — the
+  two never share a lookup, so do not add a name-based rescue near `Targets()`
+  (`docs/formats/destructibles.md`'s `⚠` on symbol-table binding).
+- `BL-254` **Both C2 studio gates' deaths now match the original (2026-08-04, `docs/HISTORY.md`);
+  only the in-cockpit playtest is owed.**
   ⚠ **Still open.** (a) The in-cockpit playtest, now covering both gates: fly gate2 to confirm the
   doors fall before the archway blows and the passage only truly opens once the wreck's colliders
   replace the healthy ones; fly gate1 to confirm the doors open but the archway stays solid — no
@@ -688,30 +534,26 @@ extracted data before being logged, so the mechanism is recorded here and not re
   overlap too, that is itself worth a HISTORY note (the doubling would be authentic, not a bug) and
   the item closes ❌-for-now instead.
 
-- `BL-161` **`cockpit_engine_sound` / `damaged_engine_sound` ship per plane, unparsed.**
-  `extracted/zrdr/vehicle.zrd.json` carries both alongside `engine_sound` for every plane def
-  (Devastator: `snd_devastator_cp` / `snd_damagedengine` + `[0.0, 1.0]`, lines 21-36; repeated at
-  lines 553-560, 870-877, 1166-1173 for the other planes). `PlaneStats.Load` reads only `engine_sound`
-  (`PlaneStats.cs:190`) — grep for the other two names across `CSVM/src` returns zero hits. Clarifies
-  `BL-080`'s wording.
-  *Fix shape:* out of scope until a cockpit-audio or damage-audio feature is scheduled; recorded here
-  so nobody has to re-derive from scratch that the *data* isn't the blocker.
+- `BL-161` **`cockpit_engine_sound` ships per plane, unparsed.** `extracted/zrdr/vehicle.zrd.json`
+  carries it alongside `engine_sound` for every plane def (Devastator: `snd_devastator_cp`, lines
+  21-36; repeated for the other planes); `PlaneStats.Load` does not read it. (`damaged_engine_sound`,
+  which this entry used to bundle, is parsed and consumed since `BL-090` item 1 landed 2026-08-01 —
+  its gain TUNE is `BL-223`.)
+  *Fix shape:* out of scope until a cockpit-audio feature is scheduled; recorded here so nobody has
+  to re-derive from scratch that the *data* isn't the blocker.
 
 ## Feature backlog
 
 - `BL-256` **Stunt screenshot feature, triggered off `DzRadius` — much later, by user decision
-  (2026-08-04, minted when `BL-125` was dropped).** `DzRadius` (15 m, user-hand-tuned) is settled
+  (2026-08-04).** `DzRadius` (15 m, user-hand-tuned) is settled
   as the **marker-centre radius**: scoring crosses the authored `dzpathN` gate pair
   (`docs/HISTORY.md` 2026-08-01 "M3 Wave C C9"), and the constant's remaining roles are the `dzN`
   marker centre and, eventually, the trigger for a stunt screenshot feature. No design beyond
   this sentence exists yet — recorded so the constant's purpose and the feature intent survive.
   ⚠ Do not retune or delete `DzRadius` as dead code — it is reserved, and the 15 m is the user's.
 
-- `BL-059` **Data-driven crash — the remaining variants/follow-ups (PLAN-data-driven-crash COMPLETE for the
-  dirt crash, default since Wave 4 2026-07-23).** The dirt/ground crash plays `player_crash_dirt`
-  end-to-end through the per-player scoped `AnimRuntime` — sparks, fireball cluster, black smokeball,
-  the `flydirt`/`dust` burst (via the Layer-1 `OpacityFade` + `MotionRuntime` scale handlers), the five
-  burning debris arcs, and the earth-impact boom all fire from the data. What is still open:
+- `BL-059` **Data-driven crash — the remaining variants/follow-ups.** The dirt/ground crash is
+  complete and the default (`PLAN-data-driven-crash`, `docs/HISTORY.md`). What is still open:
   1. **`bounce_sequence` re-launch (Layer-1.5).** The piece/debris `ObjectMotion`s carry
      `do_intersections` + a `bounce_sequence` (`pNhit` → `ground_mixed_exp_sg` + a second ranged
      launch) that `MotionRuntime` does not yet act on — it needs a ground-contact physics ray
@@ -786,18 +628,12 @@ extracted data before being logged, so the mechanism is recorded here and not re
   **When it comes back**, the fuse branch must carry its struck body into `Impact` instead of
   `null`, or it re-breaks per-surface effect selection the moment it is switched on.
 
-- `BL-062` **Rocket firing order — drain the selected hardpoint, not round-robin (M3 polish, user
-  2026-07-24) — the round-robin fix merged as `bea7947`.** The original fires **only the
-  selected/current hardpoint, draining it fully before advancing** to the next; `NextArmedHardpoint`
-  now keeps the cursor on the just-fired pylon until it is dry before the scan advances, confirmed by
-  the D44 hide-breadcrumb (`pylon ordnance: pylonN dry`).
-
-  **Still open — the H-selector design question (the "hardpoints won't cycle" finding).** H / D-pad
-  Right *is* wired (`RocketSelectPressed` → `CycleWeaponSelectors`) but gated `_ordnanceTypes.Length >
-  1`, and every stock loadout carries one hardpoint type (`wep_06`), so there is nothing to cycle —
-  working as designed, not a bug. Settle from the original whether the player selects an individual
-  **hardpoint** or the game just drains them in pylon order; meaningful mixed-ordnance cycling arrives
-  with the M4 configurator (mixed loadouts). See "Milestone 3 Polishing".
+- `BL-062` **Rocket firing order — the H-selector fidelity question.** Settle from the original
+  whether the player selects an individual **hardpoint** or the game just drains them in pylon
+  order. Our build drains the selected pylon fully before advancing, and since `BL-025` landed
+  (2026-07-30) H / D-pad Right cycles individual pylons even on a uniform-ammo loadout
+  (`WeaponCursor.NextSelectable` — the old `_ordnanceTypes.Length > 1` gate is gone). Meaningful
+  mixed-ordnance cycling arrives with the M4 configurator (mixed loadouts).
 
 - `BL-064` **Better mission states.** There is still a lot of difference between our maps and the
   original's. May need a pipeline to diff them, or to crack the mission loading states properly.
@@ -909,9 +745,8 @@ extracted data before being logged, so the mechanism is recorded here and not re
 - `BL-080` **Future cockpit view** would consume a mix of already-parsed and still-raw data: `pcdpN`
   cockpit damage panels and the `*_damage_green/yellow/red` indicator anims are already parsed
   (PlaneStats parses them, DamageVisuals skips them). `cockpit_engine_sound` (`*_cp` WAVs, e.g.
-  `snd_devastator_cp`) is **not** parsed anywhere — `PlaneStats.Load` reads only `engine_sound`
-  (`PlaneStats.cs:190`) — see `BL-161`. `player_fuelleak` (0.85 threshold) IS already parsed, as a
-  `VehicleInjureAnims` entry.
+  `snd_devastator_cp`) is still unparsed — see `BL-161`. `player_fuelleak` (0.85 threshold) IS
+  already parsed, as a `VehicleInjureAnims` entry.
 - `BL-081` **Runway `lite*`/`ltout*` lights-on/off state-variant quads** still z-tie (needs an
   engine-side light-state toggle to pick one variant).
 - `BL-082` **Rail-over-transition z-nit**: one 6-poly rail patch NE of the C1 bridges sits below the
@@ -928,9 +763,7 @@ extracted data before being logged, so the mechanism is recorded here and not re
   `--pos` `SpawnAbreast` fan already does this), or rank on a per-player-normalised time.
 
 - `BL-255` **A third main view — "nose view" — exists in the original and we do not have it**
-  (user, 2026-08-04, while handing over `CAP-17`; minted as `BL-253` in a concurrent session and
-  renumbered at the same-day merge — commit `11c22cc` cites the old number; `BL-253` is the C2
-  facade log debris). Alongside cockpit and third-person there is a
+  (user, 2026-08-04, while handing over `CAP-17`). Alongside cockpit and third-person there is a
   view with **no cockpit drawn, the camera sitting at the front of the plane, and the same instrument
   set as third-person** (the free-floating ALT/MPH/GUNS/ROCKETS dials, not the cockpit panel).
   `CAP-17 C2 south.mp4` is filmed in it throughout and is the reference footage — the dials sit at
@@ -1026,9 +859,8 @@ extracted data before being logged, so the mechanism is recorded here and not re
     *down* and makes the curve look *less* front-loaded than it is. The exponential-vs-linear verdict
     therefore only strengthens under the bias; the constant itself wants a re-measure once an FOV
     calibration exists and the rotation can be integrated as an angle rather than a pixel proxy.
-  (c) ~~**Distance is a TUNE hand-copied from the chase camera.**~~ **Resolved** — the fixed views
-  now take the per-plane shipped distance with the chase camera (`CameraController`); the Bloodhawk's
-  radius is its own 18.5, not 16.62. Nothing left to do here.
+  (c) Distance: resolved — the fixed views take the per-plane shipped distance with the chase
+  camera (`CameraController`).
   (d) **Combined keys ADD as numpad-direction vectors — MEASURED 2026-08-04 from the `CAP-08`
   scripted combo sweep, 14 staggered combinations.** Ours has no concept of this at all: `ActiveView`
   is a single-view selector that takes the first array match, so it can only ever return one of the
@@ -1093,7 +925,6 @@ extracted data before being logged, so the mechanism is recorded here and not re
   held keys' numpad offsets**, map the resultant direction onto the (a) layout, and treat a zero
   resultant as "no fixed view" — the existing ease then carries the camera there, and the
   no-snap-to-base behaviour falls out for free because only the target changes.
-  *Both captures are discharged (2026-08-04): `CAP-07` answered (a) and (e), `CAP-08` answered (d).*
   What remains open is (b)'s constant (wants an FOV calibration) and (f)'s +/− trim.
   ⚠ **`CAP-07` took two takes; the first is rejected and must not be re-analysed.** In
   `CAP-07 Numpad 1,2,3,6,9,8,7,4.mp4` the presses overlap: 10 camera transitions for 8 keys in
@@ -1108,21 +939,16 @@ extracted data before being logged, so the mechanism is recorded here and not re
   frame-to-frame motion over the last 1.2 s of each is 0.055–0.278 against a 0.090 baseline.
   ⚠ **Traps.** (a) **Only `--view=` is machine-verifiable** — live held-key input cannot be scripted
   here, so any fix to (b)/(d) is correct-by-construction only until played; do not close this off a
-  passing `--view=` capture alone. (b) ~~**The layout (a) cannot be fixed before the owed screenshots
-  pin the exact mapping**~~ — **resolved**: (a)'s table is measured. What survives of this trap is
-  the warning it carried: the fix is **not a symbol swap**. The corners gain a fore/aft term they do
-  not have today and every above-the-aircraft view disappears, so recode the table from (a) rather
-  than permuting the existing rows. And the table above is quadrants, not degrees — the exact
-  azimuth/elevation still wants an FOV-calibrated solve. (c) Don't retune
+  passing `--view=` capture alone. (b) **The fix is not a symbol swap.** The corners gain a fore/aft
+  term they do not have today and every above-the-aircraft view disappears, so recode the table from
+  (a) rather than permuting the existing rows. And the table above is quadrants, not degrees — the
+  exact azimuth/elevation still wants an FOV-calibrated solve. (c) Don't retune
   the chase radius here in isolation — the fixed views and the chase camera share one number in
   `CameraController` by design; a fix landing only in one place desyncs the two cameras again.
-  (d) ~~**Combined/multi-key positions are UNDESIGNED** — resist inferring a formula (e.g. "average
-  the two directions") from a single set of screenshots; get the key-combo captures first.~~ —
-  **resolved**: the captures were flown and the law is *summing*, not averaging (see (d)). The
-  warning that survives is the mirror image of the old one: the law is pinned by six exact
-  predictions but the eight blended positions are only bounded, so **do not quote a blend's azimuth**
-  as if it had been measured, and re-check the implementation against the four cancellations and the
-  two triples — those are the cases with a right answer to check against.
+  (d) The combination law is pinned by six exact predictions but the eight blended positions are
+  only bounded, so **do not quote a blend's azimuth** as if it had been measured, and re-check the
+  implementation against the four cancellations and the two triples — those are the cases with a
+  right answer to check against.
 
 - `BL-165` **The sun renders no lens flare; the original does.** Confirmed absent: `Launcher.cs:569`
   builds only a plain `DirectionalLight3D` (`Sun`) + a `WorldEnvironment` with no glow/bloom
@@ -1272,12 +1098,8 @@ the document alone, it says so and marks the value TUNE.
   data port. (`rof/ui_strings.json` carries "NITRO-BOOST: %4!s!" on the purchase screen and the
   buyable engines come in plain and "… nitro" variants, so the engine choice is what grants it.)
 
-- `BL-090` **Small per-impact feedback gaps — three landed (item 4, shell ejection, C22
-  2026-07-31; items 3 and 2, the glancing-collision reaction and the per-impact spark burst,
-  2026-08-01; item 1, `damaged_engine_sound`, B5 2026-08-01) — one remains,
-  with the data already shipped.** Grouped because each
-  is a few lines of wiring against an authored def and they share one theme: the moment something
-  hits the plane, or the plane touches something, is under-communicated.
+- `BL-090` **Small per-impact feedback gaps — items 1–4 landed (`docs/HISTORY.md`); one remains,
+  with the data already shipped.**
   5. **`snd_dangerzone_camera` is a data-orphan with a ready trigger.** `dangerzone_camera.wav`,
      SFX, non-3D; in no `SOUND_GROUPS` entry and named by no world data. `StuntMission.Complete` is
      the obvious hook. ⚠ Confirm against the original that it is the zone-cleared cue and not a
@@ -1636,44 +1458,13 @@ needs one of them to move needs a new measurement first.
   same measurement, same nonlinearity and same operating points — so the operating-point objection
   above disappears and no transfer function has to be assumed. Plot: `playtest/CAP-04/cadence_response.png`.
 
-  *(Design notes from before the flight, kept because they are what made the measurement work.)*
-  Shorter periods discriminate τ harder, longer ones give more signal. **Fit the ratio
-  across periods, not one period's absolute amplitude** — the ratio cancels the unknown gain from body
-  rate to flight path, which is the one systematic we cannot otherwise pin.
-  ⚠ Pick periods that are **not** an integer number of frames (0.40 s and 1.00 s are exactly 12 and 30
-  at 30 fps — use e.g. 0.23 / 0.37 / 0.57 / 0.93 s, which stay non-integer at 30, 60 and 120 fps, so
-  the set does not have to be re-chosen for the recorder). Integer periods resample the same phases
-  every cycle; non-integer ones let the phase drift reconstruct the waveform *below* the frame
-  interval. Frame rate otherwise does not matter — the pipeline reads real PTS and the existing clips
-  are already VFR — but **resolution does**: `extract.py`'s `LAYOUTS` knows only 2560×720 and
-  2560×1440 and raises on anything else, so declare a new geometry *before* recording.
-  **The strongest form is a matched A/B, and then no absolute τ is needed at all:** run the identical
-  macro cadence against our build and compare the γ ripple directly. The aero gain, the clock factor
-  and the AoA coupling all cancel, and the comparison answers the feel question rather than a constant.
-  Self-check that the pulses are actually landing: a symmetric ±cadence must hold mean rate ≈ 0, and a
-  50%-duty single-key run must give mean 16.5 °/sim-s. If it doesn't, the game is quantising the key
-  state and the input waveform is not what the macro thinks. Keyboard auto-repeat off, raw key
-  down/up, fixed throttle.
-  **The driver is written: `analysis/video-flight-calibration/pitch_cadence.ahk`** (AutoHotkey v2).
-  **F13–F18** run the periods longest-first (1300/930/700/570/370/230), **F19/F20** the duty
-  self-checks, **F21** panics and releases both keys. Everything is on F13–F24 deliberately: AHK
-  hotkeys are global and *consume* the key, so a binding on any key a real keyboard emits would break
-  that key everywhere while the script runs — F13+ are legal virtual keys nothing else claims, and
-  Synapse can remap a physical key onto them. It schedules
-  every edge against an absolute `QueryPerformanceCounter` clock (so error never accumulates), raises
-  the Windows timer to 1 ms, busy-spins the last 2 ms, and sends **extended scan codes** `sc148`/`sc150`
-  — *not* `sc048`/`sc050`, which are numpad 8/2 and would drive the camera instead of the elevator.
-  It writes `cadence-logs/*.csv`, a timestamped log of every edge: **that log is the deliverable as
-  much as the video is**, because it makes the input waveform measured rather than assumed, and it
-  reports the run's true period and jitter sd when it stops. It beeps once at start and twice at stop —
-  ⚠ **useless as an alignment marker in practice: Xbox Game Bar records game audio only, so the beep
-  is in none of the clips.** Do not infer anything from its absence; find the cadence window by matched
-  filter on altitude instead, which is what the analysis does.
-  **Timing verified 2026-08-03** (sending stubbed so the test could not type into anything): 26 cycles
-  at a nominal 230 ms measured **230.000 ms, sd 0.002 ms**, worst half-step 0.011 ms off, cumulative
-  drift 0.004 ms — ~2 µs of jitter against a 33 ms frame interval. ⚠ The first cut slept to within
-  2 ms of each edge and landed **±12 ms** out, because Windows' ~15.6 ms scheduler quantum survives
-  `timeBeginPeriod(1)`; the fix is the 25 ms busy-spin window (`SPIN_MS`). Don't "optimise" it back.
+  The driver is `analysis/video-flight-calibration/pitch_cadence.ahk` (AutoHotkey v2) — its header
+  carries the rig rationale, the re-flight rules (non-integer periods, the busy-spin timing) and
+  the verified timing figures; the edge log it writes (`cadence-logs/*.csv`) is the deliverable as
+  much as the video is. ⚠ For a re-flight: `extract.py`'s `LAYOUTS` knows only 2560×720 and
+  2560×1440 and raises on anything else — declare a new geometry *before* recording. The rig's
+  beeps are in none of the clips (Game Bar records game audio only); find the cadence window by
+  matched filter on altitude, which is what the analysis does.
   ⚠ **Traps.** (a) `PitchTune` **0.75 is a pinned measurement** (see this section's header warning) —
   and the cadence sweep leaves it untouched: it sets the **steady** rate, which still matches, while
   what the sweep refutes is the *transient shape*. It cannot move to fix a feel report — and it is
@@ -1706,7 +1497,9 @@ needs one of them to move needs a new measurement first.
   subtree), applied after the `RESET_STATE` bootstrap and before `zepstate`/`startanims`/the `.gw`,
   written only on a campaign-mission exit. Because `fuelboxconnect*` is a persisted def, the stored
   state cannot be just a destroyed/healthy flag — a *running* looping animation is part of what the
-  original carries.
+  original carries. (The `BL-099` fuel-depot report that produced this item is answered in full in
+  that doc — a cold IA1 renders intact tanks by spec, in the original and in CSVM alike; do not
+  "fix" the depot, and do not re-derive the depot chain analysis it records.)
   ⚠ **Traps.** (a) **Do not use this to explain away a rendering difference.** It is the reason a
   screenshot of the original is not evidence about the shipped data, which makes it an equally good
   way to hand-wave a real bug; anything blamed on the log needs the mission sequence that produced
@@ -1716,53 +1509,6 @@ needs one of them to move needs a new measurement first.
   should carry, the second should not).
 
 ## Open fidelity questions (answerable by testing the original)
-
-- `BL-099` **C1's fuel depot: what did you actually see, and in which mission? — ANSWERED
-  2026-08-02, nothing to implement.** The report was: in the original, C1 IA1's depot sometimes
-  spawns with tanks already alight and a pipeline tower blinking, while the shipped data says IA1's
-  depot **cannot burn and cannot blink** (`ia1.gw` deactivates `fuel_truck01`/`02`, `nodes.json`
-  ships both `active: false`, and the only caller of `trucktodepot1` is a C1/M02 script). That
-  contradiction is now explained, and it is not about C1 at all.
-
-  **The answer: the original carries destruction across mission boundaries in a state log**, and a
-  mission's rendered world is `RESET_STATE` + `zepstate` + `startanims` + its `.gw` **plus that
-  log**. Every mission load applies it; only campaign missions write it; it commits to the save and
-  survives a process restart. The per-definition opt-in is the `SAVE_LOG` / `PERSIST_LOG` pair,
-  previously documented as undecoded engine bookkeeping — **the full decode, the user's five-step
-  A/B in the original, and the 62-definition `PERSIST_LOG` list are in
-  `docs/formats/anim-definitions.md`** ("`SAVE_LOG` / `PERSIST_LOG` are the cross-mission state
-  log"). So the depot the user saw was destroyed in **C1/M02**, where the whole route is reachable,
-  and C1 IA1 inherited it.
-
-  **Both of this item's loose ends fall out of that.** `ftank0*` *and* `fuelbox*` — for both
-  `fuelboxconnect*` (the blinking pump) and `fuelboxbreaks*` — are on the `PERSIST_LOG` list, so a
-  *running* pump animation is part of what carries, which is what the blinking needed and a static
-  flag could not give. And the `{ftank02, ftank04}` "middle two" pair no longer has to be
-  producible by a clean chain: IA1 shows whatever M02 was left in, including a burn crawl caught
-  mid-flight, on top of the noted caveat that `ftank02` sits ~52 m north so the freecam "row of
-  four" need not match the X ordering.
-
-  **CSVM is not misbehaving, and this stays true — do not "fix" the depot.** Both `healthy` and
-  `destroyed` ship `active: true` in the gamez, bootstrap pass 1 resolves them via each `ftank0N`
-  def's `RESET_STATE`, and we render intact tanks, dark lights, static — every run. That is what
-  the shipped data specifies for a cold IA1, and it is what the original renders for one too.
-
-  **Do not re-derive the chain analysis** (traced 2026-07-22, and still correct): the only route to
-  a destroyed tank is weapon damage on `fuel_truck01`-`truck_destroy01` (`WeaponHit`, `health 20`)
-  → `chainreaction` → `StopAnimation fuelboxconnect1` → `CallAnimation chainreaction_fueldepot1` →
-  burn crawl → `ftank_boom4` then `ftank_boom3`; `chainreaction_fueldepot2` mirrors it with
-  `ftank_boom1`, `ftank_boom2`; each `ftank_boomN` flips `healthy`→inactive, `destroyed`→active. No
-  randomness exists anywhere on that path (the authored-random idiom is `If {RandomWeight: w}` →
-  state → `StopSequence`, and `fuel_tanks.zrd.json`, `ref_fueltanks.zrd.json`, `fueltruck.zrd.json`,
-  all 47 C1 `cam_anim` files carrying `RandomWeight`, all 13 in `C1/IA1/mis_anim` and `ia1.gw` were
-  all checked clean). The blinking is a *working* pump indicator (`flashthelights`: on → +0.1 s off
-  → +0.2 s `Loop {-1}`, with `scale_hose` rocking the `rockerarm`), and `fuelboxbreaks1` kills those
-  lights permanently — so blinking and destroyed tanks are anti-correlated **within a chain**, and
-  seeing both means one chain ran and the other did not.
-
-  **The general lesson, worth more than this item:** a screenshot of the original is not by itself
-  evidence about the shipped data, because the world you are looking at may carry state no file
-  describes. Reproducing the log itself is `BL-243`.
 
 - `BL-100` **Which weather/sky zone do C1–C4 actually use?** **C5 is answered — `zone1`** (user A/B
   2026-07-22; landed as polish-3 item 2, see `docs/formats/weather.md` and `Weather.ResolveZone`).
@@ -1811,16 +1557,6 @@ needs one of them to move needs a new measurement first.
   upstream for MW/PM, which share the vehicle-table concept) far enough to confirm whether a moving AI
   patrol boat's hit points come from the vehicle def or a mis_anim-style def — a stronger, data-side
   argument than a cockpit count, and it doesn't need the original open.
-
-- `BL-103` **Rocket firing cooldown (LANDED B17, 2026-07-24 — now a playtest A/B).** Every rocket entry
-  has `FIRE_RATE 1.0` (vs 8.0–10.5 for guns), i.e. one launch per second. The user confirmed one
-  trigger pull = one rocket from one hardpoint but was **not sure whether a cooldown exists**, so
-  B17 uses 1.0 as the data's answer rather than an observed fact (`FlightController.UpdateRockets`).
-  A/B the 1 s gate against the original.
-- `BL-104` **Rocket fire binding (design choice, LANDED B17).** Rockets fire on **F** / gamepad **A** (guns
-  are Space / pad-B), one per pull. Pad-A doubles as respawn but only from the crashed / run-complete
-  screens, which the live-flight firing path never shares — so no collision. If the mapping feels
-  wrong in the cockpit it is a one-line change in `FlightController.RocketFirePressed`.
 
 - ⚠ **Never infer a damage threshold from an animation's name.** `ptboat_50damage` fires at
   **60 %** health remaining and `ptboat_75damage` at **30 %** — the names lag their trigger,
@@ -2025,9 +1761,8 @@ needs one of them to move needs a new measurement first.
   the airframe is being worked rather than speed as such; that fits the sign we measure (nose-down,
   unloaded, engine **falls**) and is what the climb-rate-over-airspeed result says quantitatively.
 
-  Honest limits: two takes, not a distribution; **wall-clock seconds, not sim seconds** (k=1.390);
-  the two takes' coefficients disagree by 2.6× (above); and no take contains a recovery. Decoded
-  flight state and the pairing live in `analysis/video-flight-calibration/{run2chase,enginepitch}.py`
+  Decoded flight state and the pairing live in
+  `analysis/video-flight-calibration/{run2chase,enginepitch}.py`
   (`playtest/CAP-10/` holds the audio side).
   ⚠ The engine note and the overspeed whine move together in a dive; a frequency-domain measurement
   that does not separate them will attribute one to the other.
@@ -2123,8 +1858,8 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   the damage-stage sputters and the wreck smoke at once.
   ⚠ Traps: this is not the `puffer.*SizeScale` knobs — those scale sprite size, and trading
   count for size is exactly the substitution that makes a too-sparse plume read as "too small"
-  instead. **That substitution has now partly happened**: `SizeScaleDefault` went 1 → **4** at the
-  controls on 2026-08-01, which makes every unnumbered emitter read fuller without adding a sprite,
+  instead. **That substitution has now partly happened**: `SizeScaleDefault` is **4** (`BL-282`,
+  scheduled polish-8 A1), which makes every unnumbered emitter read fuller without adding a sprite,
   so a density verdict taken today is measuring the two together. If `NUMBER` is later raised, 4 has
   to be re-judged in the same session, not left standing. Do not tune it from a single `--screenshot`: sprite count only reads over a time series
   (SHOT-19). And do not infer the default from the effects readers — the `NUMBER`-carrying states
@@ -2140,66 +1875,16 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   measured dive. Judge both — whether the loop should ramp in more gradually as damage *accumulates*
   rather than snapping in on first scratch, and whether 1.0 sits right against the healthy engine —
   at the controls. Config keys: `flightAudio.damagedEngineMixGain`.
-- `BL-215` **Rocket-trail puff size (C21, 2026-07-31; was mis-tagged `BL-212`, an accidental ID
-  collision with the landed STOP_SEQUENCE bug — renumbered 2026-08-01)** — the trail look and per-type character
+- `BL-215` **Rocket-trail puff size (C21, 2026-07-31)** — the trail look and per-type character
   passed the cockpit A/B (PT-09), but the user flags the puff size as possibly needing more tuning.
   The authored FLYOUT values are verbatim; only render-side size/overlap is in play.
-- `BL-200` **Casing-ejection look (C22, 2026-07-31)** — the authored halves are verbatim (the
-  `gunshell` OBJECT_MOTION per `MotionRuntime`'s translation_range decode; the `muzzlepuffer`
-  velocity/size/life/deviation; the muzzle-light range/colour variants), but four values are
-  hand-picked: the **white puff cluster stand-in** (`EjectPuff*` in `Projectile.cs` — count 5,
-  spread 0.4 m, drift ±1 m/s riding the casing's launch velocity, size 0.5–0.9 m, life 1.2–2.0 s;
-  no shipped effect def matches it — only `muzzle_burst` references `gunshell`, and the `gunshell`
-  def is motion-only), the **muzzle puff count per shot** (`MuzzleSmokePuffs` 3, glossing the
-  authored 0.05 s-interval × 0.3 s window from a moving node), the **light flash energy**
-  (`MuzzleLightEnergy` 2.5 — the def carries range/colour only) and its **2-frame life**
-  (`MuzzleLightLife` 0.03 s, glossing the def's next-event-tick deactivate). Judge at the controls
-  ⚠ Do not re-derive the calibre gate or underbelly mount from the design spec
-  (SRC-3 — rejected against the reference captures), and do not shorten `gunshell`'s `RUN_TIME 2`
-  to any gate — authored data. **PT-10 verdict (2026-07-31): casing + cluster confirmed working;
-  the puffs render as stripes — that defect is `BL-209` (PLAN-m3-polish-3 C22). Re-judge these
-  values only after it lands.**
-- `BL-201` **Muzzle-flash shape (C24, 2026-07-31)** — the flash is now a triad of three quads 120°
-  apart, the whole triad rotated by a shared random angle each shot (user direction, matching the
-  reference captures' 3-lobed burst; the authored `mb_spinflame` node instead rotates one node to
-  one of three discrete angles — 30°/80°/140° — `RANDOM_WEIGHT` 1/3 each, `muzzle_burst.zrd.json`).
-  The per-ammo texture axis is now wired (`{slug,dum,ap,mag}_muzzle1`, resolved from the weapon's
-  `FIRE` `ANIMATION` — `muzzle_burst_slug`/`_dum`/`_ap`/`_mag`; the base `muzzle_burst` and heavy-mount
-  `muzzle_burst2` default to slug). Hand-picked: `MuzzleFlashCount` 3, `MuzzleSize` 0.5 m (unchanged
-  waypoint), and the continuous (not 3-bucket discrete) per-shot rotation. Judge against
-  `MuzzleFlash1..3.png` and shot 2 of `OriginalScreenshots/C1B IA1 Bloodhawk tracer and
-  ejection.png`. Also re-confirm A10 muzzle placement now the flash shape changed:
-  `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --infinite-ammo --fire`.
-  **PT-11 verdict (2026-07-31): unreadable — a red semi-transparent circle, rotation invisible;
-  the quad-anchoring defect is `BL-208` (PLAN-m3-polish-3 C21). Re-judge these values only after
-  it lands.**
-- `BL-202` **Tracer look (C25, 2026-07-31)** — the tail artifact (a short line bleeding past the
-  streak's end) was the engine texture default, not the streak geometry: `StandardMaterial3D`
-  defaults to `TextureRepeat = true`, so bilinear filtering at the UV=0/1 edge blends in the
-  *opposite* edge of the tracer texture; the quads never tile, so repeat is now off for every
-  `ProjectilePool` sprite material. The per-ammo texture axis is now wired for tracers too
-  (`tracer_slug`/`_dumdum`/`_armorpierce`/`_magnesium`, the same `FIRE`-binding resolution as the
-  muzzle flash — `MuzzleAmmoIndex` reused; ordnance has no ammo-type `FIRE` binding and falls back
-  to the generic `tracer1`). Hand-picked, per the user's "a lot brighter" direction: `TracerLength`
-  1.0 m (was 3 m), `TracerWidth` 0.10 m (was `0.0782f * 2`), and a uniform overbright tint
-  `TracerBrightness` 3.0 (additive blend with no bloom pass, so the only way to read brighter than
-  the texture's own pixel value). Judge against `OriginalScreenshots/C1B
-  IA1 Bloodhawk tracer and ejection.png`/`…ejection2.png`.
-  **PT-12 verdict (2026-07-31): colour right; the user tunes length/width themselves — landed via
-  `BL-210` (PLAN-m3-polish-3 C23): `weapons.tracerLength`/`tracerWidth`/`tracerBrightness` config
-  knobs, plus a `weapons.tracerMinPixels` distance-visibility floor.** ⚠ The bullet is fast enough
-  (1000 m/s at 60 fps ≈ 16.7 m/frame) that a frame-locked `--screenshot` capture almost never lands
-  exactly on a round still at the muzzle — the near/bright look is easiest judged live, holding the
-  trigger, not from a single scripted shot.
 - `BL-113` **Compass tape** — `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE
   (north = −Z is now confirmed against the original, 2026-07-30 — do not reopen).
-- `BL-115` **Flight model** — `StallNoseRate`, `KnifeAlignFloor`, `ClimbGravityScale`, `LowSpeedDragBlend`.
-  **`PitchTune` / `YawTune` / `RollTune` / `ThrustConst` have left this list**: all four are now
+- `BL-115` **Flight model** — `StallNoseRate`, `ClimbGravityScale`, `LowSpeedDragBlend`
+  (`KnifeAlignFloor` moved to `BL-247`).
+  **`PitchTune` / `YawTune` / `RollTune` / `ThrustConst` are not on this list**: all four are
   measured against the original frame by frame and asserted by the `flight-envelope` suite, so they
-  are not TUNE knobs and a feel A/B cannot overrule them. **The owed errand — flying the calibrated
-  values at the new speeds — is done (2026-07-30): confirmed feeling like the original, no
-  collision/stunt-zone/chase-camera regressions.** What remains open here is
-  `StallNoseRate`/`KnifeAlignFloor`/`ClimbGravityScale`/`LowSpeedDragBlend` alone.
+  are not TUNE knobs and a feel A/B cannot overrule them.
   **`CAP-05` decoded 2026-08-04** (four clips, all gating rigid) — three of the four are answered and
   one is not:
   - **`StallNoseRate` 1.0 rad/s is ~17× too fast.** In `CAP-05 Stall 0% Thrust no input` the nose
@@ -2234,13 +1919,6 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
     thrust cannot be formed. *What would settle it:* an independent `g`, or a capture with a
     **readable** nose angle in a sustained climb — i.e. a shallow, held climb at fixed throttle
     rather than a zoom.
-- `BL-116` **Numpad camera views — superseded 2026-07-30.** The "layout is settled" claim this entry
-  made is now contradicted by cockpit testing (8/2 swapped, 7/0 both underside-front, 1/3 both rear,
-  and the original binds 0 which we don't), and the "distance is user-recall, not data" claim is now
-  false — `extracted/zrdr/camparam.zrd.json` ships real per-plane distances. Superseded by `BL-149`
-  (the shipped camera data — landed; its residue is `BL-248`) and `BL-150` (the plan-sized rebuild
-  covering layout, easing, interrupts, and the +/− trim). Kept as a retired ID, not deleted, per this
-  file's permanent-ID rule.
 - `BL-248` **The original's chase distance is DYNAMIC in two terms, and `CAP-21` measured both
   (2026-08-04): a small SPEED term that reproduces `dist_factor` 0.01, and a much larger
   ACCELERATION transient that relaxes at 0.65 /sim-s.** `BL-149` shipped the reader and wired
@@ -2344,16 +2022,18 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   smoke misread as a casing effect (user-confirmed reading, 2026-08-05). Fix: set the muzzle
   smoke to the authored 6-puff window and remove the `EjectPuffs` block + its spawn loop; the
   pooled casing itself (chapter-gamez `gunshell` mesh flying the authored motion) is already
-  faithful and stays. *Playtest after fix:* sustained gun fire in chase view against the
+  faithful and stays. Riding along as the same judge-at-the-controls residue (was `BL-200`): the
+  muzzle-light stand-in magnitudes — `MuzzleLightEnergy` 2.5 and the 2-frame `MuzzleLightLife`
+  0.03 s; the def carries range/colour only. *Playtest after fix:* sustained gun fire in chase view against the
   original's captures — the smoke should sit at the gun line, not around the falling shells.
 - `BL-282` **Every authored particle size is multiplied by an invented global 4×**
   (`Puffer.cs:276-281`, `SizeScaleDefault = 4f` — "a judged stand-in for a missing engine
   constant, not a decode"; at 1 the emitters read as a thin scatter of specks, 4 was settled at
   the controls 2026-08-01). Every `SIZE_RANGE` in the game — crash fireball, trails, splashes,
-  gunhit — renders through it, so every effect-fidelity judgement is conditioned on it. *What
-  would settle it:* a frame-matched angular-size comparison of one well-bounded effect (the
-  crash fireball is the candidate) against original footage; if the true factor differs, every
-  effect changes size at once — re-judge, don't re-tune each effect around the old value.
+  gunhit — renders through it, so every effect-fidelity judgement is conditioned on it. *The
+  settling evidence exists:* `BL-122`'s frame-matched crash-fireball comparison puts the missing
+  constant **near 1, not 4**, and `PT-24` judged 4× too big at the controls. If the factor changes,
+  every effect changes size at once — re-judge, don't re-tune each effect around the old value.
 - `BL-263` **Muzzle flash: three invented lobes vs the authored single rolled node**
   (`Projectile.cs:98-104`). The `muzzle_burst` def is ONE `mb_spinflame` node rolled to a
   discrete random Z angle per shot (`RANDOM_WEIGHT` over 30/80/140°); we draw three quads 120°
@@ -2445,8 +2125,6 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   Also corrected by the same playtest: symptom (2) is not C1/IA1-specific and is partly authored —
   the original shows sparse singles at any altitude too, on some maps but not all, which `BL-273`
   explains via the per-chapter sprite-template counts.
-  *Superseded fix shape (kept for the record):* key the layer's vertical extent/falloff to each
-  mission's own `CloudTop`/`CloudBottom`/core-`THICKNESS` instead of the two flat margins.
   *`CAP-12` is no longer a blocker for the model* — the data settles it; film only if a difference
   survives `BL-273` (user's call, 2026-08-05). The capture stays owed for deck-density judgement.
   ⚠ **Traps.** (a) Don't just shrink the margins by feel — they vary per mission/zone; re-derive per
@@ -2484,12 +2162,8 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
 - `BL-120` **Collision feel** — behaviour against building corners.
 - `BL-121` **Damage (Run-2 item 10)** — `CrashSpeed` 25, graze friction + attitude kick,
   `GrazeStopSpeed`, breakup scatter, and whether the 10c panel-flip and smoke-trail look right in
-  real flight. ⚠ The 2026-07-31 "confirmed to render in real flight" claim (`BL-174`) was
-  narrower than it read: every dive in that test flew the identity -Z heading near the world
-  origin, the one pose where the emitter's world-anchoring bug was invisible — at any real
-  mission spawn and heading the trail rendered kilometres away until the `TopLevel` anchor fix
-  (`docs/HISTORY.md` 2026-08-03, `trail-world-anchor` suite). Rendering at real spawns is now
-  verified; this item is back to a magnitude/feel judgement. Tree softness is retired dead code
+  real flight. Rendering at real spawns is verified (the `TopLevel` anchor fix, `docs/HISTORY.md`
+  2026-08-03, `trail-world-anchor` suite); this item is a magnitude/feel judgement. Tree softness is retired dead code
   (`docs/HISTORY.md` 2026-07-23), not a TUNE — do not re-add it here.
   **`CAP-15` analysed 2026-08-05** (the burn-down half of `CAP-14 Graze and CAP 15 wing to
   red.mp4`, 37.45 s Bloodhawk chase clip; stills + per-frame fire counts in `playtest/CAP-15/`;

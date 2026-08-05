@@ -11,13 +11,8 @@ Cite them from `backlog.md` and in conversation the way `BL-nnn` is cited. IDs a
 an item closes its ID retires with it and is never reused, so numbering gaps are expected.
 Retired IDs disappear from this file, so never mint a new ID by scanning the entries below — run
 **`./New-ItemId.ps1 -Kind CAP`** (or `-Kind PT`), which increments a shared locked counter in
-`.git/item-id-counters.json` and is safe under concurrent sessions. (`CAP-17` and
-`CAP-14` and `CAP-24` and `CAP-16` retired 2026-08-04, `CAP-15` retired 2026-08-05 — IDs are
-never reused. The `PT` counter read `PT-37` while `PT-37` was already in use; corrected to `PT-38`
-on 2026-08-05. **Eighteen `PT`s retired 2026-08-05** in one triage pass — `PT-01`, `PT-02`,
-`PT-03`, `PT-04`, `PT-13`–`PT-18`, `PT-20`–`PT-25`, `PT-29`, `PT-30` — their verdicts are in
-`docs/HISTORY.md` and what they found is in `backlog.md` as `BL-273`–`BL-281` plus evidence added
-to `BL-100`/`BL-118`/`BL-119`/`BL-260`/`BL-282`.)
+`.git/item-id-counters.json` and is safe under concurrent sessions. Retired IDs' verdicts are in
+`docs/HISTORY.md`.
 
 **Captures staged for an item live in `playtest/<ID>/`** — git-ignored (they are renders of the
 player's own game files) and, unlike `.scratch/`, **not swept by `CleanScratch.ps1`**, so they
@@ -109,6 +104,17 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 ---
 
 ## 1 · Actionable now (`PT-nn`)
+
+- `PT-38` **Rocket/gun quick checks left over from the closed 2026-07-24 m3-polishing fixes**
+  (`BL-002`/`BL-003`/`BL-005`/`BL-103`, all landed and code-verified; their entries are closed, so
+  this is the one place these look-checks survive). One flight covers all four
+  (`./RunGame.ps1 --plane=player_pfighter --chapter=C1 --infinite-ammo`). *Look for:* (a) a rocket
+  fired out to max range self-destructs with the `default` IMPACT effect reading acceptably as a
+  mid-air burst, not a ground/water splash floating in the sky; (b) gun tracers start at the muzzle
+  and grow out of it, never appearing behind the plane; (c) a ground crash plays the boom with no
+  `SOUND 'snd_exp_ground_a'` warning in the log; (d) rockets gate at one launch per second
+  (`FIRE_RATE 1.0` is the data's answer; the user was never sure whether the original has a
+  cooldown — A/B it if the original is open anyway, otherwise judge on its own merits).
 
 - `PT-36` **Splash falloff onto a large neighbour, e.g. a zeppelin gasbag (`BL-239`).** Blast damage
   onto a body other than the one struck now scores to the nearest point on that body's own collision
@@ -224,11 +230,6 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 
 ## Everything else
 
-Blocked on an unlanded fix, and tracked in [`backlog.md`](backlog.md) with its own
-`*Playtest after fix:*` line — the weapons re-tests (`BL-017`–`BL-028`), the inspect-tool
-follow-ups (`BL-042`–`BL-046`), the danger-zone gates (`BL-088`), the numpad camera rebuild
-(`BL-150`), graze pushback (`BL-172`) and the whole 2026-07-31 pass (`PT-05`–`PT-12`, retired —
-their re-tests ride `BL-203`–`BL-211`, scheduled in `docs/plans/PLAN-m3-polish-3.md` (now
-`COMPLETE`); `BL-199`/`BL-204`/
-`BL-206`/`BL-207`/`BL-016`/`BL-203`/`BL-212` landed and came back as `PT-13`–`PT-19`). Do not
-re-add them here; the entry brings its own test when the fix lands.
+Everything blocked on an unlanded fix is tracked in [`backlog.md`](backlog.md) with its own
+`*Playtest after fix:*` line. Do not re-add those here; the entry brings its own test when the
+fix lands.

@@ -49,7 +49,9 @@ already-live gate would drop every ejection but one per 2 s window):
 
 The **white puff cluster** the retail captures show riding each ejected casing matches **no
 shipped effect def** (only `muzzle_burst` references `gunshell`, and the `gunshell` def carries
-no puffer), so the engine's cluster is a hand-authored stand-in (`BL-200` TUNE).
+no puffer) — the "cluster" in the captures is the muzzlepuffer's own smoke misread as a casing
+effect (user-confirmed 2026-08-05). The engine's hand-authored stand-in cluster is scheduled for
+removal (`BL-261`).
 
 ## Bullet impacts — `gunhit.zrd.json`
 
@@ -338,7 +340,8 @@ spark reuses it as an unrelated bright-flash texture, predating this wiring). Th
 `mb_spinflame` mechanism rotates one flash node to one of three discrete angles per shot
 (30°/80°/140°, `RANDOM_WEIGHT` 1/3 each); the engine instead draws three quads 120° apart with one
 shared continuous random roll per shot, matching the reference captures' 3-lobed burst
-(`BL-201` TUNE — the discrete 3-bucket roll wasn't reproduced).
+(`BL-263` — whether the authored single-node discrete roll reproduces the stills is undecided;
+the triad is an invented shape until it is).
 
 ## Binding resolution — 5 unresolved names
 

@@ -47,17 +47,17 @@ public sealed partial class ProjectilePool : Node3D
                                                 // both launch velocity and acceleration together so the whole
                                                 // profile stays proportional and the round still expires at RANGE.
                                                 // C25 retune toward the reference shots' short discrete dashes (was 3m/0.156m, read as a long
-                                                // glowing streak) — magnitudes are TUNE (BL-202), owed the cockpit A/B. C23 routes all three
+                                                // glowing streak) — magnitudes are user-owned tuning. C23 routes all three
                                                 // through Config (weapons.tracerLength/tracerWidth/tracerBrightness) so the user can retune the
                                                 // look without a rebuild; these consts are only the defaults now (Config.GetFloat falls through
                                                 // to them verbatim with no config.json, so the defaults stay byte-identical for goldens).
-    internal const float TracerLength = 1.0f;   // streak length behind the round, m — TUNE (BL-202)
-    internal const float TracerWidth = 0.10f;   // m — TUNE (BL-202)
+    internal const float TracerLength = 1.0f;   // streak length behind the round, m — default; user tunes via weapons.tracerLength
+    internal const float TracerWidth = 0.10f;   // m — default; user tunes via weapons.tracerWidth
     // Additive blending with no glow/bloom pass caps a tracer at the texture's own pixel value, which
     // read visibly dimmer than the reference captures' near-white core — an overbright multiplier (>1,
     // clipped by the additive blend itself) is the only lever available without a bloom pipeline.
     // Uniform across channels so it brightens rather than recolours the per-ammo texture's own hue.
-    internal const float TracerBrightness = 3.0f; // TUNE (BL-202)
+    internal const float TracerBrightness = 3.0f; // default; user tunes via weapons.tracerBrightness
     // C23 distance-visibility floor: the minimum screen footprint (px) a tracer's drawn width/length
     // are allowed to shrink below at range, so a round many hundred metres out still reads as a
     // fleck instead of vanishing into sub-pixel geometry (the original screenshots show distant fire

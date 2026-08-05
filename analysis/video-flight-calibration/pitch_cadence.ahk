@@ -11,7 +11,11 @@
 ;
 ; WHAT MATTERS, AND WHAT DOES NOT.  The period does NOT have to hit its nominal
 ; value - the real period is fitted from the footage.  What matters is that it is
-; STABLE.  A constant per-cycle overhead is harmless (it is just a slightly longer,
+; STABLE, and that no period is an integer number of frames: integer periods
+; resample the same phases every cycle, non-integer ones let the phase drift
+; reconstruct the waveform below the frame interval.  The shipped set
+; (1300/930/700/570/370/230 ms) stays non-integer at 30, 60 and 120 fps - keep
+; that property if you change the periods.  A constant per-cycle overhead is harmless (it is just a slightly longer,
 ; still-constant period); random jitter is the enemy.  So this script schedules
 ; every edge against an ABSOLUTE clock derived from QueryPerformanceCounter - errors
 ; never accumulate - raises the Windows timer resolution to 1 ms, and busy-spins the
