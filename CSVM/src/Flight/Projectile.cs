@@ -156,19 +156,46 @@ public sealed partial class ProjectilePool : Node3D
     // the instanced model's `*_base` disc scales xz 1→2 over 0.2 s then eases back to 1.8 over
     // [1.0,2.0] s, while the `*_splash` column pops to its authored scale (1,100,1) and collapses
     // to zero over the 2 s run (OBJECT_MOTION SCALE initial+delta·u — MotionRuntime's decode).
-    // Values verbatim from the defs; NOT rendered from them: the 0.05 s opacity fade-in / 1 s
-    // fade-out (partial opacity on world materials needs AnimRuntime's opacity-twin path) and the
-    // OBJECT_CYCLE_TEXTURE splash01→03 flipbook — the scale animation is what makes it visible.
+    // Values verbatim from the defs. C6 (BL-265) adds the two pieces that were missing: the
+    // 0.05 s opacity fade-in / 1 s fade-out (OBJECT_OPACITY_FROM_TO targets the WHOLE
+    // `splash1.flt`/`bsplsh.flt` root, i.e. base disc AND column together, not the column
+    // alone) and the column's `splash01→03` flipbook.
     private const float SplashRunTime = 2.0f;      // s, the def's sequence length
     private const float SplashBaseGrowTime = 0.2f; // s, base 1→2
     private const float SplashBaseEaseStart = 1.0f; // s (0.2 + EVENT_OFFSET 0.8), 2→1.8 over 1 s
     private const float SplashBaseMax = 2.0f, SplashBaseEnd = 1.8f;
     private const float SplashColumnScale = 100f;  // the column's authored initial Y scale
-    // TUNE: the authored splash1_splash quad is 5 cm wide — sub-pixel beyond ~30 m, it dilutes
-    // to an invisible grey sliver however bright the texture. The reference's ticks measure
-    // ~0.35 m wide (Water Splash.png), so the column's x/z are widened toward that; height
-    // stays the authored curve.
-    private const float SplashColumnWidthScale = 8f;
+    // OBJECT_OPACITY_FROM_TO on splash1.flt/bsplsh.flt (verbatim, both defs identical): 0→1 over
+    // 0.05 s, hold, then 1→0 over 1.0 s starting at 0.05 + EVENT_OFFSET 0.95 = 1.0 s — so the
+    // fade-out's start coincides numerically with the base disc's own ease-start
+    // (SplashBaseEaseStart) but the two are independent authored events, not one shared value.
+    private const float SplashFadeInTime = 0.05f;   // s
+    private const float SplashFadeOutStart = 1.0f;  // s (0.05 + EVENT_OFFSET 0.95)
+    private const float SplashFadeOutTime = 1.0f;   // s
+    // The column's authored splash01→03 flipbook rate (OBJECT_CYCLE_TEXTURE reset in both defs),
+    // 3 frames @4 fps verbatim (C1B's own materials.json: material 135's `cycle` block). See
+    // SplashFlipbookTextures below for why this needs its own registration path.
+    private const float SplashFlipbookFps = 4f;
+    // TUNE, config-visible for the A/B (same pattern as A3's MuzzleFlashCount): with the fade
+    // landed, the authored splash1_splash quad plays at its literal 5 cm width by default. Set
+    // back to 8 to reach the earlier hand-widened look this replaces — judged against
+    // `Water Splash.png` before the fade existed, when the un-faded column popped in as a thin
+    // grey sliver past ~30 m. Not a `const`: the user's pending width pick must stay reachable
+    // without deleting either path.
+    private static readonly float SplashColumnWidthScale = 1f;
+    // The column's authored flipbook frame textures. Reuses TextureCycler's frame-swap machinery
+    // (its architecture entry: "Runs the gamez material cycle flipbooks... by swapping
+    // albedo_tex; frames resolve at build time while the TextureArchive is open") rather than a
+    // bespoke per-sprite flip, since this IS that same mechanism's data — just not reached by
+    // SceneBuilder's automatic per-polygon registration: splash1_splash's own polygon binds to a
+    // SIBLING material (136) that carries the identical splash01.tif texture but no cycle block
+    // (bsplsh_splash's polygon, unlike the gun's, does bind directly to the cycling material).
+    // Registered lazily on the actual built material the first time each is seen
+    // (EnsureSplashFlipbook), so it self-heals either way. Once registered it runs like every
+    // other world flipbook: globally and continuously, not reset per hit — concurrent splashes
+    // share one synced frame, the same simplification the water/wake/surf cycles already ship
+    // with (effects.md).
+    private static readonly string[] SplashFlipbookTextures = { "splash01", "splash02", "splash03" };
 
     // The DETONATION_DISTANCE proximity fuse is OFF (BL-233). Read as a fuse radius against ANY
     // body, it can only ever trip on world geometry in M3 — the flying aircraft carries no physics
@@ -290,6 +317,16 @@ public sealed partial class ProjectilePool : Node3D
     private readonly Dictionary<string, GameZNode?> _impactNodes = new(); // impact anim name → prototype (cached)
     private readonly HashSet<string> _impactFxLogged = new();
     private readonly List<ImpactFx> _impactFx = new();
+    // C6 (BL-265): the splash fade's per-instance translucent twin, cached per SOURCE material —
+    // installed as a surface override on every splash instance that shares it (never edited in
+    // place, the same rule AnimRuntime's own fade-twin cache follows), each instance then driven
+    // independently through its own SetInstanceShaderParameter. Null once cached means the source
+    // shader had no alpha path to twin (logged, not swallowed — see EnsureSplashFade).
+    private readonly Dictionary<ShaderMaterial, ShaderMaterial?> _splashFadeTwins = new();
+    // The splash column's flipbook material, once registered with the shared TextureCycler — a
+    // set rather than a bool since the gun and HE splash defs build different underlying
+    // materials (see SplashFlipbookTextures).
+    private readonly HashSet<Material> _splashFlipbookRegistered = new();
     // Gun-impact effect throttle (C8): effect name → the sim time it last played. Keyed by name,
     // which is exactly "per firing group" — a group's rounds all carry one weapon and one
     // `<caliber><ammo>_gunhit`. Advanced by SimStep, so it follows the sim clock like everything
@@ -797,7 +834,21 @@ public sealed partial class ProjectilePool : Node3D
                 f.SplashRest.Basis.Orthonormalized().Scaled(
                     new Vector3(SplashColumnWidthScale, y, SplashColumnWidthScale)), f.SplashRest.Origin);
         }
+        // OBJECT_OPACITY_FROM_TO (C6, BL-265): 0->1 over 0.05 s, hold, 1->0 over the last second —
+        // applied to base AND column together (the def's target is the model root), each through
+        // its own per-instance csky_opacity so concurrent splashes fade independently even though
+        // they may share one twinned material (EnsureSplashFade). This alone kills the old pop-in:
+        // t=0 is posed before the first tick (see SpawnImpactModel), so a fresh splash starts
+        // invisible rather than snapping to full scale.
+        float alpha = SplashOpacity(t);
+        f.BaseMesh?.SetInstanceShaderParameter(SceneBuilder.OpacityParam, alpha);
+        f.SplashMesh?.SetInstanceShaderParameter(SceneBuilder.OpacityParam, alpha);
     }
+
+    private static float SplashOpacity(float t) =>
+        t < SplashFadeInTime ? Mathf.Lerp(0f, 1f, t / SplashFadeInTime)
+        : t < SplashFadeOutStart ? 1f
+        : Mathf.Lerp(1f, 0f, Mathf.Min((t - SplashFadeOutStart) / SplashFadeOutTime, 1f));
 
     // The built subtree's nodes carry their gamez cs_name as NameMeta (Godot renames duplicate
     // siblings, WORLD-8) — resolve the splash children by that, never by Godot node name.
@@ -1116,6 +1167,57 @@ public sealed partial class ProjectilePool : Node3D
     /// freed. Returns false — leaving the stand-in spark to show — when there is no world scene, the
     /// name is a reader/control def or an unresolved binding (no such node), or the node built no
     /// mesh (an empty puffer-host root such as <c>gunhit</c>).</summary>
+    // C6 (BL-265): installs THIS instance's own translucent twin as a surface override, so its
+    // own SetInstanceShaderParameter(OpacityParam, ...) drives the fade without editing the
+    // shared cached material every other splash's mesh also points at (the same never-edit-in-
+    // place rule AnimRuntime's fade-twin cache follows, reusing its derivation —
+    // SceneBuilder.FadeShaderFor — rather than re-deriving one). The twin is cached per SOURCE
+    // material and shared across every instance that needs it; only the per-instance uniform
+    // differs. A source shader with no alpha path is counted, not swallowed — the splash still
+    // plays its scale curves, just without a fade (should not happen for a BiasMaterial-built
+    // world mesh; every variant unconditionally emits the `vec4 col = ` line FadeShaderFor needs).
+    private void EnsureSplashFade(MeshInstance3D mi)
+    {
+        if (mi.Mesh is not { } mesh || mesh.GetSurfaceCount() == 0)
+            return;
+        if (mesh.SurfaceGetMaterial(0) is not ShaderMaterial { Shader: { } sh } sm)
+            return;
+        if (!_splashFadeTwins.TryGetValue(sm, out var twin))
+        {
+            var fadeShader = SceneBuilder.FadeShaderFor(sh);
+            twin = fadeShader != null ? (ShaderMaterial)sm.Duplicate() : null;
+            if (twin != null)
+                twin.Shader = fadeShader;
+            _splashFadeTwins[sm] = twin;
+            if (twin == null)
+                GD.Print("splash fade: source shader has no alpha path — fade skipped, curves unaffected");
+        }
+        if (twin != null)
+            mi.SetSurfaceOverrideMaterial(0, twin);
+    }
+
+    // C6 (BL-265): registers the column's built material with the shared TextureCycler the first
+    // time it is seen — see the SplashFlipbookTextures field comment for why this cannot rely on
+    // SceneBuilder's automatic per-polygon registration for the gun splash (splash1_splash's own
+    // polygon binds to a sibling non-cycling material, confirmed against C1B's materials.json).
+    private void EnsureSplashFlipbook(MeshInstance3D mi)
+    {
+        if (_flyoutScene?.Cycler is not { } cycler)
+            return;
+        if (mi.Mesh is not { } mesh || mesh.GetSurfaceCount() == 0)
+            return;
+        if (mesh.SurfaceGetMaterial(0) is not ShaderMaterial mat || !_splashFlipbookRegistered.Add(mat))
+            return;
+        var frames = new List<ImageTexture>(SplashFlipbookTextures.Length);
+        foreach (var name in SplashFlipbookTextures)
+        {
+            if (_textures.Find(name) is not { } frame)
+                return; // an incomplete flipbook would strobe a hole; leave it static (TextureCycler's own rule)
+            frames.Add(frame);
+        }
+        cycler.Add(mat, frames, SplashFlipbookFps, looping: true, "splash01");
+    }
+
     private bool SpawnImpactModel(string animName, Vector3 point)
     {
         if (_flyoutScene == null || _flyoutGamez == null)
@@ -1153,6 +1255,16 @@ public sealed partial class ProjectilePool : Node3D
         // both flags on every model now, so the hand-rolled unshaded override this used to install
         // is gone: the instance takes the shared world materials and comes out self-lit, unfogged
         // and billboarded per its own `Facade` mode, from the data rather than from a guess.
+        var baseMesh = baseNode?.GetNodeOrNull<MeshInstance3D>("mesh");
+        var splashMesh = splashNode?.GetNodeOrNull<MeshInstance3D>("mesh");
+        // C6 (BL-265): the fade targets base AND column; the flipbook only the column, per the defs.
+        if (baseMesh != null)
+            EnsureSplashFade(baseMesh);
+        if (splashMesh != null)
+        {
+            EnsureSplashFade(splashMesh);
+            EnsureSplashFlipbook(splashMesh);
+        }
         var fx = new ImpactFx
         {
             Model = inst,
@@ -1162,6 +1274,8 @@ public sealed partial class ProjectilePool : Node3D
             Splash = splashNode,
             BaseRest = baseNode?.Transform ?? Transform3D.Identity,
             SplashRest = splashNode?.Transform ?? Transform3D.Identity,
+            BaseMesh = baseMesh,
+            SplashMesh = splashMesh,
         };
         if (animated)
             AdvanceSplash(fx); // pose t=0 (the column at full authored scale) before the first tick
@@ -1879,6 +1993,11 @@ public sealed partial class ProjectilePool : Node3D
         public Node3D? Splash;      // the `*_splash` column child
         public Transform3D BaseRest;
         public Transform3D SplashRest;
+        // The children's own mesh instances (C6, BL-265) — resolved once at spawn so the fade
+        // drives SetInstanceShaderParameter directly each tick instead of re-walking the tree.
+        // Null exactly when the corresponding Base/Splash is null, or its fade twin failed.
+        public MeshInstance3D? BaseMesh;
+        public MeshInstance3D? SplashMesh;
     }
 
     // One reusable trail emitter: a Puffer built for one authored PUFFER_STATE, owned by the pool

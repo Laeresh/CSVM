@@ -1065,12 +1065,21 @@ weapon-level spelling of the same `HasBlastDamage` rule, so the rule exists once
 `ProjectilePool` — the shared-world weapon-fire subsystem: a fixed pool of projectiles integrated
 with `Ballistics` (VELOCITY/ACCELERATION/GRAVITY, expiring at RANGE), plus tracer streaks,
 muzzle flashes, and the per-surface IMPACT sound + effect model. Per-class impact looks (A2): a
-water hit instances the authored splash model and plays its def's own scale curves for the 2 s run
-(`AdvanceSplash` — base disc 1→2→1.8 xz, column popped to ×100 Y collapsing to 0, the
-splash1/bsplsh zrd values verbatim; column *width* ×8 is TUNE — the authored quad is 5 cm wide,
-sub-pixel past ~30 m) on the shared world materials, which honour the models' authored
+water hit instances the authored splash model and plays its def's own curves for the 2 s run
+(`AdvanceSplash` — base disc 1→2→1.8 xz, column popped to ×100 Y collapsing to 0, the splash1/bsplsh
+zrd values verbatim) on the shared world materials, which honour the models' authored
 `lighting/fog: false` themselves since BL-214 — the hand-rolled `OverrideUnlit` this needed is
-gone, verified pixel-identical on a C1B night water burst; a dirt
+gone, verified pixel-identical on a C1B night water burst. C6 (`BL-265`) adds the def's other two
+pieces: the 0.05 s opacity fade-in / 1 s fade-out (`OBJECT_OPACITY_FROM_TO` targets base AND column
+together) through a per-instance translucent twin (`EnsureSplashFade`, `SceneBuilder.FadeShaderFor`
+— never edits the shared cached material, since concurrent splashes share it) driven via
+`SetInstanceShaderParameter`, and the column's `splash01→03` flipbook (`EnsureSplashFlipbook`,
+reusing `TextureCycler`'s frame-swap machinery — registered manually because the gun splash's own
+polygon binds to a non-cycling sibling material, confirmed against C1B's gamez data, so
+`SceneBuilder`'s automatic per-polygon path never reaches it). Column *width* now plays at the
+authored 1× by default with the fades landed; `SplashColumnWidthScale` stays reachable at 8 for the
+user's pending A/B (same `static readonly`-not-`const` pattern as A3's `MuzzleFlashCount`) — the
+authored quad is 5 cm wide, sub-pixel past ~30 m. A dirt
 (unclassified-terrain) hit spawns tumbling chips (`SpawnDirtDebris`) drawn on the gunhit def's own
 `bit01–04` chip textures in alpha-blended per-texture pools (through the additive
 muzzle-flash-textured impact pool they read as a small flame — the BL-203 mechanism; the def's

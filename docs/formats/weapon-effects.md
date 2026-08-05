@@ -114,23 +114,38 @@ effect **animation**, splits by what the bound name resolves to:
 ### Water splash defs — `splash1.zrd.json` / `bsplsh.zrd.json`
 
 The two water-hit models each ship an `ON_CALL` def of the same name with an identical shape:
-activate → opacity 0→1 over 0.05 s, 1→0 over 1 s starting at 0.95 s; the `*_base` disc scales
-xz 1→2 over 0.2 s (`OBJECT_MOTION_FROM_TO`), then 2→1.8 over 1 s from `EVENT_OFFSET` 0.8; the
-`*_splash` column runs `OBJECT_MOTION SCALE [1,100,1, 0,-100,0]` over `RUN_TIME 2` — under
-MotionRuntime's decode (`scale = initial + delta·u`) the column **starts at ×100 Y and collapses
-to 0 over 2 s** — plus an `OBJECT_CYCLE_TEXTURE` reset on the column (the `splash01/02/03`
-flipbook). The models are authored `lighting: false`, `fog: false` (self-lit — the retail
-captures show white splashes at night) with full-white vertex colors. Geometry is tiny:
+activate → opacity 0→1 over 0.05 s, hold, then 1→0 over 1.0 s starting at 0.05 + `EVENT_OFFSET`
+0.95 = **1.0 s** (`OBJECT_OPACITY_FROM_TO` targets the model ROOT `splash1.flt`/`bsplsh.flt`, i.e.
+base disc AND column together, not the column alone); the `*_base` disc scales xz 1→2 over 0.2 s
+(`OBJECT_MOTION_FROM_TO`), then 2→1.8 over 1 s from `EVENT_OFFSET` 0.8; the `*_splash` column runs
+`OBJECT_MOTION SCALE [1,100,1, 0,-100,0]` over `RUN_TIME 2` — under MotionRuntime's decode
+(`scale = initial + delta·u`) the column **starts at ×100 Y and collapses to 0 over 2 s** — plus an
+`OBJECT_CYCLE_TEXTURE` reset on the column (the `splash01/02/03` flipbook, 3 frames @4 fps per the
+gamez `cycle` block). The models are authored `lighting: false`, `fog: false` (self-lit — the
+retail captures show white splashes at night) with full-white vertex colors. Geometry is tiny:
 `splash1_splash` is a **5 cm × 1.4 cm** quad (`Facade` SphericalY — camera-Y-billboarded), the
 base disc 24 cm across.
 
-**Engine wiring (A2).** `ProjectilePool` drives the scale curves procedurally on each per-hit
+**Engine wiring (A2, C6).** `ProjectilePool` drives the scale curves procedurally on each per-hit
 instance (`AdvanceSplash`, values verbatim; per-hit instances rather than def playback so 8
 rounds/s give concurrent walking splashes) and honours `lighting/fog: false` with unshaded
-override materials (the shared world materials multiply mission SUNLIGHT in). Not rendered: the
-opacity ramps (partial opacity on world materials needs the AnimRuntime opacity-twin path — the
-column collapsing to 0 stands in) and the `splash01→03` flipbook. The column's **width** is
-widened ×8 (TUNE — 5 cm is sub-pixel past ~30 m; the reference ticks measure ~0.35 m wide).
+override materials (the shared world materials multiply mission SUNLIGHT in). C6 (`BL-265`) adds
+the fade and the flipbook. The fade drives each instance's own `csky_opacity` through a
+per-instance translucent twin installed as a surface override (`EnsureSplashFade`, reusing
+`SceneBuilder.FadeShaderFor` — the same derivation `AnimRuntime`'s opacity-twin path uses, applied
+locally since these are transient per-hit instances, not persistent world nodes) — never editing
+the shared cached material in place, since concurrent splashes reuse it. The flipbook reuses
+`TextureCycler`'s frame-swap machinery (`EnsureSplashFlipbook`), registered manually the first time
+each splash's built material is seen: it cannot rely on `SceneBuilder`'s automatic per-polygon
+registration because the gun splash's own `splash1_splash` polygon binds to a non-cycling sibling
+material carrying the identical `splash01.tif` texture (confirmed against C1B's own `materials.json`
+— material 136, texture 131, `cycle: null` — vs. the cycling material 135 at the same texture index;
+`bsplsh_splash`'s polygon binds directly to 135, so its automatic registration already worked). Once
+registered a flipbook runs globally and continuously like every other world cycle, not reset per
+hit — concurrent splashes share one synced frame. The column's **width** now plays at the authored
+1× by default (5 cm — sub-pixel past ~30 m); `SplashColumnWidthScale` stays reachable at 8 for the
+user's pending A/B against the reference ticks (~0.35 m wide), same `static readonly` pattern as
+A3's `MuzzleFlashCount`.
 
 ### Engine wiring (M3, D32) — the world-effects runtime
 
