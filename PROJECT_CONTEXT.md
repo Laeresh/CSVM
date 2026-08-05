@@ -144,7 +144,7 @@ The day-to-day 29 of 100 — 100 is both the parser's accepted-flag count and `d
 | `--players=N` | splitscreen 1–4 in one shared world, one pane/camera/HUD/pad each |
 | `--pos=x,y,z` | place the mode's **subject**: the camera in `--freecam`/`--viewer`/`--anim-lab`, the plane in `--fly`/`--stunt` (bypassing the mission spawn list) |
 | `--direction=x,y,z` | which way it faces there — view direction or nose. `--lookat=x,y,z` is the point form (and the `--viewer` orbit pivot). Quote comma args in PowerShell |
-| `--view=1-9` | hold a numpad flight-camera perspective for the run (2 belly, 4/6 flanks, 8 ahead); `--fly`/`--stunt` only. Distance is the plane's shipped one; the layout is disputed (`BL-150`) — [`docs/cli.md`](docs/cli.md) |
+| `--view=1-9` | hold a numpad flight-camera perspective for the run (2 belly, 4/6 flanks, 8 ahead); `--fly`/`--stunt` only. Distance is the shared dynamic chase radius; the layout is disputed (`BL-150`) — [`docs/cli.md`](docs/cli.md) |
 | `--screenshot=<path>` | render a few frames, save PNG, quit — the automated-verification workhorse |
 | `--frames=N` / `--shots=N` | which sim frame the shot lands on (default 15) — **a sim coordinate, not a wall-clock delay** / capture N consecutive frames |
 | `--debug-anim` | log every live animation's pose and sound emitters once a second; conditions only when a verdict **flips** (a repeat line means a change) |
@@ -193,8 +193,8 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Active plan: [`docs/PLAN-m3-polish-8.md`](docs/PLAN-m3-polish-8.md)** — authored animations:
 play the defs (12 items, Waves A–D; `PLAN-friends-release.md` runs in a concurrent session).
-Position: A1–A3, B4, B5 landed 2026-08-05 (A3's form pick rides `PT-39`); C7 and C8→C10 in
-flight. **Next:** C6 (`BL-265`), then Wave D. Also owed: the cockpit re-tests (`PT-26`–`PT-28`, `PT-31`–`PT-37`,
+Position: A1–A3, B4, B5, C8–C10 landed 2026-08-05 (A3's form pick rides `PT-39`); C6 and C7 in
+flight. **Next:** Wave D (`BL-259` → `BL-270`) once C7 merges. Also owed: the cockpit re-tests (`PT-26`–`PT-28`, `PT-31`–`PT-37`,
 [`playtest.md`](playtest.md)). Verify any change with
 **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read
 [`docs/verification.md`](docs/verification.md) first.

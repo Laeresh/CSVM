@@ -1918,96 +1918,18 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
     thrust cannot be formed. *What would settle it:* an independent `g`, or a capture with a
     **readable** nose angle in a sustained climb — i.e. a shallow, held climb at fixed throttle
     rather than a zoom.
-- `BL-248` **The original's chase distance is DYNAMIC in two terms, and `CAP-21` measured both
-  (2026-08-04): a small SPEED term that reproduces `dist_factor` 0.01, and a much larger
-  ACCELERATION transient that relaxes at 0.65 /sim-s.** `BL-149` shipped the reader and wired
-  `dist` per airframe (`CamParams`/`CameraController`), which is the fixed part of the mechanism.
-  Four Bloodhawk chase takes driven by `analysis/capture-rigs/ThrottleSweep.ahk` — two 5 s-per-step
-  staircases 0/8↔8/8 and two 0/8↔8/8 in one jump, so the same speeds are traversed with completely
-  different throttle histories — decode through `analysis/video-flight-calibration/chasesize.py`
-  (apparent span, red-key) against `run2chase.py` (speedometer, same frame). All four register to
-  the chase pooled median at dx = dy = 0 and both dials fit at NCC 0.990.
-  - **(a) The speed term is real, and it is `dist_factor`.** At true plateaux (|dV/dt| < 0.3
-    mph/wall-s) the aircraft draws **454.00 ± 0.23 px at 118.0 mph** and **436.0–437.5 px at
-    296–299 mph** — distance grows **4.13%** over that range. Weighted across eight plateau bins,
-    `d(V)/d(0) = 1 + 5.65e-4·V(m/s)`, i.e. `d(300 mph)/d(0)` = **1.076**. Against the Bloodhawk's
-    own `dist` 18.5 that implies **`dist_factor` = 0.0105** (0.00945 from the two extreme plateaux
-    with no fit at all) — the shipped **0.01**, to 5%. So the law is
-    **`d = dist + dist_factor · V`, with `V` the airframe's speed in metres per sim second**, and
-    the game's internal speed unit is the metric one the altimeter already established.
-  - **The control worked, and it is what makes this trustworthy.** At ~296 mph the four takes read
-    **436.00 / 436.50 / 435.50 / 437.50 px** — 0.46% apart, across two throttle histories, a 2,700 ft
-    spread of altitude (673 ft and 3351 ft) and opposite sweep directions. A distance that
-    tracked throttle *setting* or *acceleration* alone could not do that.
-  - **(b) The acceleration transient is ~4× the size of the speed term and arrives far faster, so
-    it is what the eye actually sees.** Correlation of the plateau-law residual against `dV/dt` is **−0.79 to −0.85 in
-    every one of the four clips**, slope **+0.28% of `d` per (mph/sim-s)** = **0.105 camparam units
-    per (m/s²)**. Peaks: `full 0/8→8/8` reaches **+15.2%** distance at 38 mph/sim-s (realised
-    `d` ≈ **22.5**), `full 8/8→0/8` reaches **−6.9%** at −33 mph/sim-s (`d` ≈ **18.3**). The
-    staircase takes show it as a clean sawtooth — one dip per throttle step, relaxing before the
-    next (`playtest/CAP-21/chase-distance.png`).
-  - **A settling time, which is what `BL-248`(b) was after.** Fitted on the one window in the set
-    where the aircraft stops accelerating and is then left alone (`full 0/8→8/8`, t = 19.0–21.0 s,
-    |dV/dt| < 1.5 mph/sim-s, excursion above the 0.5 px span quantum), the excess decays
-    exponentially with **τ = 1.11 wall s = 1.55 sim s**, i.e. **0.65 /sim-s**, log-residual sd
-    0.108. Nearest shipped constant is **`dist_catch_up` 1.0** (measured 0.65× it); **`pos_catch_up`
-    2.0 is 3× too fast** and `look_catch_up` 3.0 is 4.6× too fast to be this rate. ⚠ The sim-second
-    figures here (and the 0.28%-per-mph/sim-s slope) carry k = 1.390, which was measured in an
-    *earlier* session; these takes ran at 120 fps in-game. **τ = 1.11 wall s is the raw number.**
-    The `dist_factor` result in (a) involves no clock at all — the speedometer reads the game's own
-    speed.
-  - ⚠ **`pos_catch_up` is NOT a plain world-space position lag, and the footage proves it.** A
-    first-order follower `ẋ_cam = c·(x_target − x_cam)` at c = 2 /s leaves the camera `V/c` behind —
-    **66 m at 300 mph**, 3.6× the whole chase radius. Apparent size at 300 mph is instead within
-    0.5% of its 118 mph value once `dist_factor` is accounted for, so the original must smooth the
-    **offset** (or feed the aircraft's velocity forward), not the world position. Our `CamSmooth`
-    must do the same or it will inherit exactly this bug at speed.
-  Still unread: `dist_vary` 0.1 (this capture does not touch it), and
-  `thirdp_height`/`thirdp_pitch` (which would replace the hand-picked offset DIRECTION, not just
-  its radius), and the whole `back_*`/`death_*`/`crash_*`/`flyby_*` set, none of which have cameras
-  to drive yet.
-  *Fix shape:* drive the radius through `d = dist + 0.01·V(m/s)`, and give the camera a first-order
-  offset relaxation at ~0.65 /s (`dist_catch_up`'s order, not `pos_catch_up`'s) so a throttle
-  slam stretches the shot ~15% and recovers in ~1.5 s, instead of our fixed radius.
-  ⚠ **Traps.** (a) **`dist_min` (15.7) is LARGER than `dist` (13.0) in the `default` block**, while
-  the seven per-plane blocks have them equal — so the mechanism is NOT "clamp `dist` into
-  `[dist_min, dist_max]`"; under that reading no plane could ever sit at the default's own 13.0.
-  Whatever law lands has to explain that, not work around it. **`CAP-21` does not settle it:** the
-  realised distance ranges 18.3–22.5 against the Bloodhawk's `dist_min` 18.5 / `dist_max` 25.0, so
-  `dist_max` **is never reached** by speed or by a full-throttle slam, and the 18.3 that dips under
-  `dist_min` is only 1.2% under it — inside this measurement's ~1% clip-to-clip systematic, and in
-  any case the transient is a *camera* lag on top of `d` rather than a smaller `d`. (b) The
-  catch-up **units** are now bounded but not pinned — 0.65 /sim-s is measured, and it is neither
-  `pos_catch_up` nor `look_catch_up`; whether `dist_catch_up` 1.0 is meant to *be* that rate (and
-  something else costs the missing 35%) is untested. (c) The chase radius is the SAME number the
-  numpad fixed views use (cross-ref `BL-150`); anything dynamic here moves both cameras, which is
-  intended — do not "fix" that by giving the views their own copy. (d) `thirdp_pitch` 0.29 rad =
-  16.6° sits close to our hand-picked 15.7° elevation, which is suggestive and **not** a decode —
-  `thirdp_height`'s units are unknown, so the pair cannot be wired on the strength of one
-  near-match. (e) ⚠ **The ~1% clip-to-clip systematic is real and it bounds every number above.**
-  Two plateaux that should agree do not quite: 118.0 mph reads 454.00 px and 134.9 mph reads
-  **458.50** px — bigger at the higher speed, the wrong way round. The span/height aspect ratio
-  differs by 3% between those two takes, so the viewing angle onto the wing differed and the
-  red-key edge moved with it. The 4.13% speed effect is 4× that systematic and survives; a claim
-  at the 1% level off this data would not.
-- `BL-260` **Four authored cameras exist in `camparam.zrd.json` and none of them is implemented**
-  (found in the 2026-08-05 hand-coded-vs-authored audit). `CamParams.cs:60-84` already parses
-  them, deliberately dormant: the **death camera** (`DeathInterval`/`DeathZ`/`DeathX`/`DeathAlt`/
-  `DeathMinAlt`), the **crash camera** (`CrashHoriz`/`CrashY`/`CrashChordY`/`CrashElev`), the
-  **look-behind view** (`BackDistMin`/`BackDistMax`), and the **flyby camera** (12 fields). Today
-  a death/crash plays out on the ordinary chase camera and no look-behind binding exists at all.
-  Scope: decide each camera's trigger, decode its fields' units, and wire it — likely one camera
-  at a time, crash first (the crash rig is already data-driven, so the authored crash framing is
-  the missing half of a scene that otherwise exists). Distinct from `BL-248` (dynamic chase
-  distance + catch-up units) and `BL-150` (numpad fixed views): those cover the *chase* camera;
-  this is the cameras that replace it. ⚠ The field units are undecoded — same trap as
-  `BL-248`(d): near-matches to hand-picked values are suggestive, not decodes; expect to need
-  original-game captures (a death, a crash, a flyby) before wiring laws.
-  **The crash camera's capture blocker is retired (user, 2026-08-05, `PT-04`):** "in the original
-  the camera is zoomed away while crashing — there are enough captures". So the crash framing can
-  be measured off footage we already hold; no `CAP` is owed for it, and crash-first (already the
-  recommended order, since the crash rig is data-driven) is now also the unblocked one. A death and
-  a flyby capture are still owed for the other two.
+- `BL-260` **The death and flyby cameras stay capture-gated; two crash-camera fields unwired**
+  (partial-close 2026-08-05: the crash camera and look-behind landed — `docs/HISTORY.md`).
+  `CamParams.cs` parses all four authored `camparam.zrd.json` blocks; still dormant: the **death
+  camera** (`death_interval/z/x/alt/min_alt` — placement magnitudes with unknown axes, and the
+  engine has no distinct shot-down state to attach it to) and the **flyby camera** (12 fields
+  describing a re-siting roadside pass; its trigger is undecodable without footage). A death and
+  a flyby capture are still owed for those two. Also unwired on the landed crash camera:
+  `crash_elev` 40 (duplicates `crash_y` 45's vertical role — the crash footage cannot separate
+  the implied 56° from 53° look-down) and `crash_chord_y` 1000 (units unknown). Details and the
+  decoded fields: `docs/formats/camparam.md`.
+  ⚠ Trap: near-matches between authored fields and hand-picked values are suggestive, not
+  decodes — wire nothing on one coincidence; each remaining camera waits for its capture.
 - `BL-263` **Muzzle flash: pick the authored single-node form or the triad at the controls**
   (`PT-39`). The authored form is the active default since plan-8 A3 (2026-08-05): one quad
   rolled to a discrete random Z angle per shot (equal odds over 30/80/140°, `mb_spinflame`)
@@ -2028,12 +1950,21 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   (`Water Splash.png`). Render the fades and the flipbook as authored; then re-judge whether
   the 8× width is still needed — the missing fade may be why the thin authored column read as
   "an invisible grey sliver" in the first place.
-- `BL-266` **`SHAKES_CAMERA` is authored, parsed, and consumed by nothing** — no camera-shake
-  implementation exists in the tree (`WeaponDefs.cs:103,258` parses it; `Probes.cs:151` dumps
-  it; zero consumers). Weapons that shake the camera in the original fire with a rock-steady
-  camera here. Needs a shake law (amplitude/frequency/decay are not authored — only the flag
-  is), so calibrate against original footage of the heaviest `SHAKES_CAMERA` weapon; also check
-  `shakes.zrd.json`/`damage_shakes.zrd.json` first — the law may be authored there.
+- `BL-266` **Camera shake: the laws ARE authored — the missing pieces are their inputs**
+  (re-scoped 2026-08-05 by the first read of `shakes.zrd.json`/`damage_shakes.zrd.json`; the
+  decode landed as [`docs/formats/shakes.md`](docs/formats/shakes.md), no code). Six oscillator
+  sources are authored (freq/damping/waveform/`magnitude_factor`: fire_bullet, bullet_impact,
+  missile_impact, explosion, high_speed, nitro) plus complete `ON_CALL`
+  `small/medium/large_camshake` defs. Unauthored, so unwired: what `magnitude_factor`
+  multiplies (damage, caliber and velocity are all plausible and several candidates land
+  one-coincidence-close to nitro's absolute 0.05), and which hit severity calls
+  small/medium/large (exe-side). Open work: (a) decode the `magnitude_factor` input — candidate
+  instrument: `Gun Wobble and animation.mp4`; (b) settle the damage-shake triggers (footage, or
+  a declared TUNE). ⚠ Traps: `SHAKES_CAMERA` is NOT the fire-path shake mechanism — its sole
+  carrier among all 48 weapons is `wep_26` "FW", a zero-damage scripted fake weapon (a scripted
+  detonation-shake marker); the player fire path would be the unflagged `fire_bullet` source.
+  And the near-match trap bites hard here: several magnitude candidates coincide with authored
+  constants — wire nothing on one coincidence.
 - `BL-267` **Engine start/stop choreography: `snd_propstop` is implemented but never called,
   and the start ramp is a bare literal** (`FlightAudio.cs:317-325` — `OnEngineStop()` has no
   production caller, so the authored wind-down cue is never heard; `:51` — `EngineStartRamp =

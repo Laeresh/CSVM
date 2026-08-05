@@ -16115,3 +16115,44 @@ whichever form loses is deleted then, not flagged off (`PT-39`; `BL-263` stays o
 pick). Verified: `RunTests.ps1` green, goldens unchanged; freeze-frame A/Bs of both forms (slug +
 AP) vs `MuzzleFlash1-3.png` staged in `playtest/PT-39/`. Neither form fully reproduces the
 stills' multi-lobed burst — recorded on the entry.
+
+## 2026-08-05 — PLAN-m3-polish-8 C8 `BL-248`: the chase distance is dynamic — the two CAP-21-measured terms land
+
+The chase radius is now `d = dist + dist_factor·V` (both authored per plane; CAP-21 measured the
+factor at 0.0105 vs the shipped 0.01 — 5% agreement, cited at the constant) plus a first-order
+acceleration transient (0.105 camparam units per m/s² steady-state) relaxing at the measured
+**0.65 /sim-s** — cited in-source as measured with the wall figure beside it (DET-11), applied on
+the sim clock. No `dist_min/max` clamp (the entry's trap); the numpad views share the dynamic
+radius by design. En route the camera's follower changed from world-position smoothing to
+**offset** smoothing — the old form trailed `V/CamSmooth` (~14 m at 248 mph), the exact bug the
+CAP-21 entry predicted. Verified by reproducing CAP-21 in-build: plateaux 18.981/19.850 m at
+48.1/135 m/s exactly on the law; magenta-wing span change 5.7% vs predicted 4.6% (within the ~1%
+clip systematic); transient decay fitted 0.651 /sim-s from drive-corrected sim-time samples.
+Exactly the four flown-plane goldens re-pinned; the nine aircraft-less shots bit-identical.
+Evidence: `.scratch/plan8/C8/`.
+
+## 2026-08-05 — PLAN-m3-polish-8 C9 `BL-260` (partial, as intended): the crash camera and look-behind land; death and flyby stay capture-gated
+
+A fatal crash now hard-cuts to the authored static vantage — `crash_horiz` 30 m behind the impact
+along the flight path's horizontal component, `crash_y` 45 m up, looking at the impact, HUD
+hidden, held until respawn — framing decoded off `C1 IA1 Crash.mp4`/`Crash 2.mp4` re-read for
+camera behaviour (instant cut, static hold, HUD gone; the dive clip's overhead view is what the
+horizontal-component rule degenerates to). `crash_elev`/`crash_chord_y` deliberately stay
+unwired (capture-gated — footage cannot separate 56° from 53°). Look-behind lands on numpad 0 /
+`--view=back`: ahead of the nose looking back at the chase radius bounded into the authored
+`back_dist_min/max` — a data-shape reading (the pair ships no base-distance sibling), and the min
+demonstrably bites (Kestrel 15.04 → 15.500). Death and flyby recorded capture-gated, nothing
+guessed. Regression: a `--view=6` shot is pixmd5-identical pre/post; only `c1-crash` moved.
+`docs/controls.md` + `docs/formats/camparam.md` updated. Evidence: `.scratch/plan8/C9/`.
+
+## 2026-08-05 — PLAN-m3-polish-8 C10 `BL-266` re-scoped: the shake laws are authored; their inputs are not — decode landed as docs, no code
+
+First read of `shakes.zrd.json`/`damage_shakes.zrd.json` (never opened before): six authored
+oscillator sources (freq/damping/waveform/`magnitude_factor` — fire_bullet, bullet_impact,
+missile_impact, explosion, high_speed, nitro) and complete `ON_CALL`
+`small/medium/large_camshake` defs. The item's premise fails twice: the laws ARE authored, and
+`SHAKES_CAMERA`'s sole carrier is `wep_26` "FW" — a zero-damage scripted fake weapon, so the flag
+is a scripted detonation-shake marker, not the fire-path mechanism. Every implementable path
+crosses an unauthored input (what `magnitude_factor` multiplies; which hit calls which shake
+def), so nothing was wired — the decode landed as `docs/formats/shakes.md` and the gaps are named
+on `BL-266`. All 13 goldens hash-identical.

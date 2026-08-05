@@ -83,9 +83,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 6. ☐ `BL-265` — water splash: authored opacity fades + `splash01→03` flipbook; re-judge the 8× width
 7. ☐ `BL-267` — engine start/stop: play `startprops`/`stopprops`; throttle-slam smoke wired magnitude-gated (`CAP-21` re-read)
-8. ☐ `BL-248` — dynamic chase distance: implement the two CAP-21-measured terms
-9. ☐ `BL-260` — the four authored cameras: crash first; un-decodable ones recorded, not guessed
-10. ☐ `BL-266` — camera shake: find the authored law (`shakes.zrd.json`/`damage_shakes.zrd.json`), then implement or re-scope
+8. ☑ `BL-248` — dynamic chase distance: implement the two CAP-21-measured terms (landed 2026-08-05)
+9. ☑ `BL-260` — the four authored cameras: crash first; un-decodable ones recorded, not guessed (crash + look-behind landed 2026-08-05; death/flyby capture-gated on the entry)
+10. ☑ `BL-266` — camera shake: find the authored law (`shakes.zrd.json`/`damage_shakes.zrd.json`), then implement or re-scope (re-scoped 2026-08-05: laws authored, inputs not — decode landed as `docs/formats/shakes.md`, no code)
 
 ### Wave D — the damage menu (after PLAN-effect-catalogue's runtime capability)
 
@@ -498,6 +498,24 @@ shake-free unless their weapons carry the flag.
 **⚠ Traps.** A shake law has a screenshot-instrument interaction: scripted screenshot verification
 poses will jitter — take stills with the shake settled or gate shake off under `--screenshot`,
 and say so in the item's landing notes.
+
+**C8 Outcome (2026-08-05) — landed, measured against CAP-21's own numbers.** `d = dist +
+dist_factor·V` + the 0.65 /sim-s transient, no clamp, numpad views share the radius. The follower
+now smooths the offset, not the world position — the CAP-21 entry's predicted `V/CamSmooth` trail
+bug is gone with it. In-build reproduction: plateaux exactly on the law; span 5.7% vs predicted
+4.6% (inside the ~1% clip systematic); decay fit 0.651 /sim-s. Four flown-plane goldens re-pinned.
+
+**C9 Outcome (2026-08-05) — landed partially, as intended.** Crash camera (30 m behind / 45 m up,
+hard cut, HUD hidden — decoded off the two crash clips) and look-behind (numpad 0 / `--view=back`,
+radius bounded into `back_dist_min/max`; the Kestrel proves the min bites) landed. `crash_elev`/
+`crash_chord_y`, death and flyby recorded capture-gated on `BL-260` — nothing guessed. `--view=6`
+pixmd5-identical pre/post; only `c1-crash` moved.
+
+**C10 Outcome (2026-08-05) — re-scoped, no code; the discipline held.** The laws are authored
+(six oscillator sources + `ON_CALL` shake defs — first read of both files); `SHAKES_CAMERA` is a
+scripted marker on one zero-damage fake weapon, not the fire path. Every wire-up crosses an
+unauthored input, so the decode landed as `docs/formats/shakes.md` and the gaps are named on
+`BL-266`.
 
 # Wave D — the damage menu
 
