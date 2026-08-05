@@ -1481,8 +1481,10 @@ while held), wheel speed, pads via `Pads.For(null)`; lab additions `Frame(Aabb)`
 a public `Camera` accessor — all inert in plain `--freecam`. Rates TUNE.
 ⚠ Default start is the mission spawn — RANDOM per launch; pass `--pos`/`--direction` for comparisons.
 ⚠ `KeyboardCaptured` zeroes keyboard axes while a text field owns focus — raw key polls bypass GUI focus.
-⚠ Vertical is Q/E plus the **Z/Space** alternate — Z, not C: C toggles the collider overlay, and
-  because this camera POLLS raw key state, sharing the key descended on every toggle press.
+⚠ Vertical is Q/E plus the **Z/U** alternate — not C/Space: C toggles the collider overlay and
+  Space fires guns, and because this camera POLLS raw key state, sharing either key moved the
+  camera as a side effect of the other action (`BL-279` moved Space off; Z stays clear of C for
+  the same reason).
 
 ## src/Flight/FlightModel.cs
 Velocity-vector arcade flight model: body rates = control torque × reciprocal inertia vs
