@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-262`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-273`.**
 When adding a new item, take the next number and bump this line. ⚠ One ID was minted twice in
 concurrent sessions on 2026-08-04 — `BL-253` (the C2 facade log debris, this file's holder) and a
 "nose view" finding merged the same day; the nose-view item was renumbered to `BL-255` at the
@@ -2242,6 +2242,85 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   pooled casing itself (chapter-gamez `gunshell` mesh flying the authored motion) is already
   faithful and stays. *Playtest after fix:* sustained gun fire in chase view against the
   original's captures — the smoke should sit at the gun line, not around the falling shells.
+- `BL-262` **Every authored particle size is multiplied by an invented global 4×**
+  (`Puffer.cs:276-281`, `SizeScaleDefault = 4f` — "a judged stand-in for a missing engine
+  constant, not a decode"; at 1 the emitters read as a thin scatter of specks, 4 was settled at
+  the controls 2026-08-01). Every `SIZE_RANGE` in the game — crash fireball, trails, splashes,
+  gunhit — renders through it, so every effect-fidelity judgement is conditioned on it. *What
+  would settle it:* a frame-matched angular-size comparison of one well-bounded effect (the
+  crash fireball is the candidate) against original footage; if the true factor differs, every
+  effect changes size at once — re-judge, don't re-tune each effect around the old value.
+- `BL-263` **Muzzle flash: three invented lobes vs the authored single rolled node**
+  (`Projectile.cs:98-104`). The `muzzle_burst` def is ONE `mb_spinflame` node rolled to a
+  discrete random Z angle per shot (`RANDOM_WEIGHT` over 30/80/140°); we draw three quads 120°
+  apart sharing one continuous per-shot roll because the reference stills (MuzzleFlash1-3.png)
+  read as a 3-lobed burst. Decide at the controls whether the authored single-node discrete
+  roll reproduces the stills (the 3 lobes may be the flipbook frame's own art, not three
+  quads) — if it does, play the def; the current triad is a shape invented from three frames.
+- `BL-264` **Prop spin bypasses `AnimRuntime` and re-implements `XYZ_ROTATION` with invented
+  units** (`PropParts.cs:25-28`, `PropAnimator.cs:39`). The spin rates are verbatim
+  `XYZ_ROTATION` triples from `plane_props.json` (`spinprops`) / `autogyro.json`
+  (`agyro_rotors`), but a hand `RotateObjectLocal` loop replays them under the guess
+  "degrees/second (a visual TUNE)" — while `AnimRuntime` already decodes `XYZ_ROTATION`
+  (`SpinMotion.cs`) with settled semantics. Route the prop/rotor spin through the runtime and
+  the unit guess dissolves; keep the throttle/windmill modulation (`PropIdleSpin`) as the
+  engine-side part, like `BL-259`'s thresholds.
+- `BL-265` **Water splash: the authored fades and flipbook are dropped, the column is
+  hand-widened 8×** (`Projectile.cs:173-189`). Values are verbatim from
+  `splash1.zrd.json`/`bsplsh.zrd.json` except: the authored 0.05 s opacity fade-in / 1 s
+  fade-out is not rendered, the `splash01→03` `OBJECT_CYCLE_TEXTURE` flipbook is not played,
+  and `SplashColumnWidthScale = 8f` widens the authored 5 cm quad against one screenshot
+  (`Water Splash.png`). Render the fades and the flipbook as authored; then re-judge whether
+  the 8× width is still needed — the missing fade may be why the thin authored column read as
+  "an invisible grey sliver" in the first place.
+- `BL-266` **`SHAKES_CAMERA` is authored, parsed, and consumed by nothing** — no camera-shake
+  implementation exists in the tree (`WeaponDefs.cs:103,258` parses it; `Probes.cs:151` dumps
+  it; zero consumers). Weapons that shake the camera in the original fire with a rock-steady
+  camera here. Needs a shake law (amplitude/frequency/decay are not authored — only the flag
+  is), so calibrate against original footage of the heaviest `SHAKES_CAMERA` weapon; also check
+  `shakes.zrd.json`/`damage_shakes.zrd.json` first — the law may be authored there.
+- `BL-267` **Engine start/stop choreography: `snd_propstop` is implemented but never called,
+  and the start ramp is a bare literal** (`FlightAudio.cs:317-325` — `OnEngineStop()` has no
+  production caller, so the authored wind-down cue is never heard; `:51` — `EngineStartRamp =
+  1.8f` s with no source or TUNE marker). Check `engines.zrd.json` / the plane defs for an
+  authored start/stop sequence (the `engine_start_smoke` def in `pufftrails.zrd.json` is
+  probably part of the same moment and is also unplayed, `BL-259`'s neighbour); wire the stop
+  cue to whatever kills the engine (crash, destruction) and source or mark the ramp.
+- `BL-268` **A blanket ×0.2 is applied over every authored sound volume, commented "Temporary
+  fix"** (`FlightAudio.cs:363,382,178,308` — four call sites multiply `def.Volume * 0.2f`).
+  Every `sounds.json` `VOLUME` in the own-ship path is silently overridden by a 5× attenuation
+  that was never revisited. Either the authored volumes assume a different reference level
+  (find it and name the conversion) or the mix is simply wrong; both answers remove the magic
+  number. Audit which buses it actually touches before changing — the world-sounds path
+  (`WorldSounds.cs`) may or may not share it.
+- `BL-269` **The 3D sound falloff curve between the authored `RANGE` radii is an admitted
+  approximation** (`WorldSounds.cs:159-161` — endpoints authored, curve "an approximation of
+  the original's, hence TUNE"). Low stakes per sound but global: every positional sound's
+  audible footprint. A calibrated fly-past recording of one loud fixed emitter (the C1
+  refinery flare is a candidate) would trace the real curve.
+- `BL-270` **Healthy↔torn panel pairing is guessed by mesh-AABB proximity; the data encodes
+  the real relationship** (`DamageVisuals.cs:22-27,57,60` — `MaxPairDistance = 1.0`,
+  `MirrorMinX = 0.15`, with the comment conceding the original pairs "by some rule of its
+  own"). `player_destruct_reset` re-ACTIVEs the `_h` nodes and the `pdpanelN` defs name their
+  `pdpN` targets — the pairing is recoverable from the defs instead of geometry. Fold into or
+  sequence after `BL-259` (same defs, same runtime dependency); the geometric guess has
+  worked so far, so this is correctness-by-construction, not a seen bug.
+- `BL-271` **The survivable-graze and stop laws are invented physics with player-facing
+  consequences** (`FlightController.cs:271-295,1652-1672`, header "all TUNE"): attitude kick
+  `GrazeKick` 1.2 rad/s, `GrazeFriction` 0.35, quadratic severity damage, "sliding below
+  `GrazeStopSpeed` 12 m/s = destroyed", "3 failed embed push-outs = explode". The original
+  might throw the nose differently or let a plane belly-slide to a stop ("collecting 0-dmg
+  kisses" is the user report that motivated the stop rule). `CAP-14`'s analysed graze
+  (2026-08-04) already bounds part of this — the original's graze cost ~5% speed + sink with
+  wings level, no visible attitude kick at that severity. Judge the kick and the stop rule
+  against that footage and `BL-120`'s corner feel item before tuning further.
+- `BL-272` **Precipitation: every unit mapping from `weather.json` to a look is invented, and
+  one deviation is deliberately held back** (`Precipitation.cs:29-62` — type/tint/rate/density
+  are authored; fall speed, box size, particle counts, streak length/width, sway are 16 TUNE
+  constants; the sprites themselves are procedural stand-ins for the original's untextured
+  line/point primitives, and rain streaking along fall-direction-vs-velocity is a documented
+  deviation pending an A/B). Needs original rain and snow footage to calibrate — worth a CAP
+  when weather work resumes.
 - `BL-118` **Cloud puffs** — opacity and density. **Cloud deck** — brightness reads ~40 units lighter
   than the original. **Playtest (2026-07-30), two new specifics + mechanism traced.** (1) The deck
   itself shows dense cloud puffs while flying through it. (2) In C1/IA1, puffs show around the plane
@@ -2272,6 +2351,14 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   is not a usable literal — 0.0001 s is imperceptible at any real frame rate — so `FlashDuration`
   0.08 s stays a deliberate hand-widening with no better data source to replace it. Only *how long* to
   widen it remains an open TUNE.
+  **Reframed 2026-08-05 (hand-coded-vs-authored audit):** the real item is *play the
+  `wing_lights_blink` def* rather than re-tune the hand duty cycle (`WingLightBlinker.cs:19`) —
+  the def also carries two things we drop entirely: the `LIGHT_STATE` point lights (warm
+  0.88/0.78/0.36, 1.25 m range) that `WingLights.cs:18-20` deliberately never emits, and an
+  `ANIMATION_LOD` gate (lights blink only at HIGH). And `PlaneBuilder.cs:204-249` re-skins the
+  authored one-sided flare quad as an additive both-sides billboard — the original may genuinely
+  show the flare only from behind; an orbit of a lit plane in the original settles both the
+  widening and the billboard deviation in one clip.
 - `BL-120` **Collision feel** — behaviour against building corners.
 - `BL-121` **Damage (Run-2 item 10)** — `CrashSpeed` 25, graze friction + attitude kick,
   `GrazeStopSpeed`, breakup scatter, and whether the 10c panel-flip and smoke-trail look right in
