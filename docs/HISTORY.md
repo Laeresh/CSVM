@@ -15555,3 +15555,26 @@ counts 2,852 where `census.py` counts 3,731 (3,731 − 2,852 = 879). Found on th
 
 Details: `analysis/wait-for-completion/FINDINGS.md`, `docs/formats/anim-definitions.md`,
 `docs/architecture.md`'s `AnimRuntime.cs` / `SequenceRunner.cs` / `Suites.cs` entries.
+
+## 2026-08-05 — PLAN-m3-polish-7 complete and archived
+
+All ten items landed (Waves A–D) and the plan moved to `docs/plans/` with a `COMPLETE` banner and a
+`plans.md` row. What the run bought: the weapon gauges sweep at the measured 168.7 °/sim-s, the
+stall lamp blinks on a speed-dependent rate law with its 0.30 warn threshold split from the 0.25
+nose-drop, the gun low-ammo step is retuned on its own merits (0.15), the altitude cap exists at the
+measured 2003 m, the engine loop is a detuned pair, the world-effects templates reveal their meshes
+at the call site, `WAIT_FOR_COMPLETION` holds a caller's next event, and blast falloff scores a
+neighbour to its collision shape.
+
+**Three items landed in part as disproofs, which this plan counted as success.** `C6`/`BL-221`
+settled the `AT_NODE` axis order as reading A verbatim across a 6,728-position census and changed no
+code (and retired one instrument as `docs/verification.md` INSTR-9); `A1` left the measured ~97 ms
+end-cap ease unimplemented rather than guess a shape the capture did not resolve; `B4` matched
+`CAP-03`'s resting cap to 0.3 ft and recorded the same capture's speed-bleed half as an open,
+disclosed gap rather than force it.
+
+**What is owed and cannot be done here.** `PT-31`–`PT-37` in `playtest.md`: the two capture A/Bs
+(`CAP-18` gauge arrow, `CAP-06` stall blink), the gun-belt colour judgement, the two sea-dive
+pictures (no headless water crash exists — `--crash` resolves `Ground`), the rocket rings' template
+meshes and splash falloff onto a real large neighbour. `B5`'s engine-detune listen A/B is owed with
+no `PT-` of its own. Found on the way and filed rather than fixed: `BL-257` and `BL-258`.

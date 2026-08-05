@@ -1,8 +1,21 @@
 # M3 polish 7 — HUD sweep/warning fidelity, flight ceiling, effects and gates
 
-**ACTIVE PLAN** (written 2026-08-04). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE** (written 2026-08-04, completed 2026-08-05). Archived under `docs/plans/`; all ten items
+landed — three of them in part as disproofs rather than code. `C6`/`BL-221` settled the `AT_NODE`
+axis order as reading **A verbatim** by a 6,728-position census, so the proposed flip is disproven
+and **no code changed**; `A1`'s measured ~97 ms end-cap ease is deliberately left unimplemented and
+recorded rather than guessed; and `B4`'s clamp matches `CAP-03`'s 2003 m resting cap to 0.3 ft while
+the same capture's speed-bleed half is an **open, disclosed gap** — the existing stall model does not
+produce it for free, as the Approach had hoped.
+
+**Owed at the controls:** `PT-31`–`PT-37` in [`playtest.md`](../../playtest.md) — the gauge-arrow
+A/B against `CAP-18`, the stall-blink A/B against `CAP-06`, the gun-belt colour judgement (no
+original clip exists to A/B against), the sea-dive splash and its splash-then-steam ordering (no
+headless water crash exists — `--crash` resolves `Ground`), the rocket rings' template meshes, and
+splash falloff onto a real large neighbour. `B5`'s engine-detune listen A/B is owed too and carries
+no `PT-` of its own. **Found on the way and filed rather than fixed:** `BL-257` (the zeppelin model's
+eight parts hidden on the tick they launch) and `BL-258` (the `unknown_seq` block — a third `Initial`
+sequence on 1,544 defs our reader never loads, holding 879 of the install's flagged calls).
 
 Ten items drawn from `backlog.md` under the criteria agreed 2026-08-04: player-visible M3-era
 fidelity (weapons/destruction/HUD plus cheap flight/audio wins), **unblocked** — no owed `CAP-nn`
