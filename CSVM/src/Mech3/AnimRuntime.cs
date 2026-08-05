@@ -185,8 +185,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// first blast's trails jump to the second's. Everything template-shaped becomes slot-scoped
     /// under it — which copy a call places (<see cref="PlaceTemplateAt"/>), reveals
     /// (<see cref="ShowTemplate"/>), tests for a move (<see cref="TemplateIsAt"/>) and resolves its
-    /// own node names in (<see cref="ResolveInOwnRoot"/>) — all keyed off the slot the call's anchor
-    /// lives in, so a nested CALL_ANIMATION stays inside its caller's slot.
+    /// own node names in (the resolver's own-root tier, fed by <see cref="TemplateRootsFor"/>) —
+    /// all keyed off the slot the call's anchor lives in, so a nested CALL_ANIMATION stays inside
+    /// its caller's slot.
     ///
     /// <para>⚠ Off on the WORLD runtime, deliberately, and this is not a keying scheme layered on
     /// the puffer key: emitters there stay keyed by the collapsed <c>(name, host)</c> (see
@@ -356,10 +357,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// nodes anyway (OBJECT_ACTIVE_STATE off / opacity fade).</summary>
     private const float MinPoseScale = 1e-3f;
 
-    // Name resolution — the index, wildcard matcher, memoized FindAll, and ResolvePath — lives in
-    // NameResolver.cs; identity is instance id, since Godot object equality is unreliable inside a
-    // dictionary/tuple key across proxy instances of the same native node.
-    private readonly NameResolver<Node3D> _resolver = new(Node3DIdentity.Instance);
+    // Name resolution — the index, wildcard matcher, memoized FindAll, and the three-tier scope
+    // chain — lives in NameResolver.cs; identity is instance id, since Godot object equality is
+    // unreliable inside a dictionary/tuple key across proxy instances of the same native node.
+    // Constructed in the constructor below: the pool reaches the resolver ONLY as the ownRootsOf
+    // hook (TemplateRootsFor) — SlotOf and the slot arithmetic stay here.
+    private readonly NameResolver<Node3D> _resolver;
 
     private readonly Dictionary<Node3D, Transform3D> _rest = new(); // authored pose per touched node
 
@@ -555,6 +558,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // How many waits were installed, and how many hit WaitCeilingS instead of their callee
     // finishing. The second number is the one that matters — it must be 0.
     private int _waitsInstalled, _waitsAbandoned, _waitsRouted, _waitsInert;
+
+    /// <summary>The resolver's two runtime hooks are this class's: <see cref="TemplateRootsFor"/>
+    /// as <c>ownRootsOf</c> (the pool reaches the resolver only as that resolved root list — the
+    /// slot arithmetic never leaves this class) and Godot's <c>IsInstanceValid</c> as the anchor
+    /// liveness predicate. The policy flags follow later, at the top of <see cref="Bootstrap"/>.
+    /// </summary>
+    public AnimRuntime()
+    {
+        _resolver = new NameResolver<Node3D>(Node3DIdentity.Instance, TemplateRootsFor, IsInstanceValid);
+    }
 
     /// <summary>Running count of ballistic <see cref="MotionRuntime"/> bodies launched â€” the debris
     /// pieces a death or crash flings (translation/translation_range/scale/forward_rotation over a
@@ -771,7 +784,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
         foreach (var name in def.NodeList)
         {
-            if (!string.IsNullOrEmpty(name) && ResolveOne(name, def, null) is { } node)
+            if (!string.IsNullOrEmpty(name) && Resolve(name, def, null) is { } node)
             {
                 return node;
             }
@@ -2516,7 +2529,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // `PufferState(fire_n_smoke, at=INPUT_NODE)` thus emits on the effect's own relocated root,
         // which is what puts it at the call/hit site (D32) rather than nowhere.
         var host = ev.Data.Str("at_node") is { } atNode
-            ? (IsSelfNodeRef(atNode) ? InputNodeOf(def, anchor) ?? anchor : ResolveOne(atNode, def, anchor))
+            ? (IsSelfNodeRef(atNode) ? InputNodeOf(def, anchor) ?? anchor : Resolve(atNode, def, anchor))
             : anchor;
         if (host == null)
         {
@@ -2627,7 +2640,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (ev.Data.Obj("translate")?.Union() is { Tag: "AtNode", Value: Dictionary<string, object?> at })
         {
             var atData = new AnimData(at);
-            if (atData.Str("name") is { } hostName && ResolveOne(hostName, def, anchor) is { } host)
+            if (atData.Str("name") is { } hostName && Resolve(hostName, def, anchor) is { } host)
                 Sounds.Attach(handle, host, atData.Vec3("pos"));
         }
         // The reader form carries no active_state at all (its ACTIVE comes as the next event), so
@@ -2694,13 +2707,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         {
             if (atObj.Str("name") is { } hostName)
             {
-                host = ResolveOne(hostName, def, anchor);
+                host = Resolve(hostName, def, anchor);
             }
             offset = atObj.Vec3("pos");
         }
         else if (ev.Data.Str("at_node") is { } atName)
         {
-            host = ResolveOne(atName, def, anchor);
+            host = Resolve(atName, def, anchor);
             offset = ev.Data.Vec3("translate");
         }
         host ??= anchor;
@@ -2730,7 +2743,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return false;
         if (ev.Data.Str("parent") is not { } parentName)
             return false;
-        if (ResolveOne(parentName, def, anchor) is not { } host)
+        if (Resolve(parentName, def, anchor) is not { } host)
             return false;
         Sounds.Attach(handle, host);
         _opsApplied++;
@@ -2760,7 +2773,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             // Resolve the host ONCE per light. These events are not occasional: a fire's flicker
             // re-issues its full LIGHT_STATE â€” AT_NODE and all â€” every loop iteration, measured
             // at ~2,700 LIGHT_STATEs/second on C1, of which ~1,740 missed the compiled symbol
-            // table and fell through to ResolveOne's full-world scan (7,064 nodes with a regex
+            // table and fell through to Resolve's full-world scan (7,064 nodes with a regex
             // matcher, so ~12M comparisons/second). That, not the shader, was the entire cost of
             // this feature: --perf put the whole viewport's GPU time at 0.26 ms while script time
             // sat near 50 ms. The name is what identifies the target, so re-resolving an
@@ -2769,7 +2782,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             {
                 if (light.Host == null || !string.Equals(hostName, light.HostName, StringComparison.Ordinal))
                 {
-                    if (ResolveOne(hostName, def, anchor) is { } host)
+                    if (Resolve(hostName, def, anchor) is { } host)
                         light.Host = host;
                     light.HostName = hostName;
                 }
@@ -2861,42 +2874,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     }
 
     /// <summary>Resolves a single node name for this definition â€” the compiled symbol table
-    /// first, then the reader-style name/wildcard match within the anchor's scope.</summary>
-    private Node3D? ResolveOne(string name, AnimDefinition def, Node3D? anchor)
-    {
-        if (_resolver.SymbolClaims(def, name, out var bound) && bound != null)
-            return bound;
-        var found = ResolveScoped(new List<string> { name }, def, anchor);
-        return found.Count > 0 ? found[0] : null;
-    }
+    /// first, then the scoped tier chain. Forwards to <see cref="NameResolver{TNode}.Resolve"/>,
+    /// which owns the tier order (anchor subtree, own template roots, global).</summary>
+    private Node3D? Resolve(string name, AnimDefinition def, Node3D? anchor) =>
+        _resolver.Resolve(name, def, anchor);
 
-    /// <summary>Resolves a name path for one definition, narrowest scope first: the call anchor's
-    /// subtree, then the DEFINITION'S OWN template root(s), then — unless <c>LOCAL_NODES_ONLY</c> —
-    /// the whole index.
-    ///
-    /// <para>The middle step exists because the anchor is not always where the def's own nodes
-    /// live: an effect callee is re-anchored onto the CALL SITE (`call_hetrails_up` onto `he_ring`)
-    /// while its nodes ride its own template root, which <see cref="PlaceTemplateAt"/> relocated to
-    /// that site. Effect templates staged side by side reuse node names — `fly_trail1`-`5` belongs
-    /// to `he_trails`, `ap_trails` AND `carnage_trails` — so falling straight to the global index
-    /// animated every copy, two of them still parked at the stage origin, i.e. the world origin.</para>
-    ///
-    /// <para>⚠ Every consumer must resolve through THIS, not through <see cref="ResolvePath"/>
-    /// directly. The motion targets and the puffer host used to take different routes to the same
-    /// name and land on different copies of it, which put the emitter on one node and the authored
-    /// <c>OBJECT_ACTIVE_STATE</c> stop on another — so the stop never reached the emitter.</para>
-    /// </summary>
-    private List<Node3D> ResolveScoped(List<string> path, AnimDefinition def, Node3D? anchor)
-    {
-        if (anchor == null || !IsInstanceValid(anchor))
-            return ResolvePath(path, null, localOnly: true);
-        var found = ResolvePath(path, anchor, localOnly: true);
-        if (found.Count == 0)
-            found = ResolveInOwnRoot(path, def, anchor);
-        if (found.Count == 0 && !def.LocalNodesOnly)
-            found = ResolvePath(path, null, localOnly: true);
-        return found;
-    }
+    /// <summary>Resolves a name path for one definition, narrowest scope first. The tier order —
+    /// call anchor's subtree, then the DEFINITION'S OWN template root(s), then unless
+    /// <c>LOCAL_NODES_ONLY</c> the whole index — is resolver-owned and structural (see
+    /// <see cref="NameResolver{TNode}.ResolveScoped"/>): this class holds no resolution primitive
+    /// it could compose in a different order.</summary>
+    private List<Node3D> ResolveScoped(List<string> path, AnimDefinition def, Node3D? anchor) =>
+        _resolver.ResolveScoped(path, def, anchor);
 
     /// <summary>
     /// The site a CALL_ANIMATION hands its callee: the target node plus the AT_NODE trailing
@@ -2928,7 +2917,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (targetName == null)
             return (null, Vector3.Zero);
 
-        var resolved = ResolveOne(targetName, def, anchor);
+        var resolved = Resolve(targetName, def, anchor);
         if (resolved != null)
             _retargeted++;
         else
@@ -2968,9 +2957,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary>The copies of a definition's own template root(s) that belong with
     /// <paramref name="inSlotOf"/> â€” the one pool slot that call is running in. Off the pool (or
     /// for a def whose root is staged in a single copy, like the shared gun family's, which C8
-    /// relocates on purpose) this is every match, exactly as before. Resolved through
-    /// <see cref="FindAll"/> rather than <see cref="Anchors"/>: the callers run per event, and
-    /// Anchors records a per-definition anchoring census that must not be re-entered.
+    /// relocates on purpose) this is every match, exactly as before. Also the resolver's
+    /// <c>ownRootsOf</c> hook (its middle tier — handed over in the constructor), which is the one
+    /// route the pool takes into the resolver: it sees the resolved root list, never the slot
+    /// arithmetic. Resolved through <see cref="FindAll"/> rather than <see cref="Anchors"/>: the
+    /// callers run per event, and Anchors records a per-definition anchoring census that must not
+    /// be re-entered.
     ///
     /// <para>Pool sizes are per ROOT (<c>data/effect_pools.json</c>), so a callee can be staged
     /// shallower than its caller's slot â€” a slot-5 blast calling a template with only 4 copies.
@@ -3102,8 +3094,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// is re-issuing the same call from a poll loop" (leave the live instance alone) from "a second
     /// explosion needs this template somewhere else" (relocate and restart). Metre-scale tolerance:
     /// distinct impacts are metres apart, and an exact compare on kilometre-scale world
-    /// coordinates would call a float round-trip a move. Resolves the roots the way
-    /// <see cref="ResolveInOwnRoot"/> does — this runs per event, and <see cref="Anchors"/> would
+    /// coordinates would call a float round-trip a move. Resolves the roots the way the
+    /// resolver's own-root tier does — this runs per event, and <see cref="Anchors"/> would
     /// re-enter its per-definition anchoring census on every frame of a poll loop. Pooled, the
     /// question is asked of the copy in the CALL's slot: another slot's copy sitting at another
     /// blast site is not this call being re-issued from somewhere new.</summary>
@@ -3493,7 +3485,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private Node3D? ConditionNode(object? reference, AnimDefinition def, Node3D? anchor)
     {
         if (reference is string name)
-            return IsSelfNodeRef(name) ? anchor : ResolveOne(name, def, anchor);
+            return IsSelfNodeRef(name) ? anchor : Resolve(name, def, anchor);
         if (AnimData.AsNum(reference) is not { } idx)
             return null;
         if (idx > 1e9f)
@@ -3501,7 +3493,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         int i = (int)idx;
         if (i < 1 || i > def.NodeList.Count)
             return null;
-        return ResolveOne(def.NodeList[i - 1], def, anchor);
+        return Resolve(def.NodeList[i - 1], def, anchor);
     }
 
     private void CountCondition(string kind, bool result)
@@ -3691,33 +3683,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
         return targets;
     }
-
-    /// <summary>Resolves a name path inside the definition's own anchor root(s) — the same set
-    /// <see cref="PlaceTemplateAt"/> moves onto a call site, so this is "the copy of the template
-    /// that was placed for me" rather than "some same-named node elsewhere in the stage". Uses
-    /// <see cref="FindAll"/> directly rather than <see cref="Anchors"/>: this runs per event, and
-    /// Anchors records a per-definition anchoring census that must not be re-entered here.
-    /// <paramref name="anchor"/> narrows it further on a pooled runtime: a nested effect callee is
-    /// re-anchored onto a node inside its CALLER's pool slot, so "my own root" is the copy staged
-    /// beside it â€” without that one blast's <c>call_hetrails_up</c> would drive every slot's
-    /// <c>fly_trail*</c>, including copies parked at the stage origin or serving another site.</summary>
-    private List<Node3D> ResolveInOwnRoot(List<string> path, AnimDefinition def, Node3D? anchor)
-    {
-        var found = new List<Node3D>();
-        if (string.IsNullOrEmpty(def.Name))
-            return found;
-        foreach (var root in TemplateRootsFor(def, anchor))
-            foreach (var node in ResolvePath(path, root, localOnly: true))
-                if (!found.Contains(node))
-                    found.Add(node);
-        return found;
-    }
-
-    // NAME paths: resolve the first element in scope (falling back to global for
-    // non-local defs), then each further element inside the previous matches. Forwards to
-    // NameResolver.cs.
-    private List<Node3D> ResolvePath(List<string> path, Node3D? scope, bool localOnly) =>
-        _resolver.ResolvePath(path, scope, localOnly);
 
     /// <summary>Every world node matching a NAME pattern, optionally restricted to one
     /// subtree. A full scan of the node index â€” and the data calls it constantly, because the
