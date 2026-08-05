@@ -82,7 +82,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — effect & camera choreography
 
 6. ◐ `BL-265` — water splash: authored opacity fades + `splash01→03` flipbook; re-judge the 8× width (fades + flipbook landed 2026-08-05; the width pick rides `PT-39`)
-7. ☐ `BL-267` — engine start/stop: play `startprops`/`stopprops`; throttle-slam smoke wired magnitude-gated (`CAP-21` re-read)
+7. ☑ `BL-267` — engine start/stop: play `startprops`/`stopprops`; throttle-slam smoke wired magnitude-gated (`CAP-21` re-read) (landed 2026-08-05; TUNE residues → `BL-285`)
 8. ☑ `BL-248` — dynamic chase distance: implement the two CAP-21-measured terms (landed 2026-08-05)
 9. ☑ `BL-260` — the four authored cameras: crash first; un-decodable ones recorded, not guessed (crash + look-behind landed 2026-08-05; death/flyby capture-gated on the entry)
 10. ☑ `BL-266` — camera shake: find the authored law (`shakes.zrd.json`/`damage_shakes.zrd.json`), then implement or re-scope (re-scoped 2026-08-05: laws authored, inputs not — decode landed as `docs/formats/shakes.md`, no code)
@@ -413,6 +413,15 @@ loop; spawn plays the start smoke if wired. Listen A/B is the user's; the regres
 **⚠ Traps.** The ×0.2 "Temporary fix" volume scale (`BL-268`, deliberately out of this plan) sits
 on these same paths — do not "fix the mix" while wiring the cue; if the stop cue sounds wrong at
 ×0.2, note it on `BL-268` and move on.
+
+**C7 Outcome (2026-08-05) — landed.** `startprops`/`stopprops` bound through `EffectCatalogue`
+onto the per-player crash runtime; the static prop disc survives flight builds so the authored
+cross-fade has both ends; `Crash()` (shared by crash and critical-part destruction — checked, one
+call site) plays the stop choreography and finally calls `OnEngineStop`. `ThrottleSlamSmoke`
+drives `nitro_boost`'s exhaust trail puffers edge-triggered at a cumulative +0.25 rise (TUNE —
+the capture's 2/8–4/8 band is unobserved), never on decrease; the staircase never fires. Ramp
+sourced to the authored 2.0 s. Residues (threshold + listen A/B) → `BL-285`. Four flown-plane
+goldens re-pinned, `c1-crash`'s 26% being the documented `Rng.Puffer` construction-order cascade.
 
 ## C8 ☐ `BL-248` — dynamic chase distance: implement the two CAP-21-measured terms
 

@@ -1775,6 +1775,14 @@ The live list (moved here from CLAUDE.md 2026-07-22). Each is a hand-tuned const
 plausible but unvalidated against the original — they need the user in the cockpit, not another
 scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.md).**
 
+- `BL-285` **Engine start/stop residues from `BL-267` (landed 2026-08-05)** — two constants
+  pending the user, both in the same cockpit sitting. (a) `ThrottleSlamSmoke.SlamThreshold`
+  0.25: the CAP-21 footage only bounds the slam gate to "a single 1/8 step never fires,
+  idle→5/8 fires" — the 2/8–4/8 band is unobserved, so 0.25 is the smallest threshold
+  consistent with both and a declared TUNE. (b) The listen A/B: `EngineStartRamp` is now the
+  `startprops` authored 2.0 s and the crash/destruction wind-down plays `snd_propstop` — judge
+  both by ear. ⚠ Trap: the ×0.2 mix scale (`BL-268`) sits on these same paths — if the stop
+  cue sounds wrong at ×0.2, that is `BL-268`'s item, not a reason to retune the ramp.
 - `BL-252` **Overspeed-whine volume** (`prop_sound`; `FlightAudio.WhineMixGain` 0.12). `CAP-10` plus a
   live cross-check incidentally confirmed the **gating** of the original's dive/overspeed sound and
   left only its level open.
@@ -1966,23 +1974,6 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   detonation-shake marker); the player fire path would be the unflagged `fire_bullet` source.
   And the near-match trap bites hard here: several magnitude candidates coincide with authored
   constants — wire nothing on one coincidence.
-- `BL-267` **Engine start/stop choreography: `snd_propstop` is implemented but never called,
-  and the start ramp is a bare literal** (`FlightAudio.cs:317-325` — `OnEngineStop()` has no
-  production caller, so the authored wind-down cue is never heard; `:51` — `EngineStartRamp =
-  1.8f` s with no source or TUNE marker). Check `engines.zrd.json` / the plane defs for an
-  authored start/stop sequence (the `engine_start_smoke` def in `pufftrails.zrd.json` is
-  probably part of the same moment and is also unplayed, `BL-259`'s neighbour); wire the stop
-  cue to whatever kills the engine (crash, destruction) and source or mark the ramp.
-  **Throttle-step smoke settled (`CAP-21` re-read, 2026-08-05, decode in `docs/HISTORY.md`):**
-  the original does smoke on a thrust increase, but only on **large** jumps. Idle→8/8 and both
-  idle→5/8 recovery taps each stream dark multi-plume exhaust smoke from the cowling sides for
-  ~2–3 wall-s (×1.390 for sim-s), onset ≤0.5 s after the command; all **fifteen** single-1/8
-  steps across the two staircase clips show nothing at chase distance, and throttle cuts and
-  sustained 8/8 never smoke. Shape is the *trail-style* exhaust stream (`exhaust1`–`4` /
-  `nitro_boost` morphology — no nitro was used, no `nitropropN` discs appear), not the round
-  `smokepuffN` start cough — so the exe trigger is magnitude-gated or ramp-proportional, **not**
-  a per-step `engine_start_smoke` call. One airframe (Bloodhawk), one session; whether a 1/8
-  step emits a sub-visible wisp is below this footage's resolution.
 - `BL-268` **A blanket ×0.2 is applied over every authored sound volume, commented "Temporary
   fix"** (`FlightAudio.cs:363,382,178,308` — four call sites multiply `def.Volume * 0.2f`).
   Every `sounds.json` `VOLUME` in the own-ship path is silently overridden by a 5× attenuation

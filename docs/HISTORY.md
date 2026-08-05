@@ -16174,3 +16174,23 @@ deterministic same-frame A/B: pre-fix pixmd5 `13af6918…` vs post-fix `c307aae8
 of the same `--weapon-lab --weapon-surface=water --weapon-fire` run. `SplashColumnWidthScale`
 reverts to the authored 1× (8× reachable; the pick rides `PT-39` with A/B frame series at both
 widths). `RunTests.ps1` green; 13/13 goldens hash-identical (no golden fires into water).
+
+## 2026-08-05 — PLAN-m3-polish-8 C7 `BL-267`: the engine start/stop choreography plays; throttle-slam smoke lands magnitude-gated
+
+`startprops`/`stopprops` now play at spawn and engine death through the existing per-player crash
+`AnimRuntime` (bound via `EffectCatalogue`): the static blade prop cross-fades to its spinning
+disc over the authored 2.0 s with the `smokepuffN` nacelle burst (flight builds now keep the
+static disc so the fade has both ends), and `Crash()` — the one call site crash and critical-part
+destruction share — plays `stopprops` and finally calls the previously caller-less
+`FlightAudio.OnEngineStop()`, so the wind-down cue layers over the crash. `EngineStartRamp`
+sourced to the authored 2.0 s (listen A/B pending, `BL-285`). New `ThrottleSlamSmoke` streams
+`nitro_boost`''s `exhaust1–4` trail puffers (via `TrailAdvance`, their authored
+`DISTANCE_INTERVAL` mechanism) on a large continuous throttle rise only — edge-triggered at a
+cumulative +0.25 (TUNE, `BL-285`; the CAP-21 capture leaves 2/8–4/8 unobserved), once per climb,
+never on decrease. Verified: gate logs (slam fires once; the fifteen-step staircase and every cut
+never fire), `--debug-anim` spawn choreography, crash-cue log ordering, and screenshots of the
+smoke appearing and dissipating (`.scratch/plan8/C7/`). The four flown-plane goldens moved and
+were re-pinned — three are the startprops smoke tail at frame 120; `c1-crash`''s 26% is the
+documented `Rng.Puffer` construction-order cascade with bit-identical crash physics underneath —
+then regenerated once more on the merged main where they combined with C8/C9''s camera reframes.
+`RunTests.ps1` green in check mode.
