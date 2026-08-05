@@ -1,8 +1,12 @@
 # Friends Release — minimal shareable build
 
-**ACTIVE PLAN** (written 2026-08-05). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans/plans.md), when every item lands.
+**COMPLETE** (written 2026-08-05, completed 2026-08-05). All five items landed the same day,
+orchestrated across parallel agent worktrees merged into a `plan-friends-release` branch, then
+into `main`. The clean-machine proof ran the friend journey scripted-verbatim from the package
+README in Windows Sandbox — and caught two real package defects (the `rimage/` unpack, the
+missing `messages.json` step) that the dev tree had masked for weeks; both fixed and re-verified
+in a second sandbox cycle. Known residue: `BL-283`, the sandbox-only free-flight exit hang.
+Zip approved by the user for hand-off on close.
 
 A minimal release build to hand to friends who own Crimson Skies: a zipped Godot release export
 (self-contained .NET) plus a one-command extraction step they run against their own install. No
@@ -71,7 +75,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ Export preset + first hand export, smoke-tested from a bare folder
 12. ☑ Friend extraction kit: one-command `Extract.ps1`, bundled fork `unzbd.exe`, README, licenses
-13. ◐ Assemble the zip, clean-machine test, first hand-off — zip built + Sandbox-proven; README review and hand-off are the user's
+13. ☑ Assemble the zip, clean-machine test, first hand-off — zip built + Sandbox-proven; README approved by the user on close
 
 ## Dependency and parallelism notes
 
@@ -237,7 +241,7 @@ or the very first command fails cryptically. Don't fold the extraction logic int
 simplify" — two diverging extractors is the maintenance trap. The user owns hand-off
 communication (standing rule): the README is drafted for them to review, not published.
 
-## B13 ◐ Assemble the zip, clean-machine test, first hand-off
+## B13 ☑ Assemble the zip, clean-machine test, first hand-off
 
 **Goal.** One zip — export + `Extract.ps1` + `tools\unzbd.exe` + README + licenses — proven on an
 environment without dev tools, and handed to the first friend with a way for their problems to

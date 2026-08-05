@@ -16391,6 +16391,10 @@ evidence in the backlog entry.
 **Remaining, user-owned:** review `packaging/README.md` (flags listed in the B12 entry), then
 the first hand-off. The friend's first-session report seeds the public-release backlog.
 
+Closed same day: the user approved the README and the zip and closed the plan — archived at
+`docs/plans/PLAN-friends-release.md`, row added to `plans.md`. Post-merge `RunTests.ps1` on
+`main` (both 2026-08-05 plans together): 475/475 units, 29/29 engine, 13/13 goldens.
+
 ## 2026-08-05 — friends-release B11: export preset lands; the first hand export flies from a bare folder, pixel-identical to the dev tree
 
 `CSVM/export_presets.cfg` is committed — one preset, **"Windows Desktop"** (release, x86_64,
