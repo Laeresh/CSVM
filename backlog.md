@@ -2009,6 +2009,24 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   the original's, hence TUNE"). Low stakes per sound but global: every positional sound's
   audible footprint. A calibrated fly-past recording of one loud fixed emitter (the C1
   refinery flare is a candidate) would trace the real curve.
+- `BL-288` **`gimmeflakes` debris fires on every damage stage and rides the plane** (seen at
+  the controls 2026-08-05, right after `BL-259` landed). Two defects in one effect: (a) the
+  flake debris flies on EVERY damage animation — the authored menu calls `gimmeflakes` only
+  from the `pdpanelN` defs, i.e. at the moment a panel tears (`player_fuelleak` calls none), so
+  a stage that destroys no panel should throw no flakes. Check what our wiring actually invokes
+  it from (every injure-stage call? each loop iteration of the burn?) against the defs before
+  fixing — the over-fire may be a re-CALL of the whole `pdpanelN` def rather than the flakes
+  themselves. (b) The flakes stay PLANE-LOCAL — hanging in the air around the aircraft and
+  moving with it — where torn-off debris must separate, decelerate in world space and fall
+  behind. "This should definitely fly away" (user).
+  ⚠ Traps: (b) is the third bite of the plane-parented-effect trap — `BL-229`'s "puff at the
+  plane's last position" and the smoke-trail `TopLevel` anchor fix (`docs/HISTORY.md`
+  2026-08-03) that produced the `trail-world-anchor` suite. The fix family is world-staging the
+  emission (`TopLevel` at the site), not per-frame reparenting; verify at a real mission spawn
+  and heading — the identity pose hides it. And don't "fix" (a) by muting `gimmeflakes`: the
+  tear moment must still throw its burst.
+  *Playtest after fix:* take panel damage in flight — flakes burst once at the tear, separate
+  from the plane and fall away behind it; a fuel-leak-only stage throws none.
 - `BL-287` **D11 follow-ups: the fuel leak fights the wing lights, and panels 4/6 burn
   flakes-only as authored** (filed at `BL-259`'s landing, 2026-08-05). (a) `player_fuelleak`'s
   ELSE branch deactivates `wing_flare2`/`winglight2`, and `WingLightBlinker` re-asserts them
