@@ -75,4 +75,28 @@ Measured after staging them (C1 sea dive, `--debug-anim`): `11 effect template(s
 retarget resolves, 7 crash-rig puffers live (`fire_n_smoke`, `trailpuffer2`, `spurtpuffer1..5`) and
 the mesh half draws too (`splash_polys`, `ripple1..3`, `fly_trail1..5` all reported visible).
 
+## 2026-08-05 — what this script cannot see (`PLAN-effect-catalogue` B2)
+
+The same closure now runs at build time against the **bound** program
+(`EffectCatalogue.StageRootsFor`, cross-checked against both hand tables by an `effects-census`
+condition on all 8 chapters). Three differences from this script's answer, all of them real:
+
+1. **⚠ This script keys definitions by `ANIMATION_NAME`, and a definition may declare only a `NAME`.**
+   Those land in its `None` bucket and never enter the closure. That is how it missed
+   `ballflare.flt` — the torpedo explosion's flare, called by `torpedo_ground_effect`/
+   `torpedo_water_effect`, a single parentless root in all 8 chapters, staged by nobody
+   (`BL-262` a). Fix the keying before trusting a re-run.
+2. **It walks the shared `zrdr/` scope only**, where the runtime merges shared + chapter + mission
+   readers *and* the compiled `cam_anim`/`mis_anim` archives (compiled preferred). No extra anchor
+   came from that in practice, but the sets are not the same input.
+3. **It reports an anchor even where the CALL supplies one.** `zep_can_dstry1.flt`
+   (`dblcannon_flying_parts`) is reached only through `AT_NODE` calls onto zeppelin wrecks whose own
+   subtrees carry the `part1..8` it flings, and C2's gamez has no node of that name at all — so it is
+   not a root to stage. Curated out in `EffectCatalogue.CallSuppliedAnchors`, with `player_pfighter`
+   (authored against one airframe's model root) in `AirframeScopedAnchors`.
+
+`apassengers` (above, in the crash rig's 11) is the other half of `BL-262`: this script asked for it,
+`WorldEffectsFactory.EffectTemplateRoots` shipped without it, and `rem_pas` carries no `AT_NODE`, so
+the crash's passenger removal plays nothing.
+
 No game data is stored here — the script reads the player's own `extracted/` tree.

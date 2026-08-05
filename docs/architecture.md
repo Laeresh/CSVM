@@ -2096,7 +2096,8 @@ live weapon fire, destructible stages/death/census, animation
 stops and bounce-terminated launches, the full effects sweep (`effects-census`: every effect
 resolves, template meshes peak at the CALL SITE not the stage origin, none stays lit after its
 stop — `Probes.Effects` rows asserted; its puffer/mesh tallies are golden counts under the
-suite's own conditions, literal seed 1 + the counting factory, pinned separately from the probe's),
+suite's own conditions, literal seed 1 + the counting factory, pinned separately from the probe's;
+plus the staged-root derivation tripwire at both binds, the crash half on two airframes),
 emitter lifetime and the emitter's own modes, texture
 flattening, glTF round trips, collision/node visibility, and authored stunt gates. `emitter-lifetime` is registered FIRST — it is
 the only suite installing a fake `IEmitterFactory`, and `WithWorld` caches one world per chapter, so
@@ -2296,7 +2297,14 @@ tables every effect producer must stay inside, static and engine-free. Owns `Eff
 `b_steamtrail`, `random_gun_impact`, the LOCAL_CHOREOGRAPHY fail-closed set — as the load-bearing
 knowledge), the crash-rig's own name sets (`CrashDefNames`: `player_crash_dirt`/`_water`;
 `PlaneDamageEffectAnims`: the four `<part>_damage_effects` shims), and the pure
-`TouchdownFor(SurfaceClass)` the graze reaction's three-way pick routes through.
+`TouchdownFor(SurfaceClass)` the graze reaction's three-way pick routes through. It also derives what
+those names need staged: `StageRootsFor(program, names, resolveRoot)` walks `AnimProgram.Subset`'s
+CALL_ANIMATION closure, takes each reached definition's NAME (the gamez node its instance anchors on),
+and resolves it three ways — a parentless gamez root is **staged**, a name the bind's own scope
+already carries is **in scope**, a name that resolves nowhere throws `EffectAnchorException` naming
+the anchor and the animations on it. `resolveRoot` is caller-supplied, so the world-effects and
+per-player crash binds share the one function (`WorldEffectsFactory.StageRootResolver`); the result is
+sorted, so no caller's staging order can depend on definition load order.
 `WorldEffectsFactory` consumes these names to build and stage the runtime; it no longer owns the
 naming itself. Every producer of a name here — `ImpactOutcome`'s gunhit lookup, `TouchdownFor`,
 `PlaneDamageEffectAnims` against every plane's real `injure_anims` data — carries a producer-range
@@ -2306,10 +2314,13 @@ its whole producible range resolves inside `EffectAnimNames`/`PlaneDamageEffectA
   `ProjectilePool.EffectSink`) on purpose — a typed catalogue entry would thread this module's types
   through the deliberately engine-free `ImpactOutcome`. The producer-range tripwires close the drift
   a typo would otherwise open, at far less churn than four delegate signatures.
-⚠ `StageRootsFor`, the anchor-root closure the names still need staged, does not live here yet —
-  `EffectStageRoots`/`EffectTemplateRoots` stay hand-authored on `WorldEffectsFactory` until that
-  derivation lands (`PLAN-effect-catalogue` B2/B3). This module only fixes *what* plays, not *what
-  gets staged for it*.
+⚠ `StageRootsFor` **cross-validates** the staged sets; it is not yet their source.
+  `EffectStageRoots`/`EffectTemplateRoots` stay hand-authored on `WorldEffectsFactory`, because two
+  anchors the closure reports are knowledge it cannot derive and the tables encode: a definition every
+  call re-sites with `AT_NODE` onto a subtree that already supplies it (`CallSuppliedAnchors`:
+  `zep_can_dstry1.flt`, absent from C2's gamez entirely) and one authored against the Devastator's own
+  model root (`AirframeScopedAnchors`: `player_pfighter`). Both are skipped before `resolveRoot` is
+  asked — extend those lists, never the mechanical walk (`PLAN-effect-catalogue` B2's Outcome).
 
 ## src/Session/WorldEffectsFactory.cs
 Builds the impact/destruction effect stages and the per-player crash runtime: the world-effects runtime (D32) and
@@ -2351,8 +2362,13 @@ a puffer count cannot see whether a template's geometry drew, and the two halves
 ⚠ `EffectStageRoots` must stay the WHOLE anchor-root set of `EffectCatalogue.EffectAnimNames`' call closure, and
   `EffectTemplateRoots` the same for the crash rig's two variants — a def anchors on the node its
   NAME names, so an omitted root leaves it unanchored and it plays nothing, silently. Staging 19 of
-  28 cost the rings, all four trail columns, the sonic puffs and the torpedo ripple; regenerate
-  either list with `analysis/effect-anchor-roots/` (it takes the anim names), never by hand.
+  28 cost the rings, all four trail columns, the sonic puffs and the torpedo ripple. `StageRootDrift`
+  now guards both against `EffectCatalogue.StageRootsFor` — `WorldStageRootDrift` as an
+  `effects-census` condition (proven on all 8 chapters), `CrashStageRootDrift` at the crash bind
+  itself and on two airframes in that suite, since the rig's scope is per-plane. `WorldStageRootGaps`
+  (`ballflare.flt`) and `CrashTemplateRootGaps` (`apassengers`) are roots the closure needs that these
+  tables do NOT stage, so those two effects play nothing today (`BL-262`); staging one means deleting
+  its name from the gap list in the same commit.
 ⚠ **Runtime ownership stays split, by design.** The factory's own `_worldEffects` field is the ONE
   lazily-built world-effects runtime (`EnsureWorldEffects` builds it on first demand and caches it
   there); `GameSession` no longer mirrors that reference — the runtime node hangs under `_worldRoot`,

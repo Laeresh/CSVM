@@ -92,7 +92,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — the derivation, and the tables die
 
-2. ☐ `StageRootsFor` + the equality tripwire at both binds, proven across all 8 chapters
+2. ☑ `StageRootsFor` + the equality tripwire at both binds, proven across all 8 chapters —
+   **landed as Decision 1's guarded-table fallback**, see B2's Outcome
 3. ☐ The hand root-tables die; the derivation becomes the stage's source
 
 ## Dependency and parallelism notes
@@ -148,7 +149,7 @@ them, don't summarize them.
 
 # Wave B — the derivation, and the tables die
 
-## B2 ☐ `StageRootsFor` + the equality tripwire at both binds, proven across all 8 chapters
+## B2 ☑ `StageRootsFor` + the equality tripwire at both binds, proven across all 8 chapters
 
 **Goal.** The catalogue computes the anchor-root closure of its names against a bound program and
 gamez, under Decision 3's three-way rule; a tripwire asserts derived == hand table at the world
@@ -178,6 +179,28 @@ failing once (remove a root from the hand table copy, watch equality break).
 **⚠ Traps.** A mismatch is Decision 1's fallback, not an obstacle: stop, keep the hand table +
 validation, record why. The crash bind is per-plane (wreck subtrees vary) — run its check on at
 least two airframes. Do not touch `EnsureWorldEffects`' seal or signature.
+
+**Outcome (2026-08-05) — Decision 1's fallback, and it earned its keep.** `StageRootsFor` landed and
+the tripwire is green on all 8 chapters at both binds (crash on `player_bhawk` + `player_pfighter`),
+but **derived ≠ hand table**, three ways, and all three are knowledge the tables encode and the
+closure cannot:
+
+| # | Divergence | Verdict |
+|---|---|---|
+| 1 | `zep_can_dstry1.flt` (world) — `dblcannon_flying_parts`' own NAME | **Derivation corrected.** Every call reaching it carries an `AT_NODE` onto a zeppelin wreck whose subtree already has the `part1..8` it flings; C2's gamez has no node of the name at all, so a strict "resolves nowhere → fail" would break that one chapter. Curated out in `EffectCatalogue.CallSuppliedAnchors`. |
+| 2 | `player_pfighter` (crash) — `plane_reset`'s anchor | **Derivation corrected.** Authored against the Devastator's own model root; on the other ten airframes the rig's scope has nothing of the name and the def is inert. No chapter's gamez carries the node, so there is no template either way. `EffectCatalogue.AirframeScopedAnchors`. |
+| 3 | `ballflare.flt` (world) and `apassengers` (crash) | **The tables are wrong, and this is the find.** Both are single parentless roots in all 8 chapters that the bound defs anchor on with no `AT_NODE` to supply them — so both effects play nothing today. Staging them is a behaviour change B2 must not make; named as KNOWN gaps in `WorldEffectsFactory.WorldStageRootGaps`/`CrashTemplateRootGaps` and filed as `BL-262`. |
+
+`ballflare.flt` is why the fallback was the right call: `analysis/effect-anchor-roots/anchor_roots.py`
+keys definitions by `ANIMATION_NAME` and that definition declares only a `NAME`, so the offline
+instrument never reached it — the derivation running against the *bound* program found a silent miss
+its own source could not see (INSTR-11's shape again).
+
+**What this means for B3.** The tables cannot simply die: deleting them deletes rows 1–3's curation
+with them. B3's shape is now (a) close `BL-262` (stage both roots, re-pin whatever moves), then
+(b) delete the tables, with rows 1 and 2 surviving as catalogue curation beside `EffectAnimNames`'
+exclusions. The derived set is returned **sorted**, so `_pools.DepthFor`/`SlotsFor` iterating it will
+not see the hand tables' authored order — B3's own ⚠ about slot assignment applies.
 
 ## B3 ☐ The hand root-tables die; the derivation becomes the stage's source
 

@@ -1,6 +1,28 @@
+using System;
+using System.Collections.Generic;
 using CSVM.Flight;
+using CSVM.Mech3;
 
 namespace CSVM.Session;
+
+/// <summary>Where one definition's anchor lives, as the bind that stages it can see it. The rule is
+/// uniform across the world-effects and the crash bind; only the lookup differs, which is why
+/// <see cref="EffectCatalogue.StageRootsFor"/> takes it as a delegate.</summary>
+public enum AnchorPlacement
+{
+    /// <summary>A parentless gamez template root: the bind must build a copy of it. A root left out
+    /// leaves every def anchored on it unanchored, so it plays nothing at all.</summary>
+    Stage,
+
+    /// <summary>Already inside the bind's own scope — a child of a root it stages anyway
+    /// (<c>ap_cracks</c> under <c>ap_effect</c>), the crash scaffold's <c>player</c>/<c>healthy</c>/
+    /// <c>destroyed</c>/pieces, the plane's own parts. Satisfied; nothing to build.</summary>
+    InScope,
+
+    /// <summary>Resolves nowhere. The def would anchor on nothing and play silently — the failure
+    /// this derivation exists to make loud.</summary>
+    Missing,
+}
 
 /// <summary>The record of which authored anims are playable effects, and what their defs need
 /// staged. Owns the name tables every effect producer must stay inside — <see cref="WorldEffectsFactory"/>
@@ -53,6 +75,26 @@ public static class EffectCatalogue
     public static readonly string[] PlaneDamageEffectAnims =
         { "nose_damage_effects", "tail_damage_effects", "leftwing_damage_effects", "rightwing_damage_effects" };
 
+    // Anchors the mechanical closure below reports that no bind stages, because the CALL that
+    // reaches the definition supplies its anchor instead of its own NAME. Curation, not derivation:
+    // the closure walks NAMEs and cannot see either of these, which is why both root tables are
+    // still hand-written and this derivation only cross-validates them.
+    //
+    // `zep_can_dstry1.flt` is `dblcannon_flying_parts`' NAME, and every call reaching it carries an
+    // AT_NODE — `zep_ng_dstry1.flt` (from `biggun_flying_parts`), `zep_main_dstry1.flt`,
+    // `doublecannon*` — each a zeppelin wreck whose own subtree carries the `part1`..`part8` the def
+    // flings, and a seeded `--effects-test --debug-anim` reports that retarget resolving with no
+    // UNRESOLVED tag. C2's gamez has no node of the name at all, so treating it as a needed root
+    // would fail that one chapter for an effect that has always played.
+    public static readonly string[] CallSuppliedAnchors = { "zep_can_dstry1.flt" };
+
+    // The crash defs' authored airframe anchor. `plane_reset` (and `pdpanel5`) are written against
+    // the Devastator's own model root, so on that airframe the rig's scope has it and on the other
+    // ten it has nothing of the name and the def is simply inert. Not a staging gap: no chapter's
+    // gamez carries a `player_pfighter` node at all (0 occurrences in all 8), so there is no
+    // template to stage either way.
+    public static readonly string[] AirframeScopedAnchors = { "player_pfighter" };
+
     /// <summary>The graze reaction's per-surface touchdown def (<c>FlightController.GrazeReaction</c>):
     /// sparks off a hard building surface, dust off unclassified terrain, a splash off water — the
     /// same three names in <see cref="EffectAnimNames"/>' graze-reaction entries above. Pure, so the
@@ -63,4 +105,98 @@ public static class EffectCatalogue
         SurfaceClass.Buildings => "touchdown_default",
         _ => "touchdown_dirt",
     };
+
+    /// <summary>The anchor-root closure of <paramref name="names"/> against a bound program — what a
+    /// bind must stage for every definition those names can reach to have something to anchor on.
+    /// The mechanical half of <c>analysis/effect-anchor-roots/</c>, run at build instead of offline:
+    /// walk the transitive CALL_ANIMATION closure (<see cref="AnimProgram.Subset(IEnumerable{string})"/>),
+    /// take each reached definition's NAME — the gamez node its instance anchors on — and ask
+    /// <paramref name="resolveRoot"/> where that node lives.
+    ///
+    /// <para><paramref name="resolveRoot"/> is the caller's lookup, so the world-effects bind and the
+    /// per-player crash bind share this one function with different scopes. Anchors listed in
+    /// <see cref="CallSuppliedAnchors"/>/<see cref="AirframeScopedAnchors"/> are dropped before it is
+    /// asked — see their own remarks for why the closure over-reports them.</para>
+    ///
+    /// <para>Sorted, so no caller's staging order can depend on definition load order.</para></summary>
+    /// <exception cref="EffectAnchorException">an anchor resolves nowhere: the definition would
+    /// anchor on nothing and play nothing at all, silently.</exception>
+    public static IReadOnlyList<string> StageRootsFor(AnimProgram program, IEnumerable<string> names,
+        Func<string, AnchorPlacement> resolveRoot)
+    {
+        // anchor → the animation names anchored on it, so a failure can name the definition and not
+        // just the missing node.
+        var anchors = new SortedDictionary<string, SortedSet<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var def in program.Subset(names).Defs)
+        {
+            if (string.IsNullOrEmpty(def.Name) || SuppliedElsewhere(def.Name))
+                continue;
+            if (!anchors.TryGetValue(def.Name, out var animNames))
+                anchors[def.Name] = animNames = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+            animNames.Add(def.AnimName ?? def.Name);
+        }
+
+        var staged = new List<string>();
+        var missing = new List<string>();
+        foreach (var (anchor, animNames) in anchors)
+        {
+            switch (resolveRoot(anchor))
+            {
+                case AnchorPlacement.Stage:
+                    staged.Add(anchor);
+                    break;
+                case AnchorPlacement.InScope:
+                    break;
+                default:
+                    missing.Add($"'{anchor}' (anchors {string.Join("/", animNames)})");
+                    break;
+            }
+        }
+        if (missing.Count > 0)
+            throw new EffectAnchorException(missing);
+        return staged;
+    }
+
+    private static bool SuppliedElsewhere(string anchor)
+    {
+        foreach (var name in CallSuppliedAnchors)
+            if (string.Equals(name, anchor, StringComparison.OrdinalIgnoreCase))
+                return true;
+        foreach (var name in AirframeScopedAnchors)
+            if (string.Equals(name, anchor, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
+    }
+}
+
+/// <summary>An effect definition's anchor resolves nowhere in the bind asked to stage it. Carries
+/// the anchor names with the animations that wanted them, because "which def" is the half a bare
+/// node name cannot answer.</summary>
+public sealed class EffectAnchorException : Exception
+{
+    public EffectAnchorException(IReadOnlyList<string> anchors)
+        : base($"effect anchor(s) resolve nowhere: {string.Join("; ", anchors)}")
+    {
+        Anchors = anchors;
+    }
+
+    public EffectAnchorException()
+        : this(Array.Empty<string>())
+    {
+    }
+
+    public EffectAnchorException(string message)
+        : base(message)
+    {
+        Anchors = Array.Empty<string>();
+    }
+
+    public EffectAnchorException(string message, Exception inner)
+        : base(message, inner)
+    {
+        Anchors = Array.Empty<string>();
+    }
+
+    /// <summary>One entry per unresolvable anchor, each naming the animations anchored on it.</summary>
+    public IReadOnlyList<string> Anchors { get; }
 }

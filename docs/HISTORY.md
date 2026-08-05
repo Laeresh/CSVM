@@ -15636,3 +15636,46 @@ entry (only the Devastator, node name `player_pfighter`, carries one) against `P
 Verified: `.\RunTests.ps1` green (450 unit tests, 29/29 in-engine suites, 13/13 goldens
 hash-identical against this item's starting HEAD — pure motion, as intended); each of the three
 tripwires independently confirmed red (a name dropped from the catalogue/array) then restored green.
+
+## 2026-08-05 — the effect anchor-root derivation lands as a tripwire, and finds two roots nothing stages
+
+`PLAN-effect-catalogue` B2. `EffectCatalogue.StageRootsFor(program, names, resolveRoot)` computes
+the anchor-root closure of a name set against a **bound** program — the mechanical half of
+`analysis/effect-anchor-roots/` run at build instead of offline: walk `AnimProgram.Subset`'s
+transitive CALL_ANIMATION closure, take each reached definition's NAME (the gamez node its instance
+anchors on), and resolve it three ways (parentless gamez root → stage it; already inside the bind's
+own scope → satisfied; nowhere → `EffectAnchorException` naming the anchor **and** the animations
+on it). `resolveRoot` is caller-supplied, so `WorldEffectsFactory.StageRootResolver` serves the
+world-effects bind (gamez only) and the per-player crash bind (gamez, then the bound controller
+subtree) from one function (WORLD-21). Equality tripwires at both binds: `effects-census` gained a
+world condition and a crash condition on a replica of the crash rig's own bind scope, run for
+`player_bhawk` and `player_pfighter`; `BuildFlightCrashRuntime` runs the same check at the real
+bind and warns on drift. **No behaviour change** — nothing in the staging path moved, and both hand
+tables are untouched.
+
+**Derived ≠ hand table, three ways** — this is Decision 1's documented fallback, taken deliberately.
+(1) `zep_can_dstry1.flt`: every call reaching `dblcannon_flying_parts` carries an `AT_NODE` onto
+a zeppelin wreck whose subtree already has the `part1..8` it flings, and C2's gamez has no node of
+that name at all, so a strict rule would fail that chapter — curated out in
+`EffectCatalogue.CallSuppliedAnchors`. (2) `player_pfighter`: `plane_reset` is authored against
+the Devastator's own model root and is inert on the other ten airframes; no chapter carries the node
+— `AirframeScopedAnchors`. (3) **`ballflare.flt` (world) and `apassengers` (crash) are roots the
+bound defs genuinely need and neither table stages**, so the torpedo explosion's flare and the crash's
+passenger removal play nothing at all today. Staging them is a behaviour change B2 must not make, so
+both are named as KNOWN gaps (`WorldStageRootGaps`/`CrashTemplateRootGaps`) and filed as
+`BL-262`. `ballflare.flt` is the reason the derivation was worth building: the offline instrument
+keys definitions by `ANIMATION_NAME` and that one declares only a `NAME`, so it never entered
+that closure — the miss was invisible to its own source, and to `effects-census`, whose row for it
+resolves (INSTR-11).
+
+**8-chapter proof** (`RunProbe.ps1 --run-tests=effects-census --chapter=<X>`, one run each):
+C1 PASS, C1B PASS, C1C PASS, C2 PASS, C2B PASS, C3 PASS, C4 PASS, C5 PASS — exit 0, `pass=1 fail=0`,
+`38/38` roots staged and the census tallies unmoved at 30 puffered / 17 meshed in every one, with
+both crash-bind airframes green in every one. **Able to fail, both directions and both binds**: with
+`he_ring1` dropped from `EffectStageRoots`, `flame_ball_03` added to it and `flydirt` dropped
+from `EffectTemplateRoots`, C1 reported `needs but does not stage: he_ring1; stages but nothing
+anchors on: flame_ball_03` and `needs but does not stage: flydirt` on both airframes; restored,
+green. The first C1 run was red on `ballflare.flt` before it was named a gap — the find and the
+control in one. Full `.\RunTests.ps1` PASS, exit 0: 450 unit tests, 29/29 in-engine suites, 13/13
+goldens hash-identical. A live `--chapter=C1 --players=2 --plane=player_bhawk,player_pfighter` run
+binds both crash rigs with no drift warning, so the real bind and the suite replica agree.

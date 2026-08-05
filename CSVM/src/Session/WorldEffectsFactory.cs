@@ -85,6 +85,25 @@ public sealed class WorldEffectsFactory
     private static readonly string[] CrashAnchorNodes =
         { "healthy", "destroyed", "dontmove", "markers", "piece1", "piece2", "piece3", "piece4", "shadow", "cockpit1" };
 
+    // Roots the derivation asks for that the tables above do not stage — real silent misses, each
+    // named so the equality tripwire reports a KNOWN gap instead of drifting, and each a behaviour
+    // change to close rather than a table typo to fix.
+    //
+    // `ballflare.flt` is the torpedo explosion's flare, called by torpedo_ground_effect and
+    // torpedo_water_effect. The offline instrument could not see it: it keys definitions by
+    // ANIMATION_NAME, and this definition declares only a NAME, so it sat in that script's null
+    // bucket and never entered the closure. A single parentless root in all 8 chapters, and its
+    // only node is itself — unlike the AT_NODE case in EffectCatalogue.CallSuppliedAnchors, the
+    // retarget target's subtree cannot supply it, so today the flare plays nothing at all.
+    private static readonly string[] WorldStageRootGaps = { "ballflare.flt" };
+
+    // `rem_pas` (anchor `apassengers`) is called by both crash variants with NO AT_NODE, so it
+    // anchors on its own template root — which this rig has never staged, so the crash's
+    // passenger-removal step plays nothing. Listed by analysis/effect-anchor-roots/FINDINGS.md
+    // among the 11 roots the crash closure needs; the table shipped with 11 that swapped it for
+    // `yellow_spark_02`.
+    private static readonly string[] CrashTemplateRootGaps = { "apassengers" };
+
     private readonly SessionSpec _spec;
     private readonly Node3D _worldRoot;
     private readonly Func<Vector3> _playerPosition;
@@ -141,6 +160,63 @@ public sealed class WorldEffectsFactory
             }
         }
         return n;
+    }
+
+    /// <summary>The anchor lookup both binds hand <see cref="EffectCatalogue.StageRootsFor"/>
+    /// (WORLD-21 — one resolver, two scopes): a parentless gamez node is a template ROOT the bind
+    /// must build; any other gamez node of that name rides inside one already staged above it
+    /// (<c>ap_cracks</c> under <c>ap_effect</c>); a name the bind's own <paramref name="scope"/>
+    /// already carries — the crash rig's <c>player</c> scaffold, its wreck, the plane's own parts —
+    /// is satisfied without a template; anything else resolves nowhere. Gamez roots are tested FIRST,
+    /// so a template the scope has already staged still reads as a root it needs.</summary>
+    public static Func<string, AnchorPlacement> StageRootResolver(GameZ gamez, Node3D? scope = null)
+    {
+        var parented = new HashSet<int>();
+        foreach (var n in gamez.Nodes)
+            foreach (var c in n.Children)
+                parented.Add(c);
+        var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var n in gamez.Nodes)
+        {
+            known.Add(n.Name);
+            if (!parented.Contains(n.Index))
+                roots.Add(n.Name);
+        }
+        var inScope = scope != null ? NamesUnder(scope) : null;
+        return name =>
+        {
+            if (roots.Contains(name))
+                return AnchorPlacement.Stage;
+            if (inScope != null && inScope.Contains(name))
+                return AnchorPlacement.InScope;
+            return known.Contains(name) ? AnchorPlacement.InScope : AnchorPlacement.Missing;
+        };
+    }
+
+    /// <summary>The world-effects bind's equality tripwire: does the derivation still say what
+    /// <see cref="EffectStageRoots"/> says, up to <see cref="WorldStageRootGaps"/>? Null when it
+    /// agrees, else the difference, named — a root the hand table would have to gain, or one it
+    /// carries that nothing anchors on. Run as an <c>effects-census</c> condition, per chapter,
+    /// because the answer is chapter data.</summary>
+    public static string? WorldStageRootDrift(AnimProgram program, GameZ gamez) =>
+        Drift("EffectStageRoots", EffectStageRoots,
+            () => EffectCatalogue.StageRootsFor(program, EffectCatalogue.EffectAnimNames,
+                StageRootResolver(gamez)),
+            WorldStageRootGaps);
+
+    /// <summary>The crash bind's half of the same tripwire, against
+    /// <see cref="EffectTemplateRoots"/>. Per-plane: <paramref name="rigScope"/> is the bound
+    /// controller subtree, whose wreck and part names vary by airframe.
+    /// <see cref="CrashTemplateRootGaps"/> is subtracted — a root the derivation asks for that the
+    /// rig knowingly does not stage.</summary>
+    public static string? CrashStageRootDrift(AnimProgram program, GameZ gamez, Node3D rigScope)
+    {
+        var rigAnims = new List<string>(EffectCatalogue.CrashDefNames);
+        rigAnims.AddRange(EffectCatalogue.PlaneDamageEffectAnims);
+        return Drift("EffectTemplateRoots", EffectTemplateRoots,
+            () => EffectCatalogue.StageRootsFor(program, rigAnims, StageRootResolver(gamez, rigScope)),
+            CrashTemplateRootGaps);
     }
 
     /// <summary>Builds the meshless <see cref="CrashAnchorNodes"/> under a 'player' root — the crash
@@ -268,9 +344,69 @@ public sealed class WorldEffectsFactory
         if (controller.PlaneModel != null)
             CollectVisibility(controller.PlaneModel, planeVis);
         controller.CrashPlaneVisibility = planeVis;
+        // The staged set against the one the bound defs actually ask for, per plane (the wreck and
+        // part names vary by airframe). A silent drift here is the failure mode EffectTemplateRoots'
+        // own remark names, so it is said out loud at the bind rather than left to a suite.
+        if (CrashStageRootDrift(crashProgram, gamez, controller) is { } drift)
+            Log.Warn("anim", $"crash rig '{planeName}': {drift}");
         if (verbose)
             GD.Print($"data-crash: {effectRoots} effect template(s) + {restPoses.Count} wreck node(s) — "
                      + "crash runtime bound (scoped, no auto-start)");
+    }
+
+    /// <summary>Every name a bind's own scope answers — the Godot node name and the gamez
+    /// <see cref="AnimRuntime.NameMeta"/> both, since name resolution reads the meta.</summary>
+    private static HashSet<string> NamesUnder(Node root)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var queue = new Queue<Node>();
+        queue.Enqueue(root);
+        while (queue.Count > 0)
+        {
+            var node = queue.Dequeue();
+            names.Add(node.Name.ToString());
+            if (node.HasMeta(AnimRuntime.NameMeta))
+                names.Add(node.GetMeta(AnimRuntime.NameMeta).AsString());
+            foreach (var child in node.GetChildren())
+                queue.Enqueue(child);
+        }
+        return names;
+    }
+
+    /// <summary>Derived vs hand table, as one line or null. The derivation's own structured error is
+    /// reported rather than thrown: this is a tripwire, and a chapter whose data cannot satisfy an
+    /// anchor is exactly what it exists to say.</summary>
+    private static string? Drift(string table, IEnumerable<string> hand,
+        Func<IReadOnlyList<string>> derive, IEnumerable<string> knownGaps)
+    {
+        IReadOnlyList<string> derived;
+        try
+        {
+            derived = derive();
+        }
+        catch (EffectAnchorException e)
+        {
+            return $"{table}: derivation failed — {e.Message}";
+        }
+        var staged = new HashSet<string>(hand, StringComparer.OrdinalIgnoreCase);
+        var wanted = new HashSet<string>(derived, StringComparer.OrdinalIgnoreCase);
+        var gaps = new HashSet<string>(knownGaps, StringComparer.OrdinalIgnoreCase);
+        var missing = new List<string>();
+        foreach (var name in derived)
+            if (!staged.Contains(name) && !gaps.Contains(name))
+                missing.Add(name);
+        var spare = new List<string>();
+        foreach (var name in hand)
+            if (!wanted.Contains(name))
+                spare.Add(name);
+        if (missing.Count == 0 && spare.Count == 0)
+            return null;
+        var parts = new List<string>();
+        if (missing.Count > 0)
+            parts.Add($"needs but does not stage: {string.Join(", ", missing)}");
+        if (spare.Count > 0)
+            parts.Add($"stages but nothing anchors on: {string.Join(", ", spare)}");
+        return $"{table}: {string.Join("; ", parts)}";
     }
 
     private static void CollectRestPoses(Node3D node, List<(Node3D, Transform3D)> into)

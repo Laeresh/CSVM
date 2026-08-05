@@ -508,6 +508,29 @@ extracted data before being logged, so the mechanism is recorded here and not re
   of them) gate it differently, and (c) what the field's raw offset is in the e24 struct.
   `analysis/wait-for-completion/callee_shapes.py` already walks every def and can be pointed at it.
 
+### Effect template roots nothing stages (found 2026-08-05 by the derivation tripwire)
+
+- `BL-262` **Two anchor roots the bound effect defs ask for are staged by neither table, so two
+  authored effects play nothing at all.** Found by `PLAN-effect-catalogue` B2's derivation
+  (`EffectCatalogue.StageRootsFor`) run against the hand tables, not by any census — the
+  `effects-census` rows for both still read as resolved, which is the whole reason B2 exists.
+  (a) **`ballflare.flt`** — the torpedo explosion's flare, called by `torpedo_ground_effect` and
+  `torpedo_water_effect` (`AT_NODE torp_effects +0,5,0`). Missing from `EffectStageRoots`; its only
+  node is itself, so unlike `zep_can_dstry1.flt` the retarget target's subtree cannot supply it.
+  A single parentless root in all 8 chapters.
+  (b) **`apassengers`** — `rem_pas`, called by both crash variants with **no** `AT_NODE`, so it
+  anchors on its own template root. Missing from `EffectTemplateRoots`;
+  `analysis/effect-anchor-roots/FINDINGS.md` listed it among the crash rig's 11 roots and the table
+  shipped with a different 11.
+  ⚠ Staging either is a **behaviour change**, not a table typo — B2 deliberately did not make it, so
+  the goldens stayed hash-identical. Both are named in `WorldEffectsFactory`'s
+  `WorldStageRootGaps`/`CrashTemplateRootGaps`, and the equality tripwire reports them as KNOWN gaps;
+  closing this item means deleting the name from that list in the same commit that stages it, and
+  re-pinning whatever moves (the census tallies, `c1-destroy-effects`, `c1-crash`).
+  ⚠ The offline instrument is blind to (a): `analysis/effect-anchor-roots/anchor_roots.py` keys defs
+  by `ANIMATION_NAME`, and `ballflare.flt` declares only a `NAME`, so it never entered that closure.
+  Fix the script when this lands, or the next re-run repeats the miss.
+
 ### Surfaces, colliders and inspect tools (from the Wave D playtest, 2026-07-25)
 
 ### HUD & audio

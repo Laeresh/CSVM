@@ -1929,8 +1929,64 @@ public static class Suites
                 runtime.Free();
                 stage.Free();
             }
+
+            // The derivation equality tripwire (world half). The census above proves the CURRENT
+            // names resolve; it cannot notice a NEW effect whose anchor root nobody staged, because
+            // that row simply resolves and the tallies do not move (INSTR-11). This asks the other
+            // question: does the anchor-root closure of the bound names still equal the hand table?
+            // Chapter data decides it, so it runs on whatever chapter the run was given.
+            var worldDrift = Session.WorldEffectsFactory.WorldStageRootDrift(world.Session.Program, world.Gamez);
+            ctx.Check(worldDrift is null,
+                $"the staged root set still equals the closure the bound effect names need — {ctx.Chapter}{Detail(worldDrift)}");
+
+            CrashStageRootTripwire(ctx, world);
         });
     }
+
+    /// <summary>The crash half of the same tripwire, on a replica of the crash rig's own bind scope
+    /// (the <c>player</c> crash root, the plane model, its <c>destroyed</c> wreck) — the scope
+    /// <c>BuildFlightCrashRuntime</c> resolves names in, minus the runtime itself, which the anchor
+    /// question does not need. Per-plane on purpose: the wreck and part subtrees vary by airframe,
+    /// and the Devastator is the one whose own model root a crash def names.</summary>
+    private static void CrashStageRootTripwire(TestContext ctx, TestWorld world)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter);
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var textures = new TextureArchive(texturesPath);
+        try
+        {
+            foreach (var model in new[] { "player_bhawk", "player_pfighter" })
+            {
+                var rigScope = new Node3D { Name = "player" };
+                rigScope.SetMeta(AnimRuntime.NameMeta, "player");
+                try
+                {
+                    var builder = new PlaneBuilder(planesGamez, textures);
+                    rigScope.AddChild(builder.Build(model));
+                    if (builder.BuildDestroyed(model) is { } wreck)
+                    {
+                        rigScope.AddChild(wreck);
+                    }
+                    ctx.Host.AddChild(rigScope);
+                    var drift = Session.WorldEffectsFactory.CrashStageRootDrift(
+                        world.Session.Program, world.Gamez, rigScope);
+                    ctx.Check(drift is null,
+                        $"{model}: the crash rig's template set still equals its closure — {world.Chapter}{Detail(drift)}");
+                }
+                finally
+                {
+                    rigScope.Free();
+                }
+            }
+        }
+        finally
+        {
+            textures.Dispose();
+        }
+    }
+
+    private static string Detail(string? drift) => drift is null ? "" : $" — {drift}";
 
     // ---- BL-240: bounce-terminated launches fly and land ---------------------------------------
 
