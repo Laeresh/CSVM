@@ -12,7 +12,8 @@ an item closes its ID retires with it and is never reused, so numbering gaps are
 Retired IDs disappear from this file, so never mint a new ID by scanning the entries below — run
 **`./New-ItemId.ps1 -Kind CAP`** (or `-Kind PT`), which increments a shared locked counter in
 `.git/item-id-counters.json` and is safe under concurrent sessions. Retired IDs' verdicts are in
-`docs/HISTORY.md`.
+the retiring commit's message (`git log --grep=<ID>`); pre-2026-08-06 retirements are in
+`docs/HISTORY.md` (frozen).
 
 **Captures staged for an item live in `playtest/<ID>/`** — git-ignored (they are renders of the
 player's own game files) and, unlike `.scratch/`, **not swept by `CleanScratch.ps1`**, so they

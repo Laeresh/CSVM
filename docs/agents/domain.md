@@ -22,8 +22,9 @@ tracked). Its equivalents, all binding:
   `gotchas.md` is the cross-cutting one, read before any reader/transform/shader work.
 - **`docs/verification.md`** — how to verify a change, and how the instruments lie.
   Read before measuring anything.
-- **`docs/plans/`** and **`docs/HISTORY.md`** — decision record. Completed plans keep
-  their dead ends; `HISTORY.md` is the dated log of what landed and how it was verified.
+- **`docs/plans/`** and **git log** — decision record. Completed plans keep their dead
+  ends; commit messages carry what landed and how it was verified (before the 2026-08-06
+  freeze, that record is `docs/HISTORY.md`'s dated entries).
 
 If `CONTEXT.md` or `docs/adr/` ever appear, read them too. Don't create them
 speculatively — `/domain-modeling` creates them lazily when a term or decision
@@ -49,7 +50,7 @@ inventing language the project doesn't use (reconsider) or there's a real gap
 
 ## Flag decision conflicts
 
-Decisions here live as dated entries in `docs/HISTORY.md`, `⚠` constraint lines in
+Decisions here live in commit messages (pre-freeze: dated `docs/HISTORY.md` entries), `⚠` constraint lines in
 `docs/architecture.md`, rules in `docs/verification.md`, and the archived plans in
 `docs/plans/` (which deliberately keep their dead ends). If your output
 contradicts one, surface it explicitly rather than silently overriding:

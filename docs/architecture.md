@@ -9,9 +9,9 @@ index line, then every still-binding constraint or deliberate-design marker as a
 Body ≤ ~8 lines (~12 for the heaviest modules). Entry order is historical, not grouped — the index
 is the map, grep is the lookup.
 
-Narratives, diagnoses, and landed-work stories do not live here: they get a short dated entry in
-`HISTORY.md`, and git history keeps the rest. Knowledge about the game's data formats belongs in
-`docs/formats/`, not here.
+Narratives, diagnoses, and landed-work stories do not live here: they go in the commit message,
+and git history keeps the rest (pre-2026-08-06 narratives: `docs/HISTORY.md`). Knowledge about the
+game's data formats belongs in `docs/formats/`, not here.
 
 ⚠ **A new or renamed module updates the index and its entry in the same edit.** Both are in this
   file precisely so they cannot drift apart; `PROJECT_CONTEXT.md` carries only the namespace-level
@@ -1418,8 +1418,10 @@ state, catch-up capped); `DriveAt` is the animation runtime's per-frame drive, d
 authored state — DISTANCE_INTERVAL trails per interval of actual host motion (CAP-15's density,
 `BL-259`; TrailPool-sized even on the sustained path, since the time-cadence pool floor silently
 dropped ~85% of a flight-speed trail), a still host keeps the time cadence (the static building
-sputters, whose distance can never elapse); `PufferState.FromAnimEvent` parses the compiled anim
-payloads.
+sputters, whose distance can never elapse), and the runtime's stop ends the trail as well as the
+emission (`PufferEmitter.SustainEnd` → `TrailEnd`), so a revived emitter re-homes rather than
+drawing a puff line from its pooled slot's previous call site (the rocket ghost trails);
+`PufferState.FromAnimEvent` parses the compiled anim payloads.
 Three config knobs scale `BaseSize` per spawn path — `puffer.burstSizeScale` /
 `puffer.trailSizeScale` / `puffer.sustainSizeScale` (`SizeScaleDefault` **1**, the authored
 SIZE_RANGE verbatim; the knobs remain for deliberate per-path tuning — the cull margin scales with

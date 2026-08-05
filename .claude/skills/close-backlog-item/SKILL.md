@@ -1,6 +1,6 @@
 ---
 name: close-backlog-item
-description: Close a resolved backlog.md item (and any playtest.md capture it owned) — retire the IDs, log the outcome in docs/HISTORY.md, and strike the caveat everywhere it was restated. Use when a BL-NNN is done, answered, superseded, or dropped.
+description: Close a resolved backlog.md item (and any playtest.md capture it owned) — retire the IDs, log the outcome in the closing commit's message, and strike the caveat everywhere it was restated. Use when a BL-NNN is done, answered, superseded, or dropped.
 ---
 
 Retire one `backlog.md` item now that it is settled. The work is bookkeeping, and the whole risk is
@@ -18,7 +18,7 @@ match wins; a phrase or missing ID means **ask**, never guess. A missing ID mean
 already deleted — say so rather than offering a near-numbered substitute.
 
 Read the entry and its enclosing section heading before touching anything. Then name which kind of
-close this is, because it changes what the history entry has to say:
+close this is, because it changes what the closure record has to say:
 
 - **Fixed** — code landed. The entry's *How you'd know it worked* line must have actually been run.
 - **Answered** — an open question settled by a capture, a measurement, or the user's call. Nothing
@@ -27,9 +27,9 @@ close this is, because it changes what the history entry has to say:
 - **Won't do** — out of scope by decision. Record the reason, not just the verdict.
 
 ⚠ **The user's decision is authoritative, but the evidence still gets written down.** If they close
-an item on a partial measurement, close it — and record in the history entry both what the evidence
-does establish and the hypothesis it cannot exclude, plus why that residue does not matter. An
-undocumented close reads months later as an unexplained disappearance.
+an item on a partial measurement, close it — and record in the closing commit's message both what the
+evidence does establish and the hypothesis it cannot exclude, plus why that residue does not matter.
+An undocumented close reads months later as an unexplained disappearance.
 
 ## 2. Delete the entry from `backlog.md`
 
@@ -41,8 +41,8 @@ Then check what the deletion breaks:
 
 - **Sibling entries that cite the ID.** Grep it. A citation inside a *narrative* ("split out of
   `BL-236`, now landed") is history and stays. A citation that sends a future reader to go *read*
-  the deleted entry for evidence or traps must be rewritten to carry the fact itself or point at
-  the `docs/HISTORY.md` entry instead.
+  the deleted entry for evidence or traps must be rewritten to carry the fact itself, or point at
+  a pre-freeze `docs/HISTORY.md` entry / the closing commit (`git log --grep=BL-NNN`) instead.
 - **A `*Playtest after fix:*` line** on the entry means an owed test that may now be actionable —
   if the fix landed and the test was not run, it moves to `playtest.md` rather than vanishing.
 
@@ -57,18 +57,19 @@ If it unblocks other `BL-NNN`s too, **keep it** and only drop this item from its
 Captures staged under `playtest/<ID>/` are git-ignored and **not** swept by `CleanScratch.ps1` —
 delete the folder with the item, or say you left it.
 
-## 4. Log the outcome in `docs/HISTORY.md`
+## 4. Log the outcome in the closing commit's message
 
-**Append a dated `##` entry at the bottom** (`## YYYY-MM-DD — <what is now true>`). History is a
-chronological record: never rewrite an old entry to make it retroactively correct.
+The closure record lives in the commit message of the commit that deletes the entry
+(`docs/HISTORY.md` is frozen as of 2026-08-06 — never append to it or edit it). Since this skill
+does not commit unless asked, **draft the message now**, while the evidence is in context: `Write`
+it to a file so the eventual commit is `git commit -F <file>` (per CLAUDE.md), whether that commit
+happens on request here or later via `/commit-next`.
 
-Cover, in prose: what settled it and how it was measured or decided; what that rules out; the honest
-limit of the evidence and why it does not reopen the question; what changed in the build (often
-"nothing — the constant it confirms was already shipping") and whether goldens moved.
-
-⚠ **Staple a forward-pointer onto the older entry that filed the item**, in bold, in place — a
-reader who lands on the original caveat must not stop there believing it still stands. This is the
-one edit to old history that is allowed, because it adds a pointer rather than revising the account.
+Subject: `Close BL-NNN: <what is now true>`. Body, in prose: what settled it and how it was
+measured or decided; what that rules out; the honest limit of the evidence and why it does not
+reopen the question; what changed in the build (often "nothing — the constant it confirms was
+already shipping") and whether goldens moved. A future reader finds this via
+`git log --grep=BL-NNN`.
 
 ## 5. Strike the caveat where it was *restated* — the step that gets missed
 
@@ -82,7 +83,9 @@ Everywhere it turns up — `docs/formats/*.md`, `docs/architecture.md`, `docs/ve
 settled fact and the evidence that settled it. Keep any ⚠ that is still true (a trap about *how* the
 mechanism works outlives the question of whether it was right).
 
-Finish with a grep of the ID across the repo: the only hits left should be in `docs/HISTORY.md`.
+Finish with a grep of the ID across the repo: the only hits left should be pre-freeze entries in
+the frozen `docs/HISTORY.md` — no hits in any live file. (Post-freeze retirements live only in
+commit messages: `git log --grep=<ID>`.)
 
 ## 6. Verify and report
 

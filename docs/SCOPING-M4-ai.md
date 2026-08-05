@@ -730,8 +730,8 @@ Carried from every prior plan here; they apply unchanged.
   data/code before building on it; **a correct disproof that lands no code is a success here.** Every
   item's Evidence line carries its confidence.
 - **`CLAUDE.md` + `docs/architecture.md` / `docs/formats/` are updated in the same turn** as each
-  landed item; a landed item gets a dated `docs/HISTORY.md` entry and is **deleted** from
-  `backlog.md`. New decodes land with their `docs/formats/` page.
+  landed item; a landed item gets its record in the landing commit's message and is **deleted**
+  from `backlog.md`. New decodes land with their `docs/formats/` page.
 - **Read `docs/verification.md` before measuring anything** — the instruments here mislead; cite the
   rule that bites per item.
 - **Verify against a full 8-chapter `--freecam --chapter=<X>` regression** (zero errors, same

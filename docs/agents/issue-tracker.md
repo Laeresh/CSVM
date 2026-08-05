@@ -30,7 +30,8 @@ Read the named section of `backlog.md`, or the checklist item in the live
 `PROJECT_CONTEXT.md` binds these, and they apply to skill output too:
 
 - **Delete the `backlog.md` entry.** A `FIXED`/closed entry does not stay there.
-- Append a dated entry to `docs/HISTORY.md`: what landed, how verified, outcome.
+- Record in the landing commit's message body: what landed, how verified, outcome.
+  (`docs/HISTORY.md` is frozen 2026-08-06 — never append to it.)
 - Tick the live plan's checklist and **swap** the "Current status" next-step
   pointer in `PROJECT_CONTEXT.md` — that section may only get shorter, never longer.
 - A way a *measurement* can mislead → a transferable rule in `docs/verification.md`.

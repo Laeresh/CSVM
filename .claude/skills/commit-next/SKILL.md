@@ -16,14 +16,15 @@ First find the **active plan**: PROJECT_CONTEXT.md's "Current status / next step
 Before committing, confirm the plan reflects the work you just did — per the plan's own ground rules this is part of the change, not a follow-up:
 - The item you just finished is flipped to ☑ in the plan's `## Checklist`.
 - PROJECT_CONTEXT.md "Current status" is refreshed (current state + next step only).
-- A dated entry is appended to `docs/HISTORY.md`, and any docs/formats or architecture updates the item requires are in.
+- Any docs/formats or architecture updates the item requires are in. (No `docs/HISTORY.md` entry — that file is frozen; the commit message body is the record now.)
 
 If any of that is missing, make those edits **now**, before the commit, so they land together.
 
 Then commit ALL current changes as one commit:
 - Run `git status --short` and `git diff --stat HEAD` to see the state. If there is nothing to commit, say so and skip to step 2.
 - `git add -A`, then `git commit`.
-- **Message style** matches `git log --oneline -5`: `M3 Wave <X> <item(s)>: <what landed>` (e.g. `M3 Wave B B18: weapon selectors`). Name the item(s) you actually implemented this session — you know them from context; don't reverse-engineer them from the diff.
+- **Message style**: subject line matches `git log --oneline -5`: `M3 Wave <X> <item(s)>: <what landed>` (e.g. `M3 Wave B B18: weapon selectors`). Name the item(s) you actually implemented this session — you know them from context; don't reverse-engineer them from the diff.
+- **The message body is the durable record** (it replaced `docs/HISTORY.md`, frozen 2026-08-06): what landed, how it was verified (test counts, golden results, screenshot A/Bs), and any diagnosis dead ends worth not re-chasing. Write it while you still have the session context. Multi-line message → `Write` it to a file and `git commit -F <file>` (per CLAUDE.md).
 - End the message with a `Co-Authored-By:` trailer on its own line, naming whichever agent and
   model is actually running this session (not a fixed name) — e.g.
   `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
@@ -48,7 +49,7 @@ Weigh the just-finished item against the next one:
 
 - **Continue (no clear)** — the next item touches the **same file(s)/module(s)** you just edited, is the **next link in a dependency chain** (e.g. B11 → B12 per the plan's dependency notes), or **relies on something established this session that isn't yet written to a doc** (a measured baseline, a hard-won mental model of a gnarly file). Clearing would re-pay exactly that cost. This is the case worth catching.
 - **`/compact`** — related, but the session is **long and full of exploration or dead ends**. Compact keeps the distilled thread (what shipped, the live findings) and sheds the transcript noise — continuity at a lower token cost than carrying everything forward.
-- **`/clear`** — the next item is **independent**: a different wave/module, no shared files, nothing it needs beyond the plan + docs (which a fresh context reloads cheaply). Safest against stale assumptions, and the loop's default. Because each item lands its own `docs/HISTORY.md` + `docs/` updates, most durable context is already on disk, so a clear rarely loses anything that matters — the exception is the un-written in-session context the "continue" case is about.
+- **`/clear`** — the next item is **independent**: a different wave/module, no shared files, nothing it needs beyond the plan + docs (which a fresh context reloads cheaply). Safest against stale assumptions, and the loop's default. Because each item lands its own commit-message record + `docs/` updates, most durable context is already on disk, so a clear rarely loses anything that matters — the exception is the un-written in-session context the "continue" case is about.
 
 State it as one line: **Recommend: `<continue | /compact | /clear>` — `<why>`.** When the plan names a tier for the next item, append it: **Next item wants `<tier>` (this session: `<tier>`).**
 
@@ -63,7 +64,7 @@ Implement item <ID> — <one-line title> — from <active plan path> (the M3 wea
 
 Before writing code: read that item's full "### <ID>" detail in the plan and the plan's "## Ground rules" and "## ⚠ Read this before implementing anything" sections, plus the docs/architecture.md entry for every module you'll touch. Verify data against the extracted JSON — never guess a value.
 
-Land it complete in the same turn: follow the plan's Verify step, update docs/formats or docs/architecture as the item requires, append a dated docs/HISTORY.md entry, flip the checklist item to ☑, and refresh PROJECT_CONTEXT.md "Current status". Commit only when I ask (with /commit-next).
+Land it complete in the same turn: follow the plan's Verify step, update docs/formats or docs/architecture as the item requires, flip the checklist item to ☑, and refresh PROJECT_CONTEXT.md "Current status". The verification record goes in the commit message. Commit only when I ask (with /commit-next).
 ~~~
 
 First copy that exact prompt text into the clipboard with the PowerShell tool, using a single-quoted here-string (closing `'@` at column 0):

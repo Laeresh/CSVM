@@ -1,6 +1,6 @@
-# Development history — Milestone 2 log
+# Development history — ARCHIVED 2026-08-06
 
-Chronological record of landed work with verification details, moved from CLAUDE.md's "Current status / next step" section on 2026-07-18. **Append new dated entries at the bottom when work lands**; CLAUDE.md keeps only the compact current state + next step. Entries deliberately preserve diagnosis narratives and dead ends — they exist so future sessions don't re-chase them.
+**Frozen — no new entries, no edits.** Landed work since this date is recorded in git commit messages (`git log`). This file is kept in place because live docs cite its dated entries by path and `New-ItemId.ps1`'s re-seed procedure scans it for retired IDs. Entries below are as-written at the time (2026-07-14 → 2026-08-05) — read them as history, not current state. They deliberately preserve diagnosis narratives and dead ends — they exist so future sessions don't re-chase them.
 
 **Milestone 1 (extraction) is essentially already delivered by mech3ax v0.6.1** — the planned RE work is reduced to (a) the cosmetic planes.zbd padding nit (upstream PR candidate) and (b) the deferred anim formats.
 
@@ -16634,3 +16634,30 @@ the crash fire (`large_10sec_fire` → `fire_n_smoke`) is live at that shot's fr
 tuned rise/lifetime moves its pixels by design; the other four puffer-bearing goldens held,
 confirming the name scoping. Full clean re-run after the re-pin: 13/13. `BL-275` deleted from
 the open backlog; its TUNE entry carries the two numbers and the sign-off playtest.
+
+## 2026-08-06 — rocket explosion ghost trails: a revived distance-state emitter re-homes instead of trailing from its slot's last blast
+
+Firing rockets grew fire-puff trails that streaked from a previous explosion point to each new
+detonation, one more per rocket (user report at the controls, 2026-08-06). Regression from
+`BL-259`/D11 (2026-08-05): `PufferEmitter.SustainAt` began dispatching through `Puffer.DriveAt`,
+whose DISTANCE_INTERVAL branch (`TrailAdvance`) interpolates one puff per interval metre between
+the last driven position and the current one. The world-effects pool teleports each effect
+template's root to its call site (`AnimRuntime.PlaceTemplateAt`) and `EmitterDirector`
+pauses/revives emitters across slot reuses — but `Puffer.SustainEnd` clears only `_sustaining`,
+so a revived emitter kept `_trailing`/`_trailPrev` from the previous blast and drew a puff line
+across the whole jump (`he_trails`' spurtpuffer1–5 + `large_fireball`'s fierypuffer, up to 4
+slots × 6 states).
+
+Fix: `PufferEmitter.SustainEnd` (the runtime's stop adapter, behind every `EmitterDirector`
+stop) now calls `Puffer.TrailEnd()` alongside `SustainEnd()`, so a stop ends the trail with the
+emission and a revival re-homes at the new site; live puffs still decay naturally. The projectile
+pool's own flyout trails already managed `TrailEnd` themselves and are untouched.
+
+Verified: new `PufferTrailRevive` check in the `puffer-modes` suite (pause + 1000 m revive
+through the runtime's own adapter) — red pre-fix with 481 stray puffs along the jump, 0 after;
+A/B census of a deterministic 15 s `--fly --fire-rockets` run — identical until the first
+pool-slot reuse at ~4 s, then 2497 vs 265 live explosion particles; `.\RunTests.ps1` fully green
+(475 units, 29/29 suites, engine errors clean, 13/13 goldens hash-identical — `c1-crash`'s
+debris trails ride the same code and did not move); ghost trails confirmed gone at the controls
+(2026-08-06). Re-verified green on the merge with B5/B6 (`BL-276`/`BL-275`), whose fire changes
+share the puffer runtime.

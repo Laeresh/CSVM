@@ -9,8 +9,7 @@ can never be handed the same number. This replaced the hand-bumped "next free ID
 backlog.md / playtest.md after BL-253 and BL-262 were each minted twice by concurrent sessions.
 
 The JSON stores the LAST ISSUED number per kind. If the file is ever lost (fresh clone), re-seed
-it from the highest ID ever used — scan every *.md including docs/HISTORY.md, since retired IDs
-are never reused:  {"BL":282,"CAP":27,"PT":37}  was the state on 2026-08-05.
+it from the highest ID ever used — scan every *.md,since retired IDs are never reused.
 
 .EXAMPLE
 ./New-ItemId.ps1 -Kind BL           # -> BL-283
@@ -34,8 +33,8 @@ if ($LASTEXITCODE -ne 0 -or -not $gitCommon) {
 $counterPath = Join-Path $gitCommon 'item-id-counters.json'
 if (-not (Test-Path $counterPath)) {
     throw ("Counter file missing: $counterPath`n" +
-        'Re-seed it with the highest ID EVER used per kind (scan all *.md incl. docs/HISTORY.md; ' +
-        'retired IDs are never reused), e.g.: {"BL":282,"CAP":27,"PT":37}')
+        'Re-seed it with the highest ID EVER used per kind (scan all *.md incl. docs/HISTORY.md ' +
+        'AND git log --all; retired IDs are never reused), e.g.: {"BL":282,"CAP":27,"PT":37}')
 }
 
 # Exclusive open is the lock: a concurrent minter gets IOException and retries.
