@@ -65,13 +65,13 @@ public sealed class ViewerDamageTarget : IDamageLabTarget
     public void Tick(float dt) => _visuals.UpdateStatic(dt);
 }
 
-/// <summary>The flown aircraft (--fly/--stunt): the sliders write the real per-part armor and HP
-/// independently, so the HUD's DMG line, the damaged-engine mix and the gauge dial all follow —
-/// and a critical part's HP at 0 leaves the plane one hit from down, exactly as a graze would.
-/// Each pool is set through a dedicated single-pool <see cref="PlaneDamage.Apply(string,float,float)"/>
-/// call (armor's with healthDamage=0, health's with armorDamage=0) after a <see cref="PlaneDamage.Reset"/>,
-/// which is what lets the lab drive armor to 0 with health untouched or vice versa — the
-/// armor-first shot model a real hit uses cannot reach either extreme on its own.
+/// <summary>The flown aircraft (--fly/--stunt): the sliders write the real per-part armor and HP,
+/// so the HUD's DMG line, the damaged-engine mix and the gauge dial all follow — and a critical
+/// part's HP at 0 leaves the plane one hit from down, exactly as a graze would. Each pool is set
+/// through a dedicated single-pool <see cref="PlaneDamage.Apply(string,float,float)"/> call
+/// (armor's with healthDamage=0, health's with armorDamage=0) after a
+/// <see cref="PlaneDamage.Reset"/>, using fractions the lab already floored — armor can be
+/// driven to 0 with health untouched, but not the reverse.
 /// Nothing to tick: FlightController drives the visuals with the plane's live pose every frame,
 /// and UpdateStatic would fight it.</summary>
 public sealed class FlightDamageTarget : IDamageLabTarget
@@ -132,17 +132,20 @@ public sealed class FlightDamageTarget : IDamageLabTarget
 /// Two hosts, one panel. In --viewer the sliders ARE the damage state on a parked plane
 /// (ViewerDamageTarget). In --fly/--stunt they write P1's real PlaneDamage
 /// (FlightDamageTarget) while the sim keeps running, so a dialled-in state can be flown, and
-/// they mirror it back — a graze moves the sliders, and a respawn returns them to 100 %. The two
-/// sliders are independent (BL-085): armor can be driven to 0 with health untouched, or the
-/// reverse, which the armor-first shot model a real hit spends through cannot reach on its own.
+/// they mirror it back — a graze moves the sliders, and a respawn returns them to 100 %. Armor
+/// can be driven to 0 with health untouched (a partial hit the real armor-first model never
+/// fully exhausts), but not the reverse: <see cref="ReadSliders"/> floors a part's armor at 0
+/// whenever its health reads below full, since the real damage path never leaves health
+/// short of max while armor still stands — dragging the health slider takes armor down with it.
 ///
 /// F5 toggles the lab — panel AND gauges together, so it is genuinely present or absent
 /// (clean F12 shots). Every viewer and flight session builds one: with --damage it opens
 /// straight away, otherwise it waits hidden behind F5, which is what makes F5 mean something in
 /// a plain launch (previously the lab only existed when --damage was passed, so the key
 /// silently did nothing — user-reported). --damage=part:frac,… presets both sliders to the same
-/// fraction (there is no CLI syntax yet for the two pools independently), so --screenshot runs
-/// capture damage states deterministically in either mode.
+/// raw fraction and lands through the same write path as a hand drag, so a fraction below 1
+/// still floors armor at 0; --screenshot runs capture damage states deterministically in either
+/// mode.
 /// </summary>
 public sealed partial class DamageLab : Node
 {
@@ -407,7 +410,13 @@ public sealed partial class DamageLab : Node
         foreach (var part in _stats.DestroyableParts)
         {
             float healthFrac = (float)(_healthSliders[part.Name].Value / 100.0);
-            float armorFrac = _armorSliders.TryGetValue(part.Name, out var a) ? (float)(a.Value / 100.0) : 1f;
+            // Mirrors PlaneDamage.Apply: armor absorbs a round in full before any of it reaches
+            // health, so no state the real damage path can reach has health short of max while
+            // armor still stands. Armor alone can still be driven to 0 with health untouched — a
+            // hit that never fully exhausts it — but not the reverse.
+            float armorFrac = 1f;
+            if (_armorSliders.TryGetValue(part.Name, out var a))
+                armorFrac = healthFrac < 1f ? 0f : (float)(a.Value / 100.0);
             float combined = part.MaxHp + part.MaxArmor > 0f
                 ? (healthFrac * part.MaxHp + armorFrac * part.MaxArmor) / (part.MaxHp + part.MaxArmor)
                 : 0f;
@@ -445,6 +454,13 @@ public sealed partial class DamageLab : Node
                 _gauges?.OnPartDamage(name);
             _lastFractions[name] = f.Combined;
         }
+
+        // ReadSliders floors armor at 0 whenever health reads below full — pull the armor
+        // widget's own position down to match, so a slider raised while health is damaged
+        // snaps back instead of showing a value the fractions dict no longer honours.
+        foreach (var (name, f) in fractions)
+            if (_armorSliders.TryGetValue(name, out var armorSlider))
+                SyncSlider(armorSlider, f.Armor);
 
         UpdateReadouts(fractions);
 

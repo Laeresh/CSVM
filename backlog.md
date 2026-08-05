@@ -360,11 +360,6 @@ shape as `BL-259`/`BL-261`.
   subtree's own contents rather than inventing a lookup.
   *Playtest after fix:* fly C1B and C3 — a real dome should appear, C3's haze should read as
   daylight grey, and C1B should stay fogged above 1.2 km. `CAP-11` then judges the brightness.
-- `BL-278` **The damage lab's health slider does not zero armor.** At the controls (`PT-29`,
-  2026-08-05): moving the health slider should take armor to 0 with it. Everything else in the
-  in-flight lab passed the same sitting (live HUD/dial/rattle response, smooth dragging, scenery
-  grazes dropping the slider on their own, **R** restoring 100 %, and "repair all" clearing panels
-  and trail without a stutter), so this is the one behaviour left.
 - `BL-279` **Space is double-bound in freecam — it fires the guns *and* a freecam action.** Found
   in the weapon lab (`PT-30` (d), 2026-08-05). The `V` round trip to the impact point and back was
   judged **correct** in the same pass, so the toggle is not at fault; only the binding overlap is.

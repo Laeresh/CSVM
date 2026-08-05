@@ -16444,3 +16444,31 @@ stage still opens the default chapter's texture tier for plane skins) **and `rim
 font `5pointhud.png` + gun reticle `impact_point.png` — without it the HUD text/reticle are off,
 which the log names; B12's extraction kit must produce both). Full `.\RunTests.ps1` green in the
 worktree after the loader change.
+
+## 2026-08-05 — PLAN-m3-polish-9 A3 `BL-278`: the damage lab's health slider floors armor at 0, mirroring the real armor-first damage path
+
+`PlaneDamage.Apply` spends armor before health on every real hit — `FlightController.SurviveHit`'s
+graze path always calls the single-magnitude overload (armor and health damage equal), armor
+absorbs the whole round before any of it carries into health, so no state the real game reaches has
+health short of max while armor still stands. The damage lab's two per-part sliders didn't share
+that constraint: dragging health down left whatever the armor slider already read untouched
+(`PT-29`, 2026-08-05) — everything else in the in-flight lab (live HUD/dial/rattle response, smooth
+dragging, scenery grazes dropping the slider on their own, **R** restoring 100%, "repair all")
+had already passed the same sitting.
+
+`DamageLab.ReadSliders` (`CSVM/src/Flight/DamageLab.cs`) now floors a part's armor fraction at 0
+whenever its health fraction reads below 1; `Reapply` syncs the armor slider widget to match, so a
+raised armor slider snaps back while health is damaged. Armor alone can still be driven to 0 with
+health untouched — a partial hit that never fully exhausts it — just not the reverse. The fix lives
+entirely in the lab's own slider-read path; `PlaneDamage.Apply` (the real damage path) is
+untouched. `--damage=part:frac` presets land through the same write path, so a preset fraction
+below 1 now also floors that part's armor — `docs/cli.md`'s `--damage=` bullet and the
+`DamageLab.cs`/`docs/architecture.md` module docs updated to match. **R** (respawn) and "repair
+all" are unaffected: both set every slider straight to 100 (or call `PlaneDamage.Reset`), which
+never crosses the new floor.
+
+Verified: `.\RunTests.ps1` green — build, 475/475 units, 29/29 engine suites (engine errors clean),
+13/13 goldens hash-identical (`--damage=` is exercised by no golden shot, so none moved or were
+expected to). The interactive drag (health to 0, watch armor read 0; R restores both) is the user's
+own sign-off — no scripted CLI path exists to move only one of the two per-part sliders, so this is
+left to the controls per `docs/verification.md`'s "what this project cannot verify itself."

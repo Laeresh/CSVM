@@ -1674,18 +1674,20 @@ stopped pdpanelN cannot reach the trail it CALLed, and prop1's trail has no auth
 
 ## src/Flight/DamageLab.cs
 The damage lab (F5 toggles): one armor slider (parts the data gives an armor pool) plus one health
-slider per destroyable part, each independent (`BL-085`) — `PartFrac` (Health, Armor, Combined)
-is what an `IDamageLabTarget` reads/writes, `Combined` is `DamageLab`'s own derived (armorFrac×
-MaxArmor + healthFrac×MaxHp)/(MaxArmor+MaxHp), the scale the injure_anims thresholds and the
-mirrored GaugeCluster damage dial are on. Presets (--damage=part:frac) set both of a part's sliders
-to the same fraction (no CLI syntax yet for the two pools independently) and land through the same
-ValueChanged path as a hand drag. One panel, two hosts, chosen by the injected IDamageLabTarget
-(same file): ViewerDamageTarget drives DamageVisuals on a parked plane from `Combined` alone (it
-holds no model), FlightDamageTarget writes P1's real PlaneDamage — each pool through its own
-single-pool `PlaneDamage.Apply(part, healthDamage, armorDamage)` call after `Reset` (armor's with
-healthDamage=0, health's with armorDamage=0), which is what lets a slider pair reach armor=0/
-health=full or the reverse; the armor-first shot model a real hit spends through cannot reach
-either extreme on its own. Neither target reimplements visuals, only decides when to rebuild them.
+slider per destroyable part — `PartFrac` (Health, Armor, Combined) is what an `IDamageLabTarget`
+reads/writes, `Combined` is `DamageLab`'s own derived (armorFrac×MaxArmor + healthFrac×MaxHp)/
+(MaxArmor+MaxHp), the scale the injure_anims thresholds and the mirrored GaugeCluster damage dial
+are on. `ReadSliders` (`BL-278`) floors a part's armor at 0 whenever its health reads below 1,
+mirroring `PlaneDamage.Apply`'s armor-first real path (armor absorbs a round in full before any of
+it reaches health, so no reachable state has health short of max with armor still standing) —
+armor alone can still be driven to 0 with health untouched, just not the reverse. Presets
+(--damage=part:frac) set both sliders to the same raw fraction through the same ValueChanged path
+as a hand drag, so a fraction below 1 floors armor there too. One panel, two hosts, chosen by the
+injected IDamageLabTarget (same file): ViewerDamageTarget drives DamageVisuals on a parked plane
+from `Combined` alone (it holds no model), FlightDamageTarget writes P1's real PlaneDamage — each
+pool through its own single-pool `PlaneDamage.Apply(part, healthDamage, armorDamage)` call after
+`Reset`, using the fractions `ReadSliders` already floored. Neither target reimplements visuals,
+only decides when to rebuild them.
 ⚠ Reapply's crossed-anim set-diff (TargetAnims) is load-bearing twice: it implements repair
   (re-derives from pristine) and keeps a slider drag from restarting the fires at every pixel.
 ⚠ Built in EVERY viewer AND flight session (StartHidden without --damage) so F5 has a receiver; two
