@@ -960,6 +960,127 @@ public static class Probes
         return r;
     }
 
+    // ---- effects (D32 / BL-061) ----------------------------------------------------------------
+
+    /// <summary>Play every impact/destruction effect through the world-effects runtime at
+    /// <paramref name="playPoint"/> and report, per effect, whether it RESOLVES (its def is bound)
+    /// and whether it BUILDS a puffer (WORLD-12 — a started def whose factory/textures are missing
+    /// renders nothing). Each effect is stopped before the next so effects sharing a template root
+    /// (the gun family shares <c>gunhit</c>) get an independent count.
+    ///
+    /// <para>With <paramref name="stage"/> (the world-effects template stage) it also reports the
+    /// MESH half (`BL-061`): how many of the stage's mesh instances become visible while the effect
+    /// plays, on which template root, and how far from the play point. A puffer count cannot see
+    /// this — the two halves fail independently, and an effect whose meshes never show, or show at
+    /// the STAGE origin, reads as a full pass on puffers alone. The whole stage is counted because
+    /// exactly one effect plays at a time (each is <c>StopAll</c>ed before the next), so every
+    /// visible mesh in the window belongs to it.</para>
+    ///
+    /// <para>⚠ Sampled EVERY tick and reported as the peak, never as one final reading: the data
+    /// turns its own meshes off inside the window (<c>large_fireball</c> deactivates
+    /// <c>flame_ball_01</c> 0.3 s in, well before the 0.5 s the puffer count needs), so a
+    /// single sample at the end reports a working effect as a blank one. The residual rows after
+    /// each stop are the opposite question — what is still lit once the effect is over.</para></summary>
+    public static EffectsResult Effects(AnimRuntime effects, string[] effectAnimNames,
+        Vector3 playPoint, Node3D? stage, string chapter)
+    {
+        var r = new EffectsResult { HasStage = stage != null };
+        var p = playPoint;
+        var sb = new StringBuilder();
+        sb.AppendLine($"effects-test: chapter {chapter}, {effectAnimNames.Length} effect name(s), "
+                      + $"point ({p.X:0},{p.Y:0},{p.Z:0})");
+        if (stage != null)
+        {
+            // The stage's BASE state, read off each mesh's own visibility flag rather than
+            // visible-in-tree (every root is hidden here by construction, so in-tree would read
+            // zero for all of them and say nothing). This is what a revealed root would show if its
+            // def touched nothing: the gamez base state the original's template copy carries.
+            r.BaseState = MeshCensus.BaseStateOfStage(stage);
+            sb.AppendLine($"  {"(stage at rest)",-22} {r.BaseState}");
+        }
+        var leaked = new SortedSet<string>(StringComparer.Ordinal);
+        var revealedDark = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var name in effectAnimNames)
+        {
+            var row = new EffectRow { Name = name };
+            r.Rows.Add(row);
+            int before = effects.PuffersBuilt;
+            var census = new MeshCensus();
+            row.Resolved = effects.PlayEffectAt(name, p);
+            // Fixed ticks so the t=0 PUFFER_STATE emits and any one-CallSequence-deep puffer
+            // (large_black_smokeball's p1trail) reaches its first batch.
+            for (int f = 0; f < 30; f++)
+            {
+                effects.Advance(1f / 60f);
+                if (stage != null)
+                    census.Sample(stage, p);
+            }
+
+            row.PuffersBuilt = effects.PuffersBuilt - before;
+            row.MeshPeaks.AddRange(census.Rows.Where(x => x.Total > 0)
+                .OrderBy(x => x.Root, StringComparer.Ordinal));
+            int litMeshes = census.Lit;
+            string half = row.PuffersBuilt > 0 ? $"puffer[{row.PuffersBuilt}]" : "no puffer";
+            string meshHalf = stage == null ? "" : $" mesh[{litMeshes}] {census.Describe()}";
+            if (!row.Resolved)
+                row.Line = $"  {name,-22} UNRESOLVED — no def bound";
+            else if (row.PuffersBuilt > 0 || litMeshes > 0)
+                row.Line = $"  {name,-22} {half}{meshHalf} rendered";
+            else
+                row.Line = $"  {name,-22} started, built no puffer{meshHalf} (light/container effect)";
+            sb.AppendLine(row.Line);
+            // Full reset before the next name: these effects share puffer names (trailpuffer2) and
+            // template roots, so a lingering instance would let the next effect read as "no puffer".
+            effects.StopAll();
+            if (stage == null)
+                continue;
+            // One tick past the stop, so a deferred hide lands: what is STILL lit now belongs to an
+            // effect that is over — a template left burning at a hit site for the rest of the
+            // session, which is the mesh half's other failure mode.
+            effects.Advance(1f / 60f);
+            var after = new MeshCensus();
+            after.Sample(stage, p);
+            foreach (var root in after.Rows)
+            {
+                if (root.Visible > 0)
+                {
+                    row.Residual.Add(root);
+                    leaked.Add($"{root.Root} ({root.Visible} mesh, after {name})");
+                }
+                else if (root.Revealed && root.Total > 0)
+                {
+                    row.RevealedDark.Add(root.Root);
+                    revealedDark.Add($"{root.Root} (after {name})");
+                }
+            }
+        }
+
+        r.Summary = $"effects-test: {r.Resolved}/{effectAnimNames.Length} resolved, "
+                    + $"{r.Puffered} built a puffer, {r.Resolved - r.Puffered} started but built none"
+                    + (stage == null ? "" : $"; {r.Meshed} showed template mesh(es)");
+        sb.AppendLine(r.Summary);
+        if (stage != null)
+        {
+            sb.AppendLine(leaked.Count == 0
+                ? "  no template mesh left lit after its effect was stopped"
+                : $"  ⚠ still lit after the stop: {string.Join(", ", leaked)}");
+            // A root left REVEALED with every mesh under it off draws nothing — the data's own
+            // OBJECT_ACTIVE_STATEs turned its pieces off — so this is a note, not a defect. It is
+            // printed because "nothing shows" and "nothing is left revealed" are separate claims.
+            if (revealedDark.Count > 0)
+                sb.AppendLine($"  (revealed but dark afterwards: {string.Join(", ", revealedDark)})");
+        }
+
+        if (effects.UnhandledEventCounts.Count > 0)
+        {
+            sb.AppendLine("  reasons a start built no puffer: "
+                          + string.Join(", ", effects.UnhandledEventCounts
+                              .OrderByDescending(kv => kv.Value).Select(kv => $"{kv.Key}×{kv.Value}")));
+        }
+        r.Text = sb.ToString();
+        return r;
+    }
+
     private static Basis Level() => Basis.Identity;
 
     /// <summary>Attitude with the nose <paramref name="deg"/>° above the horizon (negative = dive),
@@ -1246,5 +1367,186 @@ public static class Probes
         public int Asserted => Rows.Count(r => r.Asserted);
         public int Failed => Rows.Count(r => !r.Ok);
         public bool Ok => Error == null && Asserted > 0 && Failed == 0;
+    }
+
+    /// <summary>One effect's sweep reading, both halves. <see cref="MeshPeaks"/> holds every
+    /// mesh-bearing template root the census saw (peak over the window); <see cref="Residual"/>
+    /// what was still lit one tick after the stop — an over effect burning at the hit site;
+    /// <see cref="RevealedDark"/> roots left revealed with every mesh under them off, which draw
+    /// nothing and are a note, not a defect.</summary>
+    public sealed class EffectRow
+    {
+        public readonly List<MeshCensus.RootPeak> MeshPeaks = new();
+        public readonly List<MeshCensus.RootPeak> Residual = new();
+        public readonly List<string> RevealedDark = new();
+        public string Name = "";
+        public bool Resolved;
+        public int PuffersBuilt;
+        public string Line = "";
+
+        public int LitMeshes => MeshPeaks.Sum(x => x.Visible);
+    }
+
+    /// <summary>The effects sweep as a whole: per-effect rows plus the report text the
+    /// <c>--effects-test</c> flag prints. The mesh columns exist only when a stage was supplied
+    /// (<see cref="HasStage"/>).</summary>
+    public sealed class EffectsResult
+    {
+        public readonly List<EffectRow> Rows = new();
+        public string BaseState = "";
+        public string Text = "";
+        public string Summary = "";
+        public bool HasStage;
+
+        public int Resolved => Rows.Count(r => r.Resolved);
+        public int Puffered => Rows.Count(r => r.PuffersBuilt > 0);
+        public int Meshed => Rows.Count(r => r.LitMeshes > 0);
+        public bool Ok => Rows.Count > 0 && Rows.All(r => r.Resolved);
+    }
+
+    /// <summary>The mesh half's counting semantics, in one place: which of a template stage's
+    /// meshes are drawing, per root, folded to a peak over a window. Counts are visible-IN-TREE,
+    /// never <c>Visible</c> — a mesh whose own flag is set under a hidden template root draws
+    /// nothing, and that difference IS the bug this census exists to catch (`BL-061`). Both the
+    /// <see cref="Effects"/> sweep and the <c>effect-template-mesh</c> suite count through this
+    /// type, so the sweep's verdicts and the suite's assertions cannot drift apart.</summary>
+    public sealed class MeshCensus
+    {
+        private readonly Dictionary<string, RootPeak> _peak = new(StringComparer.Ordinal);
+
+        public IReadOnlyCollection<RootPeak> Rows => _peak.Values;
+
+        public int Lit => _peak.Values.Sum(r => r.Visible);
+
+        /// <summary>Instantaneous count of drawing meshes under a node — this frame, no folding.</summary>
+        public static int VisibleMeshes(Node node)
+        {
+            int vis = 0, total = 0;
+            Count(node, ref vis, ref total);
+            return vis;
+        }
+
+        /// <summary>Instantaneous count under ONE named template root of a stage. Exact name match,
+        /// never a prefix: <c>he_ring</c> and <c>he_ring1</c> are two different staged templates,
+        /// and telling them apart is what a per-root reading is for.</summary>
+        public static int VisibleMeshesUnder(Node3D stage, string rootName)
+        {
+            int n = 0;
+            foreach (var pool in stage.GetChildren())
+                foreach (var root in pool.GetChildren())
+                    if (root is Node3D r && r.Name.ToString() == rootName)
+                        n += VisibleMeshes(r);
+            return n;
+        }
+
+        /// <summary>Each mesh-bearing template root's base state: how many of its meshes carry
+        /// their own visibility flag, out of how many it has — what a revealed root would show if
+        /// its def touched nothing. Read once, before anything plays.</summary>
+        public static string BaseStateOfStage(Node3D stage)
+        {
+            var rows = new SortedDictionary<string, string>(StringComparer.Ordinal);
+            foreach (var pool in stage.GetChildren())
+            {
+                foreach (var child in pool.GetChildren())
+                {
+                    if (child is not Node3D root)
+                        continue;
+                    int self = 0, total = 0;
+                    CountSelfVisible(root, true, ref self, ref total);
+                    if (total > 0)
+                        rows[root.Name] = $"{root.Name} {self}/{total} self-visible";
+                }
+            }
+
+            return rows.Count == 0 ? "no mesh-bearing template root" : string.Join("; ", rows.Values);
+        }
+
+        /// <summary>Folds one frame's stage state in, keeping each root's best reading. Distances
+        /// are to the play point, so "renders at the call site" and "renders at the stage origin"
+        /// (kilometres away in a chapter world) are different readings rather than the same count.
+        /// Roots are named, so a row says WHICH template showed — a pooled stage holds several
+        /// copies of one name, and they are folded together on purpose: which SLOT a call took is
+        /// the pool's business (`BL-225`), not this census's.</summary>
+        public void Sample(Node3D stage, Vector3 point)
+        {
+            foreach (var pool in stage.GetChildren())
+            {
+                foreach (var child in pool.GetChildren())
+                {
+                    if (child is not Node3D root)
+                        continue;
+                    string name = root.Name;
+                    int vis = 0, total = 0;
+                    Count(root, ref vis, ref total);
+                    var was = _peak.TryGetValue(name, out var prev)
+                        ? prev : new RootPeak(name, 0, 0, 0f, false);
+                    if (vis >= was.Visible)
+                    {
+                        _peak[name] = new RootPeak(name, vis, Math.Max(total, was.Total),
+                            root.GlobalPosition.DistanceTo(point), was.Revealed || root.Visible);
+                    }
+                    else if (root.Visible && !was.Revealed)
+                    {
+                        _peak[name] = was with { Revealed = true };
+                    }
+                }
+            }
+        }
+
+        /// <summary>The per-root reading, printed for every root a run TOUCHED (revealed, or lit a
+        /// mesh) that has meshes at all. A revealed root showing none of its own meshes and a root
+        /// nobody revealed are different failures and read differently here; a root with no
+        /// geometry (most of the puffer hosts) is neither, and is left out.</summary>
+        public string Describe()
+        {
+            var text = _peak.Values.Where(r => r.Total > 0 && (r.Revealed || r.Visible > 0))
+                .OrderBy(r => r.Root, StringComparer.Ordinal)
+                .Select(r => $"{r.Root} {r.Visible}/{r.Total} "
+                             + $"@{r.Distance.ToString("0.0", CultureInfo.InvariantCulture)} m");
+            return string.Join("; ", text);
+        }
+
+        private static void Count(Node node, ref int visible, ref int total)
+        {
+            if (node is MeshInstance3D { Mesh: not null } mi && mi.Mesh.GetSurfaceCount() > 0)
+            {
+                total++;
+                if (mi.IsVisibleInTree())
+                    visible++;
+            }
+
+            foreach (var child in node.GetChildren())
+            {
+                Count(child, ref visible, ref total);
+            }
+        }
+
+        /// <summary>Counts meshes that would draw if the template ROOT were revealed — the root's
+        /// own flag is skipped and every flag below it honoured, since the root's is the engine's
+        /// to set (<c>ShowPlacedTemplates</c>) and everything under it is the data's.</summary>
+        private static void CountSelfVisible(Node node, bool shown, ref int selfVisible,
+            ref int total)
+        {
+            if (node is MeshInstance3D { Mesh: not null } mi && mi.Mesh.GetSurfaceCount() > 0)
+            {
+                total++;
+                if (shown)
+                    selfVisible++;
+            }
+
+            foreach (var child in node.GetChildren())
+            {
+                // A hidden branch still contributes its TOTAL — "0 of 8" and "0 of 0" are different
+                // answers — so the walk continues rather than stopping at the first hidden node.
+                CountSelfVisible(child, shown && (child is not Node3D c || c.Visible),
+                    ref selfVisible, ref total);
+            }
+        }
+
+        /// <summary>The high-water mark of one template root's mesh half: how many of its meshes
+        /// were visible-in-tree at once, out of how many it carries, how far the root sat from the
+        /// play point when it peaked, and whether the run ever revealed it.</summary>
+        public readonly record struct RootPeak(string Root, int Visible, int Total, float Distance,
+            bool Revealed);
     }
 }

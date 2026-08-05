@@ -15353,3 +15353,27 @@ A third launch shape beside `BL-240`'s solved bounce and `BL-245`'s falls; `BL-2
 install-wide census `BL-240` had. Details: `docs/PLAN-m3-polish-7.md` C8,
 `analysis/bl-061-template-mesh/FINDINGS.md`, `docs/architecture.md`,
 `docs/formats/anim-definitions.md`.
+
+## 2026-08-05 — The effects census moves into `Probes.Effects`; `MeshCensus` is the one mesh counter
+
+From the 2026-08-05 architecture review (candidate 3, re-scoped after C8/`BL-061` landed): the
+`--effects-test` sweep had grown into a 208-line implementation inside its `ProbeRunner` wrapper —
+the only probe with no `Probes` counterpart — while the new `effect-template-mesh` suite counted
+meshes with its own private walkers. The counting semantics existed twice, on either side of the
+seam, and the sweep's verdicts (per-root peak, distance-to-play-point, post-stop residual) were
+unreachable from any suite — the shape `Probes.cs`'s "one source of truth" ⚠ exists to prevent.
+
+**What landed.** `Probes.Effects(effects, names, playPoint, stage, chapter)` → `EffectsResult`
+(one `EffectRow` per effect: resolved / puffers built / per-root `MeshPeaks` / `Residual` /
+`RevealedDark`, plus the report text), built on `Probes.MeshCensus` — the single owner of the
+mesh-counting semantics (visible-IN-TREE over surfaced meshes, per-root peak folding with
+`Revealed` off the root's own flag, distance at peak, self-visible base state).
+`RunEffectsTest` is a print-and-write wrapper again, the shape of its siblings; the
+`effect-template-mesh` suite's private `VisibleMeshes`/`VisibleMeshesUnder` are deleted in favour
+of `MeshCensus`'s. No behaviour change intended anywhere.
+
+**How verified.** A/B of `.scratch/effects_test.txt` on `--effects-test --chapter=C5`
+pre/post-refactor: line-identical except the decimal separator (distances now render
+`InvariantCulture` per `Probes.cs`'s own convention — `@12.0 m` where the current-culture wrapper
+wrote `@12,0 m` on a de-DE machine). Full `.\RunTests.ps1` PASS, exit 0 — 26/26 suites,
+13/13 goldens hash-identical.

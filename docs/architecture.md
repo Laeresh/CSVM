@@ -1995,9 +1995,14 @@ The session's randomness policy: one master seed and ten named subsystem generat
 
 ## src/Testing/Probes.cs
 The assertion cores behind the `--dump-markers` / `--dump-weapons` / `--dump-loadout` /
-`--dump-flight` / `--dump-mips` / `--damage-test` inspection reports. Each probe does the work
-once and returns both halves: the report text the flag prints and writes, and a structured verdict
-(counts, per-row booleans, failure strings) a `--run-tests` suite asserts on.
+`--dump-flight` / `--dump-mips` / `--damage-test` / `--effects-test` inspection reports. Each probe
+does the work once and returns both halves: the report text the flag prints and writes, and a
+structured verdict (counts, per-row booleans, failure strings) a `--run-tests` suite asserts on.
+`Effects` owns the effects sweep — the puffer half and the template-MESH half (`BL-061`), the
+latter counted only through `MeshCensus` (per-root per-tick PEAK + distance-to-play-point +
+post-stop residual; a final-sample census misses meshes the data turns off inside the window,
+INSTR-11). The `effect-template-mesh` suite counts through `MeshCensus` too, so the sweep's
+verdicts and the suite's assertions cannot drift apart.
 ⚠ `FlightEnvelope` steps a throwaway `FlightModel` through the manoeuvres the ORIGINAL was
   recorded flying; its targets are the Bloodhawk's only, since it is the only airframe on video.
   A row with `Informational` set is measured but deliberately not asserted (an open question) —
@@ -2100,14 +2105,6 @@ caller's spec between calls, so a cached one would silently answer with a stale 
   calls `GetTree().Quit(code)` itself. `RunEffectsTest` likewise takes the camera, the caller's
   `EffectAnimNames` table (`WorldEffectsFactory.EffectAnimNames`, passed in per call) and the
   template stage (`WorldEffectsFactory.EffectStage`).
-⚠ `RunEffectsTest` reports BOTH halves of an effect — the puffers it builds and the template MESHES
-  that become visible, per root, with their distance from the play point (`BL-061`). It sampled only
-  the first for months and read `33/33` while several effects drew no geometry at all
-  (`verification.md` INSTR-11). The mesh half is a per-tick PEAK, not a final reading — the data
-  turns its own meshes off inside the window — plus a residual reading after the stop, which is what
-  catches a template left lit at the last hit site. The stage's base state is printed once from each
-  mesh's own flag (`self-visible`), since visible-in-tree is zero for every hidden root and would say
-  nothing.
 ⚠ `ApplyRocketOverride` and `TriggerDestroy` are static (no instance state) — call them as
   `Testing.ProbeRunner.X(...)`, not through `_probeRunner`.
 ⚠ `WriteScratch` is the one shared write path to `.scratch/<report>.txt`; `GameSession`'s

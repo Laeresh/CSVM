@@ -1581,19 +1581,20 @@ public static class Suites
         WithEffectStage(ctx, world, "he_ground_effect", new[] { "he_ring", "he_ring1", "he_trails" },
             (stage, runtime, point) =>
         {
-            ctx.Check(VisibleMeshes(stage) == 0, $"the staged templates start hidden ({VisibleMeshes(stage)} visible)");
+            ctx.Check(Probes.MeshCensus.VisibleMeshes(stage) == 0,
+                $"the staged templates start hidden ({Probes.MeshCensus.VisibleMeshes(stage)} visible)");
             runtime.PlayEffectAt("he_ground_effect", point);
             int peak = 0;
             for (int i = 0; i < 30; i++)
             {
                 runtime.Advance(1f / 60f);
-                peak = Mathf.Max(peak, VisibleMeshes(stage));
+                peak = Mathf.Max(peak, Probes.MeshCensus.VisibleMeshes(stage));
             }
 
-            ctx.Check(VisibleMeshesUnder(stage, "he_ring") > 0,
-                $"he_ground_effect's own template mesh (he_ring) is visible — the PlayEffectAt half ({VisibleMeshesUnder(stage, "he_ring")})");
-            ctx.Check(VisibleMeshesUnder(stage, "he_ring1") > 0,
-                $"the CALLED template's mesh (he_ring1, the upper ring) is visible too — BL-061 ({VisibleMeshesUnder(stage, "he_ring1")})");
+            ctx.Check(Probes.MeshCensus.VisibleMeshesUnder(stage, "he_ring") > 0,
+                $"he_ground_effect's own template mesh (he_ring) is visible — the PlayEffectAt half ({Probes.MeshCensus.VisibleMeshesUnder(stage, "he_ring")})");
+            ctx.Check(Probes.MeshCensus.VisibleMeshesUnder(stage, "he_ring1") > 0,
+                $"the CALLED template's mesh (he_ring1, the upper ring) is visible too — BL-061 ({Probes.MeshCensus.VisibleMeshesUnder(stage, "he_ring1")})");
             ctx.Check(peak >= 2, $"both rings drew in the same window (peak {peak} mesh(es))");
         });
     }
@@ -1604,8 +1605,8 @@ public static class Suites
         {
             runtime.PlayEffectAt("3040ap_gunhit", point, null, 0.3f);
             runtime.Advance(1f / 60f);
-            ctx.Check(VisibleMeshesUnder(stage, "dum_gunhit") > 0,
-                $"the ap gun hit's chunk mesh is visible while it plays ({VisibleMeshesUnder(stage, "dum_gunhit")})");
+            ctx.Check(Probes.MeshCensus.VisibleMeshesUnder(stage, "dum_gunhit") > 0,
+                $"the ap gun hit's chunk mesh is visible while it plays ({Probes.MeshCensus.VisibleMeshesUnder(stage, "dum_gunhit")})");
 
             // Past the def's own authored ACTIVE_STATE 0 at +0.1 s, which ends the instance well
             // inside the 0.3 s TTL — the case that used to leave the mesh lit for the session.
@@ -1614,33 +1615,9 @@ public static class Suites
                 runtime.Advance(1f / 60f);
             }
 
-            ctx.Check(VisibleMeshesUnder(stage, "dum_gunhit") == 0,
-                $"and is dark once the effect has ended, without waiting for its TTL — BL-061 ({VisibleMeshesUnder(stage, "dum_gunhit")} still lit)");
+            ctx.Check(Probes.MeshCensus.VisibleMeshesUnder(stage, "dum_gunhit") == 0,
+                $"and is dark once the effect has ended, without waiting for its TTL — BL-061 ({Probes.MeshCensus.VisibleMeshesUnder(stage, "dum_gunhit")} still lit)");
         });
-    }
-
-    private static int VisibleMeshes(Node node)
-    {
-        int n = node is MeshInstance3D { Mesh: not null } mi && mi.IsVisibleInTree()
-                && mi.Mesh.GetSurfaceCount() > 0 ? 1 : 0;
-        foreach (var child in node.GetChildren())
-        {
-            n += VisibleMeshes(child);
-        }
-        return n;
-    }
-
-    /// <summary>Visible meshes under ONE named template root. Exact name match, never a prefix:
-    /// <c>he_ring</c> and <c>he_ring1</c> are two different staged templates and the whole point of
-    /// this suite is telling them apart.</summary>
-    private static int VisibleMeshesUnder(Node3D stage, string rootName)
-    {
-        int n = 0;
-        foreach (var pool in stage.GetChildren())
-            foreach (var root in pool.GetChildren())
-                if (root is Node3D r && r.Name.ToString() == rootName)
-                    n += VisibleMeshes(r);
-        return n;
     }
 
     /// <summary>A miniature world-effects stage: the named template roots built from the chapter's
