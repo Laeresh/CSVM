@@ -4,6 +4,7 @@ using System.Linq;
 using CSVM.Effects;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Mech3.Anim;
 using CSVM.UI;
 using CSVM.Utils;
 using Godot;
@@ -265,6 +266,7 @@ public static class Suites
             PufferBurstMode(ctx, burstState);
             PufferSustainMode(ctx, burstState);
             PufferTrailMode(ctx, trailState);
+            PufferTrailRevive(ctx, trailState);
         }
         finally
         {
@@ -377,6 +379,40 @@ public static class Suites
             puffer._Process(1f / 60f);
             ctx.Same(6, gpu.Shown, $"a partial interval carries into the next frame instead of rounding");
             ctx.Check(gpu.MaxIndex < gpu.Capacity, $"trail never writes past its pool max={gpu.MaxIndex} pool={gpu.Capacity}");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    /// <summary>The runtime's pause + far revive, through its own adapter
+    /// (<see cref="PufferEmitter"/>): a pooled effect-template slot is teleported to each new call
+    /// site, so a distance-state emitter stopped at one blast and revived at the next must re-home
+    /// there — a kept trail origin draws a puff line across the whole jump (the rocket-explosion
+    /// ghost trails).</summary>
+    private static void PufferTrailRevive(TestContext ctx, PufferState state)
+    {
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu, sustained: true);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            var emitter = new PufferEmitter(puffer);
+            const float dt = 1f / 60f;
+            var a = new Vector3(0f, 700f, 0f);
+            emitter.SustainAt(a, Basis.Identity, dt);                              // homes at A
+            emitter.SustainAt(a + new Vector3(10f, 0f, 0f), Basis.Identity, dt);   // trails 10 m
+            puffer._Process(dt);
+            ctx.Check(gpu.Shown > 0, $"the emitter trailed at the first site shown={gpu.Shown}");
+
+            emitter.SustainEnd();
+            var b = a + new Vector3(1000f, 0f, 0f);
+            emitter.SustainAt(b, Basis.Identity, dt);
+            puffer._Process(dt);
+            int strays = gpu.LastFrame.Count(p => p.Position.X > 20f && p.Position.X < 980f);
+            ctx.Same(0, strays,
+                $"a paused trail revived at a far site re-homes there, no puff line across the jump");
         }
         finally
         {
