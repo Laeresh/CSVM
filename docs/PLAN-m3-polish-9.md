@@ -64,7 +64,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — controls and lab one-liners
 
-1. ☐ `BL-279` Unbind the freecam action from Space so guns and freecam stop sharing the key
+1. ☑ `BL-279` Unbind the freecam action from Space so guns and freecam stop sharing the key
 2. ☐ `BL-280` Orbital camera: distance on numpad `+`/`−`, `shift` no longer drives camera and target together
 3. ☐ `BL-278` The damage lab's health slider takes armor to 0 with it
 
@@ -101,7 +101,7 @@ checking which goldens each moved.
 
 # Wave A — controls and lab one-liners
 
-## A1 ☐ `BL-279` Space is double-bound in freecam
+## A1 ☑ `BL-279` Space is double-bound in freecam
 
 **Goal.** In `--freecam` with weapons available, pressing Space triggers exactly one action — the
 guns and the freecam action no longer fire together.
