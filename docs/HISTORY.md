@@ -15733,3 +15733,31 @@ restored, green.
 
 `BL-262` stays open and untouched — staging `ballflare.flt`/`apassengers` moves goldens, and this
 plan stopped rather than repinned. The plan is archived at `docs/plans/PLAN-effect-catalogue.md`.
+
+## 2026-08-05 — PLAN-friends-release A2: extraction version stamp (scripts write it, boot checks it)
+
+`extracted/` now carries its provenance. A failure-free `ExtractAssets.ps1` run — including the
+all-up-to-date one — writes `extracted/VERSION.json`: the `unzbd --version` line verbatim (the
+fork self-reports a frozen `v0.0.0-test`; its build timestamp is the distinguishing part), the
+exe's SHA-256, the fork checkout's HEAD when the exe sits inside one (omitted gracefully on a
+bare-exe machine), the date, and a hand-bumped `schema` integer (1). `ExtractRof.ps1` merges its
+own `rof` field (script/date/`-Raw`) into the same file — read-merge-write on both sides, so
+neither clobbers the other; it skips the stamp with a note when `-Dest` leaves the canonical
+`…\extracted\rof` layout rather than guessing where the shared file lives. Engine side: new
+`src/Session/ExtractionStamp.cs` (`Schema` const + `Check`), called once from `Launcher._Ready`
+right after the base paths settle — at most ONE `WARN [core]` line per boot (stale schema /
+missing / unreadable), each naming the fix; warn, never block, since the dev tree's extractions
+predate the stamp. The schema-bump-together rule is written in all three places. The extraction
+output itself is deliberately not hashed (gigabytes).
+
+One surprise: PowerShell 5.1's `-Encoding UTF8` writes a BOM, which `JsonDocument.Parse(byte[])`
+rejects (`JsonReaderException` on the first boot test) — `ExtractionStamp` parses via
+`File.ReadAllText`, whose reader strips it.
+
+**Verified.** Both scripts re-run against the real tree: fully idempotent (extracted 0 / 184 up
+to date; rof archives skipped) AND the stamp still written, fields from both merged into one
+file. Boot via `RunProbe.ps1 --stage=empty --det` with the valid stamp: no warning in the log.
+Schema hand-edited to 999: exactly one `WARN [core] extraction stamp schema=999 but this build
+expects schema=1 … re-run ExtractAssets.ps1 and ExtractRof.ps1` line; file renamed away: the
+missing-stamp variant (`extraction tree has no version stamp … re-run ExtractAssets.ps1`);
+valid stamp restored by re-running both scripts. `dotnet test` green: 450/450.

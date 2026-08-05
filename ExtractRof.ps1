@@ -24,6 +24,10 @@
         <name>_mask.png            next to each custom .BM: the paint-region masks,
                                    R = paint slot 1, G = slot 2, B = slot 3
 
+    Also merges its own "rof" field into the shared version stamp <Dest>\..\VERSION.json
+    (when -Dest follows the ...\extracted\rof layout) -- see ExtractAssets.ps1 for the
+    stamp and the schema-bump rule.
+
     Members are written verbatim; 588 of the 846 are already PNG/JPG/TGA/TIF and need
     no conversion. Only the 184 custom `.BM` textures are decoded, and only additively
     -- the original .BM is always written out too.
@@ -63,6 +67,12 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = $PSScriptRoot
 if (-not $Source) { $Source = Join-Path $RepoRoot "CrimsonSkiesGame\GOSDATA\ASSETS" }
 if (-not $Dest)   { $Dest   = Join-Path $RepoRoot "extracted\rof" }
+
+# The shared version stamp (see the tail of this script) lives one level above the rof
+# output, at <extraction root>\VERSION.json -- knowable only when -Dest follows the
+# canonical ...\extracted\rof layout (the default, or an explicit path of that shape).
+# For any other -Dest the stamp is skipped rather than guessed into a foreign folder.
+$StampDestKnown = $Dest -match '[\\/]extracted[\\/]rof[\\/]?$'
 
 if (-not (Test-Path $Source)) {
     throw "Game ASSETS folder not found at $Source -- see PROJECT_CONTEXT.md for the install layout."
@@ -391,3 +401,33 @@ if ((-not $Raw) -and $totalImages -gt 0) {
     Write-Host "  .BM decoded:     $totalImages (each -> .png + _mask.png)"
 }
 if ($skipped -gt 0) { Write-Host "  up to date:      $skipped archive(s); pass -Force to redo" }
+
+# ---- version stamp --------------------------------------------------------
+# Adds this script's field to the shared VERSION.json that ExtractAssets.ps1 writes at
+# the extraction root (read at boot by src\Session\ExtractionStamp.cs). Read-merge-write
+# so ExtractAssets' fields survive; $StampSchema bumps together with ExtractAssets.ps1's
+# and ExtractionStamp.Schema, in the same commit as any reader change that invalidates
+# old extractions.
+if ($StampDestKnown) {
+    $StampSchema = 1
+    $stampPath = Join-Path (Split-Path $Dest -Parent) "VERSION.json"
+    $stamp = [ordered]@{}
+    if (Test-Path $stampPath) {
+        try {
+            $existing = Get-Content -LiteralPath $stampPath -Raw | ConvertFrom-Json
+            foreach ($p in $existing.PSObject.Properties) { $stamp[$p.Name] = $p.Value }
+        } catch {
+            # Unreadable stamp: rewrite from scratch (the engine already warns about it).
+        }
+    }
+    $stamp["schema"] = $StampSchema
+    $stamp["rof"] = [ordered]@{
+        script = "ExtractRof.ps1"
+        date   = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+        raw    = [bool]$Raw
+    }
+    $stamp | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $stampPath -Encoding UTF8
+    Write-Host "  stamped:         $stampPath (schema $StampSchema)"
+} else {
+    Write-Host "  (custom -Dest outside ...\extracted\rof: skipping the shared VERSION.json stamp)"
+}

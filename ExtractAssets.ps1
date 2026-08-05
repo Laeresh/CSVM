@@ -26,6 +26,14 @@
     2026-07-21, are extracted like everything else, and are read by the Godot
     project's animation engine (CompiledAnim.cs -> AnimProgram.cs -> AnimRuntime.cs).
 
+    A failure-free run stamps <Dest>\VERSION.json with what produced the tree (unzbd
+    version line, exe SHA-256, fork commit when the checkout is present, date, schema
+    integer). The engine compares the schema at boot (src\Session\ExtractionStamp.cs)
+    and warns when it no longer matches.
+    RULE: the schema integer is a hand-maintained promise -- bump $StampSchema here,
+    in ExtractRof.ps1, and ExtractionStamp.Schema in the SAME commit as any reader
+    change that invalidates old extractions.
+
 .PARAMETER Source
     Root of the game's ZBD tree. Default: CrimsonSkiesGame\ZBD next to this script.
 
@@ -210,6 +218,55 @@ if ($unknowns.Count -gt 0) {
     Write-Host "  UNKNOWN types (no mode mapped -- check the script):" -ForegroundColor Yellow
     $unknowns | ForEach-Object { Write-Host "    $_" -ForegroundColor Yellow }
 }
+
+# ---- version stamp --------------------------------------------------------
+# A failure-free run (including the all-up-to-date one) stamps the tree with what
+# produced it, so the engine (src\Session\ExtractionStamp.cs) can tell a boot-time
+# "it looks wrong" report which extractor vintage it is looking at. Read-merge-write:
+# ExtractRof.ps1 owns the "rof" field of the same file and must survive this write.
+# $StampSchema bumps together with ExtractRof.ps1's and ExtractionStamp.Schema, in the
+# same commit as any reader change that invalidates old extractions (see the header).
+if ($failures.Count -eq 0) {
+    $StampSchema = 1
+
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    # The fork self-reports a frozen version number; the build timestamp in the same
+    # line is what actually distinguishes binaries, so the line is kept verbatim.
+    $unzbdVersion = ((& $UnzbdExe --version 2>&1 | Select-Object -First 1) | Out-String).Trim()
+    # Dev layout: the exe sits at <checkout>\target\release\unzbd.exe inside a git
+    # checkout. A bare exe (a friend's machine) has no checkout -- omit the field.
+    $forkCommit = $null
+    $forkDir = Split-Path (Split-Path (Split-Path $UnzbdExe -Parent) -Parent) -Parent
+    if ($forkDir -and (Test-Path (Join-Path $forkDir ".git")) -and (Get-Command git -ErrorAction SilentlyContinue)) {
+        $head = git -C $forkDir rev-parse HEAD 2>$null
+        if ($LASTEXITCODE -eq 0 -and $head) { $forkCommit = "$head".Trim() }
+    }
+    $ErrorActionPreference = $prevEap
+
+    $stampPath = Join-Path $Dest "VERSION.json"
+    $stamp = [ordered]@{}
+    if (Test-Path $stampPath) {
+        try {
+            $existing = Get-Content -LiteralPath $stampPath -Raw | ConvertFrom-Json
+            foreach ($p in $existing.PSObject.Properties) { $stamp[$p.Name] = $p.Value }
+        } catch {
+            # Unreadable stamp: rewrite from scratch (the engine already warns about it).
+        }
+    }
+    $assets = [ordered]@{
+        script       = "ExtractAssets.ps1"
+        date         = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+        unzbdVersion = $unzbdVersion
+        unzbdSha256  = (Get-FileHash -LiteralPath $UnzbdExe -Algorithm SHA256).Hash
+    }
+    if ($forkCommit) { $assets["unzbdCommit"] = $forkCommit }
+    $stamp["schema"] = $StampSchema
+    $stamp["assets"] = $assets
+    $stamp | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $stampPath -Encoding UTF8
+    Write-Host "  stamped:    $stampPath (schema $StampSchema)"
+}
+
 if ($failures.Count -gt 0) {
     Write-Host "  FAILURES:" -ForegroundColor Red
     $failures | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }

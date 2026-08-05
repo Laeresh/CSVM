@@ -65,7 +65,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — the engine runs outside the repo
 
 1. ☐ Export-aware root resolution: exe-adjacent defaults when not running from the editor
-2. ☐ Extraction version stamp: scripts write it, the engine checks it at boot
+2. ☑ Extraction version stamp: scripts write it, the engine checks it at boot
 
 ### Wave B — the package
 
@@ -128,7 +128,7 @@ instrument here: launched from Explorer it's the exe dir, so a CWD-relative bug 
 deliberately foreign CWD. Don't move the dev default off repo-root — `RunProbe.ps1`, the hooks,
 and `.scratch/` conventions all assume it.
 
-## A2 ☐ Extraction version stamp: scripts write it, the engine checks it at boot
+## A2 ☑ Extraction version stamp: scripts write it, the engine checks it at boot
 
 **Goal.** Every extraction run stamps `extracted/` with what produced it; the engine compares the
 stamp at boot and logs a clear one-line warning (stale, missing, or unknown) naming the fix

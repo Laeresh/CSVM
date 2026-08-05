@@ -200,6 +200,9 @@ public partial class Launcher : Node3D
         _messagesPath = _spec.Messages ?? Path.Combine(_dataRoot, "extracted", "messages.json");
         _rofPath = _spec.Rof ?? Path.Combine(_dataRoot, "extracted", "rof");
 
+        // The extraction tree's provenance check — at most one warning line, never a block.
+        ExtractionStamp.Check(_dataRoot);
+
         // The drop-in writes statics every material built afterwards reads, so it is applied here
         // rather than carried as a session value.
         foreach (string name in _spec.TexOverrides)

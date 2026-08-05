@@ -69,6 +69,14 @@ needs **no code change**, because the Godot loaders read either extraction shape
 Idempotent: skips outputs newer than their source unless `-Force`. `-Unzip` also expands each
 `.zip` into a sibling folder; `-Source`/`-Dest` override the roots.
 
+Every failure-free run (including an all-up-to-date one) stamps `<Dest>/VERSION.json` with its
+provenance: the `unzbd --version` line verbatim (the fork's version number is frozen — the build
+timestamp is what distinguishes binaries), the exe's SHA-256, the fork checkout's HEAD when the
+exe sits inside one, the date, and a hand-bumped schema integer the engine compares at boot
+(`src/Session/ExtractionStamp.cs` — one warning line on stale/missing/unreadable, never a block).
+The schema bumps in the same commit as any reader change that invalidates old extractions; the
+extraction output itself is never hashed (gigabytes).
+
 Two output-handling details worth knowing before touching the script:
 
 - unzbd's stderr is captured and judged **by exit code**, because PowerShell 5.1 turns a native
@@ -94,6 +102,11 @@ symbol. That last file is where the aircraft names and description text live.
 `-Raw` skips the decoding and the string table; `-Force` re-runs an up-to-date extraction;
 `-Source`/`-Dest` override the roots. The decode work is an inline C# type (`Add-Type`), so a full
 run is ~1.5 s.
+
+Each run also merges its own `rof` field (script, date, `-Raw`) into the shared
+`VERSION.json` one level above `-Dest` — read-merge-write, so `ExtractAssets.ps1`'s fields
+survive — when `-Dest` follows the canonical `…\extracted\rof` layout; any other `-Dest` skips
+the stamp with a note rather than guessing where the shared file lives.
 
 Formats: [formats/rof.md](formats/rof.md), [formats/strings.md](formats/strings.md).
 
