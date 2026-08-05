@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.RegularExpressions;
 using CSVM.Mech3.Anim;
 using CSVM.Utils;
 using Godot;
@@ -363,9 +362,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// nodes anyway (OBJECT_ACTIVE_STATE off / opacity fade).</summary>
     private const float MinPoseScale = 1e-3f;
 
-    private readonly List<(Node3D Node, string SrcName)> _index = new();
-
-    private readonly Dictionary<string, Func<string, bool>> _matcherCache = new(StringComparer.OrdinalIgnoreCase);
+    // Name resolution — the index, wildcard matcher, memoized FindAll, and ResolvePath — lives in
+    // NameResolver.cs; identity is instance id, since Godot object equality is unreliable inside a
+    // dictionary/tuple key across proxy instances of the same native node.
+    private readonly NameResolver<Node3D> _resolver = new(Node3DIdentity.Instance);
 
     private readonly Dictionary<Node3D, Transform3D> _rest = new(); // authored pose per touched node
 
@@ -467,9 +467,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // pool recycles its oldest slot â€” the shared-template behaviour, but only at the wrap.
     private readonly Dictionary<string, int> _poolCursor = new(StringComparer.OrdinalIgnoreCase);
 
-    // Node â†’ its pool slot (-1 = outside the pool), memoized on the same terms as _findCache:
-    // slot containers are built before Bind and nothing is ever reparented. TemplateIsAt asks per
-    // event on a poll loop, so the ancestor walk must not be repeated.
+    // Node â†’ its pool slot (-1 = outside the pool), memoized on the same terms as the resolver's
+    // own FindAll cache: slot containers are built before Bind and nothing is ever reparented.
+    // TemplateIsAt asks per event on a poll loop, so the ancestor walk must not be repeated.
     private readonly Dictionary<ulong, int> _slotOfNode = new();
 
     // Named once per effect, not per wrap: a pool that recycles a slot whose instance is still
@@ -486,11 +486,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private readonly Dictionary<(string Kind, Node3D? Anchor), bool> _condLast = new();
 
     private readonly HashSet<string> _retargetsLogged = new(StringComparer.Ordinal);
-
-    // Memoized for the life of the runtime: results go stale if a node is ever reparented
-    // into or out of a world subtree at runtime, so nothing may do that (pooled sound
-    // emitters and crash puffers live outside the world for this reason).
-    private readonly Dictionary<(string Pattern, ulong Scope), List<Node3D>> _findCache = new();
 
     // Last opacity pushed to each subtree root. These events sit in `Loop{-1}` sequences â€”
     // C1's `cloudparent#` re-asserts its 0.6 every frame â€” so without this the whole subtree
@@ -957,8 +952,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// mission setup the way a second <see cref="Bind"/> would.</summary>
     public void IndexStage(Node3D subtree)
     {
-        IndexWorld(subtree);   // appends the subtree's nodes to _index / _byIndex
-        _findCache.Clear();    // drop stale "resolves to nothing" results cached during bootstrap
+        IndexWorld(subtree);   // appends the subtree's nodes to the resolver / _byIndex
+        _resolver.ClearFindCache();    // drop stale "resolves to nothing" results cached during bootstrap
         ApplyResetStatesWithin(subtree);
     }
 
@@ -978,7 +973,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     public void IndexPooledCopy(Node3D subtree)
     {
         IndexWorld(subtree, indexByPointer: false);
-        _findCache.Clear();
+        _resolver.ClearFindCache();
         ApplyResetStatesWithin(subtree);
     }
 
@@ -1928,10 +1923,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // loss (Targets' own _byIndex-miss rescue is anchor-scoped by name instead).
     private void IndexWorld(Node3D worldRoot, bool indexByPointer = true)
     {
-        void Walk(Node3D n)
+        void Walk(Node3D n, Node3D? parent)
         {
             var srcName = n.HasMeta(NameMeta) ? n.GetMeta(NameMeta).AsString() : n.Name.ToString();
-            _index.Add((n, srcName));
+            int? gamezIndex = n.HasMeta(IndexMeta) ? (int)n.GetMeta(IndexMeta) : null;
+            _resolver.Add(n, srcName, parent, gamezIndex);
             // The scoped crash runtime resolves purely by name (see NameResolveFallback): it mixes
             // two gamez index spaces that collide, so a shared _byIndex would misresolve. Leaving it
             // empty makes every index lookup miss and fall through to the unique name.
@@ -1939,9 +1935,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 _byIndex.TryAdd((int)n.GetMeta(IndexMeta), n);
             foreach (var child in n.GetChildren())
                 if (child is Node3D c)
-                    Walk(c);
+                    Walk(c, n);
         }
-        Walk(worldRoot);
+        Walk(worldRoot, worldRoot.GetParent() as Node3D);
     }
 
     // Re-runs the quiet-stage RESET_STATE posing pass (bootstrap pass 1) for whatever now anchors
@@ -3911,74 +3907,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     }
 
     // NAME paths: resolve the first element in scope (falling back to global for
-    // non-local defs), then each further element inside the previous matches.
-    private List<Node3D> ResolvePath(List<string> path, Node3D? scope, bool localOnly)
-    {
-        var candidates = FindAll(path[0], scope);
-        if (candidates.Count == 0 && scope != null && !localOnly)
-            candidates = FindAll(path[0], null);
-        for (int i = 1; i < path.Count && candidates.Count > 0; i++)
-        {
-            var next = new List<Node3D>();
-            foreach (var c in candidates)
-                next.AddRange(FindAll(path[i], c).Where(n => n != c));
-            candidates = next;
-        }
-        return candidates;
-    }
+    // non-local defs), then each further element inside the previous matches. Forwards to
+    // NameResolver.cs.
+    private List<Node3D> ResolvePath(List<string> path, Node3D? scope, bool localOnly) =>
+        _resolver.ResolvePath(path, scope, localOnly);
 
     /// <summary>Every world node matching a NAME pattern, optionally restricted to one
     /// subtree. A full scan of the node index â€” and the data calls it constantly, because the
     /// poll idiom (<c>If â€¦ CallAnimation; Endif; Loop{-1}</c>) re-dispatches its body every
-    /// frame, so C5's ~400 live poll loops asked for hundreds of resolutions per frame.
-    ///
-    /// The answer is memoized because it cannot change: <see cref="_index"/> is built once
-    /// during the bootstrap and never added to, and the only runtime mutation of the world
-    /// tree is <see cref="SetSubtreeActive"/>, which toggles visibility and colliders without
-    /// reparenting or freeing anything. Callers must treat the returned list as read-only.
-    /// </summary>
-    private List<Node3D> FindAll(string pattern, Node3D? scope)
-    {
-        // Godot object identity is by native pointer, so key on the instance id rather than
-        // relying on GodotObject equality semantics inside a tuple comparer.
-        var key = (pattern, scope?.GetInstanceId() ?? 0UL);
-        if (_findCache.TryGetValue(key, out var hit))
-            return hit;
-        var match = Matcher(pattern);
-        var result = new List<Node3D>();
-        foreach (var (node, srcName) in _index)
-        {
-            // Defs may name a node without its model-file suffix ('ap_radiotwr' for the
-            // gamez node 'ap_radiotwr.flt') â€” try both.
-            var matches = match(srcName)
-                || (srcName.EndsWith(".flt", StringComparison.OrdinalIgnoreCase) && match(srcName[..^4]));
-            if (matches && (scope == null || node == scope || scope.IsAncestorOf(node)))
-                result.Add(node);
-        }
-        _findCache[key] = result;
-        return result;
-    }
-
-    // Wildcard NAME â†’ predicate: '*' (and the '**' template form) match any run of
-    // characters, '#' a run of digits ('air_gen#' covers 'air_gen'). Plain names compare
-    // exactly (case-insensitive, like every reader name lookup).
-    private Func<string, bool> Matcher(string pattern)
-    {
-        if (_matcherCache.TryGetValue(pattern, out var cached))
-            return cached;
-        Func<string, bool> match;
-        if (pattern.Contains('*') || pattern.Contains('#'))
-        {
-            var re = new Regex("^" + Regex.Escape(pattern).Replace("\\*", ".*").Replace("\\#", "[0-9]*") + "$",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-            match = re.IsMatch;
-        }
-        else
-        {
-            match = s => s.Equals(pattern, StringComparison.OrdinalIgnoreCase);
-        }
-        return _matcherCache[pattern] = match;
-    }
+    /// frame, so C5's ~400 live poll loops asked for hundreds of resolutions per frame. Forwards to
+    /// <see cref="NameResolver{TNode}"/>, which owns the index, the wildcard matcher, and the
+    /// memoization. Callers must treat the returned list as read-only.</summary>
+    private List<Node3D> FindAll(string pattern, Node3D? scope) => _resolver.FindAll(pattern, scope);
 
     // The *_STATE poses use the same absolute-in-parent-frame convention as
     // OBJECT_MOTION_FROM_TO â€” see FromToMotion's remarks for the evidence. OBJECT_TRANSLATE_STATE
@@ -4017,7 +3957,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private List<string> HideUncoveredDestroyed()
     {
         var hidden = new List<string>();
-        foreach (var (node, srcName) in _index)
+        foreach (var (node, srcName) in _resolver.Rows)
         {
             if (!srcName.Contains("destroyed", StringComparison.OrdinalIgnoreCase))
                 continue;
@@ -4037,5 +3977,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return false;
     }
 
+    // Godot object identity is by native pointer, not the inherited Equals: two managed proxies
+    // can wrap the same native node, so NameResolver's dictionary/tuple keys need this rather than
+    // trusting Node3D's own equality.
+    private sealed class Node3DIdentity : IEqualityComparer<Node3D>
+    {
+        public static readonly Node3DIdentity Instance = new();
 
+        public bool Equals(Node3D? x, Node3D? y) => (x?.GetInstanceId() ?? 0) == (y?.GetInstanceId() ?? 0);
+
+        public int GetHashCode(Node3D obj) => obj.GetInstanceId().GetHashCode();
+    }
 }
