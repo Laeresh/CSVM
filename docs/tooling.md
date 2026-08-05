@@ -230,6 +230,49 @@ disabling the dinput backend removes those phantom views, and real pads keep wor
 XInput/HIDAPI. Direct editor or exe launches don't get the workaround. Removal conditions are in
 `backlog.md` under "Drop the `SDL_JOYSTICK_DIRECTINPUT=0` workaround".
 
+## Exporting a release build
+
+`CSVM/export_presets.cfg` (committed, added 2026-08-05, friends-release B11) holds one preset,
+**"Windows Desktop"**: release export, x86_64, `embed_pck=true` — a single `CSVM.exe` with the
+pck inside, plus the .NET publish output beside it as `data_CSVM_windows_x86_64/`
+(**self-contained**: `coreclr.dll`/`hostfxr.dll` ship in it, so a recipient installs no .NET
+runtime). The exported build resolves every root to the exe's own folder (A1): it reads
+`extracted/` beside the exe and writes its logs to `.scratch/logs/` beside the exe.
+
+**One-time template install.** The Godot export templates are user-global, not part of the
+repo's pinned editor: extract the inner `templates/` FILES of
+`tools/godot-4.7-mono-export-templates.tpz` (an ordinary zip) directly into
+`%APPDATA%\Godot\export_templates\4.7.stable.mono\` (create the version dir; do not keep the
+`templates/` folder level).
+
+**Export by hand** (a fresh tree needs the build + one import pass first):
+
+```powershell
+dotnet build CSVM/CSVM.sln
+& tools\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64_console.exe `
+    --path CSVM --headless --import
+& tools\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64_console.exe `
+    --path CSVM --headless --export-release "Windows Desktop" Z:\CSVM\.scratch\export\CSVM.exe
+```
+
+Output lands at the path given on the command line (the preset's own `export_path` is
+`../.scratch/export/CSVM.exe`, git-ignored, used when exporting from the editor GUI).
+
+Two filters in the preset are load-bearing:
+
+- `include_filter="data/*.json"` — `stock_loadouts.json`/`effect_pools.json` are non-imported
+  resources the default export silently drops; without this every plane flies unarmed. Their
+  loaders read `res://data/*.json` through `Godot.FileAccess` (not `GlobalizePath` + System.IO),
+  which is what makes the pck copies reachable in an export — keep it that way.
+- `exclude_filter="config.json"` — ⚠ the dev box keeps a personal tuning override at
+  `CSVM/config.json` (git-ignored). The exclude guarantees it is never baked into a build even
+  when exporting from the main tree; an exported build logs `config absent … using in-code
+  defaults`, which is correct.
+
+Smoke-test an export from a **bare folder** (exe + data dir + `extracted/` beside it) launched
+with a **foreign CWD** and no `CSVM_DATA_ROOT` — the CWD and the env var can both mask a broken
+default root (verification: A1's traps).
+
 ## `tools/` (git-ignored)
 
 Downloaded binaries: mech3ax v0.6.1 (the pinned pre-fork extractor, kept for rollback), the

@@ -25,8 +25,10 @@ public sealed class StockLoadouts
     private readonly Dictionary<string, LoadoutDef> _byDef = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The committed config's default location (res://), independent of <c>--data-root</c>:
-    /// it is engine config, not extracted game data.</summary>
-    public static string DefaultPath => ProjectSettings.GlobalizePath("res://data/stock_loadouts.json");
+    /// it is engine config, not extracted game data. Kept as a res:// path and read through
+    /// <see cref="Godot.FileAccess"/>, because in an exported build the file lives in the pck,
+    /// where <c>GlobalizePath</c> + System.IO cannot reach it (B11, 2026-08-05).</summary>
+    public static string DefaultPath => "res://data/stock_loadouts.json";
 
     public IReadOnlyDictionary<string, LoadoutDef> All => _byDef;
 
@@ -40,12 +42,16 @@ public sealed class StockLoadouts
     {
         path ??= DefaultPath;
         var loadouts = new StockLoadouts();
-        if (!File.Exists(path))
+        // res:// lives inside the pck in an exported build, where only Godot's own FileAccess
+        // can read it; an explicit disk path (unit tests, tools) stays on System.IO, which the
+        // xunit host can run without a Godot runtime.
+        bool viaGodot = path.StartsWith("res://", StringComparison.Ordinal);
+        if (viaGodot ? !Godot.FileAccess.FileExists(path) : !File.Exists(path))
         {
             GD.PushWarning($"stock loadouts: file not found, no loadouts loaded: {path}");
             return loadouts;
         }
-        using var doc = JsonDocument.Parse(File.ReadAllBytes(path));
+        using var doc = JsonDocument.Parse(viaGodot ? Godot.FileAccess.GetFileAsBytes(path) : File.ReadAllBytes(path));
         if (!doc.RootElement.TryGetProperty("planes", out var planes) || planes.ValueKind != JsonValueKind.Object)
         {
             throw new InvalidDataException($"stock loadouts: no 'planes' object in {path}");
