@@ -15824,6 +15824,15 @@ a historical `-Unzip` run, so the friend flow would have lost HUD text and the g
 `extracted/rimage/` (idempotent, ~23 MB). Verified in the scratch package: rerun idempotent,
 `5pointhud.png`/`5pointhudbrite.png`/`impact_point.png` present in the unpacked folder.
 
+Second addendum (same day, post-first-sandbox-run): the Windows Sandbox clean-machine run showed
+raw `MSG_*` keys on the HUD and stunt briefings — `extracted/messages.json` was missing, because
+it comes from `strings.dll` at the INSTALL ROOT (`unzbd cs messages`), which neither script
+covered; the dev tree's copy was a hand-run one-off from 2026-07-21 and tooling.md said so.
+`ExtractAssets.ps1` now extracts it in a dedicated step after the ZBD walk (same idempotence and
+failure accounting; skip-with-note when the DLL is absent). Verified: dev-tree rerun idempotent
+(`messages.json (up to date)`, 185 up to date), scratch-package run produces it byte-identical
+to the dev tree's.
+
 ## 2026-08-05 — friends-release B11: export preset lands; the first hand export flies from a bare folder, pixel-identical to the dev tree
 
 `CSVM/export_presets.cfg` is committed — one preset, **"Windows Desktop"** (release, x86_64,

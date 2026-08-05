@@ -205,6 +205,39 @@ foreach ($zbd in $zbds) {
     }
 }
 
+# ---- messages.json --------------------------------------------------------
+# The HUD/briefing string table lives in strings.dll at the install root -- the
+# ZBD tree's PARENT -- so the walk above never sees it. Without messages.json the
+# engine falls back to raw MSG_* keys on the HUD and briefings. Same idempotence
+# and failure accounting as the loop.
+$StringsDll = Join-Path (Split-Path $SourceFull -Parent) "strings.dll"
+$MessagesOut = Join-Path $Dest "messages.json"
+if (Test-Path $StringsDll) {
+    $msgUpToDate = (Test-Path $MessagesOut) -and
+                   ((Get-Item $MessagesOut).LastWriteTime -ge (Get-Item $StringsDll).LastWriteTime)
+    if ($msgUpToDate -and -not $Force) {
+        Write-Host "  ok   messages.json (up to date)" -ForegroundColor DarkGray
+        $upToDate++
+    }
+    else {
+        Write-Host "  ->   messages.json  [messages]" -ForegroundColor Green
+        $prevEap = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        $output = & $UnzbdExe cs messages $StringsDll $MessagesOut 2>&1
+        $exit = $LASTEXITCODE
+        $ErrorActionPreference = $prevEap
+        if ($exit -ne 0) {
+            Write-Host "       FAILED (unzbd exit $exit)" -ForegroundColor Red
+            @($output) | ForEach-Object { Write-Host "         $_" -ForegroundColor Red }
+            $failures.Add("strings.dll -> messages.json (exit $exit)")
+        }
+        else { $extracted++ }
+    }
+}
+else {
+    Write-Host "  SKIP messages.json (no strings.dll at $StringsDll)" -ForegroundColor Yellow
+}
+
 Write-Host ""
 Write-Host "Done." -ForegroundColor Cyan
 Write-Host "  extracted:  $extracted"

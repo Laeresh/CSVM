@@ -85,8 +85,11 @@ Two output-handling details worth knowing before touching the script:
   the stored matrix bit-for-bit, informational since the matrix itself is preserved and preferred —
   are counted and summarised rather than printed (155 on a full run).
 
-**`messages.json` is not produced by this script.** It comes from
-`unzbd cs messages CrimsonSkiesGame/strings.dll`.
+**`messages.json`** is produced by a dedicated step after the ZBD walk: `strings.dll` sits at
+the install root (the ZBD tree's parent), so the walk never sees it — the script extracts it
+with `unzbd cs messages` into `<Dest>\messages.json`, skipping with a note when the DLL is
+absent. Without it the engine falls back to raw `MSG_*` keys on the HUD and briefings (how the
+gap was found in the first sandbox clean-machine run).
 
 ## `ExtractRof.ps1` (repo root) — the non-ZBD half
 
