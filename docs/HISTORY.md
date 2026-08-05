@@ -16444,3 +16444,51 @@ stage still opens the default chapter's texture tier for plane skins) **and `rim
 font `5pointhud.png` + gun reticle `impact_point.png` — without it the HUD text/reticle are off,
 which the log names; B12's extraction kit must produce both). Full `.\RunTests.ps1` green in the
 worktree after the loader change.
+
+## 2026-08-05 — B5 `BL-276`: the 30 s fire never STARTED from its death sites — the destruction slot was never parsed; `BL-212` cleared, `BL-258` landed
+
+**Diagnosed cause — not the `BL-212` halt.** The playtest's "quits at ~5 s" was read as the
+`STOP_SEQUENCE` halt firing early. Measured instead: wherever `large_30sec_fire` actually starts
+from a loaded call site, it burns its authored 30 s exactly — `--destroy=crtsk01` (C5 crate) and
+`--destroy=gate2` (C2 gate) both show `fire_n_smoke` in 29 consecutive one-second `--debug-anim`
+censuses, gone at ~30 s. But on the ~1,035 death call sites the item names, the fire **never
+started at all**: baseline `--destroy=leng11` (C1C/M01 zeppelin engine) logs **zero** `fire_n_smoke`
+lines in 35 s of sim. The call lives in the compiled defs' `unknown_seq` — the destruction slot
+`AnimDefinition.Parse` never read (`BL-258`) — so every one of those calls silently no-oped. What
+the user watched for ~5 s was the death's OTHER effects (`large_fireball`'s 0.3 s ball + trails,
+`great_balls_of_fire`'s 4 s flight, particles' 3.5–5.5 s `LIFETIME_RANGE`) reading as "the fire".
+Not a regression: those sites never played it; earlier passes (`PT-19` "the oil-tank kill reads
+right") judged fires by ENDING, which a fire that never begins satisfies trivially.
+
+**Census before loading (BL-258's own trap).** Over all 12,693 compiled defs: 1,544 non-empty
+`unknown_seq` blocks (1,430 mis_anim + 114 cam_anim), **every one on a HEALTH > 0 destructible,
+zero elsewhere**, and 1,429 of the 1,430 mission-archive blocks dispatch calls no listed sequence
+reaches (the lone overlap is
+gate1's idempotent `big_splash`/`big_ripple` pair). Kinds: CallAnimation 2,360, ObjectActiveState
+2,028, StopAnimation/InvalidateAnimation 2,546 (32 self-references — the consume-the-trigger
+idiom), Sound 307, PufferState 148, Loop 86, ObjectMotion 16. So the block is exclusively
+destruction-time content and the bootstrap-runner fear in `BL-258` was unfounded by measurement.
+
+**Fix.** `CompiledAnim` parses `unknown_seq` into `AnimDefinition.DeathSlot` (kept OFF `Sequences`
+so bootstrap, RESET application and the sequence-walking derivations are untouched);
+`AnimRuntime.RunDeathSequence` dispatches it as a runner on the death's own live instance
+(`RunDeathSlot`) inside the death bracket, under the same self-invalidate protection as Start's
+burst. `AnimProgram`'s sound-prewarm reachability walk includes the slot. Baseline → fixed on the
+same probe: `fire_n_smoke` 0 → 29 one-second censuses (~30 s, the authored stop), with the slot's
+`zeppelin_rocksright`/`zeppelin_rocksleft` lurch choreography now also playing.
+
+**Verified.** `.\RunTests.ps1` green: 475 units, 30/30 engine suites, 13 goldens hash-identical
+(the fix is death-path-only; nothing pinned destroys a slot-carrying def). New `death-slot` suite
+asserts a real kill dispatches the `destruction_slot` lane (C1 AA gun → `genx12`), and FAILS with
+`RunDeathSlot` deleted (deliberate perturbation, restored). One suite fix with cause traced:
+`bounce-launch` counted launches via the runtime-wide `BallisticMotionsLaunched`, and on the shared
+cached world the AA guns' now-dispatching slot (killed earlier by `damage-hd`) bled a `genx12`
+fireball launch into its window — the count is now scoped to the subject def's own dispatches
+(INSTR-10), and the suite alone-on-a-fresh-world passed both before and after.
+
+**Bookkeeping.** `BL-276` and `BL-258` deleted from backlog (the block is loaded and dispatched;
+of BL-258's questions, (a) no duplication — censused, (b) moot — the dispatch is the death path
+itself, (c) the raw e24 offset was already in anim-definitions.md's struct layout). Verification
+rule DIAG-20 added (an effect that never starts passes every "it ends correctly" check);
+destructibles.md / anim-definitions.md updated to record the slot as loaded. Cockpit re-test owed:
+the fire now burns 30 s at real death sites — fold into `BL-275`'s height playtest.

@@ -214,6 +214,19 @@ public sealed class AnimDefinition
     public bool ByRange;
     public int[] SiScriptIds = Array.Empty<int>();
     public AnimSequence? ResetState;
+
+    /// <summary>The compiled destruction slot — mech3ax's <c>unknown_seq</c>, a third
+    /// <c>Initial</c> block the listed <c>sequences</c> never contain. Censused over all 12,693
+    /// compiled defs (2026-08-05): every one of the 1,430 non-empty blocks sits on a
+    /// HEALTH &gt; 0 destructible, and 1,429 of them dispatch calls no listed sequence reaches —
+    /// the death's <c>large_30sec_fire</c>/flying-parts/part-hide choreography. Deliberately kept
+    /// OFF <see cref="Sequences"/> so bootstrap, RESET application and every derivation that walks
+    /// the listed sequences (<c>ChainedSwapTarget</c>, <c>AuthorsVisibleDeath</c>, the stage-root
+    /// closure) are untouched; <c>AnimRuntime.RunDeathSequence</c> is the one dispatcher. Null on
+    /// reader-sourced defs — the reader text authors its destruction as ordinary listed
+    /// sequences.</summary>
+    public AnimSequence? DeathSlot;
+
     public string SourceFile = "";
     /// <summary>The archive this def came from, and therefore the pool
     /// <see cref="SiScriptIds"/> index into. Null for zrdr-sourced defs (no scripts exist
@@ -271,6 +284,13 @@ public sealed class AnimDefinition
             def.ResetState = AnimSequence.Parse(reset);
         foreach (var seq in d.Objects("sequences"))
             def.Sequences.Add(AnimSequence.Parse(seq));
+        // The slot's authored name is empty; give the debugger timeline a recognizable lane.
+        if (d.Obj("unknown_seq") is { } slot
+            && AnimSequence.Parse(slot) is { Events.Count: > 0 } death)
+        {
+            death.Name = "destruction_slot";
+            def.DeathSlot = death;
+        }
         return def;
     }
 }

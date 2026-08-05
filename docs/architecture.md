@@ -489,6 +489,9 @@ regenerates from, and the source of truth `--dump-markers` and `UI.MarkerOverlay
 Reader for the fork's compiled `cam_anim`/`mis_anim` extraction (zip or dir): typed defs, events,
 and the SI-script pool — `Script(index)` parses lazily, ordered by `metadata.json`. Decode facts
 (ptr = flat node index, shifted quat labels, half-angle cubics): docs/formats/anim-definitions.md.
+The `unknown_seq` destruction slot parses into `AnimDefinition.DeathSlot`, deliberately OFF
+`Sequences` (bootstrap and the sequence-walking derivations never see it); only
+`AnimRuntime.RunDeathSequence` dispatches it (`BL-276`, docs/formats/destructibles.md).
 ⚠ Payloads stay a generic `AnimData` bag, not per-kind DTOs — a new event kind costs this file nothing.
 ⚠ Degrade, never fail the build: missing archive → null (normal); corrupt archive → log + skip.
 ⚠ Keep `Parse`'s spline handling: `spline_interp: false` coefficients are garbage that can be

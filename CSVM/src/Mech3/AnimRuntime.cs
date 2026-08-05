@@ -3401,6 +3401,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         try
         {
             Start(inst.Def, inst.Anchor, protectSelfInvalidate: true);
+            RunDeathSlot(inst.Def, inst.Anchor);
         }
         finally
         {
@@ -3415,6 +3416,44 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (AuthorsVisibleDeath(inst.Def))
             return;
         ApplyDeathSwap(inst);
+    }
+
+    /// <summary>Dispatches the def's compiled destruction slot
+    /// (<see cref="AnimDefinition.DeathSlot"/>) alongside the Initial sequences
+    /// <see cref="Start"/> just ran — the block that carries ~all of <c>large_30sec_fire</c>'s
+    /// 1,035 death calls, which the listed sequences never reach (`BL-276`; the slot census is on
+    /// the field's own doc). Runs as a runner ON the live instance so its timed events keep
+    /// advancing with the death, and so a reset's <see cref="Stop"/> tears it down with everything
+    /// else; a def whose Initial sequences already drained at t=0 gets its instance re-created for
+    /// the slot alone. The zero advance fires the slot's t=0 calls inside the death bracket
+    /// (template relocation permission), under the same self-invalidate protection as Start's own
+    /// burst — 32 slots name their own animation in a STOP/INVALIDATE_ANIMATION, the
+    /// consume-the-trigger idiom.</summary>
+    private void RunDeathSlot(AnimDefinition def, Node3D? anchor)
+    {
+        if (def.DeathSlot is not { } slot)
+            return;
+        var live = InstanceOf(def, anchor);
+        if (live == null)
+        {
+            live = new AnimInstance(def, anchor);
+            _instances.Add(live);
+            OnInstanceStarted?.Invoke(def, anchor);
+        }
+        live.Runners.Add(new SequenceRunner(slot));
+        _startDepth++;
+        _startingInstances.Push((live, true));
+        try
+        {
+            live.Advance(this, 0f);
+        }
+        finally
+        {
+            _startingInstances.Pop();
+            _startDepth--;
+        }
+        // A slot that drained in the zero advance is retired by the next Advance sweep, which
+        // runs the full finish path (emitters, TTLs, template hides) — nothing special here.
     }
 
     /// <summary>The first <c>CALL_ANIMATION</c> target, one level down from <paramref name="def"/>'s

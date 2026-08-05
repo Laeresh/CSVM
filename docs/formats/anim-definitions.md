@@ -459,10 +459,12 @@ splash instead of after it. The splash's own choreography runs 3.0 s (`plane_sp_
 (`wait-for-completion` suite). It is the only crash def in the install carrying the flag — the eight
 chapters' `player_crash_default`/`player_crash_dirt` are all `null`.
 
-Two spellings are counted and deliberately NOT honoured: 879 flagged calls sit in the `unknown_seq`
-block our reader does not load at all (`BL-258`), and 33 reader `CALL_SEQUENCE` bodies carry the
+One spelling is counted and deliberately NOT honoured: 33 reader `CALL_SEQUENCE` bodies carry the
 bare token, which the compiled form never does (56,750/56,750 of the field's occurrences are on
-`CallAnimation`) and so has no decoded semantics.
+`CallAnimation`) and so has no decoded semantics. The 879 flagged calls in the `unknown_seq`
+destruction slot dispatch since `BL-276` (2026-08-05) — the slot is loaded as
+`AnimDefinition.DeathSlot` and runs at death (see [destructibles.md](destructibles.md)), so its
+flags behave like any dispatched call's (a routed effect call's hold is counted, not honoured).
 
 **An `OBJECT_ACTIVE_STATE` pair around a call is a scope, not a lifetime.** The data's idiom for
 "emit here" is three events with no `START_TIME` between them — activate a bare node, call the

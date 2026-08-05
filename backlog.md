@@ -327,16 +327,6 @@ shape as `BL-259`/`BL-261`.
   height reads are no longer inflated by the 4× scale.
   *Playtest after fix:* destroy a building and crash a plane in one flight; both plumes should
   climb to the original's height.
-- `BL-276` **`large_30sec_fire` stops at about 5 s instead of 30 — a suspected `BL-212`
-  regression.** Confirmed at the controls (`PT-22` (a) and (b), 2026-08-05): the fire behind ~1,035
-  death call sites visibly quits after ~5 s, and `PT-22`'s explicit check "the fire still **ends at
-  30 s** (the `BL-212` halt must not have regressed)" came back **no**. `BL-212` is the landed
-  `STOP_SEQUENCE` halt (renumbered — the rocket-trail item that briefly held that ID is now
-  `BL-215`), and it is the prime suspect. ⚠ **Trap:** this is judged **separate** from the
-  aircraft damage-stage puffers also stopping early (user's call, 2026-08-05) — those are the
-  authored-data rework already scheduled in `PLAN-m3-polish-8` wave D. Do not merge the two; a
-  shared "puffers stop early" item would hide a regression inside planned work.
-  *Playtest after fix:* destroy a building and watch the full 30 s.
 - `BL-277` **`SkyZone` hard-codes `zone2`, which has no horizon geometry at all in C1B, C2 and
   C3.** Found by checking `PT-23`'s "skydome/fog in C1B and C3 are not correct, perhaps only wrong
   zone" against the data (2026-08-05), and it is a bug, not a fidelity preference:
@@ -447,28 +437,6 @@ extracted data before being logged, so the mechanism is recorded here and not re
   speed 17–25 m/s, so an apex exists), and whether the following event is the piece's own
   deactivation in every one of them. `analysis/bl-061-template-mesh/FINDINGS.md` records the
   measurement; `zep_ng_dstry1.flt` is the reachable repro (`--effects-test`, any chapter).
-
-### A whole authored sequence block the reader never loads (found 2026-08-05)
-
-- `BL-258` **`unknown_seq` is a third `Initial` sequence on 1,544 compiled defs, and
-  `AnimDefinition.Parse` does not read it.** Found while censusing `WAIT_FOR_COMPLETION`'s scope
-  (`BL-228`), and not that mechanism: the field is simply absent from our compiled front-end.
-  mech3ax's `unknown_seq` is shaped exactly like an entry of `sequences` — `{name, seq_state,
-  reset_state, events, pointer}` on all 1,544 — carries `seq_state: "Initial"` (so the original
-  runs it with the animation), and its `pointer` differs from every listed sequence's, so it is a
-  distinct authored block rather than a duplicate. Concrete case:
-  `C1/IA1/mis_anim/leng11-destroy_mp1zleng11-healthy.json`, a `WeaponHit` zeppelin-engine
-  destructible whose two listed sequences are `DAMAGE_SEQUENCE` and `destroyit`, while its
-  `unknown_seq` is a one-event `CALL_ANIMATION large_30sec_fire WITH_NODE supports` — the burning
-  engine mount. **879 of the install's 3,731 flagged calls live in this block**, which is exactly
-  why the two `wait-for-completion` censuses disagree by 879.
-  ⚠ Census before loading it. The name is the fork's, not the format's: nothing has established
-  what distinguishes this block from the listed ones, and blindly adding it as a third initial
-  sequence would start 1,544 more runners at bootstrap — the live-instance count, every effect
-  census and several goldens would move at once. The questions are (a) whether its events duplicate
-  content the listed sequences already reach by another route, (b) whether `WeaponHit` defs (2,565
-  of them) gate it differently, and (c) what the field's raw offset is in the e24 struct.
-  `analysis/wait-for-completion/callee_shapes.py` already walks every def and can be pointed at it.
 
 ### Effect template roots nothing stages (found 2026-08-05 by the derivation tripwire)
 
