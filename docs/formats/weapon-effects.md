@@ -350,16 +350,17 @@ ammo types**. In each chapter's `texture/`:
 
 `ProjectilePool` resolves each weapon's ammo index from its `FIRE` `ANIMATION` binding
 (`MuzzleAmmoIndex`: `muzzle_burst_slug`/`_dum`/`_ap`/`_mag` name the type directly; the base
-`muzzle_burst`/heavy-mount `muzzle_burst2` carry no suffix and default to slug). The **authored
-form is the default since A3** (`BL-263`): one quad rolled to the def's own `mb_spinflame`
-mechanism — one of three discrete Z angles per shot (30°/80°/140°, `RANDOM_WEIGHT` 1/3 each) — and
-playing that ammo's two-frame `_muzzle1`→`_muzzle2` flipbook over the flash's life (an even
-half/half split; the def carries no authored split point, so this is a gloss). Giving `_muzzle2`
-back to the flash does not restyle the impact stand-in spark, which reuses the same texture asset
-through its own, separate, hardcoded pool. The earlier hand-authored triad — three quads 120°
-apart sharing one continuous random roll, matched to the reference captures' 3-lobed burst — stays
-reachable via the `MuzzleFlashCount` constant (3) for the A/B; **the pick between the two forms is
-the user's, at the controls, and still open** — whichever loses is deleted, not flagged off.
+`muzzle_burst`/heavy-mount `muzzle_burst2` carry no suffix and default to slug). The rendered
+flash is the **triad** — three `_muzzle1` quads 120° apart sharing one continuous per-shot roll,
+matched to the reference stills' 3-lobed burst — **anchored to the firing muzzle node**, riding
+the plane as the def's `AT_NODE` placement implies (a world-fixed flash is flown through at
+speed). The def authors ONE `mb_spinflame` node with a 3-way `RANDOM_WEIGHT` roll (30°/80°/140°);
+what the original engine renders from that — one picked branch or all three at once — is not
+recoverable from the data. The pick-one reading (one rolled quad playing the
+`_muzzle1`→`_muzzle2` flipbook) was implemented and **rejected at the controls (2026-08-05,
+`BL-263`)**: it does not reproduce the stills, and the deviation is recorded here as deliberate.
+The `_muzzle2` frame is not played by the flash; the impact stand-in spark keeps reusing it
+through its own separate pool.
 
 ## Binding resolution — 5 unresolved names
 

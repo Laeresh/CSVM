@@ -16210,3 +16210,21 @@ non-monotonically before, 0.13 px mean after (`.scratch/plan8/C8/jitter_*`, `jit
 Goldens 13/13 hash-identical before and after — the det clock skips render interpolation, so no
 fixed-step instrument could have seen this (verification DET-10); it took the user at the
 controls.
+
+## 2026-08-05 — A3/`BL-263` resolved at the controls: the triad stays, now anchored to the muzzle node; the authored-reading branch is deleted
+
+The user judged the A3 default in flight and rejected it — one flame instead of three, blurrier,
+and "nothing like the screenshots from the original" — so per the item''s own rule the losing form
+is deleted, not flagged off: the pick-one single-quad roll, the `_muzzle1`→`_muzzle2` flip and
+its whole frame-2 pool machinery are gone; `MuzzleFlashCount` is a const 3 again. The verdict''s
+framing (user, same sitting): the def authors ONE `mb_spinflame` with a 3-way `RANDOM_WEIGHT`
+roll, and what the original ENGINE renders from that — one picked branch or all three — is not
+recoverable from the data; the stills are the ground truth and they show the burst. Recorded on
+`BL-286` with the 30/80/140°-concurrent hypothesis. Fixed in the same change, also
+user-reported: the flash was WORLD-FIXED, so at speed the plane flew through its own flash —
+sprites now carry `Sprite.Anchor` (pose stored local to the firing muzzle node, resolved per
+frame; the def plays `muzzle_burst` AT that node, so anchoring is the authored placement).
+Verified: breadcrumb `anchored=True` with the world-resolved basis matching the aircraft at
+1.000 in an at-speed firing probe; full `RunTests.ps1` green, 13/13 goldens hash-identical (no
+golden fires). `BL-263` retired; residues (muzzle-light magnitudes, the concurrent-roll
+hypothesis) → `BL-286`.

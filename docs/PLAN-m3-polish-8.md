@@ -72,7 +72,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ `BL-282` — `Puffer.SizeScaleDefault` 4 → 1; config knobs stay (landed 2026-08-05)
 2. ☑ `BL-261` — render the authored `muzzlepuffer`, delete the eject-puff cluster (landed 2026-08-05; look-check → `PT-39`)
-3. ◐ `BL-263` — muzzle flash: authored single-node roll + the unplayed `_muzzle2` flipbook frame (authored form landed as default 2026-08-05; the pick between forms is the user's → `PT-39`)
+3. ☑ `BL-263` — muzzle flash: authored single-node roll + the unplayed `_muzzle2` flipbook frame (resolved 2026-08-05: the user rejected the single-node reading at the controls — the triad stays as the item's own alternative outcome, now muzzle-anchored; residues → `BL-286`)
 
 ### Wave B — airframe fixtures
 
@@ -243,11 +243,16 @@ like everything visual.
 `muzzlepuffer` window is exactly 6 × 0.05 s intervals over 0.3 s). Cluster deleted, smoke on,
 casing untouched, goldens unchanged. Look-check rides `PT-39`.
 
-**A3 Outcome (2026-08-05) — authored form landed as default; pick pending.** Discrete 3-bucket
-roll + `_muzzle1`→`_muzzle2` flip over an even half-life split (declared gloss); frame 2 has its
-own MultiMesh pool so the impact spark's `slug_muzzle2` reuse is untouched; triad reachable via
-`MuzzleFlashCount = 3`. Neither form fully reproduces the stills' multi-lobed burst in
-freeze-frame — the pick (and the loser's deletion) is the user's at the controls, `PT-39`.
+**A3 Outcome (2026-08-05) — resolved by the item's alternative clause: the triad stays, reason
+recorded.** The authored single-node reading (discrete 3-bucket roll + `_muzzle1`→`_muzzle2`
+flip) was implemented, judged by the user in flight the same day, and rejected — one flame,
+blurrier, unlike the original stills; the losing branch and its frame-2 machinery were deleted
+per the item's own rule. The user's framing: what the original engine renders from the
+`RANDOM_WEIGHT` roll (one branch or all three) is not recoverable from the data — the stills are
+the ground truth. Also fixed on the same report: the flash was world-fixed and flown through at
+speed; flash sprites are now anchored to the firing muzzle node (`Sprite.Anchor`), which is the
+def's own `AT_NODE` placement. Residues (muzzle-light magnitudes, the 30/80/140°-concurrent
+hypothesis) → `BL-286`.
 
 # Wave B — airframe fixtures
 

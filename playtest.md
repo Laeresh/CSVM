@@ -112,12 +112,11 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   `Projectile.cs`'s `MuzzleFlashCount` back to 3. One flight covers it
   (`./RunGame.ps1 --plane=player_bhawk --chapter=C1B --infinite-ammo`, sustained fire in chase
   view). *Look for:* (a) smoke sits on the gun line and drifts aft, casings tumble bare — A/B vs
-  `C1B IA1 Bloodhawk tracer and ejection.png`; (b) the flash-form pick: does the authored form
-  reproduce `MuzzleFlash1-3.png`'s burst, or does the triad still read closer? Freeze-frame A/Bs
-  of both forms (slug + AP, same pose) are staged in `playtest/PT-39/` — whichever loses is
-  deleted (`BL-263`). (c) While judging, the muzzle-light magnitudes (`MuzzleLightEnergy` 2.5,
-  `MuzzleLightLife` 0.03 s) are stand-ins — the def authors range/colour only; flag if the light
-  reads wrong. (d) Fire into the water: the splash now plays its authored fade + flipbook and
+  `C1B IA1 Bloodhawk tracer and ejection.png`; (b) the flash: the pick is MADE (triad kept,
+  2026-08-05, `BL-286`) and the flash is now anchored to the muzzle — confirm it rides the plane
+  at speed and reads like it used to. (c) While judging, the muzzle-light magnitudes
+  (`MuzzleLightEnergy` 2.5, `MuzzleLightLife` 0.03 s) are stand-ins — the def authors
+  range/colour only; flag if the light reads wrong (`BL-286`). (d) Fire into the water: the splash now plays its authored fade + flipbook and
   defaults to the authored 1× column width — judge 1× vs the old 8× (`water_1x_close_*` /
   `water_8x_close_*` here, or flip `SplashColumnWidthScale`) against `Water Splash.png`; the 8×
   survives only as a config TUNE if 1× still reads wrong (`BL-265`). *Blocks:* `BL-263` and

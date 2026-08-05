@@ -1305,7 +1305,7 @@ public partial class FlightController : Node3D
                 {
                     var muzzle = g.Muzzles[st.NextMuzzle % g.Muzzles.Count];
                     st.NextMuzzle++;
-                    Projectiles.Spawn(g.Weapon, muzzle.GlobalTransform, inheritVel, PlayerIndex);
+                    Projectiles.Spawn(g.Weapon, muzzle.GlobalTransform, inheritVel, PlayerIndex, muzzle);
                     if (!InfiniteAmmo)
                     {
                         g.Ammo--;
@@ -1396,7 +1396,7 @@ public partial class FlightController : Node3D
         }
         _rocketDryWarned = false;
         var inheritVel = _model.VelocityDir * _model.Speed;
-        Projectiles.Spawn(hp.Weapon, hp.Pylon.GlobalTransform, inheritVel, PlayerIndex);
+        Projectiles.Spawn(hp.Weapon, hp.Pylon.GlobalTransform, inheritVel, PlayerIndex, hp.Pylon);
         if (!InfiniteAmmo)
         {
             hp.Ammo--;

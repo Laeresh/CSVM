@@ -1938,18 +1938,19 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   decoded fields: `docs/formats/camparam.md`.
   ⚠ Trap: near-matches between authored fields and hand-picked values are suggestive, not
   decodes — wire nothing on one coincidence; each remaining camera waits for its capture.
-- `BL-263` **Muzzle flash: pick the authored single-node form or the triad at the controls**
-  (`PT-39`). The authored form is the active default since plan-8 A3 (2026-08-05): one quad
-  rolled to a discrete random Z angle per shot (equal odds over 30/80/140°, `mb_spinflame`)
-  playing the ammo's `_muzzle1`→`_muzzle2` two-frame flipbook over an even half-life split (the
-  split point is a gloss — the def authors none). The earlier hand triad (three quads 120° apart
-  sharing one continuous roll) stays reachable via `Projectile.cs`'s `MuzzleFlashCount = 3` for
-  the A/B; freeze-frame pairs (slug + AP, both forms, same pose) are staged in `playtest/PT-39/`.
-  **Whichever form loses is deleted, not flagged off.** Neither form fully reproduces
-  `MuzzleFlash1-3.png`'s multi-lobed radiating burst in stills — judge in motion too before
-  concluding. Riding along as judge-at-the-controls residue (was `BL-200`): the muzzle-light
-  stand-in magnitudes — `MuzzleLightEnergy` 2.5 and the 2-frame `MuzzleLightLife` 0.03 s; the
-  def carries range/colour only.
+- `BL-286` **Muzzle-flash residues after the `BL-263` pick (triad kept, 2026-08-05)** — two
+  small opens. (a) The muzzle-light stand-in magnitudes (was `BL-200`, rode `BL-261`/`BL-263`):
+  `MuzzleLightEnergy` 2.5 and the 2-frame `MuzzleLightLife` 0.03 s are judged values — the def
+  carries range/colour only; judge at the controls (`PT-39` (c)). The light is also still
+  world-fixed (unlike the flash quads, now muzzle-anchored) — at speed it lags the plane by ~2 m
+  for its 2 frames; anchor it if that ever reads wrong. (b) The user's engine-semantics
+  hypothesis, open: the def's 3-way `RANDOM_WEIGHT` roll (30/80/140°) may be rendered
+  concurrently (all branches) by the original engine rather than pick-one — which would make the
+  authored form itself a triad at those exact angles. Our triad uses 120° spacing with one
+  continuous roll; a 30/80/140° triad is one constant away and could be A/B'd against
+  `MuzzleFlash1-3.png` if the flash shape is ever revisited.
+  ⚠ Trap: the pick-one single-quad reading (+ `_muzzle1`→`_muzzle2` flip) was implemented and
+  rejected at the controls — do not re-land it without new footage evidence.
 - `BL-265` **Water splash width: judge the authored 1× against the 8× widening now that the
   fades exist** (`PT-39`; the fade + flipbook half landed 2026-08-05 — `docs/HISTORY.md`). The
   authored 0.05 s fade-in / 1 s fade-out and the `splash01→03` 4 fps flipbook now render (the
