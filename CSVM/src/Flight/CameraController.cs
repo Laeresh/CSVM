@@ -339,10 +339,10 @@ public sealed class CameraController
     }
 
     /// <summary>Free orbit camera used only while paused: the host mixes WASD/arrows (or the
-    /// gamepad left stick) into <paramref name="yawIn"/>/<paramref name="pitchIn"/> and Shift/Ctrl
-    /// (or the triggers) into <paramref name="zoomIn"/>, all in [−1, 1]. The plane stays put, so
-    /// every angle frames the same pose for side-by-side screenshots. Takes WALL dt — the point of
-    /// the freeze is to fly the camera around a stopped world.</summary>
+    /// gamepad left stick) into <paramref name="yawIn"/>/<paramref name="pitchIn"/> and numpad
+    /// +/- (or the triggers) into <paramref name="zoomIn"/>, all in [−1, 1]. The plane stays put,
+    /// so every angle frames the same pose for side-by-side screenshots. Takes WALL dt — the
+    /// point of the freeze is to fly the camera around a stopped world.</summary>
     public void Orbit(float dt, Vector3 focus, float yawIn, float pitchIn, float zoomIn)
     {
         float rate = Mathf.DegToRad(OrbitRateDeg);

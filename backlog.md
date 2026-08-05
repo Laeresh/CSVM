@@ -368,11 +368,6 @@ shape as `BL-259`/`BL-261`.
 - `BL-279` **Space is double-bound in freecam — it fires the guns *and* a freecam action.** Found
   in the weapon lab (`PT-30` (d), 2026-08-05). The `V` round trip to the impact point and back was
   judged **correct** in the same pass, so the toggle is not at fault; only the binding overlap is.
-- `BL-280` **Orbital camera: move the distance controls to numpad `+` / numpad `−` like the
-  original, and stop `shift` driving camera and target point together.** User request from the
-  weapon-lab sitting (`PT-30` (e), 2026-08-05) but **about the orbital camera, not the lab's** —
-  the lab's own stand-off slider and re-parking were judged to work "really good". Cross-ref
-  `BL-150` (the numpad camera rebuild), which owns the numpad bindings this must not collide with.
 - `BL-281` **The ricochet sounds are audible but very faint.** `PT-25` (c), 2026-08-05:
   `snd_ricochet1–4` play under the per-impact spark burst but sit too low to read. A mix-gain
   question with no reference recording behind it — same shape as `BL-223`'s damaged-engine gain,

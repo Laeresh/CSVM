@@ -1958,7 +1958,7 @@ public partial class FlightController : Node3D
                       - PadAxis(JoyAxis.TriggerLeft);         // RT out, LT in
         return (KeyAxis(Key.D, Key.A) + KeyAxis(Key.Right, Key.Left) + padYaw,
                 KeyAxis(Key.W, Key.S) + KeyAxis(Key.Up, Key.Down) + padPitch,
-                KeyAxis(Key.Ctrl, Key.Shift) + padZoom);      // Ctrl/RT out, Shift/LT in
+                KeyAxis(Key.KpSubtract, Key.KpAdd) + padZoom); // Kp- out, Kp+ in, RT out, LT in
     }
 
     /// <summary>Per gun group's live firing state: the fire-rate accumulator, which muzzle fires

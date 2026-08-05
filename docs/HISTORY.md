@@ -16444,3 +16444,20 @@ stage still opens the default chapter's texture tier for plane skins) **and `rim
 font `5pointhud.png` + gun reticle `impact_point.png` — without it the HUD text/reticle are off,
 which the log names; B12's extraction kit must produce both). Full `.\RunTests.ps1` green in the
 worktree after the loader change.
+
+## 2026-08-05 — PLAN-m3-polish-9 A2 `BL-280`: orbital camera distance to numpad `+`/`−`, `shift` freed for the lab's aim-click
+
+`FlightController.OrbitInput()`'s zoom axis (`FlightController.cs`) rebinds from `Ctrl`/`Shift`
+to numpad `+`/`−` (`Key.KpAdd`/`Key.KpSubtract`): `+` dollies in, `−` dollies out, unchanged
+`OrbitZoomRate`/clamp in `CameraController.Orbit`. This is the free orbit shared by the P-pause
+screenshot freeze and the weapon lab's `Held`-plane camera (`WASD`/arrows swing it) — not
+`UI/OrbitCamera.cs`, the separate LMB-drag/wheel camera `--viewer` uses, and not the weapon lab's
+own stand-off slider or click-to-place, which stay untouched. `Shift` no longer does zoom duty,
+so it is no longer overloaded with the lab's `shift`-click "aim without moving" (target-point
+placement) — camera distance and target-point aim are now on fully separate inputs where before
+both leaned on `Shift`. Checked against `BL-150` first: that item's numpad claims are `Kp1`-`Kp9`
+(flight fixed views) plus the confirmed-unbound `Kp5`, none of it `KpAdd`/`KpSubtract`, so no
+collision. Updated the in-panel hint (`WeaponLab.cs`) and `docs/controls.md` to match.
+Verified: `.\RunTests.ps1` green (475 units, 29/29 engine suites, 13/13 goldens, all hashes
+unmoved — the change touches no golden pose). Interactive feel is the user's call at the next
+sitting: numpad `+`/`−` zoom, `Shift`+`WASD`-orbit no longer zooms, `shift`-click still aims.
