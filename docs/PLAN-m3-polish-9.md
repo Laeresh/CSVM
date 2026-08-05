@@ -70,7 +70,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — the crash and fire scene
 
-4. ☐ `BL-274` Anchor the crash ground splash at the impact point instead of the sliding wreck
+4. ☑ `BL-274` Anchor the crash ground splash at the impact point instead of the sliding wreck
 5. ☐ `BL-276` `large_30sec_fire` burns 30 s again — find and fix the suspected `BL-212` regression
 6. ☐ `BL-275` Fire plumes climb to the original's height (rise speed or per-puff lifetime)
 
@@ -168,7 +168,7 @@ not the other way around.
 
 # Wave B — the crash and fire scene
 
-## B4 ☐ `BL-274` The crash ground splash tracks the moving wreck
+## B4 ☑ `BL-274` The crash ground splash tracks the moving wreck
 
 **Goal.** On a belly-slide crash, the ground splash plays where the plane hit and stays there while
 the wreck slides on.
