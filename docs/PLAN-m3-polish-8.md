@@ -64,7 +64,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☐ `BL-262` — `Puffer.SizeScaleDefault` 4 → 1; config knobs stay
 2. ☐ `BL-261` — render the authored `muzzlepuffer`, delete the eject-puff cluster
-3. ☐ `BL-263` — muzzle flash as the authored single `mb_spinflame` discrete roll
+3. ☐ `BL-263` — muzzle flash: authored single-node roll + the unplayed `_muzzle2` flipbook frame
 
 ### Wave B — airframe fixtures
 
@@ -168,32 +168,44 @@ this pool"; the muzzlepuffer's 0.1–0.2 s lives need far less — leave the cap
 per-shot instant spawn is an accepted gloss (sustained fire fills the streak) — do not build a
 windowed emitter here; if the single-shot look bothers the user, that is a named TUNE, not a bug.
 
-## A3 ☐ `BL-263` — muzzle flash as the authored single `mb_spinflame` discrete roll
+## A3 ☐ `BL-263` — muzzle flash: the authored single-node roll AND the unplayed second flipbook frame
 
-**Goal.** The muzzle flash is one quad rolled to the def's discrete random angle per shot — or, if
-the at-the-controls A/B says the authored form doesn't reproduce the reference stills, the triad
+**Goal.** The muzzle flash is the authored form: one quad rolled to the def's discrete random
+angle per shot, playing the ammo's **two-frame** `_muzzle1`→`_muzzle2` flipbook — or, if the
+at-the-controls A/B says the authored form doesn't reproduce the reference stills, the triad
 stays with the reason recorded.
 
-**Evidence (confidence: direction-sound, outcome a judgement).** `muzzle_burst.zrd.json` authors
-ONE `mb_spinflame` node with `RANDOM_WEIGHT` over 30/80/140° of Z roll per shot.
-`Projectile.cs:98-104` draws three quads 120° apart sharing one continuous roll, justified by the
-3-lobed reading of `MuzzleFlash1-3.png` — but those lobes may be the flash *texture's own art*, in
-which case the authored single node already produces them and the triad triples it.
+**Evidence (confidence: direction-sound, outcome a judgement).** Two authored mechanisms are
+currently not played: (1) `muzzle_burst.zrd.json` authors ONE `mb_spinflame` node with
+`RANDOM_WEIGHT` over 30/80/140° of Z roll per shot, inside the per-ammo
+`muzzle_burst_{slug,dum,ap,mag}` wrapper the weapon's `FIRE` binding selects;
+`Projectile.cs:98-104` draws three quads 120° apart sharing one continuous roll instead. (2) The
+flash texture is a **two-frame flipbook per ammo** — `{slug,dum,ap,mag}_muzzle1`/`_muzzle2`
+(`docs/formats/weapon-effects.md` "Muzzle & tracer textures") — and the C24 wiring draws only the
+`_muzzle1` frame; `_muzzle2` is never played by the flash (it got reused as an unrelated
+impact-spark texture, predating that wiring). The triad was justified by the 3-lobed reading of
+`MuzzleFlash1-3.png` — but those lobes may be the texture art plus the frame flip, in which case
+the authored single node already produces them and the triad triples it.
 
 **Approach.** Implement the authored form behind the existing constants (`MuzzleFlashCount = 1` +
-a discrete 3-bucket roll), capture both forms at the same pose against `MuzzleFlash1-3.png`, and
-let the user pick at the controls. Whichever loses is deleted, not flagged off.
+a discrete 3-bucket roll + the 1→2 frame flip over `MuzzleLife`), capture both forms at the same
+pose against `MuzzleFlash1-3.png`, and let the user pick at the controls. Whichever loses is
+deleted, not flagged off. The frame flip is worth testing *with* the single node before judging —
+it may be the missing ingredient that made one quad look wrong in the first place.
 
 **Model recommendation.** medium — small code, but the A/B framing has to be honest (same ammo
 type, same pose, freeze-frame).
 
 **Verify.** Freeze-frame captures (pause + `.` step) of single shots, both forms, against the
-three reference stills; then sustained fire for the in-motion read. No regression surface beyond
-the gun line.
+three reference stills — including at least one non-slug ammo so the per-ammo axis is seen
+working; then sustained fire for the in-motion read. No regression surface beyond the gun line.
 
-**⚠ Traps.** The per-ammo flash *textures* (`{slug,dum,ap,mag}_muzzle1`) and their tints are a
-separate, data-sourced axis — don't conflate the lobe-count question with the texture selection.
-Run post-A1 like everything visual.
+**⚠ Traps.** (a) The per-ammo *selection* axis (`MuzzleAmmoIndex` from the `FIRE` binding,
+unsuffixed `muzzle_burst`/`muzzle_burst2` defaulting to slug) is already correct — don't touch it
+while changing the shape. (b) The impact stand-in spark currently reuses `_muzzle2` as a generic
+bright-flash texture; giving `_muzzle2` back to the flash must not restyle the impact spark in
+the same change — if the shared use grates, that's a separate note on `BL-263`. (c) Run post-A1
+like everything visual.
 
 # Wave B — airframe fixtures
 
