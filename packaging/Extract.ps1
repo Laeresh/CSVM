@@ -115,6 +115,22 @@ try {
         Fail ("The UI-resource extraction reported errors (see above). " +
               "If your install is a plain retail one and this keeps failing, report it with the output above.")
     }
+
+    # The HUD font and gun-reticle loaders read loose PNGs from extracted\rimage\,
+    # not from rimage.zip -- unpack that one archive (a few tens of MB). Unpacking,
+    # not extracting: the archive itself was produced by step 1.
+    $RimageZip = Join-Path $Dest "rimage.zip"
+    $RimageDir = Join-Path $Dest "rimage"
+    if (Test-Path -LiteralPath $RimageZip) {
+        $rimageCurrent = (Test-Path -LiteralPath $RimageDir) -and
+            ((Get-Item -LiteralPath $RimageDir).LastWriteTime -ge (Get-Item -LiteralPath $RimageZip).LastWriteTime)
+        if (-not $rimageCurrent) {
+            Write-Host ""
+            Write-Host "Unpacking rimage.zip (HUD font + reticle images)..."
+            Expand-Archive -LiteralPath $RimageZip -DestinationPath $RimageDir -Force
+            (Get-Item -LiteralPath $RimageDir).LastWriteTime = Get-Date
+        }
+    }
 }
 catch {
     Fail ("Extraction failed: $($_.Exception.Message)`n" +

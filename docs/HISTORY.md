@@ -15817,6 +15817,13 @@ via `cmd`: quoting defused, idempotent (all up to date, 1 s), exit 0. No engine 
 so no `RunTests.ps1`. `docs/tooling.md` gained the dispatcher section with the hard rule:
 extraction logic stays in the two scripts only.
 
+Addendum (same day, post-B11): B11's bare-folder smoke found the HUD-font/reticle loaders read
+loose PNGs from `extracted/rimage/` with no zip fallback — the dev tree only has that folder from
+a historical `-Unzip` run, so the friend flow would have lost HUD text and the gun reticle.
+`Extract.ps1` gained one post-step: `Expand-Archive` of the produced `rimage.zip` into
+`extracted/rimage/` (idempotent, ~23 MB). Verified in the scratch package: rerun idempotent,
+`5pointhud.png`/`5pointhudbrite.png`/`impact_point.png` present in the unpacked folder.
+
 ## 2026-08-05 — friends-release B11: export preset lands; the first hand export flies from a bare folder, pixel-identical to the dev tree
 
 `CSVM/export_presets.cfg` is committed — one preset, **"Windows Desktop"** (release, x86_64,

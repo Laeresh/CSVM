@@ -120,7 +120,10 @@ above, shipped next to it: `ExtractAssets.ps1 -Source <install>\ZBD -Dest .\extr
 .\extracted\rof` (all `.\` anchored to `$PSScriptRoot`, so the CWD never matters, and the
 `rof` dest keeps the canonical shape the VERSION.json stamp requires). **Keep all extraction
 logic in the two scripts only** — the dispatcher is path plumbing; a package-only extraction
-variant is the divergence trap the plan forbids.
+variant is the divergence trap the plan forbids. Its one post-step: it unpacks the produced
+`rimage.zip` into `extracted\rimage\` (`Expand-Archive`, idempotent) — the HUD-font and
+gun-reticle loaders read loose PNGs from that folder and have no zip fallback, and the dev
+tree only has it unpacked because of a historical `-Unzip` run.
 
 ## Launch scripts
 
