@@ -70,7 +70,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — the package
 
 11. ☐ Export preset + first hand export, smoke-tested from a bare folder
-12. ☐ Friend extraction kit: one-command `Extract.ps1`, bundled fork `unzbd.exe`, README, licenses
+12. ☑ Friend extraction kit: one-command `Extract.ps1`, bundled fork `unzbd.exe`, README, licenses
 13. ☐ Assemble the zip, clean-machine test, first hand-off
 
 ## Dependency and parallelism notes
@@ -198,7 +198,7 @@ stock loadouts silently vanish and every plane flies unarmed. Check that first i
 missing. The first-run `--headless --import` ritual is editor-only; exported builds carry imported
 resources and must not need it.
 
-## B12 ☐ Friend extraction kit: one-command `Extract.ps1`, bundled fork `unzbd.exe`, README, licenses
+## B12 ☑ Friend extraction kit: one-command `Extract.ps1`, bundled fork `unzbd.exe`, README, licenses
 
 **Goal.** A friend runs `.\Extract.ps1 "C:\...\Crimson Skies"` in the unzipped folder and ends up
 with a complete, stamped `extracted/` beside the exe — ZBDs and rof/strings both — with a README

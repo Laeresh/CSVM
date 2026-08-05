@@ -110,6 +110,18 @@ the stamp with a note rather than guessing where the shared file lives.
 
 Formats: [formats/rof.md](formats/rof.md), [formats/strings.md](formats/strings.md).
 
+## `packaging/Extract.ps1` — the friend-facing dispatcher
+
+Ships in the release zip (see `packaging/MANIFEST.md`), never used in the dev tree. It takes
+one argument — the recipient's Crimson Skies install root — validates `ZBD` and
+`GOSDATA\ASSETS` exist with a friendly error, and dispatches to the two UNMODIFIED scripts
+above, shipped next to it: `ExtractAssets.ps1 -Source <install>\ZBD -Dest .\extracted
+-Unzbd .\tools\unzbd.exe`, then `ExtractRof.ps1 -Source <install>\GOSDATA\ASSETS -Dest
+.\extracted\rof` (all `.\` anchored to `$PSScriptRoot`, so the CWD never matters, and the
+`rof` dest keeps the canonical shape the VERSION.json stamp requires). **Keep all extraction
+logic in the two scripts only** — the dispatcher is path plumbing; a package-only extraction
+variant is the divergence trap the plan forbids.
+
 ## Launch scripts
 
 **`RunGame.ps1` — the play entry point.** `dotnet build`, then Godot with **no user args**, so the

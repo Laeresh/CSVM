@@ -15781,3 +15781,38 @@ Schema hand-edited to 999: exactly one `WARN [core] extraction stamp schema=999 
 expects schema=1 … re-run ExtractAssets.ps1 and ExtractRof.ps1` line; file renamed away: the
 missing-stamp variant (`extraction tree has no version stamp … re-run ExtractAssets.ps1`);
 valid stamp restored by re-running both scripts. `dotnet test` green: 450/450.
+
+## 2026-08-05 — PLAN-friends-release B12: friend extraction kit (`packaging/`)
+
+Everything zip-specific now lives in a committed `packaging/` directory: `Extract.ps1` (the
+friend-facing dispatcher), the package `README.md` (a DRAFT — the user owns outward
+communication and reviews it before any hand-off), `LICENSE` (GPL-3, byte-identical to the repo
+root's, hash-verified), `LICENSE-unzbd` (EUPL-1.2, byte-identical to `tools/mech3ax/LICENSE`,
+hash-verified), and `MANIFEST.md` (the zip layout + provenance table for B13's assembler).
+
+`Extract.ps1` is deliberately logic-free: one argument (the install root — the folder holding
+`ZBD` and `GOSDATA`), friendly validation errors (never a stack trace: a `Fail` helper prints
+red and `exit 1`; the two child invocations sit in `try/catch` so even their `throw`s come out
+as one message), then dispatch to the UNMODIFIED sibling `ExtractAssets.ps1`
+(`-Source <install>\ZBD -Dest .\extracted -Unzbd .\tools\unzbd.exe`) and `ExtractRof.ps1`
+(`-Source <install>\GOSDATA\ASSETS -Dest .\extracted\rof`) — every `.\` resolved against
+`$PSScriptRoot`, so the friend's CWD is irrelevant, and the `rof` dest keeps the canonical
+shape A2's stamp gate requires. Child failures are caught by presetting `$global:LASTEXITCODE
+= 0` before each call (a child that completes without `exit` leaves the variable at whatever
+its last native call returned — presetting makes the check sound). One quoting defense: the
+argument is `.Trim().Trim('"').TrimEnd('\', '/')`-ed, because `"...\Crimson Skies\"` — the
+single likeliest friend typo — makes the shell swallow the closing quote into the argument.
+
+**Verified** against a scratch package layout (`b12-pkg`: dispatcher + the two repo scripts +
+the fork `unzbd.exe`), run from a foreign CWD (`C:\Windows`) via the README's own
+`powershell -ExecutionPolicy Bypass -File` spelling. Negative first: no argument → usage +
+friendly error; `C:\Windows` → "Expected a ZBD folder at 'C:\Windows\ZBD'…"; a nonexistent
+path with spaces → clean not-found message; all exit 1, zero stack traces. Positive: full
+extraction in **14.8 s wall**, producing **1,401 files / 555 MB** (the README says "about
+0.6 GB, well under a minute"); `VERSION.json` carries BOTH the `assets` and `rof` fields
+(schema 1; `unzbdCommit` correctly absent — the packaged exe sits outside any git checkout,
+exercising A2's bare-exe path for real); `planes.zip`, `zrdr.zip`, `C1/gamez.zip`,
+`rof/ui_strings.json` all present. Re-run with the trailing-backslash-inside-quotes argument
+via `cmd`: quoting defused, idempotent (all up to date, 1 s), exit 0. No engine code touched,
+so no `RunTests.ps1`. `docs/tooling.md` gained the dispatcher section with the hard rule:
+extraction logic stays in the two scripts only.
