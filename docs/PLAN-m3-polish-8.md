@@ -82,7 +82,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — effect & camera choreography
 
 6. ☐ `BL-265` — water splash: authored opacity fades + `splash01→03` flipbook; re-judge the 8× width
-7. ☐ `BL-267` — engine start/stop: play `startprops`/`stopprops`; throttle-step smoke stays a named open half
+7. ☐ `BL-267` — engine start/stop: play `startprops`/`stopprops`; throttle-slam smoke wired magnitude-gated (`CAP-21` re-read)
 8. ☐ `BL-248` — dynamic chase distance: implement the two CAP-21-measured terms
 9. ☐ `BL-260` — the four authored cameras: crash first; un-decodable ones recorded, not guessed
 10. ☐ `BL-266` — camera shake: find the authored law (`shakes.zrd.json`/`damage_shakes.zrd.json`), then implement or re-scope
@@ -349,15 +349,21 @@ discs fading in over 1 s, and `exhaust1`–`4` trail puffers streaming from the 
 while boosting — the only *sustained* thrust-linked smoke in the corpus. Engine side:
 `FlightAudio.cs:317-325` — `OnEngineStop()` fully implemented, zero production callers; `:51` —
 `EngineStartRamp = 1.8f` bare literal (the `startprops` 2.0 s prop cross-fade is the nearest
-authored duration — check whether the ramp should be it). **No def is keyed to ordinary throttle
-steps** — the user's recollection that the original puffs smoke on a thrust increase is either
-an exe trigger calling `engine_start_smoke`/`smokepuffN`, or a memory of `nitro_boost`; one
-original-game capture (throttle staircase, no nitro) would separate them.
+authored duration — check whether the ramp should be it). **The throttle-step half is settled
+by the `CAP-21` re-read (2026-08-05, decode in `docs/HISTORY.md`):** the original streams dark
+trail-style exhaust smoke from the cowling sides for ~2–3 wall-s (×1.390 for sim-s) on *large*
+throttle jumps only — idle→8/8 and idle→5/8 fire it, onset ≤0.5 s; all fifteen single-1/8
+steps, every throttle cut, and sustained 8/8 show nothing. The shape is the `exhaust1`–`4`
+stream (`nitro_boost` morphology, no nitro involved), not the round `smokepuffN` cough — so the
+trigger is magnitude-gated (or proportional to the RPM ramp), not a per-step call.
 
 **Approach.** Play `startprops`/`stopprops` as authored at spawn and engine-death (crash,
 destruction, wreck), wiring `OnEngineStop` in the same change; source the audio ramp from the
-authored 2.0 s if the listen A/B agrees. The throttle-step smoke stays out until the capture
-settles its trigger — record it on `BL-267` as the named open half, don't invent a step hook.
+authored 2.0 s if the listen A/B agrees. Wire the throttle-slam smoke magnitude-gated per the
+capture: a jump of several notches at once streams the exhaust-node puffers for ~2–3 s, a
+single-notch step plays nothing (and never fire it on throttle decrease). Acceptance is the
+observed cadence: idle→8/8 slam → dark aft-streaming smoke visible within 0.5 s, gone by ~3 s;
+stepping 1/8 at a time up the whole range → no visible smoke.
 
 **Model recommendation.** medium — half investigation, half wiring.
 

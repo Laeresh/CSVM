@@ -2070,6 +2070,16 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   authored start/stop sequence (the `engine_start_smoke` def in `pufftrails.zrd.json` is
   probably part of the same moment and is also unplayed, `BL-259`'s neighbour); wire the stop
   cue to whatever kills the engine (crash, destruction) and source or mark the ramp.
+  **Throttle-step smoke settled (`CAP-21` re-read, 2026-08-05, decode in `docs/HISTORY.md`):**
+  the original does smoke on a thrust increase, but only on **large** jumps. Idle→8/8 and both
+  idle→5/8 recovery taps each stream dark multi-plume exhaust smoke from the cowling sides for
+  ~2–3 wall-s (×1.390 for sim-s), onset ≤0.5 s after the command; all **fifteen** single-1/8
+  steps across the two staircase clips show nothing at chase distance, and throttle cuts and
+  sustained 8/8 never smoke. Shape is the *trail-style* exhaust stream (`exhaust1`–`4` /
+  `nitro_boost` morphology — no nitro was used, no `nitropropN` discs appear), not the round
+  `smokepuffN` start cough — so the exe trigger is magnitude-gated or ramp-proportional, **not**
+  a per-step `engine_start_smoke` call. One airframe (Bloodhawk), one session; whether a 1/8
+  step emits a sub-visible wisp is below this footage's resolution.
 - `BL-268` **A blanket ×0.2 is applied over every authored sound volume, commented "Temporary
   fix"** (`FlightAudio.cs:363,382,178,308` — four call sites multiply `def.Volume * 0.2f`).
   Every `sounds.json` `VOLUME` in the own-ship path is silently overridden by a 5× attenuation
