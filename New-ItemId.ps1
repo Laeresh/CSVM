@@ -9,9 +9,7 @@ can never be handed the same number. This replaced the hand-bumped "next free ID
 backlog.md / playtest.md after BL-253 and BL-262 were each minted twice by concurrent sessions.
 
 The JSON stores the LAST ISSUED number per kind. If the file is ever lost (fresh clone), re-seed
-it from the highest ID ever used — scan every *.md including docs/HISTORY.md AND commit messages
-(git log --all --oneline; IDs retired after the 2026-08-06 HISTORY freeze survive only there),
-since retired IDs are never reused:  {"BL":282,"CAP":27,"PT":37}  was the state on 2026-08-05.
+it from the highest ID ever used — scan every *.md,since retired IDs are never reused.
 
 .EXAMPLE
 ./New-ItemId.ps1 -Kind BL           # -> BL-283
