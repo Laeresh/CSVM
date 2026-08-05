@@ -318,6 +318,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private const int MaxStartDepth = 8;
 
+    /// <summary>Backstop on a single WAIT_FOR_COMPLETION hold, in seconds — NOT a model of
+    /// anything the data authors. The census bounds the longest authored hold at 36.01 s
+    /// (<c>start_gb3</c> → <c>cg1zepright_gasbag3</c>) and cannot read the 28 holds whose callee
+    /// ends in an SI script, so this sits clear of both. It exists because "completes" is OUR
+    /// instance lifetime, not the authored one: a callee held open by something the data cannot
+    /// predict (a motion still owing a BOUNCE_SEQUENCE, a recycled pool copy) would wedge the
+    /// caller's sequence silently, and a silent wedge is indistinguishable from the behaviour
+    /// before this landed. Every trip is counted and named (<see cref="ReportUnhandled"/>), so it
+    /// produces evidence instead of a mystery (DIAG-15).</summary>
+    private const float WaitCeilingS = 120f;
+
     /// <summary>The magic sequence name a destructible's progressive-damage script carries in
     /// both the reader and compiled forms (docs/formats/destructibles.md).</summary>
     private const string DamageSequenceName = "DAMAGE_SEQUENCE";
@@ -389,6 +400,19 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private readonly Stack<(AnimInstance Inst, bool Protect)> _startingInstances = new();
 
     private readonly Dictionary<string, int> _unhandled = new(StringComparer.Ordinal);
+
+    // WAIT_FOR_COMPLETION: callee name -> how many holds it took. NAMES, not just a total: a hold's
+    // whole effect is to keep a caller's sequence (and therefore its instance) alive longer, so it
+    // surfaces as a live-instance count that moved, and "which one" is the only question worth
+    // asking about that (DIAG-11). Bounded by the install's 38 distinct flagged callees.
+    private readonly Dictionary<string, int> _waitsByCallee = new(StringComparer.OrdinalIgnoreCase);
+
+    // Callees whose routed-away hold has already been named in the log — the print is once per
+    // name, not once per call, because a gun's impact effect routes ten times a second.
+    private readonly HashSet<string> _routedWaitsNamed = new(StringComparer.OrdinalIgnoreCase);
+
+    // Same, for a flagged call that reached no live callee instance and so held nothing.
+    private readonly HashSet<string> _inertWaitsNamed = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly DestructibleRegistry _destructibles = new();
 
@@ -542,6 +566,23 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private float _debugClock;
 
+    // WAIT_FOR_COMPLETION (BL-228). The completion test the CallAnimation case just installed,
+    // handed to the sequence runner through ISequenceHost.PendingWait and read exactly once —
+    // Dispatch clears it on entry, so it can never leak onto a later event. A closure over the
+    // (target, anchor) pairs THIS call reached, because that is the only thing that identifies
+    // them: re-asking by name would resolve a pooled template copy a second time and take
+    // another slot. See the CallAnimation case and analysis/wait-for-completion/FINDINGS.md.
+    private Func<bool>? _pendingWait;
+
+    // Sim seconds this runtime has advanced — the clock a wait's ceiling is measured against.
+    // Deliberately the runtime's own accumulation of Advance's dt, not a wall clock and not
+    // GameClock: a wait is authored animation time and must not scale with the client (DET-11).
+    private float _elapsed;
+
+    // How many waits were installed, and how many hit WaitCeilingS instead of their callee
+    // finishing. The second number is the one that matters — it must be 0.
+    private int _waitsInstalled, _waitsAbandoned, _waitsRouted, _waitsInert;
+
     /// <summary>Running count of ballistic <see cref="MotionRuntime"/> bodies launched â€” the debris
     /// pieces a death or crash flings (translation/translation_range/scale/forward_rotation over a
     /// run time). Zero at bootstrap (nothing ambient fires the ballistic path); the C26 harness
@@ -576,6 +617,23 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     }
 
     Action<EventDispatch>? ISequenceHost.OnEventDispatched => OnEventDispatched;
+
+    Func<bool>? ISequenceHost.PendingWait => _pendingWait;
+
+    /// <summary>How many <c>WAIT_FOR_COMPLETION</c> holds this runtime has armed, and how many of
+    /// those ended at <see cref="WaitCeilingS"/> instead of at their callee. The second is the one
+    /// that matters and is expected to stay 0; the `wait-for-completion` suite asserts both.
+    /// </summary>
+    public int WaitsInstalled => _waitsInstalled;
+
+    public int WaitsAbandoned => _waitsAbandoned;
+
+    /// <summary>Flagged calls this runtime handed to the world-effects runtime instead of holding
+    /// on — the one scope boundary the wait has (see <see cref="NoteRoutedWait"/>).</summary>
+    public int WaitsRouted => _waitsRouted;
+
+    /// <summary>Flagged calls that reached no live callee instance, so held nothing.</summary>
+    public int WaitsInert => _waitsInert;
 
     /// <summary>One-shot SOUND events that resolved to a stream and fired this session (the
     /// destruction/damage/impact audio). Exposed for the damage-test harness, which cannot
@@ -960,6 +1018,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// code path either way, so the game's behaviour is untouched.</summary>
     public void Advance(float dt)
     {
+        _elapsed += dt;
         // Motions advance ONCE per frame, here â€” not from the sequence runners, which would
         // apply dt once per running sequence and run the train at 4Ã— speed.
         TickMotions(dt);
@@ -1710,6 +1769,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                      string.Join(", ", netHidden.Take(10)) + (netHidden.Count > 10 ? ", â€¦" : ""));
         ReportConditions();
         ReportRetargets();
+        ReportWaits();
         ReportUnhandled();
         _censusOpen = false;
     }
@@ -1898,6 +1958,64 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
     }
 
+    /// <summary>Arms this dispatch's <c>WAIT_FOR_COMPLETION</c> hold over the instances the call
+    /// just reached — the <see cref="ISequenceHost.PendingWait"/> the runner reads back.
+    ///
+    /// <para>Nothing is installed when none of them is live: a callee whose whole choreography
+    /// fires at t=0 is completed by <see cref="Start"/> itself and never becomes an instance, so
+    /// asking the runner to hold on it would be a hold on nothing. 16 of the census's effective
+    /// holds are that shape.</para>
+    ///
+    /// <para>The ceiling (<see cref="WaitCeilingS"/>) is a backstop with a log line, not a
+    /// timeout the data authors — see its own comment. It reports at the moment it trips rather
+    /// than through <see cref="Count"/>, because the bootstrap census has already printed by then
+    /// and a counter raised afterwards is never seen (LOG-16).</para></summary>
+    /// <summary>Records a flagged call whose callee was handed to the world-effects runtime, where
+    /// this runtime has no instance to hold on. Printed ONCE per callee, at the moment it happens —
+    /// deliberately not through <see cref="Count"/>, whose report is the bootstrap census: every
+    /// routed call is a death-time event, so the census channel could never carry one (LOG-16), and
+    /// a dropped hold that no report can express is exactly the silent skip DIAG-15 forbids.
+    /// </summary>
+    private void NoteRoutedWait(string callName)
+    {
+        _waitsRouted++;
+        if (_routedWaitsNamed.Add(callName))
+        {
+            GD.Print($"anim: WAIT_FOR_COMPLETION on '{callName}' not held â€” the callee is routed to "
+                     + "the world-effects runtime, which this one cannot poll");
+        }
+    }
+
+    private void InstallWait(string callName, List<(AnimDefinition Def, Node3D? Anchor)> waitOn)
+    {
+        if (!waitOn.Any(w => IsLive(w.Def, w.Anchor)))
+        {
+            // Reached, but with nothing to hold on. Authored (a callee whose whole choreography
+            // fires at t=0 — 16 of the census's effective holds) or environmental (its nodes were
+            // not built on this stage, so Start dropped the instance). A DIFFERENT state from
+            // "never dispatched", and indistinguishable from it without this line — which is how
+            // a probe can report a mechanism as untested when it is actually inert.
+            _waitsInert++;
+            if (_inertWaitsNamed.Add(callName))
+                GD.Print($"anim: WAIT_FOR_COMPLETION on '{callName}' had nothing to hold â€” no live callee instance");
+            return;
+        }
+        _waitsInstalled++;
+        _waitsByCallee[callName] = _waitsByCallee.TryGetValue(callName, out int n) ? n + 1 : 1;
+        float deadline = _elapsed + WaitCeilingS;
+        _pendingWait = () =>
+        {
+            if (!waitOn.Any(w => IsLive(w.Def, w.Anchor)))
+                return false;
+            if (_elapsed < deadline)
+                return true;
+            _waitsAbandoned++;
+            GD.Print($"anim: WAIT_FOR_COMPLETION on '{callName}' abandoned after "
+                     + $"{WaitCeilingS:0} s â€” the callee never finished");
+            return false;
+        };
+    }
+
     /// <summary>Is this definition already running on this anchor? (Instance identity is
     /// (definition, anchor) throughout.)</summary>
     private bool IsLive(AnimDefinition def, Node3D? anchor) =>
@@ -2020,6 +2138,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private bool Dispatch(AnimEvent ev, AnimDefinition def, Node3D? anchor, bool instant, out float duration)
     {
         duration = 0f;
+        // A wait belongs to exactly the event that authored it. Cleared here rather than after
+        // the runner reads it, so a flagged call that installs nothing (its callee never
+        // resolved) cannot be answered by the previous call's still-live test.
+        _pendingWait = null;
         switch (ev.Kind)
         {
             case "ObjectActiveState":
@@ -2314,7 +2436,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         // anchoring the callee on it), and the effects runtime needs it for defs
                         // whose lifecycle reads that node.
                         if (ExternalEffect(callName, VisualOriginOf(callAnchor) + siteXform.Basis * siteOffset, siteNode))
+                        {
+                            // A routed call leaves no instance on THIS runtime, so there is
+                            // nothing here to wait on and the caller advances as it always did.
+                            // Counted rather than passed over: it is the one scope boundary the
+                            // wait has, and a dropped hold must be visible (DIAG-15). Honouring
+                            // it would mean the world runtime polling the effects runtime's
+                            // instance list across the ExternalEffect delegate, which today
+                            // carries no return path for that.
+                            if (ev.WaitsForCompletion && !instant)
+                                NoteRoutedWait(callName);
                             return true;
+                        }
                     }
                     // OPERAND_NODE is a DIFFERENT idiom from AT_NODE/WITH_NODE: it redirects the
                     // callee's OWN node resolution onto the CALLER's own subtree instead of the
@@ -2326,6 +2459,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     // wreck it should be driving goes untouched (`docs/formats/destructibles.md`'s
                     // `genx12` bullet; `Targets`' own genx12 rescue comment).
                     bool operandRedirect = ev.Data.Str("operand_node") != null;
+                    // WAIT_FOR_COMPLETION's wait set: the (def, anchor) instance identities this
+                    // call actually reached. Collected as the loop resolves them, never re-derived
+                    // afterwards — ResolveLibraryRoot below takes a POOL SLOT, so asking a second
+                    // time would hand the wait a different copy from the one that is running.
+                    List<(AnimDefinition Def, Node3D? Anchor)>? waitOn =
+                        ev.WaitsForCompletion && !instant ? new() : null;
                     foreach (var target in _program.ByAnimName(callName))
                     {
                         // Relocation is allowed here — moving a callee's template root onto the
@@ -2370,6 +2509,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         // un-pooled templates keep the old shape (anchored on the call site, resolved
                         // by the def-wide TemplateRootsFor/_byIndex as always).
                         var startAnchor = libraryCopy ?? callAnchor;
+                        // Added whether or not the Start below actually fires. A call onto an
+                        // ALREADY-LIVE callee is skipped by the live guard (the poll idiom's
+                        // whole point), but the animation the author named is running, and
+                        // "wait until it completes" is a statement about that animation, not
+                        // about whether this particular call is what started it.
+                        waitOn?.Add((target, startAnchor));
                         Vector3 wantSite = default;
                         bool movedAway = false;
                         if (relocate)
@@ -2445,6 +2590,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             }
                         }
                     }
+                    if (waitOn is { Count: > 0 })
+                        InstallWait(callName, waitOn);
                 }
                 return true;
 
@@ -3501,6 +3648,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return;
         GD.Print($"anim: {_retargeted} call(s) retargeted onto a named node"
                  + (_retargetUnresolved > 0 ? $", {_retargetUnresolved} target(s) unresolved" : ""));
+    }
+
+    /// <summary>The WAIT_FOR_COMPLETION holds armed so far, by callee. Printed with the bootstrap
+    /// census, which is a real (if partial) window on this one: the bootstrap's own ON_STARTUP
+    /// bursts dispatch through sequence runners, so a hold armed there is already counted — and it
+    /// is what makes the census's live-instance total move, since a held caller's sequence is by
+    /// definition still running. Anything armed LATER is outside this print by construction
+    /// (LOG-16); the runtime tallies stay readable on <see cref="WaitsInstalled"/> for a probe or
+    /// a suite, and an abandoned hold reports itself where it happens.</summary>
+    private void ReportWaits()
+    {
+        if (_waitsByCallee.Count == 0)
+            return;
+        var parts = _waitsByCallee.OrderByDescending(kv => kv.Value).Select(kv => $"{kv.Key} Ã—{kv.Value}");
+        GD.Print($"anim: {_waitsInstalled} WAIT_FOR_COMPLETION hold(s) armed during bootstrap: "
+                 + string.Join(", ", parts));
     }
 
     private void ReportConditions()

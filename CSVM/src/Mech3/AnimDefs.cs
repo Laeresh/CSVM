@@ -289,6 +289,14 @@ public static class AnimDefs
             case "CallAnimation":
                 AddCallTarget(data, fields);
                 break;
+            case "CallSequence":
+                // The reader carries the bare WAIT_FOR_COMPLETION token on 33 CALL_SEQUENCE
+                // bodies as well as on its 147 CALL_ANIMATION ones. Deliberately NOT honoured:
+                // the compiled form carries the field on CallAnimation and nothing else
+                // (56,750/56,750 — analysis/wait-for-completion/), so a same-instance sequence
+                // wait has no compiled counterpart to decode its semantics from. Recorded here
+                // rather than silently dropped (DIAG-15).
+                break;
             case "ObjectAddChild":
             case "ObjectDeleteChild":
                 // The reader writes one PARENT_CHILD pair where the compiled event has separate
@@ -327,7 +335,16 @@ public static class AnimDefs
         // Everything a normalizer didn't claim stays reachable verbatim, so adding a handler
         // later never needs this front-end changed.
         data["raw"] = body;
-        return new AnimEvent { Kind = kind, Data = new AnimData(data) };
+        return new AnimEvent
+        {
+            Kind = kind,
+            Data = new AnimData(data),
+            // The reader spells the wait as a BARE token, so its presence is the whole state —
+            // the compiled form's anim_refs index has no reader counterpart and needs none, since
+            // every one of the 3,731 flagged indices names the call's own callee anyway. Pairs()
+            // yields a bare flag as (key, null), so ContainsKey is the test.
+            WaitsForCompletion = kind == "CallAnimation" && fields.ContainsKey("WAIT_FOR_COMPLETION"),
+        };
     }
 
     /// <summary>

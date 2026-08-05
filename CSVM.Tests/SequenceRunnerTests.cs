@@ -488,6 +488,126 @@ public class SequenceRunnerTests
         Assert.True(inst.Finished);
     }
 
+    // ---- WAIT_FOR_COMPLETION: the call gates the NEXT event, on the callee, not on a clock ----
+
+    [Fact]
+    public void WaitForCompletionHoldsTheNextEventUntilTheCalleeFinishes()
+    {
+        // The authored case (player_crash_water/destroy_crash): a flagged CALL_ANIMATION of
+        // plane_big_splash, then large_steam_spray. Both used to retarget on the SAME tick because
+        // every call returned immediately; the splash's own choreography runs 3.0 s.
+        var host = new RecordingHost();
+        host.Running["plane_big_splash"] = true;
+        var inst = Instance(Seq(Call("plane_big_splash", wait: true), Call("large_steam_spray")));
+
+        var t = RunSteps(inst, host, 0.5f, 3);
+        Assert.Equal(new[] { "plane_big_splash" }, t[0]);   // the call fires...
+        Assert.Empty(t[1]);                                 // ...and the spray is held
+        Assert.Empty(t[2]);
+        Assert.False(inst.Finished);
+
+        host.Running["plane_big_splash"] = false;           // the callee's 3.0 s choreography ends
+        var after = RunSteps(inst, host, 0.5f, 1);
+        Assert.Equal(new[] { "large_steam_spray" }, after[0]);
+        Assert.True(inst.Finished);
+    }
+
+    [Fact]
+    public void AnUnflaggedCallDoesNotHold()
+    {
+        // METHOD-9/METHOD-10: the same fixture with the flag cleared must NOT hold, or the test
+        // above would pass on a runner that blocks every call. `0` and `null` are different
+        // authored states (3,639 vs 53,019) and this is the `null` one.
+        var host = new RecordingHost();
+        host.Running["plane_big_splash"] = true;
+        var inst = Instance(Seq(Call("plane_big_splash"), Call("large_steam_spray")));
+
+        var t = RunSteps(inst, host, 0.5f, 1);
+
+        Assert.Equal(new[] { "plane_big_splash", "large_steam_spray" }, t[0]);
+    }
+
+    [Fact]
+    public void AFlaggedCallOnANonRunningCalleeDoesNotHold()
+    {
+        // A callee whose whole choreography fires at t=0 never becomes a live instance, so the
+        // host installs no test and the caller must advance in the same pass — 16 of the census's
+        // effective holds are that shape. A runner that held on a missing test would freeze them.
+        var host = new RecordingHost();
+        var inst = Instance(Seq(Call("instant_effect", wait: true), Call("after")));
+
+        var t = RunSteps(inst, host, 0.5f, 1);
+
+        Assert.Equal(new[] { "instant_effect", "after" }, t[0]);
+    }
+
+    [Fact]
+    public void AFlaggedCallAsTheLastEventDoesNotHoldItsRunnerOpen()
+    {
+        // THE scope rule, and it is the data's: 2,770 of the 2,999 flagged calls the runtime can
+        // reach are the last event of their block, and every one of those names a callee that
+        // NEVER terminates (the sputter_* / gen_drop_ladder LOOP{-1} idiom). Read as a lifetime
+        // hold, all 2,770 would wedge their sequence open for the session; read as a gate on the
+        // next event, there is nothing behind the call to gate and the runner retires as before.
+        var host = new RecordingHost();
+        host.Running["sputter_fire"] = true;              // and it never stops
+        var inst = Instance(Seq(Swap("burn"), Call("sputter_fire", wait: true)));
+
+        RunSteps(inst, host, 0.5f, 2);
+
+        Assert.True(inst.Finished);
+        Assert.Equal(new[] { "burn", "sputter_fire" }, host.Fired);
+    }
+
+    [Fact]
+    public void TheEventAfterAWaitIsScheduledFromTheCalleesEndNotFromTheCall()
+    {
+        // The wait REPLACES the call's duration, so a trailing "Event + t" offset is measured from
+        // completion. Computed from the call instead, the offset is already behind the clock by
+        // release time and collapses to zero — the held event would fire in the same pass the
+        // callee ended, losing its authored pause.
+        var host = new RecordingHost();
+        host.Running["callee"] = true;
+        var inst = Instance(Seq(Call("callee", wait: true), Swap("after", "Event", 0.5f)));
+
+        RunSteps(inst, host, 0.25f, 4);          // 1.0 s of holding
+        host.Running["callee"] = false;
+        var t = RunSteps(inst, host, 0.25f, 4);
+
+        // t[0] is the pass that OBSERVES the callee gone and re-bases; the offset runs from there.
+        // (In the game that pass is the same tick the callee ended: AnimRuntime.Advance walks its
+        // instances backwards, and a callee started by this caller sits later in the list, so it
+        // is retired before the caller polls.)
+        Assert.Empty(t[0]);
+        Assert.Empty(t[1]);                       // release + 0.25 s: still inside the 0.5 s offset
+        Assert.Equal(new[] { "after" }, t[2]);    // release + 0.50 s: the authored pause, honoured
+        Assert.Empty(t[3]);
+    }
+
+    [Fact]
+    public void AWaitInsideAPollLoopStopsTheLoopSpinningWhileItHolds()
+    {
+        // The data's poll idiom is an INSTANTANEOUS `If … CallAnimation; Endif; Loop{-1}` body,
+        // paced to one pass per AnimFrame — so a hold inside one has to stop the whole loop, not
+        // just the next event. Unheld, five seconds of this fixture re-fire the body ~300 times.
+        var host = new RecordingHost();
+        host.Running["callee"] = true;
+        var inst = Instance(Seq(Call("callee", wait: true), Swap("body"), Loop(0)));
+
+        RunSteps(inst, host, 0.5f, 10);                      // 5 s of holding
+
+        Assert.Equal(new[] { "callee" }, host.Fired);        // one call, and nothing behind it
+        Assert.False(inst.Finished);
+
+        host.Running["callee"] = false;
+        RunSteps(inst, host, 0.5f, 1);
+
+        // Released, the iteration completes and the loop wraps in that same pass — the hold was
+        // real elapsed time, so the iteration is not ALSO charged the AnimFrame floor that paces
+        // untimed poll loops (SequenceRunner sets _iterScheduledTime on release for this).
+        Assert.Equal(new[] { "callee", "body", "callee" }, host.Fired.GetRange(0, 3));
+    }
+
     private static AnimInstance Instance(params AnimSequence[] seqs)
     {
         var inst = new AnimInstance(Dummy, null);
@@ -542,6 +662,11 @@ public class SequenceRunnerTests
         new() { Kind = "Loop", StartOffset = offset, StartTime = time,
                 Data = new AnimData(new Dictionary<string, object?> { ["Count"] = count }) };
 
+    private static AnimEvent Call(string callee, bool wait = false, string? offset = null, float time = 0f) =>
+        new() { Kind = "CallAnimation", StartOffset = offset, StartTime = time,
+                WaitsForCompletion = wait,
+                Data = new AnimData(new Dictionary<string, object?> { ["name"] = callee }) };
+
     private static AnimEvent Branch(string kind, string tag) =>
         new() { Kind = kind,
                 Data = new AnimData(new Dictionary<string, object?>
@@ -577,6 +702,13 @@ public class SequenceRunnerTests
         public readonly Dictionary<string, bool> Conditions = new(StringComparer.Ordinal);
         public readonly List<EventDispatch> Dispatched = new();
 
+        /// <summary>Callee name → is that callee still running. The real host closes over the
+        /// (def, anchor) instances a call reached; a test needs only the answer, so this stands
+        /// in for the whole of that — set an entry true and the wait holds, false and it releases.
+        /// A callee with no entry installs no wait at all, which is the real host's
+        /// "nothing live to hold on" case.</summary>
+        public readonly Dictionary<string, bool> Running = new(StringComparer.Ordinal);
+
         /// <summary>The instance CALL_SEQUENCE/STOP_SEQUENCE act on — the same thin routing the
         /// real runtime's dispatch does; the composition under test is <see cref="AnimInstance"/>'s.
         /// </summary>
@@ -587,11 +719,19 @@ public class SequenceRunnerTests
 
         public Action<EventDispatch>? OnEventDispatched { get; set; }
 
+        public Func<bool>? PendingWait { get; private set; }
+
         public bool Dispatch(AnimEvent ev, AnimDefinition def, Node3D? anchor, bool instant, out float duration)
         {
             duration = 0f;
+            PendingWait = null;
             if (ControlFlow.Contains(ev.Kind))
                 return false;
+            if (ev.WaitsForCompletion && ev.Data.Str("name") is { } callee
+                && Running.TryGetValue(callee, out bool live) && live)
+            {
+                PendingWait = () => Running.TryGetValue(callee, out bool still) && still;
+            }
             if (ev.Kind == "CallSequence" && ev.Data.Str("name") is { } callName)
                 Instance?.CallSequence(callName);
             else if (ev.Kind == "StopSequence" && ev.Data.Str("name") is { } stopName)

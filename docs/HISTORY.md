@@ -15431,3 +15431,127 @@ unaffected, since that suite exercises direct `HEALTH_DAMAGE` kills, not neighbo
 **Owed:** an in-game picture — no known chapter mission places a rocket-class blast near one end of a
 real large body (the C1 zeppelin's gasbags are the candidate), so the fix is verified on synthetic
 geometry only, tracked as `PT-36`.
+
+## 2026-08-05 — PLAN-m3-polish-7 D9 `BL-228`: `WAIT_FOR_COMPLETION` is implemented, and the data — not a judgement call — is what scopes it
+
+The flag was decoded 2026-08-01 (`analysis/wait-for-completion/census.py`: e24 flag `0x10` plus an
+index into the caller's own `anim_refs`, the index always naming the call's own callee, 3,731/3,731)
+and deliberately left unimplemented, because its clearest case was unreachable. Surface-aware crash
+selection made it reachable 2026-08-02. This lands the scheduler half.
+
+**The census came first, and it answered the item's hardest question by itself.** D9's trap (d) says
+"completes" must be defined from the data, not from what makes the crash look right, so the new
+instrument (`callee_shapes.py`) asks what each flagged call is actually asked to wait FOR: does the
+callee terminate at all (a definition carrying an infinite `LOOP` never finishes, so a caller
+waiting on one waits forever), is the flagged call the LAST event of its block (then there is
+nothing behind it to hold), and how long is the authored hold. Termination is decided over the
+**instance closure** — every non-`OnCall` sequence plus everything they reach by
+`CALL_SEQUENCE`/`STOP_SEQUENCE` — because that is what `AnimInstance.Finished` is.
+
+Over the compiled blocks the runtime executes (`reset_state` + `sequences`), 2,852 flagged calls,
+every callee resolved:
+
+| | callee never terminates | callee terminates |
+|---|---:|---:|
+| flagged call is the LAST event of its block | 2,662 | 25 |
+| flagged call has events behind it | **0** | **165** |
+
+The reader front-end reproduces the same shape independently over its own 147 flagged bodies:
+108 / 9 / **0** / 29. **Zero, twice.** Every flagged call naming a never-terminating callee is the
+last event of its block, and there are only four such callees — `sputter_fire`,
+`sputter_black_smoke`, `sputter_fire_smoke`, `gen_drop_ladder`, the `LOOP{-1}` sustain idiom.
+
+So the rule is not chosen, it is read off: **the wait gates the caller's NEXT event and nothing
+else.** Taken as a lifetime hold on the runner or the instance, 2,770 authored calls would wedge
+their sequence open for the session on a callee that by construction never ends, and the install
+would contradict itself; taken as a next-event gate it is consistent with zero exceptions. That is
+also what bounds the blast radius the item was worried about: only **165 of 2,852 calls (5.8 %)**,
+in 29 distinct (caller, callee) pairs, can shift any timing at all — median authored hold 3.0 s,
+longest 36.01 s (`start_gb3` → `cg1zepright_gasbag3`). 16 of the 165 name a callee that completes
+inside its own t=0 burst and so hold for nothing; 28 end in an SI script whose length lives in the
+`.zan` pool, so those spans are lower bounds.
+
+**Implementation.** `AnimEvent.WaitsForCompletion` is parsed in both front-ends — `AnimData.Has`
+on the compiled payload, which is exactly "present and not null" and therefore keeps trap (b)'s
+`0` (3,639) apart from `null` (53,019); `fields.ContainsKey` on the reader's bare token. `wait_for_raw`
+is never read anywhere, per trap (c). `ISequenceHost` gains a fourth member, `PendingWait` — a
+`Func<bool>?` the host arms during `Dispatch` and the runner reads back once, then polls each
+advance until it reads false. A PREDICATE rather than a duration because the callee's length is not
+knowable at the call; a CLOSURE over the `(target, startAnchor)` pairs THIS call reached rather
+than a re-ask by name, because re-resolving a pooled template root would take another pool slot.
+The install site carries the scope rule as code: `_pc < _seq.Events.Count`, so a flagged call with
+nothing behind it holds nothing and its runner retires exactly as before. On release the runner
+re-bases to the release instant and sets `_iterScheduledTime` — the hold replaces the call's
+duration, so a trailing `Event + t` offset measures from completion and an enclosing LOOP is not
+also charged the AnimFrame floor.
+
+`AnimRuntime.InstallWait` arms nothing when none of the resolved targets is live. Targets are added
+whether or not the live guard let this call `Start` one: "wait until that animation completes" is a
+statement about the animation, not about which call started it.
+
+**`WaitCeilingS` (120 s) is a backstop with a log line, not a model.** "Completes" is OUR instance
+lifetime, not the authored one, so a callee held open by something the data cannot predict (a motion
+still owing a `BOUNCE_SEQUENCE`, a recycled pool copy) would wedge a caller silently — and a silent
+wedge is indistinguishable from the behaviour before this landed. Sized clear of the 36.01 s census
+maximum and of the 28 unmeasurable SI-script holds.
+
+**All four outcomes are named where they happen, not through `Count`.** `Count`'s report is the
+bootstrap census, which prints before any death can occur, so a counter raised at death time is
+never seen (LOG-16) — the exact failure this item could have shipped invisibly. So: armed holds are
+tallied by callee and printed with the census (which is a real window on the bootstrap's own
+`ON_STARTUP` bursts); abandoned-at-the-ceiling, routed-to-the-effects-runtime, and
+nothing-live-to-hold each print once per callee at the moment they occur. The last of those matters
+more than it looks: "never dispatched" and "dispatched but inert" are different facts, and without
+that line a probe reports an untested mechanism as a working one.
+
+**One scope boundary, stated rather than papered over:** a flagged call whose callee is handed to
+the world-effects runtime (`ExternalEffect`) leaves no instance on the calling runtime, so it is not
+held. Honouring it needs a return path the delegate does not carry.
+
+**Verified.** The `wait-for-completion` suite runs `player_crash_water`'s `destroy_crash` — the
+install's one clean discriminator, eleven events of which exactly one carries the flag — on a
+crash-rig-shaped runtime over real gamez node names: `plane_big_splash` starts at t=0.000 s and
+`large_steam_spray` at t=3.050 s against the splash's authored 3.0 s choreography, with
+`WaitsAbandoned == 0`. Its control is in the same sequence: the unflagged `call_crash_trails` and
+`large_10sec_fire` ahead of the flagged call must still start at t=0, which is trap (b) asserted on
+real data instead of argued. **Both able-to-fail controls were run** (METHOD-9/METHOD-10): with the
+hold deleted the gap reads **0.000 s** — the exact pre-change symptom, both effects retargeting on
+one tick — and three of the six new unit tests fail; with the flag test dropped so every call holds,
+the sequence wedges on its first event and neither callee becomes an instance at all. Six new
+`SequenceRunnerTests` cover the interpreter half off-engine (hold, unflagged control, no-live-callee
+control, last-event control, the release re-base, and a hold inside a poll loop).
+
+Full `.\RunTests.ps1` PASS: 442/442 units (436 + 6), 29/29 suites, **13/13 goldens hash-identical**.
+The plan expected goldens to move and justified in advance; none did, and the reason is checkable
+rather than lucky — `player_crash_water` is the ONLY crash def in the install carrying the flag (all
+eight chapters' `player_crash_default`/`player_crash_dirt` are `null` on all 14 of their calls), and
+`--crash` resolves `Ground`, so `c1-crash` cannot reach it; `c1-destroy-effects`' destruction defs
+carry only last-event holds on the never-terminating sputters.
+
+**8-chapter `--freecam --det` regression: every bootstrap count identical** — `ON_STARTUP`, start
+anims, live instances and live motions match on all eight; only the `[index/reset/start ms]` timings
+move, which is noise. Zero errors, zero holds armed, all eight screenshots produced. Correct by
+construction: no flagged owner is `OnStartup`. ⚠ Recorded because it nearly became a false finding —
+the first "after" pass reported C1 at 86 live instances against 85, and that was a stale binary
+(`RunProbe.ps1` deliberately does not build, and the run followed an able-to-fail perturbation);
+rebuilt, six consecutive C1 runs all read 85 (METHOD-16, METHOD-2).
+
+**Measured runtime scope, plainly:** the mechanism is inert everywhere a headless probe currently
+reaches except the case it was opened on. `--effects-test` on C1, `--destroy=m_build` on C1 and
+`--destroy=bont` on C3/M02 all arm zero holds. The 165 effective holds sit in zeppelin crane/hookup
+choreography (`pzhomebase`, `pzep_crane`, `wv_initiate_hookup`), cockpit ejection
+(`cpeject1`/`cpeject2`), AI remote damage (`random_remote_damage`) and balloon deaths — content no
+headless probe drives today. **Owed: the sea-dive capture** — `--crash` resolves `Ground`, so no
+headless water crash exists (the same gap `BL-229` left on 2026-08-05), and the picture is therefore
+unverified — `PT-37`.
+
+**Two spellings counted and deliberately not implemented.** 33 reader `CALL_SEQUENCE` bodies carry
+the bare token; the compiled form carries the field on `CallAnimation` and nothing else
+(56,750/56,750), so a same-instance sequence wait has no compiled counterpart to decode from. And
+**879 flagged calls live in `unknown_seq`** — a third full `Initial` sequence block present on 1,544
+compiled defs that `AnimDefinition.Parse` does not read at all, which is exactly why this census
+counts 2,852 where `census.py` counts 3,731 (3,731 − 2,852 = 879). Found on the way, filed as
+`BL-258` with its own census-before-loading warning, not fixed here.
+
+Details: `analysis/wait-for-completion/FINDINGS.md`, `docs/formats/anim-definitions.md`,
+`docs/architecture.md`'s `AnimRuntime.cs` / `SequenceRunner.cs` / `Suites.cs` entries.

@@ -122,6 +122,18 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   *Look for:* the gasbag takes damage from a hit that lands well off its centre, not only from a hit
   near the middle. *Blocks:* `BL-239` sign-off.
 
+- `PT-37` **The sea dive's splash-then-steam ordering (`BL-228`).** `WAIT_FOR_COMPLETION` is
+  implemented and `player_crash_water`'s flagged `plane_big_splash` now holds `large_steam_spray`
+  for the splash's authored 3.0 s (measured 3.050 s in the `wait-for-completion` suite, on real
+  gamez data) instead of both retargeting on the same tick. **No headless run can photograph it** —
+  `--crash` resolves `Ground`, so no scripted water crash exists (the same gap `PT-34`/`BL-229`
+  left), and every golden stayed hash-identical because none of them dives into water. Fly out over
+  the C1 sea and put the plane into it: `./RunGame.ps1 --fly --chapter=C1`, nose down into open
+  water well clear of the shoreline. *Look for:* the white splash column rises and fades **first**,
+  and only as it finishes does the steam plume start — not both at once. A stopwatch is not needed;
+  the question is purely whether the two are sequential or simultaneous. *Blocks:* `BL-228` sign-off
+  — and, on the same dive, `PT-34`'s splash-emitter check, since it is the same repro.
+
 - `PT-35` **The rocket rings' template meshes (`BL-061`).** The mesh half landed and is asserted
   in-engine and in `--effects-test`'s census, but no golden sees it — the rings only appear on a
   live rocket impact, and all 13 shots stayed hash-identical through the fix. Fly a rocket into

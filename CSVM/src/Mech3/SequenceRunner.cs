@@ -20,6 +20,20 @@ public interface ISequenceHost
     /// is the documented zero-cost contract on the hot dispatch path.</summary>
     Action<EventDispatch>? OnEventDispatched { get; }
 
+    /// <summary>The completion test the event just dispatched installed, or null — read once,
+    /// immediately after a <see cref="Dispatch"/> that returned true. Only a
+    /// <c>WAIT_FOR_COMPLETION</c> CALL_ANIMATION installs one; it reads true while the callee
+    /// the call actually reached is still running, and the runner holds its next event until it
+    /// reads false (<c>BL-228</c>).
+    ///
+    /// <para>A predicate rather than a duration because that is what the mechanism is: the
+    /// callee's own length is not knowable at the call (its sequences can call further
+    /// sequences, and an SI script's run time lives in a separate archive). A closure rather
+    /// than a "re-ask by name" call because the host must test the exact instances THIS call
+    /// reached — a pooled template copy is chosen at dispatch, and asking again would take
+    /// another pool slot.</para></summary>
+    Func<bool>? PendingWait { get; }
+
     /// <summary>Executes one event; returns its duration via <paramref name="duration"/> (0 for an
     /// instantaneous state change, the run time for a timed motion/SI script). Returns false only
     /// for control-flow events the runner must interpret itself.</summary>
@@ -156,6 +170,9 @@ public sealed class SequenceRunner
     // AnimFrame out, applied at the foot of the advance loop so the trailing SetDue() cannot
     // overwrite it. Distinct from _iterScheduledTime, which asks whether the DATA scheduled time.
     private bool _frameGatePending;
+    // WAIT_FOR_COMPLETION: the callee-still-running test installed by the last dispatched call,
+    // polled once per advance until it reads false. Null whenever this runner is not waiting.
+    private Func<bool>? _waitingOn;
 
     public SequenceRunner(AnimSequence seq)
     {
@@ -168,6 +185,11 @@ public sealed class SequenceRunner
     public bool Done => _done;
 
     public string SequenceName => _seq.Name;
+
+    /// <summary>Is this runner holding on a WAIT_FOR_COMPLETION call? Observation only — the
+    /// tests and the `wait-for-completion` suite read it; nothing in the runner branches on
+    /// it.</summary>
+    public bool Waiting => _waitingOn != null;
 
     /// <summary>Has some branch of the innermost open IF chain already run? A malformed
     /// chain (an ELSE with no IF) reads as "not taken" and writes are dropped, so bad
@@ -190,6 +212,20 @@ public sealed class SequenceRunner
     public void Advance(ISequenceHost rt, AnimInstance inst, float dt)
     {
         _clock += dt;
+        if (!_done && _waitingOn != null)
+        {
+            if (_waitingOn())
+                return;
+            // The callee finished. The wait REPLACES the call's duration, so the next event's
+            // "Event + t" offset is measured from this instant, not from when the call fired —
+            // otherwise the offset is already behind the clock and collapses to zero.
+            _waitingOn = null;
+            _base = _clock;
+            // The hold was real elapsed time, so an enclosing LOOP must not read this iteration
+            // as instantaneous and collect the AnimFrame floor meant for untimed poll loops.
+            _iterScheduledTime = true;
+            SetDue();
+        }
         // Guard against a zero-length sequence looping forever within one frame.
         int fired = 0;
         while (!_done && _pc < _seq.Events.Count && _clock >= _due && fired++ < 256)
@@ -213,6 +249,25 @@ public sealed class SequenceRunner
                 }
                 _pc++;
                 SetDue();
+                // WAIT_FOR_COMPLETION (BL-228). The hold gates this sequence's NEXT event and
+                // nothing else — it is not a lifetime hold on the runner, and the data is what
+                // says so. Censused over both front-ends
+                // (analysis/wait-for-completion/FINDINGS.md): of the 2,999 flagged calls the
+                // runtime can reach, 2,770 are the LAST event of their block and 2,770 of those
+                // name a callee that never terminates — the `sputter_fire`/`sputter_black_smoke`/
+                // `sputter_fire_smoke`/`gen_drop_ladder` `LOOP{-1}` idiom. Not ONE flagged call
+                // with an event behind it names a never-terminating callee, in either front-end.
+                // So a runner-lifetime reading would wedge 2,770 authored sequences open forever
+                // while a next-event reading is consistent with the whole install, zero
+                // exceptions — which is also why the `_pc` test below is a rule and not a
+                // shortcut: past the last event there is nothing to hold back, and the trailing
+                // Done check retires the runner exactly as it always did.
+                if (ev.WaitsForCompletion && _pc < _seq.Events.Count
+                    && rt.PendingWait is { } wait)
+                {
+                    _waitingOn = wait;
+                    return; // nothing more fires this pass; the poll above resumes us
+                }
                 continue;
             }
             // Control flow.

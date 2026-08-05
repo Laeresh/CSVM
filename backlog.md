@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-258`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-259`.**
 When adding a new item, take the next number and bump this line. ⚠ One ID was minted twice in
 concurrent sessions on 2026-08-04 — `BL-253` (the C2 facade log debris, this file's holder) and a
 "nose view" finding merged the same day; the nose-view item was renumbered to `BL-255` at the
@@ -485,6 +485,28 @@ extracted data before being logged, so the mechanism is recorded here and not re
   speed 17–25 m/s, so an apex exists), and whether the following event is the piece's own
   deactivation in every one of them. `analysis/bl-061-template-mesh/FINDINGS.md` records the
   measurement; `zep_ng_dstry1.flt` is the reachable repro (`--effects-test`, any chapter).
+
+### A whole authored sequence block the reader never loads (found 2026-08-05)
+
+- `BL-258` **`unknown_seq` is a third `Initial` sequence on 1,544 compiled defs, and
+  `AnimDefinition.Parse` does not read it.** Found while censusing `WAIT_FOR_COMPLETION`'s scope
+  (`BL-228`), and not that mechanism: the field is simply absent from our compiled front-end.
+  mech3ax's `unknown_seq` is shaped exactly like an entry of `sequences` — `{name, seq_state,
+  reset_state, events, pointer}` on all 1,544 — carries `seq_state: "Initial"` (so the original
+  runs it with the animation), and its `pointer` differs from every listed sequence's, so it is a
+  distinct authored block rather than a duplicate. Concrete case:
+  `C1/IA1/mis_anim/leng11-destroy_mp1zleng11-healthy.json`, a `WeaponHit` zeppelin-engine
+  destructible whose two listed sequences are `DAMAGE_SEQUENCE` and `destroyit`, while its
+  `unknown_seq` is a one-event `CALL_ANIMATION large_30sec_fire WITH_NODE supports` — the burning
+  engine mount. **879 of the install's 3,731 flagged calls live in this block**, which is exactly
+  why the two `wait-for-completion` censuses disagree by 879.
+  ⚠ Census before loading it. The name is the fork's, not the format's: nothing has established
+  what distinguishes this block from the listed ones, and blindly adding it as a third initial
+  sequence would start 1,544 more runners at bootstrap — the live-instance count, every effect
+  census and several goldens would move at once. The questions are (a) whether its events duplicate
+  content the listed sequences already reach by another route, (b) whether `WeaponHit` defs (2,565
+  of them) gate it differently, and (c) what the field's raw offset is in the e24 struct.
+  `analysis/wait-for-completion/callee_shapes.py` already walks every def and can be pointed at it.
 
 ### Surfaces, colliders and inspect tools (from the Wave D playtest, 2026-07-25)
 

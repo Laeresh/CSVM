@@ -80,7 +80,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Larger mechanisms
 
-9. ☐ `BL-228` Implement `WAIT_FOR_COMPLETION` (scoped and measured — it moves goldens)
+9. ☑ `BL-228` Implement `WAIT_FOR_COMPLETION` (scoped and measured — it moves goldens)
 10. ☑ `BL-239` Blast falloff measures to a body's transform origin, not its geometry
 
 ## Dependency and parallelism notes
@@ -100,7 +100,7 @@ clean tree, with a golden baseline taken first.
 
 # Wave A — Gauges and warnings
 
-## A1 ☐ `BL-184` Tween the ammo/hardpoint gauge arrow
+## A1 ☑ `BL-184` Tween the ammo/hardpoint gauge arrow
 
 **Goal.** The gun and hardpoint gauge pointers visibly sweep to the newly selected slot at the
 original's constant rate, routed the shortest way round; the numeric readout still snaps.
@@ -475,7 +475,7 @@ shape carrying neither `RUN_TIME` nor `BOUNCE_SEQUENCE`. Details:
 
 # Wave D — Larger mechanisms
 
-## D9 ☐ `BL-228` Implement `WAIT_FOR_COMPLETION`
+## D9 ☑ `BL-228` Implement `WAIT_FOR_COMPLETION`
 
 **Goal.** A `CALL_ANIMATION` flagged `WAIT_FOR_COMPLETION` holds its caller's sequence until the
 callee's instance completes — landing the sea dive's authored splash-then-steam ordering and
@@ -507,6 +507,42 @@ measure before believing a screenshot. (b) `0` and `null` are **different author
 (3,639 vs 53,019): `0` waits on ref zero, `null` has no flag. (c) `wait_for_raw` exposes unflagged
 stale values (525 events) — not a wait, must not be read as one. (d) "Completes" is defined from
 the data, not from what makes the crash look right.
+
+**Landed 2026-08-05 — and the census, not a judgement call, is what scoped it.** The new instrument
+(`analysis/wait-for-completion/callee_shapes.py`) asks what each flagged call is asked to wait FOR,
+per trap (d): over the compiled blocks the runtime executes, 2,852 flagged calls split
+2,662 / 25 / **0** / 165 across (last-event × callee-never-terminates), and the reader front-end
+reproduces the same one-sided shape independently over its own 147. **Zero, twice**: not one flagged
+call with an event behind it names a callee that never finishes, and there are only four such
+callees (the `sputter_*`/`gen_drop_ladder` `LOOP{-1}` idiom). So the rule is read off rather than
+chosen — **the wait gates the caller's NEXT event and nothing else**; a lifetime reading would wedge
+2,770 authored sequences open forever. That is also trap (a)'s answer: only **165 calls (5.8 %)**, in
+29 pairs, can shift any timing, median hold 3.0 s. Traps (b) and (c) held — presence, not value, is
+the authored state (`AnimData.Has`), and `wait_for_raw` is read nowhere.
+
+`ISequenceHost` gains `PendingWait` (a predicate, not a duration — the callee's length is not
+knowable at the call); `WaitCeilingS` 120 s is a logged backstop, not a model, because "completes" is
+our instance lifetime rather than the authored one. All four outcomes name themselves where they
+happen rather than through `Count`, whose report is the bootstrap census and could never carry a
+death-time event (LOG-16).
+
+New `wait-for-completion` suite on real gamez data: `plane_big_splash` t=0.000 s,
+`large_steam_spray` t=**3.050 s** against the authored 3.0 s, with the unflagged
+`call_crash_trails`/`large_10sec_fire` beside it still at t=0 as the control. **Both able-to-fail
+controls run** — hold deleted → gap 0.000 s (the exact pre-change symptom) plus 3 unit-test
+failures; flag test dropped → the sequence wedges on its first event. Six new `SequenceRunnerTests`
+cover the interpreter half off-engine.
+
+Full `.\RunTests.ps1` PASS (442/442 units, 29/29 suites) and **13/13 goldens hash-identical**. The
+Verify step budgeted for moved goldens; none moved, and that is checkable rather than lucky —
+`player_crash_water` is the only crash def in the install carrying the flag (every chapter's
+`player_crash_default`/`_dirt` is `null` on all 14 calls) and `--crash` resolves `Ground`, so
+`c1-crash` cannot reach it. 8-chapter `--freecam` regression: every bootstrap count identical, zero
+holds armed, zero errors. **Owed: the sea-dive picture** — no headless water crash exists, the same
+gap C7 left — `PT-37`. Found on the way and filed, not fixed: **`BL-258`**, the `unknown_seq` block
+(a third `Initial` sequence on 1,544 defs that our reader never loads, holding 879 of the install's
+3,731 flagged calls). Details: `docs/HISTORY.md` 2026-08-05,
+`analysis/wait-for-completion/FINDINGS.md`, `docs/formats/anim-definitions.md`.
 
 ## D10 ☑ `BL-239` Blast falloff measures to a body's transform origin, not its geometry
 

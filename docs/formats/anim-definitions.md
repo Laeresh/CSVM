@@ -425,15 +425,44 @@ Skies; the fork exposes those separately as `wait_for_raw` (525 non-null events)
 must not treat them as waits. Census and the 92-row dump instrument:
 `analysis/wait-for-completion/`.
 
-CSVM does not yet schedule the cross-animation completion dependency. All flagged compiled owners
-are `OnCall` (2,844) or `WeaponHit` (887), never `OnStartup`; the clearest timing case is
+**The hold gates the caller's NEXT event — it is not a lifetime hold on the sequence.** Implemented
+2026-08-05 (`BL-228`), and the scope is the data's, not a decision: censusing what each flagged call
+is asked to wait FOR (`analysis/wait-for-completion/`, `callee_shapes.py`) splits the 2,852 flagged
+calls in the blocks the runtime executes into a cross-tab with an empty cell.
+
+| | callee never terminates | callee terminates |
+|---|---:|---:|
+| flagged call is the LAST event of its block | 2,662 | 25 |
+| flagged call has events behind it | **0** | **165** |
+
+Every flagged call naming a callee that never finishes is the last event of its block, and there
+are only four such callees — `sputter_fire`, `sputter_black_smoke`, `sputter_fire_smoke`,
+`gen_drop_ladder`, the `LOOP{-1}` sustain idiom. The reader front-end reproduces the same one-sided
+split independently over its own 147 flagged bodies. Read as a lifetime hold, 2,770 authored calls
+would wedge their sequence open forever; read as a next-event gate, the install is consistent with
+zero exceptions. So only **165 calls (5.8 %), in 29 distinct (caller, callee) pairs**, can shift any
+timing — median authored hold 3.0 s, longest 36.01 s (`start_gb3` → `cg1zepright_gasbag3`).
+
+"Completes" is the callee's INSTANCE ending — every non-`OnCall` sequence it started plus everything
+those reached by `CALL_SEQUENCE`, which is what makes the hold outlast the call's own t=0 burst. A
+call that reaches no live instance (a callee whose whole choreography fires at t=0 — 16 of the 165)
+holds for nothing, by design.
+
+All flagged compiled owners are `OnCall` (2,844) or `WeaponHit` (8 in these blocks), never
+`OnStartup`, so no ambient world boot arms one — measured: an 8-chapter `--freecam` regression arms
+zero holds and leaves every bootstrap count identical. The clearest timing case is
 `player_crash_water`, where flagged `plane_big_splash` precedes `large_steam_spray`. **That case is
-reachable as of 2026-08-02** (surface-aware crash selection), and a captured sea dive shows the
-divergence directly: `plane_big_splash` and `large_steam_spray` retarget on the *same tick*, so the
-steam spray starts with the splash instead of after it. The splash's own choreography runs 3.0 s
-(`plane_sp_polys`' scale + `plane_sp_polyfade`' opacity ramp), so a faithful wait would hold the
-spray that long. Calls remain instantaneous to the caller; the water crash is therefore correct in
-content and not yet in ordering.
+reachable as of 2026-08-02** (surface-aware crash selection), and a captured sea dive showed the
+divergence directly: the two retargeted on the *same tick*, so the steam spray started with the
+splash instead of after it. The splash's own choreography runs 3.0 s (`plane_sp_polys`' scale +
+`plane_sp_polyfade`' opacity ramp); the landed hold measures **3.050 s** on real gamez data
+(`wait-for-completion` suite). It is the only crash def in the install carrying the flag — the eight
+chapters' `player_crash_default`/`player_crash_dirt` are all `null`.
+
+Two spellings are counted and deliberately NOT honoured: 879 flagged calls sit in the `unknown_seq`
+block our reader does not load at all (`BL-258`), and 33 reader `CALL_SEQUENCE` bodies carry the
+bare token, which the compiled form never does (56,750/56,750 of the field's occurrences are on
+`CallAnimation`) and so has no decoded semantics.
 
 **An `OBJECT_ACTIVE_STATE` pair around a call is a scope, not a lifetime.** The data's idiom for
 "emit here" is three events with no `START_TIME` between them — activate a bare node, call the

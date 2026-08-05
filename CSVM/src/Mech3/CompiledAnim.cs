@@ -311,6 +311,17 @@ public sealed class AnimEvent
     /// immediately after the previous event.</summary>
     public string? StartOffset;
     public float StartTime;
+    /// <summary>WAIT_FOR_COMPLETION: this CALL_ANIMATION is synchronous — the caller's sequence
+    /// holds its NEXT event until the callee's instance finishes (docs/formats/anim-definitions.md).
+    /// <para>⚠ The authored state is presence, not value. Compiled e24 stores flag 0x10 plus a
+    /// zero-based index into the caller's own <c>anim_refs</c>, and the index always names the
+    /// call's own callee (3,731/3,731) — so <c>0</c> and <c>null</c> are DIFFERENT states (3,639
+    /// vs 53,019), and reading the number as a boolean would drop every zero. Hence
+    /// <see cref="AnimData.Has"/>, which is exactly "present and not null".</para>
+    /// <para>⚠ The adjacent <c>wait_for_raw</c> slot is deliberately NEVER read: Crimson Skies
+    /// leaves unflagged stale small integers there (525 events), and treating one as a wait would
+    /// invent a hold the author never wrote.</para></summary>
+    public bool WaitsForCompletion;
     public AnimData Data = AnimData.Empty;
 
     public static AnimEvent? Parse(AnimData d)
@@ -343,6 +354,7 @@ public sealed class AnimEvent
             ev.StartOffset = start.Str("offset");
             ev.StartTime = start.Num("time") ?? 0f;
         }
+        ev.WaitsForCompletion = ev.Kind == "CallAnimation" && ev.Data.Has("wait_for_completion");
         return ev;
     }
 }

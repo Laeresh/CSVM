@@ -638,6 +638,19 @@ copy) and `TemplateSharedWithLiveInstance` (`rear_flash_effect` finishes on the 
 its callee is still lighting the same root). A def whose t=0 events complete it never reaches the
 retire walk at all — `Start` drops that instance itself — so `ShowTemplate`'s own reveal schedules
 the hide for it.
+`WAIT_FOR_COMPLETION`'s host half is `InstallWait`, off the `CallAnimation` case: it closes over the
+`(target, startAnchor)` pairs the call resolved — collected as the loop runs, whether or not the
+live guard let it Start, since "wait until that animation completes" is about the animation, not
+about which call started it — and arms nothing when none of them is live (a callee finished inside
+its own t=0 burst is never an instance). `Dispatch` clears `_pendingWait` on entry, so a flagged
+call that arms nothing cannot be answered by the previous one's test. `WaitCeilingS` (120 s) is a
+BACKSTOP, not a model: "completes" is OUR instance lifetime, and a callee held open by something
+the data cannot predict would wedge a caller silently — indistinguishable from the behaviour before
+this landed. All four outcomes are named as they happen (armed / abandoned at the ceiling / routed
+to the effects runtime / nothing live to hold) rather than through `Count`, whose report is the
+bootstrap census and could never carry a death-time event (LOG-16). The routed case is the wait's
+one scope boundary: an `ExternalEffect` call leaves no instance HERE, and the delegate carries no
+return path to poll the effects runtime's.
 ⚠ `_rng` is the runtime's ONE die (`RANDOM_WEIGHT`, `SOUND_GROUPS` picks, crash-debris scatter) —
   every session sets `Seed` (`Rng.Anim`/`Rng.Crash`/`Rng.Effects`); route new dice through it or a
   replay stops being identical. `Reseed()` also clears the sound groups' recency memory, which
@@ -750,7 +763,8 @@ forever), and the re-asserting instance takes ownership. `EndOn` is NOT expressi
 their world-space particles show.
 
 ## src/Mech3/SequenceRunner.cs
-The engine-free sequence interpreter, extracted from `AnimRuntime` behind the `ISequenceHost` seam.
+The engine-free sequence interpreter, extracted from `AnimRuntime` behind the `ISequenceHost` seam
+(four members since `BL-228` added `PendingWait`; the other three are unchanged).
 `SequenceRunner` runs one sequence's event list on a clock (per-event START_TIME gating, LOOP with
 authored-count-0 = infinite, IF/ELSEIF/ELSE/ENDIF via a `_branchTaken` stack + nesting-aware `Scan`);
 `AnimInstance` holds a definition's concurrent runners and removes them as they finish, and carries
@@ -784,6 +798,23 @@ interpreter never dereferences them.
 ⚠ `OnEventDispatched` is a get-only nullable delegate on the seam ON PURPOSE — the null-conditional
   at the fire site short-circuits the `EventDispatch` construction when no debugger is attached, the
   documented zero-cost contract on the hot dispatch path. Making it a method breaks that.
+`WAIT_FOR_COMPLETION` (`BL-228`) is the seam's fourth member, `PendingWait` — a `Func<bool>?` the
+host arms during `Dispatch` and the runner reads back once, then polls each advance until it reads
+false. A PREDICATE, not a duration, because the callee's length is not knowable at the call (its
+sequences call further sequences; an SI script's run time lives in another archive); a CLOSURE
+rather than a re-ask by name, because the host must test the instances THIS call reached and
+re-resolving would take another template pool slot.
+⚠ **The hold gates the sequence's NEXT event — never the runner's lifetime, and that is the DATA's
+  rule, not a shortcut.** Censused over both front-ends (`analysis/wait-for-completion/`,
+  `callee_shapes.py`): of the 2,999 flagged calls the runtime can reach, 2,770 are the last event of
+  their block and every one of those names a callee that never terminates (the `sputter_*` /
+  `gen_drop_ladder` `LOOP{-1}` idiom). Not ONE flagged call with an event behind it names a
+  non-terminating callee, in either front-end. So the `_pc < Events.Count` test at the install site
+  is load-bearing: read as a lifetime hold, those 2,770 wedge open for the session. Only 165 calls
+  can shift any timing at all. On release the runner re-bases `_base` to the release instant and
+  sets `_iterScheduledTime` — the hold replaces the call's duration, so a trailing `Event + t`
+  offset measures from completion, and an enclosing LOOP must not also charge the iteration the
+  AnimFrame floor.
 
 ## src/Mech3/DestructibleRegistry.cs
 Live, mutable per-instance HP for the world's destructibles — any `AnimDefinition` with
@@ -2058,7 +2089,7 @@ the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replac
 emitter's own MODES are. Neither covers the other's job.
 
 ## src/Testing/Suites.cs
-The 27 registered in-engine assertion suites cover typed weapon data, blast/fuse rules, the original's
+The 29 registered in-engine assertion suites cover typed weapon data, blast/fuse rules, the original's
 flight envelope, plane/loadout bindings (stock and, since M3 B4, the full-rig `Loadout.ForRig`),
 live weapon fire, destructible stages/death/census, animation
 stops and bounce-terminated launches, the full effects sweep (`effects-census`: every effect
@@ -2088,6 +2119,14 @@ running first means it builds the shared C1 world while the fake is in effect; `
 ⚠ `puffer-modes` detaches `GameClock.Current` for its duration and drives `_Process` itself. The
   harness's clock is a FixedStep one nothing steps, so `FrameDt` is 0 — left installed, every tick
   advances no sim and every check passes vacuously.
+⚠ `wait-for-completion` runs `player_crash_water`'s `destroy_crash` — the install's ONE clean
+  discriminator, eleven events of which exactly one carries the flag — on a crash-rig-shaped runtime
+  over real gamez node names, and asserts the gap (measured 3.050 s against the authored 3.0 s)
+  TOGETHER with the unflagged `call_crash_trails`/`large_10sec_fire` beside it staying at t=0. Both
+  halves, because either alone passes a broken runtime: with the hold deleted the gap reads 0.000 s;
+  with the flag test dropped (every call held) the sequence wedges on its first event and neither
+  callee becomes an instance at all. It also asserts `WaitsAbandoned == 0` — a hold that ended at
+  the ceiling instead of at its callee would otherwise look like a working wait.
 ⚠ `weapons-fire` asserts `skipped == 0` as well as `ok == 48`; a skipped mount is not success.
 ⚠ `--loadout=<def>` reaches `loadout-bind`; `--run-tests=loadout-bind --loadout=pbloodhawk` is its able-to-fail cross-bind.
 ## src/Testing/GoldenShot.cs

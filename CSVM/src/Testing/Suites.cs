@@ -109,6 +109,8 @@ public static class Suites
             "weapon hits destroy, swap, drop colliders, and survive destroy→reset→destroy", DamageHd));
         into.Add(new TestHarness.Suite("stop-sequence",
             "authored STOP_SEQUENCE stops run: the fireball's 0.3 s stopper and the 30 s fire's halt", StopSequenceStops));
+        into.Add(new TestHarness.Suite("wait-for-completion",
+            "a WAIT_FOR_COMPLETION call holds the caller's next event for its callee, and an unflagged one beside it does not (BL-228)", WaitForCompletion));
         into.Add(new TestHarness.Suite("emitter-host-deactivation",
             "a host going inactive spares the emitter that started in its own instant and still ends the one that did not (BL-229)", EmitterHostDeactivation));
         into.Add(new TestHarness.Suite("effect-template-mesh",
@@ -1437,6 +1439,105 @@ public static class Suites
                 runtime.Free();
                 stage.Free();
             }
+        });
+    }
+
+    // ---- BL-228: WAIT_FOR_COMPLETION ------------------------------------------------------------
+
+    /// <summary>`BL-228` on the authored case, with its own control beside it in the same sequence.
+    ///
+    /// <para><c>player_crash_water</c>'s <c>destroy_crash</c> is the install's clean discriminator:
+    /// eleven events, of which exactly ONE carries the flag — <c>plane_big_splash</c>, whose own
+    /// choreography runs 3.0 s (<c>plane_sp_polys</c>' scale and <c>plane_sp_polyfade</c>' opacity
+    /// ramp) — followed immediately by an UNFLAGGED <c>large_steam_spray</c>. Before this landed
+    /// both retargeted on the same tick and the spray started with the splash instead of after it.
+    /// </para>
+    ///
+    /// <para>The control is the other nine calls in that same sequence. <c>call_crash_trails</c>
+    /// (twice) and <c>large_10sec_fire</c> sit immediately BEFORE the flagged one and carry
+    /// <c>null</c>, so they must still all start together at t=0 — that is trap (b), "0 and null
+    /// are different authored states", asserted on real data rather than argued. A runtime that
+    /// held every call would pass the spray check and fail these.</para></summary>
+    private static void WaitForCompletion(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            const string animName = "player_crash_water";
+            const string flagged = "plane_big_splash";
+            const string held = "large_steam_spray";
+            var program = world.Session.Program.Subset(animName);
+            var defs = program.ByAnimName(animName);
+            ctx.Check(defs.Count > 0, $"chapter program has {animName} defs={defs.Count}");
+            if (defs.Count == 0)
+            {
+                return;
+            }
+
+            // The caller's own nodes plus each callee's ROOT: on a flat stage a callee whose root
+            // is missing falls back to the caller's anchor, which still runs but stops being the
+            // separate instance whose lifetime is the subject here.
+            var nodes = new List<string>
+            {
+                "player", "healthy", "destroyed", "dontmove", "markers", "shadow", "cockpit1",
+                "huge_splash_model", "splash_polys", "sp_1", "white_water_impact",
+                "carnage_trails", "large_fire", "ripple1",
+            };
+            for (int i = 1; i <= 4; i++)
+            {
+                nodes.Add($"piece{i}");
+            }
+
+            WithEmitterStage(ctx, program, "CrashWaterStage", nodes, (stage, runtime, fake) =>
+            {
+                float clock = 0f;
+                var startedAt = new Dictionary<string, float>(System.StringComparer.OrdinalIgnoreCase);
+                runtime.OnInstanceStarted = (d, _) =>
+                {
+                    if (d.AnimName is { } name && !startedAt.ContainsKey(name))
+                    {
+                        startedAt[name] = clock;
+                    }
+                };
+                runtime.Start(defs[0], stage);
+                for (int i = 0; i < 480; i++)   // 8 s — well past the splash's authored 3.0 s
+                {
+                    clock += 1f / 60f;
+                    runtime.Advance(1f / 60f);
+                }
+                runtime.OnInstanceStarted = null;
+
+                ctx.Check(startedAt.ContainsKey(flagged), $"{flagged} became a live instance");
+                ctx.Check(startedAt.ContainsKey(held), $"{held} became a live instance");
+                if (!startedAt.TryGetValue(flagged, out float splashAt)
+                    || !startedAt.TryGetValue(held, out float sprayAt))
+                {
+                    return;
+                }
+
+                ctx.Note($"destroy_crash: {flagged} t={splashAt:0.000}s, {held} t={sprayAt:0.000}s (gap {sprayAt - splashAt:0.000}s vs the authored 3.0s), holds armed={runtime.WaitsInstalled} abandoned={runtime.WaitsAbandoned}");
+                ctx.Check(splashAt <= 2f / 60f,
+                    $"the flagged call itself is NOT delayed — the hold is on what follows it (t={splashAt:0.000})");
+                ctx.Check(sprayAt - splashAt >= 2.9f,
+                    $"{held} waits out {flagged}'s authored 3.0 s choreography (gap={sprayAt - splashAt:0.000} s)");
+                ctx.Check(sprayAt - splashAt <= 4.5f,
+                    $"...and starts when the splash ENDS, not at some ceiling (gap={sprayAt - splashAt:0.000} s)");
+
+                // The control: the unflagged calls ahead of it in the same sequence.
+                foreach (var unflagged in new[] { "call_crash_trails", "large_10sec_fire" })
+                {
+                    if (startedAt.TryGetValue(unflagged, out float t))
+                    {
+                        ctx.Check(t <= 2f / 60f,
+                            $"unflagged {unflagged} is not held (t={t:0.000}) — null and 0 are different authored states");
+                    }
+                }
+
+                ctx.Check(runtime.WaitsInstalled >= 1,
+                    $"the runtime armed the hold rather than the gap coming from somewhere else (installed={runtime.WaitsInstalled})");
+                ctx.Same(0, runtime.WaitsAbandoned,
+                    $"no hold ended at the WaitCeilingS backstop instead of at its callee");
+            },
+                asCrashRig: true);
         });
     }
 
