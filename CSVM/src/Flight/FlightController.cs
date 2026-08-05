@@ -922,8 +922,12 @@ public partial class FlightController : Node3D
                 // The chase camera trails the plane by exponential smoothing, so its pose is a
                 // function of the dt it is fed. On wall time that makes a scripted flight capture
                 // frame-rate dependent even when the simulation underneath it is pinned — the pose
-                // has to come off the same clock as the plane it follows.
-                _cam.Chase(simDt, _model.Position, _model.Attitude);
+                // has to come off the same clock as the plane it follows. The POSE it composes
+                // from is the DRAWN one, same rule as the rigid views above: the camera rides the
+                // plane exactly (offset smoothing only), so basing it on the raw sim pose while
+                // the plane renders interpolated makes the plane jump back and forth in frame by
+                // one sim step's travel — invisible parked, a blur at speed.
+                _cam.Chase(simDt, _renderPose.Origin, _renderPose.Basis);
             }
             _cam.LogView(view, _model.Position, _model.Attitude);
         }

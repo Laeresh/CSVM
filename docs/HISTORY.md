@@ -16194,3 +16194,19 @@ were re-pinned — three are the startprops smoke tail at frame 120; `c1-crash`'
 documented `Rng.Puffer` construction-order cascade with bit-identical crash physics underneath —
 then regenerated once more on the merged main where they combined with C8/C9''s camera reframes.
 `RunTests.ps1` green in check mode.
+
+## 2026-08-05 — C8 regression fix: the chase camera composes from the DRAWN pose — the plane no longer jitters in frame at speed
+
+User report from the controls: the plane blurry and jumping back and forth, worse at higher
+speed, everything else sharp. Cause: C8''s offset-rigid chase camera (`planePos + offset`) was fed
+the raw sim pose while the plane draws at the render-interpolated `_renderPose` — the camera
+stepped at 60 Hz against a plane gliding at render rate, a mismatch of up to one sim step''s
+travel (~2 m at 300 mph against a ~19 m radius), which the old world-position lerp had been
+incidentally low-pass-filtering away. The fixed views'' own comment already documented the rule
+("rigid views ride the DRAWN pose ... mixing them would jitter the plane"); `Chase` now composes
+from `_renderPose` like them. Measured on a wall-clock 6-frame burst at speed (`--no-det
+--shots=6`, plane-pixel centroid): frame-to-frame step 1.23 px mean / 2.63 px max oscillating
+non-monotonically before, 0.13 px mean after (`.scratch/plan8/C8/jitter_*`, `jitter_metric.py`).
+Goldens 13/13 hash-identical before and after — the det clock skips render interpolation, so no
+fixed-step instrument could have seen this (verification DET-10); it took the user at the
+controls.

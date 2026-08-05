@@ -277,7 +277,10 @@ public sealed class CameraController
     /// which the original's speed-flat apparent size rules out (BL-248). Smoothing the basis —
     /// rather than re-deriving a hard LookAt each frame from a near-world up — lets the horizon
     /// roll fully through inverted flight, while the rotational lag keeps fast rolls reading
-    /// dynamic instead of glued. Takes the SIM clock's dt.</summary>
+    /// dynamic instead of glued. Takes the SIM clock's dt, but the DRAWN pose (the fixed views'
+    /// rule): riding the plane exactly means any sim-vs-render pose gap becomes plane jitter in
+    /// frame, one sim step's travel worth — the old world-position lerp masked that mismatch,
+    /// an offset-rigid camera cannot.</summary>
     public void Chase(float dt, Vector3 planePos, Basis attitude)
     {
         float tPos = 1f - Mathf.Exp(-CamSmooth * dt);
