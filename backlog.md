@@ -11,26 +11,11 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-283`.**
-When adding a new item, take the next number and bump this line. ⚠ One ID was minted twice in
-concurrent sessions on 2026-08-04 — `BL-253` (the C2 facade log debris, this file's holder) and a
-"nose view" finding merged the same day; the nose-view item was renumbered to `BL-255` at the
-merge, so commit `11c22cc`'s message cites it under the old number.
-⚠ **It happened again on 2026-08-05 — `BL-262` was minted twice**, in two concurrent sessions
-about ninety minutes apart: the anchor-roots item (`bc2526c`, 14:18, this file's holder — it keeps
-`BL-262`, since the ID is baked into `EffectCatalogue.cs` and `Suites.cs`) and the global-4×
-particle-size item (`07754df`, 15:56). Per the precedent above the later mint was renumbered, so
-**the 4× item is now `BL-282`** — but commit `07754df`'s message, and `PLAN-m3-polish-8`'s history
-before this renumber, cite it as `BL-262`. Read those under the old number. Both collisions came
-from concurrent sessions taking the same "next ID" before either bumped this line; bump it in the
-same edit that mints the item, not afterwards.
-
-**Ten items moved into [`docs/PLAN-m3-polish-7.md`](docs/PLAN-m3-polish-7.md) on 2026-08-04**
-(`BL-184`, `BL-148`, `BL-142`, `BL-094` + its `BL-073` stub, `BL-078`, `BL-221`, `BL-229`,
-`BL-061`, `BL-228`, `BL-239`) — their evidence and traps travelled with them; do not re-add them
-here. A cross-reference to one of those IDs now resolves in that plan. `BL-088` was deleted the
-same day as **stale**: it had already landed 2026-08-01 ("M3 Wave C C9", `docs/HISTORY.md`) but
-its entry survived here; the user caught it during plan review.
+fails loudly instead of silently pointing at the wrong item. **Mint a new ID by running
+`./New-ItemId.ps1 -Kind BL`** — never by scanning this file or taking "max + 1" by hand. The
+counter lives in `.git/item-id-counters.json` (shared by every worktree, outside version
+control) and the script increments it under an exclusive file lock, so two concurrent sessions
+cannot be handed the same number. 
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
 

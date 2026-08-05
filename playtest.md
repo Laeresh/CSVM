@@ -9,8 +9,9 @@ here means the work is queued, not forgotten. Deep evidence and traps live in
 **Every item carries a stable ID** — `CAP-nn` for an owed capture, `PT-nn` for something to fly.
 Cite them from `backlog.md` and in conversation the way `BL-nnn` is cited. IDs are permanent: when
 an item closes its ID retires with it and is never reused, so numbering gaps are expected.
-Retired IDs disappear from this file, so never mint a new ID by scanning the entries below — take
-it from this counter and bump it here: **next free IDs `CAP-28` and `PT-38`.** (`CAP-17` and
+Retired IDs disappear from this file, so never mint a new ID by scanning the entries below — run
+**`./New-ItemId.ps1 -Kind CAP`** (or `-Kind PT`), which increments a shared locked counter in
+`.git/item-id-counters.json` and is safe under concurrent sessions. (`CAP-17` and
 `CAP-14` and `CAP-24` and `CAP-16` retired 2026-08-04, `CAP-15` retired 2026-08-05 — IDs are
 never reused. The `PT` counter read `PT-37` while `PT-37` was already in use; corrected to `PT-38`
 on 2026-08-05. **Eighteen `PT`s retired 2026-08-05** in one triage pass — `PT-01`, `PT-02`,

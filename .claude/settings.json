@@ -39,6 +39,18 @@
             "statusMessage": "dotnet format before tests..."
           }
         ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "$j = [Console]::In.ReadToEnd() | ConvertFrom-Json; if ($j.tool_input.command -notmatch 'git\\s+commit') { exit 0 }; $root = git rev-parse --show-toplevel 2>$null; if (-not $root) { exit 0 }; $defs = @(); $b = Join-Path $root 'backlog.md'; if (Test-Path $b) { $defs += @(Select-String -Path $b -Pattern '^\\s*-\\s+`(BL-\\d+)`' -AllMatches | ForEach-Object { $_.Matches } | ForEach-Object { $_.Groups[1].Value }) }; $p = Join-Path $root 'playtest.md'; if (Test-Path $p) { $defs += @(Select-String -Path $p -Pattern '^\\s*(?:-\\s+|\\|\\s*)`((?:PT|CAP)-\\d+)`' -AllMatches | ForEach-Object { $_.Matches } | ForEach-Object { $_.Groups[1].Value }) }; $dupes = $defs | Group-Object | Where-Object { $_.Count -gt 1 }; if ($dupes) { $dupes | ForEach-Object { [Console]::Error.WriteLine('Duplicate item ID defined more than once: ' + $_.Name) }; [Console]::Error.WriteLine('backlog.md/playtest.md define the same ID twice - mint a fresh ID with ./New-ItemId.ps1 and renumber the later mint before committing.'); exit 2 }; exit 0",
+            "timeout": 30,
+            "statusMessage": "duplicate item-ID check..."
+          }
+        ]
       }
     ]
   }
