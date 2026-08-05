@@ -55,6 +55,9 @@ Flags are specified in [`cli.md`](cli.md).
 
 | Input | Does | Scripted twin |
 |---|---|---|
+| `WASD` / arrows | move | |
+| `Q` / `E` (alt `Z` / `U`) | descend / ascend | |
+| RMB-held mouse (alt `IJKL`) | look | |
 | click an object | select it | `--debug-select=` |
 | `PgUp` / `PgDn` | walk the selection's `cs_name` ancestor ladder | |
 | `Home` / `End` | jump to the ends of that ladder | |

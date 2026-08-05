@@ -7,7 +7,7 @@ namespace CSVM.Flight;
 /// session camera directly with no aircraft in the world: the point is to park in front of
 /// a moving train or a hangar door and watch it, without scripting a flight past it.
 ///
-/// Controls — keyboard: WASD/arrows move, Q/E (or Space/C) down/up, hold Shift for ×6 and
+/// Controls — keyboard: WASD/arrows move, Q/E (or Z/U) down/up, hold Shift for ×6 and
 /// Ctrl for ÷6, mouse wheel sets the base speed, hold the RIGHT mouse button to look
 /// (the mouse is captured only while held, so the window stays usable). Arrow-free look
 /// fallback: IJKL. Gamepad: left stick moves, right stick looks, LB/RB descend/climb,
@@ -279,7 +279,7 @@ public sealed partial class SpectatorCamera : Node
     {
         if (!KeyboardCaptured &&
             (Axis(Key.S, Key.W) != 0f || Axis(Key.A, Key.D) != 0f || Axis(Key.Q, Key.E) != 0f
-             || Axis(Key.Down, Key.Up) != 0f || Axis(Key.Left, Key.Right) != 0f || Axis(Key.Z, Key.Space) != 0f))
+             || Axis(Key.Down, Key.Up) != 0f || Axis(Key.Left, Key.Right) != 0f || Axis(Key.Z, Key.U) != 0f))
         {
             return true;
         }
@@ -312,9 +312,10 @@ public sealed partial class SpectatorCamera : Node
                  + basis.X * (kb * (Axis(Key.A, Key.D) + Axis(Key.Left, Key.Right)) + PadAxis(JoyAxis.LeftX));
         // Vertical stays WORLD up regardless of where the camera looks — climbing while
         // pitched down is what you want when repositioning over a target. Q/E is the documented
-        // pair; Z/Space is the alternate (Z rather than C, which toggles the collider overlay —
-        // the camera polls raw key state, so sharing a key would descend on every toggle).
-        move += Vector3.Up * (kb * (Axis(Key.Q, Key.E) + Axis(Key.Z, Key.Space)) + PadButtonAxis());
+        // pair; Z/U is the alternate — neither collides with another raw-polled toggle (C is the
+        // collider overlay, X the class overlay) nor with the gun trigger (Space, BL-279: firing
+        // in the weapon lab's free camera used to also nudge the camera up).
+        move += Vector3.Up * (kb * (Axis(Key.Q, Key.E) + Axis(Key.Z, Key.U)) + PadButtonAxis());
         if (move.LengthSquared() < 1e-8f)
             return;
 

@@ -16444,3 +16444,15 @@ stage still opens the default chapter's texture tier for plane skins) **and `rim
 font `5pointhud.png` + gun reticle `impact_point.png` — without it the HUD text/reticle are off,
 which the log names; B12's extraction kit must produce both). Full `.\RunTests.ps1` green in the
 worktree after the loader change.
+
+**Space double-bound in freecam fixed — `BL-279` (A1, 2026-08-05):** the weapon lab's free camera
+(`V`) shared `Key.Space` between `SpectatorCamera`'s vertical-up alternate and
+`FlightController.FirePressed()`, so pressing Space in `--freecam` with weapons available both
+fired the guns and nudged the camera up — found at the controls in the weapon lab (`PT-30` (d)).
+Fix is binding-only: `SpectatorCamera`'s Q/E vertical pair keeps its Z-down alternate but the
+Space-up alternate moves to `U` (unused anywhere in the repo, confirmed by a repo-wide grep for
+`Key.U`/`KEY_U`), leaving gun fire the only thing Space does in every mode. `docs/controls.md`'s
+`--freecam`/`--anim-lab` table gained the movement-key row it never had (WASD move, Q/E alt Z/U
+vertical, RMB/IJKL look) so the fix is visible where player-input changes are supposed to live.
+Verified: `dotnet build` clean (0 warnings), full `.\RunTests.ps1` green with golden hashes
+unmoved (binding-only change, no rendering touched).

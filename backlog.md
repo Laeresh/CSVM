@@ -365,9 +365,6 @@ shape as `BL-259`/`BL-261`.
   in-flight lab passed the same sitting (live HUD/dial/rattle response, smooth dragging, scenery
   grazes dropping the slider on their own, **R** restoring 100 %, and "repair all" clearing panels
   and trail without a stutter), so this is the one behaviour left.
-- `BL-279` **Space is double-bound in freecam — it fires the guns *and* a freecam action.** Found
-  in the weapon lab (`PT-30` (d), 2026-08-05). The `V` round trip to the impact point and back was
-  judged **correct** in the same pass, so the toggle is not at fault; only the binding overlap is.
 - `BL-280` **Orbital camera: move the distance controls to numpad `+` / numpad `−` like the
   original, and stop `shift` driving camera and target point together.** User request from the
   weapon-lab sitting (`PT-30` (e), 2026-08-05) but **about the orbital camera, not the lab's** —
