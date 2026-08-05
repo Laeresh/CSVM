@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-260`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-261`.**
 When adding a new item, take the next number and bump this line. ⚠ One ID was minted twice in
 concurrent sessions on 2026-08-04 — `BL-253` (the C2 facade log debris, this file's holder) and a
 "nose view" finding merged the same day; the nose-view item was renumbered to `BL-255` at the
@@ -2187,7 +2187,19 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   differs by 3% between those two takes, so the viewing angle onto the wing differed and the
   red-key edge moved with it. The 4.13% speed effect is 4× that systematic and survives; a claim
   at the 1% level off this data would not.
-- `BL-118` **Cloud puffs** — opacity and density. **Cloud deck** — brightness reads ~40 units lighter
+- `BL-260` **Four authored cameras exist in `camparam.zrd.json` and none of them is implemented**
+  (found in the 2026-08-05 hand-coded-vs-authored audit). `CamParams.cs:60-84` already parses
+  them, deliberately dormant: the **death camera** (`DeathInterval`/`DeathZ`/`DeathX`/`DeathAlt`/
+  `DeathMinAlt`), the **crash camera** (`CrashHoriz`/`CrashY`/`CrashChordY`/`CrashElev`), the
+  **look-behind view** (`BackDistMin`/`BackDistMax`), and the **flyby camera** (12 fields). Today
+  a death/crash plays out on the ordinary chase camera and no look-behind binding exists at all.
+  Scope: decide each camera's trigger, decode its fields' units, and wire it — likely one camera
+  at a time, crash first (the crash rig is already data-driven, so the authored crash framing is
+  the missing half of a scene that otherwise exists). Distinct from `BL-248` (dynamic chase
+  distance + catch-up units) and `BL-150` (numpad fixed views): those cover the *chase* camera;
+  this is the cameras that replace it. ⚠ The field units are undecoded — same trap as
+  `BL-248`(d): near-matches to hand-picked values are suggestive, not decodes; expect to need
+  original-game captures (a death, a crash, a flyby) before wiring laws. — opacity and density. **Cloud deck** — brightness reads ~40 units lighter
   than the original. **Playtest (2026-07-30), two new specifics + mechanism traced.** (1) The deck
   itself shows dense cloud puffs while flying through it. (2) In C1/IA1, puffs show around the plane
   at *all* height levels rather than a confined band. Root cause: `CloudPuffs.cs`'s
