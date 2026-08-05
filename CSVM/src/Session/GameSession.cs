@@ -970,17 +970,27 @@ public partial class GameSession : Node3D
             }
             else
             {
+                // Stand-in puffers for the parked plane: it travels no distance, so the authored
+                // distance-interval trail defs the FLIGHT lab plays would emit nothing here —
+                // these burn in place instead (DamageVisuals.UpdateStatic), the heavy pair at the
+                // authored prop1 anchor.
                 var smoke = Effects.Puffer.MakePuffer(state.ZrdrPath, state.Textures, _worldRoot!, "pufftrails.json", "smokepuffer");
                 var fire = Effects.Puffer.MakePuffer(state.ZrdrPath, state.Textures, _worldRoot!, "pufftrails.json", "firepuffer");
                 var panelTrails = new List<Effects.Puffer>();
                 for (int i = 0; i < 8; i++) // pool one per pdp panel — the lab can flip all of them
                     if (Effects.Puffer.MakePuffer(state.ZrdrPath, state.Textures, _worldRoot!, "pufftrails.json", "firepuffer") is { } pt)
                         panelTrails.Add(pt);
-                var visuals = new DamageVisuals(builder.DamagePanels, _plane, stats, smoke, fire, panelTrails);
+                // The healthy↔torn candidate sets from the authored defs (BL-270) — the viewer
+                // has no anim program, so the two reader files are loaded directly.
+                var pairingDefs = new List<Mech3.AnimDefinition>();
+                pairingDefs.AddRange(Mech3.AnimDefs.LoadFileDefs(state.ZrdrPath, "player_destruct_reset.json"));
+                pairingDefs.AddRange(Mech3.AnimDefs.LoadFileDefs(state.ZrdrPath, "player-1.json"));
+                var visuals = new DamageVisuals(builder.DamagePanels, _plane, stats, smoke, fire, panelTrails,
+                    DamageVisuals.PanelPairingSets(pairingDefs));
                 // the HUD gauge cluster as a lab toggle (user request): the damage
                 // dial mirrors the sliders, blinks on decreases like a flight hit
                 var labGauges = GaugeCluster.Build(state.Gamez, _spec.PlaneName, state.Textures, stats.DestroyableParts);
-                _damageLab = new DamageLab(stats, new ViewerDamageTarget(visuals, _plane),
+                _damageLab = new DamageLab(stats, new ViewerDamageTarget(visuals),
                     _spec.DamagePreset, labGauges)
                 {
                     StartHidden = !_spec.DamageLab, // --damage opens it; plain --viewer waits for F5

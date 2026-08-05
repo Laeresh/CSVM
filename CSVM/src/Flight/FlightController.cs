@@ -123,8 +123,9 @@ public partial class FlightController : Node3D
     /// leaves the scrape's sound without its sparks/dust/splash.</summary>
     public System.Action<string, Vector3>? GrazeEffectSink;
 
-    /// <summary>Visible damage: torn-skin pdpanel flips + the low-HP
-    /// smoke/fire trail, driven from the data's injure_anims thresholds. Optional.</summary>
+    /// <summary>Visible damage: torn-skin pdpanel flips + the authored damage-stage anims
+    /// (panel burns, fuel leak, heavy prop1 trail), driven from the data's injure_anims
+    /// thresholds through the rig runtime. Optional.</summary>
     public DamageVisuals? Visuals;
 
     /// <summary>This plane's stock loadout bound to its model — the gun groups (with independent
@@ -1030,7 +1031,8 @@ public partial class FlightController : Node3D
         {
             WingLights?.Advance(simDt);
             Surfaces?.Advance(simDt, _lastInput);
-            Visuals?.Update(_model.Position, _model.Attitude); // smoke/fire trail emission
+            // damage-stage trails need no per-frame feed: the rig runtime's emitters follow
+            // their pdpN/prop1 host nodes themselves
         }
     }
 

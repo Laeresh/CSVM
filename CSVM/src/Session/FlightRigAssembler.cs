@@ -234,23 +234,27 @@ public sealed class FlightRigAssembler
                 GD.Print("gun reticle: ballistic impact point via impact_point.png");
         }
 
-        // Visible damage: torn-skin panel flips + the low-HP smoke/fire
-        // trail (pufftrails.json → dense_firetrail's smokepuffer/firepuffer pair).
+        // Visible damage: torn-skin panel flips + the authored damage-stage anims
+        // (player-1.zrd.json's pdpanelN / player_fuelleak / player_damage_trail menu), played
+        // through the rig runtime once it exists (the sink wiring below, after the runtime builds).
+        // The healthy↔torn candidate sets come from the same defs (plane_reset's re-ACTIVE list +
+        // the pdpanelN targets, BL-270); a missing program leaves DamageVisuals' geometric
+        // fallback to engage, loudly.
         if (controller.Damage != null)
         {
-            var smoke = Effects.Puffer.MakePuffer(_in.ZrdrPath, _in.Textures, controller, "pufftrails.json", "smokepuffer");
-            var fire = Effects.Puffer.MakePuffer(_in.ZrdrPath, _in.Textures, controller, "pufftrails.json", "firepuffer");
-            // per-panel fire trails (the original streams one from every damaged
-            // panel — clearly visible in OriginalScreenshots/Videos/C1 IA1 Crash.mp4)
-            var panelTrails = new List<Effects.Puffer>();
-            for (int i = 0; i < 4; i++)
-                if (Effects.Puffer.MakePuffer(_in.ZrdrPath, _in.Textures, controller, "pufftrails.json", "firepuffer") is { } pt)
-                    panelTrails.Add(pt);
-            controller.Visuals = new DamageVisuals(planeBuilder.DamagePanels, planeModel, stats, smoke, fire, panelTrails);
+            PanelPairing? pairing = null;
+            if (_in.CrashProgram is { } program)
+            {
+                var pairingDefs = new List<AnimDefinition>(program.ByAnimName("plane_reset"));
+                foreach (var n in EffectCatalogue.PlayerDamageStageAnims)
+                    pairingDefs.AddRange(program.ByAnimName(n));
+                pairing = DamageVisuals.PanelPairingSets(pairingDefs);
+            }
+            controller.Visuals = new DamageVisuals(planeBuilder.DamagePanels, planeModel, stats,
+                defPairing: pairing);
             if (verbose)
-                GD.Print($"damage visuals: {controller.Visuals.PanelCount} panels, " +
-                         $"smoke={(smoke != null ? "on" : "off")} fire={(fire != null ? "on" : "off")}, " +
-                         $"{panelTrails.Count} panel fire trails");
+                GD.Print($"damage visuals: {controller.Visuals.PanelCount} panels — " +
+                         "authored stage anims via the rig runtime");
         }
 
         // The data-driven crash rig is built AFTER the controller enters the tree
@@ -346,21 +350,41 @@ public sealed class FlightRigAssembler
             // The start choreography for the very first spawn: Respawn() plays this same def on
             // every later respawn, but Setup() above called Respawn() before this runtime existed.
             controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);
-            // B4: that runtime also carries the <part>_damage_effects shims, so a part crossing its
-            // 0.99 injure_anims threshold can spark at a pdpN panel. Wired here because the runtime
-            // is built after the controller joins the tree, later than DamageVisuals itself.
+            // That runtime also carries the authored damage-stage menu (BL-259) and the
+            // <part>_damage_effects shims (B4), so a part crossing an injure_anims threshold plays
+            // its authored def — panel burn, fuel leak, heavy prop1 trail, spark burst. Wired here
+            // because the runtime is built after the controller joins the tree, later than
+            // DamageVisuals itself.
             if (controller.Visuals != null && controller.CrashRuntime is { } rigRuntime)
             {
                 controller.Visuals.DamageEffectSink = anim =>
                 {
                     // applyReset:false for the same reason the crash trigger passes it — a reset
-                    // here would re-pose nodes the damage state owns, not just the effect's.
-                    int started = rigRuntime.Play(anim, applyReset: false).Count;
+                    // here would re-pose nodes the damage state owns, not just the effect's. The
+                    // plane model is the fallback anchor: the menu defs' NAME (player_pfighter)
+                    // resolves on no other airframe, exactly the startprops shape (C7).
+                    int started = rigRuntime.Play(anim, planeModel, applyReset: false).Count;
                     // ⚠ started is instances, NOT emitters — the def's PufferState events dispatch on
                     // the runtime's NEXT tick, so a puffer-count delta taken here reads 0 no matter
                     // what renders (verification.md WORLD-12 needs the count sampled later, which is
                     // what the rig's cumulative total below does).
-                    Log.Info("anim", $"damage sparks anim={anim} started={started} rig_puffers_total={rigRuntime.PuffersBuilt}");
+                    Log.Info("anim", $"damage stage anim={anim} started={started} rig_puffers_total={rigRuntime.PuffersBuilt}");
+                };
+                // The stop must cover the CLOSURE, not the played roots alone: Stop("pdpanel1")
+                // cannot reach the short_firetrail instance it CALLed onto the panel, and
+                // player_damage_trail's trail sits on prop1, which stays visible — its authored
+                // NODE_ACTIVE exit never fires. Derived from the program so no hand list can rot.
+                var stageClosure = new List<string>();
+                foreach (var d in _in.CrashProgram.Subset(EffectCatalogue.PlayerDamageStageAnims).Defs)
+                {
+                    var n = d.AnimName ?? d.Name;
+                    if (!string.IsNullOrEmpty(n) && !stageClosure.Contains(n))
+                        stageClosure.Add(n);
+                }
+                controller.Visuals.DamageEffectStop = () =>
+                {
+                    foreach (var n in stageClosure)
+                        rigRuntime.Stop(n);
                 };
             }
         }

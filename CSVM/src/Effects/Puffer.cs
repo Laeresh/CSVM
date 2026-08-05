@@ -532,6 +532,26 @@ public sealed partial class Puffer : Node3D
     /// <summary>Stops sustained emission; live particles finish their lifetimes.</summary>
     public void SustainEnd() => _sustaining = false;
 
+    /// <summary>The animation runtime's per-frame drive (<c>EmitterDirector.Tick</c>), dispatching
+    /// on what the PUFFER_STATE authored: a TIME_INTERVAL state sustains as before, a
+    /// DISTANCE_INTERVAL state emits per interval of the host's actual motion
+    /// (<see cref="TrailAdvance"/>) — the density CAP-15's wing burn shows, ~160 puffs/s at flight
+    /// speed against the 10/s the time cadence produced (`BL-259`). A host that stands still keeps
+    /// the time cadence: the damaged building's sputter is a distance state whose authored interval
+    /// can never elapse on a static object, and it has always emitted on time there.</summary>
+    public void DriveAt(Vector3 worldPos, Basis worldBasis, float dt)
+    {
+        if (_state.DistanceInterval <= 0f)
+        {
+            SustainAt(worldPos, worldBasis, dt);
+            return;
+        }
+        bool moved = _trailing && (worldPos - _trailPrev).LengthSquared() > 1e-8f;
+        TrailAdvance(worldPos);
+        if (!moved)
+            SustainAt(worldPos, worldBasis, dt);
+    }
+
     public override void _Process(double delta)
     {
         if (!_active)
@@ -654,15 +674,20 @@ public sealed partial class Puffer : Node3D
         _burstSizeScale = Config.GetFloat("puffer.burstSizeScale", SizeScaleDefault);
         _trailSizeScale = Config.GetFloat("puffer.trailSizeScale", SizeScaleDefault);
         _sustainSizeScale = Config.GetFloat("puffer.sustainSizeScale", SizeScaleDefault);
-        if (sustained)
+        if (state.DistanceInterval > 0f)
+        {
+            // Distance states use the trail pool even on the sustained (runtime) path: their
+            // population is speed × lifetime / interval — ~112 live for short_firetrail's
+            // shortpuffer1 at flight speed — and the time-cadence steady-state formula below
+            // sized them at its 16-particle floor, silently dropping ~85% of the authored
+            // emission (DriveAt routes them through SpawnTrailPuff, which stops at the pool).
+            _particles = new Particle[TrailPool];
+        }
+        else if (sustained)
         {
             int steady = Mathf.CeilToInt(state.Number * state.LifetimeMax
                                          / Mathf.Max(state.TimeInterval, 1e-3f)) + state.Number;
             _particles = new Particle[Mathf.Clamp(steady, SustainPoolMin, SustainPoolMax)];
-        }
-        else if (state.DistanceInterval > 0f)
-        {
-            _particles = new Particle[TrailPool];
         }
         else
         {

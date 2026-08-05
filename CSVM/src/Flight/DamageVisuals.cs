@@ -6,11 +6,18 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// Visible damage on the flying aircraft, driven by the data's
-/// thresholds: as a part's HP fraction crosses an entry of its 'injure_anims'
-/// (see <see cref="DestroyablePart"/>), the named pdpanelN anim flips the
-/// torn-skin panel — pdpN shown, and the healthy skin covering the same spot
-/// (a pdpN_h node, a real airframe section like the Bloodhawk wingtip) hidden.
+/// Visible damage on the aircraft, driven by the data's thresholds: as a part's
+/// combined armor+HP fraction crosses an entry of its 'injure_anims' (see
+/// <see cref="DestroyablePart"/>), the entry's authored animation plays. The
+/// pdpanelN entries flip the torn-skin panel (pdpN shown, the healthy skin covering
+/// the same spot hidden) and, in flight, play the authored pdpanelN def through the
+/// player's own rig runtime (<see cref="DamageEffectSink"/>) — gimmeflakes debris
+/// plus the staged short_firetrail / loop_short_firetrail burn-down at the panel,
+/// exactly as player-1.zrd.json choreographs it. The def-level entries play the same
+/// way: player_fuelleak (0.85 — the fuel-vapor stream from a random pdp1–3) and, for
+/// the 0.10 player_smoketrail entry, player_damage_trail — short_firetrail at prop1
+/// plus the flickering fire_lt nose light (see <see cref="RigAnimFor"/> for why that
+/// one name is mapped, `BL-259`).
 ///
 /// The healthy twin is found BY POSITION, not by name: on player_bhawk,
 /// player_fbrand and player_brigand the _h numbering is crossed in the model
@@ -28,28 +35,33 @@ namespace CSVM.Flight;
 /// three planes (unverified). The *_damage_green/yellow/red entries are the
 /// cockpit indicator's texture cycle and stay unwired until a cockpit exists.
 ///
-/// The def-level injure_anims add whole-plane effects: player_smoketrail at
-/// 0.10 starts the dense_firetrail pair — a black-smoke trail (COLORS ramp,
-/// born orange) plus a fire trail (fire_f01–06 flipbook) emitted per meter of
-/// motion at the nose (see the trail support in <see cref="Puffer"/>).
-/// player_fuelleak (0.85) is not wired yet. FlightController notifies
-/// <see cref="OnPartDamage"/> after each hit, drives <see cref="Update"/> per
-/// frame, and calls <see cref="Reset"/> on respawn.
+/// Two hosts. In flight the sinks reach the rig runtime and the effects are the
+/// authored defs; a world-less flight (--stage=empty) has no rig runtime, so only
+/// the panel flips render there, logged once. The parked viewer's damage lab has no
+/// runtime either — and a parked plane travels no distance, so the authored
+/// distance-interval trails would emit nothing anyway; it keeps stand-in Puffer
+/// trails burning in place (<see cref="UpdateStatic"/>) at the panels and at the
+/// authored prop1 anchor. FlightController notifies <see cref="OnPartDamage"/>
+/// after each hit and calls <see cref="Reset"/> on respawn.
 /// </summary>
 public sealed class DamageVisuals
 {
-    /// <summary>Plays a named anim def on this player's own plane-scoped runtime (the crash rig) —
-    /// the `&lt;part&gt;_damage_effects` shim a part's 0.99 injure_anims entry names, whose closure
-    /// sparks at a `pdpN` panel. Set after the rig's runtime exists, which is later than this object
-    /// is built; null leaves the spark burst unplayed, which is also the case for the 10 aircraft
-    /// whose data carries no 0.99 entry at all.</summary>
+    /// <summary>Plays a named anim def on this player's own plane-scoped runtime (the crash rig):
+    /// the authored damage-stage menu (<c>pdpanelN</c>/<c>player_fuelleak</c>/
+    /// <c>player_damage_trail</c>) and the `&lt;part&gt;_damage_effects` spark shims. Set after the
+    /// rig's runtime exists, which is later than this object is built; null (world-less flight, the
+    /// parked viewer) leaves the authored stages unplayed.</summary>
     public Action<string>? DamageEffectSink;
 
-    private const float NoseOffset = 3.5f; // m ahead of center — the data emits the trail
-                                           // at prop1 (the nose engine); TUNE per plane
+    /// <summary>Stops everything <see cref="DamageEffectSink"/>'s plays started — the whole
+    /// damage-stage closure, not just the played roots, because a stopped pdpanelN cannot reach the
+    /// short_firetrail instance it CALLed onto the panel, and player_damage_trail's trail sits on
+    /// prop1, whose NODE_ACTIVE exit never fires (the prop stays visible). Invoked from
+    /// <see cref="Reset"/>; null when there is no runtime to stop.</summary>
+    public Action? DamageEffectStop;
 
     private const float StaticBurnSpeed = 15f; // m/s of virtual motion the damage lab's parked
-                                               // plane spends on its in-place trails; TUNE
+                                               // plane spends on its in-place stand-in trails; TUNE
 
     // Healthy-twin pairing (see the class comment): across all 11 player planes, a
     // torn panel and its true healthy skin overlap (mesh-AABB centers ≤ 0.72 m apart),
@@ -64,35 +76,93 @@ public sealed class DamageVisuals
     private readonly Dictionary<string, DestroyablePart> _parts = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _applied = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<(float Frac, string Anim)> _vehicleInjure;
-    private readonly Puffer? _smokeTrail, _fireTrail;
+    private readonly Puffer? _standInTrailPuffer, _standInFirePuffer;
     private readonly List<Puffer> _panelTrailPool;
     private readonly List<(Node3D Panel, Puffer Trail)> _panelTrails = new();
+    private readonly Node3D? _prop1; // the authored heavy-trail anchor, for the parked stand-in
     private bool _smoking;
+    private bool _noRuntimeLogged;
 
     /// <param name="panels">PlaneBuilder.DamagePanels — pdpN (hidden) + pdpN_h nodes.</param>
     /// <param name="planeRoot">the built model's root — pairing measures panel mesh
     /// positions in this frame (the _h nodes bake their placement into mesh space).</param>
-    /// <param name="smokeTrail">dense_firetrail's smokepuffer, trail-capable; optional.</param>
-    /// <param name="fireTrail">dense_firetrail's firepuffer; optional.</param>
-    /// <param name="panelTrails">a pool of firepuffer trail emitters, one assigned per
-    /// flipped panel — the original streams a discrete-puff fire trail from every
-    /// damaged panel (its pdpanelN anims call short_firetrail WITH_NODE pdpN; clearly
-    /// visible in OriginalScreenshots/Videos/C1 IA1 Crash.mp4).</param>
+    /// <param name="standInTrail">parked-viewer stand-in for the heavy trail's smoke half,
+    /// burned in place at prop1; flight passes none and plays the authored defs instead.</param>
+    /// <param name="standInFire">its fire half.</param>
+    /// <param name="panelTrails">parked-viewer stand-in pool, one firepuffer per flipped
+    /// panel — standing in for the authored short_firetrail the flight path plays.</param>
+    /// <param name="pairing">the def-derived panel candidate sets (<see cref="PanelPairingSets"/>)
+    /// — which skins damage may hide and which torn panels participate. Null engages the
+    /// unscoped geometric fallback, loudly.</param>
     public DamageVisuals(IEnumerable<Node3D> panels, Node3D planeRoot, PlaneStats stats,
-        Puffer? smokeTrail, Puffer? fireTrail, List<Puffer>? panelTrails = null)
+        Puffer? standInTrail = null, Puffer? standInFire = null, List<Puffer>? panelTrails = null,
+        PanelPairing? defPairing = null)
     {
         foreach (var p in panels)
             _panels[p.Name] = p;
-        PairHealthySkins(planeRoot);
+        PairHealthySkins(planeRoot, defPairing);
         foreach (var part in stats.DestroyableParts)
             _parts[part.Name] = part;
         _vehicleInjure = stats.VehicleInjureAnims;
-        _smokeTrail = smokeTrail;
-        _fireTrail = fireTrail;
+        _standInTrailPuffer = standInTrail;
+        _standInFirePuffer = standInFire;
         _panelTrailPool = panelTrails ?? new List<Puffer>();
+        _prop1 = FindByName(planeRoot, "prop1");
     }
 
     public int PanelCount => _panels.Count;
+
+    /// <summary>The panel candidate sets the authored data names (`BL-270`): the healthy skins
+    /// damage may hide are exactly the `*_h` nodes `plane_reset` re-ACTIVEs on reset (pdp2_h and
+    /// pdp3_h, one shared def OPERAND_NODE-retargeted at every airframe), and the torn panels are
+    /// the `pdpN` nodes the `pdpanelN` defs activate. What the defs do NOT encode is which torn
+    /// panel hides which skin — no def ever deactivates an `_h` node — so the co-location match
+    /// (<see cref="PairHealthySkins"/>) still assigns pairs, scoped to these sets.</summary>
+    public static PanelPairing? PanelPairingSets(IEnumerable<Mech3.AnimDefinition> defs)
+    {
+        var hideable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var torn = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var def in defs)
+        {
+            string animName = def.AnimName ?? def.Name;
+            bool reset = animName.Equals("plane_reset", StringComparison.OrdinalIgnoreCase);
+            bool panel = animName.StartsWith("pdpanel", StringComparison.OrdinalIgnoreCase);
+            if (!reset && !panel)
+                continue;
+            foreach (var seq in def.Sequences)
+                foreach (var ev in seq.Events)
+                {
+                    if (ev.Kind != "ObjectActiveState" || !ev.Data.Bool("state"))
+                        continue;
+                    if ((ev.Data.Str("node") ?? ev.Data.Str("name")) is not { } name)
+                        continue;
+                    if (reset && name.EndsWith("_h", StringComparison.OrdinalIgnoreCase))
+                        hideable.Add(name);
+                    else if (panel && name.StartsWith("pdp", StringComparison.OrdinalIgnoreCase)
+                             && !name.EndsWith("_h", StringComparison.OrdinalIgnoreCase))
+                        torn.Add(name);
+                }
+        }
+        return hideable.Count == 0 && torn.Count == 0 ? null : new PanelPairing(hideable, torn);
+    }
+
+    /// <summary>The rig anim an injure_anims entry plays, or null for the entries that are not
+    /// rig-runtime work (the cockpit gauge cycles, got_hit_anim). One deliberate mapping: the
+    /// data's 0.10 entry names <c>player_smoketrail</c>, whose def calls the dense_firetrail pair,
+    /// but `BL-259`/CAP-15 pin the heavy stage the player sees as <c>player_damage_trail</c> —
+    /// short_firetrail at prop1 plus the fire_lt nose light — so that is what plays.</summary>
+    public static string? RigAnimFor(string injureAnim)
+    {
+        if (injureAnim.StartsWith("pdpanel", StringComparison.OrdinalIgnoreCase)
+            || injureAnim.EndsWith("_damage_effects", StringComparison.OrdinalIgnoreCase)
+            || injureAnim.Equals("player_fuelleak", StringComparison.OrdinalIgnoreCase))
+        {
+            return injureAnim;
+        }
+        return injureAnim.Equals("player_smoketrail", StringComparison.OrdinalIgnoreCase)
+            ? "player_damage_trail"
+            : null;
+    }
 
     /// <summary>Applies every visual whose threshold the part's new HP fraction has
     /// crossed (fraction ≤ entry). Idempotent per anim name.</summary>
@@ -110,8 +180,9 @@ public sealed class DamageVisuals
                     {
                         torn.Visible = true;
                         GD.Print($"damage panel: {anim} on ({partName} {fraction * 100f:0}%)");
-                        // the panel burns: a discrete-puff fire trail streams from it
-                        if (_panelTrailPool.Count > _panelTrails.Count)
+                        // the parked stand-in: a firepuffer burning in place at the panel
+                        // (the flight path plays the authored def through the sink below)
+                        if (DamageEffectSink == null && _panelTrailPool.Count > _panelTrails.Count)
                             _panelTrails.Add((torn, _panelTrailPool[_panelTrails.Count]));
                     }
                     // hide the healthy skin at the torn panel's own spot (paired by
@@ -119,6 +190,7 @@ public sealed class DamageVisuals
                     if (_pairedHealthy.TryGetValue("pdp" + n, out var healthySkins))
                         foreach (var healthy in healthySkins)
                             healthy.Visible = false;
+                    PlayStage(anim, partName, fraction);
                 }
                 else if (anim.EndsWith("_damage_effects", StringComparison.OrdinalIgnoreCase))
                 {
@@ -126,9 +198,7 @@ public sealed class DamageVisuals
                     // <part>_damage_effects defs are the same one-event shim calling
                     // random_gun_impact, which picks pdp1 (40%) or pdp2 (40%) and ALWAYS also
                     // sparks pdp4 — so a hit can light one panel or two, never none.
-                    DamageEffectSink?.Invoke(anim);
-                    GD.Print($"damage sparks: {anim} on ({partName} {fraction * 100f:0}%)"
-                             + (DamageEffectSink == null ? " — no rig runtime, not played" : ""));
+                    PlayStage(anim, partName, fraction);
                 }
                 // else: *_damage_green/yellow/red cockpit indicator and got_hit_anim's nosedamage
                 // blink — unwired (no cockpit; GaugeCluster.OnPartDamage approximates the latter)
@@ -139,52 +209,45 @@ public sealed class DamageVisuals
         {
             if (fraction > frac || !_applied.Add(anim))
                 continue;
-            if (anim.Equals("player_smoketrail", StringComparison.OrdinalIgnoreCase))
+            if (RigAnimFor(anim) is not { } stage)
+                continue;
+            if (DamageEffectSink == null
+                && anim.Equals("player_smoketrail", StringComparison.OrdinalIgnoreCase))
             {
-                _smoking = true;
+                _smoking = true; // the parked stand-in pair burns at prop1 (UpdateStatic)
                 GD.Print($"smoke trail: on ({partName} {fraction * 100f:0}%)");
             }
+            PlayStage(stage, partName, fraction);
         }
     }
 
-    /// <summary>Feeds the trail emitters their emit points; call each frame while
-    /// flying (not crashed/paused).</summary>
-    public void Update(Vector3 position, Basis attitude)
-    {
-        foreach (var (panel, trail) in _panelTrails)
-            trail.TrailAdvance(panel.GlobalPosition);
-        if (!_smoking)
-            return;
-        var nose = position + attitude * new Vector3(0f, 0f, -NoseOffset);
-        _smokeTrail?.TrailAdvance(nose);
-        _fireTrail?.TrailAdvance(nose);
-    }
-
-    /// <summary>Damage-lab drive (static viewer): the parked plane never moves, so the
-    /// distance-interval trails would emit nothing — burn them in place instead, at
-    /// <see cref="StaticBurnSpeed"/> of virtual motion per second (panel fires and,
-    /// when smoking, the nose smoke/fire pair rise from the standing plane).</summary>
-    public void UpdateStatic(float dt, Vector3 position, Basis attitude)
+    /// <summary>Damage-lab drive (static viewer): the parked plane never moves, so the authored
+    /// distance-interval trails would emit nothing — the stand-in puffers burn in place instead,
+    /// at <see cref="StaticBurnSpeed"/> of virtual motion per second (panel fires and, when
+    /// smoking, the prop1 smoke/fire pair rise from the standing plane).</summary>
+    public void UpdateStatic(float dt)
     {
         foreach (var (panel, trail) in _panelTrails)
             trail.TrailBurnAt(panel.GlobalPosition, dt, StaticBurnSpeed);
         if (!_smoking)
             return;
-        var nose = position + attitude * new Vector3(0f, 0f, -NoseOffset);
-        _smokeTrail?.TrailBurnAt(nose, dt, StaticBurnSpeed);
-        _fireTrail?.TrailBurnAt(nose, dt, StaticBurnSpeed);
+        if (_prop1 is not { } nose)
+            return;
+        _standInTrailPuffer?.TrailBurnAt(nose.GlobalPosition, dt, StaticBurnSpeed);
+        _standInFirePuffer?.TrailBurnAt(nose.GlobalPosition, dt, StaticBurnSpeed);
     }
 
-    /// <summary>Back to pristine: torn panels hidden, healthy twins shown, trails
-    /// cleared. Called on respawn.</summary>
+    /// <summary>Back to pristine: the runtime's damage stages stopped, torn panels hidden,
+    /// healthy twins shown, stand-in trails cleared. Called on respawn and by the damage lab's
+    /// repair path. Stop runs FIRST: pdpanel1's authored LOOP −1 re-asserts pdpN ACTIVE every
+    /// tick, so hiding the panel under a live instance would be undone next frame.</summary>
     public void Reset()
     {
+        DamageEffectStop?.Invoke();
         foreach (var (name, node) in _panels)
             node.Visible = name.EndsWith("_h", StringComparison.OrdinalIgnoreCase);
         _applied.Clear();
         _smoking = false;
-        _smokeTrail?.Clear();
-        _fireTrail?.Clear();
         foreach (var (_, trail) in _panelTrails)
             trail.Clear();
         _panelTrails.Clear();
@@ -223,12 +286,55 @@ public sealed class DamageVisuals
         return xf;
     }
 
+    /// <summary>First node under <paramref name="root"/> whose Godot name or gamez
+    /// <c>cs_name</c> meta matches — the same two names AnimRuntime resolution reads.</summary>
+    private static Node3D? FindByName(Node root, string name)
+    {
+        if (root is Node3D n3
+            && (root.Name.ToString().Equals(name, StringComparison.OrdinalIgnoreCase)
+                || (root.HasMeta(Mech3.AnimRuntime.NameMeta)
+                    && root.GetMeta(Mech3.AnimRuntime.NameMeta).AsString()
+                        .Equals(name, StringComparison.OrdinalIgnoreCase))))
+        {
+            return n3;
+        }
+        foreach (var child in root.GetChildren())
+            if (FindByName(child, name) is { } hit)
+                return hit;
+        return null;
+    }
+
+    /// <summary>Routes one authored stage anim out through the rig runtime, or says (once) why it
+    /// cannot: a world-less flight has no rig runtime and renders panel flips alone.</summary>
+    private void PlayStage(string anim, string partName, float fraction)
+    {
+        if (DamageEffectSink != null)
+        {
+            DamageEffectSink(anim);
+            GD.Print($"damage stage: {anim} on ({partName} {fraction * 100f:0}%)");
+        }
+        else if (_panelTrailPool.Count == 0 && !_noRuntimeLogged)
+        {
+            _noRuntimeLogged = true;
+            GD.Print($"damage stage: no rig runtime — authored anim '{anim}' (and any later stage) " +
+                     "not played; panel flips only");
+        }
+    }
+
     /// <summary>Pairs every healthy pdpN_h skin with the torn panel occupying the same
     /// spot on the airframe (nearest mesh-AABB center within <see cref="MaxPairDistance"/>,
-    /// same side of the centerline). Name-based pairing is wrong on three planes — see
-    /// the class comment.</summary>
-    private void PairHealthySkins(Node3D planeRoot)
+    /// same side of the centerline). The CANDIDATE sets come from the authored defs when given
+    /// (`BL-270`): only skins `plane_reset` re-ACTIVEs are hideable, only `pdpanelN` targets are
+    /// torn panels — an `_h` node outside the authored list is never hidden, by construction.
+    /// The assignment inside those sets stays positional: the defs never say which torn panel
+    /// hides which skin, and name-based pairing is wrong on three planes — see the class
+    /// comment.</summary>
+    private void PairHealthySkins(Node3D planeRoot, PanelPairing? defPairing)
     {
+        if (defPairing == null)
+        {
+            Utils.Log.Warn("flight", $"damage panels: no authored pairing data (plane_reset/pdpanelN defs unavailable) — geometric AABB pairing over every *_h skin engaged");
+        }
         var torn = new List<(string Name, Vector3 Center)>();
         var healthy = new List<(string Name, Node3D Node, Vector3 Center)>();
         foreach (var (name, node) in _panels)
@@ -236,9 +342,23 @@ public sealed class DamageVisuals
             if (!TryMeshCenter(node, planeRoot, out var c))
                 continue;
             if (name.EndsWith("_h", StringComparison.OrdinalIgnoreCase))
+            {
+                if (defPairing != null && !defPairing.HideableHealthy.Contains(name))
+                {
+                    GD.Print($"damage panels: {name} is not in the authored reset list — never hidden");
+                    continue;
+                }
                 healthy.Add((name, node, c));
+            }
             else
+            {
+                if (defPairing != null && !defPairing.TornTargets.Contains(name))
+                {
+                    GD.Print($"damage panels: {name} is not an authored pdpanelN target — not paired");
+                    continue;
+                }
                 torn.Add((name, c));
+            }
         }
         foreach (var (name, node, c) in healthy)
         {
@@ -268,3 +388,8 @@ public sealed class DamageVisuals
         }
     }
 }
+
+/// <summary>The authored panel candidate sets (<see cref="DamageVisuals.PanelPairingSets"/>):
+/// which healthy `*_h` skins damage may hide (`plane_reset`'s re-ACTIVE list) and which torn
+/// `pdpN` panels participate (the `pdpanelN` defs' targets). Case-insensitive sets.</summary>
+public sealed record PanelPairing(IReadOnlySet<string> HideableHealthy, IReadOnlySet<string> TornTargets);
