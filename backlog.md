@@ -2227,6 +2227,27 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   (`docs/HISTORY.md` 2026-08-03, `trail-world-anchor` suite). Rendering at real spawns is now
   verified; this item is back to a magnitude/feel judgement. Tree softness is retired dead code
   (`docs/HISTORY.md` 2026-07-23), not a TUNE — do not re-add it here.
+  **`CAP-15` analysed 2026-08-05** (the burn-down half of `CAP-14 Graze and CAP 15 wing to
+  red.mp4`, 37.45 s Bloodhawk chase clip; stills + per-frame fire counts in `playtest/CAP-15/`;
+  times are wall-clock PTS, sim-s = ×1.390). The 10c look verdict, part by part:
+  (a) **Panel flip matches.** The original's visible damage stage is a skin swap — the outer
+  third of the right wing turns charred black at the threshold (all-red before contact), with no
+  large flapping geometry readable at chase distance; our torn-`pdpN`-shown/`_h`-hidden swap is
+  the same mechanism. Ignition is on the contact frame itself (t = 5.886).
+  (b) **Trail staging does NOT match.** The original streams `short_firetrail`'s full
+  three-puffer stack from the damaged panel — fire_f01–06 flipbook + orange-born smoke + a
+  pure-black smoke puffer, deactivating at the authored 4/6/8 s `EVENT_OFFSET`s and
+  sputter-looping while the panel is active. On film: fire-dominant ~12.4 wall-s (peak 9,418
+  orange px at t = 6.82), then two pure-black wing plumes, then thinning, sputtering smoke still
+  going ≥ 31.5 wall-s after contact at clip end. Our per-panel trails are four bare `firepuffer`s
+  (`FlightRigAssembler.cs`) — fire flipbook only: no black-smoke phase, no staged burn-out, no
+  sputter. That is the one concrete 10c gap this capture establishes.
+  (c) **Gauge timing confirmed:** the damage silhouette's right-wing segment goes RED (nose
+  YELLOW) on the first lit blink ≤ 0.25 s after contact, then blinks lit/dim persistently.
+  (d) The clip contains **no nose-anchored trail** even with the wing red-critical for 30 s —
+  negative evidence against `DamageVisuals.NoseOffset` anchoring the whole-plane
+  `dense_firetrail` pair at the nose, though the clip cannot prove that pair ever triggered
+  (its black plumes are indistinguishable from `short_firetrail`'s own black phase; `BL-246`).
 - `BL-246` **Smoke/fire trail is effectively unreachable from organic gameplay** (found while
   fixing the trail-anchor bug, 2026-08-03). The whole-plane `player_smoketrail` needs a part at
   ≤ 0.10 HP fraction (`DamageVisuals.cs`), but the only in-game damage source is a terrain graze:
@@ -2236,8 +2257,14 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   (or `--damage=`) is currently the only practical way to see the trail. Design/tuning question,
   deliberately split from the render fix: candidate shapes are weapon fire damaging planes (no
   enemy-fire path exists at all today), a lower smoke threshold, or accepting it as a
-  near-death-only effect like the original. Decide against the original at the controls
-  (`CAP-15`'s look-half owes the same footage).
+  near-death-only effect like the original. Decide against the original at the controls.
+  **`CAP-15`'s footage (analysed 2026-08-05, `playtest/CAP-15/`) reframes the stakes:** in the
+  original, ONE survivable graze puts on the whole show — per-panel `short_firetrail` fire for
+  ~12 wall-s then sputtering black smoke past 31 wall-s, plus the charred-wing skin swap — and
+  **no nose-anchored whole-plane trail ever appears** even with the wing red-critical to clip
+  end. So the drama the player actually sees at heavy damage is the panel-level burn (reachable
+  organically today), and the `player_smoketrail` pair may be rarer in the original than we
+  assumed, or anchored at the damage site rather than the nose; the clip cannot separate those.
 - `BL-122` **Data-driven crash (PLAN-data-driven-crash, default since Wave 4)** — several playtest-gated TUNEs,
   all needing the original at the controls: `WreckMomentum` **0.4** (`FlightController.cs` — the
   fraction of impact velocity the wreck pieces inherit, so they scatter along travel vs. pop straight

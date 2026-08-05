@@ -15578,3 +15578,43 @@ disclosed gap rather than force it.
 pictures (no headless water crash exists — `--crash` resolves `Ground`), the rocket rings' template
 meshes and splash falloff onto a real large neighbour. `B5`'s engine-detune listen A/B is owed with
 no `PT-` of its own. Found on the way and filed rather than fixed: `BL-257` and `BL-258`.
+
+## 2026-08-05 — `CAP-15` analysed: the original's wing burn-down is `short_firetrail` playing as authored — fire ~12 wall-s, then sputtering black smoke past 31, plus a charred-skin swap; our panel trails are fire-only (`BL-121`)
+
+The look-half of `CAP-15` (visible damage stages) comes off the second half of `CAP-14 Graze and
+CAP 15 wing to red.mp4` (37.45 s, Bloodhawk, chase view, 2560×720; registration dx = dy = 0, peak
+0.826, already on record from the `CAP-14` decode — 2026-08-04 (g)). Times below are wall-clock
+off container PTS; sim-seconds = ×1.390. Evidence — contact sheets, damage-gauge blink strips,
+2× wing crops, and a per-frame fire-pixel count with the script that produced it — is in
+`playtest/CAP-15/`.
+
+**The timeline.** The graze is the single frame t = 5.886, and the fire lights on that same frame
+(orange-pixel count 0 → 352 px). The damage-gauge silhouette, solid green until contact, shows
+the right-wing segment **red** and the nose segment **yellow** on its first lit blink ≤ 0.25 s
+later, and blinks lit/dim persistently to the end of the clip. The wing streams a discrete-puff
+fire chain — brightest yellow-white at the emitter, cooling orange → dark-red embers downstream,
+with a thin white-grey smoke ribbon alongside — at 2,100–3,300 fire px/frame, peaking 9,418 px at
+t = 6.82. From ~13.5 s black puffs interleave; by ~15.5–18 s the fire is gone and **two
+pure-black smoke plumes** trail from the wing (mid-wing + near tip), the outer third of the wing
+now swapped to a charred-black skin (all-red before contact). The smoke then thins and
+*sputters* — visible, faint, visible again — and is still going at clip end, ≥ 31.5 wall-s
+(≈ 44 sim-s) after contact. No nose-anchored trail ever appears.
+
+**What that pins.** The staging is `extracted/zrdr/pufftrails.zrd.json`'s `short_firetrail`
+verbatim: three puffers at the panel node (fire_f01–06 flipbook at 0.2 m intervals; smoke101–103
+with the orange-born 255,164,90 → near-black COLORS ramp at 0.5 m; a pure-black 0,0,0 α 0.7
+smoke at 0.18 m), staged `INACTIVE` at `EVENT_OFFSET` 4/6/8 and re-looped (`LOOP` −1) while the
+panel is active. Verdict against our build (`BL-121` 10c): the **panel flip matches** — a skin
+swap, instant at the threshold, no flapping geometry readable at chase distance, which is what
+our torn-`pdpN`/`_h` swap does; the **trail staging does not** — `FlightRigAssembler.cs` wires
+four bare `firepuffer`s as panel trails, so ours burn without ever turning to black smoke,
+decaying, or sputtering. The gauge's ~0.2 s grey-then-red (14755's reading) resolves as the
+blink cadence: the "grey" is the dim blink phase the hit lands in.
+
+**What the clip cannot settle.** Whether the whole-plane ≤ 0.10 `dense_firetrail` pair ever
+triggered — its black smoke is indistinguishable from `short_firetrail`'s own black phase — so
+the nose-vs-damage-site anchoring question stays open as negative evidence only (30 s of
+red-critical wing, not one puff from the nose; noted on `BL-121` and `BL-246`). Docs:
+`BL-121` gained the verdict, `BL-246` the reframing (one graze puts on the whole show — the
+panel-level burn, not the near-death nose trail, is the drama the player sees), and `CAP-15`'s
+`playtest.md` §0 row is retired. No code or behaviour change; nothing built or tested.
