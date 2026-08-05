@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-273`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-282`.**
 When adding a new item, take the next number and bump this line. ⚠ One ID was minted twice in
 concurrent sessions on 2026-08-04 — `BL-253` (the C2 facade log debris, this file's holder) and a
 "nose view" finding merged the same day; the nose-view item was renumbered to `BL-255` at the
@@ -324,6 +324,107 @@ rotations, the focus-loss mute and the C2 Seaplane Hangar objective are all sche
 with the diagnosis that verification pass produced. **Do not re-add them here**; if one is closed
 without landing, its record goes to `docs/HISTORY.md`. What remains below is what is still
 unscheduled.
+
+### Playtest triage 2026-08-05 (at-the-controls findings, `PT-01`–`PT-30`)
+
+Nine findings from one sitting, triaged with the user the same day. Eighteen `PT-nn` items closed
+in the pass; what could not be closed is below. Two of them started as tuning complaints and turned
+out to be **unread authored data** once the note was checked against `extracted/` — the same shape
+as `BL-259`/`BL-261`, and the reason each entry below says what was checked, not just what was seen.
+
+- `BL-273` **`fogvol.zrd` is never read: the ambient cloud field is authored data we replaced with
+  an invented one.** Every chapter ships `extracted/<ch>/zrdr/fogvol.zrd.json` — a fog-volume
+  *clutter* spec scattering the gamez `cloudsprite`/`cloudsprite1`/`cloudsprite2` template nodes,
+  carrying `distance` (the band), `perp_dist_range`/`perturb_dist_range` (scatter and density),
+  `far_fade_range` (fade in/out distances) and `scale_range` (size) — i.e. every knob `BL-118`
+  currently guesses at. It is **entirely unconsumed**: the only repo-wide hits are the eight
+  `extracted/*/zrdr/manifest.json` entries and the files themselves; nothing in `CSVM/src`,
+  `docs/`, or `analysis/` references it. `Clutter.cs` is driven by `interp.json`'s
+  `AddClutterTemplates` (`docs/formats/clutter.md:7-22`), a different path that never reads a zrdr
+  clutter block. Scope: a `fogvol.zrd` reader plus rendering the authored clutter, replacing
+  `CloudPuffs.cs`'s hand-tuned field (`Count 12`, `Radius 620`, `SizeMin/Max 90/200`,
+  `BaseAlpha .06–.13`, `BandBelow/Above 120/280`, `VertFull/Fade 200/560` — all TUNE, all to be
+  deleted, not re-tuned). The per-chapter differences it encodes match what the playtest saw:
+  C1/C4/C5 name two sprite templates, C2/C3 name one, so "single puffs at all heights, but not on
+  every map" (`PT-02`, user, 2026-08-05) is authored behaviour, not our bug. ⚠ **Trap:** the
+  original's picture is *two* things — sparse singles at any altitude **and** a dense layer hugging
+  the deck. One uniform field reproduces neither; do not tune our way to the average.
+  *No capture owed:* the data carries the numbers, and film is only worth taking if a difference
+  survives the reader (user's call, 2026-08-05).
+  *Playtest after fix:* fly C1 and a one-sprite chapter (C2 or C3) at several altitudes and past
+  the deck — the singles should thin with the data, and the deck should carry its own dense layer.
+- `BL-274` **The crash ground splash tracks the moving wreck instead of anchoring at the impact
+  point.** Seen at the controls (`PT-04`, 2026-08-05): the splash effect drags along with the plane
+  as it slides rather than staying where it hit. Same defect family as `BL-229`'s "puff at the
+  plane's last position" and the `TopLevel` anchor fix that produced the `trail-world-anchor` suite
+  (`docs/HISTORY.md` 2026-08-03) — the effect is parented to the aircraft rather than world-staged.
+  Everything else about the crash was judged **right** in the same sitting: sound and piece tumble
+  rate both confirmed good, so this is the one visual defect left in that scene.
+  *Playtest after fix:* belly-slide a crash and watch the splash stay put.
+- `BL-275` **Fire plumes do not rise high enough — velocity or lifetime is too low.** Two
+  independent sightings the same sitting, judged as one defect (user, 2026-08-05): the crash fire
+  "burns higher" in the original (`PT-04`), and the destruction fire's flames "climb but not as
+  high as the original" with the dark plume "right but not high enough" (`PT-22` a/c). The suspect
+  is the puffer's rise speed or per-puff lifetime, not its size or count. ⚠ **Trap:** this
+  supersedes `PT-22`'s original question, which asked whether the plume read too *thin* (the
+  `NUMBER` default, `BL-218`) — the answer at the controls was about **height**, so do not fold a
+  density re-tune into this. Judge after `BL-262` lands (`PLAN-m3-polish-8` A1), since the 4×
+  size scale changes what "high enough" looks like.
+  *Playtest after fix:* destroy a building and crash a plane in one flight; both plumes should
+  climb to the original's height.
+- `BL-276` **`large_30sec_fire` stops at about 5 s instead of 30 — a suspected `BL-212`
+  regression.** Confirmed at the controls (`PT-22` (a) and (b), 2026-08-05): the fire behind ~1,035
+  death call sites visibly quits after ~5 s, and `PT-22`'s explicit check "the fire still **ends at
+  30 s** (the `BL-212` halt must not have regressed)" came back **no**. `BL-212` is the landed
+  `STOP_SEQUENCE` halt (renumbered — the rocket-trail item that briefly held that ID is now
+  `BL-215`), and it is the prime suspect. ⚠ **Trap:** this is judged **separate** from the
+  aircraft damage-stage puffers also stopping early (user's call, 2026-08-05) — those are the
+  authored-data rework already scheduled in `PLAN-m3-polish-8` wave D. Do not merge the two; a
+  shared "puffers stop early" item would hide a regression inside planned work.
+  *Playtest after fix:* destroy a building and watch the full 30 s.
+- `BL-277` **`SkyZone` hard-codes `zone2`, which has no horizon geometry at all in C1B, C2 and
+  C3.** Found by checking `PT-23`'s "skydome/fog in C1B and C3 are not correct, perhaps only wrong
+  zone" against the data (2026-08-05), and it is a bug, not a fidelity preference:
+  `SessionSpec.cs:176` sets `SkyZone = "zone2"` chapter-wide; `Weather.ResolveZone`
+  (`Weather.cs:165-166`) only falls back when a zone is **absent**, and these chapters *define*
+  `ZONE2`, so it resolves to itself with no warning. But their gamez `horizon/zone2` node is a bare
+  marker (`model_index: -1`, `child_indices: []`), so `WorldBuilder.BuildHorizon("zone2")`
+  (`WorldBuilder.cs:385-413`, called from `GameSession.cs:782`) builds a dome with **zero meshes** —
+  what renders is the `WorldEnvironment` background. Horizon children per chapter: C1 1/4,
+  **C1B 4/0**, C1C 1/4, **C2 3/0**, C2B 1/2, **C3 3/0**, C4 1/4. The fog picked is wrong the same
+  way: C3's `ZONE2` fog is night-blue `[0.063, 0.094, 0.188]` on a mission the data lights at
+  diffuse 1.5 / ambient 0.3 with the sun 25° up, while `ZONE1` carries the matching daylight grey
+  `[0.79, 0.79, 0.79]`; C1B's `ZONE2` fogs only 1128–1256 m so everything above ~1.2 km renders
+  unfogged, where `ZONE1` fogs 10000–11000 (the whole flyable column). `BL-036`'s node counts
+  agree — C1B and C3 author their world under zone 1 (2101 and 1647 nodes) with 2 nodes in zone 2.
+  Fix: select the zone per chapter (or pick the zone whose `horizon` subtree actually has
+  children), which also answers `BL-100` for these three. ⚠ **Trap:** nothing on disk selects the
+  zone — not the mission zrdr, not the 53 `.gw` scripts, not the DLL strings
+  (`docs/formats/weather.md:86-96`), and **not** `fogvol.zrd`, which carries no `fog_zone` key in
+  any chapter (checked 2026-08-05). The selection rule is engine-side; wire it from the horizon
+  subtree's own contents rather than inventing a lookup.
+  *Playtest after fix:* fly C1B and C3 — a real dome should appear, C3's haze should read as
+  daylight grey, and C1B should stay fogged above 1.2 km. `CAP-11` then judges the brightness.
+- `BL-278` **The damage lab's health slider does not zero armor.** At the controls (`PT-29`,
+  2026-08-05): moving the health slider should take armor to 0 with it. Everything else in the
+  in-flight lab passed the same sitting (live HUD/dial/rattle response, smooth dragging, scenery
+  grazes dropping the slider on their own, **R** restoring 100 %, and "repair all" clearing panels
+  and trail without a stutter), so this is the one behaviour left.
+- `BL-279` **Space is double-bound in freecam — it fires the guns *and* a freecam action.** Found
+  in the weapon lab (`PT-30` (d), 2026-08-05). The `V` round trip to the impact point and back was
+  judged **correct** in the same pass, so the toggle is not at fault; only the binding overlap is.
+- `BL-280` **Orbital camera: move the distance controls to numpad `+` / numpad `−` like the
+  original, and stop `shift` driving camera and target point together.** User request from the
+  weapon-lab sitting (`PT-30` (e), 2026-08-05) but **about the orbital camera, not the lab's** —
+  the lab's own stand-off slider and re-parking were judged to work "really good". Cross-ref
+  `BL-150` (the numpad camera rebuild), which owns the numpad bindings this must not collide with.
+- `BL-281` **The ricochet sounds are audible but very faint.** `PT-25` (c), 2026-08-05:
+  `snd_ricochet1–4` play under the per-impact spark burst but sit too low to read. A mix-gain
+  question with no reference recording behind it — same shape as `BL-223`'s damaged-engine gain,
+  and to be judged at the controls rather than derived. ⚠ Judge only after `CAP-27` decides
+  whether the original has this effect at all: `BL-090` already calls the 0.99 `injure_anims`
+  entry that drives it "plausibly an authoring leftover", present on 1 of 11 aircraft, so the
+  capture may delete the feature rather than tune it.
 
 ### C2 destruction animations (at-the-controls findings, 2026-08-04)
 
@@ -1672,8 +1773,13 @@ needs one of them to move needs a new measurement first.
 
 - `BL-100` **Which weather/sky zone do C1–C4 actually use?** **C5 is answered — `zone1`** (user A/B
   2026-07-22; landed as polish-3 item 2, see `docs/formats/weather.md` and `Weather.ResolveZone`).
-  **Still open for C1–C4**, all of which define `zone2` and resolve to themselves, so they render a
-  plausible answer either way and this is a fidelity question rather than a bug. **C1 is the one
+  **Still open for C1–C4**, all of which define `zone2` and resolve to themselves. ⚠ **This item
+  used to say that made it "a fidelity question rather than a bug" — disproven for C1B, C2 and C3**
+  (2026-08-05, `PT-23`): their gamez `horizon/zone2` node is an empty marker, so those three render
+  **no dome geometry at all** under today's `zone2` default, and C3 wears night-blue fog on a
+  sunlit mission. That is `BL-277`, which answers this item for those three; what stays open here
+  is C1 and C4, where both zones carry geometry and the choice really is a fidelity call.
+  **C1 is the one
   worth doing first:** it is the only chapter whose own scripts disagree (`load.gw` →
   `zone2_cloud_floor`, `tex_fx.gw` → `h_zone1scroll`), and its two zones are genuinely different
   skies (zone2 = moon/stars night, zone1 = day haze).
@@ -2227,6 +2333,11 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   this is the cameras that replace it. ⚠ The field units are undecoded — same trap as
   `BL-248`(d): near-matches to hand-picked values are suggestive, not decodes; expect to need
   original-game captures (a death, a crash, a flyby) before wiring laws.
+  **The crash camera's capture blocker is retired (user, 2026-08-05, `PT-04`):** "in the original
+  the camera is zoomed away while crashing — there are enough captures". So the crash framing can
+  be measured off footage we already hold; no `CAP` is owed for it, and crash-first (already the
+  recommended order, since the crash rig is data-driven) is now also the unblocked one. A death and
+  a flyby capture are still owed for the other two.
 - `BL-261` **Gun smoke: render the authored `muzzlepuffer`, delete the invented eject-puff
   cluster — the two are one effect, misattributed** (settled against the data 2026-08-05).
   `Projectile.cs` currently has it backwards: the authored muzzle smoke (`muzzle_burst`'s
@@ -2329,14 +2440,22 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   field seed visible puffs for any camera altitude in **[290 m, 1964 m]** for C1/IA1 — effectively the
   whole flight envelope (ceiling ~2003 m, `BL-094`) — while `weather.json`'s own `CLOUD_COVER` block
   defines a much narrower band: `TOP`/`BOTTOM` 1124/970 (clear at both edges) with a fully-opaque core
-  of only 1032–1062 (`docs/formats/weather.md:190-192`, `Weather.cs:112-113`). No zrdr defines a
-  separate ambient-puff emitter — reconfirmed against the newly-extracted `cam_anim` set; the only
-  "cloud" hits are the static world-decoration `clouds.zrd.json` sprites and the unrelated
-  `steamcloud` zeppelin-skin puffer.
-  *Fix shape:* key the layer's vertical extent/falloff to each mission's own
-  `CloudTop`/`CloudBottom`/core-`THICKNESS` instead of the two flat margins, so puffs read dense only
-  near the real whiteout core and fade out near the data's own clear-at-970/1124 edges.
-  *Blocked on `CAP-12`* (`playtest.md` §0).
+  of only 1032–1062 (`docs/formats/weather.md:190-192`, `Weather.cs:112-113`).
+  ⚠ **RE-SCOPED 2026-08-05 — this item used to assert "No zrdr defines a separate ambient-puff
+  emitter", and that is wrong.** The sweep behind that sentence only looked at anim defs and the
+  `cam_anim` set; the authored field is a **clutter** spec, `fogvol.zrd`, present in every chapter
+  and never read by us. It is now `BL-273`, and it carries the band, scatter, density, fade and
+  size as numbers — so the fix shape below (re-key our margins to `CloudTop`/`CloudBottom`) is
+  **superseded**: the hand-tuned constants get deleted rather than re-derived. What stays with
+  `BL-118` is the half `fogvol` does not explain — the `CloudDeck` **mesh** reading ~40 units
+  lighter than the original — plus a density judgement to be made only *after* `BL-273` lands.
+  Also corrected by the same playtest: symptom (2) is not C1/IA1-specific and is partly authored —
+  the original shows sparse singles at any altitude too, on some maps but not all, which `BL-273`
+  explains via the per-chapter sprite-template counts.
+  *Superseded fix shape (kept for the record):* key the layer's vertical extent/falloff to each
+  mission's own `CloudTop`/`CloudBottom`/core-`THICKNESS` instead of the two flat margins.
+  *`CAP-12` is no longer a blocker for the model* — the data settles it; film only if a difference
+  survives `BL-273` (user's call, 2026-08-05). The capture stays owed for deck-density judgement.
   ⚠ **Traps.** (a) Don't just shrink the margins by feel — they vary per mission/zone; re-derive per
   chapter or the same bug reappears with a different band width elsewhere. (b) The "~40 units lighter"
   brightness reading is about the `CloudDeck` **mesh**, a different object from the sprite field the
@@ -2359,6 +2478,16 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   authored one-sided flare quad as an additive both-sides billboard — the original may genuinely
   show the flare only from behind; an orbit of a lit plane in the original settles both the
   widening and the billboard deviation in one clip.
+  **Playtest evidence 2026-08-05 (`PT-03`, closed into this item).** Two measurements against the
+  original, staged in `playtest/PT-03/Light Original New.png` (an A/B still — original above,
+  ours below): (a) **our flash is twice as long** — at 30 fps the original's light occupies **one**
+  frame, ours **two**, i.e. `FlashDuration` 0.08 s ≈ 2 frames against the original's ~0.033 s. That
+  is the first real bound anyone has put on the widening, and it points at ~1 frame rather than the
+  current guess. (b) **the flare's orientation is wrong** — ours additionally draws a large flat
+  yellow wedge at the wing, where the original shows a compact camera-facing star burst. That is
+  the `PlaneBuilder.cs:204-249` re-skin above showing itself, so the billboard deviation is not
+  merely "possibly wrong": it has a screenshot against it. Both are inside this item's scope; no
+  separate entry was minted.
 - `BL-120` **Collision feel** — behaviour against building corners.
 - `BL-121` **Damage (Run-2 item 10)** — `CrashSpeed` 25, graze friction + attitude kick,
   `GrazeStopSpeed`, breakup scatter, and whether the 10c panel-flip and smoke-trail look right in

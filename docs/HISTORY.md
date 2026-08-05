@@ -15733,3 +15733,78 @@ restored, green.
 
 `BL-262` stays open and untouched — staging `ballflare.flt`/`apassengers` moves goldens, and this
 plan stopped rather than repinned. The plan is archived at `docs/plans/PLAN-effect-catalogue.md`.
+
+## Playtest triage 2026-08-05 — eighteen `PT` items closed, nine findings banked
+
+One at-the-controls sitting, triaged with the user the same day. Eighteen `PT`s retired: `PT-01`,
+`PT-02`, `PT-03`, `PT-04`, `PT-13`–`PT-18`, `PT-20`–`PT-25`, `PT-29`, `PT-30`. Ten remain open in
+`playtest.md` (`PT-26`–`PT-28`, `PT-31`–`PT-37`).
+
+**Passed outright, nothing owed.** `PT-01` E37 pipper (retires the `GunConvergenceDist` TUNE).
+`PT-13` damage-stage smoke/fire (the sputter and the `puffer` size tuning read close; PLAN-m3-polish-3
+A1's cockpit half closes). `PT-14` C2 blue water — "water is now correctly classified", closing A3.
+`PT-15` C3 spiderweb fly-through, closing B11. `PT-16` kkgate debris fade, closing B12. `PT-18`
+gun-impact looks on all three surface classes — water, dirt and buildings all judged good, closing
+A2 and the playtest half of `BL-203`/`BL-186`; its ×8 water-column width drew no complaint and is
+treated as settled. `PT-21` gun-loop switch and crash cut, both confirmed. `PT-23` backface culling:
+the half that could have sent the fix back — any surface see-through from the wrong side — found
+**nothing**, and the cloud deck turned out already fixed (double-sided).
+
+**Two tuning complaints that turned out to be unread authored data.** This is the pass's real
+result, and both were found by checking the note against `extracted/` rather than against feel.
+(1) `PT-02` clouds: the user's "the puffs could be authored" instinct was right. Every chapter ships
+`zrdr/fogvol.zrd.json`, a fog-volume **clutter** spec scattering `cloudsprite*` gamez templates with
+band, scatter, density, fade and size as numbers — never read by us, zero references outside the
+zrdr manifests. `BL-118` had asserted in writing that "no zrdr defines a separate ambient-puff
+emitter"; that sweep only covered anim defs and `cam_anim`, and the sentence is now struck. The
+per-chapter template counts (C1/C4/C5 two, C2/C3 one) explain the "singles at all heights, but not
+on every map" the playtest saw. Banked as `BL-273`; `BL-118` re-scoped to the `CloudDeck` mesh
+brightness plus a post-`BL-273` density judgement. No capture minted — the data settles it.
+(2) `PT-23`(d) skydome/fog: the user's "perhaps only wrong zone" hunch was right and worse than a
+preference. `SessionSpec.cs:176` hard-codes `SkyZone = "zone2"`, and in **C1B, C2 and C3** the gamez
+`horizon/zone2` node is a bare marker (`model_index: -1`, no children), so `BuildHorizon` builds a
+dome with **zero meshes** — what renders there is the `WorldEnvironment` background.
+`Weather.ResolveZone` cannot catch it because those chapters *define* `ZONE2`; it is empty, not
+absent. C3 also wears night-blue fog `[0.063,0.094,0.188]` on a mission lit at diffuse 1.5 with the
+sun 25° up (`ZONE1` carries the matching daylight grey), and C1B's `ZONE2` fogs only 1128–1256 m so
+everything above ~1.2 km renders unfogged. Banked as `BL-277`; `BL-100`'s "a fidelity question
+rather than a bug" framing struck for those three chapters. A dead end worth recording: `fogvol.zrd`
+looked like it might carry the zone selector, but no chapter's copy has a `fog_zone` key — nothing
+on disk selects the zone (`docs/formats/weather.md:86-96` already had that negative result).
+
+**The other seven findings**, banked as `BL-274` (the crash ground splash tracks the sliding wreck
+instead of anchoring at the impact), `BL-275` (fire plumes do not rise high enough — one item for
+both the crash fire and the destruction fire, on the user's call), `BL-276` (`large_30sec_fire`
+stops at ~5 s instead of 30 — `PT-22`'s explicit anti-regression check came back **no**, and
+`BL-212`'s landed `STOP_SEQUENCE` halt is the suspect; deliberately kept **separate** from the
+aircraft puffers' early stop, which is planned wave-D work, so a regression cannot hide inside
+planned work), `BL-278` (the damage lab's health slider should zero armor — everything else in the
+new in-flight lab passed), `BL-279` (Space is double-bound in freecam; the `V` round trip itself was
+judged correct), `BL-280` (orbital-camera distance controls belong on numpad `+`/`−`, and `shift`
+should not drive camera and target point together — the *orbital* camera, not the lab's, whose
+slider the user rated "really good"), and `BL-281` (ricochet sounds audible but very faint).
+
+**Evidence added to existing items instead of minting new ones.** `BL-119`/`PLAN-m3-polish-8` B4:
+`PT-03` measured the wing light at **two** frames against the original's **one** at 30 fps — the
+first real bound on `FlashDuration`'s 0.08 s widening, pointing at ~1 frame — and caught the flare
+rendering as a flat yellow wedge where the original shows a compact camera-facing star burst, which
+puts a screenshot behind the suspected `PlaneBuilder.cs:204-249` billboard deviation
+(`playtest/PT-03/Light Original New.png`). `BL-262`/A1: the user judged 4× **too big** at the
+controls and, more usefully, that the right multiplier differs per puffer — so before splitting into
+per-site constants, check whether the gamez host nodes carry a scale we ignore. `BL-260`: the crash
+camera's capture blocker is retired — "there are enough captures" of the original's crash zoom-out,
+so crash-first is now the unblocked order too.
+
+**Two captures minted.** `CAP-26` — rocket impacts, one clip per type with audio (`wep_04`/`05`/
+`06`/`08`), serving `PT-17`'s "the HE second ring's orientation seems kinda random" and `PT-20`'s
+"sounds a lot better but needs a cap", and settling `BL-016`'s open "faster than the original" half.
+`CAP-27` — does the original spark on the airframe at all? Framed deliberately as a capture that can
+**delete** a feature: `BL-090`'s spark burst rides a 0.99 `injure_anims` entry present on 1 of 11
+aircraft that the backlog already calls "plausibly an authoring leftover", so `BL-281`'s mix is only
+worth judging if this comes back yes.
+
+**Not minted, on the user's call.** `PT-17`'s ring-orientation oddity (already covered as a rocket
+animation bug), `PT-24`'s per-puffer scale question (already `PLAN-m3-polish-8` A1), and `PT-29`'s
+puffer rework and left-wing-overrides-right-wing symptom (already found in the data and scheduled in
+`PLAN-m3-polish-8` wave D). The `PT` counter in `playtest.md` also read `PT-37` while `PT-37` was
+already in use; corrected to `PT-38`.

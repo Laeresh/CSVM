@@ -10,9 +10,13 @@ here means the work is queued, not forgotten. Deep evidence and traps live in
 Cite them from `backlog.md` and in conversation the way `BL-nnn` is cited. IDs are permanent: when
 an item closes its ID retires with it and is never reused, so numbering gaps are expected.
 Retired IDs disappear from this file, so never mint a new ID by scanning the entries below — take
-it from this counter and bump it here: **next free IDs `CAP-26` and `PT-37`.** (`CAP-17` and
+it from this counter and bump it here: **next free IDs `CAP-28` and `PT-38`.** (`CAP-17` and
 `CAP-14` and `CAP-24` and `CAP-16` retired 2026-08-04, `CAP-15` retired 2026-08-05 — IDs are
-never reused.)
+never reused. The `PT` counter read `PT-37` while `PT-37` was already in use; corrected to `PT-38`
+on 2026-08-05. **Eighteen `PT`s retired 2026-08-05** in one triage pass — `PT-01`, `PT-02`,
+`PT-03`, `PT-04`, `PT-13`–`PT-18`, `PT-20`–`PT-25`, `PT-29`, `PT-30` — their verdicts are in
+`docs/HISTORY.md` and what they found is in `backlog.md` as `BL-273`–`BL-281` plus evidence added
+to `BL-100`/`BL-118`/`BL-119`/`BL-260`/`BL-262`.)
 
 **Captures staged for an item live in `playtest/<ID>/`** — git-ignored (they are renders of the
 player's own game files) and, unlike `.scratch/`, **not swept by `CleanScratch.ps1`**, so they
@@ -92,6 +96,8 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
+| `CAP-26` | Rocket impacts, one clip per type, **with audio** | Fire each rocket type at open ground and film it close enough to count and orient the rings, with clean audio on the same take: `wep_04` (9M/incendiary), `wep_05` (ARMOR), `wep_06` (BOOM/HE), `wep_08` (SONIC). Two playtests point here: `PT-17` found HE's second ring present but its orientation "kinda random", and `PT-20` judged the sounds "a lot better" but not settleable by ear alone. *Look for:* ring count, ring orientation and how fast the burst reads (`BL-016`'s open "faster than the original" half), plus the launch bark and the per-type impact sound | `BL-016` (open half), `BL-211` |
+| `CAP-27` | Does the original spark on the airframe at all? | Take damage in the original — a light scrape is enough — with the aircraft in frame (external/chase fine), and look for a **spark burst on the airframe itself**, distinct from smoke at the contact point. ⚠ This capture can **delete** a feature rather than tune one: `BL-090`'s per-impact spark burst is driven by a 0.99 `injure_anims` entry that exists on **1 of 11** aircraft (the Devastator), which the backlog already calls "plausibly an authoring leftover". If the original never sparks, our implementation goes. If it does, `BL-281`'s ricochet mix can be judged | `BL-281`, `BL-090` (item 2) |
 | `CAP-25` | The `chunk` debris quad at a slug dirt hit | Sustained slug fire into flat dirt, camera as close to the impacts as the original allows (external/chase view fine — no gauges needed), slow-motion or high frame rate if possible. Decides whether the original ever shows the `gunhit` def's `chunk` debris node — a ~0.5 m quad textured with the perforated `gun_barrel` shroud band (dark dot grid on tan; gamez model 27 → material 4, UVs u 1→2), flung by the three **slug** defs only (`3040`/`5060`/`70slug_gunhit`, all chapters; ap/dum/mag have no debris nodes). Our build draws it faithfully from the data (`Screenshots/Mystery debris.png`, 2026-08-04, freeze-frame zoom); we keep it unless the original provably suppresses it. *Look for:* any small tumbling textured scrap distinct from smoke/chips in the ~2–4 s after each hit — presence or absence both settle it | `BL-203` (landed — this judges a leftover) |
 
 ### World
@@ -102,14 +108,6 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 ---
 
 ## 1 · Actionable now (`PT-nn`)
-
-- `PT-01` **E37 pipper — at-the-controls only; the design question is already settled.** There is no
-  gun convergence to validate: the fixed reticle is airframe-locked with every weapon aimed at that
-  centre, and the floating one exists only because inertial forces make shots lag through a turn —
-  velocity inheritance, already modelled. `GunConvergenceDist` 250 m is purely the distance the
-  pipper is *drawn* at. *Look for:* it sits where the rounds actually land in a hard turn.
-  `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo --fire`. *Blocks:* retiring the
-  TUNE.
 
 - `PT-36` **Splash falloff onto a large neighbour, e.g. a zeppelin gasbag (`BL-239`).** Blast damage
   onto a body other than the one struck now scores to the nearest point on that body's own collision
@@ -154,190 +152,6 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   puff at the plane's last position; (c) the splash polys' 3 s scale/fade and the ripples still play
   underneath it, unchanged. *Blocks:* `BL-229` sign-off, and the `D9`/`BL-228` question of whether
   the steam spray should wait for the splash (both retarget on the same tick today).
-
-- `PT-02` **Cloud puffs / cloud deck.** Puff opacity and density, and the in-cloud pass-through
-  look. Two known symptoms with the mechanism already traced (`BL-118`): the deck reads with dense
-  puffs while you fly through it, and in **C1/IA1** puffs surround the plane at *all* altitudes
-  rather than in a band. The vertical extent is a code fix, not a TUNE — but *density* has no data
-  source and stays a judgement call. *Look for:* how dense the field should read once it is confined
-  to the real band. *Blocks:* cloud sign-off.
-
-- `PT-03` **Wing-light `FlashDuration`** (0.08 s blink). The resource check is done and settled the
-  period (1.5 s, data-exact, already shipped) but **not** the on-duration — the data's own 0.0001 s
-  is a single-tick pulse, imperceptible at any real frame rate, so 0.08 s is a deliberate widening
-  with no better source. *Look for:* whether the wingtip blink reads at the right visibility.
-
-- `PT-04` **Data-driven crash.** `WreckMomentum` 0.4, the piece tumble rate, the debris-arc scale,
-  overall crash intensity (fireball + cluster + debris fire are additive — judge the whole), and the
-  `snd_exp_ground_a` mix. A/B against branch `bespoke-crash-animation`. *Blocks:* crash sign-off.
-
-- `PT-29` **The damage lab in flight (F5) — the first interactive test any aircraft damage lab has
-  had.** `BL-130` records that the labs have only ever been verified by scripted screenshot; this
-  adds a live host, so it needs hands on it. `./RunDev.ps1 --fly --plane=player_bhawk` then **F5**.
-  *Look for:* (a) dragging a slider changes the HUD `DMG` line, the damage dial and the engine
-  rattle while the plane keeps flying; (b) a drag is smooth — the per-frame read-back must not fight
-  the mouse; (c) take a graze off scenery and the slider drops on its own; (d) **R** returns the
-  panel to 100 %; (e) "repair all" clears the torn panels and the fire trail without a visible
-  stutter. Note that zeroing a critical part does **not** down the plane on its own — death is
-  decided on the next impact (`FlightController.SurviveHit`), which is the intended behaviour, not a
-  bug to report. *Blocks:* the interactive half of `BL-130`.
-
-- `PT-30` **The weapon lab at the controls (`PLAN-weapon-lab`, landed 2026-08-03).** The whole plan
-  was verified by scripted twin and log line — every interactive action has one — but nobody has
-  flown it. `./RunGame.ps1 --weapon-lab --plane=player_bhawk --chapter=C2`, then **B** for the
-  panel. *Look for:* (a) click the bay, fire guns (Space), watch the splash; click a warehouse, fire
-  a rocket (`F`), watch it break — the impact should be the chapter's authored one, not a stand-in;
-  (b) step the hardpoint bank and watch the wing models change with the selection; (c) the mount
-  stepper's group is the one that flashes when you fire; (d) **V** out to the impact point and back
-  — the view must not jump in either direction; (e) the stand-off slider and re-parking feel usable
-  at both ends (15 m and 1100 m). *Blocks:* the interactive half of `PLAN-weapon-lab`'s end-to-end
-  verification (step 2), the only step no script covers.
-
-- `PT-13` **Damage-stage smoke/fire re-test (A1 / `BL-199` landed 2026-07-31).** Hold a
-  destructible in its stages with gunfire: black smoke should sputter at ≤60 % HP, black smoke +
-  climbing fire at ≤30 %, both anchored on the object, for as long as the stage holds (past 32 s),
-  ending at death or reset. *Look for:* (a) the sputter reads as intermittent thickness, per the
-  authored 50 %/0.1 s dice; (b) **size** — the authored puffs are 0.6–1 m growing ×3, which reads
-  small from flight range; **tune it yourself** via `config.json`'s `puffer` block
-  (`sustainSizeScale` is the damage-stage smoke; `burstSizeScale`/`trailSizeScale` cover the other
-  spawn paths — `--dump-config` writes the template), and report the value that reads right.
-  `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire --infinite-ammo` (the water tower and
-  the `m_build` hangars by the airfield are 60 HP two-stagers). *Blocks:* closing PLAN-m3-polish-3
-  A1's cockpit half.
-
-- `PT-14` **C2 blue-water re-test (A3 / `BL-204` landed 2026-07-31).** Fly the C2 coastline and
-  fire on both water looks — the open turquoise water and the near-shore blue water that
-  previously took no splash. *Look for:* every visible water surface answers with the splash +
-  sound, with no readable difference between the two looks; the **C** collider overlay agrees
-  (turquoise wireframe over both). The root cause was not a texture-name gap (`BL-041`'s patterns
-  already covered every water texture C2 uses) but a mesh-granularity one: a coastal tile is
-  mostly beach/cliff by area, so the whole-mesh area-quorum vote gave the real water polygons on it
-  to `default` regardless of size — measured at 7.9% of C2's classified water area stranded this
-  way, up to 86.7% for the same effect on `buildings` in C4. `SceneBuilder.CollidersForMesh` now
-  builds one collider per surface class actually present in a mesh instead of one for the whole
-  mesh, so there is nothing left to vote on.
-  `./RunGame.ps1 --plane=player_bhawk --chapter=C2 --fire --infinite-ammo`. *Blocks:* closing
-  PLAN-m3-polish-3 A3.
-
-- `PT-15` **C3 spiderweb fly-through re-test (B11 / `BL-206` landed 2026-07-31).** Fly full speed
-  dead-centre into the tikicave web (around x −4470, y 130, z −4839; approach from the west/−X
-  side). *Look for:* the web starts its 0.7 s fade on approach and the plane passes through it
-  unharmed — no crash, no damage, matching `OriginalScreenshots/Videos/C3 Spiderweb.mp4`. The fix
-  honours the gamez `intersect_surface` flag install-wide, so also worth a feel pass: wreck debris
-  (e.g. the kkgate pieces), spinning props and effect geometry no longer collide anywhere — but
-  terrain, water and buildings are unchanged. `./RunGame.ps1 --chapter=C3 --plane=player_bhawk`.
-  *Blocks:* closing PLAN-m3-polish-3 B11.
-
-- `PT-16` **kkgate debris fade re-test (B12 / `BL-207` landed 2026-07-31).** Kill the propane tank
-  and watch the gate pieces through their ride. *Look for:* the 12 wreck pieces visibly turn
-  transparent over their authored 3–6 s fades while still tumbling — mid-fade you should see the
-  deck/water through the wood, not opaque-then-gone — and the gate is flyable right behind the
-  blast (the pieces build no colliders since B11). The fix: the opaque world shader had no runtime
-  alpha path, so the authored fade was a silent no-op; a fading piece now swaps to a translucent
-  twin material for the fade's duration. `./RunGame.ps1 --plane=player_pfighter --chapter=C2 --fire`.
-  *Blocks:* closing PLAN-m3-polish-3 B12.
-
-- `PT-17` **Rocket explosion A/B against the original (D31 / `BL-016` landed 2026-07-31).** Fire
-  each rocket type at open ground and compare against the original, one type at a time:
-  `--rocket=wep_05` (ARMOR), the stock `wep_06` (BOOM), `--rocket=wep_08` (SONIC). *Look for:* a
-  per-type ring now expanding from the impact — yellow-green cracks for AP, a violet-fringed white
-  disc plus a second larger ring above it for HE, a stack of five pale-cyan rings rising for SONIC —
-  plus the smoke-trail columns that never had a host node before. The rings' scale/fade timings are
-  the data's and were not retuned, so **the remaining "faster than the original" half of `BL-016`
-  is the open question**: if the burst still reads too fast after this, that is a new finding, not
-  this fix failing. `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --fire-rockets`.
-  *Blocks:* closing PLAN-m3-polish-3 D31.
-
-- `PT-18` **Gun-impact looks per surface class re-test (A2 / `BL-203` + `BL-186` landed
-  2026-08-01).** Fire on all three classes at normal flight speed, no frame-stepping. *Look for:*
-  (a) **water** — each round raises a small white column that persists ~2 s, so a burst walks a
-  field of ticks across the surface (A/B `Water Splash.png`; the height/timing is authored data,
-  the ×8 column width is TUNE — say if it reads too thin/fat); (b) **dirt** — small textured
-  chips tumbling outward for ~1 s (A/B `Dirt Splash.png`), no more flame-sprite look; (c)
-  **buildings** — a spark flash plus fast white-hot ricochet sparks flying off the wall (a judged
-  stand-in, both authored assets missing from the install — all magnitudes TUNE); the C2/C5
-  film-set skyscrapers (`empire`/`chrysler` walls) now class as buildings too.
-  `./RunGame.ps1 --plane=player_bhawk --chapter=C2 --fire --infinite-ammo` (nycity + the coast in
-  one flight). *Blocks:* closing PLAN-m3-polish-3 A2.
-
-- `PT-20` **Rocket sound re-test (D32 / `BL-211` landed 2026-08-01).** Fire a mix of rocket types at
-  open ground and at water: `--rocket=wep_04` (9M/incendiary — the one whose explosion sound was
-  previously silent on land), plus a couple of others (`wep_06` BOOM, `wep_08` SONIC). *Look for:*
-  (a) a launch bark now plays the instant each rocket leaves the rail; (b) 9M's ground/building
-  impact now plays an explosion sound (previously silent — only its water splash sound worked);
-  (c) whether what you now hear still "differs from the original" in some other way the survey
-  didn't find (no rocket has an authored in-flight/flyout loop sound in the data, so there is
-  nothing more to wire without a new lead — say what's still off, or request a capture).
-  `./RunGame.ps1 --plane=player_bhawk --chapter=C1` (F fires). *Blocks:* closing
-  PLAN-m3-polish-3 D32.
-
-- `PT-21` **Gun-loop switch/crash re-test (`BL-216`/`BL-217` landed 2026-08-01).** (a) Hold the
-  trigger, then cycle gun groups (G) without releasing it — the firing loop sound should switch to
-  the newly-selected group's caliber immediately, not keep playing the old one's. (b) Hold the
-  trigger into a crash — the firing loop should cut the instant the plane crashes, not keep
-  looping under the wreck until respawn. `./RunGame.ps1 --plane=player_pfighter --chapter=C1
-  --infinite-ammo --fire` (multiple gun groups to cycle between; fly into terrain for (b)).
-
-- `PT-22` **Destruction-fire shape re-test (the `TEXTURE_SEQUENCE`/blend fix, landed 2026-08-01).**
-  Destroy a building and watch its fire for the full 30 s — this is `large_30sec_fire`, the effect
-  behind ~1,035 death call sites, so it is worth a long look. *Look for:* (a) flames **climbing**
-  from the base and giving way to a rising dark plume, not the stationary ball you reported;
-  (b) the fire still **ending at 30 s** (the `BL-212` halt must not have regressed); (c) whether the
-  plume now reads too **thin** — `NUMBER` is absent from this puffer's data and defaults to 1 sprite
-  per 0.1 s, a guess at the original engine's default, so density is the one number still open and
-  is a `config.json` `puffer` tune either way. Also worth a glance in the same flight: the **crash
-  fireball** (fly into terrain) now holds its mid flipbook frames rather than washing out white —
-  say if that reads better or worse. `./RunGame.ps1 --plane=player_bhawk --chapter=C1
-  --fire-rockets`. A/B against the original if you have or can take a capture of a burning wreck.
-
-- `PT-23` **Backface-culling A/B (landed 2026-08-01).** The world now backface-culls like the
-  original. The reported symptom is settled — Hollywood's studio screens no longer z-fight — but
-  the change also stopped the camera-anchored skydome's near wall drawing over things inside the
-  dome, which **revealed distant geometry that was previously hidden**, and that half is unconfirmed
-  against the real game. Staged for you in **`playtest/PT-23/`**: 64 spawn shots
-  (`<chapter>-<scenario>-spawn<N>.png` — 8 instant-action spawns × the 6 chapters with a
-  `stunt_flying` scenario, plus C1C/C2B on `dogfight_ace`, since those two ship no stunt
-  scenario), plus `c1-above-cloud-deck-zone1-day.png` and `-zone2-night.png`. *Look for:* (a) C4 — a far mountain range and the Chandler mesa are now
-  visible from the spawn; does the original show them or is the horizon meant to close there?
-  (b) C1 above the deck — cloud banks and towers over the deck top; right density and draw
-  distance? (c) any surface that is now **see-through from the wrong side**, which is what culling
-  costs if a polygon's winding disagrees with its data: terrain seen from below, water from
-  underneath, hangar/tunnel interiors, the inside of the backlot ring. (c) is the one that would
-  send the fix back. `./RunGame.ps1 --chapter=C4` and `--chapter=C1`.
-
-- `PT-24` **Graze reaction re-test at 4× puff size (`BL-090` item 3, first playtest 2026-08-01).**
-  Round 1 confirmed the sounds and the 1.5 s cadence, and found the smoke "mostly hidden in the
-  surfaces". Both verdicts are now **code defaults**, so the goldens and every scripted run agree
-  with what you see: `Puffer.SizeScaleDefault` 1 → **4**, and the graze staged at the **contact
-  point** (`graze.siteAtContact` true — set it false in `CSVM/config.json` to A/B the aircraft
-  staging the def's authored offsets argue for, though `--det` drops that file). *Look for:*
-  (a) whether 4× is now too **big** for the graze specifically — the same scale drives the rocket
-  trails and the 30 s destruction fire (`PT-22`), so a "right for fire, wrong for grazes" verdict
-  means the graze needs its own scale rather than sharing this one — and `PT-22`'s destruction-fire
-  density verdict is now measuring size and count together (`BL-218`); (b) that dirt and a building
-  wall give the *same* smoke is correct and needs no report — the two puffers are byte-identical in
-  the data, and only the building adds the yellow sparks; (c) the sparks are **still expected to
-  read high** — the def authors them 8 m above its host and that is not a parsing error: `BL-221`
-  settled the `AT_NODE` axis order by census (2026-08-05, verbatim — no swap). What is left is
-  **where** the def is staged, i.e. `graze.siteAtContact` above, so judge the sparks against that
-  A/B rather than reporting "floating" as a bug.
-  `./RunGame.ps1 --plane=player_bhawk --chapter=C1` (water and dirt both within reach of the C1
-  spawn), `--chapter=C2` for walls. ⚠ The `C` collider overlay you wanted for picking surfaces is
-  broken — `BL-220`.
-
-- `PT-25` **Per-impact spark burst — Devastator only (`BL-090` item 2 landed 2026-08-01).** Taking
-  any damage now sparks at a `pdpN` panel. ⚠ **Fly `--plane=player_pfighter`**: measured
-  install-wide, it is the *only* aircraft whose data carries the 0.99 `injure_anims` entry, so on
-  the other ten this is correctly silent and testing them proves nothing. Scrape something lightly —
-  the threshold is 0.99, so the first scratch fires it. *Look for:* (a) sparks visible **on the
-  airframe** at a panel, distinct from the graze reaction's smoke at the contact point (`PT-24`) —
-  the two fire together on a scrape and a flank view (numpad 4/6) separates them; (b) whether it
-  reads as **sparks** at all — the emitters are `trailpuffer2`/`chippuffer1` at the new 4× size
-  scale, and a scripted flank capture reads more like a pale plume than a bright spark shower, which
-  would mean the graze needs a smaller scale than the destruction fires (same open question as
-  `PT-24` (a)); (c) the ricochet sounds under it (`snd_ricochet1–4`, a 50/50 pick between two
-  sequences). *Not a bug:* one hit lighting **two** panels — the data always sparks `pdp4` on top of
-  its 40/40 pick between `pdp1` and `pdp2`. `./RunGame.ps1 --plane=player_pfighter --chapter=C1`.
 
 - `PT-26` **Damaged-engine loop (B5 / `BL-090` item 1 landed 2026-08-01).** A second engine loop
   (`snd_damagedengine`) now blends in the moment any part takes damage — every plane carries this

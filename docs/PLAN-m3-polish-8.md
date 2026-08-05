@@ -124,6 +124,16 @@ Repeat at 1×, same poses, and hand the pairs to the user for the A/B — expect
 markedly smaller; that is the intended outcome, not a regression. Then the standard 8-chapter
 `--freecam` regression (zero errors; counts unchanged — this change cannot alter geometry).
 
+**Playtest confirmation 2026-08-05 (`PT-24`, closed into this item).** The user judged 4× at the
+controls and reported it **too big** — and, importantly, that "the multiplier is different for
+different puffers", i.e. no single global number serves the graze smoke, the rocket trails and the
+30 s destruction fire at once. That is the case for this revert stated from the cockpit rather than
+from the data, and it also raises the follow-on this item should answer while it is open: **check
+whether the gamez host nodes carry a per-puffer scale we are ignoring** before reaching for
+per-site TUNE constants — the same pattern that turned up `fogvol.zrd` (`BL-273`) and `BL-259` in
+the same sitting. Still owed on the sparks half: an A/B against `playtest/CAP-14`'s building graze
+and crash footage, which the playtest did not get to.
+
 **⚠ Traps.** (a) `FlightController.cs:1744` — the graze reaction's contact-point staging leans on
 the 4× scale to lift the touchdown puffer's authored −0.5 Y offset clear of the struck surface; at
 1× those puffs may emit half a metre UNDER the ground. If they vanish, that is this known
@@ -241,6 +251,17 @@ same defs — watch counts stay flat).
 "faithfully" implement it and ship invisible lights; the widening is deliberate and stays. The
 point lights were skipped as "negligible at chase distance" — that judgement predates the 1×
 revert and the A/B should re-test it, not inherit it.
+
+**Playtest evidence 2026-08-05 (`PT-03`, closed into `BL-119`).** Two measurements from the
+original, staged as an A/B still in `playtest/PT-03/Light Original New.png` (original above, ours
+below). (a) **The flash is twice as long as it should be:** at 30 fps the original's light occupies
+**one** frame, ours **two** — `FlashDuration` 0.08 s ≈ 2 frames vs the original's ~0.033 s. This is
+the first measured bound on the widening, so the "keep 0.08 s as the declared TUNE" line above
+should be revisited: ~1 frame is what the footage supports. (b) **The flare renders with the wrong
+orientation** — ours draws a large flat yellow wedge at the wing where the original shows a compact
+camera-facing star burst, which is the `PlaneBuilder.cs:204-249` both-sides re-skin showing itself.
+The billboard deviation now has a screenshot against it rather than being a suspicion, so the
+authored one-sided quad is the thing to restore.
 
 ## B5 ☐ `BL-264` — prop/rotor spin through the runtime's `XYZ_ROTATION` semantics
 
