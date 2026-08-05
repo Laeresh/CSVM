@@ -16009,3 +16009,56 @@ the crash-fireball, gunhit-into-dirt and touchdown-scrape poses are staged in `.
 for the user's judgement. The touchdown-puff-underground trap (plan ⚠a) did not manifest at the
 documented repro pose. Still owed and riding the plan item: the sparks A/B against `CAP-14`'s
 building graze/crash footage.
+
+## 2026-08-05 — `CAP-21` re-read: the original smokes on **large** throttle jumps only (`BL-267`)
+
+The `HANDOFF-cap21-throttle-smoke.md` question — does the original puff engine smoke on a
+throttle step, and if so which authored def is the exe calling — answered from the four retired
+`CAP-21` Bloodhawk chase clips (2560×1440, `OriginalScreenshots\Videos\`), no new capture flown.
+The capture stays retired; this was a re-read for a different item.
+
+**Locating the steps.** No rig logs survived, so the staircase was recovered from the engine
+audio: 8192-pt FFT over a 0.1 s hop, fundamental tracked in 40–400 Hz. Both stepped clips show a
+clean RPM staircase at the rig's 5 s cadence — up-clip steps at video t≈14, 19, 24, 29, 34, 39,
+44, 49 s (126→234 Hz), down-clip at t≈12.5…42 s plus the stall-guard recovery tap at ≈52.5 s.
+The full-jump clips put their single slam at t≈11.7 s (up, 126→215 Hz inside one 0.5 s bin) and
+t≈10.7 s (down), recovery at ≈16 s. Times are PTS-based; sim-seconds = wall × 1.390.
+
+**What the frames show.** 8 fps frame sheets over a ±2 s window around every step, nose-region
+crop, with mid-dwell stills as controls:
+
+- **All fifteen single-1/8 steps (8 up, 7 down): nothing.** The only greys near the airframe
+  are the scenery puffball clouds at flight altitude — world-anchored, they emerge from behind
+  the silhouette and slide past (the fuselage even hazes over flying *through* one at up-clip
+  t≈6.5 s), and they appear mid-dwell just as often as at steps. The faint dark veil under the
+  aft fuselage at step moments turned out to be the prop-disc blur — present in the mid-dwell
+  controls (t=27.0, 32.5, 47.0) at identical strength.
+- **All three large jumps fire smoke.** Idle→8/8 (full-up t≈11.7): dark sooty multi-stream
+  exhaust plumes from both sides of the engine cowling, hugging the flanks under the wing roots
+  and streaming aft past the camera — first visible ≤0.5 s after the RPM jump (t=12.2 still),
+  fully developed by ~1 s (t=12.8 still, plumes darken the water halfway to the frame corners),
+  dissipated by ~2.5–3 s (clean by the t=14.5 sheet). Both idle→5/8 recovery taps (full-down
+  t≈16 s; down-staircase t≈52.5 s, still at 53.5) fire the same twin plumes, visibly weaker.
+- **The negations that make it a trigger.** Sustained 8/8 never smokes (full-down holds it for
+  ~11 s before the cut — clean; the up-staircase's last plateau — clean), so it is not a
+  throttle-state or speed effect. Throttle *decreases* never smoke (7 down-steps + 2 full cuts),
+  so there is no symmetry with step-down.
+
+**Reading.** The user's recollection is real but **magnitude-gated**: the exe streams
+trail-style exhaust smoke while the engine spools through a large throttle jump, and a single
+1/8 notch produces nothing visible at chase distance. The visual is the `exhaust1`–`4` puffer
+stream (`nitro_boost`'s morphology — and no nitro was involved: no `nitropropN` discs, no boost
+behaviour), **not** the round `smokepuff1`–`3` nacelle cough of `startprops` — which kills the
+simple "call `engine_start_smoke` at the throttle-step event" implementation for `BL-267`/C7.
+Wire it magnitude-gated (or proportional to the RPM ramp): slam → ~2–3 s stream, notch →
+nothing, decrease → never. `backlog.md` `BL-267` and `PLAN-m3-polish-8` C7 updated to match.
+
+**Honest limits.** One airframe, one session, chase view only; the only large jumps on film are
++5 and +8 notches, so the gate's threshold between 1 and 5 notches is unmeasured; whether a 1/8
+step emits a sub-visible wisp is below this footage's compression floor; def identity
+(`exhaust1`–`4` vs repeated `engine_start_smoke` calls) is inferred from shape/duration only —
+the footage cannot name the def.
+
+**Verified.** Docs only — no build or test run. `HANDOFF-cap21-throttle-smoke.md` (disk-only,
+never committed) is deleted from the main checkout alongside this entry, per its own
+instruction.
