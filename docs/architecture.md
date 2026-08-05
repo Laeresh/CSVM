@@ -1071,15 +1071,21 @@ buildings-classed surface spawns a ricochet spark burst + flash (`SpawnRicochet`
 judged stand-in: the authored `bld_damage.flt`/`rcochet1` are 2 of the 5 install-missing names). Each burst sprite carries its own orientation basis (`Sprite.Orient`): the muzzle flash
 rolls in the firing plane's basis, the impact spark/explosion/debris faces the struck surface
 normal (then tumbles, for debris) — a fixed world plane for none of them (BL-139); tracers stay
-velocity-aligned, and none of the three is billboarded. A gun shot's muzzle flash (C24) is three
-quads 120° apart around that basis's facing normal, the triad sharing one random per-shot roll
-(seeded via `Rng.Weapons`, so `--det` stays reproducible) — one `List<Sprite>[]`/`MultiMesh[]` pair
-per ammo-type texture (`{slug,dum,ap,mag}_muzzle1`, `MuzzleAmmoIndex` resolved from the weapon's
-`FIRE` binding), since a `MultiMesh`'s material is shared across every instance it draws. Each quad
-is centred by default (`Sprite.Pos`), except the muzzle flash triad, which sets `Sprite.AnchorLeft`
-so `RenderSprites` derives the quad centre from `Pos + Orient.X * (currentSize/2)` — the texture's
-left edge (QuadMesh's default UV, U=0 at local X=-0.5) stays pinned at the muzzle as the quad
-shrinks over its life, instead of the texture being buried under a centred blob (C21). `AddMultiMesh`
+velocity-aligned, and none of the three is billboarded. A gun shot's muzzle flash (A3, `BL-263`)
+is the authored form by default: one quad rolled to a discrete per-shot Z angle (30°/80°/140°,
+equal odds, `muzzle_burst.zrd.json`'s `mb_spinflame`), playing the ammo's `_muzzle1`→`_muzzle2`
+flipbook over its life — frame 2 a second sprite spawned with a negative `Sprite.Age` (`RenderSprites`
+skips a pending sprite; `AgeSprites` still counts it up, so it turns visible when frame 1's half-life
+ends) on its own `List<Sprite>[]`/`MultiMesh[]` pair (`{slug,dum,ap,mag}_muzzle2`) beside frame 1's.
+The earlier hand-authored triad — three quads 120° apart sharing one continuous per-shot roll,
+matched to the reference stills' 3-lobed look — stays reachable by setting `MuzzleFlashCount` back
+to 3 for the user's pending pick; whichever loses is deleted, not flagged off. Both forms key off
+the same per-ammo `MuzzleAmmoIndex` (`{slug,dum,ap,mag}_muzzle1`, resolved from the weapon's `FIRE`
+binding) and share `Rng.Weapons` for the roll, so `--det` stays reproducible either way. Each quad is
+centred by default (`Sprite.Pos`), except the muzzle flash, which sets `Sprite.AnchorLeft` so
+`RenderSprites` derives the quad centre from `Pos + Orient.X * (currentSize/2)` — the texture's left
+edge (QuadMesh's default UV, U=0 at local X=-0.5) stays pinned at the muzzle as the quad shrinks over
+its life, instead of the texture being buried under a centred blob (C21). `AddMultiMesh`
 draws every texture un-mirrored (a `Uv1Scale` mirror without a matching `Uv1Offset` here once
 degenerated, under `TextureRepeat=false` clamping, into every sprite this pool draws — tracer,
 muzzle, impact, smoke — rendering as a flat single-column colour stripe, C21); a texture needing a

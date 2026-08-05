@@ -331,18 +331,20 @@ ammo types**. In each chapter's `texture/`:
 - **Tracer:** `tracer_slug` / `tracer_dumdum` / `tracer_armorpierce` / `tracer_magnesium`, plus
   the generic `tracer1`; `slugtip`, `shell1` / `shell2`, `atorp`.
 
-### Engine wiring (M3, C24) — flash shape + ammo texture
+### Engine wiring (M3, C24; A3) — flash shape + ammo texture
 
 `ProjectilePool` resolves each weapon's ammo index from its `FIRE` `ANIMATION` binding
 (`MuzzleAmmoIndex`: `muzzle_burst_slug`/`_dum`/`_ap`/`_mag` name the type directly; the base
-`muzzle_burst`/heavy-mount `muzzle_burst2` carry no suffix and default to slug) and draws that
-ammo's `_muzzle1` frame only — the `_muzzle2` frame is unused by the flash (the impact stand-in
-spark reuses it as an unrelated bright-flash texture, predating this wiring). The def's own
-`mb_spinflame` mechanism rotates one flash node to one of three discrete angles per shot
-(30°/80°/140°, `RANDOM_WEIGHT` 1/3 each); the engine instead draws three quads 120° apart with one
-shared continuous random roll per shot, matching the reference captures' 3-lobed burst
-(`BL-263` — whether the authored single-node discrete roll reproduces the stills is undecided;
-the triad is an invented shape until it is).
+`muzzle_burst`/heavy-mount `muzzle_burst2` carry no suffix and default to slug). The **authored
+form is the default since A3** (`BL-263`): one quad rolled to the def's own `mb_spinflame`
+mechanism — one of three discrete Z angles per shot (30°/80°/140°, `RANDOM_WEIGHT` 1/3 each) — and
+playing that ammo's two-frame `_muzzle1`→`_muzzle2` flipbook over the flash's life (an even
+half/half split; the def carries no authored split point, so this is a gloss). Giving `_muzzle2`
+back to the flash does not restyle the impact stand-in spark, which reuses the same texture asset
+through its own, separate, hardcoded pool. The earlier hand-authored triad — three quads 120°
+apart sharing one continuous random roll, matched to the reference captures' 3-lobed burst — stays
+reachable via the `MuzzleFlashCount` constant (3) for the A/B; **the pick between the two forms is
+the user's, at the controls, and still open** — whichever loses is deleted, not flagged off.
 
 ## Binding resolution — 5 unresolved names
 
