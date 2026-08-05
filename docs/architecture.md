@@ -173,6 +173,7 @@ clusters they delegate to.
 
 - `src/Session/Launcher.cs` — Main.tscn root: the once-per-process bootstrap (args → paths → log/seed/window), shader-global registration, persistent camera/lighting, launchscreen + menu flow; instantiates a `GameSession` session node per launch.
 - `src/Session/GameSession.cs` — the per-launch session node (instantiated by `Launcher`): builds one session — rigs, world, plane, HUD, weather — from its `SessionSpec`; return-to-menu `QueueFree`s it.
+- `src/Session/ExtractionStamp.cs` — boot-time check of `extracted/VERSION.json` (the provenance stamp the extraction scripts write): schema const + at most one warning line when the stamp is stale, missing, or unreadable.
 - `src/Session/LiveryResolver.cs` — resolves each player's livery against a `SessionSpec`: the paint catalog, the pattern-mask library, and the per-player scheme pick.
 - `src/Session/SpawnPicker.cs` — resolves each player's flight spawn against a `SessionSpec`: the shared spawn-list index and the per-player point (or the `--spawn-at=` override).
 - `src/Session/PlaneRoster.cs` — pure lookups over a `SessionSpec`'s plane roster: which plane a player flies, and its display name.
@@ -2447,3 +2448,14 @@ the native window handle. Fully static, one call site in `Launcher._Ready` right
 predicate drives both window hiding (scripted run) and focus request (interactive run).
 ⚠ Hiding is not minimizing: a minimized window stops rendering, which blanks every screenshot
   capture. `ShowWindow(SW_HIDE)` is load-bearing — never swap it for minimize.
+
+## src/Session/ExtractionStamp.cs
+Reads the provenance stamp `ExtractAssets.ps1`/`ExtractRof.ps1` leave at `extracted/VERSION.json`
+(unzbd version line + exe SHA-256 + fork commit, dates, schema integer) and compares the schema
+against its `Schema` const in `Launcher._Ready`, right after the base paths settle. At most ONE
+warning line per boot — stale schema, missing file, or unreadable — each naming the fix (re-run
+the extraction scripts). Warn, never block: the dev tree holds valid extractions predating the stamp.
+⚠ `Schema` bumps together with `$StampSchema` in BOTH scripts, in the same commit as any reader
+  change that invalidates old extractions — a hand-maintained promise, not automation.
+⚠ The stamp is parsed via `File.ReadAllText`, not bytes: PowerShell 5.1 writes UTF-8 WITH a BOM,
+  which `JsonDocument.Parse(byte[])` rejects.
