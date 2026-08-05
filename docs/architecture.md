@@ -588,7 +588,10 @@ global — because staged effect templates reuse node names (`fly_trail1`-`5` is
 Puffer emitters live in `Anim/EmitterDirector.cs` (`Emitters`) — read its entry before touching
 anything emitter-shaped. This class keeps only the dispatch case, the `at_node` sentinel resolution
 and the `active_state` read, then forwards; `DefScopedPufferKeys` is the one role flag it still
-carries, read once when the director is built. Effect templates are **pooled** on the effects runtime (`PooledTemplates`, `BL-225`): the stage holds
+carries, read once when the director is built. `OBJECT_ACTIVE_STATE … false` forwards to
+`Emitters.EndOn` with `sparingSameInstant: !instant` — a PLAYED deactivation spares an emitter
+started in its own instant (`BL-229`, the rule and its census live on the director), a RESET_STATE
+one does not. Effect templates are **pooled** on the effects runtime (`PooledTemplates`, `BL-225`): the stage holds
 `WorldEffectsFactory.EffectPoolSlots` copies of each template, one per slot container carrying
 `PoolSlotMeta`, and each `PlayEffectAt` takes the next slot (`NextPooledAnchors`, cursor per template
 ROOT name, not per anim name — two defs on one root must not both be handed slot 0). Everything
@@ -705,6 +708,14 @@ Emission sits at the host's mesh-bounds centre only when its node origin lies ou
 `Census` spans the KNOWN emitters, not the active ones — active-only cannot tell a paused-revivable
 entry from a forgotten one, which is the `EndFor`/`Discard` distinction itself; `--debug-anim`'s
 active line and the bootstrap emitter line are both projections of it, never parallel re-derivations.
+`EndOn` (the host-subtree stop) spares an emitter that started in the SAME instant — one
+`Advance` pass, the granularity every zero-`START_TIME` run of events fires in (`BL-229`). Emitters
+are stamped in `Assert` off a counter bumped once per `Tick`. Censused install-wide
+(`analysis/bl-229-emitter-host-deactivation/`): of 414 activate/emit/deactivate pairs, the 32
+same-instant ones are 4 shapes — the splash family, whose callee authors a 0.6 s run this stop
+erased — and the other 382 sit a median 3.5 s out, smallest gap 1 ms. Not a time threshold: there is
+no number between the populations. The RESET_STATE path passes `sparingSameInstant: false`, being
+base state where the last write wins.
 ⚠ The four stops do NOT collapse into one parameterised call. They vary on two independent axes —
   SELECTOR (key / host subtree / owning instance) × DISPOSITION (pause-revivable / pause-and-forget)
   — proven independent by `EndFor` and `Discard` sharing a selector and differing only in

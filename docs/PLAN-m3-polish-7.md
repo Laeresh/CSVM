@@ -75,7 +75,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — Effects and destruction
 
 6. ☑ `BL-221` Settle the `AT_NODE` position axis order by census (graze sparks 8 m too high)
-7. ☐ `BL-229` Splash emitter killed on its start tick by its own caller
+7. ☑ `BL-229` Splash emitter killed on its start tick by its own caller
 8. ☐ `BL-061` World-effects template MESH half renders at the call site
 
 ### Wave D — Larger mechanisms
@@ -378,7 +378,7 @@ suites, 13/13 goldens hash-identical, `c1-waterfall`/`c1-destroy-effects`/`c1-cr
 Details: `docs/HISTORY.md` 2026-08-05, `analysis/at-node-axis-order/FINDINGS.md`,
 `docs/formats/anim-definitions.md`.
 
-## C7 ☐ `BL-229` Splash emitter killed on its start tick
+## C7 ☑ `BL-229` Splash emitter killed on its start tick
 
 **Goal.** `plane_big_splash`'s `plane_puff_splash1` emitter actually emits during the sea dive
 instead of being stopped by its own caller on the tick it starts.
@@ -405,6 +405,17 @@ emitters. Full `.\RunTests.ps1`.
 **⚠ Traps.** (a) Do not drop the host-deactivation stop wholesale — it is what stops emitters on
 destructible subtree swaps. (b) Census before choosing, or the fix is tuned to one def. (c) Not
 `BL-228` — these events carry **no** `WAIT_FOR_COMPLETION` flag; a wait would not explain them.
+
+**Landed 2026-08-05 — the census settled it: a host deactivation spares the emitter that started in
+its own instant, and still ends every other one.** 414 activate/emit/deactivate pairs install-wide
+split 32 same-instant (4 shapes, the splash family, every one authoring a 0.6 s run) against 382 a
+median 3.5 s later, smallest later gap 1 ms, nothing in between — so the carve-out is keyed on the
+instant, not a threshold, and costs `BL-224` nothing. `EmitterDirector` stamps emitters per
+`Advance`; RESET_STATE opts out. Both able-to-fail controls run: unconditional stop fails the splash
+half, deleted stop fails the debris half (`part3`'s trail leaks 3.667 s → 5.000 s). `analysis/
+bl-229-emitter-host-deactivation/`, `docs/HISTORY.md` 2026-08-05. **Owed: a sea-dive capture** — no
+headless water crash exists (`--crash` resolves `Ground`), so the picture is unverified. Re-check
+`D9` against this: the splash's `WAIT_FOR_COMPLETION` ordering question is untouched and still open.
 
 ## C8 ☐ `BL-061` World-effects template MESH half
 

@@ -194,6 +194,16 @@ and leave gaps when retiring old ones.
   (1.76 % of frame) swap winner under a 1 mm move at the shipped separation, 1,774 at 5e-6, and 0
   at 1.2e-5 — which is how the separation got bracketed at all.
 - **INSTR-9** — **A score normalised per axis cannot judge a question about which axis is which — the degenerate axis decides it.** Scoring a candidate placement by "how far outside the host's bounding box, in units of that axis' extent" rules against whichever reading is vertical, because effects legitimately sit above flat things and a flat thing's vertical extent is ~0. Measured on the `AT_NODE` axis-order census: that score reported 63:101 *against* the reading three sound instruments confirm, led by a fireball 12 m over a ground ring 8.4 m wide and **0.0 m tall** — an escape of 11,900, which is a division by the ring's thickness, not a finding. Prefer a statistic invariant to the thing you are not testing (there, the *spread* of a host's sibling offsets, which a constant offset cannot move).
+- **INSTR-10** — **An assertion keyed on a field that is not unique reports on whichever subject it
+  reaches first — qualify the key, or the check is about something else.** The bug it hides is the
+  one you were testing for. Measured on the `BL-229` suite: puffer names repeat across definitions
+  (`small_fireball` declares a `trailpuffer2`, the same name a building's debris trail uses), so
+  `Census.Any(r => r.Name == "trailpuffer2" && !r.Emitting)` was answered by the fireball's row and
+  passed a runtime with the stop under test **deleted outright**. Host-qualifying the read exposed
+  it. The rule generalises past names: any registry read whose selector is coarser than the thing
+  being asserted about is a check on a different object. Its companion is that the deletion control
+  must be run for EVERY half of a two-sided rule (METHOD-9/METHOD-10) — one half's control passing
+  is what surfaced this.
 - **INSTR-7** — **"Not decidable from this data" is a fact about the instrument, not the question — when a census comes back uniform, ask what else varies the quantity.** A degenerate reading blocks the *inference*, not the *answer*. Measured: all 88 `destroyable_parts` pairs ship equal, which correctly made (armor, hp) undecidable from `extracted/`, and the reading sat blocked for nine days — the original's armory varies armor independently of health and settled it in one screen.
 
 ## SRC — sources and documents

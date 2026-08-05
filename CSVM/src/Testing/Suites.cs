@@ -106,6 +106,8 @@ public static class Suites
             "weapon hits destroy, swap, drop colliders, and survive destroy→reset→destroy", DamageHd));
         into.Add(new TestHarness.Suite("stop-sequence",
             "authored STOP_SEQUENCE stops run: the fireball's 0.3 s stopper and the 30 s fire's halt", StopSequenceStops));
+        into.Add(new TestHarness.Suite("emitter-host-deactivation",
+            "a host going inactive spares the emitter that started in its own instant and still ends the one that did not (BL-229)", EmitterHostDeactivation));
         into.Add(new TestHarness.Suite("bounce-launch",
             "a bounce-terminated OBJECT_MOTION flies its solved parabola and fires its BOUNCE_SEQUENCE on landing", BounceLaunch));
         into.Add(new TestHarness.Suite("destructible-census",
@@ -1339,6 +1341,207 @@ public static class Suites
                 stage.Free();
             }
         });
+    }
+
+    // ---- BL-229: what a host deactivation may and may not stop ---------------------------------
+
+    /// <summary>`BL-229`: an <c>OBJECT_ACTIVE_STATE … INACTIVE</c> ends the emitters under that host
+    /// (`BL-224`) — but not one that started in the same instant, and this asserts BOTH halves,
+    /// because either alone is satisfied by a broken runtime. Dropping the stop entirely passes the
+    /// splash half; shipping the stop unconditioned passes the debris half. They are the two
+    /// populations the install-wide census splits, and the split is total
+    /// (`analysis/bl-229-emitter-host-deactivation/`): 32 same-instant pairs in 4 shapes against 382
+    /// later ones a median 3.5 s out, with nothing in between.
+    ///
+    /// <para>SPLASH (`plane_big_splash`, the sea dive's own definition). Three offset-less events —
+    /// activate <c>sp_1</c>, call <c>hg_splasher</c> onto it, switch <c>sp_1</c> off — all in one
+    /// runtime batch, while the callee authors a 0.5 s <c>STOP_SEQUENCE</c> and its own
+    /// <c>PUFFER_STATE 0</c> 0.1 s after that. So the emitter must survive its host's deactivation
+    /// AND still be gone by ~0.7 s: a runtime that simply never stopped it would show the same first
+    /// assertion.</para>
+    ///
+    /// <para>DEBRIS (`m_build01`, a real destructible death and the case trap (a) names). Its
+    /// <c>part1</c> is activated, given <c>trailpuffer1</c> in the same instant, flown by a 5 s
+    /// <c>OBJECT_MOTION</c> and only then switched off. That deactivation is the trail's ONLY
+    /// authored stop, so it has to keep working — this is the subtree swap whose emitters would leak
+    /// forever if `BL-229` had been fixed by weakening the stop instead of dating it.</para></summary>
+    private static void EmitterHostDeactivation(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            SplashSurvivesItsOwnInstant(ctx, world);
+            DebrisTrailStillEndsWithItsHost(ctx, world);
+        });
+    }
+
+    private static void SplashSurvivesItsOwnInstant(TestContext ctx, TestWorld world)
+    {
+        const string animName = "plane_big_splash";
+        const string pufferName = "splasher";
+        var program = world.Session.Program.Subset(animName);
+        var defs = program.ByAnimName(animName);
+        ctx.Check(defs.Count > 0, $"chapter program has {animName} defs={defs.Count}");
+        if (defs.Count == 0)
+        {
+            return;
+        }
+
+        WithEmitterStage(ctx, program, "SplashStage",
+            new[] { "huge_splash_model", "splash_polys", "sp_1", "ripple1", "ripple2", "ripple3" },
+            (stage, runtime, fake) =>
+        {
+            runtime.Start(defs[0], stage);
+            runtime.Advance(1f / 60f);
+
+            ctx.Check(fake.Built.Any(e => e.Key == pufferName),
+                $"{animName} reached the fake factory and built {pufferName}");
+            ctx.Check(EmitterOn(runtime, pufferName, "sp_1") == true,
+                $"{pufferName} survives the sp_1 deactivation it shares an instant with (BL-229)");
+
+            for (int i = 0; i < 18; i++)   // 0.3 s — inside the callee's authored 0.5 s run
+            {
+                runtime.Advance(1f / 60f);
+            }
+            ctx.Check(EmitterOn(runtime, pufferName, "sp_1") == true,
+                $"{pufferName} is still emitting 0.3 s in");
+
+            for (int i = 0; i < 30; i++)   // out to 0.8 s, past the authored 0.5 + 0.1 s stop
+            {
+                runtime.Advance(1f / 60f);
+            }
+            ctx.Check(EmitterOn(runtime, pufferName, "sp_1") == false,
+                $"{pufferName} ends on the run hg_splasher authors, not on its host (and its row is still known, so this is a pause, not a teardown)");
+            var emitter = fake.Built.FirstOrDefault(e => e.Key == pufferName);
+            ctx.Check(emitter is { Started: > 0 }, $"{pufferName} actually sustained particles");
+        },
+            asCrashRig: true);
+    }
+
+    private static void DebrisTrailStillEndsWithItsHost(TestContext ctx, TestWorld world)
+    {
+        const string animName = "m_build01";
+        const string pufferName = "trailpuffer3";
+        const string host = "part3";
+        const string offSequence = "sparkout3";   // where part3's own deactivation is authored
+        var program = world.Session.Program.Subset(animName);
+        var defs = program.ByAnimName(animName);
+        ctx.Check(defs.Count > 0, $"chapter program has {animName} defs={defs.Count}");
+        if (defs.Count == 0)
+        {
+            return;
+        }
+
+        // The fireball template roots belong on the stage as much as the building's own parts do:
+        // `small_fireball` declares a puffer ALSO called `trailpuffer2`, and with its own root
+        // missing the name resolution falls back to the call anchor, so its stop lands on the
+        // building's key and ends the debris trail early. That is a faithful-stage artifact, not a
+        // runtime rule (verification.md WORLD-12) — and it masked this very assertion once.
+        var nodes = new List<string>
+        {
+            "m_bld_healthy", "m_bld_destroyed", "dbase", "flame_ball_01", "flame_ball_02",
+        };
+        for (int i = 1; i <= 9; i++)
+        {
+            nodes.Add($"part{i}");
+        }
+        WithEmitterStage(ctx, program, "DebrisStage", nodes, (stage, runtime, fake) =>
+        {
+            // Asserted against the DISPATCH MOMENT, never a fixed second: part3 is a BL-240
+            // bounce-solved launch, so when it lands (and its `sparkout3` switches it off) is
+            // computed, not authored. Anything else that could stop this trail — the instance
+            // retiring — happens a second later, so "stopped on the deactivation's own frame" is
+            // what separates the two, and it is the reading a wall-clock check would blur.
+            float clock = 0f;
+            float deactivatedAt = -1f;
+            float stoppedAt = -1f;
+            bool everEmitted = false;
+            runtime.OnEventDispatched = d =>
+            {
+                if (deactivatedAt < 0f && d.Sequence == offSequence && d.EventKind == "ObjectActiveState")
+                {
+                    deactivatedAt = clock;
+                }
+            };
+            runtime.Start(defs[0], stage);
+            for (int i = 0; i < 300; i++)   // 5 s — past the landing and past the instance's own end
+            {
+                clock += 1f / 60f;
+                runtime.Advance(1f / 60f);
+                bool? on = EmitterOn(runtime, pufferName, host);
+                everEmitted |= on == true;
+                if (everEmitted && stoppedAt < 0f && on == false)
+                {
+                    stoppedAt = clock;
+                }
+            }
+            runtime.OnEventDispatched = null;
+
+            ctx.Check(fake.Built.Any(e => e.Key == pufferName), $"{animName}'s death built {pufferName}");
+            ctx.Check(everEmitted, $"{pufferName} trails {host} while it flies");
+            ctx.Check(deactivatedAt > 0f, $"{offSequence} switched {host} off t={deactivatedAt:0.000}");
+            ctx.Check(stoppedAt > 0f, $"{pufferName} stopped within the 5 s window t={stoppedAt:0.000}");
+            ctx.Check(stoppedAt > 0f && deactivatedAt > 0f && Mathf.Abs(stoppedAt - deactivatedAt) <= 2f / 60f,
+                $"{pufferName} ends on {host}'s own deactivation frame, not later — BL-224's stop is dated, not dropped (off={deactivatedAt:0.000} stop={stoppedAt:0.000})");
+        });
+    }
+
+    /// <summary>Is the emitter <paramref name="name"/> ON <paramref name="host"/> emitting? Null when
+    /// no such emitter is known. Host-qualified on purpose: puffer names are NOT unique across
+    /// definitions — `small_fireball` declares a `trailpuffer2` of its own, and a name-only read
+    /// answers about whichever row comes first, which is how a debris assertion here once passed a
+    /// runtime with the stop deleted outright.</summary>
+    private static bool? EmitterOn(AnimRuntime runtime, string name, string host)
+    {
+        foreach (var row in runtime.Emitters.Census)
+        {
+            if (row.Name == name && row.Host == host)
+            {
+                return row.Emitting;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>A bare stage carrying the nodes a definition names, plus a runtime bound to it
+    /// through a <see cref="CountingEmitterFactory"/>. Flat children, never a hierarchy: the point is
+    /// to give each named host its own subtree, so a stop that reaches the wrong one is visible
+    /// rather than being absorbed by a shared ancestor.</summary>
+    private static void WithEmitterStage(TestContext ctx, AnimProgram program, string stageName,
+        IEnumerable<string> nodeNames,
+        System.Action<Node3D, AnimRuntime, CountingEmitterFactory> body,
+        bool asCrashRig = false)
+    {
+        var stage = new Node3D { Name = stageName };
+        foreach (var name in nodeNames)
+        {
+            stage.AddChild(new Node3D { Name = name });
+        }
+        var fake = new CountingEmitterFactory();
+        var runtime = new AnimRuntime
+        {
+            AutoStart = false,
+            ManualAdvance = true,
+            SoundHandledElsewhere = true,
+            EmitterFactory = fake,
+            // The two role flags AnimRuntime.ForCrashRig sets, for a definition the crash rig is the
+            // only production caller of: the splash is played by the per-player rig, which resolves
+            // and relocates its own called templates and holds no ExternalEffect, so the start and
+            // the stop meet on ONE director. Reproducing that here is the point.
+            PlaceCalledTemplates = asCrashRig,
+            NameResolveFallback = asCrashRig,
+        };
+        ctx.Host.AddChild(stage);
+        ctx.Host.AddChild(runtime);
+        try
+        {
+            runtime.Bind(stage, program);
+            body(stage, runtime, fake);
+        }
+        finally
+        {
+            runtime.Free();
+            stage.Free();
+        }
     }
 
     // ---- BL-240: bounce-terminated launches fly and land ---------------------------------------

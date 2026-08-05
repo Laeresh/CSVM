@@ -15216,3 +15216,65 @@ site=(-4488,142,-6415)`); `g306` classifies `Default`, so reaching the spark var
 `Buildings`-tagged collider and belongs to the staging-site question, not this one. Details:
 `docs/PLAN-m3-polish-7.md` C6, `analysis/at-node-axis-order/FINDINGS.md`,
 `docs/formats/anim-definitions.md`, `docs/formats/gotchas.md`.
+
+## 2026-08-05 — PLAN-m3-polish-7 C7 BL-229: a host deactivation no longer stops the emitter it shares an instant with
+
+The sea dive's splash spray never emitted. `plane_big_splash` writes three events with no
+`START_TIME` — activate `sp_1`, call `hg_splasher` onto it, switch `sp_1` off — and since an absent
+`START_TIME` is `EVENT_OFFSET 0` and none of those kinds reports a run time, all three fire in one
+`Advance` pass. The last one hit `BL-224`'s host-subtree stop and ended the `splasher` emitter on the
+tick it started, while `hg_splasher` authors a 0.5 s `STOP_SEQUENCE` plus its own `PUFFER_STATE 0`
+0.1 s after that. The rest of the sea dive rendered; this was one missing emitter.
+
+**Censused before choosing, because the same stop is what cleans up destructible subtree swaps.**
+`analysis/bl-229-emitter-host-deactivation/` walks 14,963 compiled definitions across all 8 chapters
+(3,649 distinct animation names, `mis_anim` + `cam_anim`) for the activate/emit/deactivate idiom and
+finds 414 pairs in 291 authored shapes. They split with nothing in between: **32 pairs (4 shapes)**
+put the deactivation in the emitter's own instant — `big_splash`, `huge_splash`, `med_splash`,
+`plane_big_splash`, all `splasher` on `sp_1`, and **every one of the 32 authors a run greater than
+zero** (0.6 s), so there is no case in the install where the data means that deactivation as the
+stop. The other **382 pairs (287 shapes)** sit a median 3.5 s later, smallest gap 1 ms — the
+`m_build*`/`box_gen_destroy`/`ftank_boom*` family, where a `partN` is activated, given a debris
+trail in the same instant, flown by a 3.5–5 s `OBJECT_MOTION` and only then switched off, and that
+deactivation is the trail's ONLY authored stop. The authored reader corpus carries the triple by
+hand (8 offset-less sequences in 1,533 definitions, the four splash defs among them), so it is an
+authoring idiom, not a compiler artefact.
+
+**The rule:** a host deactivation ends every emitter under the host except one that started in the
+same instant. `EmitterDirector` stamps each emitter in `Assert` off a counter bumped once per
+`Tick` — one `AnimRuntime.Advance`, exactly the granularity the data's instants exist at — and
+`EndOn` skips a match carrying the current stamp. The RESET_STATE path passes
+`sparingSameInstant: false`, being base state where the last write wins. Keyed on the instant and
+not on a time threshold deliberately: the smallest gap in the other population is one millisecond,
+so no number would separate them.
+
+**Both halves are asserted, and both able-to-fail controls were run** — either half alone is
+satisfied by a broken runtime. New in-engine suite `emitter-host-deactivation` plays the real
+`plane_big_splash` on a runtime carrying the crash rig's own role flags (`PlaceCalledTemplates`,
+`NameResolveFallback`; `ForCrashRig` sets no `ExternalEffect`, so start and stop meet on one
+director) and the real `m_build01` death on a second stage. With the stop left unconditional the
+splash half fails (`splasher survives the sp_1 deactivation…`, `still emitting 0.3 s in`); with the
+stop deleted outright the debris half fails — `part3` is switched off at 3.667 s and its trail runs
+on to 5.000 s, which is the leak trap (a) warns about, measured.
+
+**Two dead assertions the deletion control exposed, and one stage artefact.** (1) Puffer names are
+not unique across definitions — `small_fireball` declares a `trailpuffer2` of its own — so a
+name-only `Census` read was answered by the fireball's row while the building's trail ran on, and
+passed a runtime with the stop deleted. Host-qualified now; recorded as `docs/verification.md`
+INSTR-10. (2) `part1`'s deactivation and the whole instance retiring both land at 5.000 s, so a
+wall-clock "stopped by 6.5 s" cannot separate them; the suite watches `part3` and asserts against the
+dispatch moment of its own `sparkout3` instead, which is also robust to `BL-240`'s solved flight time
+moving. (3) With `flame_ball_02` missing from the synthetic stage, `small_fireball`'s no-`AT_NODE`
+stop resolved onto the call anchor and ended the building's trail early — a stage must carry the
+callees' template roots, not only the caller's own nodes (WORLD-12). That key collision is shipped
+`BL-242`-family behaviour and is untouched here.
+
+**How verified.** Full `.\RunTests.ps1` PASS, exit 0 — 436 unit tests, 25/25 in-engine suites
+(including the new one), engine errors clean, and 13/13 goldens hash-identical, `c1-crash` and
+`c1-destroy-effects` among them, which are the two emitter-densest shots. The census reproduces with
+`python analysis/bl-229-emitter-host-deactivation/census.py extracted`. **Not verified: the picture.**
+There is no headless water crash — `--crash` passes no struck body so `ClassifySurface` resolves
+`Ground`, and the water variant needs a real dive into a `water`-tagged collider — so the sea dive
+owes a capture at the controls. Details: `docs/PLAN-m3-polish-7.md` C7,
+`analysis/bl-229-emitter-host-deactivation/FINDINGS.md`, `docs/formats/anim-definitions.md`,
+`docs/architecture.md`.

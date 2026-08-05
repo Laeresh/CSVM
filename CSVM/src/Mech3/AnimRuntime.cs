@@ -2032,7 +2032,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     bool active = ev.Data.Bool("state");
                     SetSubtreeActive(t, active);
                     if (!active)
-                        Emitters.EndOn(t);
+                        // BL-229: a played deactivation spares an emitter started in this same
+                        // instant (the splash idiom writes both halves and means the second); the
+                        // RESET_STATE path does not, being base state where the last write wins.
+                        Emitters.EndOn(t, sparingSameInstant: !instant);
                     _opsApplied++;
                 }
                 return true;

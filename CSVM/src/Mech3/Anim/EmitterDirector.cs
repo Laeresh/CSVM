@@ -42,7 +42,10 @@ public sealed class EmitterDirector
     /// stopped instance created.</para></summary>
     private readonly Dictionary<(string Name, Node3D Node, AnimDefinition? Def), Entry> _emitters = new();
 
-    private readonly List<(IEmitter Emitter, Node3D Node)> _active = new();
+    /// <summary>The emitting emitters, each stamped with the INSTANT it started — the runtime
+    /// batch (one <see cref="AnimRuntime.Advance"/> pass) that dispatched its <c>PUFFER_STATE 1</c>.
+    /// <see cref="EndOn"/> reads the stamp; nothing else does. See <see cref="_instant"/>.</summary>
+    private readonly List<(IEmitter Emitter, Node3D Node, ulong Started)> _active = new();
 
     // Each host node's emission point in its own frame (see AnimRuntime.VisualOriginOf) — zero for
     // a node whose origin sits inside its mesh bounds. Computed lazily on the first tick, never at
@@ -56,6 +59,13 @@ public sealed class EmitterDirector
     private readonly bool _debug;
 
     private readonly Action<string> _count;
+
+    // The current runtime batch, bumped once per Tick — i.e. once per AnimRuntime.Advance, which is
+    // exactly the granularity at which the data's own instants exist: an event with no START_TIME is
+    // "EVENT_OFFSET 0" and every zero-offset run of events fires in one Advance pass
+    // (SequenceRunner). Emitters carry the value they started on so a host deactivation can tell
+    // "this emitter has been running" from "this emitter started a moment ago in this very batch".
+    private ulong _instant;
 
     private IEmitterFactory _factory;
 
@@ -110,7 +120,7 @@ public sealed class EmitterDirector
             // dice every pass, and reading "stopped" as "still running" collapsed the authored
             // sputter to at most one burst per stage.
             if (!Emitting(existing.Emitter))
-                _active.Add((existing.Emitter, host));
+                _active.Add((existing.Emitter, host, _instant));
             // The re-asserting instance TAKES OWNERSHIP (same def, later anchor). Ownership is what
             // every stop resolves through — End, the TTL sweep and EndFor all ask "which emitters
             // does (def, anchor) own?" — so an emitter left attributed to the FIRST asserter
@@ -138,7 +148,7 @@ public sealed class EmitterDirector
                              + $"'{other.Value.Def.AnimName}''s emitter [def {def.AnimName}]");
         }
         _emitters[key] = new Entry(emitter, def, anchor);
-        _active.Add((emitter, host));
+        _active.Add((emitter, host, _instant));
         Built++;
     }
 
@@ -198,12 +208,24 @@ public sealed class EmitterDirector
     /// <para>The entry stays, so a later <c>PUFFER_STATE 1</c> revives it — the sputter loop cycles
     /// 0/1 forever and relies on that. Leaving <see cref="_active"/> is not optional though:
     /// <see cref="IEmitter.SustainAt"/> re-arms emission on its own, so a still-ticked emitter would
-    /// resume on the very next frame.</para></summary>
-    public void EndOn(Node3D root)
+    /// resume on the very next frame.</para>
+    ///
+    /// <para>⚠ It does NOT reach an emitter that started in this same instant (`BL-229`), because
+    /// the data writes both halves of a one-tick idiom and means only the second: the four splash
+    /// definitions activate <c>sp_1</c>, call an emitter definition onto it, and switch it off again
+    /// with no START_TIME anywhere, while the callee authors a 0.5 s run. Censused install-wide
+    /// (`analysis/bl-229-emitter-host-deactivation/`): 414 activate/emit/deactivate pairs, and the
+    /// split is total — the 32 same-instant ones are those four shapes, every one of which authors a
+    /// run this stop would cut to nothing, and the other 382 sit a median 3.5 s later, which is the
+    /// whole population `BL-224` built this stop for (`m_build*`'s debris trails end when their
+    /// flying part is switched off after its 5 s OBJECT_MOTION). No pair sits in between.
+    /// <paramref name="sparingSameInstant"/> is false only on the RESET_STATE path, where every op
+    /// is a base state and "last write wins" is the whole semantics.</para></summary>
+    public void EndOn(Node3D root, bool sparingSameInstant = true)
     {
         for (int i = _active.Count - 1; i >= 0; i--)
         {
-            var (emitter, node) = _active[i];
+            var (emitter, node, started) = _active[i];
             if (!emitter.IsValid || !GodotObject.IsInstanceValid(node))
             {
                 _active.RemoveAt(i);
@@ -211,6 +233,14 @@ public sealed class EmitterDirector
             }
             if (node != root && !root.IsAncestorOf(node))
                 continue;
+            if (sparingSameInstant && started == _instant)
+            {
+                _count("ObjectActiveState(spared an emitter started this instant)");
+                if (_debug)
+                    GD.Print($"anim: host '{AnimRuntime.NameOf(node)}' deactivated in the instant its "
+                             + "emitter started — left emitting (BL-229)");
+                continue;
+            }
             emitter.SustainEnd();
             _active.RemoveAt(i);
             if (_debug)
@@ -277,9 +307,12 @@ public sealed class EmitterDirector
     /// frame.</summary>
     public void Tick(float dt)
     {
+        // A new runtime batch begins here — everything the instances dispatch below this point
+        // shares one instant, which is what EndOn's BL-229 carve-out is keyed on.
+        _instant++;
         for (int i = _active.Count - 1; i >= 0; i--)
         {
-            var (emitter, node) = _active[i];
+            var (emitter, node, _) = _active[i];
             if (!emitter.IsValid || !GodotObject.IsInstanceValid(node))
             {
                 _active.RemoveAt(i);

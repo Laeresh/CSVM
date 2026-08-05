@@ -10,7 +10,7 @@ here means the work is queued, not forgotten. Deep evidence and traps live in
 Cite them from `backlog.md` and in conversation the way `BL-nnn` is cited. IDs are permanent: when
 an item closes its ID retires with it and is never reused, so numbering gaps are expected.
 Retired IDs disappear from this file, so never mint a new ID by scanning the entries below — take
-it from this counter and bump it here: **next free IDs `CAP-26` and `PT-34`.** (`CAP-17` and
+it from this counter and bump it here: **next free IDs `CAP-26` and `PT-35`.** (`CAP-17` and
 `CAP-14` and `CAP-24` and `CAP-16` retired 2026-08-04 — IDs are never reused.)
 
 **Captures staged for an item live in `playtest/<ID>/`** — git-ignored (they are renders of the
@@ -110,6 +110,16 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   pipper is *drawn* at. *Look for:* it sits where the rounds actually land in a hard turn.
   `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo --fire`. *Blocks:* retiring the
   TUNE.
+
+- `PT-34` **The sea dive's splash spray (`BL-229`).** The rule landed and is asserted in-engine, but
+  the picture is unverified: there is no headless water crash (`--crash` passes no struck body, so
+  the surface classifies `Ground` and plays the dirt variant), so `plane_big_splash` has never been
+  seen since the fix. Fly into the water: `./RunGame.ps1 --fly --chapter=C1B` and dive into the sea.
+  *Look for:* (a) the white `watersquirt` spray fires ON impact and runs about half a second — the
+  bug was it never appearing at all; (b) it reads as a column thrown up from the impact point, not a
+  puff at the plane's last position; (c) the splash polys' 3 s scale/fade and the ripples still play
+  underneath it, unchanged. *Blocks:* `BL-229` sign-off, and the `D9`/`BL-228` question of whether
+  the steam spray should wait for the splash (both retarget on the same tick today).
 
 - `PT-02` **Cloud puffs / cloud deck.** Puff opacity and density, and the in-cloud pass-through
   look. Two known symptoms with the mechanism already traced (`BL-118`): the deck reads with dense

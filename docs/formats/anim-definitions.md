@@ -430,6 +430,20 @@ steam spray starts with the splash instead of after it. The splash's own choreog
 spray that long. Calls remain instantaneous to the caller; the water crash is therefore correct in
 content and not yet in ordering.
 
+**An `OBJECT_ACTIVE_STATE` pair around a call is a scope, not a lifetime.** The data's idiom for
+"emit here" is three events with no `START_TIME` between them — activate a bare node, call the
+emitter definition onto it, switch the node off again — and the author means the emitter to keep
+running: the four splash definitions (`big_splash`, `huge_splash`, `med_splash`,
+`plane_big_splash`, all on `sp_1`) wrap `hg_splasher`, which authors a 0.5 s `STOP_SEQUENCE` plus its
+own `PUFFER_STATE 0` 0.1 s later. Since an absent `START_TIME` is `EVENT_OFFSET 0`, all three land in
+one instant, so a consumer that reads the deactivation as "stop the emitters here" kills the effect
+on the tick it starts. The same-shaped pair a few seconds APART means the opposite and is the far
+larger population — a `partN` activated, given a debris trail, flown by a 3.5–5 s `OBJECT_MOTION`
+and only then switched off, where that deactivation is the trail's ONLY authored stop. Censused
+install-wide (`analysis/bl-229-emitter-host-deactivation/`): 414 pairs, 32 same-instant in 4 shapes
+against 382 a median 3.5 s later, smallest later gap 1 ms, nothing in between. The reader source
+carries the triple by hand, so it is an authoring idiom rather than a compiler artefact.
+
 **Placing an effect template means moving its root.** An effect template hosts its puffers on
 its OWN root subtree — `small_yellow_sparks`' puffer `at_node` is `yellow_spark_01`,
 `call_crash_trails`' are `fly_trail1..5` — so re-scoping the callee's name resolution to the
