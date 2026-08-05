@@ -9,9 +9,9 @@ index line, then every still-binding constraint or deliberate-design marker as a
 Body ≤ ~8 lines (~12 for the heaviest modules). Entry order is historical, not grouped — the index
 is the map, grep is the lookup.
 
-Narratives, diagnoses, and landed-work stories do not live here: they get a short dated entry in
-`HISTORY.md`, and git history keeps the rest. Knowledge about the game's data formats belongs in
-`docs/formats/`, not here.
+Narratives, diagnoses, and landed-work stories do not live here: they go in the commit message,
+and git history keeps the rest (pre-2026-08-06 narratives: `docs/HISTORY.md`). Knowledge about the
+game's data formats belongs in `docs/formats/`, not here.
 
 ⚠ **A new or renamed module updates the index and its entry in the same edit.** Both are in this
   file precisely so they cannot drift apart; `PROJECT_CONTEXT.md` carries only the namespace-level

@@ -1,7 +1,8 @@
 # Verifying a change in this project
 
-This file contains transferable verification rules. Dated evidence belongs in `docs/HISTORY.md`,
-analysis findings, or git history; module constraints belong in `docs/architecture.md`.
+This file contains transferable verification rules. Dated evidence belongs in commit messages
+(pre-2026-08-06: `docs/HISTORY.md`), analysis findings, or git history; module constraints belong
+in `docs/architecture.md`.
 
 Read **METHOD** first, then only the relevant section. Rule IDs are permanent: append new rules
 and leave gaps when retiring old ones.

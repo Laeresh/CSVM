@@ -7,7 +7,7 @@ Turn one `CAP-nn` recording of **the original game** into evidence a `backlog.md
 
 The capture exists because a question could not be answered from extracted data or from our own
 build — so the whole value is in reading the footage honestly. This skill is mostly **read-and-
-measure**; it edits `backlog.md`/`playtest.md`/`docs/HISTORY.md` only at the end, and never commits
+measure**; it edits `backlog.md`/`playtest.md` only at the end, and never commits
 unless asked.
 
 ⚠ **Never answer from the filename or from the backlog's expectation of what the clip shows.**
@@ -18,8 +18,8 @@ real result and must be reported as one.
 ## 0. Work in a worktree
 
 Enter a git worktree with `EnterWorktree` before touching anything else — name it after the
-capture (e.g. `worktree-cap-08`). The skill edits `backlog.md`, `playtest.md`, and
-`docs/HISTORY.md` and can span several sessions, so isolating the work keeps `main` clean and lets
+capture (e.g. `worktree-cap-08`). The skill edits `backlog.md` and `playtest.md`
+and can span several sessions, so isolating the work keeps `main` clean and lets
 other captures run in parallel. Exit with `action: "keep"` when you report (Section 8), so the user
 can review and merge the branch themselves — never merge or push it yourself.
 
@@ -163,8 +163,8 @@ Write to the entry that owns the question, in its own voice:
 - **Discharges the capture** → the `CAP-nn` row goes only when every `BL-NNN` in its Unblocks column
   is served. If it still owes another item, leave the row and note what's done. When an ID does
   retire, it is never reused — take new IDs from `playtest.md`'s counter, don't scan for a free one.
-- Findings that change what we believe about the original get a dated `##` entry in
-  `docs/HISTORY.md`, per `/close-backlog-item` §4.
+- Findings that change what we believe about the original are recorded in the closing commit's
+  message, per `/close-backlog-item` §4 (`docs/HISTORY.md` is frozen — never append to it).
 
 ⚠ **A capture is evidence, not proof of a constant.** Record the honest limit: one take is not a
 distribution, a plateau is worth more than a transient, and a number read off a single frame carries

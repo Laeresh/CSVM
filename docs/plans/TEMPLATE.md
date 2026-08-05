@@ -33,7 +33,8 @@ a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/pl
 
 <!-- [core] Scope paragraph(s). State what this plan delivers, and — just as important — what it
      deliberately excludes and why. If the plan draws items from backlog.md, record that EACH was
-     re-verified still-open against BOTH docs/HISTORY.md AND the code (a backlog entry is not proof
+     re-verified still-open against BOTH the record (git log --grep, and pre-2026-08-06 entries in
+     docs/HISTORY.md) AND the code (a backlog entry is not proof
      the work is undone). Convert any relative dates to absolute. -->
 <One or two paragraphs: the goal, the explicit boundaries ("X is out of scope — it's M<n+1>"), and
 any assumptions the plan rests on.>
@@ -91,7 +92,8 @@ exact fields/keys. Cite files by path. This is the shared evidence the per-item 
   failure. Mark each item's Evidence with its confidence (traced-to-code / direction-sound-magnitude-
   TUNE / lead-only).
 - **`PROJECT_CONTEXT.md` + `docs/architecture.md` / `docs/formats/` are updated in the same turn** as each
-  landed item; a landed item gets a dated entry in `docs/HISTORY.md` and is **deleted** from
+  landed item; a landed item gets its record in the landing commit's message (`docs/HISTORY.md` is
+  frozen — never append) and is **deleted** from
   `backlog.md` (not marked FIXED there). New decodes land with their `docs/formats/` page.
 - **Read `docs/verification.md` before measuring anything** — the instruments here mislead; cite the
   rule that bites per item.

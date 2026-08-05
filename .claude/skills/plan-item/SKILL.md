@@ -27,8 +27,8 @@ One authority; do not glob for candidates.
   so and point at `/new-plan`. Never guess.
 - **An explicitly named plan** (`/plan-item A1 in PLAN-m3-polish-5`, or a path) → honour it, but if
   it carries a `COMPLETE` banner or lives in `docs/plans/`, explain it **read-only** and skip §4
-  entirely: retroactively starting or deferring a finished item is nonsense. Point at its
-  `docs/HISTORY.md` entry instead.
+  entirely: retroactively starting or deferring a finished item is nonsense. Point at its landing
+  commit (`git log --grep`) or pre-freeze `docs/HISTORY.md` entry instead.
 
 ## 2. Resolve the item
 
@@ -62,7 +62,8 @@ Do the reading yourself; no Explore subagent. The item text and code need to sta
    re-locate symbols **by name**.
 
 While there, check whether the item **already landed** without its checklist being flipped — a
-`docs/HISTORY.md` entry, or code that already does the thing.
+landing commit (`git log --grep=<ID>`), a pre-freeze `docs/HISTORY.md` entry, or code that already
+does the thing.
 
 **Confirmation is by reading, not by running.** When a claim can only be settled by executing
 something (a collider count printed at build, a per-chapter node census), say so under *The evidence,
@@ -85,7 +86,7 @@ Use these headings, in this order:
   against the tier you are running. **On a mismatch, say plainly that the item wants a different tier
   before the user picks *start it here*.** Older plans may carry no recommendation; then skip it.
 - **Status** — one line: still open, or looks already landed / superseded / moot. Cite the evidence
-  (a `docs/HISTORY.md` entry, the code state).
+  (a landing commit, a pre-freeze `docs/HISTORY.md` entry, the code state).
 - **Goal** — what will be true when the item is done.
 - **The problem** — what's wrong today, and why it matters at the controls.
 - **The evidence, and how far it goes** — the item's own confidence label (traced / direction-sound-
@@ -122,7 +123,7 @@ them makes this path start identically.
 ~~~
 Before writing code: read that item's full "### <ID>" detail in the plan and the plan's "## Ground rules" and "## ⚠ Read this before implementing anything" sections, plus the docs/architecture.md entry for every module you'll touch. Verify data against the extracted JSON — never guess a value.
 
-Land it complete in the same turn: follow the plan's Verify step, update docs/formats or docs/architecture as the item requires, append a dated docs/HISTORY.md entry, flip the checklist item to ☑, and refresh PROJECT_CONTEXT.md "Current status". Commit only when I ask (with /commit-next).
+Land it complete in the same turn: follow the plan's Verify step, update docs/formats or docs/architecture as the item requires, flip the checklist item to ☑, and refresh PROJECT_CONTEXT.md "Current status". The verification record goes in the commit message. Commit only when I ask (with /commit-next).
 ~~~
 
 Tiers 1–3 already satisfied most of the first paragraph — say so in one line rather than silently
@@ -140,8 +141,8 @@ The plan bookkeeping is this skill's; the `BL-NNN` side is not.
 - Advance `PROJECT_CONTEXT.md` "Current status" if this was the next-item pointer — **swap or delete
   only**, never add a sentence about what closed (that section's own fixed-shape rule).
 - Then hand to **`/close-backlog-item <BL-NNN>`**, unmodified. It owns the closure kind, deleting the
-  entry, the dated `docs/HISTORY.md` entry with its forward-pointer, retiring any `CAP-nn`/`PT-nn`,
-  and the restated-caveat sweep. Do not pre-empt its history entry.
+  entry, the closure record in the closing commit's message, retiring any `CAP-nn`/`PT-nn`, and the
+  restated-caveat sweep. Do not pre-empt its closure record.
 - **If that was the plan's last open item**, say so and *offer* the completion move — `COMPLETE`
   banner, move to `docs/plans/`, add its row to `docs/plans/plans.md`. Don't do it unasked; but a
   finished plan left in `docs/` still resolves as "active" for the next session.

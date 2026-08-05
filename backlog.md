@@ -2,7 +2,8 @@
 
 Everything known-but-not-scheduled, so it survives between polish runs. Which plan is active, if
 any, is `PROJECT_CONTEXT.md`'s "Current status" — never restated here. Per-item history/diagnosis
-detail is in `docs/HISTORY.md` (dated entries) and `docs/architecture.md` (module bullets); how to
+detail is in commit messages (`git log --grep=BL-NNN`; pre-2026-08-06 in `docs/HISTORY.md`'s dated
+entries, now frozen) and `docs/architecture.md` (module bullets); how to
 verify a change without fooling yourself is `docs/verification.md`. **The live list of hand-tuned
 constants awaiting playtest lives here** (see "TUNE constants pending playtest" below).
 When an item gets scheduled into a plan, move it there; when it lands, delete it here.
@@ -279,7 +280,7 @@ Reference shots are in `OriginalScreenshots/` (gitignored — cited by filename)
 The user's running issue list. Where a check pinned a cause it is recorded here so it is not
 re-derived; where it did not, the item says so rather than guessing. Paths are relative to the
 Godot project's `src/`. Scheduled items live in their plan — **do not re-add them here**; if one
-is closed without landing, its record goes to `docs/HISTORY.md`.
+is closed without landing, its record goes in the closing commit's message.
 
 ### Playtest triage 2026-08-05 (at-the-controls findings)
 
@@ -489,7 +490,7 @@ extracted data before being logged, so the mechanism is recorded here and not re
   is why the candidate fix is a cited exemption list, not a live filter.
   *Playtest after fix:* `CAP-22` (C5 city building density, `playtest.md`) decides it — if the
   original's downtown reads as one consistent skyline, the exemption list lands; if it shows visible
-  overlap too, that is itself worth a HISTORY note (the doubling would be authentic, not a bug) and
+  overlap too, that is itself worth recording in the closing commit's message (the doubling would be authentic, not a bug) and
   the item closes ❌-for-now instead.
 
 - `BL-161` **`cockpit_engine_sound` ships per plane, unparsed.** `extracted/zrdr/vehicle.zrd.json`

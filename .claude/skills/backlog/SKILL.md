@@ -40,7 +40,8 @@ follow-up questions and the handoff.
 - Read the entry **and its enclosing section heading** — the heading carries status (e.g. "Merged
   into `m3-polishing` — pending playtest").
 - Follow the references the entry actually names: code files and symbols (`AnimRuntime.cs:214-216`,
-  `FlightController.NextArmedHardpoint`) and doc sections in `docs/HISTORY.md`,
+  `FlightController.NextArmedHardpoint`) and doc sections in `docs/HISTORY.md` (frozen 2026-08-06 —
+  pre-freeze evidence only; later evidence lives in commit messages, `git log --grep=BL-NNN`),
   `docs/architecture.md`, `docs/verification.md`.
 - Don't go hunting beyond what the entry cites.
 
@@ -54,7 +55,7 @@ rather than padding.
 Use these headings, in this order:
 
 - **Status** — one line: still live, or looks landed/superseded. Cite the evidence (section heading,
-  a `docs/HISTORY.md` entry, a merged-and-pending-playtest table).
+  a landing commit or pre-freeze `docs/HISTORY.md` entry, a merged-and-pending-playtest table).
 - **Goal** — what will be true when the item is done.
 - **The problem** — what's wrong today, and why it matters at the controls.
 - **Traps** — the ⚠ notes plus anything the code reading reveals: wrong-mechanism "fixes", unsettled

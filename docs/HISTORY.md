@@ -1,6 +1,6 @@
-# Development history — Milestone 2 log
+# Development history — ARCHIVED 2026-08-06
 
-Chronological record of landed work with verification details, moved from CLAUDE.md's "Current status / next step" section on 2026-07-18. **Append new dated entries at the bottom when work lands**; CLAUDE.md keeps only the compact current state + next step. Entries deliberately preserve diagnosis narratives and dead ends — they exist so future sessions don't re-chase them.
+**Frozen — no new entries, no edits.** Landed work since this date is recorded in git commit messages (`git log`). This file is kept in place because live docs cite its dated entries by path and `New-ItemId.ps1`'s re-seed procedure scans it for retired IDs. Entries below are as-written at the time (2026-07-14 → 2026-08-05) — read them as history, not current state. They deliberately preserve diagnosis narratives and dead ends — they exist so future sessions don't re-chase them.
 
 **Milestone 1 (extraction) is essentially already delivered by mech3ax v0.6.1** — the planned RE work is reduced to (a) the cosmetic planes.zbd padding nit (upstream PR candidate) and (b) the deferred anim formats.
 

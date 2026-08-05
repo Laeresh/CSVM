@@ -45,7 +45,8 @@ those boundaries is a named trap in some backlog entry; respect them per item.
   failure. Mark each item's Evidence with its confidence (traced-to-code / direction-sound-magnitude-
   TUNE / lead-only).
 - **`PROJECT_CONTEXT.md` + `docs/architecture.md` / `docs/formats/` are updated in the same turn** as each
-  landed item; a landed item gets a dated entry in `docs/HISTORY.md` and is **deleted** from
+  landed item; a landed item gets its record in the landing commit's message (`docs/HISTORY.md` is
+  frozen 2026-08-06) and is **deleted** from
   `backlog.md` (not marked FIXED there). New decodes land with their `docs/formats/` page.
 - **Read `docs/verification.md` before measuring anything** — the instruments here mislead; cite the
   rule that bites per item.
