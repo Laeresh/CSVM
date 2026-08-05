@@ -159,7 +159,7 @@ The day-to-day 29 of 100 — 100 is both the parser's accepted-flag count and `d
 | `--collision[=show]` | build the world's colliders in a mode that builds none (freecam/anim-lab/viewer); `=show` opens the **C** wireframe overlay — but only in freecam/anim-lab, since C in `--viewer` is the mesh lab's cull cycler |
 | `--no-pads` | ignore every gamepad — a drifting stick silently ruins a scripted run |
 | `--mute` | skip flight audio — a **load-time** switch, so nothing plays *and nothing is counted or logged*; a muted baseline is blind to sound errors |
-| `--volume=N` | master gain 0–1 (default 1). `--volume=0` is silent but **not** blind: audio still loads, plays, counts and logs, so a run is testable from `.scratch/logs/`. Also the `audio.volume` config key, which the flag beats |
+| `--volume=N` | master gain 0–1 (default 0 since 2026-08-05 — `RunGame.ps1`/`RunDev.ps1` pass `--volume=1.0` so interactive play sounds). `--volume=0` is silent but **not** blind: audio still loads, plays, counts and logs, so a run is testable from `.scratch/logs/`. Also the `audio.volume` config key, which the flag beats |
 
 the player controls during development are in `docs/controls.md`. **change them if the player input changes**
 
