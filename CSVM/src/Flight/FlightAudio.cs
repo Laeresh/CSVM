@@ -48,7 +48,10 @@ public partial class FlightAudio : Node
     private const float EngineVoiceGain = 0.70710678f;
 
     private const float SilenceThreshold = 0.002f;
-    private const float EngineStartRamp = 1.8f; // s for the loop to fade to full behind snd_propstart
+    // s for the loop to fade to full behind snd_propstart. Sourced from startprops' authored prop
+    // cross-fade (plane_props.zrd.json, OBJECT_OPACITY_FROM_TO RUN_TIME 2.0 on staticpropN→propN)
+    // — the nearest authored duration to the old bare-literal 1.8f. TUNE pending a listen A/B.
+    private const float EngineStartRamp = 2.0f;
 
     private readonly List<(string name, AudioStreamWav stream, float volume)> _crashSounds = new();
 
@@ -309,11 +312,12 @@ public partial class FlightAudio : Node
         return name;
     }
 
-    /// <summary>Graceful engine wind-down (future landing/parking): plays snd_propstop and
-    /// kills the loops. NOT called on crash — the explosion one-shot already covers that
-    /// moment, and a prop wind-down under it would read wrong. A shutdown state using this
-    /// must also stop driving <see cref="Update"/> (as the crash freeze does), else the
-    /// loop-restart hook there would immediately fire snd_propstart again.</summary>
+    /// <summary>Engine wind-down: plays snd_propstop and kills the loops. Layers over the crash
+    /// explosion one-shot (<see cref="OnCrash"/>) rather than replacing it — FlightController
+    /// calls both from the same crash/destruction moment, snd_propstop right after the boom, so
+    /// the loops end on the authored cue instead of a cut. The loop-restart hook in
+    /// <see cref="Update"/> is what fires snd_propstart again on the next respawn; nothing here
+    /// needs to prevent that.</summary>
     public void OnEngineStop()
     {
         _engine?.Stop();
@@ -322,6 +326,7 @@ public partial class FlightAudio : Node
         _rattle?.Stop();
         _damagedEngine?.Stop();
         PlayOneShot(_propStop, _propStopVol);
+        GD.Print("engine stop: snd_propstop");
     }
 
     private static void PlayOneShot(AudioStreamPlayer? player, float volume)

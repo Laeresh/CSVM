@@ -320,6 +320,12 @@ public sealed class FlightRigAssembler
             if (verbose)
                 GD.Print($"weapon lab: P{pi + 1} held at the spawn pose (world sim running)");
         }
+        // The throttle-slam exhaust smoke (CAP-21 re-read): needs the plane's own exhaust marker
+        // nodes plus the live throttle Setup just wrote, so it builds after Setup rather than
+        // alongside Props/WingLights above.
+        controller.ThrottleSmoke = ThrottleSlamSmoke.Build(planeModel, _in.ZrdrPath, _in.Textures,
+            controller, controller.Throttle);
+
         // The incoming-fire near-miss cue (BL-087): this aircraft becomes a target every OTHER
         // pilot's rounds are measured against. After Setup — the target reads the live flight
         // model — and after PlayerIndex, the identity that excludes this pilot's own rounds.
@@ -337,6 +343,9 @@ public sealed class FlightRigAssembler
         {
             _worldEffects.BuildFlightCrashRuntime(controller, planeBuilder, planeName, _in.Gamez,
                 _in.WorldScene, _in.Textures, _in.CrashProgram, verbose);
+            // The start choreography for the very first spawn: Respawn() plays this same def on
+            // every later respawn, but Setup() above called Respawn() before this runtime existed.
+            controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);
             // B4: that runtime also carries the <part>_damage_effects shims, so a part crossing its
             // 0.99 injure_anims threshold can spark at a pdpN panel. Wired here because the runtime
             // is built after the controller joins the tree, later than DamageVisuals itself.

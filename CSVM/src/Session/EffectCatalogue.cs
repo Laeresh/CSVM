@@ -75,10 +75,18 @@ public static class EffectCatalogue
     public static readonly string[] PlaneDamageEffectAnims =
         { "nose_damage_effects", "tail_damage_effects", "leftwing_damage_effects", "rightwing_damage_effects" };
 
-    // Everything the per-player crash rig binds — both crash variants plus the four damage shims,
-    // i.e. every def that plays ON one aircraft — and therefore the name set whose anchor-root
-    // closure that rig's own template stage must satisfy (<see cref="CrashStageRoots"/>).
-    public static readonly string[] CrashRigAnimNames = Concat(CrashDefNames, PlaneDamageEffectAnims);
+    // The engine start/stop choreography (plane_props.zrd.json): the static blade prop cross-fades
+    // to its spinning blur disc (with the startup smokepuffN burst) and the reverse on shutdown.
+    // Bound alongside the crash def for the same live puffer factory; unlike the crash/damage defs
+    // above, FlightController plays these directly (spawn/engine-death), never through a CALL.
+    public static readonly string[] PropChoreographyAnims = { "startprops", "stopprops" };
+
+    // Everything the per-player crash rig binds — both crash variants, the four damage shims and
+    // the prop choreography, i.e. every def that plays ON one aircraft — and therefore the name
+    // set whose anchor-root closure that rig's own template stage must satisfy
+    // (<see cref="CrashStageRoots"/>).
+    public static readonly string[] CrashRigAnimNames =
+        Concat(Concat(CrashDefNames, PlaneDamageEffectAnims), PropChoreographyAnims);
 
     // Anchors the mechanical closure below reports that no bind stages, because the CALL that
     // reaches the definition supplies its anchor instead of its own NAME. Curation, not derivation:
@@ -92,7 +100,12 @@ public static class EffectCatalogue
     // flings, and a seeded `--effects-test --debug-anim` reports that retarget resolving with no
     // UNRESOLVED tag. C2's gamez has no node of the name at all, so treating it as a needed root
     // would fail that one chapter for an effect that has always played.
-    public static readonly string[] CallSuppliedAnchors = { "zep_can_dstry1.flt" };
+    //
+    // `warhawk` is `startprops`/`stopprops`' own NAME (plane_props.zrd.json) — a shared authoring
+    // label, not a per-plane node, so it never resolves on any of the 11 airframes. That is fine:
+    // FlightController's own `Play` calls always supply the plane model as the fallback anchor
+    // directly (not a CALL_ANIMATION), so nothing needs `warhawk` staged anywhere.
+    public static readonly string[] CallSuppliedAnchors = { "zep_can_dstry1.flt", "warhawk" };
 
     // The crash defs' authored airframe anchor. `plane_reset` (and `pdpanel5`) are written against
     // the Devastator's own model root, so on that airframe the rig's scope has it and on the other

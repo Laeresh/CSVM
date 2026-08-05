@@ -270,12 +270,21 @@ public sealed class PlaneBuilder
         if (node.Name.EndsWith("_hook", StringComparison.OrdinalIgnoreCase))
             return true;
         var kind = PropParts.Classify(node.Name);
-        // Flight shows ONLY the spinning blur discs; the exterior viewer shows ONLY the static
-        // disc. The nitro boost disc is hidden either way (no nitro system yet). Hiding it in
-        // flight matters: nitropropN is a NON-spinning blur disc, so leaving it in overlaid a
-        // fixed disc on the spinning ones, and its edge painted the shimmering seam.
-        return _spinningProps
-            ? kind is PropParts.Kind.Static or PropParts.Kind.Nitro
-            : PropParts.IsDynamic(kind);
+        // The exterior viewer shows ONLY the static disc. The nitro boost disc is hidden either
+        // way (no nitro system yet). Hiding it in flight matters: nitropropN is a NON-spinning
+        // blur disc, so leaving it in overlaid a fixed disc on the spinning ones, and its edge
+        // painted the shimmering seam.
+        if (!_spinningProps)
+            return PropParts.IsDynamic(kind);
+        if (kind == PropParts.Kind.Nitro)
+            return true;
+        // Flight now builds the static PROPELLER disc too (not skipped), alongside the spinning
+        // blur discs it always built — the startprops/stopprops choreography cross-fades between
+        // them at spawn/engine-stop (see FlightController.Respawn/Crash), so both need to exist
+        // for the fade to have two things to fade between. That choreography names only
+        // staticpropN, never staticrotorN: the autogyro's static rotor disc has no such fade and
+        // stays skipped, exactly as before, so it does not double-expose against its own blur.
+        return kind == PropParts.Kind.Static
+            && !node.Name.StartsWith("staticprop", StringComparison.OrdinalIgnoreCase);
     }
 }
