@@ -15812,6 +15812,43 @@ header `defs=780 anchored_by_name=1 … root_lift_suppressed=108 unanchored=671
 target_missing_ops=4` plus the three sample lines) byte-identical line for line. No behaviour
 change.
 
+## 2026-08-05 — PLAN-name-resolver A3: the three-tier scope order moves into `NameResolver`; the plan completes
+
+The final item of the plan (now archived at `docs/plans/PLAN-name-resolver.md`): `ResolveScoped`'s
+tier chain — call-anchor subtree, then the definition's OWN template roots, then global unless
+`LOCAL_NODES_ONLY`, with a null/dead anchor dropping to the plain whole-index walk — leaves
+`AnimRuntime` for `NameResolver<TNode>`, ported line for line. The pool enters the resolver only
+as Decision 1's constructor hook `ownRootsOf(def, anchor)`, implemented by
+`AnimRuntime.TemplateRootsFor` (`SlotOf` and the slot arithmetic stay in the runtime — Decision 16
+respected by construction), and anchor liveness as an `isLive` predicate (the engine passes
+`IsInstanceValid`, tests pass `_ => true`). `ResolveOne` folded into the resolver's `Resolve`
+(symbol claim first; claimed-but-unbound still falls through to the scoped tiers); `ResolvePath`
+went private to the module, so the tier-order ⚠ — the invariant that had already diverged once
+(the emitter host and the motion targets took different routes to the same name, so an authored
+stop never reached its emitter) — is now structural: `AnimRuntime` resolves only through
+`Resolve`/`ResolveScoped`/`Anchors` forwards and holds no primitive it could compose in the wrong
+order. The own-root tier and its hook stay census-free (`FindAll` only) and allocation-identical
+on the poll-loop hot path.
+
+Four new off-engine tier tests (23 in the resolver suite, 473 units total): anchor-subtree wins
+with the `ownRootsOf` hook never consulted; the own-root tier beats global on an anchor miss
+(`BL-219`'s parked-copy shape); the global tier is skipped under `LOCAL_NODES_ONLY`; a dead
+anchor falls to the local-only global resolve, which ignores `LOCAL_NODES_ONLY` exactly like the
+null-anchor path it shares. Each seen red once via two reverted mutations (the tier chain
+flattened to global-only → the three scoping tests fail together; the liveness predicate ignored
+→ the dead-anchor test fails alone). The A1 `ResolvePath` unit re-routed through the public
+`ResolveScoped` surface.
+
+**Verified.** Full `.\RunTests.ps1` PASS: build clean (0 warnings), 473 units, 29/29 in-engine
+suites (effects-census, emitter-host-deactivation and effect-template-mesh — the diverged-once
+bug's exact shape — among them), **13/13 goldens hash-identical**, engine errors clean. Census A/B
+at worktree HEAD before/after (SHELL-10/SHELL-12, both probes `--screenshot`-terminated): the C5
+`--freecam` Bootstrap summary byte-identical (`anim: 781 defs (592 compiled, 189 reader), 43 SI
+scripts; 383 anchored, 1483 state ops applied, 17 unresolved`), and the `--node=ctur1 --chapter=C5`
+`[anim] bind` block identical line for line (`defs=780 anchored_by_name=1 narrowed_by_symbol=0
+anchored_by_root_lift=0 root_lift_suppressed=108 unanchored=671 target_missing_ops=4` plus the
+sample lines). No behaviour change.
+
 ## Playtest triage 2026-08-05 — eighteen `PT` items closed, nine findings banked
 
 One at-the-controls sitting, triaged with the user the same day. Eighteen `PT`s retired: `PT-01`,

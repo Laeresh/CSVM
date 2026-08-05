@@ -7,7 +7,8 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The off-engine charter for <c>src/Mech3/Anim/NameResolver.cs</c>: the wildcard matcher, the
-/// memoized <c>FindAll</c>, <c>ResolvePath</c>, the symbol-table authority
+/// memoized <c>FindAll</c>, the three-tier scope chain (<c>ResolveScoped</c>: anchor subtree,
+/// own template roots via the <c>ownRootsOf</c> hook, global), the symbol-table authority
 /// (<c>SymbolClaims</c>/<c>NarrowToSymbolRoot</c>) and the anchoring rules (<c>Anchors</c>' NAME
 /// match, twin narrowing and root lift with its policy inputs), asserted against a plain token
 /// node type — no Godot, no chapter world. <see cref="TestNode"/> carries no overridden
@@ -153,10 +154,11 @@ public class NameResolverTests
         Assert.Single(resolver.FindAll("late_arrival", null));
     }
 
-    // ---- ResolvePath walks a parent->child NAME path one scoped segment at a time ----
+    // ---- a NAME path walks one scoped segment at a time (through the public tier surface:
+    // ResolvePath itself is private, which is what makes the tier order structural) ----
 
     [Fact]
-    public void ResolvePathWalksEachSegmentInsideThePreviousMatches()
+    public void PathResolutionWalksEachSegmentInsideThePreviousMatches()
     {
         var root = Node("m_build01");
         var door = Node("door1");
@@ -166,10 +168,99 @@ public class NameResolverTests
             (door, "door1", root),
             (hinge, "hinge1", door));
 
-        var found = resolver.ResolvePath(
-            new List<string> { "m_build01", "door1", "hinge1" }, null, localOnly: true);
+        var found = resolver.ResolveScoped(
+            new List<string> { "m_build01", "door1", "hinge1" }, Def("bld"), null);
 
         Assert.Equal(new[] { hinge }, found);
+    }
+
+    // ---- the three-tier scope order: anchor subtree, own template roots, global ----
+
+    [Fact]
+    public void AnchorSubtreeWinsOverOwnRootAndGlobal()
+    {
+        // fly_trail1 exists under the anchor, under the def's own staged root AND as a stray
+        // global copy: the anchor's copy wins outright, and the own-root hook is never consulted.
+        var anchor = Node("he_ring");
+        var mine = Node("fly_trail1");
+        var ownRoot = Node("he_trails");
+        var ownTrail = Node("fly_trail1");
+        var stray = Node("fly_trail1");
+        int hookCalls = 0;
+        var resolver = new NameResolver<TestNode>(
+            ownRootsOf: (_, _) =>
+            {
+                hookCalls++;
+                return new[] { ownRoot };
+            });
+        resolver.Add(anchor, "he_ring", null);
+        resolver.Add(mine, "fly_trail1", anchor);
+        resolver.Add(ownRoot, "he_trails", null);
+        resolver.Add(ownTrail, "fly_trail1", ownRoot);
+        resolver.Add(stray, "fly_trail1", null);
+
+        var found = resolver.ResolveScoped(new List<string> { "fly_trail1" }, Def("he_trails"), anchor);
+
+        Assert.Equal(new[] { mine }, found);
+        Assert.Equal(0, hookCalls); // the own-root tier is consulted only on an anchor miss
+    }
+
+    [Fact]
+    public void OwnRootTierIsConsultedOnAnchorMissBeforeGlobal()
+    {
+        // The anchor subtree misses; the def's own placed copy must win over the stray global
+        // match (which is the BL-219 shape: a copy parked at the stage origin).
+        var anchor = Node("he_ring");
+        var ownRoot = Node("he_trails");
+        var ownTrail = Node("fly_trail1");
+        var stray = Node("fly_trail1");
+        var resolver = new NameResolver<TestNode>(ownRootsOf: (_, _) => new[] { ownRoot });
+        resolver.Add(anchor, "he_ring", null);
+        resolver.Add(ownRoot, "he_trails", null);
+        resolver.Add(ownTrail, "fly_trail1", ownRoot);
+        resolver.Add(stray, "fly_trail1", null);
+
+        var found = resolver.ResolveScoped(new List<string> { "fly_trail1" }, Def("he_trails"), anchor);
+
+        Assert.Equal(new[] { ownTrail }, found);
+    }
+
+    [Fact]
+    public void GlobalTierIsSkippedUnderLocalNodesOnly()
+    {
+        // The name resolves only globally: a LOCAL_NODES_ONLY def gets nothing, the same def
+        // without the flag falls through to the whole index.
+        var anchor = Node("he_ring");
+        var stray = Node("fly_trail1");
+        var resolver = new NameResolver<TestNode>();
+        resolver.Add(anchor, "he_ring", null);
+        resolver.Add(stray, "fly_trail1", null);
+        var path = new List<string> { "fly_trail1" };
+
+        Assert.Empty(resolver.ResolveScoped(path, Def("he_trails", localNodesOnly: true), anchor));
+        Assert.Equal(new[] { stray }, resolver.ResolveScoped(path, Def("he_trails"), anchor));
+    }
+
+    [Fact]
+    public void DeadAnchorFallsToTheLocalOnlyGlobalResolve()
+    {
+        // A dead anchor (liveness predicate false) cannot scope anything: the resolve drops to
+        // the plain whole-index walk — which also ignores LOCAL_NODES_ONLY, exactly like the
+        // null-anchor path it shares.
+        var anchor = Node("he_ring");
+        var mine = Node("fly_trail1");
+        var stray = Node("fly_trail1");
+        var resolver = new NameResolver<TestNode>(isLive: n => !ReferenceEquals(n, anchor));
+        resolver.Add(anchor, "he_ring", null);
+        resolver.Add(mine, "fly_trail1", anchor);
+        resolver.Add(stray, "fly_trail1", null);
+
+        var found = resolver.ResolveScoped(
+            new List<string> { "fly_trail1" }, Def("he_trails", localNodesOnly: true), anchor);
+
+        Assert.Equal(2, found.Count); // the anchor no longer narrows — both copies, index order
+        Assert.Contains(mine, found);
+        Assert.Contains(stray, found);
     }
 
     // ---- symbol authority: an exact gamez-index binding beats ambiguous name matching ----
@@ -301,8 +392,8 @@ public class NameResolverTests
 
     private static TestNode Node(string label) => new() { Label = label };
 
-    private static AnimDefinition Def(string name, string? rootName = null) =>
-        new() { Name = name, RootName = rootName };
+    private static AnimDefinition Def(string name, string? rootName = null, bool localNodesOnly = false) =>
+        new() { Name = name, RootName = rootName, LocalNodesOnly = localNodesOnly };
 
     // C1's twin-hangar shape: two instance roots, each owning a child that shares the NAME
     // `air_gen`, distinguishable only by gamez index.

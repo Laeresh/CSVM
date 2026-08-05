@@ -1,11 +1,13 @@
 # NameResolver — the name→node resolution leaves `AnimRuntime`
 
-**DRAFTED PLAN** (written 2026-08-05, from that day's architecture review, candidate 2; decisions
-settled in the same day's grilling session). It sits in `docs/`, which by this repo's convention
-makes it live; PROJECT_CONTEXT.md's "Current status" still names `PLAN-m3-polish-7` as the active
-plan, so treat this as a self-contained handoff for its own session (a parallel worktree is fine —
-see the file-ownership note). Move it to `docs/plans/` with a `COMPLETE` banner, and add its row to
-[`plans/plans.md`](plans/plans.md), when every item lands.
+**COMPLETE** (written 2026-08-05 from that day's architecture review, candidate 2; decisions
+settled in the same day's grilling session; completed the same day). Archived under `docs/plans/`;
+all three items landed, each goldens-identical with the census triple A/B'd byte-identical: `A1`
+moved the index/`Matcher`/`FindAll`/`ResolvePath` core out with the first off-engine resolver
+suite, `A2` the symbol authority, `Anchors`/root-lift and the bind census, `A3` the three-tier
+scope order with the pool supplied as the `ownRootsOf` constructor hook — `ResolvePath` is now
+private to the module, so the tier order (the invariant that had already diverged once) is
+structural rather than a doc-comment obligation.
 
 "Which world node(s) does this name mean, for this def, at this anchor" is one concept spread over
 ~10 private methods, 4 caches, 3 policy flags and a census inside the 3,700-line `AnimRuntime.cs`,
@@ -88,7 +90,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ `NameResolver<TNode>`: index + `Matcher` + `FindAll` + `ResolvePath`, with the off-engine suite
 2. ☑ The symbol authority, `Anchors`/root-lift, and the census move in
-3. ☐ `ResolveScoped`'s tiers + the own-roots hook; `ResolveOne` folds into `Resolve`
+3. ☑ `ResolveScoped`'s tiers + the own-roots hook; `ResolveOne` folds into `Resolve`
 
 ## Dependency and parallelism notes
 
@@ -172,7 +174,7 @@ reader defs / unbuilt index / foreign root, root-lift refuses above `MaxRootLift
 versus an empty narrowing are different outcomes (`:3670`) — keep the tri-state. The `genx12`
 rescue is anchor-scoped *strictly* (`:3694-3700`) — never global.
 
-## A3 ☐ `ResolveScoped`'s tiers + the own-roots hook; `ResolveOne` folds into `Resolve`
+## A3 ☑ `ResolveScoped`'s tiers + the own-roots hook; `ResolveOne` folds into `Resolve`
 
 **Goal.** The three-tier scope order is resolver-owned with the pool supplied as `ownRootsOf`;
 `ResolvePath` goes private to the module; `AnimRuntime` resolves only through the module's `Resolve`
