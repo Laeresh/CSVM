@@ -194,7 +194,7 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 **Active plan: [`docs/PLAN-m3-polish-9.md`](docs/PLAN-m3-polish-9.md)** — Waves A and B landed
 (items 1–6); Wave C (`C7`–`C10`) is open, sequential, one golden-moving item per landing window.
 **Next:** `C7` (`BL-262`), then `C8`/`C9`/`C10`; also owed: the `PT-39` gun-line/splash cockpit
-flight, `PT-40` belly-slide splash check, and the cockpit re-tests (`PT-26`–`PT-28`,
+flight and the cockpit re-tests (`PT-26`–`PT-28`,
 `PT-31`–`PT-37`, [`playtest.md`](playtest.md)). Verify any change with
 **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read
 [`docs/verification.md`](docs/verification.md) first.
