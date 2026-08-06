@@ -154,22 +154,11 @@ public sealed partial class GaugeCluster : Control
     private GaugePoly? _altHundreds, _altThousands;
     private GaugePoly? _spdNeedle;
     private double _time;
-    // Live sweep angle of each weapon-gauge pointer (degrees, same convention as DrawGaugePoly's
-    // rotDeg); NaN means "not yet drawn" — the next update snaps to target instead of sweeping in
-    // from zero.
-    private float _gunArrowAngle = float.NaN;
-    private float _missileArrowAngle = float.NaN;
-    // The STALL lamp's blink, integrated rather than read off a clock: its period changes with
-    // airspeed, so PosMod over accumulated time would jump the lamp mid-dwell whenever the rate
-    // moved. _stallBlinkPhase is the fraction of the current half-period elapsed.
-    private double _stallBlinkPhase;
-    private float _stallDwellS;   // sim time the current dwell has run, for the toggle log
-    private bool _stallLampOn = true;
-    private bool _stallWarnPrev;  // last frame's StallWarning, so the crossing logs once
-
-    /// <summary>Whether the lit STALL overlay draws this frame. Internal so the run-tests suite can
-    /// read the blink out of a live cluster rather than re-deriving it.</summary>
-    internal bool StallLampLit => StallWarning && _stallLampOn;
+    // Live sweep state of each weapon-gauge pointer and the STALL lamp's blink — plain structs
+    // (PLAN-engine-free-suites B11) so CSVM.Tests can drive them without a live Control.
+    private ArrowSweep _gunArrow = new();
+    private ArrowSweep _missileArrow = new();
+    private StallLamp _stallLamp = new();
 
     private bool WarnPhaseOn => Mathf.PosMod((float)_time, WarnBlinkPeriod) < WarnBlinkPeriod * 0.5f;
     private bool DamagePhaseOn => Mathf.PosMod((float)_time, DamageBlinkPeriod) < DamageBlinkPeriod * 0.5f;
@@ -285,17 +274,22 @@ public sealed partial class GaugeCluster : Control
         return Mathf.Abs(delta) <= maxStep ? target : current + Mathf.Sign(delta) * maxStep;
     }
 
+    /// <summary>Half of the STALL lamp's blink period, in SIM seconds, at an airspeed of
+    /// <paramref name="stallFrac"/> × fd_speed — proportional to speed, held flat below the deepest
+    /// speed the capture reached. Duty is 0.50, so the full period is twice this. Public so
+    /// CSVM.Tests (<c>StallWarningTests</c>) can assert the law against CAP-06's two anchors
+    /// directly.</summary>
+    public static float StallBlinkHalfPeriodS(float stallFrac) =>
+        StallBlinkHalfPeriodPerFrac * Mathf.Max(stallFrac, StallBlinkFracFloor);
+
     /// <summary>Restarts the warning/blink state (respawn).</summary>
     public void Reset()
     {
         foreach (var z in _zones)
             z.BlinkLeft = 0f;
-        _gunArrowAngle = float.NaN;
-        _missileArrowAngle = float.NaN;
-        _stallBlinkPhase = 0.0;
-        _stallDwellS = 0f;
-        _stallLampOn = true;
-        _stallWarnPrev = false;
+        _gunArrow.Reset();
+        _missileArrow.Reset();
+        _stallLamp.Set();
     }
 
     /// <summary>A part took damage: its fill + border blink for the next few seconds
@@ -312,10 +306,10 @@ public sealed partial class GaugeCluster : Control
         _time += delta;
         float simDt = GameClock.Current?.FrameDt ?? (float)delta;
         if (GunGauge is { } gg)
-            _gunArrowAngle = TweenArrow(_gunArrowAngle, TargetArrowAngle(_gunGaugeGeom.Positions, gg.Selected), simDt);
+            _gunArrow.Advance(TargetArrowAngle(_gunGaugeGeom.Positions, gg.Selected), simDt);
         if (MissileGauge is { } mg)
-            _missileArrowAngle = TweenArrow(_missileArrowAngle, TargetArrowAngle(_missileGaugeGeom.Positions, mg.Selected), simDt);
-        AdvanceStallLamp(simDt);
+            _missileArrow.Advance(TargetArrowAngle(_missileGaugeGeom.Positions, mg.Selected), simDt);
+        _stallLamp.Advance(StallWarning, StallFrac, SpeedMph, simDt);
         foreach (var z in _zones)
             z.BlinkLeft = Mathf.Max(0f, z.BlinkLeft - (float)delta);
         QueueRedraw();
@@ -345,7 +339,7 @@ public sealed partial class GaugeCluster : Control
         float spdR = SpdRadius * s;
         foreach (var p in _spdFace)
             DrawGaugePoly(p, spdC, spdR);
-        if (StallWarning && _stallLampOn)
+        if (_stallLamp.Lit)
             foreach (var p in _spdWarn)
                 DrawGaugePoly(p, spdC, spdR);
         if (_spdNeedle != null)
@@ -375,53 +369,12 @@ public sealed partial class GaugeCluster : Control
         if (MissileGauge is { } mg && _missileGaugeGeom.HasGeometry)
         {
             var c = new Vector2(MissileCenter.X * s, FromBottom(MissileCenter.Y, s, vp.Y));
-            DrawWeaponGauge(_missileGaugeGeom, mg, c, MissileRadius * s, isGun: false, _missileArrowAngle);
+            DrawWeaponGauge(_missileGaugeGeom, mg, c, MissileRadius * s, isGun: false, _missileArrow.Angle);
         }
         if (GunGauge is { } gg && _gunGaugeGeom.HasGeometry)
         {
             var c = new Vector2(vp.X - GunCenterFromRight * s, FromBottom(GunCenterY, s, vp.Y));
-            DrawWeaponGauge(_gunGaugeGeom, gg, c, GunRadius * s, isGun: true, _gunArrowAngle);
-        }
-    }
-
-    /// <summary>Half of the STALL lamp's blink period, in SIM seconds, at an airspeed of
-    /// <paramref name="stallFrac"/> × fd_speed — proportional to speed, held flat below the deepest
-    /// speed the capture reached. Duty is 0.50, so the full period is twice this. Internal so the
-    /// run-tests suite can assert the law against CAP-06's two anchors directly.</summary>
-    internal static float StallBlinkHalfPeriodS(float stallFrac) =>
-        StallBlinkHalfPeriodPerFrac * Mathf.Max(stallFrac, StallBlinkFracFloor);
-
-    /// <summary>Integrates the STALL lamp's blink one sim step. The lamp lights the instant the
-    /// warning does and its phase restarts when the warning clears — the original shows no
-    /// hysteresis at the threshold (on at 89.9/90.0 mph decelerating, 90.0/89.9 accelerating).
-    /// Internal so the run-tests suite can drive it on its own clock.</summary>
-    internal void AdvanceStallLamp(float simDt)
-    {
-        if (StallWarning != _stallWarnPrev)
-        {
-            // The threshold crossing itself, with the fraction it happened at — the other half of
-            // what a scripted run needs to check the cue against the capture.
-            Log.Debug("flight", $"stall warning {(StallWarning ? "on" : "off")} frac={StallFrac:0.000} mph={SpeedMph:0.0}");
-            _stallWarnPrev = StallWarning;
-        }
-        if (!StallWarning)
-        {
-            _stallBlinkPhase = 0.0;
-            _stallDwellS = 0f;
-            _stallLampOn = true;
-            return;
-        }
-        _stallDwellS += simDt;
-        _stallBlinkPhase += simDt / StallBlinkHalfPeriodS(StallFrac);
-        while (_stallBlinkPhase >= 1.0)
-        {
-            _stallBlinkPhase -= 1.0;
-            _stallLampOn = !_stallLampOn;
-            // The dwell that just ended, in sim ms — the one number the blink law is measured in,
-            // so a run can be checked against CAP-06 without eyes on the lamp. Carries its own
-            // times as values: the log has no timestamp column by design.
-            Log.Debug("flight", $"stall lamp {(_stallLampOn ? "lit" : "dark")} dwell_ms={_stallDwellS * 1000f:0} frac={StallFrac:0.000} half_ms={StallBlinkHalfPeriodS(StallFrac) * 1000f:0}");
-            _stallDwellS = 0f;
+            DrawWeaponGauge(_gunGaugeGeom, gg, c, GunRadius * s, isGun: true, _gunArrow.Angle);
         }
     }
 
@@ -757,6 +710,96 @@ public sealed partial class GaugeCluster : Control
             DrawPolygon(pts, colors, p.Uvs, tex);
         else
             DrawPolygon(pts, colors);
+    }
+
+    /// <summary>One weapon-gauge arrow's live sweep angle (degrees, same convention as
+    /// <see cref="DrawGaugePoly"/>'s rotDeg). <see cref="Angle"/> starts NaN — "not yet drawn" — so
+    /// the first <see cref="Advance"/> snaps to target instead of sweeping in from zero. Moved out
+    /// of GaugeCluster's private fields (PLAN-engine-free-suites B11) so CSVM.Tests
+    /// (<c>GaugeArrowTweenTests</c>) can drive it without constructing a live Control.</summary>
+    public struct ArrowSweep
+    {
+        public float Angle = float.NaN;
+
+        public ArrowSweep()
+        {
+        }
+
+        /// <summary>Advances toward <paramref name="target"/> at <see cref="ArrowSweepDegPerSimS"/>,
+        /// the shortest way round (BL-184).</summary>
+        public void Advance(float target, float simDt) => Angle = TweenArrow(Angle, target, simDt);
+
+        /// <summary>Clears to NaN so the next <see cref="Advance"/> snaps instead of sweeping in
+        /// (gauge just appeared, or a respawn).</summary>
+        public void Reset() => Angle = float.NaN;
+    }
+
+    /// <summary>The STALL lamp's blink (BL-148, CAP-06): binary brightness, duty 0.50, integrated on
+    /// its own sim clock rather than read off a wall clock — a rate change mid-dwell shortens the
+    /// remainder rather than jumping the lamp. Moved out of GaugeCluster's private fields
+    /// (PLAN-engine-free-suites B11) so CSVM.Tests (<c>StallWarningTests</c>) can drive it without
+    /// constructing a live Control.</summary>
+    public struct StallLamp
+    {
+        // The fraction of the current half-period elapsed — see the class remark on why this is
+        // integrated rather than PosMod'd over accumulated time.
+        private double _phase;
+        private float _dwellS;   // sim time the current dwell has run, for the toggle log
+        private bool _lampOn;
+        private bool _warnPrev;  // last-seen warning flag, so the crossing logs once
+
+        public StallLamp() => Set();
+
+        /// <summary>Whether the lit STALL overlay should draw this frame.</summary>
+        public bool Lit { get; private set; }
+
+        /// <summary>(Re)arms the lamp lit and clears the blink phase — construction and a respawn
+        /// (<see cref="GaugeCluster.Reset"/>) both start here, so a respawn snaps.</summary>
+        public void Set()
+        {
+            _phase = 0.0;
+            _dwellS = 0f;
+            _lampOn = true;
+            _warnPrev = false;
+            Lit = false;
+        }
+
+        /// <summary>Integrates one sim step. The lamp lights the instant <paramref name="warning"/>
+        /// does and its phase restarts when it clears — the original shows no hysteresis at the
+        /// threshold (on at 89.9/90.0 mph decelerating, 90.0/89.9 accelerating).
+        /// <paramref name="frac"/> is StallFrac (only read while warned); <paramref name="mph"/> is
+        /// for the crossing log only.</summary>
+        public void Advance(bool warning, float frac, float mph, float simDt)
+        {
+            if (warning != _warnPrev)
+            {
+                // The threshold crossing itself, with the fraction it happened at — the other half
+                // of what a scripted run needs to check the cue against the capture.
+                Log.Debug("flight", $"stall warning {(warning ? "on" : "off")} frac={frac:0.000} mph={mph:0.0}");
+                _warnPrev = warning;
+            }
+            if (!warning)
+            {
+                _phase = 0.0;
+                _dwellS = 0f;
+                _lampOn = true;
+                Lit = false;
+                return;
+            }
+            _dwellS += simDt;
+            _phase += simDt / StallBlinkHalfPeriodS(frac);
+            while (_phase >= 1.0)
+            {
+                _phase -= 1.0;
+                _lampOn = !_lampOn;
+                // The dwell that just ended, in sim ms — the one number the blink law is measured
+                // in, so a run can be checked against CAP-06 without eyes on the lamp. Carries its
+                // own times as values: the log has no timestamp column by design.
+                Log.Debug("flight", $"stall lamp {(_lampOn ? "lit" : "dark")} dwell_ms={_dwellS * 1000f:0} frac={frac:0.000} half_ms={StallBlinkHalfPeriodS(frac) * 1000f:0}");
+                _dwellS = 0f;
+            }
+            Lit = _lampOn;
+        }
     }
 
     /// <summary>Live state for one weapon gauge (gun or rocket), pushed by the FlightController each

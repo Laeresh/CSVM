@@ -1,10 +1,10 @@
 # Engine-free suites — nine checks leave the windowed harness for `CSVM.Tests`
 
-**ACTIVE** (written 2026-08-06 from that day's architecture review, candidate 4; decisions
-settled the same day in A1's grilling session — the Decisions table below is the authority where
-prose disagrees). Sibling handoffs:
-[`PLAN-template-stage.md`](PLAN-template-stage.md),
-[`PLAN-puffer-interface.md`](PLAN-puffer-interface.md).
+**COMPLETE** (2026-08-06). Written that day from the day's architecture review, candidate 4;
+decisions settled the same day in A1's grilling session — the Decisions table below is the
+authority where prose disagrees. Every checklist item landed except `tex-dropin`, closed ❌ in A1
+as engine-bound. Sibling handoffs (live, in `docs/`): [`PLAN-template-stage.md`](../PLAN-template-stage.md),
+[`PLAN-puffer-interface.md`](../PLAN-puffer-interface.md).
 
 This is a **seam relocation, not a redesign**: nine of `Suites.cs`'s ~31 in-engine suites touch no
 live Node — they call `Probes.*` functions that take paths and return records (`Probes.cs` has
@@ -106,7 +106,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — companion (kept by Decision 5)
 
-11. ☐ B11 `StallLamp`/`ArrowSweep` structs inside `GaugeCluster`; `stall-warning` moves; the 7 testability-escape internals retire (`FlightController` untouched)
+11. ☑ B11 `StallLamp`/`ArrowSweep` structs inside `GaugeCluster`; `stall-warning` moves; the testability-escape internals retire (`FlightController` untouched)
 
 ## Dependency and parallelism notes
 
@@ -114,9 +114,9 @@ A1 blocks all. Execution order A3 → A2 → A4 → B11 (Decision 7); A2 and A3 
 each other, A4 needs both, B11 runs last by choice not dependency. **File ownership:**
 `CSVM/src/Testing/Suites.cs`, new `CSVM.Tests/*` files, `CSVM/src/Flight/StuntMission.cs`,
 `CSVM/src/Flight/Loadout.cs` (print site only), Wave B adds `CSVM/src/Flight/GaugeCluster.cs`
-only (`FlightController.cs` excluded by Decision 5). Contends with
-[`PLAN-puffer-interface.md`](PLAN-puffer-interface.md) on `Suites.cs` — not in parallel worktrees
-with it. No contention with [`PLAN-template-stage.md`](PLAN-template-stage.md).
+only (`FlightController.cs` excluded by Decision 5). Contended with
+[`PLAN-puffer-interface.md`](../PLAN-puffer-interface.md) on `Suites.cs` — not in parallel
+worktrees with it. No contention with [`PLAN-template-stage.md`](../PLAN-template-stage.md).
 
 ---
 
@@ -234,7 +234,7 @@ tier (units, not engine) and `loadout-bind` unchanged in the engine tier (Decisi
 
 # Wave B — companion (kept by Decision 5)
 
-## B11 ☐ `StallLamp` / `ArrowSweep` — the gauge cues become plain structs; `stall-warning` moves
+## B11 ☑ `StallLamp` / `ArrowSweep` — the gauge cues become plain structs; `stall-warning` moves
 
 **Goal.** The stateful stall-lamp and arrow-sweep halves of `GaugeCluster` live in two plain
 structs (`Set/Advance/Lit`, `Advance/Angle/Reset`); the 7 `internal static` testability escape
@@ -259,3 +259,16 @@ constants (0.30 fd lamp, 643→296 ms ramp) exactly as the in-engine suite pinne
 
 **⚠ Traps.** The entry's three ⚠ lines, verbatim. The `_held` exemption is documented behaviour
 (the weapon lab), not an accident — a "simplified" predicate that drops it breaks the lab.
+
+**Landed 2026-08-06.** `GaugeCluster.ArrowSweep` (`Angle`/`Advance`/`Reset`) and
+`GaugeCluster.StallLamp` (`Lit`/`Advance`/`Set`) are public nested structs; `_gunArrow`/
+`_missileArrow`/`_stallLamp` replace the old private fields, `Reset()` delegates to each struct.
+`StallBlinkHalfPeriodS` went `internal` → `public` (same pattern as A3's four statics);
+`StallLampLit`/`AdvanceStallLamp` and the private stall/arrow fields are deleted, not kept. The
+in-engine `stall-warning` suite (`Suites.cs`) is deleted; `CSVM.Tests/StallWarningTests.cs` (3
+facts) reproduces it — the FlightModel threshold split, the blink-law statics against CAP-06's two
+anchors (0.30 fd → 643 ms, 0.15 fd → 296 ms, values re-verified against the existing pinned
+constants, unchanged), and the integrator driven directly on the struct with no `GaugeCluster`
+construction needed. Verify: `.\RunTests.ps1` green (536 unit / 24 engine / 13 goldens, all pass,
+0 StyleCop warnings), goldens hash-identical, the three CAP-06 assertions pass with the same
+tolerances the in-engine suite used. This closes Wave B and the plan.

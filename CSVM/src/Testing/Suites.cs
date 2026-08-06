@@ -72,9 +72,6 @@ public static class Suites
             "a destructible's death starts a PUFFER_STATE emitter and BL-236's own retirement rule stops it", EmitterLifetime));
         into.Add(new TestHarness.Suite("puffer-modes",
             "the emitter's burst, distance-trail and sustain modes, driven through a fake renderer with no GPU", PufferModes));
-        into.Add(new TestHarness.Suite("stall-warning",
-            "the STALL lamp lights at CAP-06's 0.30 fd while the nose-drop keeps its own 0.25, and " +
-            "its blink half-period ramps 643 → 296 ms sim with airspeed (BL-148)", StallWarning));
         into.Add(new TestHarness.Suite("loadout-bind",
             "every stock loadout binds to its model with every marker resolved", LoadoutBind));
         into.Add(new TestHarness.Suite("weapons-fire",
@@ -401,102 +398,6 @@ public static class Suites
         finally
         {
             puffer.Free();
-        }
-    }
-
-    /// <summary>BL-148: the stall cues are TWO thresholds on one margin, and the STALL lamp's blink
-    /// is a rate ramp. Asserts the split (the lamp leads the nose-drop over a real fd band), the
-    /// blink law against both of CAP-06's measured anchors, and the integrator that carries it —
-    /// including the case the fixed-period predecessor could not express, a dwell that changes
-    /// length while the lamp is already lit.
-    ///
-    /// <para>Everything here is in SIM seconds. The capture's wall figures are 1/1.390 of these, so
-    /// a wrong-clock implementation lands ~39% short of every dwell asserted below — which is what
-    /// makes the two anchor checks able to fail rather than decorative.</para></summary>
-    private static void StallWarning(TestContext ctx)
-    {
-        // One game frame of the original, in sim ms (33.37 ms wall × 1.390) — the resolution the
-        // lamp was measured at, and so the tolerance every period assertion gets.
-        const float gameFrameSimMs = 46.4f;
-        const float simDt = 1f / 60f;
-
-        // --- the split: one margin (StallFraction), two thresholds on it. Measured inside a single
-        // CAP-05 clip — the lamp lights 2.64 sim s / 14.9 mph before the nose breaks.
-        var model = new FlightModel(new PlaneStats());
-        float fd = model.Stats.FdSpeed;
-        void At(float frac, bool warned, bool stalled, string what)
-        {
-            model.Reset(Vector3.Zero, Basis.Identity, frac * fd, 0f);
-            bool w = model.IsStallWarned(), s = model.isStalled();
-            ctx.Check(w == warned && s == stalled,
-                $"{what}: at {frac:0.000} fd warned={w} stalled={s}, expected warned={warned} stalled={stalled}");
-        }
-
-        At(0.310f, false, false, $"above both thresholds neither cue shows");
-        At(0.299f, true, false, $"the lamp lights at 0.30 fd");
-        At(0.260f, true, false, $"mid-lead: lamp lit, nose still held");
-        At(0.249f, true, true, $"the nose drops at 0.25 fd");
-        ctx.Check(Mathf.IsEqualApprox(model.StallFraction, 0.249f, 1e-4f),
-            $"both cues read one stall margin, StallFraction={model.StallFraction:0.0000}");
-
-        // --- the blink law against CAP-06's two anchors.
-        float half030 = GaugeCluster.StallBlinkHalfPeriodS(0.30f) * 1000f;
-        float half015 = GaugeCluster.StallBlinkHalfPeriodS(0.15f) * 1000f;
-        ctx.Check(Mathf.Abs(half030 - 643f) < gameFrameSimMs,
-            $"half-period at the 0.30 fd threshold {half030:0} ms sim vs CAP-06's 643 ms");
-        ctx.Check(Mathf.Abs(half015 - 296f) < gameFrameSimMs,
-            $"half-period at 0.15 fd {half015:0} ms sim vs CAP-06's 296 ms");
-        ctx.Check(half030 > GaugeCluster.StallBlinkHalfPeriodS(0.25f) * 1000f
-                  && GaugeCluster.StallBlinkHalfPeriodS(0.25f) > GaugeCluster.StallBlinkHalfPeriodS(0.20f),
-            $"the blink shortens monotonically with stall depth");
-        ctx.Check(Mathf.IsEqualApprox(GaugeCluster.StallBlinkHalfPeriodS(0.02f), GaugeCluster.StallBlinkHalfPeriodS(0.15f)),
-            $"below the deepest measured speed the law holds instead of extrapolating to a strobe");
-
-        // --- the integrator, driven on a sim clock of its own.
-        var gauges = new GaugeCluster { StallWarning = true, StallFrac = 0.30f };
-        try
-        {
-            ctx.Check(gauges.StallLampLit, $"the lamp is lit on the tick the warning arrives");
-            float Dwell()
-            {
-                bool lit = gauges.StallLampLit;
-                int steps = 0;
-                while (gauges.StallLampLit == lit && steps < 1000)
-                {
-                    gauges.AdvanceStallLamp(simDt);
-                    steps++;
-                }
-                return steps * simDt * 1000f;
-            }
-
-            float dwell030 = Dwell();
-            ctx.Check(Mathf.Abs(dwell030 - 643f) < gameFrameSimMs + simDt * 1000f,
-                $"a dwell at the threshold spans {dwell030:0} ms sim (CAP-06: 643)");
-            gauges.StallFrac = 0.15f;
-            float dwell015 = Dwell();
-            ctx.Check(Mathf.Abs(dwell015 - 296f) < gameFrameSimMs + simDt * 1000f,
-                $"a dwell deep in the stall spans {dwell015:0} ms sim (CAP-06: 296) — the RATE ramped, not the brightness");
-
-            // The old fixed-period blink read the phase off a clock; this one integrates, so a speed
-            // change part-way through a dwell shortens the REMAINDER rather than jumping the lamp.
-            gauges.StallFrac = 0.30f;
-            bool before = gauges.StallLampLit;
-            gauges.AdvanceStallLamp(simDt);
-            gauges.StallFrac = 0.15f;
-            gauges.AdvanceStallLamp(simDt);
-            ctx.Check(gauges.StallLampLit == before,
-                $"a mid-dwell speed change does not toggle the lamp, only its remaining time");
-
-            // No hysteresis: the cue follows speed both ways, and clearing it re-arms the lamp lit.
-            gauges.StallWarning = false;
-            gauges.AdvanceStallLamp(simDt);
-            ctx.Check(!gauges.StallLampLit, $"the lamp is dark once the warning clears");
-            gauges.StallWarning = true;
-            ctx.Check(gauges.StallLampLit, $"re-entering the warning lights the lamp again at once");
-        }
-        finally
-        {
-            gauges.Free();
         }
     }
 

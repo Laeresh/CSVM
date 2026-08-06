@@ -191,7 +191,7 @@ clusters they delegate to.
 - `src/SessionPaths.cs` — resolves extracted-data paths (per-chapter gamez/texture/zrdr; `PreferUnzipped`); extracted from `GameSession`.
 - `src/SessionSpec.cs` — the launch args as one immutable, engine-free value: `Parse` parses **and** resolves (closed `SessionMode`, `--det` bundle, placement, `BuildsCollision`), plus the pure arg parsers.
 
-- `CSVM.Tests/` — the xUnit project (`dotnet test`): engine-free reader units on hand-authored fixtures + `extracted/` golden counts, skipped when absent; plus, since `PLAN-engine-free-suites.md` A3, the six former in-engine suites moved here as `Probes.*`-calling facts.
+- `CSVM.Tests/` — the xUnit project (`dotnet test`): engine-free reader units on hand-authored fixtures + `extracted/` golden counts, skipped when absent; plus, since `PLAN-engine-free-suites.md` (A3/A4/B11), eight former in-engine suites moved here as `Probes.*`/plain-static/`StuntMission`/`GaugeCluster` facts.
 
 ## Cross-module conventions
 
@@ -1910,12 +1910,17 @@ it), `yellowAt`/`orangeAt`/`redAt` are mined per-part from the data's own
 `*_damage_green/yellow/red` injure_anims. Both `Border` and `Fill` always take the same colour
 index — `BL-173`'s refuted fix shape was a synthetic per-pool ring split; there is only ever one
 colour per zone. `GunIndicatorColor`/`HardpointIndicatorColor`/`SlotIndicatorColor`/
-`DamageZoneColor`/`TargetArrowAngle`/`TweenArrow`/`IndicatorLowFrac`/`ArrowSweepDegPerSimS` are
-`public` (not `internal`) so `CSVM.Tests` (`GaugeColoursTests`, `GaugeArrowTweenTests`) can call
-them from outside the assembly — moved from the in-engine `gauge-colours`/`gauge-arrow-tween`
-suites (`PLAN-engine-free-suites.md` A3). `StallBlinkHalfPeriodS`/`AdvanceStallLamp` and the
-stall-specific consts stay `internal`: `stall-warning` is Wave B, scoped to a future
-`GaugeCluster`-only deepening, not this move.
+`DamageZoneColor`/`TargetArrowAngle`/`TweenArrow`/`IndicatorLowFrac`/`ArrowSweepDegPerSimS`/
+`StallBlinkHalfPeriodS` are `public` (not `internal`) so `CSVM.Tests` (`GaugeColoursTests`,
+`GaugeArrowTweenTests`, `StallWarningTests`) can call them from outside the assembly — moved from
+the in-engine `gauge-colours`/`gauge-arrow-tween`/`stall-warning` suites (`PLAN-engine-free-suites.md`
+A3, B11). The two animated cues are plain nested structs, `GaugeCluster.ArrowSweep`
+(`Angle`/`Advance`/`Reset`) and `GaugeCluster.StallLamp` (`Lit`/`Advance`/`Set`) — B11 retired the
+`internal` testability-escape hatches (`StallLampLit`, `AdvanceStallLamp`, the private
+`_gunArrowAngle`/`_missileArrowAngle`/`_stallBlinkPhase`/`_stallDwellS`/`_stallLampOn`/
+`_stallWarnPrev` fields) that existed only so the in-engine suite could reach a live `GaugeCluster`;
+the structs need no `Control` to construct, so `CSVM.Tests` drives them directly. Scoped to
+`GaugeCluster` only (Decision 5) — `FlightController`'s stall/arrow feed predicates are untouched.
 ⚠ The gauge textures lie — compare pixel values, never appearances: the faces hold dark UNLIT
   copies of the STALL / LOW ALT windows (~58,0,0 unlit vs 180+,0,0 lit); bitten twice. The needle
   draws its shipped RGBA art untouched (the pointer silhouette is the rtexture-tier alpha, BL-048)
@@ -1927,13 +1932,15 @@ stall-specific consts stay `internal`: `stall-warning` is Wave B, scoped to a fu
   raw frame delta or `_time` — their rates are video-decoded in sim seconds and the wall figures
   would run them 39% fast. (1) The gun/missile arrow SWEEPS at a shared constant 168.7 °/sim-s
   (`ArrowSweepDegPerSimS`, `BL-184`/`CAP-18`, `TweenArrow`, shortest-way wrap), not drawn from
-  `Selected` — `_Draw` reads the already-advanced `_gunArrowAngle`/`_missileArrowAngle`, and the
-  readout digits/type name still snap on the sweep's first frame; do not tween those too. (2) The
-  STALL lamp's blink is a RATE ramp (`AdvanceStallLamp`, `BL-148`/`CAP-06`): binary brightness, duty
-  0.50, half-period ∝ the fd fraction the controller feeds as `StallFrac`. It is INTEGRATED, not
-  read off a clock — a period that changes mid-dwell must shorten the remainder, not jump the lamp.
-  `Reset()` clears the arrows to NaN and re-arms the lamp lit, so a respawn snaps. The LOW ALT cue
-  is legitimately a plain fixed blink (`WarnBlinkPeriod`) — do not generalise the ramp onto it.
+  `Selected` — `_Draw` reads the already-advanced `_gunArrow.Angle`/`_missileArrow.Angle`
+  (`GaugeCluster.ArrowSweep`), and the readout digits/type name still snap on the sweep's first
+  frame; do not tween those too. (2) The STALL lamp's blink is a RATE ramp
+  (`GaugeCluster.StallLamp.Advance`, `BL-148`/`CAP-06`): binary brightness, duty 0.50, half-period
+  ∝ the fd fraction the controller feeds as `StallFrac`. It is INTEGRATED, not read off a clock —
+  a period that changes mid-dwell must shorten the remainder, not jump the lamp. `Reset()` calls
+  each struct's own `Reset`/`Set` to clear the arrows to NaN and re-arm the lamp lit, so a respawn
+  snaps. The LOW ALT cue is legitimately a plain fixed blink (`WarnBlinkPeriod`) — do not
+  generalise the ramp onto it.
 ⚠ The gungauge/missilegauge face is on a generic child (`g815`/`g819`) on ALL planes (no Bloodhawk
   special case, unlike the damage dial) — "any unrecognised child = face" is the extraction rule.
 ⚠ The hardpoint gauge's `WeaponGauge.Slots`/`Selected` index by PYLON NUMBER
@@ -2455,11 +2462,12 @@ flattening, and glTF/collision/node visibility. `emitter-lifetime` is registered
 the only suite installing a fake `IEmitterFactory`, and `WithWorld` caches one world per chapter, so
 running first means it builds the shared C1 world while the fake is in effect; `damage-hd`'s
 `collision:true` immediately after forces a real rebuild for everyone downstream.
-⚠ **Seven suites moved out** (`PLAN-engine-free-suites.md` A3+A4, 2026-08-06): `flight-envelope`,
-  `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` (A3) and
-  `stunt-gates` (A4, once `StuntMission` itself went engine-free in A2) are now `CSVM.Tests` facts
-  calling the same `Probes.*`/plain statics/`StuntMission.Load` — the units count grew by 17 facts
-  and this registry shrank from 32 to 25. `stall-warning` (Wave B) stays here for now.
+⚠ **Eight suites moved out** (`PLAN-engine-free-suites.md` A3+A4+B11, 2026-08-06): `flight-envelope`,
+  `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` (A3),
+  `stunt-gates` (A4, once `StuntMission` itself went engine-free in A2) and `stall-warning` (B11,
+  once its `StallLamp`/`ArrowSweep` cues became plain `GaugeCluster` structs) are now `CSVM.Tests`
+  facts calling the same `Probes.*`/plain statics/`StuntMission.Load`/`GaugeCluster.StallLamp` —
+  this registry shrank from 32 to 24.
 ⚠ **`loadout-bind` does NOT split, correcting the plan's Decision 1.** `Probes.Loadouts` — the
   function the plan's A1 classification called "pure" — calls `StockLoadouts.Load()` (its
   no-arg default reads `res://data/stock_loadouts.json` through `Godot.FileAccess`) and then

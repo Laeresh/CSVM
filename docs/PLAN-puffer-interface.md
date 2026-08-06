@@ -5,8 +5,9 @@ review, candidate 3; decisions NOT yet settled). The first working session on th
 start with a `/grilling` session with the user** (item A1) — the Decisions table below is empty
 until then, and the checklist after A1 is provisional. When a session activates this plan, point
 PROJECT_CONTEXT.md's "Current status" at it. Sibling handoffs:
-[`PLAN-template-stage.md`](PLAN-template-stage.md),
-[`PLAN-engine-free-suites.md`](PLAN-engine-free-suites.md).
+[`PLAN-template-stage.md`](PLAN-template-stage.md).
+[`PLAN-engine-free-suites.md`](plans/PLAN-engine-free-suites.md) is a completed sibling, archived
+2026-08-06.
 
 `Puffer`'s caller-visible surface exposes the implementation's modes: `Burst`, `TrailAdvance`,
 `TrailEnd`, `TrailBurnAt`, `SustainAt`, `SustainEnd`, `DriveAt` (`Effects/Puffer.cs` ~:430–577) —
@@ -95,8 +96,8 @@ A1 → A2 → A3, linear. **File ownership:** `CSVM/src/Effects/Puffer.cs`,
 `CSVM/src/Mech3/Anim/PufferEmitterFactory.cs`, `CSVM/src/Flight/Projectile.cs` (trail sites only),
 `CSVM/src/Flight/DamageVisuals.cs`, `CSVM/src/Testing/Suites.cs` (the `puffer-modes` suite).
 Contends with [`PLAN-template-stage.md`](PLAN-template-stage.md) on the effects goldens/`Anim/`
-neighbourhood and with [`PLAN-engine-free-suites.md`](PLAN-engine-free-suites.md) on `Suites.cs` —
-run none of the three in parallel worktrees with each other.
+neighbourhood; [`PLAN-engine-free-suites.md`](plans/PLAN-engine-free-suites.md) (completed
+2026-08-06) also touched `Suites.cs` — no longer a live contention.
 
 ---
 
