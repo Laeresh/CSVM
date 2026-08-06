@@ -94,7 +94,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ☑ Menu: "Dogfight" entry, `MenuMode` enum, ≥2-player start lock + menu tests
 23. ☑ Per-pane VS HUD: match timer, own K/D, leader, kill banners
 24. ☑ Opponent edge-arrows (MarkerHud adaptation)
-25. ☐ `VersusBoard` end-of-match overlay + `RestartMatch` rematch
+25. ☑ `VersusBoard` end-of-match overlay + `RestartMatch` rematch
 26. ☐ Landing sweep: docs (cli.md, architecture.md, controls.md), follow-up BLs, SCOPING-M4 A1 note, `PT-` item
 
 ## Dependency and parallelism notes
@@ -428,7 +428,7 @@ edge as the target crosses out of frame (two-shot A/B).
 **⚠ Traps.** Do not use `AnimRuntime.PlayerPosition` (a P1-only singleton, flagged in
 `SCOPING-M4-ai.md:702-706`) — read positions from the rigs.
 
-## C25 ☐ `VersusBoard` end-of-match overlay + `RestartMatch` rematch
+## C25 ☑ `VersusBoard` end-of-match overlay + `RestartMatch` rematch
 
 **Goal.** On `MatchCompleted`, a full-window ranked board (winner or "DRAW" on top; kills + deaths
 per row, player colors) over the live world; R rematches — everyone respawns, scores and clock

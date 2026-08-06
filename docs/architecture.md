@@ -1544,6 +1544,23 @@ happened to.
   `AnimRuntime.PlayerPosition` (a P1-only singleton) — the same rule MarkerHud/FlightController
   already follow.
 
+## src/Flight/VersusBoard.cs
+The dogfight's shared results overlay (`PLAN-vs-mode.md` C25) — `StuntRaceBoard`'s construction
+almost verbatim: winner (their own `SplitScreen.PlayerColor`, or "DRAW" on a tie) on top, then one
+ranked row per player (tag, kills, deaths) from `VersusMatch.Standings()`, covering the WHOLE
+window on its own CanvasLayer (Layer 10, above SplitScreen's 0) — the match ends for everybody at
+once, unlike a per-pane HUD element. Wakes on `MatchCompleted`, hides in `_Process` once
+`Completed` clears (a rematch); `Populate` runs ONLY from `OnMatchCompleted`, so the drawn rows
+stay the ones the match actually ended with even after `Restart()` zeroes the live state —
+`StuntRaceBoard`'s `FinishTime`-snapshot discipline, achieved here for free since `VersusStanding`
+is a value-type snapshot already. Live flying continues underneath (nothing scores post-match); R
+routes through `GameSession.RestartMatch` (mirrors `RestartRace`: `VersusMatch.Restart()` then
+every rig respawns), owned only while the board is visible via `FlightController.Match is
+{ Completed: true }` — checked before the crash branch, same R-ownership shape `Race`/
+`RestartRace` already use.
+⚠ Scales on raw window height / 720, NOT HudMetrics — same reason `StuntRaceBoard` does: pane
+  damping would shrink a full-window overlay for no reason.
+
 ## src/Flight/Weather.cs
 `WeatherState`: per-mission atmosphere from the flown mission's own weather.json — per-zone fog
 (`FOG_COLOR`/`FOG_RANGES`/`FOG_ALTITUDE`), `SUNLIGHT_*` → `ZoneFog.WorldLight` (`SunIncidence`
@@ -1869,6 +1886,12 @@ free camera left the eye.
   `ProjectilePool.SimStep` steps real rounds with — see `Ballistics.cs`'s entry for the one thing
   that still differs between them (`dt`).
 ⚠ The stunt/race AllComplete freeze runs BEFORE the crash branch; Respawn never resets a mid-run stunt.
+⚠ Dogfight's R-ownership gate (`Match is { Completed: true }`, C25) is ALSO checked before the
+  crash branch, mirroring the stunt/race rule above, but does NOT freeze the sim like it — the
+  match keeps flying under its results board on every frame the button is not pressed, unlike a
+  finished stunt run. `DebugForceCrash(killer)` (`--debug-scoreboard --vs`) is the scripted twin of
+  a real weapon kill: it carries a killer id through the same `Crash` → `Downed` path a live hit
+  does, so a screenshot's K/D/leader/banner/board are real facts, not staged ones.
 
 ## src/Flight/PlaneDamage.cs
 Per-part armor + hit points from vehicle.json destroyable_parts (via PlaneStats). MapStruckPart
@@ -2366,10 +2389,17 @@ so `FlightRigAssembler` can bind every pane's `VersusHud` to it (C23); once ever
 forwards each one's `Downed` into TWO independent subscriptions: the scoring one (a killer inside
 the roster is `RegisterKill`, anything else — terrain, mid-air, unowned or `IncomingFire` rounds —
 is a plain `RegisterDeath`) and a kill-banner broadcast that pushes the same fact to every pane's
-`VersusHud.OnKill` (never piggybacked on the scoring handler); and arms every rig's 3 s
-auto-respawn (`VersusRespawnDelay`, R skips). The match clock advances on sim dt only
-(`_PhysicsProcess` realtime, `DriveSimSteps` when parent-driven), so a halt freezes the match with
-the sim.
+`VersusHud.OnKill` (never piggybacked on the scoring handler); arms every rig's 3 s auto-respawn
+(`VersusRespawnDelay`, R skips); sets `Controller.Match` + `Controller.RestartMatch` on every rig
+(C25 — the R-ownership seam, mirroring `Race`/`RestartRace`); and builds `VersusBoard` on its own
+CanvasLayer, same construction as the race board just above it. `RestartMatch(match)` (private,
+invoked through the delegate above) mirrors `RestartRace`: `match.Restart()` then every rig
+respawns. The match clock advances on sim dt only (`_PhysicsProcess` realtime, `DriveSimSteps`
+when parent-driven), so a halt freezes the match with the sim. `DriveSimSteps` also carries
+`--debug-scoreboard --vs`'s one-shot forced kill (`_versusDebugKillFired`, same single-fire shape
+as `--crash`'s `_crashFired`): P1 downs P2 through the real `DebugForceCrash(killer)` → `Crash` →
+`Downed` path on the first sim step, so a scripted screenshot has a real, attributed kill without
+scripting an actual shot.
 ⚠ **It parses no args and resolves nothing** — the Launcher hands it the one `SessionSpec` its
   session is built from; **a new flag is a SessionSpec change**. `_menuPads` is the deliberate
   exception: join-flow session state riding the `LauncherContext`, never the spec.

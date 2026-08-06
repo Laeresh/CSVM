@@ -117,6 +117,8 @@ public partial class GameSession : Node3D
     private SpawnPicker _spawnPicker = null!;
     // --crash[=frame]: fires once, the frame the sim clock first reaches _spec.CrashFrame.
     private bool _crashFired;
+    // --debug-scoreboard --vs: fires once, on the first sim step — see DriveSimSteps.
+    private bool _versusDebugKillFired;
     private SpectatorCamera? _spectator;
     // The session's shared world selection (--freecam/--anim-lab): the clicked leaf plus its
     // cs_name ancestor ladder, which every inspect tool reads instead of picking for itself.
@@ -1539,6 +1541,8 @@ public partial class GameSession : Node3D
                 if (rig.Controller is { } pilot)
                 {
                     pilot.AutoRespawnAfter = VersusRespawnDelay; // crash cam, then back in — R skips
+                    pilot.Match = match;                  // R-ownership gate (C25): board-up ⇒ rematch
+                    pilot.RestartMatch = () => RestartMatch(match);
                     pilot.Downed += (victim, killer) =>
                     {
                         if (killer is int k && k >= 0 && k < match.PlayerCount)
@@ -1560,6 +1564,15 @@ public partial class GameSession : Node3D
             GD.Print($"dogfight: {_rigs.Count} pilots, " +
                      (match.KillTarget > 0 ? $"first to {match.KillTarget} kills" : "no kill target") + ", " +
                      (match.TimeLimit > 0f ? $"{match.TimeLimit / 60f:0.#} min limit" : "no time limit"));
+
+            // The match's shared results board (C25): same construction as the race board above —
+            // one CanvasLayer over the whole window (the match ends for everybody at once), R
+            // routed back through this session via RestartMatch.
+            var board = VersusBoard.Build(match, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
+                exitsToMenu: _menuDriven);
+            var boardLayer = new CanvasLayer { Name = "dogfight_board", Layer = 10 };
+            boardLayer.AddChild(board);
+            _worldRoot!.AddChild(boardLayer);
         }
 
         // --incoming: the near-miss test rig — a phantom shooter on every pilot's six, so the
@@ -1817,6 +1830,17 @@ public partial class GameSession : Node3D
             rig.Controller?.Respawn();
     }
 
+    /// <summary>Rematch from the dogfight results board (R): every score and the clock reset, then
+    /// every plane back to its own spawn — mirrors <see cref="RestartRace"/> exactly. The board
+    /// retires itself once <see cref="VersusMatch.Completed"/> clears.</summary>
+    private void RestartMatch(VersusMatch match)
+    {
+        GD.Print("dogfight: rematch — scores and clock reset for every pilot");
+        match.Restart();
+        foreach (var rig in _rigs)
+            rig.Controller?.Respawn();
+    }
+
     /// <summary>Frames the parked plane in the orbit view. <c>--lookat</c> is a true pivot and is
     /// used verbatim; <c>--direction</c> names only an aim, so a pivot is synthesized on the aim
     /// ray — at the subject's nearest approach when an eye was given, otherwise the subject's own
@@ -1865,6 +1889,16 @@ public partial class GameSession : Node3D
             _crashFired = true;
             foreach (var rig in _rigs)
                 rig.Controller?.DebugForceCrash();
+        }
+        // --debug-scoreboard --vs: one scripted, ATTRIBUTED kill (P1 downs P2) on the first sim
+        // step, through the same Downed path a real kill takes — so a screenshot has a real K/D,
+        // leader and kill banner to show without scripting an actual shot, and (with --vs-kills=1)
+        // a deterministic completed match for the results board. Same single-fire shape as
+        // --crash above.
+        if (_spec.Versus && _spec.DebugScoreboard && !_versusDebugKillFired && _rigs.Count > 1)
+        {
+            _versusDebugKillFired = true;
+            _rigs[1].Controller?.DebugForceCrash(_rigs[0].Controller?.PlayerIndex);
         }
         for (int i = 0; i < clock.Steps; i++)
         {

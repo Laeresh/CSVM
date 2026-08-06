@@ -234,6 +234,18 @@ public partial class FlightController : Node3D
     /// work). Invoked when a player presses R on the shared results board.</summary>
     public Action? RestartRace;
 
+    /// <summary>The dogfight this plane is one seat of, or null outside <c>--vs</c>. Set, once
+    /// <see cref="VersusMatch.Completed"/> the results board is up and any player's R there means
+    /// "rematch" instead of "respawn me" — checked before the crash branch, exactly the same
+    /// R-ownership rule <see cref="Race"/>/<see cref="RestartRace"/> already follow (the board
+    /// owns R only while it is visible, which mirrors <c>Completed</c> exactly).</summary>
+    public VersusMatch? Match;
+
+    /// <summary>Restarts the whole match (the session owns every player's plane, so it does the
+    /// work): scores and clock reset, every plane respawns. Invoked when a player presses R on the
+    /// dogfight results board.</summary>
+    public Action? RestartMatch;
+
     /// <summary>0-based player index — this plane's seat in the race and its pane, and the
     /// identity a round it fired carries (<c>ProjectilePool.Spawn</c>'s shooter id).</summary>
     public int PlayerIndex;
@@ -677,11 +689,14 @@ public partial class FlightController : Node3D
     /// headless trigger for the per-player crash rig. <c>hitName</c>/<c>part</c> are nominal and
     /// there is no struck body, so <see cref="ClassifySurface"/> resolves
     /// <see cref="CrashSurface.Ground"/> however the plane is posed — the water variant needs a real
-    /// dive into a <c>water</c>-tagged collider. A no-op once already crashed.</summary>
-    public void DebugForceCrash()
+    /// dive into a <c>water</c>-tagged collider. A no-op once already crashed.
+    /// <paramref name="killer"/> is null (a plain death) by default — <c>--crash</c> itself never
+    /// passes one; <c>--debug-scoreboard --vs</c> passes a shooter id so a Dogfight screenshot has
+    /// a real, attributed kill to show without scripting an actual shot.</summary>
+    public void DebugForceCrash(int? killer = null)
     {
         if (!_crashed)
-            Crash(_model.Position, "debug-crash", "test", null);
+            Crash(_model.Position, "debug-crash", "test", null, killer);
     }
 
     /// <summary>One projectile hit on this plane (the pool resolved the struck box already):
@@ -757,6 +772,18 @@ public partial class FlightController : Node3D
         if (DebugCompleteStunt && Stunt is { AllComplete: false }
             && (Race == null || Stunt.Elapsed >= PlayerIndex * DebugFinishStagger))
             Stunt.DebugCompleteAll(Race != null ? PlayerIndex * 2f : 0f);
+
+        // Dogfight (VS, C25): once the match is decided the results board is up — Visible mirrors
+        // Match.Completed exactly, same as the race board mirrors Race.AllFinished — and any
+        // player's R there is a rematch, not a respawn. Checked before the crash branch (a still-
+        // crashed loser's R means "rematch", not "respawn me alone"; RestartMatch already respawns
+        // every rig, this one included) but does NOT freeze the sim like the stunt/race branch
+        // below — flying continues under the board on every frame the button is not pressed.
+        if (Match is { Completed: true } && RespawnPressed())
+        {
+            RestartMatch?.Invoke();
+            return;
+        }
 
         // Run complete: the flight sim freezes in place (the chase camera in _Process still holds
         // on the plane). Solo, the scoreboard is up and R (gamepad Y/A) starts a fresh run — the
