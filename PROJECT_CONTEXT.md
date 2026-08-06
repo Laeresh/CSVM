@@ -191,10 +191,8 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt mode, or 2–4-player splitscreen, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, and world destructibles that take damage, die, lose collision, throw debris and reset. The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
-**Active plan: [`docs/PLAN-m3-polish-9.md`](docs/PLAN-m3-polish-9.md)** — all ten items landed
-(Waves A, B and C); the plan moves to `docs/plans/` with its `plans.md` row.
-**Next:** close the plan out; owed at the controls: the `PT-41` sky-zone flight, the new cloud-field
-playtest (`BL-118`), and the cockpit re-tests (`PT-27`/`PT-28`, [`playtest.md`](playtest.md)). Verify any change with
+**No active plan.** Owed at the controls: `PT-27`, `PT-28`, `PT-41` and `PT-42`
+([`playtest.md`](playtest.md)). Verify any change with
 **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read
 [`docs/verification.md`](docs/verification.md) first.
 

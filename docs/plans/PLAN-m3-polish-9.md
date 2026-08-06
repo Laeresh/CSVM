@@ -1,8 +1,6 @@
 # Milestone 3 — Polish 9: the 2026-08-05 playtest batch
 
-**ACTIVE PLAN** (written 2026-08-05). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE** (2026-08-06). Archived under `docs/plans/`; all ten items landed.
 
 Ten items drawn from `backlog.md` under the criteria the user picked for this run: **unblocked and
 visible** — no owed `CAP-nn` capture, no M4/menu-hub dependency, no pending user decision, a
