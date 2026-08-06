@@ -77,9 +77,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Air-to-air hittability (front-loads M4 A1)
 
-1. ☐ Aircraft physics bodies on the shared `PlaneCollider` shapes, with collision layers
-2. ☐ Projectiles strike aircraft: per-shot owner exclusion, struck-part mapping, damage applied
-3. ☐ In-engine hittability suite: hit → part → damage → kill chain + self-hit negative case
+1. ☑ Aircraft physics bodies on the shared `PlaneCollider` shapes, with collision layers
+2. ☑ Projectiles strike aircraft: per-shot owner exclusion, struck-part mapping, damage applied
+3. ☑ In-engine hittability suite: hit → part → damage → kill chain + self-hit negative case
 
 ### Wave B — Kill flow and match bookkeeping
 
@@ -109,7 +109,7 @@ in this one worktree; no parallel worktrees planned.
 
 # Wave A — Air-to-air hittability
 
-## A1 ☐ Aircraft physics bodies on the shared `PlaneCollider` shapes, with collision layers
+## A1 ☑ Aircraft physics bodies on the shared `PlaneCollider` shapes, with collision layers
 
 **Goal.** Every flying aircraft carries a `CollisionObject3D` body whose shapes are the existing
 `PlaneCollider` boxes, on a dedicated collision layer — so a physics ray can strike a plane, and
@@ -144,7 +144,7 @@ deliberate: the sweep must exclude the sweeping plane's own body, and a mid-air 
 the existing `SurviveHit`/`Crash` path, not a physics solver response (the plane is a `Node3D`
 moved by `FlightModel`, not physics-driven — nothing here may start pushing transforms).
 
-## A2 ☐ Projectiles strike aircraft: per-shot owner exclusion, struck-part mapping, damage applied
+## A2 ☑ Projectiles strike aircraft: per-shot owner exclusion, struck-part mapping, damage applied
 
 **Goal.** A fired round that crosses an opponent's plane hits it: the shooter's own plane is never
 hittable by their own rounds, the struck box maps to a data part, and the weapon's damage values
@@ -178,7 +178,7 @@ route plane hits through the destructible pipeline (`DestructibleRegistry` stage
 world-object semantics). `PlaneDamage`'s "tail" arm is correct only because `PlaneCollider.Relabel`
 hands it no outboard boxes — do not "fix" sidedness in `PlaneDamage` (architecture.md, rejected).
 
-## A3 ☐ In-engine hittability suite: hit chain + self-hit negative case
+## A3 ☑ In-engine hittability suite: hit chain + self-hit negative case
 
 **Goal.** A `--run-tests` suite pins the whole chain — projectile hit → struck part → damage →
 critical-part kill — and pins that a plane's own rounds never strike it. The self-hit case is

@@ -528,7 +528,9 @@ public sealed partial class WeaponLab : Node3D
         }
         var from = _camera.ProjectRayOrigin(screen);
         var dir = _camera.ProjectRayNormal(screen);
-        var query = PhysicsRayQueryParameters3D.Create(from, from + (dir * RayLength));
+        // World colliders only: a pick places the aircraft against the WORLD — the held plane's
+        // own body (or a wingman's) must never be what a placement click lands on.
+        var query = PhysicsRayQueryParameters3D.Create(from, from + (dir * RayLength), CollisionLayers.World);
         var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
         if (hit.Count == 0)
         {
@@ -581,7 +583,7 @@ public sealed partial class WeaponLab : Node3D
         dir = dir.Normalized();
         // Probe the point itself so the readout names a real body when there is one under the aim,
         // rather than reporting "default" for a building the tester deliberately aimed at.
-        var query = PhysicsRayQueryParameters3D.Create(point - (dir * ClearanceProbeStart), point + (dir * ClearanceProbeStart));
+        var query = PhysicsRayQueryParameters3D.Create(point - (dir * ClearanceProbeStart), point + (dir * ClearanceProbeStart), CollisionLayers.World);
         var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
         var body = hit.Count > 0 ? hit["collider"].As<Node>() : null;
         PlaceOn(point, dir, body, body != null ? NameOfStruck(body) : "(world point)", aimOnly: false);
@@ -642,7 +644,7 @@ public sealed partial class WeaponLab : Node3D
         // Take the FIRST thing the line to that point actually strikes: the readout must name the
         // surface a round fired down this aim would hit, which is not always the one searched for.
         var dir = (bestPoint - origin).Normalized();
-        var query = PhysicsRayQueryParameters3D.Create(origin, origin + (dir * RayLength));
+        var query = PhysicsRayQueryParameters3D.Create(origin, origin + (dir * RayLength), CollisionLayers.World);
         var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
         var point = hit.Count > 0 ? hit["position"].AsVector3() : bestPoint;
         var body = hit.Count > 0 ? hit["collider"].As<Node>() : best;
@@ -657,7 +659,7 @@ public sealed partial class WeaponLab : Node3D
     {
         var back = -dir;
         var start = point + (back * ClearanceProbeStart);
-        var query = PhysicsRayQueryParameters3D.Create(start, point + (back * _standoff));
+        var query = PhysicsRayQueryParameters3D.Create(start, point + (back * _standoff), CollisionLayers.World);
         var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
         if (hit.Count == 0)
         {

@@ -105,6 +105,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/WingLightBlinker.cs` — blinks the wingtip flares 0.08 s every 1.5 s, reset off on respawn; `--fly` only.
 - `src/Flight/PylonOrdnance.cs` — the rockets under the wings: one FLYOUT-model body per loaded pylon, hidden as its ammo depletes; `--fly` only.
 - `src/Flight/PlaneCollider.cs` — derives 5–8 plane-frame collision boxes from the built model's triangles, with no per-plane data.
+- `src/Flight/CollisionLayers.cs` — the named physics layers (world / aircraft): the one place a layer bit is assigned a meaning.
+- `src/Flight/AircraftBody.cs` — the flying plane's physics body: the shared `PlaneCollider` boxes on the aircraft layer; struck shape → part name.
 - `src/Flight/PlaneDamage.cs` — per-part HP model from vehicle.json `destroyable_parts`; maps struck box + impact point to a data part.
 - `src/Flight/DamageVisuals.cs` — flips the torn-skin `pdpN` panels (paired by mesh position) at the data's injure thresholds, plus fire trails.
 - `src/Flight/DamageLab.cs` — the `--damage`/F5 slider UI: one HP slider per part, driving the parked plane's DamageVisuals or the flown plane's real PlaneDamage.
@@ -1269,7 +1271,15 @@ round has actually flown.
 every player's guns — `shooterId` is the firing `PlayerIndex` (`NoShooter` for the lab's), carried on
 the round so the near-miss cue can exclude its own. `NearMissTargets` is that cue's registry (BL-087):
 each step measures the round's ACTUAL travelled segment — hit/fuse point included — against every
-registered aircraft but its shooter's, and reports the pass distance (`WarningShotCue`). `DamageSink` (→ `AnimRuntime.DamageAt`) turns a hit into destructible damage;
+registered aircraft but its shooter's, and reports the pass distance (`WarningShotCue`).
+`RegisterAircraft` is the hittability half: the hit ray runs world+aircraft with each round
+excluding its own shooter's registered `AircraftBody` by RID; a struck plane classifies `Player`
+and routes to `FlightController.TakeProjectileHit` (struck shape → part, armor-first damage) —
+never the destructible pipeline, and no blast sphere: planes take direct hits only (the
+fuse/blast sphere stays world-masked on purpose).
+⚠ `_ray` is a shared mutable query object: per-shot `Exclude` is set AND reset around every
+  query — a leaked exclusion silently shields the next round's target.
+`DamageSink` (→ `AnimRuntime.DamageAt`) turns a world hit into destructible damage;
 `EffectSink` (→ `AnimRuntime.PlayEffectAt`) plays the non-model impact effects — rockets on the
 runtime's own bound, gun hits under `GunEffectTtl` 0.3 s (the `*_gunhit` family's longest authored
 stop, and the only bound the stop-less slug defs have) and one play per `GunEffectInterval` 0.1 s
@@ -1764,6 +1774,8 @@ lab's rebuild-on-swap cannot leave the old ordnance hanging beside the new.
 Derives 5–8 plane-frame collision boxes from the built model's mesh triangles alone (no per-plane
 data): region-clipped geometry (tail/wing/fuselage), then greedy volume-guided refinement cutting
 one OR two parallel planes per axis (the double cut separates bilateral pairs like twin fins).
+Single-sourced: the terrain sweep casts these boxes AND `AircraftBody` mounts the same
+`BoxShape3D` resources as the plane's hittable body — never a second derivation.
 ⚠ Relabel renames aft outboard boxes `wing` (box wholly one side of the centerline + centre
   outboard of WingBandFrac) so PlaneDamage's localImpact-blind "tail" arm never sees a wingtip
   strike. The half-span is known here — do not side-split in PlaneDamage instead.
@@ -1778,7 +1790,10 @@ logs), crash and respawn. The camera is `CameraController`'s — this node only 
 the pose, the dt and the mixed orbit axes (`OrbitInput`); on a crash it cuts to `CrashView` once,
 writes nothing to the camera until respawn, and hides the HUD layer (the original's crash camera
 shows no HUD — footage), restoring it on respawn. Sweeps the
-PlaneCollider boxes via CastMotion each physics frame; the sim half is `SimStep(dt)`, called by
+PlaneCollider boxes via CastMotion each physics frame — mask world+aircraft with its own
+`Body` (`AircraftBody`, built in `_Ready` from the same boxes) excluded by RID, so another plane
+is solid and a mid-air resolves through the same SurviveHit/Crash as terrain; `Crash`/`Respawn`
+toggle the body's hittability; the sim half is `SimStep(dt)`, called by
 `_PhysicsProcess` (realtime clock) or by `GameSession` (fixed/halted clock). Collaborators:
 FlightModel, CameraController + CamParams, Loadout + ProjectilePool (guns/rockets),
 `CollideDamageSink` →
@@ -1789,8 +1804,10 @@ here maps it to `CrashSurface`) to pick the variant: a `water`-tagged body plays
 `Air` is the no-impact destruct and has no trigger. `--crash` has no struck body, so it forces dirt.
 It also fires `Audio.OnEngineStop` (the wind-down cue, layered over the explosion) and plays
 `stopprops` on `CrashRuntime` — the one call site every engine-death path shares, whether the
-collision resolver called it for a full-speed impact or for a critical part reaching 0 HP on a
-survivable-speed graze (`SurviveHit` returning false). `Respawn` plays `startprops` back and resets
+collision resolver called it for a full-speed impact, for a critical part reaching 0 HP on a
+survivable-speed graze (`SurviveHit` returning false), or for a projectile kill
+(`TakeProjectileHit`: the pool-resolved hit — part-mapped armor-first damage plus the graze's
+feedback triple, no cooldown since rounds are discrete). `Respawn` plays `startprops` back and resets
 `ThrottleSmoke`, which `Update` otherwise drives every frame off the live throttle.
 A survivable graze also plays touchdown.zrd's per-surface reaction (`GrazeReaction`): the struck
 collider classified through the same call picks `touchdown_default` (buildings,
@@ -2469,8 +2486,11 @@ the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replac
 emitter's own MODES are. Neither covers the other's job.
 
 ## src/Testing/Suites.cs
-The 25 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
-the full-rig `Loadout.ForRig`), live weapon fire, destructible stages/death/census, animation
+The 26 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
+the full-rig `Loadout.ForRig`), live weapon fire, the air-to-air hit chain (`air-to-air`: two real
+flight rigs on manual sim steps — body strike, struck-shape→part mapping, armor-first data-value
+damage, critical-zero Crash, crashed-plane immunity, and the zero-self-hits negative case, which
+must stay non-optional), destructible stages/death/census, animation
 stops and bounce-terminated launches, the full effects sweep (`effects-census`: every effect
 resolves, template meshes peak at the CALL SITE not the stage origin, none stays lit after its
 stop — `Probes.Effects` rows asserted; its puffer/mesh tallies are golden counts under the
@@ -2905,3 +2925,24 @@ the extraction scripts). Warn, never block: the dev tree holds valid extractions
   change that invalidates old extractions — a hand-maintained promise, not automation.
 ⚠ The stamp is parsed via `File.ReadAllText`, not bytes: PowerShell 5.1 writes UTF-8 WITH a BOM,
   which `JsonDocument.Parse(byte[])` rejects.
+
+## src/Flight/CollisionLayers.cs
+The named physics collision layers — world (layer 1, the engine default every pre-existing
+collider sits on implicitly) and aircraft (layer 2, `AircraftBody`) — plus the combined mask.
+The first and only place a layer bit is assigned a meaning; new layers go here, never inline.
+⚠ Godot's default query mask is ALL layers: a query that should not see planes must say
+  `CollisionLayers.World` explicitly (weapon-lab picks, the pool's fuse/blast spheres do).
+⚠ Nothing assigns `World` to world colliders — they carry it by engine default. Assigning it
+  everywhere would be churn for zero behavior; the constant documents the meaning instead.
+
+## src/Flight/AircraftBody.cs
+The flying aircraft's physics body: one `AnimatableBody3D` child of `FlightController`, one
+`CollisionShape3D` per `PlaneCollider.Part` reusing the SAME `BoxShape3D` + local transform the
+terrain sweep casts, on the aircraft layer. Rides the controller's transform; `PartName(shapeIdx)`
+maps a query's struck shape back to the part (shapes added in `Parts` order); `ExcludeSelf` is the
+cached one-entry RID list the owner's own queries pass; `SetHittable` drops it to layer 0 while
+crashed, back at respawn.
+⚠ The plane stays Node3D-moved by `FlightModel` — `SyncToPhysics` false, `CollisionMask` 0: the
+  body is a query target only, and nothing may let the physics engine push plane transforms. A
+  plane-vs-plane impact resolves through the striking plane's `SurviveHit`/`Crash`, never a solver.
+⚠ Shapes are shared resources, not copies — a fidelity upgrade edits `PlaneCollider`, not this.
