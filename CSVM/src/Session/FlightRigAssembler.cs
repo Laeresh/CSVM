@@ -311,6 +311,17 @@ public sealed class FlightRigAssembler
             }
         }
 
+        // Dogfight (--vs): the per-pane match timer/K-D/leader line + kill banner (C23). Bound to
+        // the match GameSession built before this loop ran (mirrors Race above); the kill facts
+        // themselves arrive later, once every rig exists, through GameSession's own Downed
+        // subscription.
+        if (_in.VersusMatch is { } versus)
+        {
+            controller.VersusHud = VersusHud.Build(versus, pi);
+            if (verbose)
+                GD.Print("dogfight HUD: match timer/K-D/leader line + kill banner");
+        }
+
         var (spawnPos, spawnLookAt) = _spawns.ChooseSpawn(_in.SpawnList, _in.MissionZrdrPath, _in.SpawnBase, pi, tag);
         controller.Setup(new FlightModel(stats), rig.Camera, _in.CamParamsFor(planeName),
             spawnPos, spawnLookAt);
@@ -431,6 +442,9 @@ public sealed class FlightRigAssembler
         /// The mission's danger zones (--stunt), and the shared race when several pilots fly them.
         public StuntMission? StuntZones;
         public StuntRace? Race;
+        /// The dogfight match (--vs), built before this loop runs so every pane's VersusHud binds
+        /// to the same instance GameSession later feeds Downed reports into.
+        public VersusMatch? VersusMatch;
 
         // The build's archives and world outputs (BuildState's, unchanged).
         public TextureArchive Textures = null!;

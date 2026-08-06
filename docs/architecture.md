@@ -1521,6 +1521,19 @@ time-out win, draw, post-completion no-op, rematch re-arm, each limit disabled o
 ⚠ Deliberately not a Node — freed with the session, host-fed exactly like `StuntRace`'s `Tick`/
   `Advance` timekeeping.
 
+## src/Flight/VersusHud.cs
+Per-pane Dogfight HUD (`PLAN-vs-mode.md` C23): a compact status line — remaining time (omitted
+once `VersusMatch.TimeLimit` is disabled), this pane's own K/D, and the current leader's tag —
+drawn in MarkerHud's run-status slot (`RefStatusY` — Stunt and Versus are mutually exclusive, so
+the two never compete for it), plus a transient "P2 DOWNED P3" kill banner ("P3 DOWN" with no
+killer). `Build(match, playerIndex)` binds the match; the status line pulls it live every
+`_Draw` (no pose to project, unlike MarkerHud, so nothing is fed per frame for it) and `OnKill`
+is pushed once per `Downed` report by GameSession's own broadcast — a second subscription,
+never piggybacked on the scoring one, so every pane hears every kill/death, not just the two it
+happened to.
+⚠ `LeaderText` reads "LEADER —" whenever more than one player shares rank 1, including the 0-0
+  tie before the first kill — accurate, not a placeholder: nobody leads yet.
+
 ## src/Flight/Weather.cs
 `WeatherState`: per-mission atmosphere from the flown mission's own weather.json — per-zone fog
 (`FOG_COLOR`/`FOG_RANGES`/`FOG_ALTITUDE`), `SUNLIGHT_*` → `ZoneFog.WorldLight` (`SunIncidence`
@@ -2338,11 +2351,15 @@ build's edges. `BuildsCollision` is the only spelling of "does this session buil
 when `_spec.AnimLab`, else `.Session`), which is also where `TexturesOutliveBuild`/
 `SoundsOutliveBuild` come from now — `BuildWorldStage`'s `WorldSession.Options` reads them off
 `BuildState`, it does not set them by hand. In `--vs`, `BuildFlightRigs` builds one `VersusMatch`
-(`VsKills`, `VsTimeMinutes`×60 s), forwards every rig's `Downed` into it — a killer inside the
-roster is `RegisterKill`, anything else (terrain, mid-air, unowned or `IncomingFire` rounds) is a
-plain `RegisterDeath` — and arms every rig's 3 s auto-respawn (`VersusRespawnDelay`, R skips);
-the match clock advances on sim dt only (`_PhysicsProcess` realtime, `DriveSimSteps` when
-parent-driven), so a halt freezes the match with the sim.
+(`VsKills`, `VsTimeMinutes`×60 s) BEFORE the rig loop — same reason `StuntRace` is built early —
+so `FlightRigAssembler` can bind every pane's `VersusHud` to it (C23); once every rig exists it
+forwards each one's `Downed` into TWO independent subscriptions: the scoring one (a killer inside
+the roster is `RegisterKill`, anything else — terrain, mid-air, unowned or `IncomingFire` rounds —
+is a plain `RegisterDeath`) and a kill-banner broadcast that pushes the same fact to every pane's
+`VersusHud.OnKill` (never piggybacked on the scoring handler); and arms every rig's 3 s
+auto-respawn (`VersusRespawnDelay`, R skips). The match clock advances on sim dt only
+(`_PhysicsProcess` realtime, `DriveSimSteps` when parent-driven), so a halt freezes the match with
+the sim.
 ⚠ **It parses no args and resolves nothing** — the Launcher hands it the one `SessionSpec` its
   session is built from; **a new flag is a SessionSpec change**. `_menuPads` is the deliberate
   exception: join-flow session state riding the `LauncherContext`, never the spec.
@@ -2716,8 +2733,9 @@ extraction) and as an `effects-census` condition on whatever chapter the run was
 Assembles one player's flight rig: the painted plane model, the `FlightController` and everything hung
 on it — loadout/ordnance, compass, gauges, HUD font test/weapon readout/reticle, damage visuals,
 audio, the throttle-slam exhaust smoke (`ThrottleSlamSmoke.Build`, after `Setup` so it can seed its
-climb tracker from the live spawn throttle), this player's stunt run + marker/scoreboard/race entry,
-the spawn placement, and the crash runtime built after the controller joins the tree. Constructed
+climb tracker from the live spawn throttle), this player's stunt run + marker/scoreboard/race entry
+(or, in `--vs`, its `VersusHud` bound to `Inputs.VersusMatch` — C23), the spawn placement, and the
+crash runtime built after the controller joins the tree. Constructed
 once per session build from
 `(SessionSpec, LiveryResolver, SpawnPicker, WorldEffectsFactory, worldRoot, Inputs)`, then
 `Assemble(pi, rig)` once per rig; `MeshInstances`/`WhatSuffix` accumulate across the rigs for the

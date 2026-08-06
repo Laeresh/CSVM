@@ -218,6 +218,12 @@ public partial class FlightController : Node3D
     /// the run's RunCompleted. Null in free flight.</summary>
     public StuntScoreboard? Scoreboard;
 
+    /// <summary>The Dogfight per-pane HUD (PLAN-vs-mode C23): the match timer/K-D/leader line and
+    /// the kill banner. Added to the HUD canvas; fed nothing per frame (it pulls VersusMatch's own
+    /// live state) beyond the kill facts GameSession pushes through its OnKill. Null outside
+    /// <c>--vs</c>.</summary>
+    public VersusHud? VersusHud;
+
     /// <summary>The splitscreen stunt race this plane is one seat of, or null when
     /// flying solo. Set, clearing every zone parks this player at the finish while the others fly
     /// on, and R only becomes a rematch once the whole field is in — a rematch restarts every
@@ -477,6 +483,8 @@ public partial class FlightController : Node3D
             canvas.AddChild(WeaponReadout); // selected-weapon text readout, over the dials
         if (Marker != null)
             canvas.AddChild(Marker); // stunt objective marker, drawn on top of the dials
+        if (VersusHud != null)
+            canvas.AddChild(VersusHud); // dogfight timer/K-D/leader line + kill banner
         if (Scoreboard != null)
             canvas.AddChild(Scoreboard); // end-of-run results, drawn over everything
         if (FontTest != null)

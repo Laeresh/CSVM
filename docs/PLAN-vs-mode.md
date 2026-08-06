@@ -92,7 +92,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ `SessionSpec`: `--vs`, `--vs-kills`, `--vs-time`, precedence, `dogfight_ace` default + parse tests
 22. ☑ Menu: "Dogfight" entry, `MenuMode` enum, ≥2-player start lock + menu tests
-23. ☐ Per-pane VS HUD: match timer, own K/D, leader, kill banners
+23. ☑ Per-pane VS HUD: match timer, own K/D, leader, kill banners
 24. ☐ Opponent edge-arrows (MarkerHud adaptation)
 25. ☐ `VersusBoard` end-of-match overlay + `RestartMatch` rematch
 26. ☐ Landing sweep: docs (cli.md, architecture.md, controls.md), follow-up BLs, SCOPING-M4 A1 note, `PT-` item
@@ -382,7 +382,7 @@ entry (the layout-verification path cli.md documents for `--menu`).
 **⚠ Traps.** The callback signature change touches every `Launch` call site — sweep them all in
 one edit. Don't leak match-rule configuration into the menu (Decision #7: defaults only).
 
-## C23 ☐ Per-pane VS HUD: match timer, own K/D, leader, kill banners
+## C23 ☑ Per-pane VS HUD: match timer, own K/D, leader, kill banners
 
 **Goal.** Each pane shows one compact `HudFont` line — remaining time, own kills/deaths, current
 leader — and a transient "P2 DOWNED P3" banner on each kill, sized through `HudMetrics` so it

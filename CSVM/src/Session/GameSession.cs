@@ -1363,6 +1363,13 @@ public partial class GameSession : Node3D
                 race = new StuntRace(); // splitscreen: a race, ranked on the shared board
         }
 
+        // Dogfight (--vs): built here, before the rigs — same reason Race is (FlightRigAssembler
+        // binds every pane's VersusHud to this one instance below); the score/respawn plumbing
+        // that feeds it Downed reports only runs once every rig exists, further down.
+        VersusMatch? versus = _spec.Versus
+            ? new VersusMatch(_rigs.Count, _spec.VsKills, _spec.VsTimeMinutes * 60f)
+            : null;
+
         // The game's own HUD bitmap font (extracted/rimage/5pointhud*.png), loaded once and
         // shared across panes — the E36 weapon readout and the --hud-font-test proof overlay
         // both draw with it. Null (one log line) if the rimage atlas is absent; both are then
@@ -1399,6 +1406,7 @@ public partial class GameSession : Node3D
                 ReticleTex = reticleTex,
                 StuntZones = stuntZones,
                 Race = race,
+                VersusMatch = versus,
                 Textures = state.Textures,
                 ZrdrPath = state.ZrdrPath,
                 MissionZrdrPath = state.MissionZrdrPath,
@@ -1523,9 +1531,8 @@ public partial class GameSession : Node3D
         // inside the roster scores a kill; anything else — terrain, mid-air, an unowned or
         // non-player round — is a plain death. The match ignores post-completion events itself,
         // so no guard is layered here. The rigs report facts; only this session applies rules.
-        if (_spec.Versus)
+        if (versus is { } match)
         {
-            var match = new VersusMatch(_rigs.Count, _spec.VsKills, _spec.VsTimeMinutes * 60f);
             _versus = match;
             foreach (var rig in _rigs)
                 if (rig.Controller is { } pilot)
@@ -1537,6 +1544,14 @@ public partial class GameSession : Node3D
                             match.RegisterKill(k, victim);
                         else
                             match.RegisterDeath(victim);
+                    };
+                    // The kill banner (C23): a SEPARATE subscription from the scoring one above —
+                    // every pane's HUD hears every Downed report, not just the shooter's/victim's,
+                    // so the whole field sees who went down.
+                    pilot.Downed += (victim, killer) =>
+                    {
+                        foreach (var other in _rigs)
+                            other.Controller?.VersusHud?.OnKill(killer, victim);
                     };
                 }
             match.MatchCompleted += () => GD.Print("dogfight: match complete — " + string.Join(", ",
