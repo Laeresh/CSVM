@@ -10,8 +10,8 @@ using Godot;
 namespace CSVM;
 
 /// <summary>The session shapes, closed. Every launch is exactly one of these; <c>Stunt</c>,
-/// <c>Players</c>, <c>EmptyStage</c>, <c>NodeName</c> and <c>DamageLab</c> are modifiers on top of
-/// one, not shapes of their own.</summary>
+/// <c>Versus</c>, <c>Players</c>, <c>EmptyStage</c>, <c>NodeName</c> and <c>DamageLab</c> are
+/// modifiers on top of one, not shapes of their own.</summary>
 public enum SessionMode
 {
     /// <summary>No content arg (or <c>--menu</c>): the launchscreen picks the session.</summary>
@@ -73,7 +73,7 @@ public sealed record SessionSpec
     // vote for the same mode (--markers/--damage/--weapon-* for the viewer, --damage-test/
     // --effects-test for the freecam, --play-anim=/--debug-anim-ui for the anim lab), and the
     // arbitration below is the only thing entitled to turn them into one.
-    private bool _flyArg, _viewerArg, _freecamArg, _animLabArg, _stuntArg, _damageLabArg, _detArg;
+    private bool _flyArg, _viewerArg, _freecamArg, _animLabArg, _stuntArg, _vsArg, _damageLabArg, _detArg;
 
     private SessionSpec()
     {
@@ -102,6 +102,18 @@ public sealed record SessionSpec
     /// <summary><b>Resolved.</b> Flight plus the mission's danger zones — a modifier on
     /// <see cref="SessionMode.Fly"/>, cleared by any mode that beats flight.</summary>
     public bool Stunt { get; private set; }
+    /// <summary><b>Resolved.</b> Splitscreen free-for-all deathmatch ("Dogfight") — a modifier on
+    /// <see cref="SessionMode.Fly"/>, cleared by any mode that beats flight, same as
+    /// <see cref="Stunt"/>. <c>--vs</c> beats <c>--stunt</c> by fixed precedence when both are
+    /// given, with a warning — the two are not composable. The menu enforces
+    /// <see cref="Players"/> &gt;= 2 before it will start a match; the CLI only warns.</summary>
+    public bool Versus { get; private set; }
+    /// <summary><c>--vs-kills=N</c>: the kill target that ends a match early. Default 5; 0
+    /// disables the kill limit (the match then runs to the time limit alone).</summary>
+    public int VsKills { get; private set; } = 5;
+    /// <summary><c>--vs-time=minutes</c>: the match time limit, in MINUTES. Default 5; 0 disables
+    /// the time limit (the match then runs to the kill target alone).</summary>
+    public int VsTimeMinutes { get; private set; } = 5;
     /// <summary><b>Resolved.</b> Open the aircraft's per-part HP sliders at launch — a modifier on
     /// <see cref="SessionMode.Viewer"/> (the parked plane) or <see cref="SessionMode.Fly"/> (the
     /// flown one), dropped by the modes that build no aircraft at all. The lab itself is always
@@ -133,6 +145,7 @@ public sealed record SessionSpec
         : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips ? "dump"
         : Mode == SessionMode.Freecam ? "freecam"
         : Mode == SessionMode.Viewer ? "viewer"
+        : Versus ? "vs"
         : Stunt ? "stunt"
         : Mode == SessionMode.Fly ? "fly"
         : "menu";
@@ -165,8 +178,9 @@ public sealed record SessionSpec
     /// or by <c>--node=</c>, whose subtree comes out of the chapter's gamez.</summary>
     public bool ChapterGiven { get; private set; }
     public string Mission { get; private set; } = "IA1";
-    /// <summary><b>Resolved.</b> Which instant-action spawn list to use. <c>--stunt</c> forces
-    /// "stunt_flying" unless the tester pinned another one for a specific spawn.</summary>
+    /// <summary><b>Resolved.</b> Which instant-action scenario's spawn list to use. <c>--stunt</c>
+    /// forces "stunt_flying" and <c>--vs</c> forces "dogfight_ace", unless the tester pinned
+    /// another one for a specific spawn.</summary>
     public string Scenario { get; private set; } = "zeppelin_run";
     public bool ScenarioExplicit { get; private set; }
     /// <summary>The <c>--stage=</c> value as given, unvalidated — only "empty" names a stage.
@@ -493,6 +507,9 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--node=")) { s.NodeName = arg["--node=".Length..]; s.HasContentArg = true; }
             else if (arg == "--fly") { s._flyArg = true; s.HasContentArg = true; }
             else if (arg == "--stunt") { s._stuntArg = true; s.HasContentArg = true; }
+            else if (arg == "--vs") { s._vsArg = true; s.HasContentArg = true; }
+            else if (arg.StartsWith("--vs-kills=")) { s.VsKills = int.Parse(arg["--vs-kills=".Length..]); }
+            else if (arg.StartsWith("--vs-time=")) { s.VsTimeMinutes = int.Parse(arg["--vs-time=".Length..]); }
             else if (arg == "--freecam") { s._freecamArg = true; s.HasContentArg = true; }
             else if (arg == "--anim-lab") { s._animLabArg = true; s.HasContentArg = true; }
             else if (arg.StartsWith("--play-anim=")) { s.PlayAnim = arg["--play-anim=".Length..]; s.HasContentArg = true; }
@@ -882,33 +899,48 @@ public sealed record SessionSpec
         // Every flag that votes for a mode, gathered before anything is arbitrated. The probes vote
         // like the rest: they need a world without an aircraft (or a parked plane to shoot at), and
         // asking for it through the mode is how they get one.
-        bool fly = _flyArg || _stuntArg;
+        bool fly = _flyArg || _stuntArg || _vsArg;
         bool stunt = _stuntArg;
+        bool vs = _vsArg;
         bool damageLab = _damageLabArg;
         bool viewer = _viewerArg || MarkersOverlay || WeaponTest;
         bool freecam = _freecamArg || DamageTest || EffectsTest;
         bool animLab = _animLabArg || PlayAnim != null || DebugAnimUi;
 
+        // --vs and --stunt are both flight modifiers, but not composable — one match mode has to
+        // be chosen ahead of time rather than by argument order, so --vs beats --stunt by FIXED
+        // precedence (unlike the rest of this file's last-flag-wins parsing).
+        if (vs && stunt)
+        {
+            Warn("core", "--vs beats --stunt (fixed precedence, not last-wins); dropping stunt mode");
+            stunt = false;
+        }
         // --stunt is free flight over the mission's danger zones: the flight path plus the
         // stunt_flying spawn list, unless the tester pinned another scenario for a specific spawn.
         if (stunt && !ScenarioExplicit)
         {
             Scenario = "stunt_flying";
         }
+        // --vs is free-for-all splitscreen deathmatch: the flight path plus the dogfight_ace
+        // spawn list, unless the tester pinned another scenario for a specific spawn.
+        if (vs && !ScenarioExplicit)
+        {
+            Scenario = "dogfight_ace";
+        }
         // --anim-lab is the animation debugger's stage: the chapter world under the lab's own
         // clock, with no flight controller. The most specific mode of all, so it wins outright —
         // combining it with a flight/viewer/spectator mode is a contradiction.
         if (animLab && (fly || viewer || freecam))
         {
-            Print("--anim-lab is the animation lab; ignoring --fly/--stunt/--viewer/--damage/--freecam");
-            fly = stunt = viewer = damageLab = freecam = false;
+            Print("--anim-lab is the animation lab; ignoring --fly/--stunt/--vs/--viewer/--damage/--freecam");
+            fly = stunt = vs = viewer = damageLab = freecam = false;
         }
         // --freecam is the spectator world view: not flight (no aircraft) and not the parked-plane
         // viewer. Asking for a plane-less world AND a plane is a contradiction either way.
         if (freecam && (fly || viewer))
         {
-            Print("--freecam is a world view with no aircraft; ignoring --fly/--stunt/--viewer/--damage");
-            fly = stunt = viewer = damageLab = false;
+            Print("--freecam is a world view with no aircraft; ignoring --fly/--stunt/--vs/--viewer/--damage");
+            fly = stunt = vs = viewer = damageLab = false;
         }
         // The damage lab has two hosts now — the parked plane and the flown one — so --damage
         // asks for a lab, not for a mode. It only picks the parked viewer when nothing else
@@ -921,8 +953,8 @@ public sealed record SessionSpec
         // view. The explicit --viewer wins, since a bare --fly is now just the default spelled out.
         if (viewer && fly)
         {
-            Print("--viewer and --fly/--stunt are opposites (flight is the default); using --viewer");
-            fly = stunt = false;
+            Print("--viewer and --fly/--stunt/--vs are opposites (flight is the default); using --viewer");
+            fly = stunt = vs = false;
         }
         // --node= is a single-subtree INSPECTION stage: the static viewer unless the anim lab was
         // asked for. Neither flight nor the spectator view has anything to do with one object.
@@ -930,8 +962,8 @@ public sealed record SessionSpec
         {
             if (fly || stunt || freecam)
             {
-                Print("--node= is a single-subtree inspection stage; ignoring --fly/--stunt/--freecam");
-                fly = stunt = freecam = false;
+                Print("--node= is a single-subtree inspection stage; ignoring --fly/--stunt/--vs/--freecam");
+                fly = stunt = vs = freecam = false;
             }
             viewer = true;
             ChapterGiven = true; // the subtree comes out of the chapter's gamez
@@ -946,6 +978,7 @@ public sealed record SessionSpec
             : fly ? SessionMode.Fly
             : SessionMode.Menu;
         Stunt = stunt;
+        Versus = vs;
         DamageLab = damageLab;
 
         // The numpad views orbit a FLYING plane; the other modes have their own cameras (the
@@ -1026,6 +1059,12 @@ public sealed record SessionSpec
         {
             Print($"--players={Players} needs flight (nothing to fly in --viewer); using 1");
             Players = 1;
+        }
+        // The menu refuses to start a Dogfight below 2 joined pilots; the CLI has no join flow to
+        // gate on, so it only warns and runs with whatever --players= asked for.
+        if (Versus && Players < 2)
+        {
+            Warn("core", $"--vs with --players={Players} needs at least 2 pilots to fight (the menu enforces this; the CLI only warns)");
         }
         if (DamageLab && WorldMode)
         {

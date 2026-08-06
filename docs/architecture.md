@@ -2212,11 +2212,12 @@ Static resolver for the extracted-data paths (`ChapterTextures`/`ChapterGamez`/`
 ## src/SessionSpec.cs
 Everything the command line settles about a session, as one immutable record: `Parse(args)` parses
 **and resolves**; the pure arg parsers (`ParseVec3`, `ParsePlanes`, `ParseHold`, …) are public so
-they are testable. `SessionMode` is closed — Menu/Fly/Viewer/Freecam/AnimLab — with modifiers and
-`SessionProbe`; per-rule coverage lives in `CSVM.Tests/SessionSpec*Tests`.
-⚠ **Step order in `Resolve` IS the behaviour**: `--stunt` moves `Scenario` before arbitration can
-  clear `Stunt`; the freecam/anim-lab-only debug tools are dropped after `--node=` has forced the
-  viewer. Both look like tidying chances.
+they are testable. `SessionMode` is closed — Menu/Fly/Viewer/Freecam/AnimLab — with modifiers
+(`Stunt`, `Versus`) and `SessionProbe`; per-rule coverage lives in `CSVM.Tests/SessionSpec*Tests`.
+`Versus` (`--vs`, `--vs-kills=`, `--vs-time=`) beats `Stunt` by fixed precedence, not last-wins.
+⚠ **Step order in `Resolve` IS the behaviour**: `--stunt`/`--vs` move `Scenario` before arbitration
+  can clear the mode that set it; the freecam/anim-lab-only debug tools are dropped after `--node=`
+  has forced the viewer. Both look like tidying chances.
 ⚠ **Pure — no engine state, no globals, no logging, no clock** (DET-9: a spec that read the clock
   would not be a function of its args); complaints go to `Warnings`, never a print.
 ⚠ **`FromMenu` is static, takes its base as a PARAMETER, and does NOT re-resolve** — it must keep
