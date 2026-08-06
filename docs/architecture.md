@@ -2443,7 +2443,7 @@ the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replac
 emitter's own MODES are. Neither covers the other's job.
 
 ## src/Testing/Suites.cs
-The 26 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
+The 25 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
 the full-rig `Loadout.ForRig`), live weapon fire, destructible stages/death/census, animation
 stops and bounce-terminated launches, the full effects sweep (`effects-census`: every effect
 resolves, template meshes peak at the CALL SITE not the stage origin, none stays lit after its
@@ -2451,15 +2451,27 @@ stop — `Probes.Effects` rows asserted; its puffer/mesh tallies are golden coun
 suite's own conditions, literal seed 1 + the counting factory, pinned separately from the probe's;
 plus the staged-root derivation tripwire at both binds, the crash half on two airframes),
 emitter lifetime and the emitter's own modes, texture
-flattening, glTF round trips, collision/node visibility, and authored stunt gates. `emitter-lifetime` is registered FIRST — it is
+flattening, and glTF/collision/node visibility. `emitter-lifetime` is registered FIRST — it is
 the only suite installing a fake `IEmitterFactory`, and `WithWorld` caches one world per chapter, so
 running first means it builds the shared C1 world while the fake is in effect; `damage-hd`'s
 `collision:true` immediately after forces a real rebuild for everyone downstream.
-⚠ **Six suites moved out** (`PLAN-engine-free-suites.md` A3, 2026-08-06): `flight-envelope`,
-  `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` are now
-  `CSVM.Tests` facts calling the same `Probes.*`/plain statics — the units count grew by 16 facts
-  and this registry shrank from 32 to 26. `stall-warning` (Wave B) and the `loadout-bind`/
-  `stunt-gates` blockers listed in the plan stay here for now.
+⚠ **Seven suites moved out** (`PLAN-engine-free-suites.md` A3+A4, 2026-08-06): `flight-envelope`,
+  `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` (A3) and
+  `stunt-gates` (A4, once `StuntMission` itself went engine-free in A2) are now `CSVM.Tests` facts
+  calling the same `Probes.*`/plain statics/`StuntMission.Load` — the units count grew by 17 facts
+  and this registry shrank from 32 to 25. `stall-warning` (Wave B) stays here for now.
+⚠ **`loadout-bind` does NOT split, correcting the plan's Decision 1.** `Probes.Loadouts` — the
+  function the plan's A1 classification called "pure" — calls `StockLoadouts.Load()` (its
+  no-arg default reads `res://data/stock_loadouts.json` through `Godot.FileAccess`) and then
+  `PlaneBuilder.Build` for every stock plane to resolve `Loadout.Bind`'s markers; both are
+  native-backed and crash the xUnit host exactly like `tex-dropin`'s `Image` calls (verified
+  empirically, A4, 2026-08-06: an off-engine call into `Probes.Loadouts` throws
+  `AccessViolationException` at the `Godot.FileAccess.FileExists` call, before `PlaneBuilder` is
+  even reached). Binding inherently needs a built plane — there is no engine-free half to extract
+  without reimplementing `Loadout.Bind`'s marker resolution, the "never re-implement a check" trap.
+  `loadout-bind` stays whole here, unlike the classification table's clean-mover/splits framing.
+  The already-off-engine half (`StockLoadouts.Load`'s own JSON parsing, `PylonFillOrder`) was
+  already covered by `CSVM.Tests/LoadoutTests.cs` in A3.
 ⚠ Expected numbers are **golden counts against the retail install** (48 weapon defs, 11 airframes,
   per-chapter destructibles); change one only with the measurement that moved it.
 ⚠ `bounce-launch` asserts a **band**, not a time: the launch draws speed and elevation per instance,

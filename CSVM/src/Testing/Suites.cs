@@ -116,8 +116,6 @@ public static class Suites
             "nothing a chapter hides is left solid: no enabled collider under an invisible node", CollisionVisibility));
         into.Add(new TestHarness.Suite("nodelab-visibility",
             "the node lab's tree row follows live Visible, not the hide button's last action", NodeLabVisibility));
-        into.Add(new TestHarness.Suite("stunt-gates",
-            "C4 Danger Zones require their authored entry and exit apertures, not a marker sphere", StuntGates));
         into.Add(new TestHarness.Suite("trail-world-anchor",
             "a trail emitter under a rotated carrier anchors at world identity and drops puffs where it is fed", TrailWorldAnchor));
         into.Add(new TestHarness.Suite("damage-template-pool",
@@ -404,52 +402,6 @@ public static class Suites
         {
             puffer.Free();
         }
-    }
-
-    // ---- pure data -----------------------------------------------------------------------------
-
-    private static void StuntGates(TestContext ctx)
-    {
-        const string chapter = "C4";
-        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
-        string missionPath = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, "IA1");
-        ctx.RequireData(gamezPath, $"chapter {chapter} gamez");
-        ctx.RequireData(missionPath, $"chapter {chapter} IA1 zrdr");
-        ctx.RequireData(ctx.MessagesPath, $"messages table");
-
-        var mission = StuntMission.Load(GameZ.Load(gamezPath), missionPath, Messages.Load(ctx.MessagesPath));
-        ctx.Check(mission != null, $"C4 IA1 loads authored Danger Zone gates");
-        if (mission == null)
-            return;
-        ctx.Same(14, mission.TotalCount, $"C4 IA1 resolved gate pairs");
-        var zone = mission.Zones.FirstOrDefault(z => z.PathName == "dzpath14");
-        ctx.Check(zone != null, $"C4 dzpath14 resolves despite its route being polygon 2");
-        if (zone == null)
-            return;
-
-        var separated = mission.Zones.FirstOrDefault(z => z.GreenGate.Center.DistanceTo(z.RedGate.Center) > 100f);
-        ctx.Check(separated != null, $"C4 has a Danger Zone with separated gate pair");
-        if (separated == null)
-            return;
-        Cross(mission, separated.RedGate);
-        ctx.Check(!separated.Completed, $"C4 red gate alone does not score");
-        Cross(mission, separated.GreenGate);
-        ctx.Check(separated.Completed, $"C4 scores after both gates in red-to-green order");
-
-        mission.Reset();
-        var side = zone.GreenGate.Normal.Cross(Vector3.Up);
-        if (side.LengthSquared() < 1e-4f)
-            side = zone.GreenGate.Normal.Cross(Vector3.Right);
-        side = side.Normalized() * 10000f;
-        mission.Update(zone.GreenGate.Center + side - zone.GreenGate.Normal * 20f);
-        mission.Update(zone.GreenGate.Center + side + zone.GreenGate.Normal * 20f);
-        ctx.Check(!zone.Completed, $"C4 dzpath14 plane crossing beside the aperture does not score");
-    }
-
-    private static void Cross(StuntMission mission, StuntGate gate)
-    {
-        mission.Update(gate.Center - gate.Normal * 20f);
-        mission.Update(gate.Center + gate.Normal * 20f);
     }
 
     /// <summary>BL-148: the stall cues are TWO thresholds on one margin, and the STALL lamp's blink

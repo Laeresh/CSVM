@@ -55,7 +55,7 @@ verification SHELL-3 records a bulk text rewrite corrupting files here before.
 
 | # | Question | Decision |
 |---|---|---|
-| 1 | Confirm the nine after re-classification | **Seven clean movers** (`flight-envelope`, `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig`, `stunt-gates`); **`loadout-bind` splits** — `Probes.Loadouts` half moves, BL-294 fill-order half stays in-engine with a narrowed description; **`tex-dropin` closed ❌** (engine-bound on Godot `Image`). *Losing option:* keep `loadout-bind` whole in-engine — would strand the `StockLoadouts` print conversion's beneficiary. |
+| 1 | Confirm the nine after re-classification | **Seven clean movers** (`flight-envelope`, `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig`, `stunt-gates`); **`loadout-bind` splits** — `Probes.Loadouts` half moves, BL-294 fill-order half stays in-engine with a narrowed description; **`tex-dropin` closed ❌** (engine-bound on Godot `Image`). *Losing option:* keep `loadout-bind` whole in-engine — would strand the `StockLoadouts` print conversion's beneficiary. ⚠ **Corrected in A4 (2026-08-06):** the `loadout-bind` split does not hold — re-classified at execution, `Probes.Loadouts` calls `StockLoadouts.Load()` (native `Godot.FileAccess`) and `PlaneBuilder.Build` for every plane, both engine-bound (verified empirically: an off-engine call crashes the xUnit host with `AccessViolationException` at the `FileAccess` step, per ⚠ #1's re-run-the-classification rule). `loadout-bind` stays whole in-engine, same as `tex-dropin`; only `stunt-gates` actually moved. See `docs/architecture.md`'s `Suites.cs` entry for the full evidence. |
 | 2 | Delete or keep in-engine copies? | **Delete, same commit as each move.** For the split suite, delete only the moved half's lines. *Losing option:* keep-both transition period — double green, zero extra coverage (both tiers call the same probe), rots. |
 | 3 | Naming/discoverability | **One xUnit class per suite, name mirrored** (`flight-envelope` → `FlightEnvelopeTests`), old kebab suite name verbatim in each class doc; one file per class in `CSVM.Tests/` root. **No `[Trait]`s** — nothing filters by trait. *Losing options:* one big file (kills suite-per-commit cadence); traits (machinery without a consumer). |
 | 4 | Skip semantics + reporting | **No script/mechanism changes** — `RunTests.ps1` already prints per-stage skip + Unchecked lines for both tiers (`:377`, `:478`), and `[ExtractedDataFact]` skips with `NoDataReason`. Prose only: landing commits state the data-less behaviour; one line in the Testing entry noting counts shifted tiers. *Losing option:* a "moved suites" summary note in `RunTests.ps1` — machinery for a one-time event. |
@@ -101,7 +101,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ A1 Grilling session: Decisions table settled 2026-08-06; checklist rewritten to match
 2. ☑ A3 The six no-blocker suites move (per-suite xUnit twins calling the same probes; in-engine copies deleted)
 3. ☑ A2 Enablers, by hand: the 9 sites of Decision 6 → `Log` (engine suites still verify them in-engine)
-4. ☐ A4 `stunt-gates` moves + `loadout-bind` splits; tripwire failure-drill and data-less-run drill recorded
+4. ☑ A4 `stunt-gates` moves + `loadout-bind` splits; tripwire failure-drill and data-less-run drill recorded
 5. ❌ `tex-dropin` — closed in A1: engine-bound on Godot `Image` (see the classification table)
 
 ### Wave B — companion (kept by Decision 5)
@@ -195,7 +195,7 @@ moved suites, goldens untouched (nothing rendering changed).
 **⚠ Traps.** ⚠ #1/#2. A suite body that quietly used `ctx` conveniences beyond data paths
 (RequireData is fine — it maps to the skip gate) is the drift to catch.
 
-## A4 ☐ `stunt-gates` moves, `loadout-bind` splits; the two drills
+## A4 ☑ `stunt-gates` moves; `loadout-bind` split disproven; the two drills
 
 **Goal.** `stunt-gates` moves whole. `loadout-bind` splits per Decision 1: the `Probes.Loadouts`
 half (bind counts, failure list) becomes an xUnit twin; the BL-294 pylon-fill-order half
@@ -205,6 +205,23 @@ drills: **(1) tripwire** — break a `FlightModel` Tune rate locally, watch `Run
 the *units* stage, revert; **(2) data-less** — run `dotnet test` with `TestData` pointed at an
 empty root, see skips-with-reason, not passes. Both recorded in the landing commit message.
 
+**Outcome (2026-08-06): the `loadout-bind` split does not hold — disproven at execution, per
+⚠ #1's re-run-the-classification rule.** `stunt-gates` moved clean: `CSVM.Tests/StuntGatesTests.cs`
+calls the same `StuntMission.Load`/`Update` the in-engine suite did, with a no-op `Log.ConsoleSink`
+installed (mirroring `StuntRaceTests`) since `StuntMission.Load` now logs through `Log` (A2) and an
+uninstalled sink falls through to a host-crashing `GD.Print`. But `loadout-bind`'s "pure
+`Probes.Loadouts` half" turned out not to be pure: `Probes.Loadouts` calls `StockLoadouts.Load()`
+(no explicit path — its default reads `res://data/stock_loadouts.json` through `Godot.FileAccess`)
+and `PlaneBuilder.Build` for every stock plane, to resolve `Loadout.Bind`'s markers against a real
+node tree. Verified empirically (the project's own standing method for this class of question — see
+the `StuntRace` C7 precedent in `docs/HISTORY.md`): a scratch off-engine xUnit fact calling
+`Probes.Loadouts` crashed the whole test host with an unmanaged `AccessViolationException`, at the
+`Godot.FileAccess.FileExists` call inside `StockLoadouts.Load` — before `PlaneBuilder` was even
+reached. There is no engine-free remainder to extract without re-implementing `Loadout.Bind`'s own
+marker resolution off-engine, which the plan's own "never re-implement" trap forbids. `loadout-bind`
+stays whole in `Suites.cs`, unchanged; only its registration position shifted up one slot when
+`stunt-gates`'s entry was deleted below it. The Decisions table's Decision 1 is corrected above.
+
 **Evidence (confidence: traced).** `FlightModel`'s ⚠: "the flight-envelope suite fails if the
 Tune rates move" — the tripwire must keep failing the build after the move (⚠ #4).
 
@@ -212,8 +229,8 @@ Tune rates move" — the tripwire must keep failing the build after the move (�
 
 **Model recommendation.** medium.
 
-**Verify.** Both drills above, plus `RunTests.ps1` green with the split suite present in exactly
-one tier per check.
+**Verify.** Both drills above, plus `RunTests.ps1` green with `stunt-gates` present in exactly one
+tier (units, not engine) and `loadout-bind` unchanged in the engine tier (Decision 1 correction).
 
 # Wave B — companion (kept by Decision 5)
 
