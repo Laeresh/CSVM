@@ -317,9 +317,13 @@ public sealed class FlightRigAssembler
         // subscription.
         if (_in.VersusMatch is { } versus)
         {
-            controller.VersusHud = VersusHud.Build(versus, pi);
+            // Rigs is the SAME list GameSession keeps live for the whole session — every seat
+            // already exists (BuildRigs ran before this loop), only .Controller fills in as each
+            // player assembles, so by the time this pane draws, every opponent's is populated.
+            controller.VersusHud = VersusHud.Build(versus, pi, rig.Camera);
+            controller.VersusHud.Rigs = _in.Rigs;
             if (verbose)
-                GD.Print("dogfight HUD: match timer/K-D/leader line + kill banner");
+                GD.Print("dogfight HUD: match timer/K-D/leader line + kill banner + opponent markers");
         }
 
         var (spawnPos, spawnLookAt) = _spawns.ChooseSpawn(_in.SpawnList, _in.MissionZrdrPath, _in.SpawnBase, pi, tag);
@@ -445,6 +449,9 @@ public sealed class FlightRigAssembler
         /// The dogfight match (--vs), built before this loop runs so every pane's VersusHud binds
         /// to the same instance GameSession later feeds Downed reports into.
         public VersusMatch? VersusMatch;
+        /// Every rig in the session (--vs opponent markers, C24) — the same list GameSession
+        /// keeps live for the whole session, not a snapshot; see the Assemble call site.
+        public IReadOnlyList<PlayerRig>? Rigs;
 
         // The build's archives and world outputs (BuildState's, unchanged).
         public TextureArchive Textures = null!;

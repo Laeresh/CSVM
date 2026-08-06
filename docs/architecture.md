@@ -1522,17 +1522,27 @@ time-out win, draw, post-completion no-op, rematch re-arm, each limit disabled o
   `Advance` timekeeping.
 
 ## src/Flight/VersusHud.cs
-Per-pane Dogfight HUD (`PLAN-vs-mode.md` C23): a compact status line — remaining time (omitted
-once `VersusMatch.TimeLimit` is disabled), this pane's own K/D, and the current leader's tag —
-drawn in MarkerHud's run-status slot (`RefStatusY` — Stunt and Versus are mutually exclusive, so
-the two never compete for it), plus a transient "P2 DOWNED P3" kill banner ("P3 DOWN" with no
-killer). `Build(match, playerIndex)` binds the match; the status line pulls it live every
-`_Draw` (no pose to project, unlike MarkerHud, so nothing is fed per frame for it) and `OnKill`
-is pushed once per `Downed` report by GameSession's own broadcast — a second subscription,
-never piggybacked on the scoring one, so every pane hears every kill/death, not just the two it
+Per-pane Dogfight HUD (`PLAN-vs-mode.md` C23/C24): a compact status line — remaining time
+(omitted once `VersusMatch.TimeLimit` is disabled), this pane's own K/D, and the current leader's
+tag — drawn in MarkerHud's run-status slot (`RefStatusY` — Stunt and Versus are mutually
+exclusive, so the two never compete for it); a transient "P2 DOWNED P3" kill banner ("P3 DOWN"
+with no killer); and one opponent marker per living rig (`Rigs`, excluding `PlayerIndex` and any
+`Controller.Crashed` seat) — an on-screen tag at the projected point, or MarkerHud's edge-arrow +
+clock-hour bearing (`EdgePoint`/`ClockHour`, copied verbatim) when off screen/behind, in that
+opponent's own `SplitScreen.PlayerColor`. `Build(match, playerIndex, camera)` binds the match +
+this pane's own camera (opponent markers project through it, exactly like MarkerHud's zone);
+`Rigs` is attached once by `FlightRigAssembler` (the SAME live list `GameSession` keeps, not a
+snapshot — every seat exists before this pane assembles, only `.Controller` fills in as siblings
+do); `PlanePos`/`HeadingDeg` are fed every frame by `FlightController`, same site as `Marker`'s.
+The status line pulls the match live every `_Draw` (no pose to project for it) and `OnKill` is
+pushed once per `Downed` report by GameSession's own broadcast — a second subscription, never
+piggybacked on the scoring one, so every pane hears every kill/death, not just the two it
 happened to.
 ⚠ `LeaderText` reads "LEADER —" whenever more than one player shares rank 1, including the 0-0
   tie before the first kill — accurate, not a placeholder: nobody leads yet.
+⚠ Opponent positions come off `PlayerRig.Controller.GlobalPosition` directly, never
+  `AnimRuntime.PlayerPosition` (a P1-only singleton) — the same rule MarkerHud/FlightController
+  already follow.
 
 ## src/Flight/Weather.cs
 `WeatherState`: per-mission atmosphere from the flown mission's own weather.json — per-zone fog
@@ -2734,8 +2744,9 @@ Assembles one player's flight rig: the painted plane model, the `FlightControlle
 on it — loadout/ordnance, compass, gauges, HUD font test/weapon readout/reticle, damage visuals,
 audio, the throttle-slam exhaust smoke (`ThrottleSlamSmoke.Build`, after `Setup` so it can seed its
 climb tracker from the live spawn throttle), this player's stunt run + marker/scoreboard/race entry
-(or, in `--vs`, its `VersusHud` bound to `Inputs.VersusMatch` — C23), the spawn placement, and the
-crash runtime built after the controller joins the tree. Constructed
+(or, in `--vs`, its `VersusHud` bound to `Inputs.VersusMatch` + `Inputs.Rigs` for the opponent
+markers — C23/C24), the spawn placement, and the crash runtime built after the controller joins
+the tree. Constructed
 once per session build from
 `(SessionSpec, LiveryResolver, SpawnPicker, WorldEffectsFactory, worldRoot, Inputs)`, then
 `Assemble(pi, rig)` once per rig; `MeshInstances`/`WhatSuffix` accumulate across the rigs for the

@@ -93,7 +93,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☑ `SessionSpec`: `--vs`, `--vs-kills`, `--vs-time`, precedence, `dogfight_ace` default + parse tests
 22. ☑ Menu: "Dogfight" entry, `MenuMode` enum, ≥2-player start lock + menu tests
 23. ☑ Per-pane VS HUD: match timer, own K/D, leader, kill banners
-24. ☐ Opponent edge-arrows (MarkerHud adaptation)
+24. ☑ Opponent edge-arrows (MarkerHud adaptation)
 25. ☐ `VersusBoard` end-of-match overlay + `RestartMatch` rematch
 26. ☐ Landing sweep: docs (cli.md, architecture.md, controls.md), follow-up BLs, SCOPING-M4 A1 note, `PT-` item
 
@@ -404,7 +404,7 @@ switch if needed, per the house `--debug-scoreboard` convention); readable at 4-
 **⚠ Traps.** HUD sizing decisions belong in `HudMetrics` — don't scale ad hoc per element
 (architecture: it is "the one place HUD sizing is decided").
 
-## C24 ☐ Opponent edge-arrows (MarkerHud adaptation)
+## C24 ☑ Opponent edge-arrows (MarkerHud adaptation)
 
 **Goal.** Each player's pane marks opponents when off-screen: edge arrow + clock bearing, in the
 opponent's player color — because two planes losing each other in a chapter-sized world makes the

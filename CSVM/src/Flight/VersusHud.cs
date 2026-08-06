@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using CSVM.UI;
 using Godot;
@@ -5,49 +6,78 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// Per-pane Dogfight HUD (PLAN-vs-mode C23): one compact status line — remaining time (omitted
-/// once <see cref="VersusMatch.TimeLimit"/> is disabled), this player's own kills/deaths, and the
-/// current leader's tag — plus a transient "P2 DOWNED P3" banner on every Downed report anywhere
-/// in the match (a plain "P3 DOWN" when the crash carried no killer). Sits in the same screen
-/// slot MarkerHud's run-status line uses — Stunt and Versus are mutually exclusive modes, so the
-/// two never compete for it.
+/// Per-pane Dogfight HUD (PLAN-vs-mode C23/C24): one compact status line — remaining time
+/// (omitted once <see cref="VersusMatch.TimeLimit"/> is disabled), this player's own
+/// kills/deaths, and the current leader's tag — a transient "P2 DOWNED P3" banner on every
+/// Downed report anywhere in the match (a plain "P3 DOWN" when the crash carried no killer), and
+/// an edge-arrow + clock-bearing marker per living opponent (hidden while
+/// <see cref="FlightController.Crashed"/>), in that opponent's own identity colour — the
+/// splitscreen answer to the original's radar (no reference to copy; extends MarkerHud's
+/// stunt-marker visual language, its own entry in architecture.md). The status line sits in the
+/// same screen slot MarkerHud's run-status line uses — Stunt and Versus are mutually exclusive
+/// modes, so the two never compete for it.
 ///
 /// <para>The status line pulls <see cref="VersusMatch"/> live each frame: its own bookkeeping is
-/// already current by the time the HUD draws, so unlike MarkerHud there is no world pose to
-/// project. The banner is pushed once per fact via <see cref="OnKill"/> — GameSession's own
-/// Downed subscription, a second one never piggybacked on the scoring handler, broadcast to
-/// every pane so the whole field sees who went down.</para>
+/// already current by the time the HUD draws. The banner is pushed once per fact via
+/// <see cref="OnKill"/> — GameSession's own Downed subscription, a second one never piggybacked
+/// on the scoring handler, broadcast to every pane so the whole field sees who went down.
+/// Opponent positions are read straight off <see cref="Rigs"/> each frame — never
+/// <c>AnimRuntime.PlayerPosition</c>, a P1-only singleton — and projected through THIS pane's own
+/// camera, exactly like MarkerHud projects a danger zone.</para>
 /// </summary>
 public sealed partial class VersusHud : Control
 {
-    /// <summary>Which pane this draws in (0-based) — this pane's own K/D.</summary>
+    /// <summary>Which pane this draws in (0-based) — this pane's own K/D, and the identity every
+    /// opponent marker excludes.</summary>
     public int PlayerIndex;
+
+    /// <summary>Every rig in the session (this player's own included — skipped when drawing
+    /// markers), set once the whole field is built. Null in a solo <c>--vs --players=1</c>
+    /// session — nothing to mark.</summary>
+    public IReadOnlyList<PlayerRig>? Rigs;
 
     // 1440p reference metrics (scaled by HudMetrics — matches MarkerHud's calibration).
     private const int RefStatusFont = 19;
     private const int RefBannerFont = 24;
+    private const int RefMarkerFont = 14;
     private const float RefStatusY = 100f;    // same slot as MarkerHud's run-status line
     private const float RefBannerYFrac = 0.30f;
     private const float BannerDuration = 3f;  // s the banner shows
     private const float BannerFadeTail = 0.6f; // s of that spent fading out
+    private const float RefEdgeMargin = 46f;  // keep edge markers this far off the screen border
+    private const float RefArrowLen = 18f;
+    private const float RefArrowHalf = 8f;
+    private const float RefTextGap = 8f;
+    private const float RefOnScreenLift = 22f; // gap above a plane's own projected point
 
     private static readonly Color HudBlue = new(0.55f, 0.78f, 1f);
     private static readonly Color HudRed = new(1f, 0.55f, 0.55f);
     private static readonly Color Shadow = new(0f, 0f, 0f, 0.75f);
 
     private VersusMatch _match = null!;
+    private Camera3D _camera = null!;
     private float _bannerTime;
     private string _bannerText = "";
     private Color _bannerColor = HudBlue;
 
-    /// <summary>Binds the match. Add to the HUD canvas; nothing else needs feeding each frame —
+    /// <summary>This pane's own world pose, fed every frame by FlightController — opponent clock
+    /// bearings read off it, exactly like MarkerHud's PlanePos/HeadingDeg.</summary>
+    public Vector3 PlanePos { get; set; }
+
+    /// <summary>This pane's own nose heading, 0 = north (−Z) — see <see cref="PlanePos"/>.</summary>
+    public float HeadingDeg { get; set; }
+
+    /// <summary>Binds the match + this pane's own camera (opponent markers project through it).
+    /// Add to the HUD canvas; <see cref="Rigs"/> is attached once the whole field is built, and
+    /// <see cref="PlanePos"/>/<see cref="HeadingDeg"/> every frame — nothing else needs feeding,
     /// the match's own state is always current.</summary>
-    public static VersusHud Build(VersusMatch match, int playerIndex)
+    public static VersusHud Build(VersusMatch match, int playerIndex, Camera3D camera)
     {
         return new VersusHud
         {
             _match = match,
             PlayerIndex = playerIndex,
+            _camera = camera,
             MouseFilter = MouseFilterEnum.Ignore,
             FocusMode = FocusModeEnum.None,
         };
@@ -100,12 +130,33 @@ public sealed partial class VersusHud : Control
             DrawCentered(font, new Vector2(cx, Size.Y * RefBannerYFrac), _bannerText, bannerFont,
                 new Color(_bannerColor, alpha));
         }
+
+        if (Rigs == null)
+            return;
+        int markerFont = Mathf.Max(1, Mathf.RoundToInt(RefMarkerFont * s));
+        foreach (var opp in Rigs)
+        {
+            if (opp.Index == PlayerIndex || opp.Controller is not { Crashed: false } c)
+                continue; // this pane's own seat, or an opponent out of the fight for now
+            DrawOpponent(font, c.GlobalPosition, SplitScreen.PlayerColor(opp.Index),
+                SplitScreen.PlayerTag(opp.Index), s, markerFont);
+        }
     }
 
     private static string FormatTime(float seconds)
     {
         int total = Mathf.Max(0, Mathf.CeilToInt(seconds));
         return $"{total / 60}:{total % 60:00}";
+    }
+
+    /// <summary>Screen-edge point along <paramref name="dir"/> from centre, inset by the margin —
+    /// MarkerHud's EdgePoint verbatim.</summary>
+    private static Vector2 EdgePoint(Vector2 center, Vector2 dir, float margin)
+    {
+        float hx = center.X - margin, hy = center.Y - margin;
+        float tx = Mathf.Abs(dir.X) > 1e-4f ? hx / Mathf.Abs(dir.X) : float.MaxValue;
+        float ty = Mathf.Abs(dir.Y) > 1e-4f ? hy / Mathf.Abs(dir.Y) : float.MaxValue;
+        return center + dir * Mathf.Min(tx, ty);
     }
 
     private string StatusLine()
@@ -121,6 +172,64 @@ public sealed partial class VersusHud : Control
     {
         var leaders = _match.Standings().Where(st => st.Rank == 1).ToList();
         return leaders.Count == 1 ? $"LEADER {SplitScreen.PlayerTag(leaders[0].PlayerIndex)}" : "LEADER —";
+    }
+
+    /// <summary>One opponent's marker: on screen, their tag floats just above the projected
+    /// point; off screen (or behind), an edge arrow + "N o'clock" bearing — MarkerHud's on-screen/
+    /// edge-arrow branch, one instance per opponent instead of one stunt zone.</summary>
+    private void DrawOpponent(Font font, Vector3 pos, Color color, string tag, float s, int fontSize)
+    {
+        bool behind = _camera.IsPositionBehind(pos);
+        Vector2 sp = _camera.UnprojectPosition(pos);
+        float m = RefEdgeMargin * s;
+        var inner = new Rect2(m, m, Size.X - 2f * m, Size.Y - 2f * m);
+        if (!behind && inner.HasPoint(sp))
+        {
+            DrawTag(font, sp + new Vector2(0f, -RefOnScreenLift * s), tag, color, fontSize);
+            return;
+        }
+        var center = Size / 2f;
+        var dir = sp - center;
+        if (behind)
+            dir = -dir; // the projection of a point behind the camera is mirrored through centre
+        if (dir.LengthSquared() < 1f)
+            dir = Vector2.Down;
+        dir = dir.Normalized();
+        var edge = EdgePoint(center, dir, m);
+        DrawArrow(edge, dir, RefArrowLen * s, RefArrowHalf * s, s, color);
+        DrawTag(font, edge - dir * (RefArrowLen + RefTextGap) * s, $"{tag}  {ClockHour(pos)} o'clock",
+            color, fontSize);
+    }
+
+    /// <summary>Relative bearing of <paramref name="targetPos"/> from this pilot's own heading in
+    /// clock hours (12 = ahead, 3 = right, 6 = behind, 9 = left) — MarkerHud.ClockHour over an
+    /// opponent instead of a danger zone.</summary>
+    private int ClockHour(Vector3 targetPos)
+    {
+        var d = targetPos - PlanePos;
+        float bearing = Mathf.RadToDeg(Mathf.Atan2(d.X, -d.Z)); // 0 = N (−Z), 90 = E (+X)
+        float rel = Mathf.PosMod(bearing - HeadingDeg, 360f);
+        int h = Mathf.RoundToInt(rel / 30f) % 12;
+        return h == 0 ? 12 : h;
+    }
+
+    private void DrawArrow(Vector2 tip, Vector2 dir, float len, float half, float s, Color color)
+    {
+        var perp = new Vector2(-dir.Y, dir.X);
+        var b1 = tip - dir * len + perp * half;
+        var b2 = tip - dir * len - perp * half;
+        var off = new Vector2(1.5f, 1.5f) * s;
+        DrawColoredPolygon(new[] { tip + off, b1 + off, b2 + off }, Shadow);
+        DrawColoredPolygon(new[] { tip, b1, b2 }, color);
+    }
+
+    private void DrawTag(Font font, Vector2 center, string text, Color color, int fontSize)
+    {
+        float w = font.GetStringSize(text, HorizontalAlignment.Left, -1f, fontSize).X;
+        float h = font.GetHeight(fontSize);
+        var p = new Vector2(center.X - w / 2f, center.Y - h / 2f + font.GetAscent(fontSize));
+        DrawString(font, p + Vector2.One, text, HorizontalAlignment.Left, -1f, fontSize, Shadow);
+        DrawString(font, p, text, HorizontalAlignment.Left, -1f, fontSize, color);
     }
 
     /// <summary>Draws one horizontally-centred line at <paramref name="anchor"/>.X, top-anchored

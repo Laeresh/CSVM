@@ -1407,6 +1407,7 @@ public partial class GameSession : Node3D
                 StuntZones = stuntZones,
                 Race = race,
                 VersusMatch = versus,
+                Rigs = _rigs,
                 Textures = state.Textures,
                 ZrdrPath = state.ZrdrPath,
                 MissionZrdrPath = state.MissionZrdrPath,

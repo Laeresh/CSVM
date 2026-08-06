@@ -1042,6 +1042,13 @@ public partial class FlightController : Node3D
             Marker.PlanePos = _model.Position;
             Marker.HeadingDeg = headingDeg;
         }
+        // Dogfight opponent markers (C24): this pane's own pose, so the HUD can compute each
+        // opponent's clock bearing off it — same feed Marker gets, for the same reason.
+        if (VersusHud != null)
+        {
+            VersusHud.PlanePos = _model.Position;
+            VersusHud.HeadingDeg = headingDeg;
+        }
         if (Gauges != null)
         {
             Gauges.SpeedMph = mph;
