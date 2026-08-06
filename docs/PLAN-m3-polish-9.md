@@ -79,7 +79,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 7. ☑ `BL-262` Stage `ballflare.flt` and `apassengers`; re-pin what moves
 8. ☑ `BL-257` Census the no-`RUN_TIME`/no-`BOUNCE_SEQUENCE` launch shape; make the zeppelin's eight parts fly
-9. ☐ `BL-277` Select the sky/fog zone per chapter instead of hard-coding `zone2`
+9. ☑ `BL-277` Select the sky/fog zone per chapter instead of hard-coding `zone2`
 10. ☐ `BL-273` Read `fogvol.zrd` and render the authored cloud field, deleting `CloudPuffs`' invented one
 
 ## Dependency and parallelism notes
@@ -305,7 +305,7 @@ Then the full suite — `BL-245`'s 379 falls must still *not* enter the solved p
 entry is explicit. `BL-245`'s shapes (zero-gravity `chuteman`, downward throws) must stay out of
 any apex-based solve; a parabola solve divides by zero on `chuteman`.
 
-## C9 ☐ `BL-277` `SkyZone` hard-codes `zone2`, which is empty in C1B, C2 and C3
+## C9 ☑ `BL-277` `SkyZone` hard-codes `zone2`, which is empty in C1B, C2 and C3
 
 **Goal.** C1B, C2 and C3 render a real horizon dome and the fog their data actually authors for the
 zone the world is built under.

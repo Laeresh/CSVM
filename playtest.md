@@ -107,6 +107,25 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 ## 1 · Actionable now (`PT-nn`)
 
 
+- `PT-41` **The per-chapter sky/fog zone in C1B, C2 and C3 (C9 / `BL-277` landed 2026-08-06).**
+  Those three define `ZONE2` fog but ship no `zone2` dome at all, so they rendered the engine's
+  clear colour with a hard horizon cut; they now build `zone1` — sky and fog together — and the
+  dome scale is fitted inside the far plane (C1B's zone1 dome is 21.8 km and clipped open at the
+  2.5× anchor). Headless goldens cover the three poses; what they cannot judge is whether the
+  chosen sky is the *right* one and how it reads in flight. One flight each
+  (`./RunGame.ps1 --plane=player_bhawk --chapter=C1B`, then `--chapter=C3`, then `--chapter=C2`).
+  *Look for:*
+  - (a) a real dome in all three, from the deck up to the ceiling and looking straight up — no
+    grey wedge, no hard cut, at any altitude or heading;
+  - (b) C3's haze reads as daylight grey on a sunlit mission (it used to be night-blue), and C2's
+    as the pale sky-blue its `ZONE1` authors;
+  - (c) C1B stays fogged above ~1.2 km, where the old `ZONE2` band stopped;
+  - (d) the four chapters the rule deliberately leaves alone — C1, C1C, C2B, C4 — look exactly as
+    they did.
+
+  *Blocks:* `BL-100`'s remaining four chapters are the A/B this sets up; `CAP-11` still judges C1B's
+  night brightness separately.
+
 - `PT-39` **The gun line after plan-8 A2/A3: smoke at the gun line, bare casings, and pick the
   muzzle-flash form (`BL-263`).** The invented eject-puff cluster is deleted and the authored
   `muzzlepuffer` renders (6 puffs / 0.3 s, drifting aft); the muzzle flash defaults to the authored

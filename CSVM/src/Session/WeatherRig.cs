@@ -42,9 +42,9 @@ public sealed class WeatherRig
     /// fog + whiteout + puffs + precipitation — the same order <c>StartSession</c> ran before the
     /// move.</summary>
     public void Build(string missionZrdrPath, IReadOnlyList<PlayerRig> rigs, TextureArchive textures,
-        Action<string> buildDomes)
+        IReadOnlyList<HorizonZone> horizonZones, Action<string> buildDomes)
     {
-        LoadWeather(missionZrdrPath);
+        LoadWeather(missionZrdrPath, horizonZones);
         buildDomes(_activeZone);
         SetupWeather(rigs, textures);
     }
@@ -103,21 +103,46 @@ public sealed class WeatherRig
         }
     }
 
+    // "zone2 0 meshes, zone1 3 meshes" — the evidence the pick was made on, not just its result.
+    private static List<string> HorizonZoneCounts(IReadOnlyList<HorizonZone> horizonZones)
+    {
+        var counts = new List<string>();
+        foreach (var z in horizonZones)
+            counts.Add($"{z.Name} {z.MeshedNodes} meshes");
+        return counts;
+    }
+
     /// <summary>Resolves <see cref="_activeZone"/>: the zone the fog AND the skydome are both
     /// built from. Called before the domes, because the zone names are per chapter — C5 ships
     /// zone1+zone3, so the `zone2` default has to fall back or C5 renders with no fog and no dome
-    /// at all. The default stays `zone2` deliberately; which zone a mission actually flies is in
-    /// no reader, so it is the user's A/B against the original (docs/formats/weather.md).</summary>
-    private void LoadWeather(string missionZrdrPath)
+    /// at all. Two corrections, in this order, and the second one only applies to the DEFAULT
+    /// request: the mission's own zone names (<c>ResolveZone</c>), then the chapter's horizon
+    /// geometry — a request whose dome is a bare marker yields to the zone that has one
+    /// (C1B/C2/C3; see <see cref="WeatherState.PreferPopulatedHorizonZone"/>). An explicit
+    /// <c>--sky-zone=</c> is honoured as asked, empty dome and all: it is the flag for looking at
+    /// a named zone, and the repro poses recorded in <c>analysis/</c> depend on it.
+    /// Which zone a mission flies is in no reader file (docs/formats/weather.md), so where the
+    /// geometry does not decide it, the choice is still the user's A/B against the original.</summary>
+    private void LoadWeather(string missionZrdrPath, IReadOnlyList<HorizonZone> horizonZones)
     {
         _weather = WeatherState.Load(missionZrdrPath);
-        _activeZone = _weather?.ResolveZone(_spec.SkyZone) ?? _spec.SkyZone;
+        string byFile = _weather?.ResolveZone(_spec.SkyZone) ?? _spec.SkyZone;
+        _activeZone = _spec.SkyZoneExplicit
+            ? byFile
+            : _weather?.ResolveZone(_spec.SkyZone, horizonZones)
+              ?? WeatherState.PreferPopulatedHorizonZone(byFile, horizonZones);
+        if (!_activeZone.Equals(byFile, StringComparison.OrdinalIgnoreCase))
+            // The horizon correction. Printed with the counts it was decided on, because this is
+            // the one line that says which sky and which fog the flight actually got.
+            GD.Print($"weather: {_spec.Chapter} builds no horizon geometry under '{byFile}' "
+                     + $"({string.Join(", ", HorizonZoneCounts(horizonZones))}) — "
+                     + $"rendering '{_activeZone}' sky and fog");
         if (_weather == null)
         {
             GD.PushWarning($"no weather.json for {_spec.Chapter}/{_spec.Mission} — flying without fog / whiteout");
             return;
         }
-        if (!_activeZone.Equals(_spec.SkyZone, StringComparison.OrdinalIgnoreCase))
+        if (!byFile.Equals(_spec.SkyZone, StringComparison.OrdinalIgnoreCase))
             // Not a fault: a chapter that numbers its zones differently resolves here every
             // flight. C5 (zone1/zone3) does so on all 8 missions, and zone1 is the confirmed
             // correct choice there — so this must not read as a missing-data warning.

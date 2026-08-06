@@ -44,6 +44,10 @@ message says so. Every other mass flip is a defect.
 the commit message. An unexplained flip is stop-the-line.** A hash regenerated in a separate
 "fix the goldens" commit is indistinguishable from a hash regenerated to bury a regression.
 
+**That explanation goes in the commit message, and only there.** `exercises` describes what a shot
+covers *today*; a shot's re-pin history is what `git log -p analysis/goldens/manifest.json` is for,
+and duplicating it in the file made the entries unreadable.
+
 ## Goldens are a tripwire, not a diagnosis
 
 A failing shot tells you *that* pixels moved, never *why*. Do not diagnose by staring at the diff —
@@ -54,7 +58,8 @@ you know which instrument to reach for.
 
 ## What the set does and does not cover
 
-Each entry's `exercises` field carries its measured frame-sensitivity — frame N against N+1, which is
+Each entry's `exercises` field says what that shot covers and carries its measured
+frame-sensitivity — frame N against N+1, which is
 the check that a pose has any animated surface in it at all (SHOT-12: a pose that renders identically
 twice proves nothing, because most poses show nothing that moves). Six shots move on a one-frame
 perturbation (`c1-flight` 34.52 %, `empty-stage` 12.21 %, `c4-snow` 3.74 %, `c2b-rain` 3.47 %,

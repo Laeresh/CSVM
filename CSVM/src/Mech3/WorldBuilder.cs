@@ -4,6 +4,16 @@ using Godot;
 
 namespace CSVM.Mech3;
 
+/// <summary>One <c>zone*</c> child of the gamez <c>horizon</c> node, and how many meshed nodes its
+/// subtree carries — the dome <see cref="WorldBuilder.BuildHorizon"/> would build for it.
+/// <see cref="MeshedNodes"/> 0 means the zone is a bare marker (<c>model_index: -1</c> with no
+/// children), which is exactly what C1B, C2 and C3 ship for <c>zone2</c>.</summary>
+public readonly record struct HorizonZone(string Name, int MeshedNodes)
+{
+    /// <summary>The zone has a dome to build.</summary>
+    public bool BuildsGeometry => MeshedNodes > 0;
+}
+
 /// <summary>
 /// Builds the whole world of a chapter gamez.zbd (terrain chunks, buildings, zeppelins,
 /// horizon). World content lives in two places: the World node's children, and ~350
@@ -195,6 +205,40 @@ public sealed class WorldBuilder
     /// per call. Null when the subtree draws nothing.</summary>
     public static Aabb? DetachedWorldAabb(Node3D root) => SubtreeAabb(root, root.Transform);
 
+    /// <summary>The <c>horizon</c> node's zone children in gamez order, each with the number of
+    /// meshed nodes its subtree carries — i.e. how much dome <see cref="BuildHorizon"/> would
+    /// actually build for it. Empty when the chapter ships no <c>horizon</c> node.
+    ///
+    /// <para>Read <b>before</b> the horizon build, because the zone the fog and the dome share is
+    /// chosen from it: three chapters ship a <c>zone2</c> that is a bare marker
+    /// (<c>model_index: -1</c>, no children), so requesting it renders no sky at all. The
+    /// selection rule itself is <see cref="Flight.WeatherState.ResolveZone(string,
+    /// IReadOnlyList{HorizonZone})"/> — it lives beside the fog so the pair cannot diverge.</para>
+    ///
+    /// <para>Static over a <see cref="GameZ"/> so it needs no built scene: the zone has to be
+    /// settled before the world is built, and the census is testable off-engine that way.</para>
+    /// </summary>
+    public static IReadOnlyList<HorizonZone> HorizonZonesOf(GameZ gamez)
+    {
+        var zones = new List<HorizonZone>();
+        var horizon = gamez.FindByName("horizon");
+        if (horizon == null)
+            return zones;
+        foreach (var childIndex in horizon.Children)
+        {
+            if (childIndex < 0 || childIndex >= gamez.Nodes.Count)
+                continue;
+            var child = gamez.Nodes[childIndex];
+            if (!child.Name.StartsWith("zone", StringComparison.OrdinalIgnoreCase))
+                continue;
+            zones.Add(new HorizonZone(child.Name, MeshedNodesIn(gamez, child)));
+        }
+        return zones;
+    }
+
+    /// <inheritdoc cref="HorizonZonesOf"/>
+    public IReadOnlyList<HorizonZone> HorizonZones() => HorizonZonesOf(_gamez);
+
     public Node3D Build(string worldName = "world1")
     {
         GameZNode? world = null;
@@ -381,6 +425,12 @@ public sealed class WorldBuilder
     /// child, mirroring <see cref="Flight.WeatherState.ResolveZone"/>. In the normal path
     /// GameSession has already resolved the zone against the mission's weather.json and this
     /// fallback is a no-op; it exists so a mission with no weather.json still gets a dome.</para>
+    ///
+    /// <para><b>An empty zone is not an absent one.</b> C1B, C2 and C3 ship a <c>zone2</c> child
+    /// that is a bare marker, so it matches here and builds a dome of zero meshes — the caller
+    /// keeps that from happening by picking the zone off <see cref="HorizonZonesOf"/> before it
+    /// gets here (<see cref="Flight.WeatherState.PreferPopulatedHorizonZone"/>). This method
+    /// builds what it is asked for, including nothing.</para>
     /// </summary>
     public Node3D? BuildHorizon(string zone = "zone2")
     {
@@ -599,6 +649,18 @@ public sealed class WorldBuilder
             mi.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
         foreach (var child in node.GetChildren())
             DisableShadows(child);
+    }
+
+    // Meshed nodes in a subtree, the node itself included: what BuildHorizon has to draw for a
+    // zone. Counts MeshIndex >= 0 rather than polygons, because that is the same test SceneBuilder
+    // uses to decide a node carries a model at all; the distinction this serves is 0 vs 3-6.
+    private static int MeshedNodesIn(GameZ gamez, GameZNode node)
+    {
+        int meshed = node.MeshIndex >= 0 ? 1 : 0;
+        foreach (var childIndex in node.Children)
+            if (childIndex >= 0 && childIndex < gamez.Nodes.Count)
+                meshed += MeshedNodesIn(gamez, gamez.Nodes[childIndex]);
+        return meshed;
     }
 
     // Rendered but not solid: the plane should fly through cloud/sky geometry and through
@@ -920,21 +982,22 @@ public sealed class WorldBuilder
 
     private string ResolveHorizonZone(GameZNode horizon, string zone)
     {
-        var zones = new List<string>();
-        foreach (var childIndex in horizon.Children)
-            if (childIndex >= 0 && childIndex < _gamez.Nodes.Count
-                && _gamez.Nodes[childIndex].Name is { } name
-                && name.StartsWith("zone", StringComparison.OrdinalIgnoreCase))
-                zones.Add(name);
-        if (zones.Count == 0 || zones.Exists(z => z.Equals(zone, StringComparison.OrdinalIgnoreCase)))
+        var zones = HorizonZones();
+        if (zones.Count == 0)
             return zone;
+        foreach (var z in zones)
+            if (z.Name.Equals(zone, StringComparison.OrdinalIgnoreCase))
+                return zone;
         if (!_loggedHorizonZoneFallback)
         {
             _loggedHorizonZoneFallback = true;
-            GD.Print($"horizon: no '{zone}' subtree (has {string.Join("/", zones)}) — "
-                     + $"building '{zones[0]}'");
+            var names = new List<string>();
+            foreach (var z in zones)
+                names.Add(z.Name);
+            GD.Print($"horizon: no '{zone}' subtree (has {string.Join("/", names)}) — "
+                     + $"building '{zones[0].Name}'");
         }
-        return zones[0];
+        return zones[0].Name;
     }
 
     // The source moon is an axis-aligned quad (constant z), which looks tilted and

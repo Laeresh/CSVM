@@ -88,15 +88,32 @@ request falls back to the file's first zone (`WeatherState.ResolveZone`), logged
 Not in the mission `zrdr` (`ia`, `objectives`, `targets`, `dzones`, `aiv`, `location`, `map`,
 `egen`, `net`, `startanims`), not in the 53 mission `.gw` interp scripts (1,215 statements,
 zero zone mentions), not in the ROF/DLL string tables (`DEBUGINFO.TXT`'s zone strings are
-Danger-Zones **UI widget** names — `ozonestitle`, `o_radbutzone`). The only zone references in
-the install are chapter-level and mutually inconsistent: `support\c1\load.gw` says
-`CameraSetHorizonXZ zone2_cloud_floor` while `support\c1\tex_fx.gw` says
-`FindNode h_zone1scroll`; six other `load.gw` name a plain `horizon`. Zone selection therefore
+Danger-Zones **UI widget** names — `ozonestitle`, `o_radbutzone`). Zone selection therefore
 happens engine-side in the binary — the same shape as the `fire2` trigger (see
 [anim-definitions.md](anim-definitions.md#fire-templates-flipbooks-and-a-trigger-that-lives-in-the-exe)).
 
-So the remake selects it via `--sky-zone` (default `zone2` = night), and settling the real
-answer needs an A/B against the original — C5 most of all, whose two candidates are far apart:
+**`interp.json` neither (re-read in full 2026-08-06).** Four zone-bearing strings in its 98
+scripts, and none of them selects anything:
+
+- `support\c1\load.gw` `CameraSetHorizonXZ zone2_cloud_floor` (×2) and `support\c1b\load.gw`
+  `CameraSetHorizonXZ moon_reflection` (×2). **Neither argument is a node either chapter's gamez
+  holds** — both are dangling. All 8 chapters additionally carry the plain
+  `CameraSetHorizon horizon` (×2 each), so the verb pair is camera anchoring by node name, and
+  `moon_reflection` shows the `XZ` form is not about zones at all.
+- `support\c1\tex_fx.gw` and `support\c1b\tex_fx.gw` `FindNode h_zone1scroll` +
+  `Object3DSetScroll on 0.07 0.0` — a UV scroll on the sky band, not a selection. C1 has that
+  node; **C1B does not** (its `horizon/zone1` children are `g1163`–`g1166`), so C1B's statement is
+  dead as well. `MissionSetup` already treats an unmatched `FindNode` as expected, not a warning.
+
+⚠ **This retires the "C1's own scripts disagree" reading**, which had made C1 the priority for the
+remaining `BL-100` A/B. The two C1 strings are not two zone selections: one names a node C1 does
+not have, the other scrolls a texture. Nothing in `interp.json` bears on which zone a mission
+flies.
+
+So the remake selects it via `--sky-zone` (default `zone2` = night) — but see
+[the horizon's own say](#the-horizons-own-geometry-settles-three-chapters-2026-08-06) below, which
+settles C1B, C2 and C3 from the data. Settling the rest needs an A/B against the original — C5 most
+of all, whose two candidates are far apart:
 
 | | `ZONE1` | `ZONE3` |
 |---|---|---|
@@ -127,8 +144,61 @@ two orders disagree — C5's weather.json lists `ZONE1` first, its horizon lists
 `BuildHorizon`, which is what keeps the pair consistent; `BuildHorizon`'s own fallback is a
 no-op in that path and exists only for a mission with no weather.json at all.
 
-**Still open for C1–C4**, which all define `zone2` and resolve to themselves — C1 most of all,
-the one chapter whose own scripts disagree (`load.gw` → zone2, `tex_fx.gw` → zone1).
+#### The horizon's own geometry settles three chapters (2026-08-06)
+
+`ZONE2` being *defined* is not the same as it being *flown*. In **C1B, C2 and C3** the gamez
+`horizon/zone2` node is a bare marker — `model_index: -1`, `child_indices: []` — so the `zone2`
+default resolved to itself (they do carry `ZONE2` fog) and `BuildHorizon("zone2")` built a dome of
+**zero meshes**: what rendered was the engine's clear colour, with a hard horizon cut. The fog was
+wrong the same way (C3 wore night-blue on a mission its own data lights at diffuse 1.5, sun 25° up;
+C1B fogged only the 1128–1256 m band).
+
+Meshed nodes under each `horizon/zone*` subtree, install-wide (the zone node included, gamez child
+order — which is **not** zone-number order):
+
+| chapter | horizon zones | flown |
+|---|---|---|
+| C1 | zone1 **2**, zone2 **4** | zone2 (both build — open) |
+| **C1B** | zone1 **4**, zone2 **0** | **zone1** |
+| C1C | zone2 **4**, zone1 **1** | zone2 (both build — open) |
+| **C2** | zone2 **0**, zone1 **3** | **zone1** |
+| C2B | zone2 **2**, zone1 **1** | zone2 (both build — open) |
+| **C3** | zone2 **0**, zone1 **3** | **zone1** |
+| C4 | zone2 **4**, zone1 **1** | zone2 (both build — open) |
+| C5 | zone3 **1**, zone1 **2** | zone1 (no `zone2` at all — the fallback above) |
+
+`BL-036`'s node counts agree: C1B and C3 author their worlds under zone 1 (2,101 and 1,647 nodes,
+against 2 in zone 2), C2 likewise (766 against 1).
+
+So `WeatherState.PreferPopulatedHorizonZone` swaps the request for the one zone that has geometry,
+and only then — the rule is deliberately narrow, and every other shape keeps the request:
+
+- the request builds a dome → kept (C1, C1C, C2B, C4 are untouched, and their choice stays the
+  open fidelity question below);
+- the request is not one of the horizon's zones at all → kept, so `ResolveZone`'s weather-file
+  fallback owns it (C5). **This is why the rule must not simply take the horizon's first zone**:
+  the two orders disagree (C5's weather.json lists `ZONE1` first, its horizon lists `zone3` first),
+  and doing so would render one zone's sky under another's fog;
+- no zone, or more than one, builds geometry → kept (not decidable from geometry).
+
+The correction is applied only if the mission's own weather.json also defines fog for the new zone,
+so the sky and the fog can never come from different zones — and it is skipped entirely under an
+explicit `--sky-zone=`, which stays a literal request (empty dome and all) for inspection and for
+the repro poses recorded in `analysis/`. Coverage: `CSVM.Tests/SkyZoneTests.cs` pins both the rule
+and the real per-chapter census.
+
+⚠ **A dome bigger than the far plane is clipped open.** The dome is camera-anchored, so its far
+wall sits at (its own radius × `GameSession.HorizonScale`) from the eye. Every chapter's dome is
+6.4–12.0 km and clears the 40 km far plane at the 2.5× anchor scale — except **C1B's zone1 at
+21.8 km**, where 2.5× reaches 54.5 km and the sky renders as a hole onto the engine clear colour
+(seen at the controls the moment this selection first chose that zone). `HorizonScaleFor` therefore
+treats 2.5× as a maximum and fits the dome inside `HorizonFarFraction` of the far plane; C1B lands
+at ~1.65×, every other chapter keeps 2.5× exactly.
+
+**Still open for C1, C1C, C2B and C4**, which define `zone2` *and* build a dome for it, so the
+geometry cannot decide. There is no longer a data reason to rank one of the four first — the
+`interp.json` re-read above retired the "C1's scripts disagree" tiebreak — so the A/B is a plain
+four-chapter sweep against the original.
 
 ### Zone keys
 
