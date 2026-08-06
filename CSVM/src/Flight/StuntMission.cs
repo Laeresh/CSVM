@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight;
@@ -174,14 +175,13 @@ public sealed class StuntMission
         }
 
         if (unresolved.Count > 0)
-            GD.PushWarning($"stunt: {unresolved.Count} danger-zone marker(s) not in the world gamez: "
-                + string.Join(", ", unresolved));
+            Log.Warn("flight", $"stunt: {unresolved.Count} danger-zone marker(s) not in the world gamez: {string.Join(", ", unresolved)}");
         if (zones.Count == 0)
             return null;
 
-        GD.Print($"stunt: {zones.Count} danger zone(s) loaded");
+        Log.Info("flight", $"stunt: {zones.Count} danger zone(s) loaded");
         foreach (var z in zones)
-            GD.Print($"  {z.DzName}: {z.MarkerText()} @ ({z.Position.X:0},{z.Position.Y:0},{z.Position.Z:0})");
+            Log.Info("flight", $"  {z.DzName}: {z.MarkerText()} @ ({z.Position.X:0},{z.Position.Y:0},{z.Position.Z:0})");
         return new StuntMission(zones) { IntroLine = messages.Get(IntroMsgKey) };
     }
 
@@ -267,7 +267,7 @@ public sealed class StuntMission
             if (!_zones[i].Completed)
             {
                 if (i != _active)
-                    GD.Print($"stunt: target → {_zones[i].DzName} ({_zones[i].MarkerText()})");
+                    Log.Info("flight", $"stunt: target → {_zones[i].DzName} ({_zones[i].MarkerText()})");
                 _active = i;
                 return;
             }
@@ -389,16 +389,9 @@ public sealed class StuntMission
             merged = merged == null ? b.Box : merged.Value.Merge(b.Box);
         }
         var anchor = merged!.Value.GetCenter();
-        // InvariantCulture: a German locale renders these with comma decimals, which turns an
-        // XYZ triple into six ambiguous numbers in the one log line that carries the evidence.
-        GD.Print(string.Format(System.Globalization.CultureInfo.InvariantCulture,
-            "stunt: {0} is world geometry, not a dz marker — anchored on {1} at ({2:0.0}, {3:0.0}, {4:0.0}) "
-            + "instead of its node origin ({5:0.0}, {6:0.0}, {7:0.0})",
-            node.Name,
-            hasDoorPair ? $"the {doorCount} door leaves of its {boxes.Count} meshes"
-                        : $"all {boxes.Count} of its meshes",
-            anchor.X, anchor.Y, anchor.Z,
-            origin.X, origin.Y, origin.Z));
+        string meshesDesc = hasDoorPair ? $"the {doorCount} door leaves of its {boxes.Count} meshes"
+                                         : $"all {boxes.Count} of its meshes";
+        Log.Info("flight", $"stunt: {node.Name} is world geometry, not a dz marker — anchored on {meshesDesc} at ({anchor.X:0.0}, {anchor.Y:0.0}, {anchor.Z:0.0}) instead of its node origin ({origin.X:0.0}, {origin.Y:0.0}, {origin.Z:0.0})");
         return anchor;
     }
 
@@ -544,7 +537,7 @@ public sealed class StuntMission
         z.CompletedAt = Elapsed;      // cumulative run time — the scoreboard derives splits
         z.CompletionOrder = CompletedCount; // 0-based, before the increment below
         CompletedCount++;
-        GD.Print($"stunt: {LogTag}completed {z.DzName} — {z.MarkerText()} ({CompletedCount}/{TotalCount})");
+        Log.Info("flight", $"stunt: {LogTag}completed {z.DzName} — {z.MarkerText()} ({CompletedCount}/{TotalCount})");
         ZoneCompleted?.Invoke(z);
         // Keep pointing at the manually-cycled target unless it was the zone just
         // completed; otherwise auto-advance to the next incomplete in list order.
@@ -553,12 +546,12 @@ public sealed class StuntMission
         if (CompletedCount >= _zones.Count && !AllComplete)
         {
             AllComplete = true;
-            GD.Print($"stunt: {LogTag}ALL DANGER ZONES COMPLETE");
+            Log.Info("flight", $"stunt: {LogTag}ALL DANGER ZONES COMPLETE");
             RunCompleted?.Invoke();
         }
         else if (ActiveZone is { } next)
         {
-            GD.Print($"stunt: {LogTag}next target → {next.DzName} ({next.MarkerText()})");
+            Log.Info("flight", $"stunt: {LogTag}next target → {next.DzName} ({next.MarkerText()})");
         }
     }
 

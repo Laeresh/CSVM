@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight;
@@ -48,7 +49,7 @@ public sealed class StockLoadouts
         bool viaGodot = path.StartsWith("res://", StringComparison.Ordinal);
         if (viaGodot ? !Godot.FileAccess.FileExists(path) : !File.Exists(path))
         {
-            GD.PushWarning($"stock loadouts: file not found, no loadouts loaded: {path}");
+            Log.Warn("weapons", $"stock loadouts: file not found, no loadouts loaded: {path}");
             return loadouts;
         }
         using var doc = JsonDocument.Parse(viaGodot ? Godot.FileAccess.GetFileAsBytes(path) : File.ReadAllBytes(path));

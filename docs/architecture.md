@@ -1042,7 +1042,8 @@ each gun slot's markers to live muzzle `Node3D`s and its caliber+ammo to a `Weap
 `GunWeaponId` = `wep_{N+k}`), and each hardpoint to its `pylon`, yielding `GunGroup`s (independent
 ammo counters from `CLUSTER_SIZE`) + `Hardpoint`s. Turret slots bind but `IsTurret` (inert, M4).
 Schema: docs/formats/loadouts.md. Verify/inspect with `--dump-loadout` (add `--weapon-lab` to bind
-the full-rig loadout below instead of the stock one).
+the full-rig loadout below instead of the stock one). `StockLoadouts.Load`'s missing-file warning
+logs through `Log` (`Utils`), not `GD.PushWarning` (`engine-free-suites` A2).
 ⚠ A missing marker is a LOUD throw naming plane/slot/marker — never a silent skip (a silent one
   fires a gun from nowhere). Markers resolve by `cs_name` meta from the built tree, like MarkerOverlay.
 ⚠ Gun ammo is per group (Balmoral's two .50s carry 2000 each); rocket ammo is per pylon
@@ -1381,7 +1382,9 @@ Stunt Flying state: `Load` builds the ordered zone list from ia.json `dzones` (H
 when a mission has none → free flight); `Update` requires both polygon-plane crossings in either
 order, fires events, advances the target; clock/scoring via
 `Elapsed`/`CompletedAt`/`CompletionOrder`/`InCompletionOrder`; `ForAnotherPlayer()` clones an
-independent run so the archives parse once per session.
+independent run so the archives parse once per session. Logs through `Log` (`Utils`), not
+`GD.Print`/`GD.PushWarning` (`engine-free-suites` A2) — the class itself has no other engine
+dependency, which is what lets `stunt-gates` move off-engine in A4.
 ⚠ Ordinals lie here, twice: drive off the dzones LIST, never the gamez `dzN` nodes (numbering is
   non-contiguous, missions.md); and inside a `dzpathN` mesh tell the route from the gate pair by
   MATERIAL, not polygon index — the route is polygon 0 in only 2 of C4's 15 zones.

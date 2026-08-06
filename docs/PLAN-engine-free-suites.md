@@ -100,7 +100,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ A1 Grilling session: Decisions table settled 2026-08-06; checklist rewritten to match
 2. ☑ A3 The six no-blocker suites move (per-suite xUnit twins calling the same probes; in-engine copies deleted)
-3. ☐ A2 Enablers, by hand: the 9 sites of Decision 6 → `Log` (engine suites still verify them in-engine)
+3. ☑ A2 Enablers, by hand: the 9 sites of Decision 6 → `Log` (engine suites still verify them in-engine)
 4. ☐ A4 `stunt-gates` moves + `loadout-bind` splits; tripwire failure-drill and data-less-run drill recorded
 5. ❌ `tex-dropin` — closed in A1: engine-bound on Godot `Image` (see the classification table)
 
@@ -153,7 +153,7 @@ FireControl session, 2026-08-06, is the model):
 
 **Verify.** Decisions table filled, each row naming its losing option.
 
-## A2 ☐ Enablers, by hand
+## A2 ☑ Enablers, by hand
 
 **Goal.** `StuntMission` and the `Loadout`/`StockLoadouts` print site log through `Log`, so plain
 classes construct in the xUnit host. Runs **after A3** (Decision 7) — the pattern is proven
