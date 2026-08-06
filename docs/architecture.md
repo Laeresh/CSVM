@@ -2460,8 +2460,11 @@ the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replac
 emitter's own MODES are. Neither covers the other's job.
 
 ## src/Testing/Suites.cs
-The 25 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
-the full-rig `Loadout.ForRig`), live weapon fire, destructible stages/death/census, animation
+The 26 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
+the full-rig `Loadout.ForRig`), live weapon fire, the air-to-air hit chain (`air-to-air`: two real
+flight rigs on manual sim steps — body strike, struck-shape→part mapping, armor-first data-value
+damage, critical-zero Crash, crashed-plane immunity, and the zero-self-hits negative case, which
+must stay non-optional), destructible stages/death/census, animation
 stops and bounce-terminated launches, the full effects sweep (`effects-census`: every effect
 resolves, template meshes peak at the CALL SITE not the stage origin, none stays lit after its
 stop — `Probes.Effects` rows asserted; its puffer/mesh tallies are golden counts under the

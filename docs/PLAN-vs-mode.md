@@ -79,7 +79,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ Aircraft physics bodies on the shared `PlaneCollider` shapes, with collision layers
 2. ☑ Projectiles strike aircraft: per-shot owner exclusion, struck-part mapping, damage applied
-3. ☐ In-engine hittability suite: hit → part → damage → kill chain + self-hit negative case
+3. ☑ In-engine hittability suite: hit → part → damage → kill chain + self-hit negative case
 
 ### Wave B — Kill flow and match bookkeeping
 
@@ -178,7 +178,7 @@ route plane hits through the destructible pipeline (`DestructibleRegistry` stage
 world-object semantics). `PlaneDamage`'s "tail" arm is correct only because `PlaneCollider.Relabel`
 hands it no outboard boxes — do not "fix" sidedness in `PlaneDamage` (architecture.md, rejected).
 
-## A3 ☐ In-engine hittability suite: hit chain + self-hit negative case
+## A3 ☑ In-engine hittability suite: hit chain + self-hit negative case
 
 **Goal.** A `--run-tests` suite pins the whole chain — projectile hit → struck part → damage →
 critical-part kill — and pins that a plane's own rounds never strike it. The self-hit case is

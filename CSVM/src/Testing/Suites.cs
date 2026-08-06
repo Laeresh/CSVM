@@ -86,6 +86,9 @@ public static class Suites
         into.Add(new TestHarness.Suite("blast-neighbor-shape",
             "splash falloff on a neighbour scores to its nearest collision-shape surface, not its " +
             "transform origin (BL-239)", BlastNeighborShape));
+        into.Add(new TestHarness.Suite("air-to-air",
+            "a round strikes the target plane's body, maps to the data part, moves armor/HP by the " +
+            "weapon's own values, downs it on a critical zero — and never hits the shooter's own geometry", AirToAir));
         into.Add(new TestHarness.Suite("damage-stages",
             "each DAMAGE_SEQUENCE def fires its stage effects across an HP sweep", DamageStages));
         into.Add(new TestHarness.Suite("damage-hd",
@@ -931,6 +934,189 @@ public static class Suites
             pool?.Free();
             wall?.Free();
             neighbor?.Free();
+            textures.Dispose();
+        }
+    }
+
+    /// <summary>The air-to-air hit chain (VS-mode wave A) with its able-to-fail negative case. Two
+    /// real flight rigs (built plane, PlaneCollider boxes, AircraftBody, per-part PlaneDamage) in
+    /// an otherwise empty world, driven purely on manual sim steps — deterministic, no wall clock.
+    /// Pins: a physics ray at the fuselage returns the aircraft body and its struck shape maps to
+    /// a Parts entry; a scripted round hits, `MapStruckPart` names the expected part (nose), and
+    /// armor moves by the weapon's own ARMOR_DAMAGE while health waits behind it (armor-first);
+    /// sustained fire zeroes the critical nose and triggers the real Crash; a crashed plane soaks
+    /// no further rounds; and a burst fired through the shooter's OWN airframe registers zero
+    /// self-hits — the regression that would otherwise arrive silently as "guns too strong".</summary>
+    private static void AirToAir(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        // The first gun carrying both damage magnitudes — data-driven, not a hardcoded id.
+        WeaponDef? gun = weapons.All.FirstOrDefault(w =>
+            w.IsGun && w.ArmorDamage is > 0f && w.HealthDamage is > 0f);
+        ctx.Check(gun != null, $"a gun with ARMOR_DAMAGE and HEALTH_DAMAGE exists in the data");
+        if (gun == null)
+            return;
+        float armorDmg = gun.ArmorDamage!.Value;
+        float healthDmg = gun.HealthDamage!.Value;
+
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var nose = stats.DestroyableParts.FirstOrDefault(p =>
+            p.Name.Equals("nose", System.StringComparison.OrdinalIgnoreCase));
+        ctx.Check(nose is { Critical: true }, $"{ctx.PlaneName} carries a critical nose part");
+        if (nose == null)
+            return;
+        ctx.Check(nose.MaxArmor > 2f * armorDmg,
+            $"precondition: nose armor {nose.MaxArmor:0} absorbs the two measured shots (2×{armorDmg:0.#})");
+
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        FlightController? target = null;
+        FlightController? shooter = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            FlightController BuildRig(int playerIndex, Vector3 pos)
+            {
+                var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+                var rig = new FlightController
+                {
+                    PlaneModel = model,
+                    Collider = PlaneCollider.Build(model),
+                    Damage = new PlaneDamage(stats.DestroyableParts),
+                    PlayerIndex = playerIndex,
+                    Projectiles = live,
+                    UseKeyboard = false,
+                    AllowPause = false,
+                };
+                rig.AddChild(model);
+                // Nose on world -Z (identity attitude): plane-local == world - pos.
+                rig.Setup(new FlightModel(stats), ctx.Camera, new CamParams(), pos, pos + Vector3.Forward);
+                ctx.Host.AddChild(rig);
+                return rig;
+            }
+
+            // Two rigs on a known bearing: the target on the origin column, the shooter well
+            // abeam so its own test bursts cross nothing but its own airframe.
+            var targetPos = new Vector3(0f, 500f, 0f);
+            var shooterPos = new Vector3(500f, 500f, 0f);
+            target = BuildRig(1, targetPos);
+            shooter = BuildRig(0, shooterPos);
+            ctx.Check(target.Body != null && shooter.Body != null,
+                $"both rigs derived collider boxes and built an AircraftBody");
+            if (target.Body == null || shooter.Body == null)
+                return;
+            ctx.Check(ProjectilePool.ClassifySurface(target.Body) == SurfaceClass.Player,
+                $"an aircraft body classifies as the player IMPACT surface");
+
+            // A1's core claim, straight off the space state: a ray at the fuselage returns the
+            // body, and the struck shape index maps back to a Parts entry.
+            var space = live.GetWorld3D().DirectSpaceState;
+            var probe = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                targetPos + new Vector3(0f, 0f, -30f), targetPos, CollisionLayers.WorldAndAircraft));
+            bool probeHitBody = probe.Count > 0 && ReferenceEquals(probe["collider"].Obj, target.Body);
+            ctx.Check(probeHitBody, $"a ray at the fuselage returns the aircraft body");
+            if (probeHitBody)
+            {
+                string probePart = target.Body.PartName(probe["shape"].AsInt32());
+                ctx.Check(probePart == "fuselage",
+                    $"the struck shape maps to the expected Parts entry part={probePart}");
+            }
+
+            bool Pristine(FlightController rig) => rig.Damage!.Parts.Values.All(
+                p => p.Hp >= p.Def.MaxHp && p.Armor >= p.Def.MaxArmor);
+            float Combined(FlightController rig) => rig.Damage!.Parts.Values.Sum(p => p.Hp + p.Armor);
+
+            // One shot per call from `muzzlePos` along world +Z / -Z per the basis, then enough
+            // manual sim steps to land it; leftovers (misses fly a full RANGE) are cleared so no
+            // phase leaks rounds into the next.
+            void FireOne(Transform3D muzzle, int shooterId, int steps)
+            {
+                live.Spawn(gun, muzzle, Vector3.Zero, shooterId);
+                for (int i = 0; i < steps; i++)
+                    live.SimStep(1f / 60f);
+                live.Clear();
+            }
+
+            // --- the negative case FIRST, while both airframes are pristine: a burst from 14 m
+            // behind the shooter's own tail, fired forward through its whole airframe (tail →
+            // fuselage → nose, world -Z), owned by that same pilot. Broken owner exclusion turns
+            // several of these into self-hits; correct exclusion registers none.
+            var selfMuzzle = new Transform3D(Basis.Identity, shooterPos + new Vector3(0f, 0f, 14f));
+            for (int i = 0; i < 25; i++)
+                live.Spawn(gun, selfMuzzle, Vector3.Zero, shooter.PlayerIndex);
+            for (int i = 0; i < 60; i++)
+                live.SimStep(1f / 60f);
+            live.Clear();
+            ctx.Check(Pristine(shooter) && !shooter.Crashed,
+                $"a burst through the shooter's own geometry registers zero self-hits");
+            ctx.Check(Pristine(target), $"the abeam burst touched nothing else");
+
+            // --- the measured hits: single rounds from 10 m ahead of the target's nose, on the
+            // centerline, fired by the opposing identity. Each registering round spends exactly
+            // ARMOR_DAMAGE from the nose pool; health waits behind the armor (armor-first), and
+            // no other part moves — which is MapStruckPart naming the right part.
+            var noseMuzzle = new Transform3D(
+                Basis.LookingAt(Vector3.Back, Vector3.Up), targetPos + new Vector3(0f, 0f, -10f));
+            var noseState = target.Damage!.Parts["nose"];
+            for (int shot = 1; shot <= 2; shot++)
+            {
+                // One round per attempt: a CANNON_SPREAD deviation can miss the box from any
+                // range, so retry a clean miss (armor unmoved) — but a REGISTERING round must
+                // move the pool by exactly one ARMOR_DAMAGE quantum, which is the assertion.
+                float before = noseState.Armor;
+                int tries = 0;
+                while (noseState.Armor >= before && tries < 5)
+                {
+                    tries++;
+                    FireOne(noseMuzzle, shooter.PlayerIndex, 10);
+                }
+                if (tries > 1)
+                    ctx.Note($"shot {shot} needed {tries} rounds (spread misses)");
+                ctx.Check(Mathf.IsEqualApprox(noseState.Armor, nose.MaxArmor - shot * armorDmg),
+                    $"shot {shot}: nose armor moved by the weapon's ARMOR_DAMAGE armor={noseState.Armor:0.##} expected={nose.MaxArmor - shot * armorDmg:0.##}");
+                ctx.Check(Mathf.IsEqualApprox(noseState.Hp, nose.MaxHp),
+                    $"shot {shot}: health untouched while armor absorbs hp={noseState.Hp:0.##}");
+            }
+            ctx.Check(target.Damage.Parts.Values.All(
+                    p => p.Def == nose || (p.Hp >= p.Def.MaxHp && p.Armor >= p.Def.MaxArmor)),
+                $"no part but the nose moved");
+
+            // --- the kill: keep firing the same bearing until the critical nose zeroes. The
+            // round budget is derived from the data (armor + health over the per-round values),
+            // tripled for spread misses.
+            int budget = (int)(nose.MaxArmor / armorDmg + nose.MaxHp / healthDmg) * 3 + 20;
+            int fired = 0;
+            while (!target.Crashed && fired < budget)
+            {
+                fired++;
+                FireOne(noseMuzzle, shooter.PlayerIndex, 8);
+            }
+            ctx.Check(target.Crashed,
+                $"sustained fire zeroes the critical nose and triggers Crash rounds={fired}/{budget}");
+            ctx.Check(noseState.Hp <= 0f, $"the nose health pool is empty hp={noseState.Hp:0.##}");
+            ctx.Note($"kill took {fired} rounds of {gun.Id} (armor {nose.MaxArmor:0}/{armorDmg:0.#}, hp {nose.MaxHp:0}/{healthDmg:0.#})");
+
+            // --- a crashed plane is out of the fight: its body is unhittable and further rounds
+            // change nothing.
+            float afterCrash = Combined(target);
+            FireOne(noseMuzzle, shooter.PlayerIndex, 10);
+            ctx.Check(Mathf.IsEqualApprox(Combined(target), afterCrash),
+                $"a crashed plane soaks no further rounds");
+        }
+        finally
+        {
+            pool?.Free();
+            target?.Free();
+            shooter?.Free();
             textures.Dispose();
         }
     }
