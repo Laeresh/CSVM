@@ -84,7 +84,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — Kill flow and match bookkeeping
 
 11. ☐ Bullet-kill attribution: critical-part death → `Crash` with killer identity reported
-12. ☐ `VersusMatch` engine-free bookkeeping + xUnit tests
+12. ☑ `VersusMatch` engine-free bookkeeping + xUnit tests
 13. ☐ VS respawn loop: 3 s auto-respawn, R skips early
 
 ### Wave C — Mode plumbing and UI
@@ -237,7 +237,14 @@ tally through the real event path; a scripted terrain crash reports a death with
 static state, and the mode must not introduce any. Mid-air collisions arrive through `SurviveHit`'s
 existing path; resist inventing a separate mid-air handler.
 
-## B12 ☐ `VersusMatch` engine-free bookkeeping + xUnit tests
+## B12 ☑ `VersusMatch` engine-free bookkeeping + xUnit tests
+
+**Landed** (commit `8a59ad9`): `Flight/VersusMatch.cs` + `VersusStanding` record; nine
+`VersusMatchTests` cases. Competition ranking — shared rank 1 is the draw signal. Note for C23:
+with the time limit disabled, `Elapsed` does not accumulate (kills-only matches show no clock).
+**Verified:** `dotnet test` 9/9 green post-merge; engine-free confirmed by inspection.
+
+**Original approach (kept for reference).**
 
 **Goal.** An engine-free class (not a Node — `StuntRace`'s shape) holding per-player kills/deaths
 and the match clock; fires `MatchCompleted` on kill threshold or time limit; `Standings()` ranked
