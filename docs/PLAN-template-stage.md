@@ -1,10 +1,8 @@
 # TemplateStage — the pool/slot/place/reveal/hide cluster leaves `AnimRuntime`
 
-**HANDOFF DRAFT — grill before activating** (written 2026-08-06 from that day's architecture
-review, candidate 2; decisions NOT yet settled). The first working session on this plan **must
-start with a `/grilling` session with the user** (item A1) — the Decisions table below is empty
-until then, and the checklist after A1 is provisional. When a session activates this plan, point
-PROJECT_CONTEXT.md's "Current status" at it. Sibling handoffs from the same review:
+**ACTIVE — decisions settled** (written 2026-08-06 from that day's architecture review,
+candidate 2; the A1 grilling session ran 2026-08-06 and filled the Decisions table below, which
+is the authority where prose disagrees). Sibling handoffs from the same review:
 [`PLAN-puffer-interface.md`](plans/PLAN-puffer-interface.md) (completed 2026-08-06); the review's
 candidate 1 already landed as `FireControl` (BL-295, commit `7410cbe`), and candidate 4 as
 [`PLAN-engine-free-suites.md`](plans/PLAN-engine-free-suites.md) (completed 2026-08-06).
@@ -46,11 +44,19 @@ cannot keep them identical stops rather than repins.
 **`EmitterDirector` still receives already-resolved host and anchor nodes.** The pool does not
 become a third keying scheme — that property of the current design survives by construction.
 
-## Decisions (unfilled — settle in A1's grilling session)
+## Decisions (settled 2026-08-06; authority where prose disagrees)
 
 | # | Question | Decision |
 |---|---|---|
-| 1–9 | See the grilling agenda in item A1. | *(to be filled by the grilling session; this table then becomes the authority where prose disagrees)* |
+| 1 | The Decision 16 conflict (⚠ #2) | **Reinterpret.** The pin's letter blocked moving slot arithmetic into `EmitterDirector`; its spirit is the property "the director is handed already-resolved host and anchor nodes; the pool is not a third keying scheme". A peer module in `Anim/` preserves that property. Both prior texts (PLAN-deepening D16, PLAN-name-resolver's milestone goal) get quoted in the new `architecture.md` entries with this reinterpretation stated. *Losing options:* reopen formally (heavier, no interpretive reading); drop the extraction (keeps the 1,200-line duplication and the sealing leak). |
+| 2 | Scope of the move | **The whole cluster PLUS the BL-288 caller-slot trio** the draft's 13-member list omitted (`AssignCallerSlot`/`AssignedCallerSlot` + `_callerSlots`/`_callerSlotCursor`, ~:3038–3077 — consulted by `TemplateRootsFor`/`TemplateRootsOf`, so load-bearing for slot choice). `IndexPooledCopy` moves as the stage's staging entry with `IndexWorld`/`ApplyResetStatesWithin` as supplied runtime hooks; `ResolveLibraryRoot` stays a delegate outside (a *provider of* pooled copies, not slot/place/reveal logic). *Losing options:* the draft's 13 only (splits slot choice across two files); slots/placement only (half the concept moves). |
+| 3 | Generic `TNode` or `Node3D`-typed? | **Generic `TNode`**, `NameResolver<TNode>`'s shape. Honest hook count is ~8, not the draft's 2: identity comparer, parent/slot-meta walk, place-writer (`GlobalTransform`+`TopLevel`), visibility-writer, position-reader, and `isValid`/`isLive`/still-animated predicates — each one line in the engine adapter. The off-engine suite is the milestone's point; `MotionSet`'s typed-but-not-dereferenced precedent records exactly what that choice costs (its off-engine fake collapses). *Losing options:* `Node3D` + static arithmetic core (re-splits the concept); plain `Node3D`-typed (off-engine goal dropped). |
+| 4 | Who constructs the stage? | **`WorldEffectsFactory` builds it sealed and passes it into `ForEffects`/`ForCrashRig` as an argument**; the three flags become the stage's ctor state; plain `new AnimRuntime` gets an inert default stage (all-off — zero change for the ambient world and the lab/test construction sites). The flag properties leave `AnimRuntime` entirely, so the accepted-shallow-spot leak becomes *unexpressible*, not just closed. ⚠ The leak's cite drifted: it now sits at `WorldEffectsFactory.cs:441–442`, not `:391`. *Losing options:* runtime builds + factory configures (renames the leak); stage as a `Bind` argument (two-phase birth with an implicit ordering contract). |
+| 5 | Does `PoolSlotMeta` stay node meta? | **Yes — keep stamping it; the stage becomes its only reader** (the engine adapter's slot hook is today's ancestry walk). Verified: written by `WorldEffectsFactory` (2 sites) + `Suites.cs` fake pools (3 sites), read only by `SlotOf`; its value is scene-dump observability plus the suites' existing idiom, both preserved at zero cost. *Losing options:* internal container registry (blinds scene dumps, new suite API); stamp + registry both (two sources of truth). |
+| 6 | The two 0.25 f tolerances (⚠ #5) | **One named contract.** Verified per the ⚠ before merging: `TemplateIsAt` (~:3238) and the `CallAnimation` `movedAway` test (~:2484) ask the identical question — "has the call site moved from where this copy sits" — with the same threshold and purpose, differing only in root resolution (pooled roots vs a library copy that `TemplateRootsFor` cannot see). One `TemplateStage` constant (0.25 f m² ≡ 0.5 m), rationale in its doc. *Losing option:* two named constants — preserves a coincidence as a distinction the code doesn't have. |
+| 7 | `ownRootsOf` rewiring (⚠ #3) | **Confirmed.** The resolver's hook becomes `TemplateStage.RootsFor`; the stage's `findAll` is a **late-bound delegate wired at the runtime handover** (the factory builds the stage before any resolver exists — both directions are delegates). The discipline moves onto the stage's doc verbatim, WITH the real asymmetry spelled out: per-*call* paths (`NextPooledAnchors`) may use `Anchors` (census records once per def identity), per-*event* paths must use `FindAll` only. `NextPooledAnchors` keeps its `Anchors` call unchanged. *Losing option:* handing the stage the whole resolver — makes the discipline advisory instead of structural. |
+| 8 | Test split | **Arithmetic off-engine, integration in-engine, nothing re-implemented across tiers.** New `TemplateStageTests` (token adapter): cursor wrap, modulo fallback, `PoolRecycles` counting (both wrap flavours), caller-slot stickiness, hide-deferral holds + sweep drain. `effect-template-mesh` / `effects-census` / `damage-template-pool` stay in `Suites.cs` unchanged as the integration tier (they assert scene/visibility consequences a token type cannot honestly fake). *Losing options:* also porting suites down (MotionSet's lesson); in-engine only (abandons Q3's reason for generics). |
+| 9 | Migration + instruments | **Three goldens-identical commits (A2→A3→A4), each verified by the FULL 13-golden `.\RunTests.ps1` sweep** — not just `c1-destroy-effects`; the puffer A3 migration proved the moving golden is the unexpected one (`c1-flight`). Per commit: `effects-census` verdicts + `PoolRecycles` A/B'd identical against HEAD on a `--debug-anim` chapter run. **Zero tolerated deltas** — this is a pure extraction with no accepted behavioural change anywhere; any golden moving is stop-and-diagnose, never re-pin. B11 stays in the plan, decided after A4 lands. *Losing options:* one big commit (loses bisectability in the hottest file); dropping B11 today. |
 
 ## ⚠ Read this before implementing anything
 
@@ -91,14 +97,14 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — decisions, then the stage
 
-1. ☐ Grilling session: settle the Decisions table with the user; rewrite Waves A2+/B if the calls differ
-2. ☐ `TemplateStage<TNode>`: slot arithmetic + placement + the "which copy is mine" rule, with the off-engine suite
-3. ☐ Reveal/retire/sweep move in; both entry points perform the ritual through the module
-4. ☐ Sealing-leak closure: the two flags become ctor args; `WorldEffectsFactory` hands the stage over sealed
+1. ☑ Grilling session: Decisions table settled 2026-08-06; all nine recommendations accepted (two with substantive findings: the caller-slot trio joins the move scope, and the honest hook count is ~8)
+2. ☐ `TemplateStage<TNode>`: slot arithmetic + placement + the "which copy is mine" rule **+ the BL-288 caller-slot claim** (Decision 2), generic per Decision 3, with the off-engine suite (Decision 8's list)
+3. ☐ Reveal/retire/sweep move in; both entry points perform the ritual through the module; the two tolerances become the one named contract (Decision 6)
+4. ☐ Sealing-leak closure: the three flags become stage ctor state, `ForEffects`/`ForCrashRig` take the stage as an argument, plain construction gets the inert default (Decision 4); the accepted-shallow-spot ⚠ is deleted from `architecture.md`
 
-### Wave B — the ride-along (if the grilling keeps it)
+### Wave B — the ride-along (kept; decided after A4 lands)
 
-11. ☐ `EnsureWorldEffects`'s 6-param call-order-dependent signature folds into the stage handover (the BL-232 failure family)
+11. ☐ `EnsureWorldEffects`'s 6-param call-order-dependent signature folds into the stage handover (the BL-232 failure family) — go/no-go decision is part of starting this item, per Decision 9
 
 ## Dependency and parallelism notes
 
@@ -113,42 +119,20 @@ ownership:** `CSVM/src/Mech3/Anim/TemplateStage.cs` (new), `CSVM/src/Mech3/AnimR
 
 # Wave A — decisions, then the stage
 
-## A1 ☐ Grilling session — settle the decision tree with the user
+## A1 ☑ Grilling session — settled 2026-08-06
 
-**Goal.** Every question below has a user-made call recorded in the Decisions table; the checklist
-is rewritten to match. No code before this lands.
-
-**Approach.** Run `/grilling` with this agenda, one question at a time, recommendation first (the
-FireControl session, 2026-08-06, is the model — its record is in commit `7410cbe`'s plan trail):
-
-1. **The Decision 16 conflict (⚠ #2 above).** Reopen, reinterpret, or drop the extraction?
-   *Recommended:* reinterpret — a peer module in `Anim/` preserves the pinned property (the
-   director gets resolved nodes); quote both texts in the new entries.
-2. **Scope of the move.** The 13 behaviours + flags + `PoolSlotMeta` protocol + `PoolRecycles` +
-   `IndexPooledCopy`? *Recommended:* the whole cluster — a partial move leaves the concept split
-   across two files, which is the current disease.
-3. **Generic `TNode` or `Node3D`-typed?** *Recommended:* generic like `NameResolver<TNode>`
-   (two adapters at birth: `Node3D` in engine, token type in tests); the two genuine engine
-   touches (`PlaceTemplateOn`'s `GlobalTransform` write, `root.Visible`) become supplied hooks.
-4. **Who constructs the stage?** *Recommended:* `WorldEffectsFactory` builds it (it stamps
-   `PoolSlotMeta` today) and hands it to `AnimRuntime` sealed — the two flags as ctor args, which
-   is what deletes the accepted-shallow-spot ⚠.
-5. **Does `PoolSlotMeta` stay node meta?** External observability (probes, labs) vs an internal
-   map. *Recommended:* keep stamping the meta, but the module becomes its only reader.
-6. **The two 0.25 f tolerances** (⚠ #5). One named contract, or two named constants?
-7. **`ownRootsOf` rewiring.** After the move the resolver's hook is `TemplateStage.RootsFor` —
-   confirm the `FindAll`-never-`Anchors` discipline carries over verbatim (⚠ #3).
-8. **Test split.** Which facts go off-engine (slot wrap, modulo fallback, recycle counting, hide
-   deferral, "which copy is mine") vs stay in-engine (`effect-template-mesh`, `effects-census`
-   as integration)? *Recommended:* exactly that split — never re-implement a check in both tiers.
-9. **Migration + instruments.** *Recommended:* three goldens-identical commits (A2/A3/A4), with
-   `effects-census` verdicts and the `PoolRecycles` counter A/B'd against HEAD per commit, plus
-   the `c1-destroy-effects` golden as the pixel tripwire.
-
-**Model recommendation.** high — judgement-heavy, user-interactive, and it rewrites this plan.
-
-**Verify.** The Decisions table is filled, each row naming its losing option; the checklist
-matches the calls.
+All nine questions put to the user one at a time, recommendation first; every recommendation was
+accepted. Two carried substantive findings the code-read forced: the draft's 13-member list was
+incomplete — the **BL-288 caller-slot trio** (`AssignCallerSlot`/`AssignedCallerSlot` + two
+fields) is consulted by `TemplateRootsFor`/`TemplateRootsOf` and joins the move (Q2) — and the
+draft's "two supplied hooks" undercounted: generic `TNode` honestly needs ~8 (Q3), each one line
+in the engine adapter. Verifications performed during the session: the sealing-leak cite drifted
+`:391` → `:441–442` (⚠ #4 in action); `PoolSlotMeta` has no reader outside `SlotOf` and no
+probe/lab keys on it (Q5); the two 0.25 f tolerances are one rule asked through two root
+resolutions, so ⚠ #5's precondition for merging them is met (Q6). Q9 tightened the draft's
+instrument from "the `c1-destroy-effects` golden" to the FULL 13-golden sweep — the puffer A3
+migration's lesson (the moving golden was `c1-flight`, the unexpected one). The Decisions table
+above holds each call with its losing options.
 
 ## A2 ☐ `TemplateStage<TNode>` — slots, placement, identity, with the off-engine suite
 
@@ -163,8 +147,12 @@ dereferenced": `MotionSet`'s and `NameResolver`'s architecture entries.
 
 **Approach.** Move `SlotOf` / `NextPooledAnchors` / `PlaceTemplateAt` / `PlaceTemplateOn` /
 `TemplateRootsFor` / `TemplateRootsOf` / `TemplateIsAt` / `TemplateSharedWithLiveInstance` /
-`IndexPooledCopy` plus `_poolCursor` / `_slotOfNode` / `PoolRecycles`, exactly as they are —
-resist improving logic mid-move. Wire per A1's construction call.
+`IndexPooledCopy` plus `_poolCursor` / `_slotOfNode` / `PoolRecycles` **and the caller-slot trio
+`AssignCallerSlot` / `AssignedCallerSlot` + `_callerSlots` / `_callerSlotCursor` (Decision 2)**,
+exactly as they are — resist improving logic mid-move. `IndexPooledCopy`'s body stays two calls
+into runtime services (`IndexWorld`, `ApplyResetStatesWithin`) supplied as hooks;
+`ResolveLibraryRoot` stays outside. Wire per Decision 4's construction call, `findAll` late-bound
+at the handover (Decision 7).
 
 **Model recommendation.** high — the hottest file in the repo; the blast radius is every effect.
 
