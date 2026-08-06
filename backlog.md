@@ -412,7 +412,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   re-open `BL-288`'s pooling — the theft mechanism was real and its fix is verified independent
   of these semantics.
   *Cross-refs:* `CAP-29` (the capture), `CAP-27` (spark-shim existence), `BL-288` landing
-  (`docs/PLAN-m3-polish-10.md` A1), `DamageVisuals.cs` (the consumer),
+  (`docs/plans/PLAN-m3-polish-10.md` A1), `DamageVisuals.cs` (the consumer),
   `extracted/zrdr/vehicle.zrd.json` (the authority).
 
 ## Weapons & combat
@@ -1415,7 +1415,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   under (b) each event would snap back to rest. **Needs the original game**: watch a zeppelin rock
   through several loops and see whether it returns to the same attitude or walks. Same class of
   call as `MissionSetup`'s `Object3DRotate` angle unit, resolved 2026-08-06 by a per-script
-  magnitude heuristic rather than a global guess (`BL-249`, `docs/PLAN-m3-polish-10.md` C22) — do
+  magnitude heuristic rather than a global guess (`BL-249`, `docs/plans/PLAN-m3-polish-10.md` C22) — do
   not resolve this differently.
 
 - `BL-035` `[Feature]` `[Blocked: cutscene player]` **Animation event kinds that need weapons or cutscenes — `CALLBACK`, `OBJECT_CYCLE_TEXTURE`,
@@ -1597,7 +1597,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   feel side: upper ring facing the plane / against the rocket's flight direction. The ring anims
   carry no rotation data (scale/opacity only — `docs/formats/weapon-effects.md`), so any change
   is engine-side and a deliberate deviation. Cross-link: `BL-292` (crash-splash orientation,
-  different spawn path; scheduled in `docs/PLAN-m3-polish-10.md` A3).
+  different spawn path; scheduled in `docs/plans/PLAN-m3-polish-10.md` A3).
 
 ## Audio
 
@@ -1861,7 +1861,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   idle→5/8 fires" — the 2/8–4/8 band is unobserved, so 0.25 is the smallest threshold
   consistent with both and a declared TUNE. (b) The listen A/B: `EngineStartRamp` is now the
   `startprops` authored 2.0 s and the crash/destruction wind-down plays `snd_propstop` — judge
-  both by ear. ⚠ Trap: `BL-268` (`docs/PLAN-m3-polish-10.md` C21, landed 2026-08-06) removed
+  both by ear. ⚠ Trap: `BL-268` (`docs/plans/PLAN-m3-polish-10.md` C21, landed 2026-08-06) removed
   the blanket ×0.2 mix scale on these same paths, raising the own-ship mix ~5× — judge the
   ramp/stop cue against the new, unscaled level, not the old ×0.2 one.
 

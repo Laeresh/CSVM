@@ -1,8 +1,6 @@
 # Milestone 3 — Polish run 10: quick-win bug fixes
 
-**ACTIVE PLAN** (written 2026-08-06). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE** (2026-08-06). Archived under `docs/plans/`; all ten items landed.
 
 Ten open `[Bug]` items from `backlog.md`, selected 2026-08-06 by the criterion **quick wins / low
 risk**: small, well-diagnosed fixes with a clear fix shape, favouring many landings over one deep
