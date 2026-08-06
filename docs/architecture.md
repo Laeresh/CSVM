@@ -1811,7 +1811,10 @@ survivable-speed graze (`SurviveHit` returning false), or for a projectile kill
 feedback triple, no cooldown since rounds are discrete). Every `Crash` raises `Downed` exactly
 once — (victim `PlayerIndex`, killer: the killing round's shooter id; null for terrain, mid-air,
 an unowned `NoShooter` round and every other cause) — a fact report the session scores in `--vs`;
-flight holds no match state, and `Respawn` emits nothing. `Respawn` plays `startprops` back and resets
+flight holds no match state, and `Respawn` emits nothing. `AutoRespawnAfter` (session-armed —
+Versus sets 3 s on every rig) auto-respawns a crash on the sim clock with R still skipping early;
+null, the default, keeps every other mode manual-R (scripted HoldSegments runs keep their 1.5 s).
+`Respawn` plays `startprops` back and resets
 `ThrottleSmoke`, which `Update` otherwise drives every frame off the live throttle.
 A survivable graze also plays touchdown.zrd's per-surface reaction (`GrazeReaction`): the struck
 collider classified through the same call picks `touchdown_default` (buildings,
@@ -2335,10 +2338,11 @@ build's edges. `BuildsCollision` is the only spelling of "does this session buil
 when `_spec.AnimLab`, else `.Session`), which is also where `TexturesOutliveBuild`/
 `SoundsOutliveBuild` come from now — `BuildWorldStage`'s `WorldSession.Options` reads them off
 `BuildState`, it does not set them by hand. In `--vs`, `BuildFlightRigs` builds one `VersusMatch`
-(`VsKills`, `VsTimeMinutes`×60 s) and forwards every rig's `Downed` into it — a killer inside the
+(`VsKills`, `VsTimeMinutes`×60 s), forwards every rig's `Downed` into it — a killer inside the
 roster is `RegisterKill`, anything else (terrain, mid-air, unowned or `IncomingFire` rounds) is a
-plain `RegisterDeath`; its clock advances on sim dt only (`_PhysicsProcess` realtime,
-`DriveSimSteps` when parent-driven), so a halt freezes the match with the sim.
+plain `RegisterDeath` — and arms every rig's 3 s auto-respawn (`VersusRespawnDelay`, R skips);
+the match clock advances on sim dt only (`_PhysicsProcess` realtime, `DriveSimSteps` when
+parent-driven), so a halt freezes the match with the sim.
 ⚠ **It parses no args and resolves nothing** — the Launcher hands it the one `SessionSpec` its
   session is built from; **a new flag is a SessionSpec change**. `_menuPads` is the deliberate
   exception: join-flow session state riding the `LauncherContext`, never the spec.
@@ -2498,9 +2502,11 @@ The 26 registered in-engine assertion suites cover plane/loadout bindings (stock
 the full-rig `Loadout.ForRig`), live weapon fire, the air-to-air hit chain (`air-to-air`: two real
 flight rigs on manual sim steps — body strike, struck-shape→part mapping, armor-first data-value
 damage, critical-zero Crash, crashed-plane immunity, the zero-self-hits negative case, which
-must stay non-optional, and `Downed`-into-`VersusMatch` attribution: the weapon kill scores
-exactly the shooter, killer-less and unowned-round deaths score nobody), destructible
-stages/death/census, animation
+must stay non-optional, `Downed`-into-`VersusMatch` attribution: the weapon kill scores
+exactly the shooter, killer-less and unowned-round deaths score nobody, and the VS respawn loop:
+`AutoRespawnAfter` 3 s respawns at that mark in sim frames, respawn reports nothing, null waits
+for R),
+destructible stages/death/census, animation
 stops and bounce-terminated launches, the full effects sweep (`effects-census`: every effect
 resolves, template meshes peak at the CALL SITE not the stage origin, none stays lit after its
 stop — `Probes.Effects` rows asserted; its puffer/mesh tallies are golden counts under the

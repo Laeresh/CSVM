@@ -950,7 +950,9 @@ public static class Suites
     /// self-hits — the regression that would otherwise arrive silently as "guns too strong".
     /// The Downed reports feed a real VersusMatch through the same forwarding GameSession uses
     /// (B11): the weapon kill scores exactly the shooter, a wreck reports no second death, a
-    /// killer-less crash and an unowned round's kill each tally a death and score nobody.</summary>
+    /// killer-less crash and an unowned round's kill each tally a death and score nobody. The tail
+    /// pins the VS respawn loop (B13): without AutoRespawnAfter a crash waits for R; armed at the
+    /// session's 3 s it auto-respawns at that mark in sim frames, and the respawn reports nothing.</summary>
     private static void AirToAir(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -1155,6 +1157,34 @@ public static class Suites
             ctx.Check(target.Crashed, $"the unowned burst downed the plane rounds={fired}/{budget}");
             ctx.Check(match.DeathsOf(1) == 3 && match.KillsOf(0) == 1 && match.KillsOf(1) == 0,
                 $"an unowned round's kill is a death with no killer deaths(P2)={match.DeathsOf(1)} kills={match.KillsOf(0)}/{match.KillsOf(1)}");
+
+            // The VS respawn loop (B13), in sim frames. Default (AutoRespawnAfter null): a crash
+            // waits for R — 4 s of crash-cam sim steps respawn nothing.
+            for (int i = 0; i < 240; i++)
+                target.SimStep(1f / 60f);
+            ctx.Check(target.Crashed, $"without AutoRespawnAfter a crash waits for R (still down after 4 s)");
+
+            // Armed at 3 s (what the session sets per rig in --vs): the timer runs from Crash in
+            // sim frames — still down just short of the mark, flying again within a frame or two
+            // of it (the 180 × 1/60f float subtractions leave the exact frame a knife-edge), and
+            // the respawn itself reports no death.
+            target.Respawn();
+            target.AutoRespawnAfter = 3f;
+            target.DebugForceCrash();
+            int deathsAtCrash = match.DeathsOf(1);
+            for (int i = 0; i < 175; i++)
+                target.SimStep(1f / 60f);
+            ctx.Check(target.Crashed, $"just short of the 3 s mark the plane is still on the crash cam");
+            int extra = 0;
+            while (target.Crashed && extra < 10)
+            {
+                extra++;
+                target.SimStep(1f / 60f);
+            }
+            ctx.Check(!target.Crashed,
+                $"the armed crash auto-respawns at the 3 s mark (step {175 + extra} of 180±5)");
+            ctx.Check(match.DeathsOf(1) == deathsAtCrash && match.KillsOf(0) == 1,
+                $"respawn emitted nothing — the death was reported at Crash deaths(P2)={match.DeathsOf(1)}");
         }
         finally
         {

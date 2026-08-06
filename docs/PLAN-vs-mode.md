@@ -85,7 +85,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ Bullet-kill attribution: critical-part death → `Crash` with killer identity reported
 12. ☑ `VersusMatch` engine-free bookkeeping + xUnit tests
-13. ☐ VS respawn loop: 3 s auto-respawn, R skips early
+13. ☑ VS respawn loop: 3 s auto-respawn, R skips early
 
 ### Wave C — Mode plumbing and UI
 
@@ -270,7 +270,7 @@ in the class (the two-tier rule, architecture.md `## CSVM.Tests`).
 **⚠ Traps.** `StuntRace`'s lesson (`StuntMission` once crashed the xUnit host via `GD.Print` —
 fixed in engine-free-suites A2): keep every engine touch out, including logging.
 
-## B13 ☐ VS respawn loop: 3 s auto-respawn, R skips early
+## B13 ☑ VS respawn loop: 3 s auto-respawn, R skips early
 
 **Goal.** In VS mode a downed player watches the crash cam ~3 s, then auto-respawns at their own
 spawn point with full HP/ammo; R still respawns early. No invulnerability window. Other modes'

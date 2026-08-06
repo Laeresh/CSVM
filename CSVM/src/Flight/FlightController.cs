@@ -265,6 +265,13 @@ public partial class FlightController : Node3D
     /// wins over this while it is down.</summary>
     public int PinnedView;
 
+    /// <summary>Seconds a crash sits on the crash cam before this plane auto-respawns, or null —
+    /// the default — for manual R only. The session arms it (Versus: 3 s, every rig) so a downed
+    /// player rejoins the fight without touching a key; R still respawns early, and the timer is
+    /// armed at <see cref="Crash"/>. Scripted HoldSegments runs auto-respawn regardless, on
+    /// <see cref="AutoRespawnDelay"/> unless this says otherwise.</summary>
+    public float? AutoRespawnAfter;
+
     private const float ThrottleRate = 0.5f;    // full sweep in 2 s
     private const float SpawnThrottle = 0.5f;   // the original always spawns at half throttle (confirmed in-game, all planes)
     private const float SpawnSpeed = 53.6f;     // m/s ≈ 120 mph. PLACEHOLDER: the original's spawn speed is
@@ -775,9 +782,10 @@ public partial class FlightController : Node3D
             // _Process through this crash freeze (motions, the played def, every puffer) — but not
             // through a clock halt, which stops that runtime with everything else, so P during a
             // crash catches the wreck mid-break-up. The airframe stays frozen at the impact point
-            // until the pilot respawns (R / gamepad Y or A); unattended HoldSegments runs respawn
-            // on a timer instead
-            if (RespawnPressed() || (HoldSegments != null && (_autoRespawnIn -= dt) <= 0f))
+            // until the pilot respawns (R / gamepad Y or A); unattended HoldSegments runs and
+            // AutoRespawnAfter sessions (Versus) respawn on the timer armed at Crash instead
+            if (RespawnPressed()
+                || ((HoldSegments != null || AutoRespawnAfter != null) && (_autoRespawnIn -= dt) <= 0f))
                 Respawn();
             return;
         }
@@ -1438,7 +1446,7 @@ public partial class FlightController : Node3D
         if (_crashed)
             return; // one crash, one Downed report — nothing may double-fire the death
         _crashed = true;
-        _autoRespawnIn = AutoRespawnDelay;
+        _autoRespawnIn = AutoRespawnAfter ?? AutoRespawnDelay;
         if (PlaneModel != null)
             PlaneModel.Visible = false; // the airframe is gone; HUD prompts for respawn
         Body?.SetHittable(false);       // a crashed plane soaks no rounds and blocks no sweep

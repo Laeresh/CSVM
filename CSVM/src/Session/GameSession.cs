@@ -44,6 +44,10 @@ public partial class GameSession : Node3D
     /// behind the subject still leaves something to orbit rather than spinning about the eye.</summary>
     private const float MinOrbitRadius = 1f;
 
+    /// <summary>Seconds a downed Versus player watches the crash cam before auto-respawning
+    /// (R skips early). Decision #6: own spawn point, full HP/ammo, no invulnerability window.</summary>
+    private const float VersusRespawnDelay = 3f;
+
     private static readonly string[] InstanceShaderParams =
         { "node_bias", "csky_fog_on", "csky_light_fade", Mech3.SceneBuilder.OpacityParam };
 
@@ -1525,6 +1529,8 @@ public partial class GameSession : Node3D
             _versus = match;
             foreach (var rig in _rigs)
                 if (rig.Controller is { } pilot)
+                {
+                    pilot.AutoRespawnAfter = VersusRespawnDelay; // crash cam, then back in — R skips
                     pilot.Downed += (victim, killer) =>
                     {
                         if (killer is int k && k >= 0 && k < match.PlayerCount)
@@ -1532,6 +1538,7 @@ public partial class GameSession : Node3D
                         else
                             match.RegisterDeath(victim);
                     };
+                }
             match.MatchCompleted += () => GD.Print("dogfight: match complete — " + string.Join(", ",
                 match.Standings().Select(s => $"P{s.PlayerIndex + 1} {s.Kills}K/{s.Deaths}D (#{s.Rank})")));
             GD.Print($"dogfight: {_rigs.Count} pilots, " +
