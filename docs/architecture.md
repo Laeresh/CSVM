@@ -94,6 +94,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/StuntRace.cs` — splitscreen stunt race bookkeeping: one `Racer` per player, finish placings, standings, rematch reset.
 - `src/Flight/StuntRaceBoard.cs` — the race's shared ranked results overlay, on its own full-window CanvasLayer above the splitscreen panes.
 - `src/Flight/ScoreStore.cs` — stunt best-time persistence: `user://stunt_scores.json` keyed chapter/mission/plane, faster runs only.
+- `src/Flight/VersusMatch.cs` — Dogfight deathmatch bookkeeping: per-player kills/deaths, the host-fed match clock, threshold/time-out completion, ranked standings.
 - `src/Flight/Weather.cs` — weather.json reader → `WeatherState`: per-zone fog, sunlight, cloud whiteout, wind, precipitation.
 - `src/Flight/FlightAudio.cs` — own-plane loops (engine, overspeed whine, rattle) + crash/prop one-shots, per-player `MixGain`.
 - `src/Flight/SpectatorCamera.cs` — the `--freecam`/`--anim-lab` observation camera: RMB-look + WASD/QE, no roll; `Frame`/`FollowNode` track an object.
@@ -1491,6 +1492,23 @@ total + gap to the winner; DNF when unfinished). Wakes on `RaceCompleted`, hides
 once `AllFinished` clears; the footer's exit hint follows how the session was launched.
 ⚠ Scales on raw window height / 720, NOT HudMetrics — pane damping would shrink a full-window
   overlay for no reason.
+
+## src/Flight/VersusMatch.cs
+Dogfight deathmatch bookkeeping (M4-A1 front-load `PLAN-vs-mode.md` B12): `RegisterKill(shooter,
+victim)` scores the shooter and tallies the victim's death, `RegisterDeath(victim)` tallies a death
+alone (terrain/mid-air — no killer, no score change); `Advance(dt)` is the host-fed match clock;
+`MatchCompleted` fires once on kill threshold or time-out (leader wins, equal top kills draw);
+`Standings()` ranks by kills descending with ties sharing a rank; `Restart()` (rematch) zeroes every
+score and re-arms completion. Off-engine coverage: `CSVM.Tests/VersusMatchTests.cs` (threshold win,
+time-out win, draw, post-completion no-op, rematch re-arm, each limit disabled on its own).
+⚠ Zero engine dependency at all — no `GD.*`, no `Godot.` type, no `Node`, no logging (unlike
+  `StuntRace`, not even through `Log`): a `GD.Print` in this family once crashed the xUnit host with
+  an unmanaged `AccessViolationException`, so this class stays engine-free by construction rather
+  than by a later fix.
+⚠ Kill target 0 and/or time limit 0 each disable that end condition independently; both 0 is a
+  valid, deliberate untimed-unlimited match that never completes on its own.
+⚠ Deliberately not a Node — freed with the session, host-fed exactly like `StuntRace`'s `Tick`/
+  `Advance` timekeeping.
 
 ## src/Flight/Weather.cs
 `WeatherState`: per-mission atmosphere from the flown mission's own weather.json — per-zone fog
