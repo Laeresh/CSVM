@@ -1,10 +1,8 @@
 # Engine-free suites — nine checks leave the windowed harness for `CSVM.Tests`
 
-**HANDOFF DRAFT — grill before activating** (written 2026-08-06 from that day's architecture
-review, candidate 4; decisions NOT yet settled). The first working session on this plan **must
-start with a `/grilling` session with the user** (item A1) — the Decisions table below is empty
-until then, and the checklist after A1 is provisional. When a session activates this plan, point
-PROJECT_CONTEXT.md's "Current status" at it. Sibling handoffs:
+**ACTIVE** (written 2026-08-06 from that day's architecture review, candidate 4; decisions
+settled the same day in A1's grilling session — the Decisions table below is the authority where
+prose disagrees). Sibling handoffs:
 [`PLAN-template-stage.md`](PLAN-template-stage.md),
 [`PLAN-puffer-interface.md`](PLAN-puffer-interface.md).
 
@@ -19,20 +17,20 @@ anything that runs without the engine goes in `CSVM.Tests`."* The infrastructure
 the `Log.ConsoleSink` shim precedent (`CSVM.Tests/StuntRaceTests.cs` — "the real `GD.Print` …
 crashes the whole test host outside the engine").
 
-The nine, as classified on 2026-08-06 (body sizes then; **re-verify each at execution — this
-table is a lead, not a fact**):
+The nine, **re-classified in A1's session (2026-08-06, evening)** — two verdicts changed from
+the morning table:
 
-| suite | ~lines | blocker to clear |
+| suite | blocker to clear | A1 verdict |
 |---|---|---|
-| `stunt-gates` | 52 | `StuntMission.cs`: 8 `GD.Print` → `Log` (hand-edit) |
-| `flight-envelope` | 31 | none — `FlightModel.cs` has zero `GD.*` |
-| `gauge-colours` | 74 | none (pure statics) |
-| `gauge-arrow-tween` | 53 | none (pure statics) |
-| `weapons-defs` | 15 | none |
-| `weapon-blast` | 21 | none |
-| `markers-rig` | 14 | none |
-| `loadout-bind` | 25 | `Loadout`/`StockLoadouts`: 1 print site (hand-edit) |
-| `tex-dropin` | 64 | none claimed — re-verify `TextureArchive` use |
+| `stunt-gates` | `StuntMission.cs`: 8 `GD.*` sites → `Log` (hand-edit; see Decision 6's closed list) | moves (A4) |
+| `flight-envelope` | none — `FlightModel.cs` has zero `GD.*` | moves (A3) |
+| `gauge-colours` | none (pure statics) | moves (A3) |
+| `gauge-arrow-tween` | none (pure statics) | moves (A3) |
+| `weapons-defs` | none | moves (A3) |
+| `weapon-blast` | none | moves (A3) |
+| `markers-rig` | none | moves (A3) |
+| `loadout-bind` | first half pure `Probes.Loadouts`; **BL-294 (8faa6b1) appended a second half building real planes** (`PlaneBuilder.Build` → `Node3D`, `Free()` at `Suites.cs:833`) | **splits** (A4): probes half moves, fill-order half stays in-engine |
+| `tex-dropin` | **engine-bound** — body works on Godot `Image` objects (`GetData`/`GetFormat`/`Flatten`, `Suites.cs:1349–1394`); `Image` is native-backed and crashes the xUnit host | **❌ stays put** — moving it would mean re-implementing the flatten check, the exact "never re-implement" trap |
 
 `stall-warning` (87 lines) is **excluded**: it is engine-bound only because `GaugeCluster :
 Control` forces `new`/`Free()` — freeing it is the optional Wave B (the review's candidate 6:
@@ -53,11 +51,17 @@ plain `StallLamp`/`ArrowSweep` structs).
 **No bulk `GD.Print` sweep.** The enabler conversions are hand edits at the ~9 named sites only —
 verification SHELL-3 records a bulk text rewrite corrupting files here before.
 
-## Decisions (unfilled — settle in A1's grilling session)
+## Decisions (settled 2026-08-06, A1 grilling session — authority where prose disagrees)
 
 | # | Question | Decision |
 |---|---|---|
-| 1–7 | See the grilling agenda in item A1. | *(to be filled by the grilling session; this table then becomes the authority where prose disagrees)* |
+| 1 | Confirm the nine after re-classification | **Seven clean movers** (`flight-envelope`, `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig`, `stunt-gates`); **`loadout-bind` splits** — `Probes.Loadouts` half moves, BL-294 fill-order half stays in-engine with a narrowed description; **`tex-dropin` closed ❌** (engine-bound on Godot `Image`). *Losing option:* keep `loadout-bind` whole in-engine — would strand the `StockLoadouts` print conversion's beneficiary. |
+| 2 | Delete or keep in-engine copies? | **Delete, same commit as each move.** For the split suite, delete only the moved half's lines. *Losing option:* keep-both transition period — double green, zero extra coverage (both tiers call the same probe), rots. |
+| 3 | Naming/discoverability | **One xUnit class per suite, name mirrored** (`flight-envelope` → `FlightEnvelopeTests`), old kebab suite name verbatim in each class doc; one file per class in `CSVM.Tests/` root. **No `[Trait]`s** — nothing filters by trait. *Losing options:* one big file (kills suite-per-commit cadence); traits (machinery without a consumer). |
+| 4 | Skip semantics + reporting | **No script/mechanism changes** — `RunTests.ps1` already prints per-stage skip + Unchecked lines for both tiers (`:377`, `:478`), and `[ExtractedDataFact]` skips with `NoDataReason`. Prose only: landing commits state the data-less behaviour; one line in the Testing entry noting counts shifted tiers. *Losing option:* a "moved suites" summary note in `RunTests.ps1` — machinery for a one-time event. |
+| 5 | Wave B in or out? | **In**, as its own goldens-identical item, **scoped to `GaugeCluster` only** — the `FlightController` feed predicate stays untouched (the `_held` exemption trap lives there). *Losing option:* defer — leaves `stall-warning` as the lone pure-arithmetic suite paying a windowed launch, re-asking "why is this one different" every session. |
+| 6 | Enabler scope (closed list) | **Exactly 9 sites:** `StuntMission.cs` `:177` (PushWarning), `:182`, `:184`, `:270`, `:394`, `:547`, `:556`, `:561`; `Loadout.cs:51` (PushWarning in `StockLoadouts.Load`). The `:547/:556/:561` trio was missing from the morning list. `PushWarning` → nearest `Log` level, resolved by A2 against `Log`'s actual API — not a scope widening. *Losing option:* any wider sweep (SHELL-3). |
+| 7 | Order of the moves | **A3 → A2 → A4 → B11.** Pattern proven on no-blocker suites before any live-code edit; enablers land while `stunt-gates` still verifies them in-engine; B11 last so its review carries no relocation noise. *Losing option:* the checklist's original A2-first chain — front-loads the riskiest hand edits before the pattern justifying them is demonstrated. |
 
 ## ⚠ Read this before implementing anything
 
@@ -92,23 +96,25 @@ verification SHELL-3 records a bulk text rewrite corrupting files here before.
 
 Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Keep this in sync as items land.**
 
-### Wave A — decisions, then the relocation
+### Wave A — decisions, then the relocation (execution order: A1 → A3 → A2 → A4, per Decision 7)
 
-1. ☐ Grilling session: settle the Decisions table with the user; rewrite A2–A4 if the calls differ
-2. ☐ Enablers, by hand: `StuntMission` 8 prints + the `Loadout`/`StockLoadouts` site → `Log`; re-classify all nine suites
-3. ☐ The no-blocker suites move (per-suite xUnit twins calling the same probes; in-engine copies deleted)
-4. ☐ `stunt-gates` + `loadout-bind` + `tex-dropin` move; tripwire failure-drill run and recorded
+1. ☑ A1 Grilling session: Decisions table settled 2026-08-06; checklist rewritten to match
+2. ☐ A3 The six no-blocker suites move (per-suite xUnit twins calling the same probes; in-engine copies deleted)
+3. ☐ A2 Enablers, by hand: the 9 sites of Decision 6 → `Log` (engine suites still verify them in-engine)
+4. ☐ A4 `stunt-gates` moves + `loadout-bind` splits; tripwire failure-drill and data-less-run drill recorded
+5. ❌ `tex-dropin` — closed in A1: engine-bound on Godot `Image` (see the classification table)
 
-### Wave B — optional companion (if the grilling keeps it)
+### Wave B — companion (kept by Decision 5)
 
-11. ☐ `StallLamp`/`ArrowSweep` structs inside `GaugeCluster`; `stall-warning` moves; the 7 testability-escape internals retire
+11. ☐ B11 `StallLamp`/`ArrowSweep` structs inside `GaugeCluster`; `stall-warning` moves; the 7 testability-escape internals retire (`FlightController` untouched)
 
 ## Dependency and parallelism notes
 
-A1 blocks all. A2 → A3 → A4 is a chain; B11 independent after A1. **File ownership:**
+A1 blocks all. Execution order A3 → A2 → A4 → B11 (Decision 7); A2 and A3 are independent of
+each other, A4 needs both, B11 runs last by choice not dependency. **File ownership:**
 `CSVM/src/Testing/Suites.cs`, new `CSVM.Tests/*` files, `CSVM/src/Flight/StuntMission.cs`,
-`CSVM/src/Flight/Loadout.cs` (print site only), Wave B adds `CSVM/src/Flight/GaugeCluster.cs` +
-`CSVM/src/Flight/FlightController.cs` (the gauge feed site). Contends with
+`CSVM/src/Flight/Loadout.cs` (print site only), Wave B adds `CSVM/src/Flight/GaugeCluster.cs`
+only (`FlightController.cs` excluded by Decision 5). Contends with
 [`PLAN-puffer-interface.md`](PLAN-puffer-interface.md) on `Suites.cs` — not in parallel worktrees
 with it. No contention with [`PLAN-template-stage.md`](PLAN-template-stage.md).
 
@@ -116,10 +122,10 @@ with it. No contention with [`PLAN-template-stage.md`](PLAN-template-stage.md).
 
 # Wave A — decisions, then the relocation
 
-## A1 ☐ Grilling session — settle the decision tree with the user
+## A1 ☑ Grilling session — settle the decision tree with the user
 
-**Goal.** Every question below has a user-made call in the Decisions table; the checklist is
-rewritten to match. No code before this lands.
+**Done 2026-08-06.** All seven questions settled in the Decisions table above; checklist and
+items A2–A4/B11 rewritten to match. The agenda below is kept for the record.
 
 **Approach.** Run `/grilling` with this agenda, one question at a time, recommendation first (the
 FireControl session, 2026-08-06, is the model):
@@ -150,14 +156,16 @@ FireControl session, 2026-08-06, is the model):
 ## A2 ☐ Enablers, by hand
 
 **Goal.** `StuntMission` and the `Loadout`/`StockLoadouts` print site log through `Log`, so plain
-classes construct in the xUnit host; the nine-suite classification is re-run and recorded.
+classes construct in the xUnit host. Runs **after A3** (Decision 7) — the pattern is proven
+before these hand edits land.
 
-**Evidence (confidence: traced, but stale-able).** Site list as of 2026-08-06:
-`StuntMission.cs` ~:177, :182, :184, :270, :394 (8 prints); `StockLoadouts.Load`'s
-`GD.PushWarning`. Re-grep first.
+**Evidence (confidence: traced 2026-08-06 evening, A1's re-grep).** Decision 6's closed list:
+`StuntMission.cs` `:177` (PushWarning), `:182`, `:184`, `:270`, `:394`, `:547`, `:556`, `:561`;
+`Loadout.cs:51` (`StockLoadouts.Load`'s PushWarning). Re-grep first anyway — line numbers drift.
 
-**Approach.** Hand edits only (⚠ #3). `Log.ConsoleSink` in the tests, per `StuntRaceTests`'
-existing pattern.
+**Approach.** Hand edits only (⚠ #3), exactly the 9 sites. `PushWarning` maps to `Log`'s nearest
+warning-flavoured level — resolve against `Log`'s actual API, don't add one. `Log.ConsoleSink`
+in the tests, per `StuntRaceTests`' existing pattern.
 
 **Model recommendation.** medium, low effort — mechanical, but the SHELL-3 rule makes care the
 point.
@@ -167,9 +175,11 @@ point.
 
 ## A3 ☐ The no-blocker suites move
 
-**Goal.** `flight-envelope`, `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`,
-`weapon-blast`, `markers-rig` (and `tex-dropin` if A1's re-classification cleared it early) run as
-xUnit facts calling the same `Probes.*`; their `Suites.cs` bodies and registrations are deleted.
+**Goal.** The six no-blocker suites — `flight-envelope`, `gauge-colours`, `gauge-arrow-tween`,
+`weapons-defs`, `weapon-blast`, `markers-rig` — run as xUnit facts calling the same `Probes.*`;
+their `Suites.cs` bodies and registrations are deleted in the same commits (Decision 2). Naming
+per Decision 3: mirrored class names, old suite name verbatim in the class doc, one file each.
+**Runs first** (Decision 7) — this item proves the whole pattern before any live code is touched.
 
 **Evidence (confidence: traced).** The classification table above; `Probes.Markers` / `Weapons` /
 `Loadouts` / `MipChains` / `FlightEnvelope` all take paths and return records.
@@ -185,31 +195,36 @@ moved suites, goldens untouched (nothing rendering changed).
 **⚠ Traps.** ⚠ #1/#2. A suite body that quietly used `ctx` conveniences beyond data paths
 (RequireData is fine — it maps to the skip gate) is the drift to catch.
 
-## A4 ☐ `stunt-gates`, `loadout-bind`, `tex-dropin` move; the tripwire drill
+## A4 ☐ `stunt-gates` moves, `loadout-bind` splits; the two drills
 
-**Goal.** The enabler-dependent suites move; then the failure drill: break a `FlightModel` Tune
-rate locally, watch `RunTests.ps1` fail at the *units* stage, revert — recorded in the landing
-commit message.
+**Goal.** `stunt-gates` moves whole. `loadout-bind` splits per Decision 1: the `Probes.Loadouts`
+half (bind counts, failure list) becomes an xUnit twin; the BL-294 pylon-fill-order half
+(`Suites.cs:798–840`, needs built planes) stays in-engine as a slimmed suite whose description
+narrows to the fill-order check. (`tex-dropin` left the plan in A1 — engine-bound.) Then the two
+drills: **(1) tripwire** — break a `FlightModel` Tune rate locally, watch `RunTests.ps1` fail at
+the *units* stage, revert; **(2) data-less** — run `dotnet test` with `TestData` pointed at an
+empty root, see skips-with-reason, not passes. Both recorded in the landing commit message.
 
 **Evidence (confidence: traced).** `FlightModel`'s ⚠: "the flight-envelope suite fails if the
 Tune rates move" — the tripwire must keep failing the build after the move (⚠ #4).
 
-**Approach.** As A3. The drill is not optional — it is the item's Verify.
+**Approach.** As A3. The drills are not optional — they are the item's Verify.
 
 **Model recommendation.** medium.
 
-**Verify.** The drill, plus a data-less run of `dotnet test` (temporarily point `TestData` at an
-empty root) showing skips, not passes.
+**Verify.** Both drills above, plus `RunTests.ps1` green with the split suite present in exactly
+one tier per check.
 
-# Wave B — optional companion
+# Wave B — companion (kept by Decision 5)
 
 ## B11 ☐ `StallLamp` / `ArrowSweep` — the gauge cues become plain structs; `stall-warning` moves
 
 **Goal.** The stateful stall-lamp and arrow-sweep halves of `GaugeCluster` live in two plain
 structs (`Set/Advance/Lit`, `Advance/Angle/Reset`); the 7 `internal static` testability escape
-hatches retire; `stall-warning` and its 87 lines join the xUnit tier — and the 4-term feed
-predicate in `FlightController` (`!_crashed && !halted && !_held && IsStallWarned()`) becomes
-assertable if the grilling chose to move it with them.
+hatches retire; `stall-warning` and its 87 lines join the xUnit tier. **Scoped to `GaugeCluster`
+only (Decision 5):** the 4-term feed predicate in `FlightController`
+(`!_crashed && !halted && !_held && IsStallWarned()`) stays untouched — the `_held` exemption
+trap lives there, and no test for it exists yet to justify the second live file.
 
 **Evidence (confidence: traced).** `GaugeCluster.cs` ~:340–391 (the statics each carrying an
 "Internal so the run-tests suite can assert" comment), the `Suites.cs` `StallWarning` body's
