@@ -506,7 +506,7 @@ public sealed partial class ProjectilePool : Node3D
             if (model != null)
                 model.GlobalTransform = FlyoutPose(muzzle.Origin, vel);
             float rollRate = 0f;
-            var trails = weapon.IsRocket ? AcquireTrails(weapon, muzzle.Origin, out rollRate) : null;
+            var trails = weapon.IsRocket ? AcquireTrails(weapon, muzzle.Origin, muzzle.Basis, out rollRate) : null;
             _proj[slot] = new Proj
             {
                 Alive = true,
@@ -679,8 +679,9 @@ public sealed partial class ProjectilePool : Node3D
             // meters of flight, emitted in world space and left behind (C21).
             if (p.Trails != null)
             {
+                var trailBasis = FlyoutPose(next, p.Vel).Basis;
                 foreach (var t in p.Trails)
-                    t.Puffer.TrailAdvance(next);
+                    t.Puffer.Emit(next, trailBasis, dt);
             }
             p.DistLeft -= stepLen;
             if (p.DistLeft <= 0f)
@@ -874,7 +875,7 @@ public sealed partial class ProjectilePool : Node3D
             return;
         foreach (var t in p.Trails)
         {
-            t.Puffer.TrailEnd(); // live smoke decays naturally
+            t.Puffer.Stop(); // live smoke decays naturally
             t.InUse = false;
         }
         p.Trails = null;
@@ -1049,7 +1050,7 @@ public sealed partial class ProjectilePool : Node3D
     /// <paramref name="rollRate"/> is the def's spinner rate (rad/s about the nose axis; the
     /// sonic), 0 for everything else. Null when there is no anim program (no world / the weapon
     /// lab), the weapon names no <c>MODEL_ANIMATION</c>, or its textures are absent.</summary>
-    private TrailEmitter[]? AcquireTrails(WeaponDef weapon, Vector3 origin, out float rollRate)
+    private TrailEmitter[]? AcquireTrails(WeaponDef weapon, Vector3 origin, Basis basis, out float rollRate)
     {
         rollRate = 0f;
         var spec = TrailSpecFor(weapon);
@@ -1084,7 +1085,7 @@ public sealed partial class ProjectilePool : Node3D
                 _trailEmitters.Add(emitter);
             }
             emitter.InUse = true;
-            emitter.Puffer.TrailAdvance(origin); // first call homes the trail at the muzzle
+            emitter.Puffer.Emit(origin, basis, 0f); // first call homes the trail at the muzzle
             set.Add(emitter);
         }
         return set.Count > 0 ? set.ToArray() : null;

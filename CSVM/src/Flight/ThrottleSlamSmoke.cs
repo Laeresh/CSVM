@@ -101,10 +101,10 @@ public sealed class ThrottleSlamSmoke
         {
             _smokeRemaining -= dt;
             foreach (var (node, trail) in _exhausts)
-                trail.TrailAdvance(node.GlobalPosition);
+                trail.Emit(node.GlobalPosition, node.GlobalTransform.Basis, dt);
             if (_smokeRemaining <= 0f)
                 foreach (var (_, trail) in _exhausts)
-                    trail.TrailEnd();
+                    trail.Stop();
         }
     }
 

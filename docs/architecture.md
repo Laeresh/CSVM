@@ -1294,7 +1294,8 @@ assertion say the same thing, which is what makes a "these two surfaces look the
 answerable without a lucky screenshot (`BL-019`); rockets fly
 their FLYOUT model body via `BuildFlyoutBody` (shared with `PylonOrdnance`) and trail their FLYOUT
 `MODEL_ANIMATION` smoke (C21): the def's DISTANCE_INTERVAL puffers resolved from the world
-`AnimProgram` (ctor `flyoutAnims`), one pooled/reused `Puffer.TrailAdvance` set per live round,
+`AnimProgram` (ctor `flyoutAnims`), one pooled/reused `Puffer.Emit`/`Stop` set per live round
+(PLAN-puffer-interface A3),
 plus the sonic's authored 8.73 rad/s body roll (weapon-effects.md). Gun shots add the
 `muzzle_burst` secondaries (C22): a pooled per-shot `gunshell` casing instance flying the def's
 OBJECT_MOTION verbatim (per-shot nodes on purpose — a shared anchor under `CallAnimation`'s
@@ -1582,9 +1583,20 @@ synthetic 0.1 s TIME_INTERVAL, so that cadence always exists); a host that CANNO
 `staticBurnMps` and spends virtual metres at the held pose instead (the damage lab's parked
 plane). `Stop` ends the trail as well as the emission, unconditionally and idempotently, so a
 revived emitter re-homes rather than drawing a puff line from its pooled slot's previous call
-site (the rocket ghost trails). The six mode verbs (`TrailAdvance`/`TrailEnd`/`TrailBurnAt`/
-`SustainAt`/`SustainEnd`/`DriveAt` — the last now a straight `Emit` alias) remain public ONLY
-until the callers migrate (plan item A3), then go private;
+site (the rocket ghost trails). **All four external callers (`PufferEmitter`, `ProjectilePool`,
+`DamageVisuals`, `ThrottleSlamSmoke`) drive the emitter through `Emit`/`Stop` only** — the six
+mode verbs (`TrailAdvance`/`TrailEnd`/`TrailBurnAt`/`SustainAt`/`SustainEnd`) are `private`
+(PLAN-puffer-interface A3); `DriveAt` was deleted (it had been a straight `Emit` alias with no
+remaining caller once `PufferEmitter` moved to calling `Emit` directly).
+⚠ `Emit`'s very first call on a DISTANCE_INTERVAL state that hasn't moved yet (a trail's homing
+frame) also fires one `SustainAt` batch — a single 1-puff burst at the muzzle/exhaust, since a
+distance state's synthetic TIME_INTERVAL cadence is always live underneath the distance dispatch.
+`EmitterDirector`'s own callers always had this; migrating `ProjectilePool`'s rocket trails and
+`ThrottleSlamSmoke`'s exhaust trail onto `Emit` gave them the same one-puff homing sputter they
+didn't carry under raw `TrailAdvance` — judged negligible-to-desirable and confirmed at the
+controls (rocket-volley capture: a continuous, non-ghosted trail; the `c1-flight` golden's
+one-golden move is exactly this, its `--hold` throttle jump crossing `ThrottleSlamSmoke`'s slam
+threshold on the capture's first frame).
 `PufferState.FromAnimEvent` parses the compiled anim payloads.
 Three config knobs scale `BaseSize` per spawn path — `puffer.burstSizeScale` /
 `puffer.trailSizeScale` / `puffer.sustainSizeScale` (`SizeScaleDefault` **1**, the authored
@@ -1710,9 +1722,9 @@ boost. `Update(dt, throttle)` runs an edge-triggered gate: it tracks the throttl
 current unbroken climb and fires once per climb the instant the cumulative rise crosses
 `SlamThreshold`, never again for that climb and never on a flat or falling throttle — so tapping one
 notch at a time (each tap separated by a flat/falling frame) evaluates fresh every time. Drives the
-puffers via `Puffer.TrailAdvance`/`TrailEnd` (DISTANCE_INTERVAL, the same mechanism `DamageVisuals`
-uses for the nose smoke trail), not `SustainAt` — the authored def is a distance-triggered trail, not
-a time-interval burst. `Reset(throttle)` (crash/respawn) hard-stops any plume and re-anchors the
+puffers via `Puffer.Emit`/`Stop` (PLAN-puffer-interface A3; DISTANCE_INTERVAL, the same mechanism
+`DamageVisuals` uses for the nose smoke trail) — the authored def is a distance-triggered trail,
+not a time-interval burst. `Reset(throttle)` (crash/respawn) hard-stops any plume and re-anchors the
 climb tracker so the throttle jump those moments make is never itself read as a slam.
 ⚠ `SlamThreshold` 0.25 (TUNE): the capture only bounds it between a firing idle→5/8 (0.625) and a
   silent single 1/8 (0.125) — 2/8-4/8 is unobserved. 0.25 is the smallest round two-notch jump

@@ -716,8 +716,8 @@ public static class Suites
 
             var a = pose.Origin;
             var b = a + new Vector3(3f, 0f, -2f); // several DISTANCE_INTERVALs of motion
-            trail.TrailAdvance(a);
-            trail.TrailAdvance(b);
+            trail.Emit(a, pose.Basis, 0f);
+            trail.Emit(b, pose.Basis, 0f);
             ctx.Check(trail.LiveCount > 0, $"puffs spawned over {a.DistanceTo(b):0.0} m of motion live={trail.LiveCount}");
             ctx.Check(trail.GlobalTransform.Basis.IsEqualApprox(Basis.Identity),
                 $"emitter basis is world identity under the rotated carrier basis={trail.GlobalTransform.Basis}");

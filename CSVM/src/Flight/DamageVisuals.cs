@@ -228,13 +228,13 @@ public sealed class DamageVisuals
     public void UpdateStatic(float dt)
     {
         foreach (var (panel, trail) in _panelTrails)
-            trail.TrailBurnAt(panel.GlobalPosition, dt, StaticBurnSpeed);
+            trail.Emit(panel.GlobalPosition, panel.GlobalTransform.Basis, dt, StaticBurnSpeed);
         if (!_smoking)
             return;
         if (_prop1 is not { } nose)
             return;
-        _standInTrailPuffer?.TrailBurnAt(nose.GlobalPosition, dt, StaticBurnSpeed);
-        _standInFirePuffer?.TrailBurnAt(nose.GlobalPosition, dt, StaticBurnSpeed);
+        _standInTrailPuffer?.Emit(nose.GlobalPosition, nose.GlobalTransform.Basis, dt, StaticBurnSpeed);
+        _standInFirePuffer?.Emit(nose.GlobalPosition, nose.GlobalTransform.Basis, dt, StaticBurnSpeed);
     }
 
     /// <summary>Back to pristine: the runtime's damage stages stopped, torn panels hidden,

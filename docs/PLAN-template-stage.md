@@ -5,8 +5,8 @@ review, candidate 2; decisions NOT yet settled). The first working session on th
 start with a `/grilling` session with the user** (item A1) — the Decisions table below is empty
 until then, and the checklist after A1 is provisional. When a session activates this plan, point
 PROJECT_CONTEXT.md's "Current status" at it. Sibling handoffs from the same review:
-[`PLAN-puffer-interface.md`](PLAN-puffer-interface.md); the review's candidate 1 already
-landed as `FireControl` (BL-295, commit `7410cbe`), and candidate 4 as
+[`PLAN-puffer-interface.md`](plans/PLAN-puffer-interface.md) (completed 2026-08-06); the review's
+candidate 1 already landed as `FireControl` (BL-295, commit `7410cbe`), and candidate 4 as
 [`PLAN-engine-free-suites.md`](plans/PLAN-engine-free-suites.md) (completed 2026-08-06).
 
 "Where does this pooled effect draw, and when does it show and hide" is one concept spread over
@@ -104,10 +104,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 A1 blocks everything. A2 → A3 → A4 is a chain (each goldens-identical); B11 depends on A4. **File
 ownership:** `CSVM/src/Mech3/Anim/TemplateStage.cs` (new), `CSVM/src/Mech3/AnimRuntime.cs`,
-`CSVM/src/Session/WorldEffectsFactory.cs`, a new `CSVM.Tests/TemplateStageTests.cs`. Contends with
-[`PLAN-puffer-interface.md`](PLAN-puffer-interface.md) on the effects goldens and the `Anim/`
-neighbourhood, and both touch `GameSession`-adjacent wiring — do not run the two in parallel
-worktrees. [`PLAN-engine-free-suites.md`](plans/PLAN-engine-free-suites.md) is completed
+`CSVM/src/Session/WorldEffectsFactory.cs`, a new `CSVM.Tests/TemplateStageTests.cs`.
+[`PLAN-puffer-interface.md`](plans/PLAN-puffer-interface.md) and
+[`PLAN-engine-free-suites.md`](plans/PLAN-engine-free-suites.md) are both completed
 (2026-08-06) — no longer a live contention.
 
 ---

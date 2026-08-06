@@ -1,10 +1,10 @@
 # Puffer interface — six start/stop verbs collapse into Emit / Stop
 
-**ACTIVE — decisions settled** (drafted 2026-08-06 from that day's architecture review,
-candidate 3; the A1 grilling session ran 2026-08-06 and filled the Decisions table below, which
-is the authority where prose disagrees). Sibling handoffs:
-[`PLAN-template-stage.md`](PLAN-template-stage.md).
-[`PLAN-engine-free-suites.md`](plans/PLAN-engine-free-suites.md) is a completed sibling, archived
+**COMPLETE** (2026-08-06). Drafted 2026-08-06 from that day's architecture review, candidate 3;
+the A1 grilling session ran 2026-08-06 and filled the Decisions table below, which is the
+authority where prose disagrees. Sibling handoffs:
+[`PLAN-template-stage.md`](../PLAN-template-stage.md) (still live).
+[`PLAN-engine-free-suites.md`](PLAN-engine-free-suites.md) is a completed sibling, archived
 2026-08-06.
 
 `Puffer`'s caller-visible surface exposes the implementation's modes: `Burst`, `TrailAdvance`,
@@ -95,7 +95,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ Grilling session: Decisions table settled 2026-08-06; A2/A3 rewritten (fourth caller found, privatisation moved to A3, `Emit` grew `staticBurnMps`)
 2. ☑ `Emit(worldPos, worldBasis, dt, staticBurnMps = 0f)`/`Stop` landed inside `Puffer` (`DriveAt` body moved into `Emit` + the burn branch, `DriveAt` now an alias); `puffer-modes` suite rewritten — sustain, trail, still-sputter, static-burn and stop/revive all through `Emit`/`Stop`; 13/13 goldens hash-identical
-3. ☐ The **four** callers migrate (`PufferEmitter`, `ProjectilePool`, `DamageVisuals`, `ThrottleSlamSmoke`); the compensating adapter lines and the hand-maintained stop rules are deleted; the six old verbs flip private in this commit
+3. ☑ The **four** callers migrate (`PufferEmitter`, `ProjectilePool`, `DamageVisuals`, `ThrottleSlamSmoke`); the compensating adapter lines and the hand-maintained stop rules are deleted; the six old verbs are `private` (`DriveAt` deleted outright — dead once `PufferEmitter` calls `Emit` directly). `RunTests.ps1` green (551 units / 24 engine / 13 goldens); `c1-flight` re-pinned — its `--hold` throttle jump crosses `ThrottleSlamSmoke`'s slam threshold, and migrating its raw `TrailAdvance` to `Emit` adds the documented one-puff homing-frame sputter (⚠, confirmed at the controls via a rocket-volley capture and a damage-lab capture, verdict: accept). This closes the plan.
 
 ## Dependency and parallelism notes
 

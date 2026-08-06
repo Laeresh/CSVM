@@ -455,107 +455,6 @@ public sealed partial class Puffer : Node3D
         Visible = false;
     }
 
-    /// <summary>Advances a DISTANCE_INTERVAL trail emitter to the followed node's new
-    /// world position, emitting one sprite per interval of motion (with carry across
-    /// frames) — the dense_firetrail smoke/fire trailing a damaged plane. The first
-    /// call starts the trail; call every frame while the effect is on.</summary>
-    public void TrailAdvance(Vector3 worldPos)
-    {
-        if (_state.DistanceInterval <= 0f)
-            return;
-        if (!_trailing)
-        {
-            TopLevel = true;             // particles live in world space, left behind the plane
-            // Toggling TopLevel PRESERVES the global transform (Godot 4): a flying parent's
-            // attitude would stick as this node's basis and yaw every "world-space" puff
-            // around the world origin — kilometres off at a far-from-origin mission spawn
-            // (the fly-mode damage-trail bug). Identity transform, not just zero position.
-            GlobalTransform = Transform3D.Identity;
-            _trailing = true;
-            _trailPrev = worldPos;
-            _trailCarry = 0f;
-            _active = true;
-            Visible = true;
-            return;
-        }
-        var delta = worldPos - _trailPrev;
-        float dist = delta.Length();
-        _trailPrev = worldPos;
-        if (dist < 1e-5f)
-            return;
-        var dir = delta / dist;
-        float interval = _state.DistanceInterval;
-        _trailCarry += dist;
-        // walk back from the current position so the newest puff sits at the plane
-        var start = worldPos - dir * (_trailCarry - interval);
-        int count = (int)(_trailCarry / interval);
-        for (int k = 0; k < count; k++)
-            SpawnTrailPuff(start + dir * (k * interval));
-        _trailCarry -= count * interval;
-    }
-
-    /// <summary>Stops trail emission; live smoke decays naturally.</summary>
-    public void TrailEnd() => _trailing = false;
-
-    /// <summary>Static-viewer variant of <see cref="TrailAdvance"/>: emits the trail's
-    /// per-meter puffs AT a fixed world point, spending <paramref name="speedMps"/>
-    /// meters of virtual motion per second — the damage lab's parked plane, whose
-    /// panels burn in place (the puffs' own random velocity and growth make the
-    /// stacked emissions read as a flickering fire). Same carry, pool and spawn
-    /// path as the moving trail.</summary>
-    public void TrailBurnAt(Vector3 worldPos, float dt, float speedMps)
-    {
-        if (_state.DistanceInterval <= 0f)
-            return;
-        if (!_trailing)
-        {
-            TopLevel = true;
-            GlobalTransform = Transform3D.Identity; // see TrailAdvance: TopLevel keeps the global basis
-            _trailing = true;
-            _trailPrev = worldPos;
-            _trailCarry = 0f;
-            _active = true;
-            Visible = true;
-        }
-        _trailCarry += speedMps * dt;
-        int count = (int)(_trailCarry / _state.DistanceInterval);
-        for (int k = 0; k < count; k++)
-            SpawnTrailPuff(worldPos);
-        _trailCarry -= count * _state.DistanceInterval;
-    }
-
-    /// <summary>
-    /// Continuous emission at a moving world point — the third emission mode, alongside the
-    /// one-shot <see cref="Burst"/> and the distance-driven <see cref="TrailAdvance"/>. This
-    /// is what an animation's <c>PUFFER_STATE … ACTIVE_STATE 1</c> asks for: emit
-    /// <c>NUMBER</c> sprites every <c>TIME_INTERVAL</c>, indefinitely, wherever the emitter
-    /// node currently is (the C1 train's smokestack moves along the whole track loop).
-    /// Particles live in world space, so they are left behind rather than dragged along.
-    /// Call every frame while the puffer is on; <see cref="SustainEnd"/> stops emission and
-    /// lets the live particles decay.
-    /// </summary>
-    public void SustainAt(Vector3 worldPos, Basis worldBasis, float dt)
-    {
-        if (!_sustaining)
-        {
-            TopLevel = true;                 // world-space particles, like the trail mode
-            GlobalTransform = Transform3D.Identity; // see TrailAdvance: TopLevel keeps the global basis
-            _sustaining = true;
-            _active = true;
-            Visible = true;
-            _sustainCarry = _state.TimeInterval; // emit on the very first frame
-        }
-        _sustainCarry += dt;
-        float interval = Mathf.Max(_state.TimeInterval, 1e-3f);
-        int batches = Mathf.Min((int)(_sustainCarry / interval), MaxSustainBatchesPerFrame);
-        for (int b = 0; b < batches; b++)
-            SpawnSustained(worldPos, worldBasis);
-        _sustainCarry -= batches * interval;
-    }
-
-    /// <summary>Stops sustained emission; live particles finish their lifetimes.</summary>
-    public void SustainEnd() => _sustaining = false;
-
     /// <summary>The one continuous drive: feed the host's current world pose + dt every frame and
     /// the authored state picks the mode — a TIME_INTERVAL state sustains, a DISTANCE_INTERVAL
     /// state emits per interval of the host's actual motion (<see cref="TrailAdvance"/> — the
@@ -596,12 +495,6 @@ public sealed partial class Puffer : Node3D
         SustainEnd();
         TrailEnd();
     }
-
-    /// <summary>The animation runtime's per-frame drive (<c>EmitterDirector.Tick</c>) — now a
-    /// straight alias of <see cref="Emit"/>, kept until the callers migrate (PLAN-puffer-interface
-    /// A3).</summary>
-    public void DriveAt(Vector3 worldPos, Basis worldBasis, float dt) =>
-        Emit(worldPos, worldBasis, dt);
 
     public override void _Process(double delta)
     {
@@ -716,6 +609,107 @@ public sealed partial class Puffer : Node3D
         return sum / (w * h);
     }
 
+    /// <summary>Advances a DISTANCE_INTERVAL trail emitter to the followed node's new
+    /// world position, emitting one sprite per interval of motion (with carry across
+    /// frames) — the dense_firetrail smoke/fire trailing a damaged plane. The first
+    /// call starts the trail; call every frame while the effect is on.</summary>
+    private void TrailAdvance(Vector3 worldPos)
+    {
+        if (_state.DistanceInterval <= 0f)
+            return;
+        if (!_trailing)
+        {
+            TopLevel = true;             // particles live in world space, left behind the plane
+            // Toggling TopLevel PRESERVES the global transform (Godot 4): a flying parent's
+            // attitude would stick as this node's basis and yaw every "world-space" puff
+            // around the world origin — kilometres off at a far-from-origin mission spawn
+            // (the fly-mode damage-trail bug). Identity transform, not just zero position.
+            GlobalTransform = Transform3D.Identity;
+            _trailing = true;
+            _trailPrev = worldPos;
+            _trailCarry = 0f;
+            _active = true;
+            Visible = true;
+            return;
+        }
+        var delta = worldPos - _trailPrev;
+        float dist = delta.Length();
+        _trailPrev = worldPos;
+        if (dist < 1e-5f)
+            return;
+        var dir = delta / dist;
+        float interval = _state.DistanceInterval;
+        _trailCarry += dist;
+        // walk back from the current position so the newest puff sits at the plane
+        var start = worldPos - dir * (_trailCarry - interval);
+        int count = (int)(_trailCarry / interval);
+        for (int k = 0; k < count; k++)
+            SpawnTrailPuff(start + dir * (k * interval));
+        _trailCarry -= count * interval;
+    }
+
+    /// <summary>Stops trail emission; live smoke decays naturally.</summary>
+    private void TrailEnd() => _trailing = false;
+
+    /// <summary>Static-viewer variant of <see cref="TrailAdvance"/>: emits the trail's
+    /// per-meter puffs AT a fixed world point, spending <paramref name="speedMps"/>
+    /// meters of virtual motion per second — the damage lab's parked plane, whose
+    /// panels burn in place (the puffs' own random velocity and growth make the
+    /// stacked emissions read as a flickering fire). Same carry, pool and spawn
+    /// path as the moving trail.</summary>
+    private void TrailBurnAt(Vector3 worldPos, float dt, float speedMps)
+    {
+        if (_state.DistanceInterval <= 0f)
+            return;
+        if (!_trailing)
+        {
+            TopLevel = true;
+            GlobalTransform = Transform3D.Identity; // see TrailAdvance: TopLevel keeps the global basis
+            _trailing = true;
+            _trailPrev = worldPos;
+            _trailCarry = 0f;
+            _active = true;
+            Visible = true;
+        }
+        _trailCarry += speedMps * dt;
+        int count = (int)(_trailCarry / _state.DistanceInterval);
+        for (int k = 0; k < count; k++)
+            SpawnTrailPuff(worldPos);
+        _trailCarry -= count * _state.DistanceInterval;
+    }
+
+    /// <summary>
+    /// Continuous emission at a moving world point — the third emission mode, alongside the
+    /// one-shot <see cref="Burst"/> and the distance-driven <see cref="TrailAdvance"/>. This
+    /// is what an animation's <c>PUFFER_STATE … ACTIVE_STATE 1</c> asks for: emit
+    /// <c>NUMBER</c> sprites every <c>TIME_INTERVAL</c>, indefinitely, wherever the emitter
+    /// node currently is (the C1 train's smokestack moves along the whole track loop).
+    /// Particles live in world space, so they are left behind rather than dragged along.
+    /// Call every frame while the puffer is on; <see cref="SustainEnd"/> stops emission and
+    /// lets the live particles decay.
+    /// </summary>
+    private void SustainAt(Vector3 worldPos, Basis worldBasis, float dt)
+    {
+        if (!_sustaining)
+        {
+            TopLevel = true;                 // world-space particles, like the trail mode
+            GlobalTransform = Transform3D.Identity; // see TrailAdvance: TopLevel keeps the global basis
+            _sustaining = true;
+            _active = true;
+            Visible = true;
+            _sustainCarry = _state.TimeInterval; // emit on the very first frame
+        }
+        _sustainCarry += dt;
+        float interval = Mathf.Max(_state.TimeInterval, 1e-3f);
+        int batches = Mathf.Min((int)(_sustainCarry / interval), MaxSustainBatchesPerFrame);
+        for (int b = 0; b < batches; b++)
+            SpawnSustained(worldPos, worldBasis);
+        _sustainCarry -= batches * interval;
+    }
+
+    /// <summary>Stops sustained emission; live particles finish their lifetimes.</summary>
+    private void SustainEnd() => _sustaining = false;
+
     private void Init(PufferState state, IEmitterRenderer renderer, float activeDuration,
         bool sustained)
     {
@@ -736,7 +730,7 @@ public sealed partial class Puffer : Node3D
             // population is speed × lifetime / interval — ~112 live for short_firetrail's
             // shortpuffer1 at flight speed — and the time-cadence steady-state formula below
             // sized them at its 16-particle floor, silently dropping ~85% of the authored
-            // emission (DriveAt routes them through SpawnTrailPuff, which stops at the pool).
+            // emission (Emit routes them through SpawnTrailPuff, which stops at the pool).
             _particles = new Particle[TrailPool];
         }
         else if (sustained)
