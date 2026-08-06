@@ -99,7 +99,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — decisions, then the relocation (execution order: A1 → A3 → A2 → A4, per Decision 7)
 
 1. ☑ A1 Grilling session: Decisions table settled 2026-08-06; checklist rewritten to match
-2. ☐ A3 The six no-blocker suites move (per-suite xUnit twins calling the same probes; in-engine copies deleted)
+2. ☑ A3 The six no-blocker suites move (per-suite xUnit twins calling the same probes; in-engine copies deleted)
 3. ☐ A2 Enablers, by hand: the 9 sites of Decision 6 → `Log` (engine suites still verify them in-engine)
 4. ☐ A4 `stunt-gates` moves + `loadout-bind` splits; tripwire failure-drill and data-less-run drill recorded
 5. ❌ `tex-dropin` — closed in A1: engine-bound on Godot `Image` (see the classification table)

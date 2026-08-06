@@ -29,10 +29,6 @@ public static class Suites
     /// coverage without changing the 48/48 line.</summary>
     private const int RigGunGroups = 4;
 
-    /// <summary>How many flight scenarios carry a measured target to assert. Pinned so that
-    /// silently demoting one to informational cannot read as a green run.</summary>
-    private const int FlightScenarios = 8;
-
     /// <summary>Destructible instances / distinct node groups per chapter, at each chapter's
     /// default mission. Instances exceed node groups where a reader wildcard def and its compiled
     /// per-instance twin bind the same nodes.
@@ -76,23 +72,9 @@ public static class Suites
             "a destructible's death starts a PUFFER_STATE emitter and BL-236's own retirement rule stops it", EmitterLifetime));
         into.Add(new TestHarness.Suite("puffer-modes",
             "the emitter's burst, distance-trail and sustain modes, driven through a fake renderer with no GPU", PufferModes));
-        into.Add(new TestHarness.Suite("gauge-colours",
-            "the belt indicator's yellow tier is gun-only; hardpoints step green→red; a damage " +
-            "zone's four bands walk armor-first over the combined pool (BL-085/BL-173)", GaugeColours));
-        into.Add(new TestHarness.Suite("gauge-arrow-tween",
-            "the weapon-gauge pointer sweeps at CAP-18's measured 168.7 °/sim-s the shortest way " +
-            "round, and snaps rather than sweeping in from an undefined pose (BL-184)", GaugeArrowTween));
         into.Add(new TestHarness.Suite("stall-warning",
             "the STALL lamp lights at CAP-06's 0.30 fd while the nose-drop keeps its own 0.25, and " +
             "its blink half-period ramps 643 → 296 ms sim with airspeed (BL-148)", StallWarning));
-        into.Add(new TestHarness.Suite("weapons-defs",
-            "every weapons.json BALLISTICS entry reads through the typed reader", WeaponsDefs));
-        into.Add(new TestHarness.Suite("weapon-blast",
-            "blast falloff, authored fuse/radius independence, and zero-damage special exclusion", WeaponBlast));
-        into.Add(new TestHarness.Suite("flight-envelope",
-            "the flown envelope still matches the original's measured manoeuvres", FlightEnvelope));
-        into.Add(new TestHarness.Suite("markers-rig",
-            "every player airframe has a firepoint/pylon rig in planes.zbd", MarkersRig));
         into.Add(new TestHarness.Suite("loadout-bind",
             "every stock loadout binds to its model with every marker resolved", LoadoutBind));
         into.Add(new TestHarness.Suite("weapons-fire",
@@ -470,163 +452,6 @@ public static class Suites
         mission.Update(gate.Center + gate.Normal * 20f);
     }
 
-    /// <summary>The Bloodhawk's flown envelope against the original's, measured off cockpit-gauge
-    /// video. These are golden numbers in the same sense as the destructible census — the original
-    /// is a fixed artifact, so "150 → 290 mph in 3.76 s" is an invariant of it.
-    ///
-    /// <para>Why a suite and not a playtest: the flight constants are coupled (thrust sets speed,
-    /// speed sets the yaw <c>eff</c>), so editing one silently moves others. The probe's
-    /// informational rows — the 1/8-throttle pair and the zoom climb — are deliberately NOT asserted;
-    /// they record open questions and must not fail a build.</para></summary>
-    private static void FlightEnvelope(TestContext ctx)
-    {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        var r = Probes.FlightEnvelope(ctx.ZrdrPath, "player_bhawk");
-        ctx.Check(r.Error == null, $"plane stats load error={r.Error ?? "-"}");
-        if (r.Error != null)
-        {
-            return;
-        }
-        ctx.WriteArtifact("flight_envelope.txt", r.Text);
-        ctx.Same(FlightScenarios, r.Asserted, $"asserted flight scenarios");
-        foreach (var row in r.Rows)
-        {
-            if (row.Asserted)
-            {
-                string measured = $"original={row.Measured:0.00}{row.Unit} "
-                                  + $"tol=±{row.Tolerance:0.00} err={row.ErrorPct:+0.0;-0.0}%";
-                ctx.Check(row.Ok, $"{row.Name} model={row.Model:0.00}{row.Unit} {measured}");
-            }
-            else
-            {
-                ctx.Note($"{row.Name} model={row.Model:0.00}{row.Unit} not asserted — {row.Detail}");
-            }
-        }
-        ctx.Note($"{r.Summary}");
-    }
-
-    /// <summary>BL-024: the belt indicator's yellow tier belongs to guns only — a per-pylon
-    /// hardpoint steps straight from green to red at empty, matching the original. BL-085/BL-173:
-    /// a damage zone's four colour bands walk the combined armor+health fraction, armor spent
-    /// first, matching the game manual's Crispen Mark V description.</summary>
-    private static void GaugeColours(TestContext ctx)
-    {
-        for (float frac = 0f; frac <= 1f; frac += 0.01f)
-        {
-            ctx.Check(GaugeCluster.HardpointIndicatorColor(frac) != 1, $"hardpoint colour never yellow at frac={frac:0.00}");
-        }
-        ctx.Check(GaugeCluster.HardpointIndicatorColor(0f) == 2, $"hardpoint colour red at empty");
-        ctx.Check(GaugeCluster.HardpointIndicatorColor(1f) == 0, $"hardpoint colour green at full");
-
-        ctx.Check(GaugeCluster.GunIndicatorColor(GaugeCluster.IndicatorLowFrac) == 1,
-            $"gun colour yellow at the low threshold frac={GaugeCluster.IndicatorLowFrac:0.00}");
-        ctx.Check(GaugeCluster.GunIndicatorColor(GaugeCluster.IndicatorLowFrac + 0.01f) == 0,
-            $"gun colour green just above the low threshold");
-        ctx.Check(GaugeCluster.GunIndicatorColor(0f) == 2, $"gun colour red at empty");
-
-        // An unfitted belt position (index past the end of the loadout) reads red, not dark — the
-        // original lights every position on the dial. A 2-gun plane on a 4-position gun dial:
-        // slots 0-1 follow their ammo, 2-3 are red.
-        float[] twoGuns = { 1f, 0f };
-        for (int i = 0; i < 4; i++)
-        {
-            int want = i == 0 ? 0 : 2; // slot 0 full → green; slot 1 spent and slots 2-3 unfitted → red
-            ctx.Check(GaugeCluster.SlotIndicatorColor(twoGuns, i, isGun: true) == want,
-                $"gun belt slot {i} colour {want} on a 2-gun plane");
-        }
-        ctx.Check(GaugeCluster.SlotIndicatorColor(new float[0], 7, isGun: false) == 2,
-            $"unfitted pylon slot red");
-
-        // BL-085/BL-173 (PLAN-armour-layer C21): a damage zone's colour is the COMBINED armor+health
-        // fraction (PlaneDamage.PartState.Fraction), armor spent first, against the shipped
-        // thresholds (docs/formats/hud.md "Thresholds") — never a synthetic split from one pool.
-        // The three checkpoints reproduce Decision 6's own reconciliation with the game manual's
-        // four bands as a regression: on a stock zone (armor == hp), 56% of the armor gone lands
-        // exactly on the shipped yellow threshold, armor-zero-plus-8%-airframe on orange, and
-        // 60%-airframe on red. Each pool is spent through its own single-pool PlaneDamage.Apply
-        // call (armor's with healthDamage=0, health's with armorDamage=0) — the same technique
-        // DamageLab's two independent sliders use — because the two-pool Apply's overflow
-        // arithmetic describes one weapon round's own (health, armor) pair, not two independently
-        // dialled-in targets (see FlightDamageTarget.Apply's doc comment).
-        var zonePart = new DestroyablePart { Name = "nose", MaxHp = 20f, MaxArmor = 20f };
-        var zoneDamage = new PlaneDamage(new[] { zonePart });
-        var zoneState = zoneDamage.Parts["nose"];
-        const float yellowAt = 0.72f, orangeAt = 0.46f, redAt = 0.20f;
-
-        ctx.Check(GaugeCluster.DamageZoneColor(zoneState.Fraction, yellowAt, orangeAt, redAt) == 0,
-            $"a pristine zone is green");
-
-        zoneDamage.Apply("nose", 0f, 11.2f); // 56% of the armor gone, health untouched
-        ctx.Check(Mathf.IsEqualApprox(zoneState.Fraction, yellowAt),
-            $"56% armor gone lands on the shipped yellow threshold, frac={zoneState.Fraction:0.000}");
-        ctx.Check(GaugeCluster.DamageZoneColor(zoneState.Fraction, yellowAt, orangeAt, redAt) == 1,
-            $"56% armor gone is yellow");
-
-        zoneDamage.Reset();
-        zoneDamage.Apply("nose", 0f, 20f);  // armor fully spent...
-        zoneDamage.Apply("nose", 1.6f, 0f); // ...plus 8% of the airframe
-        ctx.Check(Mathf.IsEqualApprox(zoneState.Fraction, orangeAt),
-            $"armor zero + 8% airframe lands on the shipped orange threshold, frac={zoneState.Fraction:0.000}");
-        ctx.Check(GaugeCluster.DamageZoneColor(zoneState.Fraction, yellowAt, orangeAt, redAt) == 2,
-            $"armor zero + 8% airframe is orange");
-
-        zoneDamage.Reset();
-        zoneDamage.Apply("nose", 0f, 20f); // armor fully spent...
-        zoneDamage.Apply("nose", 12f, 0f); // ...plus 60% of the airframe
-        ctx.Check(Mathf.IsEqualApprox(zoneState.Fraction, redAt),
-            $"60% airframe gone lands on the shipped red threshold, frac={zoneState.Fraction:0.000}");
-        ctx.Check(GaugeCluster.DamageZoneColor(zoneState.Fraction, yellowAt, orangeAt, redAt) == 3,
-            $"60% airframe gone is red");
-    }
-
-    /// <summary>BL-184 (CAP-18): the weapon-gauge pointer sweeps at a single measured constant
-    /// rate — 168.7 °/sim-s — toward the selected belt slot, routed the shortest way round, and
-    /// snaps instead of sweeping in when it has no prior pose (NaN: gauge just appeared, or a
-    /// respawn cleared it via GaugeCluster.Reset).</summary>
-    private static void GaugeArrowTween(TestContext ctx)
-    {
-        ctx.Check(Mathf.IsEqualApprox(GaugeCluster.TargetArrowAngle(4, 0), 0f),
-            $"gun slot 0 targets 0°");
-        ctx.Check(Mathf.IsEqualApprox(GaugeCluster.TargetArrowAngle(4, 1), -90f),
-            $"gun slot 1 targets -90° (4 positions, 90° apart)");
-        ctx.Check(Mathf.IsEqualApprox(GaugeCluster.TargetArrowAngle(8, 1), -45f),
-            $"missile slot 1 targets -45° (8 positions, 45° apart)");
-        ctx.Check(GaugeCluster.TargetArrowAngle(0, 0) == 0f, $"no positions targets 0°, never NaN/inf");
-
-        ctx.Check(GaugeCluster.TweenArrow(float.NaN, -90f, 0.5f) == -90f,
-            $"a NaN pose snaps to target instead of sweeping in from an undefined angle");
-
-        // A 90° step at 168.7 °/sim-s is 533 ms of pure interior-rate sim time; one 16.6 ms
-        // sim-step (1/60 s) advances it by exactly the rate — neither clamped early nor
-        // overshooting. CAP-18's end-to-end capture reads ~633 ms for the same step because it
-        // also carries a ~97 ms ease unimplemented here — the Approach was a constant-rate tween
-        // with no easing, and the ease's own shape is only known as "not a smoothstep", not
-        // measured well enough to build (a lead, not a finding); the gap is real and owed a
-        // follow-up if the capture A/B this item still owes reads as visibly wrong at the ends.
-        float step = GaugeCluster.ArrowSweepDegPerSimS * (1f / 60f);
-        float afterOneStep = GaugeCluster.TweenArrow(0f, 90f, 1f / 60f);
-        ctx.Check(Mathf.IsEqualApprox(afterOneStep, step),
-            $"one sim-step advances by rate×dt, angle={afterOneStep:0.000} expected={step:0.000}");
-
-        float angle = 0f;
-        int steps = 0;
-        while (!Mathf.IsEqualApprox(angle, 90f) && steps < 200)
-        {
-            angle = GaugeCluster.TweenArrow(angle, 90f, 1f / 60f);
-            steps++;
-        }
-        float simMs = steps * (1000f / 60f);
-        ctx.Check(Mathf.IsEqualApprox(angle, 90f), $"a 90° sweep reaches its target, angle={angle:0.000}");
-        ctx.Check(simMs is > 510f and < 560f,
-            $"a 90° sweep at a pure 168.7°/sim-s interior rate spans ~533 ms sim, got {simMs:0}ms (CAP-18's own end-to-end capture reads ~633 ms — the ~97ms unimplemented ease, see above)");
-
-        // Shortest-way wrap: 170° → -170° is only 20° apart going UP through the ±180° seam, 340°
-        // apart going down through 0° — the step must move toward 180°, not back toward 0°.
-        float wrapped = GaugeCluster.TweenArrow(170f, -170f, 1f / 60f);
-        ctx.Check(wrapped > 170f,
-            $"the shortest-way wrap steps up through the ±180° seam rather than back through 0°, got {wrapped:0.00}");
-    }
-
     /// <summary>BL-148: the stall cues are TWO thresholds on one margin, and the STALL lamp's blink
     /// is a rate ramp. Asserts the split (the lamp leads the nose-drop over a real fd band), the
     /// blink law against both of CAP-06's measured anchors, and the integrator that carries it —
@@ -721,56 +546,6 @@ public static class Suites
         {
             gauges.Free();
         }
-    }
-
-    private static void WeaponsDefs(TestContext ctx)
-    {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        var r = Probes.Weapons(ctx.ZrdrPath, ctx.MessagesPath, "");
-        ctx.Check(r.Error == null, $"weapons.json loads error={r.Error ?? "-"}");
-        if (r.Error != null)
-        {
-            return;
-        }
-        ctx.Same(WeaponDefCount, r.Total, $"weapon defs");
-        ctx.Same(0, r.UnhandledTotal, $"unhandled weapon keys");
-        ctx.Check(!string.IsNullOrEmpty(r.EmptyClipSound), $"empty-clip sound resolves value={r.EmptyClipSound ?? "-"}");
-        ctx.Note($"{r.Summary}");
-    }
-
-    private static void WeaponBlast(TestContext ctx)
-    {
-        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
-        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        ctx.Check(weapons.TryGet("wep_14", out var torpedo), $"torpedo definition loads");
-        ctx.Check(Mathf.IsEqualApprox(torpedo.DetonationDistance ?? -1f, 1f), $"torpedo authored fuse distance = 1 m");
-        ctx.Check(Mathf.IsEqualApprox(torpedo.ImpactProximity ?? -1f, 30f), $"torpedo authored blast radius = 30 m");
-        ctx.Check(Mathf.IsEqualApprox(ProjectilePool.BlastDamage(200f, 30f, 0f), 200f), $"blast full damage at centre");
-        ctx.Check(Mathf.IsEqualApprox(ProjectilePool.BlastDamage(200f, 30f, 15f), 100f), $"blast linear half damage");
-        ctx.Check(Mathf.IsZeroApprox(ProjectilePool.BlastDamage(200f, 30f, 30f)), $"blast zero damage at edge");
-
-        ctx.Check(weapons.TryGet("wep_09", out var flash), $"flash definition loads");
-        ctx.Check(weapons.TryGet("wep_15", out var flare), $"flare definition loads");
-        ctx.Check(!ProjectilePool.HasBlastDamage(flash), $"zero-damage FLASH radius is not a damage blast");
-        ctx.Check(!ProjectilePool.HasBlastDamage(flare), $"zero-damage FLARE radius is not a damage blast");
-        ctx.Check(ProjectilePool.FuseDotAllows(0.3f, Vector3.Forward, Vector3.Forward),
-            $"authored dot gate accepts a target ahead");
-        ctx.Check(!ProjectilePool.FuseDotAllows(0.3f, Vector3.Forward, Vector3.Back),
-            $"authored dot gate rejects a target behind");
-    }
-
-    private static void MarkersRig(TestContext ctx)
-    {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        var r = Probes.Markers(ctx.PlanesGamezPath, "");
-        ctx.Check(r.Error == null, $"planes gamez loads error={r.Error ?? "-"}");
-        if (r.Error != null)
-        {
-            return;
-        }
-        ctx.Same(PlayerAirframes, r.Requested, $"known player airframes");
-        ctx.Same(PlayerAirframes, r.Done, $"airframes with a marker rig");
-        ctx.Check(r.Missing.Count == 0, $"no airframe missing its root node missing={string.Join(",", r.Missing)}");
     }
 
     private static void LoadoutBind(TestContext ctx)

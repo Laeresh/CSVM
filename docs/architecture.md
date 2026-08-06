@@ -164,7 +164,7 @@ instead.
 - `src/Testing/TestHarness.cs` — `--run-tests`: suite registry, `TestContext`, the PASS/FAIL/SKIP table, JSON report, exit code, engine-error allowlist.
 - `src/Testing/CountingEmitterFactory.cs` — the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
 - `src/Testing/RecordingEmitterRenderer.cs` — the no-GPU `IEmitterRenderer` fake that keeps a `Puffer`'s particles instead of drawing them, so its three modes are assertable.
-- `src/Testing/Suites.cs` — the 22 registered suites and their golden counts (48 weapon defs, 11 airframes, blast/fuse rules, destructibles, flight envelope, glTF round trip).
+- `src/Testing/Suites.cs` — the 26 registered suites and their golden counts (48 weapon defs, destructibles, glTF round trip). Six no-blocker suites (`flight-envelope`, `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` — 11 airframes, blast/fuse rules — moved to `CSVM.Tests` (`FlightEnvelopeTests`, `GaugeColoursTests`, `GaugeArrowTweenTests`, `WeaponsDefsTests`, `WeaponBlastTests`, `MarkersRigTests`) since their bodies called only `Probes.*`/plain statics with no live Node — `PLAN-engine-free-suites.md` A3. `GaugeCluster`'s colour/sweep statics (`GunIndicatorColor`, `HardpointIndicatorColor`, `SlotIndicatorColor`, `DamageZoneColor`, `TargetArrowAngle`, `TweenArrow`, `IndicatorLowFrac`, `ArrowSweepDegPerSimS`) went `internal` → `public` for the move; `StallBlinkHalfPeriodS`/`AdvanceStallLamp` and the stall-specific consts stay `internal` (`stall-warning` is Wave B, scoped to `GaugeCluster` only).
 - `src/Testing/GoldenShot.cs` — the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
 - `src/Testing/CaptureDirector.cs` — the `--screenshot=`/`--shots=`/`--frames=` capture state machine + F11/F12, ticked from `_Process`.
@@ -191,7 +191,7 @@ clusters they delegate to.
 - `src/SessionPaths.cs` — resolves extracted-data paths (per-chapter gamez/texture/zrdr; `PreferUnzipped`); extracted from `GameSession`.
 - `src/SessionSpec.cs` — the launch args as one immutable, engine-free value: `Parse` parses **and** resolves (closed `SessionMode`, `--det` bundle, placement, `BuildsCollision`), plus the pure arg parsers.
 
-- `CSVM.Tests/` — the xUnit project (`dotnet test`): engine-free reader units on hand-authored fixtures + `extracted/` golden counts, skipped when absent.
+- `CSVM.Tests/` — the xUnit project (`dotnet test`): engine-free reader units on hand-authored fixtures + `extracted/` golden counts, skipped when absent; plus, since `PLAN-engine-free-suites.md` A3, the six former in-engine suites moved here as `Probes.*`-calling facts.
 
 ## Cross-module conventions
 
@@ -1906,7 +1906,13 @@ armor+health value (both bound sources, flight and the lab, feed that scale; not
 it), `yellowAt`/`orangeAt`/`redAt` are mined per-part from the data's own
 `*_damage_green/yellow/red` injure_anims. Both `Border` and `Fill` always take the same colour
 index — `BL-173`'s refuted fix shape was a synthetic per-pool ring split; there is only ever one
-colour per zone.
+colour per zone. `GunIndicatorColor`/`HardpointIndicatorColor`/`SlotIndicatorColor`/
+`DamageZoneColor`/`TargetArrowAngle`/`TweenArrow`/`IndicatorLowFrac`/`ArrowSweepDegPerSimS` are
+`public` (not `internal`) so `CSVM.Tests` (`GaugeColoursTests`, `GaugeArrowTweenTests`) can call
+them from outside the assembly — moved from the in-engine `gauge-colours`/`gauge-arrow-tween`
+suites (`PLAN-engine-free-suites.md` A3). `StallBlinkHalfPeriodS`/`AdvanceStallLamp` and the
+stall-specific consts stay `internal`: `stall-warning` is Wave B, scoped to a future
+`GaugeCluster`-only deepening, not this move.
 ⚠ The gauge textures lie — compare pixel values, never appearances: the faces hold dark UNLIT
   copies of the STALL / LOW ALT windows (~58,0,0 unlit vs 180+,0,0 lit); bitten twice. The needle
   draws its shipped RGBA art untouched (the pointer silhouette is the rtexture-tier alpha, BL-048)
@@ -2434,9 +2440,8 @@ the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replac
 emitter's own MODES are. Neither covers the other's job.
 
 ## src/Testing/Suites.cs
-The 29 registered in-engine assertion suites cover typed weapon data, blast/fuse rules, the original's
-flight envelope, plane/loadout bindings (stock and, since M3 B4, the full-rig `Loadout.ForRig`),
-live weapon fire, destructible stages/death/census, animation
+The 26 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
+the full-rig `Loadout.ForRig`), live weapon fire, destructible stages/death/census, animation
 stops and bounce-terminated launches, the full effects sweep (`effects-census`: every effect
 resolves, template meshes peak at the CALL SITE not the stage origin, none stays lit after its
 stop — `Probes.Effects` rows asserted; its puffer/mesh tallies are golden counts under the
@@ -2447,6 +2452,11 @@ flattening, glTF round trips, collision/node visibility, and authored stunt gate
 the only suite installing a fake `IEmitterFactory`, and `WithWorld` caches one world per chapter, so
 running first means it builds the shared C1 world while the fake is in effect; `damage-hd`'s
 `collision:true` immediately after forces a real rebuild for everyone downstream.
+⚠ **Six suites moved out** (`PLAN-engine-free-suites.md` A3, 2026-08-06): `flight-envelope`,
+  `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` are now
+  `CSVM.Tests` facts calling the same `Probes.*`/plain statics — the units count grew by 16 facts
+  and this registry shrank from 32 to 26. `stall-warning` (Wave B) and the `loadout-bind`/
+  `stunt-gates` blockers listed in the plan stay here for now.
 ⚠ Expected numbers are **golden counts against the retail install** (48 weapon defs, 11 airframes,
   per-chapter destructibles); change one only with the measurement that moved it.
 ⚠ `bounce-launch` asserts a **band**, not a time: the launch draws speed and elevation per instance,

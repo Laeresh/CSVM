@@ -35,6 +35,23 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed partial class GaugeCluster : Control
 {
+    // A gun belt indicator's colour by remaining fraction: green healthy, yellow low, red empty.
+    // Gun-only (BL-024): hardpoints/pylons never show this intermediate tier. TUNE (BL-142,
+    // re-tuned 2026-08-04): the prior 0.34 was inherited from the unrelated 3-round rocket-pylon
+    // coincidence (1/3), never watched against a real gun belt. A screenshot sweep
+    // (`--ammo=200 --gun-select=0 --fire`, a scaled-down stand-in for the 30-cal's real 2800-round
+    // CLUSTER_SIZE) drained the belt from full to empty: at 0.34 the light turned yellow with 68 of
+    // 200 rounds left — at the real capacity that's ~950 rounds, ~119 sim s of sustained fire at
+    // the weapon's 8 rounds/s, so the cue lit while the belt was still nearly two-thirds full.
+    // Lowered to 0.15 (~420 rounds / ~53 sim s at real capacity) so yellow reads as genuinely low
+    // rather than "still comfortably stocked"; still pending an eyes-on playtest against the
+    // original (no capture exists to trace this to).
+    public const float IndicatorLowFrac = 0.15f;
+    // Weapon-gauge arrow sweep rate, shared by both gauges (BL-184, CAP-18: 168.7 ± 1.6 °/sim-s,
+    // linear — the measured ~2-frame ease at each end is within noise and NOT a smoothstep).
+    // Public so CSVM.Tests (GaugeArrowTweenTests) can assert the rate directly.
+    public const float ArrowSweepDegPerSimS = 168.7f;
+
     // ---- state fed by the FlightController ----
     public float AltitudeFt;               // above sea level (the dial is in feet)
     public float AglMeters = float.MaxValue; // above ground (physics ray) — LOW ALT
@@ -55,22 +72,6 @@ public sealed partial class GaugeCluster : Control
     public WeaponGauge? MissileGauge;
 
     // ---- tuning ----
-    // A gun belt indicator's colour by remaining fraction: green healthy, yellow low, red empty.
-    // Gun-only (BL-024): hardpoints/pylons never show this intermediate tier. TUNE (BL-142,
-    // re-tuned 2026-08-04): the prior 0.34 was inherited from the unrelated 3-round rocket-pylon
-    // coincidence (1/3), never watched against a real gun belt. A screenshot sweep
-    // (`--ammo=200 --gun-select=0 --fire`, a scaled-down stand-in for the 30-cal's real 2800-round
-    // CLUSTER_SIZE) drained the belt from full to empty: at 0.34 the light turned yellow with 68 of
-    // 200 rounds left — at the real capacity that's ~950 rounds, ~119 sim s of sustained fire at
-    // the weapon's 8 rounds/s, so the cue lit while the belt was still nearly two-thirds full.
-    // Lowered to 0.15 (~420 rounds / ~53 sim s at real capacity) so yellow reads as genuinely low
-    // rather than "still comfortably stocked"; still pending an eyes-on playtest against the
-    // original (no capture exists to trace this to).
-    internal const float IndicatorLowFrac = 0.15f;
-    // Weapon-gauge arrow sweep rate, shared by both gauges (BL-184, CAP-18: 168.7 ± 1.6 °/sim-s,
-    // linear — the measured ~2-frame ease at each end is within noise and NOT a smoothstep).
-    // Internal (not private) so the run-tests suite can assert the rate directly.
-    internal const float ArrowSweepDegPerSimS = 168.7f;
     // The hardpoint dial's belt-light ring is 8 positions on every airframe regardless of the
     // loadout's pylon count (user-confirmed 2026-08-04, PLAN-m3-polish-7 A1/BL-184; markers.md) —
     // never derive it from the bound Hardpoints count. Indicator i is pylon i+1 (BL-294): the belt
@@ -239,6 +240,51 @@ public sealed partial class GaugeCluster : Control
         return cluster;
     }
 
+    // Guns: green > low > empty, indexing the 3 indicator colour variants. The low tier is
+    // gun-only — see IndicatorLowFrac's comment. Public so CSVM.Tests (GaugeColoursTests) can
+    // assert both colour paths directly.
+    public static int GunIndicatorColor(float frac) => frac <= 0f ? 2 : frac <= IndicatorLowFrac ? 1 : 0;
+
+    // Hardpoints/pylons: green > empty, no intermediate colour (confirmed against the original —
+    // BL-024). Never reuse IndicatorLowFrac here.
+    public static int HardpointIndicatorColor(float frac) => frac <= 0f ? 2 : 0;
+
+    // The colour of belt indicator i, including positions past the end of the loadout: an unfitted
+    // slot reads RED, the same as a fitted-but-spent one. In the original every belt light on the
+    // dial is lit — a plane with fewer guns/pylons than the dial has positions shows the surplus in
+    // red, it does not leave them dark. Public so CSVM.Tests can assert that directly.
+    public static int SlotIndicatorColor(IReadOnlyList<float> slots, int i, bool isGun) =>
+        i >= slots.Count ? 2
+        : isGun ? GunIndicatorColor(slots[i]) : HardpointIndicatorColor(slots[i]);
+
+    // Damage zones: green > yellow > orange > red, over the zone's COMBINED armor+health fraction
+    // (BL-085's PartState.Fraction) against thresholds MINED per-part from the data's own
+    // *_damage_green/yellow/red injure_anims (never hand-authored — BL-173's refuted fix shape was
+    // an armor-fraction/health-fraction ring split; the manual's four bands fall out of the shipped
+    // combined-scale numbers instead, docs/formats/hud.md "Thresholds"). Crosses to the next
+    // (worse) colour once frac drops TO OR BELOW its threshold, the same convention
+    // DamageVisuals/DamageLab use for injure_anims thresholds. Public so CSVM.Tests can assert the
+    // sequence directly.
+    public static int DamageZoneColor(float frac, float yellowAt, float orangeAt, float redAt) =>
+        frac > yellowAt ? 0 : frac > orangeAt ? 1 : frac > redAt ? 2 : 3;
+
+    // Public so CSVM.Tests (GaugeArrowTweenTests) can assert the sweep math directly.
+    public static float TargetArrowAngle(int positions, int selected) =>
+        positions > 0 ? -(360f / positions) * selected : 0f;
+
+    /// <summary>Advances a weapon-gauge arrow angle at most <see cref="ArrowSweepDegPerSimS"/> ×
+    /// simDt toward target, routed the shortest way round (BL-184). NaN snaps instead of sweeping
+    /// in from an undefined pose (gauge just appeared, or a respawn cleared it via Reset). Public
+    /// so CSVM.Tests (GaugeArrowTweenTests) can assert the sweep directly.</summary>
+    public static float TweenArrow(float current, float target, float simDt)
+    {
+        if (float.IsNaN(current))
+            return target;
+        float delta = Mathf.PosMod(target - current + 180f, 360f) - 180f;
+        float maxStep = ArrowSweepDegPerSimS * simDt;
+        return Mathf.Abs(delta) <= maxStep ? target : current + Mathf.Sign(delta) * maxStep;
+    }
+
     /// <summary>Restarts the warning/blink state (respawn).</summary>
     public void Reset()
     {
@@ -344,50 +390,6 @@ public sealed partial class GaugeCluster : Control
     /// run-tests suite can assert the law against CAP-06's two anchors directly.</summary>
     internal static float StallBlinkHalfPeriodS(float stallFrac) =>
         StallBlinkHalfPeriodPerFrac * Mathf.Max(stallFrac, StallBlinkFracFloor);
-
-    // Guns: green > low > empty, indexing the 3 indicator colour variants. The low tier is
-    // gun-only — see IndicatorLowFrac's comment. Internal (not private) so the run-tests suite can
-    // assert both colour paths directly.
-    internal static int GunIndicatorColor(float frac) => frac <= 0f ? 2 : frac <= IndicatorLowFrac ? 1 : 0;
-
-    // Hardpoints/pylons: green > empty, no intermediate colour (confirmed against the original —
-    // BL-024). Never reuse IndicatorLowFrac here.
-    internal static int HardpointIndicatorColor(float frac) => frac <= 0f ? 2 : 0;
-
-    // The colour of belt indicator i, including positions past the end of the loadout: an unfitted
-    // slot reads RED, the same as a fitted-but-spent one. In the original every belt light on the
-    // dial is lit — a plane with fewer guns/pylons than the dial has positions shows the surplus in
-    // red, it does not leave them dark. Internal so the run-tests suite can assert that directly.
-    internal static int SlotIndicatorColor(IReadOnlyList<float> slots, int i, bool isGun) =>
-        i >= slots.Count ? 2
-        : isGun ? GunIndicatorColor(slots[i]) : HardpointIndicatorColor(slots[i]);
-
-    // Damage zones: green > yellow > orange > red, over the zone's COMBINED armor+health fraction
-    // (BL-085's PartState.Fraction) against thresholds MINED per-part from the data's own
-    // *_damage_green/yellow/red injure_anims (never hand-authored — BL-173's refuted fix shape was
-    // an armor-fraction/health-fraction ring split; the manual's four bands fall out of the shipped
-    // combined-scale numbers instead, docs/formats/hud.md "Thresholds"). Crosses to the next
-    // (worse) colour once frac drops TO OR BELOW its threshold, the same convention
-    // DamageVisuals/DamageLab use for injure_anims thresholds. Internal so the run-tests suite can
-    // assert the sequence directly.
-    internal static int DamageZoneColor(float frac, float yellowAt, float orangeAt, float redAt) =>
-        frac > yellowAt ? 0 : frac > orangeAt ? 1 : frac > redAt ? 2 : 3;
-
-    // Internal (not private) so the run-tests suite can assert the sweep math directly.
-    internal static float TargetArrowAngle(int positions, int selected) =>
-        positions > 0 ? -(360f / positions) * selected : 0f;
-
-    /// <summary>Advances a weapon-gauge arrow angle at most <see cref="ArrowSweepDegPerSimS"/> ×
-    /// simDt toward target, routed the shortest way round (BL-184). NaN snaps instead of sweeping
-    /// in from an undefined pose (gauge just appeared, or a respawn cleared it via Reset).</summary>
-    internal static float TweenArrow(float current, float target, float simDt)
-    {
-        if (float.IsNaN(current))
-            return target;
-        float delta = Mathf.PosMod(target - current + 180f, 360f) - 180f;
-        float maxStep = ArrowSweepDegPerSimS * simDt;
-        return Mathf.Abs(delta) <= maxStep ? target : current + Mathf.Sign(delta) * maxStep;
-    }
 
     /// <summary>Integrates the STALL lamp's blink one sim step. The lamp lights the instant the
     /// warning does and its phase restarts when the warning clears — the original shows no
