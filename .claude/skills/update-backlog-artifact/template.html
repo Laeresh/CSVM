@@ -1,0 +1,446 @@
+<title>CSVM Backlog — by Theme &amp; Tag</title>
+<style>
+  :root {
+    --bg: #f4f5f3;
+    --panel: #ffffff;
+    --ink: #1b2321;
+    --ink-dim: #5b6560;
+    --line: #d8dcd7;
+    --line-soft: #e7e9e5;
+    --accent: #b5731f;
+    --accent-ink: #7a4d14;
+    --accent-soft: #f4e3cc;
+    --chip-bug: #a23b3b;
+    --chip-bug-bg: #f7e3e1;
+    --chip-feature: #2f5f8a;
+    --chip-feature-bg: #e2ecf3;
+    --chip-research: #6a4a94;
+    --chip-research-bg: #ece3f4;
+    --chip-tuning: #8a6a1f;
+    --chip-tuning-bg: #f4ecd6;
+    --chip-cleanup: #556058;
+    --chip-cleanup-bg: #e6e9e4;
+    --owed: #2f7d4f;
+    --owed-bg: #e0f0e4;
+    --blocked: #a23b3b;
+    --blocked-bg: #f7e3e1;
+    --focus: #b5731f;
+  }
+  :root[data-theme="dark"] {
+    --bg: #14181a;
+    --panel: #1c2124;
+    --ink: #e9ece9;
+    --ink-dim: #97a19b;
+    --line: #333a3d;
+    --line-soft: #262b2e;
+    --accent: #d99a4e;
+    --accent-ink: #f0c691;
+    --accent-soft: #3a2c17;
+    --chip-bug: #e08585;
+    --chip-bug-bg: #3a2222;
+    --chip-feature: #8fbde0;
+    --chip-feature-bg: #1f2c38;
+    --chip-research: #c1a4e6;
+    --chip-research-bg: #2a2438;
+    --chip-tuning: #e0c479;
+    --chip-tuning-bg: #362e18;
+    --chip-cleanup: #aab3ac;
+    --chip-cleanup-bg: #262b28;
+    --owed: #7bc99a;
+    --owed-bg: #1c2f22;
+    --blocked: #e08585;
+    --blocked-bg: #3a2222;
+    --focus: #e0b579;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14181a;
+      --panel: #1c2124;
+      --ink: #e9ece9;
+      --ink-dim: #97a19b;
+      --line: #333a3d;
+      --line-soft: #262b2e;
+      --accent: #d99a4e;
+      --accent-ink: #f0c691;
+      --accent-soft: #3a2c17;
+      --chip-bug: #e08585;
+      --chip-bug-bg: #3a2222;
+      --chip-feature: #8fbde0;
+      --chip-feature-bg: #1f2c38;
+      --chip-research: #c1a4e6;
+      --chip-research-bg: #2a2438;
+      --chip-tuning: #e0c479;
+      --chip-tuning-bg: #362e18;
+      --chip-cleanup: #aab3ac;
+      --chip-cleanup-bg: #262b28;
+      --owed: #7bc99a;
+      --owed-bg: #1c2f22;
+      --blocked: #e08585;
+      --blocked-bg: #3a2222;
+      --focus: #e0b579;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: ui-sans-serif, "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.45;
+  }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 2.5rem 1.5rem 5rem;
+  }
+  header.page {
+    margin-bottom: 1.75rem;
+  }
+  .eyebrow {
+    font-family: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    margin: 0 0 0.5rem;
+  }
+  h1 {
+    font-size: 1.85rem;
+    margin: 0 0 0.35rem;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+  .sub {
+    color: var(--ink-dim);
+    font-size: 0.95rem;
+    margin: 0;
+    max-width: 62ch;
+  }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.9rem 1.4rem;
+    align-items: flex-end;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1rem 1.15rem;
+    margin: 1.5rem 0 1.25rem;
+  }
+  .filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .filter-group label.group-label {
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+  }
+  .chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+  .chip-toggle {
+    appearance: none;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink-dim);
+    font-size: 0.78rem;
+    padding: 0.3rem 0.65rem;
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
+  }
+  .chip-toggle:hover { border-color: var(--accent); color: var(--ink); }
+  .chip-toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .chip-toggle[aria-pressed="true"] {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+    font-weight: 600;
+  }
+  .search-group { flex: 1 1 220px; min-width: 200px; }
+  #search {
+    width: 100%;
+    padding: 0.45rem 0.7rem;
+    border-radius: 7px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 0.85rem;
+    font-family: inherit;
+  }
+  #search:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .reset-btn {
+    appearance: none;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--ink-dim);
+    font-size: 0.78rem;
+    padding: 0.4rem 0.75rem;
+    border-radius: 7px;
+    cursor: pointer;
+    font-family: inherit;
+    align-self: flex-end;
+  }
+  .reset-btn:hover { border-color: var(--accent); color: var(--ink); }
+  .reset-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .count-line {
+    font-size: 0.8rem;
+    color: var(--ink-dim);
+    margin: 0 0 0.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .count-line strong { color: var(--ink); }
+
+  .table-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.87rem;
+    min-width: 760px;
+  }
+  thead th {
+    position: sticky;
+    top: 0;
+    background: var(--panel);
+    text-align: left;
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    padding: 0.6rem 0.9rem;
+    border-bottom: 1px solid var(--line);
+    z-index: 2;
+  }
+  td { padding: 0.55rem 0.9rem; vertical-align: top; border-bottom: 1px solid var(--line-soft); }
+  tr.item-row:last-child td { border-bottom: none; }
+  tr.item-row:hover { background: var(--line-soft); }
+
+  tr.theme-row th {
+    position: sticky;
+    top: 33px;
+    text-align: left;
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    padding: 0.45rem 0.9rem;
+    border-bottom: 1px solid var(--line);
+    border-top: 1px solid var(--line);
+    z-index: 1;
+  }
+  tr.theme-row .theme-count {
+    font-weight: 400;
+    color: var(--accent-ink);
+    opacity: 0.75;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .id-cell {
+    font-family: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--ink);
+    font-size: 0.85rem;
+  }
+  .tags-cell { white-space: nowrap; }
+  .tag {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.14rem 0.5rem;
+    border-radius: 5px;
+    margin-right: 0.3rem;
+    white-space: nowrap;
+  }
+  .tag-Bug { color: var(--chip-bug); background: var(--chip-bug-bg); }
+  .tag-Feature { color: var(--chip-feature); background: var(--chip-feature-bg); }
+  .tag-Research { color: var(--chip-research); background: var(--chip-research-bg); }
+  .tag-Tuning { color: var(--chip-tuning); background: var(--chip-tuning-bg); }
+  .tag-Cleanup { color: var(--chip-cleanup); background: var(--chip-cleanup-bg); }
+  .status-owed { color: var(--owed); background: var(--owed-bg); }
+  .status-blocked { color: var(--blocked); background: var(--blocked-bg); }
+  .title-cell { color: var(--ink); max-width: 46ch; }
+
+  .empty-state {
+    padding: 2.5rem 1rem;
+    text-align: center;
+    color: var(--ink-dim);
+    font-size: 0.9rem;
+  }
+
+  footer.note {
+    margin-top: 1.25rem;
+    font-size: 0.78rem;
+    color: var(--ink-dim);
+  }
+  footer.note code {
+    font-family: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+    background: var(--line-soft);
+    padding: 0.05rem 0.35rem;
+    border-radius: 4px;
+  }
+</style>
+
+<div class="wrap">
+  <header class="page">
+    <p class="eyebrow">CSVM · backlog.md</p>
+    <h1>Backlog, by theme and tag</h1>
+    <p class="sub" id="sub-line">Filter by type or status, or search titles.</p>
+  </header>
+
+  <div class="toolbar">
+    <div class="filter-group">
+      <span class="group-label">Type</span>
+      <div class="chip-row" id="type-filters"></div>
+    </div>
+    <div class="filter-group">
+      <span class="group-label">Status</span>
+      <div class="chip-row" id="status-filters"></div>
+    </div>
+    <div class="filter-group search-group">
+      <span class="group-label">Search</span>
+      <input id="search" type="text" placeholder="Search ID or title…" autocomplete="off" />
+    </div>
+    <button class="reset-btn" id="reset-btn" type="button">Reset filters</button>
+  </div>
+
+  <p class="count-line" id="count-line"></p>
+
+  <div class="table-scroll">
+    <table id="backlog-table">
+      <thead>
+        <tr>
+          <th style="width:5.5rem">ID</th>
+          <th style="width:9rem">Tags</th>
+          <th>Title</th>
+        </tr>
+      </thead>
+      <tbody id="table-body"></tbody>
+    </table>
+  </div>
+
+  <footer class="note">Source: <code>backlog.md</code> · <code>[Owed-playtest]</code> items are also tracked in <code>playtest.md</code>. Regenerated by <code>/update-backlog-artifact</code>.</footer>
+</div>
+
+<script>
+  // Each row: [theme, id, type, status-or-null, title]. Regenerated by the
+  // update-backlog-artifact skill from backlog.md — do not hand-edit this
+  // array, edit backlog.md and re-run the skill instead.
+  const DATA = __BACKLOG_DATA__;
+
+  const THEME_ORDER = [...new Set(DATA.map(row => row[0]))];
+  const TYPES = ["Bug","Feature","Research","Tuning","Cleanup"];
+  const STATUSES = ["Owed-playtest","Blocked"];
+
+  const state = { types: new Set(), statuses: new Set(), query: "" };
+
+  function buildChips(container, values, key) {
+    values.forEach(v => {
+      const btn = document.createElement("button");
+      btn.className = "chip-toggle";
+      btn.type = "button";
+      btn.textContent = v;
+      btn.setAttribute("aria-pressed", "false");
+      btn.addEventListener("click", () => {
+        const set = state[key];
+        if (set.has(v)) { set.delete(v); btn.setAttribute("aria-pressed", "false"); }
+        else { set.add(v); btn.setAttribute("aria-pressed", "true"); }
+        render();
+      });
+      container.appendChild(btn);
+    });
+  }
+  buildChips(document.getElementById("type-filters"), TYPES, "types");
+  buildChips(document.getElementById("status-filters"), STATUSES, "statuses");
+
+  document.getElementById("search").addEventListener("input", e => {
+    state.query = e.target.value.trim().toLowerCase();
+    render();
+  });
+  document.getElementById("reset-btn").addEventListener("click", () => {
+    state.types.clear(); state.statuses.clear(); state.query = "";
+    document.getElementById("search").value = "";
+    document.querySelectorAll(".chip-toggle").forEach(b => b.setAttribute("aria-pressed", "false"));
+    render();
+  });
+
+  function statusMatches(itemStatus, filter) {
+    if (filter === "Blocked") return !!(itemStatus && itemStatus.startsWith("Blocked"));
+    return itemStatus === filter;
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function render() {
+    const body = document.getElementById("table-body");
+    body.innerHTML = "";
+    let shown = 0;
+
+    THEME_ORDER.forEach(theme => {
+      const items = DATA.filter(row => {
+        const [rowTheme, id, type, status, title] = row;
+        if (rowTheme !== theme) return false;
+        if (state.types.size && !state.types.has(type)) return false;
+        if (state.statuses.size) {
+          const ok = [...state.statuses].some(s => statusMatches(status, s));
+          if (!ok) return false;
+        }
+        if (state.query) {
+          const hay = (id + " " + title).toLowerCase();
+          if (!hay.includes(state.query)) return false;
+        }
+        return true;
+      });
+      if (!items.length) return;
+
+      const themeRow = document.createElement("tr");
+      themeRow.className = "theme-row";
+      themeRow.innerHTML = `<th colspan="3">${escapeHtml(theme)} <span class="theme-count">(${items.length})</span></th>`;
+      body.appendChild(themeRow);
+
+      items.forEach(([, id, type, status, title]) => {
+        shown++;
+        const tr = document.createElement("tr");
+        tr.className = "item-row";
+        const statusTag = status
+          ? `<span class="tag ${status.startsWith("Blocked") ? "status-blocked" : "status-owed"}">${escapeHtml(status)}</span>`
+          : "";
+        tr.innerHTML = `
+          <td class="id-cell">${escapeHtml(id)}</td>
+          <td class="tags-cell"><span class="tag tag-${type}">${escapeHtml(type)}</span>${statusTag}</td>
+          <td class="title-cell">${escapeHtml(title)}</td>
+        `;
+        body.appendChild(tr);
+      });
+    });
+
+    document.getElementById("count-line").innerHTML =
+      `Showing <strong>${shown}</strong> of ${DATA.length} items.`;
+
+    if (!shown) {
+      body.innerHTML = `<tr><td colspan="3" class="empty-state">No items match the current filters.</td></tr>`;
+    }
+  }
+
+  document.getElementById("sub-line").textContent =
+    `${DATA.length} open items across ${THEME_ORDER.length} themes. Filter by type or status, or search titles — grouping and item order match backlog.md.`;
+
+  render();
+</script>
