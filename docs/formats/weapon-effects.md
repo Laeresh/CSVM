@@ -142,10 +142,11 @@ material carrying the identical `splash01.tif` texture (confirmed against C1B's 
 — material 136, texture 131, `cycle: null` — vs. the cycling material 135 at the same texture index;
 `bsplsh_splash`'s polygon binds directly to 135, so its automatic registration already worked). Once
 registered a flipbook runs globally and continuously like every other world cycle, not reset per
-hit — concurrent splashes share one synced frame. The column's **width** now plays at the authored
-1× by default (5 cm — sub-pixel past ~30 m); `SplashColumnWidthScale` stays reachable at 8 for the
-user's pending A/B against the reference ticks (~0.35 m wide), same `static readonly` pattern as
-A3's `MuzzleFlashCount`.
+hit — concurrent splashes share one synced frame. The column's **width** plays at 8×
+(`SplashColumnWidthScale`), settled at the controls 2026-08-06 with the fades in: the authored
+quad is 5 cm wide — sub-pixel past ~30 m — while the reference ticks measure ~0.35 m, which 8×
+matches. The authored 1× stays reachable, same `static readonly` pattern as A3's
+`MuzzleFlashCount`.
 
 ### Engine wiring (M3, D32) — the world-effects runtime
 

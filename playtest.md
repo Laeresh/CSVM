@@ -96,6 +96,7 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 | `CAP-26` | Rocket impacts, one clip per type, **with audio** | Fire each rocket type at open ground and film it close enough to count and orient the rings, with clean audio on the same take: `wep_04` (9M/incendiary), `wep_05` (ARMOR), `wep_06` (BOOM/HE), `wep_08` (SONIC). Two playtests point here: `PT-17` found HE's second ring present but its orientation "kinda random", and `PT-20` judged the sounds "a lot better" but not settleable by ear alone. *Look for:* ring count, ring orientation and how fast the burst reads (`BL-016`'s open "faster than the original" half), plus the launch bark and the per-type impact sound | `BL-016` (open half), `BL-211` |
 | `CAP-27` | Does the original spark on the airframe at all? | Take damage in the original — a light scrape is enough — with the aircraft in frame (external/chase fine), and look for a **spark burst on the airframe itself**, distinct from smoke at the contact point. ⚠ This capture can **delete** a feature rather than tune one: `BL-090`'s per-impact spark burst is driven by a 0.99 `injure_anims` entry that exists on **1 of 11** aircraft (the Devastator), which the backlog already calls "plausibly an authoring leftover". If the original never sparks, our implementation goes. If it does, `BL-281`'s ricochet mix can be judged | `BL-281`, `BL-090` (item 2) |
 | `CAP-25` | The `chunk` debris quad at a slug dirt hit | Sustained slug fire into flat dirt, camera as close to the impacts as the original allows (external/chase view fine — no gauges needed), slow-motion or high frame rate if possible. Decides whether the original ever shows the `gunhit` def's `chunk` debris node — a ~0.5 m quad textured with the perforated `gun_barrel` shroud band (dark dot grid on tan; gamez model 27 → material 4, UVs u 1→2), flung by the three **slug** defs only (`3040`/`5060`/`70slug_gunhit`, all chapters; ap/dum/mag have no debris nodes). Our build draws it faithfully from the data (`Screenshots/Mystery debris.png`, 2026-08-04, freeze-frame zoom); we keep it unless the original provably suppresses it. *Look for:* any small tumbling textured scrap distinct from smoke/chips in the ~2–4 s after each hit — presence or absence both settle it | `BL-203` (landed — this judges a leftover) |
+| `CAP-28` | Torpedo flight dynamics | The aerial torpedo (`TORPDO`) released in level flight, ideally at high speed, filmed external/chase with the surface in frame and held from release to impact — long enough to read the speed decay the user saw at the controls (a max/cruise speed, slowing after launch). HUD in frame lets `analysis/video-flight-calibration` decode speed over time; without it the decay is still readable against fixed terrain | `BL-290` |
 
 ### World
 
@@ -106,101 +107,6 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 
 ## 1 · Actionable now (`PT-nn`)
 
-
-- `PT-39` **The gun line after plan-8 A2/A3: smoke at the gun line, bare casings, and pick the
-  muzzle-flash form (`BL-263`).** The invented eject-puff cluster is deleted and the authored
-  `muzzlepuffer` renders (6 puffs / 0.3 s, drifting aft); the muzzle flash defaults to the authored
-  single rolled node with the `_muzzle1`→`_muzzle2` frame flip, the old triad reachable by setting
-  `Projectile.cs`'s `MuzzleFlashCount` back to 3. One flight covers it
-  (`./RunGame.ps1 --plane=player_bhawk --chapter=C1B --infinite-ammo`, sustained fire in chase
-  view). *Look for:*
-  - (a) smoke sits on the gun line and drifts aft, casings tumble bare — A/B vs
-    `C1B IA1 Bloodhawk tracer and ejection.png`;
-  - (b) the flash: the pick is MADE (triad kept, 2026-08-05, `BL-286`) and the flash is now
-    anchored to the muzzle — confirm it rides the plane at speed and reads like it used to.
-  - (c) While judging, the muzzle-light magnitudes (`MuzzleLightEnergy` 2.5, `MuzzleLightLife`
-    0.03 s) are stand-ins — the def authors range/colour only; flag if the light reads wrong
-    (`BL-286`).
-  - (d) Fire into the water: the splash now plays its authored fade + flipbook and defaults to
-    the authored 1× column width — judge 1× vs the old 8× (`water_1x_close_*` /
-    `water_8x_close_*` here, or flip `SplashColumnWidthScale`) against `Water Splash.png`; the
-    8× survives only as a config TUNE if 1× still reads wrong (`BL-265`).
-
-  *Blocks:* `BL-263` and `BL-265` close.
-
-- `PT-38` **Rocket/gun quick checks left over from the closed 2026-07-24 m3-polishing fixes**
-  (`BL-002`/`BL-003`/`BL-005`/`BL-103`, all landed and code-verified; their entries are closed, so
-  this is the one place these look-checks survive). One flight covers all four
-  (`./RunGame.ps1 --plane=player_pfighter --chapter=C1 --infinite-ammo`). *Look for:*
-  - (a) a rocket fired out to max range self-destructs with the `default` IMPACT effect reading
-    acceptably as a mid-air burst, not a ground/water splash floating in the sky;
-  - (b) gun tracers start at the muzzle and grow out of it, never appearing behind the plane;
-  - (c) a ground crash plays the boom with no `SOUND 'snd_exp_ground_a'` warning in the log;
-  - (d) rockets gate at one launch per second (`FIRE_RATE 1.0` is the data's answer; the user was
-    never sure whether the original has a cooldown — A/B it if the original is open anyway,
-    otherwise judge on its own merits).
-
-- `PT-36` **Splash falloff onto a large neighbour, e.g. a zeppelin gasbag (`BL-239`).** Blast damage
-  onto a body other than the one struck now scores to the nearest point on that body's own collision
-  shape instead of its transform origin, so a large body — a zeppelin gasbag, a long building mesh —
-  no longer soaks less splash than a small one, or none at all when its origin happens to sit outside
-  the blast radius entirely. Landed against a controlled synthetic repro (the `blast-neighbor-shape`
-  suite); no chapter mission is known to place a rocket-class blast near one end of a real large body,
-  so the in-game picture is unverified. Fly at the C1 zeppelin (`hk_zep`) and put a rocket into one
-  end of a gasbag, away from dead centre: `./RunGame.ps1 --fly --chapter=C1 --infinite-ammo`.
-  *Look for:* the gasbag takes damage from a hit that lands well off its centre, not only from a hit
-  near the middle. *Blocks:* `BL-239` sign-off.
-
-- `PT-37` **The sea dive's splash-then-steam ordering (`BL-228`).** `WAIT_FOR_COMPLETION` is
-  implemented and `player_crash_water`'s flagged `plane_big_splash` now holds `large_steam_spray`
-  for the splash's authored 3.0 s (measured 3.050 s in the `wait-for-completion` suite, on real
-  gamez data) instead of both retargeting on the same tick. **No headless run can photograph it** —
-  `--crash` resolves `Ground`, so no scripted water crash exists (the same gap `PT-34`/`BL-229`
-  left), and every golden stayed hash-identical because none of them dives into water. Fly out over
-  the C1 sea and put the plane into it: `./RunGame.ps1 --fly --chapter=C1`, nose down into open
-  water well clear of the shoreline. *Look for:* the white splash column rises and fades **first**,
-  and only as it finishes does the steam plume start — not both at once. A stopwatch is not needed;
-  the question is purely whether the two are sequential or simultaneous. *Blocks:* `BL-228` sign-off
-  — and, on the same dive, `PT-34`'s splash-emitter check, since it is the same repro.
-
-- `PT-35` **The rocket rings' template meshes (`BL-061`).** The mesh half landed and is asserted
-  in-engine and in `--effects-test`'s census, but no golden sees it — the rings only appear on a
-  live rocket impact, and all 13 shots stayed hash-identical through the fix. Fly a rocket into
-  terrain: `./RunGame.ps1 --fly --chapter=C1 --infinite-ammo`, and again with
-  `--rocket=wep_08` (the sonic, whose IMPACT names `sonic_ground_effect`) and `--rocket=wep_14`
-  (the torpedo, over water — `torpedo_water_effect`); stock HE is `wep_06`. *Look for:*
-  - (a) HE — a SECOND ring above the ground ring (`he_ring1`, ~12 m up), not just the one on the
-    deck;
-  - (b) sonic — four rings rising off the impact, which showed nothing at all before;
-  - (c) torpedo on water — the splash model and its ripple rings at the hit;
-  - (d) after every one of them, nothing left behind: no ring or chunk frozen at the impact point
-    once the effect is over.
-
-  *Blocks:* `BL-061` sign-off.
-
-- `PT-34` **The sea dive's splash spray (`BL-229`).** The rule landed and is asserted in-engine, but
-  the picture is unverified: there is no headless water crash (`--crash` passes no struck body, so
-  the surface classifies `Ground` and plays the dirt variant), so `plane_big_splash` has never been
-  seen since the fix. Fly into the water: `./RunGame.ps1 --fly --chapter=C1B` and dive into the sea.
-  *Look for:*
-  - (a) the white `watersquirt` spray fires ON impact and runs about half a second — the bug was
-    it never appearing at all;
-  - (b) it reads as a column thrown up from the impact point, not a puff at the plane's last
-    position;
-  - (c) the splash polys' 3 s scale/fade and the ripples still play underneath it, unchanged.
-
-  *Blocks:* `BL-229` sign-off, and the `D9`/`BL-228` question of whether the steam spray should
-  wait for the splash (both retarget on the same tick today).
-
-- `PT-26` **Damaged-engine loop (B5 / `BL-090` item 1 landed 2026-08-01).** A second engine loop
-  (`snd_damagedengine`) now blends in the moment any part takes damage — every plane carries this
-  data, so any of the 11 works. Scrape something lightly and listen for the loop rising under the
-  healthy engine sound; it should stay audible (not swamp the healthy loop) and fade back out on
-  respawn. *TUNE, not a bug either way* (`BL-223`): the shipped data reads as "full blend on first
-  scratch, no ramp," and the mix gain (`flightAudio.damagedEngineMixGain`, default 1.0) has no
-  reference recording behind it — judge whether it should ramp in more gradually as damage
-  *accumulates*, and whether 1.0 sits right against the healthy engine loop.
-  `./RunGame.ps1 --plane=player_bhawk --chapter=C1`.
 
 - `PT-27` **Gun-impact smoke (C8 / `BL-061` item 1 landed 2026-08-01).** Strafe **terrain** — not a
   building; a gun's `buildings` entry is the install-missing `bld_damage.flt` — and get inside 500 m
@@ -231,48 +137,6 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
     wrong.
 
   `./RunGame.ps1 --plane=player_bhawk --chapter=C1B --infinite-ammo`.
-
-- `PT-31` **Weapon-gauge arrow sweep A/B against `CAP-18` (A1 / `BL-184` landed 2026-08-04).** The
-  gun/missile pointer now tweens to the selected slot at 168.7 °/sim-s instead of snapping — this
-  is the item's own acceptance criterion, since the sweep can only be judged against the reference
-  clip. Cycle weapons in the cockpit (`./RunGame.ps1 --plane=player_bhawk --chapter=C1
-  --infinite-ammo`) and compare against `CAP-18`. *Look for:*
-  - (a) the arrow visibly sweeps rather than snapping;
-  - (b) the readout (digits/type name) still flips instantly at the start of the move, not
-    tweened;
-  - (c) a step near the ±180° antipode goes the short way (the counterclockwise choice CAP-18
-    measured there);
-  - (d) whether the sweep's start/end read as abrupt — the landed version has **no** ease
-    (CAP-18's own ~97 ms sim ease at each end was left unimplemented, its shape unmeasured beyond
-    "not a smoothstep"; see `docs/formats/hud.md`) — if that reads wrong at the controls, the
-    ease is the follow-up, not a re-tune of the rate.
-
-- `PT-32` **Stall-warning blink A/B against `CAP-06` (A2 / `BL-148` landed 2026-08-04).** The `STALL`
-  plate now blinks at a speed-dependent rate — 643 ms sim half-period at the 0.30 fd threshold, 296
-  at 0.15 — and lights 0.05 fd before the nose breaks. Fly a level deceleration to the stall and back
-  out (`./RunGame.ps1 --plane=player_bhawk --chapter=C1`) beside `CAP-06 2.mp4`. *Look for:*
-  - (a) the lamp lights while the nose is still flying, and the break comes noticeably later;
-  - (b) the blink visibly speeds up as the stall deepens and slows again on recovery;
-  - (c) the plate is fully lit or fully dark, never dim — brightness is binary and any fade is a
-    bug;
-  - (d) whether the rate at the threshold reads right, since the sim/wall conversion is the live
-    trap (a wall implementation would blink 39% fast).
-
-  The deep end below 0.15 fd is asserted in the `stall-warning` suite but was never flown in a
-  scripted run — that band is the one worth watching.
-
-- `PT-33` **Gun belt low-ammo colour step, own-merits judgement (A3 / `BL-142` landed 2026-08-04).**
-  The gun gauge's belt light now turns yellow at 15% of the group's ammo remaining, down from 34% —
-  there is no original capture to A/B against (the thresholds were never measured from the original,
-  `docs/formats/hud.md`), so this is a judgement call on our own remake, not a fidelity check. Fire
-  one gun group down from full (`./RunGame.ps1 --plane=player_bhawk --chapter=C1 --gun-select=0
-  --fire`, or hold the trigger manually) and watch the belt light. *Look for:*
-  - (a) does yellow still feel too early or too late against a real magazine's length of
-    sustained fire;
-  - (b) does the light sit yellow for a satisfying "getting low, plan around it" stretch rather
-    than flickering on right before empty;
-  - (c) whether red-only-at-literal-zero (no separate "critical" tier) reads as a gap — that
-    would be a new item, not a re-tune of this constant.
 
 ---
 

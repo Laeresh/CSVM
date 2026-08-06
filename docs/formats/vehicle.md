@@ -89,8 +89,9 @@ A list of part entries:
 - **The two values are equal in every entry** — all 88 parts across the 22 defs that carry
   `destroyable_parts` (11 player `p*` + 11 AI `r*`), measured; values 15/20/25/30/35/40. Equal
   because armor is **purchasable** and these are the *stock* allocations, not because the number is
-  duplicated. `PlaneStats` reads both values (`DestroyablePart.MaxHp`/`MaxArmor`); `PlaneDamage`
-  still spends only `HEALTH_DAMAGE` against a single pool — the remaining gap, `BL-085` Wave A2.
+  duplicated. `PlaneStats` reads both values (`DestroyablePart.MaxHp`/`MaxArmor`); the two-pool
+  `PlaneDamage.Apply(part, healthDamage, armorDamage)` — armour first, 1:1 overflow — landed
+  2026-08-04 (`PLAN-armour-layer`).
   *(An earlier version of this page said AI variants differ 25/20 — that is wrong; nothing in
   this install has an unequal pair.)*
 - Flags: `critical` — the plane is destroyed when this part reaches 0 HP (all four player

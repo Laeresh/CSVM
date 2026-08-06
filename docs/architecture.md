@@ -1108,10 +1108,10 @@ together) through a per-instance translucent twin (`EnsureSplashFade`, `SceneBui
 `SetInstanceShaderParameter`, and the column's `splash01→03` flipbook (`EnsureSplashFlipbook`,
 reusing `TextureCycler`'s frame-swap machinery — registered manually because the gun splash's own
 polygon binds to a non-cycling sibling material, confirmed against C1B's gamez data, so
-`SceneBuilder`'s automatic per-polygon path never reaches it). Column *width* now plays at the
-authored 1× by default with the fades landed; `SplashColumnWidthScale` stays reachable at 8 for the
-user's pending A/B (`static readonly`, not `const`, so the branch stays compiled) — the
-authored quad is 5 cm wide, sub-pixel past ~30 m. A dirt
+`SceneBuilder`'s automatic per-polygon path never reaches it). Column *width* plays at 8×
+(`SplashColumnWidthScale`; judged at the controls 2026-08-06 with the fades in — the authored quad
+is 5 cm wide, sub-pixel past ~30 m, while the reference ticks measure ~0.35 m, which 8× matches;
+the authored 1× stays reachable, `static readonly` not `const`, so the branch stays compiled). A dirt
 (unclassified-terrain) hit spawns tumbling chips (`SpawnDirtDebris`) drawn on the gunhit def's own
 `bit01–04` chip textures in alpha-blended per-texture pools (through the additive
 muzzle-flash-textured impact pool they read as a small flame — the BL-203 mechanism; the def's

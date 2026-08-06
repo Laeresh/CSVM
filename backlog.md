@@ -396,6 +396,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Playtest after fix:* take panel damage in flight — flakes burst once at the tear, separate
   from the plane and fall away behind it; a fuel-leak-only stage throws none.
 
+- `BL-291` `[Feature]` **A way to spawn/damage a zeppelin — the thin harness that finishes `BL-239`'s in-game
+  verification** (PT-36, 2026-08-06). Splash damage reads right at the controls, but nothing in
+  C1 shows damage registering on the zeppelin, so `BL-239`'s one unverified picture — a gasbag
+  taking blast damage from a hit well off its centre — still has nowhere to be seen. Wanted: a
+  `--damage-test`-style spawn of a damageable `hk_zep`, or a debug damage readout on the existing
+  C1 one — just enough to watch blast numbers score to the gasbag. Acceptance test: a rocket into
+  one END of a gasbag, away from dead centre, damages it (the nearest-collision-shape falloff,
+  landed 2026-08-05). Explicitly out of scope: the authored destruction sequence (`breakupzep` →
+  13 `break*`, the crash-sink motions) — that is its own M4-sized feature for when zeppelins
+  matter to gameplay, not this item.
+
 ## Weapons & combat
 
 - `BL-062` `[Research]` **Rocket firing order — the H-selector fidelity question.** Settle from the original
@@ -610,22 +621,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   **When it comes back**, the fuse branch must carry its struck body into `Impact` instead of
   `null`, or it re-breaks per-surface effect selection the moment it is switched on.
 
-- `BL-265` `[Tuning]` `[Owed-playtest]` **Water splash width: judge the authored 1× against the 8× widening now that the
-  fades exist** (`PT-39`; the fade + flipbook half landed 2026-08-05 — `docs/HISTORY.md`). The
-  authored 0.05 s fade-in / 1 s fade-out and the `splash01→03` 4 fps flipbook now render (the
-  fade targets the whole model root — base disc AND column, per the defs — and the gun splash's
-  flipbook needed manual registration: its polygon binds a non-cycling sibling material,
-  confirmed against C1B's `materials.json`). `SplashColumnWidthScale` defaults to the authored
-  1× with the 8× reachable (same pattern as `BL-263`'s flash pick); A/B frame series at both
-  widths in `playtest/PT-39/` (`water_1x_close_*` / `water_8x_close_*`) vs `Water Splash.png`.
-  The 8× survives only as a config-visible TUNE if 1× still reads wrong with the fades in.
-
 - `BL-286` `[Tuning]` `[Owed-playtest]` **Muzzle-flash residues after the `BL-263` pick (triad kept, 2026-08-05)** — two
-  small opens. (a) The muzzle-light stand-in magnitudes (was `BL-200`, rode `BL-261`/`BL-263`):
-  `MuzzleLightEnergy` 2.5 and the 2-frame `MuzzleLightLife` 0.03 s are judged values — the def
-  carries range/colour only; judge at the controls (`PT-39` (c)). The light is also still
-  world-fixed (unlike the flash quads, now muzzle-anchored) — at speed it lags the plane by ~2 m
-  for its 2 frames; anchor it if that ever reads wrong. (b) The user's engine-semantics
+  small opens. (a) closed 2026-08-06: the muzzle-light stand-in magnitudes (was `BL-200`, rode
+  `BL-261`/`BL-263`; `MuzzleLightEnergy` 2.5, 2-frame `MuzzleLightLife` 0.03 s — the def carries
+  range/colour only) are signed off, judged in `--weapon-lab`; static, so the sign-off covers
+  magnitudes only, not motion. (c) Anchor the flash quads AND the muzzle light to the muzzle
+  point: at the controls 2026-08-06 the flash sits visibly forward of the muzzle ("direct at it
+  would look better"), and the light is still world-fixed — at speed it lags the plane by ~2 m
+  for its 2 frames, which the weapon-lab sign-off could not see. Same anchoring work, one
+  landing; re-judge both **in flight**, not the lab. When landing, check whether the forward
+  offset is authored (a node offset in the def) — if so this is a deliberate deviation and the
+  entry's close should say so. (b) The user's engine-semantics
   hypothesis, open: the def's 3-way `RANDOM_WEIGHT` roll (30/80/140°) may be rendered
   concurrently (all branches) by the original engine rather than pick-one — which would make the
   authored form itself a triad at those exact angles. Our triad uses 120° spacing with one
@@ -639,10 +645,21 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   RUN_TIME is 1–2 s), `DirtDebrisSpeed` **4 m/s**, `DirtDebrisSpreadDeg` **60°**, `DirtDebrisSpinMax`
   **25 rad/s**; building ricochet `RicochetSparks` **8**, `RicochetSparkSize` **0.55 m**,
   `RicochetSparkLife` **0.55 s**, `RicochetSparkSpeed` **22 m/s**, `RicochetSpreadDeg` **90°** (a
-  stand-in — both authored assets are missing from the install); water-splash column width
-  `SplashColumnWidthScale` **8×** (the authored quad is 5 cm wide — sub-pixel past ~30 m; the
-  reference ticks measure ~0.35 m). A/B against `Dirt Splash.png` / `Water Splash.png` at the
-  controls; the splash *height/timing* curves are authored data, not TUNE.
+  stand-in — both authored assets are missing from the install). The water-splash column width
+  is settled and out of this entry: `SplashColumnWidthScale` **8×** confirmed at the controls
+  2026-08-06 with the fades in (`BL-265` closed — the authored quad is 5 cm wide, sub-pixel past
+  ~30 m; the reference ticks measure ~0.35 m, which 8× matches). A/B the rest against
+  `Dirt Splash.png` at the controls; the splash *height/timing* curves are authored data, not TUNE.
+
+- `BL-290` `[Bug]` `[Blocked: CAP-28]` **Torpedo flight dynamics: the original's torpedo has a max/cruise speed and
+  visibly slows after firing; ours flies the generic projectile model** (PT-38, 2026-08-06). Data
+  check done: the decoded weapon block carries only `VELOCITY` (muzzle/flyout speed) and
+  `ACCELERATION` (0 = constant velocity) — no drag or speed-cap field (`docs/formats/weapons.md`) —
+  so this is engine behaviour to measure, not data to consume. Hypothesis recorded, not evidence:
+  the torpedo may inherit the launching plane's speed and decay toward its own authored
+  `VELOCITY`; a fast launch would then visibly slow, as a drop-torpedo physically should. `CAP-28`
+  films it; measurement can reuse `analysis/video-flight-calibration` if the HUD is in frame.
+  `wep_14` is mountable via `--rocket=wep_14` (no stock loadout carries it).
 
 ## Flight model & collision physics
 
@@ -1616,6 +1633,31 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   - `chuteman` has **zero gravity**. Any solve phrased as a parabola divides by zero on it; it is a
     constant-velocity descent and needs the distance, nothing else.
 
+- `BL-292` `[Bug]` **Crash water splash is mis-oriented: the spray does not go up and the rings do not lie
+  flat; fire and steam are correct** (seen on PT-37's sea dive, 2026-08-06). On a dive into open
+  water, `plane_big_splash`'s spray column visibly does not fire upward and its flat rings do not
+  lie in the water plane, while the fire and steam parts of the same crash choreography rise
+  correctly. The splash sub-effects should orient to the struck surface normal — straight up on
+  water. Hypothesis, not observation: the effect root inherits the crashed plane's attitude,
+  which would be the fourth bite of the plane-parented-effect trap (`BL-288` catalogues the
+  family) — verify the actual transform at spawn before assuming the angle. Re-check the
+  ground/dirt crash variant when landing: same spawn path, and a tipped effect is harder to spot
+  against terrain. Related but separate: `BL-293` orients impact rings — different spawn path
+  (template meshes, not crash choreography).
+
+- `BL-293` `[Tuning]` **Rocket impact rings: orient the ground rings to the struck surface normal; the
+  fixed-axis upper ring is faithful but reads poorly — parked** (PT-35, 2026-08-06). The
+  actionable half: ALL ground rings — HE's ground ring, AP's cracks quad, the sonic stack —
+  orient to the struck surface normal. Polish framing, no observed defect: on flat C1 terrain
+  the rule changes nothing; the payoff is slopes and water. The parked half — faithfulness vs
+  feels-good, decide later: rewatching the original (`Crimson Skies 1.02 2026-07-31 23-27-53.mp4`)
+  shows the second (upper) HE ring always oriented on the same fixed axis, matching our
+  behaviour — ours is CORRECT as-is and this is not a bug. The proposal on the table for the
+  feel side: upper ring facing the plane / against the rocket's flight direction. The ring anims
+  carry no rotation data (scale/opacity only — `docs/formats/weapon-effects.md`), so any change
+  is engine-side and a deliberate deviation. Cross-link: `BL-292` (crash-splash orientation,
+  different spawn path).
+
 ## Audio
 
 - `BL-079` `[Feature]` **Positional 3D audio for other aircraft** — all sound is own-plane non-positional today;
@@ -1813,16 +1855,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Fix shape:* out of scope until a cockpit-audio feature is scheduled; recorded here so nobody has
   to re-derive from scratch that the *data* isn't the blocker.
 
-- `BL-223` `[Tuning]` `[Owed-playtest]` **Damaged-engine loop gain (B5, 2026-08-01)** — `vehicle.json`'s `damaged_engine_sound`
-  entry (`["snd_damagedengine", 0.0, 1.0]`, shared by every plane via `basic_airplane`) has two
-  undecoded trailing floats. `PlaneStats`/`FlightAudio` read them as a fade window over accumulated
-  damage fraction (`1 - PlaneDamage.WorstFraction`): 0 gain at `f0`, full gain at `f1` — for this
-  data that means "no blend until pristine, full blend the instant any part is scratched," since
-  `f0=0.0`. `FlightAudio.DamagedEngineMixGain` (default 1.0, the def's own sounds.json volume,
-  unattenuated) has no reference recording to derive an attenuation from, unlike `WhineMixGain`'s
-  measured dive. Judge both — whether the loop should ramp in more gradually as damage *accumulates*
-  rather than snapping in on first scratch, and whether 1.0 sits right against the healthy engine —
-  at the controls. Config keys: `flightAudio.damagedEngineMixGain`.
+- `BL-223` `[Bug]` `[Owed-playtest]` **Damaged-engine loop gates on the wrong thing: any part's worst fraction, not the
+  engine part's health pool (B5, 2026-08-01; regated per playtest 2026-08-06, PT-26).** Today
+  `PlaneStats`/`FlightAudio` blend `snd_damagedengine` from `1 - PlaneDamage.WorstFraction` across
+  ALL parts — first scratch anywhere brings the loop in. Two fixes, both data-supported:
+  1. **Gate by zone:** blend from the **engine-marked destroyable part(s)** only — the
+     `destroyable_parts` `engine` flag marks the part the engines physically live in (tail on the
+     Bloodhawk, wings on the Balmoral; `docs/formats/vehicle.md`), matching the user's read of the
+     original. Damage elsewhere leaves the engine sounding healthy.
+  2. **Gate by pool:** the loop responds to that part's **hit-point pool**, not its armor —
+     armor-only damage stays silent. Implementable now: the two-pool
+     `PlaneDamage.Apply(part, healthDamage, armorDamage)` landed 2026-08-04 (`PLAN-armour-layer`).
+  The `damaged_engine_sound` `f0/f1` fade window (`["snd_damagedengine", 0.0, 1.0]`, shared via
+  `basic_airplane`) then reads over the engine part's health fraction. A pleasant consequence:
+  with armor spent first, the loop naturally starts only once real airframe damage exists — which
+  answers the old "should it ramp rather than snap on first scratch" question by construction.
+  No capture owed: the `engine` data flag plus the user's recollection carry the zone rule, and
+  filming the original to prove armor hits don't trigger it would be trying to hear a negative.
+  The gain TUNE survives as this entry's tail: `FlightAudio.DamagedEngineMixGain` (default 1.0,
+  the def's own sounds.json volume, unattenuated) has no reference recording, unlike
+  `WhineMixGain`'s measured dive — judge against the healthy engine at the controls after the
+  regating. Config keys: `flightAudio.damagedEngineMixGain`.
 
 - `BL-252` `[Tuning]` `[Owed-playtest]` **Overspeed-whine volume** (`prop_sound`; `FlightAudio.WhineMixGain` 0.12). `CAP-10` plus a
   live cross-check incidentally confirmed the **gating** of the original's dive/overspeed sound and
@@ -2123,6 +2176,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   its chrome rather than today's placeholder styling. Blocked on the menu-hub milestone, not on data.
   *Fix shape:* re-review `MarkerHud.cs`/`StuntScoreboard.cs` placement once the menu hub UI exists,
   against the hub's own type scale/units rather than in isolation.
+
+- `BL-294` `[Bug]` **Weapon-gauge slot mapping: the index must equal the pylon number, and the sweep
+  direction is mirrored against the original** (PT-31, 2026-08-06). Two observations, one
+  instrument: (1) the original's gauge index corresponds to the PYLON number — empty pylons
+  leave gaps in the dial, and the display corresponds to the active pylon / gun group — while
+  ours compacts the used hardpoints into indices 1..N. The original's fill order alternates per
+  wing: 1,5,2,6,3,7,4,8; the pylons themselves are believed correctly ordered, the display is
+  not. (2) On the Balmoral's full stock loadout (all 8 pylons — the fill difference is invisible
+  there) the original cycles CLOCKWISE, ours counterclockwise. Analysis order: check the dial's
+  index winding first — a mirrored slot→angle map explains the direction flip without touching
+  `BL-184`'s landed tween rate — and reconcile with `CAP-18`'s measured CCW antipode step before
+  changing anything: on a full 8-slot dial, cycling 1→5 in the original's alternating order IS
+  the 180° antipode case, so `CAP-18`'s measurement may describe exactly those steps, not a
+  general rule.
 
 ## Missions, modes & campaign
 

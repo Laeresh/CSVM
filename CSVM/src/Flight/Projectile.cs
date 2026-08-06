@@ -136,7 +136,7 @@ public sealed partial class ProjectilePool : Node3D
     // event tick, so the flash lives ~2 frames here; energy is ours to pick (TUNE).
     private const int MaxMuzzleLights = 8;
     private const float MuzzleLightLife = 0.03f;   // s
-    private const float MuzzleLightEnergy = 2.5f;  // TUNE — the def carries range/colour only
+    private const float MuzzleLightEnergy = 2.5f;  // the def carries range/colour only; magnitude signed off 2026-08-06 (weapon-lab, BL-286a)
 
     // A dirt impact's tumbling-debris burst: a few small chips that fly outward and arc under
     // gravity, in place of the single 3 m stand-in spark. Count/size/speed/spin are TUNE; the
@@ -184,13 +184,13 @@ public sealed partial class ProjectilePool : Node3D
     // 3 frames @4 fps verbatim (C1B's own materials.json: material 135's `cycle` block). See
     // SplashFlipbookTextures below for why this needs its own registration path.
     private const float SplashFlipbookFps = 4f;
-    // TUNE, config-visible for the A/B (same pattern as A3's MuzzleFlashCount): with the fade
-    // landed, the authored splash1_splash quad plays at its literal 5 cm width by default. Set
-    // back to 8 to reach the earlier hand-widened look this replaces — judged against
-    // `Water Splash.png` before the fade existed, when the un-faded column popped in as a thin
-    // grey sliver past ~30 m. Not a `const`: the user's pending width pick must stay reachable
-    // without deleting either path.
-    private static readonly float SplashColumnWidthScale = 1f;
+    // TUNE, source-visible for the A/B (same pattern as A3's MuzzleFlashCount): the authored
+    // splash1_splash quad is literally 5 cm wide — sub-pixel past ~30 m — while the reference
+    // ticks in `Water Splash.png` measure ~0.35 m, which 8× matches. Judged at the controls
+    // 2026-08-06 with the fades in: 1× still reads as a thin stripe, so 8× is the shipped
+    // width (BL-265 closed). Set to 1 to reach the authored literal width. Not a `const`: both
+    // paths stay reachable without deleting either.
+    private static readonly float SplashColumnWidthScale = 8f;
     // The column's authored flipbook frame textures. Reuses TextureCycler's frame-swap machinery
     // (its architecture entry: "Runs the gamez material cycle flipbooks... by swapping
     // albedo_tex; frames resolve at build time while the TextureArchive is open") rather than a
