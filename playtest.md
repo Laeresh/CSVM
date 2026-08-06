@@ -15,6 +15,25 @@ Retired IDs disappear from this file, so never mint a new ID by scanning the ent
 the retiring commit's message (`git log --grep=<ID>`); pre-2026-08-06 retirements are in
 `docs/HISTORY.md` (frozen).
 
+**Structure.** Section 0 lists owed captures as themed tables — one table per filming batch, the
+theme naming the capture setup (cockpit gauges in frame, external view, …) — with fixed columns
+ID · Capture · What must be in frame · Unblocks. A table exists only while it has rows: an emptied
+table is deleted, and a future capture recreates its section. Section 1 groups flights by **flight
+profile** — one section is one sortie (chapter + plane + situation), headed by a copyable launch
+command. Sections sort by chapter then plane; items within a section by ascending ID. An item free
+to choose its plane or chapter piggybacks on an existing profile — it never opens a section of its
+own. Every PT item is one bullet:
+
+    - `PT-nn` `[A/B: <ref>]`-or-`[Own]` **What to check (`BL-NNN`).** context… *Look for:* … *Blocks:* …
+
+`[A/B: <ref>]` names the capture or `OriginalScreenshots/` shot to have open *before* launching;
+`[Own]` is a judgement call on our own remake with no original reference. A mixed item takes
+`[A/B]` — the per-check references stay in their bullets. *Look for:* holds one sub-bullet per
+check, lettered `(a)(b)(c)` when there is more than one. *Blocks:* is mandatory — name what a pass
+closes, or state outright that nothing tracks the outcome and a fail mints a new `BL` item.
+Optional: context prose between title and *Look for:* (a few lines at most — deep evidence lives
+in `backlog.md`), and *Variations:* for extra flags or re-runs beyond the section's command.
+
 **Captures staged for an item live in `playtest/<ID>/`** — git-ignored (they are renders of the
 player's own game files) and, unlike `.scratch/`, **not swept by `CleanScratch.ps1`**, so they
 survive until the item that owns them closes. Delete the folder with the item.
@@ -64,21 +83,6 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 | `CAP-02` | Low pass along a canyon wall | A close pass down a canyon face; the only possible source of ground-blow magnitude | `BL-095` |
 | `CAP-20` | Throttle equilibria + a shallow held climb | Two level runs held to equilibrium at **1/4** and **1/2** throttle (the thrust-vs-throttle curve), then a **shallow, steady climb** at fixed throttle — shallow enough that the ADI does **not** saturate, i.e. keep the nose under ~+25°, and hold it 10 s+. `CAP-05`'s 50%-throttle clip failed on exactly this: it was a zoom, the ADI pinned at sky fraction 0.730, and the nose angle became unreadable | `BL-115` (`ClimbGravityScale`), `BL-092` |
 
-### HUD — ammo gauge in frame
-
-| ID | Capture | What must be in frame | Unblocks |
-|---|---|---|---|
-
-### Camera
-
-| ID | Capture | What must be in frame | Unblocks |
-|---|---|---|---|
-
-### Audio
-
-| ID | Capture | What must be audible | Unblocks |
-|---|---|---|---|
-
 ### Weather & visuals
 
 | ID | Capture | What must be in frame | Unblocks |
@@ -98,24 +102,58 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 | `CAP-25` | The `chunk` debris quad at a slug dirt hit | Sustained slug fire into flat dirt, camera as close to the impacts as the original allows (external/chase view fine — no gauges needed), slow-motion or high frame rate if possible. Decides whether the original ever shows the `gunhit` def's `chunk` debris node — a ~0.5 m quad textured with the perforated `gun_barrel` shroud band (dark dot grid on tan; gamez model 27 → material 4, UVs u 1→2), flung by the three **slug** defs only (`3040`/`5060`/`70slug_gunhit`, all chapters; ap/dum/mag have no debris nodes). Our build draws it faithfully from the data (`Screenshots/Mystery debris.png`, 2026-08-04, freeze-frame zoom); we keep it unless the original provably suppresses it. *Look for:* any small tumbling textured scrap distinct from smoke/chips in the ~2–4 s after each hit — presence or absence both settle it | `BL-203` (landed — this judges a leftover) |
 | `CAP-28` | Torpedo flight dynamics | The aerial torpedo (`TORPDO`) released in level flight, ideally at high speed, filmed external/chase with the surface in frame and held from release to impact — long enough to read the speed decay the user saw at the controls (a max/cruise speed, slowing after launch). HUD in frame lets `analysis/video-flight-calibration` decode speed over time; without it the decay is still readable against fixed terrain | `BL-290` |
 
-### World
-
-| ID | Capture | What must be in frame | Unblocks |
-|---|---|---|---|
-
 ---
 
 ## 1 · Actionable now (`PT-nn`)
 
+### C1 · Devastator — strafing terrain
 
-- `PT-41` **The per-chapter sky/fog zone in C1B, C2 and C3 (C9 / `BL-277` landed 2026-08-06).**
-  Those three define `ZONE2` fog but ship no `zone2` dome at all, so they rendered the engine's
-  clear colour with a hard horizon cut; they now build `zone1` — sky and fog together — and the
-  dome scale is fitted inside the far plane (C1B's zone1 dome is 21.8 km and clipped open at the
-  2.5× anchor). Headless goldens cover the three poses; what they cannot judge is whether the
-  chosen sky is the *right* one and how it reads in flight. One flight each
-  (`./RunGame.ps1 --plane=player_bhawk --chapter=C1B`, then `--chapter=C3`, then `--chapter=C2`).
-  *Look for:*
+```powershell
+./RunGame.ps1 --plane=player_pfighter --chapter=C1 --infinite-ammo
+```
+
+- `PT-27` `[Own]` **Gun-impact smoke (C8 / `BL-061` item 1 landed 2026-08-01).** Strafe
+  **terrain** — not a building; a gun's `buildings` entry is the install-missing `bld_damage.flt` —
+  and get inside 500 m of where the rounds land, which is the effect's own `PLAYER_RANGE` gate. Each
+  hit should leave one small black smoke puff that drifts and fades, with nothing left parked at the
+  last hit once you stop firing. *Look for:*
+  - (a) is one puff per hit the right density at gun rates, or does the 0.1 s per-group throttle
+    read as gaps;
+  - (b) does 0.3 s of emission read as too brief;
+  - (c) the authored puff is 0.1–0.5 m and black — against dark terrain it is subtle by design, so
+    the call is whether the original reads more strongly at the same range.
+
+  *Blocks:* nothing open — `BL-061` is closed; a fail mints a new `BL` item.
+  *Variations:* try the other ammo too if you fit it: `dum`/`ap` give a white-hot flash and `mag`
+  adds fire (a different look, not a different bug).
+
+### C1B · Bloodhawk, night — sky, clouds, self-lit art
+
+```powershell
+./RunGame.ps1 --plane=player_bhawk --chapter=C1B --infinite-ammo
+```
+
+- `PT-28` `[A/B: C1B IA1 Bloodhawk tracer and ejection.png]` **Night self-lit art (C9 / `BL-214`
+  landed 2026-08-02).** The model `lighting` flag is now honoured, so on a night map the cloud
+  sprite cards, water splashes, beacons and effect meshes draw at full brightness while the terrain
+  and sea still dim with the mission SUNLIGHT. Fly C1B at night and judge **the clouds
+  specifically** — that is the one part with no matched capture of the original. *Look for:*
+  - (a) do the cloud cards read as moonlit at the right level, or as blown-out white cut-outs
+    against the dark sea;
+  - (b) do the gun splashes on the water read like
+    `OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png` (they measure the same);
+  - (c) does the skydome still meet the terrain in a grey band — the dome deliberately keeps its
+    fog even though the data says otherwise, and a hard horizon edge would mean that call is
+    wrong.
+
+  *Blocks:* nothing open — `BL-214` is closed; a fail mints a new `BL` item.
+
+- `PT-41` `[Own]` **The per-chapter sky/fog zone in C1B, C2 and C3 (C9 / `BL-277` landed
+  2026-08-06).** Those three define `ZONE2` fog but ship no `zone2` dome at all, so they rendered
+  the engine's clear colour with a hard horizon cut; they now build `zone1` — sky and fog
+  together — and the dome scale is fitted inside the far plane (C1B's zone1 dome is 21.8 km and
+  clipped open at the 2.5× anchor). Headless goldens cover the three poses; what they cannot judge
+  is whether the chosen sky is the *right* one and how it reads in flight. *Look for:*
   - (a) a real dome in all three, from the deck up to the ceiling and looking straight up — no
     grey wedge, no hard cut, at any altitude or heading;
   - (b) C3's haze reads as daylight grey on a sunlit mission (it used to be night-blue), and C2's
@@ -126,36 +164,8 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 
   *Blocks:* `BL-100`'s remaining four chapters are the A/B this sets up; `CAP-11` still judges C1B's
   night brightness separately.
-
-- `PT-27` **Gun-impact smoke (C8 / `BL-061` item 1 landed 2026-08-01).** Strafe **terrain** — not a
-  building; a gun's `buildings` entry is the install-missing `bld_damage.flt` — and get inside 500 m
-  of where the rounds land, which is the effect's own `PLAYER_RANGE` gate. Each hit should leave one
-  small black smoke puff that drifts and fades, with nothing left parked at the last hit once you
-  stop firing. What to judge:
-  - (a) is one puff per hit the right density at gun rates, or does the 0.1 s per-group throttle
-    read as gaps;
-  - (b) does 0.3 s of emission read as too brief;
-  - (c) the authored puff is 0.1–0.5 m and black — against dark terrain it is subtle by design, so
-    the call is whether the original reads more strongly at the same range.
-
-  Try the other ammo too if you fit it:
-  `dum`/`ap` give a white-hot flash and `mag` adds fire (a different look, not a different bug).
-  `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --infinite-ammo`.
-
-- `PT-28` **Night self-lit art (C9 / `BL-214` landed 2026-08-02).** The model `lighting` flag is now
-  honoured, so on a night map the cloud sprite cards, water splashes, beacons and effect meshes draw
-  at full brightness while the terrain and sea still dim with the mission SUNLIGHT. Fly C1B at night
-  and judge **the clouds specifically** — that is the one part with no matched capture of the
-  original. What to judge:
-  - (a) do the cloud cards read as moonlit at the right level, or as blown-out white cut-outs
-    against the dark sea;
-  - (b) do the gun splashes on the water read like
-    `OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png` (they measure the same);
-  - (c) does the skydome still meet the terrain in a grey band — the dome deliberately keeps its
-    fog even though the data says otherwise, and a hard horizon edge would mean that call is
-    wrong.
-
-  `./RunGame.ps1 --plane=player_bhawk --chapter=C1B --infinite-ammo`.
+  *Variations:* one flight each — repeat with `--chapter=C3`, then `--chapter=C2`; (d)'s four
+  untouched chapters need only a glance in each.
 
 ---
 
