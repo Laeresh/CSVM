@@ -50,4 +50,10 @@ public sealed partial class AircraftBody : AnimatableBody3D
     /// <summary>Turns the body on/off as a target: off while crashed (the airframe is hidden and
     /// gone — a wreck must not soak rounds or block a sweep), back on at respawn.</summary>
     public void SetHittable(bool on) => CollisionLayer = on ? CollisionLayers.Aircraft : 0;
+
+    /// <summary>One projectile hit on this plane: resolve the struck shape to its collider part
+    /// and hand the round to the controller's own damage path
+    /// (<see cref="FlightController.TakeProjectileHit"/>).</summary>
+    public void TakeProjectileHit(WeaponDef weapon, Vector3 point, int shapeIdx) =>
+        Rig.TakeProjectileHit(weapon, point, PartName(shapeIdx));
 }

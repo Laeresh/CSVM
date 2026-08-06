@@ -16,10 +16,12 @@ namespace CSVM.Flight;
 /// each physics frame. One pool serves every player (projectiles live in the shared world, so every
 /// splitscreen pane sees them).
 ///
-/// <para>Hit detection is a per-step world raycast (B15). The flying aircraft has no physics body,
-/// so a round never hits its own launcher and the <c>player</c>/<c>enemy</c> IMPACT classes are
-/// unreachable in M3 — only <c>default</c>/<c>water</c>/<c>buildings</c> occur, chosen from the
-/// struck collider's <see cref="SceneBuilder.SurfaceMeta"/> tag.</para>
+/// <para>Hit detection is a per-step raycast (B15) over world + aircraft: a round can strike an
+/// opponent's <see cref="AircraftBody"/> (the <c>player</c> IMPACT class), with the shooter's own
+/// body excluded per shot by identity — a pilot's rounds never hit their own launcher. World
+/// surfaces classify as <c>default</c>/<c>water</c>/<c>buildings</c> from the struck collider's
+/// <see cref="SceneBuilder.SurfaceMeta"/> tag; an aircraft hit routes its damage to the struck
+/// plane's own part model, never the destructible pipeline.</para>
 /// </summary>
 public sealed partial class ProjectilePool : Node3D
 {
@@ -248,6 +250,9 @@ public sealed partial class ProjectilePool : Node3D
     // alpha-blended quads, one MultiMesh per texture (a MultiMesh's material is shared).
     private static readonly string[] DirtDebrisTextures = { "bit01", "bit02", "bit03", "bit04" };
 
+    // The reset value for _ray.Exclude between shots — shared and never mutated.
+    private static readonly Godot.Collections.Array<Rid> NoExclude = new();
+
     private readonly Proj[] _proj = new Proj[MaxProjectiles];
     // One sprite list per muzzle-flash ammo texture (MuzzleAmmoTextures) — a separate MultiMesh per
     // texture, since a MultiMesh's material (and so its texture) is shared across every instance.
@@ -319,10 +324,13 @@ public sealed partial class ProjectilePool : Node3D
     // else here and a `--det` run throttles identically.
     private readonly Dictionary<string, float> _gunEffectAt = new();
 
-    // Reused each step (no per-round alloc). World colliders only for now: aircraft bodies exist
-    // (CollisionLayers.Aircraft) but rounds may not strike them until each round excludes its own
-    // shooter's body — a mask that saw planes today would shoot every plane down with its own fire.
-    private readonly PhysicsRayQueryParameters3D _ray = new() { CollisionMask = CollisionLayers.World };
+    // Reused each step (no per-round alloc). Sees world AND aircraft bodies; the shooter's own
+    // body is excluded per shot (ExcludeFor), set AND reset around every query — a leaked Exclude
+    // would silently shield the next round's target.
+    private readonly PhysicsRayQueryParameters3D _ray = new() { CollisionMask = CollisionLayers.WorldAndAircraft };
+    // The flying aircraft bodies rounds can strike, one per rig (FlightController._Ready
+    // registers) — how a round's shooter id resolves to the one body its hit ray must exclude.
+    private readonly List<AircraftBody> _aircraft = new();
     private readonly SphereShape3D _proximitySphere = new();
     // Fuse/blast probes stay world-only on purpose: a proximity fuse arming on an aircraft or a
     // blast sphere feeding planes into the destructible DamageSink are undesigned behaviors —
@@ -411,6 +419,8 @@ public sealed partial class ProjectilePool : Node3D
     /// read, so a round and a wingtip never disagree about what they hit.</summary>
     public static SurfaceClass ClassifySurface(Node? collider)
     {
+        if (collider is AircraftBody)
+            return SurfaceClass.Player;
         if (collider != null && collider.HasMeta(SceneBuilder.SurfaceMeta))
         {
             return collider.GetMeta(SceneBuilder.SurfaceMeta).AsString() switch
@@ -422,6 +432,11 @@ public sealed partial class ProjectilePool : Node3D
         }
         return SurfaceClass.Default;
     }
+
+    /// <summary>Registers a flying aircraft's body as a strikeable target: rounds from every
+    /// OTHER identity can hit it, and this plane's own rounds exclude it per shot (the body's
+    /// <see cref="AircraftBody.PlayerIndex"/> is matched against each round's shooter id).</summary>
+    public void RegisterAircraft(AircraftBody body) => _aircraft.Add(body);
 
     public override void _Ready()
     {
@@ -666,12 +681,17 @@ public sealed partial class ProjectilePool : Node3D
                 }
                 _ray.From = prev;
                 _ray.To = next;
+                // Per-shot owner exclusion on the SHARED query object: set for this round's
+                // shooter, reset right after — a leaked Exclude shields the next round's target.
+                _ray.Exclude = ExcludeFor(p.Shooter);
                 var hit = space.IntersectRay(_ray);
+                _ray.Exclude = NoExclude;
                 if (hit.Count > 0)
                 {
                     var hitPoint = (Vector3)hit["position"];
                     NearMissPass(prev, hitPoint, p.Shooter);
-                    Impact(p.Weapon, hitPoint, hit["collider"].Obj as Node, (Vector3)hit["normal"]);
+                    Impact(p.Weapon, hitPoint, hit["collider"].Obj as Node, (Vector3)hit["normal"],
+                        hit["shape"].AsInt32());
                     p.Alive = false;
                     KillModel(ref p);
                     ReleaseTrails(ref p);
@@ -1279,7 +1299,7 @@ public sealed partial class ProjectilePool : Node3D
         return true;
     }
 
-    private void Impact(WeaponDef weapon, Vector3 point, Node? collider, Vector3 normal)
+    private void Impact(WeaponDef weapon, Vector3 point, Node? collider, Vector3 normal, int shapeIdx = -1)
     {
         var surface = ClassifySurface(collider);
         bool hasEffectsRuntime = EffectSink != null;
@@ -1306,7 +1326,7 @@ public sealed partial class ProjectilePool : Node3D
                      $"({point.X:0},{point.Y:0},{point.Z:0}) on {collider?.GetParent()?.Name}/{collider?.Name}" +
                      $" fx={outcome.EffectName ?? "-"} snd={outcome.Sound ?? "-"} standin={outcome.StandIn}");
         }
-        Apply(weapon, surface, outcome, point, collider, normal);
+        Apply(weapon, surface, outcome, point, collider, normal, shapeIdx);
     }
 
     /// <summary>Perform a resolved impact: the effect, the stand-in burst, the sound and the damage.
@@ -1315,7 +1335,7 @@ public sealed partial class ProjectilePool : Node3D
     /// the spark's tint (a <c>Color</c>, which the engine-free <see cref="ImpactOutcome"/> cannot
     /// carry).</summary>
     private void Apply(WeaponDef weapon, SurfaceClass surface, in ImpactOutcome outcome, Vector3 point,
-        Node? collider, Vector3 normal)
+        Node? collider, Vector3 normal, int shapeIdx = -1)
     {
         // The impact sprites face the struck surface (SurfaceBasis(normal)) rather than a fixed world
         // plane — a supplier distinct from the muzzle flash's plane basis (both feed Sprite.Orient).
@@ -1347,8 +1367,13 @@ public sealed partial class ProjectilePool : Node3D
         // Per-surface IMPACT sound (landed): the struck surface's SOUND, else the default's.
         if (outcome.Sound is { } snd)
             PlaySound(snd);
-        // Apply the hit to whatever destructible was struck (C23) — a no-op for terrain/water/clutter.
-        ApplyDamage(outcome, point, collider);
+        // A struck aircraft takes the weapon's health/armor damage through its own per-part
+        // model — never the destructible pipeline, and no blast sphere: planes take direct
+        // hits only. Everything else goes to the destructible sink as before.
+        if (collider is AircraftBody plane)
+            plane.TakeProjectileHit(weapon, point, shapeIdx);
+        else
+            ApplyDamage(outcome, point, collider);
     }
 
     private bool ProximityFuseTriggered(PhysicsDirectSpaceState3D space, WeaponDef weapon,
@@ -1817,6 +1842,23 @@ public sealed partial class ProjectilePool : Node3D
             if (d <= radius)
                 t.OnPass(d);
         }
+    }
+
+    /// <summary>The exclusion list a round's hit ray carries: its shooter's own registered body,
+    /// so identity — not weapon — is what keeps a pilot's rounds off their own airframe (the same
+    /// reading the near-miss cue uses). An unowned round (<see cref="NoShooter"/>) excludes
+    /// nothing and can hit any plane.</summary>
+    private Godot.Collections.Array<Rid> ExcludeFor(int shooter)
+    {
+        if (shooter != NoShooter)
+        {
+            foreach (var a in _aircraft)
+            {
+                if (a.PlayerIndex == shooter)
+                    return a.ExcludeSelf;
+            }
+        }
+        return NoExclude;
     }
 
     private float RandRange(float a, float b) => a + _rng.Randf() * (b - a);

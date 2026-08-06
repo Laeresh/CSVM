@@ -13,8 +13,9 @@ namespace CSVM.Flight;
 /// never <c>CallAnimation</c>-referenced by name — so the choice is ours to reconstruct in
 /// <see cref="FlightController.ClassifySurface"/>, which reads the struck body's surface tag.
 /// <see cref="Water"/> is a sea dive, <see cref="Ground"/> everything else it can hit;
-/// <see cref="Air"/> stays unreachable — it is the no-impact destruct, and nothing shoots the
-/// player down yet, so there is no trigger for it.</summary>
+/// <see cref="Air"/> stays unreachable — it is the no-impact destruct, and even a shoot-down
+/// (a critical part killed by gunfire) routes through the ground/water variant at the plane's
+/// pose; wiring the dedicated air destruct is deliberately still open.</summary>
 public enum CrashSurface { Air, Ground, Water }
 
 /// <summary>
@@ -337,6 +338,7 @@ public partial class FlightController : Node3D
     private float _grazeReactionCooldown;        // s left before the next touchdown_* reaction
     private float _damageFlash;                  // s left on the HUD impact line
     private string _damageFlashText = "";
+    private int _projectileHitsLogged;           // verification breadcrumb: the first few hits log
     private FireControl? _fire;                  // the fire-control state machine (BL-295); built in _Ready with the loadout
     private GunGroup[] _firableGuns = Array.Empty<GunGroup>(); // the firable gun groups in _fire's slot order (muzzle nodes, live ammo)
     private bool _gunLoopOn;                     // the firing loop sound is currently playing
@@ -390,6 +392,10 @@ public partial class FlightController : Node3D
     /// assembler can seed <see cref="ThrottleSmoke"/> at build time, after <see cref="Setup"/> has
     /// already placed the plane at its spawn throttle.</summary>
     public float Throttle => _model.Throttle;
+
+    /// <summary>Whether this plane is crashed — frozen at the impact, airframe hidden, waiting
+    /// for respawn. The fact the session (and the in-engine suites) read; only Respawn clears it.</summary>
+    public bool Crashed => _crashed;
 
     /// <summary>The weapon lab's free camera (D8): while set, this controller writes NOTHING to the
     /// camera — no chase, no fixed view, no orbit, and <see cref="SnapCamera"/> is a no-op — because
@@ -485,6 +491,8 @@ public partial class FlightController : Node3D
         {
             Body = new AircraftBody(this, Collider);
             AddChild(Body);
+            // Strikeable by every other identity's rounds; this pilot's own rounds exclude it.
+            Projectiles?.RegisterAircraft(Body);
         }
         SnapCamera();
 
@@ -649,6 +657,43 @@ public partial class FlightController : Node3D
     {
         if (!_crashed)
             Crash(_model.Position, "debug-crash", "test", null);
+    }
+
+    /// <summary>One projectile hit on this plane (the pool resolved the struck box already):
+    /// maps the box + plane-local impact to the data part, spends the weapon's ARMOR_DAMAGE /
+    /// HEALTH_DAMAGE through <see cref="PlaneDamage.Apply"/> (armor first), and drives the same
+    /// feedback a terrain graze does — part visuals, damage-dial blink, HUD flash line. A dead
+    /// critical part downs the plane through the existing <see cref="Crash"/> path, exactly as
+    /// <see cref="SurviveHit"/> does. No cooldown: weapon fire is discrete, every round counts.
+    /// Ignored while crashed (the body is unhittable then anyway — belt and braces) and without
+    /// damage data (no destroyable_parts: nothing to track, the round just sparks).</summary>
+    public void TakeProjectileHit(WeaponDef weapon, Vector3 impact, string colliderPart)
+    {
+        if (_crashed || Damage == null)
+            return;
+        // The sim pose, not GlobalTransform: the render half may hold an interpolated frame.
+        var pose = new Transform3D(_model.Attitude, _model.Position);
+        var localImpact = pose.AffineInverse() * impact;
+        string dataPart = PlaneDamage.MapStruckPart(colliderPart, localImpact);
+        var state = Damage.Apply(dataPart, weapon.HealthDamage ?? 0f, weapon.ArmorDamage ?? 0f);
+        if (state == null)
+            return;
+        Visuals?.OnPartDamage(dataPart, state.Fraction);
+        Gauges?.OnPartDamage(dataPart); // damage dial: hit zone blinks 5 s
+        if (_projectileHitsLogged < 6)
+        {
+            _projectileHitsLogged++;
+            GD.Print($"shot hit P{PlayerIndex + 1} ({colliderPart}→{dataPart}): {weapon.Id} " +
+                     $"armor={state.Armor:0.0}/{state.Def.MaxArmor:0} hp={state.Hp:0.0}/{state.Def.MaxHp:0}");
+        }
+        if (state.Hp <= 0f && state.Def.Critical)
+        {
+            GD.Print($"part destroyed: {dataPart} (critical) — shot down by {weapon.Id}");
+            Crash(impact, $"gunfire ({weapon.Id})", colliderPart, null);
+            return;
+        }
+        _damageFlashText = $"⚠ HIT {dataPart.ToUpperInvariant()} {state.Fraction * 100f:0}%";
+        _damageFlash = DamageFlashTime;
     }
 
     public override void _PhysicsProcess(double delta)

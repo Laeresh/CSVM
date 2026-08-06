@@ -78,7 +78,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Air-to-air hittability (front-loads M4 A1)
 
 1. ☑ Aircraft physics bodies on the shared `PlaneCollider` shapes, with collision layers
-2. ☐ Projectiles strike aircraft: per-shot owner exclusion, struck-part mapping, damage applied
+2. ☑ Projectiles strike aircraft: per-shot owner exclusion, struck-part mapping, damage applied
 3. ☐ In-engine hittability suite: hit → part → damage → kill chain + self-hit negative case
 
 ### Wave B — Kill flow and match bookkeeping
@@ -144,7 +144,7 @@ deliberate: the sweep must exclude the sweeping plane's own body, and a mid-air 
 the existing `SurviveHit`/`Crash` path, not a physics solver response (the plane is a `Node3D`
 moved by `FlightModel`, not physics-driven — nothing here may start pushing transforms).
 
-## A2 ☐ Projectiles strike aircraft: per-shot owner exclusion, struck-part mapping, damage applied
+## A2 ☑ Projectiles strike aircraft: per-shot owner exclusion, struck-part mapping, damage applied
 
 **Goal.** A fired round that crosses an opponent's plane hits it: the shooter's own plane is never
 hittable by their own rounds, the struck box maps to a data part, and the weapon's damage values

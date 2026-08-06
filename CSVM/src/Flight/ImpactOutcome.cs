@@ -44,10 +44,11 @@ public readonly record struct ImpactOutcome
     /// the caller: a scene-less pool (the weapon lab) has nowhere to build a hardpoint weapon's real
     /// fireball, so the explosion stand-in carries the blast there and only there.</para>
     ///
-    /// <para><c>Player</c> and <c>Enemy</c> are unreachable in M3 — a round is raycast against a
-    /// world with no aircraft body in it — so they get no case of their own here. They read out of
-    /// the table like any other class and fall to <see cref="ImpactStandIn.Spark"/>, which is the
-    /// existing else-branch and not a behaviour invented for them.</para></summary>
+    /// <para><c>Player</c> is a struck <c>AircraftBody</c>; <c>Enemy</c> stays unreachable until
+    /// something non-player flies (M4). Neither gets a case of its own here: both read out of the
+    /// table like any other class and fall to <see cref="ImpactStandIn.Spark"/>, which is the
+    /// existing else-branch and not a behaviour invented for them — the struck plane's damage is
+    /// the caller's business, not this record's.</para></summary>
     public static ImpactOutcome Resolve(WeaponDef weapon, SurfaceClass surface, bool modelResolved,
         bool hasEffectsRuntime)
     {

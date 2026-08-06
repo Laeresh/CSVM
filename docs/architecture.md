@@ -1270,7 +1270,15 @@ round has actually flown.
 every player's guns — `shooterId` is the firing `PlayerIndex` (`NoShooter` for the lab's), carried on
 the round so the near-miss cue can exclude its own. `NearMissTargets` is that cue's registry (BL-087):
 each step measures the round's ACTUAL travelled segment — hit/fuse point included — against every
-registered aircraft but its shooter's, and reports the pass distance (`WarningShotCue`). `DamageSink` (→ `AnimRuntime.DamageAt`) turns a hit into destructible damage;
+registered aircraft but its shooter's, and reports the pass distance (`WarningShotCue`).
+`RegisterAircraft` is the hittability half: the hit ray runs world+aircraft with each round
+excluding its own shooter's registered `AircraftBody` by RID; a struck plane classifies `Player`
+and routes to `FlightController.TakeProjectileHit` (struck shape → part, armor-first damage) —
+never the destructible pipeline, and no blast sphere: planes take direct hits only (the
+fuse/blast sphere stays world-masked on purpose).
+⚠ `_ray` is a shared mutable query object: per-shot `Exclude` is set AND reset around every
+  query — a leaked exclusion silently shields the next round's target.
+`DamageSink` (→ `AnimRuntime.DamageAt`) turns a world hit into destructible damage;
 `EffectSink` (→ `AnimRuntime.PlayEffectAt`) plays the non-model impact effects — rockets on the
 runtime's own bound, gun hits under `GunEffectTtl` 0.3 s (the `*_gunhit` family's longest authored
 stop, and the only bound the stop-less slug defs have) and one play per `GunEffectInterval` 0.1 s
@@ -1778,8 +1786,10 @@ here maps it to `CrashSurface`) to pick the variant: a `water`-tagged body plays
 `Air` is the no-impact destruct and has no trigger. `--crash` has no struck body, so it forces dirt.
 It also fires `Audio.OnEngineStop` (the wind-down cue, layered over the explosion) and plays
 `stopprops` on `CrashRuntime` — the one call site every engine-death path shares, whether the
-collision resolver called it for a full-speed impact or for a critical part reaching 0 HP on a
-survivable-speed graze (`SurviveHit` returning false). `Respawn` plays `startprops` back and resets
+collision resolver called it for a full-speed impact, for a critical part reaching 0 HP on a
+survivable-speed graze (`SurviveHit` returning false), or for a projectile kill
+(`TakeProjectileHit`: the pool-resolved hit — part-mapped armor-first damage plus the graze's
+feedback triple, no cooldown since rounds are discrete). `Respawn` plays `startprops` back and resets
 `ThrottleSmoke`, which `Update` otherwise drives every frame off the live throttle.
 A survivable graze also plays touchdown.zrd's per-surface reaction (`GrazeReaction`): the struck
 collider classified through the same call picks `touchdown_default` (buildings,
