@@ -348,6 +348,10 @@ public sealed record SessionSpec
     public bool DebugAnimUi { get; private set; }
     public string? PlayAnim { get; private set; }
     public bool DebugDzPaths { get; private set; }
+    /// <summary><c>--debug-ainets[=name,…]</c>: open the AI patrol-net overlay (F13) at
+    /// launch. Null = flag absent; empty = every net; else the comma-separated net names to
+    /// build.</summary>
+    public string? DebugAiNets { get; private set; }
     public bool DebugScoreboard { get; private set; }
     public int? DebugLivery { get; private set; }
     public string? DebugMesh { get; private set; }
@@ -508,6 +512,8 @@ public sealed record SessionSpec
             else if (arg == "--menu") { s.ForceMenu = true; }
             else if (arg.StartsWith("--menu=")) { s.ForceMenu = true; s.MenuStartScreen = arg["--menu=".Length..]; }
             else if (arg == "--debug-dzpaths") { s.DebugDzPaths = true; }
+            else if (arg == "--debug-ainets") { s.DebugAiNets ??= ""; }
+            else if (arg.StartsWith("--debug-ainets=")) { s.DebugAiNets = arg["--debug-ainets=".Length..]; }
             else if (arg.StartsWith("--debug-join=")) { s.DebugJoin = int.Parse(arg["--debug-join=".Length..]); }
             else if (arg.StartsWith("--paint=")) { s.PaintNames = arg["--paint=".Length..].Split(',', StringSplitOptions.TrimEntries); }
             else if (arg.StartsWith("--paint-color=")) { s.PaintColorOverride = ParsePaintColors(arg["--paint-color=".Length..]); }

@@ -41,6 +41,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/Clutter.cs` — stamps interp.json clutter templates onto matching-textured terrain: sprites, plus C2/C5's solid 3D city blocks.
 - `src/Mech3/FogVolumes.cs` — the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
 - `src/Mech3/Zrdr.cs` — zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's list.
+- `src/Mech3/AiNets.cs` — the chapter AI patrol nets: `ne0NNNNN` waypoint graphs + the `neindex` id→name table, raw tags/trailer included.
 - `src/Mech3/Messages.cs` — the game's localized string table: the `messages.json` key→value map behind every `MSG_*` key.
 - `src/Mech3/MarkerRig.cs` — a plane's firepoint/pylon/target rig from planes.zbd: plane-frame positions + co-located mounts; feeds `--dump-markers`.
 - `src/Mech3/CompiledAnim.cs` — reader for the compiled `cam_anim`/`mis_anim` archives: anim defs, sequences/events, lazy SI-script pool.
@@ -131,6 +132,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/MeshLab.cs` — the geometry/shading lab (M): normal lines, smoothing seams, cull/normal overrides; on the parked plane, or on the selection.
 - `src/UI/ColliderOverlay.cs` — the collider wireframes (C): every built collision shape drawn, coloured by owner class; needs `--collision` outside flight.
 - `src/UI/ClassOverlay.cs` — the colour-by-class overlay (X): every drawn mesh tinted destructible/facade/clutter/scenery, a findable-targets view.
+- `src/UI/AiNetsOverlay.cs` — the AI patrol-net overlay (F13, `--debug-ainets`): the chapter's nets as coloured graphs with labels + census log.
 - `src/UI/WeaponLab.cs` — the weapon lab panel (B): steppers that arm the held plane's live loadout, click-to-place on a real world surface. Fires nothing itself.
 - `src/UI/PanelFocus.cs` — the one-line rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
@@ -475,6 +477,7 @@ plus a UV-clamp variant from `SceneBuilder.UvsWithinUnitSquare` over the kind's 
 
 ## src/Mech3/Zrdr.cs
 Zrdr extraction reader (zip or unpacked dir): `LoadFile`, content-sniffing `LoadMatchingFiles`,
+name-predicate `LoadFilesNamed` (for families with nothing to sniff, e.g. the `ne0*` nets),
 and `ZrdrDict`, the key/[values…] view over a reader's alternating list.
 ⚠ `LoadFile` accepts both entry namings — v0.6.1 writes `X.json`, the fork writes `X.zrd.json` —
   in both the zip and directory branches.
@@ -482,6 +485,16 @@ and `ZrdrDict`, the key/[values…] view over a reader's alternating list.
   walks the raw lists instead.
 ⚠ It also DROPS an unkeyed value in the root list. `FogVolumeSpec.Parse` walks by hand for that
   reason — three chapters' `fogvol.zrd` carries its clutter block with no key in front of it.
+
+## src/Mech3/AiNets.cs
+The chapter patrol-net reader (`docs/formats/ai-nets.md`): every `ne0NNNNN.zrd.json` in a chapter
+zrdr scope joined with its `neindex.zrd.json` name — nodes, the explicit edge list, raw per-node
+tags, and the trailer attach target. First consumer: `UI/AiNetsOverlay.cs`; M4's net-following
+(B5/F17) is the intended second. Golden counts asserted in `CSVM.Tests/AiNetsTests.cs`.
+⚠ A net is a GRAPH: only `Edges` is connectivity — node order is not a route, loops are one
+  authoring choice. Tags and the trailer are exposed raw, never interpreted (undecoded).
+⚠ The `neindex` first element is NOT the pair count (C1: 46 over 29 pairs) — parse pairs to the
+  list's end.
 
 ## src/Mech3/FogVolumes.cs
 The chapter's `fogvol.zrd` (`FogVolumeSpec.Load`/`Parse`) plus `VolumesOf`, the gamez census of
@@ -2116,6 +2129,16 @@ node-backed shapes + 10k–14k clutter placements.
   the wireframe by 0.25% of position — ~20 m at a map corner, invisible near the origin (BL-198).
 ⚠ Cost with it up (C4, `--perf --no-vsync`): draws 2,181 → 2,532, prims 217k → 257k, `render_cpu`
   1.05 → 1.42 ms, memory 225 → 266 MB. Read those, never `fps`/`frame_ms` (PERF-11).
+
+## src/UI/AiNetsOverlay.cs
+The AI patrol-net overlay (F13; `--debug-ainets[=name,…]` scripts it) — added to every chapter
+world by `GameSession.BuildWorldStage` (skipped on the `--node=` partial stage). Draws each net in
+a stable id-derived colour (golden-ratio hue): edges as individual segments off the edge list,
+sphere markers per node (tagged nodes bigger), one fixed-size `Label3D` per net with the trailer
+(`M4ReinfAce#10 → player`), all depth-tested. Nets load lazily on first toggle; the census — one
+line per net — goes to the `world` log. F13 is the first tenant of the F13–F24 debug-overlay key
+range (`docs/controls.md`).
+⚠ Never draw node order as the route — the graph branches; only the edge list is connectivity.
 
 ## src/UI/ClassOverlay.cs
 The colour-by-class overlay (key X, `--debug-classoverlay` scripts it) — same mode set as

@@ -660,6 +660,19 @@ public partial class GameSession : Node3D
         state.WorldScene = session.Builder.Scene;
         state.WorldRuntime = session.Runtime;
 
+        // F13 / --debug-ainets: the chapter's AI patrol nets (ne0NNNNN + neindex — AI route
+        // data the original never renders; docs/formats/ai-nets.md). Chapter-scoped data, so
+        // the --node= partial stage skips it with the rest of the mission dressing.
+        if (state.NodeSubtree == null)
+        {
+            _plane.AddChild(new UI.AiNetsOverlay(
+                SessionPaths.ChapterZrdr(state.DataRoot, _spec.Chapter), _spec.Chapter)
+            {
+                DebugShow = _spec.DebugAiNets != null,
+                Filter = _spec.DebugAiNets ?? "",
+            });
+        }
+
         // --node=: the built subtree's WORLD-frame box. Computed from the built meshes and
         // the node transforms rather than from GlobalTransform, because the subtree has not
         // joined the scene tree yet — and never from the gamez child_bbox, which is stored
