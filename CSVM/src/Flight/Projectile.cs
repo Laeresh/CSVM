@@ -691,7 +691,7 @@ public sealed partial class ProjectilePool : Node3D
                     var hitPoint = (Vector3)hit["position"];
                     NearMissPass(prev, hitPoint, p.Shooter);
                     Impact(p.Weapon, hitPoint, hit["collider"].Obj as Node, (Vector3)hit["normal"],
-                        hit["shape"].AsInt32());
+                        hit["shape"].AsInt32(), p.Shooter);
                     p.Alive = false;
                     KillModel(ref p);
                     ReleaseTrails(ref p);
@@ -1299,7 +1299,8 @@ public sealed partial class ProjectilePool : Node3D
         return true;
     }
 
-    private void Impact(WeaponDef weapon, Vector3 point, Node? collider, Vector3 normal, int shapeIdx = -1)
+    private void Impact(WeaponDef weapon, Vector3 point, Node? collider, Vector3 normal, int shapeIdx = -1,
+        int shooter = NoShooter)
     {
         var surface = ClassifySurface(collider);
         bool hasEffectsRuntime = EffectSink != null;
@@ -1326,7 +1327,7 @@ public sealed partial class ProjectilePool : Node3D
                      $"({point.X:0},{point.Y:0},{point.Z:0}) on {collider?.GetParent()?.Name}/{collider?.Name}" +
                      $" fx={outcome.EffectName ?? "-"} snd={outcome.Sound ?? "-"} standin={outcome.StandIn}");
         }
-        Apply(weapon, surface, outcome, point, collider, normal, shapeIdx);
+        Apply(weapon, surface, outcome, point, collider, normal, shapeIdx, shooter);
     }
 
     /// <summary>Perform a resolved impact: the effect, the stand-in burst, the sound and the damage.
@@ -1335,7 +1336,7 @@ public sealed partial class ProjectilePool : Node3D
     /// the spark's tint (a <c>Color</c>, which the engine-free <see cref="ImpactOutcome"/> cannot
     /// carry).</summary>
     private void Apply(WeaponDef weapon, SurfaceClass surface, in ImpactOutcome outcome, Vector3 point,
-        Node? collider, Vector3 normal, int shapeIdx = -1)
+        Node? collider, Vector3 normal, int shapeIdx = -1, int shooter = NoShooter)
     {
         // The impact sprites face the struck surface (SurfaceBasis(normal)) rather than a fixed world
         // plane — a supplier distinct from the muzzle flash's plane basis (both feed Sprite.Orient).
@@ -1371,7 +1372,7 @@ public sealed partial class ProjectilePool : Node3D
         // model — never the destructible pipeline, and no blast sphere: planes take direct
         // hits only. Everything else goes to the destructible sink as before.
         if (collider is AircraftBody plane)
-            plane.TakeProjectileHit(weapon, point, shapeIdx);
+            plane.TakeProjectileHit(weapon, point, shapeIdx, shooter);
         else
             ApplyDamage(outcome, point, collider);
     }

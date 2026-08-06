@@ -83,7 +83,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — Kill flow and match bookkeeping
 
-11. ☐ Bullet-kill attribution: critical-part death → `Crash` with killer identity reported
+11. ☑ Bullet-kill attribution: critical-part death → `Crash` with killer identity reported
 12. ☑ `VersusMatch` engine-free bookkeeping + xUnit tests
 13. ☐ VS respawn loop: 3 s auto-respawn, R skips early
 
@@ -210,7 +210,7 @@ in `CSVM.Tests` per the two-tier rule.
 
 # Wave B — Kill flow and match bookkeeping
 
-## B11 ☐ Bullet-kill attribution: critical-part death → `Crash` with killer identity reported
+## B11 ☑ Bullet-kill attribution: critical-part death → `Crash` with killer identity reported
 
 **Goal.** When a round's damage kills a critical part, the victim crashes exactly as terrain
 crashes do today, and the session learns *who* killed *whom*; terrain and mid-air deaths report a

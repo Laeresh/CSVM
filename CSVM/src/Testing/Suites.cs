@@ -88,7 +88,8 @@ public static class Suites
             "transform origin (BL-239)", BlastNeighborShape));
         into.Add(new TestHarness.Suite("air-to-air",
             "a round strikes the target plane's body, maps to the data part, moves armor/HP by the " +
-            "weapon's own values, downs it on a critical zero — and never hits the shooter's own geometry", AirToAir));
+            "weapon's own values, downs it on a critical zero with the kill attributed through the " +
+            "Downed event — and never hits the shooter's own geometry", AirToAir));
         into.Add(new TestHarness.Suite("damage-stages",
             "each DAMAGE_SEQUENCE def fires its stage effects across an HP sweep", DamageStages));
         into.Add(new TestHarness.Suite("damage-hd",
@@ -946,7 +947,10 @@ public static class Suites
     /// armor moves by the weapon's own ARMOR_DAMAGE while health waits behind it (armor-first);
     /// sustained fire zeroes the critical nose and triggers the real Crash; a crashed plane soaks
     /// no further rounds; and a burst fired through the shooter's OWN airframe registers zero
-    /// self-hits — the regression that would otherwise arrive silently as "guns too strong".</summary>
+    /// self-hits — the regression that would otherwise arrive silently as "guns too strong".
+    /// The Downed reports feed a real VersusMatch through the same forwarding GameSession uses
+    /// (B11): the weapon kill scores exactly the shooter, a wreck reports no second death, a
+    /// killer-less crash and an unowned round's kill each tally a death and score nobody.</summary>
     private static void AirToAir(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -1016,6 +1020,20 @@ public static class Suites
                 return;
             ctx.Check(ProjectilePool.ClassifySurface(target.Body) == SurfaceClass.Player,
                 $"an aircraft body classifies as the player IMPACT surface");
+
+            // The kill-attribution seam (B11), scored exactly the way GameSession does in --vs:
+            // each rig's Downed report forwarded into a real (unlimited, untimed) VersusMatch —
+            // a killer inside the roster is a kill, anything else a plain death.
+            var match = new VersusMatch(2, killTarget: 0, timeLimit: 0f);
+            void ScoreDowned(FlightController rig) => rig.Downed += (victim, killer) =>
+            {
+                if (killer is int k && k >= 0 && k < match.PlayerCount)
+                    match.RegisterKill(k, victim);
+                else
+                    match.RegisterDeath(victim);
+            };
+            ScoreDowned(target);
+            ScoreDowned(shooter);
 
             // A1's core claim, straight off the space state: a ray at the fuselage returns the
             // body, and the struck shape index maps back to a Parts entry.
@@ -1104,6 +1122,10 @@ public static class Suites
                 $"sustained fire zeroes the critical nose and triggers Crash rounds={fired}/{budget}");
             ctx.Check(noseState.Hp <= 0f, $"the nose health pool is empty hp={noseState.Hp:0.##}");
             ctx.Note($"kill took {fired} rounds of {gun.Id} (armor {nose.MaxArmor:0}/{armorDmg:0.#}, hp {nose.MaxHp:0}/{healthDmg:0.#})");
+            ctx.Check(match.KillsOf(0) == 1 && match.DeathsOf(1) == 1,
+                $"the weapon kill scored the shooter through the real Downed path kills(P1)={match.KillsOf(0)} deaths(P2)={match.DeathsOf(1)}");
+            ctx.Check(match.KillsOf(1) == 0 && match.DeathsOf(0) == 0,
+                $"nobody else's tally moved kills(P2)={match.KillsOf(1)} deaths(P1)={match.DeathsOf(0)}");
 
             // --- a crashed plane is out of the fight: its body is unhittable and further rounds
             // change nothing.
@@ -1111,6 +1133,28 @@ public static class Suites
             FireOne(noseMuzzle, shooter.PlayerIndex, 10);
             ctx.Check(Mathf.IsEqualApprox(Combined(target), afterCrash),
                 $"a crashed plane soaks no further rounds");
+            ctx.Check(match.KillsOf(0) == 1 && match.DeathsOf(1) == 1,
+                $"rounds into a wreck report no second death kills(P1)={match.KillsOf(0)}");
+
+            // A crash with no round behind it — the terrain/mid-air shape — is a death with a
+            // null killer: a tally for the victim, a kill for nobody.
+            target.Respawn();
+            target.DebugForceCrash();
+            ctx.Check(match.DeathsOf(1) == 2 && match.KillsOf(0) == 1 && match.KillsOf(1) == 0,
+                $"a killer-less crash registers a death and no kill anywhere deaths(P2)={match.DeathsOf(1)}");
+
+            // An unowned round (NoShooter — nobody's identity) that downs the plane is likewise
+            // a death with no killer, never a kill.
+            target.Respawn();
+            fired = 0;
+            while (!target.Crashed && fired < budget)
+            {
+                fired++;
+                FireOne(noseMuzzle, ProjectilePool.NoShooter, 8);
+            }
+            ctx.Check(target.Crashed, $"the unowned burst downed the plane rounds={fired}/{budget}");
+            ctx.Check(match.DeathsOf(1) == 3 && match.KillsOf(0) == 1 && match.KillsOf(1) == 0,
+                $"an unowned round's kill is a death with no killer deaths(P2)={match.DeathsOf(1)} kills={match.KillsOf(0)}/{match.KillsOf(1)}");
         }
         finally
         {

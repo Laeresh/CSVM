@@ -143,6 +143,10 @@ public partial class GameSession : Node3D
     // the tree order Godot's physics tick would have used. Dropped by ReturnToMenu.
     private ProjectilePool? _projectiles;
     private IncomingFire? _incomingFire;   // --incoming: the near-miss test rig
+    // The dogfight scorekeeping (--vs): built with the rigs, fed their Downed reports, its clock
+    // advanced on the sim dt (never wall time). Null outside Versus — the Downed events then
+    // simply have no subscriber. Freed with this node; flight holds no match state.
+    private VersusMatch? _versus;
     // rolling mirrored-tile window past the map edge
     private Mech3.MapEdgeExtender? _edgeExtender;
     // the splitscreen pane rig (null in single player)
@@ -475,6 +479,17 @@ public partial class GameSession : Node3D
                 _focusPoints.Add(rig.Camera.Position);
             _edgeExtender.Update(_focusPoints);
         }
+    }
+
+    /// <summary>The match clock on a realtime session: like every physics-stepped consumer,
+    /// advance on Godot's tick unless the clock is parent-driven — then
+    /// <see cref="DriveSimSteps"/> advances the match itself, on the same dt as the rigs.</summary>
+    public override void _PhysicsProcess(double delta)
+    {
+        float dt = _clock?.PhysicsDt(delta) ?? (float)delta;
+        if (dt <= 0f)
+            return;
+        _versus?.Advance(dt);
     }
 
     private static void CopyInstanceShaderParams(Node source, Node copy)
@@ -1500,6 +1515,30 @@ public partial class GameSession : Node3D
                      "own progress + clock each, shared ranked board");
         }
 
+        // Dogfight (--vs): the match bookkeeping, fed by every rig's Downed report. A killer
+        // inside the roster scores a kill; anything else — terrain, mid-air, an unowned or
+        // non-player round — is a plain death. The match ignores post-completion events itself,
+        // so no guard is layered here. The rigs report facts; only this session applies rules.
+        if (_spec.Versus)
+        {
+            var match = new VersusMatch(_rigs.Count, _spec.VsKills, _spec.VsTimeMinutes * 60f);
+            _versus = match;
+            foreach (var rig in _rigs)
+                if (rig.Controller is { } pilot)
+                    pilot.Downed += (victim, killer) =>
+                    {
+                        if (killer is int k && k >= 0 && k < match.PlayerCount)
+                            match.RegisterKill(k, victim);
+                        else
+                            match.RegisterDeath(victim);
+                    };
+            match.MatchCompleted += () => GD.Print("dogfight: match complete — " + string.Join(", ",
+                match.Standings().Select(s => $"P{s.PlayerIndex + 1} {s.Kills}K/{s.Deaths}D (#{s.Rank})")));
+            GD.Print($"dogfight: {_rigs.Count} pilots, " +
+                     (match.KillTarget > 0 ? $"first to {match.KillTarget} kills" : "no kill target") + ", " +
+                     (match.TimeLimit > 0f ? $"{match.TimeLimit / 60f:0.#} min limit" : "no time limit"));
+        }
+
         // --incoming: the near-miss test rig — a phantom shooter on every pilot's six, so the
         // incoming-fire cue is reachable with one player and nothing in the world that shoots back.
         if (_spec.IncomingPass is float incomingPass)
@@ -1815,6 +1854,7 @@ public partial class GameSession : Node3D
             }
             // The weapon lab has no sim step of its own any more (A3): it is hosted by player 1's
             // FlightController, which owns the fire clock, and fires into _projectiles above.
+            _versus?.Advance(dt);
         }
     }
 

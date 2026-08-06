@@ -368,6 +368,16 @@ public partial class FlightController : Node3D
     private Transform3D _simCurr = Transform3D.Identity;
     private Transform3D _renderPose = Transform3D.Identity; // the pose actually drawn this frame
 
+    /// <summary>Raised exactly once per crash, at the moment of <see cref="Crash"/>: (victim
+    /// <see cref="PlayerIndex"/>, killer shooter id) — the killer is the identity of the round
+    /// whose critical-part kill downed this plane, null for terrain, mid-air, an unowned round
+    /// (<see cref="ProjectilePool.NoShooter"/>) and every other crash cause. A fact report, not a
+    /// score: this node knows no match rules — the session subscribes and scores when a match
+    /// exists, guarding the killer against its own roster (a non-player shooter id like
+    /// <see cref="IncomingFire.ShooterId"/> is a plain death there). Respawn emits nothing; the
+    /// death was reported here.</summary>
+    public event Action<int, int?>? Downed;
+
     /// <summary>The weapon lab (A2): the airframe holds the pose it had when this was set — it does
     /// not fly, stall, fall or collide — while everything else in the session keeps running. The
     /// props still spin, the guns still fire through the normal trigger, the rounds still fly and
@@ -666,8 +676,11 @@ public partial class FlightController : Node3D
     /// critical part downs the plane through the existing <see cref="Crash"/> path, exactly as
     /// <see cref="SurviveHit"/> does. No cooldown: weapon fire is discrete, every round counts.
     /// Ignored while crashed (the body is unhittable then anyway — belt and braces) and without
-    /// damage data (no destroyable_parts: nothing to track, the round just sparks).</summary>
-    public void TakeProjectileHit(WeaponDef weapon, Vector3 impact, string colliderPart)
+    /// damage data (no destroyable_parts: nothing to track, the round just sparks).
+    /// <paramref name="shooter"/> is the round's owner (<see cref="PlayerIndex"/> of who fired,
+    /// <see cref="ProjectilePool.NoShooter"/> for an unowned round) — carried into
+    /// <see cref="Downed"/> as the killer when the hit downs the plane.</summary>
+    public void TakeProjectileHit(WeaponDef weapon, Vector3 impact, string colliderPart, int shooter)
     {
         if (_crashed || Damage == null)
             return;
@@ -689,7 +702,8 @@ public partial class FlightController : Node3D
         if (state.Hp <= 0f && state.Def.Critical)
         {
             GD.Print($"part destroyed: {dataPart} (critical) — shot down by {weapon.Id}");
-            Crash(impact, $"gunfire ({weapon.Id})", colliderPart, null);
+            Crash(impact, $"gunfire ({weapon.Id})", colliderPart, null,
+                killer: shooter != ProjectilePool.NoShooter ? shooter : null);
             return;
         }
         _damageFlashText = $"⚠ HIT {dataPart.ToUpperInvariant()} {state.Fraction * 100f:0}%";
@@ -1419,8 +1433,10 @@ public partial class FlightController : Node3D
         return true;
     }
 
-    private void Crash(Vector3 impact, string hitName, string part, Node? hitBody)
+    private void Crash(Vector3 impact, string hitName, string part, Node? hitBody, int? killer = null)
     {
+        if (_crashed)
+            return; // one crash, one Downed report — nothing may double-fire the death
         _crashed = true;
         _autoRespawnIn = AutoRespawnDelay;
         if (PlaneModel != null)
@@ -1481,6 +1497,7 @@ public partial class FlightController : Node3D
         GD.Print($"CRASH into {hitName} ({part}) surface={surface} impact=({impact.X:0},{impact.Y:0},{impact.Z:0}) " +
                  $"pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) " +
                  $"spd={_model.Speed:0} m/s — waiting for respawn");
+        Downed?.Invoke(PlayerIndex, killer);
     }
 
     /// <summary>True when the button is down on one of THIS player's gamepads. With

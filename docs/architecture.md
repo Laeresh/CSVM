@@ -1274,9 +1274,10 @@ each step measures the round's ACTUAL travelled segment — hit/fuse point inclu
 registered aircraft but its shooter's, and reports the pass distance (`WarningShotCue`).
 `RegisterAircraft` is the hittability half: the hit ray runs world+aircraft with each round
 excluding its own shooter's registered `AircraftBody` by RID; a struck plane classifies `Player`
-and routes to `FlightController.TakeProjectileHit` (struck shape → part, armor-first damage) —
-never the destructible pipeline, and no blast sphere: planes take direct hits only (the
-fuse/blast sphere stays world-masked on purpose).
+and routes to `FlightController.TakeProjectileHit` (struck shape → part, armor-first damage),
+carrying the round's `Shooter` id through so a kill is attributable — never the destructible
+pipeline, and no blast sphere: planes take direct hits only (the fuse/blast sphere stays
+world-masked on purpose).
 ⚠ `_ray` is a shared mutable query object: per-shot `Exclude` is set AND reset around every
   query — a leaked exclusion silently shields the next round's target.
 `DamageSink` (→ `AnimRuntime.DamageAt`) turns a world hit into destructible damage;
@@ -1807,7 +1808,10 @@ It also fires `Audio.OnEngineStop` (the wind-down cue, layered over the explosio
 collision resolver called it for a full-speed impact, for a critical part reaching 0 HP on a
 survivable-speed graze (`SurviveHit` returning false), or for a projectile kill
 (`TakeProjectileHit`: the pool-resolved hit — part-mapped armor-first damage plus the graze's
-feedback triple, no cooldown since rounds are discrete). `Respawn` plays `startprops` back and resets
+feedback triple, no cooldown since rounds are discrete). Every `Crash` raises `Downed` exactly
+once — (victim `PlayerIndex`, killer: the killing round's shooter id; null for terrain, mid-air,
+an unowned `NoShooter` round and every other cause) — a fact report the session scores in `--vs`;
+flight holds no match state, and `Respawn` emits nothing. `Respawn` plays `startprops` back and resets
 `ThrottleSmoke`, which `Update` otherwise drives every frame off the live throttle.
 A survivable graze also plays touchdown.zrd's per-surface reaction (`GrazeReaction`): the struck
 collider classified through the same call picks `touchdown_default` (buildings,
@@ -2330,7 +2334,11 @@ build's edges. `BuildsCollision` is the only spelling of "does this session buil
 `LoadArchives` opens the five session archives through `SessionArchives.OpenFor` (`ArchiveIntent.Lab`
 when `_spec.AnimLab`, else `.Session`), which is also where `TexturesOutliveBuild`/
 `SoundsOutliveBuild` come from now — `BuildWorldStage`'s `WorldSession.Options` reads them off
-`BuildState`, it does not set them by hand.
+`BuildState`, it does not set them by hand. In `--vs`, `BuildFlightRigs` builds one `VersusMatch`
+(`VsKills`, `VsTimeMinutes`×60 s) and forwards every rig's `Downed` into it — a killer inside the
+roster is `RegisterKill`, anything else (terrain, mid-air, unowned or `IncomingFire` rounds) is a
+plain `RegisterDeath`; its clock advances on sim dt only (`_PhysicsProcess` realtime,
+`DriveSimSteps` when parent-driven), so a halt freezes the match with the sim.
 ⚠ **It parses no args and resolves nothing** — the Launcher hands it the one `SessionSpec` its
   session is built from; **a new flag is a SessionSpec change**. `_menuPads` is the deliberate
   exception: join-flow session state riding the `LauncherContext`, never the spec.
@@ -2489,8 +2497,10 @@ emitter's own MODES are. Neither covers the other's job.
 The 26 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
 the full-rig `Loadout.ForRig`), live weapon fire, the air-to-air hit chain (`air-to-air`: two real
 flight rigs on manual sim steps — body strike, struck-shape→part mapping, armor-first data-value
-damage, critical-zero Crash, crashed-plane immunity, and the zero-self-hits negative case, which
-must stay non-optional), destructible stages/death/census, animation
+damage, critical-zero Crash, crashed-plane immunity, the zero-self-hits negative case, which
+must stay non-optional, and `Downed`-into-`VersusMatch` attribution: the weapon kill scores
+exactly the shooter, killer-less and unowned-round deaths score nobody), destructible
+stages/death/census, animation
 stops and bounce-terminated launches, the full effects sweep (`effects-census`: every effect
 resolves, template meshes peak at the CALL SITE not the stage origin, none stays lit after its
 stop — `Probes.Effects` rows asserted; its puffer/mesh tallies are golden counts under the

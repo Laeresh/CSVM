@@ -52,8 +52,8 @@ public sealed partial class AircraftBody : AnimatableBody3D
     public void SetHittable(bool on) => CollisionLayer = on ? CollisionLayers.Aircraft : 0;
 
     /// <summary>One projectile hit on this plane: resolve the struck shape to its collider part
-    /// and hand the round to the controller's own damage path
+    /// and hand the round — with the identity that fired it — to the controller's own damage path
     /// (<see cref="FlightController.TakeProjectileHit"/>).</summary>
-    public void TakeProjectileHit(WeaponDef weapon, Vector3 point, int shapeIdx) =>
-        Rig.TakeProjectileHit(weapon, point, PartName(shapeIdx));
+    public void TakeProjectileHit(WeaponDef weapon, Vector3 point, int shapeIdx, int shooter) =>
+        Rig.TakeProjectileHit(weapon, point, PartName(shapeIdx), shooter);
 }
