@@ -105,5 +105,13 @@ public class LoadoutTests
         }
     }
 
+    [Fact]
+    public void PylonFillOrderAlternatesWings()
+    {
+        // BL-294/PT-31: the original fills hardpoints 1,5,2,6,3,7,4,8 — both wings alternately,
+        // not sequential 1..N. A partial stock fit (hp.Count < 8) takes this sequence's prefix.
+        Assert.Equal(new[] { 1, 5, 2, 6, 3, 7, 4, 8 }, Loadout.PylonFillOrder);
+    }
+
     private static StockLoadouts Load() => StockLoadouts.Load(ConfigPath);
 }

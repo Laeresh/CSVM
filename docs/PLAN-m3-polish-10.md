@@ -67,7 +67,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — HUD & world rendering
 
-11. ☐ `BL-294` — weapon-gauge slots map to pylon numbers (1,5,2,6,3,7,4,8 fill) and the sweep direction matches the original
+11. ☑ `BL-294` — weapon-gauge slots map to pylon numbers (1,5,2,6,3,7,4,8 fill) and the sweep direction matches the original
 12. ❌ `BL-047` — closed 2026-08-06: the original disables the HUD on crash, as do we
 13. ☐ `BL-081` — the zeppelin hookup-light `lite*`/`ltout*` state pairs play their authored state instead of both drawing
 14. ❌ `BL-082` — closed 2026-08-06: the original z-fights there too (user A/B at the spot) — faithful as-is
@@ -347,9 +347,43 @@ CORRECT per the original — don't "fix" ring orientation globally.
 
 # Wave B — HUD & world rendering
 
-## B11 ☐ `BL-294` — weapon-gauge pylon mapping and sweep direction
+## B11 ☑ `BL-294` — weapon-gauge pylon mapping and sweep direction
 
-**Goal.** The weapon gauge shows slots at their PYLON numbers — empty pylons leave gaps, fill
+**LANDED 2026-08-06.** Root cause was in `Loadout.Bind` (`Loadout.cs`), not the gauge draw path:
+hardpoints bound `pylon1..pylonN` **sequentially**, so a partial stock fit (e.g. the Bloodhawk's 3)
+always claimed the physical dial's first N positions contiguously, one wing's worth piled at the
+ring's start. Fixed by binding through a new `Loadout.PylonFillOrder = {1,5,2,6,3,7,4,8}`: a fit of
+count N takes that sequence's first N pylon NUMBERS (not loop positions), so `Hardpoint.Index`
+carries the true physical pylon. `GaugeCluster`/`FlightController.UpdateWeaponGauges` were reading
+the gauge's `Slots`/`Selected` off the COMPACTED position in `Loadout.Hardpoints` instead of that
+Index — fixed to build the belt-light array at the ring's full fixed size
+(`GaugeCluster.HardpointRingSize` = 8, confirmed fixed in PLAN-m3-polish-7 A1/`BL-184`) indexed by
+`Hardpoint.Index − 1`, unfitted positions defaulting to 0f (reads red, same as spent — the existing,
+correct `HardpointIndicatorColor` rule), and `Selected` likewise converted through the chosen
+hardpoint's own Index. Guns needed no equivalent change: `FirableGuns` only ever skips a TRAILING
+turret slot (W3/W4), so the compacted gun-group index was already the physical slot.
+
+The reported "sweeps counterclockwise" symptom was never a separate sign bug in
+`TargetArrowAngle`/`TweenArrow` — both already matched CAP-18's measured convention (index 0 top,
+increasing counterclockwise, shortest-path routing). It was an emergent effect of the wrong
+`Selected` index landing the arrow's TARGET angle at the wrong physical slot; fixing the mapping
+fixes the sweep along with it. A full 8-pylon airframe (Balmoral, Warhawk) is provably unaffected —
+`PylonFillOrder` is a permutation covering all eight positions either way, so both the belt-light
+array and the default-selected pylon (index 0 in the bound list is always pylon 1) render
+identically before and after.
+
+**Verify.** Partial-loadout gaps case: `--chapter=C1 --plane=player_bhawk` (3 stock pylons) —
+`--run-tests` confirmed `Loadout.Hardpoints` binds indices `{1,5,2}` (new `loadout-bind` suite
+assertion, all 11 planes), and the `c1-flight`/`c1-destroy-effects`/`empty-stage` goldens' rockets
+dial shows exactly three lit belt lights at the ring's top/upper-left/bottom positions (pylons
+1, 2, 5) with the rest red — gaps, not a contiguous run — inspected pixel-cropped and re-pinned
+deliberately (all three goldens frame the Bloodhawk HUD). Full-loadout sweep-direction case
+(Balmoral/Warhawk, all 8 pylons) not re-captured: proven code-identical to the pre-fix behaviour
+above, and the unchanged `gauge-arrow-tween`/`gauge-colours` suites already cover the angle math.
+`.\RunTests.ps1`: 516 units / 32 engine suites (new `loadout-bind` pylon-index check included) /
+13 goldens, all green (3 re-pinned, explained above and in the manifest's landing commit).
+
+**Goal (unchanged).** The weapon gauge shows slots at their PYLON numbers — empty pylons leave gaps, fill
 order alternates per wing (1,5,2,6,3,7,4,8) — and cycling sweeps the same direction as the
 original (clockwise on the Balmoral's full 8).
 

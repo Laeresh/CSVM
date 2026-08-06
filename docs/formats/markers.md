@@ -76,9 +76,12 @@ below).
 
 ## Pylons
 
-`pylon1`…`pylonN`, bound **sequentially** (count N → `pylon1`…`pylonN`). Every player plane
-has 8. These are the ordnance hardpoints (rockets, bombs, mines); their positions are omitted
-here. (AI-plane models instead name their pylons `lpylon*`/`rpylon*` — not the player rig.)
+`pylon1`…`pylon8` markers exist on every player plane. `Loadout.ForRig` (the full-rig lab loadout)
+binds all of them present on the model; the **stock** loadout (`loadouts.md`) does not bind them
+sequentially — a fit with fewer than 8 pylons takes `Loadout.PylonFillOrder`'s prefix
+(`{1,5,2,6,3,7,4,8}`, `BL-294`), alternating wings rather than piling onto `pylon1`'s side. These
+are the ordnance hardpoints (rockets, bombs, mines); their positions are omitted here. (AI-plane
+models instead name their pylons `lpylon*`/`rpylon*` — not the player rig.)
 
 ## The target marker and gun nodes
 

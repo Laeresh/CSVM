@@ -188,7 +188,12 @@ The functional children, and how `cockpit.gw` drives each:
   upper-cased and left-aligned (`30slug`→`30SLUG`, `BOOM`, `SONIC`).
 - **`ggindicator0..3`** (gun, 4) / **`mgindicator0..7`** (missile, 8) — the **belt
   lights**, one per gun slot / pylon, arranged around the ring: index 0 at the top
-  (90°) and running **counter-clockwise** (gun 90° apart, missile 45°). Each is a
+  (90°) and running **counter-clockwise** (gun 90° apart, missile 45°). **`mgindicator`
+  index _i_ is pylon _i+1_** (`BL-294`) — the hardpoint gauge's `WeaponGauge.Slots` is
+  always the ring's full 8 entries indexed by `Hardpoint.Index − 1`, never the compacted
+  position within a plane's bound-hardpoints list (`loadouts.md`'s fill order): a
+  partial stock fit leaves the unfitted ring positions red, spread around the ring
+  rather than trailing at its end. Each is a
   `Xhilite.tif` bezel bar + a `Xindicator.tif` light, both carrying a **3-frame**
   cycle green→yellow→red (`CycleTextureSet` 3). **Every belt light is always lit** —
   none stays dark — and **steps the colour by that slot's remaining fraction**: green

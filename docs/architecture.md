@@ -1041,6 +1041,11 @@ the full-rig loadout below instead of the stock one).
 ⚠ `Load` reads a `res://` path through `Godot.FileAccess` (the pck copy in an exported build —
   `GlobalizePath` + System.IO cannot see inside the pck, B11 2026-08-05) and an explicit disk path
   through System.IO (unit tests run without a Godot runtime; a native call there crashes the host).
+⚠ Hardpoints bind via `PylonFillOrder = {1,5,2,6,3,7,4,8}`, never `pylon1..pylonN` sequentially
+  (`BL-294`, PT-31) — a partial stock fit alternates wings, so `Hardpoint.Index` (the resolved pylon
+  NUMBER) is not the loop position. `GaugeCluster`/`FlightController.UpdateWeaponGauges` key the
+  hardpoint gauge's belt lights and arrow target off that Index against the dial's fixed 8-slot
+  ring, not off position in the (possibly reordered) `Hardpoints` list.
 
 `Loadout.ForRig(plane, WeaponDefs, LoadoutDef?)` (M3 B4) synthesizes a lab loadout covering the
 airframe's **whole** rig rather than only what stock names: the 4 gun-group slots the reverse-index
@@ -1905,6 +1910,15 @@ colour per zone.
   is legitimately a plain fixed blink (`WarnBlinkPeriod`) — do not generalise the ramp onto it.
 ⚠ The gungauge/missilegauge face is on a generic child (`g815`/`g819`) on ALL planes (no Bloodhawk
   special case, unlike the damage dial) — "any unrecognised child = face" is the extraction rule.
+⚠ The hardpoint gauge's `WeaponGauge.Slots`/`Selected` index by PYLON NUMBER
+  (`Hardpoint.Index − 1`), never by position in `Loadout.Hardpoints` (`BL-294`) — that list is bound
+  via `PylonFillOrder`, not `1..N`, so a plane with fewer than 8 pylons must show gaps at the
+  ring's unfitted physical positions rather than piling its lit slots at the start.
+  `FlightController.UpdateWeaponGauges` builds a fixed `HardpointRingSize`-length array (unfitted
+  defaults 0f, reading red same as spent) and reindexes `Selected` through the bound `Hardpoint`'s
+  own `Index`, not the loop position. Guns need no equivalent fix: turret slots (the only ones
+  `FirableGuns` skips) are always trailing (W3/W4), so the compacted gun-group index already equals
+  the physical slot.
 
 ## src/UI/LaunchMenu.cs
 The in-game launchscreen CanvasLayer: Mode → Chapter → Plane, input polled every frame through

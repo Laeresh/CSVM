@@ -262,12 +262,14 @@ public static class Probes
                     {
                         var hp = loadout.Hardpoints[0];
                         int total = 0;
+                        var pylonNums = new List<string>();
                         foreach (var h in loadout.Hardpoints)
                         {
                             total += h.Capacity;
+                            pylonNums.Add(h.Index.ToString());
                         }
                         sb.Append($"\n  hardpoints: {loadout.Hardpoints.Count} x {hp.Weapon.Id} ({hp.Weapon.Name}),"
-                                  + $" {hp.Capacity} per pylon = {total} total  (pylon1..pylon{loadout.Hardpoints.Count})");
+                                  + $" {hp.Capacity} per pylon = {total} total  (pylon{string.Join(",", pylonNums)})");
                     }
                     else
                     {

@@ -71,6 +71,11 @@ public sealed partial class GaugeCluster : Control
     // linear — the measured ~2-frame ease at each end is within noise and NOT a smoothstep).
     // Internal (not private) so the run-tests suite can assert the rate directly.
     internal const float ArrowSweepDegPerSimS = 168.7f;
+    // The hardpoint dial's belt-light ring is 8 positions on every airframe regardless of the
+    // loadout's pylon count (user-confirmed 2026-08-04, PLAN-m3-polish-7 A1/BL-184; markers.md) —
+    // never derive it from the bound Hardpoints count. Indicator i is pylon i+1 (BL-294): the belt
+    // light and arrow-target math both index by PYLON NUMBER, not by position in a compacted list.
+    internal const int HardpointRingSize = 8;
     // The STALL lamp is a blink-RATE ramp (BL-148, CAP-06 + the two CAP-05 stall clips): brightness
     // is BINARY at every speed and the duty cycle 0.50, while the half-period shortens in proportion
     // to airspeed — 643 ms sim at the 0.30 fd threshold down to 296 ms at 0.15 fd. Fitted through

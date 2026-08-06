@@ -1150,17 +1150,26 @@ public partial class FlightController : Node3D
         if (hps.Count > 0)
         {
             int sel = Mathf.Clamp(_fire?.SelectedPylon ?? 0, 0, hps.Count - 1);
+            var selectedHp = hps[sel];
+            // The belt lights index by PYLON NUMBER (Hardpoint.Index), not by position in this
+            // compacted list — a partial stock fit must leave gaps at the unfitted physical
+            // positions rather than piling its lit slots at the ring's start (BL-294). The ring is
+            // always the full 8; unfitted positions default to 0f, which already reads red like a
+            // spent one (GaugeCluster.HardpointIndicatorColor).
             _missileGaugeSlots.Clear();
-            for (int i = 0; i < hps.Count; i++)
+            for (int i = 0; i < GaugeCluster.HardpointRingSize; i++)
             {
-                var h = hps[i];
-                _missileGaugeSlots.Add(h.Capacity > 0 ? (float)h.Ammo / h.Capacity : 0f);
+                _missileGaugeSlots.Add(0f);
             }
-            WeaponDef typeWeapon = hps[sel].Weapon;
-            int perPylon = hps[sel].Ammo;
+            foreach (var h in hps)
+            {
+                _missileGaugeSlots[h.Index - 1] = h.Capacity > 0 ? (float)h.Ammo / h.Capacity : 0f;
+            }
+            WeaponDef typeWeapon = selectedHp.Weapon;
+            int perPylon = selectedHp.Ammo;
             if (_missileGaugeState != null)
             {
-                _missileGaugeState.Selected = sel;
+                _missileGaugeState.Selected = selectedHp.Index - 1;
                 _missileGaugeState.Count = perPylon;
                 _missileGaugeState.Type = typeWeapon.Name;
             }

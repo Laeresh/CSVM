@@ -48,7 +48,7 @@ Keyed by **vehicle def name** (`vehicle.json`), matching `PlaneStats`. Per plane
 | `guns[].ammo` | `slug` / `dumdum` / `ap` / `magnesium` — stock is always `slug` |
 | `guns[].markers` | the firepoint node(s) this group fires from (see binding rule) |
 | `guns[].turret` | present + `true` on turret slots — parsed but **inert in M3** (see below) |
-| `hardpoints.count` | number of underwing pylons (`pylon1`…`pylonN`) |
+| `hardpoints.count` | number of underwing pylons carried; **which** physical `pylonN` markers get used is `Loadout.PylonFillOrder`, not `1..count` (below) |
 | `hardpoints.stock` | the `wep_*` id every pylon carries in stock fit (`wep_06`, HE) — one id for all pylons, see the [schema limitation](#the-uniform-he-stock-load-is-an-observation-and-a-schema-limit) |
 
 ## Two resolution rules baked into the file
@@ -65,6 +65,16 @@ arrays are the **explicit result checked into the file, not computed at runtime*
 is a visible data fix — as A10's in-engine confirmation may yet require. The Kestrel's W1 `Center
 Guns` resolves to just `["firepoint7"]`: it is the lone 7-firepoint airframe, its fp7 a
 centreline mount with no fp8.
+
+**`hardpoints.count` → pylon numbers.** `Loadout.Bind` does **not** resolve `pylon1`…`pylonN`
+sequentially — it takes the first `count` entries of `Loadout.PylonFillOrder = {1,5,2,6,3,7,4,8}`
+(`BL-294`/`PT-31`, user-observed at the controls against the original's weapon-gauge belt lights:
+a partial stock fit lands on both wings alternately, not piled onto pylon1's side). `Hardpoint.Index`
+carries the resolved pylon NUMBER, not the loop position, and the weapon gauge's belt lights and
+arrow-target math (`GaugeCluster`/`FlightController.UpdateWeaponGauges`) key off that number against
+the dial's fixed 8-position ring — an unfitted physical position reads red, the gap the fill order
+predicts (`hud.md`'s belt-light rule). A full 8-pylon loadout (Balmoral, Warhawk) is unaffected: the
+fill order is a permutation covering all eight positions either way.
 
 ## Turrets are represented but inert
 

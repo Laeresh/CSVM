@@ -77,21 +77,21 @@
     {
       "name": "empty-stage",
       "frame": 120,
-      "hash": "dad20e720204f8bdd8032570a24a4bdc",
+      "hash": "054ed5caaffdcfa9ed4043e594934367",
       "exercises": "the synthetic stage with no gamez at all â€” code-drawn grid, default sky and sun, flight model, HUD; frame-sensitive 12.21 %, and the one shot that still renders with extracted/ absent.",
       "args": ["--stage=empty", "--plane=player_bhawk", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "decedbce92a79975f70aa86f098d89d3",
+      "hash": "67a003353413d951e8fac6b93d05e187",
       "exercises": "a flying plane: chase camera on the sim clock, prop and control-surface animators, gauges, compass tape, weapon readout, impact reticle; frame-sensitive 34.52 %, the strongest tripwire here.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "dbc7580eb6f06c0aace1ccef329b1c17",
+      "hash": "eb23e8ba4d1530c9f352a18cb8809928",
       "exercises": "the world-effects runtime (ForEffects/D32) built and rendering a puffer: a flight-session kill of the single ap_radiotwr instance CALL_ANIMATIONs great_balls_of_fire onto the world-effects stage; frame-sensitive (distinct hashes at 119/120/121), and moves off its Rng.Effects seed (PLAN-animruntime-role-factories A1).",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },

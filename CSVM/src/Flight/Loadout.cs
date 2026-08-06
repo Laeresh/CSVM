@@ -150,6 +150,12 @@ public sealed class HardpointSpec
 /// </summary>
 public sealed class Loadout
 {
+    /// <summary>The original's hardpoint fill order — alternating wings, not sequential
+    /// (`BL-294`/`PT-31`, user-observed at the controls against the weapon gauge's belt lights):
+    /// a stock fit with fewer than 8 pylons leaves physical gaps rather than filling pylon1..N
+    /// contiguously. <c>hp.Count</c> takes a PREFIX of this sequence.</summary>
+    public static readonly int[] PylonFillOrder = { 1, 5, 2, 6, 3, 7, 4, 8 };
+
     private Loadout(LoadoutDef def, List<GunGroup> guns, List<Hardpoint> hardpoints)
     {
         Def = def;
@@ -214,14 +220,17 @@ public sealed class Loadout
             var weapon = weapons.Get(hp.Stock)
                 ?? throw new InvalidOperationException(
                     $"loadout {def.Def}: hardpoint stock '{hp.Stock}' not in weapons.json");
-            // Pylons bind sequentially: count N -> pylon1..pylonN (markers.md).
+            // Pylons bind via PylonFillOrder, not sequentially 1..N (BL-294) — count N takes the
+            // sequence's first N entries, so a partial stock fit lands on both wings alternately
+            // instead of piling onto one side.
             int perPylon = weapon.ClusterSize ?? 0;
-            for (int i = 1; i <= hp.Count; i++)
+            for (int i = 0; i < hp.Count; i++)
             {
-                var pylon = Resolve(markerNodes, $"pylon{i}", def, "hardpoint");
+                int pylonNumber = PylonFillOrder[i];
+                var pylon = Resolve(markerNodes, $"pylon{pylonNumber}", def, "hardpoint");
                 hardpoints.Add(new Hardpoint
                 {
-                    Index = i,
+                    Index = pylonNumber,
                     Pylon = pylon,
                     Weapon = weapon,
                     Capacity = perPylon,

@@ -794,6 +794,50 @@ public static class Suites
         {
             ctx.Check(false, $"loadout binding {f}");
         }
+
+        // BL-294/PT-31: a partial stock fit takes the FILL ORDER's prefix (1,5,2,6,3,7,4,8), not
+        // pylon1..pylonN — Hardpoint.Index must be the true pylon number so the weapon gauge's
+        // belt lights land at the original's physical positions, gaps included.
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, Messages.Load(ctx.MessagesPath));
+        var stock = StockLoadouts.Load();
+        var textures = new TextureArchive(texturesPath);
+        try
+        {
+            foreach (var def in stock.All.Values)
+            {
+                if (def.Hardpoints is not { Count: > 0 } hp)
+                {
+                    continue;
+                }
+                Node3D? plane = null;
+                try
+                {
+                    plane = new PlaneBuilder(planesGamez, textures).Build(def.Model);
+                    var loadout = Loadout.Bind(def, plane, weapons);
+                    var wantIndices = new int[hp.Count];
+                    System.Array.Copy(Loadout.PylonFillOrder, wantIndices, hp.Count);
+                    var gotIndices = new int[loadout.Hardpoints.Count];
+                    for (int i = 0; i < loadout.Hardpoints.Count; i++)
+                    {
+                        gotIndices[i] = loadout.Hardpoints[i].Index;
+                    }
+                    string want = string.Join(",", wantIndices), got = string.Join(",", gotIndices);
+                    ctx.Check(want == got,
+                        $"{def.Display}: hardpoints bind to the fill-order's pylon numbers (want {want}, got {got})");
+                }
+                finally
+                {
+                    plane?.Free();
+                }
+            }
+        }
+        finally
+        {
+            textures.Dispose();
+        }
     }
 
     // ---- needs a built plane in the tree --------------------------------------------------------
