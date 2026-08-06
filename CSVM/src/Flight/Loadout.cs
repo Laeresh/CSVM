@@ -363,29 +363,39 @@ public sealed class Loadout
 
 /// <summary>One live gun group: its resolved weapon, muzzle nodes, and an <b>independent</b> ammo
 /// counter (the Balmoral's two .50 groups each carry their own — playtest-confirmed). Turret
-/// groups are bound but inert in M3 (<see cref="IsTurret"/>).</summary>
-public sealed class GunGroup
+/// groups are bound but inert in M3 (<see cref="IsTurret"/>). The <see cref="IGunSlot"/> face is
+/// what <see cref="FireControl"/> fires through — the node-free slice of this class.</summary>
+public sealed class GunGroup : IGunSlot
 {
     public int Slot;
     public string Mount = "";
-    public WeaponDef Weapon = null!;
     public IReadOnlyList<Node3D> Muzzles = Array.Empty<Node3D>();
-    public int Capacity;          // CLUSTER_SIZE — the full per-group load
-    public int Ammo;              // mutable remaining rounds
     public bool IsTurret;
+
+    public WeaponDef Weapon { get; set; } = null!;
+
+    public int Capacity { get; set; }  // CLUSTER_SIZE — the full per-group load
+
+    public int Ammo { get; set; }      // mutable remaining rounds
+
+    public int MuzzleCount => Muzzles.Count;
 
     public bool Empty => Ammo <= 0;
 }
 
 /// <summary>One live hardpoint (pylon): its resolved ordnance weapon and a per-pylon ammo counter
-/// (rocket capacity = pylon count × CLUSTER_SIZE, per pylon — A9).</summary>
-public sealed class Hardpoint
+/// (rocket capacity = pylon count × CLUSTER_SIZE, per pylon — A9). The <see cref="IPylonSlot"/>
+/// face is what <see cref="FireControl"/> launches through — the node-free slice of this class.</summary>
+public sealed class Hardpoint : IPylonSlot
 {
     public int Index;             // pylon number, 1-based
     public Node3D Pylon = null!;
-    public WeaponDef Weapon = null!;
-    public int Capacity;          // CLUSTER_SIZE per pylon
-    public int Ammo;
+
+    public WeaponDef Weapon { get; set; } = null!;
+
+    public int Capacity { get; set; }  // CLUSTER_SIZE per pylon
+
+    public int Ammo { get; set; }
 
     public bool Empty => Ammo <= 0;
 }

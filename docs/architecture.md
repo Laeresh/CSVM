@@ -73,7 +73,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/WeaponDefs.cs` — typed reader over `weapons.json` `BALLISTICS`: 48 `WeaponDef`s; inspect with `--dump-weapons`.
 - `src/Flight/Loadout.cs` — `stock_loadouts.json` reader + `Bind` to a built plane: gun groups + hardpoints, markers→muzzle nodes; `--dump-loadout`.
 - `src/Flight/WeaponBench.cs` — the world-less 48-weapon mount-and-fire pass check behind `--weapon-test` and `weapons-fire`; fires the whole `ForRig` rig, no lab node involved.
-- `src/Flight/WeaponCursor.cs` — pure ammo-slot stepping shared by rockets (H) and gun groups (G): manual select + on-empty auto-advance, engine-free so it unit-tests.
+- `src/Flight/FireControl.cs` — the engine-free fire-control state machine (BL-295): trigger edges, fire clocks, ammo draw-down, both selectors, dry cues; `FlightController` performs its `FireOutcome`.
+- `src/Flight/WeaponCursor.cs` — `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
 - `src/Flight/Ballistics.cs` — the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
 - `src/Flight/CameraController.cs` — the flown plane's camera: roll-following chase, numpad fixed views, paused orbit. Steers a `Camera3D` it does not own.
@@ -108,7 +109,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/DamageLab.cs` — the `--damage`/F5 slider UI: one HP slider per part, driving the parked plane's DamageVisuals or the flown plane's real PlaneDamage.
 - `src/Flight/CompassTape.cs` — the top-centre heading tape from the game's own HUD textures, drawn as a cylindrical drum seen edge-on.
 - `src/Flight/GaugeCluster.cs` — the cockpit dials as HUD (altimeter/speedo/damage + gun/missile), geometry from the plane's `gauges` subtree.
-- `src/Flight/FlightController.cs` — the flying-aircraft node: input → FlightModel → transform, chase camera, HUD, collision/crash, respawn.
+- `src/Flight/FlightController.cs` — the flying-aircraft node: input → FlightModel → transform, chase camera, HUD, collision/crash, respawn; `FireControl`'s engine adapter.
 - `src/Flight/PlayerRig.cs` — one rendered view's state: camera, SubViewport, HUD parent, visual layer, controller, own sky/deck/puffs.
 
 ### `src/Effects/` — particle systems
@@ -1024,16 +1025,32 @@ errors, 0 skipped.
   notices), so both callers assert it at 0, and `GunMounts` is pinned at ForRig's 4 so shrinking the
   coverage cannot hide behind an unchanged 48/48.
 
+## src/Flight/FireControl.cs
+The fire-control state machine (BL-295), a plain engine-free class: trigger edges (first shot on
+the press tick), per-group `FIRE_RATE` accumulators + muzzle rotation, ammo draw-down, both weapon
+selectors with their on-empty auto-advance, the rocket pull/cooldown gate and the two once-only dry
+cues. `Step(dt, FireInputs)` takes raw HELD booleans — every edge is detected inside — and returns
+decisions in one reused `FireOutcome` (spawn commands as (group, muzzle)/pylon indices, the
+declarative gun-loop state, the cues); `FlightController.ApplyFireOutcome` performs them against
+muzzle transforms, `ProjectilePool` and `FlightAudio`. Ammo mutates through the node-free
+`IGunSlot`/`IPylonSlot` views (`GunGroup`/`Hardpoint` implement them), so `Loadout` stays the single
+store the gauges read and a decision can never diverge from the counters mid-tick. `Refill` re-arms
+everything but deliberately keeps the gun pick; the pylon cursor doubles as the firing cursor, so it
+resets to pylon 0.
+⚠ **The interface is the test surface**: proven in `FireControlTests` (xUnit); the in-engine
+`weapons-fire` suite is only the mounting census — never re-add rate/edge/cue assertions there.
+⚠ `AutoFireRockets`/`InfiniteAmmo` are runtime-mutable properties, NOT frozen config: the weapon
+lab flips them live on `FlightController`'s public fields (and `GameSession` sets `InfiniteAmmo`
+post-`_Ready`), so the adapter mirrors both into the machine every `Step`. `--fire` (guns) is just
+a forced held input, OR'd in by the adapter.
+
 ## src/Flight/WeaponCursor.cs
-The ammo-slot selector as pure index math, shared by rocket hardpoints (H, `_selectedPylon`) and
-firable gun groups (G, `_gunSel`), lifted out of `FlightController` so it unit-tests without a live
-node (`WeaponCursorTests`). `NextArmed` is the firing cursor — the selected slot while it has rounds,
-else the next armed slot forward-wrapping (`-1` when all empty); `NextSelectable` is where the manual
-selector moves — the next armed slot strictly after the cursor, skipping empties. Each slot is its own
-position regardless of ordnance/weapon type, so H cycles even a uniform loadout (all 11 stock planes
-carry one hardpoint type). `FlightController` owns the two cursor fields and the gauge `Selected`
-feeds and advances each cursor the instant its slot empties (in `UpdateRockets`/`UpdateGuns`); this
-file is stateless.
+`FireControl`'s internal ammo-slot index math (an `internal` class — nothing else may call it):
+`NextArmed` is the firing cursor — the selected slot while it has rounds, else the next armed slot
+forward-wrapping (`-1` when all empty); `NextSelectable` is where the manual G/H step lands — the
+next armed slot strictly after the cursor, skipping empties. Each slot is its own position
+regardless of ordnance/weapon type, so H cycles even a uniform loadout. Stateless; proven through
+`FireControl`'s interface (`FireControlTests`), not its own.
 
 ## src/Flight/Ballistics.cs
 The VELOCITY/ACCELERATION/GRAVITY integration every round steps with: a static, Godot-`Node`-free
@@ -1655,8 +1672,10 @@ one OR two parallel planes per axis (the double cut separates bilateral pairs li
 ⚠ Known limit: the Bloodhawk's canard tips stay uncovered.
 
 ## src/Flight/FlightController.cs
-The flying-aircraft node: input → FlightModel → transform, text HUD + telemetry, weapon
-firing/selection, crash and respawn. The camera is `CameraController`'s — this node only feeds it
+The flying-aircraft node: input → FlightModel → transform, text HUD + telemetry, weapon fire as
+`FireControl`'s engine adapter (polls the held triggers, `Step`s the machine each sim tick,
+performs the `FireOutcome`: muzzle-transform spawns, gun-loop start/stop, dry cues, breadcrumb
+logs), crash and respawn. The camera is `CameraController`'s — this node only feeds it
 the pose, the dt and the mixed orbit axes (`OrbitInput`); on a crash it cuts to `CrashView` once,
 writes nothing to the camera until respawn, and hides the HUD layer (the original's crash camera
 shows no HUD — footage), restoring it on respawn. Sweeps the

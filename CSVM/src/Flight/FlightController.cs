@@ -331,18 +331,11 @@ public partial class FlightController : Node3D
     private float _grazeReactionCooldown;        // s left before the next touchdown_* reaction
     private float _damageFlash;                  // s left on the HUD impact line
     private string _damageFlashText = "";
-    private GunState[]? _gunStates;              // per firable gun group: fire clock, muzzle rotation, empty-warned
-    private GunGroup[] _firableGuns = Array.Empty<GunGroup>(); // the firable gun groups in _gunSel/_gunStates order (live ammo)
-    private bool _firePrev;                      // previous frame's fire button (immediate first shot on press)
+    private FireControl? _fire;                  // the fire-control state machine (BL-295); built in _Ready with the loadout
+    private GunGroup[] _firableGuns = Array.Empty<GunGroup>(); // the firable gun groups in _fire's slot order (muzzle nodes, live ammo)
     private bool _gunLoopOn;                     // the firing loop sound is currently playing
-    private float _rocketCooldown;               // s until the next rocket may launch (FIRE_RATE gate, one at a time)
-    private int _selectedPylon;                  // the hardpoint H selects and rockets fire from; auto-advances to the next armed pylon as each empties
-    private bool _rocketFirePrev;                // previous frame's rocket button (one rocket per discrete pull)
-    private bool _rocketDryWarned;               // the all-pylons-empty cue has already sounded
+    private bool[] _gunLoggedFirst = Array.Empty<bool>(); // verification breadcrumb: each group logs its first live round once
     private int _rocketsLaunched;                // verification breadcrumb: the first few launches log their pylon
-    private int _gunSel;                         // gun selector: 0-based firable group that fires (only ONE at a time)
-    private bool _gunSelPrev;                    // edge detection for the gun-selector button
-    private bool _rocketSelPrev;                 // edge detection for the hardpoint-selector (H) button
     private bool _held;                          // Held's backing field — the airframe is pinned (weapon lab)
     private bool _cameraOwned;                   // CameraOwned's backing field — the lab's free camera has the view
     private bool _orbitPrev;                     // edge detection for entering the orbit (halt or hold)
@@ -514,13 +507,11 @@ public partial class FlightController : Node3D
                     h.Ammo = h.Capacity;
                 }
             }
-            _gunStates = new GunState[n];
-            for (int i = 0; i < n; i++)
-            {
-                _gunStates[i] = new GunState();
-            }
-            // Apply the --gun-select testing override (0-based group index, clamped into range).
-            _gunSel = n > 0 ? Mathf.Clamp(InitialGunSelect, 0, n - 1) : 0;
+            // The state machine sees the loadout through its node-free slot views; --gun-select
+            // (0-based group index, clamped) seeds its cursor.
+            _fire = new FireControl(_firableGuns, Loadout.Hardpoints,
+                AutoFireRockets, InfiniteAmmo, InitialGunSelect);
+            _gunLoggedFirst = new bool[n];
 
             // Bind the two weapon gauges (E35) — only for a system this plane actually carries.
             if (Gauges != null)
@@ -625,21 +616,13 @@ public partial class FlightController : Node3D
     /// the programmatic twin of G / D-pad Left, which only cycles. Interactively that cycle still
     /// wins the next time it is pressed; <see cref="InitialGunSelect"/> is the _Ready-time
     /// equivalent and cannot be re-applied once the rig is built.</summary>
-    public void SelectGunGroup(int index)
-    {
-        int n = _firableGuns.Length;
-        _gunSel = n > 0 ? Mathf.Clamp(index, 0, n - 1) : 0;
-    }
+    public void SelectGunGroup(int index) => _fire?.SelectGunGroup(index);
 
     /// <summary>Weapon lab (B5): point the hardpoint selector at a pylon (0-based, clamped) — the
     /// programmatic twin of H. Unlike H this lands on an EMPTY pylon too (the lab picks a mount to
-    /// look at, not a mount to fire); the firing path's own
-    /// <see cref="NextArmedHardpoint"/> scan still advances off it when the trigger is pulled.</summary>
-    public void SelectPylon(int index)
-    {
-        int n = Loadout?.Hardpoints.Count ?? 0;
-        _selectedPylon = n > 0 ? Mathf.Clamp(index, 0, n - 1) : 0;
-    }
+    /// look at, not a mount to fire); the firing path's own armed scan still advances off it when
+    /// the trigger is pulled.</summary>
+    public void SelectPylon(int index) => _fire?.SelectPylon(index);
 
     /// <summary>--crash[=frame]: forces this player's crash outside any live collision — the only
     /// headless trigger for the per-player crash rig. <c>hitName</c>/<c>part</c> are nominal and
@@ -803,11 +786,25 @@ public partial class FlightController : Node3D
         // SIM-time rate (BL-248). A crash or halt stops the calls, freezing the radius too.
         _cam.UpdateDynamics(dt, _model.Speed);
 
-        // Weapons: cycle the two selectors (edge-detected), then advance the fire clocks and spawn
-        // into the shared projectile pool.
-        CycleWeaponSelectors();
-        UpdateGuns(dt);
-        UpdateRockets(dt);
+        // Weapons: poll the raw held controls, let FireControl decide (selector edges, fire
+        // clocks, ammo draw-down, cues), then perform its outcome against the pool and audio.
+        if (_fire != null)
+        {
+            // The weapon lab flips these on the public fields at runtime (bank switch, toggles;
+            // GameSession also sets InfiniteAmmo post-_Ready) — mirror them into the machine.
+            _fire.AutoFireRockets = AutoFireRockets;
+            _fire.InfiniteAmmo = InfiniteAmmo;
+            var fireInputs = new FireInputs
+            {
+                // A null pool could spawn nothing — feed the triggers as released so no ammo is
+                // decided away on rounds that could never fire.
+                FireHeld = Projectiles != null && FirePressed(),
+                RocketHeld = Projectiles != null && RocketFirePressed(),
+                GunSelectHeld = GunSelectPressed(),
+                RocketSelectHeld = RocketSelectPressed(),
+            };
+            ApplyFireOutcome(_fire.Step(dt, fireInputs));
+        }
         Ordnance?.Update();   // hide a pylon's mounted rocket the moment it fired its last (D44)
 
         // Stunt run: flew-through-a-danger-zone test against this frame's committed position.
@@ -1092,7 +1089,7 @@ public partial class FlightController : Node3D
     /// does NOT auto-repeat; only the 1.0 s cooldown gates it), and <c>--fire-rockets</c> auto-repeats
     /// for unattended runs. Gamepad A also respawns, but only from the crashed / run-complete screens
     /// — states this live-flight firing path never shares — so the two never collide.</summary>
-    private bool RocketFirePressed() => AutoFireRockets || KeyDown(Key.F) || PadPressed(JoyButton.A);
+    private bool RocketFirePressed() => KeyDown(Key.F) || PadPressed(JoyButton.A);
 
     /// <summary>G / gamepad D-pad Left — cycles the gun selector through the firable groups (1 → 2 →
     /// … → 1). Only ONE group fires at a time; the gun trigger fires the selected one. Caller edge-detects.</summary>
@@ -1103,31 +1100,6 @@ public partial class FlightController : Node3D
     /// one uniform ordnance type). The rocket trigger then launches from the selected pylon. Caller
     /// edge-detects.</summary>
     private bool RocketSelectPressed() => KeyDown(Key.H) || PadPressed(JoyButton.DpadRight);
-
-    /// <summary>Advances each weapon selector on the rising edge of its button to the next armed slot
-    /// (one active at a time, skipping empties): the gun selector across the firable groups, the
-    /// hardpoint selector across the pylons. Both cursors also auto-advance on their own when the
-    /// selected slot empties (in `UpdateGuns`/`UpdateRockets`). The gun pick persists across a respawn;
-    /// the pylon cursor doubles as the firing cursor, so a refill resets it to pylon 0 with the
-    /// ammo.</summary>
-    private void CycleWeaponSelectors()
-    {
-        bool gunSel = GunSelectPressed();
-        if (gunSel && !_gunSelPrev && _gunStates is { Length: > 1 })
-        {
-            _gunSel = WeaponCursor.NextSelectable(
-                _firableGuns.Length, i => _firableGuns[i].Ammo, _gunSel, InfiniteAmmo);
-        }
-        _gunSelPrev = gunSel;
-
-        bool rocketSel = RocketSelectPressed();
-        if (rocketSel && !_rocketSelPrev && Loadout is { Hardpoints.Count: > 1 } l)
-        {
-            _selectedPylon = WeaponCursor.NextSelectable(
-                l.Hardpoints.Count, i => l.Hardpoints[i].Ammo, _selectedPylon, InfiniteAmmo);
-        }
-        _rocketSelPrev = rocketSel;
-    }
 
     /// <summary>Feeds the two cockpit weapon gauges (E35) from the same live ammo the firing code
     /// draws down. The gun gauge shows the SELECTED group (its rounds, its short NAME, and one belt
@@ -1141,6 +1113,7 @@ public partial class FlightController : Node3D
         {
             return;
         }
+        int gunSel = _fire?.GunSel ?? 0;
 
         // Guns: the SELECTED firable group. The gauge takes the caliber+ammo short NAME and the belt
         // fractions; the readout (E36) takes the group's mount name and its per-group rounds.
@@ -1150,7 +1123,7 @@ public partial class FlightController : Node3D
         foreach (var g in Loadout.FirableGuns)
         {
             _gunGaugeSlots.Add(g.Capacity > 0 ? (float)g.Ammo / g.Capacity : 0f);
-            if (firable == _gunSel)
+            if (firable == gunSel)
             {
                 selectedGun = g;
             }
@@ -1158,7 +1131,7 @@ public partial class FlightController : Node3D
         }
         if (_gunGaugeState != null)
         {
-            _gunGaugeState.Selected = firable > 0 ? Mathf.Clamp(_gunSel, 0, firable - 1) : 0;
+            _gunGaugeState.Selected = firable > 0 ? Mathf.Clamp(gunSel, 0, firable - 1) : 0;
             _gunGaugeState.Count = selectedGun?.Ammo ?? 0;
             _gunGaugeState.Type = selectedGun?.Weapon.Name ?? "";
         }
@@ -1176,7 +1149,7 @@ public partial class FlightController : Node3D
         var hps = Loadout.Hardpoints;
         if (hps.Count > 0)
         {
-            int sel = Mathf.Clamp(_selectedPylon, 0, hps.Count - 1);
+            int sel = Mathf.Clamp(_fire?.SelectedPylon ?? 0, 0, hps.Count - 1);
             _missileGaugeSlots.Clear();
             for (int i = 0; i < hps.Count; i++)
             {
@@ -1217,7 +1190,7 @@ public partial class FlightController : Node3D
         }
         // Hidden while crashed (the airframe is gone) — a stale pipper must not hang in the sky —
         // and when there is nothing to aim.
-        if (_crashed || Loadout == null || _gunStates == null)
+        if (_crashed || Loadout == null || _fire == null)
         {
             Reticle.Active = false;
             return;
@@ -1228,7 +1201,7 @@ public partial class FlightController : Node3D
         int gi = 0;
         foreach (var g in Loadout.FirableGuns)
         {
-            if (gi == _gunSel)
+            if (gi == _fire.GunSel)
             {
                 sel = g;
                 break;
@@ -1261,184 +1234,57 @@ public partial class FlightController : Node3D
         Reticle.Active = true;
     }
 
-    /// <summary>Advances every gun group's fire clock: while the trigger is held, the selected group
-    /// spawns rounds at its <c>FIRE_RATE</c> (alternating muzzles so the group's total rate equals it),
-    /// drawing from its own ammo counter. When the selected group runs dry the selection auto-advances
-    /// to the next group with ammo (the moment it empties); the empty-clip cue sounds only once every
-    /// group is spent. Also drives the firing loop sound. No-op without a loadout / pool.</summary>
-    private void UpdateGuns(float dt)
+    /// <summary>Performs one <see cref="FireControl.Step"/>'s decisions against the engine: spawns
+    /// the commanded rounds from their live muzzle nodes (with the plane's inherited velocity),
+    /// launches the commanded rocket, mirrors the loop-sound state onto <see cref="FlightAudio"/>
+    /// (started every wanted frame — StartGunLoop only rebuilds when the name changes, which is how
+    /// a mid-burst group switch swaps the loop), and sounds the dry cues. The first-round-per-group
+    /// and first-launches breadcrumbs log here — print throttles, not fire-control state.</summary>
+    private void ApplyFireOutcome(FireOutcome outcome)
     {
-        if (Loadout == null || Projectiles == null || _gunStates == null)
-        {
-            return;
-        }
-        bool fire = FirePressed();
-        bool wantLoop = false;
         var inheritVel = _model.VelocityDir * _model.Speed;
-        string? loopSound = null;
-        int gi = 0;
-        foreach (var g in Loadout.FirableGuns)
+        foreach ((int gi, int mi) in outcome.GunShots)
         {
-            int groupIndex = gi;
-            var st = _gunStates[gi++];
-            // Only the selected gun group fires — one at a time (the original's behaviour).
-            bool selected = groupIndex == _gunSel;
-            if (!fire || !selected || g.Weapon.FireRate <= 0f || g.Muzzles.Count == 0)
+            var g = _firableGuns[gi];
+            var muzzle = g.Muzzles[mi];
+            Projectiles!.Spawn(g.Weapon, muzzle.GlobalTransform, inheritVel, PlayerIndex, muzzle);
+            if (!_gunLoggedFirst[gi])
             {
-                st.Accum = 0f;
-                continue;
-            }
-            float interval = 1f / g.Weapon.FireRate;
-            if (!_firePrev)
-            {
-                st.Accum = interval; // the first shot leaves the barrel the instant the trigger goes down
-            }
-            st.Accum += dt;
-            bool hasAmmo = g.Ammo > 0 || InfiniteAmmo;
-            if (hasAmmo)
-            {
-                wantLoop = true;
-                loopSound ??= g.Weapon.LoopedSoundName;
-            }
-            while (st.Accum >= interval)
-            {
-                st.Accum -= interval;
-                if (g.Ammo > 0 || InfiniteAmmo)
-                {
-                    var muzzle = g.Muzzles[st.NextMuzzle % g.Muzzles.Count];
-                    st.NextMuzzle++;
-                    Projectiles.Spawn(g.Weapon, muzzle.GlobalTransform, inheritVel, PlayerIndex, muzzle);
-                    if (!InfiniteAmmo)
-                    {
-                        g.Ammo--;
-                    }
-                    st.Warned = false; // it fired a real round — re-arm the dry warning
-                    if (!st.LoggedFirst)
-                    {
-                        st.LoggedFirst = true;   // verification breadcrumb: which groups actually fire
-                        GD.Print($"gun group {groupIndex + 1} ({g.Mount}, {g.Weapon.Caliber ?? 0}-cal " +
-                                 $"{g.Weapon.Id}) firing");
-                    }
-                }
-                else
-                {
-                    // The selected group just ran dry — switch to the next group that still has ammo
-                    // the moment it empties, not on the next trigger pull. Only when no group has ammo
-                    // left does the dry cue sound.
-                    int next = WeaponCursor.NextArmed(
-                        _firableGuns.Length, i => _firableGuns[i].Ammo, _gunSel, InfiniteAmmo);
-                    if (next >= 0)
-                    {
-                        _gunSel = next;
-                    }
-                    else if (!st.Warned)
-                    {
-                        st.Warned = true;
-                        Audio?.PlayEmptyClip();
-                    }
-                    st.Accum = 0f;
-                    break;
-                }
+                _gunLoggedFirst[gi] = true;   // verification breadcrumb: which groups actually fire
+                GD.Print($"gun group {gi + 1} ({g.Mount}, {g.Weapon.Caliber ?? 0}-cal " +
+                         $"{g.Weapon.Id}) firing");
             }
         }
-        if (wantLoop)
+        if (outcome.RocketPylon >= 0)
         {
-            // Called every frame the trigger is held, not just on the silence-to-firing edge:
-            // switching gun groups mid-burst changes loopSound while wantLoop stays true, and
-            // StartGunLoop only rebuilds the player when the name it's given actually changes.
+            var hp = Loadout!.Hardpoints[outcome.RocketPylon];
+            Projectiles!.Spawn(hp.Weapon, hp.Pylon.GlobalTransform, inheritVel, PlayerIndex, hp.Pylon);
+            if (_rocketsLaunched < 12)
+            {
+                _rocketsLaunched++;
+                GD.Print($"rocket: {hp.Weapon.Id} ({hp.Weapon.Name}) from pylon{hp.Index}, " +
+                         $"{(InfiniteAmmo ? "∞" : hp.Ammo.ToString())} left on that pylon");
+            }
+        }
+        if (outcome.GunLoopWanted)
+        {
             _gunLoopOn = true;
-            Audio?.StartGunLoop(loopSound);
+            Audio?.StartGunLoop(outcome.GunLoopSound);
         }
         else if (_gunLoopOn)
         {
             _gunLoopOn = false;
             Audio?.StopGunLoop();
         }
-        _firePrev = fire;
-    }
-
-    /// <summary>Launches rockets from the hardpoints: one per discrete trigger pull, drawn from the
-    /// selected pylon (H picks it; it drains fully, then the cursor auto-advances to the next armed
-    /// pylon the instant it empties), gated by the weapon's <c>FIRE_RATE</c> — 1.0/s for every rocket,
-    /// i.e. one launch per second. Depletes that pylon's own counter; a pull with every pylon empty
-    /// sounds the dry cue once. No-op without hardpoints / a pool.</summary>
-    private void UpdateRockets(float dt)
-    {
-        if (Loadout == null || Projectiles == null || Loadout.Hardpoints.Count == 0)
+        if (outcome.GunDryCue)
         {
-            return;
+            Audio?.PlayEmptyClip();
         }
-        if (_rocketCooldown > 0f)
+        if (outcome.RocketDryCue)
         {
-            _rocketCooldown -= dt;
+            Audio?.PlayEmptyClip();
+            GD.Print("rocket: dry pull, all pylons empty — empty-clip cue");
         }
-        bool fire = RocketFirePressed();
-        // A human pull fires one rocket; holding does not auto-repeat. Only --fire-rockets (soak
-        // runs) auto-repeats — and either way the FIRE_RATE cooldown caps the launch rate.
-        bool pull = AutoFireRockets ? fire : (fire && !_rocketFirePrev);
-        _rocketFirePrev = fire;
-        if (!pull)
-        {
-            return;
-        }
-        var hp = NextArmedHardpoint();
-        if (hp == null)
-        {
-            if (!_rocketDryWarned)
-            {
-                _rocketDryWarned = true;
-                Audio?.PlayEmptyClip();
-                GD.Print("rocket: dry pull, all pylons empty — empty-clip cue");
-            }
-            return;
-        }
-        if (_rocketCooldown > 0f)
-        {
-            return;
-        }
-        _rocketDryWarned = false;
-        var inheritVel = _model.VelocityDir * _model.Speed;
-        Projectiles.Spawn(hp.Weapon, hp.Pylon.GlobalTransform, inheritVel, PlayerIndex, hp.Pylon);
-        if (!InfiniteAmmo)
-        {
-            hp.Ammo--;
-            // Advance the moment the selected pylon empties — not on the next trigger pull — so the
-            // gauge arrow leaves the spent pylon straight away. NextArmed keeps the cursor while the
-            // pylon still has rounds and steps to the next armed pylon once it is dry; -1 (all empty)
-            // leaves it put so the next pull sounds the dry cue.
-            var hps = Loadout.Hardpoints;
-            int next = WeaponCursor.NextArmed(hps.Count, i => hps[i].Ammo, _selectedPylon, false);
-            if (next >= 0)
-            {
-                _selectedPylon = next;
-            }
-        }
-        _rocketCooldown = hp.Weapon.FireRate > 0f ? 1f / hp.Weapon.FireRate : 1f;
-        if (_rocketsLaunched < 12)
-        {
-            _rocketsLaunched++;
-            GD.Print($"rocket: {hp.Weapon.Id} ({hp.Weapon.Name}) from pylon{hp.Index}, " +
-                     $"{(InfiniteAmmo ? "∞" : hp.Ammo.ToString())} left on that pylon");
-        }
-    }
-
-    /// <summary>The hardpoint the next rocket fires from: the selected pylon while it still has
-    /// ordnance, else the next armed pylon scanning from it and wrapping. Updates
-    /// <see cref="_selectedPylon"/> to the pylon it returns. The cursor normally already sits on an
-    /// armed pylon (the firing path advances it the instant one empties, and H lands only on armed
-    /// pylons), so this is a confirming scan; it still self-heals if the cursor is somehow left on a
-    /// spent pylon. Null when every pylon is empty. With <c>--infinite-ammo</c> the selected pylon
-    /// always qualifies.</summary>
-    private Hardpoint? NextArmedHardpoint()
-    {
-        var hps = Loadout!.Hardpoints;
-        int idx = WeaponCursor.NextArmed(hps.Count, i => hps[i].Ammo, _selectedPylon, InfiniteAmmo);
-        if (idx < 0)
-        {
-            return null;
-        }
-        _selectedPylon = idx;
-        return hps[idx];
     }
 
     /// <summary>Refills every gun group to its full load and re-arms the dry warnings (respawn).</summary>
@@ -1448,6 +1294,9 @@ public partial class FlightController : Node3D
         {
             return;
         }
+        // The loadout-wide top-up covers the inert turret groups too, and runs even before _Ready
+        // has built the state machine (Setup's pre-tree Respawn). FireControl.Refill re-tops its
+        // own slots with the same values and resets the machine (clocks, cursors, dry warnings).
         foreach (var g in Loadout.Guns)
         {
             g.Ammo = g.Capacity;
@@ -1456,19 +1305,7 @@ public partial class FlightController : Node3D
         {
             h.Ammo = h.Capacity;
         }
-        if (_gunStates != null)
-        {
-            foreach (var st in _gunStates)
-            {
-                st.Accum = 0f;
-                st.Warned = false;
-                st.NextMuzzle = 0;
-            }
-        }
-        _rocketCooldown = 0f;
-        _selectedPylon = 0;
-        _rocketFirePrev = false;
-        _rocketDryWarned = false;
+        _fire?.Refill();
         if (_gunLoopOn)
         {
             _gunLoopOn = false;
@@ -1516,9 +1353,9 @@ public partial class FlightController : Node3D
         _autoRespawnIn = AutoRespawnDelay;
         if (PlaneModel != null)
             PlaneModel.Visible = false; // the airframe is gone; HUD prompts for respawn
-        // Crash freezes the airframe before UpdateGuns runs again this frame (the early _crashed
-        // return above it), so a held trigger's loop would otherwise keep playing under the wreck
-        // until respawn — nothing else ever calls StopGunLoop while _crashed is true.
+        // Crash freezes the airframe before the fire step runs again this frame (the early
+        // _crashed return above it), so a held trigger's loop would otherwise keep playing under
+        // the wreck until respawn — nothing else ever calls StopGunLoop while _crashed is true.
         if (_gunLoopOn)
         {
             _gunLoopOn = false;
@@ -1959,17 +1796,6 @@ public partial class FlightController : Node3D
         return (KeyAxis(Key.D, Key.A) + KeyAxis(Key.Right, Key.Left) + padYaw,
                 KeyAxis(Key.W, Key.S) + KeyAxis(Key.Up, Key.Down) + padPitch,
                 KeyAxis(Key.KpSubtract, Key.KpAdd) + padZoom); // Kp- out, Kp+ in, RT out, LT in
-    }
-
-    /// <summary>Per gun group's live firing state: the fire-rate accumulator, which muzzle fires
-    /// next (rounds alternate left/right so the group's total rate equals FIRE_RATE), and whether
-    /// the empty-clip warning has already sounded since it last had ammo.</summary>
-    private sealed class GunState
-    {
-        public float Accum;
-        public int NextMuzzle;
-        public bool Warned;
-        public bool LoggedFirst;   // verification breadcrumb: the group logs its first live round once
     }
 
 }

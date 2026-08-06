@@ -2140,6 +2140,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the 180° antipode case, so `CAP-18`'s measurement may describe exactly those steps, not a
   general rule.
 
+- `BL-296` `[Feature]` **Per-player ActionMap: named actions over the raw key/pad polling, as the
+  rebinding seam.** Every control is hard-polled today (`Input.IsKeyPressed`/`IsJoyButtonPressed`
+  scattered across `FlightController` (~a dozen bindings), `MenuInput`, `SpectatorCamera`), with
+  per-player device routing via `PadDevices`/`UseKeyboard`; `docs/controls.md` is the binding
+  record. The shape (decided with BL-295, 2026-08-06): a named-action indirection — helpers like
+  `FirePressed()` become `actions.Held(Action.FireGuns)` resolved by a per-player `ActionMap`
+  (player 1 keyboard+pad, others pad-only), persistable so a rebinding UI can edit it later. Godot's
+  built-in `InputMap` supports runtime rebinding but is app-global, so the per-player layer stays
+  ours either way. ⚠ *Traps:* NOT an event/message bus — fire is a held control on the 60 Hz
+  fixed-tick sim, edge detection lives in the consumers (`FireControl`), and events would break
+  scripted `--det`/`--hold` runs; the polling *sites* are the seam, `FireControl` itself never
+  changes (it consumes `FireInputs` booleans). Update `docs/controls.md` when this lands.
+
 ## Missions, modes & campaign
 
 - `BL-064` `[Feature]` **Better mission states.** There is still a lot of difference between our maps and the
