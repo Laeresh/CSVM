@@ -1571,15 +1571,20 @@ The original engine's billboard-particle emitter, data-driven from `PUFFER_STATE
 (schema: docs/formats/effects.md). `PufferState.Load` finds the fully-defined state in an
 effects reader; `Puffer.Create` builds the atlas and hands it to an `IEmitterRenderer`
 (`EmitterRenderer.cs`) — the class itself owns only the CPU integration, so `CreateWith` builds any
-mode with no atlas, no `TextureArchive` and no GPU. Modes: `Burst`, `TrailAdvance` /
-`TrailBurnAt` (distance trails), `SustainAt` (continuous at a moving node — pool sized to steady
-state, catch-up capped); `DriveAt` is the animation runtime's per-frame drive, dispatching on the
-authored state — DISTANCE_INTERVAL trails per interval of actual host motion (CAP-15's density,
-`BL-259`; TrailPool-sized even on the sustained path, since the time-cadence pool floor silently
-dropped ~85% of a flight-speed trail), a still host keeps the time cadence (the static building
-sputters, whose distance can never elapse), and the runtime's stop ends the trail as well as the
-emission (`PufferEmitter.SustainEnd` → `TrailEnd`), so a revived emitter re-homes rather than
-drawing a puff line from its pooled slot's previous call site (the rocket ghost trails);
+mode with no atlas, no `TextureArchive` and no GPU. The continuous surface is ONE pair
+(PLAN-puffer-interface A2): `Emit(worldPos, worldBasis, dt, staticBurnMps = 0f)` / `Stop()`,
+plus the one-shot `Burst` and the hard-kill `Clear` — the authored state picks the mode, callers
+never do. `Emit` dispatches: DISTANCE_INTERVAL trails per interval of actual host motion (CAP-15's
+density, `BL-259`; TrailPool-sized even on the sustained path, since the time-cadence pool floor
+silently dropped ~85% of a flight-speed trail); a still host keeps the time cadence (the static
+building sputters, whose distance can never elapse — every distance state carries the parsers'
+synthetic 0.1 s TIME_INTERVAL, so that cadence always exists); a host that CANNOT move declares
+`staticBurnMps` and spends virtual metres at the held pose instead (the damage lab's parked
+plane). `Stop` ends the trail as well as the emission, unconditionally and idempotently, so a
+revived emitter re-homes rather than drawing a puff line from its pooled slot's previous call
+site (the rocket ghost trails). The six mode verbs (`TrailAdvance`/`TrailEnd`/`TrailBurnAt`/
+`SustainAt`/`SustainEnd`/`DriveAt` — the last now a straight `Emit` alias) remain public ONLY
+until the callers migrate (plan item A3), then go private;
 `PufferState.FromAnimEvent` parses the compiled anim payloads.
 Three config knobs scale `BaseSize` per spawn path — `puffer.burstSizeScale` /
 `puffer.trailSizeScale` / `puffer.sustainSizeScale` (`SizeScaleDefault` **1**, the authored
@@ -1603,7 +1608,8 @@ live emitter).
   the master seed: measured, the C1 waterfall mist moved 0.47% of a `--det` frame before and 0.00%
   after. Its seed depends on how many puffers were built before it — deterministic under `--det`,
   and pinned to WHERE `new Puffer()` sits in `Create`. Moving it, or constructing one anywhere on a
-  capture path, re-pins all four puffer-bearing goldens; `CreateWith` is a test entry point only.
+  capture path, re-pins all five puffer-bearing goldens (the `SizeScaleDefault` list above — an
+  earlier "four" here was a stale count); `CreateWith` is a test entry point only.
 
 ## src/Effects/EmitterRenderer.cs
 `Puffer`'s lower seam: `IEmitterRenderer` takes live particles (`Attach` sizes the pool, `Write`

@@ -556,14 +556,19 @@ public sealed partial class Puffer : Node3D
     /// <summary>Stops sustained emission; live particles finish their lifetimes.</summary>
     public void SustainEnd() => _sustaining = false;
 
-    /// <summary>The animation runtime's per-frame drive (<c>EmitterDirector.Tick</c>), dispatching
-    /// on what the PUFFER_STATE authored: a TIME_INTERVAL state sustains as before, a
-    /// DISTANCE_INTERVAL state emits per interval of the host's actual motion
-    /// (<see cref="TrailAdvance"/>) — the density CAP-15's wing burn shows, ~160 puffs/s at flight
-    /// speed against the 10/s the time cadence produced (`BL-259`). A host that stands still keeps
-    /// the time cadence: the damaged building's sputter is a distance state whose authored interval
-    /// can never elapse on a static object, and it has always emitted on time there.</summary>
-    public void DriveAt(Vector3 worldPos, Basis worldBasis, float dt)
+    /// <summary>The one continuous drive: feed the host's current world pose + dt every frame and
+    /// the authored state picks the mode — a TIME_INTERVAL state sustains, a DISTANCE_INTERVAL
+    /// state emits per interval of the host's actual motion (<see cref="TrailAdvance"/> — the
+    /// density CAP-15's wing burn shows, ~160 puffs/s at flight speed against the 10/s the time
+    /// cadence produced, `BL-259`), and a host that stands still keeps the time cadence: the
+    /// damaged building's sputter is a distance state whose authored interval can never elapse on
+    /// a static object, and it has always emitted on time there (every distance state carries the
+    /// parsers' synthetic 0.1 s TIME_INTERVAL, so that cadence always exists). A caller whose host
+    /// CANNOT move (the damage lab's parked plane) passes <paramref name="staticBurnMps"/>:
+    /// metres of virtual motion per second spent at the held pose (<see cref="TrailBurnAt"/>'s
+    /// in-place burn) in place of the time cadence. <see cref="Stop"/> ends the run; the next
+    /// call after a stop re-homes rather than trailing from the old site.</summary>
+    public void Emit(Vector3 worldPos, Basis worldBasis, float dt, float staticBurnMps = 0f)
     {
         if (_state.DistanceInterval <= 0f)
         {
@@ -571,10 +576,32 @@ public sealed partial class Puffer : Node3D
             return;
         }
         bool moved = _trailing && (worldPos - _trailPrev).LengthSquared() > 1e-8f;
+        if (!moved && staticBurnMps > 0f)
+        {
+            TrailBurnAt(worldPos, dt, staticBurnMps);
+            return;
+        }
         TrailAdvance(worldPos);
         if (!moved)
             SustainAt(worldPos, worldBasis, dt);
     }
+
+    /// <summary>Stops a continuous run: trail AND sustain together, unconditionally — the
+    /// ghost-trail rule (the rocket-explosion fix, commit 450131a): a pooled slot is teleported
+    /// between call sites, so a trail origin kept across the pause would draw a puff line from
+    /// the previous site on revival. Idempotent; live particles finish their own lifetimes
+    /// (<see cref="Clear"/> is the hard kill).</summary>
+    public void Stop()
+    {
+        SustainEnd();
+        TrailEnd();
+    }
+
+    /// <summary>The animation runtime's per-frame drive (<c>EmitterDirector.Tick</c>) — now a
+    /// straight alias of <see cref="Emit"/>, kept until the callers migrate (PLAN-puffer-interface
+    /// A3).</summary>
+    public void DriveAt(Vector3 worldPos, Basis worldBasis, float dt) =>
+        Emit(worldPos, worldBasis, dt);
 
     public override void _Process(double delta)
     {

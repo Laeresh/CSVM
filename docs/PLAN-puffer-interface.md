@@ -94,7 +94,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — decisions, then the collapse
 
 1. ☑ Grilling session: Decisions table settled 2026-08-06; A2/A3 rewritten (fourth caller found, privatisation moved to A3, `Emit` grew `staticBurnMps`)
-2. ☐ `Emit(worldPos, worldBasis, dt, staticBurnMps = 0f)`/`Stop` land inside `Puffer` as order-preserving dispatch over the still-public old verbs (mode pick per Decision 3, both static fallbacks per Decision 2, the both-stops rule per Decision 4); `puffer-modes` suite rewritten to the new interface
+2. ☑ `Emit(worldPos, worldBasis, dt, staticBurnMps = 0f)`/`Stop` landed inside `Puffer` (`DriveAt` body moved into `Emit` + the burn branch, `DriveAt` now an alias); `puffer-modes` suite rewritten — sustain, trail, still-sputter, static-burn and stop/revive all through `Emit`/`Stop`; 13/13 goldens hash-identical
 3. ☐ The **four** callers migrate (`PufferEmitter`, `ProjectilePool`, `DamageVisuals`, `ThrottleSlamSmoke`); the compensating adapter lines and the hand-maintained stop rules are deleted; the six old verbs flip private in this commit
 
 ## Dependency and parallelism notes
@@ -121,7 +121,7 @@ it cannot compile earlier (Q6). The sweep also confirmed Q2's suspicion (the lab
 surfaced that "the static-host fallback" is TWO behaviours (time-cadence sputter vs virtual-metre
 burn), both of which survive. The Decisions table above holds each call with its losing options.
 
-## A2 ☐ `Emit` / `Stop` inside `Puffer`; the suite drives the new interface
+## A2 ☑ `Emit` / `Stop` inside `Puffer`; the suite drives the new interface
 
 **Goal.** `Emit(worldPos, worldBasis, dt, staticBurnMps = 0f)` and `Stop()` land as new public
 members; the six old verbs **stay public and untouched** in this commit (Decision 6 — they flip
@@ -175,3 +175,11 @@ rocket-volley check against the ghost-trail commit's scenario, and a throttle-sl
 **⚠ Traps.** `ProjectilePool._trailEmitters`' reuse predicate (`InUse && LiveCount == 0`) has its
 own ⚠ in the architecture entry — the migration must not change when an emitter is considered
 free.
+⚠ **The homing-frame sputter (found in A2).** `Emit`'s still-host rule fires on the trail's FIRST
+call too — the homing frame has no motion yet, so a pool/slam trail migrating from raw
+`TrailAdvance` gains ONE sustained batch at the muzzle/exhaust per launch (`smokepuffer` authors
+no NUMBER ⇒ one puff). The director's callers always had this (it is the building sputter's
+immediacy, suite-asserted); the pool/slam callers did not. Judged negligible-to-desirable in
+A2 (one 1-puff batch at the launch point), but it IS the one behavioural delta of the migration
+besides `DamageVisuals` — put it to the user with the rocket-volley check if it reads as a
+change at the controls.
