@@ -653,9 +653,10 @@ anchoring, twin narrowing, root lift, the bind census and the three-tier scope o
 staged templates reuse node names, `fly_trail1`-`5` is `he_trails` AND `ap_trails` AND
 `carnage_trails`) — is resolver-owned (`NameResolver` — read its entry): this class resolves only
 through its `Resolve`/`ResolveScoped`/`Anchors` forwards, hands its
-`NameResolveFallback`/`SuppressRootLift`/`ReportResolution` flags over at `Bind`, and supplies the
-pool's per-slot root list as the resolver's `ownRootsOf` constructor hook (`TemplateRootsFor` —
-the slot arithmetic never leaves this class).
+`NameResolveFallback`/`SuppressRootLift`/`ReportResolution` flags over at `Bind`, and wires the
+pool's per-slot root list as the resolver's `ownRootsOf` hook (`TemplateStage.RootsFor` — the
+slot arithmetic lives on the stage, PLAN-template-stage A2, and the resolver still sees only a
+resolved root list).
 Puffer emitters live in `Anim/EmitterDirector.cs` (`Emitters`) — read its entry before touching
 anything emitter-shaped. This class keeps only the dispatch case, the `at_node` sentinel resolution
 and the `active_state` read, then forwards; `DefScopedPufferKeys` is the one role flag it still
@@ -664,19 +665,24 @@ carries, read once when the director is built. `OBJECT_ACTIVE_STATE … false` f
 started in its own instant (`BL-229`, the rule and its census live on the director), a RESET_STATE
 one does not. Effect templates are **pooled** on the effects runtime (`PooledTemplates`, `BL-225`): the stage holds
 `WorldEffectsFactory.EffectPoolSlots` copies of each template, one per slot container carrying
-`PoolSlotMeta`, and each `PlayEffectAt` takes the next slot (`NextPooledAnchors`, cursor per template
-ROOT name, not per anim name — two defs on one root must not both be handed slot 0). Everything
-template-shaped is then slot-scoped through `TemplateRootsFor(def, node)`: which copy is placed
-(`PlaceTemplateAt`/`PlaceTemplateOn`), revealed (`ShowTemplate`), tested for a move (`TemplateIsAt`)
-and searched for the def's own names (the resolver's own-root tier, which `TemplateRootsFor` feeds
-as its `ownRootsOf` hook) — all off the slot the CALL's anchor sits in, so a nested CALL_ANIMATION
-stays inside its caller's copy instead of driving all four `fly_trail*` sets. The cursor wraps: past the pool a call recycles a still-live slot, which is the
-old shared-template collapse, counted in `PoolRecycles` and named once per effect.
+`PoolSlotMeta`, and each `PlayEffectAt` takes the next slot (`TemplateStage.TakeNextSlot`, cursor
+per template ROOT name, not per anim name — two defs on one root must not both be handed slot 0).
+The slot arithmetic, placement and copy-identity questions live in `Anim/TemplateStage.cs`
+(PLAN-template-stage A2 — read its entry, which carries the Decision-16 reinterpretation): this
+class supplies the engine and runtime hooks in its constructor and calls through. Everything
+template-shaped is slot-scoped through `TemplateStage.RootsFor(def, node)`: which copy is placed
+(`PlaceAt`/`PlaceOn`), revealed (`ShowTemplate` — still here until A3), tested for a move
+(`IsAt`) and searched for the def's own names (the resolver's own-root tier, which `RootsFor`
+feeds as its `ownRootsOf` hook) — all off the slot the CALL's anchor sits in, so a nested
+CALL_ANIMATION stays inside its caller's copy instead of driving all four `fly_trail*` sets. The
+cursor wraps: past the pool a call recycles a still-live slot, which is the
+old shared-template collapse, counted in `PoolRecycles` (a forward of `TemplateStage.Recycles`)
+and named once per effect.
 The pool is NOT a third keying scheme (the rule and its ⚠ live on `EmitterDirector`); distinct
-emitters per call fall out of the host node being a different node per slot, and `SlotOf` /
-`NextPooledAnchors` / `PlaceTemplateAt` stay here — the director is handed already-resolved host and
-anchor nodes.
-⚠ `PlaceTemplateOn` sets `TopLevel = true` on a placed root before writing its `GlobalTransform`
+emitters per call fall out of the host node being a different node per slot, and the director is
+handed already-resolved host and anchor nodes — the property PLAN-deepening Decision 16 pinned,
+preserved by construction across the stage extraction (see `TemplateStage.cs`'s entry).
+⚠ The stage's `PlaceOn` write (`AnimRuntime.PlaceNodeAt`) sets `TopLevel = true` on a placed root before writing its `GlobalTransform`
   (`BL-288`, one half of the fix — the pool paragraph below is the other) — a staged root stays parented
   where it was built (the per-player crash rig's roots sit under the controller subtree,
   `WorldEffectsFactory.BuildFlightCrashRuntime`), so without `TopLevel` a still-flying caller drags
@@ -691,7 +697,7 @@ anchor nodes.
   (`WorldEffectsFactory.BuildFlightCrashRuntime`'s own note) — the fourth bite of the
   plane-parented-effect trap: a template that is supposed to lie flat on the struck surface (the
   water splash's spray column/rings, the dirt burst's dust plane) instead sprayed off at the plane's
-  impact angle (`BL-292`). `PlaceTemplateOn`'s `level` parameter — driven by
+  impact angle (`BL-292`). `TemplateStage.PlaceOn`'s `level` parameter — driven by
   `LevelPlacedTemplateNames`, a named allowlist keyed by `AnimName ?? Name` — overwrites the placed
   root's basis to `Basis.Identity` for exactly those defs. **Named, not blanket**: an earlier,
   whole-runtime version of this flag also releveled `call_crash_trails`' flying debris chunks
@@ -705,14 +711,14 @@ anchor nodes.
 The crash rig pools its templates too (`BL-288`), with a twist the world pool does not need:
 its calls anchor on the PLANE's own nodes (each `pdpanelN` tear CALLs `gimmeflakes` onto its own
 `pdpN`; the crash defs CALL `large_firetrail` onto their four `pieceN`), which sit in no slot
-container — so slot choice cannot be read off the anchor's ancestry. `AssignCallerSlot` (invoked
-from the CALL dispatch, before the placed-where test) pins each (template root, call anchor) pair
-to its own slot on the anchor's first call, sticky for the session: a re-tear restarts ITS OWN
-copy, and `TemplateRootsFor` consults the claim (`AssignedCallerSlot`) whenever the ancestry walk
+container — so slot choice cannot be read off the anchor's ancestry. `TemplateStage.AssignCallerSlot`
+(invoked from the CALL dispatch, before the placed-where test) pins each (template root, call
+anchor) pair to its own slot on the anchor's first call, sticky for the session: a re-tear
+restarts ITS OWN copy, and `RootsFor` consults the claim whenever the ancestry walk
 comes back empty. Sizes are the AUTHORED distinct-anchor counts per root
 (`effect_pools.json`'s crash section — not TUNE; re-count only if the shared damage-stage defs
-change), and more anchors than copies wrap by `TemplateRootsFor`'s modulo, counted in
-`PoolRecycles`. Before this, `TemplateRootsFor` returned the same single node for every caller,
+change), and more anchors than copies wrap by `RootsFor`'s modulo, counted in
+`PoolRecycles`. Before this, the root lookup returned the same single node for every caller,
 and a second panel's `CALL_ANIMATION` found `IsLive(target, startAnchor)` false (keyed on the
 FIRST anchor), teleported the shared root to the new site and restarted it from rest pose —
 discarding the first burst mid-flight, leaving the stale instance under the old anchor alive, and
@@ -805,8 +811,9 @@ the one member reached from outside this namespace without going through `AnimRu
 `Flight/PropAnimator.cs` calls it directly so a plane's own props spin through the identical
 accumulate-from-rest decode instead of a second hand conversion; it takes a rest `Basis` and a
 rate, no `AnimRuntime`/`MotionSet` state, so the reach-in is inert to everything else here.
-`MotionSet`, `EmitterDirector`
-and `NameResolver` share the namespace but ARE independently owned — their own entries below.
+`MotionSet`, `EmitterDirector`,
+`NameResolver` and `TemplateStage` share the namespace but ARE independently owned — their own
+entries below.
 `MotionRuntime`'s `translation_range` is a SPHERICAL launch — `xz` azimuth, `y` elevation, both in
 degrees, `initial` the speed (`analysis/object-motion-range/`, decoded 2026-08-01) — and a launch
 seeds from the node's authored rest pose, since a shared effect template's children are re-homed by
@@ -918,7 +925,7 @@ engine-free instantiation over a plain token type (plus plain `AnimDefinition`s)
 suite.
 ⚠ **The three-tier scope order is structural: `ResolvePath` is private to the module.**
   `ResolveScoped` runs call-anchor subtree → the def's OWN template roots (the constructor's
-  `ownRootsOf(def, anchor)` hook — `AnimRuntime.TemplateRootsFor`, so the pool reaches the
+  `ownRootsOf(def, anchor)` hook — `TemplateStage.RootsFor`, so the pool reaches the
   resolver only as a resolved root list and the slot arithmetic stays out) → global unless
   `LOCAL_NODES_ONLY`; a null/dead anchor (the `isLive` predicate) drops the scoped tiers for the
   plain whole-index walk. The order once diverged caller-side (the emitter host and the motion
@@ -932,7 +939,7 @@ suite.
 ⚠ `Anchors` is the ONE census-recording resolution call (once per def identity — the bootstrap asks
   on several passes). `FindAll` and the private census-free paths (`ComputeAnchors`, `ResolvePath`,
   the own-root tier) record nothing; the `ownRootsOf` hook and per-event callers
-  (`TemplateRootsFor`) must keep resolving through those, never through `Anchors` or a second
+  (`TemplateStage.RootsFor`) must keep resolving through those, never through `Anchors` or a second
   recording path.
 `FindAll`'s memoized result must be treated as read-only — the same list instance is returned on
 every repeat query (a single-name `ResolveScoped` hands it back directly), which is what makes it
@@ -940,6 +947,45 @@ cheap for C5's ~400 live poll loops re-dispatching every frame. **This is not th
 split** — G18 ("⚠ Do not re-propose splitting the modes into three interfaces", the `AnimRuntime`
 entry) refused per-mode *observation* interfaces; this plan extracted one concept all three modes
 share, unchanged — one resolver for all of them. No re-open.
+
+## src/Mech3/Anim/TemplateStage.cs
+The effect-template stage as one module (`TemplateStage<TNode>`, PLAN-template-stage A2): pool-slot
+arithmetic (`SlotOf` memoized over a raw-walk hook, `TakeNextSlot`'s per-root cursor, `RootsFor`'s
+slot scoping with the modulo fallback for callees staged shallower than their caller's slot), the
+BL-288 caller-slot claim (`AssignCallerSlot` — sticky per (root, anchor), wraps through the same
+modulo), template placement (`PlaceAt`/`PlaceOn`, the BL-292 `level` basis reset), the
+copy-identity questions (`IsAt` on the ONE named move tolerance — 0.25 m², the two coincident
+0.25 f literals merged per Decision 6 —, `RootsOf`, `SharedWithLiveInstance`), the pooled-copy
+staging entry (`IndexPooledCopy` over supplied runtime hooks) and `Recycles`, which counts BOTH
+wrap flavours. Generic like `NameResolver<TNode>`: ~8 engine hooks at construction (identity,
+slot walk, transform read, the `TopLevel`+`GlobalTransform` placement write, print/debug), the
+runtime-dependent hooks late-bound via `Wire` at the handover (`findAll`, `anchors`, `isLive`,
+live instances, `LevelsTemplate`, `NameOf`, the index/reset services) — they cannot be
+construction arguments, because the factory that builds the stage exists before any resolver
+does, and the resolver's own `ownRootsOf` hook is this class's `RootsFor` (both directions are
+delegates). The off-engine charter is `CSVM.Tests/TemplateStageTests.cs` (slot wrap, modulo
+fallback, recycle counting both flavours, caller-slot stickiness, placement, the tolerance);
+`effect-template-mesh`/`effects-census`/`damage-template-pool` stay the in-engine integration
+tier — nothing is asserted in both.
+⚠ **Decision 16, reinterpreted — not reopened, and not silently overridden.** Two prior texts pin
+  these members to `AnimRuntime`: PLAN-deepening Decision 16, and PLAN-name-resolver's milestone
+  goal (*"`SlotOf` / `TemplateRootsFor` / `NextPooledAnchors` / `PlaceTemplateAt` stay where
+  Decision 16 of PLAN-deepening pinned them"*), echoed by the `AnimRuntime` entry's own "the
+  director is handed already-resolved host and anchor nodes". PLAN-template-stage Decision 1
+  reads the pins' letter as blocking a move into `EmitterDirector` and their spirit as the
+  property that the pool never becomes a third keying scheme. That property survives this peer
+  module by construction: the stage resolves roots and hands them out; nothing here keys an
+  emitter, and `EmitterDirector` still receives resolved host and anchor nodes.
+⚠ Root resolution goes through the `findAll` hook with one deliberate asymmetry: per-EVENT paths
+  (`RootsFor`, `IsAt`, the resolver's own-root tier) run on poll loops and must never re-enter
+  `NameResolver.Anchors`' census; per-CALL paths (`TakeNextSlot`, `RootsOf`) may use the
+  `anchors` hook — once per call, census recorded once per def identity. Exactly the pre-move
+  behaviour; do not "clean up" the asymmetry in either direction.
+⚠ `SlotOf`'s memo assumes slot containers are built before `Bind` and never reparented — the same
+  snapshot terms as the resolver's `FindAll` cache. A2/A3/A4 staging: reveal/retire/sweep
+  (`ShowTemplate`/`HideTemplateWhenIdle`/`SweepTemplateHides`) are still on `AnimRuntime` until
+  A3; `Pooled` is still a mutable property (the factory sets it post-construction) until A4 seals
+  it — the accepted-shallow-spot ⚠ on `AnimRuntime`'s entry stands until then.
 
 ## src/Mech3/SequenceRunner.cs
 The engine-free sequence interpreter, extracted from `AnimRuntime` behind the `ISequenceHost` seam
@@ -2754,7 +2800,7 @@ vertical-only shape as a launched wreck piece, so only the name can tell "stay p
 `flydirt_plane`) names the crash def's own sub-effects that belong flat on the struck surface for
 `AnimRuntime.LevelPlacedTemplateNames` (`BL-292`) — the water splash's spray column/rings and the
 dirt burst's dust plane; the fireball/smoke/debris family and `large_steam_spray` are deliberately
-excluded (own comment carries why — `AnimRuntime`'s `PlaceTemplateOn` entry has the mechanism). It also derives what
+excluded (own comment carries why — `TemplateStage.PlaceOn`'s ⚠ in `AnimRuntime`'s entry has the mechanism). It also derives what
 those names need staged: `StageRootsFor(program, names, resolveRoot)` walks `AnimProgram.Subset`'s
 CALL_ANIMATION closure, takes each reached definition's NAME (the gamez node its instance anchors on),
 and resolves it three ways — a parentless gamez root is **staged**, a name the bind's own scope
@@ -2830,7 +2876,7 @@ The world-effects stage is built in **pool slots** (`BL-225`): each root is stag
 `AnimRuntime`'s pool paragraph for how a call picks its slot). The containers carry no `cs_name` and
 are invisible to name resolution. Sizes are **per root and per player count**, so the deeper slots
 hold only the roots sized that deep and a def whose root has no copy in its slot falls back to one
-that exists (`TemplateRootsFor` picks by modulo — never "all of them", which would be the collapse
+that exists (`TemplateStage.RootsFor` picks by modulo — never "all of them", which would be the collapse
 again). The build line names the sizes, not just the total, because a bare count cannot say whether a
 root someone just re-sized actually got its copies.
 `EffectStage` exposes that stage node read-only, for `--effects-test`'s mesh census (`BL-061`) —

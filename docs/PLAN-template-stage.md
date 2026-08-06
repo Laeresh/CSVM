@@ -98,7 +98,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — decisions, then the stage
 
 1. ☑ Grilling session: Decisions table settled 2026-08-06; all nine recommendations accepted (two with substantive findings: the caller-slot trio joins the move scope, and the honest hook count is ~8)
-2. ☐ `TemplateStage<TNode>`: slot arithmetic + placement + the "which copy is mine" rule **+ the BL-288 caller-slot claim** (Decision 2), generic per Decision 3, with the off-engine suite (Decision 8's list)
+2. ☑ `TemplateStage<TNode>` landed: slots/placement/identity + the BL-288 caller-slot claim moved (10 members, 5 fields), generic with 7 ctor hooks + 9 `Wire`d runtime hooks; `TemplateStageTests` (15 facts) asserts wrap/modulo/recycles/stickiness/placement/tolerance off-engine; 566 units + 24 suites + 13/13 goldens identical, and the two `--debug-anim` A/B scenarios (destroy + crash, frame 120) pixel-identical AND anim-log-identical to HEAD
 3. ☐ Reveal/retire/sweep move in; both entry points perform the ritual through the module; the two tolerances become the one named contract (Decision 6)
 4. ☐ Sealing-leak closure: the three flags become stage ctor state, `ForEffects`/`ForCrashRig` take the stage as an argument, plain construction gets the inert default (Decision 4); the accepted-shallow-spot ⚠ is deleted from `architecture.md`
 
@@ -134,7 +134,7 @@ instrument from "the `c1-destroy-effects` golden" to the FULL 13-golden sweep �
 migration's lesson (the moving golden was `c1-flight`, the unexpected one). The Decisions table
 above holds each call with its losing options.
 
-## A2 ☐ `TemplateStage<TNode>` — slots, placement, identity, with the off-engine suite
+## A2 ☑ `TemplateStage<TNode>` — slots, placement, identity, with the off-engine suite
 
 **Goal.** The slot/placement/identity half of the cluster lives in
 `src/Mech3/Anim/TemplateStage.cs`, generic over the node type, with `TemplateStageTests` asserting
