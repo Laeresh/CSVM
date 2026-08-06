@@ -31,7 +31,10 @@ public static class SessionPaths
     /// texture memory; every chapter ships 2/4/6/8 plus one full-quality tier) over
     /// <c>texture.zip</c>: the tiers are what the original renders, and hundreds of same-name,
     /// same-size textures differ in content from the base archive — the gauge needles only carry
-    /// their painted alpha silhouette there.</summary>
+    /// their painted alpha silhouette there. A <c>&lt;tier&gt;_x4</c> sibling folder — the
+    /// Real-ESRGAN output of <c>UpscaleTextures.ps1</c> — beats the tier itself when present;
+    /// the <c>_x4</c> suffix is skipped by the tier scan (its name doesn't parse as
+    /// <c>rtextureN</c>), so the folder never competes as a tier of its own.</summary>
     public static string ChapterTextures(string dataRoot, string chapter)
     {
         var dir = Path.Combine(dataRoot, "extracted", chapter);
@@ -49,6 +52,8 @@ public static class SessionPaths
                 }
             }
         }
+        var upscaled = Path.Combine(dir, best + "_x4");
+        if (Directory.Exists(upscaled)) { return upscaled; }
         return PreferUnzipped(Path.Combine(dir, best + ".zip"));
     }
 

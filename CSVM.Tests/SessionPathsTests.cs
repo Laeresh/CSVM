@@ -62,4 +62,25 @@ public class SessionPathsTests
         Directory.CreateDirectory(Path.Combine(chapter, "rtexture15"));
         Assert.Equal(Path.Combine(chapter, "rtexture15"), SessionPaths.ChapterTextures(root, "C1"));
     }
+
+    [Fact]
+    public void AnUpscaledX4FolderBeatsTheTierItWasMadeFrom()
+    {
+        var root = TestData.TempDir();
+        var chapter = Path.Combine(root, "extracted", "C1");
+        Directory.CreateDirectory(Path.Combine(chapter, "rtexture15"));
+        File.WriteAllText(Path.Combine(chapter, "rtexture15.zip"), "x");
+        // The _x4 suffix must not register as a tier of its own ("15_x4" is not an N)...
+        Directory.CreateDirectory(Path.Combine(chapter, "rtexture15_x4"));
+
+        // ...but once the top tier wins, its upscaled sibling wins over it.
+        Assert.Equal(Path.Combine(chapter, "rtexture15_x4"), SessionPaths.ChapterTextures(root, "C1"));
+
+        // An _x4 for a lower tier does not hijack the choice: only the winner's sibling counts.
+        var c2 = Path.Combine(root, "extracted", "C2");
+        Directory.CreateDirectory(Path.Combine(c2, "rtexture2_x4"));
+        File.WriteAllText(Path.Combine(c2, "rtexture2.zip"), "x");
+        File.WriteAllText(Path.Combine(c2, "rtexture14.zip"), "x");
+        Assert.Equal(Path.Combine(c2, "rtexture14.zip"), SessionPaths.ChapterTextures(root, "C2"));
+    }
 }
