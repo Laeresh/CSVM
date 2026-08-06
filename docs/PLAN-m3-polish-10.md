@@ -24,12 +24,12 @@ review closed two before work started: `BL-047` (B12) and `BL-283` (D31).
   space (`BL-288`).
 - The fuel-leak animation and the wing-light blinker stop fighting over the same nodes (`BL-287`).
 - The crash water splash sprays up and its rings lie flat on the water (`BL-292`).
-- The zeppelin hookup-light on/off quads (`lite*`/`ltout*`) stop z-fighting (`BL-081`).
 - The own-ship audio mix loses its unexplained blanket ×0.2 (`BL-268`).
 - The weapon gauge maps slots to pylon numbers and sweeps the original's way (`BL-294`).
 - Flying C1/M05, C3/MP1–2 or C5/MP1 places the interp-scripted entities where authored (`BL-249`).
 - ~~`BL-047` damage display~~, ~~`BL-082` rail z-nit~~ and ~~`BL-283` sandbox hang~~ closed
-  2026-08-06 by user call/A/B — see B12/B14/D31.
+  2026-08-06 by user call/A/B — see B12/B14/D31. ~~The zeppelin hookup-light `lite*`/`ltout*`
+  quads~~ closed 2026-08-06 — already correct, see B13.
 
 **This plan fixes only what is already diagnosed — no new reverse engineering, no flight-model or
 TUNE changes.** An item that turns out to need an original-game capture stops and records that,
@@ -69,7 +69,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ `BL-294` — weapon-gauge slots map to pylon numbers (1,5,2,6,3,7,4,8 fill) and the sweep direction matches the original
 12. ❌ `BL-047` — closed 2026-08-06: the original disables the HUD on crash, as do we
-13. ☐ `BL-081` — the zeppelin hookup-light `lite*`/`ltout*` state pairs play their authored state instead of both drawing
+13. ❌ `BL-081` — closed 2026-08-06: already correct — the generic RESET_STATE bootstrap pass hides `lite*`/shows `ltout*` as authored
 14. ❌ `BL-082` — closed 2026-08-06: the original z-fights there too (user A/B at the spot) — faithful as-is
 
 ### Wave C — Audio & missions
@@ -418,10 +418,36 @@ path left latched (`GaugeCluster.cs` blinks on `OnPartDamage`; `FlightController
 called into `Gauges`), and the planned fix was to wire `Crash()` to whatever the original's crash
 footage shows. The HUD-off-on-crash behaviour supersedes that wiring entirely.
 
-## B13 ☐ `BL-081` — zeppelin hookup-light state pairs play their authored state
+## B13 ❌ `BL-081` — zeppelin hookup-light state pairs play their authored state: closed, already correct
 
-**Goal.** The `lite*`/`ltout*` lights-on/lights-off state-variant quads no longer z-fight: each
-pair shows the state the data authors, and the hookup-lights animation can swap it.
+**Closed 2026-08-06 (disproof — no code change).** `AnimRuntime.Bootstrap` pass 1 already applies
+every anchored def's `RESET_STATE` (`docs/architecture.md`'s `AnimRuntime.cs` entry, "1. every
+anchored definition's RESET_STATE"), and `pz_hookup_lights`/`wv_hookup_lights`'s own `RESET_STATE`
+is exactly the fix this item asked for: `ObjectActiveState lite01..11 false` +
+`ObjectActiveState ltout01..11 true` — mutually exclusive, so both variants can never be `Visible`
+at once. Measured directly against the running engine, not just the reader JSON:
+
+- Bind census (`--debug-anim`) on C1/M02, C1/M04, C1/M05 (`piratezep`/`pz_lites`) and C1C/M01
+  (`workersvoyagezep`/`hookup_lights`, the second lite01/ltout01-named pair the `NAME`-collision
+  trap warned about) shows zero unresolved ops for either def — every `lite*`/`ltout*` node
+  resolved and got its `ObjectActiveState` applied.
+- `--debug-nodelab=node=<name>` read the built nodes' actual Godot `Visible` back on all four
+  missions: `lite01`/`lite03` → `visible=False`, `ltout01`/`ltout07` → `visible=True`, matching
+  the authored `RESET_STATE` exactly, on BOTH zeppelins (the resolver's symbol-table binding kept
+  the two same-named `lite01` pairs apart — `docs/formats/destructibles.md`'s binding trap did not
+  bite).
+- Freecam screenshots from the topside (`piratezep`, C1/M02) and the underside (`workersvoyagezep`,
+  C1C/M01 — the hookup lights face down, toward an approaching plane, not up) show a single clean
+  light point at each of the 11 positions, no doubled/striped geometry.
+
+No engine code needed changing; the original "runway lights / needs an engine-side light-state
+toggle" framing (superseded by the 2026-08-05 zeppelin-hookup-lights data read below) was the only
+thing out of date. `BL-081` deleted from `backlog.md`'s predecessor state (already moved into this
+plan 2026-08-06); no further action.
+
+**Goal (as scoped before the disproof).** The `lite*`/`ltout*` lights-on/lights-off state-variant
+quads no longer z-fight: each pair shows the state the data authors, and the hookup-lights
+animation can swap it.
 
 **Evidence (confidence: traced — user lead confirmed in data 2026-08-06).** The `liteNN`/`ltoutNN`
 pairs are not runway lights: they are the **pirate zeppelin's hookup lights**, driven by the
