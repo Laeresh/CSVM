@@ -14,7 +14,7 @@
     {
       "name": "c1-waterfall",
       "frame": 120,
-      "hash": "848493579ab7f5d0cd8d98e8db66c2a3",
+      "hash": "c02de8d74278b2aeee4ea047f6343c62",
       "exercises": "UV scroll on the falls sheet + the mist puffer; frame-sensitive 1.28 % at 120 vs 121.",
       "args": ["--freecam", "--chapter=C1", "--pos=-7720,60,-3380", "--lookat=-7868,40,-3449", "--det", "--mute"]
     },
@@ -28,7 +28,7 @@
     {
       "name": "c1c-rain",
       "frame": 120,
-      "hash": "3ce43afaf1b4161f9c456b62d6d0e885",
+      "hash": "c724ebe4655a518f991a232d1402a66a",
       "exercises": "rain precipitation (seeded field on the sim clock), cloud deck, heavy fog; frame-sensitive 2.50 %.",
       "args": ["--freecam", "--chapter=C1C", "--pos=-3843,700,-1101", "--direction=-0.052,-0.25,-0.999", "--det", "--mute"]
     },
@@ -42,7 +42,7 @@
     {
       "name": "c2b-rain",
       "frame": 120,
-      "hash": "77b449191b7231abe957a83a98332287",
+      "hash": "0323f640be19770bd6c737d3e700c883",
       "exercises": "rain over open water â€” the surface A3 measured at 4.75 % unpinned; frame-sensitive 3.47 %.",
       "args": ["--freecam", "--chapter=C2B", "--pos=-3843,200,-1101", "--direction=-0.052,-0.1,-0.999", "--det", "--mute"]
     },
@@ -56,14 +56,14 @@
     {
       "name": "c4-snow",
       "frame": 120,
-      "hash": "006ceb2801ca0f4366ae0e1b96f11d05",
+      "hash": "ecfc1bb1e7c4ad3ab8a9b5fb00b29be9",
       "exercises": "snow precipitation plus the chapter carrying 6 UV-scroll models; frame-sensitive 3.74 %, the largest of the freecam set.",
       "args": ["--freecam", "--chapter=C4", "--pos=-3330,958,-9181", "--direction=-0.682,-0.2,0.731", "--det", "--mute"]
     },
     {
       "name": "c5-city-night",
       "frame": 120,
-      "hash": "b38a48226ab77315049c1854e7a8c78f",
+      "hash": "fb5537ffad131f04669254f9c52c948f",
       "exercises": "the night city: LIGHT_STATE point lights packed into csky_light_data, lit window skins, moon and stars; static, 11 px at 120 vs 360.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute"]
     },
@@ -84,14 +84,14 @@
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "49f2173645f90fc274f560c77b11ff39",
+      "hash": "decedbce92a79975f70aa86f098d89d3",
       "exercises": "a flying plane: chase camera on the sim clock, prop and control-surface animators, gauges, compass tape, weapon readout, impact reticle; frame-sensitive 34.52 %, the strongest tripwire here.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "94e135f487043e6a2c8ccefad91d04ac",
+      "hash": "dbc7580eb6f06c0aace1ccef329b1c17",
       "exercises": "the world-effects runtime (ForEffects/D32) built and rendering a puffer: a flight-session kill of the single ap_radiotwr instance CALL_ANIMATIONs great_balls_of_fire onto the world-effects stage; frame-sensitive (distinct hashes at 119/120/121), and moves off its Rng.Effects seed (PLAN-animruntime-role-factories A1).",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },

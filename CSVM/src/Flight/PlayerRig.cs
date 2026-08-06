@@ -1,4 +1,3 @@
-using CSVM.Effects;
 using Godot;
 
 namespace CSVM.Flight;
@@ -9,11 +8,11 @@ namespace CSVM.Flight;
 /// unchanged; splitscreen has one per pane (see <see cref="UI.SplitScreen"/>).
 ///
 /// <para>The rig exists because the flight view is not just a camera: the skydome, the cloud
-/// deck, the ambient cloud puffs and the cloud-band whiteout overlay are all anchored to
-/// <i>the</i> camera every frame, so each player needs a private copy of each, on that player's
-/// visual layer. GameSession's per-frame anchoring loops over rigs; everything else in the world
-/// (terrain, clutter, map-edge extension, precipitation, all aircraft) is shared and rendered in
-/// every pane.</para>
+/// deck and the cloud-band whiteout overlay are all anchored to <i>the</i> camera every frame, so
+/// each player needs a private copy of each, on that player's visual layer. GameSession's
+/// per-frame anchoring loops over rigs; everything else in the world (terrain, clutter, the
+/// ambient cloud field, map-edge extension, precipitation, all aircraft) is shared and rendered
+/// in every pane.</para>
 /// </summary>
 public sealed class PlayerRig
 {
@@ -45,8 +44,9 @@ public sealed class PlayerRig
     /// <summary>This player's cloudlayer deck copy, re-anchored under the camera each frame.</summary>
     public Node3D? Deck;
 
-    /// <summary>This player's ambient cloud-puff field, advanced from the camera each frame.</summary>
-    public CloudPuffs? Puffs;
+    // No per-rig ambient cloud field: the authored fogvol clutter is world-anchored static
+    // geometry every pane sees (see Effects/FogVolumeClutter), unlike the dome and the deck,
+    // which follow a camera and therefore still need a copy each.
 
     /// <summary>This player's full-pane cloud-band whiteout overlay, faded by camera altitude.</summary>
     public ColorRect? Whiteout;

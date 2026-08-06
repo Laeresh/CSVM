@@ -1264,35 +1264,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-110` `[Tuning]` `[Blocked: CAP-11]` **`SunIncidence` 0.46** (item-6 world brightness) rests on a single overcast reference —
   a C1B-night and a bright-day original screenshot would confirm/refine the self-scaling (`CAP-11`).
 
-- `BL-118` `[Tuning]` `[Blocked: BL-273]` **Cloud puffs** — opacity and density. **Cloud deck** — brightness reads ~40 units lighter
-  than the original. **Playtest (2026-07-30), two new specifics + mechanism traced.** (1) The deck
-  itself shows dense cloud puffs while flying through it. (2) In C1/IA1, puffs show around the plane
-  at *all* height levels rather than a confined band. Root cause: `CloudPuffs.cs`'s
-  `BandBelow`/`BandAbove` (120 m/280 m) plus `VertFull`/`VertFade` (200 m/560 m) together make the
-  field seed visible puffs for any camera altitude in **[290 m, 1964 m]** for C1/IA1 — effectively the
-  whole flight envelope (ceiling ~2003 m, `BL-094`) — while `weather.json`'s own `CLOUD_COVER` block
-  defines a much narrower band: `TOP`/`BOTTOM` 1124/970 (clear at both edges) with a fully-opaque core
-  of only 1032–1062 (`docs/formats/weather.md:190-192`, `Weather.cs:112-113`).
-  ⚠ **RE-SCOPED 2026-08-05 — this item used to assert "No zrdr defines a separate ambient-puff
-  emitter", and that is wrong.** The sweep behind that sentence only looked at anim defs and the
-  `cam_anim` set; the authored field is a **clutter** spec, `fogvol.zrd`, present in every chapter
-  and never read by us. It is now `BL-273`, and it carries the band, scatter, density, fade and
-  size as numbers — so the fix shape below (re-key our margins to `CloudTop`/`CloudBottom`) is
-  **superseded**: the hand-tuned constants get deleted rather than re-derived. What stays with
-  `BL-118` is the half `fogvol` does not explain — the `CloudDeck` **mesh** reading ~40 units
-  lighter than the original — plus a density judgement to be made only *after* `BL-273` lands.
-  Also corrected by the same playtest: symptom (2) is not C1/IA1-specific and is partly authored —
-  the original shows sparse singles at any altitude too, on some maps but not all, which `BL-273`
-  explains via the per-chapter sprite-template counts.
-  *`CAP-12` is no longer a blocker for the model* — the data settles it; film only if a difference
-  survives `BL-273` (user's call, 2026-08-05). The capture stays owed for deck-density judgement.
-  ⚠ **Traps.** (a) Don't just shrink the margins by feel — they vary per mission/zone; re-derive per
-  chapter or the same bug reappears with a different band width elsewhere. (b) The "~40 units lighter"
-  brightness reading is about the `CloudDeck` **mesh**, a different object from the sprite field the
-  two new symptoms describe — do not read one as evidence for the other. (c) Some margin beyond the
-  opaque core may be intentional (real cloud decks have wisps outside the solid layer, which is the
-  whole reason this field exists) — a capture matched to `C1 IA1 Cloud Puffs and Moon.png`'s altitude
-  would settle whether today's margins are too generous or roughly right.
+- `BL-118` `[Tuning]` **Cloud deck** — the `CloudDeck` **mesh** brightness reads ~40 units lighter than the
+  original — **plus a post-`BL-273` density judgement of the now-authored ambient cloud field.**
+  ⚠ **RE-SCOPED 2026-08-06, `BL-273` landed.** Everything this item used to say about the sprite
+  field went with `CloudPuffs.cs`: the field is now `fogvol.zrd`'s authored clutter scattered
+  through the gamez `fvol*` volumes, and it carries no TUNE constant at all
+  (`docs/formats/fogvol.md`). Both 2026-07-30 symptoms are answered — "puffs at all height levels"
+  was the deleted `BandBelow`/`BandAbove` (120/280 m) + `VertFull`/`VertFade` (200/560 m) margins,
+  which seeded visible puffs across [290 m, 1964 m] of a 2003 m envelope; "not on every map" is
+  authored (C1B/C2/C3 ship no fog volumes and no `cloudsprite*` template). What is left here is
+  (a) the deck mesh's brightness, which `fogvol` never explained, and (b) whether the authored
+  field's density and look match the original at the controls.
+  *Specific thing to judge (b) on:* at a grazing angle the 130 m scatter grid is visible as a faint
+  comb in the cloud sheet — a 10–20 m `perturb_dist_range` on a 130 m `distance` is only ±15 %
+  jitter. That is what the authored numbers produce under the documented grid reading of `distance`
+  (fogvol.md, "What is decoded and what is inferred"); if the original shows no such structure, the
+  reading of `distance` is what to revisit — **not** a new tuning constant.
+  *`CAP-12`* stays owed for the deck-density judgement; film the sprite field only if a difference
+  survives the reader (user's call, 2026-08-05). *Playtest:* `PT-42` ([`playtest.md`](playtest.md)).
+  ⚠ **Trap.** The "~40 units lighter" brightness reading is about the `CloudDeck` **mesh**, a
+  different object from the sprite field — do not read one as evidence for the other.
 
 - `BL-165` `[Feature]` `[Blocked: CAP-13]` **The sun renders no lens flare; the original does.** Confirmed absent: `Launcher.cs:569`
   builds only a plain `DirectionalLight3D` (`Sun`) + a `WorldEnvironment` with no glow/bloom
@@ -1375,28 +1366,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   line/point primitives, and rain streaking along fall-direction-vs-velocity is a documented
   deviation pending an A/B). Needs original rain and snow footage to calibrate — worth a CAP
   when weather work resumes.
-
-- `BL-273` `[Feature]` **`fogvol.zrd` is never read: the ambient cloud field is authored data we replaced with
-  an invented one.** Every chapter ships `extracted/<ch>/zrdr/fogvol.zrd.json` — a fog-volume
-  *clutter* spec scattering the gamez `cloudsprite`/`cloudsprite1`/`cloudsprite2` template nodes,
-  carrying `distance` (the band), `perp_dist_range`/`perturb_dist_range` (scatter and density),
-  `far_fade_range` (fade in/out distances) and `scale_range` (size) — i.e. every knob `BL-118`
-  currently guesses at. It is **entirely unconsumed**: the only repo-wide hits are the eight
-  `extracted/*/zrdr/manifest.json` entries and the files themselves; nothing in `CSVM/src`,
-  `docs/`, or `analysis/` references it. `Clutter.cs` is driven by `interp.json`'s
-  `AddClutterTemplates` (`docs/formats/clutter.md:7-22`), a different path that never reads a zrdr
-  clutter block. Scope: a `fogvol.zrd` reader plus rendering the authored clutter, replacing
-  `CloudPuffs.cs`'s hand-tuned field (`Count 12`, `Radius 620`, `SizeMin/Max 90/200`,
-  `BaseAlpha .06–.13`, `BandBelow/Above 120/280`, `VertFull/Fade 200/560` — all TUNE, all to be
-  deleted, not re-tuned). The per-chapter differences it encodes match what the playtest saw:
-  C1/C4/C5 name two sprite templates, C2/C3 name one, so "single puffs at all heights, but not on
-  every map" (`PT-02`, user, 2026-08-05) is authored behaviour, not our bug. ⚠ **Trap:** the
-  original's picture is *two* things — sparse singles at any altitude **and** a dense layer hugging
-  the deck. One uniform field reproduces neither; do not tune our way to the average.
-  *No capture owed:* the data carries the numbers, and film is only worth taking if a difference
-  survives the reader (user's call, 2026-08-05).
-  *Playtest after fix:* fly C1 and a one-sprite chapter (C2 or C3) at several altitudes and past
-  the deck — the singles should thin with the data, and the deck should carry its own dense layer.
 
 ## Effects & animation runtime
 

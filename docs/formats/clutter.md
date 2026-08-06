@@ -4,6 +4,11 @@ Part of the [format documentation](README.md). Covers how the original populates
 forests/bushes (and city blocks) without a single placed tree node in the gamez.
 Consumed by `CSVM/src/Mech3/Clutter.cs`.
 
+**A second, independent clutter system uses the same template roots**: `fogvol.zrd` scatters
+`cloudsprite1`/`cloudsprite2` through the world's `fvol*` fog volumes, with its own reader-side
+weights and ranges rather than `AddClutterTemplates`. Template-root lookup is shared
+(`ClutterBuilder.FindTemplateRoot`); everything else is separate — see [fogvol.md](fogvol.md).
+
 ## `interp.json` — the engine boot scripts
 
 `interp.zbd` (extracted by `unzbd cs interp`) is a JSON array of scripts

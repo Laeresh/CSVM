@@ -18,5 +18,6 @@ Byte-level fixtures (WAV/ADPCM) are not files at all: they are assembled field b
 | `zrdr/sounds.json` | `sounds.md` | `SETS` flags and value keys, `SOUND_GROUPS` weights and `DYNAMIC_WEIGHTS` recency |
 | `zrdr/targets.json` | `missions.md` | `targets.json` pair-list entries, multi-node entries |
 | `zrdr/demo_anims.json` | `anim-definitions.md` | reader→compiled normalization, the unit conversions, `DAMAGE_SEQUENCE` |
+| `zrdr/fogvol.json` | `fogvol.md` | the fog-volume header keys, a weighted `clutter` block, its two `far_fade_range` bands and the scatter ranges |
 | `gamez-plane/` | `gamez.md`, `markers.md` | node tree parse, the Yxz Euler order, marker rig extraction |
 | `messages.json` | `missions.md` | the message table and its `%1`/`!d!` placeholder grammar |

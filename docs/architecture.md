@@ -39,6 +39,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/WorldBuilder.cs` — builds a chapter world: placed + partition subtrees, cloud deck, camera-anchored skydome, edge extender.
 - `src/Mech3/MapEdgeExtender.cs` — rolling window of mirrored border tiles + clutter continuing the world past the map edge, per camera.
 - `src/Mech3/Clutter.cs` — stamps interp.json clutter templates onto matching-textured terrain: sprites, plus C2/C5's solid 3D city blocks.
+- `src/Mech3/FogVolumes.cs` — the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
 - `src/Mech3/Zrdr.cs` — zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's list.
 - `src/Mech3/Messages.cs` — the game's localized string table: the `messages.json` key→value map behind every `MSG_*` key.
 - `src/Mech3/MarkerRig.cs` — a plane's firepoint/pylon/target rig from planes.zbd: plane-frame positions + co-located mounts; feeds `--dump-markers`.
@@ -114,7 +115,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 
 - `src/Effects/Puffer.cs` — data-driven `PUFFER_STATE` billboard-particle emitter: burst, distance-trail, or sustained at-node modes.
 - `src/Effects/EmitterRenderer.cs` — the `IEmitterRenderer` seam under `Puffer` (particles → GPU) and the real `MultiMesh` + billboard-shader renderer behind it.
-- `src/Effects/CloudPuffs.cs` — synthetic ambient cloud field: one alpha-blended MultiMesh of billboards on the CLOUD_COVER band.
+- `src/Effects/FogVolumeClutter.cs` — the authored ambient cloud field: `fogvol.zrd`'s clutter scattered through the gamez `fvol*` boxes, one static MultiMesh per sprite kind.
 - `src/Effects/Precipitation.cs` — weather.json rain/snow: one camera-following MultiMesh of flakes or streaks, self-animating on the GPU.
 
 ### `src/UI/` — screens, overlays and the inspection labs
@@ -396,7 +397,8 @@ Builds a chapter world (fullbright): World children + partition-referenced subtr
 (`BuildHorizon` makes the camera-anchored skydome, and is the ONE caller that sets
 `SceneBuilder.ForceFogged` — every horizon model in every chapter is authored `fog: false`, and
 honouring that on a dome that is 2.5x scaled ~22 km out would delete the horizon band; its
-`lighting: false` is honoured), `fvol*`, `dzpaths`.
+`lighting: false` is honoured), `fvol*` (`IsFogVolumeNode`, shared with `FogVolumeSpec.VolumesOf`
+so the skipped set and the cloud-scatter set are one list), `dzpaths`.
 `HorizonZonesOf`/`HorizonZones` census the `horizon` node's `zone*` children with the meshed-node
 count each subtree carries — read BEFORE the build, because the zone the dome and the fog share is
 picked from it (`Flight.WeatherState.PreferPopulatedHorizonZone`; three chapters ship a `zone2`
@@ -458,6 +460,10 @@ plus a UV-clamp variant from `SceneBuilder.UvsWithinUnitSquare` over the kind's 
   `_update_shapes()` and clear them; `SharedShapeMeta` on the clutter root anchors them against the GC.
 ⚠ Sprites drop basis + local Y at placement; an upright render is NOT proof the basis is consumed
   (authored bases ≈ identity) — the evidence is docs/formats/clutter.md.
+⚠ `FindTemplateRoot(GameZ, name)` is public and SHARED: the fog-volume cloud field
+  (`Effects/FogVolumeClutter`, driven by a different reader) resolves `cloudsprite*` by the same
+  parentless-Object3d rule. A null return is retail-data-normal — C2B registers three templates
+  its gamez lacks, and C1B/C2/C3's `fogvol.zrd` names a `cloudsprite` no chapter carries.
 ⚠ **`PlaceOnMesh` matches a template to a polygon by TEXTURE NAME ONLY — it never reads
   `GameZPolygon.Subface`.** In C5, `cblock1/2/3`'s subface polygons sit directly on top of
   `cblock4/5/6`'s base polygons (88.5–100% footprint overlap, `analysis/item9-depth-bias/CBLOCK-LOD.md`),
@@ -473,6 +479,25 @@ and `ZrdrDict`, the key/[values…] view over a reader's alternating list.
   in both the zip and directory branches.
 ⚠ `ZrdrDict` COLLAPSES duplicate keys; anim definitions repeat keys meaningfully, so AnimDefs
   walks the raw lists instead.
+⚠ It also DROPS an unkeyed value in the root list. `FogVolumeSpec.Parse` walks by hand for that
+  reason — three chapters' `fogvol.zrd` carries its clutter block with no key in front of it.
+
+## src/Mech3/FogVolumes.cs
+The chapter's `fogvol.zrd` (`FogVolumeSpec.Load`/`Parse`) plus `VolumesOf`, the gamez census of
+`fvol*` boxes — the two halves of the authored ambient cloud field, rendered by
+`Effects/FogVolumeClutter`. Schema, per-chapter values and the decoded/inferred split:
+docs/formats/fogvol.md. Both halves are static over a `GameZ`/reader list, so the pair is testable
+off-engine (`CSVM.Tests/FogVolumeTests.cs` pins all eight chapters).
+⚠ The census shares `WorldBuilder.IsFogVolumeNode` with the world walk's skip rule, so the set
+  excluded from the render and the set filled with clutter cannot drift apart.
+⚠ **Neither half alone says whether a chapter has clouds.** C1B/C2/C3 ship a reader file naming a
+  `cloudsprite` template no gamez carries, AND no `fvol*` node, AND no `clutter` key. The parser
+  deliberately reads their keyless block anyway so the empty result is a proven lookup failure.
+⚠ `fog_zone` (and C5's `fog_color`/`*_fade_dist`) are read and reported, consumed by nothing. It is
+  NOT the sky/fog zone selector — `docs/HISTORY.md`'s "no chapter has a `fog_zone` key" is a wrong
+  negative (five do), but the values do not name a weather zone either; see fogvol.md. `BL-277`'s
+  geometry rule stands.
+⚠ A volume is NOT the `CLOUD_COVER` band: only C1's floor coincides, and C1C/C4/C5 all disagree.
 
 ## src/Mech3/Messages.cs
 The game's localized string table: plain `System.Text.Json` over the extracted `messages.json`
@@ -1488,20 +1513,29 @@ custom data, and the soft-particle depth fade. Reached in a suite by `RecordingE
 ⚠ The blend arrives resolved. `Create` derives additive-vs-mix from the COLORS ramp and the dying
   sprite's luminance; this type holds no state to re-derive it from, so there is no `Auto` here.
 
-## src/Effects/CloudPuffs.cs
-Synthetic ambient cloud field: ONE alpha-blended MultiMesh of cloud1/cloud2 billboards in a
-cylindrical shell around the camera — Y anchored to the CLOUD_COVER band, X/Z following the
-plane, passed puffs recycling to the leading edge, WIND-driven drift, alpha fading at the shell
-edge and by vertical distance. Feel constants all TUNE (`BaseAlpha` kept low — overlaps saturate).
-⚠ Synthetic by design only for DENSITY: the world's own ~600 cloud sprites cluster near the airfield
-  and no zrdr defines an ambient emitter or a puff count/opacity. The vertical EXTENT is not
-  synthetic — `weather.json`'s CLOUD_COVER band is the truth, and the hand-picked `BandBelow`/
-  `BandAbove`/`VertFull`/`VertFade` margins currently span most of the flight envelope instead.
-⚠ The shader keeps `fog_disabled` yet carries the custom `csky_fog_*` cylindrical fog term —
-  that render mode only disables Godot's BUILT-IN fog; ours is custom.
-⚠ `_rng` is a per-field stream off `Rng.Clouds` (one field per splitscreen rig, each independent).
-  Puff *recycling* is camera-position driven, so the draw count is sim state, not a fixed series —
-  identical only when the camera path is.
+## src/Effects/FogVolumeClutter.cs
+The ambient cloud field, ENTIRELY authored (`BL-273`): `fogvol.zrd`'s weighted clutter table
+scattered on a world-origin-anchored X/Z grid of the file's own `distance` period through every
+`fvol*` box the gamez carries, one alpha-blended MultiMesh per sprite kind (two per chapter).
+Templates resolve through `ClutterBuilder.FindTemplateRoot` — the trees' own lookup. Per placement:
+kind by weight, `perturb_dist_range` in the plane at a free bearing, uniform Y in the volume plus
+`perp_dist_range`, size = the card's authored extent × `scale_range`. Schema, per-chapter values
+and the decoded/inferred split: docs/formats/fogvol.md. **This file holds no TUNE constant** — it
+replaced `CloudPuffs`, whose entire field (Count 12, Radius 620, SizeMin/Max, BaseAlpha,
+BandBelow/Above, VertFull/Fade) was hand-tuned because this reader had not been found.
+⚠ Built ONCE, world-anchored, no per-frame hook and NOT per rig — unlike the dome/deck/whiteout,
+  nothing here follows a camera. Splitscreen shares one field; the far fade is evaluated per view
+  inside the shader, which is what makes that correct.
+⚠ The shader collapses a sprite past `far_fade.y` to a degenerate quad (`cull` scales the
+  billboard basis to 0). Without it the whole map's field would rasterize alpha-0 fragments over
+  huge quads every frame; with it, a static MultiMesh needs no streaming at all.
+⚠ Scatter runs once per VOLUME, not once per clutter block. Per block would double the authored
+  density (the block `weight` × node weight is one two-level table); first-volume-wins would drop
+  C1C's twelve stacked build-up boxes and render a flat deck.
+⚠ The cards are authored `fog: false` and carry `far_fade_range` instead, so this shader does NOT
+  fog them — the opposite of `CloudPuffs`, which applied the cylindrical fog term to its puffs.
+⚠ `Rng.Clouds` is drawn in a fixed volume/cell order at build, so the field is a pure function of
+  the master seed — which is what re-pinned seven goldens deterministically.
 
 ## src/Effects/Precipitation.cs
 Rain/snow from weather.json's precip block (`WeatherState.PrecipData`): ONE MultiMesh whose
@@ -1823,8 +1857,10 @@ gutter backdrop, one `SubViewport` pane per player sharing the main `World3D`, p
 
 ## src/Flight/PlayerRig.cs
 One rendered view's state bag: index, camera, optional `SubViewport`, `HudParent`, `VisualLayer`,
-the player's FlightController, and private camera-anchored copies (`Horizon`/`Deck`/`Puffs`/
-`Whiteout`) — those re-anchor to the view's camera every frame, so N players need N of each.
+the player's FlightController, and private camera-anchored copies (`Horizon`/`Deck`/`Whiteout`) —
+those re-anchor to the view's camera every frame, so N players need N of each.
+⚠ The ambient cloud field is deliberately NOT one of them (`BL-273`): the authored fogvol clutter
+  is world-anchored static geometry every pane shares, and the `Puffs` slot went with `CloudPuffs`.
 ⚠ Single player holds exactly one rig wrapping the main-viewport camera with `VisualLayer` 0, so
   every loop over the rigs degenerates to the old single-camera code.
 ⚠ In splitscreen the camera's parent is a `SubViewport`, not a Node3D — local `Position` IS the
@@ -2618,15 +2654,20 @@ a puffer count cannot see whether a template's geometry drew, and the two halves
 
 ## src/Session/WeatherRig.cs
 Loads/applies the flown mission's weather and drives its per-frame rig state: `LoadWeather`/`SetupWeather` become
-`Build`, and the per-rig skydome/whiteout/deck/puff update block from `_Process` becomes `Tick`.
+`Build`, and the per-rig skydome/whiteout/deck update block from `_Process` becomes `Tick`.
 Constructed once per session (`_weatherRig`, same lifetime as `LiveryResolver`/`SpawnPicker`/
 `WorldEffectsFactory`) and discarded with the session node on return-to-menu — its per-rig nodes
 hang under `_worldRoot`, so the `QueueFree` of the session frees them; `_Process`'s `_weatherRig?.Tick`
 null guard covers the frame before that deferred free lands (it can never be null mid-session).
 ⚠ **The horizon (skydome) build loop stays on `GameSession`** — it's a `SceneBuilder` concern, not
   weather state. `Build` takes it as a `buildDomes` callback, invoked between resolving the zone and
-  applying fog/whiteout/puffs/precip, at exactly the point the original inline code ran it — do not
+  applying fog/whiteout/precip, at exactly the point the original inline code ran it — do not
   reorder `Build`'s three steps (zone → domes → setup) relative to each other.
+⚠ **The ambient cloud field is not here** (`BL-273`, 2026-08-06). It is chapter data — `fogvol.zrd`
+  plus the gamez `fvol*` boxes — not mission weather, it is world-anchored rather than per rig, and
+  it needs no `Tick`; `GameSession` builds it beside the world under the same fly/freecam/sky-zone
+  gate. Until then a hand-tuned per-rig `CloudPuffs` lived here, keyed off `CLOUD_COVER`, and
+  `PlayerRig.Puffs` is gone with it. See `Effects/FogVolumeClutter`.
 `Build` also takes the chapter's `WorldBuilder.HorizonZones()` census, because `LoadWeather`
 resolves the rendered zone from BOTH the mission's zone names and the horizon's geometry
 (`BL-277` — see `Flight/Weather.cs`). `_activeZone` is the single answer both the fog and the dome

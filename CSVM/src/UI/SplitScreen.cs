@@ -16,7 +16,7 @@ namespace CSVM.UI;
 /// gutter width is ours; the backdrop rect paints the gutters and the empty 3P quadrant.</para>
 ///
 /// <para><b>Per-player visibility layers.</b> Most of the world is shared geometry every camera
-/// sees. But the skydome, the cloud deck and the ambient cloud puffs are *camera-anchored*
+/// sees. But the skydome, the cloud deck and the whiteout overlay are *camera-anchored*
 /// singletons (GameSession re-centers them on "the camera" each frame) — with several players
 /// they must exist once per player and each camera must see only its own copy. So each player
 /// owns one visual layer out of a reserved band at the top of Godot's 20 (<see cref="PlayerLayerBit0"/>
@@ -74,7 +74,8 @@ public sealed partial class SplitScreen : CanvasLayer
     }
 
     /// <summary>The private visual layer of player <paramref name="index"/> — put that player's
-    /// camera-anchored copies (skydome / cloud deck / cloud puffs) on it.</summary>
+    /// camera-anchored copies (skydome / cloud deck) on it. The ambient cloud field is NOT one of
+    /// them — the authored fogvol clutter is world-anchored and shared (see FogVolumeClutter).</summary>
     public static uint PlayerVisualLayer(int index) => 1u << (PlayerLayerBit0 + index);
 
     /// <summary>Player <paramref name="index"/>'s identity colour (menu cursor, HUD tags).</summary>

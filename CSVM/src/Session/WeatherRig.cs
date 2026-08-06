@@ -10,14 +10,21 @@ namespace CSVM.Session;
 
 /// <summary>Loads and applies the flown mission's weather, and drives its per-frame rig state
 /// (PLAN-planeviewer-split A5, moved verbatim off <c>GameSession</c>): <c>LoadWeather</c> +
-/// <c>SetupWeather</c> become <see cref="Build"/>, and the per-rig skydome/whiteout/deck/puff
+/// <c>SetupWeather</c> become <see cref="Build"/>, and the per-rig skydome/whiteout/deck
 /// update block from <c>_Process</c> becomes <see cref="Tick"/>. Constructed once per session
 /// (<c>_weatherRig</c> in <c>GameSession.StartSession</c>, same lifetime as
 /// <see cref="LiveryResolver"/>/<see cref="SpawnPicker"/>/<see cref="WorldEffectsFactory"/>).
 /// The horizon (skydome) build loop itself stays on <c>GameSession</c> — it is a
 /// <c>SceneBuilder</c> concern, not weather state — so <see cref="Build"/> takes it as a callback
-/// invoked between the zone resolving and the fog/whiteout/puffs/precip setup, at exactly the
-/// point the original code ran it.</summary>
+/// invoked between the zone resolving and the fog/whiteout/precip setup, at exactly the
+/// point the original code ran it.
+///
+/// <para>⚠ The ambient cloud field is <b>not</b> weather state and is not built here. It is the
+/// chapter's authored <c>fogvol.zrd</c> clutter scattered through its <c>fvol*</c> volumes —
+/// gamez + chapter-zrdr data, world-anchored and shared by every pane — built beside the world in
+/// <c>GameSession</c> (<see cref="CSVM.Effects.FogVolumeClutter"/>, <c>BL-273</c>). Until
+/// 2026-08-06 a hand-tuned per-rig <c>CloudPuffs</c> field lived here, keyed off
+/// <c>CLOUD_COVER</c>, because that reader had not been found.</para></summary>
 public sealed class WeatherRig
 {
     private static readonly Color WhiteoutColor = new(0.95f, 0.95f, 0.96f);
@@ -39,14 +46,14 @@ public sealed class WeatherRig
 
     /// <summary>Loads the mission's weather.json and resolves the rendered zone, builds the
     /// per-rig domes via <paramref name="buildDomes"/> (needs the resolved zone), then applies
-    /// fog + whiteout + puffs + precipitation — the same order <c>StartSession</c> ran before the
+    /// fog + whiteout + precipitation — the same order <c>StartSession</c> ran before the
     /// move.</summary>
-    public void Build(string missionZrdrPath, IReadOnlyList<PlayerRig> rigs, TextureArchive textures,
+    public void Build(string missionZrdrPath, IReadOnlyList<PlayerRig> rigs,
         IReadOnlyList<HorizonZone> horizonZones, Action<string> buildDomes)
     {
         LoadWeather(missionZrdrPath, horizonZones);
         buildDomes(_activeZone);
-        SetupWeather(rigs, textures);
+        SetupWeather(rigs);
     }
 
     /// <summary>The deck geometry's original AABB centre, so <see cref="Tick"/> can re-anchor it
@@ -57,9 +64,10 @@ public sealed class WeatherRig
 
     /// <summary>Everything anchored to *a* camera, once per rig — one in single player, one per
     /// pane in splitscreen (each on that player's own visual layer): re-centers the skydome,
-    /// fades the cloud-band whiteout, re-anchors the cloud deck, and advances the ambient puffs.
-    /// Moved verbatim off <c>GameSession._Process</c>.</summary>
-    public void Tick(IReadOnlyList<PlayerRig> rigs, float dt)
+    /// fades the cloud-band whiteout and re-anchors the cloud deck. Moved verbatim off
+    /// <c>GameSession._Process</c>; the ambient-puff advance it also carried went with
+    /// <c>CloudPuffs</c> (the authored field is static geometry and needs no frame hook).</summary>
+    public void Tick(IReadOnlyList<PlayerRig> rigs)
     {
         foreach (var rig in rigs)
         {
@@ -95,11 +103,6 @@ public sealed class WeatherRig
                     mid - _deckCenter.Y,
                     camPos.Z - _deckCenter.Z);
             }
-
-            // Ambient cloud puffs: keep the drifting field around the plane (world-anchored,
-            // recycled at the shell edge — see CloudPuffs). Forward is the camera's -Z look dir,
-            // so fresh puffs spawn ahead and the plane flies into them.
-            rig.Puffs?.Update(dt, camPos, -rig.Camera.GlobalTransform.Basis.Z);
         }
     }
 
@@ -155,7 +158,7 @@ public sealed class WeatherRig
     /// full-screen cloud-band whiteout overlay (its opacity is driven each frame from the camera
     /// altitude in <see cref="Tick"/>). No-op if the mission has no weather.json — the fog
     /// globals keep their registered no-op range. Call <see cref="LoadWeather"/> first.</summary>
-    private void SetupWeather(IReadOnlyList<PlayerRig> rigs, TextureArchive textures)
+    private void SetupWeather(IReadOnlyList<PlayerRig> rigs)
     {
         if (_weather == null)
             return;
@@ -204,9 +207,10 @@ public sealed class WeatherRig
 
         if (_weather.HasCloudBand)
         {
-            // Both of these follow *a* camera, so each rig gets its own: in splitscreen
-            // the overlay must dim only the pane whose player is inside the cloud, and the puff
-            // field must sit around that player.
+            // The whiteout overlay follows *a* camera, so each rig gets its own: in splitscreen
+            // it must dim only the pane whose player is inside the cloud. (The ambient cloud
+            // field is NOT here — it is world-anchored authored geometry every pane shares, built
+            // with the world; see Effects/FogVolumeClutter.)
             foreach (var rig in rigs)
             {
                 // A pane-filling overlay so the whiteout swallows everything (terrain, plane,
@@ -220,21 +224,6 @@ public sealed class WeatherRig
                 rig.Whiteout.SetAnchorsPreset(Control.LayoutPreset.FullRect);
                 canvas.AddChild(rig.Whiteout);
                 rig.HudParent.AddChild(canvas);
-
-                // Ambient cloud puffs: the soft wisps that drift past the plane at altitude
-                // (OriginalScreenshots/"C1 IA1 Cloud Puffs and Moon.png"). A hand-tuned field
-                // gated to the cloud band and drifting with the weather WIND; Tick advances it
-                // each frame from the camera. Added at world identity (its instance positions are
-                // absolute world coords).
-                rig.Puffs = CloudPuffs.Create(textures, _weather.WindStatic,
-                    _weather.CloudBottom, _weather.CloudTop);
-                if (rig.Puffs == null)
-                    continue;
-                if (rig.VisualLayer != 0)
-                    SplitScreen.SetVisualLayer(rig.Puffs, rig.VisualLayer);
-                _worldRoot.AddChild(rig.Puffs);
-                if (rig.Index == 0)
-                    GD.Print("cloud puffs: ambient field active over the cloud band");
             }
         }
 

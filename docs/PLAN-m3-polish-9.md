@@ -80,7 +80,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 7. ☑ `BL-262` Stage `ballflare.flt` and `apassengers`; re-pin what moves
 8. ☑ `BL-257` Census the no-`RUN_TIME`/no-`BOUNCE_SEQUENCE` launch shape; make the zeppelin's eight parts fly
 9. ☑ `BL-277` Select the sky/fog zone per chapter instead of hard-coding `zone2`
-10. ☐ `BL-273` Read `fogvol.zrd` and render the authored cloud field, deleting `CloudPuffs`' invented one
+10. ☑ `BL-273` Read `fogvol.zrd` and render the authored cloud field, deleting `CloudPuffs`' invented one
 
 ## Dependency and parallelism notes
 
@@ -338,7 +338,7 @@ a lookup. `BL-036`'s guess-what-to-hide prohibition is about *geometry* — pick
 whose dome is demonstrably empty is not that, but don't let this item grow into hiding zone
 geometry.
 
-## C10 ☐ `BL-273` `fogvol.zrd` is never read — the ambient cloud field is invented
+## C10 ☑ `BL-273` `fogvol.zrd` is never read — the ambient cloud field is invented
 
 **Goal.** The ambient cloud field renders the authored `fogvol.zrd` clutter — per-chapter sprite
 templates, band, scatter, fades and sizes — and `CloudPuffs.cs`'s hand-tuned field is deleted, not

@@ -476,7 +476,14 @@ public sealed class WorldBuilder
     internal static bool SkipWorldNode(GameZNode n) =>
         n.Name.Equals("horizon", StringComparison.OrdinalIgnoreCase)
         || n.Name.Equals("dzpaths", StringComparison.OrdinalIgnoreCase)
-        || n.Name.StartsWith("fvol", StringComparison.OrdinalIgnoreCase);
+        || IsFogVolumeNode(n);
+
+    /// <summary>A <c>fvol1</c>…<c>fvol34</c> fog-volume node: an invisible box the world walk
+    /// skips (above) and <see cref="FogVolumeSpec.VolumesOf"/> measures. One predicate for both,
+    /// so the set that is excluded from the render and the set that is filled with cloud clutter
+    /// can never drift apart.</summary>
+    internal static bool IsFogVolumeNode(GameZNode n) =>
+        n.Name.StartsWith("fvol", StringComparison.OrdinalIgnoreCase);
 
     // Non-scenery world content: 'horizon' is the original skydome (built separately via
     // BuildHorizon — as part of the world it would swallow the scene), 'fvol1'..'fvol9'

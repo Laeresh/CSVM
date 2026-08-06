@@ -273,8 +273,10 @@ The whiteout band (a vertical altitude band the plane vanishes inside), bare-sca
 ## Wind (`WIND`)
 
 Bare-scalar block: `STATIC_VELOCITY [x,y,z]` (steady wind m/s) + `RANDOM_MAX_SPEED` /
-`RANDOM_ACCEL` (random-gust bounds). Parsed in full; drives the ambient cloud-puff drift
-(see `CloudPuffs.cs`).
+`RANDOM_ACCEL` (random-gust bounds). Parsed in full and **currently unconsumed**: it used to drive
+the drift of the hand-tuned `CloudPuffs` field, which the authored `fogvol.zrd` clutter replaced
+on 2026-08-06 (`BL-273`, [fogvol.md](fogvol.md)) — that field is static world geometry and the
+reader says nothing about wind moving it.
 
 ## Precipitation (the item-5 decode, 2026-07-18)
 

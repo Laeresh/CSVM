@@ -1,0 +1,422 @@
+using System;
+using System.Collections.Generic;
+using CSVM.Mech3;
+using CSVM.Utils;
+using Godot;
+
+namespace CSVM.Effects;
+
+/// <summary>
+/// The original's ambient cloud field: the chapter's own <c>zrdr/fogvol.zrd</c> clutter table
+/// scattered through the <c>fvol*</c> boxes its gamez authors — the wisps the plane flies through
+/// at the overcast (see <c>OriginalScreenshots/C1 IA1 Cloud Puffs and Moon.png</c>). Schema, the
+/// per-chapter numbers and the decoded/undecoded split: docs/formats/fogvol.md.
+///
+/// <para><b>Everything here comes off disk.</b> Which sprite templates
+/// (<c>cloudsprite1</c>/<c>cloudsprite2</c>, resolved as gamez clutter template roots by
+/// <see cref="ClutterBuilder.FindTemplateRoot"/>, the same lookup the trees use), their relative
+/// weights, the scatter period (<c>distance</c>), the per-placement jitter
+/// (<c>perturb_dist_range</c> in the plane, <c>perp_dist_range</c> vertically), the size
+/// multiplier (<c>scale_range</c>), the draw distance (<c>far_fade_range</c>) and the altitude
+/// band (the <c>fvol*</c> boxes' own geometry) are all authored. The sprite's size, texture,
+/// billboard mode and its <c>lighting</c>/<c>fog</c> render flags come from the gamez model. This
+/// class holds <b>no TUNE constant</b> — it replaced <c>CloudPuffs</c>, whose whole field (count,
+/// radius, size, opacity, band margins, vertical fades) was hand-tuned because this reader had not
+/// been found (<c>BL-273</c>).</para>
+///
+/// <para><b>Model — world-anchored, built once, zero per-frame cost.</b> The field is static
+/// geometry, not a camera-following pool: the volumes are fixed boxes and the grid is anchored on
+/// the world origin, so every placement is decided at load and nothing recycles. One
+/// <see cref="MultiMeshInstance3D"/> per sprite kind (two draw calls in every shipped chapter); a
+/// spatial shader billboards each quad toward the camera, fades it out over the authored
+/// <c>far_fade_range</c> and collapses it to a degenerate quad past the far end, so a sprite
+/// outside its draw distance costs no fragments. That is also why it is ONE field shared by every
+/// splitscreen pane rather than a copy each — nothing about it is anchored to a camera, and the
+/// fade is evaluated per view inside the shader.</para>
+///
+/// <para><b>Three chapters render nothing, and that is the data.</b> C1B, C2 and C3 ship no
+/// <c>fvol*</c> node, no <c>cloudsprite*</c> template, and a degenerate <c>fogvol.zrd</c> whose
+/// clutter block has lost its <c>clutter</c> key and names a <c>cloudsprite</c> that exists in no
+/// chapter's gamez. Their ambient sky is the world's own placed <c>cloudparent</c> sprites (C1B
+/// has 70; C2 and C3 have none) — which is the "singles at all heights, but not on every map" the
+/// playtest saw, and it is drawn by the ordinary world build, not here.</para>
+/// </summary>
+public sealed partial class FogVolumeClutter : Node3D
+{
+    // A runaway guard, not a tuning knob: the shipped chapters place 8.9k-19k sprites, so this is
+    // several times the largest real field. It can only bind if a future extraction reports a
+    // `distance` near zero or a volume far larger than a map, both of which should be seen rather
+    // than swallowed.
+    private const int MaxPlacements = 80_000;
+
+    /// <summary>Sprites placed, summed over every kind. Zero means nothing was built and
+    /// <see cref="Create"/> returned null.</summary>
+    public int InstanceCount { get; private set; }
+
+    /// <summary>Per-kind counts of the build, e.g. "cloudsprite1 x4471 (cloud1.tif, fade
+    /// 3100-3500 m)" — the evidence that the authored weights and fades reached the field.</summary>
+    public string Summary { get; private set; } = "";
+
+    /// <summary>Builds the chapter's ambient cloud field, or null when the data asks for none:
+    /// no <c>fogvol.zrd</c>, no <c>fvol*</c> volume, no resolvable template, or a
+    /// <c>distance</c> that is not a usable grid period. Add the result to the world root at
+    /// identity — its instance transforms are absolute world coordinates.</summary>
+    public static FogVolumeClutter? Create(GameZ gamez, TextureArchive textures,
+        FogVolumeSpec? spec, IReadOnlyList<FogVolumeBox> volumes)
+    {
+        if (spec == null)
+        {
+            return null;
+        }
+        if (volumes.Count == 0 || spec.Clutter.Count == 0)
+        {
+            // Said out loud: "this chapter has no ambient clouds" is a conclusion drawn from
+            // separate absences, and a silent one reads exactly like a reader that broke.
+            Log.Info("world", $"fogvol: no ambient cloud field volumes={volumes.Count} clutter={spec.Clutter.Count} clutter_key={spec.HasClutterKey}");
+            return null;
+        }
+        if (spec.Distance < 1f)
+        {
+            Log.Info("world", $"fogvol: unusable scatter period distance={spec.Distance}");
+            return null;
+        }
+
+        var kinds = ResolveKinds(gamez, textures, spec);
+        if (kinds.Count == 0)
+        {
+            return null;
+        }
+
+        var field = new FogVolumeClutter();
+        field.Scatter(spec, volumes, kinds);
+        if (field.InstanceCount == 0)
+        {
+            field.QueueFree();
+            return null;
+        }
+        field.Build(gamez, kinds);
+        return field;
+    }
+
+    // The gamez side of one clutter alternative: the sprite card its template root carries.
+    // Resolved by ClutterBuilder's own template rule — a parentless Object3d of that name whose
+    // first meshed descendant is the card (docs/formats/clutter.md).
+    private static List<Kind> ResolveKinds(GameZ gamez, TextureArchive textures, FogVolumeSpec spec)
+    {
+        var kinds = new List<Kind>();
+        foreach (var block in spec.Clutter)
+        {
+            foreach (var reference in block.Nodes)
+            {
+                var root = ClutterBuilder.FindTemplateRoot(gamez, reference.Node);
+                var card = root == null ? null : FirstWithMesh(gamez, root);
+                if (card == null)
+                {
+                    // Retail-data-normal for C1B/C2/C3 — see the class remarks.
+                    Log.Info("world", $"fogvol clutter template not in gamez template={reference.Node}");
+                    continue;
+                }
+                var mesh = gamez.Meshes[card.MeshIndex];
+                var texture = FirstTexture(gamez, mesh);
+                kinds.Add(new Kind
+                {
+                    Name = reference.Node,
+                    Block = block,
+                    Weight = block.Weight * reference.Weight,
+                    MeshIndex = card.MeshIndex,
+                    Texture = texture == null ? null : textures.Find(texture),
+                    TextureName = texture ?? "?",
+                    Lit = mesh.Lighting,
+                    Fogged = mesh.Fog,
+                    Radius = CardRadius(mesh),
+                });
+            }
+        }
+        return kinds;
+    }
+
+    private static GameZNode? FirstWithMesh(GameZ gamez, GameZNode node)
+    {
+        if (node.MeshIndex >= 0 && node.MeshIndex < gamez.Meshes.Count
+            && gamez.Meshes[node.MeshIndex].Polygons.Count > 0)
+        {
+            return node;
+        }
+        foreach (var childIndex in node.Children)
+        {
+            if (childIndex >= 0 && childIndex < gamez.Nodes.Count
+                && FirstWithMesh(gamez, gamez.Nodes[childIndex]) is { } found)
+            {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    private static string? FirstTexture(GameZ gamez, GameZMesh mesh)
+    {
+        foreach (var poly in mesh.Polygons)
+        {
+            if (poly.MaterialIndex >= 0 && poly.MaterialIndex < gamez.Materials.Count
+                && gamez.Materials[poly.MaterialIndex].TextureName is { } tex)
+            {
+                return tex;
+            }
+        }
+        return null;
+    }
+
+    // Half the card's largest local extent — what the billboard can swing outside the MultiMesh's
+    // static AABB, so it sizes ExtraCullMargin.
+    private static float CardRadius(GameZMesh mesh)
+    {
+        float radius = 0f;
+        foreach (var v in mesh.Vertices)
+        {
+            radius = Mathf.Max(radius, Mathf.Max(Mathf.Abs(v.X), Mathf.Max(Mathf.Abs(v.Y), Mathf.Abs(v.Z))));
+        }
+        return radius;
+    }
+
+    private static float Lerp(Vector2 range, float t) => range.X + ((range.Y - range.X) * t);
+
+    // The card's own source geometry (verts, UVs and the authored vertex colours), triangulated by
+    // the same fan/strip rule as SceneBuilder.EmitPolygon — the cloud cards are tri-strips.
+    // Recentred on the quad's centroid so the billboard pivots at its middle, like the placed cloud
+    // sprites (SceneBuilder recenters those the same way); the shipped cards are already centred to
+    // within 3 mm, so this moves nothing in this install and keeps a future one honest.
+    private static ArrayMesh BuildCardMesh(GameZ gamez, int meshIndex)
+    {
+        var mesh = gamez.Meshes[meshIndex];
+        var centre = Vector3.Zero;
+        foreach (var v in mesh.Vertices)
+        {
+            centre += v;
+        }
+        if (mesh.Vertices.Count > 0)
+        {
+            centre /= mesh.Vertices.Count;
+        }
+
+        var st = new SurfaceTool();
+        st.Begin(Mesh.PrimitiveType.Triangles);
+        foreach (var poly in mesh.Polygons)
+        {
+            int n = poly.VertexIndices.Count;
+            int first = poly.TriangleStrip ? 0 : 1;
+            int last = poly.TriangleStrip ? n - 3 : n - 2;
+            for (int i = first; i <= last; i++)
+            {
+                Span<int> corners = poly.TriangleStrip
+                    ? stackalloc int[] { i, i + 1, i + 2 }
+                    : stackalloc int[] { 0, i, i + 1 };
+                foreach (int corner in corners)
+                {
+                    st.SetNormal(Vector3.Back);
+                    st.SetColor(poly.VertexColors != null && corner < poly.VertexColors.Count
+                        ? poly.VertexColors[corner]
+                        : Colors.White);
+                    if (poly.UvCoords != null && corner < poly.UvCoords.Count)
+                    {
+                        st.SetUV(poly.UvCoords[corner]);
+                    }
+                    st.AddVertex(mesh.Vertices[poly.VertexIndices[corner]] - centre);
+                }
+            }
+        }
+        var arrayMesh = new ArrayMesh();
+        st.Commit(arrayMesh);
+        return arrayMesh;
+    }
+
+    // Camera-facing billboard keeping the instance scale (the same hand-rolled billboard as
+    // SceneBuilder's cloud-sprite shader — a MultiMesh cannot use Godot's billboard flag), plus
+    // the authored far fade. `cull` collapses the quad to a point past the fade's far end, so a
+    // sprite outside its draw distance is discarded before rasterization rather than costing a
+    // screenful of alpha-0 fragments — which is what lets the whole map's field be one static
+    // MultiMesh with no streaming. The fade distance is the true 3D one, not the fog's horizontal
+    // cylinder: this is the sprite's own LOD range, and a cloud directly overhead is as far away
+    // as one on the horizon.
+    private static string ShaderCode(bool lit, bool fogged)
+    {
+        string light = lit ? " * csky_world_light" : string.Empty;
+        string albedo = fogged
+            ? "    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;\n"
+              + "    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);\n"
+              + $"    ALBEDO = mix(col.rgb{light}, csky_fog_color, fog_amt);"
+            : $"    ALBEDO = col.rgb{light};";
+        return $$"""
+            shader_type spatial;
+            render_mode blend_mix, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
+
+            uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_disable;
+            uniform vec2 far_fade = vec2(1e8, 1e9);  // metres: alpha 1 below x, 0 at y
+
+            #include "res://shaders/csky_atmosphere.gdshaderinc"
+            #include "res://shaders/csky_srgb.gdshaderinc"
+
+            varying flat float v_alpha;
+
+            void vertex() {
+                vec3 origin = MODEL_MATRIX[3].xyz;
+                float d = distance(origin, CAMERA_POSITION_WORLD);
+                v_alpha = 1.0 - smoothstep(far_fade.x, far_fade.y, d);
+                float cull = step(d, far_fade.y);
+                MODELVIEW_MATRIX = VIEW_MATRIX * mat4(
+                    INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
+                MODELVIEW_MATRIX[0] *= length(MODEL_MATRIX[0].xyz) * cull;
+                MODELVIEW_MATRIX[1] *= length(MODEL_MATRIX[1].xyz) * cull;
+                MODELVIEW_MATRIX[2] *= length(MODEL_MATRIX[2].xyz);
+            }
+
+            void fragment() {
+                vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * texture(albedo_tex, UV);
+            {{albedo}}
+                ALPHA = col.a * v_alpha;
+            }
+            """;
+    }
+
+    // The scatter itself: each volume filled on a world-anchored X/Z grid of the authored period,
+    // one placement per cell drawn from the weighted clutter table.
+    //
+    // ⚠ ONE pass per VOLUME, not per clutter block. The blocks carry a `weight` and their `nodes`
+    // lists carry weights of their own, which is a two-level weighted table — running the grid
+    // once per block instead would double the authored density and stack cloudsprite1 on
+    // cloudsprite2 in every cell. See docs/formats/fogvol.md for the density this reading produces
+    // (C1: one sprite-area of cover per unit of layer, i.e. an overcast exactly one sprite deep).
+    //
+    // ⚠ Per volume, and overlapping volumes each get their own fill. C1C is why: its fvol1-9 tile
+    // the whole map at 971-1091 m, and fvol10-23 are twelve smaller boxes sitting ON TOP of that
+    // footprint, reaching 1391-1688 m. Taking only the first containing volume per cell drops all
+    // twelve — the authored build-ups over specific places — and renders a flat deck instead.
+    // The grid is anchored on the world origin (not on each box), so a cell shared by two volumes
+    // is the same X/Z in both and the stack is vertical, as authored.
+    private void Scatter(FogVolumeSpec spec, IReadOnlyList<FogVolumeBox> volumes, List<Kind> kinds)
+    {
+        Name = "fog_volume_clutter";
+        float period = spec.Distance;
+        float totalWeight = 0f;
+        foreach (var kind in kinds)
+        {
+            totalWeight += Mathf.Max(kind.Weight, 0f);
+        }
+        if (totalWeight <= 0f)
+        {
+            return;
+        }
+
+        // One draw sequence off the master seed's cloud stream, in a fixed volume/cell order, so
+        // the whole field is a function of the seed — which is what makes a cloud shot reproducible.
+        var rng = Rng.NewSystemRandom(Rng.Clouds);
+        float Rand(float a, float b) => a + ((float)rng.NextDouble() * (b - a));
+
+        foreach (var volume in volumes)
+        {
+            var box = volume.Box;
+            int gx0 = Mathf.CeilToInt(box.Position.X / period), gx1 = Mathf.FloorToInt(box.End.X / period);
+            int gz0 = Mathf.CeilToInt(box.Position.Z / period), gz1 = Mathf.FloorToInt(box.End.Z / period);
+            for (int gx = gx0; gx <= gx1 && InstanceCount < MaxPlacements; gx++)
+            {
+                for (int gz = gz0; gz <= gz1 && InstanceCount < MaxPlacements; gz++)
+                {
+                    float x = gx * period, z = gz * period;
+
+                    // Weighted draw over the whole table (block weight x node weight).
+                    float pick = Rand(0f, totalWeight);
+                    var kind = kinds[kinds.Count - 1];
+                    foreach (var candidate in kinds)
+                    {
+                        pick -= Mathf.Max(candidate.Weight, 0f);
+                        if (pick <= 0f)
+                        {
+                            kind = candidate;
+                            break;
+                        }
+                    }
+
+                    // In-plane perturbation off the grid point: an authored distance at a free
+                    // bearing. A placement can therefore sit up to perturb_dist_range.y outside
+                    // its own volume's wall, which is what a perturbation means — the volume
+                    // bounds the field, it does not clip each sprite.
+                    var block = kind.Block;
+                    float bearing = Rand(0f, Mathf.Tau);
+                    float perturb = Lerp(block.PerturbDistRange, (float)rng.NextDouble());
+                    float y = Rand(box.Position.Y, box.End.Y)
+                              + Lerp(block.PerpDistRange, (float)rng.NextDouble());
+                    float scale = Lerp(block.ScaleRange, (float)rng.NextDouble());
+                    kind.Placements.Add(new Transform3D(
+                        Basis.Identity.Scaled(new Vector3(scale, scale, scale)),
+                        new Vector3(
+                            x + (Mathf.Sin(bearing) * perturb),
+                            y,
+                            z + (Mathf.Cos(bearing) * perturb))));
+                    InstanceCount++;
+                }
+            }
+        }
+    }
+
+    private void Build(GameZ gamez, List<Kind> kinds)
+    {
+        var parts = new List<string>();
+        var meshCache = new Dictionary<int, ArrayMesh>();
+        foreach (var kind in kinds)
+        {
+            if (kind.Placements.Count == 0)
+            {
+                continue;
+            }
+            if (!meshCache.TryGetValue(kind.MeshIndex, out var mesh))
+            {
+                meshCache[kind.MeshIndex] = mesh = BuildCardMesh(gamez, kind.MeshIndex);
+            }
+            var mat = new ShaderMaterial { Shader = new Shader { Code = ShaderCode(kind.Lit, kind.Fogged) } };
+            if (kind.Texture != null)
+            {
+                mat.SetShaderParameter("albedo_tex", kind.Texture);
+            }
+            mat.SetShaderParameter("far_fade", kind.Block.FarFade);
+
+            var mm = new MultiMesh
+            {
+                TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+                Mesh = mesh,
+                InstanceCount = kind.Placements.Count,
+            };
+            for (int i = 0; i < kind.Placements.Count; i++)
+            {
+                mm.SetInstanceTransform(i, kind.Placements[i]);
+            }
+            AddChild(new MultiMeshInstance3D
+            {
+                Multimesh = mm,
+                MaterialOverride = mat,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                // The billboard swings vertices outside the instances' static AABB.
+                ExtraCullMargin = kind.Radius * Mathf.Max(kind.Block.ScaleRange.Y, 1f),
+                Name = kind.Name,
+            });
+            parts.Add($"{kind.Name} x{kind.Placements.Count} ({kind.TextureName}, "
+                      + $"fade {kind.Block.FarFade.X:0}-{kind.Block.FarFade.Y:0} m)");
+        }
+        Summary = string.Join(", ", parts);
+    }
+
+    // One alternative of the resolved scatter table: a clutter block paired with one of the
+    // template nodes it names, and everything the gamez says about that node's sprite card.
+    private sealed class Kind
+    {
+        public readonly List<Transform3D> Placements = new();
+
+        public string Name = "";
+        public FogClutter Block = null!;
+        public float Weight;
+        public int MeshIndex;
+        public ImageTexture? Texture;
+        public string TextureName = "";
+        public bool Lit = true;
+        public bool Fogged = true;
+        public float Radius;
+    }
+}

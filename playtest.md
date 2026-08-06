@@ -126,6 +126,32 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 
 ## 1 · Actionable now (`PT-nn`)
 
+### C1 · Bloodhawk — climbing through the overcast
+
+```powershell
+./RunGame.ps1 --plane=player_bhawk --chapter=C1
+```
+
+- `PT-42` `[A/B: OriginalScreenshots/C1 IA1 Cloud Puffs and Moon.png]` **The `fogvol.zrd` cloud
+  field (C10 / `BL-273` landed 2026-08-06).** The hand-tuned `CloudPuffs` field is deleted; what
+  draws now is the chapter's own clutter table scattered through its `fvol*` volumes, with no
+  tuning constant anywhere in it ([`docs/formats/fogvol.md`](docs/formats/fogvol.md)). C1 places
+  9,025 sprites in a 120 m slab at 970–1090 m — climb to ~3,500 ft and back down through it.
+  *Look for:*
+  - (a) does it read as a real overcast with depth — base, interior, tops — or as a flat sheet;
+  - (b) **the grid.** At a grazing angle the 130 m scatter lattice shows as a faint comb. If the
+    original has no such structure that is evidence against the reading of `distance`, and the fix
+    is in fogvol.md's inference list — *not* a new tuning constant;
+  - (c) density and opacity against the reference shot;
+  - (d) C1B, C2 and C3 must show **no** ambient field at all — they ship no fog volumes. C1B still
+    has its 70 placed `cloudparent` sprites; C2 and C3 have nothing. That is the data, not a
+    regression.
+
+  *Blocks:* `BL-118`'s reopened density judgement is exactly this; `CAP-12` stays owed for the
+  cloud **deck** brightness, which is a different object.
+  *Variations:* `--chapter=C1C` for the twelve authored build-up towers above the deck, and
+  `--chapter=C5` at street level for its low night haze between the skyscrapers.
+
 ### C1 · Devastator — strafing terrain
 
 ```powershell

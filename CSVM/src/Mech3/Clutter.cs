@@ -176,6 +176,29 @@ public sealed class ClutterBuilder
         return names;
     }
 
+    /// <summary>Template roots are parentless (they hang off nothing; the boot script
+    /// LoadGameGen's them by name), so only match nodes no other node lists as a child — the
+    /// world also contains unrelated same-named leaf nodes (g4/g5 …). Null when the gamez ships
+    /// no such root, which is retail-data-normal: C2B registers three templates it does not
+    /// carry, and C1B/C2/C3's <c>fogvol.zrd</c> names a <c>cloudsprite</c> no chapter carries.
+    ///
+    /// <para>Static and shared, because the fog-volume cloud clutter
+    /// (<see cref="CSVM.Effects.FogVolumeClutter"/>) resolves its templates by exactly this rule
+    /// from a different reader — one lookup, so the two cannot diverge.</para></summary>
+    public static GameZNode? FindTemplateRoot(GameZ gamez, string name)
+    {
+        var isChild = new bool[gamez.Nodes.Count];
+        foreach (var n in gamez.Nodes)
+            foreach (var c in n.Children)
+                if (c >= 0 && c < isChild.Length)
+                    isChild[c] = true;
+        foreach (var n in gamez.Nodes)
+            if (!isChild[n.Index] && n.Kind == "Object3d"
+                && string.Equals(n.Name, name, StringComparison.OrdinalIgnoreCase))
+                return n;
+        return null;
+    }
+
     // Any billboard kind counts as a placeable card: C1's trees/bushes are CylindricalY, and
     // C5's cblock templates additionally carry SphericalY `poleflare` glows beside their
     // CylindricalY `lightpole` posts. Both are one-quad cards and both are placed, which is
@@ -252,6 +275,12 @@ public sealed class ClutterBuilder
         return InstanceCount == 0 && SolidCount == 0 ? null : root;
     }
 
+    /// <summary>Template roots are parentless (they hang off nothing; the boot script
+    /// LoadGameGen's them by name), so only match nodes no other node lists as a child — the
+    /// world also contains unrelated same-named leaf nodes (g4/g5 …). Null when the gamez ships
+    /// no such root, which is retail-data-normal: C2B registers three templates it does not
+    /// carry, and C1B/C2/C3's <c>fogvol.zrd</c> names a <c>cloudsprite</c> no chapter carries.
+    ///
     private static bool IsSpriteCard(GameZMesh mesh)
     {
         if (SceneBuilder.ClassifyBillboard(mesh) is { } kind)
@@ -501,22 +530,8 @@ public sealed class ClutterBuilder
         return template.Kinds.Count > 0 ? template : null;
     }
 
-    // Template roots are parentless (they hang off nothing; the boot script LoadGameGen's
-    // them by name), so only match nodes no other node lists as a child — the world also
-    // contains unrelated same-named leaf nodes (g4/g5 …).
-    private GameZNode? FindTemplateRoot(string name)
-    {
-        var isChild = new bool[_gamez.Nodes.Count];
-        foreach (var n in _gamez.Nodes)
-            foreach (var c in n.Children)
-                if (c >= 0 && c < isChild.Length)
-                    isChild[c] = true;
-        foreach (var n in _gamez.Nodes)
-            if (!isChild[n.Index] && n.Kind == "Object3d"
-                && string.Equals(n.Name, name, StringComparison.OrdinalIgnoreCase))
-                return n;
-        return null;
-    }
+    /// <inheritdoc cref="FindTemplateRoot(GameZ, string)"/>
+    private GameZNode? FindTemplateRoot(string name) => FindTemplateRoot(_gamez, name);
 
     private GameZNode? FirstWithMesh(GameZNode node, bool includeSelf = true)
     {

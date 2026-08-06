@@ -1529,7 +1529,7 @@ void fragment() {{");
         sb.AppendLine(@"
 void vertex() {
     // Camera-facing billboard keeping the instance scale (Godot's billboard_keep_scale, by
-    // hand — the bias shader can't billboard, like CloudPuffs). The mesh was recentered on its
+    // hand — the bias shader can't billboard, like FogVolumeClutter). The mesh was recentered on its
     // quad centre and the instance placed there, so the quad pivots at its centre.
     MODELVIEW_MATRIX = VIEW_MATRIX * mat4(
         INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);

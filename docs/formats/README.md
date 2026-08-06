@@ -34,6 +34,7 @@ the original game (screenshots, videos, in-game measurements) — no exe decompi
 | [weapon-effects.md](weapon-effects.md) | The muzzle/flyout/impact effect readers (`muzzle_burst`, `gunhit`, the `*_control` ordnance bursts) and the gamez projectile prototype roots the weapon bindings resolve to |
 | [interp.md](interp.md) | `interp.zbd` boot scripts (`.gw`): the command format, and the **per-mission world setup** that decides which entities a mission shows (zeppelins, CTF props) |
 | [clutter.md](clutter.md) | The clutter system: `interp.json` boot scripts, `AddClutterTemplates`, template subtree shape |
+| [fogvol.md](fogvol.md) | Fog volumes: `fogvol.zrd`'s clutter table + the gamez `fvol*` boxes — the authored ambient cloud field, and the three chapters that render none |
 | [hud.md](hud.md) | HUD: the compass tape textures + drum projection, the cockpit gauge dials (altimeter/speedometer/damage display) |
 | [camparam.md](camparam.md) | `camparam.json`: the chase/third-person camera tuning — per-plane chase distance (keyed by DISPLAY name), catch-up rates, and the look-behind/death/crash/flyby geometry |
 | [shakes.md](shakes.md) | `shakes.json` (six camera-shake oscillator sources: frequency/damp/waveform + a magnitude term whose input is unauthored) and `damage_shakes.json` (ON_CALL small/medium/large shake defs, triggers exe-side) — read, documented, deliberately unconsumed |

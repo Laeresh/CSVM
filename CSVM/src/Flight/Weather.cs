@@ -10,7 +10,7 @@ namespace CSVM.Flight;
 /// <summary>
 /// Per-mission atmosphere from the mission's own <c>weather.json</c> (a zrdr reader, same
 /// archive as ia.json/objectives.json — see <see cref="SpawnPoints"/>). Feeds the remake's
-/// distance fog, the cloud-band whiteout, and (later) wind-driven ambient cloud puffs.
+/// distance fog, the cloud-band whiteout, and the precipitation field.
 ///
 /// <para>weather.json layout (validated on C1/IA1): a single alternating dict with blocks
 /// <c>VIEWING_RANGE</c>, <c>WIND</c>, <c>CLOUD_COVER</c>, and per-zone <c>ZONE<i>n</i></c>
@@ -73,8 +73,10 @@ public sealed class WeatherState
 
     public Color? CloudBottomColor { get; private set; }
 
-    /// <summary>Steady wind (m/s) plus the random-gust bounds — the drift source for the
-    /// future ambient cloud puffs (parsed now so the loader is complete; unused this milestone).</summary>
+    /// <summary>Steady wind (m/s) plus the random-gust bounds. Parsed so the loader is complete;
+    /// currently unconsumed — it drove the drift of the hand-tuned <c>CloudPuffs</c> field, which
+    /// the authored <c>fogvol.zrd</c> clutter replaced (<c>BL-273</c>, docs/formats/fogvol.md).
+    /// That field is static world geometry, and no reader says wind moves it.</summary>
     public Vector3 WindStatic { get; private set; }
 
     public float WindRandomMaxSpeed { get; private set; }

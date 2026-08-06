@@ -63,7 +63,7 @@ public partial class GameSession : Node3D
     // the clock) and re-applied here at each session build.
     private readonly ulong _masterSeed;
     // One rig per rendered view: its camera plus the camera-anchored copies only it
-    // sees (skydome / cloud deck / cloud puffs / whiteout). Exactly one entry in single player,
+    // sees (skydome / cloud deck / whiteout). Exactly one entry in single player,
     // wrapping the main-viewport _camera below — so the 1P render path is unchanged.
     private readonly List<PlayerRig> _rigs = new();
     // scratch: rig camera positions for the edge extender
@@ -462,7 +462,7 @@ public partial class GameSession : Node3D
         // Everything below is anchored to *a* camera, so it runs once per rig — one in single
         // player, one per pane in splitscreen (each on that player's own visual layer). See
         // src/Session/WeatherRig.cs's Tick (PLAN-planeviewer-split A5).
-        _weatherRig?.Tick(_rigs, _clock?.FrameDt ?? (float)delta);
+        _weatherRig?.Tick(_rigs);
 
         // Map-edge continuation: re-center the mirrored-tile window on the cameras. One window
         // serves every pane (the union of the rings around each player), so two players at
@@ -780,10 +780,26 @@ public partial class GameSession : Node3D
         if (_spec.Fly || _spec.Freecam || _spec.SkyZoneExplicit)
         {
             long weatherMark = StartupProfile.Mark();
+            // The ambient cloud field: the chapter's own fogvol.zrd clutter scattered through the
+            // fvol* boxes its gamez authors (BL-273). World-anchored authored geometry, so it is
+            // built once beside the world rather than per rig, and needs no per-frame driving —
+            // unlike the dome/deck/whiteout below, which follow a camera. Gated with them because
+            // it is atmosphere: a plain --viewer inspection shows the data, not the sky, and it
+            // shares their `weather` startup phase ("skydome + fog + cloud visuals").
+            var fogVolumes = Mech3.FogVolumeSpec.VolumesOf(state.Gamez);
+            var cloudField = Effects.FogVolumeClutter.Create(state.Gamez, state.Textures,
+                Mech3.FogVolumeSpec.Load(SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter)), fogVolumes);
+            if (cloudField != null)
+            {
+                _worldRoot!.AddChild(cloudField);
+                GD.Print($"fogvol clouds: {cloudField.InstanceCount} sprites over "
+                         + $"{fogVolumes.Count} volume(s) — {cloudField.Summary}");
+            }
+
             _weatherRig = new WeatherRig(_spec, _worldRoot!);
             // The horizon's zone children go in with the mission's weather: the zone the fog and
             // the dome share is picked from both (BL-277 — three chapters ship an empty zone2).
-            _weatherRig.Build(state.MissionZrdrPath, _rigs, state.Textures, builder.HorizonZones(),
+            _weatherRig.Build(state.MissionZrdrPath, _rigs, builder.HorizonZones(),
                 activeZone =>
             {
                 foreach (var rig in _rigs)
@@ -1560,7 +1576,6 @@ public partial class GameSession : Node3D
                 GD.Print($"view P{rig.Index + 1}: layer {Mathf.Log(rig.VisualLayer) / Mathf.Log(2) + 1:0} " +
                          $"cull 0x{rig.Camera.CullMask:X5}, sky={(rig.Horizon != null ? "own" : "none")} " +
                          $"deck={(rig.Deck != null ? "own" : "none")} " +
-                         $"puffs={(rig.Puffs != null ? "own" : "none")} " +
                          $"whiteout={(rig.Whiteout != null ? "own" : "none")}");
         // The authored-mip coverage, said out loud per chapter: a chapter never loads its whole
         // archive, so "installed N" alone cannot show whether a level was missed or simply unused.
