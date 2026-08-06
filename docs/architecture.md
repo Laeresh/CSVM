@@ -595,11 +595,20 @@ Owns the phantom policy (span every pad, never `pads[0]`), `Disabled` (`--no-pad
 
 ## src/Mech3/MissionSetup.cs
 Parses + applies the per-mission `.gw` interp script that decides which world entities a mission
-shows; acts on `NodeSetActive`/`DeleteTree`/`Object3DSetScroll`, counts + reports every other verb.
+shows; acts on `NodeSetActive`/`DeleteTree`/`Object3DSetScroll`/`Object3DTranslate`/`Object3DRotate`,
+counts + reports every other verb.
 ⚠ Read docs/formats/interp.md before extending: order matters and last write wins, a `FindNode`
   matching nothing is NORMAL (never warn), and `DeleteTree` names its own target.
-⚠ `Object3DRotate` is unimplemented on purpose — the data's angle unit is ambiguous; guessing would silently mis-pose props (BL-249, with `Object3DTranslate`).
-⚠ The entity half applies as AnimRuntime bootstrap pass 0, before animation state (engine load order).
+⚠ `Object3DRotate`'s angle unit is ambiguous **per script**, not globally (BL-249, with
+  `Object3DTranslate`): `RotateAsRadians` decides once per script by magnitude — any component
+  over 2π marks that script's rotations as degrees — because C1/M05 and C3/MP1/MP2 disagree with
+  each other, not just with a single global guess. No mission this project defaults to (an IA1)
+  exercises either verb, so this is unreachable from the goldens; verified by targeted `--freecam`
+  captures instead (see docs/formats/interp.md).
+⚠ The entity half applies as AnimRuntime bootstrap pass 0, before animation state (engine load
+  order) — translate/rotate reuse `AnimRuntime.PoseTranslate`/`PoseRotate` rather than writing the
+  transform directly, so the first later touch of the same node (`RestOf`) records the
+  mission-placed pose as rest, not the pre-placement corner.
 
 ## src/Mech3/AnimRuntime.cs
 The animation engine: bootstrap passes (mission setup, anchored RESET_STATEs, ON_STARTUP,

@@ -41,7 +41,8 @@ public sealed class MissionSetup
     private readonly Dictionary<string, int> _unapplied = new(StringComparer.Ordinal);
     private readonly List<string> _unresolved = new();
     private readonly List<string> _scrollUnresolved = new();
-    private int _activated, _deactivated, _scrollOps;
+    private int _activated, _deactivated, _scrollOps, _translated, _rotated;
+    private bool? _rotateDegrees;
 
     /// <summary>The interp script this was read from, for logging.</summary>
     public string ScriptName { get; private init; } = "";
@@ -126,10 +127,17 @@ public sealed class MissionSetup
     /// <summary>
     /// Applies the script to a built world. <paramref name="resolve"/> maps a gamez name (plus an
     /// optional scope node for the FindSubNode form) to the built nodes; <paramref name="setActive"/>
-    /// switches a subtree on or off. Both are supplied by <see cref="AnimRuntime"/> so this reuses
-    /// the one proven name resolver rather than growing a second one.
+    /// switches a subtree on or off; <paramref name="translate"/> sets the selection's position
+    /// (absolute, parent frame — the same convention <c>OBJECT_TRANSLATE_STATE</c> uses); <paramref
+    /// name="rotate"/> sets its orientation from a radians Euler triple, already unit-converted (see
+    /// <see cref="RotateAsRadians"/>). All four are supplied by <see cref="AnimRuntime"/> so this
+    /// reuses the one proven name resolver rather than growing a second one.
     /// </summary>
-    public void Apply(Func<string, Node3D?, IReadOnlyList<Node3D>> resolve, Action<Node3D, bool> setActive)
+    public void Apply(
+        Func<string, Node3D?, IReadOnlyList<Node3D>> resolve,
+        Action<Node3D, bool> setActive,
+        Action<Node3D, Vector3> translate,
+        Action<Node3D, Vector3> rotate)
     {
         foreach (var op in _ops)
         {
@@ -144,6 +152,30 @@ public sealed class MissionSetup
                 // indistinguishable here and keeps one code path. 12 uses, all C3.
                 case "DeleteTree":
                     SetActive(op, false);
+                    break;
+                // Places the selection (14 uses: C1/M05's boats/redcross/workersvoyagezep,
+                // C3/MP1-2's cargozep1, C5/MP1's rearm_node_2) — see docs/formats/interp.md,
+                // "Vehicles load unplaced".
+                case "Object3DTranslate":
+                    if (ParseVector3(op.Args) is { } pos)
+                        foreach (var t in ResolveTargets(op))
+                        {
+                            translate(t, pos);
+                            _translated++;
+                        }
+                    break;
+                // Re-orients the selection (11 uses). The data's angle unit is ambiguous and
+                // decided per script — see RotateAsRadians and docs/formats/interp.md.
+                case "Object3DRotate":
+                    if (ParseVector3(op.Args) is { } euler)
+                    {
+                        var radians = RotateAsRadians(euler);
+                        foreach (var t in ResolveTargets(op))
+                        {
+                            rotate(t, radians);
+                            _rotated++;
+                        }
+                    }
                     break;
                 // Acted on, but at world-build time rather than here — the rate is part of the
                 // material cache key, so it has to be known before the material exists. See
@@ -160,8 +192,21 @@ public sealed class MissionSetup
 
         void SetActive(Op op, bool active)
         {
-            if (op.Target == null)
+            var targets = ResolveTargets(op);
+            if (targets.Count == 0)
                 return;
+            foreach (var t in targets)
+                setActive(t, active);
+            if (active)
+                _activated += targets.Count;
+            else
+                _deactivated += targets.Count;
+        }
+
+        List<Node3D> ResolveTargets(Op op)
+        {
+            if (op.Target == null)
+                return new List<Node3D>();
             var hosts = resolve(op.Target, null);
             if (hosts.Count == 0)
             {
@@ -170,24 +215,16 @@ public sealed class MissionSetup
                 // have (C3's blackhatzep/blackswanzep), or the node exists but WorldBuilder
                 // never built it because it is a parentless root no partition references
                 // (C2B's limo, C3's britbalmoral_1..3 and cpilot_shadow — the same pool the
-                // effect templates live in). Either way there is nothing here to switch off.
+                // effect templates live in). Either way there is nothing here to act on.
                 _unresolved.Add(op.Sub == null ? op.Target : $"{op.Target}/{op.Sub}");
-                return;
+                return new List<Node3D>();
             }
             var targets = op.Sub == null
-                ? hosts
+                ? hosts.ToList()
                 : hosts.SelectMany(h => resolve(op.Sub, h)).ToList();
             if (targets.Count == 0)
-            {
                 _unresolved.Add($"{op.Target}/{op.Sub}");
-                return;
-            }
-            foreach (var t in targets)
-                setActive(t, active);
-            if (active)
-                _activated += targets.Count;
-            else
-                _deactivated += targets.Count;
+            return targets;
         }
     }
 
@@ -197,6 +234,10 @@ public sealed class MissionSetup
         var s = $"mission setup: {ScriptName} — {_deactivated} node(s) deactivated";
         if (_activated > 0)
             s += $", {_activated} activated";
+        if (_translated > 0)
+            s += $", {_translated} translated";
+        if (_rotated > 0)
+            s += $", {_rotated} rotated ({(_rotateDegrees == true ? "deg" : "rad")})";
         if (_scrollOps > 0)
             s += $", {_scrollOps} texture scroll(s) set at build"
                  + (_scrollUnresolved.Count > 0
@@ -219,8 +260,35 @@ public sealed class MissionSetup
         nodeName.Equals(scriptName, StringComparison.OrdinalIgnoreCase)
         || Strip(nodeName).Equals(Strip(scriptName), StringComparison.OrdinalIgnoreCase);
 
+    private static Vector3? ParseVector3(string[] args)
+    {
+        if (args.Length < 3
+            || !float.TryParse(args[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x)
+            || !float.TryParse(args[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float y)
+            || !float.TryParse(args[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float z))
+            return null;
+        return new Vector3(x, y, z);
+    }
+
     private static string Strip(string s) =>
         s.EndsWith(".flt", StringComparison.OrdinalIgnoreCase) ? s[..^4] : s;
+
+    // BL-249: the shipped data does not use one unit consistently — C1/M05's boat rotations are
+    // small integers that only make sense as degrees (0 45 0, 0 172 0), C3/MP1-2's cargozep1 is a
+    // high-precision radians triple (-0.000010 -3.144009 -0.000000, i.e. pi on Y) — and the two
+    // families are cleanly separable by magnitude, so the decision is made once per script rather
+    // than guessed globally (docs/formats/interp.md's "Object3DRotate's angle unit is ambiguous").
+    // Cross-ref BL-034: the same question over OBJECT_3D_ROTATE data must not be resolved
+    // differently there.
+    private Vector3 RotateAsRadians(Vector3 euler)
+    {
+        _rotateDegrees ??= _ops.Any(o => o.Verb == "Object3DRotate"
+            && o.Args.Any(a => float.TryParse(a, NumberStyles.Float, CultureInfo.InvariantCulture, out float v)
+                                && MathF.Abs(v) > MathF.Tau));
+        return _rotateDegrees.Value
+            ? new Vector3(Mathf.DegToRad(euler.X), Mathf.DegToRad(euler.Y), Mathf.DegToRad(euler.Z))
+            : euler;
+    }
 
     // The script is a flat command list with a stateful selector: FindNode picks a node by
     // name, FindSubNode narrows to a descendant, and the following verb acts on that selection.

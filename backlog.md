@@ -1414,8 +1414,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   chained eased rock (accelerate, decelerate, reverse) is at least as plausible a reading, and
   under (b) each event would snap back to rest. **Needs the original game**: watch a zeppelin rock
   through several loops and see whether it returns to the same attitude or walks. Same class of
-  call as `MissionSetup`'s unguessed `Object3DRotate` angle unit (`BL-249`, scheduled in
-  `docs/PLAN-m3-polish-10.md` C22).
+  call as `MissionSetup`'s `Object3DRotate` angle unit, resolved 2026-08-06 by a per-script
+  magnitude heuristic rather than a global guess (`BL-249`, `docs/PLAN-m3-polish-10.md` C22) — do
+  not resolve this differently.
 
 - `BL-035` `[Feature]` `[Blocked: cutscene player]` **Animation event kinds that need weapons or cutscenes — `CALLBACK`, `OBJECT_CYCLE_TEXTURE`,
   one-shot `SOUND`** (triaged 2026-07-22, the last of `docs/plans/PLAN-anim-rendering-followups.md`

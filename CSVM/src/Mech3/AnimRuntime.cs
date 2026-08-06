@@ -1670,7 +1670,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // chapter gamez holds every mission's content and this script switches off what this
         // mission does not show (C1/IA1: hk_zep, both MP zeppelins, the CTF props, â€¦). Runs
         // first so an animation state can still override it, which is the engine's load order.
-        Setup?.Apply((name, scope) => FindAll(name, scope), SetSubtreeActive);
+        // Translate/rotate (BL-249) reuse PoseTranslate/PoseRotate — the same absolute
+        // parent-frame convention OBJECT_TRANSLATE_STATE/OBJECT_ROTATE_STATE use, and safe to
+        // call before anything else has touched these nodes, so the RestOf capture inside them
+        // records the mission's placed pose as rest for any later anim state on the same node.
+        Setup?.Apply(
+            (name, scope) => FindAll(name, scope),
+            SetSubtreeActive,
+            (t, pos) => PoseTranslate(t, pos, relative: false),
+            PoseRotate);
 
         // Pass 1: base states. Anchored defs only â€” a def whose NAME matches nothing in this
         // world (player-plane anims, cutscene rigs) must not stomp globally-resolved bare

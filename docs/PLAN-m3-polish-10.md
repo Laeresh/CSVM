@@ -75,7 +75,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — Audio & missions
 
 21. ☑ `BL-268` — remove/replace the blanket ×0.2 over authored sound volumes in `FlightAudio`
-22. ☐ `BL-249` — `MissionSetup` applies `Object3DTranslate`/`Object3DRotate`, with a per-script angle-unit decision
+22. ☑ `BL-249` — `MissionSetup` applies `Object3DTranslate`/`Object3DRotate`, with a per-script angle-unit decision
 
 ### Wave D — Stretch
 
@@ -523,7 +523,7 @@ and logs — `docs/cli.md`); confirm world-sounds path unchanged unless delibera
 explicitly gated on this item — note in the landing message that the mix base changed. Do not
 touch `BL-269`'s 3D falloff curve; different item.
 
-## C22 ☐ `BL-249` — `MissionSetup` applies the interp placement verbs
+## C22 ☑ `BL-249` — `MissionSetup` applies the interp placement verbs
 
 **Goal.** Flying C1/M05, C3/MP1–2 or C5/MP1 places the scripted entities (`lifesaver*` boats,
 `redcross`, `workersvoyagezep`, `cargozep1`, `rearm_node_2`) at their authored positions and

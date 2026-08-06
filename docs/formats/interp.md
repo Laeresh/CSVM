@@ -135,11 +135,22 @@ Semantics worth knowing:
   Never treat an unresolved name as an error.
 - **`DeleteTree` names its own target** rather than acting on the current selection, and no
   script re-activates a name it deleted (checked over all 53).
-- **`Object3DRotate`'s angle unit is ambiguous** and unresolved. Nine of the eleven uses are
-  small integers that only make sense as degrees (`0 45 0`, `0 172 0`); the other two are
-  high-precision values paired with a high-precision translate (`-0.000010 -3.144009
-  -0.000000`, i.e. π on Y) that only make sense as radians. No mission this project defaults
-  to uses either verb, so the question has not had to be settled.
+- **`Object3DTranslate`/`Object3DRotate` place the selection** (`MissionSetup`, BL-249, consumed
+  since 2026-08-06): translate is a plain absolute position, applied through the same
+  parent-frame convention `OBJECT_TRANSLATE_STATE` uses. **`Object3DRotate`'s angle unit is
+  ambiguous per script, not globally**, and is decided once per script by magnitude
+  (`MissionSetup.RotateAsRadians`): any component whose absolute value exceeds 2π marks that
+  whole script's `Object3DRotate` statements as degrees, otherwise they are radians. C1/M05's
+  nine uses are small integers that only make sense as degrees (`0 45 0`, `0 172 0`); C3/MP1
+  and MP2's two uses are high-precision values paired with a high-precision translate
+  (`-0.000010 -3.144009 -0.000000`, i.e. π on Y) that only make sense as radians — the two
+  families are cleanly separable by the 2π threshold, so a per-script decision costs nothing a
+  global guess would have gotten right and fixes the one case (mixed units across scripts) a
+  global guess cannot. No mission this project defaults to (an IA1) uses either verb, so the
+  goldens cannot catch a wrong guess here — verified instead by targeted `--freecam` captures at
+  C1/M05 (boats/`redcross`/`workersvoyagezep` at their authored positions and headings) and
+  C3/MP1 (`cargozep1` at ≈π). Cross-ref `BL-034`: the same question over animation-layer
+  `OBJECT_3D_ROTATE`/`OBJECT_ROTATE_STATE` data must not be resolved differently there.
 
 ## `Object3DSetScroll` — the second source of texture scrolling
 
