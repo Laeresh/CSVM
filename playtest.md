@@ -17,8 +17,8 @@ the retiring commit's message (`git log --grep=<ID>`); pre-2026-08-06 retirement
 
 **Structure.** Section 0 lists owed captures as themed tables — one table per filming batch, the
 theme naming the capture setup (cockpit gauges in frame, external view, …) — with fixed columns
-ID · Capture · What must be in frame · Unblocks. A table exists only while it has rows: an emptied
-table is deleted, and a future capture recreates its section. Section 1 groups flights by **flight
+ID · Capture · What must be in frame · Unblocks. The theme sections are standing — an emptied
+table stays, meaning nothing is currently owed in that batch. Section 1 groups flights by **flight
 profile** — one section is one sortie (chapter + plane + situation), headed by a copyable launch
 command. Sections sort by chapter then plane; items within a section by ascending ID. An item free
 to choose its plane or chapter piggybacks on an existing profile — it never opens a section of its
@@ -83,6 +83,21 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 | `CAP-02` | Low pass along a canyon wall | A close pass down a canyon face; the only possible source of ground-blow magnitude | `BL-095` |
 | `CAP-20` | Throttle equilibria + a shallow held climb | Two level runs held to equilibrium at **1/4** and **1/2** throttle (the thrust-vs-throttle curve), then a **shallow, steady climb** at fixed throttle — shallow enough that the ADI does **not** saturate, i.e. keep the nose under ~+25°, and hold it 10 s+. `CAP-05`'s 50%-throttle clip failed on exactly this: it was a zoom, the ADI pinned at sky fraction 0.730, and the nose angle became unreadable | `BL-115` (`ClimbGravityScale`), `BL-092` |
 
+### HUD — ammo gauge in frame
+
+| ID | Capture | What must be in frame | Unblocks |
+|---|---|---|---|
+
+### Camera
+
+| ID | Capture | What must be in frame | Unblocks |
+|---|---|---|---|
+
+### Audio
+
+| ID | Capture | What must be audible | Unblocks |
+|---|---|---|---|
+
 ### Weather & visuals
 
 | ID | Capture | What must be in frame | Unblocks |
@@ -101,6 +116,11 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 | `CAP-27` | Does the original spark on the airframe at all? | Take damage in the original — a light scrape is enough — with the aircraft in frame (external/chase fine), and look for a **spark burst on the airframe itself**, distinct from smoke at the contact point. ⚠ This capture can **delete** a feature rather than tune one: `BL-090`'s per-impact spark burst is driven by a 0.99 `injure_anims` entry that exists on **1 of 11** aircraft (the Devastator), which the backlog already calls "plausibly an authoring leftover". If the original never sparks, our implementation goes. If it does, `BL-281`'s ricochet mix can be judged | `BL-281`, `BL-090` (item 2) |
 | `CAP-25` | The `chunk` debris quad at a slug dirt hit | Sustained slug fire into flat dirt, camera as close to the impacts as the original allows (external/chase view fine — no gauges needed), slow-motion or high frame rate if possible. Decides whether the original ever shows the `gunhit` def's `chunk` debris node — a ~0.5 m quad textured with the perforated `gun_barrel` shroud band (dark dot grid on tan; gamez model 27 → material 4, UVs u 1→2), flung by the three **slug** defs only (`3040`/`5060`/`70slug_gunhit`, all chapters; ap/dum/mag have no debris nodes). Our build draws it faithfully from the data (`Screenshots/Mystery debris.png`, 2026-08-04, freeze-frame zoom); we keep it unless the original provably suppresses it. *Look for:* any small tumbling textured scrap distinct from smoke/chips in the ~2–4 s after each hit — presence or absence both settle it | `BL-203` (landed — this judges a leftover) |
 | `CAP-28` | Torpedo flight dynamics | The aerial torpedo (`TORPDO`) released in level flight, ideally at high speed, filmed external/chase with the surface in frame and held from release to impact — long enough to read the speed decay the user saw at the controls (a max/cruise speed, slowing after launch). HUD in frame lets `analysis/video-flight-calibration` decode speed over time; without it the decay is still readable against fixed terrain | `BL-290` |
+
+### World
+
+| ID | Capture | What must be in frame | Unblocks |
+|---|---|---|---|
 
 ---
 
