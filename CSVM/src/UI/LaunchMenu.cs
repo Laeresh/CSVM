@@ -8,11 +8,16 @@ namespace CSVM.UI;
 /// <summary>
 /// The in-game launchscreen: a keyboard/controller-driven menu shown
 /// when the viewer is launched with no content-selecting CLI arg (a bare launch, e.g.
-/// RunGame.ps1). Three screens in sequence — <b>Mode</b> (Free Flight / Stunt Flying) →
+/// RunGame.ps1). Three screens in sequence — <b>Mode</b> (Free Flight / Stunt Flying / Dogfight) →
 /// <b>Chapter</b> (the eight chapter worlds) → <b>Plane</b> (the player roster, with a couple of
 /// stats from <see cref="PlaneStats"/>) — after which <see cref="Launch"/> fires with the chosen
 /// chapter, the per-player plane + pad, and the mode; GameSession builds the world through the
 /// normal arg-driven pipeline (the menu just fills in the same selections the CLI would).
+///
+/// <para><b>Dogfight needs a fight.</b> Its Plane screen withholds the launch gesture until at
+/// least two players have joined, even once everyone present is locked — see
+/// <see cref="CanLaunch"/> and the hint line <see cref="JoinHint"/> shows while it is withheld.
+/// Free Flight and Stunt Flying still launch solo exactly as before.</para>
 ///
 /// <para><b>Join flow.</b> Two phases, in this order. First player 1 — the keyboard plus
 /// every pad nobody else holds — picks the mode and the chapter, and the pad it actually steers
@@ -48,8 +53,8 @@ namespace CSVM.UI;
 public sealed partial class LaunchMenu : CanvasLayer
 {
     /// <summary>Fired when every joined player has locked a plane: (chapter code, one choice per
-    /// player in player order, stunt mode). The host hides the menu and builds the session.</summary>
-    public Action<string, IReadOnlyList<PlayerChoice>, bool>? Launch;
+    /// player in player order, the picked mode). The host hides the menu and builds the session.</summary>
+    public Action<string, IReadOnlyList<PlayerChoice>, MenuMode>? Launch;
 
     /// <summary>Fired when the player backs out of the Mode screen — the host quits.</summary>
     public Action? Quit;
@@ -68,11 +73,13 @@ public sealed partial class LaunchMenu : CanvasLayer
     private const float StripHeightFrac = 0.12f;
     private const int PanePad = 10;
 
-    // The two flight modes. Index 1 (Stunt Flying) sets stunt mode.
+    // The three flight modes, in MenuMode's ordinal order (Free/Stunt/Versus) so the row index
+    // doubles as the enum value with no separate lookup.
     private static readonly Choice[] Modes =
     {
         new("Free Flight", "Explore the map freely — no objectives, no clock."),
         new("Stunt Flying", "Race through every Danger Zone against the clock."),
+        new("Dogfight", "Splitscreen free-for-all — first to the kill target wins."),
     };
 
     // The eight chapter worlds (mirrors RunDev.ps1's roster: display name + extracted folder code).
@@ -130,7 +137,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string _zrdrPath = "";
     private Screen _screen = Screen.Mode;
     private int _modeIndex, _chapterIndex;
-    private bool _stunt;
+    private MenuMode _mode;
     private string _error = "";
     // The pad player 1 claimed by driving the Mode/Chapter screens with it (−1 = none yet, i.e.
     // player 1 is on the keyboard and every connected pad is still free to join).
@@ -185,6 +192,13 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         return menu;
     }
+
+    /// <summary>The launch-gate RULE, pure and public so it is reachable from <c>CSVM.Tests</c>
+    /// with no menu instance behind it: everyone joined has locked a plane, AND — Dogfight only —
+    /// at least two have joined to fight each other. Free Flight and Stunt Flying launch solo
+    /// exactly as before.</summary>
+    public static bool CanLaunch(MenuMode mode, bool allLocked, int joinedCount) =>
+        allLocked && (mode != MenuMode.Versus || joinedCount >= 2);
 
     /// <summary>Show the menu (normally from the Mode screen) and prime every input edge so a
     /// button still held from the transition here (the Esc that left a flight, the Start that
@@ -442,7 +456,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                 _error = "";
                 _screen = _screen == Screen.Mode ? Screen.Chapter : Screen.Plane;
                 if (_screen == Screen.Chapter)
-                    _stunt = _modeIndex == 1;
+                    _mode = (MenuMode)_modeIndex; // the row order IS the enum order
                 else
                     PrimeJoins(); // joining opens here — a Start held on the way in must not fire
                 dirty = true;
@@ -504,7 +518,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             }
         }
 
-        if (AllLocked())
+        if (CanLaunch())
         {
             FireLaunch();
             return false; // the host has hidden us and is building
@@ -520,13 +534,17 @@ public sealed partial class LaunchMenu : CanvasLayer
         return _slots.Count > 0;
     }
 
+    /// <summary>Whether the Plane screen's launch gesture is live right now. A lone Dogfight pilot
+    /// stays on this screen with <see cref="JoinHint"/> naming what it is waiting for.</summary>
+    private bool CanLaunch() => CanLaunch(_mode, AllLocked(), _slots.Count);
+
     private void FireLaunch()
     {
         var choices = new List<PlayerChoice>(_slots.Count);
         foreach (var slot in _slots)
             choices.Add(new PlayerChoice(Planes[slot.PlaneIndex].Node, slot.Input.Pads));
         // Leave our state as-is so a failed build can send us back with ShowMenu.
-        Launch?.Invoke(Chapters[_chapterIndex].Code, choices, _stunt);
+        Launch?.Invoke(Chapters[_chapterIndex].Code, choices, _mode);
     }
 
     // --- rendering ---
@@ -771,13 +789,18 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     /// <summary>The hint beside the join strip. Joining only happens on the aircraft screen, so
-    /// the earlier screens say where it will be rather than inviting a press that does nothing.</summary>
+    /// the earlier screens say where it will be rather than inviting a press that does nothing.
+    /// Dogfight below 2 players gets its own line — <see cref="CanLaunch"/> is withholding the
+    /// launch gesture, so the generic "you may join" hint would undersell what is actually
+    /// blocking it.</summary>
     private string JoinHint()
     {
         if (_slots.Count >= SplitScreen.MaxPlayers)
             return $"({SplitScreen.MaxPlayers}-player maximum)";
         if (_screen != Screen.Plane)
             return "(other players join at aircraft select)";
+        if (_mode == MenuMode.Versus && _slots.Count < 2)
+            return $"(Dogfight needs a fight — {SplitScreen.PlayerTag(_slots.Count)}: press START to join)";
         return Pads.Connected().Count > 0
             ? "(press START on a free pad to join)"
             : "(connect a pad and press START to join)";
@@ -792,7 +815,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private string Breadcrumb()
     {
-        string mode = _stunt ? "Stunt Flying" : "Free Flight";
+        string mode = Modes[(int)_mode].Label;
         return _screen switch
         {
             Screen.Mode => "Mode  ›  Map  ›  Aircraft",

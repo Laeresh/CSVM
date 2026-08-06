@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using CSVM;
 using Xunit;
@@ -14,7 +15,7 @@ public class SessionSpecMenuTests
     [Fact]
     public void AMenuLaunchIsAlwaysFlightOverAChapterWorld()
     {
-        var spec = Menu(Cli(), "C4", stunt: false, "player_fury");
+        var spec = Menu(Cli(), "C4", MenuMode.Free, "player_fury");
 
         Assert.Equal(SessionMode.Fly, spec.Mode);
         Assert.True(spec.Fly);
@@ -34,7 +35,7 @@ public class SessionSpecMenuTests
         Assert.Equal(SessionMode.Menu, cli.Mode);
         Assert.True(cli.ShowsMenu);
 
-        Assert.Equal(SessionMode.Fly, Menu(cli, "C1", stunt: false, "player_bhawk").Mode);
+        Assert.Equal(SessionMode.Fly, Menu(cli, "C1", MenuMode.Free, "player_bhawk").Mode);
     }
 
     /// <summary>The menu launches flight even when the command line asked for a static view: the
@@ -45,7 +46,7 @@ public class SessionSpecMenuTests
         var cli = Cli("--viewer", "--menu", "--plane=player_kestrel");
         Assert.Equal(SessionMode.Viewer, cli.Mode);
 
-        var spec = Menu(cli, "C2", stunt: false, "player_fury");
+        var spec = Menu(cli, "C2", MenuMode.Free, "player_fury");
         Assert.Equal(SessionMode.Fly, spec.Mode);
         Assert.False(spec.Viewer);
         Assert.Equal("player_fury", spec.PlaneName);
@@ -54,7 +55,7 @@ public class SessionSpecMenuTests
     [Fact]
     public void OnePlanePerPlayerStatesThePlayerCount()
     {
-        var spec = Menu(Cli(), "C1", stunt: false, "player_bhawk", "player_fury", "player_kestrel");
+        var spec = Menu(Cli(), "C1", MenuMode.Free, "player_bhawk", "player_fury", "player_kestrel");
 
         Assert.Equal(3, spec.Players);
         Assert.Equal(new[] { "player_bhawk", "player_fury", "player_kestrel" }, spec.PlaneNames);
@@ -65,22 +66,38 @@ public class SessionSpecMenuTests
     [Fact]
     public void AStuntPickTakesTheStuntSpawnListAndAFreeFlightPickTakesTheDefault()
     {
-        Assert.Equal("stunt_flying", Menu(Cli(), "C1", stunt: true, "player_bhawk").Scenario);
-        Assert.True(Menu(Cli(), "C1", stunt: true, "player_bhawk").Stunt);
+        Assert.Equal("stunt_flying", Menu(Cli(), "C1", MenuMode.Stunt, "player_bhawk").Scenario);
+        Assert.True(Menu(Cli(), "C1", MenuMode.Stunt, "player_bhawk").Stunt);
 
-        Assert.Equal("zeppelin_run", Menu(Cli(), "C1", stunt: false, "player_bhawk").Scenario);
-        Assert.False(Menu(Cli(), "C1", stunt: false, "player_bhawk").Stunt);
+        Assert.Equal("zeppelin_run", Menu(Cli(), "C1", MenuMode.Free, "player_bhawk").Scenario);
+        Assert.False(Menu(Cli(), "C1", MenuMode.Free, "player_bhawk").Stunt);
     }
 
-    /// <summary>A tester who pinned a scenario alongside a bare launch keeps it, in both modes —
-    /// the re-derivation is a default, not an override.</summary>
+    /// <summary>The third mode: a Dogfight pick takes the dogfight_ace spawn list and sets
+    /// Versus, not Stunt — the two modifiers are mutually exclusive from the menu, same as from
+    /// the CLI's fixed `--vs`/`--stunt` precedence.</summary>
     [Fact]
-    public void AnExplicitScenarioSurvivesEitherMenuMode()
+    public void AVersusPickTakesTheDogfightAceSpawnList()
+    {
+        var spec = Menu(Cli(), "C1", MenuMode.Versus, "player_bhawk", "player_fury");
+
+        Assert.Equal("dogfight_ace", spec.Scenario);
+        Assert.True(spec.Versus);
+        Assert.False(spec.Stunt);
+        Assert.Equal(SessionMode.Fly, spec.Mode);
+        Assert.Equal(2, spec.Players);
+    }
+
+    /// <summary>A tester who pinned a scenario alongside a bare launch keeps it, in all three
+    /// modes — the re-derivation is a default, not an override.</summary>
+    [Fact]
+    public void AnExplicitScenarioSurvivesEveryMenuMode()
     {
         var cli = Cli("--scenario=hangar_run");
 
-        Assert.Equal("hangar_run", Menu(cli, "C1", stunt: false, "player_bhawk").Scenario);
-        Assert.Equal("hangar_run", Menu(cli, "C1", stunt: true, "player_bhawk").Scenario);
+        Assert.Equal("hangar_run", Menu(cli, "C1", MenuMode.Free, "player_bhawk").Scenario);
+        Assert.Equal("hangar_run", Menu(cli, "C1", MenuMode.Stunt, "player_bhawk").Scenario);
+        Assert.Equal("hangar_run", Menu(cli, "C1", MenuMode.Versus, "player_bhawk").Scenario);
     }
 
     /// <summary>Nothing a previous launch settled reaches the next one. Every field the factory
@@ -91,11 +108,11 @@ public class SessionSpecMenuTests
     public void ASecondLaunchKeepsNothingFromTheFirst()
     {
         var cli = Cli();
-        var first = Menu(cli, "C4", stunt: true, "player_fury", "player_bhawk");
+        var first = Menu(cli, "C4", MenuMode.Stunt, "player_fury", "player_bhawk");
         Assert.Equal("stunt_flying", first.Scenario);
         Assert.Equal(2, first.Players);
 
-        var second = SessionSpec.FromMenu(cli, "C2", new[] { "player_kestrel" }, stunt: false);
+        var second = SessionSpec.FromMenu(cli, "C2", new[] { "player_kestrel" }, MenuMode.Free);
         Assert.Equal("C2", second.Chapter);
         Assert.Equal("player_kestrel", second.PlaneName);
         Assert.Equal(new[] { "player_kestrel" }, second.PlaneNames);
@@ -112,16 +129,17 @@ public class SessionSpecMenuTests
     public void DerivingFreshAgreesWithPatchingTheLiveSpec()
     {
         var cli = Cli("--menu");
-        var first = Menu(cli, "C4", stunt: true, "player_fury", "player_bhawk");
+        var first = Menu(cli, "C4", MenuMode.Stunt, "player_fury", "player_bhawk");
 
-        var fresh = SessionSpec.FromMenu(cli, "C2", new[] { "player_kestrel" }, stunt: false);
-        var patched = SessionSpec.FromMenu(first, "C2", new[] { "player_kestrel" }, stunt: false);
+        var fresh = SessionSpec.FromMenu(cli, "C2", new[] { "player_kestrel" }, MenuMode.Free);
+        var patched = SessionSpec.FromMenu(first, "C2", new[] { "player_kestrel" }, MenuMode.Free);
 
         Assert.Equal(fresh.Chapter, patched.Chapter);
         Assert.Equal(fresh.PlaneName, patched.PlaneName);
         Assert.Equal(fresh.PlaneNames, patched.PlaneNames);
         Assert.Equal(fresh.Players, patched.Players);
         Assert.Equal(fresh.Stunt, patched.Stunt);
+        Assert.Equal(fresh.Versus, patched.Versus);
         Assert.Equal(fresh.Mode, patched.Mode);
         Assert.Equal(fresh.WorldMode, patched.WorldMode);
         Assert.Equal(fresh.Scenario, patched.Scenario);
@@ -133,7 +151,7 @@ public class SessionSpecMenuTests
     public void EverythingThePickDoesNotNameStillComesFromTheCommandLine()
     {
         var cli = Cli("--menu", "--mission=M02", "--seed=7", "--mute", "--volume=0", "--no-fog", "--anim-lod=1");
-        var spec = Menu(cli, "C3", stunt: false, "player_bhawk");
+        var spec = Menu(cli, "C3", MenuMode.Free, "player_bhawk");
 
         Assert.Equal("M02", spec.Mission);
         Assert.Equal(7ul, spec.Seed);
@@ -152,11 +170,43 @@ public class SessionSpecMenuTests
         {
             many.Add("player_bhawk");
         }
-        Assert.Equal(UI.SplitScreen.MaxPlayers, SessionSpec.FromMenu(Cli(), "C1", many, stunt: false).Players);
+        Assert.Equal(UI.SplitScreen.MaxPlayers, SessionSpec.FromMenu(Cli(), "C1", many, MenuMode.Free).Players);
     }
+
+    // ---- The third mode + its menu-only launch gate ---------------------------------------------
+
+    /// <summary>The Mode screen's three rows map 1:1 onto <see cref="MenuMode"/>'s ordinals
+    /// (`LaunchMenu.Modes[(int)mode]`), in this order — the fact the row-to-enum mapping in
+    /// <c>LaunchMenu</c> (an engine-bound CanvasLayer, unreachable from here) depends on.</summary>
+    [Fact]
+    public void TheThreeMenuModesExistInRowOrder()
+    {
+        var modes = (MenuMode[])Enum.GetValues(typeof(MenuMode));
+        Assert.Equal(new[] { MenuMode.Free, MenuMode.Stunt, MenuMode.Versus }, modes);
+    }
+
+    /// <summary>The launch-gate rule itself (<see cref="UI.LaunchMenu.CanLaunch(MenuMode, bool, int)"/>)
+    /// is a pure static function, reachable from here with no menu instance behind it: Free Flight
+    /// and Stunt Flying launch as soon as everyone joined is locked, solo included; Dogfight
+    /// additionally needs 2 joined players. Nothing launches before everyone is locked, whatever
+    /// the mode or the count.</summary>
+    [Theory]
+    [InlineData(MenuMode.Free, 1, true)]
+    [InlineData(MenuMode.Stunt, 1, true)]
+    [InlineData(MenuMode.Versus, 1, false)]
+    [InlineData(MenuMode.Versus, 2, true)]
+    [InlineData(MenuMode.Versus, 4, true)]
+    public void TheLaunchGateLocksDogfightBelowTwoPlayers(MenuMode mode, int joinedCount, bool expected)
+        => Assert.Equal(expected, UI.LaunchMenu.CanLaunch(mode, allLocked: true, joinedCount));
+
+    [Theory]
+    [InlineData(MenuMode.Free)]
+    [InlineData(MenuMode.Versus)]
+    public void TheLaunchGateNeverOpensBeforeEveryoneIsLocked(MenuMode mode)
+        => Assert.False(UI.LaunchMenu.CanLaunch(mode, allLocked: false, joinedCount: 4));
 
     private static SessionSpec Cli(params string[] args) => SessionSpec.Parse(args);
 
-    private static SessionSpec Menu(SessionSpec cli, string chapter, bool stunt, params string[] planes)
-        => SessionSpec.FromMenu(cli, chapter, planes, stunt);
+    private static SessionSpec Menu(SessionSpec cli, string chapter, MenuMode mode, params string[] planes)
+        => SessionSpec.FromMenu(cli, chapter, planes, mode);
 }

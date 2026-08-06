@@ -39,6 +39,7 @@ public class SessionSpecTests
     [InlineData("--screenshot=shot.png")]
     [InlineData("--fly")]
     [InlineData("--stunt")]
+    [InlineData("--vs")]
     public void AnyContentArgFliesByDefault(string arg)
     {
         var s = S(arg);
@@ -167,6 +168,87 @@ public class SessionSpecTests
     {
         var s = S("--stunt", "--scenario=hangar_run");
         Assert.True(s.Stunt);
+        Assert.Equal("hangar_run", s.Scenario);
+        Assert.True(s.ScenarioExplicit);
+    }
+
+    // ---- --vs (Versus / "Dogfight") ---------------------------------------------------------
+
+    [Fact]
+    public void VsParsesToFlightWithTheVersusModifier()
+    {
+        var s = S("--vs");
+        Assert.Equal(SessionMode.Fly, s.Mode);
+        Assert.True(s.Versus);
+        Assert.False(s.Stunt);
+    }
+
+    /// <summary>Not last-flag-wins like the rest of the parser: `--vs` beats `--stunt` by FIXED
+    /// precedence whichever order they appear in, and says so.</summary>
+    [Fact]
+    public void VsBeatsStuntByFixedPrecedenceWithAWarning()
+    {
+        var vsThenStunt = S("--vs", "--stunt");
+        Assert.True(vsThenStunt.Versus);
+        Assert.False(vsThenStunt.Stunt);
+        Assert.Contains(vsThenStunt.Warnings, w => w.Message.Contains("--vs beats --stunt"));
+
+        var stuntThenVs = S("--stunt", "--vs");
+        Assert.True(stuntThenVs.Versus);
+        Assert.False(stuntThenVs.Stunt);
+        Assert.Contains(stuntThenVs.Warnings, w => w.Message.Contains("--vs beats --stunt"));
+    }
+
+    [Fact]
+    public void VsKillsAndVsTimeDefaultToFiveAndFive()
+    {
+        var s = S("--vs");
+        Assert.Equal(5, s.VsKills);
+        Assert.Equal(5, s.VsTimeMinutes);
+    }
+
+    [Fact]
+    public void VsKillsAndVsTimeTakeExplicitValues()
+    {
+        var s = S("--vs", "--vs-kills=10", "--vs-time=15");
+        Assert.Equal(10, s.VsKills);
+        Assert.Equal(15, s.VsTimeMinutes);
+    }
+
+    /// <summary>0 disables the limit — a match with both at 0 has no end condition, which is
+    /// accepted here (the win/lose flow that would need to guard against it is a later item).</summary>
+    [Fact]
+    public void ZeroDisablesEitherVsLimit()
+    {
+        var s = S("--vs", "--vs-kills=0", "--vs-time=0");
+        Assert.Equal(0, s.VsKills);
+        Assert.Equal(0, s.VsTimeMinutes);
+    }
+
+    /// <summary>The menu enforces at least 2 joined pilots before it will start a match; the CLI
+    /// has no join flow to gate on, so it only warns and runs with what --players= asked for.</summary>
+    [Fact]
+    public void VsWithOnePlayerWarnsButStillRuns()
+    {
+        var s = S("--vs", "--players=1");
+        Assert.True(s.Versus);
+        Assert.Equal(1, s.Players);
+        Assert.Contains(s.Warnings, w => w.Message.Contains("needs at least 2 pilots"));
+
+        Assert.Empty(S("--vs", "--players=2").Warnings);
+    }
+
+    [Fact]
+    public void VsNamesItsModeVs() => Assert.Equal("vs", S("--vs").ModeName);
+
+    [Fact]
+    public void VsDefaultsToTheDogfightAceScenario() => Assert.Equal("dogfight_ace", S("--vs").Scenario);
+
+    [Fact]
+    public void AnExplicitScenarioBeatsVssDefault()
+    {
+        var s = S("--vs", "--scenario=hangar_run");
+        Assert.True(s.Versus);
         Assert.Equal("hangar_run", s.Scenario);
         Assert.True(s.ScenarioExplicit);
     }

@@ -89,8 +89,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — Mode plumbing and UI
 
-21. ☐ `SessionSpec`: `--vs`, `--vs-kills`, `--vs-time`, precedence, `dogfight_ace` default + parse tests
-22. ☐ Menu: "Dogfight" entry, `MenuMode` enum, ≥2-player start lock + menu tests
+21. ☑ `SessionSpec`: `--vs`, `--vs-kills`, `--vs-time`, precedence, `dogfight_ace` default + parse tests
+22. ☑ Menu: "Dogfight" entry, `MenuMode` enum, ≥2-player start lock + menu tests
 23. ☐ Per-pane VS HUD: match timer, own K/D, leader, kill banners
 24. ☐ Opponent edge-arrows (MarkerHud adaptation)
 25. ☐ `VersusBoard` end-of-match overlay + `RestartMatch` rematch
@@ -296,7 +296,7 @@ Spawn camping / invulnerability are explicitly deferred (Decision #6) — do not
 
 # Wave C — Mode plumbing and UI
 
-## C21 ☐ `SessionSpec`: `--vs`, `--vs-kills`, `--vs-time`, precedence, `dogfight_ace` default + parse tests
+## C21 ☑ `SessionSpec`: `--vs`, `--vs-kills`, `--vs-time`, precedence, `dogfight_ace` default + parse tests
 
 **Goal.** `--vs` parses to `Versus = true` on `Mode = Fly` with scenario defaulting to
 `dogfight_ace`; `--vs-kills=N`/`--vs-time=minutes` carry the match rules (defaults 5/5, 0 disables);
@@ -324,7 +324,7 @@ day-to-day (it is — add `--vs` only, the match flags stay cli.md-only).
 (its own ⚠ says so). Don't let `--vs` imply `--players=2` silently — the menu enforces ≥2, the CLI
 only warns (Decision #10).
 
-## C22 ☐ Menu: "Dogfight" entry, `MenuMode` enum, ≥2-player start lock + menu tests
+## C22 ☑ Menu: "Dogfight" entry, `MenuMode` enum, ≥2-player start lock + menu tests
 
 **Goal.** The mode screen offers Free Flight / Stunt Flying / Dogfight; the launch callback carries
 `enum MenuMode { Free, Stunt, Versus }` instead of `bool stunt`; in Dogfight the plane-screen start

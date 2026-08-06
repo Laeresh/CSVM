@@ -661,14 +661,14 @@ public partial class Launcher : Node3D
     /// the exception on purpose: they come from the join flow rather than from args, so they stay
     /// session state here instead of becoming a spec field.</para></summary>
     private void StartSessionFromMenu(string chapter, IReadOnlyList<LaunchMenu.PlayerChoice> players,
-        bool stunt)
+        MenuMode mode)
     {
         var planes = new List<string>(players.Count);
         foreach (var p in players)
         {
             planes.Add(p.PlaneNode);
         }
-        _spec = SessionSpec.FromMenu(_cli, chapter, planes, stunt);
+        _spec = SessionSpec.FromMenu(_cli, chapter, planes, mode);
         // Honour the join flow's device binding rather than re-deriving it from the roster: the
         // pad that joined as P2 in the menu must be the pad that flies P2. Single player keeps the
         // any-pad policy (null), so every connected pad flies the one plane, as before.
