@@ -29,6 +29,12 @@ public partial class GameSession : Node3D
 {
     private const float HorizonScale = 2.5f;
 
+    /// The fraction of the camera's far plane the scaled skydome may reach. The dome is anchored
+    /// on the camera, so its far wall sits at (its own radius x scale) from the eye in every
+    /// direction; past the far plane it is CLIPPED and the engine's clear colour shows through the
+    /// hole. 0.9 leaves room for the dome's one-frame anchor lag and for a diagonal vertex.
+    private const float HorizonFarFraction = 0.9f;
+
     /// How many near-miss names a failed <c>--node=</c> lookup offers. A chapter holds
     /// thousands of nodes and a substring like "zep" hits dozens; the point is a usable hint, not
     /// a census.
@@ -775,14 +781,17 @@ public partial class GameSession : Node3D
         {
             long weatherMark = StartupProfile.Mark();
             _weatherRig = new WeatherRig(_spec, _worldRoot!);
-            _weatherRig.Build(state.MissionZrdrPath, _rigs, state.Textures, activeZone =>
+            // The horizon's zone children go in with the mission's weather: the zone the fog and
+            // the dome share is picked from both (BL-277 — three chapters ship an empty zone2).
+            _weatherRig.Build(state.MissionZrdrPath, _rigs, state.Textures, builder.HorizonZones(),
+                activeZone =>
             {
                 foreach (var rig in _rigs)
                 {
                     var dome = builder.BuildHorizon(activeZone);
                     if (dome == null)
                         break;
-                    dome.Scale = Vector3.One * HorizonScale;
+                    dome.Scale = Vector3.One * HorizonScaleFor(dome);
                     if (rig.VisualLayer != 0)
                         UI.SplitScreen.SetVisualLayer(dome, rig.VisualLayer);
                     _worldRoot!.AddChild(dome);
@@ -815,6 +824,40 @@ public partial class GameSession : Node3D
             BuildAnimLabStage(state, session);
         }
         return true;
+    }
+
+    /// <summary>The anchor scale for one built skydome: <see cref="HorizonScale"/>, reduced where
+    /// that would push the dome's far wall past the camera's far plane.
+    ///
+    /// <para>The 2.5x exists because the authored domes are ~8.8 km in radius on a 12.3 km map and
+    /// would otherwise cut into the terrain. It is a MAXIMUM, not a constant: every chapter's dome
+    /// is 6.4–12.0 km and clears the 40 km far plane at 2.5x — except <b>C1B's zone1 at 21.8 km</b>,
+    /// which 2.5x puts at 54.5 km, so its far wall clipped and the engine's clear colour showed
+    /// through the sky (seen at the controls the moment <c>BL-277</c> started selecting that zone).
+    /// Clamped, C1B lands at ~1.65x and every other chapter keeps 2.5x exactly, which is why no
+    /// other chapter's sky moves.</para>
+    ///
+    /// <para>Measured from the built dome rather than a table, so a chapter is never assumed: the
+    /// radius is the largest axis extent of its own geometry, which for a dome is its rim.</para>
+    /// </summary>
+    private float HorizonScaleFor(Node3D dome)
+    {
+        if (Mech3.WorldBuilder.DetachedWorldAabb(dome) is not { } aabb)
+            return HorizonScale;
+        var min = aabb.Position;
+        var max = aabb.End;
+        float radius = Mathf.Max(
+            Mathf.Max(Mathf.Abs(min.X), Mathf.Abs(max.X)),
+            Mathf.Max(
+                Mathf.Max(Mathf.Abs(min.Y), Mathf.Abs(max.Y)),
+                Mathf.Max(Mathf.Abs(min.Z), Mathf.Abs(max.Z))));
+        if (radius <= 0f)
+            return HorizonScale;
+        float fitted = Mathf.Min(HorizonScale, _camera.Far * HorizonFarFraction / radius);
+        if (fitted < HorizonScale)
+            GD.Print($"horizon: dome radius {radius:0} m x {HorizonScale:0.##} would reach past the "
+                     + $"{_camera.Far:0} m far plane — scaled {fitted:0.##}x instead");
+        return fitted;
     }
 
     /// <summary>--anim-lab: the animation debugger's quiet stage — the effect/crash anchor

@@ -145,6 +145,47 @@ public sealed class WeatherState
         return w;
     }
 
+    /// <summary>Swaps a zone whose horizon subtree is empty for the one zone that has geometry —
+    /// the geometry half of <see cref="ResolveZone(string, IReadOnlyList{HorizonZone})"/>, public
+    /// on its own only so a mission with no weather.json still gets the correction.
+    ///
+    /// <para>Deliberately narrow: it fires only when the request <b>is</b> one of the horizon's
+    /// zones <b>and</b> builds nothing <b>and</b> exactly one sibling does build something. Every
+    /// other shape keeps the request:</para>
+    /// <list type="bullet">
+    /// <item>the request draws a dome (C1, C1C, C2B, C4 — untouched);</item>
+    /// <item>the request is not a zone this horizon has at all (C5, which ships zone3/zone1) —
+    /// that is <see cref="ResolveZone(string)"/>'s fallback to the weather file's first zone, and
+    /// it must stay there: the two orders disagree (C5's weather.json lists ZONE1 first, its
+    /// horizon lists zone3 first), so picking the horizon's first zone would render one zone's sky
+    /// under another's fog;</item>
+    /// <item>no zone or more than one zone builds geometry — ambiguous, so the request stands and
+    /// the choice remains the open fidelity question (<c>BL-100</c>, C1 and C4).</item>
+    /// </list></summary>
+    public static string PreferPopulatedHorizonZone(string zone, IReadOnlyList<HorizonZone> horizonZones)
+    {
+        bool requestedIsAZone = false;
+        foreach (var z in horizonZones)
+            if (z.Name.Equals(zone, StringComparison.OrdinalIgnoreCase))
+            {
+                if (z.BuildsGeometry)
+                    return zone;
+                requestedIsAZone = true;
+            }
+        if (!requestedIsAZone)
+            return zone;
+        string? only = null;
+        foreach (var z in horizonZones)
+        {
+            if (!z.BuildsGeometry)
+                continue;
+            if (only != null)
+                return zone;   // more than one candidate — not decidable from the geometry
+            only = z.Name;
+        }
+        return only ?? zone;
+    }
+
     /// <summary>The zone to actually render, given the one the caller asked for: the request
     /// itself when this mission defines it, otherwise the first zone the file defines (and the
     /// request unchanged when the file defines none, so the caller still gets <see cref="NoFog"/>).
@@ -164,6 +205,28 @@ public sealed class WeatherState
     /// See docs/formats/weather.md.</para></summary>
     public string ResolveZone(string requested) =>
         _zones.ContainsKey(requested) || _zoneNames.Count == 0 ? requested : _zoneNames[0];
+
+    /// <summary>The zone to render when the chapter's own <c>horizon</c> subtree gets a say:
+    /// <see cref="ResolveZone(string)"/> first, then <see cref="PreferPopulatedHorizonZone"/>,
+    /// and the correction is taken only if <b>this</b> mission also defines fog for it — so the
+    /// sky and the fog stay the same zone, which is the whole invariant the pair has
+    /// (docs/formats/weather.md).
+    ///
+    /// <para>This is what fixes C1B, C2 and C3, whose <c>horizon/zone2</c> is a bare marker: the
+    /// <c>zone2</c> request resolved to itself (they <i>do</i> define <c>ZONE2</c> fog), so the
+    /// dome built with zero meshes and the fog came from the wrong zone — C3's night-blue on a
+    /// mission its own data lights at diffuse 1.5, C1B's 1128–1256 m band under a 10000–11000 m
+    /// one. Nothing on disk names the zone a mission flies (searched exhaustively 2026-07-22),
+    /// so the horizon's own contents are the evidence, not a lookup table.</para></summary>
+    public string ResolveZone(string requested, IReadOnlyList<HorizonZone> horizonZones)
+    {
+        var zone = ResolveZone(requested);
+        var preferred = PreferPopulatedHorizonZone(zone, horizonZones);
+        return preferred.Equals(zone, StringComparison.OrdinalIgnoreCase) || _zones.ContainsKey(preferred)
+            ? preferred
+            : zone;
+    }
+
 
     /// <summary>Fog for a zone ("zone1"/"zone2"/"zone3"); a no-op fog if the zone is absent.
     /// Callers should pass a <see cref="ResolveZone"/> result rather than a raw request.</summary>

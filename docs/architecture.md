@@ -396,7 +396,16 @@ Builds a chapter world (fullbright): World children + partition-referenced subtr
 (`BuildHorizon` makes the camera-anchored skydome, and is the ONE caller that sets
 `SceneBuilder.ForceFogged` — every horizon model in every chapter is authored `fog: false`, and
 honouring that on a dome that is 2.5x scaled ~22 km out would delete the horizon band; its
-`lighting: false` is honoured), `fvol*`, `dzpaths`. `BuildDzPaths` is its
+`lighting: false` is honoured), `fvol*`, `dzpaths`.
+`HorizonZonesOf`/`HorizonZones` census the `horizon` node's `zone*` children with the meshed-node
+count each subtree carries — read BEFORE the build, because the zone the dome and the fog share is
+picked from it (`Flight.WeatherState.PreferPopulatedHorizonZone`; three chapters ship a `zone2`
+that is a bare marker). Static over a `GameZ` so it needs no built scene and is testable
+off-engine.
+⚠ `BuildHorizon` builds exactly the zone it is handed, INCLUDING an empty one — the selection is
+  the caller's, and an explicit `--sky-zone=` is meant to be able to show a bare marker's nothing.
+  Its own name-absent fallback (first zone child) stays a no-op in the normal path.
+`BuildDzPaths` is its
 debug-only custom renderer: material-matched gate polygons green/red at 50% alpha, route as an open
 white line strip (never a filled or closed polygon).
 Splits the overcast deck into
@@ -1387,6 +1396,18 @@ trapezoid), `WIND`, and precipitation → `PrecipData`. Schema + colours + zone 
   order; `ResolveZone`'s fallback is the file's FIRST zone); `SW_ZONE*` twins are excluded.
 ⚠ The default stays `zone2` (user decision) — which zone a mission flies is in no file
   (negative result in weather.md), so a fallback is the only correct behaviour.
+`PreferPopulatedHorizonZone` is the second, geometry-driven correction (`BL-277`): a request whose
+`horizon/zone*` subtree carries NO meshes yields to the one zone that does, which is what makes
+C1B/C2/C3 render a sky at all. The `ResolveZone(requested, horizonZones)` overload runs both in
+order and takes the geometry pick ONLY if this mission's weather.json also defines fog for it, so
+sky and fog are always the same zone. Census + per-chapter table: weather.md; the census itself is
+`WorldBuilder.HorizonZonesOf`; coverage `CSVM.Tests/SkyZoneTests.cs`.
+⚠ **The rule must never fall back to the horizon's FIRST zone.** C5's weather.json lists `ZONE1`
+  first while its horizon lists `zone3` first, so that would pair one zone's sky with another's
+  fog. A request the horizon does not name at all is left to `ResolveZone`'s weather-file fallback,
+  which is what already lands C5 on `zone1`.
+⚠ It fires on a UNIQUE populated sibling only. Two buildable zones (C1, C1C, C2B, C4) means the
+  geometry cannot decide and the request stands — that is `BL-100`, still open, not a gap here.
 
 ## src/Flight/FlightAudio.cs
 Own-plane non-positional loops (engine with throttle-driven pitch, overspeed whine, rattle,
@@ -2121,6 +2142,15 @@ when `_spec.AnimLab`, else `.Session`), which is also where `TexturesOutliveBuil
   there. The viewer path builds **no** lab node at all: `--weapon-test` is `WeaponBench.Run` over a
   parked plane and a scene-less pool, and quits the session (D9). `DriveSimSteps` no longer steps a
   lab or a second pool.
+⚠ **`HorizonScale` 2.5x is a MAXIMUM, not a constant** (`HorizonScaleFor`). The skydome is anchored
+  on the camera, so its far wall sits at (its own radius × the scale) from the eye in every
+  direction; past `Camera3D.Far` (40 km) it is clipped and the engine clear colour shows through
+  the sky. Every chapter's dome is 6.4–12.0 km and clears that at 2.5x — except **C1B's zone1 at
+  21.8 km**, which 2.5x puts at 54.5 km, so it renders as a hole (seen at the controls when
+  `BL-277`'s per-chapter zone selection first chose it). The scale is fitted to
+  `HorizonFarFraction` (0.9) of the far plane from the built dome's OWN AABB, never a per-chapter
+  table: C1B lands ~1.65x, every other chapter keeps 2.5x exactly, which is why no other chapter's
+  sky moved. Raising `Camera3D.Far` instead would cost depth precision world-wide.
 ⚠ **`--pos`/`--direction` are routed by mode in ONE place** (`ResolvePlacement`): flight gets
   `_spawnAt`/`_spawnDir`, everything else `_camPos`/`_camDir`. **Never fold `_camDir` into
   `_lookAt`** — `--lookat` is a POINT, `--direction` a vector; only flight converts one to the other.
@@ -2597,6 +2627,13 @@ null guard covers the frame before that deferred free lands (it can never be nul
   weather state. `Build` takes it as a `buildDomes` callback, invoked between resolving the zone and
   applying fog/whiteout/puffs/precip, at exactly the point the original inline code ran it — do not
   reorder `Build`'s three steps (zone → domes → setup) relative to each other.
+`Build` also takes the chapter's `WorldBuilder.HorizonZones()` census, because `LoadWeather`
+resolves the rendered zone from BOTH the mission's zone names and the horizon's geometry
+(`BL-277` — see `Flight/Weather.cs`). `_activeZone` is the single answer both the fog and the dome
+are built from, and it is logged with the meshed counts it was decided on.
+⚠ An explicit `--sky-zone=` skips the geometry correction and is honoured literally, empty dome and
+  all (`SkyZoneExplicit`) — it is the flag for looking at a named zone, and `analysis/`'s recorded
+  repro poses depend on it. The weather-file fallback still applies to it, as before.
 ⚠ **`GlobalShaderParameterSet`, never `Add`.** `GlobalShaderParameterAdd` runs once per process in
   `Launcher._Ready`; `Build`'s fog/whiteout writes must stay `Set`-only, or every in-process menu
   relaunch that flies a second foggy mission crashes on the duplicate `Add`.

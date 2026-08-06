@@ -75,7 +75,9 @@ and leave gaps when retiring old ones.
 
 ## GOLD — golden images
 
-- **GOLD-1** — **Update moved hashes with the visual change and explain each shot.**
+- **GOLD-1** — **Update moved hashes with the visual change, and explain each moved shot in the
+  commit message.** The explanation is history and belongs in the git log; `manifest.json`'s
+  `exercises` field says what a shot covers *today* — do not append a re-pin note to it.
 - **GOLD-2** — **A golden is a tripwire, not a diagnosis.**
 - **GOLD-3** — **For render-path changes, sweep every golden and inspect the largest movers.**
 - **GOLD-4** — **Reproduce a golden with its OWN `frame` count, or the A/B is meaningless.** The

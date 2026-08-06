@@ -1198,18 +1198,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-082` `[Bug]` **Rail-over-transition z-nit**: one 6-poly rail patch NE of the C1 bridges sits below the
   draw-order tie-break's resolution.
 
-- `BL-100` `[Research]` **Which weather/sky zone do C1–C4 actually use?** **C5 is answered — `zone1`** (user A/B
-  2026-07-22; landed as polish-3 item 2, see `docs/formats/weather.md` and `Weather.ResolveZone`).
-  **Still open for C1–C4**, all of which define `zone2` and resolve to themselves. ⚠ **This item
-  used to say that made it "a fidelity question rather than a bug" — disproven for C1B, C2 and C3**
-  (2026-08-05, `PT-23`): their gamez `horizon/zone2` node is an empty marker, so those three render
-  **no dome geometry at all** under today's `zone2` default, and C3 wears night-blue fog on a
-  sunlit mission. That is `BL-277`, which answers this item for those three; what stays open here
-  is C1 and C4, where both zones carry geometry and the choice really is a fidelity call.
-  **C1 is the one
-  worth doing first:** it is the only chapter whose own scripts disagree (`load.gw` →
-  `zone2_cloud_floor`, `tex_fx.gw` → `h_zone1scroll`), and its two zones are genuinely different
-  skies (zone2 = moon/stars night, zone1 = day haze).
+- `BL-100` `[Research]` **Which weather/sky zone do C1, C1C, C2B and C4 actually use?** **C5 is
+  answered — `zone1`** (user A/B 2026-07-22; landed as polish-3 item 2). **C1B, C2 and C3 are
+  answered — `zone1`**, settled from the data rather than by A/B (2026-08-06, `BL-277`): their
+  gamez `horizon/zone2` is a bare marker with no dome at all, so the geometry decides it and
+  `WeatherState.PreferPopulatedHorizonZone` now selects it (`docs/formats/weather.md`).
+  **What stays open is the four chapters where BOTH zones build a dome** — C1, C1C, C2B, C4 — and
+  there the choice really is a fidelity call the geometry cannot make. ⚠ **The "C1 first, its own
+  scripts disagree" ranking is withdrawn** (2026-08-06, `interp.json` re-read in full): its two
+  strings are not two zone selections — `load.gw`'s `CameraSetHorizonXZ zone2_cloud_floor` names a
+  node **C1's gamez does not contain**, and `tex_fx.gw`'s `FindNode h_zone1scroll` is a UV scroll,
+  not a pick. All four zone-bearing strings in the 98 scripts are accounted for in
+  `docs/formats/weather.md`; none bears on zone choice. So this is a plain four-chapter sweep, with
+  no data reason to order it. C1 is still the most *visible* case (its two zones are genuinely
+  different skies — zone2 moon/stars night, zone1 day haze). Method: fly each candidate in the
+  original and compare against `--sky-zone=zone1` / `=zone2`, which still render a named zone
+  literally.
 
 - `BL-101` `[Tuning]` `[Owed-playtest]` **Fine-tune fog and environment** — method: record video from a spawn point flying straight for a
   fixed number of seconds, in both engines, and compare.
@@ -1393,30 +1397,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   survives the reader (user's call, 2026-08-05).
   *Playtest after fix:* fly C1 and a one-sprite chapter (C2 or C3) at several altitudes and past
   the deck — the singles should thin with the data, and the deck should carry its own dense layer.
-
-- `BL-277` `[Bug]` **`SkyZone` hard-codes `zone2`, which has no horizon geometry at all in C1B, C2 and
-  C3.** Found by checking `PT-23`'s "skydome/fog in C1B and C3 are not correct, perhaps only wrong
-  zone" against the data (2026-08-05), and it is a bug, not a fidelity preference:
-  `SessionSpec.cs:176` sets `SkyZone = "zone2"` chapter-wide; `Weather.ResolveZone`
-  (`Weather.cs:165-166`) only falls back when a zone is **absent**, and these chapters *define*
-  `ZONE2`, so it resolves to itself with no warning. But their gamez `horizon/zone2` node is a bare
-  marker (`model_index: -1`, `child_indices: []`), so `WorldBuilder.BuildHorizon("zone2")`
-  (`WorldBuilder.cs:385-413`, called from `GameSession.cs:782`) builds a dome with **zero meshes** —
-  what renders is the `WorldEnvironment` background. Horizon children per chapter: C1 1/4,
-  **C1B 4/0**, C1C 1/4, **C2 3/0**, C2B 1/2, **C3 3/0**, C4 1/4. The fog picked is wrong the same
-  way: C3's `ZONE2` fog is night-blue `[0.063, 0.094, 0.188]` on a mission the data lights at
-  diffuse 1.5 / ambient 0.3 with the sun 25° up, while `ZONE1` carries the matching daylight grey
-  `[0.79, 0.79, 0.79]`; C1B's `ZONE2` fogs only 1128–1256 m so everything above ~1.2 km renders
-  unfogged, where `ZONE1` fogs 10000–11000 (the whole flyable column). `BL-036`'s node counts
-  agree — C1B and C3 author their world under zone 1 (2101 and 1647 nodes) with 2 nodes in zone 2.
-  Fix: select the zone per chapter (or pick the zone whose `horizon` subtree actually has
-  children), which also answers `BL-100` for these three. ⚠ **Trap:** nothing on disk selects the
-  zone — not the mission zrdr, not the 53 `.gw` scripts, not the DLL strings
-  (`docs/formats/weather.md:86-96`), and **not** `fogvol.zrd`, which carries no `fog_zone` key in
-  any chapter (checked 2026-08-05). The selection rule is engine-side; wire it from the horizon
-  subtree's own contents rather than inventing a lookup.
-  *Playtest after fix:* fly C1B and C3 — a real dome should appear, C3's haze should read as
-  daylight grey, and C1B should stay fogged above 1.2 km. `CAP-11` then judges the brightness.
 
 ## Effects & animation runtime
 
