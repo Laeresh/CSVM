@@ -106,6 +106,12 @@ public partial class FlightController : Node3D
     /// back to the old center-ray-only test.</summary>
     public PlaneCollider? Collider;
 
+    /// <summary>The airframe's physics body on the aircraft collision layer, built in
+    /// <c>_Ready</c> from <see cref="Collider"/>'s own boxes: what a projectile ray or another
+    /// plane's sweep strikes. This plane's own queries exclude it (<see cref="AircraftBody.ExcludeSelf"/>).
+    /// Null when no collider boxes could be derived — the plane is then unhittable, as before.</summary>
+    public AircraftBody? Body;
+
     /// <summary>Per-part hit points from the vehicle def's destroyable_parts.
     /// When set, collisions below the crash threshold damage the struck
     /// part and the plane flies on; null keeps the old any-hit-crashes behavior.</summary>
@@ -471,6 +477,15 @@ public partial class FlightController : Node3D
                 },
             });
         }
+        // The airframe's physics body: the PlaneCollider boxes as real shapes on the aircraft
+        // layer, riding this node's transform as a child. Every OTHER plane's sweep and every
+        // hit ray sees it; this plane's own queries pass Body.ExcludeSelf so it never collides
+        // with itself. Nothing here lets the physics engine move the plane.
+        if (Collider != null)
+        {
+            Body = new AircraftBody(this, Collider);
+            AddChild(Body);
+        }
         SnapCamera();
 
         // One firing-state slot per firable gun group (turrets excluded — inert in M3).
@@ -570,6 +585,7 @@ public partial class FlightController : Node3D
             _hudCanvas.Visible = true;  // the crash camera hid it (footage); flying again
         if (PlaneModel != null)
             PlaneModel.Visible = true;
+        Body?.SetHittable(true);
         _throttle = SpawnThrottle;
         // The start choreography (snd_propstart already re-fires from FlightAudio's own
         // loop-restart hook): the static blade prop cross-fades to its spinning blur disc with
@@ -1332,7 +1348,8 @@ public partial class FlightController : Node3D
         Respawn();
     }
 
-    /// <summary>True if the segment crosses any static world collider; on a hit,
+    /// <summary>True if the segment crosses any solid collider — the static world, or another
+    /// aircraft's body (never this plane's own, excluded by RID); on a hit,
     /// <paramref name="point"/> is the impact position (else the segment end) and
     /// <paramref name="hitName"/> names the collider (parent/body — e.g. a terrain
     /// tile's "g27889/col", or a clutter city block's "world1/clutter_bld_3_7").</summary>
@@ -1344,7 +1361,8 @@ public partial class FlightController : Node3D
         var space = GetWorld3D()?.DirectSpaceState;
         if (space == null)
             return false;
-        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, to));
+        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, to,
+            CollisionLayers.WorldAndAircraft, Body?.ExcludeSelf));
         if (hit.Count == 0)
             return false;
         point = (Vector3)hit["position"];
@@ -1362,6 +1380,7 @@ public partial class FlightController : Node3D
         _autoRespawnIn = AutoRespawnDelay;
         if (PlaneModel != null)
             PlaneModel.Visible = false; // the airframe is gone; HUD prompts for respawn
+        Body?.SetHittable(false);       // a crashed plane soaks no rounds and blocks no sweep
         // Crash freezes the airframe before the fire step runs again this frame (the early
         // _crashed return above it), so a held trigger's loop would otherwise keep playing under
         // the wreck until respawn — nothing else ever calls StopGunLoop while _crashed is true.
@@ -1596,7 +1615,10 @@ public partial class FlightController : Node3D
                     {
                         Shape = p.Shape,
                         Transform = pose * p.Local,
+                        CollisionMask = CollisionLayers.WorldAndAircraft,
                     };
+                    if (Body != null)
+                        q.Exclude = Body.ExcludeSelf; // own boxes always overlap the own body
                     // One hit is enough — this only asks whether the box is free.
                     // (Was a 4-result scan skipping bodies named "clutter_col". Those
                     // bodies were real until `a795548` confined clutter collision to
@@ -1671,8 +1693,10 @@ public partial class FlightController : Node3D
         Log.Info("flight", $"graze reaction effect={effect} surface={surface} into={hitName} contact=({impact.X:0},{impact.Y:0},{impact.Z:0}) site=({site.X:0},{site.Y:0},{site.Z:0}) rendered={(GrazeEffectSink != null ? 1 : 0)}");
     }
 
-    /// <summary>Sweeps each airframe box along this frame's motion against the static
-    /// world colliders. On a hit, reports the earliest one: contact point + surface
+    /// <summary>Sweeps each airframe box along this frame's motion against every solid
+    /// collider — the static world plus other aircraft's bodies (a mid-air is a collision
+    /// like any other, resolved by SurviveHit/Crash), this plane's own body excluded by
+    /// RID. On a hit, reports the earliest one: contact point + surface
     /// normal (from rest info at the just-touching pose), collider name, which part
     /// struck, and the motion fraction where it stopped (for the debug draw). False
     /// when no collider was built or nothing is in the way.</summary>
@@ -1700,7 +1724,10 @@ public partial class FlightController : Node3D
                 Shape = p.Shape,
                 Transform = baseXf * p.Local,
                 Motion = motion,
+                CollisionMask = CollisionLayers.WorldAndAircraft,
             };
+            if (Body != null)
+                query.Exclude = Body.ExcludeSelf; // never sweep into this plane's own body
             var cast = space.CastMotion(query); // [safe, unsafe] fractions; [1,1] = clear
             if (cast[0] >= 1f || cast[0] >= stopFrac)
                 continue;

@@ -77,7 +77,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Air-to-air hittability (front-loads M4 A1)
 
-1. ☐ Aircraft physics bodies on the shared `PlaneCollider` shapes, with collision layers
+1. ☑ Aircraft physics bodies on the shared `PlaneCollider` shapes, with collision layers
 2. ☐ Projectiles strike aircraft: per-shot owner exclusion, struck-part mapping, damage applied
 3. ☐ In-engine hittability suite: hit → part → damage → kill chain + self-hit negative case
 
@@ -109,7 +109,7 @@ in this one worktree; no parallel worktrees planned.
 
 # Wave A — Air-to-air hittability
 
-## A1 ☐ Aircraft physics bodies on the shared `PlaneCollider` shapes, with collision layers
+## A1 ☑ Aircraft physics bodies on the shared `PlaneCollider` shapes, with collision layers
 
 **Goal.** Every flying aircraft carries a `CollisionObject3D` body whose shapes are the existing
 `PlaneCollider` boxes, on a dedicated collision layer — so a physics ray can strike a plane, and

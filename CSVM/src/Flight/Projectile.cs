@@ -319,9 +319,15 @@ public sealed partial class ProjectilePool : Node3D
     // else here and a `--det` run throttles identically.
     private readonly Dictionary<string, float> _gunEffectAt = new();
 
-    private readonly PhysicsRayQueryParameters3D _ray = new(); // reused each step (no per-round alloc)
+    // Reused each step (no per-round alloc). World colliders only for now: aircraft bodies exist
+    // (CollisionLayers.Aircraft) but rounds may not strike them until each round excludes its own
+    // shooter's body — a mask that saw planes today would shoot every plane down with its own fire.
+    private readonly PhysicsRayQueryParameters3D _ray = new() { CollisionMask = CollisionLayers.World };
     private readonly SphereShape3D _proximitySphere = new();
-    private readonly PhysicsShapeQueryParameters3D _proximityQuery = new();
+    // Fuse/blast probes stay world-only on purpose: a proximity fuse arming on an aircraft or a
+    // blast sphere feeding planes into the destructible DamageSink are undesigned behaviors —
+    // aircraft take direct hits only.
+    private readonly PhysicsShapeQueryParameters3D _proximityQuery = new() { CollisionMask = CollisionLayers.World };
     private readonly List<AudioStreamPlayer> _sfxPool = new();
     // CANNON_SPREAD jitter and the stand-in fireball's sprite scatter. Held rather than resolved
     // per draw: two draws fire per round.

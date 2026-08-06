@@ -104,6 +104,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/WingLightBlinker.cs` — blinks the wingtip flares 0.08 s every 1.5 s, reset off on respawn; `--fly` only.
 - `src/Flight/PylonOrdnance.cs` — the rockets under the wings: one FLYOUT-model body per loaded pylon, hidden as its ammo depletes; `--fly` only.
 - `src/Flight/PlaneCollider.cs` — derives 5–8 plane-frame collision boxes from the built model's triangles, with no per-plane data.
+- `src/Flight/CollisionLayers.cs` — the named physics layers (world / aircraft): the one place a layer bit is assigned a meaning.
+- `src/Flight/AircraftBody.cs` — the flying plane's physics body: the shared `PlaneCollider` boxes on the aircraft layer; struck shape → part name.
 - `src/Flight/PlaneDamage.cs` — per-part HP model from vehicle.json `destroyable_parts`; maps struck box + impact point to a data part.
 - `src/Flight/DamageVisuals.cs` — flips the torn-skin `pdpN` panels (paired by mesh position) at the data's injure thresholds, plus fire trails.
 - `src/Flight/DamageLab.cs` — the `--damage`/F5 slider UI: one HP slider per part, driving the parked plane's DamageVisuals or the flown plane's real PlaneDamage.
@@ -1746,6 +1748,8 @@ lab's rebuild-on-swap cannot leave the old ordnance hanging beside the new.
 Derives 5–8 plane-frame collision boxes from the built model's mesh triangles alone (no per-plane
 data): region-clipped geometry (tail/wing/fuselage), then greedy volume-guided refinement cutting
 one OR two parallel planes per axis (the double cut separates bilateral pairs like twin fins).
+Single-sourced: the terrain sweep casts these boxes AND `AircraftBody` mounts the same
+`BoxShape3D` resources as the plane's hittable body — never a second derivation.
 ⚠ Relabel renames aft outboard boxes `wing` (box wholly one side of the centerline + centre
   outboard of WingBandFrac) so PlaneDamage's localImpact-blind "tail" arm never sees a wingtip
   strike. The half-span is known here — do not side-split in PlaneDamage instead.
@@ -1760,7 +1764,10 @@ logs), crash and respawn. The camera is `CameraController`'s — this node only 
 the pose, the dt and the mixed orbit axes (`OrbitInput`); on a crash it cuts to `CrashView` once,
 writes nothing to the camera until respawn, and hides the HUD layer (the original's crash camera
 shows no HUD — footage), restoring it on respawn. Sweeps the
-PlaneCollider boxes via CastMotion each physics frame; the sim half is `SimStep(dt)`, called by
+PlaneCollider boxes via CastMotion each physics frame — mask world+aircraft with its own
+`Body` (`AircraftBody`, built in `_Ready` from the same boxes) excluded by RID, so another plane
+is solid and a mid-air resolves through the same SurviveHit/Crash as terrain; `Crash`/`Respawn`
+toggle the body's hittability; the sim half is `SimStep(dt)`, called by
 `_PhysicsProcess` (realtime clock) or by `GameSession` (fixed/halted clock). Collaborators:
 FlightModel, CameraController + CamParams, Loadout + ProjectilePool (guns/rockets),
 `CollideDamageSink` →
@@ -2879,3 +2886,24 @@ the extraction scripts). Warn, never block: the dev tree holds valid extractions
   change that invalidates old extractions — a hand-maintained promise, not automation.
 ⚠ The stamp is parsed via `File.ReadAllText`, not bytes: PowerShell 5.1 writes UTF-8 WITH a BOM,
   which `JsonDocument.Parse(byte[])` rejects.
+
+## src/Flight/CollisionLayers.cs
+The named physics collision layers — world (layer 1, the engine default every pre-existing
+collider sits on implicitly) and aircraft (layer 2, `AircraftBody`) — plus the combined mask.
+The first and only place a layer bit is assigned a meaning; new layers go here, never inline.
+⚠ Godot's default query mask is ALL layers: a query that should not see planes must say
+  `CollisionLayers.World` explicitly (weapon-lab picks, the pool's fuse/blast spheres do).
+⚠ Nothing assigns `World` to world colliders — they carry it by engine default. Assigning it
+  everywhere would be churn for zero behavior; the constant documents the meaning instead.
+
+## src/Flight/AircraftBody.cs
+The flying aircraft's physics body: one `AnimatableBody3D` child of `FlightController`, one
+`CollisionShape3D` per `PlaneCollider.Part` reusing the SAME `BoxShape3D` + local transform the
+terrain sweep casts, on the aircraft layer. Rides the controller's transform; `PartName(shapeIdx)`
+maps a query's struck shape back to the part (shapes added in `Parts` order); `ExcludeSelf` is the
+cached one-entry RID list the owner's own queries pass; `SetHittable` drops it to layer 0 while
+crashed, back at respawn.
+⚠ The plane stays Node3D-moved by `FlightModel` — `SyncToPhysics` false, `CollisionMask` 0: the
+  body is a query target only, and nothing may let the physics engine push plane transforms. A
+  plane-vs-plane impact resolves through the striking plane's `SurviveHit`/`Crash`, never a solver.
+⚠ Shapes are shared resources, not copies — a fidelity upgrade edits `PlaneCollider`, not this.
