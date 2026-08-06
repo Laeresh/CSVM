@@ -138,6 +138,8 @@ public static class Suites
             "C4 Danger Zones require their authored entry and exit apertures, not a marker sphere", StuntGates));
         into.Add(new TestHarness.Suite("trail-world-anchor",
             "a trail emitter under a rotated carrier anchors at world identity and drops puffs where it is fed", TrailWorldAnchor));
+        into.Add(new TestHarness.Suite("damage-template-pool",
+            "a second panel's tear takes its own pooled gimmeflakes copy and leaves the first burst flying at its site (BL-288)", DamageTemplatePool));
     }
 
     // ---- BL-241: emitter lifetime is observable with no GPU -------------------------------------
@@ -1963,6 +1965,106 @@ public static class Suites
             stage.Free();
         }
     }
+
+    // ---- BL-288: a new panel's tear must not steal a live panel's template copy ----------------
+
+    /// <summary>`BL-288`: the crash rig's damage-stage templates are pooled, and a relocating
+    /// CALL_ANIMATION from a NEW anchor takes its own copy instead of teleporting the one a
+    /// previous anchor's burst is still flying on. Reproduces the shipped shape exactly: two of
+    /// the authored `pdpanelN` menu defs each CALL <c>gimmeflakes</c> AT_NODE their own
+    /// <c>pdpN</c>, on a runtime carrying the crash rig's role flags plus the pool
+    /// (<c>PooledTemplates</c> + <see cref="AnimRuntime.PoolSlotMeta"/> slot containers, the
+    /// shape <c>WorldEffectsFactory.BuildFlightCrashRuntime</c> builds). Before the fix the
+    /// second call relocated and restarted the single shared <c>planeflakes</c> root mid-flight —
+    /// the "panels fly away repeatedly, and from the wrong site" report.</summary>
+    private static void DamageTemplatePool(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var stage = new Node3D { Name = "DamagePoolStage" };
+            var pdp5 = PoolAnchorNode("pdp5", new Vector3(-10, 0, 0));
+            var pdp4 = PoolAnchorNode("pdp4", new Vector3(10, 0, 0));
+            stage.AddChild(pdp5);
+            stage.AddChild(pdp4);
+            var copies = new List<Node3D>();
+            for (int slot = 0; slot < 2; slot++)
+            {
+                var pool = new Node3D { Name = $"pool{slot}" };
+                pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
+                stage.AddChild(pool);
+                int built = Session.WorldEffectsFactory.BuildEffectStage(world.Gamez,
+                    world.Session.Builder.Scene, pool, new[] { "planeflakes" });
+                ctx.Check(built == 1, $"slot {slot} staged its planeflakes copy");
+                foreach (var child in pool.GetChildren())
+                {
+                    if (child is Node3D copy)
+                    {
+                        copies.Add(copy);
+                    }
+                }
+            }
+
+            var runtime = new AnimRuntime
+            {
+                AutoStart = false,
+                ManualAdvance = true,
+                SoundHandledElsewhere = true,
+                EmitterFactory = new CountingEmitterFactory(),
+                PlaceCalledTemplates = true,
+                NameResolveFallback = true,
+                PooledTemplates = true,
+            };
+            ctx.Host.AddChild(stage);
+            ctx.Host.AddChild(runtime);
+            try
+            {
+                runtime.Bind(stage, world.Session.Program.Subset(new[] { "pdpanel4", "pdpanel5" }));
+                runtime.Play("pdpanel5", stage, applyReset: false);
+                for (int i = 0; i < 6; i++)
+                {
+                    runtime.Advance(1f / 60f);
+                }
+
+                var first = copies.Find(c => AtPoolSite(c, pdp5));
+                ctx.Check(first != null, $"pdpanel5's tear placed a planeflakes copy at pdp5");
+
+                // Mid-flight of the first burst (the def's authored RUN_TIME is 1.0 s), the
+                // second panel tears.
+                runtime.Play("pdpanel4", stage, applyReset: false);
+                for (int i = 0; i < 6; i++)
+                {
+                    runtime.Advance(1f / 60f);
+                }
+
+                var second = copies.Find(c => AtPoolSite(c, pdp4));
+                ctx.Check(second != null, $"pdpanel4's tear placed a planeflakes copy at pdp4");
+                ctx.Check(first != null && AtPoolSite(first, pdp5),
+                    $"pdp5's copy stayed at ITS OWN site — the new tear did not steal it (BL-288)");
+                ctx.Check(first != null && second != null && !ReferenceEquals(first, second),
+                    $"the two tears hold two different copies");
+                ctx.Check(runtime.PoolRecycles == 0,
+                    $"no pool wrap for two anchors over two copies ({runtime.PoolRecycles})");
+            }
+            finally
+            {
+                runtime.Free();
+                stage.Free();
+            }
+        });
+    }
+
+    /// <summary>A flat named call-site node for <see cref="DamageTemplatePool"/> — name meta set
+    /// the way the crash rig's own anchor scaffold sets it, so resolution finds it.</summary>
+    private static Node3D PoolAnchorNode(string name, Vector3 at)
+    {
+        var node = new Node3D { Name = name, Position = at };
+        node.SetMeta(AnimRuntime.NameMeta, name);
+        return node;
+    }
+
+    private static bool AtPoolSite(Node3D? copy, Node3D site) =>
+        copy != null
+        && copy.GlobalTransform.Origin.DistanceTo(site.GlobalTransform.Origin) < 0.5f;
 
     // ---- the full effects sweep as suite verdicts ----------------------------------------------
 

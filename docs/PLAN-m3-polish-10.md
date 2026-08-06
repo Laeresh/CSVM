@@ -61,7 +61,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Damage & crash effects
 
-1. ☐ `BL-288` — `gimmeflakes` fires only at a panel tear, and the flakes separate in world space
+1. ☑ `BL-288` — `gimmeflakes` fires only at a panel tear, and the flakes separate in world space
 2. ☐ `BL-287` — the fuel leak stops fighting `WingLightBlinker` over `wing_flare2`/`winglight2`; confirm panels 4/6 burn flakes-only as authored
 3. ☐ `BL-292` — the crash water splash orients to the struck surface: spray up, rings flat
 
@@ -94,32 +94,141 @@ landing message that the mix changed so that playtest is re-based. B12, B14 and 
 
 # Wave A — Damage & crash effects
 
-## A1 ☐ `BL-288` — `gimmeflakes` fires once at the tear and separates in world space
+## A1 ☑ `BL-288` — `gimmeflakes` fires once at the tear and separates in world space
 
-**Goal.** Taking panel damage in flight throws a single flake burst at the moment a panel tears;
-the flakes separate from the plane, decelerate in world space and fall behind. A fuel-leak-only
-stage throws none.
+**LANDED 2026-08-06 (second pass).** The diagnosed unpooled-template theft below was fixed by
+pooling the crash rig's templates (slot containers per `effect_pools.json`'s new crash section,
+sized to the authored distinct call-anchor counts) plus a new per-(root, anchor) sticky
+caller-slot assignment in `AnimRuntime` — the crash rig's calls anchor on plane nodes outside any
+slot, so the world pool's ancestry-based slot choice alone could not work here. The TopLevel half
+stayed. Verified on `--plane=player_bhawk` with staggered two-part damage: each of five torn
+panels claimed its own `planeflakes` copy (log `caller slot N … claimed by 'pdpX'`, no wrap), the
+screenshot series shows both wings' debris fields receding at their own sites, nothing at the
+nose; new `damage-template-pool` suite; full battery green (515 units / 32 suites / 13 goldens
+byte-identical). Record in the landing commit. The section below is kept as the diagnosis record.
 
-**Evidence (confidence: traced for the symptom, lead for the over-fire mechanism).** Seen at the
-controls 2026-08-05 (backlog `BL-288`). (a) Flakes fly on EVERY damage animation, but the authored
-menu calls `gimmeflakes` only from the `pdpanelN` defs — `player_fuelleak` calls none. The
-over-fire may be a re-CALL of the whole `pdpanelN` def rather than the flakes — check what our
-wiring invokes before fixing. (b) The flakes stay plane-local — the third bite of the
-plane-parented-effect trap (`BL-229`, the smoke-trail `TopLevel` fix of 2026-08-03 and its
-`trail-world-anchor` suite are the family).
+**User re-test verdict, same day:** the pooling fix stands, but the FEATURE semantics are
+disputed — nose damage spraying wing panels, tears while armor absorbs, repeated identical
+bursts. The data reading says those are authored (`random_gun_impact`'s random `pdp1/2/4`, the
+vehicle-level `player_fuelleak`'s random `pdp1–3`, `pdpanel7`'s 4-burst call, and our
+combined-armor+HP threshold scale) — whether the ORIGINAL behaves that way is now
+`BL-297` `[Blocked: CAP-29]` (backlog.md / playtest.md), per the ground rule that an item needing
+a capture stops and records it. No further code here.
 
-**Approach.** First trace what invokes `gimmeflakes` (log the dispatch per damage stage in the F5
-lab). Fix (a) at the call site so only a panel-tear transition fires it. Fix (b) with the proven
-family fix: world-stage the emission (`TopLevel` at the site), never per-frame reparenting.
+**Goal (unchanged).** Taking panel damage in flight throws a single flake burst at the moment a
+panel tears; the flakes separate from the plane, decelerate in world space and fall behind. A
+fuel-leak-only stage throws none.
 
-**Model recommendation.** medium — mechanical once traced; the trap family is documented.
+**What the first pass got right — keep it.** `AnimRuntime.PlaceTemplateOn` (~line 3130) now sets
+`root.TopLevel = true` before writing the placed `GlobalTransform`. This is real and necessary:
+without it, ANY template `PlaceTemplateAt` relocates onto a still-flying (not frozen-at-crash)
+anchor stays parented under the controller and gets dragged/re-yawed every later frame — confirmed
+by tracing the parent chain (`WorldEffectsFactory.BuildFlightCrashRuntime`'s `crashRoot` sits under
+`controller`, which is the flying `FlightController`) and matches the already-tested `BL-229`/
+`trail-world-anchor` family exactly. `.\RunTests.ps1` is clean with it in (513 unit + 31 engine
+suites incl. `trail-world-anchor`/`effects-census`/`damage-hd` + 13 goldens byte-identical) — this
+part regresses nothing and should stay regardless of what else changes.
 
-**Verify.** F5 damage lab in `--fly` at a real mission spawn and heading (the identity pose hides
-the parenting bug — `docs/verification.md`); step damage stages: burst only on a tear, flakes fall
-behind. Then `.\RunTests.ps1` incl. the `trail-world-anchor` suite and goldens.
+**What was WRONG in the first pass: verification never used the plane the bug was reported on.**
+Every probe in the first session used the CLI's default/random plane selection (`--fly
+--damage=leftwing:0.01`, no `--plane=`) — never `--plane=player_bhawk`. `DamageVisuals.cs`'s own
+class doc already flags the Bloodhawk (with the Firebrand and Brigand) as one of the three
+airframes with non-standard/crossed panel-node naming. Any session picking this back up **must**
+add `--plane=player_bhawk` to every repro command, matching the user's actual report.
 
-**⚠ Traps.** Do not mute `gimmeflakes` to fix (a) — the tear moment must still throw its burst.
-Verify off-origin; the identity pose masks plane-local anchoring.
+**The real, now-evidenced root cause: `gimmeflakes`'s template (`planeflakes`) is a single,
+UNPOOLED node shared across every panel and every hit, and each new `CALL_ANIMATION gimmeflakes`
+steals it.** Traced 2026-08-06 with `--plane=player_bhawk --damage=leftwing:0.01 --debug-anim
+--log=anim:debug` (`.scratch/logs/probe-*.out`, the `GD.Print` stream — NOT the categorized `.log`
+file, which only carries `Log.*` calls):
+```
+damage panel: pdpanel5 on (leftwing 1%)
+anim: retarget 'gimmeflakes' onto 'pdp5' (pdp5) [caller pdpanel5]
+damage panel: pdpanel4 on (leftwing 1%)
+anim: retarget 'gimmeflakes' onto 'pdp4' (pdp4) [caller pdpanel4]
+damage panel: pdpanel3 on (leftwing 1%)
+anim: retarget 'gimmeflakes' onto 'pdp3' (pdp3) [caller pdpanel3]
+```
+Each `AT_NODE` **resolves correctly** to its own panel (pdp5/pdp4/pdp3 in turn) — so the earlier
+"(a) over-fire" framing (a bad re-CALL, or bad node resolution) is still a correct disproof; that
+part of the previous session's conclusion holds. What is NOT idempotent is the template root
+itself: `AnimRuntime.ForCrashRig` never sets `PooledTemplates`/`ShowPlacedTemplates` (grep
+confirms — only `WorldEffectsFactory.BuildWorldEffectsRuntime:408-409` and the test suites set
+them; the crash rig never does). So `TemplateRootsFor("planeflakes", ...)` always returns the
+SAME single "planeflakes" node for every panel on every hit. In the `CallAnimation` dispatch
+(`AnimRuntime.cs` ~2384-2461), each subsequent call — pdp4's, then pdp3's — finds `IsLive(target,
+startAnchor)` false (the live instance is keyed on the PREVIOUS anchor, e.g. pdp5, not this one),
+so it unconditionally `PlaceTemplateAt`s (teleports) the shared root onto the NEW site and
+`Start()`s it again from the def's rest pose — discarding whatever the previous panel's flakes
+were doing mid-flight and restarting the whole burst at the new location. `RemoveInstances` inside
+`Start` is keyed on the NEW anchor too, so it does not even clean up the stale instance still
+registered under the OLD anchor — for the ~1 s the def's `RUN_TIME` runs, two or three `AnimInstance`s
+of the same def can be alive on different (one current, others stale) anchors at once, all driving
+the SAME `flake1..flake7` child nodes (`MotionSet.Add`'s per-`(Target,Channel)` eviction is what
+keeps only the latest one visible — read `docs/architecture.md`'s `MotionSet.cs` entry before
+touching this).
+
+This matches BOTH user-reported symptoms without further hypothesis: **"multiple times"** is the
+debris repeatedly teleport-and-restarting as each new panel crosses its threshold (in the extreme
+single-hit repro above all three panels fire in one frame; in a normal fight, hits land seconds
+apart, so the user would SEE each teleport as a fresh burst); **"wrong site, even the nose"** is
+the debris always ending up wherever the MOST RECENT panel-tear resolved to, never staying at the
+panel the user is actually watching — and depending on where Bloodhawk's own pdpN nodes physically
+sit (unverified — see next), the most recent one could easily read as "the nose" even though the
+hit landed on a wing.
+
+**Not yet done — pick up here.**
+1. **Confirm the physical site claim.** Dump Bloodhawk's `pdp1..pdp8` node positions (no existing
+   `--dump-*` covers this — extend `--dump-markers` or write a one-off probe reading
+   `PlaneBuilder.DamagePanels`/`FindByName` positions) and correlate against a staggered-hit repro
+   (`--damage=leftwing:0.15,rightwing:0.15` — NOT a single `:0.01`, which crosses every threshold
+   in one frame and hides the teleport-over-time shape) plus the `anim: retarget 'gimmeflakes' onto
+   'pdpN'` log line active at the moment a nose-looking burst is seen.
+2. **Fix shape (pick one, both plausible, neither implemented):**
+   (a) Pool the crash rig's damage-stage templates the way `WorldEffectsFactory.BuildWorldEffectsRuntime`
+   pools the world ones — `PooledTemplates = true` + a per-root slot count (`data/effect_pools.json`
+   is the existing mechanism; would need a `planeflakes` entry sized to the plane's own panel count,
+   probably 8) so each panel's tear gets its OWN copy instead of stealing the one shared node. Check
+   whether `short_firetrail`/`yellow_sparks_follow`/`small_fireball_follow` — the OTHER templates the
+   same unpooled crash rig places (see the same `.out` log) — have the identical bug; if so this is
+   one fix for the whole family, not just `gimmeflakes`.
+   (b) A narrower fix scoped to `gimmeflakes` alone, if pooling the whole crash rig turns out to be
+   too invasive (splitscreen-sized pools, `data/effect_pools.json` schema) — e.g. let a def opt out
+   of the shared-template relocate-and-restart and instead spawn/track one instance per anchor. No
+   precedent for this in the codebase yet; would be new plumbing, not a "proven family fix" the way
+   (a) is — weigh carefully against the ground rules' "no new reverse engineering" bar (this is
+   engine plumbing, not decode work, so it should still be in scope, but says so explicitly since
+   it is more invasive than the original estimate assumed).
+3. **Re-verify on `--plane=player_bhawk` explicitly**, staggered hits, `--debug-anim`, before
+   calling this closed again. The `trail-world-anchor`/`effects-census`/`damage-hd` suites all still
+   need to stay green, but none of them exercises the unpooled-template-theft path — check whether a
+   new suite belongs alongside `trail-world-anchor` for this (multiple `CALL_ANIMATION`s onto the
+   same unpooled template root from different anchors within one frame, asserting each gets its own
+   copy or its own untouched flight) once the fix shape is chosen.
+4. **`docs/architecture.md` needs correcting, not just extending**, once the real fix lands: both
+   entries this session touched (`AnimRuntime.cs`'s `PlaceTemplateOn` bullet, `DamageVisuals.cs`'s
+   "traced to NOT be a dispatch bug" bullet) currently overstate the fix as complete. Rewrite them
+   from what actually landed, not what was believed to have landed.
+
+**Model recommendation.** medium-high now — the TopLevel half was mechanical, but the pooling
+question touches `data/effect_pools.json` schema and the multi-instance-per-anchor question the
+crash rig has never needed before; worth thinking through the blast radius on the OTHER unpooled
+crash-rig templates before picking fix shape (a) vs (b).
+
+**Verify.** `--plane=player_bhawk --fly --damage=<staggered per-part fractions> --debug-anim
+--log=anim:debug` at a real mission spawn and heading (the identity pose hides the parenting bug —
+`docs/verification.md`); confirm from the `.out` log that `gimmeflakes` retargets onto each newly
+torn panel WITHOUT relocating a still-live earlier burst, and confirm visually (screenshot series
+across several seconds, not one frame) that each panel's debris field stays put at ITS OWN site.
+Then `.\RunTests.ps1` incl. the `trail-world-anchor` suite and goldens.
+
+**⚠ Traps.** Do not mute `gimmeflakes` to fix the repeated-burst symptom — the tear moment must
+still throw its burst, for every panel, independently. Verify off-origin; the identity pose masks
+plane-local anchoring. **Verify on `--plane=player_bhawk` specifically** — the default/random plane
+selection used throughout the first session's probes never exercised the airframe the bug was
+reported on, and Bloodhawk is a documented crossed-naming outlier (`DamageVisuals.cs` class doc).
+Single extreme `--damage=part:0.01` presets cross every threshold in one frame and hide the
+teleport-over-time shape — use staggered fractions or successive hits instead.
 
 ## A2 ☐ `BL-287` — fuel leak vs wing lights; panels 4/6 flakes-only check
 

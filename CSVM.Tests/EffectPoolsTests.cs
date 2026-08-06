@@ -116,6 +116,31 @@ public class EffectPoolsTests
         Assert.True(depth > pools.Default.Base);
     }
 
+    [Fact]
+    public void TheCrashSectionSizesThePerPanelFamilyAndDefaultsEverythingElseToOne()
+    {
+        var pools = Load();
+        // The per-panel damage-stage family carries one copy per authored call anchor (BL-288);
+        // the exact counts live in the file's own why lines.
+        Assert.Equal(8, pools.CrashSlotsFor("planeflakes"));
+        Assert.True(pools.CrashSlotsFor("short_firetrail") > 1);
+        Assert.True(pools.CrashSlotsFor("large_firetrail") > 1);
+        // A crash template with no entry stays single-copy — the pre-pool behaviour, right for
+        // the once-per-crash choreography templates.
+        Assert.Equal(1, pools.CrashSlotsFor("plane_sp_polys"));
+        Assert.Equal(8, pools.CrashDepthFor(new[] { "planeflakes", "plane_sp_polys" }));
+    }
+
+    [Fact]
+    public void TheCrashSectionIsItsOwnNamespaceNotTheWorldOne()
+    {
+        // A crash entry must not resize the world pool of the same name, and vice versa.
+        var pools = EffectPools.Parse(Json("{\"crashRoots\":{\"he_ring\":{\"base\":5}}}"));
+        Assert.Equal(5, pools.CrashSlotsFor("he_ring"));
+        Assert.Equal(EffectPools.Fallback.Default.Base, pools.SlotsFor("he_ring", 1));
+        Assert.Equal(new[] { "he_ring" }, pools.UnknownCrashRoots(new[] { "planeflakes" }));
+    }
+
     private static byte[] Json(string s) => Encoding.UTF8.GetBytes(s);
 
     private static EffectPools Load() => EffectPools.Parse(File.ReadAllBytes(ConfigPath));

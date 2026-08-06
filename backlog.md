@@ -380,6 +380,41 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   13 `break*`, the crash-sink motions) — that is its own M4-sized feature for when zeppelins
   matter to gameplay, not this item.
 
+- `BL-297` `[Research]` `[Blocked: CAP-29]` **Panel-damage semantics: what the original actually
+  shows when a part is damaged — the user's re-test verdict is that our authored-data reading has
+  the feature wrong.** User at the controls 2026-08-06, after `BL-288`'s pooling fix landed
+  (bursts no longer teleport — that mechanical fix stands and is not in question): (1) nose
+  damage sprays effects at the WINGS; (2) panels appear to tear while armor should still be
+  absorbing; (3) identical repeated debris bursts read as "the same panel flies away again" — a
+  torn panel should be gone once. Expectation: debris matches the point of destruction, is
+  health-gated, and each panel tears exactly once.
+  *Evidence (data reading, 2026-08-06):* the per-part `injure_anims` DO map panels to their part
+  (`extracted/zrdr/vehicle.zrd.json`, player-1: nose→`pdpanel7`, tail→`pdpanel8`,
+  leftwing→`pdpanel5`/`4`/`3` at 0.5/0.3/0.15, rightwing→`pdpanel6`/`1`/`2` at 0.4/0.3/0.15). The
+  cross-part bleed the user sees is authored *elsewhere* in our reading: (a) every part's 0.99
+  `<part>_damage_effects` shim → `random_gun_impact`, which sparks a random `pdp1` (40%)/`pdp2`
+  (40%) and ALWAYS `pdp4` — wing sites, whatever part was hit; (b) the vehicle-level 0.85
+  `player_fuelleak` (ANY part's fraction) plays a gunhit flash + fuel vapor at a random `pdp1–3`.
+  The "repeats" have two shapes: `pdpanel7` (nose) is authored to throw FOUR `gimmeflakes` bursts
+  within 0.4 s (one extended burst), and every panel's burst uses the same 7-flake `planeflakes`
+  template, so successive panels' bursts look identical. The armor question is a scale ambiguity:
+  we consume threshold fractions as COMBINED armor+HP (`DamageLab.Combined`); stock parts are
+  25 armor/25 HP so `pdpanelN` thresholds ≤ 0.5 do imply armor exhausted under armor-first — but
+  armor upgrades shift the combined scale, `--damage` presets floor armor, and health-only vs
+  combined is undecoded.
+  *Fix shape:* answer `CAP-29` first; then either close as faithful-as-authored, or change
+  mechanism — e.g. resolve `random_gun_impact`/`player_fuelleak`'s panel pick to the pdpN nearest
+  the struck part instead of the authored random, and/or re-base injure thresholds on health-only.
+  Any such change is a deliberate deviation or a re-decode — not a bug fix — until the capture
+  says which.
+  *⚠ Traps:* do not "fix" by suppressing the authored shims wholesale (`CAP-27` already probes
+  whether the spark shim exists at all in the original — coordinate, don't overlap). Do not
+  re-open `BL-288`'s pooling — the theft mechanism was real and its fix is verified independent
+  of these semantics.
+  *Cross-refs:* `CAP-29` (the capture), `CAP-27` (spark-shim existence), `BL-288` landing
+  (`docs/PLAN-m3-polish-10.md` A1), `DamageVisuals.cs` (the consumer),
+  `extracted/zrdr/vehicle.zrd.json` (the authority).
+
 ## Weapons & combat
 
 - `BL-062` `[Research]` **Rocket firing order — the H-selector fidelity question.** Settle from the original

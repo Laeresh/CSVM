@@ -44,6 +44,17 @@ public sealed class EffectPools
         {
             ["facdsticks"] = new Entry(6, 0),
         },
+        _crashDefault = new Entry(1, 0),
+        _crashRoots =
+        {
+            ["planeflakes"] = new Entry(8, 0),
+            ["planeflakes2"] = new Entry(2, 0),
+            ["short_firetrail"] = new Entry(6, 0),
+            ["large_firetrail"] = new Entry(6, 0),
+            ["small_injure_fireball"] = new Entry(3, 0),
+            ["flame_ball_02"] = new Entry(2, 0),
+            ["yellow_spark_02"] = new Entry(4, 0),
+        },
     };
 
     private readonly Dictionary<string, Entry> _roots = new(StringComparer.OrdinalIgnoreCase);
@@ -53,9 +64,17 @@ public sealed class EffectPools
     // against WorldEffectsFactory.EffectStageRoots, and these names never are one).
     private readonly Dictionary<string, Entry> _localCallRoots = new(StringComparer.OrdinalIgnoreCase);
 
+    // The crash rig's own pool (BL-288) — per-airframe damage/crash templates staged under the
+    // rig's crash root, kept apart from _roots (validated against the WORLD stage's derived root
+    // set) and from _localCallRoots (library-root clones). No per-player term: the whole rig is
+    // already built once per player.
+    private readonly Dictionary<string, Entry> _crashRoots = new(StringComparer.OrdinalIgnoreCase);
+
     private Entry _default = new(4, 1);
 
     private Entry _localCallDefault = new(1, 0);
+
+    private Entry _crashDefault = new(1, 0);
 
     /// <summary>The committed config's default location (res://), independent of
     /// <c>--data-root</c>: it is engine config, not extracted game data. Kept as a res:// path and
@@ -130,6 +149,14 @@ public sealed class EffectPools
                 if (ReadEntry(r.Value) is { } e)
                     pools._localCallRoots[r.Name] = e;
         }
+        if (root.TryGetProperty("crashDefault", out var crDef) && ReadEntry(crDef) is { } crd)
+            pools._crashDefault = crd;
+        if (root.TryGetProperty("crashRoots", out var crRoots) && crRoots.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var r in crRoots.EnumerateObject())
+                if (ReadEntry(r.Value) is { } e)
+                    pools._crashRoots[r.Name] = e;
+        }
         return pools;
     }
 
@@ -157,6 +184,40 @@ public sealed class EffectPools
     {
         var e = _localCallRoots.TryGetValue(rootName, out var hit) ? hit : _localCallDefault;
         return Math.Clamp(e.Base, 1, MaxSlots);
+    }
+
+    /// <summary>How many copies of a crash-rig template root the per-player crash stage builds
+    /// (`BL-288`) — against <c>crashRoots</c>/<c>crashDefault</c>, never <c>roots</c>/<c>default</c>
+    /// (those are the WORLD stage's, validated against its derived root set). No player scaling:
+    /// the whole crash rig is already one per player. A root with no entry stays single-copy —
+    /// right for the crash choreography templates, which play once per crash; the per-panel
+    /// damage-stage family is sized to its authored distinct call anchors.</summary>
+    public int CrashSlotsFor(string rootName)
+    {
+        var e = _crashRoots.TryGetValue(rootName, out var hit) ? hit : _crashDefault;
+        return Math.Clamp(e.Base, 1, MaxSlots);
+    }
+
+    /// <summary>The crash stage's pool depth — <see cref="DepthFor"/> against the crash
+    /// sizes.</summary>
+    public int CrashDepthFor(IEnumerable<string> stageRoots)
+    {
+        int depth = 1;
+        foreach (var r in stageRoots)
+            depth = Math.Max(depth, CrashSlotsFor(r));
+        return depth;
+    }
+
+    /// <summary>Names any authored <c>crashRoots</c> entry that is not one of
+    /// <paramref name="stageRoots"/> — <see cref="UnknownRoots"/> for the crash section.</summary>
+    public List<string> UnknownCrashRoots(IEnumerable<string> stageRoots)
+    {
+        var known = new HashSet<string>(stageRoots, StringComparer.OrdinalIgnoreCase);
+        var unknown = new List<string>();
+        foreach (var name in _crashRoots.Keys)
+            if (!known.Contains(name))
+                unknown.Add(name);
+        return unknown;
     }
 
     /// <summary>The pool DEPTH for a set of stage roots — the largest per-root count, i.e. how many

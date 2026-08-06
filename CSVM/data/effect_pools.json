@@ -42,6 +42,44 @@
     "why": "A library-root template with no entry here stays single-copy (today's behaviour) unless explicitly raised — matches genx12, which is deliberately NOT pooled in this pass (kkgate is one propane tank per chapter, never overlapping itself)."
   },
 
+  "_crashAbout": "A THIRD pool, for the per-player crash rig's templates (BL-288) — kept apart from 'roots' (the WORLD stage's, validated against its derived root set) and 'localCallRoots' (library-root clones). The rig's damage-stage menu (pdpanel1..8, player_damage_trail, the random_gun_impact shims, both crash defs) CALLs each template from several distinct anchors — a panel, prop1, a wreck piece — and the one shared copy was relocated-and-restarted onto every new call site, discarding the previous site's burst mid-flight. Unlike the world pool there is no cursor: AnimRuntime.AssignCallerSlot pins each (root, call anchor) pair to its own slot on first call, so sizes below are the AUTHORED distinct-anchor counts read off the C1 cam_anim defs (2026-08-06), not TUNE guesses — a re-count is only owed if the shared damage-stage defs ever change. No perExtraPlayer term: the whole rig is built once per player already. A root with no entry stays single-copy (the crash choreography templates, played once per crash).",
+
+  "crashDefault": {
+    "base": 1,
+    "why": "Single copy = the pre-BL-288 behaviour, correct for every template only ever called from one anchor at a time (the crash choreography's splash/fire/steam family)."
+  },
+
+  "crashRoots": {
+    "planeflakes": {
+      "base": 8,
+      "why": "gimmeflakes debris — called AT its own pdpN by all eight pdpanelN defs; one copy per panel."
+    },
+    "planeflakes2": {
+      "base": 2,
+      "why": "gimme_bigflakes — pdpanel4/6 only."
+    },
+    "short_firetrail": {
+      "base": 6,
+      "why": "Panel burn — pdpanel1/2/4/5/6 WITH their pdpN, plus player_damage_trail WITH prop1."
+    },
+    "large_firetrail": {
+      "base": 6,
+      "why": "pdpanel4/6 WITH their pdpN, plus the crash defs' four WITH pieceN trails — which shared one copy across all four flung pieces before this pool existed."
+    },
+    "small_injure_fireball": {
+      "base": 3,
+      "why": "small_fireball_follow — pdpanel2/3/5."
+    },
+    "flame_ball_02": {
+      "base": 2,
+      "why": "small_fireball — pdpanel7/8 (the world's own flame_ball callers play on the world-effects runtime, not this rig)."
+    },
+    "yellow_spark_02": {
+      "base": 4,
+      "why": "yellow_sparks_follow — pdpanel5 plus random_gun_impact's three WITH pdp1/2/4 shim calls."
+    }
+  },
+
   "localCallRoots": {
     "facdsticks": {
       "base": 6,

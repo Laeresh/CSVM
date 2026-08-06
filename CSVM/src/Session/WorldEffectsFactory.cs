@@ -239,7 +239,28 @@ public sealed class WorldEffectsFactory
         // the wreck, and the crash root still sits between the plane model and the runtime.
         controller.AddChild(crashRoot);
         var rootNames = CrashStageRootNames(crashProgram, gamez, controller);
-        int effectRoots = BuildEffectStage(gamez, worldScene, crashRoot, rootNames);
+        // Staged in pool slots like the world-effects stage (BL-288, the BL-225 mechanism): the
+        // damage-stage menu CALLs one template from up to eight distinct anchors (each pdpanelN
+        // onto its own pdpN, the crash defs onto their four pieceN), and the single shared copy
+        // was relocated-and-restarted onto every new tear, discarding the previous panel's burst
+        // mid-flight. Sizes per root from effect_pools.json's crash section — most crash
+        // templates stay single-copy in slot 0; the per-panel family gets one copy per authored
+        // call anchor. The runtime's caller-slot assignment (AnimRuntime.AssignCallerSlot) pins
+        // each call anchor to its own slot on the first tear.
+        int depth = _pools.CrashDepthFor(rootNames);
+        int effectRoots = 0, slot0Roots = 0;
+        for (int slot = 0; slot < depth; slot++)
+        {
+            var pool = new Node3D { Name = $"pool{slot}" };
+            pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
+            crashRoot.AddChild(pool);
+            int at = slot;
+            int built = BuildEffectStage(gamez, worldScene, pool,
+                rootNames.Where(r => _pools.CrashSlotsFor(r) > at));
+            if (slot == 0)
+                slot0Roots = built;
+            effectRoots += built;
+        }
 
         // The plane's destroyed wreck (pieceN meshes), built hidden; the crash def shows + flings it.
         var destroyed = planeBuilder.BuildDestroyed(planeName);
@@ -279,6 +300,9 @@ public sealed class WorldEffectsFactory
         // choreography and the authored damage-stage menu — every def that plays ON this aircraft.
         // Both crash variants are bound because the surface is only known at the moment of impact
         // (FlightController.ClassifySurface); Air stays out, having no trigger.
+        // The pooled-copy selection above needs the flag; a template staged single-copy (most of
+        // the crash set) behaves exactly as before it.
+        crashRuntime.PooledTemplates = true;
         crashRuntime.Bind(controller, crashProgram.Subset(EffectCatalogue.CrashRigAnimNames));
         controller.AddChild(crashRuntime);
         controller.CrashRuntime = crashRuntime;
@@ -290,11 +314,13 @@ public sealed class WorldEffectsFactory
         if (controller.PlaneModel != null)
             CollectVisibility(controller.PlaneModel, planeVis);
         controller.CrashPlaneVisibility = planeVis;
-        if (effectRoots != rootNames.Count)
-            Log.Warn("anim", $"crash rig '{planeName}': staged {effectRoots} of {rootNames.Count} template root(s) the bound defs anchor on — the rest built nothing from this chapter's gamez, so their defs play nothing");
+        if (slot0Roots != rootNames.Count)
+            Log.Warn("anim", $"crash rig '{planeName}': staged {slot0Roots} of {rootNames.Count} template root(s) the bound defs anchor on — the rest built nothing from this chapter's gamez, so their defs play nothing");
+        foreach (var unknown in _pools.UnknownCrashRoots(rootNames))
+            Log.Warn("anim", $"effect pools: crash root '{unknown}' is not staged by this rig — it sizes nothing");
         if (verbose)
-            GD.Print($"data-crash: {effectRoots} effect template(s) + {restPoses.Count} wreck node(s) — "
-                     + "crash runtime bound (scoped, no auto-start)");
+            GD.Print($"data-crash: {effectRoots} effect template cop(ies) over {depth} pool slot(s) "
+                     + $"+ {restPoses.Count} wreck node(s) — crash runtime bound (scoped, no auto-start)");
     }
 
     /// <summary>Every name a bind's own scope answers — the Godot node name and the gamez

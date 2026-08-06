@@ -654,6 +654,37 @@ The pool is NOT a third keying scheme (the rule and its ⚠ live on `EmitterDire
 emitters per call fall out of the host node being a different node per slot, and `SlotOf` /
 `NextPooledAnchors` / `PlaceTemplateAt` stay here — the director is handed already-resolved host and
 anchor nodes.
+⚠ `PlaceTemplateOn` sets `TopLevel = true` on a placed root before writing its `GlobalTransform`
+  (`BL-288`, one half of the fix — the pool paragraph below is the other) — a staged root stays parented
+  where it was built (the per-player crash rig's roots sit under the controller subtree,
+  `WorldEffectsFactory.BuildFlightCrashRuntime`), so without `TopLevel` a still-flying caller drags
+  the whole template, and every child `OBJECT_MOTION` computed in ITS parent frame (`MotionRuntime`),
+  along on every later frame instead of leaving it at the call site. The plane-parented-effect trap's
+  family (`BL-229`'s puffer `TopLevel`, the smoke-trail fix, `trail-world-anchor`) — harmless on a
+  stationary call site (buildings, the world-effects pool) and on the crash's own frozen templates;
+  only a still-moving caller ever exposed it. Still correct and still needed; keep it.
+The crash rig pools its templates too (`BL-288`), with a twist the world pool does not need:
+its calls anchor on the PLANE's own nodes (each `pdpanelN` tear CALLs `gimmeflakes` onto its own
+`pdpN`; the crash defs CALL `large_firetrail` onto their four `pieceN`), which sit in no slot
+container — so slot choice cannot be read off the anchor's ancestry. `AssignCallerSlot` (invoked
+from the CALL dispatch, before the placed-where test) pins each (template root, call anchor) pair
+to its own slot on the anchor's first call, sticky for the session: a re-tear restarts ITS OWN
+copy, and `TemplateRootsFor` consults the claim (`AssignedCallerSlot`) whenever the ancestry walk
+comes back empty. Sizes are the AUTHORED distinct-anchor counts per root
+(`effect_pools.json`'s crash section — not TUNE; re-count only if the shared damage-stage defs
+change), and more anchors than copies wrap by `TemplateRootsFor`'s modulo, counted in
+`PoolRecycles`. Before this, `TemplateRootsFor` returned the same single node for every caller,
+and a second panel's `CALL_ANIMATION` found `IsLive(target, startAnchor)` false (keyed on the
+FIRST anchor), teleported the shared root to the new site and restarted it from rest pose —
+discarding the first burst mid-flight, leaving the stale instance under the old anchor alive, and
+letting `MotionSet`'s per-`(Target,Channel)` eviction pick the winner: the user-visible
+"panels fly away repeatedly, and from the wrong site". The whole per-panel family shared the
+mechanism (`planeflakes`/`planeflakes2`, `short_firetrail`, `large_firetrail`,
+`small_injure_fireball`, `flame_ball_02`, `yellow_spark_02`) and is pooled by the same fix; the
+`damage-template-pool` suite holds the regression shape (two panel defs, one template, two
+copies). `ForCrashRig` still sets neither flag itself — `BuildFlightCrashRuntime` sets
+`PooledTemplates` beside the slot containers it builds, mirroring where the world side sets its
+pair; `ShowPlacedTemplates` stays off (crash templates hide by their own reset states).
 `PlayEffectAt(name, point, inputNode, ttl)` carries
 the call-site node: it resolves the callee's INPUT_NODE (the sputter emits on, and its `NodeActive`
 loop gate reads, the damaged object); `ttl` overrides `EffectTtl` per call (a gun hit passes 0.3 s,
@@ -1756,6 +1787,13 @@ surface, blocked on `BL-222`), and, for the data's 0.10 `player_smoketrail`, `pl
 (short_firetrail at prop1 + the fire_lt light) — `RigAnimFor` owns that one mapping.
 `DamageEffectStop` (Reset, first) stops the whole stage CLOSURE, derived from the program — a
 stopped pdpanelN cannot reach the trail it CALLed, and prop1's trail has no authored exit.
+⚠ `gimmeflakes` "firing on every damage stage" (`BL-288`, fixed) was never this class's dispatch:
+  `_applied`'s per-anim-name guard fires each `pdpanelN` (and its one `CALL_ANIMATION gimmeflakes`)
+  exactly once, and each `AT_NODE` resolved to its own panel throughout. The repeated-burst/
+  wrong-site symptom was the crash rig's then-unpooled shared template being teleported to each new
+  tear — fixed by the crash-rig template pool + caller-slot assignment (see `src/Mech3/AnimRuntime.cs`'s
+  pool paragraphs). Any future probe in this family: use `--plane=player_bhawk` explicitly — the
+  airframe the bug was reported on, one of the three crossed-naming outliers below.
 ⚠ PairHealthySkins' CANDIDATE sets are def-derived (`BL-270`, `PanelPairingSets`: plane_reset's
   re-ACTIVE list = the hideable _h skins, the pdpanelN targets = the torn set; the viewer loads
   the two reader files, flight reads the bound program; no def data = a loud Warn + the unscoped
@@ -2506,7 +2544,12 @@ The `CSVM/data/effect_pools.json` reader — how many copies of each effect-temp
 world-effects stage builds (`BL-225`; the numbers are `BL-231` in the TUNE list). Hand-authored
 engine config, in a file rather than a `const` precisely because it is **invented**: the original
 copies its template per CALL_ANIMATION and has no such number, so any finite pool is our
-approximation and the user must be able to move it without a rebuild.
+approximation and the user must be able to move it without a rebuild. Three sections, three
+namespaces: `roots`/`default` (the world stage, per-player scaled), `localCallRoots` (library-root
+clones, `BL-253`), and `crashRoots`/`crashDefault` (`BL-288` — the per-player crash rig's
+templates; `CrashSlotsFor`/`CrashDepthFor`/`UnknownCrashRoots`, no player term since the rig is
+already per-player). The crash sizes are the AUTHORED distinct call-anchor counts read off the
+shared damage-stage defs, not TUNE — the file's why lines carry the per-root counts.
 `SlotsFor(root, players) = clamp(base + perExtraPlayer × (players − 1), 1, maxSlots)` — the
 per-player term is what keeps splitscreen/multiplayer from collapsing back onto one copy, since every
 extra aircraft is another gun and another rocket landing somewhere else. `DepthFor` is the deepest
@@ -2605,7 +2648,13 @@ the surface is only known at impact, so both are bound and `FlightController.Cla
 **plus** `EffectCatalogue.PlaneDamageEffectAnims` (the four `<part>_damage_effects` shims →
 `random_gun_impact` → `yellow_sparks_follow`) **plus** `EffectCatalogue.PropChoreographyAnims`
 (`startprops`/`stopprops`), because those need exactly what it already has — the
-`player` anim root, the plane's own `pdpN` panels as INPUT_NODEs, and a live emitter factory. The
+`player` anim root, the plane's own `pdpN` panels as INPUT_NODEs, and a live emitter factory.
+Its templates are staged in **pool slots** like the world stage (`BL-288`): sizes per root from
+`effect_pools.json`'s crash section (most stay single-copy in slot 0; the per-panel damage-stage
+family gets one copy per authored call anchor), `PooledTemplates` set beside the slot build, and
+the runtime's caller-slot assignment pins each call anchor (`pdpN`, `prop1`, `pieceN`) to its own
+copy — see `AnimRuntime`'s pool paragraphs for the mechanism and the `damage-template-pool` suite
+for the regression shape. The
 prop choreography's own defs resolve their `staticpropN`/`propN`/`propNb` node names against the
 plane model directly (`LOCAL_NODES_ONLY`) — `FlightController.Respawn`/`Crash` call
 `CrashRuntime.Play("startprops"/"stopprops", PlaneModel, applyReset: false)` themselves, since

@@ -471,6 +471,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // and not an error. PoolRecycles counts every one of them.
     private readonly HashSet<string> _poolRecyclesLogged = new(StringComparer.OrdinalIgnoreCase);
 
+    // BL-288: a relocating CALL_ANIMATION on a pooled runtime whose anchor sits in no slot
+    // container — the crash rig's pdpN panels, its wreck pieces, prop1: plane nodes, never pool
+    // copies — claims a slot per (template root, anchor) here on its first call and keeps it, so
+    // each panel's tear owns its own template copy while every other panel's burst flies on.
+    // Keyed per root with its own cursor, because one root's callers are a SUBSET of all damage
+    // anchors: a single shared numbering would fold two of its callers onto one copy while other
+    // copies idle.
+    private readonly Dictionary<(string Root, ulong Anchor), int> _callerSlots = new();
+
+    private readonly Dictionary<string, int> _callerSlotCursor = new(StringComparer.OrdinalIgnoreCase);
+
     // ---- IF/ELSEIF conditions ----
     // Per condition kind: how often it evaluated true / false. Reported after the bootstrap
     // passes, which is the headless proof that (say) the refinery's AnimationLod branch is
@@ -2412,6 +2423,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         // "wait until it completes" is a statement about that animation, not
                         // about whether this particular call is what started it.
                         waitOn?.Add((target, startAnchor));
+                        // A relocating call from an anchor OUTSIDE the pool (the crash rig's own
+                        // plane nodes — BL-288) claims its sticky slot BEFORE the placed-where
+                        // test and the placement below ask for this call's copy. The library-copy
+                        // path carries its own pool, and a call anchored on a pooled copy already
+                        // has a slot — both skip this.
+                        if (relocate && libraryCopy == null)
+                            AssignCallerSlot(target, callAnchor!);
                         Vector3 wantSite = default;
                         bool movedAway = false;
                         if (relocate)
@@ -2970,6 +2988,57 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return _slotOfNode[id] = slot;
     }
 
+    /// <summary>Claims a pool slot for a relocating CALL_ANIMATION whose anchor sits in no slot
+    /// container — the crash rig's damage-stage calls, anchored on the plane's own nodes
+    /// (`BL-288`: every `pdpanelN` tear CALLs `gimmeflakes` onto its own `pdpN`, and the one
+    /// shared `planeflakes` root was teleported to each new tear, restarting the previous panel's
+    /// burst mid-flight). Sticky per (template root, anchor), so a re-call from the same anchor
+    /// restarts ITS OWN copy and never a sibling's. More anchors than staged copies wrap through
+    /// <see cref="TemplateRootsFor"/>'s modulo — the effects pool's own exhaustion behaviour —
+    /// counted in <see cref="PoolRecycles"/> and named once. No-op off the pool, for a template
+    /// staged single-copy (those never ask for a slot), and for anchors already inside a slot
+    /// (the world-effects runtime's calls, whose anchors are the pooled copies themselves).</summary>
+    private void AssignCallerSlot(AnimDefinition callee, Node3D anchor)
+    {
+        if (!PooledTemplates || string.IsNullOrEmpty(callee.Name) || SlotOf(anchor) >= 0)
+            return;
+        var key = (callee.Name, anchor.GetInstanceId());
+        if (_callerSlots.ContainsKey(key))
+            return;
+        int copies = FindAll(callee.Name, null).Count;
+        if (copies <= 1)
+            return;
+        int next = _callerSlotCursor.TryGetValue(callee.Name, out int cur) ? cur : 0;
+        _callerSlotCursor[callee.Name] = next + 1;
+        _callerSlots[key] = next;
+        // The per-anchor claim, log-visible beside the retarget line it pairs with — the BL-288
+        // verify reads this to confirm a new tear takes a fresh copy instead of the live one.
+        if (DebugMotions)
+        {
+            string site = anchor.HasMeta(NameMeta) ? anchor.GetMeta(NameMeta).AsString() : anchor.Name;
+            GD.Print($"anim: caller slot {next % copies} of '{callee.Name}' ({copies} cop(ies)) "
+                     + $"claimed by '{site}'");
+        }
+        if (next >= copies)
+        {
+            PoolRecycles++;
+            if (_poolRecyclesLogged.Add(callee.AnimName ?? callee.Name))
+            {
+                GD.Print($"anim: caller pool for '{callee.AnimName ?? callee.Name}' wrapped — "
+                         + $"{next + 1} call anchor(s) over {copies} staged cop(ies) share again");
+            }
+        }
+    }
+
+    /// <summary>The slot <see cref="AssignCallerSlot"/> gave this (template root, anchor) pair,
+    /// or -1 when it never claimed one.</summary>
+    private int AssignedCallerSlot(AnimDefinition callee, Node3D? anchor)
+    {
+        if (anchor == null || !IsInstanceValid(anchor) || string.IsNullOrEmpty(callee.Name))
+            return -1;
+        return _callerSlots.TryGetValue((callee.Name, anchor.GetInstanceId()), out int s) ? s : -1;
+    }
+
     /// <summary>The copies of a definition's own template root(s) that belong with
     /// <paramref name="inSlotOf"/> â€” the one pool slot that call is running in. Off the pool (or
     /// for a def whose root is staged in a single copy, like the shared gun family's, which C8
@@ -2991,6 +3060,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (!PooledTemplates || roots.Count <= 1)
             return roots;
         int slot = SlotOf(inSlotOf);
+        if (slot < 0)
+            slot = AssignedCallerSlot(callee, inSlotOf); // a crash-rig call anchor's claim (BL-288)
         if (slot < 0)
             return roots;
         var staged = roots.Select(SlotOf).Where(s => s >= 0).Distinct().OrderBy(s => s).ToList();
@@ -3081,7 +3152,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// pooled copy when this runtime pools them and the anchor sits in a slot, else the def's
     /// anchors.</summary>
     private IReadOnlyList<Node3D?> TemplateRootsOf(AnimDefinition def, Node3D? anchor) =>
-        PooledTemplates && SlotOf(anchor) >= 0
+        PooledTemplates && (SlotOf(anchor) >= 0 || AssignedCallerSlot(def, anchor) >= 0)
             ? TemplateRootsFor(def, anchor).Cast<Node3D?>().ToList()
             : Anchors(def);
 
@@ -3135,6 +3206,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 continue;
             var xf = root.GlobalTransform;
             xf.Origin = origin;
+            // World-stage the template once placed: TopLevel decouples it from a moving/rotating
+            // caller (a flying plane's pdpN panel) so it holds this pose instead of being dragged
+            // and re-yawed every later frame the caller moves — the same plane-parented-effect trap
+            // Puffer's TrailAdvance/Burst fix (BL-229 family). A caller that calls again later (or
+            // the pooled-copy path re-placing a recycled slot) simply overwrites this transform.
+            root.TopLevel = true;
             root.GlobalTransform = xf;
         }
     }
