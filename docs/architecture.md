@@ -2136,9 +2136,12 @@ world by `GameSession.BuildWorldStage` (skipped on the `--node=` partial stage).
 a stable id-derived colour (golden-ratio hue): edges as individual segments off the edge list,
 sphere markers per node (tagged nodes bigger), one fixed-size `Label3D` per net with the trailer
 (`M4ReinfAce#10 → player`), all depth-tested. Nets load lazily on first toggle; the census — one
-line per net — goes to the `world` log. F13 is the first tenant of the F13–F24 debug-overlay key
+line per net — goes to the `world` log. A HUD text field narrows the drawn set live by
+case-insensitive name prefix. F13 is the first tenant of the F13–F24 debug-overlay key
 range (`docs/controls.md`).
 ⚠ Never draw node order as the route — the graph branches; only the edge list is connectivity.
+⚠ The filter field is a deliberate PanelFocus exception (a text filter cannot work unfocusable):
+  focus arrives only by clicking the field, and Enter releases it back to the aircraft.
 
 ## src/UI/ClassOverlay.cs
 The colour-by-class overlay (key X, `--debug-classoverlay` scripts it) — same mode set as

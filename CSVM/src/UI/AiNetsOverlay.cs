@@ -15,7 +15,8 @@ namespace CSVM.UI;
 /// "polygon" already invited, BL-249-era). Nodes get markers (tagged nodes bigger — the raw
 /// undecoded stop/valve candidates), each net a fixed-size name label with its trailer
 /// (<c>M4ReinfAce → player</c>). Depth-tested on purpose: an x-ray view lies about where a
-/// route threads terrain.
+/// route threads terrain. While the overlay is up, a HUD text field narrows the drawn set
+/// live to nets whose name starts with the typed prefix (case-insensitive).
 ///
 /// <para>F13 is the first tenant of the F13–F24 range reserved for debug overlays
 /// (docs/controls.md); the older overlay keys (C/X/T/…) migrate there later.</para>
@@ -29,10 +30,12 @@ public sealed partial class AiNetsOverlay : Node
     private readonly string _chapter;
 
     private List<AiNet>? _nets;
+    private List<AiNet>? _cliSelected;
     private Node3D? _holder;
     private bool _shown, _debugDone;
     private CanvasLayer? _hudLayer;
     private Label? _hud;
+    private LineEdit? _filterEdit;
     private string _summary = "";
 
     public AiNetsOverlay(string chapterZrdrPath, string chapter)
@@ -95,7 +98,7 @@ public sealed partial class AiNetsOverlay : Node
             _shown = true; // the notice is the overlay; F13 again clears it
             return;
         }
-        Build(Selected(_nets));
+        Build(Visible());
         _shown = true;
         ShowNotice(_summary);
     }
@@ -227,6 +230,32 @@ public sealed partial class AiNetsOverlay : Node
         return picked;
     }
 
+    // The CLI-selected set, narrowed by the HUD field's live name prefix. The CLI selection
+    // is resolved once (its miss warnings must not repeat per keystroke).
+    private List<AiNet> Visible()
+    {
+        var nets = _cliSelected ??= Selected(_nets!);
+        string prefix = _filterEdit?.Text.Trim() ?? "";
+        if (prefix.Length > 0)
+        {
+            nets = nets.FindAll(n => n.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        }
+        return nets;
+    }
+
+    // Live refilter while the overlay is up: rebuild the drawn set, keep the HUD in step.
+    private void Refilter()
+    {
+        if (!_shown || _nets == null || _nets.Count == 0)
+        {
+            return;
+        }
+        _holder?.QueueFree();
+        _holder = null;
+        Build(Visible());
+        ShowNotice(_summary);
+    }
+
     private void Build(List<AiNet> nets)
     {
         _holder = new Node3D { Name = "ainets_draw" };
@@ -261,6 +290,19 @@ public sealed partial class AiNetsOverlay : Node
             };
             _hud.AddThemeFontSizeOverride("font_size", 13);
             root.AddChild(_hud);
+            // The flight-panel focus rule (PanelFocus) is deliberately excepted here: a text
+            // filter cannot work unfocusable. Focus only ever arrives by an explicit click on
+            // the field, and Enter hands the keyboard straight back to the aircraft.
+            _filterEdit = new LineEdit
+            {
+                PlaceholderText = "filter: name starts with…",
+                Position = new Vector2(12, 282),
+                Size = new Vector2(230, 28),
+            };
+            _filterEdit.AddThemeFontSizeOverride("font_size", 13);
+            _filterEdit.TextChanged += _ => Refilter();
+            _filterEdit.TextSubmitted += _ => _filterEdit!.ReleaseFocus();
+            root.AddChild(_filterEdit);
             _hudLayer.AddChild(root);
             AddChild(_hudLayer);
         }
@@ -272,6 +314,7 @@ public sealed partial class AiNetsOverlay : Node
     {
         if (_hudLayer != null)
         {
+            _filterEdit?.ReleaseFocus();
             _hudLayer.Visible = false;
         }
     }
