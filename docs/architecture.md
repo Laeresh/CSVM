@@ -2501,14 +2501,6 @@ its whole producible range resolves inside `EffectAnimNames`/`PlaneDamageEffectA
   `startprops`/`stopprops`' own NAME — a shared authoring label no real airframe carries) and one
   authored against the Devastator's own model root (`AirframeScopedAnchors`: `player_pfighter`).
   Extend those lists, never the walk (`PLAN-effect-catalogue` B2's Outcome).
-⚠ **`WorldStageRootGaps` (`ballflare.flt`) / `CrashTemplateRootGaps` (`apassengers`) are the
-  opposite case and are NOT curation**: roots the closure genuinely needs and nothing stages, so the
-  torpedo flare and the crash's passenger removal play nothing at all today (`BL-262`). They are
-  subtracted from what the binds stage, which is the only reason deleting the hand tables moved no
-  golden — staging them is a behaviour change that plan refused to make. These two lists are the
-  marker of what `BL-262` deletes: closing it means removing the name here in the same commit that
-  accepts the moved census tallies and effect/crash goldens. `effects-census` fails in both
-  directions if a gap stops being asked for or turns up staged.
 
 ## src/Session/WorldEffectsFactory.cs
 Builds the impact/destruction effect stages and the per-player crash runtime: the world-effects runtime (D32) and

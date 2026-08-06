@@ -1622,31 +1622,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   deactivation in every one of them. `analysis/bl-061-template-mesh/FINDINGS.md` records the
   measurement; `zep_ng_dstry1.flt` is the reachable repro (`--effects-test`, any chapter).
 
-- `BL-262` `[Bug]` **Two anchor roots the bound effect defs ask for are staged by neither table, so two
-  authored effects play nothing at all.** Found by `PLAN-effect-catalogue` B2's derivation
-  (`EffectCatalogue.StageRootsFor`) run against the hand tables, not by any census — the
-  `effects-census` rows for both still read as resolved, which is the whole reason B2 exists.
-  (a) **`ballflare.flt`** — the torpedo explosion's flare, called by `torpedo_ground_effect` and
-  `torpedo_water_effect` (`AT_NODE torp_effects +0,5,0`). Missing from `EffectStageRoots`; its only
-  node is itself, so unlike `zep_can_dstry1.flt` the retarget target's subtree cannot supply it.
-  A single parentless root in all 8 chapters.
-  (b) **`apassengers`** — `rem_pas`, called by both crash variants with **no** `AT_NODE`, so it
-  anchors on its own template root. Missing from `EffectTemplateRoots`;
-  `analysis/effect-anchor-roots/FINDINGS.md` listed it among the crash rig's 11 roots and the table
-  shipped with a different 11.
-  ⚠ Staging either is a **behaviour change**, not a table typo — B2 deliberately did not make it, so
-  the goldens stayed hash-identical. Both are named in `EffectCatalogue`'s
-  `WorldStageRootGaps`/`CrashTemplateRootGaps`;
-  closing this item means deleting the name from that list in the same commit that stages it, and
-  re-pinning whatever moves (the census tallies, `c1-destroy-effects`, `c1-crash`).
-  ⚠ Since B3 the hand tables are **gone** — both binds stage `EffectCatalogue.WorldStageRoots`/
-  `CrashStageRoots`, i.e. the closure MINUS these two lists, so deleting a name here is the whole
-  fix: the root stages itself. `effects-census` fails in both directions if a listed gap stops being
-  asked for or turns up staged, so the marker cannot rot.
-  ⚠ The offline instrument is blind to (a): `analysis/effect-anchor-roots/anchor_roots.py` keys defs
-  by `ANIMATION_NAME`, and `ballflare.flt` declares only a `NAME`, so it never entered that closure.
-  Fix the script when this lands, or the next re-run repeats the miss.
-
 ## Audio
 
 - `BL-079` `[Feature]` **Positional 3D audio for other aircraft** — all sound is own-plane non-positional today;

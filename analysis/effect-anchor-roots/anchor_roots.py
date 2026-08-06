@@ -86,7 +86,11 @@ def main(extracted, roots=None):
         for kv in definitions(path):
             anim = kv.get("ANIMATION_NAME", [[None]])[0][0]
             name = kv.get("NAME", [[None]])[0][0]
-            by_anim[anim].append((os.path.basename(path), name, kv))
+            # A def with no ANIMATION_NAME is still callable by its NAME (a CALL_ANIMATION's
+            # NAME targets whichever field the def declares) — mirrors AnimDefs' `AnimName ??=
+            # Name`. Keying by ANIMATION_NAME alone dropped ballflare.flt (NAME-only) into a
+            # bucket no CALL_ANIMATION ever asks for.
+            by_anim[anim or name].append((os.path.basename(path), name, kv))
 
     seen, queue = set(), list(root_names)
     anchors = collections.defaultdict(set)

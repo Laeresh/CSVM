@@ -2038,17 +2038,11 @@ public static class Suites
 
             // The derivation IS the staged set now (B3), so "derived == hand table" is gone with
             // the table. What still needs saying, per chapter, because chapter data decides it:
-            // (1) the pool config sizes the set that is really staged — a root renamed on one side
-            // sizes nothing, silently; (2) `BL-262`'s two gaps are still exactly what the bind
-            // holds back, so the marker cannot rot into "the derivation stopped asking for them".
+            // the pool config sizes the set that is really staged — a root renamed on one side
+            // sizes nothing, silently.
             var unsized = Utils.EffectPools.Load().UnknownRoots(roots);
             ctx.Check(unsized.Count == 0,
                 $"effect_pools.json sizes only roots this bind stages — {ctx.Chapter}{(unsized.Count == 0 ? "" : $" — sizes nothing: {string.Join(", ", unsized)}")}");
-
-            var wanted = Session.EffectCatalogue.StageRootsFor(world.Session.Program, names,
-                Session.WorldEffectsFactory.StageRootResolver(world.Gamez));
-            ctx.Check(GapsHeldBack(wanted, roots, Session.EffectCatalogue.WorldStageRootGaps, out var world262),
-                $"the closure still needs `BL-262`'s world gap(s) and the bind still holds them back — {ctx.Chapter}{Detail(world262)}");
 
             CrashStageRootTripwire(ctx, world);
         });
@@ -2060,8 +2054,8 @@ public static class Suites
     /// which the anchor question does not need. Per-plane on purpose: the wreck and part subtrees
     /// vary by airframe, and the Devastator is the one whose own model root a crash def names.
     /// Asserts what the world half asserts: the rig's derived roots all BUILD from this chapter's
-    /// gamez (a root the closure asks for that the chapter cannot supply is the silent-miss
-    /// failure), and `BL-262`'s crash gap is still needed and still held back.</summary>
+    /// gamez — a root the closure asks for that the chapter cannot supply is the silent-miss
+    /// failure.</summary>
     private static void CrashStageRootTripwire(TestContext ctx, TestWorld world)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2092,12 +2086,6 @@ public static class Suites
                     built.Free();
                     ctx.Check(n == rigRoots.Count,
                         $"{model}: the crash rig stages every root its bound defs anchor on ({n}/{rigRoots.Count}) — {world.Chapter}");
-
-                    var wanted = Session.EffectCatalogue.StageRootsFor(world.Session.Program,
-                        Session.EffectCatalogue.CrashRigAnimNames, resolve);
-                    ctx.Check(GapsHeldBack(wanted, rigRoots, Session.EffectCatalogue.CrashTemplateRootGaps,
-                            out var crash262),
-                        $"{model}: the closure still needs `BL-262`'s crash gap(s) and the rig still holds them back — {world.Chapter}{Detail(crash262)}");
                 }
                 finally
                 {
@@ -2110,30 +2098,6 @@ public static class Suites
             textures.Dispose();
         }
     }
-
-    /// <summary>`BL-262`'s guard, both binds: every named gap is a root the closure genuinely
-    /// asks for (<paramref name="wanted"/>) and that the bind deliberately does not stage
-    /// (<paramref name="staged"/>). Fails in BOTH directions — a gap the closure stopped asking for
-    /// is a stale marker to delete, and a gap that turned up staged means the behaviour change
-    /// `BL-262` owns happened by accident, with goldens to re-pin.</summary>
-    private static bool GapsHeldBack(IReadOnlyList<string> wanted, IReadOnlyList<string> staged,
-        IReadOnlyList<string> gaps, out string? detail)
-    {
-        var need = new HashSet<string>(wanted, System.StringComparer.OrdinalIgnoreCase);
-        var have = new HashSet<string>(staged, System.StringComparer.OrdinalIgnoreCase);
-        var bad = new List<string>();
-        foreach (var gap in gaps)
-        {
-            if (!need.Contains(gap))
-                bad.Add($"{gap}: no bound def anchors on it any more");
-            if (have.Contains(gap))
-                bad.Add($"{gap}: staged after all");
-        }
-        detail = bad.Count == 0 ? null : string.Join("; ", bad);
-        return bad.Count == 0;
-    }
-
-    private static string Detail(string? drift) => drift is null ? "" : $" — {drift}";
 
     // ---- BL-240: bounce-terminated launches fly and land ---------------------------------------
 

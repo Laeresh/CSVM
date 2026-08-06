@@ -77,7 +77,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — authored effects and world data
 
-7. ☐ `BL-262` Stage `ballflare.flt` and `apassengers`; re-pin what moves
+7. ☑ `BL-262` Stage `ballflare.flt` and `apassengers`; re-pin what moves
 8. ☐ `BL-257` Census the no-`RUN_TIME`/no-`BOUNCE_SEQUENCE` launch shape; make the zeppelin's eight parts fly
 9. ☐ `BL-277` Select the sky/fog zone per chapter instead of hard-coding `zone2`
 10. ☐ `BL-273` Read `fogvol.zrd` and render the authored cloud field, deleting `CloudPuffs`' invented one
@@ -246,7 +246,7 @@ not fold a density re-tune into this.
 
 # Wave C — authored effects and world data
 
-## C7 ☐ `BL-262` Two anchor roots the bound effect defs ask for are staged by nothing
+## C7 ☑ `BL-262` Two anchor roots the bound effect defs ask for are staged by nothing
 
 **Goal.** The torpedo explosion's flare (`ballflare.flt`, via `torpedo_ground_effect` /
 `torpedo_water_effect`) and the crash's `apassengers` (`rem_pas`) actually play.

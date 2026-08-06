@@ -100,3 +100,12 @@ condition on all 8 chapters). Three differences from this script's answer, all o
 the crash's passenger removal plays nothing.
 
 No game data is stored here — the script reads the player's own `extracted/` tree.
+
+## 2026-08-06 — the keying bug fixed, `BL-262` closed
+
+`by_anim` now keys a definition by `ANIMATION_NAME or NAME`, the same fallback `AnimDefs` applies at
+load (`AnimName ??= Name`). Re-run confirms the world-effects closure now reports **29** anchor roots
+(28 + `ballflare.flt`, itself a single parentless root in all 8 chapters, as predicted above) and the
+crash rig's still reports its 13 including `apassengers`. Both names are deleted from
+`EffectCatalogue`'s stage-gap lists (which are themselves deleted — nothing subtracts from the
+closure any more), so the two effects stage and play.
