@@ -86,6 +86,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ Bullet-kill attribution: critical-part death → `Crash` with killer identity reported
 12. ☑ `VersusMatch` engine-free bookkeeping + xUnit tests
 13. ☑ VS respawn loop: 3 s auto-respawn, R skips early
+14. ☐ Rockets vs planes: proximity fuse arms on aircraft, blast damage reaches them, kills attributed
 
 ### Wave C — Mode plumbing and UI
 
@@ -294,7 +295,41 @@ crash (no double-count across the auto/manual paths).
 **⚠ Traps.** Respawn must not emit a second death event; the death was registered at `Crash`.
 Spawn camping / invulnerability are explicitly deferred (Decision #6) — do not "improve" here.
 
-# Wave C — Mode plumbing and UI
+## B14 ☐ Rockets vs planes: proximity fuse arms on aircraft, blast damage reaches them, kills attributed
+
+**Goal.** Rockets become the practical PvP weapon they were in the original: a rocket passing near
+an opponent's plane fuses, its blast damages aircraft in radius with distance falloff, and a blast
+kill scores the shooter — while your own rockets never fuse on or damage your own plane, and world
+destructibles behave byte-identically to today.
+
+**Evidence (confidence: traced).** Wave A deliberately pinned `_proximityQuery` world-only
+(`Projectile.cs` — "fuse/blast probes stay world-only on purpose"); user direction 2026-08-06
+reverses that for VS: the original's rockets + proximity fuses are its anti-air mechanism, and
+without the original's aim assistance (bullet magnetism — still unbuilt, see the tuning BL),
+gun-only PvP under-hits. Blast falloff precedent: the `blast-neighbor-shape` suite pins
+nearest-collision-shape scoring for destructibles. Attribution plumbing exists (B11: shooter id
+threads through `TakeProjectileHit`). Trap precedent: a rocket leaves the muzzle INSIDE the
+shooter's own hitboxes — without owner exclusion on the fuse query it detonates at launch.
+
+**Approach.** Fuse: `_proximityQuery.CollisionMask` → `WorldAndAircraft`, shooter's own body
+excluded per shot, set AND reset (same shared-query discipline as `_ray`). Blast: a separate
+aircraft pass beside the destructible sink — for each registered `AircraftBody` (never the
+shooter's own) within the weapon's blast radius, falloff by distance to the nearest collision box
+(mirror `blast-neighbor-shape`'s rule), apply through the attributed `TakeProjectileHit` path with
+the nearest box as the struck part. Planes never enter `DamageSink`. Damage magnitudes come from
+the weapon defs' own blast fields — never invented.
+
+**Model recommendation.** high — shared-query traps and blast math in the highest-traffic combat
+module.
+
+**Verify.** Extend the `air-to-air` suite: a rocket passing a plane at fuse range detonates; blast
+at offset damages with falloff (nearer > farther, zero outside radius); a blast kill attributes to
+the shooter through `Downed`; a rocket fired at launch never self-fuses or self-damages; world
+destructible suites (`damage-hd`, `blast-neighbor-shape`) stay green. Full 26-suite stage green.
+
+**⚠ Traps.** `_proximityQuery` is shared and mutable — Exclude set/reset per check like `_ray`.
+Do not feed planes into the destructible sink. Self-blast exemption is the guns invariant applied
+consistently, not a balance opinion — revisiting it belongs in the VS tuning BL, not here.
 
 ## C21 ☑ `SessionSpec`: `--vs`, `--vs-kills`, `--vs-time`, precedence, `dogfight_ace` default + parse tests
 
