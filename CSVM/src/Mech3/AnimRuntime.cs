@@ -197,6 +197,35 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// node.</para></summary>
     public bool PooledTemplates;
 
+    /// <summary>Named CALL_ANIMATION callees whose placed root levels to world axes instead of the
+    /// inherited parent rotation (<see cref="PlaceTemplateOn"/>), keyed by <c>AnimName ?? Name</c>.
+    /// Set by <see cref="FlightController.Crash"/> to the crash-def's own surface-hugging sub-effects
+    /// only (`BL-292`): the crash rig's effect-template pool slots sit under <c>crashRoot</c>, whose
+    /// <c>Transform</c> is the plane's own attitude (<see cref="WorldEffectsFactory.BuildFlightCrashRuntime"/>)
+    /// — needed so the wreck subtree lands at the crash pose, but wrong for a template that is
+    /// supposed to lie on the struck surface (flat ground/water, always world-up here — the fourth
+    /// bite of the plane-parented-effect trap the family already names): the water splash's flat
+    /// rings/spray column (`plane_big_splash`/`plane_big_ripple`/`hg_splasher`) and the dirt burst's
+    /// dust plane (`flydirt_plane`).
+    ///
+    /// <para>⚠ Deliberately NOT every crash-def template. `call_crash_trails`' flying debris chunks
+    /// (`fly_trail1-5`) author their scatter (xz/y `translation_range`) in the template's OWN local
+    /// frame — leveling it strips the co-rotation that made debris continue roughly along the crash's
+    /// own attitude/momentum (already reinforced by <see cref="InheritedWorldVelocity"/>), and instead
+    /// launches it in a fixed world direction unrelated to how the plane hit, i.e. off to the side of
+    /// the impact. Confirmed at the controls 2026-08-06 on the `c1-crash` golden (`--crash=5`): late
+    /// frames (t≈1.3s, past the fireball) showed debris peeling off on a wrong fixed heading with an
+    /// early blanket-runtime version of this flag, while `plane_big_splash`/`plane_big_ripple`
+    /// leveled correctly. `large_fireball`/`large_10sec_fire`/`large_black_smokeball` are pure puffers
+    /// (no owned mesh) already unaffected by a host's basis; `large_steam_spray` is explicitly
+    /// out of scope per the item's own goal ("fire and steam stay correct").</para>
+    ///
+    /// <para>Off everywhere else, including the SAME runtime's in-flight damage-stage effects
+    /// (`gimmeflakes` etc., played before a crash while the plane is still flying, where inheriting
+    /// the current attitude is correct and already verified — `BL-288`/`BL-287`) — <c>Crash</c> sets
+    /// this only once the crash def itself plays, and <c>Respawn</c> clears it.</para></summary>
+    public HashSet<string>? LevelPlacedTemplateNames;
+
     /// <summary>Key puffer emitters by owning def as well as (name, host) â€” see
     /// <see cref="EmitterDirector"/>'s keying remark, which carries the measurement behind each
     /// case. Set on the world-effects runtime, where distinct effect defs declaring same-named
@@ -1113,7 +1142,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             // Pooled, that root is the NEXT copy in the pool — this call's own — and only that
             // copy is moved onto the site (BL-225).
             var roots = NextPooledAnchors(def);
-            PlaceTemplateOn(roots, worldPoint);
+            PlaceTemplateOn(roots, worldPoint, LevelsTemplate(def));
             var anchor = roots.FirstOrDefault();
             bool governed = inputNode != null && IsInstanceValid(inputNode)
                             && DefConditionsOnInputNode(def);
@@ -3119,7 +3148,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// frame.</summary>
     private void PlaceTemplateAt(AnimDefinition callee, Node3D site, Vector3 offset) =>
         PlaceTemplateOn(TemplateRootsFor(callee, site),
-            site.GlobalTransform.Origin + site.GlobalTransform.Basis * offset);
+            site.GlobalTransform.Origin + site.GlobalTransform.Basis * offset, LevelsTemplate(callee));
+
+    /// <summary>Whether <paramref name="def"/>'s placed root should level to world axes
+    /// (<see cref="LevelPlacedTemplateNames"/>) rather than inherit its caller's rotation.</summary>
+    private bool LevelsTemplate(AnimDefinition def) =>
+        LevelPlacedTemplateNames != null && LevelPlacedTemplateNames.Contains(def.AnimName ?? def.Name);
 
     /// <summary>Shows or hides the effect-template root(s) a definition anchors on, when this
     /// runtime stages its templates hidden (<see cref="ShowPlacedTemplates"/>). Paired with the
@@ -3198,7 +3232,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return true;
     }
 
-    private void PlaceTemplateOn(IEnumerable<Node3D?> roots, Vector3 origin)
+    private void PlaceTemplateOn(IEnumerable<Node3D?> roots, Vector3 origin, bool level = false)
     {
         foreach (var root in roots)
         {
@@ -3206,6 +3240,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 continue;
             var xf = root.GlobalTransform;
             xf.Origin = origin;
+            // BL-292: a named crash-def template (the water splash's flat rings/spray column, the
+            // dirt burst's dust plane) inherits crashRoot's rotation otherwise — the plane's
+            // attitude at impact, not the struck surface. Basis only; the origin above still places
+            // at the call site. Named, not blanket (see LevelPlacedTemplateNames's own ⚠): a crash
+            // debris template's scatter is authored in ITS OWN frame and must keep co-rotating with
+            // the impact attitude.
+            if (level)
+                xf.Basis = Basis.Identity;
             // World-stage the template once placed: TopLevel decouples it from a moving/rotating
             // caller (a flying plane's pdpN panel) so it holds this pose instead of being dragged
             // and re-yawed every later frame the caller moves — the same plane-parented-effect trap

@@ -76,6 +76,20 @@ public static class EffectCatalogue
     // `piece1..4`, does not also drag this splash off with the sliding wreck (BL-274).
     public static readonly string[] GroundSplashAnimNames = { "flydirt_plane" };
 
+    // The crash def's own sub-effects that are meant to lie flat on the struck surface, not co-rotate
+    // with the plane's impact attitude — the ONLY crash-rig templates `AnimRuntime
+    // .LevelPlacedTemplateNames` levels to world axes (BL-292). `plane_big_splash` (the water splash's
+    // spray column + flat rings, `huge_splash_model`) and its two own CALL_ANIMATION children
+    // `plane_big_ripple` (the fading ripple rings, `ripple`) and `hg_splasher` (the water-squirt
+    // puffer, no owned mesh — leveling only turns its local_velocity upright); `flydirt_plane` (the
+    // dirt burst's ground-scorch dust plane, `flydirt`) is the direct ground analogue. Deliberately
+    // excludes the fireball/smoke/debris family (`large_fireball`, `large_10sec_fire`,
+    // `large_black_smokeball`, `call_crash_trails`) and `large_steam_spray` — see
+    // `AnimRuntime.LevelPlacedTemplateNames`'s own ⚠ for why those must keep inheriting the crash
+    // attitude.
+    public static readonly string[] CrashSurfaceLevelAnimNames =
+        { "plane_big_splash", "plane_big_ripple", "hg_splasher", "flydirt_plane" };
+
     // The per-player rig's non-crash defs (B4): the four `<part>_damage_effects` shims the
     // Devastator's 0.99 injure_anims entry names. Bound alongside the crash def because they need
     // exactly what the crash rig already has — the `player` anim root, the plane's own `pdpN`

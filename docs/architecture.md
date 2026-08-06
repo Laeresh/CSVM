@@ -663,6 +663,23 @@ anchor nodes.
   family (`BL-229`'s puffer `TopLevel`, the smoke-trail fix, `trail-world-anchor`) — harmless on a
   stationary call site (buildings, the world-effects pool) and on the crash's own frozen templates;
   only a still-moving caller ever exposed it. Still correct and still needed; keep it.
+⚠ `TopLevel` alone still leaves a placed root's BASIS inherited from its parent chain at the moment
+  it is read — fine for a stationary pool container (identity), but the per-player crash rig's roots
+  sit under `crashRoot`, whose own `Transform` is deliberately the plane's attitude at the crash
+  (`WorldEffectsFactory.BuildFlightCrashRuntime`'s own note) — the fourth bite of the
+  plane-parented-effect trap: a template that is supposed to lie flat on the struck surface (the
+  water splash's spray column/rings, the dirt burst's dust plane) instead sprayed off at the plane's
+  impact angle (`BL-292`). `PlaceTemplateOn`'s `level` parameter — driven by
+  `LevelPlacedTemplateNames`, a named allowlist keyed by `AnimName ?? Name` — overwrites the placed
+  root's basis to `Basis.Identity` for exactly those defs. **Named, not blanket**: an earlier,
+  whole-runtime version of this flag also releveled `call_crash_trails`' flying debris chunks
+  (`fly_trail1-5`), which author their xz/y launch spread in the TEMPLATE's own local frame on
+  purpose — leveling it stripped the co-rotation that made debris continue along the crash's own
+  attitude/momentum (reinforced separately by `InheritedWorldVelocity`) and sent it off on a fixed
+  world heading unrelated to the impact instead (caught visually on the `c1-crash` golden's later
+  frames, past the fireball). `EffectCatalogue.CrashSurfaceLevelAnimNames` is the one list; see its
+  own comment for exactly which defs are in and why the rest (fireball/smoke/debris,
+  `large_steam_spray`) stay out.
 The crash rig pools its templates too (`BL-288`), with a twist the world pool does not need:
 its calls anchor on the PLANE's own nodes (each `pdpanelN` tear CALLs `gimmeflakes` onto its own
 `pdpN`; the crash defs CALL `large_firetrail` onto their four `pieceN`), which sit in no slot
@@ -2624,7 +2641,12 @@ knowledge), the crash-rig's own name sets (`CrashDefNames`: `player_crash_dirt`/
 `GroundSplashAnimNames` (`flydirt_plane`) names the crash's ground-splash def for
 `AnimRuntime.InheritedVelocityExempt` (`BL-274`) — its `ObjectMotion` is authored the same
 vertical-only shape as a launched wreck piece, so only the name can tell "stay planted" from
-"scatter with the crash's momentum" apart. It also derives what
+"scatter with the crash's momentum" apart.
+`CrashSurfaceLevelAnimNames` (`plane_big_splash`, `plane_big_ripple`, `hg_splasher`,
+`flydirt_plane`) names the crash def's own sub-effects that belong flat on the struck surface for
+`AnimRuntime.LevelPlacedTemplateNames` (`BL-292`) — the water splash's spray column/rings and the
+dirt burst's dust plane; the fireball/smoke/debris family and `large_steam_spray` are deliberately
+excluded (own comment carries why — `AnimRuntime`'s `PlaceTemplateOn` entry has the mechanism). It also derives what
 those names need staged: `StageRootsFor(program, names, resolveRoot)` walks `AnimProgram.Subset`'s
 CALL_ANIMATION closure, takes each reached definition's NAME (the gamez node its instance anchors on),
 and resolves it three ways — a parentless gamez root is **staged**, a name the bind's own scope
@@ -2668,7 +2690,11 @@ Its templates are staged in **pool slots** like the world stage (`BL-288`): size
 family gets one copy per authored call anchor), `PooledTemplates` set beside the slot build, and
 the runtime's caller-slot assignment pins each call anchor (`pdpN`, `prop1`, `pieceN`) to its own
 copy — see `AnimRuntime`'s pool paragraphs for the mechanism and the `damage-template-pool` suite
-for the regression shape. The
+for the regression shape. `LevelPlacedTemplateNames` is set beside `PooledTemplates`/
+`InheritedVelocityExempt`, once, from `EffectCatalogue.CrashSurfaceLevelAnimNames` (`BL-292`) — the
+named defs only ever play from within a crash sequence, so unlike `InheritedWorldVelocity` (set
+per-crash in `FlightController.Crash`, since it depends on the live impact speed/direction) this
+needs no per-crash toggle. The
 prop choreography's own defs resolve their `staticpropN`/`propN`/`propNb` node names against the
 plane model directly (`LOCAL_NODES_ONLY`) — `FlightController.Respawn`/`Crash` call
 `CrashRuntime.Play("startprops"/"stopprops", PlaneModel, applyReset: false)` themselves, since

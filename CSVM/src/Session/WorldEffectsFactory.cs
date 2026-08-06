@@ -293,6 +293,13 @@ public sealed class WorldEffectsFactory
         // per-crash), because which defs are exempt never changes across a session.
         crashRuntime.InheritedVelocityExempt =
             new HashSet<string>(EffectCatalogue.GroundSplashAnimNames, StringComparer.OrdinalIgnoreCase);
+        // The crash def's own surface-hugging sub-effects (the water splash's flat rings/spray
+        // column, the dirt burst's dust plane) level to world axes instead of inheriting the plane's
+        // impact attitude (BL-292) — set once here, like the exempt set above, since the named
+        // defs only ever play from within a crash sequence; never reached by the in-flight
+        // damage-stage effects this same runtime also plays, so no per-crash toggle is needed.
+        crashRuntime.LevelPlacedTemplateNames =
+            new HashSet<string>(EffectCatalogue.CrashSurfaceLevelAnimNames, StringComparer.OrdinalIgnoreCase);
         // Bind only the named defs' transitive CALL_ANIMATION closures (Subset), never the whole
         // world program: the full 800+ defs include ~150 generic-named world defs that would
         // mis-anchor onto this plane's parts and run their reset states on the aircraft. The set

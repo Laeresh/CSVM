@@ -63,7 +63,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ `BL-288` — `gimmeflakes` fires only at a panel tear, and the flakes separate in world space
 2. ☑ `BL-287` — the fuel leak stops fighting `WingLightBlinker` over `wing_flare2`/`winglight2`; confirm panels 4/6 burn flakes-only as authored
-3. ☐ `BL-292` — the crash water splash orients to the struck surface: spray up, rings flat
+3. ☑ `BL-292` — the crash water splash orients to the struck surface: spray up, rings flat
 
 ### Wave B — HUD & world rendering
 
@@ -281,10 +281,49 @@ across several blink cycles; `.\RunTests.ps1`.
 **⚠ Traps.** Don't "fix" (b) by wiring `view_result` — nothing calls it in the data; that would be
 inventing content.
 
-## A3 ☐ `BL-292` — crash water splash orients to the surface
+## A3 ☑ `BL-292` — crash water splash orients to the surface
 
-**Goal.** A dive into open water plays `plane_big_splash` with the spray column firing straight up
-and the flat rings lying in the water plane; fire and steam stay correct.
+**LANDED 2026-08-06.** Confirmed the hypothesis: `WorldEffectsFactory.BuildFlightCrashRuntime` sets
+`crashRoot.Transform = controller.PlaneModel.Transform`, and the crash rig's effect-template pool
+slots (where `plane_big_splash`/`plane_big_ripple`/`flydirt_plane` etc. get placed) sit under that
+root — needed so the wreck subtree lands at the crash pose, but the same rotation leaked into every
+CALL_ANIMATION-relocated template's BASIS, since `AnimRuntime.PlaceTemplateOn` only ever overwrote
+the placed root's ORIGIN, never its inherited basis (the fourth bite of the plane-parented-effect
+trap, confirmed against `carnage_trails-call_crash_trails.json`/`huge_splash_model-plane_big_splash.json`
+et al. — no guessing). Fix: `PlaceTemplateOn` gained a `level` parameter that overwrites the basis to
+`Basis.Identity`, driven by a new `AnimRuntime.LevelPlacedTemplateNames` allowlist (keyed by
+`AnimName ?? Name`) rather than a runtime-wide flag — `EffectCatalogue.CrashSurfaceLevelAnimNames`
+names exactly the water splash's own sub-effects (`plane_big_splash`, `plane_big_ripple`,
+`hg_splasher`) and the dirt burst's ground-scorch dust plane (`flydirt_plane`), set once in
+`BuildFlightCrashRuntime` beside `PooledTemplates`/`InheritedVelocityExempt`.
+
+**First pass was too broad — caught at the controls.** A runtime-wide bool (level EVERY
+CALL_ANIMATION-relocated crash template) fixed the splash but also releveled `call_crash_trails`'
+flying debris chunks (`fly_trail1-5`), which author their xz/y launch spread in the template's OWN
+frame on purpose so debris continues roughly along the crash's own attitude/momentum (reinforced
+separately by `InheritedWorldVelocity`) — leveling it sent debris off on a fixed world heading
+unrelated to the impact instead, visible on the `c1-crash` golden's later frames (past the fireball,
+`--frames=85` vs the pinned `--frames=20`) as wreckage "flying away" 45° to the side instead of along
+the forward vector. Diagnosed by isolating frames past the fireball on both builds side by side
+(before-fix debris tracked the impact heading; blanket-fix debris diverged) — the named-allowlist
+version above reproduces the before-fix debris trajectory exactly while still leveling the splash.
+**Fire and steam are unaffected on purpose**: `large_fireball`/`large_10sec_fire`/
+`large_black_smokeball` are pure puffers (no owned mesh, so a host's basis was never their orientation
+signal) and `large_steam_spray` is excluded from the allowlist per this item's own goal.
+
+**Verify.** Scripted C1 sea dive (`--pos=-6500,300,-1500 --direction=1,-0.85,0 --hold=0,0,0,1`,
+nose-down + banked): before the fix the splash's `splash_polys`/`ripple1-3` inherited the ~40° dive
+tilt, rendering as a giant screen-filling wedge (the huge authored ring scale, 7-20×, presented
+nearly edge-on toward the camera); after the fix the same shot shows a round, level ring with the
+spray column firing straight up. `--crash=5 --hold=0,0,0,0.6` (the `c1-crash` golden's own repro) at
+frames past the fireball (`--frames=85`) confirmed debris/fireball/smoke pixel-identical to the
+pre-BL-292 baseline once the allowlist was scoped down; at the golden's own pinned frame 20 the
+allowlisted `flydirt_plane` still moves a thin 2.16 % halo ring (>20/255 threshold) around the
+fireball — `c1-crash` re-pinned, explained in `analysis/goldens/manifest.json`. Full
+`.\RunTests.ps1`: 515 units / 32 engine suites / 13 goldens, all green.
+
+**Goal (unchanged).** A dive into open water plays `plane_big_splash` with the spray column firing
+straight up and the flat rings lying in the water plane; fire and steam stay correct.
 
 **Evidence (confidence: direction sound; the mechanism is a stated hypothesis).** PT-37 sea dive,
 2026-08-06 (backlog `BL-292`). Hypothesis, not observation: the effect root inherits the crashed

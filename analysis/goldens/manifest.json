@@ -98,8 +98,8 @@
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "bf24db3f7e145daeb0b6be03af2d834a",
-      "exercises": "the per-player crash rig (ForCrashRig/D32) constructing and playing player_crash_dirt: --crash=5 forces FlightController.Crash() at a fixed sim frame, the only headless trigger for this path (PLAN-animruntime-role-factories A2); moves off its Rng.Crash draw. The set's biggest puffer surface, so the TEXTURE_SEQUENCE lifetime-fraction fix moved 26.55 % of its pixels: the fireball holds its mid flipbook frames instead of the blown-out last one.",
+      "hash": "c8cd8d2e2965a399a5f140429314f806",
+      "exercises": "the per-player crash rig (ForCrashRig/D32) constructing and playing player_crash_dirt: --crash=5 forces FlightController.Crash() at a fixed sim frame, the only headless trigger for this path (PLAN-animruntime-role-factories A2); moves off its Rng.Crash draw. The set's biggest puffer surface, so the TEXTURE_SEQUENCE lifetime-fraction fix moved 26.55 % of its pixels: the fireball holds its mid flipbook frames instead of the blown-out last one. Also exercises EffectCatalogue.CrashSurfaceLevelAnimNames (BL-292): flydirt_plane, the dirt burst's ground-scorch dust plane, levels to world axes instead of the plane's spawn-trim attitude at --crash=5's frame, moving a 2.16% halo ring around the fireball (>20/255 threshold) — the fireball/smoke/debris family is deliberately excluded from that set and is pixel-unchanged.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     }
   ]
