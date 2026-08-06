@@ -709,8 +709,11 @@ public partial class FlightController : Node3D
     /// damage data (no destroyable_parts: nothing to track, the round just sparks).
     /// <paramref name="shooter"/> is the round's owner (<see cref="PlayerIndex"/> of who fired,
     /// <see cref="ProjectilePool.NoShooter"/> for an unowned round) — carried into
-    /// <see cref="Downed"/> as the killer when the hit downs the plane.</summary>
-    public void TakeProjectileHit(WeaponDef weapon, Vector3 impact, string colliderPart, int shooter)
+    /// <see cref="Downed"/> as the killer when the hit downs the plane.
+    /// <paramref name="damageScale"/> scales both magnitudes: 1 for a direct round, the linear
+    /// blast falloff share for a splash hit (the pool's aircraft blast pass).</summary>
+    public void TakeProjectileHit(WeaponDef weapon, Vector3 impact, string colliderPart, int shooter,
+        float damageScale = 1f)
     {
         if (_crashed || Damage == null)
             return;
@@ -718,7 +721,8 @@ public partial class FlightController : Node3D
         var pose = new Transform3D(_model.Attitude, _model.Position);
         var localImpact = pose.AffineInverse() * impact;
         string dataPart = PlaneDamage.MapStruckPart(colliderPart, localImpact);
-        var state = Damage.Apply(dataPart, weapon.HealthDamage ?? 0f, weapon.ArmorDamage ?? 0f);
+        var state = Damage.Apply(dataPart,
+            (weapon.HealthDamage ?? 0f) * damageScale, (weapon.ArmorDamage ?? 0f) * damageScale);
         if (state == null)
             return;
         Visuals?.OnPartDamage(dataPart, state.Fraction);

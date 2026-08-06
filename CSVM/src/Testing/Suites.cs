@@ -89,7 +89,8 @@ public static class Suites
         into.Add(new TestHarness.Suite("air-to-air",
             "a round strikes the target plane's body, maps to the data part, moves armor/HP by the " +
             "weapon's own values, downs it on a critical zero with the kill attributed through the " +
-            "Downed event — and never hits the shooter's own geometry", AirToAir));
+            "Downed event — never hits the shooter's own geometry — and a rocket fuses on a passing " +
+            "plane, blasting with falloff and attributing the kill", AirToAir));
         into.Add(new TestHarness.Suite("damage-stages",
             "each DAMAGE_SEQUENCE def fires its stage effects across an HP sweep", DamageStages));
         into.Add(new TestHarness.Suite("damage-hd",
@@ -952,7 +953,13 @@ public static class Suites
     /// (B11): the weapon kill scores exactly the shooter, a wreck reports no second death, a
     /// killer-less crash and an unowned round's kill each tally a death and score nobody. The tail
     /// pins the VS respawn loop (B13): without AutoRespawnAfter a crash waits for R; armed at the
-    /// session's 3 s it auto-respawns at that mark in sim frames, and the respawn reports nothing.</summary>
+    /// session's 3 s it auto-respawns at that mark in sim frames, and the respawn reports nothing.
+    /// The rocket phases (B14) pin the proximity fuse and blast: a rocket crossing a fixed gap
+    /// ahead of the target's nose fuses there and blasts the nose by exactly the linear falloff at
+    /// that gap; a second plane farther inside the radius takes less, a plane outside it nothing;
+    /// sustained fused passes down the target with the kill attributed through the same Downed
+    /// seam; a wreck neither fuses a round nor soaks blast; and a rocket fired from INSIDE its own
+    /// shooter's boxes never self-fuses or self-damages, flying on to fuse on the opponent.</summary>
     private static void AirToAir(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -984,6 +991,7 @@ public static class Suites
         ProjectilePool? pool = null;
         FlightController? target = null;
         FlightController? shooter = null;
+        FlightController? bystander = null;
         try
         {
             var live = new ProjectilePool(textures, null, null);
@@ -1185,12 +1193,124 @@ public static class Suites
                 $"the armed crash auto-respawns at the 3 s mark (step {175 + extra} of 180±5)");
             ctx.Check(match.DeathsOf(1) == deathsAtCrash && match.KillsOf(0) == 1,
                 $"respawn emitted nothing — the death was reported at Crash deaths(P2)={match.DeathsOf(1)}");
+
+            // ---- B14: the proximity fuse arms on aircraft and blast damage reaches them ----
+            // Data-driven pick: a dumbfire, spread-free rocket whose blast radius comfortably
+            // exceeds its fuse trigger distance (the flak profile), so a fused detonation still
+            // lands damage inside the linear falloff; the fuse range must also clear the suite's
+            // fixed pass gap. Equal ARMOR/HEALTH magnitudes make the combined armor+HP delta equal
+            // the scaled magnitude regardless of how much armor is left (the carry-over rule).
+            WeaponDef? rocket = weapons.All.FirstOrDefault(w =>
+                w.IsRocket && w.DetonationDotProduct is null && w.CannonSpread is not > 0f
+                && w.ArmorDamage is > 0f && w.HealthDamage is > 0f
+                && w.DetonationDistance is > 8f
+                && w.ImpactProximity is { } prox && prox >= 2f * w.DetonationDistance!.Value);
+            ctx.Check(rocket != null,
+                $"a fused rocket with a blast radius beyond its trigger distance exists in the data");
+            if (rocket == null)
+                return;
+            float fuseRange = rocket.DetonationDistance!.Value;
+            float blastRadius = rocket.ImpactProximity!.Value;
+            float rocketDmg = rocket.ArmorDamage!.Value;
+            ctx.Check(Mathf.IsEqualApprox(rocketDmg, rocket.HealthDamage!.Value),
+                $"precondition: the rocket's two damage magnitudes are equal ({rocket.Id})");
+            ctx.Note($"rocket phases use {rocket.Id} (fuse {fuseRange:0} m, blast {blastRadius:0} m, dmg {rocketDmg:0})");
+
+            // The crossing line: level with the target nose's own nearest hull point, a fixed gap
+            // ahead of its front face — the nearest box to any point on it is that front face, so
+            // the detonation distance IS the gap and the struck part maps forward (the nose).
+            const float FuseGap = 5f;
+            ctx.Check(FuseGap < fuseRange && blastRadius >= 60f,
+                $"precondition: the pass gap sits inside the fuse range and the radius leaves falloff room");
+            target.Respawn();
+            target.Body.NearestShape(targetPos + new Vector3(0f, 0f, -60f), out _, out var noseTip);
+            var passPoint = new Vector3(noseTip.X, noseTip.Y, noseTip.Z - FuseGap);
+            var crossMuzzle = new Transform3D(
+                Basis.LookingAt(Vector3.Right, Vector3.Up), passPoint + new Vector3(-150f, 0f, 0f));
+
+            // A third airframe straight below the pass: inside the blast radius but farther from
+            // the detonation than the fused-on target — the nearer > farther falloff witness.
+            bystander = BuildRig(2, passPoint + new Vector3(0f, -0.4f * blastRadius, 0f));
+
+            void FireRocket(Transform3D muzzle, int shooterId, int steps = 30)
+            {
+                live.Spawn(rocket, muzzle, Vector3.Zero, shooterId);
+                for (int i = 0; i < steps; i++)
+                    live.SimStep(1f / 60f);
+                live.Clear();
+            }
+
+            // --- the fused pass: one rocket across the nose gap. The fuse must hold while the
+            // round is still closing and pop at the closest approach, blasting the nose by the
+            // weapon's own magnitudes under the linear falloff at exactly the gap distance.
+            float beforeNear = Combined(target);
+            float beforeFar = Combined(bystander);
+            FireRocket(crossMuzzle, shooter.PlayerIndex);
+            float movedNear = beforeNear - Combined(target);
+            float expectedBlast = ProjectilePool.BlastDamage(rocketDmg, blastRadius, FuseGap);
+            ctx.Check(Mathf.Abs(movedNear - expectedBlast) < 1f,
+                $"the fused pass blasts by the falloff at the {FuseGap:0} m gap moved={movedNear:0.##} expected={expectedBlast:0.##}");
+            ctx.Check(target.Damage.Parts.Values.All(
+                    p => p.Def == nose || (p.Hp >= p.Def.MaxHp && p.Armor >= p.Def.MaxArmor)),
+                $"the blast lands on the nearest box only — it maps to the nose");
+            float movedFar = beforeFar - Combined(bystander);
+            ctx.Check(movedFar > 0f && movedFar < movedNear,
+                $"a farther plane inside the radius takes less nearer={movedNear:0.##} farther={movedFar:0.##}");
+            ctx.Check(Pristine(shooter), $"the shooter's own plane took nothing from its own blast");
+
+            // --- the same pass fired by nobody: an unowned round excludes no plane, so the
+            // shooter's airframe — 500 m out, far beyond IMPACT_PROXIMITY — is a legal blast
+            // candidate and still records nothing: zero outside the radius.
+            target.Respawn();
+            bystander.Respawn();
+            FireRocket(crossMuzzle, ProjectilePool.NoShooter);
+            ctx.Check(Combined(target) < beforeNear,
+                $"an unowned rocket fuses like any other moved={beforeNear - Combined(target):0.##}");
+            ctx.Check(Pristine(shooter), $"zero blast outside the radius (the shooter's plane, 500 m out)");
+
+            // --- the attributed blast kill: fused passes across the critical nose until it
+            // zeroes. The Downed report carries the shooter and the match scores it — the same
+            // seam the gun kill used. Counters entering this phase: kills(P1)=1, deaths(P2)=4
+            // (the gun kill, the killer-less crash, the unowned kill, B13's forced crash).
+            target.Respawn();
+            int rockets = 0;
+            int rocketBudget = (int)((nose.MaxArmor + nose.MaxHp) / expectedBlast) + 6;
+            while (!target.Crashed && rockets < rocketBudget)
+            {
+                rockets++;
+                FireRocket(crossMuzzle, shooter.PlayerIndex);
+            }
+            ctx.Check(target.Crashed,
+                $"sustained fused passes zero the critical nose rockets={rockets}/{rocketBudget}");
+            ctx.Check(match.KillsOf(0) == 2 && match.DeathsOf(1) == 5,
+                $"the blast kill scored the shooter through Downed kills(P1)={match.KillsOf(0)} deaths(P2)={match.DeathsOf(1)}");
+
+            // --- a wreck is out of the fight for rockets too: it neither fuses a round nor
+            // soaks its blast, and no second death is reported.
+            float wreck = Combined(target);
+            FireRocket(crossMuzzle, shooter.PlayerIndex);
+            ctx.Check(Mathf.IsEqualApprox(Combined(target), wreck) && match.DeathsOf(1) == 5,
+                $"a wreck neither fuses a rocket nor soaks its blast");
+
+            // --- the launch trap: a rocket spawns INSIDE its shooter's own collision boxes.
+            // Owner exclusion must keep it from fusing on or blasting its own plane at launch —
+            // and the round must fly on and still fuse on the opponent downrange.
+            target.Respawn();
+            var aim = (passPoint - shooterPos).Normalized();
+            var ownMuzzle = new Transform3D(Basis.LookingAt(aim, Vector3.Up), shooterPos);
+            float tBefore = Combined(target);
+            FireRocket(ownMuzzle, shooter.PlayerIndex, steps: 60);
+            ctx.Check(Pristine(shooter) && !shooter.Crashed,
+                $"a rocket fired from inside its own airframe never self-fuses or self-damages");
+            ctx.Check(Combined(target) < tBefore,
+                $"…and the same round flew on to fuse on the opponent moved={tBefore - Combined(target):0.##}");
         }
         finally
         {
             pool?.Free();
             target?.Free();
             shooter?.Free();
+            bystander?.Free();
             textures.Dispose();
         }
     }
