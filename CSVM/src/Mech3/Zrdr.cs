@@ -98,6 +98,51 @@ public static class Zrdr
         }
     }
 
+    /// <summary>Enumerates reader files by NAME (dir or zip) — the counterpart of
+    /// <see cref="LoadMatchingFiles"/> for families keyed by filename rather than content
+    /// (the ne0NNNNN patrol nets are pure number arrays with nothing to sniff for). The
+    /// predicate sees the stored file name; unparseable matches are skipped.</summary>
+    public static IEnumerable<(string Name, List<object?> Root)> LoadFilesNamed(
+        string zrdrPath, Func<string, bool> namePredicate)
+    {
+        static (string, List<object?>)? TryParse(string name, byte[] bytes)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(bytes);
+                return Convert(doc.RootElement) is List<object?> root ? (name, root) : null;
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+
+        if (Directory.Exists(zrdrPath))
+        {
+            foreach (var file in Directory.EnumerateFiles(zrdrPath, "*.json"))
+            {
+                var name = Path.GetFileName(file);
+                if (namePredicate(name) && TryParse(name, File.ReadAllBytes(file)) is { } hit)
+                    yield return hit;
+            }
+        }
+        else if (File.Exists(zrdrPath))
+        {
+            using var zip = ZipFile.OpenRead(zrdrPath);
+            foreach (var entry in zip.Entries)
+            {
+                if (!namePredicate(entry.Name))
+                    continue;
+                using var s = entry.Open();
+                using var ms = new MemoryStream();
+                s.CopyTo(ms);
+                if (TryParse(entry.Name, ms.ToArray()) is { } hit)
+                    yield return hit;
+            }
+        }
+    }
+
     /// <summary>The names a requested reader file may be stored under. mech3ax v0.6.1
     /// replaced the source extension ("vehicle.zrd" → "vehicle.json"); the fork appends
     /// instead ("vehicle.zrd.json"), keeping the original extension visible. Content is
