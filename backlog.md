@@ -1860,9 +1860,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   idle→5/8 fires" — the 2/8–4/8 band is unobserved, so 0.25 is the smallest threshold
   consistent with both and a declared TUNE. (b) The listen A/B: `EngineStartRamp` is now the
   `startprops` authored 2.0 s and the crash/destruction wind-down plays `snd_propstop` — judge
-  both by ear. ⚠ Trap: the ×0.2 mix scale (`BL-268`, scheduled in `docs/PLAN-m3-polish-10.md`
-  C21) sits on these same paths — if the stop cue sounds wrong at ×0.2, that is `BL-268`'s
-  item, not a reason to retune the ramp.
+  both by ear. ⚠ Trap: `BL-268` (`docs/PLAN-m3-polish-10.md` C21, landed 2026-08-06) removed
+  the blanket ×0.2 mix scale on these same paths, raising the own-ship mix ~5× — judge the
+  ramp/stop cue against the new, unscaled level, not the old ×0.2 one.
 
 ## Cameras & views
 

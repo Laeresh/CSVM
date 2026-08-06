@@ -1532,6 +1532,14 @@ loudness.
   in step by hand, there is no shared trigger.
 ⚠ `MixGain` (1/√N in splitscreen, TUNE) covers the four loops and the per-player cues
   (`PlayEmptyClip`, `OnGraze`); the crash/prop one-shots are deliberately left unscaled.
+⚠ `BL-268`: `MakeLoop`/`MakeOneShot` and the gun-loop/warning-shot one-offs used to multiply
+  `def.Volume` by a blanket, uncommented-beyond-"Temporary fix" ×0.2 before any of the named
+  mix gains above were applied. Audited against every other own-ship/world reader of the same
+  `sounds.json` VOLUME field — `WorldSounds.Create`/`PlayOneShot` and `OnCrash`'s plane-explosion
+  pick, which never carried it — and found no reference-level basis for the factor, so it is
+  removed rather than promoted to a named constant: authored VOLUME now plays unscaled, with
+  `MixGain`/`WhineMixGain`/`DamagedEngineMixGain` as the only deliberate attenuations. This
+  raises the own-ship mix roughly 5×; `BL-285`'s owed engine start/stop listen is re-based on it.
 
 ## src/Effects/Puffer.cs
 The original engine's billboard-particle emitter, data-driven from `PUFFER_STATE` blocks

@@ -178,7 +178,7 @@ public partial class FlightAudio : Node
                 _gunLoop = new AudioStreamPlayer { Stream = stream };
                 AddChild(_gunLoop);
                 _gunLoopName = sndName;
-                _gunLoopVol = def.Volume * 0.2f;
+                _gunLoopVol = def.Volume;
             }
         }
         if (_gunLoop is { Playing: false })
@@ -308,7 +308,7 @@ public partial class FlightAudio : Node
         if (stream == null)
             return null;
         _warningShot.Stream = stream;
-        PlayOneShot(_warningShot, def.Volume * 0.2f * MixGain);
+        PlayOneShot(_warningShot, def.Volume * MixGain);
         return name;
     }
 
@@ -365,7 +365,11 @@ public partial class FlightAudio : Node
         var stream = archive.Find(def.WavName, def.Looped);
         if (stream == null)
             return null;
-        baseVolume = def.Volume * 0.2f; //Temporary fix for volume
+        // BL-268: sounds.json's authored VOLUME plays unscaled here, same as WorldSounds' 3D
+        // emitters and OnCrash's plane-explosion pick — the only other own-ship path that ever
+        // read this field, and it never carried a blanket factor. MixGain/WhineMixGain/
+        // DamagedEngineMixGain are the deliberate, named attenuations layered on top per loop.
+        baseVolume = def.Volume;
         var player = new AudioStreamPlayer { Stream = stream, VolumeDb = -60f };
         AddChild(player);
         return player;
@@ -384,7 +388,7 @@ public partial class FlightAudio : Node
         var stream = archive.Find(def.WavName, looped: false);
         if (stream == null)
             return null;
-        baseVolume = def.Volume * 0.2f; // same temporary volume scale as the loops
+        baseVolume = def.Volume; // BL-268: unscaled, same convention as MakeLoop above
         var player = new AudioStreamPlayer { Stream = stream };
         AddChild(player);
         return player;

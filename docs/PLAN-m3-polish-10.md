@@ -74,7 +74,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — Audio & missions
 
-21. ☐ `BL-268` — remove/replace the blanket ×0.2 over authored sound volumes in `FlightAudio`
+21. ☑ `BL-268` — remove/replace the blanket ×0.2 over authored sound volumes in `FlightAudio`
 22. ☐ `BL-249` — `MissionSetup` applies `Object3DTranslate`/`Object3DRotate`, with a per-script angle-unit decision
 
 ### Wave D — Stretch
@@ -86,8 +86,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 The open items are independent — no item blocks another; waves are theme groups, not dependency
 chains, and run in any order. File contention: A1 and A2 both touch the damage-visuals wiring
 (`DamageVisuals`/`FlightRigAssembler` neighbourhood) — land them sequentially, not in parallel
-worktrees. C21's ×0.2 sits on the paths `BL-285`'s owed listen A/B will judge; note in the
-landing message that the mix changed so that playtest is re-based. B12, B14 and D31 are closed
+worktrees. C21 (landed 2026-08-06) sat on the paths `BL-285`'s owed listen A/B will judge; its
+removal of the ×0.2 re-bases that playtest to the new, unscaled mix. B12, B14 and D31 are closed
 (2026-08-06).
 
 ---
@@ -498,7 +498,7 @@ a global tie-break change.
 
 # Wave C — Audio & missions
 
-## C21 ☐ `BL-268` — remove the blanket ×0.2 mix override
+## C21 ☑ `BL-268` — remove the blanket ×0.2 mix override
 
 **Goal.** The own-ship path plays authored `sounds.json` volumes through a named, justified
 conversion — no magic ×0.2 commented "Temporary fix".
