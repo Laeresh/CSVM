@@ -1589,6 +1589,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   downward at elevation −70…−90° (`lifesaver11`'s `lifeboat` → `boat_explode`/`boat_explode_water`,
   `b_turret1`'s parts); and **8** `chuteman` at `translation (0,−3,0)` with **gravity 0** — a
   constant 3 m/s descent, no parabola at all, ending in `deactivate_chuteman`.
+  **A fourth group joined on 2026-08-06, from `BL-257`'s census** (`analysis/bl-257-nulled-launch/`):
+  **8 events that name no `BOUNCE_SEQUENCE` either**, so the 733-event census above never counted
+  them — `susp_bridge`'s `rope1burn` `part2`/`3a`/`3b`/`3c`/`part4` (`translation.initial.y`
+  −0.44…−1.0 with `rnd_xz.y` ±0.89…±1.0, gravity −9.8: a burning rope end dropping, and the user
+  confirms at the controls that it visibly falls in the original), `bridge_destroy01`'s
+  `bridge_truck01` (`initial.y` exactly 0, no spread — level), and both `fuelboxbreaks` `rockerarm`s
+  (elevation 90° but speed **−45…45**, so half the draws point down). `BL-257`'s widened gate admits
+  by APEX, so these are declined by the same `FlightToLaunchHeight` guard and stay posed at rest.
+  ⚠ For the spherical `translation_range` form the vertical speed is `sin(elevation)·speed` — **a
+  negative speed inverts an upward elevation**, which is why the rockerarms are not solvable
+  launches; any later census of this family must read the speed range, not the elevation alone.
   **Blocked on a ground ray**, and blocked on it twice: the fall distance is unknowable without one,
   and unlike `BL-240`'s 150 these carry populated `water`/`lava` branches, which need the struck
   collider to select. The engine already has both halves of the second problem —
@@ -1604,23 +1615,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     landing altitude for 335 zeppelins.
   - `chuteman` has **zero gravity**. Any solve phrased as a parabola divides by zero on it; it is a
     constant-velocity descent and needs the distance, nothing else.
-
-- `BL-257` `[Bug]` **The zeppelin destruction model's eight parts vanish on the tick they are thrown.**
-  Found while landing `BL-061`'s mesh half, and NOT that mechanism: the geometry and the visibility
-  path are both fine (`--effects-test` reads `zep_ng_dstry1.flt` as `8/8 self-visible` in the gamez
-  base state, and its root IS revealed at the call site), yet 0 of the 8 ever draw.
-  `biggun_flying_parts` calls `dblcannon_flying_parts`, whose eight sequences each launch a part
-  with `OBJECT_MOTION` and then switch that part off with a **null-start** event — i.e. one that
-  fires after the motion's own duration. Those launches carry **no `RUN_TIME` and no
-  `BOUNCE_SEQUENCE`**, and `MotionRuntime`'s solved-flight path (`BL-240`) is gated on a bounce
-  being named (`m._hasBallistic && data.Num("run_time") is null && data.Has("bounce_sequence")`), so
-  the event reports duration 0, the deactivation lands in the same instant, and every part is hidden
-  before it moves. A third launch shape beside `BL-240`'s solved bounce and `BL-245`'s falls.
-  ⚠ Do **not** widen the solve on this one case: it needs the same install-wide census `BL-240`
-  had — how many events omit both, whether they all launch upward (this one does: elevation 10–60°,
-  speed 17–25 m/s, so an apex exists), and whether the following event is the piece's own
-  deactivation in every one of them. `analysis/bl-061-template-mesh/FINDINGS.md` records the
-  measurement; `zep_ng_dstry1.flt` is the reachable repro (`--effects-test`, any chapter).
 
 ## Audio
 

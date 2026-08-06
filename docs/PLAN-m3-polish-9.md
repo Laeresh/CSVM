@@ -78,7 +78,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — authored effects and world data
 
 7. ☑ `BL-262` Stage `ballflare.flt` and `apassengers`; re-pin what moves
-8. ☐ `BL-257` Census the no-`RUN_TIME`/no-`BOUNCE_SEQUENCE` launch shape; make the zeppelin's eight parts fly
+8. ☑ `BL-257` Census the no-`RUN_TIME`/no-`BOUNCE_SEQUENCE` launch shape; make the zeppelin's eight parts fly
 9. ☐ `BL-277` Select the sky/fog zone per chapter instead of hard-coding `zone2`
 10. ☐ `BL-273` Read `fogvol.zrd` and render the authored cloud field, deleting `CloudPuffs`' invented one
 
@@ -276,7 +276,7 @@ effects exist.
 make it so the goldens stayed hash-identical. Do this item alone in its landing window (see
 dependency notes) so the golden movement is attributable.
 
-## C8 ☐ `BL-257` The zeppelin destruction model's eight parts vanish on launch
+## C8 ☑ `BL-257` The zeppelin destruction model's eight parts vanish on launch
 
 **Goal.** `dblcannon_flying_parts`' eight pieces fly their authored arcs instead of being hidden on
 the tick they are thrown — and every other event of the same shape install-wide gets the same fix,

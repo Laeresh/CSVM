@@ -272,7 +272,9 @@ which pieces that covers. A format reader should know the current wiring:
   - **Ground-rest is split, `PLAN-bounce-launch` (2026-08-03).** A census over all 17,568 extracted
     defs found 733 `OBJECT_MOTION` events naming a `bounce_sequence`, 529 of those with no authored
     `RUN_TIME` (217 def files) — the shape that means "fly until you land." Those 529 are two
-    populations, not one:
+    populations, not one. ⚠ **A third population omits the `bounce_sequence` too** and was found
+    only by `BL-257`'s later census — see the "no `RUN_TIME`, no `BOUNCE_SEQUENCE`" bullet below;
+    what admits a launch to the solve is the **apex**, not the bounce.
     - **152 (150 reachable in an executed `sequences`) are upward launches** — positive launch speed,
       negative gravity, so the parabola has an apex. For these, `MotionRuntime.FlightToLaunchHeight`
       solves `t = 2·v0.y / |accel.y|` and ends the flight there instead of holding the final pose: a
@@ -290,6 +292,29 @@ which pieces that covers. A format reader should know the current wiring:
       above cannot supply. `MotionRuntime` still integrates these freely over the run time and then
       holds the final pose; the pieces arc/fall and are then hidden by the sequence's own
       `OBJECT_ACTIVE_STATE`, so they read fine without it.
+  - **No `RUN_TIME`, no `BOUNCE_SEQUENCE` — the third launch shape, `BL-257` (2026-08-06).** A
+    census of every ballistic `ObjectMotion` in all 8 chapters' `cam_anim`
+    (`analysis/bl-257-nulled-launch/`) found **167 events / 119 distinct defs** that name *neither*
+    field: the piece is launched and then switched off by **its own null-start `ACTIVE_STATE 0`**
+    downstream, with no bounce to end the flight. Every `m_stuff_blowup`/`m_gens_blowup`, both
+    `loading_crane`s, `destroy_jsign`, `col_tower_destroy`, `mineshack_destroy`, `shaft_destroy`,
+    `sluice_destroy`, `switchhouse_destroy`, `collapse_platform` — and `dblcannon_flying_parts`, the
+    zeppelin cannon's eight parts, which is the reachable repro (`--effects-test`, via
+    `biggun_flying_parts`).
+    - Read as duration 0 — which is what a bounce-gated solve left them as — the deactivation lands
+      **on the launch tick** and the piece is hidden before it moves. The solve gate is therefore
+      the **absent `RUN_TIME`**, not the bounce; `PendingBounce` still arms only where a
+      `BOUNCE_SEQUENCE` is named, so this shape flies and owes nothing.
+    - All 167 carry gravity (−9.8 on 161, −10 on 6) and author `do_intersections` **false**. **159
+      always launch upward** and solve. The other **8 are `BL-245` falls wearing this shape** and
+      are declined by the same no-apex guard: `bridge_destroy01`'s truck (level), `rope1burn`'s five
+      burning rope ends (−0.44…−1.0 m/s ± ~1), and both `fuelboxbreaks` rockerarms (elevation 90°
+      but speed **−45…45**, so half the draws point down). ⚠ For the spherical `translation_range`
+      form the vertical speed is `sin(elevation)·speed` — **a negative speed inverts an upward
+      elevation**, which is the only reason the rockerarms are not in the solved 159.
+    - 159 of the 167 are switched off downstream with every intervening event null-start
+      (`destroy_pwr_station` puts three `CALL_ANIMATION`s between launch and hide); the other 8 are
+      the last event of their sequence and nothing hides them at all.
 - **Death audio (D31) is still stubbed.** The explosion is silent; the one-shot `Sound` events are
   not yet played.
 - **Flying into a collide-destructible breaks it (C27).** `ACTIVATION` decides what a plane

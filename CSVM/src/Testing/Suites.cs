@@ -122,6 +122,8 @@ public static class Suites
             "the full --effects-test sweep as verdicts: every effect resolves, template meshes show at the CALL SITE (not the stage origin), and none stays lit after its stop", EffectsCensus));
         into.Add(new TestHarness.Suite("bounce-launch",
             "a bounce-terminated OBJECT_MOTION flies its solved parabola and fires its BOUNCE_SEQUENCE on landing", BounceLaunch));
+        into.Add(new TestHarness.Suite("nulled-launch",
+            "an OBJECT_MOTION naming NEITHER RUN_TIME nor BOUNCE_SEQUENCE flies its solved parabola before its own deactivation switches it off (BL-257)", NulledLaunch));
         into.Add(new TestHarness.Suite("destructible-census",
             "per-chapter destructible registry totals", DestructibleCensus));
         into.Add(new TestHarness.Suite("tex-dropin",
@@ -2027,8 +2029,14 @@ public static class Suites
                     $"no template mesh left lit after its effect was stopped{(lit.Count == 0 ? "" : $" — {string.Join("; ", lit)}")}");
                 ctx.Check(r.Puffered == 30,
                     $"the puffer half's tally holds under suite conditions ({r.Puffered} built one, expected 30)");
-                ctx.Check(r.Meshed == 17,
-                    $"the mesh half's tally holds under suite conditions ({r.Meshed} showed meshes, expected 17)");
+                // 17 → 18 on 2026-08-06 (BL-257): `biggun_flying_parts` went `mesh[0]
+                // (light/container effect)` → `mesh[8] zep_ng_dstry1_flt 8/8 @0.0 m`. Its eight
+                // parts used to be switched off on the tick they launched, so no sample in the
+                // window ever caught one drawing; they now fly their solved parabola first. Sole
+                // mover — the `--effects-test` row table differs in exactly this one line across
+                // the gate A/B, and all 13 goldens stayed hash-identical.
+                ctx.Check(r.Meshed == 18,
+                    $"the mesh half's tally holds under suite conditions ({r.Meshed} showed meshes, expected 18)");
             }
             finally
             {
@@ -2310,6 +2318,137 @@ public static class Suites
         ctx.Note($"{node} solved flight {flight:0.000} s (band {min:0.000}…{max:0.000})");
         ctx.Check(flight >= min && flight <= max,
             $"{node}'s solved flight is inside its authored band flight={flight:0.000} band={min:0.000}…{max:0.000}");
+    }
+
+    // ---- BL-257: a launch that names neither RUN_TIME nor BOUNCE_SEQUENCE ------------------------
+
+    /// <summary>`BL-257`: the third launch shape. 167 <c>OBJECT_MOTION</c> events install-wide (119
+    /// distinct defs — <c>analysis/bl-257-nulled-launch/</c>) omit <c>RUN_TIME</c> <b>and</b>
+    /// <c>BOUNCE_SEQUENCE</c>, and follow the launch with the flying piece's own null-start
+    /// <c>ACTIVE_STATE 0</c>. Gated on a bounce being named, BL-240's flight solve declined all of
+    /// them: the launch reported duration 0, the deactivation landed on the same tick, and the
+    /// piece was hidden before it moved. The zeppelin cannon's eight parts are the reachable repro
+    /// — <c>biggun_flying_parts</c> is one <c>CALL_ANIMATION</c> onto <c>dblcannon_flying_parts</c>,
+    /// whose eight sequences are each exactly this pair.
+    ///
+    /// <para>⚠ The measurement is the GAP between each part's launch and its own deactivation, not
+    /// a mesh count. <c>--effects-test</c> read this def as <c>8/8</c> mesh throughout the bug
+    /// (INSTR-11): the root IS revealed and the parts ARE self-visible, and the census's peak fold
+    /// catches the tick before the hide. A gap is 0 with the solve declined and the solved flight
+    /// with it, so it discriminates and a visibility count does not. Displacement is asserted
+    /// beside it — DIAG-13, a dispatched launch is not a moved piece.</para>
+    ///
+    /// <para>⚠ Assert a BAND (the same rule as <c>bounce-launch</c>): elevation and speed are
+    /// per-instance draws, so the flight is a random variable whose support the authored ranges fix
+    /// — <c>t = 2·speed·sin(elevation)/9.8</c> over elevation 10…70° and speed 17…25 m/s.</para>
+    /// </summary>
+    private static void NulledLaunch(TestContext ctx)
+    {
+        // extracted/*/cam_anim/zep_can_dstry1-dblcannon_flying_parts.json: eight parts, each
+        // xz −135…135°, y 10…70°, initial 17…25 m/s, gravity −9.8, no run_time, no bounce_sequence.
+        //   min  2·17·sin(10°)/9.8 = 0.602 s      max  2·25·sin(70°)/9.8 = 4.794 s
+        // A dispatch is observed on a frame boundary, so the gap can run one tick long.
+        const float FlightMin = 0.602f, FlightMax = 4.794f;
+        const float Tick = 1f / 60f;
+        const string root = "zep_ng_dstry1_flt";   // the staged copy's node name, '.' sanitised
+
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            WithEffectStage(ctx, world, "biggun_flying_parts", new[] { "zep_ng_dstry1.flt" },
+                (stage, runtime, point) =>
+            {
+                var parts = new Dictionary<string, Node3D>(System.StringComparer.Ordinal);
+                CollectNamed(stage, parts);
+                ctx.Same(8, parts.Count, $"the staged wreck carries its eight parts");
+
+                var launched = new Dictionary<string, float>(System.StringComparer.Ordinal);
+                var switchedOff = new Dictionary<string, float>(System.StringComparer.Ordinal);
+                var moved = new Dictionary<string, float>(System.StringComparer.Ordinal);
+                var restAt = new Dictionary<string, Vector3>(System.StringComparer.Ordinal);
+                bool bounceOwed = false;
+                float clock = 0f;
+                var previous = runtime.OnEventDispatched;
+                try
+                {
+                    runtime.OnEventDispatched = d =>
+                    {
+                        if (d.EventName is not { } name || !parts.ContainsKey(name))
+                        {
+                            return;
+                        }
+                        if (d.EventKind == "ObjectMotion" && !launched.ContainsKey(name))
+                        {
+                            launched[name] = clock;
+                            restAt[name] = parts[name].Position;
+                        }
+                        else if (d.EventKind == "ObjectActiveState" && !switchedOff.ContainsKey(name))
+                        {
+                            switchedOff[name] = clock;
+                        }
+                        // Nothing here names a bounce, so nothing may owe one — the widened gate
+                        // must solve the flight WITHOUT arming a landing sequence that does not
+                        // exist (the over-generalization this item's trap names).
+                        bounceOwed |= runtime.Motions.OwesBounce(d.Def, d.Anchor);
+                    };
+                    runtime.PlayEffectAt("biggun_flying_parts", point);
+                    for (int i = 0; i < 360; i++)   // 6 s, past the 4.79 s worst-case flight
+                    {
+                        clock += Tick;
+                        runtime.Advance(Tick);
+                        foreach (var (name, node) in parts)
+                        {
+                            if (restAt.TryGetValue(name, out var rest))
+                            {
+                                float d = node.Position.DistanceTo(rest);
+                                moved[name] = Mathf.Max(moved.GetValueOrDefault(name), d);
+                            }
+                        }
+                    }
+                }
+                finally
+                {
+                    runtime.OnEventDispatched = previous;
+                }
+
+                ctx.Same(8, launched.Count, $"parts launched by one {root} destruction");
+                ctx.Check(!bounceOwed, $"no part owes a BOUNCE_SEQUENCE — the data names none");
+                foreach (var name in parts.Keys.OrderBy(n => n, System.StringComparer.Ordinal))
+                {
+                    if (!launched.TryGetValue(name, out float at))
+                    {
+                        ctx.Check(false, $"{name} never launched");
+                        continue;
+                    }
+                    ctx.Check(switchedOff.TryGetValue(name, out float off),
+                        $"{name}'s own null-start deactivation dispatches");
+                    if (!switchedOff.ContainsKey(name))
+                    {
+                        continue;
+                    }
+                    float flight = off - at;
+                    ctx.Note($"{name} flew {flight:0.000} s and travelled {moved.GetValueOrDefault(name):0.0} m (band {FlightMin:0.000}…{FlightMax:0.000})");
+                    ctx.Check(flight >= FlightMin && flight <= FlightMax + Tick,
+                        $"{name} flies its solved parabola before it is switched off flight={flight:0.000} band={FlightMin:0.000}…{FlightMax:0.000}");
+                    ctx.Check(moved.GetValueOrDefault(name) > 1f,
+                        $"{name} actually left its rest pose travelled={moved.GetValueOrDefault(name):0.0} m");
+                }
+            });
+        });
+    }
+
+    /// <summary>The <c>part1</c>…<c>part8</c> the flying-parts def drives, by node name, from
+    /// anywhere under the staged template. Named lookup rather than a child index: the wreck is
+    /// real gamez geometry and its parts sit at whatever depth it authors them.</summary>
+    private static void CollectNamed(Node node, Dictionary<string, Node3D> into)
+    {
+        if (node is Node3D n3 && n3.Name.ToString().StartsWith("part", System.StringComparison.Ordinal))
+        {
+            into[n3.Name.ToString()] = n3;
+        }
+        foreach (var child in node.GetChildren())
+        {
+            CollectNamed(child, into);
+        }
     }
 
     // ---- BL-044: node lab tree rows must follow live Visible ------------------------------------

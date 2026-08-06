@@ -709,6 +709,16 @@ nothing between calls. `RangeLaunchDirection` is that decode's ONE expression; `
 gun-casing ejection reads the same `gunshell` event through it (INSTR-3). Its `scale` channel is an
 OFFSET from unit scale (`1 + initial + delta·u`), unlike the absolute `PoseScale`/`OBJECT_SCALE_STATE`
 — 30 of the 45 distinct SCALE events carry a bare `-0.1`, which absolute is a negative scale.
+`MotionRuntime`'s flight solve is admitted by an **absent `RUN_TIME` plus an apex**, never by the
+`BOUNCE_SEQUENCE` — `BL-257`'s census (`analysis/bl-257-nulled-launch/`) found 167 events / 119
+distinct defs naming NEITHER field, which end instead with the flying piece's own null-start
+`ACTIVE_STATE 0`; gated on the bounce they all reported duration 0 and were hidden on the tick they
+launched. `PendingBounce` still arms only where a bounce IS named, so the second shape flies and
+owes nothing.
+⚠ Do NOT re-narrow that gate to the bounce, and do not widen it past the apex. `FlightToLaunchHeight`
+  returning 0 for `v0y <= 0` is what keeps `BL-245`'s falls out — including 8 of those 167 (a level
+  `bridge_truck01`, `rope1burn`'s five rope ends, two `fuelbox` rockerarms whose speed range is
+  −45…45, so `sin(elevation)·speed` inverts). A `chuteman` parabola solve divides by zero.
 ⚠ `RestOf`, `_rng`, `SetSubtreeOpacity` and `NonSingularScale` on `AnimRuntime` are `internal`
   (not `private`) specifically so these motion types can reach them — same-assembly only, no wider
   exposure intended; don't widen further without a reason. `NameOf`/`VisualOriginOf` joined them for

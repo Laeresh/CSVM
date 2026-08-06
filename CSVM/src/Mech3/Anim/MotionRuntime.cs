@@ -40,13 +40,15 @@ namespace CSVM.Mech3.Anim;
 ///   <c>bounce_sequence</c> re-launch are still a Layer-1.5 follow-up (they need a physics ray;
 ///   <c>BL-245</c>) for the 379 events that FALL — no apex, so no parabola to solve — which the
 ///   body still integrates freely over the run time and then holds at rest.
-///   ⚠ For the other 152 (150 reachable) that LAUNCH upward with no authored <c>RUN_TIME</c>,
-///   <see cref="FlightToLaunchHeight"/> ends the flight when the parabola returns to launch
-///   height instead: a CHOICE, not a decode — the original tested real ground via
-///   <c>do_intersections</c>, which a down-ray would replace. It agrees wherever the ground under
-///   the piece is flat, which is every reachable case measured (debris off a ground-sitting
-///   structure). See <c>docs/formats/destructibles.md</c>'s "Debris tumbles" bullet for the
-///   split.</item>
+///   ⚠ For every event that LAUNCHES upward with no authored <c>RUN_TIME</c> — the 152 (150
+///   reachable) that name a bounce, plus BL-257's 167 that name neither a bounce nor a run time
+///   and end with the piece's own deactivation instead — <see cref="FlightToLaunchHeight"/> ends
+///   the flight when the parabola returns to launch height: a CHOICE, not a decode — the original
+///   tested real ground via <c>do_intersections</c>, which a down-ray would replace. It agrees
+///   wherever the ground under the piece is flat, which is every reachable case measured (debris
+///   off a ground-sitting structure). The apex is the ADMISSION TEST, not the bounce: anything
+///   with no apex is declined here and stays BL-245's. See
+///   <c>docs/formats/destructibles.md</c>'s "Debris tumbles" bullet for the split.</item>
 /// <item><c>forward_rotation.Time.initial</c> is a tumble RATE (rad/s) about the node's local
 ///   X axis (a piece = 15.708 = 900°/s). ⚠ the axis is a reasoned choice — the data carries a
 ///   scalar rate, not an axis — an end-over-end tumble about the local X reads well for
@@ -97,15 +99,17 @@ internal sealed class MotionRuntime : IAnimMotion
     public bool Finished => _t >= _runTime;
 
     /// <summary>The flight time this body actually runs for: the authored <c>RUN_TIME</c>, or —
-    /// for a bounce-terminated launch, which carries none — the time its own parabola takes to
-    /// return to launch height. The caller reads it back rather than trusting the authored value,
-    /// since only <see cref="Create"/> knows the randomised launch the solve rests on.</summary>
+    /// for a launch that carries none, whether it names a <c>BOUNCE_SEQUENCE</c> (BL-240) or
+    /// nothing at all (BL-257) — the time its own parabola takes to return to launch height. The
+    /// caller reads it back rather than trusting the authored value, since only
+    /// <see cref="Create"/> knows the randomised launch the solve rests on.</summary>
     public float RunTime => _runTime;
 
     /// <summary>The ON_CALL sequence this body owes when it lands — <c>BOUNCE_SEQUENCE</c>'s
     /// <c>default</c> branch — or null when nothing is owed. Armed only on a launch whose flight
-    /// time this class SOLVED, i.e. one the data terminated with a bounce rather than a
-    /// <c>RUN_TIME</c>. The 204 events that carry both an authored run time and a bounce are left
+    /// time this class SOLVED <b>and</b> which names a bounce; BL-257's shape solves the same way
+    /// but names none, so it owes nothing and simply advances its sequence when the flight ends.
+    /// The 204 events that carry both an authored run time and a bounce are left
     /// alone: 102 of them name a live <c>water</c> branch (<c>p1grndhit</c> vs its wet twin), and
     /// choosing between the branches needs the struck collider that <c>BL-245</c> will cast for.
     /// </summary>
@@ -202,22 +206,37 @@ internal sealed class MotionRuntime : IAnimMotion
             m._hasScale = m._scaleInit.LengthSquared() > 1e-9f;
         }
 
-        // A bounce-terminated launch: the data's idiom for "fly until you hit something" omits
-        // RUN_TIME entirely and names a BOUNCE_SEQUENCE for the landing instead, so there is no
-        // authored duration to run for and the old `run_time ?? 0` read it as "duration 0" —
-        // posing 150 reachable pieces at rest on the wreck they should have left (BL-240).
+        // A launch with no authored RUN_TIME: the data's idiom for "fly until you hit something"
+        // omits the duration and lets the landing end the flight, so there is nothing to run for
+        // and the old `run_time ?? 0` read it as "duration 0" — posing the pieces at rest on the
+        // wreck they should have left (BL-240).
+        //
+        // Two shapes reach here, and the gate is the ABSENT run time, not what terminates the
+        // flight (BL-257 censused the second, `analysis/bl-257-nulled-launch/`):
+        //   • 120 events name a BOUNCE_SEQUENCE for the landing — BL-240's shape, which arms
+        //     `PendingBounce` below.
+        //   • 167 events (119 distinct defs) name NEITHER field and instead follow the launch with
+        //     the piece's OWN null-start deactivation, i.e. "fly, then vanish" — the zeppelin
+        //     cannon's eight parts, the crane/sign/generator/shack debris. Gated on a bounce, all
+        //     167 reported duration 0, so the deactivation landed on the launch tick and every
+        //     piece was hidden before it moved (BL-257, `dblcannon_flying_parts` the repro).
         //
         // ⚠ Ending it when the parabola returns to LAUNCH HEIGHT is a CHOICE, not a decode. The
-        // original tested real ground through `do_intersections`; this agrees wherever the ground
-        // under the object is flat, which is every reachable case here — debris thrown off a
-        // ground-sitting structure. A down-ray replaces it, and must, for the 379 events that
-        // FALL rather than launch (a shot-down zeppelin, a parachutist): those have no apex, this
-        // solve declines them, and they stay posed at rest until BL-245 lands the ray.
+        // original tested real ground through `do_intersections` — false on all 167 of the second
+        // shape, and on the whole first one; this agrees wherever the ground under the object is
+        // flat, which is every reachable case here — debris thrown off a ground-sitting structure.
+        // A down-ray replaces it, and must, for the events that FALL rather than launch (a
+        // shot-down zeppelin, a parachutist): those have no apex, `FlightToLaunchHeight` declines
+        // them, and they stay posed at rest until BL-245 lands the ray. That guard is what keeps
+        // this widening off BL-245's falls — it is the apex, not the bounce, that admits a launch,
+        // and the census found 8 of the 167 with no reliable apex (a `bridge_truck` dropped level,
+        // `susp_bridge`'s burning ropes at −0.5 m/s ± 1, two `fuelbox` rockerarms whose speed range
+        // is −45…45) that keep behaving exactly as they do today.
         //
         // Solved in the node's PARENT frame, the same frame the launch and gravity already live
         // in. Absent-RUN_TIME is read from the data, not from `runTime <= 0`, so an authored 0
         // keeps meaning zero.
-        if (m._hasBallistic && data.Num("run_time") is null && data.Has("bounce_sequence"))
+        if (m._hasBallistic && data.Num("run_time") is null)
         {
             float flight = FlightToLaunchHeight(m._v0.Y, m._accel.Y);
             if (flight > 0f)
@@ -225,7 +244,9 @@ internal sealed class MotionRuntime : IAnimMotion
                 rtSafe = flight;
                 m._runTime = flight;
                 // Landing is the only thing that ends this body, so the sequence the data names
-                // for the landing rides with it: every one of these 150 carries `default` alone.
+                // for the landing rides with it: every one of BL-240's 150 carries `default`
+                // alone. Null for BL-257's shape, which names no bounce at all — the flight ends,
+                // the sequence advances, and the piece's own deactivation is what runs next.
                 m.PendingBounce = data.Obj("bounce_sequence")?.Str("default");
             }
         }

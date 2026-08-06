@@ -180,11 +180,15 @@ live pose walked every repeat explosion's debris further from the blast than the
   the run time and then holds at rest. The other 152 (150 reachable) LAUNCH upward with an apex, and
   `PLAN-bounce-launch` gave those an analytic landing instead — see `docs/formats/destructibles.md`'s
   "Debris tumbles" bullet for the split and the ⚠ choice it records.
-  ⚠ A third shape exists next to those two: **neither `RUN_TIME` nor `BOUNCE_SEQUENCE`**, where the
-  event's duration is what the sequence's NEXT (null-start) event waits on. `dblcannon_flying_parts`
-  is the reachable case — eight parts, each launched upward (elevation 10–60°, 17–25 m/s) and then
-  switched off by its own following event, so a duration of 0 hides every part on the tick it is
-  thrown. Uncensused and unfixed (`BL-257`); the solve is gated on a named bounce today.
+  A third shape sits next to those two: **neither `RUN_TIME` nor `BOUNCE_SEQUENCE`**, where the
+  event's duration is what the sequence's NEXT (null-start) event waits on — in 159 of 167 cases
+  install-wide, the flying piece's own `ACTIVE_STATE 0`. Censused and fixed 2026-08-06 (`BL-257`,
+  `analysis/bl-257-nulled-launch/`): the flight solve is admitted by the **absent `RUN_TIME` plus an
+  apex**, not by a named bounce, so these fly too. `dblcannon_flying_parts` is the reachable case —
+  eight parts at elevation 10–70°, 17–25 m/s, each switched off by its own following event, which a
+  duration of 0 fired on the launch tick. ⚠ 8 of the 167 have no apex and stay `BL-245`'s; the
+  vertical speed is `sin(elevation)·speed`, so **a negative speed range inverts an upward
+  elevation** (`fuelboxbreaks`' rockerarm, elevation 90° at speed −45…45).
 - `FORWARD_ROTATION.Time.initial` is a tumble **total angle over `RUN_TIME`**, not a rate: divide
   by `RUN_TIME` before integrating (read as rad/s, the crash pieces spin ~15 rad/s, visibly wrong;
   the ÷`RUN_TIME` reading passed the crash A/B playtest and remains a TUNE handle, not a decode).

@@ -2168,10 +2168,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         // and a tumble (plus any steady XYZ_ROTATION), all on one node over run_time.
                         // See MotionRuntime for the semantics and the TUNE caveats.
                         float authored = ev.Data.Num("run_time") ?? 0f;
-                        // The duration this event reports. A bounce-terminated launch carries no
-                        // authored time and solves its own from the parabola it just drew, so the
-                        // flight is read BACK off each body rather than assumed here — and the
-                        // longest of them is what the sequence waits on (BL-240).
+                        // The duration this event reports. A launch with no authored time solves
+                        // its own from the parabola it just drew, so the flight is read BACK off
+                        // each body rather than assumed here — and the longest of them is what the
+                        // sequence waits on (BL-240 for the bounce-terminated ones, BL-257 for the
+                        // ones that name neither a run time nor a bounce and whose next null-start
+                        // event is the flying piece's own deactivation).
                         float ballTime = authored;
                         bool bounceArmed = false;
                         // Opt this def's nodes out of InheritedWorldVelocity when the crash rig named

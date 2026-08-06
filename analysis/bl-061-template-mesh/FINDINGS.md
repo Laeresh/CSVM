@@ -81,7 +81,10 @@ instance itself — so the hide is scheduled from the reveal for that case.
 ## What this does NOT settle
 
 **`zep_ng_dstry1.flt` — the zeppelin destruction model — still shows 0 of its 8 meshes, and the
-cause is not the mesh half.** Its parts are `8/8 self-visible` in the gamez base state and the root
+cause is not the mesh half.** *(Closed 2026-08-06 by `BL-257`; see
+`analysis/bl-257-nulled-launch/`. The diagnosis below was right, and the fix was to admit the
+flight solve by the absent `RUN_TIME` plus an apex rather than by the bounce. The
+`--effects-test` row went `mesh[0] (light/container effect)` → `mesh[8] zep_ng_dstry1_flt 8/8`.)* Its parts are `8/8 self-visible` in the gamez base state and the root
 is revealed at the call site, so the geometry and the visibility path are both fine. They go dark
 because `biggun_flying_parts` calls `dblcannon_flying_parts`, whose eight sequences each launch a
 part with `OBJECT_MOTION` and then switch that part off with a **null-start** event — i.e. after the
