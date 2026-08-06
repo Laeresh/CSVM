@@ -21,7 +21,10 @@ namespace CSVM.Flight;
 /// body excluded per shot by identity — a pilot's rounds never hit their own launcher. World
 /// surfaces classify as <c>default</c>/<c>water</c>/<c>buildings</c> from the struck collider's
 /// <see cref="SceneBuilder.SurfaceMeta"/> tag; an aircraft hit routes its damage to the struck
-/// plane's own part model, never the destructible pipeline.</para>
+/// plane's own part model, never the destructible pipeline. A round that misses may still fuse:
+/// the <c>DETONATION_DISTANCE</c> proximity fuse arms against aircraft (only — never world
+/// geometry), and a detonation's blast reaches planes through a dedicated falloff pass beside
+/// the destructible sink (<see cref="BlastAircraftPass"/>), with the kill attributed.</para>
 /// </summary>
 public sealed partial class ProjectilePool : Node3D
 {
@@ -88,6 +91,10 @@ public sealed partial class ProjectilePool : Node3D
     // to zero at IMPACT_PROXIMITY. The shape is a design choice, not encoded by the weapon data.
     private const float BlastImpulsePerDamage = 1f; // N*s per point of dealt damage; TUNE
     private const int MaxBlastBodies = 4096;
+
+    // A fuse candidate whose closest approach sits at the very end of the swept step is still
+    // closing — hold the fuse: the next step detonates closer, or the hit ray lands a direct hit.
+    private const float StillClosingFraction = 0.999f;
 
     private const int MaxProjectiles = 1024;
     private const int MaxFlashes = 128;
@@ -207,19 +214,6 @@ public sealed partial class ProjectilePool : Node3D
     // with (effects.md).
     private static readonly string[] SplashFlipbookTextures = { "splash01", "splash02", "splash03" };
 
-    // The DETONATION_DISTANCE proximity fuse is OFF (BL-233). Read as a fuse radius against ANY
-    // body, it can only ever trip on world geometry in M3 — the flying aircraft carries no physics
-    // body (see the class remark), so terrain and buildings are the sole candidates. That detonated
-    // every rocket 15-50 m short of the surface it was aimed at (the torpedo's 1 m read as a normal
-    // ground hit, which is why it went unnoticed), and — because the fuse branch has no struck body
-    // to hand over — passed `Impact` a null collider, so EVERY hardpoint hit classified as
-    // `default` and no weapon could reach its `water`/`buildings`/`player` IMPACT entry: a torpedo
-    // in the sea played `torpedo_ground_effect` with no `snd_bsplash`. Off, a round flies on to the
-    // raycast and gets its real surface. What DETONATION_DISTANCE means (fuse radius vs blast
-    // radius) and which bodies may fuse a round is M4 work — see BL-233. NOT a const: the branch
-    // it guards must stay compiled and reachable.
-    private static readonly bool ProximityFuseEnabled = false;
-
     private static readonly Color RicochetTint = new(1f, 0.95f, 0.6f); // white-hot spark yellow
     private static readonly Color DirtTint = new(1f, 1f, 1f); // the bit textures carry the colour
     private static readonly Color MuzzleSmokeTint = new(0.85f, 0.85f, 0.85f);
@@ -332,9 +326,9 @@ public sealed partial class ProjectilePool : Node3D
     // registers) — how a round's shooter id resolves to the one body its hit ray must exclude.
     private readonly List<AircraftBody> _aircraft = new();
     private readonly SphereShape3D _proximitySphere = new();
-    // Fuse/blast probes stay world-only on purpose: a proximity fuse arming on an aircraft or a
-    // blast sphere feeding planes into the destructible DamageSink are undesigned behaviors —
-    // aircraft take direct hits only.
+    // The destructible blast sphere stays world-masked on purpose: planes never enter the
+    // destructible DamageSink. The aircraft halves of fuse and blast run off the registered
+    // `_aircraft` list instead (ProximityFuseTriggered / BlastAircraftPass) — never this query.
     private readonly PhysicsShapeQueryParameters3D _proximityQuery = new() { CollisionMask = CollisionLayers.World };
     private readonly List<AudioStreamPlayer> _sfxPool = new();
     // CANNON_SPREAD jitter and the stand-in fireball's sprite scatter. Held rather than resolved
@@ -669,16 +663,6 @@ public sealed partial class ProjectilePool : Node3D
 
             if (space != null && stepLen > 1e-5f)
             {
-                if (ProximityFuseEnabled
-                    && ProximityFuseTriggered(space, p.Weapon, prev, next, p.Vel, out var fusePoint))
-                {
-                    NearMissPass(prev, fusePoint, p.Shooter);
-                    Impact(p.Weapon, fusePoint, null, Vector3.Zero);
-                    p.Alive = false;
-                    KillModel(ref p);
-                    ReleaseTrails(ref p);
-                    continue;
-                }
                 _ray.From = prev;
                 _ray.To = next;
                 // Per-shot owner exclusion on the SHARED query object: set for this round's
@@ -692,6 +676,24 @@ public sealed partial class ProjectilePool : Node3D
                     NearMissPass(prev, hitPoint, p.Shooter);
                     Impact(p.Weapon, hitPoint, hit["collider"].Obj as Node, (Vector3)hit["normal"],
                         hit["shape"].AsInt32(), p.Shooter);
+                    p.Alive = false;
+                    KillModel(ref p);
+                    ReleaseTrails(ref p);
+                    continue;
+                }
+                // No direct hit this step — the proximity fuse may still pop the round near a
+                // plane. Checked AFTER the ray so a round that would strike its target keeps the
+                // full direct hit. The fused-on body rides into Impact for per-surface
+                // effect/sound selection (the weapon's `player` IMPACT entry); its damage arrives
+                // through the blast's aircraft pass with falloff, never the direct-hit branch
+                // (shapeIdx -1 keeps it out).
+                if (ProximityFuseTriggered(p.Weapon, p.Shooter, prev, next, p.Vel,
+                        out var fusePoint, out var fused, out var towardHull))
+                {
+                    NearMissPass(prev, fusePoint, p.Shooter);
+                    var fuseNormal = towardHull.LengthSquared() > 1e-8f
+                        ? towardHull.Normalized() : Vector3.Zero;
+                    Impact(p.Weapon, fusePoint, fused, fuseNormal, -1, p.Shooter);
                     p.Alive = false;
                     KillModel(ref p);
                     ReleaseTrails(ref p);
@@ -717,8 +719,9 @@ public sealed partial class ProjectilePool : Node3D
                 if (p.Weapon.IsRocket)
                 {
                     // Mid-air range-expiry detonation: no struck surface, so no normal — the impact
-                    // sprite falls back to the world-facing quad (SurfaceBasis handles a zero normal).
-                    Impact(p.Weapon, p.Pos, null, Vector3.Zero);
+                    // sprite falls back to the world-facing quad (SurfaceBasis handles a zero
+                    // normal). The shooter rides along so the blast's aircraft pass attributes.
+                    Impact(p.Weapon, p.Pos, null, Vector3.Zero, shooter: p.Shooter);
                 }
                 p.Alive = false;   // spent
                 KillModel(ref p);
@@ -1368,41 +1371,56 @@ public sealed partial class ProjectilePool : Node3D
         // Per-surface IMPACT sound (landed): the struck surface's SOUND, else the default's.
         if (outcome.Sound is { } snd)
             PlaySound(snd);
-        // A struck aircraft takes the weapon's health/armor damage through its own per-part
-        // model — never the destructible pipeline, and no blast sphere: planes take direct
-        // hits only. Everything else goes to the destructible sink as before.
-        if (collider is AircraftBody plane)
+        // A ray-struck aircraft takes the weapon's health/armor damage through its own per-part
+        // model — never the destructible pipeline. Only a ray hit carries a struck shape; a fuse
+        // detonation (shapeIdx -1) leaves its plane to the blast's aircraft pass, where falloff
+        // applies. Everything else goes to the destructible sink as before — a plane never does.
+        if (collider is AircraftBody plane && shapeIdx >= 0)
             plane.TakeProjectileHit(weapon, point, shapeIdx, shooter);
         else
-            ApplyDamage(outcome, point, collider);
+            ApplyDamage(weapon, outcome, point, collider is AircraftBody ? null : collider, shooter);
     }
 
-    private bool ProximityFuseTriggered(PhysicsDirectSpaceState3D space, WeaponDef weapon,
-        Vector3 from, Vector3 to, Vector3 velocity, out Vector3 detonationPoint)
+    /// <summary>The DETONATION_DISTANCE proximity fuse: armed against AIRCRAFT only — the
+    /// original fuses on enemies, never terrain (BL-233; a world fuse detonated every rocket
+    /// 15-50 m short of the surface it was aimed at and, handing Impact a null collider, locked
+    /// every hardpoint weapon out of its per-surface IMPACT entry). The round detonates at its
+    /// CLOSEST APPROACH to a candidate's collision boxes within the swept step, not at first
+    /// entry into fuse range: most rockets author DETONATION_DISTANCE equal to IMPACT_PROXIMITY,
+    /// so a first-entry fuse would always detonate exactly where the linear blast falls to zero
+    /// and no rocket could ever hurt a plane. While the round is still closing at the step's end
+    /// the fuse holds (<see cref="StillClosingFraction"/>). The shooter's own plane is never a
+    /// candidate — a rocket leaves the muzzle INSIDE its own boxes — and neither is a wreck.</summary>
+    private bool ProximityFuseTriggered(WeaponDef weapon, int shooter, Vector3 from, Vector3 to,
+        Vector3 velocity, out Vector3 detonationPoint, out AircraftBody? fused, out Vector3 towardHull)
     {
         detonationPoint = to;
-        if (weapon.DetonationDistance is not > 0f)
+        fused = null;
+        towardHull = Vector3.Zero;
+        if (weapon.DetonationDistance is not { } fuseRange || fuseRange <= 0f)
             return false;
-
-        ConfigureSphereQuery(weapon.DetonationDistance.Value, from);
-        var motion = to - from;
-        _proximityQuery.Motion = motion;
-        var fractions = space.CastMotion(_proximityQuery);
-        _proximityQuery.Motion = Vector3.Zero;
-        if (fractions[0] >= 1f)
-            return false;
-
-        detonationPoint = from + motion * fractions[0];
-        if (weapon.DetonationDotProduct is null)
-            return true;
-
-        // GetRestInfo needs a slightly overlapping pose, not the first-touch safe fraction.
-        _proximityQuery.Transform = new Transform3D(Basis.Identity, from + motion * fractions[1]);
-        var rest = space.GetRestInfo(_proximityQuery);
-        if (rest.Count == 0)
-            return false;
-        return FuseDotAllows(weapon.DetonationDotProduct, velocity,
-            (Vector3)rest["point"] - detonationPoint);
+        float best = float.PositiveInfinity;
+        foreach (var plane in _aircraft)
+        {
+            if (plane.PlayerIndex == shooter || plane.Rig.Crashed)
+                continue;
+            // Cheap reject: the segment cannot come within fuse range of any box while it stays
+            // outside the plane's bounding sphere by more than that range.
+            if (WarningShotCue.SegmentPointDistance(from, to, plane.GlobalPosition)
+                > fuseRange + plane.BoundRadius)
+                continue;
+            float d = plane.SegmentDistance(from, to, out float t, out var hull);
+            if (d > fuseRange || d >= best || t >= StillClosingFraction)
+                continue;
+            var candidate = from + (to - from) * t;
+            if (!FuseDotAllows(weapon.DetonationDotProduct, velocity, hull - candidate))
+                continue;
+            best = d;
+            detonationPoint = candidate;
+            fused = plane;
+            towardHull = hull - candidate;
+        }
+        return fused != null;
     }
 
     private void ConfigureSphereQuery(float radius, Vector3 point)
@@ -1448,8 +1466,14 @@ public sealed partial class ProjectilePool : Node3D
         return rest.Count > 0 ? (Vector3)rest["point"] : DamageZonePosition(body, shapeIndex);
     }
 
-    private void ApplyDamage(in ImpactOutcome outcome, Vector3 point, Node? struck)
+    private void ApplyDamage(WeaponDef weapon, in ImpactOutcome outcome, Vector3 point, Node? struck,
+        int shooter)
     {
+        // The blast's aircraft half runs beside the destructible sink, never through it: planes
+        // take their share via their own armor-first part model under the same linear falloff.
+        if (outcome.HasBlastDamage)
+            BlastAircraftPass(weapon, point, outcome.BlastRadius, shooter);
+
         float fullDamage = outcome.Damage;
         float radius = outcome.BlastRadius;
         if (DamageSink == null || fullDamage <= 0f)
@@ -1488,6 +1512,27 @@ public sealed partial class ProjectilePool : Node3D
             var away = rigid.GlobalPosition - point;
             if (away.LengthSquared() > 1e-6f)
                 rigid.ApplyCentralImpulse(away.Normalized() * fullDamage * BlastImpulsePerDamage);
+        }
+    }
+
+    /// <summary>The blast's aircraft pass: every registered flying plane inside the weapon's
+    /// IMPACT_PROXIMITY radius — never the shooter's own (the guns invariant applied
+    /// consistently, not a balance opinion) and never a wreck — takes the weapon's own
+    /// ARMOR/HEALTH damage scaled by the same linear falloff the destructible sink applies,
+    /// measured to the nearest point on the plane's OWN collision boxes (the
+    /// blast-neighbor-shape rule) and struck at that box, so part mapping and kill attribution
+    /// run the exact direct-hit path.</summary>
+    private void BlastAircraftPass(WeaponDef weapon, Vector3 point, float radius, int shooter)
+    {
+        foreach (var plane in _aircraft)
+        {
+            if (plane.PlayerIndex == shooter || plane.Rig.Crashed)
+                continue;
+            int shapeIdx = plane.NearestShape(point, out float distance, out var nearPoint);
+            if (shapeIdx < 0 || distance >= radius)
+                continue;
+            plane.TakeProjectileHit(weapon, nearPoint, shapeIdx, shooter,
+                damageScale: 1f - distance / radius);
         }
     }
 

@@ -86,7 +86,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ Bullet-kill attribution: critical-part death → `Crash` with killer identity reported
 12. ☑ `VersusMatch` engine-free bookkeeping + xUnit tests
 13. ☑ VS respawn loop: 3 s auto-respawn, R skips early
-14. ☐ Rockets vs planes: proximity fuse arms on aircraft, blast damage reaches them, kills attributed
+14. ☑ Rockets vs planes: proximity fuse arms on aircraft, blast damage reaches them, kills attributed
 
 ### Wave C — Mode plumbing and UI
 
@@ -295,7 +295,7 @@ crash (no double-count across the auto/manual paths).
 **⚠ Traps.** Respawn must not emit a second death event; the death was registered at `Crash`.
 Spawn camping / invulnerability are explicitly deferred (Decision #6) — do not "improve" here.
 
-## B14 ☐ Rockets vs planes: proximity fuse arms on aircraft, blast damage reaches them, kills attributed
+## B14 ☑ Rockets vs planes: proximity fuse arms on aircraft, blast damage reaches them, kills attributed
 
 **Goal.** Rockets become the practical PvP weapon they were in the original: a rocket passing near
 an opponent's plane fuses, its blast damages aircraft in radius with distance falloff, and a blast
@@ -330,6 +330,19 @@ destructible suites (`damage-hd`, `blast-neighbor-shape`) stay green. Full 26-su
 **⚠ Traps.** `_proximityQuery` is shared and mutable — Exclude set/reset per check like `_ray`.
 Do not feed planes into the destructible sink. Self-blast exemption is the guns invariant applied
 consistently, not a balance opinion — revisiting it belongs in the VS tuning BL, not here.
+
+**Landed (2026-08-06), two deviations from the Approach above, both forced by the data/goal.**
+(1) The fuse mask is NOT `WorldAndAircraft`: a world-armed fuse re-breaks BL-233 (rockets
+detonate 15–50 m short of terrain, null-collider surface misclassification) and contradicts this
+item's own "world destructibles byte-identical" goal — and BL-233 records the user's recollection
+that the original fuses on enemies, never terrain. The fuse therefore runs geometrically against
+the registered `AircraftBody` list (`SegmentDistance`, whole swept segment, shooter/wrecks
+skipped), and `_proximityQuery` stays world-masked for the destructible blast only. (2) The fuse
+detonates at the round's closest approach within the step, not at first entry into fuse range:
+the six plain rockets author `DETONATION_DISTANCE` == `IMPACT_PROXIMITY` (BL-233 census), so a
+first-entry fuse always detonates exactly where the linear blast reaches zero and no rocket
+could ever hurt a plane — the opposite of this item's goal. Ray runs before fuse, so dead-on
+rockets keep their full direct hit.
 
 ## C21 ☑ `SessionSpec`: `--vs`, `--vs-kills`, `--vs-time`, precedence, `dogfight_ace` default + parse tests
 

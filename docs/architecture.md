@@ -1276,8 +1276,20 @@ registered aircraft but its shooter's, and reports the pass distance (`WarningSh
 excluding its own shooter's registered `AircraftBody` by RID; a struck plane classifies `Player`
 and routes to `FlightController.TakeProjectileHit` (struck shape → part, armor-first damage),
 carrying the round's `Shooter` id through so a kill is attributable — never the destructible
-pipeline, and no blast sphere: planes take direct hits only (the fuse/blast sphere stays
-world-masked on purpose).
+pipeline. A missing round may still fuse (B14): the `DETONATION_DISTANCE` proximity fuse arms
+against AIRCRAFT ONLY — never world geometry (BL-233: a world fuse detonated every rocket short
+of its aimed surface and, with a null collider, locked every hardpoint weapon out of its
+per-surface IMPACT entry) — checked AFTER the ray so a dead-on rocket keeps its direct hit, and
+detonating at the round's CLOSEST APPROACH to the registered boxes within the swept step
+(`AircraftBody.SegmentDistance`), holding while still closing at step end: most rockets author
+`DETONATION_DISTANCE` equal to `IMPACT_PROXIMITY`, so a first-entry fuse would always detonate
+exactly where the linear blast reaches zero. The fused-on body rides into `Impact` for
+per-surface effect/sound selection, but its damage arrives only through `BlastAircraftPass`: every
+registered plane inside the blast radius — never the shooter's own, never a wreck — takes the
+weapon's ARMOR/HEALTH scaled by the linear falloff, measured to the nearest point of its OWN
+boxes (`NearestShape`, the blast-neighbor-shape rule) and struck at that box, so part mapping and
+kill attribution run the direct-hit path. Planes never enter `DamageSink`; the destructible blast
+sphere stays world-masked.
 ⚠ `_ray` is a shared mutable query object: per-shot `Exclude` is set AND reset around every
   query — a leaked exclusion silently shields the next round's target.
 `DamageSink` (→ `AnimRuntime.DamageAt`) turns a world hit into destructible damage;
@@ -1314,10 +1326,9 @@ is scored from the nearest point on **its own collision shape**, not its transfo
 candidate body excluded, so a large neighbour (a zeppelin gasbag, a long building mesh) is scored by
 how close the blast actually is to its skin, not by how far the blast is from wherever its origin
 happens to sit. Falls back to the shape owner's transform origin only if that query somehow finds no
-contact. A swept `DETONATION_DISTANCE` sphere prevents fuse tunnelling and gates its actual contact
-point through `DETONATION_DOT_PRODUCT`. The linear curve and 1 N·s/HP impulse are TUNE.
-⚠ Hit detection is a per-step world raycast vs a body-less plane — a round never hits its own
-  launcher, and `player`/`enemy` IMPACT classes are unreachable in M3.
+contact. The fuse tests the whole swept segment per candidate plane (no tunnelling at ~20 m/step)
+and gates through `DETONATION_DOT_PRODUCT` toward the nearest hull point. The linear curve and
+1 N·s/HP impulse are TUNE.
 ⚠ `CANNON_SPREAD` jitter and the stand-in fireball draw from `Rng.Weapons` — a pinned run repeats
   its whole impact pattern (two `--det` C1B dives: 8/8 identical impact positions); new randomness
   must route through it. Trail-puffer scatter draws each emitter's own `Rng.Puffer` stream.
@@ -1808,7 +1819,8 @@ It also fires `Audio.OnEngineStop` (the wind-down cue, layered over the explosio
 collision resolver called it for a full-speed impact, for a critical part reaching 0 HP on a
 survivable-speed graze (`SurviveHit` returning false), or for a projectile kill
 (`TakeProjectileHit`: the pool-resolved hit — part-mapped armor-first damage plus the graze's
-feedback triple, no cooldown since rounds are discrete). Every `Crash` raises `Downed` exactly
+feedback triple, no cooldown since rounds are discrete; its `damageScale` is the blast falloff
+share for a splash hit, 1 for a direct round). Every `Crash` raises `Downed` exactly
 once — (victim `PlayerIndex`, killer: the killing round's shooter id; null for terrain, mid-air,
 an unowned `NoShooter` round and every other cause) — a fact report the session scores in `--vs`;
 flight holds no match state, and `Respawn` emits nothing. `AutoRespawnAfter` (session-armed —
@@ -2957,7 +2969,12 @@ The flying aircraft's physics body: one `AnimatableBody3D` child of `FlightContr
 terrain sweep casts, on the aircraft layer. Rides the controller's transform; `PartName(shapeIdx)`
 maps a query's struck shape back to the part (shapes added in `Parts` order); `ExcludeSelf` is the
 cached one-entry RID list the owner's own queries pass; `SetHittable` drops it to layer 0 while
-crashed, back at respawn.
+crashed, back at respawn. Also the fuse/blast geometry oracle (B14), answering from the same box
+set without a physics query: `NearestShape(point)` (nearest box, its skin distance + surface
+point — blast falloff), `SegmentDistance(from,to)` (closest approach of a swept round, ternary
+search per box — distance to a box is convex along the segment), `BoundRadius` for the cheap
+per-step reject, and `TakeProjectileHit(..., damageScale)` scaling both damage magnitudes by the
+blast falloff share (1 = direct round).
 ⚠ The plane stays Node3D-moved by `FlightModel` — `SyncToPhysics` false, `CollisionMask` 0: the
   body is a query target only, and nothing may let the physics engine push plane transforms. A
   plane-vs-plane impact resolves through the striking plane's `SurviveHit`/`Crash`, never a solver.
