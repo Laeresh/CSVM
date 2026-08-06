@@ -36,6 +36,17 @@ public enum SessionProbe
     WeaponTest,
 }
 
+/// <summary>The launchscreen's Mode screen, in the order its rows are drawn. Carried through
+/// <see cref="LaunchMenu"/>'s <c>Launch</c> callback and into <see cref="SessionSpec.FromMenu"/>,
+/// which turns the pick into <see cref="SessionSpec.Stunt"/>/<see cref="SessionSpec.Versus"/> —
+/// kept here rather than on <c>LaunchMenu</c> so the menu's own tests stay engine-free.</summary>
+public enum MenuMode
+{
+    Free,
+    Stunt,
+    Versus,
+}
+
 /// <summary>
 /// One immutable value for everything the command line settles about a session: parsed once, then
 /// resolved once, so a consumer reads an answer instead of re-deriving one.
@@ -741,8 +752,11 @@ public sealed record SessionSpec
     }
 
     /// <summary>The spec for a launchscreen launch: the picked chapter, one plane per player, and
-    /// whether it is a stunt run. The menu always launches flight over a chapter world, whatever
-    /// mode the command line asked for — one plane each, the player count stated by the list.
+    /// which of the three modes was picked. The menu always launches flight over a chapter world,
+    /// whatever mode the command line asked for — one plane each, the player count stated by the
+    /// list. Match rules (<see cref="VsKills"/>/<see cref="VsTimeMinutes"/>) are never menu-set —
+    /// they carry over from <paramref name="cli"/> unchanged, defaults unless the tester pinned
+    /// them on the command line the menu was launched with.
     ///
     /// <para><b>Derived from <paramref name="cli"/>, the PRISTINE command line, never from the spec
     /// the last session ran with.</b> Nothing a previous launch settled can reach this one, so
@@ -754,9 +768,13 @@ public sealed record SessionSpec
     /// would win a second time and the menu would stop launching flight) and placement is not
     /// re-routed (<c>--pos</c> was routed to the camera at parse time under a non-flight mode, and
     /// re-routing it here would start moving the menu's plane). Both match what the launchscreen has
-    /// always done: it overwrites an answer, it does not ask the question again.</para></summary>
+    /// always done: it overwrites an answer, it does not ask the question again.</para>
+    ///
+    /// <para>⚠ <b>The &gt;= 2-player Dogfight lock is the caller's job, not this one's</b> — the
+    /// launchscreen's Plane screen withholds the launch gesture until enough pilots have joined
+    /// (see <c>LaunchMenu</c>); this factory trusts whatever roster it is handed.</para></summary>
     public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
-        bool stunt)
+        MenuMode mode)
     {
         var names = planeNodes.ToArray();
         return cli with
@@ -768,10 +786,16 @@ public sealed record SessionSpec
             // plane rather than to whatever the last session flew.
             PlaneName = names.Length > 0 ? names[0] : cli.PlaneName,
             Players = Mathf.Clamp(names.Length, 1, UI.SplitScreen.MaxPlayers),
-            Stunt = stunt,
+            Stunt = mode == MenuMode.Stunt,
+            Versus = mode == MenuMode.Versus,
             Mode = SessionMode.Fly,
             WorldMode = true,
-            Scenario = cli.ScenarioExplicit ? cli.Scenario : stunt ? "stunt_flying" : "zeppelin_run",
+            Scenario = cli.ScenarioExplicit ? cli.Scenario : mode switch
+            {
+                MenuMode.Stunt => "stunt_flying",
+                MenuMode.Versus => "dogfight_ace",
+                _ => "zeppelin_run",
+            },
         };
     }
 

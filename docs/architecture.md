@@ -1950,11 +1950,16 @@ stall-specific consts stay `internal`: `stall-warning` is Wave B, scoped to a fu
 The in-game launchscreen CanvasLayer: Mode → Chapter → Plane, input polled every frame through
 one MenuInput per player (no input-map/focus wiring); joining is gated to the Plane screen, and
 with >1 player that screen becomes real SplitScreen.PaneRect panes — pick in the pane you fly in.
+Three Mode rows — Free Flight/Stunt Flying/Dogfight — map 1:1 onto `SessionSpec.MenuMode`'s
+ordinals; `Launch` carries the enum (not a bool) straight through to `SessionSpec.FromMenu`. Size
+comes from GetViewport().GetVisibleRect() (a CanvasLayer is not a CanvasItem); LayoutScale caps
+fonts so 4P fits 720p.
 ⚠ Player 1 is the keyboard + the SET of all unclaimed pads until ClaimP1Pad pins its real pad —
   never pads[0], which re-breaks the phantom-device fix; the leftover set makes hand-off free.
 ⚠ Re-entrant: ShowMenu resets to Mode, clears locks (joined players survive), and primes input +
   join edges from the CURRENT raw state — a still-held Esc/Start must not read as a fresh press.
-⚠ Size from GetViewport().GetVisibleRect() (a CanvasLayer is not a CanvasItem); LayoutScale caps fonts so 4P fits 720p.
+⚠ Dogfight withholds the launch gesture below 2 joined players (`CanLaunch`), even once P1 is
+  locked — the hint line says so; every other mode launches solo exactly as before.
 
 ## src/UI/MenuInput.cs
 One launchscreen player's input source — keyboard flag (player 1 only), `Pads` device array, edge/
@@ -2221,7 +2226,9 @@ they are testable. `SessionMode` is closed — Menu/Fly/Viewer/Freecam/AnimLab �
 ⚠ **Pure — no engine state, no globals, no logging, no clock** (DET-9: a spec that read the clock
   would not be a function of its args); complaints go to `Warnings`, never a print.
 ⚠ **`FromMenu` is static, takes its base as a PARAMETER, and does NOT re-resolve** — it must keep
-  writing every menu-settable field, or the pristine base re-opens the carry-over bug.
+  writing every menu-settable field, or the pristine base re-opens the carry-over bug. Takes a
+  `MenuMode` (Free/Stunt/Versus, also defined here so `LaunchMenu`'s tests stay engine-free), not
+  a bool — the >= 2-player Dogfight lock is `LaunchMenu`'s job, not this factory's.
 
 ## src/Mech3/WorldSession.cs
 Builds one chapter world and binds its `AnimProgram` — the world+anim half of a session build;
