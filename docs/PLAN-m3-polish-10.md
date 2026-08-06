@@ -14,18 +14,22 @@ needing an original-game A/B or a new capture before any code can move (`BL-070`
 `BL-284`, and everything `[Blocked: CAP-nn]`), `[Blocked: M4]` items (future milestone), and
 `[Owed-playtest]` items (code done; they need the user at the controls, not a plan).
 
+All ten entries moved out of `backlog.md` into this plan on 2026-08-06 (scheduled items live in
+their plan); the deep evidence and traps are in the per-item sections below. Same day, the user's
+review closed two before work started: `BL-047` (B12) and `BL-283` (D31).
+
 ## Milestone goal
 
 - Torn-panel flake debris fires only at the tear moment and separates from the plane in world
   space (`BL-288`).
 - The fuel-leak animation and the wing-light blinker stop fighting over the same nodes (`BL-287`).
 - The crash water splash sprays up and its rings lie flat on the water (`BL-292`).
-- The runway light-state quads and the C1 rail patch stop z-fighting (`BL-081`, `BL-082`).
+- The zeppelin hookup-light on/off quads (`lite*`/`ltout*`) stop z-fighting (`BL-081`).
 - The own-ship audio mix loses its unexplained blanket ×0.2 (`BL-268`).
-- The weapon gauge maps slots to pylon numbers and sweeps the original's way (`BL-294`); the
-  damage display no longer latches all-red on a crash (`BL-047`).
+- The weapon gauge maps slots to pylon numbers and sweeps the original's way (`BL-294`).
 - Flying C1/M05, C3/MP1–2 or C5/MP1 places the interp-scripted entities where authored (`BL-249`).
-- The sandbox-only free-flight exit hang is diagnosed or bounded (`BL-283`, stretch).
+- ~~`BL-047` damage display~~, ~~`BL-082` rail z-nit~~ and ~~`BL-283` sandbox hang~~ closed
+  2026-08-06 by user call/A/B — see B12/B14/D31.
 
 **This plan fixes only what is already diagnosed — no new reverse engineering, no flight-model or
 TUNE changes.** An item that turns out to need an original-game capture stops and records that,
@@ -64,9 +68,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — HUD & world rendering
 
 11. ☐ `BL-294` — weapon-gauge slots map to pylon numbers (1,5,2,6,3,7,4,8 fill) and the sweep direction matches the original
-12. ☐ `BL-047` — the damage display no longer latches fully red on a crash
-13. ☐ `BL-081` — runway `lite*`/`ltout*` state-variant quads pick one light state instead of z-tying
-14. ☐ `BL-082` — the C1 rail-over-transition patch draws above its transition
+12. ❌ `BL-047` — closed 2026-08-06: the original disables the HUD on crash, as do we
+13. ☐ `BL-081` — the zeppelin hookup-light `lite*`/`ltout*` state pairs play their authored state instead of both drawing
+14. ❌ `BL-082` — closed 2026-08-06: the original z-fights there too (user A/B at the spot) — faithful as-is
 
 ### Wave C — Audio & missions
 
@@ -75,17 +79,16 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Stretch
 
-31. ☐ `BL-283` — diagnose the sandbox-only free-flight `--screenshot` exit hang (timeboxed)
+31. ❌ `BL-283` — closed 2026-08-06: sandbox existed only to test the installer, which passed
 
 ## Dependency and parallelism notes
 
-All ten items are independent — no item blocks another; waves are theme groups, not dependency
+The open items are independent — no item blocks another; waves are theme groups, not dependency
 chains, and run in any order. File contention: A1 and A2 both touch the damage-visuals wiring
 (`DamageVisuals`/`FlightRigAssembler` neighbourhood) — land them sequentially, not in parallel
-worktrees. B12 touches `GaugeCluster.cs`, as does B11 — same rule. C21's ×0.2 sits on the paths
-`BL-285`'s owed listen A/B will judge; note in the landing message that the mix changed so that
-playtest is re-based. D31 is diagnosis-only and can run any time in the background; it must not
-block the plan's completion — if timeboxed out, it stays in `backlog.md` unchanged.
+worktrees. C21's ×0.2 sits on the paths `BL-285`'s owed listen A/B will judge; note in the
+landing message that the mix changed so that playtest is re-based. B12, B14 and D31 are closed
+(2026-08-06).
 
 ---
 
@@ -195,71 +198,69 @@ gauge index equals pylon. A partial-loadout plane (gaps visible) as the second c
 **⚠ Traps.** Do not retune the `BL-184` tween rate. `CAP-18`'s measurement is not automatically
 wrong — re-read it under the antipode framing first.
 
-## B12 ☐ `BL-047` — crash damage display no longer latches all-red
+## B12 ❌ `BL-047` — crash damage display: closed, nothing to fix
 
-**Goal.** After a crash, the damage display shows whatever the original shows — not the ordinary
-damage path left latched fully red.
+**Closed 2026-08-06 (user call — "answered").** The original disables the HUD on a crash, and so
+does our build in the meantime — the latched all-red state the entry described is no longer
+player-visible on the crash path. No code change; `BL-047` deleted from `backlog.md`, record in
+the closing commit (`git log --grep=BL-047`).
 
-**Evidence (confidence: traced).** Backlog `BL-047`: `GaugeCluster.cs` blinks a zone on
-`OnPartDamage` and picks red at `frac <= RedAt`, but `FlightController.Crash()` never calls into
-`Gauges` — the all-red is the ordinary damage path latched, not a crash behaviour mis-firing.
+**Original approach (kept for reference).** The entry traced the all-red to the ordinary damage
+path left latched (`GaugeCluster.cs` blinks on `OnPartDamage`; `FlightController.Crash()` never
+called into `Gauges`), and the planned fix was to wire `Crash()` to whatever the original's crash
+footage shows. The HUD-off-on-crash behaviour supersedes that wiring entirely.
 
-**Approach.** First establish what the original shows on a crash — `CAP-16`/`CAP-14` crash clips
-in `playtest/` and `OriginalScreenshots/` may already answer it (the original cuts to menu ~0.35 s
-after a fatal crash, so "nothing" is a plausible answer); ask the user only if the footage doesn't
-settle it. Then wire `Crash()` to the gauge accordingly (freeze, clear, or all-red-blink —
-whichever is observed).
+## B13 ☐ `BL-081` — zeppelin hookup-light state pairs play their authored state
 
-**Model recommendation.** medium, low effort — tiny wiring once the observed behaviour is settled.
+**Goal.** The `lite*`/`ltout*` lights-on/lights-off state-variant quads no longer z-fight: each
+pair shows the state the data authors, and the hookup-lights animation can swap it.
 
-**Verify.** Scripted crash + `--shots` through the impact frames; compare the gauge region against
-the chosen reference. `.\RunTests.ps1`.
+**Evidence (confidence: traced — user lead confirmed in data 2026-08-06).** The `liteNN`/`ltoutNN`
+pairs are not runway lights: they are the **pirate zeppelin's hookup lights**, driven by the
+`pz_hookup_lights` mission animation (anchored at `pz_lites` on `piratezep`), which references
+`lite01`–`lite11`, `ltout01`–`ltout11` and `flash1`–`flash11` — shipped in C1's M02, M04 and M05
+(`extracted/C1/M02/mis_anim/pz_lites-pz_hookup_lights.json` and siblings). We draw both variants
+of every pair at once, so they z-tie. The old entry's "runway lights / needs an engine-side
+light-state toggle" framing is superseded by this.
 
-**⚠ Traps.** Don't invent a "crash display state" the original doesn't have — the footage decides.
-
-## B13 ☐ `BL-081` — runway light-state quads stop z-tying
-
-**Goal.** The runway `lite*`/`ltout*` lights-on/lights-off state-variant quads no longer z-fight:
-the engine picks one state's variant and suppresses the other.
-
-**Evidence (confidence: traced on the cause).** Backlog `BL-081`: the two variants are authored
-state alternatives; we draw both, so they z-tie. Needs an engine-side light-state toggle to pick
-one variant.
-
-**Approach.** Classify the `lite*`/`ltout*` pairing at build time (`SceneBuilder`/`WorldBuilder`
-neighbourhood — read the architecture entries first) and show exactly one variant, keyed off the
-mission's light state (day missions: lights-off unless data says otherwise — check how the state
-is authored before choosing a default).
+**Approach.** Honor the anim def's RESET_STATE at build (one variant of each pair hidden — the
+same start-hidden pattern `wing_lights_blink` established in `PlaneBuilder`), and let the
+`pz_hookup_lights` def drive the swap through the existing anim runtime if it is dispatched in
+the flown mission. Check first whether the def's node bindings resolve (the zeppelin subtree owns
+the nodes — mind the compiled-symbol-table binding trap in `docs/formats/destructibles.md`).
 
 **Model recommendation.** medium.
 
-**Verify.** Before/after screenshots at a known z-tying runway; the 8-chapter `--freecam`
-regression — node counts will change (variants suppressed), so record the expected delta rather
-than asserting unchanged counts. Golden hashes will move if a golden frames a runway — inspect and
-re-pin deliberately.
+**Verify.** Before/after screenshots of the pirate zeppelin (`--node=piratezep --viewer
+--chapter=C1` frames it; a C1/M02 flight for the live anim). The 8-chapter `--freecam`
+regression — visible-variant counts change by design, so record the expected delta. Golden hashes
+move only if a golden frames the zeppelin — inspect and re-pin deliberately.
 
 **⚠ Traps.** Do not fix by a depth-bias nudge — the variants are semantic alternatives, not a
-draw-order tie to break.
+draw-order tie to break. Do not hide by name pattern globally without checking every chapter's
+`lite*` users: the C1 texture list also has unrelated `lite_out.tif`/`rr_lite*` consumers.
 
-## B14 ☐ `BL-082` — the C1 rail-over-transition z-nit
+## B14 ❌ `BL-082` — the C1 rail-over-transition z-nit: closed, the original does it too
 
-**Goal.** The one 6-poly rail patch NE of the C1 bridges draws above its ground transition.
+**Closed 2026-08-06 (user A/B — "answered", faithful as-is).** The user located the patch at the
+controls and confirmed **the original z-fights there too**: rails vs ground, at
+`--pos="-6047.982,152.993,-5881.963" --direction="-0.67488,-0.73759,0.02216"` (freecam F11
+print) — on the rail line just east of the third railroad bridge `rrbrdg3` (center
+(−6311, 131, −5859)). Matching our render is the goal, so this is authored-data behaviour and
+"fixing" it would be a deliberate deviation — not taken. (Probe shots referenced below are
+transient `.scratch/` artifacts — the F11 params are the durable pointer.) No code change;
+`BL-082` deleted from `backlog.md`, record in the closing commit (`git log --grep=BL-082`).
 
-**Evidence (confidence: traced to a location, lead on the fix).** Backlog `BL-082`: the patch sits
-below the draw-order tie-break's resolution.
-
-**Approach.** Read the draw-order tie-break's entry in `docs/architecture.md` and the depth-bias
-findings (`analysis/item9-depth-bias/`) first; then either extend the tie-break's resolution for
-this class or accept a targeted bias for the patch's class. Smallest change that doesn't disturb
-the global tie-break wins.
-
-**Model recommendation.** medium, low effort — a one-location nit with a documented instrument.
-
-**Verify.** Screenshot at the exact patch (freecam `--pos` at the NE-of-bridges location),
-before/after; 8-chapter regression + goldens unchanged elsewhere.
-
-**⚠ Traps.** A global tie-break change to fix a 6-poly nit is the failure mode — blast radius must
-stay local.
+**Evidence note for any future revisit.** A data sweep first mis-located the patch: the only
+`track_base.tif` decal polys in C1's gamez sit on the **Los Angeles station** corridor — node
+`track01` at (−5226, 128, −3837)/(−5170, 128, −3836) (the latter layered over `abld_shadow`) and
+`a_detail2` at (−4939, 128, −3836) — and those render **clean** (probe shots
+`.scratch/bl082_track01.png` / `bl082_adetail2.png`), plausibly healed by the overlay-pass
+machinery that post-dates the 2026-07-16 observation. The user's actual spot draws its rails from
+terrain-tile texturing, not `track_base` decals — so a texture-based search cannot find it; the
+F11 params above are the only reliable pointer. If anyone ever wants to *improve on* the original
+here: smallest local change only (a targeted class bias per `analysis/item9-depth-bias/`), never
+a global tie-break change.
 
 # Wave C — Audio & missions
 
@@ -316,30 +317,13 @@ there is this same class — do not resolve it differently in two places.
 
 # Wave D — Stretch
 
-## D31 ☐ `BL-283` — sandbox free-flight exit hang (diagnosis, timeboxed)
+## D31 ❌ `BL-283` — sandbox free-flight exit hang: closed, won't do
 
-**Goal.** Know why the exported build's free-flight `--screenshot` run never exits in Windows
-Sandbox — or a bounded "not reproducible outside sandbox / parked with new evidence" verdict. A
-fix is welcome but not owed; this item may legitimately land as a better-characterized backlog
-entry.
-
-**Evidence (confidence: well-characterized symptom, no mechanism).** Backlog `BL-283`, B13
-clean-machine tests 2026-08-05: work completes (`pixmd5` logged), process parks in normal frame
-flow (39 threads, message pump responding), 3/3 repro in sandbox, 0 repro on host; mode-specific
-(stunt/launchscreen/splitscreen exit cleanly 5/5). Run order ruled out.
-
-**Approach.** Use the Windows Sandbox test-harness rig (see memory: mount race — wait for the
-mapped folder; never force-kill the sandbox). Instrument the quit path in the exported build
-(log each shutdown stage), rerun in sandbox, see which stage never completes. Timebox: one
-session; if no mechanism, write the new evidence back to `BL-283` and close the item ❌-style as
-"investigated, parked".
-
-**Model recommendation.** high — environment-specific process-lifecycle diagnosis with no
-mechanism in hand.
-
-**Verify.** The instrumented log from a sandbox run showing the last shutdown stage reached; a
-host-side run proving the instrumentation itself doesn't change exit behaviour.
-
-**⚠ Traps.** From the backlog entry: not the timeout knob (600 s changed nothing); the
-kill-the-predecessor theory is disproven — don't re-derive; a dev-machine repro needs the
-*exported* build, the editor path exits fine everywhere.
+**Closed 2026-08-06 (user call — "won't do").** Windows Sandbox mattered only as the
+clean-machine instrument for the friends-release installer test, and that test passed
+(PLAN-friends-release B13, 2026-08-05). The hang never reproduced outside the sandbox, and the
+affected path is the scripted auto-quit, not the UI quit a player uses — so the defect has no
+player-facing surface worth a diagnosis session. `BL-283` deleted from `backlog.md`; the full
+symptom characterization (3/3 sandbox repro, 0 host repro, mode-specific, run-order ruled out)
+lives in the closing commit (`git log --grep=BL-283`) and the frozen `docs/HISTORY.md`
+2026-08-05 B13 entry, should a real-Windows report ever revive it.

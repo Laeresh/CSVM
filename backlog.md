@@ -369,33 +369,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   handles it today; this item was the swap timing/authorship only. (c) The 28.5 s offset reads long
   but is what is authored — A/B the original's timing rather than "fixing" the number.
 
-- `BL-287` `[Bug]` **D11 follow-ups: the fuel leak fights the wing lights, and panels 4/6 burn
-  flakes-only as authored** (filed at `BL-259`'s landing, 2026-08-05). (a) `player_fuelleak`'s
-  ELSE branch deactivates `wing_flare2`/`winglight2`, and `WingLightBlinker` re-asserts them
-  every 1.5 s blink cycle — the two fight over the same nodes; harmless-looking but unresolved.
-  (b) `pdpanel4`/`pdpanel6`'s `short_firetrail` calls sit in an `ON_CALL` sequence
-  (`view_result`) nothing calls, so as authored those two panels play flakes + skin flip with no
-  burn — check against the original at the controls if footage ever shows those panels burning.
-
-- `BL-288` `[Bug]` **`gimmeflakes` debris fires on every damage stage and rides the plane** (seen at
-  the controls 2026-08-05, right after `BL-259` landed). Two defects in one effect: (a) the
-  flake debris flies on EVERY damage animation — the authored menu calls `gimmeflakes` only
-  from the `pdpanelN` defs, i.e. at the moment a panel tears (`player_fuelleak` calls none), so
-  a stage that destroys no panel should throw no flakes. Check what our wiring actually invokes
-  it from (every injure-stage call? each loop iteration of the burn?) against the defs before
-  fixing — the over-fire may be a re-CALL of the whole `pdpanelN` def rather than the flakes
-  themselves. (b) The flakes stay PLANE-LOCAL — hanging in the air around the aircraft and
-  moving with it — where torn-off debris must separate, decelerate in world space and fall
-  behind. "This should definitely fly away" (user).
-  ⚠ Traps: (b) is the third bite of the plane-parented-effect trap — `BL-229`'s "puff at the
-  plane's last position" and the smoke-trail `TopLevel` anchor fix (`docs/HISTORY.md`
-  2026-08-03) that produced the `trail-world-anchor` suite. The fix family is world-staging the
-  emission (`TopLevel` at the site), not per-frame reparenting; verify at a real mission spawn
-  and heading — the identity pose hides it. And don't "fix" (a) by muting `gimmeflakes`: the
-  tear moment must still throw its burst.
-  *Playtest after fix:* take panel damage in flight — flakes burst once at the tear, separate
-  from the plane and fall away behind it; a fuel-leak-only stage throws none.
-
 - `BL-291` `[Feature]` **A way to spawn/damage a zeppelin — the thin harness that finishes `BL-239`'s in-game
   verification** (PT-36, 2026-08-06). Splash damage reads right at the controls, but nothing in
   C1 shows damage registering on the zeppelin, so `BL-239`'s one unverified picture — a gasbag
@@ -1192,12 +1165,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-076` `[Feature]` **Star twinkle + undecoded light fields** (flags 523/…, the 0.17 float) — stars/beacons
   render as fixed-size soft sprites, no twinkle.
 
-- `BL-081` `[Bug]` **Runway `lite*`/`ltout*` lights-on/off state-variant quads** still z-tie (needs an
-  engine-side light-state toggle to pick one variant).
-
-- `BL-082` `[Bug]` **Rail-over-transition z-nit**: one 6-poly rail patch NE of the C1 bridges sits below the
-  draw-order tie-break's resolution.
-
 - `BL-100` `[Research]` **Which weather/sky zone do C1, C1C, C2B and C4 actually use?** **C5 is
   answered — `zone1`** (user A/B 2026-07-22; landed as polish-3 item 2). **C1B, C2 and C3 are
   answered — `zone1`**, settled from the data rather than by A/B (2026-08-06, `BL-277`): their
@@ -1412,7 +1379,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   chained eased rock (accelerate, decelerate, reverse) is at least as plausible a reading, and
   under (b) each event would snap back to rest. **Needs the original game**: watch a zeppelin rock
   through several loops and see whether it returns to the same attitude or walks. Same class of
-  call as `MissionSetup`'s unguessed `Object3DRotate` angle unit (`BL-249`).
+  call as `MissionSetup`'s unguessed `Object3DRotate` angle unit (`BL-249`, scheduled in
+  `docs/PLAN-m3-polish-10.md` C22).
 
 - `BL-035` `[Feature]` `[Blocked: cutscene player]` **Animation event kinds that need weapons or cutscenes — `CALLBACK`, `OBJECT_CYCLE_TEXTURE`,
   one-shot `SOUND`** (triaged 2026-07-22, the last of `docs/plans/PLAN-anim-rendering-followups.md`
@@ -1582,18 +1550,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   - `chuteman` has **zero gravity**. Any solve phrased as a parabola divides by zero on it; it is a
     constant-velocity descent and needs the distance, nothing else.
 
-- `BL-292` `[Bug]` **Crash water splash is mis-oriented: the spray does not go up and the rings do not lie
-  flat; fire and steam are correct** (seen on PT-37's sea dive, 2026-08-06). On a dive into open
-  water, `plane_big_splash`'s spray column visibly does not fire upward and its flat rings do not
-  lie in the water plane, while the fire and steam parts of the same crash choreography rise
-  correctly. The splash sub-effects should orient to the struck surface normal — straight up on
-  water. Hypothesis, not observation: the effect root inherits the crashed plane's attitude,
-  which would be the fourth bite of the plane-parented-effect trap (`BL-288` catalogues the
-  family) — verify the actual transform at spawn before assuming the angle. Re-check the
-  ground/dirt crash variant when landing: same spawn path, and a tipped effect is harder to spot
-  against terrain. Related but separate: `BL-293` orients impact rings — different spawn path
-  (template meshes, not crash choreography).
-
 - `BL-293` `[Tuning]` **Rocket impact rings: orient the ground rings to the struck surface normal; the
   fixed-axis upper ring is faithful but reads poorly — parked** (PT-35, 2026-08-06). The
   actionable half: ALL ground rings — HE's ground ring, AP's cracks quad, the sonic stack —
@@ -1605,7 +1561,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   feel side: upper ring facing the plane / against the rocket's flight direction. The ring anims
   carry no rotation data (scale/opacity only — `docs/formats/weapon-effects.md`), so any change
   is engine-side and a deliberate deviation. Cross-link: `BL-292` (crash-splash orientation,
-  different spawn path).
+  different spawn path; scheduled in `docs/PLAN-m3-polish-10.md` A3).
 
 ## Audio
 
@@ -1849,14 +1805,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   while ours is not — so it cannot be read across. **Needs a level match by ear against the
   original, not another measurement** (user, 2026-08-04: "the only tune parameter would be volume").
 
-- `BL-268` `[Bug]` **A blanket ×0.2 is applied over every authored sound volume, commented "Temporary
-  fix"** (`FlightAudio.cs:363,382,178,308` — four call sites multiply `def.Volume * 0.2f`).
-  Every `sounds.json` `VOLUME` in the own-ship path is silently overridden by a 5× attenuation
-  that was never revisited. Either the authored volumes assume a different reference level
-  (find it and name the conversion) or the mix is simply wrong; both answers remove the magic
-  number. Audit which buses it actually touches before changing — the world-sounds path
-  (`WorldSounds.cs`) may or may not share it.
-
 - `BL-269` `[Tuning]` **The 3D sound falloff curve between the authored `RANGE` radii is an admitted
   approximation** (`WorldSounds.cs:159-161` — endpoints authored, curve "an approximation of
   the original's, hence TUNE"). Low stakes per sound but global: every positional sound's
@@ -1877,8 +1825,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   idle→5/8 fires" — the 2/8–4/8 band is unobserved, so 0.25 is the smallest threshold
   consistent with both and a declared TUNE. (b) The listen A/B: `EngineStartRamp` is now the
   `startprops` authored 2.0 s and the crash/destruction wind-down plays `snd_propstop` — judge
-  both by ear. ⚠ Trap: the ×0.2 mix scale (`BL-268`) sits on these same paths — if the stop
-  cue sounds wrong at ×0.2, that is `BL-268`'s item, not a reason to retune the ramp.
+  both by ear. ⚠ Trap: the ×0.2 mix scale (`BL-268`, scheduled in `docs/PLAN-m3-polish-10.md`
+  C21) sits on these same paths — if the stop cue sounds wrong at ×0.2, that is `BL-268`'s
+  item, not a reason to retune the ramp.
 
 ## Cameras & views
 
@@ -2108,12 +2057,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
-- `BL-047` `[Bug]` **Crash damage display blinks fully red.** `GaugeCluster.cs` blinks a zone for `DamageBlinkTime`
-  on `OnPartDamage` and picks the red variant at `frac <= RedAt`, but the only caller is a graze
-  hit — `FlightController.Crash()` touches audio, fireball, breakup and visibility and never calls
-  into `Gauges`. So the all-red state is not a crash behaviour being mis-fired; it is the ordinary
-  damage path left latched. Check what the original shows on a crash before wiring anything.
-
 - `BL-113` `[Tuning]` `[Owed-playtest]` **Compass tape** — `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE
   (north = −Z is now confirmed against the original, 2026-07-30 — do not reopen).
 
@@ -2125,20 +2068,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   its chrome rather than today's placeholder styling. Blocked on the menu-hub milestone, not on data.
   *Fix shape:* re-review `MarkerHud.cs`/`StuntScoreboard.cs` placement once the menu hub UI exists,
   against the hub's own type scale/units rather than in isolation.
-
-- `BL-294` `[Bug]` **Weapon-gauge slot mapping: the index must equal the pylon number, and the sweep
-  direction is mirrored against the original** (PT-31, 2026-08-06). Two observations, one
-  instrument: (1) the original's gauge index corresponds to the PYLON number — empty pylons
-  leave gaps in the dial, and the display corresponds to the active pylon / gun group — while
-  ours compacts the used hardpoints into indices 1..N. The original's fill order alternates per
-  wing: 1,5,2,6,3,7,4,8; the pylons themselves are believed correctly ordered, the display is
-  not. (2) On the Balmoral's full stock loadout (all 8 pylons — the fill difference is invisible
-  there) the original cycles CLOCKWISE, ours counterclockwise. Analysis order: check the dial's
-  index winding first — a mirrored slot→angle map explains the direction flip without touching
-  `BL-184`'s landed tween rate — and reconcile with `CAP-18`'s measured CCW antipode step before
-  changing anything: on a full 8-slot dial, cycling 1→5 in the original's alternating order IS
-  the 180° antipode case, so `CAP-18`'s measurement may describe exactly those steps, not a
-  general rule.
 
 - `BL-296` `[Feature]` **Per-player ActionMap: named actions over the raw key/pad polling, as the
   rebinding seam.** Every control is hard-polled today (`Input.IsKeyPressed`/`IsJoyButtonPressed`
@@ -2285,21 +2214,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `PERSIST_LOG` object and a save-only one in one campaign mission, then load an IA — the first
   should carry, the second should not).
 
-- `BL-249` `[Bug]` **`MissionSetup` does not apply the interp placement verbs — `Object3DTranslate` /
-  `Object3DRotate`** (measured 2026-08-04; previously visible only as an aside in `BL-034`).
-  Mission-script uses (build-side `load.gw` uses are baked into the shipped gamez and need
-  nothing): `c1\m05.gw` ×20 — repositions the nine `lifesaver*` boats, `redcross` and
-  `workersvoyagezep`, rotations unambiguously **degrees** (`0 45 0`, `0 172 0`);
-  `c3\mp1.gw`+`mp2.gw` ×4 — places `cargozep1`, rotation unambiguously **radians**
-  (`-3.144009` ≈ π on Y); `c5\mp1.gw` ×1 — moves `rearm_node_2`. Effect while open: flying
-  C1/M05, C3/MP1–2 or C5/MP1 leaves those entities at the world corner / unrotated (the
-  vehicles-load-unplaced mechanism in `docs/formats/interp.md`).
-  ⚠ Traps: **the angle unit is per-script inconsistent in shipped data** — degrees in C1/M05,
-  radians in C3/MP — so a single global unit guess mis-poses one set or the other; any fix needs
-  a per-script (or magnitude-based) unit decision plus an original-game check. Last-write-wins
-  ordering applies as everywhere in these scripts. No IA1/default mission uses either verb, so
-  the goldens cannot catch a wrong guess — verify in the named missions directly.
-
 - `BL-256` `[Feature]` **Stunt screenshot feature, triggered off `DzRadius` — much later, by user decision
   (2026-08-04).** `DzRadius` (15 m, user-hand-tuned) is settled
   as the **marker-centre radius**: scoring crosses the authored `dzpathN` gate pair
@@ -2335,27 +2249,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   F5 in `--fly` drives the flown plane's real HP while the sim runs — which widens the gap rather
   than closing it: a drag there competes with a per-frame read-back and nothing scripted can prove
   that feels right. `PT-29` is the owed test.
-
-- `BL-283` `[Bug]` **Exported build: free-flight `--screenshot` run never exits in Windows Sandbox (2026-08-05).**
-  In the B13 clean-machine tests (Windows Sandbox, vGPU paravirtualized RTX 5080 via D3D12 12_0),
-  the scripted free-flight run — `-- --plane=player_bhawk --chapter=C1 --det --screenshot=…` —
-  finished all its work (world loaded, shot saved, `pixmd5` logged as the final line, exactly like
-  a clean run) but the process never exited: killed at 300 s and 600 s in three runs out of three.
-  At kill time: 39 threads, 103.9 s CPU accumulated, 1.1 GB working set, message pump alive
-  (`Responding=True`) — it looks parked in normal frame flow with the quit never taking effect,
-  not deadlocked. **Mode-specific, environment-specific:** stunt over the same C1 world, the
-  launchscreen, and `--stage=empty` splitscreen exited cleanly in every sandbox run (5/5), and the
-  same free-flight command exits cleanly on the host (B11 smoke + goldens). Run order ruled out:
-  the hang reproduces when free flight is the first process ever started in the sandbox.
-
-  *Why it can wait:* friends run real Windows — no hang has ever been seen outside the sandbox —
-  and the affected path is the scripted auto-quit, not the UI quit a friend uses. Evidence:
-  `docs/HISTORY.md` 2026-08-05 B13 entry.
-
-  **⚠ Traps.** Do not chase this with the sandbox timeout knob — 600 s changed nothing; it is a
-  hang, not slowness. The kill-the-predecessor theory is already disproven (reorder run), don't
-  re-derive it. A dev-machine repro attempt needs the *exported* build, not the editor run — the
-  editor path exits fine everywhere.
 
 ## Misc
 
