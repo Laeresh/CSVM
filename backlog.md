@@ -587,47 +587,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   achieved distance is a distribution — judge over a burst, never off one pass. Raising it far enough
   that a round crossing the sky sounds is the failure mode, not a louder cue.
 
-- `BL-233` `[Feature]` `[Blocked: M4]` **The `DETONATION_DISTANCE` proximity fuse is DISABLED — decode it and re-target it in
-  M4 (turned off 2026-08-02).** `Projectile.cs`'s `ProximityFuseEnabled` is `false`; the branch and
-  `ProximityFuseTriggered` are intact and unreached. **Why it had to go now:** the fuse sphere-cast
-  ran against *any* body, and in M3 the only bodies are terrain and buildings (the flying aircraft
-  carries no physics body — `Projectile.cs` class remark), so it fired on **every** hardpoint shot,
-  15-50 m short of the surface for rockets and 1 m short for the torpedo. Worse, the fuse branch
-  calls `Impact(weapon, fusePoint, null, Vector3.Zero)` — a **null collider** — so
-  `ClassifySurface` returned `Default` for every rocket/torpedo hit and **no hardpoint weapon could
-  ever reach its `water`/`buildings`/`player` IMPACT entry.** Reported as "a torpedo in C1B water
-  plays the ground explosion"; `wep_14` does bind `water → torpedo_water_effect` + `snd_bsplash`,
-  and C1B's sea *is* tagged (`wtr*`/`srf*`/`wakefront*` all hit `SceneBuilder.ClassifySurface`) —
-  the classification was simply never asked. Measured, `.scratch/logs/probe-20260802-160502-14692.out`:
-  `impact: wep_14 (TORPDO) -> Default at (…) on / fx=torpedo_ground_effect snd=-` — the empty `on `
-  field IS the null collider.
-  **The two open questions for M4:**
-  1. ~~**What is `DETONATION_DISTANCE`?**~~ **Settled from the data 2026-08-02: it is the FUSE
-     TRIGGER distance, not the explosion radius** — so the current reading is right and only the
-     targeting is wrong. Three independent reasons, in order of strength:
-     (a) **`wep_12` CHOKER carries `DETONATION_DISTANCE` 35 and NO `IMPACT_PROXIMITY` at all**, with
-     `ARMOR_DAMAGE`/`HEALTH_DAMAGE` both 0 and a `TANGLER RADIUS` of **35.0** — the same number,
-     authored separately. The choker has no explosion, so a field meaning "explosion radius" on it
-     is incoherent; a trigger distance that fires a tangle whose radius is its own field is exactly
-     right. (b) **The torpedo runs backwards under the radius reading**: highest damage in the game
-     by 2× (200 vs BOOM's 100) paired with the file's *smallest* `DETONATION_DISTANCE` (1.0).
-     Biggest warhead + contact fuse holds; biggest warhead + smallest blast does not. (c) The whole
-     `DETONATION_*` family is triggers — `DETONATION_TIME` (flare, 2 s) and `DETONATION_DOT_PRODUCT`
-     (flare/flash/choker) are unambiguously "when does it go off", and the flare ships
-     `DETONATION_TIME` with **no** `DETONATION_DISTANCE`: same slot, timed condition instead of a
-     distance one. `IMPACT_PROXIMITY` is correspondingly the effect radius throughout, as
-     `ApplyDamage` already treats it — `wep_09` FLASH is `DAMAGE 0` with IP 450 (blind radius),
-     `wep_15` FLARE is `DAMAGE 0` with IP 500 (decoy-attraction radius).
-     ⚠ **Why this hid for so long:** on the six plain rockets the two are *equal* (ARMOR/BOOM/BEEPER/
-     SEEKER 15=15, SONIC 35=35) — "it goes off as soon as it is close enough to hurt you" — so the
-     wrong reading produced right-sized results there. Full census, IP vs DD: 9M 25/30 (**the only**
-     weapon where IP < DD), FLAK 22/20, FLAK 100/50, gb 155/15, FLASH 450/30, TORPDO 30/1,
-     CHOKER –/35, FLARE 500/–, FW 100/–.
-  2. **Which bodies may fuse a round?** The user's recollection is enemies only — aircraft and
-     zeppelins, never terrain. That needs a targetable-body layer the world colliders are not on,
-     which is M4 work (nothing else flies in M3).
-  **When it comes back**, the fuse branch must carry its struck body into `Impact` instead of
-  `null`, or it re-breaks per-surface effect selection the moment it is switched on.
+- `BL-233` `[Feature]` `[Blocked: M4]` **Extend the proximity fuse to zeppelins (and any other M4 flyer) when they get
+  bodies.** The fuse itself came back 2026-08-06 (PLAN-vs-mode B14): re-enabled **aircraft-only**
+  against the registered `AircraftBody` list — never world geometry, matching the user's
+  recollection that the original fuses on enemies, never terrain — detonating at the round's
+  **closest approach** within the swept step, with the fused-on body carried into `Impact` (the
+  per-surface IMPACT entries are reachable; the old null-collider bug cannot recur). DD = fuse
+  trigger distance, IP = effect radius (settled 2026-08-02 from the choker/torpedo/flare census —
+  see the B14 landing commit for the full argument). Remaining work: when M4 gives zeppelins (or
+  anything else that flies) collision bodies, they join the fuse's candidate list — the natural
+  seam is `CollisionLayers.Aircraft` or a shared targetable layer read by
+  `ProximityFuseTriggered`'s registry.
+  ⚠ Traps: (a) the six plain rockets author `DETONATION_DISTANCE == IMPACT_PROXIMITY`, so a
+  first-entry-into-range fuse always detonates exactly where the linear blast falls to zero and
+  deals nothing — the closest-approach rule is load-bearing, keep it for any new candidate class;
+  (b) a world-armed fuse re-detonates every rocket 15–50 m short of terrain (the 2026-08-02
+  failure) — never widen the mask to world bodies.
 
 - `BL-286` `[Tuning]` `[Owed-playtest]` **Muzzle-flash residues after the `BL-263` pick (triad kept, 2026-08-05)** — two
   small opens. (a) closed 2026-08-06: the muzzle-light stand-in magnitudes (was `BL-200`, rode
@@ -2142,6 +2117,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 - `BL-126` `[Tuning]` `[Owed-playtest]` **Splitscreen** — the `HudMetrics` sqrt pane damping, `MixGain`, `SpawnAbreast`, join/lock
   feel, tag-gutter widths.
+
+- `BL-299` `[Research]` **Decode `net.zrd.json` as the multiplayer spawn table → the retail MP1–MP3 maps for
+  Dogfight.** 45 files, one flat group each, node counts quantised by mission type (MP1→80,
+  MP2/MP3→48, campaign→8), 23 distinct payloads shared across files — shape and distribution say
+  *spawn table*, not patrol route (`docs/SCOPING-M4-ai.md` survey; its "do not build patrol on it"
+  warning stands). Now there is a consumer to validate a decode against: Dogfight (`--vs`) plays
+  the IA1 `dogfight_ace` list today; a confirmed spawn decode gives it the maps the original
+  authored for exactly this mode. MP worlds already load (`--mission=MP1`); only their spawns fall
+  back today (`SpawnPicker` warns).
+
+- `BL-300` `[Cleanup]` **Tighter aircraft collision shapes — convex hulls per clipped region instead of
+  boxes.** Pays off twice since PLAN-vs-mode A1 single-sourced the shape set: the same
+  `PlaneCollider.Parts` feed the terrain sweep (close-stunt false crashes from box overhang —
+  user-reported 2026-08-06) and the aircraft body (being-shot fairness, blast nearest-point
+  falloff). Keep the `Relabel`/part-name contract intact — `PlaneDamage`'s "tail" arm depends on
+  it (its architecture.md ⚠), and `MapStruckPart` consumes the names unchanged. The Bloodhawk's
+  uncovered canard tips are the known gap to close.
+
+- `BL-301` `[Tuning]` `[Owed-playtest]` **Dogfight (VS mode) tuning** — every deliberate v1 deferral, to be re-judged from
+  `PT-43` evidence, not speculation: **bullet magnetism / aim assistance** (the original assists
+  gun aim; without it kills lean on rockets — decide mechanism and strength), spawn
+  camping / spawn protection (none in v1), suicide penalty and last-damager credit (0 / none in
+  v1), sudden-death overtime on a drawn time-out (draw declared in v1), menu-side match options
+  (kill target and time limit are CLI-only), `dogfight_ace` vs `zeppelin_run` spawn spacing, the
+  self-blast exemption (own rockets can't hurt you — the guns invariant applied consistently, not
+  a balance call), VS HUD line/arrow sizing at 4-player panes. Related, not absorbed: `BL-084`
+  (race spawn fairness), `BL-126` (splitscreen chrome).
 
 - `BL-134` `[Feature]` **Cutscene player — the missing consumer (M04's zeppelin, `letterbox`, `CALLBACK`).**
   **This is a missing subsystem, not a bug.** The cutscene defs run because nothing tells them they

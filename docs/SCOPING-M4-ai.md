@@ -778,7 +778,10 @@ milestone has not started.**
 
 ### Wave A — Foundations (nothing downstream is verifiable without these)
 
-1. ☐ A1 — Air-to-air hittability: collision layers, aircraft bodies, projectile owner-exclusion
+1. ☑ A1 — Air-to-air hittability: collision layers, aircraft bodies, projectile owner-exclusion
+   — **front-loaded by PLAN-vs-mode (landed 2026-08-06)**: `CollisionLayers`, `AircraftBody` on
+   the shared `PlaneCollider` boxes, per-shot owner exclusion, part-mapped damage, attributed
+   kills, aircraft-only proximity fuse + blast falloff, all pinned by the `air-to-air` suite
 2. ☐ A2 — The AI actor seam: runtime spawn, a non-player `FlightModel` driver, `GameClock` wiring
 3. ☐ A3 — `docs/formats/ai-data.md`: nets, rosters, turrets, generators, zeppelins — plus `--dump-ai`
 4. ☐ A4 — **Decision + design note only:** multi-zone destructibles and the kill threshold

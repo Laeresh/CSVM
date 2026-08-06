@@ -174,6 +174,32 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   *Variations:* try the other ammo too if you fit it: `dum`/`ap` give a white-hot flash and `mag`
   adds fire (a different look, not a different bug).
 
+### C1 · two pilots — Dogfight (splitscreen VS)
+
+```powershell
+./RunGame.ps1 --vs --players=2 --chapter=C1
+```
+
+- `PT-43` `[Own]` **Dogfight v1 feel (PLAN-vs-mode landed 2026-08-06).** The invented splitscreen
+  deathmatch — no original splitscreen reference exists, so every call here is a judgement on our
+  own remake. Two pads (or pad + keyboard); menu path: Dogfight → any chapter → both press Start.
+  *Look for:*
+  - (a) **damage balance plane-vs-plane** — a gun kill measured 18 rounds of `wep_00` in the suite;
+    does that read as right at the controls, and do rockets (fuse + falloff blast) feel like the
+    practical weapon they were in the original;
+  - (b) **hitting at all without the original's aim assistance** — if landing guns feels hopeless,
+    that is `BL-301`'s bullet-magnetism line, not a damage tune;
+  - (c) spawn camping viability after the 3 s auto-respawn (no invulnerability by design);
+  - (d) opponent edge-arrows + the status line: readable at 2- and 4-player pane sizes, arrows
+    flip to the right edge, marker vanishes while the opponent is down;
+  - (e) kill banners, the end board's rows/winner/draw, and the R-rematch flow (R must still be
+    respawn while the board is hidden);
+  - (f) draw frequency at the 5-kills / 5-minutes defaults.
+
+  *Blocks:* the `BL-301` tuning decisions; a structural fail mints its own `BL` item.
+  *Variations:* `--players=4` for pane-size readability; `--vs-kills=1` for a fast board check;
+  `--scenario=zeppelin_run` to judge whether `dogfight_ace` spawns are actually the better pick.
+
 ### C1B · Bloodhawk, night — sky, clouds, self-lit art
 
 ```powershell

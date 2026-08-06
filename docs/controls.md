@@ -23,7 +23,7 @@ Flags are specified in [`cli.md`](cli.md).
 | stand-off slider | | weapon lab: how far back every placement parks (15–1100 m, default 90) — `--weapon-standoff=` |
 | `V` | | weapon lab: hand the view to a free camera and back — fly out and watch an impact from a metre away, then `V` returns the orbit where you left it. `--weapon-camera=free\|<frames>` |
 | `WASD` / numpad `+`/`−` | | weapon lab: swing and zoom the orbit around the held plane (numpad `+` in, `−` out; it reads no stick input while held). With `V` out, the freecam's own controls apply instead |
-| `R` | | respawn |
+| `R` | | respawn · rematch while the Dogfight results board is up |
 | `Tab` | | cycle stunt target |
 | `numpad 1–9` (not `5`) | | hold a fixed camera view around the plane (P1's keyboard) — `--view=` |
 | `numpad 0` | | hold the look-behind view: ahead of the nose looking back, at the authored `back_dist` range — `--view=back` |

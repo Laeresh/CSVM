@@ -1,9 +1,10 @@
 # VS Mode — "Dogfight": splitscreen deathmatch + air-to-air hittability
 
-**ACTIVE PLAN** (written 2026-08-06). It sits in `docs/`, which by this repo's convention makes it
-a live plan; it lives on the `worktree-vs-mode` branch, so `main`'s "Current status" keeps naming
-`PLAN-engine-free-suites` until this branch merges. Move it to `docs/plans/` with a `COMPLETE`
-banner, and add its row to [`plans.md`](plans/plans.md), when every item lands.
+**✅ COMPLETE** (written 2026-08-06, completed 2026-08-06 on branch `worktree-vs-mode`). All 13
+items landed — waves A/B by parallel agent worktrees merged after review, wave C plus the
+user-directed B14 (rockets vs planes) likewise; every item verified against the live suites
+(26/26, `air-to-air` covering guns + rockets end-to-end) and 561/561 unit tests. Indexed in
+[`plans.md`](plans.md).
 
 A third game mode, invented for this remake (the original's multiplayer was networked — there is no
 splitscreen reference to copy, per `playtest.md`): splitscreen free-for-all deathmatch for 2–4
@@ -95,7 +96,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 23. ☑ Per-pane VS HUD: match timer, own K/D, leader, kill banners
 24. ☑ Opponent edge-arrows (MarkerHud adaptation)
 25. ☑ `VersusBoard` end-of-match overlay + `RestartMatch` rematch
-26. ☐ Landing sweep: docs (cli.md, architecture.md, controls.md), follow-up BLs, SCOPING-M4 A1 note, `PT-` item
+26. ☑ Landing sweep: docs (cli.md, architecture.md, controls.md), follow-up BLs, SCOPING-M4 A1 note, `PT-` item
 
 ## Dependency and parallelism notes
 
@@ -465,7 +466,15 @@ scores zeroed, clock restarted, planes respawned. Deterministic screenshot of th
 **⚠ Traps.** R is also the respawn key (B13) — the board must own R only while visible, exactly
 as the race board does; check the race board's input-claim pattern rather than inventing one.
 
-## C26 ☐ Landing sweep: docs, follow-up BLs, SCOPING-M4 note, `PT-` item
+## C26 ☑ Landing sweep: docs, follow-up BLs, SCOPING-M4 note, `PT-` item
+
+**Landed** (2026-08-06): `BL-299` (net.zrd.json MP-spawn decode), `BL-300` (convex-hull collision
+shapes), `BL-301` (consolidated Dogfight tuning incl. bullet magnetism), `PT-43` (the
+at-the-controls checklist); `BL-233` narrowed to its zeppelin remainder with the closest-approach
+and never-world-fuse traps recorded; SCOPING-M4 A1 marked front-loaded; `controls.md` R row
+carries the board's rematch meaning. Plan archived to `docs/plans/`.
+
+**Original approach (kept for reference).**
 
 **Goal.** The merge-ready state: docs updated, follow-ups minted, nothing left implicit.
 
