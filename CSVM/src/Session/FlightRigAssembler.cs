@@ -369,6 +369,11 @@ public sealed class FlightRigAssembler
                     // what renders (verification.md WORLD-12 needs the count sampled later, which is
                     // what the rig's cumulative total below does).
                     Log.Info("anim", $"damage stage anim={anim} started={started} rig_puffers_total={rigRuntime.PuffersBuilt}");
+                    // BL-287: player_fuelleak's ELSE branch deactivates wing_flare2 for the rest of
+                    // the leak (the def never re-activates it) — hand that lamp to the leak so
+                    // WingLightBlinker's 1.5 s cycle stops re-asserting the blink over it.
+                    if (anim.Equals("player_fuelleak", StringComparison.OrdinalIgnoreCase))
+                        controller.WingLights?.Suspend("wing_flare2");
                 };
                 // The stop must cover the CLOSURE, not the played roots alone: Stop("pdpanel1")
                 // cannot reach the short_firetrail instance it CALLed onto the panel, and

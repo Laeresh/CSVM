@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using CSVM.Mech3;
 using Godot;
@@ -28,12 +29,14 @@ public sealed class WingLightBlinker
     private const float LightEnergy = 1.0f;
 
     private readonly List<(Node3D Flare, OmniLight3D Light)> _lamps;
+    private readonly bool[] _suspended;
     private readonly bool _lodOk;
     private double _t;
 
     private WingLightBlinker(List<(Node3D, OmniLight3D)> lamps, bool lodOk)
     {
         _lamps = lamps;
+        _suspended = new bool[lamps.Count];
         _lodOk = lodOk;
     }
 
@@ -68,26 +71,53 @@ public sealed class WingLightBlinker
 
     /// <summary>Advances the blink phase and shows the flares + lights during the flash
     /// window. A no-op below the LOD gate: the flares stay off (left however
-    /// <see cref="Reset"/> last set them).</summary>
+    /// <see cref="Reset"/> last set them). A lamp <see cref="Suspend"/> has claimed is
+    /// skipped entirely, left at whatever that caller set it to.</summary>
     public void Advance(double delta)
     {
         if (!_lodOk)
             return;
         _t = (_t + delta) % WingLights.BlinkPeriod;
         bool on = _t < FlashDuration;
-        foreach (var (flare, light) in _lamps)
+        for (int i = 0; i < _lamps.Count; i++)
         {
+            if (_suspended[i])
+                continue;
+            var (flare, light) = _lamps[i];
             flare.Visible = on;
             light.Visible = on;
         }
     }
 
-    /// <summary>Restart the cycle with the flares and lights off (called on (re)spawn).</summary>
+    /// <summary>Hands the named flare (its Godot node name, e.g. <c>wing_flare2</c>) to
+    /// whatever just deactivated it, so the next <see cref="Advance"/> stops re-asserting
+    /// the blink over it — BL-287: <c>player_fuelleak</c>'s <c>OBJECT_ACTIVE_STATE</c>
+    /// turns a flare off for the rest of the leak, and the def never turns it back on.
+    /// Sets the flare and its lamp hidden immediately. A no-op if no managed lamp carries
+    /// that name — e.g. below the LOD gate, where none were built as lit at all is still
+    /// fine since they are already off.</summary>
+    public void Suspend(string flareName)
+    {
+        for (int i = 0; i < _lamps.Count; i++)
+        {
+            var (flare, light) = _lamps[i];
+            if (!flare.Name.ToString().Equals(flareName, StringComparison.OrdinalIgnoreCase))
+                continue;
+            _suspended[i] = true;
+            flare.Visible = false;
+            light.Visible = false;
+        }
+    }
+
+    /// <summary>Restart the cycle with the flares and lights off, and hand every suspended
+    /// lamp back (called on (re)spawn).</summary>
     public void Reset()
     {
         _t = 0;
-        foreach (var (flare, light) in _lamps)
+        for (int i = 0; i < _lamps.Count; i++)
         {
+            _suspended[i] = false;
+            var (flare, light) = _lamps[i];
             flare.Visible = false;
             light.Visible = false;
         }

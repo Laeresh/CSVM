@@ -1674,8 +1674,16 @@ Flashes the wingtip flares for FlashDuration ~0.033 s (TUNE — matches the orig
 toggles a matching OmniLight3D per flare (range/colour from WingLights) on the same window. Gated on
 the session's ANIMATION_LOD quality flag (SessionSpec.AnimLod vs AnimRuntime.HighLod) — below HIGH
 the flares/lights stay off for the instance's life, the def's authored low-detail branch. Reset
-(respawn) restarts the cycle with everything off. Advanced each _Process, frozen while paused or
-crashed. --fly only.
+(respawn) restarts the cycle with everything off, handing every suspended lamp back. Advanced each
+_Process, frozen while paused or crashed. --fly only.
+`Suspend(flareName)` (BL-287) hands a named lamp to whatever just deactivated it — the fuel-leak stage
+(`player_fuelleak`'s `OBJECT_ACTIVE_STATE … wing_flare2 false`, never reversed by the def) used to
+fight the blink cycle, which unconditionally re-asserted the flare/light `Visible` every tick and
+undid the leak's deactivation within 1.5 s. `FlightRigAssembler`'s `DamageEffectSink` calls
+`Suspend("wing_flare2")` right after playing `player_fuelleak` through the rig runtime — a suspended
+lamp's index is skipped outright in `Advance`, deterministically, not by detecting a stray write after
+the fact (which would miss the common case where the blinker's own commanded state already happened
+to read "off" the instant the leak fires).
 
 ## src/Flight/PylonOrdnance.cs
 The rockets mounted under a plane's wings (D44): `Build` instances ONE FLYOUT MODEL body per loaded
@@ -2595,6 +2603,12 @@ is built below — so this method plays `startprops` once more right after
 ⚠ **`Inputs` is set once and never mutated per rig** — it is the "shared" half of the old loop's
   local graph, made explicit. A value that differs per player is a local in `Assemble`, not a field
   here; a new shared load belongs in `GameSession.BuildFlightRigs` and a new `Inputs` field.
+⚠ **The `DamageEffectSink` closure also arbitrates node ownership between damage-stage anims and
+  other per-frame systems** (BL-287): playing `player_fuelleak` through the rig runtime calls
+  `controller.WingLights?.Suspend("wing_flare2")` right after, so `WingLightBlinker`'s 1.5 s cycle
+  stops re-asserting a flare the leak just turned off. A future damage-stage anim that contests
+  another per-frame-owned node belongs here too, named explicitly — not a generic "did someone else
+  touch this" scan.
 
 ## src/Session/EffectCatalogue.cs
 The record of which authored anims are playable effects, and what their defs need staged: the name

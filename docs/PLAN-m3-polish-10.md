@@ -62,7 +62,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Damage & crash effects
 
 1. ☑ `BL-288` — `gimmeflakes` fires only at a panel tear, and the flakes separate in world space
-2. ☐ `BL-287` — the fuel leak stops fighting `WingLightBlinker` over `wing_flare2`/`winglight2`; confirm panels 4/6 burn flakes-only as authored
+2. ☑ `BL-287` — the fuel leak stops fighting `WingLightBlinker` over `wing_flare2`/`winglight2`; confirm panels 4/6 burn flakes-only as authored
 3. ☐ `BL-292` — the crash water splash orients to the struck surface: spray up, rings flat
 
 ### Wave B — HUD & world rendering
@@ -230,7 +230,33 @@ reported on, and Bloodhawk is a documented crossed-naming outlier (`DamageVisual
 Single extreme `--damage=part:0.01` presets cross every threshold in one frame and hide the
 teleport-over-time shape — use staggered fractions or successive hits instead.
 
-## A2 ☐ `BL-287` — fuel leak vs wing lights; panels 4/6 flakes-only check
+## A2 ☑ `BL-287` — fuel leak vs wing lights; panels 4/6 flakes-only check
+
+**LANDED 2026-08-06.** `WingLightBlinker.Suspend(flareName)` hands a named lamp's index to
+whatever deactivated it and skips it outright in `Advance` from then on; `FlightRigAssembler`'s
+`DamageEffectSink` calls `Suspend("wing_flare2")` right after playing `player_fuelleak` through the
+rig runtime (the def's own `ObjectActiveState` target name, traced in
+`extracted/C1/cam_anim/player_pfighter-player_fuelleak.json`'s ELSE branch). Deterministic ownership
+handoff at the one call site that knows the leak just fired, not a "did someone else touch this
+node" scan after the fact — that scan was tried first and rejected: `WingLightBlinker` spends
+>97% of its 1.5 s cycle already commanding the flare `Visible=false`, so a leak trigger landing
+during the "off" phase (the common case) would write the SAME value the blinker already had and
+never be detected as a change, leaving the very next blink window free to override it anyway.
+`winglight2` (a real, distinct mesh node — not a `wing_flare*` node `WingLightBlinker` ever
+manages) needed no code: nothing else in the codebase or the data touches it after
+`player_fuelleak`'s deactivation, so it just stays off, as authored. Panels 4/6's `view_result`
+sequence is confirmed never called by anything in the compiled program (searched every
+`player_pfighter-pdpanel*.json` for a `CallSequence` and the C# source for the literal
+`view_result` — zero hits either way): flakes + skin flip only, no burn, exactly as filed. No code
+change for that half.
+**Verify.** `--fly --plane=player_bhawk --chapter=C1 --damage=leftwing:0.9 --det --log=anim:debug
+--frames=210 --screenshot=…` (`.scratch/logs/bl287-verify.log`): `player_fuelleak` fires once
+(`damage stage anim=player_fuelleak started=1`), zero errors/warnings beyond the pre-existing
+`pir_spinner.tif` texture-fallback notice, screenshot saved at frame 210 (3.5 s, past two 1.5 s
+blink cycles since the leak fired) with no exception. `.\RunTests.ps1`: 515 units / 32 engine
+suites / 13 goldens, all green, byte-identical. No 8-chapter `--freecam` regression run: this
+change touches only the flight controller's per-frame flare update and the flight rig's damage
+sink wiring, neither reachable outside `--fly`, so `--freecam`/world-building exercises none of it.
 
 **Goal.** `player_fuelleak`'s deactivation of `wing_flare2`/`winglight2` and `WingLightBlinker`'s
 1.5 s re-assert stop fighting — one owner wins deliberately. Secondarily, confirm (not change)
