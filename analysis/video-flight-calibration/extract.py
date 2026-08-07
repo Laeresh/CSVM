@@ -204,6 +204,22 @@ CLIPS = {
     "cap02r33": "CAP-02 Run3 3.mp4",
     "cap02r34": "CAP-02 Run3 4.mp4",
     "cap02r35": "CAP-02 Run3 5.mp4",
+    # 2026-08-07 CAP-02 batch 4: THE matched pair, and the one that removes the
+    # pilot-timing confound. The stick is held at full pull throughout BOTH, so the
+    # input is constant and identical and only the terrain differs:
+    #   r4c1  pull held all the way down to the deck
+    #   r4c2  the same manoeuvre high up with nothing near - the plateau's height
+    # A constant max pull must give a FLAT a_n plateau; a rise above the control's
+    # plateau as range closes is the game, not the pilot.
+    "cap02r4c1": "CAP-02 Run4 Clip1.mp4",
+    "cap02r4c2": "CAP-02 Run4 Clip2.mp4",
+    # Clip 3: the LEVEL run straight at a cliff. Constant altitude with only the
+    # range ahead closing is what separates a range trigger from a height one in
+    # the horizontal - and being level and shallow these are the first CAP-02
+    # takes where the ADI (body pitch rate) and the compass (lateral escape) are
+    # both meaningful. The second one ends in the cliff.
+    "cap02r4c3": "CAP-02 Run4 Clip3.mp4",
+    "cap02r4c3x": "CAP-02 Run4 Clip3 with crash.mp4",
 }
 
 

@@ -776,11 +776,36 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   is the original's own speed-dependent yaw authority, which our hand-rolled `eff`
   (`1.4 − clamp(v/fd)`) stands in for and whose comment already admits is "still not same as
   original".
-  **`CAP-02` (2026-08-07, three batches). The behaviour is real and characterised; the magnitude
-  claim is RETRACTED.** What the pilot reports is a collision-avoidance assist on the **elevator**
-  channel that fires near terrain and turns the nose away. What the instruments say is that it does
-  **not** raise the path-normal acceleration beyond what the aircraft reaches in free air — so
-  whatever it does, it is not adding load factor, and no magnitude has been measured.
+  **`CAP-02` (2026-08-07, four batches, 14 takes). No amplification is measurable, on either axis.**
+  The pilot reports a collision-avoidance assist on the **elevator** channel that fires near terrain.
+  Every controlled comparison filmed says the pull near the ground is the *same* pull as in free
+  air — to within ±10% on both the quantity that could show it:
+
+  | | free air | near terrain | ratio |
+  |---|---|---|---|
+  | path-normal accel `a_n`, matched 280–330 mph | 72.6 m/sim-s² | 65.9 | **0.91×** |
+  | `a_n` plateau, held pull, 150–200 mph (median) | 25.9 | 25.6 | **0.99×** |
+  | `a_n` plateau, held pull, 200–250 mph (median) | 33.5 | 34.6 | **1.03×** |
+  | ADI **body pitch rate**, matched pull from level at ~300 mph | 0.609 /s | 0.551 (deck) · 0.669 (cliff) | **0.91× · 1.10×** |
+
+  **Batch 4 is the clean experiment** and it removes the pilot-timing confound entirely: the same
+  loop flown twice at full held deflection, once from 1,113 ft and once from **90 ft**, over the same
+  speed envelope (128–300 mph both). Constant input, only the altitude differs. The `a_n` plateaus
+  are indistinguishable. `Run4 Clip3` adds the horizontal case — **level at ~250 ft and 299 mph
+  straight at a cliff for nine seconds** (`a_n` ≈ 1), then a pull peaking at 39.5, inside the
+  control's own envelope (max 41.1 at 241 mph).
+
+  **The pitch-rate hypothesis is tested and also negative.** `a_n` is blind to the nose: at high AoA
+  the nose can swing well ahead of the path, so a body pitch-rate boost would not show in `a_n`. The
+  ADI is a gyro ball whose sky-area fraction is monotone in pitch (`adi.py`), and on the matched
+  batch-4 pull it gives 0.609 /s in free air against 0.551 /s at 90 ft. If anything the deck pull is
+  *slower*. ⚠ The ADI **saturates above ~+25° of nose-up** (sky fraction pins at 0.729–0.730 in all
+  three clips) — only the first ~0.7 s of each pull is usable, which is the matched part anyway.
+
+  **What this does and does not say.** It bounds the effect: in the geometries filmed — down at
+  water, held pull at the deck, level at a cliff — nothing amplifies flight-path curvature or nose
+  rate by more than ~10%. It does **not** call the pilot's experience mistaken; the same pull genuinely
+  is far more violent-looking with the ground close, and one anomaly is still unexplained (below).
 
   ⚠ **Retraction (batch 3).** An earlier pass here — and the message of commit `13d9fbe` — claimed
   ground blow "roughly doubles pitch authority (1.95× max pull)". **That was an artifact of a
@@ -865,6 +890,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   without a cleaner take. (e) `pull up to cras` fails `checkclip` as a whole clip because it ends in
   a crash — a *windowed* re-run shows it rigid to **t = 10.5 s** and only that prefix is used; its
   own pull is too steep to measure (100% gated).
+  (g) ⚠ **The one outstanding anomaly.** `Up Down` recovery #1 still reads **2.30×** the free-air
+  control at 323 mph — the only event in fourteen takes that does. It is also the least trustworthy
+  (28–30% of samples gated at γ ≈ −63°, right where the estimator is weakest), and every clip built
+  to reproduce it has come back flat. Either it is an estimator artifact at steep γ, or the effect
+  is real and none of the deliberately-designed shots happened to hit its conditions. **The
+  batch-1 mountain geometry — where the sideways flick was first reported — has never been cleanly
+  measured**, because those takes are near-vertical and over unknown terrain height.
   (f) **One clean event.** Only recovery #2 is shallow enough to separate range from altitude; the
   other three dives are near-vertical, where the two coincide. The 400 is a single crossing, sampled
   at 0.1 s — a plateau it is not.

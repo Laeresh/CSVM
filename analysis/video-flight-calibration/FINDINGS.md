@@ -337,10 +337,16 @@ crash: bounce_factor 0.6, armor/health_damage_range [50,300]
 autohead_turn_time 0.75  autohead_turn_max 2.86  autohead_turn_min_pitch -3.0
 ```
 
-`CAP-02` characterised ground blow but **did not measure a magnitude**: at matched speed the
-near-ground pull reaches **0.91×** the aircraft's own free-air maximum, i.e. no excess load factor
-at all. An earlier pass here claimed "1.95× max pull"; that was **wrong** — see the retraction on
-`BL-095`. Do not re-derive any of it from the clips.
+`CAP-02` ran to 14 takes and found **no measurable amplification near terrain on either axis** —
+path-normal acceleration 0.91–1.03× free air, ADI body pitch rate 0.91–1.10× — including a
+controlled pair flying the same held full-deflection loop at 1,113 ft and at 90 ft. An earlier pass
+here claimed "1.95× max pull"; that was **wrong** (a borrowed yardstick) — the retraction and the
+one outstanding anomaly are on `BL-095`. Do not re-derive any of it from the clips.
+
+⚠ **The ADI saturates above roughly +25° nose-up** — sky fraction pins at 0.729–0.730, identically
+in every `CAP-02` batch-4 clip. Only the first ~0.7 s of a hard pull is readable for pitch rate, so
+design the comparison to live in that window (a pull *from level flight* does; a pull out of a dive
+does not). This is the same ceiling `playtest.md`'s `CAP-20` row already records.
 
 ⚠ **`BL-109`'s 32.96 / 34.02 m/sim-s² is SPEED-SPECIFIC. Never reuse it as a general max-pull
 yardstick.** Lift ∝ V², and at ~300 mph this same aircraft pulls **72.6 m/sim-s²** in free air —
