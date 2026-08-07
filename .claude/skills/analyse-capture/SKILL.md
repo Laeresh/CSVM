@@ -69,7 +69,11 @@ python analysis/video-flight-calibration/clipdata.py slice <clip> --from 7.5 --t
 Read that header **first**, for every clip in the set. Three things it decides for you:
 
 - **A cached `REJECT`** means the clip has auto head turn and cannot be decoded. Stop; do not
-  re-derive that verdict, and do not sample frames hoping otherwise.
+  re-derive that verdict, and do not sample frames hoping otherwise. This is *enforced*, not just
+  documented: a rejected clip's sidecar stores the verdict and **no dial columns at all**, and
+  `slice`/`where` refuse it outright. (`--force` exists to inspect the invalid series knowingly —
+  never to quote it.) The gate verdict *is* the finding: report the clip needs re-recording with
+  head turn off.
 - **The digest's extrema and their timestamps** answer a surprising share of "where does X happen"
   outright — no sheet needed.
 - **`⚠ STALE` on a column** means the producing script changed since the decode. Re-run

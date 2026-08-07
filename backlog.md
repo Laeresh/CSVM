@@ -2439,7 +2439,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     Sidecars written by the first backfill pre-date the stamp and say so; a rebuild makes them
     checkable.
   - The `checkclip` gate verdict is cached per clip: a `REJECT` (auto head turn) stops anyone ever
-    paying to decode that clip again.
+    paying to decode that clip again. ⚠ A rejected clip stores the **verdict and no dial columns**,
+    and `slice`/`where` refuse it (`--force` to inspect knowingly, never to quote). The first
+    version wrote the numbers anyway behind a header line — 384 rows of plausible, citable, wrong
+    altitudes for `cap02pullcrash`, whose dx anti-correlates at −0.23 with 53 px of shear. A warning
+    above a clean-looking table is what gets scrolled past; refusing is the only version that holds.
   - Found while building it: `showinfo` and `read_frames` disagree on frame count (3,422 vs 3,427 on
     `cap12c4`) with **no interior gap** and ~1 frame of tail. Unexplained. Rows align at the head and
     the header stamps the worst-case timing error (~0.17 s); **do not quote a clip time finer than

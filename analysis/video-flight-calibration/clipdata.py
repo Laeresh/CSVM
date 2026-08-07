@@ -220,6 +220,28 @@ def _hdr_get(head, prefix):
     return [h for h in head if h.startswith(prefix)]
 
 
+def gate_verdict(head):
+    for h in _hdr_get(head, "# gate "):
+        return h[len("# gate "):].strip()
+    return "unknown"
+
+
+def refuse_if_rejected(head, clip, force):
+    """⚠ A REJECT clip's numbers are wrong, not merely noisy. Refusing here rather
+    than warning is deliberate: a warning printed above a clean-looking table is
+    exactly what gets scrolled past and then cited."""
+    g = gate_verdict(head)
+    if g.startswith("REJECT") and not force:
+        raise SystemExit(
+            f"{clip}: REFUSING — this clip failed the checkclip gate.\n"
+            f"  {g}\n"
+            f"  Auto head turn rotates the camera, so the dials foreshorten in "
+            f"opposite directions and translation-only registration absorbs it "
+            f"into WRONG needle angles. No downstream care fixes it (FINDINGS.md).\n"
+            f"  The clip must be re-recorded with head turn off. Pass --force only "
+            f"to inspect the invalid series knowingly; never to quote it.")
+
+
 def stale_columns(head, cols):
     """Columns that can no longer be trusted at face value.
 
@@ -490,6 +512,21 @@ def build(short, reindex=True):
         ok = checkclip.report(short)
         gate = ("OK — rigid, translation registration valid" if ok else
                 "REJECT — consistent with auto head turn; DO NOT DECODE, re-record")
+        if not ok:
+            # ⚠ Write NO dial columns for a rejected clip. FINDINGS.md: a REJECT on
+            # anti-correlated dx means the camera rotated, the dials foreshorten in
+            # opposite directions, and the translation-only registration silently
+            # absorbs that into wrong needle angles - "no amount of care downstream
+            # fixes it". Storing those numbers anyway would leave a file full of
+            # plausible, citable, wrong altitudes behind a header line someone can
+            # skip. The gate verdict IS the finding; it is what the sidecar keeps.
+            print(f"  gate REJECT -> storing verdict only, no dial columns")
+            t, pts_short = _pts(short, len(np.load(f"{cache}/{short}_lum.npy",
+                                                   mmap_mode="r")))
+            rows = np.column_stack([t])
+            p = write_sidecar(short, ["pts"], rows, gate, None, pts_short=pts_short)
+            print(f"  wrote {os.path.relpath(p, repo_root())}  gate: REJECT")
+            return p
         P = np.load(f"{cache}/dial_affines.npy")
         dA, dS = Dial(P[0], run2.ALT_BANDS), Dial(P[1], run2.SPD_BANDS)
         rA, rS = LKRegistrar(P[0]), LKRegistrar(P[1])
@@ -558,6 +595,7 @@ def cmd_show(a):
 
 def cmd_slice(a):
     head, cols, rows = read_sidecar(a.clip)
+    refuse_if_rejected(head, a.clip, a.force)
     t = rows[:, cols.index("pts")]
     m = (t >= a.start) & (t <= a.end)
     want = a.cols.split(",") if a.cols else cols + ["climb_fpm"]
@@ -574,6 +612,7 @@ def cmd_slice(a):
 
 def cmd_where(a):
     head, cols, rows = read_sidecar(a.clip)
+    refuse_if_rejected(head, a.clip, a.force)
     env = {c: column(cols, rows, c) for c in set(cols) | set(DERIVED)}
     env["np"] = np
     m = np.asarray(eval(a.expr, {"__builtins__": {}}, env), bool)  # noqa: S307
@@ -692,6 +731,8 @@ def main():
     s.add_argument("--every", type=int, default=1)
     s.add_argument("--cols", default="")
     s.add_argument("--limit", type=int, default=60)
+    s.add_argument("--force", action="store_true",
+                   help="read a gate-REJECTed clip's invalid series anyway")
     s.set_defaults(fn=cmd_slice)
 
     s = sub.add_parser("where", help="frames matching an expression over columns")
@@ -699,6 +740,8 @@ def main():
     s.add_argument("expr")
     s.add_argument("--cols", default="")
     s.add_argument("--limit", type=int, default=40)
+    s.add_argument("--force", action="store_true",
+                   help="read a gate-REJECTed clip's invalid series anyway")
     s.set_defaults(fn=cmd_where)
 
     s = sub.add_parser("note", help="append a NAVIGATIONAL shot-index line")
