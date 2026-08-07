@@ -1273,8 +1273,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   - **The original shows no comb.** Grazing passes along tops and base (stills t=44/59/97/124,
     t=29.2) show soft continuous structure only — no 130 m lattice at any angle. Whether *our*
     field shows one at the controls is still `PT-42`'s check; the original side is now on file.
-  - Our `csvm-above-1160m.png` shows **discrete puff balls floating above the tops**; the
-    original's tops are smooth (C1 has no build-up towers — those are C1C).
+  - ~~Discrete puff balls above the tops in ours, none in the original~~ — **explained, not a
+    defect (user, 2026-08-07): the placed/scattered puffs exist only over the base map**, and the
+    clip had left it (a straight run at ~300 mph covers the 12,288 m map in under a minute),
+    while our `csvm-above-1160m.png` sits at (-4974,-3861) — on it. The edge extension carries
+    no puffs in the original; same phenomenon on C2's world-placed puffs. Any future above-deck
+    A/B must say which side of the map edge both frames are on.
   *Playtest:* `PT-42` ([`playtest.md`](playtest.md)) keeps the at-the-controls look judgement.
   ⚠ **Trap.** The "~40 units lighter" brightness reading is about the `CloudDeck` **mesh**, a
   different object from the sprite field — do not read one as evidence for the other. (The +54
