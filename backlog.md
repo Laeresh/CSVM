@@ -1289,10 +1289,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     inside its 970–1124). Puffs riding visibly above the deck are data, not a bug.
   - **The user-reported gap is real in the footage, and uniform fill cannot produce it.** At
     1135 m (t=19.5) the original flies in *clear air* — gray sheet below, puff bases above; the
-    whole climb 1003→1230 m never whites out (lum ≤ 195). Under uniform fill the 132.3 m cards
-    (scale ≤1.5) hang to ~956–990 m, piercing the deck — no gap is expressible. Our build at the
-    same spot (`csvm-c4-1135m.png`) sits in murk, and at 1050 m (`csvm-c4-1050m-deck.png`) is
-    total whiteout where the original shows a thin 192-gray veil. A **top-anchored** scatter
+    whole climb 1003→1230 m never fully obscures (lum ≤ 195). Under uniform fill the 132.3 m
+    cards (scale ≤1.5) hang to ~956–990 m, piercing the deck — no gap is expressible. Our build
+    at the same spot (`csvm-c4-1135m.png`) sits in murk, and at 1050 m
+    (`csvm-c4-1050m-deck.png`) renders a **243 whiteout where the original's obscuration is a
+    GRAY-out** (user, 2026-08-07): C4 authors `CLOUD_COVER` `TOP_COLOR`/`BOTTOM_COLOR` =
+    192,192,192, and the original's veil measures exactly that flat 192 — so C4 carries a
+    *second*, in-cloud brightness delta (243 vs 192, +51) on top of the C1 underside one, and
+    the target value is authored data, not a judgement call. A **top-anchored** scatter
     (centres near the volume top, perp jitter) puts card bottoms at ~1076–1127 m — a 30–75 m
     clear band over the sheet, which is what the clip shows. C1 cross-checks: top-anchoring at
     1090 predicts bottoms ~991–1027, matching the measured whiteout onset 1003 m / wisps 982 m.
