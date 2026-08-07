@@ -1279,6 +1279,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     while our `csvm-above-1160m.png` sits at (-4974,-3861) — on it. The edge extension carries
     no puffs in the original; same phenomenon on C2's world-placed puffs. Any future above-deck
     A/B must say which side of the map edge both frames are on.
+  **C4 take analysed 2026-08-07** (`CAP-11 C4 and CAP-12 Clouddeck.mp4`, gate dx=dy=0 peak
+  0.848, d2 sd 0.99 ft; evidence in `playtest/CAP-12/c4/`) — the clear-air chapter separates
+  what C1's murk hid, and it bears on the **uniform-vertical-fill inference** in
+  [`docs/formats/fogvol.md`](docs/formats/fogvol.md):
+  - **C4's authored numbers put the puffers above the deck, uniquely among chapters.** Deck mesh
+    y=1050 (`Sky1.tif` tiles), `CLOUD_COVER` 1000–1100 (colors authored 192-gray), `fvol` slab
+    **1060–1180.5** — the slab tops out **80 m above** the cover band (C1's 970–1090.5 nests
+    inside its 970–1124). Puffs riding visibly above the deck are data, not a bug.
+  - **The user-reported gap is real in the footage, and uniform fill cannot produce it.** At
+    1135 m (t=19.5) the original flies in *clear air* — gray sheet below, puff bases above; the
+    whole climb 1003→1230 m never whites out (lum ≤ 195). Under uniform fill the 132.3 m cards
+    (scale ≤1.5) hang to ~956–990 m, piercing the deck — no gap is expressible. Our build at the
+    same spot (`csvm-c4-1135m.png`) sits in murk, and at 1050 m (`csvm-c4-1050m-deck.png`) is
+    total whiteout where the original shows a thin 192-gray veil. A **top-anchored** scatter
+    (centres near the volume top, perp jitter) puts card bottoms at ~1076–1127 m — a 30–75 m
+    clear band over the sheet, which is what the clip shows. C1 cross-checks: top-anchoring at
+    1090 predicts bottoms ~991–1027, matching the measured whiteout onset 1003 m / wisps 982 m.
+  - ⚠ Confound to keep separate: C4 also ships **45 `cloudparent` clusters parked at the world
+    origin** in gamez (runtime-placed by mission setup, altitude not in `nodes.json`); the big
+    cumulus towers at 1200–1600 m in the same clip are likely those, not `fvol` scatter.
+  *Fix shape:* revisit fogvol.md's vertical-spread inference (anchor at/near the volume top
+  rather than filling it), per this entry's own rule — an inference correction, not a TUNE.
   *Playtest:* `PT-42` ([`playtest.md`](playtest.md)) keeps the at-the-controls look judgement.
   ⚠ **Trap.** The "~40 units lighter" brightness reading is about the `CloudDeck` **mesh**, a
   different object from the sprite field — do not read one as evidence for the other. (The +54
