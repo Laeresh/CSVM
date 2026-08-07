@@ -99,7 +99,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ Grilling session: Decisions table settled 2026-08-06; all nine recommendations accepted (two with substantive findings: the caller-slot trio joins the move scope, and the honest hook count is ~8)
 2. ☑ `TemplateStage<TNode>` landed: slots/placement/identity + the BL-288 caller-slot claim moved (10 members, 5 fields), generic with 7 ctor hooks + 9 `Wire`d runtime hooks; `TemplateStageTests` (15 facts) asserts wrap/modulo/recycles/stickiness/placement/tolerance off-engine; 566 units + 24 suites + 13/13 goldens identical, and the two `--debug-anim` A/B scenarios (destroy + crash, frame 120) pixel-identical AND anim-log-identical to HEAD
-3. ☐ Reveal/retire/sweep move in; both entry points perform the ritual through the module; the two tolerances become the one named contract (Decision 6)
+3. ☑ Reveal/retire/sweep landed: `Reveal`/`RetireWhenIdle`/`Sweep` + the pending-hides list moved in (the still-animated hold stays in `AnimRuntime` as the supplied predicate, Decision 3's hook list), both entry points drive the one module, `ShowPlacedTemplates` forwards to `Shown`, Decision 6's second literal folded onto `MoveToleranceSq`; 6 new off-engine facts (572 units) + 24 suites + 13/13 goldens identical, both `--debug-anim` A/B scenarios pixel- and anim-log-identical to HEAD
 4. ☐ Sealing-leak closure: the three flags become stage ctor state, `ForEffects`/`ForCrashRig` take the stage as an argument, plain construction gets the inert default (Decision 4); the accepted-shallow-spot ⚠ is deleted from `architecture.md`
 
 ### Wave B — the ride-along (kept; decided after A4 lands)
@@ -163,7 +163,7 @@ at the handover (Decision 7).
 across pooled copies — port the cache boundaries as they are (same trap class as
 `PLAN-name-resolver` ⚠ #3).
 
-## A3 ☐ Reveal / retire / sweep — one ritual, two entry points
+## A3 ☑ Reveal / retire / sweep — one ritual, two entry points
 
 **Goal.** `ShowTemplate` / `HideTemplateWhenIdle` / `ReadyToHide` / `TemplateStillAnimated` /
 `SweepTemplateHides` and `_templateHidesPending` move in; `PlayEffectAt` and the `CallAnimation`

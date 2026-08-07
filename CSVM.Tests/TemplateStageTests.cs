@@ -249,6 +249,101 @@ public class TemplateStageTests
         Assert.True(h.Stage.SharedWithLiveInstance(defA, copies[0], roots));
     }
 
+    // ---- reveal / retire / sweep: the deferral holds and their drain ----
+
+    [Fact]
+    public void RevealTouchesNothingWhenTheStageDoesNotStageItsTemplatesHidden()
+    {
+        var h = new Harness();
+        var (def, copies) = h.PooledRoot("boom", slots: 2);
+        h.Live.Add((def, copies[0]));
+
+        h.Stage.Reveal(def, copies[0], visible: true); // Shown is off — the world runtime's shape
+        Assert.False(copies[0].Visible);
+    }
+
+    [Fact]
+    public void RevealLightsOnlyTheCallsOwnSlotCopy()
+    {
+        var h = new Harness { Stage = { Shown = true } };
+        var (def, copies) = h.PooledRoot("boom", slots: 2);
+        h.Live.Add((def, copies[0]));
+
+        h.Stage.Reveal(def, copies[0], visible: true);
+        Assert.True(copies[0].Visible);
+        Assert.False(copies[1].Visible); // a sibling blast still burning is not blanked
+    }
+
+    [Fact]
+    public void RevealingADefThatIsAlreadyFinishedSchedulesItsOwnHide()
+    {
+        // `biggun_flying_parts`: one CALL_ANIMATION, finished inside Start, so it never reaches the
+        // retire walk — the reveal must schedule the hide itself or the copy stays lit forever.
+        var h = new Harness { Stage = { Shown = true } };
+        var (def, copies) = h.PooledRoot("biggun_flying_parts", slots: 1);
+
+        h.Stage.Reveal(def, copies[0], visible: true); // nothing live, nothing animating
+        Assert.False(copies[0].Visible);
+    }
+
+    [Fact]
+    public void RetireWhenIdleHoldsTheCopyLitWhileSomethingStillAnimatesItAndTheSweepDrainsIt()
+    {
+        var h = new Harness { Stage = { Shown = true } };
+        var (def, copies) = h.PooledRoot("he_ring1", slots: 1);
+        h.Live.Add((def, copies[0]));
+        h.Stage.Reveal(def, copies[0], visible: true);
+
+        // The ring's scale/opacity motions outlive the sequence that launched them (D31).
+        h.Animating.Add(copies[0]);
+        h.Stage.RetireWhenIdle(def, copies[0]);
+        Assert.True(copies[0].Visible);
+        h.Stage.Sweep();
+        Assert.True(copies[0].Visible); // still held
+
+        h.Animating.Clear();
+        h.Stage.Sweep();
+        Assert.False(copies[0].Visible); // the deferral drains
+        h.Stage.Sweep();
+        Assert.False(copies[0].Visible); // and the entry is gone, not re-fired
+    }
+
+    [Fact]
+    public void RetireWhenIdleHoldsForAnotherLiveInstanceOnTheSameRoot()
+    {
+        // The rear muzzle flash's shape: caller and callee share one root, so hiding on the
+        // caller's finish would blank the flash the callee just revealed there.
+        var h = new Harness { Stage = { Shown = true } };
+        var (defA, copies) = h.PooledRoot("rear_flash_control", slots: 1);
+        var defB = Def("rear_flash_effect");
+        h.Roots["rear_flash_effect"] = new List<TestNode> { copies[0] };
+        h.Live.Add((defA, copies[0]));
+        h.Stage.Reveal(defA, copies[0], visible: true);
+
+        h.Instances.Add((defB, copies[0]));
+        h.Stage.RetireWhenIdle(defA, copies[0]);
+        Assert.True(copies[0].Visible);
+
+        h.Instances.Clear();
+        h.Stage.Sweep();
+        Assert.False(copies[0].Visible);
+    }
+
+    [Fact]
+    public void ARevealSettlesAPendingHideSoAReplayIsNotSweptDark()
+    {
+        var h = new Harness { Stage = { Shown = true } };
+        var (def, copies) = h.PooledRoot("he_ring1", slots: 1);
+        h.Live.Add((def, copies[0]));
+        h.Animating.Add(copies[0]);
+        h.Stage.RetireWhenIdle(def, copies[0]); // deferred: this effect is over
+        h.Animating.Clear();
+
+        h.Stage.Reveal(def, copies[0], visible: true); // …but the copy is replayed first
+        h.Stage.Sweep();
+        Assert.True(copies[0].Visible); // the stale hide was about an effect that is over
+    }
+
     private static AnimDefinition Def(string name) => new() { Name = name };
 
     /// <summary>The token adapter: reference-equality nodes, a parent-chain slot walk, transform
@@ -261,6 +356,8 @@ public class TemplateStageTests
         public readonly HashSet<(AnimDefinition Def, TestNode? Anchor)> Live = new();
 
         public readonly List<(AnimDefinition Def, TestNode? Anchor)> Instances = new();
+
+        public readonly HashSet<TestNode> Animating = new();
 
         public readonly List<string> Printed = new();
 
@@ -287,6 +384,7 @@ public class TemplateStageTests
                     n.Placed = true;
                     n.Xf = xf;
                 },
+                (n, visible) => n.Visible = visible,
                 Printed.Add,
                 () => Debug)
             {
@@ -298,6 +396,7 @@ public class TemplateStageTests
                 (def, anchor) => anchor != null && Live.Contains((def, anchor)),
                 () => Instances.Select(i => (i.Def, i.Anchor)),
                 _ => false,
+                roots => roots.Any(r => r != null && Animating.Contains(r)),
                 n => n.Label,
                 _ => { },
                 () => { },
@@ -341,5 +440,7 @@ public class TemplateStageTests
         public Transform3D Xf = Transform3D.Identity;
 
         public bool Placed;
+
+        public bool Visible;
     }
 }

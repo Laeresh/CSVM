@@ -671,7 +671,7 @@ The slot arithmetic, placement and copy-identity questions live in `Anim/Templat
 (PLAN-template-stage A2 — read its entry, which carries the Decision-16 reinterpretation): this
 class supplies the engine and runtime hooks in its constructor and calls through. Everything
 template-shaped is slot-scoped through `TemplateStage.RootsFor(def, node)`: which copy is placed
-(`PlaceAt`/`PlaceOn`), revealed (`ShowTemplate` — still here until A3), tested for a move
+(`PlaceAt`/`PlaceOn`), revealed (`Reveal`), tested for a move
 (`IsAt`) and searched for the def's own names (the resolver's own-root tier, which `RootsFor`
 feeds as its `ownRootsOf` hook) — all off the slot the CALL's anchor sits in, so a nested
 CALL_ANIMATION stays inside its caller's copy instead of driving all four `fly_trail*` sets. The
@@ -744,25 +744,14 @@ is the stop for a def carrying an `ACTIVE_STATE 1` and neither authored stop (th
 fire, C1's refuel tanks). It cannot reach the ambient emitters: theirs are the 619 defs whose
 `LOOP {-1}` means the instance never finishes. **Instance-scoped, never sequence-scoped** — a lone
 `PufferState` in a one-tick sequence (`part1_trail`) is the debris-trail idiom.
-`ShowPlacedTemplates` pairs a staged template root's visibility with the EFFECT's life, not its
-instance's: revealed after `Start`, because the authored
-scale/opacity motions outlive the sequence that launched them — hiding on instance-finish would cut
-an explosion ring off mid-expansion (D31). What shows INSIDE the root stays the data's call.
-Both ends are the engine's, and both were half-written (`BL-061`, `analysis/bl-061-template-mesh/`).
-The reveal also fires on a relocating **CALL_ANIMATION**, not only on `PlayEffectAt`: a called
-template used to be moved to the site and left dark while its puffers — world-level particles that
-do not read the root — emitted there, so the whole D31 ring set (`he_ring1`, `sonic_ring1`-`5`, the
-torpedo `ripple`/`huge_splash_model`) was staged, placed, animated and invisible. The hide is
-`HideTemplateWhenIdle`, off the instance-retire walk plus `SweepTemplateHides`: `Stop` reaches a
-template only THROUGH a live instance, so a def that ends by running out of its own events left its
-mesh lit at the site for the session (measured: the ap/dum/mag `dum_gunhit` chunk, whose authored
-`ACTIVE_STATE 0` finishes it inside its own TTL — the slug hit, which ships no stop, was covered by
-the TTL sweep and looked fine). It defers on two holds, each measured: `TemplateStillAnimated`
-(asked of the ROOT, since a template's pieces are driven by the CALLEE's motions on the CALLER's
-copy) and `TemplateSharedWithLiveInstance` (`rear_flash_effect` finishes on the tick it starts and
-its callee is still lighting the same root). A def whose t=0 events complete it never reaches the
-retire walk at all — `Start` drops that instance itself — so `ShowTemplate`'s own reveal schedules
-the hide for it.
+`ShowPlacedTemplates` forwards to `TemplateStage.Shown`, and the reveal/retire/sweep ritual it
+gates lives on the stage (`Reveal`/`RetireWhenIdle`/`Sweep`, PLAN-template-stage A3 — read its
+entry for the holds and what each measured): both entry points drive it through the one module,
+`PlayEffectAt` and the relocating **CALL_ANIMATION** arm alike (`BL-061`,
+`analysis/bl-061-template-mesh/`), and `Advance`'s retire walk hands finished instances to
+`RetireWhenIdle` while the frame's `Sweep` drains the deferrals. This class keeps only the
+motion-domain half as the stage's supplied `stillAnimated` predicate (`TemplateStillAnimated` —
+asked of the ROOT, and an endless spin excluded, the `MotionSet.OwesBounce` narrowness).
 `WAIT_FOR_COMPLETION`'s host half is `InstallWait`, off the `CallAnimation` case: it closes over the
 `(target, startAnchor)` pairs the call resolved — collected as the loop runs, whether or not the
 live guard let it Start, since "wait until that animation completes" is about the animation, not
@@ -949,22 +938,27 @@ entry) refused per-mode *observation* interfaces; this plan extracted one concep
 share, unchanged — one resolver for all of them. No re-open.
 
 ## src/Mech3/Anim/TemplateStage.cs
-The effect-template stage as one module (`TemplateStage<TNode>`, PLAN-template-stage A2): pool-slot
+The effect-template stage as one module (`TemplateStage<TNode>`, PLAN-template-stage A2+A3): pool-slot
 arithmetic (`SlotOf` memoized over a raw-walk hook, `TakeNextSlot`'s per-root cursor, `RootsFor`'s
 slot scoping with the modulo fallback for callees staged shallower than their caller's slot), the
 BL-288 caller-slot claim (`AssignCallerSlot` — sticky per (root, anchor), wraps through the same
 modulo), template placement (`PlaceAt`/`PlaceOn`, the BL-292 `level` basis reset), the
 copy-identity questions (`IsAt` on the ONE named move tolerance — 0.25 m², the two coincident
 0.25 f literals merged per Decision 6 —, `RootsOf`, `SharedWithLiveInstance`), the pooled-copy
-staging entry (`IndexPooledCopy` over supplied runtime hooks) and `Recycles`, which counts BOTH
-wrap flavours. Generic like `NameResolver<TNode>`: ~8 engine hooks at construction (identity,
-slot walk, transform read, the `TopLevel`+`GlobalTransform` placement write, print/debug), the
-runtime-dependent hooks late-bound via `Wire` at the handover (`findAll`, `anchors`, `isLive`,
-live instances, `LevelsTemplate`, `NameOf`, the index/reset services) — they cannot be
-construction arguments, because the factory that builds the stage exists before any resolver
-does, and the resolver's own `ownRootsOf` hook is this class's `RootsFor` (both directions are
-delegates). The off-engine charter is `CSVM.Tests/TemplateStageTests.cs` (slot wrap, modulo
-fallback, recycle counting both flavours, caller-slot stickiness, placement, the tolerance);
+staging entry (`IndexPooledCopy` over supplied runtime hooks), `Recycles`, which counts BOTH
+wrap flavours, and the reveal/retire/sweep ritual both entry points drive (`Reveal` — the one
+visibility write, gated on `Shown`, scheduling its own hide for a def whose t=0 events already
+finished it; `RetireWhenIdle`, deferring on the two measured holds, the supplied `stillAnimated`
+predicate asked of the ROOT and `SharedWithLiveInstance`; `Sweep`, draining the deferrals once a
+frame). Generic like `NameResolver<TNode>`: ~8 engine hooks at construction (identity, slot walk,
+transform read, the `TopLevel`+`GlobalTransform` placement write, the visibility write,
+print/debug), the runtime-dependent hooks late-bound via `Wire` at the handover (`findAll`,
+`anchors`, `isLive`, live instances, `LevelsTemplate`, `stillAnimated`, `NameOf`, the index/reset
+services) — they cannot be construction arguments, because the factory that builds the stage
+exists before any resolver does, and the resolver's own `ownRootsOf` hook is this class's
+`RootsFor` (both directions are delegates). The off-engine charter is
+`CSVM.Tests/TemplateStageTests.cs` (slot wrap, modulo fallback, recycle counting both flavours,
+caller-slot stickiness, placement, the tolerance, the hide-deferral holds and the sweep drain);
 `effect-template-mesh`/`effects-census`/`damage-template-pool` stay the in-engine integration
 tier — nothing is asserted in both.
 ⚠ **Decision 16, reinterpreted — not reopened, and not silently overridden.** Two prior texts pin
@@ -982,10 +976,9 @@ tier — nothing is asserted in both.
   `anchors` hook — once per call, census recorded once per def identity. Exactly the pre-move
   behaviour; do not "clean up" the asymmetry in either direction.
 ⚠ `SlotOf`'s memo assumes slot containers are built before `Bind` and never reparented — the same
-  snapshot terms as the resolver's `FindAll` cache. A2/A3/A4 staging: reveal/retire/sweep
-  (`ShowTemplate`/`HideTemplateWhenIdle`/`SweepTemplateHides`) are still on `AnimRuntime` until
-  A3; `Pooled` is still a mutable property (the factory sets it post-construction) until A4 seals
-  it — the accepted-shallow-spot ⚠ on `AnimRuntime`'s entry stands until then.
+  snapshot terms as the resolver's `FindAll` cache. A4 staging: `Pooled` and `Shown` are still
+  mutable properties (the factory sets them post-construction) until A4 seals them into the ctor
+  — the accepted-shallow-spot ⚠ on `AnimRuntime`'s entry stands until then.
 
 ## src/Mech3/SequenceRunner.cs
 The engine-free sequence interpreter, extracted from `AnimRuntime` behind the `ISequenceHost` seam

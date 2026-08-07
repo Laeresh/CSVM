@@ -6,13 +6,13 @@ using Godot;
 namespace CSVM.Mech3.Anim;
 
 /// <summary>
-/// The effect-template stage as one module: pool-slot arithmetic, template placement and the
-/// "which copy is mine" identity rule that <c>PlayEffectAt</c> and the <c>CALL_ANIMATION</c> arm
-/// both perform (PLAN-template-stage A2; the reveal/retire/sweep half follows in A3). Generic over
+/// The effect-template stage as one module: pool-slot arithmetic, template placement, the
+/// "which copy is mine" identity rule and the reveal/retire/sweep ritual that <c>PlayEffectAt</c>
+/// and the <c>CALL_ANIMATION</c> arm both perform (PLAN-template-stage A2 + A3). Generic over
 /// the node type like <see cref="NameResolver{TNode}"/>: the engine hands adapter hooks over at
 /// construction (<see cref="TemplateStage{TNode}(IEqualityComparer{TNode}, Func{TNode, int},
-/// Func{TNode?, bool}, Func{TNode, Transform3D}, Action{TNode, Transform3D}, Action{string},
-/// Func{bool})"/>) and the runtime-dependent hooks at the handover (<see cref="Wire"/> — they
+/// Func{TNode?, bool}, Func{TNode, Transform3D}, Action{TNode, Transform3D}, Action{TNode, bool},
+/// Action{string}, Func{bool})"/>) and the runtime-dependent hooks at the handover (<see cref="Wire"/> — they
 /// cannot be construction arguments, because the factory that builds the stage exists before any
 /// resolver or runtime does), so slot wrap, modulo fallback, recycle counting and caller-slot
 /// stickiness are assertable off-engine against a token node type (<c>CSVM.Tests</c>).
@@ -61,6 +61,10 @@ public sealed class TemplateStage<TNode>
     // The one placement write: TopLevel + GlobalTransform on the engine (see PlaceOn's comment).
     private readonly Action<TNode, Transform3D> _placeAt;
 
+    // The one visibility write. Only the template ROOT's own flag is touched; what shows inside it
+    // stays the data's decision (see Reveal).
+    private readonly Action<TNode, bool> _setVisible;
+
     private readonly Action<string> _print;
 
     private readonly Func<bool> _debug;
@@ -93,6 +97,11 @@ public sealed class TemplateStage<TNode>
 
     private readonly Dictionary<string, int> _callerSlotCursor = new(StringComparer.OrdinalIgnoreCase);
 
+    // Effects whose instance has ended but whose template copy is still revealed — something is
+    // still animating it, or another def is still playing on it (BL-061 — see RetireWhenIdle, and
+    // Sweep for when they drain).
+    private readonly List<(AnimDefinition Def, TNode? Anchor)> _hidesPending = new();
+
     // ---- runtime hooks (Wire) ----
     private Func<string, TNode?, List<TNode>> _findAll = null!;
 
@@ -103,6 +112,8 @@ public sealed class TemplateStage<TNode>
     private Func<IEnumerable<(AnimDefinition Def, TNode? Anchor)>> _liveInstances = null!;
 
     private Func<AnimDefinition, bool> _levels = null!;
+
+    private Func<IReadOnlyList<TNode?>, bool> _stillAnimated = null!;
 
     private Func<TNode, string> _nameOf = null!;
 
@@ -118,6 +129,7 @@ public sealed class TemplateStage<TNode>
         Func<TNode?, bool> isValid,
         Func<TNode, Transform3D> transformOf,
         Action<TNode, Transform3D> placeAt,
+        Action<TNode, bool> setVisible,
         Action<string> print,
         Func<bool> debug)
     {
@@ -126,6 +138,7 @@ public sealed class TemplateStage<TNode>
         _isValid = isValid;
         _transformOf = transformOf;
         _placeAt = placeAt;
+        _setVisible = setVisible;
         _print = print;
         _debug = debug;
         _slotOfNode = new Dictionary<TNode, int>(identity);
@@ -135,6 +148,17 @@ public sealed class TemplateStage<TNode>
     /// forwards here). Mutable until A4 seals it into construction — the factory still sets it
     /// after the runtime factories return, which is the accepted-shallow-spot leak A4 closes.</summary>
     public bool Pooled { get; set; }
+
+    /// <summary>Whether this runtime's templates are staged hidden, so the stage reveals a root
+    /// while an effect plays on it and hides it again when that effect is over
+    /// (<c>AnimRuntime.ShowPlacedTemplates</c> forwards here). Set on the world-effects runtime,
+    /// whose templates are staged hidden so nothing renders ambiently at the stage origin: without
+    /// it the templates' own MESHES — the rocket's per-type explosion rings, the fireball facades,
+    /// the splash models — never draw, only their puffers do (D31). Only the root's own visibility
+    /// is touched; what shows inside it stays the data's decision (the rings are reset INACTIVE or
+    /// opacity-OFF and their defs turn them on). Off everywhere else, where the stage is visible
+    /// anyway. Mutable until A4 seals it into construction, exactly like <see cref="Pooled"/>.</summary>
+    public bool Shown { get; set; }
 
     /// <summary>Every wrap onto a still-occupied copy, both flavours (<see cref="TakeNextSlot"/>'s
     /// cursor recycling a live slot, <see cref="AssignCallerSlot"/>'s claims outnumbering the
@@ -151,6 +175,7 @@ public sealed class TemplateStage<TNode>
         Func<AnimDefinition, TNode?, bool> isLive,
         Func<IEnumerable<(AnimDefinition Def, TNode? Anchor)>> liveInstances,
         Func<AnimDefinition, bool> levels,
+        Func<IReadOnlyList<TNode?>, bool> stillAnimated,
         Func<TNode, string> nameOf,
         Action<TNode> indexSubtree,
         Action clearFindCache,
@@ -161,6 +186,7 @@ public sealed class TemplateStage<TNode>
         _isLive = isLive;
         _liveInstances = liveInstances;
         _levels = levels;
+        _stillAnimated = stillAnimated;
         _nameOf = nameOf;
         _indexSubtree = indexSubtree;
         _clearFindCache = clearFindCache;
@@ -384,6 +410,79 @@ public sealed class TemplateStage<TNode>
         return false;
     }
 
+    /// <summary>Shows or hides the effect-template root(s) a definition anchors on, when this
+    /// runtime stages its templates hidden (<see cref="Shown"/>). Paired with the effect's life,
+    /// not its instance: hiding on instance-finish would cut the ring off mid-flight, because the
+    /// authored scale/opacity motions outlive the sequence that launched them.
+    /// <paramref name="anchor"/> is the instance's own anchor, so on a pooled runtime only THAT
+    /// call's copy is revealed or hidden — hiding the whole set would blank a sibling blast that
+    /// is still burning.
+    ///
+    /// <para>The one place the ritual lives: <c>PlayEffectAt</c> and the <c>CALL_ANIMATION</c> arm
+    /// both reveal through here after their Start, and the retire walk and instance teardown both
+    /// hide through here (PLAN-template-stage A3 — before the move each entry point carried its
+    /// own copy of the same steps ~1,200 lines apart).</para></summary>
+    public void Reveal(AnimDefinition def, TNode? anchor, bool visible)
+    {
+        if (!Shown)
+            return;
+        // Either direction settles a deferred hide: a replay re-reveals this copy (its old hide is
+        // about an effect that is over), and an explicit hide has already done the job.
+        _hidesPending.RemoveAll(p => p.Def == def && NodesEqual(p.Anchor, anchor));
+        foreach (var root in RootsOf(def, anchor))
+            if (root != null && _isValid(root))
+                _setVisible(root, visible);
+        // A def whose t=0 events complete it never reaches the retire walk — Start removes such an
+        // instance itself — so a reveal for one would stand for the rest of the session.
+        // `biggun_flying_parts` is exactly that shape: one CALL_ANIMATION, finished inside Start.
+        // Scheduling the hide from here covers both entry points in one place, and the holds below
+        // still apply, so a copy something is still animating stays lit.
+        if (visible && !_isLive(def, anchor))
+            RetireWhenIdle(def, anchor);
+    }
+
+    /// <summary>Hides an ended effect's template root — the other half of the reveal
+    /// (<see cref="Reveal"/>), and the reason a staged template does not stay lit at the last hit
+    /// site for the rest of the session. An explicit stop already hides what it tears down, but an
+    /// instance that ends by reaching the end of its OWN sequences is removed without one: the
+    /// ap/dum/mag gun hit authors an <c>ACTIVE_STATE 0</c> stop, finishes 0.3 s in and left its
+    /// <c>dum_gunhit</c> chunk mesh visible at the impact point permanently (measured by
+    /// <c>--effects-test</c>'s residual line), while the slug hit — which ships no stop and so runs
+    /// to its TTL — was hidden by the Stop the sweep does and looked fine.
+    ///
+    /// <para>Deferred while the instance's motions still run, because the reveal is paired with the
+    /// EFFECT's life and not its instance's: the ring defs' scale/opacity motions outlive the
+    /// sequence that launched them, and hiding on instance-finish cuts the explosion ring off
+    /// mid-expansion (D31). The <c>stillAnimated</c> hook carries which motions count, and
+    /// <see cref="SharedWithLiveInstance"/> the other hold; <see cref="Sweep"/> drains the
+    /// deferrals.</para></summary>
+    public void RetireWhenIdle(AnimDefinition def, TNode? anchor)
+    {
+        if (!Shown)
+            return;
+        if (ReadyToHide(def, anchor))
+        {
+            Reveal(def, anchor, visible: false);
+            return;
+        }
+
+        if (!_hidesPending.Any(p => p.Def == def && NodesEqual(p.Anchor, anchor)))
+            _hidesPending.Add((def, anchor));
+    }
+
+    /// <summary>Retries every deferred hide — once a frame, from the runtime's own advance.</summary>
+    public void Sweep()
+    {
+        for (int i = _hidesPending.Count - 1; i >= 0; i--)
+        {
+            var (def, anchor) = _hidesPending[i];
+            // Reveal drops the entry itself, so the walk stays backwards and nothing else touches
+            // the list here.
+            if (ReadyToHide(def, anchor))
+                Reveal(def, anchor, visible: false);
+        }
+    }
+
     /// <summary>Indexes a lazily-built pooled copy for name resolution and applies its RESET_STATE
     /// poses — the staging entry a copy passes through exactly once, when its provider builds it
     /// (BL-253's `facdsticks`). The three steps are runtime services supplied as hooks: the
@@ -395,6 +494,14 @@ public sealed class TemplateStage<TNode>
         _indexSubtree(subtree);
         _clearFindCache();
         _applyResetStates(subtree);
+    }
+
+    /// <summary>Whether an ended effect's template may go dark now: nothing is still animating the
+    /// copy, and no other live instance is playing on it.</summary>
+    private bool ReadyToHide(AnimDefinition def, TNode? anchor)
+    {
+        var roots = RootsOf(def, anchor);
+        return !_stillAnimated(roots) && !SharedWithLiveInstance(def, anchor, roots);
     }
 
     /// <summary>The slot <see cref="AssignCallerSlot"/> gave this (template root, anchor) pair,
