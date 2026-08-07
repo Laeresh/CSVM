@@ -164,25 +164,29 @@ CLIPS = {
     # asked for. Recorded at 2560x728, a geometry that needed its own LAYOUTS row.
     "cap14bldgraze": ("CAP-14 Building Hard graze Balmoral.mp4", "chase"),
     "cap14bldcrash": ("CAP-14 Building crash Balmoral.mp4", "chase"),
-    # 2026-08-07 CAP-02 (BL-095, ground blow). Recorded at 1920x1080 and staged
-    # pre-resampled to canonical 1280x720 (see LAYOUTS). The question is whether
-    # AIRSPEED FALLS WHILE ALTITUDE IS STILL FALLING at the terrain-avoidance
-    # flick - a sink that gains no speed is energy going somewhere gravity did
-    # not put it, which is the signature a body force leaves and a pull does not.
-    "cap02s9": ("playtest/CAP-02/s9_720.mp4", "chase"),
-    "cap02s23": ("playtest/CAP-02/s23_720.mp4", "chase"),
-    # The two cockpit takes of the same event. `ht12` has AUTO HEAD TURN ON and is
-    # therefore invalid for gauge decode (FINDINGS.md); kept only so checkclip can
-    # say so out of its own gate rather than from the filename.
-    "cap02ck10": "playtest/CAP-02/ck10_720.mp4",
-    "cap02ht12": "playtest/CAP-02/ht12_720.mp4",
-    # The CONTROL, and the reason CAP-02 was filmed as a canyon pass in the first
-    # place: three long runs hugging a canyon FACE, where the terrain that is close
-    # is beside the aircraft rather than under it. If the arrest the other takes
-    # show is triggered by height above ground, these must not show it.
-    "cap02can1": "playtest/CAP-02/canyon1_720.mp4",
-    "cap02can2": "playtest/CAP-02/canyon2_720.mp4",
-    "cap02can3": "playtest/CAP-02/canyon3_720.mp4",
+    # ⚠ REMOVED 2026-08-07: seven CAP-02 keys that pointed into `playtest/CAP-02/`
+    # (`s9_720`, `s23_720`, `ck10_720`, `ht12_720`, `canyon1..3_720`). Those were
+    # 1920x1080 captures pre-resampled to canonical 1280x720 - and the resampled
+    # files no longer exist on disk, so every one of those keys raised. `playtest/`
+    # is git-ignored, so nothing carried them between checkouts.
+    #
+    # The FULL-RESOLUTION originals are still in OriginalScreenshots/Videos under
+    # their own names (`CAP-02 Seconds9.mp4`, `CAP-02 Second 23.mp4`, `CAP-02
+    # Cockpit Second10.mp4`, `CAP-02 Second12 cockpit with head turn.mp4`, `CAP-02
+    # C4 Canyon.mp4`, `CAP-02 C4 Canyon 2.mp4`, `CAP-02 Canyon 3.mp4`). CAP-02 is
+    # closed, so they are not re-registered here - but do NOT re-add them pointing
+    # at the 1x paths above without first redoing the resample, because 1920x1080
+    # is 1.5x canonical and the block-mean in `extract` cannot reach 1280x720 from
+    # a non-integer ratio. The `(1280, 720)` LAYOUTS row is theirs and is now
+    # unused; it is kept because the geometry is real, not because a clip needs it.
+    #
+    # What they were for, so the question is not re-derived from scratch: whether
+    # AIRSPEED FALLS WHILE ALTITUDE IS STILL FALLING at the terrain-avoidance flick
+    # (BL-095, ground blow) - a sink that gains no speed is energy going somewhere
+    # gravity did not put it. `ht12` had AUTO HEAD TURN ON and was kept only so
+    # checkclip could reject it from its own gate rather than from the filename;
+    # the canyon trio was the CONTROL, hugging a canyon FACE so the near terrain is
+    # beside the aircraft rather than under it.
     # 2026-08-07 CAP-02 second batch, and the pair that makes the question
     # answerable: the flick only happens WHEN PULLING (hands off is a crash), so
     # the measurement is the SAME max-elevator pull at two heights.
