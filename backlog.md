@@ -2479,12 +2479,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   fix before removing. Side effect while active: DirectInput-only controllers (non-XInput
   sticks without an SDL HIDAPI driver) are invisible in-game.
 
-- `BL-130` `[Research]` `[Owed-playtest]` **The labs are mouse-driven** (`--viewer`: damage on F5, livery on L, mesh on M) and have had no
-  interactive playtest beyond scripted verification. The damage lab now has a second, live host —
-  F5 in `--fly` drives the flown plane's real HP while the sim runs — which widens the gap rather
-  than closing it: a drag there competes with a per-frame read-back and nothing scripted can prove
-  that feels right. `PT-29` is the owed test.
-
 ## Misc
 
 - `BL-072` `[Feature]` **Paint scheme follow-ups** (the core landed 2026-07-20 — see `docs/formats/paint.md`
