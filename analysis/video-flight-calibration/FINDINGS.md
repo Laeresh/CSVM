@@ -85,8 +85,9 @@ much (`BL-095`). `player.json` ships three unconsumed fields of the right shape 
 | **sustained max-pull turn, full throttle** | **222.94 ± 1.77 mph**, held 15.9 sim s at 100° bank |
 | full throttle, 150 → 290 mph | 2.685 wall s = **3.76 sim s** |
 | terminal dive (γ ≈ 70°) | **355.2 ± 0.4 mph** = 1.182 × level max |
-| 1/8 throttle equilibrium | **137.9 mph** (0.459 × fd) |
+| 1/8 throttle equilibrium | **≈135 mph** (0.449 × fd) — bracketed, not settled; see `CAP-31` below. Published as 137.9 until 2026-08-07 |
 | 8/8 → **0/8**, 290 → 150 mph, level | 5.03 wall s = **7.04 sim s** |
+| 8/8 → **1/8**, 290 → 150 mph, level | 10.03 wall s = **13.94 sim s** as flown (`CAP-31`); ≈12.8–13.3 for an instant chop |
 | **loop from 300 mph level, held full pull** (`pitch`) | slowest **127.9 mph** at +4.36 sim s, apex **+936 ft** at +6.54 sim s, 360° in **11.94 sim s** |
 | zoom climb from 300 mph level, full pull | +1635 ft, bottoming at 104 mph in 10.5 sim s — **different flight, unknown stick history**, see below |
 | level top speed vs altitude | flat ~300 mph from 714 m to **1988 m**, i.e. right up to the cap |
@@ -99,6 +100,56 @@ probe with no thrust term and no equilibrium; at 1/8 there is an equilibrium at 
 differently. Modelled at the wrong setting the row reads 12.1 s against this 7.04 and cannot be
 fixed by *any* power law — which briefly looked like a contradiction in the original's own data
 rather than a mis-specified scenario. The 1/8 case has never actually been filmed; it is `CAP-31`.
+
+**The 1/8 case, filmed at last — decoded 2026-08-07 from `CAP-31`** (2560×728 cockpit, `checkclip`
+`OK`: dial dx correlation +1.00, dy range 0 px, so the view is rigid and unshaken; altitude
+second-difference sd **0.13 ft**, airspeed **0.60 mph**). Level throughout — 1237.3 → 1280.7 ft, a
+drift of +0.96 ft/sim-s over the whole 38.1 sim s — and the entry plateau reads **299.29 ± 0.13 mph**
+over 5.5 sim s, agreeing with the published level maximum. Pilot-confirmed 8/8 → 1/8, and the
+recording was stopped "when no more speed changes were visible".
+
+| what | measured |
+|---|---|
+| **290 → 150 mph, as flown** | **13.94 ± 0.29 sim s** (10.031 wall s) |
+| **240 → 150 mph** (entirely after the throttle transition) | **11.33 ± 0.24 sim s** |
+| speed at the last frame (38.08 sim s) | **134.84 mph**, still falling at **0.35 mph/sim-s** |
+| peak deceleration | **24.5 mph/sim-s** at 9.6 sim s / 244 mph — *not* at the top of the speed range |
+
+**The prediction recorded before the capture missed in the direction nobody offered.** The model was
+published at **12.1 sim s** settling at **137.9 mph**, and `playtest.md` framed the outcome as either
+that, or *markedly faster* — the latter being the signature of the user's unmodelled "airbrake-like
+drag on throttle chop". The original is **slower**: 13.94 s as flown, and ≈12.8–13.3 s once the chop
+transient below is removed, against the model's 12.10. So the original **coasts more than we do, not
+less**, and the airbrake hypothesis has no support in this footage. The "feels like coasting" report
+is faithful reproduction, if anything understated.
+
+⚠ **The throttle chop is not instantaneous, and it eats a measurable slice of the 290 → 150 interval.**
+Deceleration *builds* for 3.5 sim s after the speed leaves the plateau — 0 → 2.4 → 5.8 → 10.6 m/sim-s²,
+peaking at 244 mph — and only then decays. Constant thrust minus a drag that is monotone in speed
+cannot do that: |a| would be largest at the highest speed. Something is still spooling down. The
+footage cannot say what: the cockpit panel carries **no throttle indicator at all** (checked on stills
+at 3.0 s and 26.0 s), so a pilot stepping down through the eight notches on the keyboard and an
+engine spool-down lag look identical here. The consequence is that the headline 13.94 s is an
+**upper bound** on an instantaneous chop, which is what the model's probe runs. Fitting the
+post-transient part alone (x = 0.45…0.77) to `a_net(x) = −c(xᵖ − xₑᵖ)` gives c = 24.9, **p = 2.746**,
+residual 0.075 m/sim-s², and extrapolating it up to 290 mph puts an instant chop at **13.3 sim s**;
+differencing the measured 290 → 240 leg (2.62 sim s) against that fit's 1.54 puts the transient's
+cost at 1.1 s and the instant chop at **12.8 s**. Both are estimates reaching from x = 0.77 to 0.97 —
+the **11.33 sim s over 240 → 150 mph needs no extrapolation** and is the number to run a model
+against.
+
+⚠ **Neither 1/8 clip is settled, so the equilibrium is bracketed rather than measured — and the two
+brackets cross.** `CAP-31` is still decelerating at its last frame (134.84 mph, −0.35 mph/sim-s), so
+it caps the equilibrium **below 134.8 mph**; an exponential fit to its last 8 sim s rails at the scan
+bound and pins nothing. The `accel` clip's own entry leg is the only other 1/8 measurement, and
+re-decoded in the same session it is **not a plateau either**: it rises from 134.25 to 135.56 mph at
++0.33 mph/sim-s, with the push to 8/8 beginning at 4.7 sim s — so it floors the equilibrium **above
+135.6 mph**. A single equilibrium cannot satisfy both. The two disagree by 0.7%, which is the
+clip-to-clip systematic floor this file already records, and the honest reading is **≈135 mph
+(0.449 × fd), good to about ±1**. What is *not* in doubt is that the published **137.9 is ~2% high** —
+it sits above one clip's ceiling and is approached from below by the other. The two clips also differ
+in altitude (1250 ft against 3930 ft), which is a candidate explanation but is untested, and level
+top speed at full throttle is measured flat over a far wider band than that.
 
 The acceleration and the terminal dive fall out of **one** number: a max thrust acceleration of
 **A ≈ 60 m/s²** reproduces the measured acceleration *and* predicts a 70.7° terminal dive of

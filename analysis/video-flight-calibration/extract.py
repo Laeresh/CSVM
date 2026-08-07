@@ -232,6 +232,13 @@ CLIPS = {
     # of Clip3's 34 deg/wall-s, which would need about 80 deg of bank to explain.
     "cap02r5l": "CAP-02 Run 5 45° left.mp4",
     "cap02r5r": "CAP-02 Run 5 45° right.mp4",
+    # 2026-08-07 CAP-31: the 8/8 -> 1/8 level deceleration that was never actually
+    # filmed (FINDINGS.md's "8/8 to 1/8" row is 0/8 - corrected the same day). At 1/8
+    # there IS an equilibrium, at 137.9 mph, so the 290 -> 150 mph time is asymptotic
+    # and tests the drag curve's SHAPE between x = 0.5 and x = 0.96 rather than its
+    # scale. Cockpit, 2560x728 - the same eight-extra-row geometry as the C5 building
+    # pair above, here on the cockpit HUD for the first time.
+    "cap31": "CAP-31.mp4",
 }
 
 
