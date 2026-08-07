@@ -415,6 +415,47 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`docs/plans/PLAN-m3-polish-10.md` A1), `DamageVisuals.cs` (the consumer),
   `extracted/zrdr/vehicle.zrd.json` (the authority).
 
+- `BL-302` `[Bug]` **Every destructible takes collision damage in the original — `ACTIVATION` gates the
+  *plane's* fate, not the object's. Refutes M3 Decision 6's behavioural reading.** We currently damage
+  only the 44 `WeaponOrCollideHit` defs on contact and leave every `WeaponHit` destructible untouched
+  by a ram ("ramming a water tower kills *you*, and the tower is untouched" —
+  `docs/plans/PLAN-M3-weapons.md`, wave item C27). That reading was inferred from the activation
+  census alone and never tested against the original. **Three original-game tests (user, C1,
+  2026-08-07) overturn it:**
+  1. **Full ram into a C1 hangar: the plane crash AND the hangar's destruction both play.** No C1 def
+     is in the 44-def collide set (all are C2 facades / C5 windows / C5 `agyrobus`,
+     `docs/formats/destructibles.md`), so the hangar is a plain `WeaponHit` destructible — and the
+     collision still killed it.
+  2. **A survivable graze along a hangar advanced it to its stage-2 smoke-and-burn damage stage**
+     while the plane flew on — so collision damage is *severity-scaled* and flows through the ordinary
+     `DAMAGE_SEQUENCE` thresholds, not an instant kill.
+  3. **Crashing on bare ground next to a destructible damages nothing** — the plane's death explosion
+     has no blast radius (consistent with the data: rockets are the only blast-radius carriers), so
+     test 1's hangar died from the *contact*, not the boom.
+  **What stands:** the 2,565 `WeaponHit` / 44 `WeaponOrCollideHit` census is a data fact. **What the
+  enum actually means:** `WeaponOrCollideHit` = the object breaks and the plane flies *through*
+  unharmed (fly-through set dressing); `WeaponHit` = the object is solid — the plane grazes or
+  crashes on it — but it still takes the collision damage.
+  *Fix shape:* apply collision damage to ANY struck destructible (`FlightController.cs:882-894`
+  currently consults `CollideDamageSink` and `AnimRuntime.CollideDamageAt:1257-1269` rejects
+  non-`WeaponOrCollideHit` defs — lift that gate for the damage half), keeping the fly-through-on-break
+  behaviour gated on `WeaponOrCollideHit` exactly as now, and dealing the damage on the crash branch
+  too, not only the graze/fly-through one.
+  *Playtest after fix:* ram + graze a C1 hangar in our build and A/B the damage stages against the
+  original.
+  ⚠ **Traps.** (a) Do **not** add a crash blast radius — test 3 refuted it directly. (b)
+  `CollideDamagePerVn` 8 (`FlightController.cs:313`) has only ever fed 0.01-HP set dressing, where any
+  value shatters it; once 40–60 HP buildings take collision damage the constant is live and untuned —
+  test 2 (a graze reaching stage 2, not death) is the first calibration point, once the struck
+  hangar's def and its HP/thresholds are identified (the C1 building def is not `hangar3` — that
+  zrdr def is the ON_CALL *doors* anim; one lookup owed during the fix). (c) The `--damage-hd`
+  `collide[✓/✗]` gate (`Probes.cs:683`) *asserts the old semantics* — WeaponHit towers ignoring
+  collision is its ✗ leg — and must flip with the code, or it will fail green. (d) Plane-vs-plane
+  ram damage is NOT this item — no original evidence yet; the struck plane taking damage stays
+  unowned. *Supersedes:* the "decision 6 upheld" caveat (`PLAN-M3-weapons.md:1281`,
+  `docs/HISTORY.md:5295` records the old behaviour landing) and `docs/formats/destructibles.md`'s
+  `ACTIVATION` reading (⚠-noted in place).
+
 ## Weapons & combat
 
 - `BL-062` `[Research]` **Rocket firing order — the H-selector fidelity question.** Settle from the original
