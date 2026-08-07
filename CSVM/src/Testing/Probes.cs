@@ -815,7 +815,7 @@ public static class Probes
                             / (stats.VehWeight / 1000f);
 
         void Row(string name, string what, string unit, double model, double? measured,
-                 double tol, string detail = "", bool info = false)
+                 double tol, string detail = "", bool info = false, bool upperBound = false)
         {
             r.Rows.Add(new FlightRow
             {
@@ -827,6 +827,7 @@ public static class Probes
                 Tolerance = tol,
                 Detail = detail,
                 Informational = info,
+                UpperBound = upperBound,
             });
         }
 
@@ -912,6 +913,54 @@ public static class Probes
         Row("level-speed-near-cap", "level full throttle at 1988 m, held to equilibrium", "mph",
             m.Speed / Mph, 300.4, 4.0, $"altitude clamp must not leak below the cap, α {m.Alpha:0.0}°");
 
+        // --- sustained turn. CAP-01: full throttle, stick full back throughout (pilot-confirmed),
+        // entered from the 298.96 mph cruise, held to a true equilibrium — 15.9 sim s and 449.8° of
+        // heading. Sampling early measures the bleed-in instead, which is a different number (0.369
+        // A against the plateau's 0.380) that happens to look plausible, so this settles for 10 s
+        // first and then averages over the original's own 15.9 s window.
+        //
+        // ⚠ The bank is set at entry and then LEFT FREE — no roll input, which is what the original's
+        // pilot was doing to the stick and is NOT what "hold 100°" would mean here. Forcing it is
+        // worse than useless: a roll controller keyed on atan2(-X.Y, Y.Y) stops measuring bank the
+        // moment the nose leaves the horizontal, and drove entry banks of 60°, 75° and 100° all into
+        // the same nose-down spiral at terminal speed — identically with and without the B12 lift
+        // term, i.e. an instrument artifact and not a model reading. Free-roll settles honestly, at
+        // its own bank rather than the original's; the row reports both, and asserts neither.
+        var turn = SustainedTurn(stats, 100f, 298.96f * Mph, settle: 10f, window: 15.9f);
+        Row("sustained-turn-speed", "full back stick from a banked entry, settled speed", "mph",
+            turn.SpeedMph, 222.94, 5.0,
+            $"entered at 100° bank, settled at {turn.BankDeg:0.0}° (emergent, not held), "
+            + $"α {turn.Alpha:0.0}°, swept {turn.SweptDeg:0} ° (original 449.8 in the same window)",
+            info: true);
+
+        // ⚠ Asserted as an UPPER BOUND, not a band. BL-247's defect is the aircraft falling out of
+        // this manoeuvre — 83% of gravity across the flight path at a steep bank — so "sinks no
+        // harder than the original" is the claim the measurement supports. The other side is a
+        // different question: we currently come out slightly CLIMBING, which is its own divergence
+        // and is visible in the number rather than folded into this verdict.
+        Row("sustained-turn-sink", "sustained max-pull turn, sink rate", "ft/s",
+            turn.SinkFtS, 1.85, 0.0,
+            $"upper bound — the failure this guards is falling out of the turn (before the B12 lift "
+            + $"re-key this read 18.29). Negative = climbing.",
+            upperBound: true);
+
+        // ⚠ INFORMATIONAL and must stay so until the rate gap closes. We sweep heading far faster
+        // than the original, which is recorded, not fixed — no capture we hold explains it, and
+        // inventing a rate limiter to close it is the wrong-mechanism fix BL-092 trap (b) and
+        // BL-124's history both warn about.
+        // ⚠ The original's own turn is NOT internally consistent with a coordinated level turn, so
+        // do not promote this by matching the ADI's bank either: 18.95 °/sim-s at 222.94 mph is
+        // V·ω = 32.96 m/s² lateral, which implies atan(32.96/20) = 58.7° of bank, not the +100° the
+        // ADI sky-region centroid reads (trusted only to ±4°, BL-247 trap (b)). Ours IS consistent —
+        // it settles at exactly the bank its own lateral acceleration implies — which is why the
+        // two banks differ by more than the two rates do.
+        Row("sustained-turn-rate", "sustained max-pull turn, heading rate", "°/s",
+            turn.RateDegS, 18.95, 3.0,
+            $"{turn.RateDegS / 18.95:0.00}x the original — OPEN, no capture explains it. The "
+            + "original's 18.95 °/sim-s at 222.94 mph implies a 58.7° coordinated-turn bank, not "
+            + "the +100° its ADI reads",
+            info: true);
+
         // --- part throttle. These two are the ONLY place the drag shape is observable: the
         // full-throttle equilibrium is fd_speed by construction for any curve, so it can never
         // detect a wrong shape (BL-148 trap (b)). Both are informational pending a playtest of the
@@ -979,9 +1028,15 @@ public static class Probes
         foreach (var row in r.Rows)
         {
             string verdict = row.Asserted ? (row.Ok ? "ok" : "!! FAIL") : "(not asserted)";
+            // An upper-bound row's target is a ceiling, not a centre — print it as one, or a model
+            // value far BELOW it reads as a large error against a band it was never judged on.
+            string target = row.Measured is { } t
+                ? (row.UpperBound ? $"<= {t:0.00}" : t.ToString("0.00"))
+                : "-";
             sb.AppendLine($"{row.Name,-22} {row.Unit,-5} {row.Model,10:0.00} "
-                          + $"{(row.Measured?.ToString("0.00") ?? "-"),10} "
-                          + $"{(row.ErrorPct is { } p ? $"{p:+0.0;-0.0}%" : "-"),8}  {verdict}");
+                          + $"{target,10} "
+                          + $"{(row.UpperBound || row.ErrorPct is not { } p ? "-" : $"{p:+0.0;-0.0}%"),8}"
+                          + $"  {verdict}");
             sb.AppendLine($"{"",-22} {row.What}{(row.Detail.Length > 0 ? $" — {row.Detail}" : "")}");
         }
         r.Text = sb.ToString();
@@ -1118,6 +1173,11 @@ public static class Probes
     /// wings level. Verified by the report's own settled-path readout rather than assumed.</summary>
     private static Basis Pitched(float deg) => Basis.Identity.Rotated(Vector3.Right, Mathf.DegToRad(deg));
 
+    /// <summary>Attitude banked <paramref name="deg"/>° about the nose, nose level. Over 90° is past
+    /// vertical, which is where <c>CAP-01</c>'s ADI reads; this is the ENTRY only — the run's own
+    /// settled bank is reported beside it, because nothing holds this one there.</summary>
+    private static Basis Banked(float deg) => Basis.Identity.Rotated(Vector3.Forward, Mathf.DegToRad(deg));
+
     /// <summary>A model parked at an attitude and speed, with the flight path along the nose —
     /// <see cref="FlightModel.Reset"/>'s own convention, so a scenario starts trimmed.</summary>
     private static FlightModel Fresh(PlaneStats stats, Basis attitude, float speed, float throttle)
@@ -1153,6 +1213,46 @@ public static class Probes
             }
         }
         return limit;
+    }
+
+    /// <summary>Full throttle and full back stick from a banked entry, settled for
+    /// <paramref name="settle"/> s and then averaged over <paramref name="window"/> s — the shape
+    /// <c>CAP-01</c> was flown in. Heading is accumulated off the flight path with wrap unfolded, so
+    /// a turn past 360° reports what it swept rather than what is left over; sink is the window's
+    /// net altitude change over its own duration, which is the quantity the original's altimeter
+    /// gave. No roll input: see the call site for why forcing the bank cannot be measured.</summary>
+    private static (double SpeedMph, double SinkFtS, double RateDegS, double Alpha, double BankDeg,
+                    double SweptDeg) SustainedTurn(
+        PlaneStats stats, float entryBankDeg, float entrySpeed, float settle, float window)
+    {
+        var m = Fresh(stats, Banked(entryBankDeg), entrySpeed, 1f);
+        Run(m, 1f, settle, pitch: 1f);
+
+        double Heading() => Mathf.RadToDeg(Mathf.Atan2(m.VelocityDir.X, -m.VelocityDir.Z));
+        float startY = m.Position.Y;
+        double prev = Heading(), swept = 0, speedSum = 0, alphaSum = 0, bankSum = 0;
+        int samples = 0;
+        float elapsed = 0f;
+        for (float t = 0f; t < window; t += EnvDt)
+        {
+            m.Step(new FlightInput { Pitch = 1f, Throttle = 1f }, EnvDt);
+            double step = Heading() - prev;
+            if (step > 180.0) { step -= 360.0; } else if (step < -180.0) { step += 360.0; }
+            swept += step;
+            prev += step;
+            speedSum += m.Speed;
+            alphaSum += m.Alpha;
+            bankSum += Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(m.Attitude.Y.Dot(Vector3.Up), -1f, 1f)));
+            samples++;
+            elapsed = t + EnvDt;
+        }
+
+        return (speedSum / samples / Mph,
+                (startY - m.Position.Y) / Ft / elapsed,
+                Math.Abs(swept) / elapsed,
+                alphaSum / samples,
+                bankSum / samples,
+                Math.Abs(swept));
     }
 
     /// <summary>One level of a mip chain as a standalone image. Godot stores the chain as one buffer
@@ -1378,8 +1478,18 @@ public static class Probes
         public bool Informational;
         public string Detail = "";
 
+        /// <summary>Assert an UPPER BOUND (model ≤ original + tolerance) instead of a two-sided
+        /// band. For a measurement whose failure mode is one-directional and whose other side is a
+        /// different question: the sustained turn's sink is the original's worst case, so sinking
+        /// harder is the BL-247 defect while sinking less is a separate divergence that this row
+        /// would misreport as the same fault.</summary>
+        public bool UpperBound;
+
         public bool Asserted => !Informational && Measured != null;
-        public bool Ok => !Asserted || Math.Abs(Model - Measured!.Value) <= Tolerance;
+        public bool Ok => !Asserted
+                          || (UpperBound
+                              ? Model <= Measured!.Value + Tolerance
+                              : Math.Abs(Model - Measured!.Value) <= Tolerance);
 
         /// <summary>Signed miss against the original, as a percentage — the shape that tells a
         /// scale error (constant %) from drift (sign-random).</summary>

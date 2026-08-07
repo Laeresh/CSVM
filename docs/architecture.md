@@ -2667,7 +2667,10 @@ verdicts and the suite's assertions cannot drift apart.
 ⚠ `FlightEnvelope` steps a throwaway `FlightModel` through the manoeuvres the ORIGINAL was
   recorded flying; its targets are the Bloodhawk's only, since it is the only airframe on video.
   A row with `Informational` set is measured but deliberately not asserted (an open question) —
-  never promote one to a verdict without the measurement that closes it.
+  never promote one to a verdict without the measurement that closes it. A row with `UpperBound`
+  set asserts a CEILING, not a band, for a measurement whose failure is one-directional
+  (`sustained-turn-sink`: sinking harder than the original is the defect; sinking less is a
+  different divergence and must not be folded into the same verdict).
 ⚠ **One source of truth.** The flags in `ProbeRunner` are thin wrappers over these; a check added
   to a probe reaches both the report and the suite. Never re-implement a check in a suite.
 ⚠ `Probes.SweepCap` (16) caps the swept ROWS, not the registry totals — a census must read

@@ -168,7 +168,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ Introduce α as a modelled quantity
 12. ☑ Re-key lift on `f(α)`; revisit the knife-edge terms
-13. ☐ Sustained-turn probe rows
+13. ☑ Sustained-turn probe rows
 
 ### Wave C — Induced drag (`BL-092`)
 
@@ -576,7 +576,58 @@ equilibrium, reaching −27° nose / −18.7° path by +36 s, 540 m lost). Full 
   hypothesis; if the fitted ramp needs values far from [5, 9], that is evidence the units are not
   degrees and belongs in `BL-095`, not a fudge here.
 
-## B13 ☐ Sustained-turn probe rows
+## B13 ☑ Sustained-turn probe rows
+
+**Landed** 2026-08-07. Three rows in `--dump-flight`, from one `SustainedTurn` run (full throttle,
+full back stick, banked entry, settled 10 s then averaged over `CAP-01`'s own 15.9 s window):
+
+| row | model | original | verdict |
+|---|---|---|---|
+| `sustained-turn-speed` | 299.26 mph | 222.94 | informational until C21 fits `C_i` |
+| `sustained-turn-sink` | **−3.03 ft/s** | ≤ 1.85 | **asserted** |
+| `sustained-turn-rate` | 32.32 °/s | 18.95 | informational — 1.71×, open |
+
+**Asserted count 8 → 9**, pinned in `FlightEnvelopeTests.FlightScenarios` so demoting one to
+informational cannot read as a green run.
+
+**Able to fail, checked deliberately as this item asked.** With `LiftLoadMax` set to 1 — which
+reproduces the pre-B12 model exactly — the new row reads **18.29 ft/s** and prints `!! FAIL`, and
+`dotnet test --filter FlightEnvelope` fails with it. Both halves of the instrument (the report and
+the suite that reads the same probe) were confirmed able to fail, then restored.
+
+**Verified.** `.\RunTests.ps1`: build clean, **616/616** units, **26/26** engine suites, engine
+errors clean, **13/13 goldens hash-identical**. 8-chapter `--freecam` regression clean. Swept all
+eleven airframes: the Bloodhawk asserts 9/9 green, the other ten carry no assertion at all (the
+`bhawk` guard nulls `Measured`) and none fails.
+
+**A new row kind, because the measurement is one-sided.** `FlightRow.UpperBound` asserts
+`model ≤ original + tol` instead of a band, and the report prints the target as `<= 1.85` and
+suppresses the `err` column (a percentage against a ceiling is noise — it read `−263.7%` for a
+comfortable pass). `BL-247`'s defect is the aircraft *falling out of* the manoeuvre, so "sinks no
+harder than the original" is the claim the measurement supports. We currently come out slightly
+**climbing**, which is its own divergence and stays visible in the model column rather than being
+folded into this verdict.
+
+**Two things this item could not honestly assert.**
+
+1. **The bank is an entry condition, not a hold.** B12's dead end is now written into the probe's
+   comment: forcing the bank with a roll controller keyed on `atan2(−X.Y, Y.Y)` stops measuring
+   bank the moment the nose leaves the horizontal, and drove entry banks of 60°, 75° and 100° all
+   into the same nose-down spiral at terminal speed — identically with and without the lift term.
+   The row enters at 100° and reports where the run actually settles (**75.5°**), labelled
+   *emergent, not held*.
+2. **That settled bank is not a bug, and the arithmetic says which side is inconsistent.** Ours is
+   exactly the bank its own lateral acceleration implies — `atan(75.4/20)` = 75.1° against a
+   measured 75.5° — so the model is flying a properly coordinated level turn at its own (too fast)
+   rate. The original's pair is not self-consistent: 18.95 °/sim-s at 222.94 mph implies 58.7°,
+   not the +100° its ADI reads. Both facts are in the row's detail string, so the next reader
+   cannot quietly "fix" the bank to 100° and think they have closed something.
+
+**The equilibrium is genuinely sustained**, checked rather than assumed: the window sweeps **514°**
+of heading against `CAP-01`'s 449.8° in the same 15.9 s, so the row is on the plateau and not in
+the bleed-in (0.369 A vs 0.380 A — the trap this item named).
+
+**Original approach (kept for reference).**
 
 **Goal.** The `CAP-01` manoeuvre is a probe row, so B12 and C21 are both measurable and defended.
 
