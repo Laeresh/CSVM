@@ -14,7 +14,8 @@ namespace CSVM.Tests;
 /// no live Control needs constructing. <see cref="Log.Debug"/> still runs through
 /// <see cref="Log.ConsoleSink"/>; with no sink installed that falls through to the real
 /// <c>GD.Print</c>, which crashes the whole test host outside the engine (the
-/// <c>StuntRaceTests</c> precedent) — so this test installs a no-op sink for its duration.
+/// <c>StuntRaceTests</c> precedent) — which the process-wide no-op sink in
+/// <c>TestHostLogSink</c> covers, so no per-test ceremony is needed here.
 ///
 /// <para>Everything here is in SIM seconds. The capture's wall figures are 1/1.390 of these, so a
 /// wrong-clock implementation lands ~39% short of every dwell asserted below — which is what
@@ -69,37 +70,34 @@ public class StallWarningTests
     [Fact]
     public void TheIntegratorCarriesTheRampOnItsOwnSimClock()
     {
-        WithConsoleSink(() =>
-        {
-            var lamp = new GaugeCluster.StallLamp();
-            lamp.Advance(warning: true, frac: 0.30f, mph: 0f, simDt: 0f);
-            Assert.True(lamp.Lit, "the lamp is lit on the tick the warning arrives");
+        var lamp = new GaugeCluster.StallLamp();
+        lamp.Advance(warning: true, frac: 0.30f, mph: 0f, simDt: 0f);
+        Assert.True(lamp.Lit, "the lamp is lit on the tick the warning arrives");
 
-            // --- 0.30 fd dwell.
-            float dwell030 = DwellAt(ref lamp, 0.30f);
-            Assert.True(Mathf.Abs(dwell030 - 643f) < GameFrameSimMs + SimDt * 1000f,
-                $"a dwell at the threshold spans {dwell030:0} ms sim (CAP-06: 643)");
+        // --- 0.30 fd dwell.
+        float dwell030 = DwellAt(ref lamp, 0.30f);
+        Assert.True(Mathf.Abs(dwell030 - 643f) < GameFrameSimMs + SimDt * 1000f,
+            $"a dwell at the threshold spans {dwell030:0} ms sim (CAP-06: 643)");
 
-            // --- 0.15 fd dwell, deep in the stall.
-            float dwell015 = DwellAt(ref lamp, 0.15f);
-            Assert.True(Mathf.Abs(dwell015 - 296f) < GameFrameSimMs + SimDt * 1000f,
-                $"a dwell deep in the stall spans {dwell015:0} ms sim (CAP-06: 296) — the RATE ramped, not the brightness");
+        // --- 0.15 fd dwell, deep in the stall.
+        float dwell015 = DwellAt(ref lamp, 0.15f);
+        Assert.True(Mathf.Abs(dwell015 - 296f) < GameFrameSimMs + SimDt * 1000f,
+            $"a dwell deep in the stall spans {dwell015:0} ms sim (CAP-06: 296) — the RATE ramped, not the brightness");
 
-            // A fixed-period blink would read the phase off a clock; this one integrates, so a
-            // speed change part-way through a dwell shortens the REMAINDER rather than jumping the
-            // lamp.
-            bool before = lamp.Lit;
-            lamp.Advance(true, 0.30f, 0f, SimDt);
-            lamp.Advance(true, 0.15f, 0f, SimDt);
-            Assert.True(lamp.Lit == before,
-                "a mid-dwell speed change does not toggle the lamp, only its remaining time");
+        // A fixed-period blink would read the phase off a clock; this one integrates, so a
+        // speed change part-way through a dwell shortens the REMAINDER rather than jumping the
+        // lamp.
+        bool before = lamp.Lit;
+        lamp.Advance(true, 0.30f, 0f, SimDt);
+        lamp.Advance(true, 0.15f, 0f, SimDt);
+        Assert.True(lamp.Lit == before,
+            "a mid-dwell speed change does not toggle the lamp, only its remaining time");
 
-            // No hysteresis: the cue follows speed both ways, and clearing it re-arms the lamp lit.
-            lamp.Advance(false, 0.15f, 0f, SimDt);
-            Assert.False(lamp.Lit, "the lamp is dark once the warning clears");
-            lamp.Advance(true, 0.30f, 0f, SimDt);
-            Assert.True(lamp.Lit, "re-entering the warning lights the lamp again at once");
-        });
+        // No hysteresis: the cue follows speed both ways, and clearing it re-arms the lamp lit.
+        lamp.Advance(false, 0.15f, 0f, SimDt);
+        Assert.False(lamp.Lit, "the lamp is dark once the warning clears");
+        lamp.Advance(true, 0.30f, 0f, SimDt);
+        Assert.True(lamp.Lit, "re-entering the warning lights the lamp again at once");
     }
 
     private static float DwellAt(ref GaugeCluster.StallLamp lamp, float frac)
@@ -112,19 +110,5 @@ public class StallWarningTests
             steps++;
         }
         return steps * SimDt * 1000f;
-    }
-
-    private static void WithConsoleSink(System.Action body)
-    {
-        var was = Log.ConsoleSink;
-        Log.ConsoleSink = _ => { };
-        try
-        {
-            body();
-        }
-        finally
-        {
-            Log.ConsoleSink = was;
-        }
     }
 }

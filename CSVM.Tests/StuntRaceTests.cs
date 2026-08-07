@@ -21,6 +21,8 @@ namespace CSVM.Tests;
 /// surface), and a finish is simulated by setting <c>Elapsed</c> and raising the private
 /// <c>RunCompleted</c> backing delegate directly — exactly what <c>Complete()</c> itself does once
 /// every zone is in, minus the call that would crash.
+/// Lines that DO go through <see cref="Log"/> are safe without any per-test ceremony: the
+/// process-wide no-op sink in <c>TestHostLogSink</c> keeps them off the engine fallthrough.
 /// </summary>
 public class StuntRaceTests
 {
@@ -28,9 +30,7 @@ public class StuntRaceTests
     public void FinishOrderAssignsPlacingsInFinishOrderNotEntryOrder()
     {
         var lines = new List<string>();
-        var was = Log.ConsoleSink;
-        Log.ConsoleSink = lines.Add;
-        try
+        using (Log.PushConsoleSink(lines.Add))
         {
             var race = new StuntRace();
             var a = race.Add(0, FakeMission(1), "Bloodhawk");
@@ -63,82 +63,54 @@ public class StuntRaceTests
             Assert.Contains(lines, l => l.Contains(c.Tag) && l.Contains("finished"));
             Assert.Contains(lines, l => l.Contains("RACE COMPLETE"));
         }
-        finally
-        {
-            Log.ConsoleSink = was;
-        }
     }
 
     [Fact]
     public void RestartClearsPlacingsClocksAndMissionProgressForARematch()
     {
-        WithConsoleSink(() =>
-        {
-            var race = new StuntRace();
-            var a = race.Add(0, FakeMission(2), "Bloodhawk");
-            var b = race.Add(1, FakeMission(2), "Kestrel");
+        var race = new StuntRace();
+        var a = race.Add(0, FakeMission(2), "Bloodhawk");
+        var b = race.Add(1, FakeMission(2), "Kestrel");
 
-            FinishAt(a.Mission, 10f);
-            FinishAt(b.Mission, 20f);
-            Assert.True(race.AllFinished);
+        FinishAt(a.Mission, 10f);
+        FinishAt(b.Mission, 20f);
+        Assert.True(race.AllFinished);
 
-            race.Restart();
+        race.Restart();
 
-            Assert.Equal(0, a.Rank);
-            Assert.Equal(0, b.Rank);
-            Assert.Equal(0f, a.FinishTime);
-            Assert.Equal(0f, b.FinishTime);
-            Assert.Equal(0, race.FinishedCount);
-            Assert.False(race.AllFinished);
-            // Restart() runs the real, public StuntMission.Reset() — asserting through it is the
-            // point: a rematch must not leave the previous run's clock or completions behind.
-            Assert.False(a.Mission.AllComplete);
-            Assert.Equal(0f, a.Mission.Elapsed);
-            Assert.Equal(0, a.Mission.CompletedCount);
-        });
+        Assert.Equal(0, a.Rank);
+        Assert.Equal(0, b.Rank);
+        Assert.Equal(0f, a.FinishTime);
+        Assert.Equal(0f, b.FinishTime);
+        Assert.Equal(0, race.FinishedCount);
+        Assert.False(race.AllFinished);
+        // Restart() runs the real, public StuntMission.Reset() — asserting through it is the
+        // point: a rematch must not leave the previous run's clock or completions behind.
+        Assert.False(a.Mission.AllComplete);
+        Assert.Equal(0f, a.Mission.Elapsed);
+        Assert.Equal(0, a.Mission.CompletedCount);
     }
 
     [Fact]
     public void StandingsRanksAFinisherFirstThenStillFlyingByZonesThenByTheFasterClockOnATie()
     {
-        WithConsoleSink(() =>
-        {
-            var race = new StuntRace();
-            var winner = race.Add(0, FakeMission(3), "Bloodhawk");
-            var ahead = race.Add(1, FakeMission(3), "Kestrel");      // 3 zones cleared, still flying
-            var tiedSlower = race.Add(2, FakeMission(3), "Hoplite"); // 2 zones, slower clock
-            var tiedFaster = race.Add(3, FakeMission(3), "Autogyro"); // 2 zones, faster clock — the tie
+        var race = new StuntRace();
+        var winner = race.Add(0, FakeMission(3), "Bloodhawk");
+        var ahead = race.Add(1, FakeMission(3), "Kestrel");      // 3 zones cleared, still flying
+        var tiedSlower = race.Add(2, FakeMission(3), "Hoplite"); // 2 zones, slower clock
+        var tiedFaster = race.Add(3, FakeMission(3), "Autogyro"); // 2 zones, faster clock — the tie
 
-            FinishAt(winner.Mission, 99f);
-            SetProgress(ahead.Mission, completedCount: 3, elapsed: 40f);
-            SetProgress(tiedSlower.Mission, completedCount: 2, elapsed: 30f);
-            SetProgress(tiedFaster.Mission, completedCount: 2, elapsed: 20f);
+        FinishAt(winner.Mission, 99f);
+        SetProgress(ahead.Mission, completedCount: 3, elapsed: 40f);
+        SetProgress(tiedSlower.Mission, completedCount: 2, elapsed: 30f);
+        SetProgress(tiedFaster.Mission, completedCount: 2, elapsed: 20f);
 
-            var order = new List<Racer>(race.Standings());
+        var order = new List<Racer>(race.Standings());
 
-            Assert.Equal(new[] { winner, ahead, tiedFaster, tiedSlower }, order);
-        });
+        Assert.Equal(new[] { winner, ahead, tiedFaster, tiedSlower }, order);
     }
 
     // ---- StuntMission off-engine test doubles (see the class doc-comment for why) ----
-
-    /// <summary>Every <see cref="FinishAt"/> call reaches <see cref="StuntRace.OnFinished"/>,
-    /// which now logs through <see cref="Log"/> — with no sink installed that falls through to
-    /// the real <c>GD.Print</c>, which crashes the whole test host outside the engine. Any test
-    /// that calls <see cref="FinishAt"/> must run inside this.</summary>
-    private static void WithConsoleSink(Action body)
-    {
-        var was = Log.ConsoleSink;
-        Log.ConsoleSink = _ => { };
-        try
-        {
-            body();
-        }
-        finally
-        {
-            Log.ConsoleSink = was;
-        }
-    }
 
     private static StuntMission FakeMission(int zoneCount)
     {

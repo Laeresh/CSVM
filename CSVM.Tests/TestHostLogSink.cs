@@ -13,10 +13,14 @@ namespace CSVM.Tests;
 /// always lands on some managed sink, never on the engine fallthrough. A test that asserts on
 /// console lines still swaps in its own capturing sink for its duration.
 ///
-/// <para>⚠ Known residual flake, accepted: a capturing sink is still the one global static, so a
-/// parallel class's log line can land in another test's capture list and flip an exact-count
-/// assertion (e.g. <c>StuntRaceTests</c>' <c>lines.Count</c>). Never observed in practice; the
-/// engineered fix would be an <c>AsyncLocal</c> sink, deliberately not built until it fires.</para>
+/// <para>⚠ Do not "simplify" this away because every test looks safe without it: what makes them
+/// safe IS this default. It is also the reason <see cref="Log"/>'s scoped sink could not simply
+/// replace the static — a <c>[ModuleInitializer]</c> runs on a flow xunit's test threads do not
+/// inherit, so an <c>AsyncLocal</c> written here would be invisible where it is needed.</para>
+///
+/// <para>The residual flake this comment used to call accepted DID fire, 2026-08-07, and is fixed:
+/// a capture is now scoped per flow (<see cref="Log.PushConsoleSink"/>, BL-306), so a parallel
+/// class can neither steal another test's capture nor add its lines to it.</para>
 /// </summary>
 internal static class TestHostLogSink
 {

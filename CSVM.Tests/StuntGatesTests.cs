@@ -15,7 +15,8 @@ namespace CSVM.Tests;
 /// itself has been engine-free since A2's <c>Log</c> conversion). <c>StuntMission.Load</c> logs
 /// through <see cref="Log"/>; with no sink installed that falls through to the real
 /// <c>GD.Print</c>, which crashes the whole test host outside the engine (the
-/// <c>StuntRaceTests</c> precedent) — so this test installs a no-op sink for its duration.
+/// <c>StuntRaceTests</c> precedent) — which the process-wide no-op sink in
+/// <c>TestHostLogSink</c> covers, so no per-test ceremony is needed here.
 /// </summary>
 public class StuntGatesTests
 {
@@ -30,16 +31,7 @@ public class StuntGatesTests
     [ExtractedDataFact]
     public void C4DangerZonesRequireBothGatesInOrderNotAMarkerSphere()
     {
-        var was = Log.ConsoleSink;
-        Log.ConsoleSink = _ => { };
-        try
-        {
-            Run();
-        }
-        finally
-        {
-            Log.ConsoleSink = was;
-        }
+        Run();
     }
 
     private static void Run()

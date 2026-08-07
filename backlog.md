@@ -2436,33 +2436,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Tooling, platform & docs
 
-- `BL-306` `[Bug]` **`RunTests.ps1` reddens at random: four xUnit classes race over the process-wide
-  `Log.ConsoleSink`.** Caught 2026-08-07 —
-  `StuntRaceTests.FinishOrderAssignsPlacingsInFinishOrderNotEntryOrder` failed with
-  `Assert.Equal(4, lines.Count)` reading **0**, on a change that touched only comments and a
-  detail string. Reproduction attempts: **5/5 pass** for that class alone and **4/4 pass** for the
-  full 616 afterwards, so it is intermittent, not a regression — the failing run is the only one
-  seen so far.
-  **Mechanism, read off the source rather than guessed.** `Log.ConsoleSink` is a plain mutable
-  static. `StuntRaceTests:32` swaps in its own `lines.Add` collector and asserts on what it
-  collected, while `StallWarningTests:120`, `StuntGatesTests:34` and `StuntRaceTests:132` each
-  install a `_ => { }` no-op over the same static (plus `TestHostLogSink.Install()` process-wide).
-  xUnit runs distinct test **classes** in parallel and the assembly sets no `CollectionBehavior`,
-  so a concurrent class can replace the collector between its install and its assertions — after
-  which the collector receives nothing, which is exactly the observed `0` rather than a partial
-  count.
-  *Fix options, not yet chosen:* put the sink-swapping classes in one non-parallel xUnit
-  collection; or give `Log` an `AsyncLocal`/scoped sink so a swap cannot leak across threads. The
-  second is the real fix and also removes the `try/finally` restore dance from four call sites.
-  ⚠ **Traps.** (a) **Do not "fix" it by deleting the `lines.Count` assertion** — the comment above
-  it names that count as the seam the test exists to prove (one line per racer plus the completion
-  line, reaching the installed sink rather than the real `GD.Print`), so dropping it makes the test
-  pass while checking nothing. (b) A green run is not
-  evidence: it passed 4/4 immediately after failing, so any fix needs a deliberate control —
-  hammer the full suite, or force the interleaving — not one clean run (`METHOD-9`, `INSTR-6`).
-  (c) The failure lands on whatever change happens to be in flight, so it will be misattributed;
-  that is the main cost of leaving it.
-
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
   RunGame.ps1/RunDev.ps1) once tools/godot ships a Godot bundling **SDL ≥ 3.4.4**: the bundled
   SDL (3.2.28 up to Godot 4.7.1) hard-freezes the engine when a >255-button DirectInput device

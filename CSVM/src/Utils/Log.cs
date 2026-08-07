@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using System.Threading;
 using Godot;
 
 namespace CSVM.Utils;
@@ -46,6 +47,13 @@ public static class Log
     // the few milliseconds of startup before the repo root and the session mode are known.
     private const int PreludeCap = 512;
 
+    // The SCOPED console sink, one value per execution flow (see PushConsoleSink). Deliberately
+    // not the same storage as ConsoleSink below: that one is the process-wide default, and it has
+    // to be, because CSVM.Tests installs it from a [ModuleInitializer] — an AsyncLocal written
+    // there is invisible on the threads xunit later runs tests on, so folding the two tiers into
+    // one would drop every test back onto the host-killing GD.Print fallthrough (BL-302, BL-306).
+    private static readonly AsyncLocal<Action<string>?> ScopedSink = new();
+
     private static readonly object Gate = new();
     private static readonly Dictionary<string, Level> Thresholds = new();
     private static readonly List<string> Prelude = new();
@@ -66,10 +74,27 @@ public static class Log
     /// <summary>The open log file's absolute path, or null before <see cref="Open"/>.</summary>
     public static string? SinkPath { get; private set; }
 
-    /// <summary>Overrides where console lines go; null (the default) means <c>GD.Print</c> /
-    /// <c>GD.PrintErr</c>. A test host installs its own to assert on console output off-engine.
+    /// <summary>The PROCESS-WIDE default for console lines; null (the default) means
+    /// <c>GD.Print</c> / <c>GD.PrintErr</c>. A test host installs one once, so that a plain class
+    /// that logs is callable without an engine. To capture lines and assert on them, use
+    /// <see cref="PushConsoleSink"/> instead — this one is shared by every thread in the process.
     /// The file sink is untouched by this — it always takes everything regardless.</summary>
     public static Action<string>? ConsoleSink { get; set; }
+
+    /// <summary>Routes this execution flow's console lines to <paramref name="sink"/> until the
+    /// returned handle is disposed, then restores whatever this flow had before. Scopes nest, and
+    /// disposing twice does nothing.
+    ///
+    /// <para>Per-flow, not global: a concurrent flow — an xunit test class running in parallel —
+    /// has its own, so it can neither steal these lines nor add its own to them (BL-306). The
+    /// converse is the one sharp edge: a thread this flow spawns does NOT inherit the scope
+    /// unless it captures the execution context, so its lines go to <see cref="ConsoleSink"/>
+    /// instead.</para></summary>
+    public static IDisposable PushConsoleSink(Action<string> sink)
+    {
+        ArgumentNullException.ThrowIfNull(sink);
+        return new ConsoleSinkScope(sink);
+    }
 
     /// <summary>Applies a <c>--log=</c> filter spec: comma-separated <c>cat</c>,
     /// <c>cat:level</c>, <c>*</c>, <c>*:level</c> or a bare <c>level</c>. A bare category means
@@ -240,14 +265,16 @@ public static class Log
         }
     }
 
-    // The console half of a line. ConsoleSink, once installed, replaces GD.Print/GD.PrintErr
+    // The console half of a line, resolved in three tiers: this flow's scoped sink, else the
+    // process-wide default, else the engine. A sink, once found, replaces GD.Print/GD.PrintErr
     // entirely — the caller who set it decides what "console" means, including dropping the
     // Error/non-Error distinction if it wants one sink for everything.
     private static void WriteConsole(string line, bool isError)
     {
-        if (ConsoleSink != null)
+        Action<string>? sink = ScopedSink.Value ?? ConsoleSink;
+        if (sink != null)
         {
-            ConsoleSink(line);
+            sink(line);
             return;
         }
         if (isError)
@@ -328,5 +355,29 @@ public static class Log
             parts.Add($"{kv.Key}:{Tag(kv.Value).Trim().ToLowerInvariant()}");
         }
         return string.Join(",", parts);
+    }
+
+    private sealed class ConsoleSinkScope : IDisposable
+    {
+        private readonly Action<string>? _previous;
+        private bool _popped;
+
+        internal ConsoleSinkScope(Action<string> sink)
+        {
+            _previous = ScopedSink.Value;
+            ScopedSink.Value = sink;
+        }
+
+        // Restores the enclosing SCOPE, not null — nested scopes have to compose, and the
+        // process-wide ConsoleSink is a different tier that a scope must never touch.
+        public void Dispose()
+        {
+            if (_popped)
+            {
+                return;
+            }
+            _popped = true;
+            ScopedSink.Value = _previous;
+        }
     }
 }

@@ -2605,8 +2605,15 @@ logs is callable from `CSVM.Tests` without an engine. `CSVM.Tests` installs a pr
 default once, before any test runs (`TestHostLogSink.cs`, `[ModuleInitializer]`, BL-302) — the
 per-class save/restore alone raced across xunit's parallel classes and could restore the sink to
 null mid-run, and the resulting `GD.Print` fallthrough killed the test host with an unmanaged
-`AccessViolationException` on ~1 in 3 full runs. A test that asserts on console lines still swaps
-in its own capturing sink for its duration.
+`AccessViolationException` on ~1 in 3 full runs. A test that asserts on console lines takes a
+**scoped** sink instead — `Log.PushConsoleSink(sink)` returns an `IDisposable`, nests, and is
+per execution flow, so a class running in parallel can neither steal its lines nor add its own
+(BL-306; a console line resolves scoped sink → process-wide `ConsoleSink` → the engine).
+⚠ **The two tiers are separate storage on purpose** — folding the process-wide default into the
+  `AsyncLocal` would break it: `TestHostLogSink` installs from a `[ModuleInitializer]`, whose flow
+  xunit's test threads do not inherit, so every test would silently drop back onto the
+  host-killing `GD.Print` fallthrough. The converse edge is real too: a thread the code under test
+  spawns without capturing the execution context sees `ConsoleSink`, not the scope.
 ⚠ **The file sink always takes EVERYTHING** — every category, every level, no filter, and is
   untouched by `ConsoleSink`; `--log=` only moves the *console* threshold, so a post-hoc grep can
   never miss a category.
