@@ -2149,7 +2149,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   one-coincidence-close to nitro's absolute 0.05), and which hit severity calls
   small/medium/large (exe-side). Open work: (a) decode the `magnitude_factor` input — candidate
   instrument: `Gun Wobble and animation.mp4`; (b) settle the damage-shake triggers (footage, or
-  a declared TUNE). ⚠ Traps: `SHAKES_CAMERA` is NOT the fire-path shake mechanism — its sole
+  a declared TUNE). Where the shake is applied (user observation of the original,
+  2026-08-07): in 3rd-person views it is definitely the **plane** that wobbles against the
+  world; cockpit/nose views read as camera shake — consistent with one mechanism rocking the
+  plane node, which a plane-mounted camera inherits for free (mirroring how `damage_shakes`
+  rocks the plane's `healthy` node). ⚠ Traps: `SHAKES_CAMERA` is NOT the fire-path shake mechanism — its sole
   carrier among all 48 weapons is `wep_26` "FW", a zero-damage scripted fake weapon (a scripted
   detonation-shake marker); the player fire path would be the unflagged `fire_bullet` source.
   And the near-match trap bites hard here: several magnitude candidates coincide with authored

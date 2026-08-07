@@ -32,6 +32,13 @@ suggestively near `nitro`'s 0.05 — the classic one-coincidence trap (`BL-248`(
 from the data alone; wants a shake-amplitude measurement off original footage
 (`Gun Wobble and animation.mp4` is a candidate source for `fire_bullet`).
 
+**What the oscillators displace** is also unauthored, but observation of the original
+(2026-08-07) constrains it: in 3rd-person views the **plane itself** wobbles against the world;
+cockpit/nose views read as camera shake. One mechanism explains both — rock the plane node, and
+any plane-mounted camera inherits the motion — mirroring how the `damage_shakes` defs below rock
+the plane's `healthy` node (there the camera gets its own authored half because the chase camera
+is not rigidly attached).
+
 ## `damage_shakes.json` — ON_CALL shake animation defs
 
 Standard `ANIMATION_DEFINITIONS` ([anim-definitions.md](anim-definitions.md)), all `ON_CALL`:
