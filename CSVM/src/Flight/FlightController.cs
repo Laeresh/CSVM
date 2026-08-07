@@ -61,6 +61,11 @@ public partial class FlightController : Node3D
     /// <summary>The visible aircraft model (a child of this node); hidden while crashed.</summary>
     public Node3D? PlaneModel;
 
+    /// <summary>The wobble oscillators and the pivot they roll — the node the assembler hung
+    /// <see cref="PlaneModel"/> under. Null when no rig assembly ran (parked lab planes).</summary>
+    public PlaneShake? Shake;
+    public Node3D? ShakePivot;
+
     /// <summary>Spins the plane's propeller/rotor blur discs; advanced each frame,
     /// throttle-scaled. Null if the model has no propeller nodes.</summary>
     public PropAnimator? Props;
@@ -715,7 +720,19 @@ public partial class FlightController : Node3D
     public void TakeProjectileHit(WeaponDef weapon, Vector3 impact, string colliderPart, int shooter,
         float damageScale = 1f)
     {
-        if (_crashed || Damage == null)
+        if (_crashed)
+            return;
+        // The being-hit rock: a gun round reuses the measured caliber law; a rocket's armor
+        // damage stands in for the unauthored quantity (he_factor doubles HE); a splash hit
+        // (damageScale < 1 — the pool's blast pass) plays the explosion source instead. Runs
+        // even with no damage data, so a plane nothing tracks HP for still visibly takes fire.
+        if (weapon.Caliber is { } shakeCal)
+            Shake?.BulletHit(shakeCal);
+        else if (damageScale < 1f)
+            Shake?.ExplosionAt((weapon.ArmorDamage ?? 0f) * damageScale);
+        else
+            Shake?.MissileHit(weapon.ArmorDamage ?? 0f, weapon.HighExplosive);
+        if (Damage == null)
             return;
         // The sim pose, not GlobalTransform: the render half may hold an interpolated frame.
         var pose = new Transform3D(_model.Attitude, _model.Position);
@@ -928,6 +945,17 @@ public partial class FlightController : Node3D
             ApplyFireOutcome(_fire.Step(dt, fireInputs));
         }
         Ordnance?.Update();   // hide a pylon's mounted rocket the moment it fired its last
+
+        // The plane wobble: overspeed drive plus this tick's fire/hit kicks, written as
+        // visual-only roll to the pivot the model hangs under. Physics, aim and the camera
+        // read this node's transform, which the pivot sits below — never the wobble.
+        if (Shake != null)
+        {
+            Shake.SetSpeedRatio(_model.Speed / Mathf.Max(1f, _model.Stats.FdSpeed));
+            Shake.Advance(dt);
+            if (ShakePivot != null)
+                ShakePivot.Rotation = new Vector3(0f, 0f, Shake.Roll);
+        }
 
         // Stunt run: flew-through-a-danger-zone test against this frame's committed position.
         Stunt?.Update(_model.Position);
@@ -1386,6 +1414,7 @@ public partial class FlightController : Node3D
             var g = _firableGuns[gi];
             var muzzle = g.Muzzles[mi];
             Projectiles!.Spawn(g.Weapon, muzzle.GlobalTransform, inheritVel, PlayerIndex, muzzle);
+            Shake?.FireBullet(g.Weapon.Caliber ?? 0f); // the firing buzz: factor × caliber (measured)
             if (!_gunLoggedFirst[gi])
             {
                 _gunLoggedFirst[gi] = true;   // verification breadcrumb: which groups actually fire

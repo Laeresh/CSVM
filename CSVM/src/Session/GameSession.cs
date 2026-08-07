@@ -1327,6 +1327,7 @@ public partial class GameSession : Node3D
         var weaponMessages = Messages.Load(state.MessagesPath);
         var weaponDefs = WeaponDefs.Load(state.ZrdrPath, weaponMessages);
         var stockLoadouts = StockLoadouts.Load();
+        var shakeDefs = ShakeDefs.Load(state.ZrdrPath);
         StartupProfile.Record("zrdr", mark);
         // flyoutAnims: the world program also carries the rockets' FLYOUT MODEL_ANIMATION defs
         // (cam_anim / missile_puffers), from which the pool builds each type's smoke trail.
@@ -1418,6 +1419,7 @@ public partial class GameSession : Node3D
                 WeaponDefs = weaponDefs,
                 WeaponMessages = weaponMessages,
                 StockLoadouts = stockLoadouts,
+                Shakes = shakeDefs,
                 Projectiles = projectiles,
                 HudFont = hudFont,
                 ReticleTex = reticleTex,

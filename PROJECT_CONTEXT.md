@@ -194,7 +194,7 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **No active plan** — `PLAN-template-stage` completed 2026-08-07 (A1–A4 ☑, B11 ❌ no-go) and is
 archived in [`docs/plans/plans.md`](docs/plans/plans.md); next work comes from `backlog.md`.
-Owed at the controls: `PT-27`, `PT-28`, `PT-41`, `PT-42` and `PT-43`
+Owed at the controls: `PT-27`, `PT-28`, `PT-41`, `PT-42`, `PT-43` and `PT-44`
 ([`playtest.md`](playtest.md)). Verify any change with
 **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read
 [`docs/verification.md`](docs/verification.md) first.

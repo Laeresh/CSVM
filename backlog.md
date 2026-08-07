@@ -2139,25 +2139,21 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ Trap: near-matches between authored fields and hand-picked values are suggestive, not
   decodes — wire nothing on one coincidence; each remaining camera waits for its capture.
 
-- `BL-266` `[Research]` **Camera shake: the laws ARE authored — the missing pieces are their inputs**
-  (re-scoped 2026-08-05 by the first read of `shakes.zrd.json`/`damage_shakes.zrd.json`; the
-  decode landed as [`docs/formats/shakes.md`](docs/formats/shakes.md), no code). Six oscillator
-  sources are authored (freq/damping/waveform/`magnitude_factor`: fire_bullet, bullet_impact,
-  missile_impact, explosion, high_speed, nitro) plus complete `ON_CALL`
-  `small/medium/large_camshake` defs. Unauthored, so unwired: what `magnitude_factor`
-  multiplies (damage, caliber and velocity are all plausible and several candidates land
-  one-coincidence-close to nitro's absolute 0.05), and which hit severity calls
-  small/medium/large (exe-side). Open work: (a) decode the `magnitude_factor` input — candidate
-  instrument: `Gun Wobble and animation.mp4`; (b) settle the damage-shake triggers (footage, or
-  a declared TUNE). Where the shake is applied (user observation of the original,
-  2026-08-07): in 3rd-person views it is definitely the **plane** that wobbles against the
-  world; cockpit/nose views read as camera shake — consistent with one mechanism rocking the
-  plane node, which a plane-mounted camera inherits for free (mirroring how `damage_shakes`
-  rocks the plane's `healthy` node). ⚠ Traps: `SHAKES_CAMERA` is NOT the fire-path shake mechanism — its sole
-  carrier among all 48 weapons is `wep_26` "FW", a zero-damage scripted fake weapon (a scripted
-  detonation-shake marker); the player fire path would be the unflagged `fire_bullet` source.
-  And the near-match trap bites hard here: several magnitude candidates coincide with authored
-  constants — wire nothing on one coincidence.
+- `BL-266` `[Research]` `[Owed-playtest]` **Plane wobble: residual decode questions after the
+  wiring landed.** The oscillators are wired (`ShakeDefs`/`PlaneShake`, visual-only roll on the
+  plane node; law and measurement in [`docs/formats/shakes.md`](docs/formats/shakes.md) and
+  `analysis/gun-wobble-shake/`). Still open, all data questions: (a) the pure-caliber magnitude
+  law is measured on ONE clip (Bloodhawk, 40-cal) — whether plane model/weight also enter waits
+  on `CAP-30`; (b) the impact sources' per-event quantities are stand-ins declared TUNE (gun
+  hits reuse caliber, rockets use armor damage) — a being-hit capture pins them; (c) the
+  `ON_CALL` `small/medium/large` `damage_shakes` defs stay unwired — unknown caller, likely
+  script/set-piece; (d) `high_speed`'s normalised-by-`fd_speed` reading fits the quiet-cruise
+  evidence but is unverified against a calibrated dive. *Playtest:* `PT-44`.
+  ⚠ Traps: `SHAKES_CAMERA` is NOT the fire-path shake mechanism — its sole carrier among all
+  48 weapons is `wep_26` "FW", a zero-damage scripted fake weapon (a scripted detonation-shake
+  marker); the fire path is the unflagged `fire_bullet` source. And the near-match trap: several
+  magnitude candidates coincide with authored constants — wire nothing on one coincidence (the
+  caliber law stood because the candidates separated by an order of magnitude each way).
 
 ## HUD & UI
 
