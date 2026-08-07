@@ -2493,8 +2493,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   than the old billboard blob, but the PT-03 reference still shows sharp radiating star points that
   our plain radial `oil_liteflare` sprite does not produce. Whether the original draws the flare
   from every angle (a one-sided quad is roughly chase-view-only) is also unmeasured — one orbit
-  clip of a lit plane in the original settles both (piratefighter or brigand: the only airframes
-  whose defs wire `wing_lights_blink`; the Bloodhawk carries no flare nodes at all). Also riding
+  clip of a lit plane in the original settles both — any player plane works: `vehicle.zrd.json`
+  wires `wing_lights_blink` (or `brigand`'s own `wing_lights_brigand`) into every player craft's
+  `start_anims` except the Bloodhawk, which has neither the anim nor flare nodes. (Earlier notes
+  here said only piratefighter/brigand carried it — that read `wing_light.zrd.json`'s two
+  `ANIMATION_DEFINITION`s alone; `vehicle.zrd.json`'s per-plane `start_anims` is the wider
+  wiring and is what the runtime actually plays from, per `WingLights.cs`'s doc comment.) Also riding
   here: `WingLightBlinker.LightEnergy = 1.0` is a declared TUNE — the def authors the point
   lights' range/colour only, no intensity.
   ⚠ Traps: (a) re-adding the billboard is the rejected fix — PT-03's screenshot is against it.
