@@ -166,7 +166,9 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   *Blocks:* `BL-118`'s reopened density judgement is exactly this. `CAP-12` is delivered and
   analysed (2026-08-07, `playtest/CAP-12/`): the original's deck band is 3290–3560 ft — the
   authored slab — its base reads luma 167 vs our 221, and it shows **no** grazing-angle comb, so
-  (b) above now has its reference: if our field combs, the original doesn't.
+  (b) above now has its reference: if our field combs, the original doesn't. (The C4 take's last
+  third — due-north over the river — was reused 2026-08-07 for `BL-105`'s map-edge unit size:
+  `playtest/CAP-12/c4-mapedge/`.)
   *Variations:* `--chapter=C1C` for the twelve authored build-up towers above the deck, and
   `--chapter=C5` at street level for its low night haze between the skyscrapers.
 

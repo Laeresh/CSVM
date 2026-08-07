@@ -1258,7 +1258,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (corr with the coast trace −0.067), airspeed is flat at **295–302** units/sim-s (sd 2.7, matching
   the 299.0–300.4 level max), altitude excursion is **218 ft** total and flat after frame 800 (corr
   +0.19). That matters because a straight coast's screen-x scales as 1/h.
-  **What is still open: the size of the mirrored unit — it is NOT one 1024 m cell.** The seam
+  **What is still open: the size of the mirrored unit — it is NOT one 1024 m cell, and (measured
+  2026-08-07, second map) it is NOT one universal cell count either.** The C2 seam
   spacing is 240 frames = 8.006 wall s = 11.13 sim s at k = 1.390, i.e. **3.28–3.36 km ≈ 3.2 cells**
   at the measured speed. A one-cell unit is excluded by ~3×, and directly: translation NCC decays
   smoothly through the lag a 1024 m cell would occupy (lag 74 = +0.353, lag 111 = −0.038) with no
@@ -1266,10 +1267,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   border row is nearly all water (coast between cols 8 and 9 of the 12×12 × 1024 m grid), so
   repeating it southward would give a coastline **invariant in z** — a straight line, not the
   observed 471-frame swing.
+  **C4 north measured 2026-08-07** (`playtest/CAP-12/c4-mapedge/`, reusing the CAP-12 file
+  `CAP-11 C4 and CAP-12 Clouddeck.mp4`, t 72–114 s: due-north flight over C4's river, compass
+  scroll 0.0 px, airspeed flat 298.5–299.6, gate dx=dy=0 peak 0.848). The river's
+  water-fraction/x-centroid traces repeat at a **translational period of 333.5 ± 6 frames**
+  (NCC +0.555; −0.30 at the half-lag), reflection seams at half that, and consecutive episodes
+  match better **time-reversed** (0.648/0.678 vs 0.563/0.587) while episodes two apart match
+  better as-is — alternating reflection again, on a second map and axis. Unit:
+  **2310 ± 60 m ≈ 2.26 cells** — not C2's ~3.2 cells, so the mirrored block is per-map (or
+  per-edge), and any fixed `Rings`-style constant is the wrong shape. Noted, unproven: both
+  measurements sit on **n + ¼ cells** (2304 m and 3328 m); a single k·V systematic cannot make
+  both integers (+12.5 % vs +7 % needed), so if the pattern is real it is about where the
+  mirrored block is anchored, not a scale error.
   ⚠ **The cell count is the soft number, the mirroring is the hard one.** The metre conversion
   inherits both V and k, and k = 1.390 is a machine/session property measured on *other* clips, so
-  read the unit as "about three cells, definitely not one" rather than an exact integer. Settling it
-  needs either a level constant-altitude pass with a known start position, or an A/B against our own
+  read each unit as soft ("about three cells" on C2, "about two and a quarter" on C4 — definitely
+  not one, definitely not equal) rather than exact integers. Settling it needs either a level
+  constant-altitude pass with a known start position, or an A/B against our own
   build once `Rings`/the clamp granularity is changed.
   **Extent:** the clip covers ~28 km ≈ **2.3 × the 12,288 m map** and the mirrored tiling continues
   undegraded to the last frame — no limit, no change, no fade found within that range.
