@@ -100,12 +100,20 @@ public sealed class CaptureDirector
             return;
         }
         var path = spec.ScreenshotShots > 1 ? IndexedShotPath(_pendingShot, _shotIndex) : _pendingShot;
-        img.SavePng(path);
+        var saveErr = img.SavePng(path);
         // The sim frame is part of what the capture IS: under the fixed clock one rendered frame is
         // exactly one sim step, so this number pins the moment the shot shows.
         long simFrame = clock?.Frame ?? 0;
         double simTime = clock?.Time ?? 0.0;
-        Log.Info("core", $"screenshot saved: {path} sim_frame={simFrame} sim_time={simTime:0.###}");
+        if (saveErr == Error.Ok)
+        {
+            Log.Info("core", $"screenshot saved: {path} sim_frame={simFrame} sim_time={simTime:0.###}");
+        }
+        else
+        {
+            // A missing parent directory fails SavePng silently — say so instead of "saved".
+            Log.Error("core", $"screenshot save FAILED ({saveErr}): {path} sim_frame={simFrame}");
+        }
         // The golden-image tripwire's whole input: a hash of the RAW pixels (never the PNG, whose
         // encoded bytes differ between identical images), the size that hash is only valid at, and
         // the adapter that drew it. Emitted on every capture so any shot can become a golden.
