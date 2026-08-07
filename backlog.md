@@ -1351,7 +1351,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   different object from the sprite field — do not read one as evidence for the other. (The +54
   measurement above is the mesh underside; the sprite field sits *inside* the whiteout band.)
 
-- `BL-165` `[Feature]` `[Blocked: CAP-13]` **The sun renders no lens flare; the original does.** Confirmed absent: `Launcher.cs:569`
+- `BL-165` `[Feature]` **The sun renders no lens flare; the original does — layout now decoded from `CAP-13`.** Confirmed absent: `Launcher.cs:569`
   builds only a plain `DirectionalLight3D` (`Sun`) + a `WorldEnvironment` with no glow/bloom
   configured. Grepping `CSVM/src` for `flare`/`glow`/`bloom` turns up only the wingtip nav-lights
   (`WingLights.cs`), world lamp/beacon glow sprites (`gen_flare_yellow`, `poleflare`,
@@ -1364,17 +1364,40 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `LensFlareTexture 3 lflare4` (plus `LightMapTexture lightmap`), binding `lflare1`–`lflare4` to
   flare element slots 0–3 in that order. No gamez node, material, or cam_anim/zrdr def references
   them, consistent with a hardcoded screen-space effect fed by these registered textures. Open
-  oddity: only C2/C3 carry the lines — the other chapters' `init.gw` scripts register nothing, yet
-  the original presumably flares everywhere; `bigflare01`/`02` remain a naming-convention lead only.
-  *Fix shape:* a screen-space flare rig keyed off the sun's view-space direction (sprites strung along
-  the sun→screen-centre vector), textured from the candidate set above, gated by an occlusion check
-  (terrain/plane in front of the sun kills it).
-  *Blocked on `CAP-13`* (`playtest.md` §0).
+  oddity: only C2/C3 carry the lines — the other chapters' `init.gw` scripts register nothing, and
+  the user's CAP-11 chapter sweep (2026-08-07) **found a visible sun only in C3**, so "flares
+  everywhere" is no longer presumed; `bigflare01`/`02` remain a naming-convention lead only.
+  *Measured spec (CAP-13, `CAP-13 C3.mp4`, analysed 2026-08-07 — full numbers and stills in
+  `playtest/CAP-13/README.md`):* **no streaks** — the flare is exactly four elements: a
+  saturated-white core glow at the sun (half-max dia ~63 px of 1280×720, blue-cyan skirt) plus
+  three thin blue-white rings (annulus RGB ≈ 194,226,254) strung along the sun→screen-centre
+  vector at fractions **0.50 (dia ~102), 0.90 (dia ~45, brightest), and 2.0 (dia ~164,
+  faintest)** — fractions verified ±0.03 at two poses (t=17.0, t=19.5). On top of it a
+  **full-screen white wash**, opacity ~linear in the sun's screen distance from centre:
+  α≈0.66 at 30 px → 0.40 at ~180 px → 0.13 at 350 px (dark fuselage 38,2,9 → 179,174,173 at
+  max). The whole rig pops in complete when the sun core enters the frame and fades out in
+  ~0.1–0.15 s as it exits (t=19.75–19.85); with the flare off, the sun itself stays visible
+  as a plain pale-yellow billboard disc (`CAP-11 C3 2.mp4` t=20–48).
+  *Occlusion & layering (CAP-13 + `CAP-11 C3 2.mp4` + user live tests, all 2026-08-07):*
+  the two halves gate **differently**. The **sprites** (core + rings) are killed by terrain
+  occluding the sun and by the own plane *fully* covering it — but a *partial* plane cover
+  changes nothing (t=18.5), and billboard sprites don't occlude at all (volcano eruption
+  puffs drifted across the sun: no visible change). The **wash** survives terrain occlusion
+  outright and stays on its unoccluded trend under partial plane cover. Layer order measured:
+  world < flare sprites < HUD/cockpit (compass clips the core, t=6.4) < wash — the wash
+  whitens the HUD itself at the same α as the world (compass 20,20,18 → 178,180,177 at max).
+  *Fix shape:* a screen-space flare rig keyed off the sun's view-space direction, per the
+  spec above: sprites drawn under the HUD, gated by a line-of-sight test against solid
+  geometry (terrain, own plane) and by the sun-centre-on-screen test, both with the quick
+  ~0.1 s fade; the wash drawn over the HUD, keyed only on screen-centre distance, ignoring
+  geometry occlusion.
   ⚠ **Traps.** (a) Do not confuse `gen_flare_yellow` (a town-lamp light-source glow node) with this —
-  same texture-naming family, unrelated purpose. (b) No def confirms `bigflare01`/`lflare*` are
-  actually the sun's flare set; verify against a reference capture before committing to it. (c) Needs
-  a reference capture with the sun in frame before implementing — the streak count/layout is unknown
-  without one.
+  same texture-naming family, unrelated purpose. (b) The footage fixes the element inventory
+  (core + 3 rings) but not which texture feeds which element — `bigflare01`/`lflare*` remain a
+  naming-convention lead; match render output against `playtest/CAP-13/` stills, not the asset
+  names. (c) Nose/cockpit-camera flare behaviour was still being tested by the user when this
+  was recorded — check with them before assuming the chase-cam layering holds there. Full
+  record: `playtest/CAP-13/README.md`.
 
 - `BL-250` `[Bug]` `[Blocked: CAP-22]` **C5 draws doubled clutter buildings — confirmed, strong candidate fix.** Answers the question the subface report (`analysis/item9-depth-bias/CBLOCK-LOD.md`)
   left open: `cblock4/5/6` carry their own **disjoint** clutter building templates (`cb12a`–`cb24a`)

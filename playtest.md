@@ -103,7 +103,6 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
 | `CAP-11` | `SunIncidence` per chapter | World brightness framed like `OriginalScreenshots/C1 IA1 Zone1 environment Spawn3.png`, for every chapter, plus a few seconds of video each. **Priority pair: a C1B night mission and a C1C bright-day mission** — the two extremes the self-scaling model predicts (0.43 / clamp 1.0) and is riskiest on | `BL-110` |
-| `CAP-13` | Lens flare | The sun at several screen positions — centred, near-edge, and partially occluded by terrain — to read the streak count, colour and fade | `BL-165` |
 | `CAP-22` | C5 city building density | A low pass through C5's downtown city blocks (IA1), close enough to street level to tell whether buildings sit as one consistent skyline or visibly overlap/interpenetrate each other. Our build currently draws two disjoint building districts on the same footprint (`cb00a`–`cb11a` over `cb12a`–`cb24a`) — this settles whether the original shows only one | `BL-250` |
 | `CAP-23` | Water vs shoreline order | A low pass over a C1B shoreline where surf meets open water (the recorded pose is around `-7700,49,-5798`), close enough to tell **which of the two draws on top** — does the surf/foam strip lie over the water, or does the water edge cover it? Any chapter's shore/water boundary answers it; C1B is where our build's contested pair sits | `BL-251` |
 
