@@ -193,7 +193,8 @@ public sealed class WorldEffectsFactory
     public static TemplateStage<Node3D> NewCrashTemplateStage(bool debugMotions = false) =>
         AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true,
             debugMotions: debugMotions,
-            placeExempt: EffectCatalogue.AirframeScopedAnchors);
+            placeExempt: EffectCatalogue.AirframeScopedAnchors
+                .Concat(EffectCatalogue.CrashScaffoldAnchors));
 
     /// <summary>Builds the meshless <see cref="CrashAnchorNodes"/> under a 'player' root — the crash
     /// def's local anchor set (see the field remark).</summary>

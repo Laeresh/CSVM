@@ -2252,10 +2252,13 @@ public static class Suites
                             }
                         }
 
-                        if (builder.BuildDestroyed(model) is { } wreck)
+                        var wreck = builder.BuildDestroyed(model);
+                        var restPoses = new List<(Node3D Node, Transform3D RestPose)>();
+                        if (wreck != null)
                         {
                             wreck.Visible = false;
                             crashRoot.AddChild(wreck);
+                            CollectRestPoses(wreck, restPoses);
                         }
 
                         ctx.Host.AddChild(controller);
@@ -2305,6 +2308,53 @@ public static class Suites
                                   && planeModel.GlobalTransform.Origin.DistanceTo(restOrigin) < 0.5f
                                   && planeModel.Visible,
                             $"{model}: the airframe model is still parented, placed and visible after the tear");
+
+                        // Crash → respawn → move → crash again: the wreck and every template a
+                        // crash reveals must play at the SECOND crash's site (live report: the
+                        // destroyed plane and the dirt burst replayed at the first crash's
+                        // position on every crash after the first).
+                        runtime.Play("player_crash_dirt", crashRoot, applyReset: false);
+                        for (int i = 0; i < 180; i++)
+                        {
+                            runtime.Advance(1f / 60f);
+                        }
+
+                        // The respawn ritual, FlightController.Respawn's crash arm verbatim.
+                        runtime.ResetToBaseState();
+                        foreach (var (node, rest) in restPoses)
+                        {
+                            node.Transform = rest;
+                        }
+
+                        var leftover = string.Join("; ", copies
+                            .Select(c => (c.Root, c.Slot, Lit: LitMeshCount(c.Copy)))
+                            .Where(c => c.Lit > 0)
+                            .Select(c => $"'{c.Root}' slot{c.Slot} lights {c.Lit}"));
+                        ctx.Check(leftover.Length == 0,
+                            $"{model}: respawn leaves no crash template revealed{(leftover.Length == 0 ? "" : $" — {leftover}")}");
+
+                        controller.Position += new Vector3(400, 0, 0);
+                        runtime.Play("player_crash_dirt", crashRoot, applyReset: false);
+                        for (int i = 0; i < 180; i++)
+                        {
+                            runtime.Advance(1f / 60f);
+                        }
+
+                        var here = controller.GlobalTransform.Origin;
+                        if (wreck != null)
+                        {
+                            ctx.Check(wreck.GlobalTransform.Origin.DistanceTo(here) < 150f,
+                                $"{model}: the wreck flies from the SECOND crash's site ({wreck.GlobalTransform.Origin.DistanceTo(here):0} m away)");
+                        }
+
+                        var stale = string.Join("; ", copies
+                            .Where(c => LitMeshCount(c.Copy) > 0
+                                        && c.Copy.GlobalTransform.Origin.DistanceTo(here) > 150f)
+                            .Select(c => $"'{c.Root}' slot{c.Slot} at {c.Copy.GlobalTransform.Origin.DistanceTo(here):0} m"));
+                        ctx.Check(stale.Length == 0,
+                            $"{model}: every template the second crash reveals plays at its own site{(stale.Length == 0 ? "" : $" — {stale}")}");
+                        ctx.Check(!crashRoot.TopLevel,
+                            $"{model}: the crash scaffold is never world-pinned by a crash's own calls");
                     }
                     finally
                     {
@@ -2318,6 +2368,21 @@ public static class Suites
                 textures.Dispose();
             }
         });
+    }
+
+    /// <summary>Every wreck node's rest pose — the local mirror of
+    /// <c>WorldEffectsFactory.CollectRestPoses</c>, so the suite's respawn ritual can re-home the
+    /// flung pieces the way <c>FlightController.Respawn</c> does.</summary>
+    private static void CollectRestPoses(Node3D node, List<(Node3D Node, Transform3D RestPose)> into)
+    {
+        into.Add((node, node.Transform));
+        foreach (var child in node.GetChildren())
+        {
+            if (child is Node3D sub)
+            {
+                CollectRestPoses(sub, into);
+            }
+        }
     }
 
     /// <summary>Meshes drawing under one staged template copy — visibility taken in-tree, so a
