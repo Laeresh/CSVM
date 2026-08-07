@@ -1175,7 +1175,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-037` `[Research]` **`WorldPartitionSetActive` is unimplemented and undescribed — a C3-only mechanism.**
   Measured: **all 25 uses are `support\c3\*.gw` — C3 only** — and it takes rectangle coordinates,
   not node names. It never appears in any C5 script, so it is NOT the C5 ground-LOD mechanism —
-  that is the **subface flag** (see `BL-250`) — and not "the runtime system that picks between
+  that is the **subface flag** (`analysis/item9-depth-bias/CBLOCK-LOD.md`; the clutter side of it
+  closed as `BL-250`, `git log --grep=BL-250`) — and not "the runtime system that picks between
   coarse and fine ground", a claim this entry once made and retracted (⛔ 2026-07-23). It is a C3
   question, not a ground-LOD one.
 
@@ -1401,37 +1402,30 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   was recorded — check with them before assuming the chase-cam layering holds there. Full
   record: `playtest/CAP-13/README.md`.
 
-- `BL-250` `[Bug]` `[Blocked: CAP-22]` **C5 draws doubled clutter buildings — confirmed, strong candidate fix.** Answers the question the subface report (`analysis/item9-depth-bias/CBLOCK-LOD.md`)
-  left open: `cblock4/5/6` carry their own **disjoint** clutter building templates (`cb12a`–`cb24a`)
-  versus `cblock1/2/3`'s (`cb00a`–`cb11a`), and `ClutterBuilder.PlaceOnMesh`
-  (`CSVM/src/Mech3/Clutter.cs:632-661`) matches a template to a polygon by **texture name only** — it
-  never reads `GameZPolygon.Subface`. Since `cblock1/2/3`'s subface polygons sit on top of
-  `cblock4/5/6`'s base polygons at 88.5–100% footprint overlap (`CBLOCK-LOD.md` §2), both districts
-  stamp buildings at the same C5 build: measured 43,873 `cblock1/2/3`-district placements and 35,433
-  `cblock4/5/6`-district placements in one `--freecam --chapter=C5` run (`ClutterBuilder.Summary`),
-  visually confirmed at the item9 repro pose. Full record: `analysis/bl-058-clutter-doubling/FINDINGS.md`.
-  **Candidate fix, not yet landed:** `cblock1`/`cblock4` (r=0.705, independently reproduced),
-  `cblock2`/`cblock5` and `cblock3`/`cblock6` are each the *same* painted city-block scene at two
-  fidelities — a crisp 256² night pass (`cblock1/2/3`) and a blurry 64² pass of the identical layout
-  (`cblock4/5/6`, `CBLOCK-LOD.md` §1a's r≈0.70-0.72 pairing). `CBLOCK-LOD.md` already ruled out any
-  live selector between the two passes (no day/night/zone/LOD state picks one) — the high-res pass
-  wins the ground z-fight unconditionally, so the low-res pass is **always** buried (97.0/99.9/100.0%
-  overlapped, never merely "sometimes"). That is a principled basis to treat `cblock4/5/6` as a
-  named, cited exemption from `ClutterBuilder`'s template set — mirroring
-  `TextureArchive.KnownAbsentFromGameData`'s pattern (a curated, measured list, not a runtime
-  overlap computation) — rather than a guess.
-  ⚠ **Traps.** Do not land the candidate fix without `CAP-22` first — the inference is from "its
-  ground never wins", not from an observed original screenshot showing `cb12a`–`cb24a`-style
-  buildings absent; the plan/backlog rule against guessing what to hide applies here exactly as it
-  does to `BL-036`. **`zone_id` (`BL-036`) is not the filter** — checked: the repro node carries one
-  `zone_id` for both its `cblock1` and `cblock4` polygons, and the two districts' nodes don't split
-  cleanly by `zone_id` either. **`Subface` is a property of the overlay polygon, not the base** — a
-  general runtime rule would need the same coplanar-overlap computation `CBLOCK-LOD.md` used, which
-  is why the candidate fix is a cited exemption list, not a live filter.
-  *Playtest after fix:* `CAP-22` (C5 city building density, `playtest.md`) decides it — if the
-  original's downtown reads as one consistent skyline, the exemption list lands; if it shows visible
-  overlap too, that is itself worth recording in the closing commit's message (the doubling would be authentic, not a bug) and
-  the item closes ❌-for-now instead.
+- `BL-305` `[Bug]` **C5's city blocks are packed edge to edge where the original shows pavement
+  between buildings — within-block clutter density/alignment is wrong.** Found by `CAP-22`
+  (2026-08-07) while closing `BL-250` (the doubled-district bug, landed the same day — evidence
+  in that closing commit, `git log --grep=BL-250`, and `playtest/CAP-22/` while it lives): at
+  scale-matched nadir (`playtest/CAP-22/ours-nadir-230-scale-matched.png` vs
+  `orig-c-t4-nadir-crossroads.png`, matched by eye on avenue width, ±20 %) the original's blocks
+  show pavement between neighbouring buildings, while ours have whole regions of no visible
+  ground — and that persisted with the buried `cblock4/5/6` district already suppressed, so it is
+  **not** the doubling: it is the placement of the surviving `cblock1/2/3`+`cblock7` districts
+  themselves. Prime suspect: `ClutterBuilder` tiles each template on a fixed world-space X/Z grid
+  of its authored period rather than reproducing the original's (undecoded) alignment
+  (`Clutter.cs`'s class comment records the decision and why), which can double-stamp a
+  template's cell pattern relative to the painted street layout the ground texture shows.
+  A footprint-vs-texture matching attempt was already made and was inconclusive without the
+  ground quad's UV-to-world orientation verified first —
+  `analysis/bl-058-clutter-doubling/FINDINGS.md` (the `match_footprints.py` paragraph) has the
+  dead end so it is not re-walked.
+  ⚠ **Traps.** (a) Do not re-open the district question: the original's downtown is the
+  `cblock1/2/3` city and `cblock4/5/6` stays exempted (`Clutter.cs`
+  `BuriedClutterDistricts`, closing commit of `BL-250`). (b) The scale match behind the founding
+  observation is by eye, ±20 % — re-shoot with a decoded altitude before tuning to it.
+  (c) `cblock7` places `cb12a`/`13a`/`14a` (models in the exempted district's name range) — a
+  density census that lumps by name range will mis-attribute exactly the way `BL-250`'s first
+  census did; count per template root.
 
 - `BL-251` `[Research]` `[Blocked: CAP-23]` **Does the original draw water over the shoreline, or the shoreline over the water?** Our cross-node draw order is "the later gamez node wins" — `nodes.json` is
   a depth-first serialization, which is the original engine's own draw order — and the dense

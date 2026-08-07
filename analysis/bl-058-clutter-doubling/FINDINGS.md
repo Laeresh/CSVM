@@ -31,7 +31,10 @@ So a `cblock4/5/6` base polygon is, for practical purposes, *always* also presen
 `cblock1/2/3` subface polygon at the same X/Z — the two textures coexist as real, separate polygons
 at (very nearly) the same footprint. `interp.json`'s `support\c5\adjust.gw` registers all seven
 templates (`AddClutterTemplates cblock1`…`cblock7`), and each has its **own, disjoint** building
-list — `cblock1`'s `cb00a`–`cb11a` share nothing with `cblock4`'s `cb12a`–`cb24a`.
+list — `cblock1`'s `cb00a`–`cb11a` share nothing with `cblock4`'s `cb12a`–`cb24a`. *(True for
+`cblock1` vs `cblock4` specifically, but corrected 2026-08-07 as a district-level claim —
+`cblock5/6` share `cb06a`/`cb11a` with `cblock2/3`, and `cblock7` places `cb12a`–`cb14a`; see the
+capture addendum at the end of this report.)*
 
 ## 2. `Clutter.cs` does not know about subfaces
 
@@ -101,7 +104,8 @@ clutter at all (base clutter roots the covered case, i.e. `PlaceOnMesh` should s
 carries no flag to key off; the subface/base pairing would have to be inferred the same way
 `CBLOCK-LOD.md` did it), or (b) the original's own clutter system might have a coplanar-aware skip
 this reader has not found evidence for yet. Both are equally plausible from the data gathered here;
-neither is implemented. See the new backlog entry `BL-250`.
+neither is implemented. (Tracked as `BL-250`; landed 2026-08-07 as the exemption list — see the
+capture addendum below and the closing commit, `git log --grep=BL-250`.)
 
 ## Follow-up (same session): a strong candidate fix, still gated on a playtest
 
@@ -128,9 +132,55 @@ high-res pass always wins the ground z-fight, so the low-res pass is **always** 
 100.0% overlapped per §2's coverage table, not merely "usually"). A district whose ground art can
 never be seen is a reasonable candidate for "its buildings were never meant to be seen either" — but
 this is still an inference from the ground layer's fate, not a direct observation of what the
-original's downtown actually shows. `playtest.md` `CAP-22` is now queued to settle it before any code
-lands. See `backlog.md` `BL-250` for the exemption-list fix shape (mirrors
-`TextureArchive.KnownAbsentFromGameData`) and the reasoning for gating it on the capture.
+original's downtown actually shows. The exemption list landed 2026-08-07 as
+`ClutterBuilder.BuriedClutterDistricts` (mirrors `TextureArchive.KnownAbsentFromGameData`;
+closing commit: `git log --grep=BL-250`).
+
+## The capture came back, and it cannot settle it either — 2026-08-07
+
+`CAP-22` was shot and read (three clips, ~76 s; full record `playtest/CAP-22/README.md`). The
+original's C5 reads as one consistent, street-respecting city at every altitude filmed — every
+avenue clear end to end, buildings inside their blocks, nothing interpenetrating. **But that is
+not the positive observation the paragraph above asked for**, because the buried district is
+nearly invisible in our *own* build: rendered at C5 with `cblock4/5/6` temporarily dropped from
+`ClutterBuilder.TemplateNames`, removing all 35,433 of its placements changes only **7.10%** of a
+400 m nadir frame, **6.34%** at 1200 m and **2.12%** at street level. Its buildings are shorter
+than `cblock1/2/3`'s and sit under or behind them. The diff heat map also removes the obvious
+tell — the vanished buildings scatter through the blocks and almost none sit on the avenues, so
+"the original's streets are clear" is not evidence of a single district; both districts respect
+the same street bands.
+
+That direction of the test is one-way — but the *reverse* direction discriminates, and a
+follow-up measurement (same day) settles the district identity outright:
+
+- **Authored heights** (per-template, extracted gamez, parentless-root rule; table in
+  `playtest/CAP-22/README.md`): every building above **52 m** — the 59–108 m towers
+  `cb02a`–`cb05a`/`cb07a`–`cb10a` — exists only in `cblock1/2/3`'s templates. `cblock4/5/6` top
+  out at 52 m, `cblock7` at 26 m.
+- **Counterfactual render** (`cblock1/2/3` suppressed instead): **31.98 %** of the street-level
+  frame / **23.18 %** of the 400 m nadir changes — the clutter city collapses to a uniform
+  low-rise field with only placed landmarks standing. The original's rooftop pass
+  (`CAP-11 C5 clear CAP-22.mp4` t=26–29) shows dense 15–25-story towers throughout the lattice:
+  it matches the baseline and cannot be the `cblock4/5/6` city.
+
+So the final verdict is stronger than "not contradicted": **the original's downtown is positively
+the `cblock1/2/3` city, it does not stamp both sets (no interpenetration in ~76 s of footage,
+where our doubled build does interpenetrate at §4's repro pose), and `cblock4/5/6`'s buildings
+are the set it does not draw.** The exemption list may land.
+
+The same measurement pass also **corrected §1/§3 of this report**: the districts are *not*
+disjoint building sets. `cblock5/6` also place `cb06a`/`cb11a` (shared with `cblock2/3`), and the
+visible `cblock7` places only `cb12a`/`13a`/`14a` — models from the "buried" name range. §3's
+43,873/35,433 census, summed by name range, cross-attributes both ways; the post-fix acceptance
+census is by *template-exclusive* models: `cb15a`–`cb24a` → 0, `cb12a`/`13a`/`14a` →
+`cblock7`-only counts, `cb06a`/`cb11a` → `cblock2/3`-only counts.
+
+Separately, the capture showed that landing the exemption list will not close our visible gap to
+the original: at scale-matched nadir the original's blocks show pavement between neighbouring
+buildings while ours are packed edge to edge with whole regions of no visible ground, and that
+persists with `cblock4/5/6` suppressed. The dominant error is the within-block placement density
+of `cblock1/2/3`+`cblock7` themselves — split out as `BL-305` when `BL-250` closed (2026-08-07,
+fix landed as `ClutterBuilder.BuriedClutterDistricts`; closing commit: `git log --grep=BL-250`).
 
 ## Ruled out: the unparsed node `zone_id` (`BL-036`) is not the filter
 

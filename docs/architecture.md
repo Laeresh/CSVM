@@ -475,8 +475,9 @@ plus a UV-clamp variant from `SceneBuilder.UvsWithinUnitSquare` over the kind's 
 ⚠ **`PlaceOnMesh` matches a template to a polygon by TEXTURE NAME ONLY — it never reads
   `GameZPolygon.Subface`.** In C5, `cblock1/2/3`'s subface polygons sit directly on top of
   `cblock4/5/6`'s base polygons (88.5–100% footprint overlap, `analysis/item9-depth-bias/CBLOCK-LOD.md`),
-  and the two districts name disjoint building sets, so today's build stamps BOTH — confirmed doubled
-  clutter buildings (`BL-250`, `analysis/bl-058-clutter-doubling/`). The subface depth-bias fix
+  so stamping both doubled the clutter buildings — settled 2026-08-07 by excluding the always-buried
+  `cblock4/5/6` via `ClutterBuilder.BuriedClutterDistricts` (CAP-22 established the original draws
+  the `cblock1/2/3` city; closing commit: `git log --grep=BL-250`). The subface depth-bias fix
   (`SceneBuilder.SubfaceBias`) only resolves which ground TEXTURE wins the z-fight; it has no effect
   on this file, which walks the same gamez tree independently.
 

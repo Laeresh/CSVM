@@ -105,6 +105,26 @@ public sealed class ClutterBuilder
     // node knows — i.e. nothing. Do not mix the two APIs on these bodies.
     private const float CollisionRegion = 1024f;
 
+    // C5's boot script registers cblock1..cblock7, but cblock4/5/6 dress a ground layer the
+    // player can never see: cblock1/2/3's subface polygons cover their base polygons at
+    // 97.0/99.9/100.0% and win the ground z-fight unconditionally — no day/night/zone/LOD
+    // state ever picks the low-res pass (analysis/item9-depth-bias/CBLOCK-LOD.md §1c/§2, the
+    // r≈0.70 same-scene-two-fidelities pairing). Stamping their buildings anyway doubled the
+    // city's clutter and interpenetrated the visible district's buildings. CAP-22 settled the
+    // original's side: its downtown lattice carries the 59–108 m towers that exist only in
+    // cblock1/2/3's templates, and shows no interpenetration anywhere — so the original draws
+    // the cblock1/2/3 city and not this set (closing commit of BL-250, and
+    // playtest/CAP-22/README.md while it lives). A curated, measured list like
+    // TextureArchive.KnownAbsentFromGameData, not a runtime overlap computation: the base
+    // polygon carries no flag of its own (Subface marks the OVERLAY), so a live rule would
+    // need CBLOCK-LOD.md's coplanar-overlap computation at every load.
+    // ⚠ cblock7 stays: same artwork family, but a VISIBLE subface district (78 C5 nodes) — and
+    // it places cb12a/13a/14a, so those names must NOT read as proof this exemption failed.
+    private static readonly HashSet<string> BuriedClutterDistricts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "cblock4", "cblock5", "cblock6", // C5 only
+    };
+
     private readonly GameZ _gamez;
     private readonly TextureArchive _textures;
     private readonly SceneBuilder? _scene;
@@ -151,7 +171,8 @@ public sealed class ClutterBuilder
 
     /// <summary>Reads the chapter's boot script out of the interp extraction
     /// (extracted/interp.json) and returns its registered clutter template names
-    /// (the "AddClutterTemplates X" lines of support\&lt;chapter&gt;\adjust.gw).
+    /// (the "AddClutterTemplates X" lines of support\&lt;chapter&gt;\adjust.gw),
+    /// minus <see cref="BuriedClutterDistricts"/>.
     /// Empty when the file or script is missing.</summary>
     public static List<string> TemplateNames(string interpPath, string chapter)
     {
@@ -170,7 +191,8 @@ public sealed class ClutterBuilder
                 var parts = (line.GetString() ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length >= 2 && parts[0] == "AddClutterTemplates")
                     for (int i = 1; i < parts.Length; i++)
-                        names.Add(parts[i]);
+                        if (!BuriedClutterDistricts.Contains(parts[i]))
+                            names.Add(parts[i]);
             }
         }
         return names;

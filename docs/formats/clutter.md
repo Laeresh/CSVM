@@ -89,7 +89,7 @@ ground with nothing standing on it.
 | chapter | templates | period | 3D decorations placed | sprites placed |
 |---|---|---|---|---|
 | C2 | `filmblock1-5`, `resblock1-6`, `parklot1-2` | 128 m (`parklot*` 32 m) | 10,261 | 37,167 |
-| C5 | `cblock1-7` | 256 m | 79,306 | 139,388 |
+| C5 | `cblock1-7` registered; `cblock1/2/3` + `cblock7` placed (see below) | 256 m | 71,326 | 124,072 |
 
 `parkpat` (C2, 512 m) and every other chapter's templates are sprite-only, so no other
 chapter gains or loses anything. **C2B registers `resblock2`/`filmblock1`/`filmblock2` in
@@ -101,14 +101,18 @@ a bug in the reader.
 from 11 distinct models; each is stamped at every 256 m grid cell whose terrain carries
 `cblock1.tif`.
 
-**Confirmed 2026-08-04 (`BL-250`, `analysis/bl-058-clutter-doubling/`): C5 places two disjoint
-building districts on top of each other.** `cblock4/5/6` are the *base* ground layer and
-`cblock1/2/3` are OpenFlight subface overlays laid directly on top of them at 88.5–100% footprint
-overlap (see `analysis/item9-depth-bias/CBLOCK-LOD.md`), and `ClutterBuilder.PlaceOnMesh` matches a
-template to a polygon by **texture name only** — it never reads the polygon's `Subface` flag. So a
-live build stamps `cblock1/2/3`'s district (`cb00a`–`cb11a`, measured 43,873 placements) *and*
-`cblock4/5/6`'s disjoint district (`cb12a`–`cb24a`, measured 35,433 placements) at the same C5 city
-blocks. The fix mechanism is not decided — `BL-250` tracks it.
+**C5's `cblock4/5/6` templates are registered by the boot script but excluded by the reader
+(`ClutterBuilder.BuriedClutterDistricts`), settled 2026-08-07.** They dress the *base* ground
+layer, which `cblock1/2/3`'s subface overlays cover at 97.0/99.9/100.0% and beat in the ground
+z-fight unconditionally (`analysis/item9-depth-bias/CBLOCK-LOD.md` — the same painted scene at
+two fidelities, r≈0.70 per pair); since `PlaceOnMesh` matches by **texture name only** and never
+reads the polygon's `Subface` flag, stamping them too doubled the city's buildings
+(`analysis/bl-058-clutter-doubling/FINDINGS.md`). `CAP-22` footage settled the original's side:
+its downtown lattice carries the 59–108 m towers that exist only in `cblock1/2/3`'s templates
+and shows no interpenetration, so the original draws the `cblock1/2/3` city (closing commit:
+`git log --grep=BL-250`). ⚠ The building sets are **not** disjoint by name range: `cblock5/6`
+also place `cb06a`/`cb11a`, and the *visible* `cblock7` places `cb12a`/`13a`/`14a` — census by
+template root, never by `cbNNa` name range.
 
 **`cbNNa` and `cbNNdet01` are co-located halves of one building, not a LOD pair.** Every
 `det` decoration in `cblock1` sits at the *exact* same local origin as its `a` sibling, but
