@@ -100,17 +100,18 @@ $Planes = @(
 )
 $DefaultPlane = "player_bhawk"   # Bloodhawk: the primary test aircraft
 
-# The chapter worlds (--chapter=). Code is the extracted folder; Name is the map
-# (region labels per PROJECT_CONTEXT.md; C1/C1B/C1C are day/night/weather variants of Sea Haven).
+# The chapter worlds (--chapter=). Code is the extracted folder; Name is the map, labelled after
+# the original's instant-action environment menu (crimson.exe maps env 0-6 to c1, c2b, c3, c5,
+# c1b, c4, c2; C1C is not selectable in instant action - campaign/MP only).
 $Chapters = @(
-    [pscustomobject]@{ Name = "Sea Haven (Northwest) - night"; Code = "C1" }
-    [pscustomobject]@{ Name = "Sea Haven - variant B";         Code = "C1B" }
-    [pscustomobject]@{ Name = "Sea Haven - variant C";         Code = "C1C" }
-    [pscustomobject]@{ Name = "Hollywood";                     Code = "C2" }
-    [pscustomobject]@{ Name = "Hollywood - variant B";         Code = "C2B" }
-    [pscustomobject]@{ Name = "Hawaii (islands)";              Code = "C3" }
-    [pscustomobject]@{ Name = "Rocky Mountains";               Code = "C4" }
-    [pscustomobject]@{ Name = "New York";                      Code = "C5" }
+    [pscustomobject]@{ Name = "Sea Haven (night) - IA: an airfield";           Code = "C1" }
+    [pscustomobject]@{ Name = "The ocean - Sea Haven variant";                 Code = "C1B" }
+    [pscustomobject]@{ Name = "Sea Haven variant C - no IA, campaign/MP only"; Code = "C1C" }
+    [pscustomobject]@{ Name = "Hollywood - IA: a movie studio";                Code = "C2" }
+    [pscustomobject]@{ Name = "The clouds - Hollywood variant";                Code = "C2B" }
+    [pscustomobject]@{ Name = "Hawaii (islands)";                              Code = "C3" }
+    [pscustomobject]@{ Name = "Rocky Mountains - IA: Sky Haven";               Code = "C4" }
+    [pscustomobject]@{ Name = "New York - IA: Manhattan";                      Code = "C5" }
 )
 $DefaultChapter = "C1"
 

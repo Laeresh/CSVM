@@ -85,19 +85,22 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The eight chapter worlds (mirrors RunDev.ps1's roster: display name + extracted folder code).
     // The lettered codes are separate terrain databases, not lighting variants of one map: C1/C1B/C1C
     // all sit in the campaign's Sea Haven region but host different story missions over different
-    // ground, with disjoint landmarks and Danger Zones (same for C2/C2B). Not every chapter has
-    // Danger Zones — C1C/C2B have none, so Stunt Flying there falls back to free flight (logged by
-    // StuntMission).
-    private static readonly (string Name, string Code)[] Chapters =
+    // ground, with disjoint landmarks and Danger Zones (same for C2/C2B). Names follow the original's
+    // instant-action environment menu (crimson.exe maps env 0-6 to c1, c2b, c3, c5, c1b, c4, c2; C1C
+    // is not selectable there — campaign/MP only). DangerZones marks the chapters whose ia.json has
+    // a dzones list; C1C/C2B have none, so ChaptersFor hides them from Stunt Flying (the original
+    // hides "the clouds" there too). A stunt run forced onto them via CLI still falls back to free
+    // flight (logged by StuntMission).
+    private static readonly (string Name, string Code, bool DangerZones)[] Chapters =
     {
-        ("Sea Haven (night)", "C1"),
-        ("Sea Haven — variant B", "C1B"),
-        ("Sea Haven — variant C", "C1C"),
-        ("Hollywood", "C2"),
-        ("Hollywood — variant B", "C2B"),
-        ("Hawaii (islands)", "C3"),
-        ("Rocky Mountains", "C4"),
-        ("New York", "C5"),
+        ("Sea Haven (night) — IA: an airfield", "C1", true),
+        ("The ocean — Sea Haven variant", "C1B", true),
+        ("Sea Haven variant C — no IA, campaign/MP only", "C1C", false),
+        ("Hollywood — IA: a movie studio", "C2", true),
+        ("The clouds — Hollywood variant", "C2B", false),
+        ("Hawaii (islands)", "C3", true),
+        ("Rocky Mountains — IA: Sky Haven", "C4", true),
+        ("New York — IA: Manhattan", "C5", true),
     };
 
     // The player-flyable roster (mirrors RunDev.ps1, the curated game order + display names — note
@@ -152,6 +155,10 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private enum Screen { Mode, Chapter, Plane }
 
+    /// <summary>The chapter roster the picked mode offers — the Chapter screen and everything
+    /// downstream (breadcrumb, launch) index into this, never the full list.</summary>
+    private (string Name, string Code, bool DangerZones)[] CurrentChapters => ChaptersFor(_mode);
+
     /// <summary>The single-player cursor position on the current screen (the plane screen reads
     /// player 1's cursor).</summary>
     private int CurrentIndex => _screen switch
@@ -199,6 +206,18 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// exactly as before.</summary>
     public static bool CanLaunch(MenuMode mode, bool allLocked, int joinedCount) =>
         allLocked && (mode != MenuMode.Versus || joinedCount >= 2);
+
+    /// <summary>The chapter list a mode actually offers, as codes: Stunt Flying only the maps with
+    /// Danger Zones (a stunt run elsewhere would be an empty free flight); every other mode all
+    /// eight. Static + public so the rule is testable without a menu instance.</summary>
+    public static string[] ChapterCodesFor(MenuMode mode)
+    {
+        var list = ChaptersFor(mode);
+        var codes = new string[list.Length];
+        for (int i = 0; i < list.Length; i++)
+            codes[i] = list[i].Code;
+        return codes;
+    }
 
     /// <summary>Show the menu (normally from the Mode screen) and prime every input edge so a
     /// button still held from the transition here (the Esc that left a flight, the Start that
@@ -281,6 +300,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     // --- players / devices ---
 
     private static int Wrap(int index, int count) => ((index % count) + count) % count;
+
+    private static (string Name, string Code, bool DangerZones)[] ChaptersFor(MenuMode mode) =>
+        mode == MenuMode.Stunt ? Array.FindAll(Chapters, c => c.DangerZones) : Chapters;
 
     private static int Mph(PlaneStats s) => Mathf.RoundToInt(s.FdSpeed * 2.23694f);
 
@@ -444,7 +466,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             dirty |= ClaimP1Pad();
             if (p1.Move != 0)
             {
-                int n = _screen == Screen.Mode ? Modes.Length : Chapters.Length;
+                int n = _screen == Screen.Mode ? Modes.Length : CurrentChapters.Length;
                 if (_screen == Screen.Mode)
                     _modeIndex = Wrap(_modeIndex + p1.Move, n);
                 else
@@ -456,7 +478,12 @@ public sealed partial class LaunchMenu : CanvasLayer
                 _error = "";
                 _screen = _screen == Screen.Mode ? Screen.Chapter : Screen.Plane;
                 if (_screen == Screen.Chapter)
+                {
                     _mode = (MenuMode)_modeIndex; // the row order IS the enum order
+                    // The roster may have shrunk (Stunt hides the dzone-less maps) — keep the
+                    // cursor on a row that exists.
+                    _chapterIndex = Wrap(_chapterIndex, CurrentChapters.Length);
+                }
                 else
                     PrimeJoins(); // joining opens here — a Start held on the way in must not fire
                 dirty = true;
@@ -544,7 +571,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         foreach (var slot in _slots)
             choices.Add(new PlayerChoice(Planes[slot.PlaneIndex].Node, slot.Input.Pads));
         // Leave our state as-is so a failed build can send us back with ShowMenu.
-        Launch?.Invoke(Chapters[_chapterIndex].Code, choices, _mode);
+        Launch?.Invoke(CurrentChapters[_chapterIndex].Code, choices, _mode);
     }
 
     // --- rendering ---
@@ -733,7 +760,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     private int CurrentCount() => _screen switch
     {
         Screen.Mode => Modes.Length,
-        Screen.Chapter => Chapters.Length,
+        Screen.Chapter => CurrentChapters.Length,
         _ => Planes.Length,
     };
 
@@ -745,7 +772,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         string text = _screen switch
         {
             Screen.Mode => Modes[index].Label,
-            Screen.Chapter => Chapters[index].Name,
+            Screen.Chapter => CurrentChapters[index].Name,
             _ => Planes[index].Name,
         };
         bool sel = index == CurrentIndex;
@@ -820,14 +847,14 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             Screen.Mode => "Mode  ›  Map  ›  Aircraft",
             Screen.Chapter => $"{mode}  ›  Map  ›  Aircraft",
-            _ => $"{mode}  ›  {Chapters[_chapterIndex].Name}  ›  Aircraft",
+            _ => $"{mode}  ›  {CurrentChapters[_chapterIndex].Name}  ›  Aircraft",
         };
     }
 
     private string Detail(int focus) => _screen switch
     {
         Screen.Mode => Modes[focus].Detail,
-        Screen.Chapter => $"Region {Chapters[focus].Code}",
+        Screen.Chapter => $"Region {CurrentChapters[focus].Code}",
         _ => PlaneStat(Planes[focus].Node),
     };
 

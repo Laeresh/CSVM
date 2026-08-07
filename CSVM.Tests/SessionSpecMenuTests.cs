@@ -205,6 +205,20 @@ public class SessionSpecMenuTests
     public void TheLaunchGateNeverOpensBeforeEveryoneIsLocked(MenuMode mode)
         => Assert.False(UI.LaunchMenu.CanLaunch(mode, allLocked: false, joinedCount: 4));
 
+    /// <summary>The Map screen's roster rule (<see cref="UI.LaunchMenu.ChapterCodesFor"/>): Stunt
+    /// Flying hides C1C and C2B — they ship no <c>dzones</c>, so a stunt run there would be an
+    /// empty free flight (the original hides "the clouds" from stunt for the same reason) — while
+    /// every other mode offers all eight chapters.</summary>
+    [Fact]
+    public void StuntFlyingHidesTheChaptersWithoutDangerZones()
+    {
+        Assert.Equal(
+            new[] { "C1", "C1B", "C2", "C3", "C4", "C5" },
+            UI.LaunchMenu.ChapterCodesFor(MenuMode.Stunt));
+        Assert.Equal(8, UI.LaunchMenu.ChapterCodesFor(MenuMode.Free).Length);
+        Assert.Equal(8, UI.LaunchMenu.ChapterCodesFor(MenuMode.Versus).Length);
+    }
+
     private static SessionSpec Cli(params string[] args) => SessionSpec.Parse(args);
 
     private static SessionSpec Menu(SessionSpec cli, string chapter, MenuMode mode, params string[] planes)
