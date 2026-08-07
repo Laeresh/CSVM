@@ -63,7 +63,7 @@
     {
       "name": "c5-city-night",
       "frame": 120,
-      "hash": "fb5537ffad131f04669254f9c52c948f",
+      "hash": "a0c47e74ac7976b21e5276ba1c8dc027",
       "exercises": "the night city: LIGHT_STATE point lights packed into csky_light_data, lit window skins, moon and stars; static, 11 px at 120 vs 360.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute"]
     },
