@@ -342,6 +342,10 @@ path-normal acceleration 0.91–1.03× free air, ADI body pitch rate 0.91–1.10
 controlled pair flying the same held full-deflection loop at 1,113 ft and at 90 ft. An earlier pass
 here claimed "1.95× max pull"; that was **wrong** (a borrowed yardstick) — the retraction and the
 one outstanding anomaly are on `BL-095`. Do not re-derive any of it from the clips.
+**Closed 2026-08-07**: the mechanism turned out to be *designed* — GDD §4.1.7 "Ground Blow"
+describes a proximity repulsion from large objects (the ground, cliff walls, zeppelins) that biases
+control response away from the emitter and never overpowers the stick. The lateral heading step
+below is that bias; `CAP-02` is retired (`BL-095`).
 
 ⚠ **The ADI saturates above roughly +25° nose-up** — sky fraction pins at 0.729–0.730, identically
 in every `CAP-02` batch-4 clip. Only the first ~0.7 s of a hard pull is readable for pitch rate, so
@@ -360,8 +364,9 @@ unreadable for it.
 ⚠ **There is no roll readout for a daylight scene.** `moon.py` recovers roll by tracking the moon
 and needs a night sky. An ADI sky-centroid bank estimator is the obvious substitute and a naive one
 does **not** work — it wrapped to ±178° on all three batch-4 clips. Until one exists, heading cannot
-be separated from a banked turn, so any "it yawed" claim needs either a level-horizon landmark in
-frame or a night mission.
+be separated from a banked turn by measurement alone, so any future "it yawed" claim needs either a
+level-horizon landmark in frame or a night mission. (Ground blow no longer waits on this — the
+design document supplies the mechanism and the pilot flew the cliff pull wings-level; `BL-095`.)
 
 ⚠ **`ψ̇ = g·tan φ / V` does not give bank in a manoeuvring clip.** It is a *level coordinated turn*
 identity, and the aircraft in these takes is pulling hard throughout. Run against `CAP-02`'s batch-5
@@ -706,7 +711,7 @@ the spread only a trigger for computing it.
 | 2 | Full loop from level | ✅ this is what pinned the clock |
 | 3 | Sustained level turn, max pull | ✅ **decoded 2026-08-03** from `CAP-01.mp4` — 222.9 mph sustained against 299.0 level, at 18.95 °/sim-s and 100° bank (`BL-092`, `BL-247`) |
 | 4 | 360° aileron roll | ✅ |
-| 5 | Low pass along a canyon wall | ❌ owed — the only source for ground blow |
+| 5 | Low pass along a canyon wall | ✅ **decoded 2026-08-07** across the `CAP-02` batches — ground blow is a lateral control bias away from the surface ahead (17° heading step at a cliff, nothing in the vertical plane), matching GDD §4.1.7's designed repulsion (`BL-095`; `CAP-02` closed) |
 | 7 | Sustained knife-edge | ✅ **decoded 2026-08-04** from the two `CAP-05` knife clips — a 4° nose step then an unbounded 0.7–0.9 °/sim-s sag, 540 m lost in 38.9 sim s, turning only 0.7–1.1 °/sim-s at 100° bank (`BL-247`; closed `BL-124`) |
 | 8 | Stall entry and recovery, engine off | ✅ **decoded 2026-08-04** from `CAP-05 Stall 0% Thrust no input` — break at 0.25 fd, nose drop 3.4 °/sim-s to a −22° floor, and the low-speed drag curve (`BL-115`, `BL-092`) |
 | 6 | Level top speed at 5500 / 6000 / 6500 ft, plus the cap | ✅ **decoded 2026-08-03** from the four `CAP-03` clips — flat 300 mph to 1988 m, then a hard altitude clamp at 2003 m (`BL-094`). 6800 ft is unreachable: the aircraft cannot be flown above the clamp |
