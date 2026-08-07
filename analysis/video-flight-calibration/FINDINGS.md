@@ -66,6 +66,17 @@ for the 90°-bank turn). The roll is the apples-to-apples one and involves no al
 **Pitch rate does not fall off with speed** — binned round the loop it is 37.9 / 33.7 / 30.7 /
 36.5 °/sim-s over 120–160 / 160–200 / 200–240 / 240–280 mph, flat within the noise.
 
+⚠ **It DOES fall off with bank, and that is the sharpest unexplained thing in this file.** The same
+aircraft at the same full back stick sweeps **30.16 °/sim-s** round the wings-level loop (`pitch`,
+360° in 11.94 sim s) but only **18.95 °/sim-s** in the sustained 100°-banked turn (`CAP-01`) — the
+original is **1.6× slower when banked**. Both are full-throttle, both pilot-confirmed full
+deflection. This is not a speed effect: the loop passes clean through the turn's 222.94 mph on its
+way round. Our model has no such asymmetry — it pulls ~33 °/s in both, which is right for the loop
+and 71% fast for the turn — so the "turn-rate gap" recorded against `BL-092`/`BL-247` is a
+**bank/load-factor effect, not a pitch-authority error**, and no capture is owed to establish that
+much. `player.json` ships three unconsumed fields of the right shape — `turn_fade_in 10`,
+`turn_fade_out 50`, `highGs [9, 15]` (`BL-095`). A lead, not a decode: none has been tested.
+
 **Thrust and drag.**
 
 | scenario | measured |
@@ -76,7 +87,8 @@ for the 90°-bank turn). The roll is the apples-to-apples one and involves no al
 | terminal dive (γ ≈ 70°) | **355.2 ± 0.4 mph** = 1.182 × level max |
 | 1/8 throttle equilibrium | **137.9 mph** (0.459 × fd) |
 | 8/8 → **0/8**, 290 → 150 mph, level | 5.03 wall s = **7.04 sim s** |
-| zoom climb from 300 mph level, full pull | **+1635 ft**, bottoming at 104 mph in 10.5 sim s |
+| **loop from 300 mph level, held full pull** (`pitch`) | slowest **127.9 mph** at +4.36 sim s, apex **+936 ft** at +6.54 sim s, 360° in **11.94 sim s** |
+| zoom climb from 300 mph level, full pull | +1635 ft, bottoming at 104 mph in 10.5 sim s — **different flight, unknown stick history**, see below |
 | level top speed vs altitude | flat ~300 mph from 714 m to **1988 m**, i.e. right up to the cap |
 
 ⚠ **The deceleration row is 0/8, not 1/8 — corrected 2026-08-07, pilot-confirmed.** It was labelled
@@ -408,7 +420,12 @@ python -c "import sys;sys.path.insert(0,'analysis/video-flight-calibration');imp
 python -c "import sys;sys.path.insert(0,'analysis/video-flight-calibration');import run2;run2.main()"
 python -c "import sys;sys.path.insert(0,'analysis/video-flight-calibration');import anchor;[anchor.resolve(s) for s in ['pitch','roll','yaw','dive','accel','decel','cap01']]"
 python analysis/video-flight-calibration/compass.py cap01   # heading, where a clip turns
+python analysis/video-flight-calibration/loop.py pitch      # slowest point vs apex vs loop exit
 ```
+
+⚠ `loop.py` exists because those are **three different moments** — on `pitch` the speed minimum
+leads the apex by 2.2 sim s and 63 mph, and the loop exit is 112 mph faster again. Quoting one for
+another is where the stale "+1635 ft / 104 mph" zoom-climb target came from.
 
 PTS timestamps come from the bundled ffmpeg — **required**, see the VFR trap below:
 

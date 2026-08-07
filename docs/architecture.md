@@ -1828,8 +1828,9 @@ a public `Camera` accessor — all inert in plain `--freecam`. Rates TUNE.
 ## src/Flight/FlightModel.cs
 Velocity-vector arcade flight model: body rates = control torque × reciprocal inertia vs
 ang_momentum_damp, scaled per axis (PitchTune/YawTune/RollTune). Thrust/drag/gravity integrate on
-the velocity vector (speed passes through zero); lift cancels gravity's cross-path share; drag is
-normalized so drag(fd_speed) = max thrust. `Alpha` (deg) is angle(nose, VelocityDir), read once per
+the velocity vector (speed passes through zero); lift cancels gravity's cross-path share; drag is a
+speed power law normalized so drag(fd_speed) = max thrust, PLUS an induced term in α (below).
+`Alpha` (deg) is angle(nose, VelocityDir), read once per
 step right after the nose vector — an emergent LAG from the nose-chase, not a modelled aerodynamic
 state, and reported in every `--dump-flight` row's detail. Lift consumes it as the pull's stand-in:
 `liftFrac = min(1, speedLift × |up·Y| × n(α))`, `n` ramping 1 g → `LiftLoadMax` over the authored
@@ -1847,8 +1848,10 @@ off one number, and never recompute the margin beside them.
   the drag curve and lands within 0.3% of the original, so a value that binds replaces a measured
   number with a guess. Keep it above every airframe's emergent terminal — worst is the Balmoral,
   1.678 in a 71° dive (`--dump-flight=player_balmoral`) and ~1.71 vertical.
-⚠ Accepted artifacts, not bugs: loop energy pump, steep-climb equilibrium, stall hang. Known
-  MISSING, measured: no induced drag (a hard pull costs no speed). A hard altitude clamp (2003 m,
+⚠ Accepted artifacts, not bugs: loop energy pump, steep-climb equilibrium, stall hang. Induced
+  drag is `A · C_i · sin²α` — `InducedDragCoef` is the one genuinely FITTED constant here and is
+  NOT transferable: it absorbs our 1.71× turn-rate error, so closing that gap means refitting it.
+  A hard altitude clamp (2003 m,
   `BL-094`/`CAP-03`) deletes climbing velocity at/above the cap rather than fading thrust/lift/drag
   toward it — traced to one mission (C1B IA1) only, not assumed global/per-chapter/per-aircraft.
 

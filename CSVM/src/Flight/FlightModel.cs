@@ -190,6 +190,33 @@ public sealed class FlightModel
     private const float DragExpLow = 3.278f;      // below fd_speed — CAP-05's thrust-free probe
     private const float DragExpHigh = 2.663f;     // at/above fd_speed — the terminal dive
 
+    // Induced drag: the cost of the pull, added to the speed power law as A · C_i · sin²α and
+    // clamped at MaxAoaDeg. Without it a hard pull cost us nothing — the original bleeds from a
+    // 298.96 mph cruise to a 222.94 mph plateau and holds it (CAP-01), where we used to hold 299.
+    // Vanishes exactly at α = 0, so cruise, the acceleration and the terminal dive are untouched by
+    // construction rather than by luck.
+    // ⚠ TUNE, and the only genuinely fitted constant in this group: it was swept against the real
+    // integrator until `sustained-turn-speed` landed on the measured plateau (223.03 mph against
+    // 222.94), because the couplings (drag → speed → bank → wingVert → align → α → drag) have no
+    // closed form. The thrust-vectoring loss is already in that loop — thrust acts along the nose
+    // and drag along the path, so the 1 − cos α deficit falls out of the vector sum — so this
+    // supplies the REMAINDER. Never hand-compute the whole deficit and add it here; that counts the
+    // vectoring twice. At the settled α of 13.8° it contributes 0.61 A, against a base drag of
+    // 0.37 A: BL-092's "+0.380 A" was quoted against the old lerp(x², x, 0.35) blend and understates
+    // the deficit under the refitted curve by more than half, so do not re-derive C_i from it.
+    // ⚠ NOT TRANSFERABLE, and it is not a property of the original. It absorbs our turn-rate error:
+    // we sweep heading at ~32 °/s where the original sweeps 18.95, so our α in this manoeuvre is
+    // larger than the original's and a SMALLER C_i reaches the same settled speed. Close the rate
+    // gap and this must be refitted (`sustained-turn-rate`, informational for exactly that reason).
+    // ⚠ The EXPONENT is a choice, not a measurement. Both CAP-01 segments sit at essentially the
+    // same load factor (V·ω 32.96 against 34.02), so terms in n, n² or ω² fit the clip equally
+    // well; sin²α is picked on physical grounds — textbook shape, doesn't saturate where the lift
+    // ramp does, and vanishes at α = 0 — not because the data prefers it.
+    private const float InducedDragCoef = 10.75f;
+    // deg. player.json's authored `maxAOA 46.0`, units unverified (`BL-095`) — a ceiling on how far
+    // this term can grow, not a limit on α itself, which is still free to exceed it.
+    private const float MaxAoaDeg = 46f;
+
     // Per-axis control-rate calibration. Steady rate = torque · recInertia · Tune /
     // ang_momentum_damp (× eff on yaw), and a full 360° takes ≈ 1/damp spin-up + 2π/rate.
     // Fitted to stopwatch timings of the original, then confirmed against cockpit-gauge video of
@@ -264,6 +291,8 @@ public sealed class FlightModel
         float liftAoaLo = Config.GetFloat("flightModel.liftAoaLo", LiftAoaLo);
         float liftAoaHi = Config.GetFloat("flightModel.liftAoaHi", LiftAoaHi);
         float liftLoadMax = Config.GetFloat("flightModel.liftLoadMax", LiftLoadMax);
+        float inducedDragCoef = Config.GetFloat("flightModel.inducedDragCoef", InducedDragCoef);
+        float maxAoaDeg = Config.GetFloat("flightModel.maxAoaDeg", MaxAoaDeg);
         float alignRate = Config.GetFloat("flightModel.alignRate", AlignRate);
         float altitudeCapM = Config.GetFloat("flightModel.altitudeCapM", AltitudeCapM);
         float altitudeCapOvershootM = Config.GetFloat("flightModel.altitudeCapOvershootM", AltitudeCapOvershootM);
@@ -431,8 +460,12 @@ public sealed class FlightModel
         // bleeds/returns speed — reduced climbing (climb retention: the original bleeds
         // noticeably less speed in a sustained climb), full when diving.
         float xSpd = Speed / s.FdSpeed;
+        // Drag is the speed power law PLUS the pull's own cost: a hard pull bleeds speed, which is
+        // what makes a sustained max-pull turn settle far below cruise instead of at it.
+        float sinAoa = Mathf.Sin(Mathf.DegToRad(Mathf.Min(Alpha, maxAoaDeg)));
         float dragAccel = _maxThrustAccel
-                          * Mathf.Pow(xSpd, xSpd < 1f ? dragExpLow : dragExpHigh);
+                          * (Mathf.Pow(xSpd, xSpd < 1f ? dragExpLow : dragExpHigh)
+                             + (inducedDragCoef * sinAoa * sinAoa));
         var gravity = Vector3.Down * s.Gravity;
         var gAlong = VelocityDir * gravity.Dot(VelocityDir);
         var gAcross = gravity - gAlong;

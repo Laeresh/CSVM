@@ -771,6 +771,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `yaw_high_speed 0.17`, `yaw_fade_in 10`, `yaw_max 50`, `yaw_fade_out 400`, `groundblow_elev 400`,
   `groundblow_mag 10`, `ai_groundblow 0.5`, and the `crash` block's `bounce_factor 0.6`. Units are
   unverified; decoding it deserves its own pass, and it is the upstream of two other entries here.
+  **`turn_fade_in 10` / `turn_fade_out 50` / `highGs [9,15]` now have a measurement waiting for
+  them (2026-08-07).** The original pulls **1.6× slower when banked**: 30.16 °/sim-s round a
+  wings-level 360° loop against 18.95 °/sim-s in `CAP-01`'s 100°-banked turn, same aircraft, same
+  full back stick, same full throttle — and not a speed effect, since the loop passes through the
+  turn's 222.94 mph on its way round (`analysis/video-flight-calibration/FINDINGS.md`). Our model
+  has no such asymmetry and is 71% fast in the banked case while being right to ~11% in the loop.
+  These three fields are the only authored ones shaped like a bank/load-factor rate fade, so
+  decoding them is now the concrete next step rather than a wish. ⚠ **A lead, not a decode** — the
+  names have not been mapped to units and `maxAOA`/`liftAOAs` were consumed as a hypothesis under
+  test, not as a decode (`docs/PLAN-flight-drag-lift.md` B12). Do not implement a rate limiter from
+  the names alone; that is the wrong-mechanism fix `BL-092` trap (b) and `BL-124` both warn about.
   Two things it settles immediately: **ground blow ships** (`groundblow_elev`/`groundblow_mag`),
   where the M2 plan recorded it as absent with "magnitude would be a TUNE"; and the `yaw_*` fade set
   is the original's own speed-dependent yaw authority, which our hand-rolled `eff`
@@ -2422,6 +2433,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ Do not retune or delete `DzRadius` as dead code — it is reserved, and the 15 m is the user's.
 
 ## Tooling, platform & docs
+
+- `BL-306` `[Bug]` **`RunTests.ps1` reddens at random: four xUnit classes race over the process-wide
+  `Log.ConsoleSink`.** Caught 2026-08-07 —
+  `StuntRaceTests.FinishOrderAssignsPlacingsInFinishOrderNotEntryOrder` failed with
+  `Assert.Equal(4, lines.Count)` reading **0**, on a change that touched only comments and a
+  detail string. Reproduction attempts: **5/5 pass** for that class alone and **4/4 pass** for the
+  full 616 afterwards, so it is intermittent, not a regression — the failing run is the only one
+  seen so far.
+  **Mechanism, read off the source rather than guessed.** `Log.ConsoleSink` is a plain mutable
+  static. `StuntRaceTests:32` swaps in its own `lines.Add` collector and asserts on what it
+  collected, while `StallWarningTests:120`, `StuntGatesTests:34` and `StuntRaceTests:132` each
+  install a `_ => { }` no-op over the same static (plus `TestHostLogSink.Install()` process-wide).
+  xUnit runs distinct test **classes** in parallel and the assembly sets no `CollectionBehavior`,
+  so a concurrent class can replace the collector between its install and its assertions — after
+  which the collector receives nothing, which is exactly the observed `0` rather than a partial
+  count.
+  *Fix options, not yet chosen:* put the sink-swapping classes in one non-parallel xUnit
+  collection; or give `Log` an `AsyncLocal`/scoped sink so a swap cannot leak across threads. The
+  second is the real fix and also removes the `try/finally` restore dance from four call sites.
+  ⚠ **Traps.** (a) **Do not "fix" it by deleting the `lines.Count` assertion** — the comment above
+  it names that count as the seam the test exists to prove (one line per racer plus the completion
+  line, reaching the installed sink rather than the real `GD.Print`), so dropping it makes the test
+  pass while checking nothing. (b) A green run is not
+  evidence: it passed 4/4 immediately after failing, so any fix needs a deliberate control —
+  hammer the full suite, or force the interleaving — not one clean run (`METHOD-9`, `INSTR-6`).
+  (c) The failure lands on whatever change happens to be in flight, so it will be misattributed;
+  that is the main cost of leaving it.
 
 - `BL-030` `[Cleanup]` `[Blocked: M4]` **`docs/SCOPING-M4-ai.md` still names `PlaneViewer.cs:<line>`.** The C11 final sweep
   (PLAN-planeviewer-split) re-pointed the three `docs/formats/` hits to their real post-split

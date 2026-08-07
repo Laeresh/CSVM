@@ -945,9 +945,14 @@ public static class Probes
             upperBound: true);
 
         // ⚠ INFORMATIONAL and must stay so until the rate gap closes. We sweep heading far faster
-        // than the original, which is recorded, not fixed — no capture we hold explains it, and
-        // inventing a rate limiter to close it is the wrong-mechanism fix BL-092 trap (b) and
-        // BL-124's history both warn about.
+        // than the original, which is recorded, not fixed; inventing a rate limiter to close it is
+        // the wrong-mechanism fix BL-092 trap (b) and BL-124's history both warn about.
+        // ⚠ What the gap IS has narrowed: the original pulls 1.6x slower BANKED than wings-level
+        // (18.95 °/sim-s here against 30.16 round the `pitch` clip's 360° loop, same stick, same
+        // throttle), while we pull the same rate in both — so this is a bank/load-factor effect,
+        // not a pitch-authority error, and `zoom-climb` above is the row that shows our pitch is
+        // nearly right. player.json's unconsumed turn_fade_in/turn_fade_out/highGs are the only
+        // authored fields of that shape (BL-095). A lead; none of it is decoded.
         // ⚠ The original's own turn is NOT internally consistent with a coordinated level turn, so
         // do not promote this by matching the ADI's bank either: 18.95 °/sim-s at 222.94 mph is
         // V·ω = 32.96 m/s² lateral, which implies atan(32.96/20) = 58.7° of bank, not the +100° the
@@ -956,9 +961,11 @@ public static class Probes
         // two banks differ by more than the two rates do.
         Row("sustained-turn-rate", "sustained max-pull turn, heading rate", "°/s",
             turn.RateDegS, 18.95, 3.0,
-            $"{turn.RateDegS / 18.95:0.00}x the original — OPEN, no capture explains it. The "
-            + "original's 18.95 °/sim-s at 222.94 mph implies a 58.7° coordinated-turn bank, not "
-            + "the +100° its ADI reads",
+            $"{turn.RateDegS / 18.95:0.00}x the original — OPEN. The original pulls 1.6x slower "
+            + "BANKED than wings-level (18.95 vs 30.16 °/sim-s round its own loop) and we pull the "
+            + "same rate in both, so the gap is bank/load-factor, not pitch authority. Its 18.95 "
+            + "°/sim-s at 222.94 mph also implies a 58.7° coordinated-turn bank, not the +100° its "
+            + "ADI reads",
             info: true);
 
         // --- part throttle. These two are the ONLY place the drag shape is observable: the
@@ -988,14 +995,24 @@ public static class Probes
         Row("decel-290-150", "throttle cut to ZERO, 290 -> 150 mph, level", "s", tDecel, 7.04, 1.0,
             $"pure drag — no thrust term to assume, α {m.Alpha:0.0}° at finish", info: true);
 
-        // --- zoom climb. INFORMATIONAL, and it is the row that exposes the model's largest known
-        // gap: the original bled to 104 mph reaching its apex where we arrive still fast, because we
-        // model no induced drag at all — a hard pull costs us nothing. The altitude is close; the
-        // energy is not. (Its stick history is also unknown: a held full pull is a loop, and the
-        // same session's loop passed 180° in ~6 s, so 10.5 s to apex was some other input.) Also a
-        // second, longer-duration B11 check of the wings-level-full-pull inference alongside
-        // pitch-rate above — a held pull becomes a sustained loop, so α should sit near the same
-        // ≈8° equilibrium at the point of minimum speed.
+        // --- zoom climb. INFORMATIONAL. Measured off the `pitch` clip's loop — full throttle, full
+        // back stick from a 299.4 mph level cruise, which is the SAME take that pinned the 33 °/s
+        // pitch rate, so its stick history is known rather than inferred. The original bleeds to
+        // 127.9 mph 4.4 sim s into the pull and tops out 936 ft up at 6.5 s, still climbing past its
+        // own slowest point (the speed minimum leads the apex by 2.2 s and 63 mph, because speed
+        // bottoms where thrust − drag = g·sinγ, not where the climb stops).
+        //
+        // ⚠ These targets REPLACE the "+1635 ft, 104 mph, 10.5 s" figures this row carried until
+        // 2026-08-07. That set is a real measurement of a different flight, with an unknown stick
+        // history — it cannot be a held full pull, because a held full pull is this loop and this
+        // loop reaches its apex in 6.5 s, not 10.5. Do not average the two or split the difference.
+        //
+        // The C21 induced-drag term closed most of the speed gap (min speed 269 -> 205 mph against
+        // 128) and overshot the altitude in the other direction (1282 ft against 936), so the energy
+        // is now wrong the other way round and this stays the row to watch. Also a second,
+        // longer-duration B11 check of the wings-level-full-pull inference alongside pitch-rate
+        // above — a held pull becomes a sustained loop, so α should sit near the same ≈8°
+        // equilibrium at the point of minimum speed.
         m = Fresh(stats, Level(), 300f * Mph, 1f);
         float apex = 0f, minSpeed = float.MaxValue, alphaAtMinSpeed = 0f;
         double tApex = RunUntil(m, 1f, 30f,
@@ -1010,9 +1027,9 @@ public static class Probes
                 }
             });
         Row("zoom-climb", "full pull from 300 mph level, altitude gained", "ft",
-            apex / Ft, 1635.0, 200.0,
-            $"min speed {minSpeed / Mph:0.0} mph (original 104 — we model no induced drag), "
-            + $"apex at {tApex:0.0} s (original 10.5), α {alphaAtMinSpeed:0.0}° at min speed",
+            apex / Ft, 936.0, 200.0,
+            $"min speed {minSpeed / Mph:0.0} mph (original 127.9), "
+            + $"apex at {tApex:0.0} s (original 6.5), α {alphaAtMinSpeed:0.0}° at min speed",
             info: true);
 
         var sb = new StringBuilder();

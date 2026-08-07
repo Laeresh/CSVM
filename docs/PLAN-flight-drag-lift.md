@@ -39,10 +39,20 @@ as a hypothesis under test), and `ClimbGravityScale`, which `CAP-05` proved it c
   defended against regression.
 
 **This plan does not close the banked-turn pitch-rate gap.** Once lift can hold 100° of bank we will
-sweep heading at ~33 °/s against the original's measured 18.95 — 1.74× too fast. No capture we hold
-explains it, and inventing a rate limiter to close it is precisely the wrong-mechanism fix that
-`BL-092` trap (b) and `BL-124`'s history both warn about. It is recorded as an informational probe
-row and a named capture request, and nothing else.
+sweep heading at ~33 °/s against the original's measured 18.95 — 1.74× too fast. Inventing a rate
+limiter to close it is precisely the wrong-mechanism fix that `BL-092` trap (b) and `BL-124`'s
+history both warn about. It is recorded as an informational probe row, and nothing else.
+
+**⚠ Updated 2026-08-07 — "no capture we hold explains it" was wrong, and the capture we hold
+narrows it to a mechanism.** Decoding the loop in `Bloodhawk Pitch.mp4` (the same take that pinned
+the 33 °/s pitch rate) gives **30.16 °/sim-s** round a wings-level 360° at full back stick, against
+**18.95** in `CAP-01`'s 100°-banked turn at full back stick. The original is **1.6× slower when
+banked**; we pull the same rate in both. So the gap is a **bank/load-factor effect, not a pitch-
+authority error** — our pitch is right to ~11% and only the banked case is 71% out — and it is not
+a speed effect either, since the loop passes clean through the turn's 222.94 mph on the way round.
+`player.json`'s unconsumed `turn_fade_in 10` / `turn_fade_out 50` / `highGs [9, 15]` are the right
+shape (`BL-095`). **A lead, not a decode** — nothing here has been tested, and the capture request
+this plan was going to name is no longer what is missing.
 
 ## Decisions (2026-08-07)
 
@@ -172,7 +182,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — Induced drag (`BL-092`)
 
-21. ☐ The `sin²α` induced-drag term, `C_i` fitted to the `CAP-01` plateau
+21. ☑ The `sin²α` induced-drag term, `C_i` fitted to the `CAP-01` plateau
 22. ☐ Assert the plateau; record the turn-rate gap
 
 ### Wave D — Records
@@ -653,7 +663,68 @@ shape and the `bhawk` guard — the Bloodhawk is the only airframe on video.
 
 # Wave C — Induced drag (`BL-092`)
 
-## C21 ☐ The `sin²α` induced-drag term, `C_i` fitted to the `CAP-01` plateau
+## C21 ☑ The `sin²α` induced-drag term, `C_i` fitted to the `CAP-01` plateau
+
+**Landed** 2026-08-07. `dragAccel` gains `A · C_i · sin²(min(α, maxAOA))`, with `InducedDragCoef`
+**10.75** and `MaxAoaDeg` **46** (`player.json`'s authored `maxAOA`), both config-backed. `BL-092`
+is closed on the measurement: a hard pull now costs speed.
+
+| | before | after | original |
+|---|---|---|---|
+| `sustained-turn-speed` | 299.26 mph | **223.03** | 222.94 (±5) |
+| `zoom-climb` min speed | 269.5 mph | **205.3** | 104 |
+| all eight prior asserted rows | green | **green** | — |
+
+**How `C_i` was fitted, and why not by hand.** Swept against the real integrator (8.5 → 242.22,
+11.0 → 220.76, 10.75 → 223.03) because the couplings — drag → speed → bank → `wingVert` → `align`
+→ α → drag — have no closed form. Trap (d) is handled *by construction* rather than by care: the
+thrust-vectoring loss is already inside that loop, since thrust acts along the nose and drag along
+the path, so the fit converges on the REMAINDER and cannot double-count it. Trap (e) confirmed and
+quantified: at the settled α of 13.8° the induced term contributes **0.61 A** against a base drag
+of 0.37 A, so the entry's `+0.380 A` — quoted against the old `lerp(x², x, 0.35)` blend — understates
+the deficit under the refitted curve **by more than half**. Anyone re-deriving `C_i` from that
+figure would land at roughly half the right value.
+
+**Trap (b) held.** `pitch-rate` is unmoved at 33.47 °/s across all three speeds — nothing leaked
+into the pitch axis. `terminal-dive` moved 355.37 → 355.26 mph (α 0.6° there, so the term is ~1e-4 A),
+`yaw-360` improved 29.80 → 29.17 s against 28.6, and the four level rows are bit-identical because
+α is exactly 0 in them.
+
+**Verified.** `.\RunTests.ps1`: build clean, **616/616** units, **26/26** engine suites, engine
+errors clean. 8-chapter `--freecam` regression clean. All eleven airframes: **zero failures**, and
+every one now settles its max-pull turn below its own top speed.
+
+**Two goldens moved, and both were traced rather than assumed.**
+
+| shot | pixels moved | why |
+|---|---|---|
+| `c1-flight` | **18.94%**, max Δ207/255 | `--hold=0.2,…` holds a PULL — α develops, the pull now costs speed, and the plane sits elsewhere on its arc. The intended effect. Well inside the shot's own 34.52% frame-sensitivity. |
+| `c1-destroy-effects` | **0.07%**, max Δ8/255 | sub-visual; the two images are indistinguishable and the effect renders identically. |
+
+`empty-stage` and `c1-crash` did **not** move — both hold pitch 0 wings-level, where α is exactly 0
+and the term is identically zero. `c1-destroy-effects` holds pitch 0 too, which made it the odd one
+out, so the mechanism was *tested* rather than reasoned about: re-running its exact args with
+`--direction=1,0,0` (level) instead of its authored `1,-0.1,0` gives a **hash-identical** image at
+`C_i` = 10.75 and `C_i` = 0. Its nose-down entry is what develops the α. Controls run: at
+`C_i` = 0 all 13 goldens return hash-identical, and both moved shots reproduce their old committed
+hashes exactly; two independent runs at 10.75 produced identical new hashes. Rebaselined.
+
+**⚠ Deviation.** C22's `zoom-climb` comment rewrite was started early: the row's comment and its
+printed detail string both asserted "we model no induced drag at all", which this item makes false
+output. Corrected minimally. C22 still owns the informational `zoom-climb` min-speed row and the
+plateau's promotion to asserted.
+
+**⚠ The apex moved the wrong way.** `zoom-climb` altitude went 1470 → 1282 ft against the original's
+1635 (−10.1% → −21.6%). The min-speed half moved toward the original as this item predicted and the
+altitude half moved away from it — consistent with a plane that now pays for its pull, and left
+informational because the row's stick history is unknown anyway. Worth watching, not worth tuning
+against, since fitting `C_i` to the apex instead would contradict the plateau it was measured on.
+
+**⚠ Owed, not done.** The cockpit A/B. `BL-092` carries a pilot-confirmed report that the original
+visibly slows through a sustained pull and bleeds more in a climb than we do; that is the felt form
+of exactly this gap, and it has not been re-flown. Rides `BL-092`'s `Owed-playtest`.
+
+**Original approach (kept for reference).**
 
 **Goal.** A sustained max-pull turn settles at 222.94 mph against a 298.96 mph level cruise — a hard
 pull costs ~25% of top speed, held indefinitely.
