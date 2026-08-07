@@ -1548,10 +1548,12 @@ Its console lines, and `StuntScoreboard`/`StuntRaceBoard`'s, route through `Log.
   correctly after a rematch has reset the missions.
 ⚠ Deliberately not a Node — it is freed with the session, so the `RunCompleted` subscriptions
   need no teardown.
-⚠ `StuntMission` (its `Racer.Mission`) is NOT part of this seam — `Load`/`Complete` still call
-  `GD.Print`/`GD.PushWarning` directly and crash the test host outside the engine (an unmanaged
-  `AccessViolationException`, not a catchable one). `StuntRaceTests` never calls either: it builds
-  a `StuntMission` via reflection on the private constructor and fires `RunCompleted` the same way.
+⚠ `StuntMission` (its `Racer.Mission`) logs through `Log` since the engine-free-suites A2/A4
+  conversion (zero direct `GD.*` sites), and `CSVM.Tests` installs a process-wide no-op
+  `Log.ConsoleSink` before any test runs (`TestHostLogSink.cs`, BL-302) — so calling `Load` from a
+  test is safe now (`StuntGatesTests` calls it). `StuntRaceTests` still builds a `StuntMission`
+  via reflection on the private constructor and fires `RunCompleted` directly — it has no public
+  constructor, and a real `Complete()` does more than the finish-ordering check wants.
 
 ## src/Flight/StuntRaceBoard.cs
 The race's shared ranked results overlay: same clean-Godot-UI construction as StuntScoreboard,
@@ -2440,7 +2442,12 @@ The diagnostic log: `Log.Info("world", $"…")` / `Warn` / `Error` / `Debug` ove
 jobs — the console is the human's, the `.scratch/logs/<mode>-<stamp>.log` file is the machine's.
 `Log.ConsoleSink` (`Action<string>?`, default null) overrides where console lines go; null means
 `GD.Print`/`GD.PrintErr` as before. Installed by a test host so a plain (non-`Node`) class that
-logs is callable from `CSVM.Tests` without an engine.
+logs is callable from `CSVM.Tests` without an engine. `CSVM.Tests` installs a process-wide no-op
+default once, before any test runs (`TestHostLogSink.cs`, `[ModuleInitializer]`, BL-302) — the
+per-class save/restore alone raced across xunit's parallel classes and could restore the sink to
+null mid-run, and the resulting `GD.Print` fallthrough killed the test host with an unmanaged
+`AccessViolationException` on ~1 in 3 full runs. A test that asserts on console lines still swaps
+in its own capturing sink for its duration.
 ⚠ **The file sink always takes EVERYTHING** — every category, every level, no filter, and is
   untouched by `ConsoleSink`; `--log=` only moves the *console* threshold, so a post-hoc grep can
   never miss a category.
