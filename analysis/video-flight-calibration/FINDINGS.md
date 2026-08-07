@@ -337,11 +337,18 @@ crash: bounce_factor 0.6, armor/health_damage_range [50,300]
 autohead_turn_time 0.75  autohead_turn_max 2.86  autohead_turn_min_pitch -3.0
 ```
 
-`CAP-02` decoded ground blow: it is a **collision-avoidance assist on the elevator channel** that
-roughly **doubles pitch authority** (1.95× `BL-109`'s sustained max pull) once the **along-path
-range to terrain** drops under **400** — a *distance*, not an elevation, despite the constant's
-name. Not a force and not automatic: hands off the stick is a crash, yaw input shows nothing, and
-it works inverted. Measurements and traps are on `BL-095`; do not re-derive them from the clips.
+`CAP-02` characterised ground blow but **did not measure a magnitude**: at matched speed the
+near-ground pull reaches **0.91×** the aircraft's own free-air maximum, i.e. no excess load factor
+at all. An earlier pass here claimed "1.95× max pull"; that was **wrong** — see the retraction on
+`BL-095`. Do not re-derive any of it from the clips.
+
+⚠ **`BL-109`'s 32.96 / 34.02 m/sim-s² is SPEED-SPECIFIC. Never reuse it as a general max-pull
+yardstick.** Lift ∝ V², and at ~300 mph this same aircraft pulls **72.6 m/sim-s²** in free air —
+2.17× that figure with nothing anywhere near it (`CAP-02 Run3 5`, 28 s at 2,634–3,939 ft over open
+water). Comparing a fast manoeuvre against the slower loop is what manufactured a phantom "×2".
+Film a free-air control in the same session, at the same speed, and compare inside a **matched
+speed band** — and note `a_n/V²` is *not* a safe substitute: it is proportional to `C_L` in
+principle but blows up as V falls, reading a spurious 4.07× at 80 mph on `CAP-02 Run3 1`.
 
 ⚠ **Range, not altitude — and a shallow dive is what separates them.** Along-path range to a level
 surface is `alt / sin|γ|`, so in a −43° dive it is 1.47× the altitude and in a vertical dive the two

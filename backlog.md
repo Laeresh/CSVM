@@ -776,69 +776,96 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   is the original's own speed-dependent yaw authority, which our hand-rolled `eff`
   (`1.4 − clamp(v/fd)`) stands in for and whose comment already admits is "still not same as
   original".
-  **`CAP-02` is answered for ground blow (2026-08-07)**, over two batches, and the mechanism is not
-  what the constant's name suggests. **It is a collision-avoidance assist on the ELEVATOR channel:
-  when the along-path distance to terrain falls below ~400 units it roughly doubles the pitch
-  authority of the pull the pilot is already making, turning the nose away from the impact.**
-  Established with the user at the controls:
+  **`CAP-02` (2026-08-07, three batches). The behaviour is real and characterised; the magnitude
+  claim is RETRACTED.** What the pilot reports is a collision-avoidance assist on the **elevator**
+  channel that fires near terrain and turns the nose away. What the instruments say is that it does
+  **not** raise the path-normal acceleration beyond what the aircraft reaches in free air — so
+  whatever it does, it is not adding load factor, and no magnitude has been measured.
+
+  ⚠ **Retraction (batch 3).** An earlier pass here — and the message of commit `13d9fbe` — claimed
+  ground blow "roughly doubles pitch authority (1.95× max pull)". **That was an artifact of a
+  borrowed yardstick and is wrong.** It compared against `BL-109`'s sustained max pull of
+  32.96 / 34.02 m/sim-s², which was measured on a different clip at a *lower speed*, and lift ∝ V².
+  Batch 3 supplied the control that was missing: `CAP-02 Run3 5`, 28 s at **2,634–3,939 ft over open
+  water** (so nothing is within 400 units even in a vertical dive — free air confirmed from its own
+  altimeter). In a matched **280–330 mph** band:
+
+  | | peak `a_n` | at | vs free air |
+  |---|---|---|---|
+  | **free air** (`Run3 5`) | **72.6** m/sim-s² | 298 mph, 2,958 ft | 1.00× |
+  | near ground, recovery #2 (clean, 0% gated) | **65.9** | 304 mph, 146 ft | **0.91×** |
+  | near ground, recovery #1 (30% gated, γ −64°) | 166.8 | 323 mph, 177 ft | 2.30× — untrustworthy |
+
+  The clean near-ground event is **weaker** than the free-air maximum. The free-air pull is itself
+  2.17× `BL-109`'s figure, which is the whole of the old "×2": **at ~300 mph this aircraft simply
+  pulls that hard unaided.** ⚠ **`BL-109`'s 32.96 / 34.02 is speed-specific — do not reuse it as a
+  general max-pull yardstick**, which is the mistake made here.
+
+  ⚠ **The `groundblow_elev 400` range finding goes with it.** Recovery #2's onset does bracket
+  along-path range 427 → 376 ft while *altitude* 399 ft shows nothing, and the boost decays as range
+  grows back — a real feature of the data, and a striking coincidence with the shipped 400. But with
+  no magnitude anomaly to explain, "the pull starts when range ≈ 400" is equally well explained by
+  the pilot choosing that moment to pull. **Treat 400 as an unconfirmed coincidence, not a result.**
+
+  **Why the pilot's report and the instruments can both be right.** `a_n` measures how sharply the
+  *flight path* bends. "The pitch is increased over the normal controls" is about how fast the
+  **nose** rotates, and at high angle of attack the nose can swing well ahead of the path. A body
+  pitch-rate boost would leave `a_n` untouched. Nothing here refutes the pilot's account — it locates
+  it: the instrument that could test it is the **ADI** (`adi.py`, body attitude), not the altimeter.
+
+  Characterisation from the user at the controls, which the measurements do not touch:
 
   - **It is not a force and not automatic.** Hands off the stick is a crash. It only exists while
     pitch is held — so nothing about it can be modelled as an applied acceleration.
   - **Elevator only.** Yaw input shows no over-max behaviour.
   - **Body frame, not world frame.** Inverted, pulling *down* works the same way. An "upward ground
     blow" cannot produce that, which independently kills the additive-force reading.
-  - **It is an assist, not a clamp** — `pull up to cras` shows the boost firing and the aircraft
-    hitting the water anyway, from a −650 ft/s sink pulled too late. `ai_groundblow 0.5` reads
-    naturally as the same multiplier, halved for the AI.
+  - **It is an assist, not a clamp** — `pull up to cras` ends in the water anyway, from a −650 ft/s
+    sink pulled too late, so whatever fires does not guarantee a recovery. `ai_groundblow 0.5`
+    plausibly scales the same thing for the AI, but nothing here tests that.
 
-  **The trigger is range to terrain, NOT height above it — and it is 400.** `CAP-02 Up Down`
-  recovery #2 discriminates the two because it is a *shallow* −43° dive, where along-path range to a
-  flat surface (`alt / sin|γ|`) is 1.47× the altitude. Flown over open water, so the surface is at
-  0 ft and the altimeter's MSL reading is exact:
+  **Height above ground is still excluded as the trigger**, and that part survives — it rests on
+  *where* the pull starts, not on how hard it is. `CAP-02 Up Down` recovery #2 is a shallow −43°
+  dive over water, so along-path range to the surface (`alt / sin|γ|`) is 1.47× the altitude:
 
   | t | 17.51 | 17.71 | **17.81** | **17.91** | 18.01 | 18.11 | 18.31 | 18.41 | 18.51 | 18.61 |
   |---|---|---|---|---|---|---|---|---|---|---|
   | altitude ft | 399 | 333 | **300** | **267** | 234 | 204 | 153 | 133 | 119 | 109 |
   | **range ft** | 588 | 490 | **441** | **400** | 365 | 342 | 324 | 341 | 390 | 505 |
-  | vs max pull | −0.02× | −0.10× | **0.06×** | **0.55×** | 1.01× | 1.41× | 1.92× | **1.95×** | 1.84× | 1.71× |
+  | `a_n` m/sim-s² | −0.7 | −3.5 | **2.1** | **18.4** | 33.8 | 47.1 | 64.2 | 65.3 | 61.6 | 57.2 |
 
-  Two independent reasons altitude is excluded. (1) At **altitude 399 ft** the boost is
-  **−0.02×** — an altitude trigger of 400 would have fired there and demonstrably did not; it fires
-  at altitude 267, where the *range* is 400. (2) Across the window altitude falls **monotonically**
-  300 → 102 ft, yet the boost rises *and then decays*; range is non-monotonic (441 → 324 → 505) and
-  the boost tracks it both ways, peaking within one 0.1 s sample of minimum range. Onset brackets
-  **range 427 → 376 ft**. So `groundblow_elev 400` is a **distance**, despite the name.
+  At **altitude 399 ft** nothing happens; the pull begins at altitude 267, where *range* is 400, and
+  it decays again as range grows back through 400 while altitude keeps falling monotonically
+  300 → 102 ft. `CAP-02 Run3 3` reinforces it from the other side: a **level run held at 165–336 ft
+  for 7.9 s** at a steady 272–281 mph with `a_n` never exceeding **1.8** m/sim-s² (0.02× free air) —
+  seven seconds inside any plausible 400 ft *height* band with no effect whatever.
 
-  **The magnitude is ~2×.** Peak path-normal acceleration 65.3 m/sim-s² against `BL-109`'s sustained
-  max-elevator pull of 32.96 / 34.02 = **1.95×**. γ stays between −43° and −21° across the whole
-  ramp, so **0% of samples are gated** — this is not the saturation artifact that wrecked batch 1 —
-  and the peak survives the smoothing window: 2.75 / 2.13 / 1.97 / 1.88 / 1.80× at 0.30 / 0.40 /
-  0.50 / 0.70 / 0.90 s. Whether `groundblow_mag 10` *is* that multiplier is unverified; what is
-  ruled out is reading it as an acceleration in `nom_gravity 20.0`'s units, which would give 0.5 g
-  against a measured excess of 2.7–3.9 g.
-
-  **This is also what the canyon control was showing.** Flying *along* a canyon, nothing is within
-  400 units *ahead* however close the walls are beside you — which is why those runs trip `LOW ALT`
-  continuously and never once fire the boost. The same rule predicts the sideways flick the user
-  first reported in the batch-1 takes: aimed at a mountain rather than at flat ground, the nose is
-  turned away from *that* surface, so the escape has a lateral component.
+  **This is consistent with the canyon control.** Flying *along* a canyon, nothing is close *ahead*
+  however near the walls are beside you — which fits those runs tripping `LOW ALT` continuously
+  while nothing ever fires. The same reading would explain the sideways flick the user reports in
+  the batch-1 takes (aimed at a mountain, the nose is turned away from *that* surface, so the escape
+  has a lateral component) — but that remains the user's account, not a measurement: heading is
+  degenerate in a vertical dive, so no `CAP-02` take yet decodes the lateral component.
 
   ⚠ **`a_n` here is computed WITHOUT differentiating γ**, which is what makes it trustworthy where
   every earlier attempt failed. From `h" = V' sin γ + a_n cos γ`, solve `a_n = (h" − V' sin γ)/cos γ`;
   `sin γ = climb/V` is a *ratio*, not a derivative, so the ±60 °/s unpinning artifact `BL-109`
   documents cannot enter. Gate on `|sin γ| < 0.90` and the estimator dies only where `cos γ → 0`.
 
-  ⚠ **Traps on batch 2.** (a) The **range figure rests on flat terrain.** `alt / sin|γ|` is the
-  along-path distance to a *level* surface, which open water guarantees and nothing else in the
-  `CAP-02` set does. Over a mountain the real range is shorter than that formula and the 400 would
-  come out low — do not apply it to the batch-1 takes. (b) The first `Up Down` recovery reads
-  3.7–5.0× but with 28–30% of samples gated at γ ≈ −63°; quote 1.95×, not that one. (c) `pull up to
-  cras` fails `checkclip` as a whole clip because it ends in a crash — a *windowed* re-run shows it
-  rigid to **t = 10.5 s** and only that prefix is used; its own pull is too steep to measure
-  (100% gated). (d) **The yardstick is borrowed.** Neither clip contains a hard *free-air* pull —
-  their high-altitude stretches are gentle arcs peaking at ≤1.1× and mostly ≤0 — so the ×2 still
-  rests on `BL-109`'s figure, from a different clip at a different speed, and lift ∝ V².
-  (e) **One clean event.** Only recovery #2 is shallow enough to separate range from altitude; the
+  ⚠ **Traps on batches 2–3.** (a) **Always carry your own free-air control.** The whole retracted
+  claim came from comparing a manoeuvre against a max-pull figure measured elsewhere at another
+  speed. `Run3 5` costs 28 s to film and settles it. (b) **`a_n/V²` is not a safe normaliser at low
+  speed** — it is proportional to `C_L` in principle, but dividing by V² inflates wildly as V falls;
+  `Run3 1` reads a spurious 4.07× at **80 mph**. Compare inside a matched speed band instead.
+  (c) The **range figure rests on flat terrain.** `alt / sin|γ|` is the along-path distance to a
+  *level* surface, which open water guarantees and nothing else in the `CAP-02` set does — do not
+  apply it to the batch-1 mountain takes. (d) The first `Up Down` recovery reads 2.30× the free-air
+  control but has 28–30% of samples gated at γ ≈ −63°, right where the estimator is weakest; it is
+  the one event that still looks anomalous and it is also the least trustworthy. Do not build on it
+  without a cleaner take. (e) `pull up to cras` fails `checkclip` as a whole clip because it ends in
+  a crash — a *windowed* re-run shows it rigid to **t = 10.5 s** and only that prefix is used; its
+  own pull is too steep to measure (100% gated).
+  (f) **One clean event.** Only recovery #2 is shallow enough to separate range from altitude; the
   other three dives are near-vertical, where the two coincide. The 400 is a single crossing, sampled
   at 0.1 s — a plateau it is not.
 

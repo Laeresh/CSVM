@@ -194,6 +194,16 @@ CLIPS = {
     # flat, which is what makes MSL altitude usable as height above ground.
     "cap02updown": "CAP-02 Up Down.mp4",
     "cap02pullcrash": "CAP-02 pull up to cras.mp4",
+    # 2026-08-07 CAP-02 third batch: runs AT terrain rather than down at it. These
+    # are what test the range rule in the horizontal, where altitude is constant and
+    # only the distance ahead closes - and, being shallow, they are also the first
+    # CAP-02 takes on which the compass is meaningful (heading is degenerate near a
+    # vertical dive, which is why no earlier take could measure the lateral escape).
+    "cap02r31": "CAP-02 Run3 1.mp4",
+    "cap02r32": "CAP-02 Run3 2.mp4",
+    "cap02r33": "CAP-02 Run3 3.mp4",
+    "cap02r34": "CAP-02 Run3 4.mp4",
+    "cap02r35": "CAP-02 Run3 5.mp4",
 }
 
 
