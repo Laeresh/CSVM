@@ -240,7 +240,11 @@ per-mission scalar `WorldLight = clamp(AMBIENT + DIFFUSE·k, 0.15, 1)`, with `k 
 average up-facing sun incidence — **one TUNE constant** calibrated to the C1/IA1 reference
 (`OriginalScreenshots/C1 IA1 Zone1 environment Spawn3.png`: overcast deck 210→169, terrain
 →~57). It then self-scales from the data: C1/IA1 → 0.80, C1B night → 0.43, C1C day →
-clamp 1.0. `Weather.WorldLightFactor` computes it (`ZoneFog.WorldLight`); `WeatherRig` sets
+clamp 1.0. **Confirmed against original footage 2026-08-07** (`CAP-11`, matched-pose A/B at
+0.426 / 0.784 / clamp 1.0 — C1B terrain −12%, C2B deck tops −9%, C2 suburb +5–15%;
+`git log --grep=BL-110`, evidence `playtest/CAP-11/README.md`). Two exemptions the original
+applies that we don't yet: water renders unmodulated (`BL-304`), and night cloud sprites are
+directionally moonlit rather than uniformly dimmed (`BL-118`). `Weather.WorldLightFactor` computes it (`ZoneFog.WorldLight`); `WeatherRig` sets
 the global shader scalar `csky_world_light` — **linearised** first, so the shader's
 linear-space `ALBEDO ×` lands the dimming in gamma space (matching the DX7 chain
 texel×vertex×light, all sRGB-space; a raw linear ×0.80 only reaches 210→190, gamma-space
