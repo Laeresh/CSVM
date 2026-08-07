@@ -167,7 +167,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — Angle of attack and lift (`BL-247`)
 
 11. ☑ Introduce α as a modelled quantity
-12. ☐ Re-key lift on `f(α)`; revisit the knife-edge terms
+12. ☑ Re-key lift on `f(α)`; revisit the knife-edge terms
 13. ☐ Sustained-turn probe rows
 
 ### Wave C — Induced drag (`BL-092`)
@@ -461,7 +461,82 @@ No asserted row may move — α is observed-only at this stage.
   outcome and should be written up, not engineered around.
 - Near-parallel nose and path is the normal cruise state; anything reading α must be safe at α → 0.
 
-## B12 ☐ Re-key lift on `f(α)`; revisit the knife-edge terms
+## B12 ☑ Re-key lift on `f(α)`; revisit the knife-edge terms
+
+**Landed** 2026-08-07. `liftFrac = speedLift * wingVert` became
+`min(1, speedLift * wingVert * n(α))`, with `n` a load factor ramping 1 g → `LiftLoadMax` **9**
+over `LiftAoaLo/Hi` **5°/9°**. All three are config-backed.
+
+**The shape the item asked for is not the shape that works, and the arithmetic says why.**
+B12 as written says "replace `liftFrac = speedLift * wingVert` with `speedLift * f(α)`" — i.e. drop
+the bank carrier. That cannot be right, and it dies in one line: **level cruise and knife-edge are
+the same α**. Both fly a horizontal path at neutral stick, so both sit at α ≈ 0 and gravity's
+cross-path component is the full `g` in both. A term keyed on α *alone* must give them the same
+answer, and one of them has to hold altitude while the other falls out of the sky. α cannot be the
+whole carrier — it can only be a *second* factor. So the landed form keeps `wingVert` (trap (a)
+satisfied literally: it is not flattened) and multiplies it by a load factor read off α. That is
+also the textbook reading of `CAP-01`: holding altitude at 100° of bank needs
+`1/|cos 100°|` = **5.8 g**, and `player.json` ships `highGs [9, 15]`, so the manoeuvre is inside
+the airframe's authored envelope rather than requiring lift to stop depending on bank.
+
+**Verified.** `.\RunTests.ps1`: build clean, **616/616** units, **26/26** engine suites, engine
+errors clean, **13/13 goldens hash-identical** — including the four flown `--hold` shots, which
+A2 moved. 8-chapter `--freecam` regression: all eight built, rendered and exited clean, zero errors.
+A/B against `LiftLoadMax = 1`, which reproduces the old model exactly (METHOD-9's able-to-fail
+control), swept over **all eleven airframes** through the real `FlightModel.Step` integrator:
+
+| | before | after | original |
+|---|---|---|---|
+| sustained max-pull turn, sink (Bloodhawk) | 18.29 ft/sim-s | **−3.03** (a 3 ft/s climb) | 1.85 |
+| same, settled speed | 301.47 mph | **299.26** | 222.94 |
+| knife-edge, 35 s altitude lost | 539.98 m | **539.98** (bit-identical) | 540 |
+| all eight asserted envelope rows | green | **green, unmoved** | — |
+
+Every airframe's turn sink falls by 10–19 ft/sim-s (worst remaining: Balmoral 40.6, Warhawk 18.3 —
+both are slow enough that their turn α sits *inside* the ramp rather than past it, so they collect
+only part of the load factor). The knife-edge is **bit-identical on ten of eleven**.
+
+**Three findings the item did not go looking for.**
+
+1. **The ramp is inert by construction, and that was measured, not assumed.** Knife-edge at neutral
+   stick settles at α = **3.2°** and every scenario the suite asserts sits at α ≤ **2.9°** — all
+   below `liftAOAs`' 5° edge — while the sustained pull settles at α = 6–14°. That is why nothing
+   moved: the term reads exactly zero everywhere the calibration lives. **The authored `[5, 9]`
+   survives as a hypothesis**; it did not have to move, so B12's unit-scepticism trap was not
+   triggered and nothing goes back to `BL-095`.
+2. **The Balmoral has already spent that margin.** It knife-edges at α = **5.1°**, 0.1° *inside* the
+   ramp, and gets back 2.2% of its 35-second altitude loss (466.6 → 456.5 m). Left as is — it is
+   small, the Balmoral has no measured original, and moving an authored constant to protect one
+   airframe is the fudge the trap warns about — but 5° is now a live boundary, recorded in the code.
+3. **`CAP-01`'s own numbers are not those of a coordinated level turn, and this is worth knowing
+   before C21.** 18.95 °/sim-s at 222.94 mph is `V·ω` = 32.96 m/s² lateral, which for a level turn
+   implies a bank of `atan(32.96/20)` = **58.7°** — not the 100° the ADI centroid reads. Our model
+   is self-consistent where the original is not: it settles at 75.4 m/s² lateral and **75.1°** of
+   bank, exactly `atan(75.4/20)`. So either the ADI sky-centroid reading is not bank (`BL-247`
+   trap (b) already trusts it only to ±4°) or the original is not flying coordinated. This does not
+   change what B12 landed — the lift deficit was real at *any* steep bank, and it is gone — but it
+   means "holds 100° of bank" should not be turned into an assertion at face value in B13.
+
+**⚠ The knife-edge constants were NOT replaced, and that is a result, not an omission.** B12
+inherited from `BL-247` the expectation that `KnifeNoseSag` / `KnifeNoseRate` / `KnifeAlignFloor`
+must be replaced "at the same time" as the lift keying, because `knife = 1 − wingVert` is the same
+quantity. They were left untouched because the re-key does not displace `wingVert` — it multiplies
+it — so the three terms still run on exactly the quantity they were measured against, and the
+knife-edge behaviour is bit-identical on ten of eleven airframes. `KnifeNoseSag`'s known divergence
+(the original's sag is unbounded; ours settles) is untouched and still open.
+
+**⚠ Owed, not done.** A cockpit A/B of the banked turn. The manoeuvre now *works*, but "works" here
+means an instrument reading — nobody has flown it. Rides `BL-247`'s `Owed-playtest`.
+
+**A probe-design warning for B13, paid for in this item.** A sustained-turn probe that *forces* the
+bank with a roll input measured as `atan2(−X.Y, Y.Y)` is worthless: that angle stops meaning bank
+the moment the nose leaves the horizontal, and the controller drove targets of 60°, 75° and 100° all
+into the same 100°-bank, −75°-nose spiral at terminal speed — **identically with and without this
+change**, which is what identified it as an instrument artifact rather than a model finding. The
+free-roll probe (bank set at entry, no roll input, full back stick) settles honestly at nose 0.3° /
+path 0.4° and is the one that measures anything.
+
+**Original approach (kept for reference).**
 
 **Goal.** The aircraft holds 100° of bank at full back-stick with altitude sinking ~1.85 ft/sim-s,
 while knife-edge at near-neutral stick still departs — from one keying, with no bank term.

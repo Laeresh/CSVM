@@ -1831,8 +1831,11 @@ ang_momentum_damp, scaled per axis (PitchTune/YawTune/RollTune). Thrust/drag/gra
 the velocity vector (speed passes through zero); lift cancels gravity's cross-path share; drag is
 normalized so drag(fd_speed) = max thrust. `Alpha` (deg) is angle(nose, VelocityDir), read once per
 step right after the nose vector — an emergent LAG from the nose-chase, not a modelled aerodynamic
-state; observation-only (BL-247 B11), reported in every `--dump-flight` row's detail so B12/C21 can
-check their premise against it before keying lift/drag on it. The stall is TWO measured thresholds
+state, and reported in every `--dump-flight` row's detail. Lift consumes it as the pull's stand-in:
+`liftFrac = min(1, speedLift × |up·Y| × n(α))`, `n` ramping 1 g → `LiftLoadMax` over the authored
+`liftAOAs [5,9]` read as degrees (a hypothesis, not a decode — `BL-095`). `|up·Y|` stays the carrier
+and must NOT be flattened: it is what makes knife-edge depart, and the α ramp is what lets a hard
+pull hold altitude through a steep bank without a bank term. The stall is TWO measured thresholds
 over one margin
 (`StallFraction` = speed/fd_speed): `isStalled()` is the nose-drop at 0.25 fd, `IsStallWarned()` the
 STALL lamp at 0.30 — the lamp leads the break by 2.64 sim s (`BL-148`/`CAP-06`); never drive both

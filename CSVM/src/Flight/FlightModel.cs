@@ -15,11 +15,14 @@ public struct FlightInput
 /// A velocity-vector model in arcade clothing: thrust, drag and gravity
 /// integrate on the velocity vector (so a vertical zoom tail-slides out through
 /// zero speed instead of hanging), lift cancels gravity's cross-path component
-/// only when the plane is fast enough AND the wings carry vertically (lift ∝
-/// speed² × |up·Y|, so knife-edge flight is near-ballistic and a slow plane
-/// sinks), and the arcade handling is the flight path chasing the nose
-/// (alignment lag, exposed each step as <see cref="Alpha"/> — observation-only for now, BL-247
-/// B11). In a knife-edge the nose itself also sags to a bounded angle
+/// only when the plane is fast enough AND the wings carry vertically AND the pull
+/// is generating the load factor to spare (lift ∝ speed² × |up·Y| × n(α), so
+/// knife-edge flight at neutral stick is near-ballistic and a slow plane sinks,
+/// while a hard pull holds altitude through a steep bank on the small vertical
+/// share of a large lift vector), and the arcade handling is the flight path
+/// chasing the nose (alignment lag, exposed each step as <see cref="Alpha"/> and
+/// consumed by the lift keying — see <see cref="LiftAoaLo"/>).
+/// In a knife-edge the nose itself also sags to a bounded angle
 /// below the horizon, so the plane noses down as it sinks rather than descending
 /// wings-level-nosed — ⚠ the original's sag is NOT bounded (a known divergence —
 /// see <see cref="KnifeNoseSag"/>). Below stall speed the nose is additionally pulled toward
@@ -43,7 +46,7 @@ public sealed class FlightModel
     public float Throttle;
     // deg: angle(nose, VelocityDir) at frame start, i.e. before this step's forces move
     // VelocityDir — see Step()'s "α" comment. An emergent LAG from the nose-chase, not a modelled
-    // aerodynamic incidence (BL-247 B11); observation-only until B12/C21 key lift/drag on it.
+    // aerodynamic incidence; the lift keying reads it as the pull's stand-in (see LiftAoaLo).
     public float Alpha;
 
     // m/s² per engine-power unit per tonne. NOT a free TUNE, but NOT independently measurable
@@ -74,6 +77,26 @@ public sealed class FlightModel
     private const float MaxControlEff = 1.15f;    // TUNE: authority ceiling in a dive
     private const float LiftSpeedFrac = 0.40f;    // TUNE: full lift at/above this fraction of fd_speed
                                                   // (0.40·135 = 54 m/s keeps the 120 mph spawn fully lifted)
+
+    // How hard the pull is, read off α, expressed as a load factor multiplying the wings' vertical
+    // share. Ramps from 1 g at LiftAoaLo to LiftLoadMax at LiftAoaHi and holds there.
+    // The two edges are player.json's authored `liftAOAs [5, 9]` taken as degrees — a HYPOTHESIS,
+    // not a decode (`BL-095`: the block's units are unverified). What makes it testable is that our
+    // own manoeuvres straddle it: a sustained full-back-stick steep-bank turn settles at α = 6–14°,
+    // while knife-edge at neutral stick settles at α = 3.2° and every scenario the flight-envelope
+    // suite asserts sits at α ≤ 2.9°. So outside the hard pull the ramp reads zero and the term is
+    // inert by construction rather than by tuning — the whole calibrated envelope and (on ten of
+    // the eleven airframes) the knife-edge departure are bit-identical with and without it.
+    // ⚠ The knife-edge margin is thin and the slowest airframe has already spent it: the Balmoral
+    // knife-edges at α = 5.1°, 0.1° INSIDE the ramp, which returns 2.2% of the altitude it drops
+    // over 35 s (466.6 → 456.5 m). Anything that raises knife-edge α further turns a 2% nibble into
+    // the plane being held up in a manoeuvre that must depart, so treat 5° as a live boundary.
+    private const float LiftAoaLo = 5f;           // deg: below this the pull adds nothing
+    private const float LiftAoaHi = 9f;           // deg: at/above this the load factor is maxed
+    // g. From player.json's `highGs [9, 15]` — same units caveat. CAP-01 gives a LOWER BOUND, not a
+    // fit: holding altitude at 100° of bank needs 1/|cos 100°| = 5.8 g, and anything at or above
+    // that lands on the same clamped answer, so the plateau cannot distinguish 6 from 15.
+    private const float LiftLoadMax = 9f;
 
     // The two stall thresholds are DIFFERENT numbers and both are measured, not TUNEs. The nose does
     // not break until 0.25 fd (the original's "Stall 0% Thrust no input" clip: the nose holds +4.2°
@@ -238,6 +261,9 @@ public sealed class FlightModel
         float dragExpHigh = Config.GetFloat("flightModel.dragExpHigh", DragExpHigh);
         float throttleExp = Config.GetFloat("flightModel.throttleExp", ThrottleExp);
         float liftSpeedFrac = Config.GetFloat("flightModel.liftSpeedFrac", LiftSpeedFrac);
+        float liftAoaLo = Config.GetFloat("flightModel.liftAoaLo", LiftAoaLo);
+        float liftAoaHi = Config.GetFloat("flightModel.liftAoaHi", LiftAoaHi);
+        float liftLoadMax = Config.GetFloat("flightModel.liftLoadMax", LiftLoadMax);
         float alignRate = Config.GetFloat("flightModel.alignRate", AlignRate);
         float altitudeCapM = Config.GetFloat("flightModel.altitudeCapM", AltitudeCapM);
         float altitudeCapOvershootM = Config.GetFloat("flightModel.altitudeCapOvershootM", AltitudeCapOvershootM);
@@ -359,8 +385,8 @@ public sealed class FlightModel
         var nose = -Attitude.Z;
 
         // α = angle(nose, VelocityDir), read here — before this step's forces move VelocityDir —
-        // so lift, drag and align could all key on the SAME value once B12/C21 re-key them (they
-        // don't yet: this is observation-only). Hoisted out of the near-parallel pathDot check
+        // so lift (below) and anything else keyed on the pull read the SAME value for the frame.
+        // Hoisted out of the near-parallel pathDot check
         // below rather than replacing it: that one re-reads pathDot AFTER the translation update,
         // to decide whether Slerp's cross-product axis is well-conditioned for THIS frame's actual
         // chase, which is a distinct question from what α reports here.
@@ -372,11 +398,27 @@ public sealed class FlightModel
 
         // lift fraction: quadratic in speed up to the lift speed, scaled by how much of
         // the wings' lift points vertically — |up·Y| is 1 level OR inverted (arcade:
-        // inverted flight still carries), 0 in knife-edge (near-ballistic, nose sags).
+        // inverted flight still carries), 0 in knife-edge (near-ballistic, nose sags) —
+        // and by the LOAD FACTOR the pull is generating, which is what lets a steep bank
+        // hold altitude on the small vertical share of a large lift vector.
+        //
+        // wingVert stays the carrier and is deliberately NOT flattened: it is the same
+        // quantity the knife-edge nose-sag runs on, and a bank-independent lift term
+        // reproduces the banked turn while destroying the knife-edge departure. The load
+        // factor is the second factor, keyed on α — a quantity with no bank in it — so the
+        // two attitudes the original separates (100° bank at full back stick, which holds
+        // altitude; 94–104° at near-neutral stick, which falls out of the sky) come out
+        // different from one keying.
         float liftSpeed = liftSpeedFrac * s.FdSpeed;
         float speedLift = Mathf.Min(1f, (Speed / liftSpeed) * (Speed / liftSpeed));
         float wingVert = Mathf.Abs(Attitude.Y.Dot(Vector3.Up));
-        float liftFrac = speedLift * wingVert;
+        float aoaRamp = Mathf.Clamp((Alpha - liftAoaLo) / Mathf.Max(1e-3f, liftAoaHi - liftAoaLo),
+                                    0f, 1f);
+        // Clamped at 1: this term can cancel gravity's cross-path component and no more. Lift is
+        // not rebuilt as a perpendicular force here — the flight path is turned by the nose-chase
+        // (`align`, below), and letting liftFrac exceed 1 would push the path as well and
+        // double-count it against every calibrated steady rate.
+        float liftFrac = Mathf.Min(1f, speedLift * wingVert * (1f + (liftLoadMax - 1f) * aoaRamp));
 
         // thrust pulls along the nose (its along-path share falls out of the vector sum —
         // a stalled plane falling nose-high needs no special case), and is sublinear in the
