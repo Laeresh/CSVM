@@ -17,7 +17,7 @@ public class FlightEnvelopeTests
 {
     /// <summary>How many flight scenarios carry a measured target to assert. Pinned so that
     /// silently demoting one to informational cannot read as a green run.</summary>
-    private const int FlightScenarios = 9;
+    private const int FlightScenarios = 10;
 
     private static string ZrdrPath =>
         SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));

@@ -183,7 +183,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — Induced drag (`BL-092`)
 
 21. ☑ The `sin²α` induced-drag term, `C_i` fitted to the `CAP-01` plateau
-22. ☐ Assert the plateau; record the turn-rate gap
+22. ☑ Assert the plateau; record the turn-rate gap
 
 ### Wave D — Records
 
@@ -762,7 +762,34 @@ original's 104 mph from our 266. Full asserted suite green — **especially `pit
   Recompute the target against the *landed* base curve; the entry's `+0.380 A` is quoted against the
   old blend and is stale.
 
-## C22 ☐ Assert the plateau; record the turn-rate gap
+## C22 ☑ Assert the plateau; record the turn-rate gap
+
+**Landed** 2026-08-07. `sustained-turn-speed` dropped its `info: true` and now asserts 222.94 ± 5 mph
+— `FlightScenarios` (`FlightEnvelopeTests.cs`) moved **9 → 10**. A new `zoom-climb-min-speed` row
+reports the same loop's speed minimum, informational at 127.9 mph (C21's retargeted figure, not the
+stale 104 mph this item's own approach text still quoted — that target was superseded by C21's
+known-stick-history loop decode before this item ran). The `zoom-climb` comment rewrite and the
+`sustained-turn-rate` detail string's "no capture explains it" → bank/load-factor rewrite were both
+already done in C21; nothing further was needed there.
+
+**Verified.** `.\RunTests.ps1` with `$env:CSVM_DATA_ROOT = "Z:\CSVM"` (this worktree carries no
+extracted data of its own): build clean, **616/616** units, **26/26** engine suites, engine errors
+clean, **13/13 goldens hash-identical** — this item touches only `Probes.cs`/`FlightEnvelopeTests.cs`,
+no rendered state. 8-chapter `--freecam` regression clean (part of the same goldens/engine run).
+
+**Able to fail, checked deliberately.** Reverting `FlightScenarios` to 9 (its pre-item value) makes
+`dotnet test --filter FlightEnvelope` fail, because `r.Asserted` is now 10 and the count assertion
+catches the mismatch — confirming the new asserted row is genuinely counted, not just printed.
+Restored to 10 and re-confirmed green.
+
+**`--dump-flight` note.** A direct `--dump-flight=player_bhawk` invocation outside `RunTests.ps1`
+hung on this machine (the CLI needs the hidden-desktop wrapper `RunTests.ps1` itself uses for a GUI
+Godot even under `--headless`) and was killed rather than chased — not needed for verification, since
+`FlightEnvelopeTests` calls the identical `Probes.FlightEnvelope` code path against the same real
+extracted data (the class doc: "engine-free: `Probes.FlightEnvelope` touches no live Node") and passed
+with real data loaded, which is the same measurement `--dump-flight` would print.
+
+**Original approach (kept for reference).**
 
 **Goal.** Everything this plan fixed is defended by an assertion; everything it knowingly did not fix
 is visible as an informational row with the capture that would settle it named.

@@ -930,8 +930,7 @@ public static class Probes
         Row("sustained-turn-speed", "full back stick from a banked entry, settled speed", "mph",
             turn.SpeedMph, 222.94, 5.0,
             $"entered at 100° bank, settled at {turn.BankDeg:0.0}° (emergent, not held), "
-            + $"α {turn.Alpha:0.0}°, swept {turn.SweptDeg:0} ° (original 449.8 in the same window)",
-            info: true);
+            + $"α {turn.Alpha:0.0}°, swept {turn.SweptDeg:0} ° (original 449.8 in the same window)");
 
         // ⚠ Asserted as an UPPER BOUND, not a band. BL-247's defect is the aircraft falling out of
         // this manoeuvre — 83% of gravity across the flight path at a steep bank — so "sinks no
@@ -1030,6 +1029,17 @@ public static class Probes
             apex / Ft, 936.0, 200.0,
             $"min speed {minSpeed / Mph:0.0} mph (original 127.9), "
             + $"apex at {tApex:0.0} s (original 6.5), α {alphaAtMinSpeed:0.0}° at min speed",
+            info: true);
+
+        // ⚠ INFORMATIONAL, same loop as the row above — a direction check, not an assertion. C21
+        // closed most of this gap (269 -> 205 mph against 127.9) but the energy split still reads
+        // wrong: the row above now OVERSHOOTS altitude (1282 ft against 936) while this UNDERSHOOTS
+        // speed, so C_i (fitted to the sustained-turn plateau only) does not yet reproduce this
+        // manoeuvre's energy balance. Asserting it would fail on that known-open gap, not a new one.
+        Row("zoom-climb-min-speed", "same loop, speed at its own minimum", "mph",
+            minSpeed / Mph, 127.9, 6.0,
+            $"α {alphaAtMinSpeed:0.0}° here (liftAOAs [5,9] predicts α_ss ≈ 8.25° at wings-level "
+            + "equilibrium; this loop has carried well past that regime by its own minimum)",
             info: true);
 
         var sb = new StringBuilder();
