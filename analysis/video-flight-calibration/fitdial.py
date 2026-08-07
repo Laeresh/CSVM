@@ -9,12 +9,18 @@ top, 36 deg per unit; speedometer labels at 0/100/200/300).
 Objective: weighted normalised cross-correlation against the pooled median
 frame, with weight 1/(1+std) so the needle-swept pixels stop voting.
 """
+import os
+
 import numpy as np
 from PIL import Image
 from scipy.optimize import minimize
 
 CACHE = ".scratch/vidcal/cache"
-TEXDIR = "extracted/C1/texture"
+# Extracted game art is git-ignored, so a worktree has no extracted/ at all.
+# Same escape hatch as extract.py's CSVM_VIDEOS: point CSVM_EXTRACTED at the
+# main checkout's extracted/ to fit dials from one.
+TEXDIR = os.path.join(os.environ.get("CSVM_EXTRACTED", "extracted"),
+                      "C1", "texture")
 
 
 def load_tex(name):

@@ -337,6 +337,38 @@ crash: bounce_factor 0.6, armor/health_damage_range [50,300]
 autohead_turn_time 0.75  autohead_turn_max 2.86  autohead_turn_min_pitch -3.0
 ```
 
+`CAP-02` decoded ground blow: it is a **collision-avoidance assist on the elevator channel** that
+roughly **doubles pitch authority** (1.95× `BL-109`'s sustained max pull) once the **along-path
+range to terrain** drops under **400** — a *distance*, not an elevation, despite the constant's
+name. Not a force and not automatic: hands off the stick is a crash, yaw input shows nothing, and
+it works inverted. Measurements and traps are on `BL-095`; do not re-derive them from the clips.
+
+⚠ **Range, not altitude — and a shallow dive is what separates them.** Along-path range to a level
+surface is `alt / sin|γ|`, so in a −43° dive it is 1.47× the altitude and in a vertical dive the two
+are identical. Only a *shallow* pass can tell a range trigger from a height trigger, and only over
+**water** is the surface flat and at a known 0 ft. Both `CAP-02` batches' other dives are
+near-vertical and cannot distinguish them at all.
+
+⚠ **Path-normal acceleration without differentiating γ.** Every attempt that went through
+`ω = dγ/dt` failed on these clips, because γ saturates at ±90° in a steep dive and the unpinning
+frames throw the ±60 °/s artifacts recorded above. Use instead, from `h" = V' sin γ + a_n cos γ`:
+
+```
+a_n = (h" - V' sin γ) / cos γ           sin γ = climb / V     (a ratio, not a derivative)
+```
+
+`h"` by local *quadratic* fit on the PTS axis (one fit, not two chained first-derivatives), `V'` by
+local linear fit, and gate on `|sin γ| < 0.90` — the estimator only dies where `cos γ → 0`. On
+`CAP-02 Up Down` this reads 0% gated across the whole recovery and the peak moves by less than
+±15% across smoothing windows from 0.30 s to 0.90 s.
+
+⚠ **A clip that ends in a crash fails `checkclip` on its last second.** The gate is deliberately
+all-or-nothing (a head turn invalidates everything after it), so it returns REJECT for the whole
+clip. Re-run the same registration **in windows** to find where rigidity is actually lost, and
+decode only the prefix — `CAP-02 pull up to cras` is clean to t = 10.5 s of 12.8 s. Do not skip the
+windowed check and decode a rejected clip anyway; and note a REJECT's "consistent with auto head
+turn" wording names one cause among several — `CAP-02 C4 Canyon 2` shears from **damage wobble**.
+
 ⚠ **The design document's turn-rate ladder (30/45/60/75/90 °/s) is the *velocity-vector* turn
 rate, and it maps to pitch** — not a body-axis rate. Measured sustained pitch ~34 °/sim-s sits
 between the ladder's 30 and 45 steps, consistent with the ladder being pitch and the Bloodhawk
@@ -410,6 +442,39 @@ ffmpeg -i <clip> -vf showinfo -f null - 2>&1 | grep -oE "pts_time:[0-9.]+"
 Needs `imageio_ffmpeg`, `numpy`, `scipy`, `pillow`, `matplotlib`. No game data is read
 except the extracted dial textures (`extracted/C1/texture/{altimeter,speedometer}.png`)
 and `extracted/zrdr/{vehicle,player,engines}.zrd.json`.
+
+**Running it from a git worktree** (added 2026-08-07 for `CAP-02`). Both inputs above are
+git-ignored, so a worktree has *neither* `OriginalScreenshots/` nor `extracted/`. Two env vars
+point the pipeline at the main checkout's copies:
+
+```
+$env:CSVM_VIDEOS    = "Z:\CSVM\OriginalScreenshots\Videos"   # extract.py
+$env:CSVM_EXTRACTED = "Z:\CSVM\extracted"                    # fitdial.py
+```
+
+⚠ **Never junction the media in instead** — PowerShell 5.1's recursive delete follows a junction
+into its *target*, so a link left in a worktree turns a later sweep into a deletion of
+irreplaceable original-game footage (`CLAUDE.md`).
+
+**A third capture geometry: 1920×1080** (`CAP-02`). 1080p is 16:9 but reaches canonical 1280×720
+at **1.5×**, which the block-mean in `extract.py` cannot do — it takes an integer factor and raises
+on anything else rather than guessing. Those clips are therefore pre-resampled **once** with
+ffmpeg/lanczos into `playtest/CAP-02/` and enter through the new `LAYOUTS[(1280, 720)] = (0, 0, 1)`;
+a single high-quality resample beats a two-step. It registers: the cockpit pool rebuilt to the same
+2,529 frames, `fitdial` returned altimeter NCC **0.9787** / speedometer **0.9808** against the
+published 0.978/0.981, and all four 1080p cockpit takes landed at **dx = dy = 0** (peaks 0.61–0.68).
+On the chase side MPH / gun / rockets also land at dx = dy = 0 (peaks 0.48–0.82) — so the
+screen-space HUD does scale with render resolution, which was not obvious in advance. The chase ALT
+and ADI cannot be checked this way at all: their ROI sits hard against the screen edge and the
+padded search window runs off the array, returning the window edge with peak 0.000. That is the
+gate's limit, not the clip's.
+
+⚠ **`run2chase.pts()` silently returned an EMPTY time axis for a staged clip** (fixed 2026-08-07).
+`extract()` has always accepted a repo-relative `playtest/<ID>/…` path; `pts()` did not, and hard-
+prefixed `OriginalScreenshots/Videos`. The ffmpeg call then failed, the list comprehension yielded
+`[]`, and **nothing raised** — `alt`/`mph` decoded and printed healthy statistics while `_pts.npy`
+was zero-length, so the failure only surfaced downstream as an empty analysis window. Both helpers
+now share the same fallback.
 
 ## How each instrument works
 

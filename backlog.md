@@ -764,7 +764,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Playtest after fix:* once a load-factor drag term lands, fly a full-pull 360° and a sustained climb
   and compare the bleed by feel before closing this.
 
-- `BL-095` `[Research]` `[Blocked: CAP-02]` **`player.json` ships a physics block we consume almost none of.** Alongside the used
+- `BL-095` `[Research]` **`player.json` ships a physics block we consume almost none of.** Alongside the used
   `nom_gravity 20.0` / `stall_mag 1.25`: `maxAOA 46.0`, `liftAOAs [5,9]`, `lift_accel_rate 0.75`,
   `highGs [9,15]`, `lowGs [-6,-9]`, `drag_factor 1.5`, `drag_fade_speed 40`, `turn_fade_in 10`,
   `turn_fade_out 50`, `high_speed_pitch_fade [1000,1001]`, `yaw_low_speed 0.0625`,
@@ -776,7 +776,115 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   is the original's own speed-dependent yaw authority, which our hand-rolled `eff`
   (`1.4 − clamp(v/fd)`) stands in for and whose comment already admits is "still not same as
   original".
-  *Blocked on `CAP-02`* (`playtest.md` §0).
+  **`CAP-02` is answered for ground blow (2026-08-07)**, over two batches, and the mechanism is not
+  what the constant's name suggests. **It is a collision-avoidance assist on the ELEVATOR channel:
+  when the along-path distance to terrain falls below ~400 units it roughly doubles the pitch
+  authority of the pull the pilot is already making, turning the nose away from the impact.**
+  Established with the user at the controls:
+
+  - **It is not a force and not automatic.** Hands off the stick is a crash. It only exists while
+    pitch is held — so nothing about it can be modelled as an applied acceleration.
+  - **Elevator only.** Yaw input shows no over-max behaviour.
+  - **Body frame, not world frame.** Inverted, pulling *down* works the same way. An "upward ground
+    blow" cannot produce that, which independently kills the additive-force reading.
+  - **It is an assist, not a clamp** — `pull up to cras` shows the boost firing and the aircraft
+    hitting the water anyway, from a −650 ft/s sink pulled too late. `ai_groundblow 0.5` reads
+    naturally as the same multiplier, halved for the AI.
+
+  **The trigger is range to terrain, NOT height above it — and it is 400.** `CAP-02 Up Down`
+  recovery #2 discriminates the two because it is a *shallow* −43° dive, where along-path range to a
+  flat surface (`alt / sin|γ|`) is 1.47× the altitude. Flown over open water, so the surface is at
+  0 ft and the altimeter's MSL reading is exact:
+
+  | t | 17.51 | 17.71 | **17.81** | **17.91** | 18.01 | 18.11 | 18.31 | 18.41 | 18.51 | 18.61 |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | altitude ft | 399 | 333 | **300** | **267** | 234 | 204 | 153 | 133 | 119 | 109 |
+  | **range ft** | 588 | 490 | **441** | **400** | 365 | 342 | 324 | 341 | 390 | 505 |
+  | vs max pull | −0.02× | −0.10× | **0.06×** | **0.55×** | 1.01× | 1.41× | 1.92× | **1.95×** | 1.84× | 1.71× |
+
+  Two independent reasons altitude is excluded. (1) At **altitude 399 ft** the boost is
+  **−0.02×** — an altitude trigger of 400 would have fired there and demonstrably did not; it fires
+  at altitude 267, where the *range* is 400. (2) Across the window altitude falls **monotonically**
+  300 → 102 ft, yet the boost rises *and then decays*; range is non-monotonic (441 → 324 → 505) and
+  the boost tracks it both ways, peaking within one 0.1 s sample of minimum range. Onset brackets
+  **range 427 → 376 ft**. So `groundblow_elev 400` is a **distance**, despite the name.
+
+  **The magnitude is ~2×.** Peak path-normal acceleration 65.3 m/sim-s² against `BL-109`'s sustained
+  max-elevator pull of 32.96 / 34.02 = **1.95×**. γ stays between −43° and −21° across the whole
+  ramp, so **0% of samples are gated** — this is not the saturation artifact that wrecked batch 1 —
+  and the peak survives the smoothing window: 2.75 / 2.13 / 1.97 / 1.88 / 1.80× at 0.30 / 0.40 /
+  0.50 / 0.70 / 0.90 s. Whether `groundblow_mag 10` *is* that multiplier is unverified; what is
+  ruled out is reading it as an acceleration in `nom_gravity 20.0`'s units, which would give 0.5 g
+  against a measured excess of 2.7–3.9 g.
+
+  **This is also what the canyon control was showing.** Flying *along* a canyon, nothing is within
+  400 units *ahead* however close the walls are beside you — which is why those runs trip `LOW ALT`
+  continuously and never once fire the boost. The same rule predicts the sideways flick the user
+  first reported in the batch-1 takes: aimed at a mountain rather than at flat ground, the nose is
+  turned away from *that* surface, so the escape has a lateral component.
+
+  ⚠ **`a_n` here is computed WITHOUT differentiating γ**, which is what makes it trustworthy where
+  every earlier attempt failed. From `h" = V' sin γ + a_n cos γ`, solve `a_n = (h" − V' sin γ)/cos γ`;
+  `sin γ = climb/V` is a *ratio*, not a derivative, so the ±60 °/s unpinning artifact `BL-109`
+  documents cannot enter. Gate on `|sin γ| < 0.90` and the estimator dies only where `cos γ → 0`.
+
+  ⚠ **Traps on batch 2.** (a) The **range figure rests on flat terrain.** `alt / sin|γ|` is the
+  along-path distance to a *level* surface, which open water guarantees and nothing else in the
+  `CAP-02` set does. Over a mountain the real range is shorter than that formula and the 400 would
+  come out low — do not apply it to the batch-1 takes. (b) The first `Up Down` recovery reads
+  3.7–5.0× but with 28–30% of samples gated at γ ≈ −63°; quote 1.95×, not that one. (c) `pull up to
+  cras` fails `checkclip` as a whole clip because it ends in a crash — a *windowed* re-run shows it
+  rigid to **t = 10.5 s** and only that prefix is used; its own pull is too steep to measure
+  (100% gated). (d) **The yardstick is borrowed.** Neither clip contains a hard *free-air* pull —
+  their high-altitude stretches are gentle arcs peaking at ≤1.1× and mostly ≤0 — so the ×2 still
+  rests on `BL-109`'s figure, from a different clip at a different speed, and lift ∝ V².
+  (e) **One clean event.** Only recovery #2 is shallow enough to separate range from altitude; the
+  other three dives are near-vertical, where the two coincide. The 400 is a single crossing, sampled
+  at 0.1 s — a plateau it is not.
+
+  **What batch 1 measured** — seven takes at 1920×1080 (plus a `.zip` that
+  merely re-packs three of them). Five decoded; `Second12 cockpit with head turn` and
+  `C4 Canyon 2` were rejected by `checkclip` — the first for auto head turn as its filename says,
+  the second for panel shear the user identifies as **damage wobble**, so read that verdict's
+  "consistent with auto head turn" wording as one cause among several, not a diagnosis.
+  Three takes over open terrain show the same event, and they agree closely:
+
+  | take | view | sinking *and* slowing | altitude | airspeed | peak sink | descent arrested at |
+  |---|---|---|---|---|---|---|
+  | `Seconds9` | chase | 2.40 s | 860 → 456 ft | 232.0 → 185.4 mph | −337 ft/s | 456 ft |
+  | `Second 23` | chase | 2.34 s | 942 → 505 ft | 253.6 → 202.5 mph | −370 ft/s | 499 **and** 504 ft |
+  | `Cockpit Second10` | cockpit | 2.44 s | 1032 → 556 ft | 228.9 → 193.5 mph | −342 ft/s | 553 ft |
+
+  This confirms the user's own reported signature — **airspeed falls while altitude is still
+  falling** — with numbers: a sink converts height into speed, so losing both at once is energy
+  leaving along the flight path faster than gravity puts it in. `Second 23` arrests **twice, 11 s
+  apart, 5 ft apart** (499 / 504 ft), which no pilot judges by eye.
+
+  **The canyon runs are the control and they rule out the obvious trigger.** `C4 Canyon` and
+  `Canyon 3` reach the panel's own `LOW ALT` lamp repeatedly (22 and 18 flashes; `C4 Canyon`
+  essentially continuously t=6.8–15.4 s), so they *did* get low above ground — the lamp is the only
+  AGL-referenced signal on the panel, since the altimeter reads MSL. Yet their sinking-and-slowing
+  stretches are mild (peak sink −44…−166 ft/s against −337…−370) and their descent-arrest altitudes
+  scatter over **653 ft** instead of clustering. So the discriminator is **not** low altitude; it is
+  the steep, fast closure with the ground. Whatever fires, fires on a collision course, not on
+  proximity — which is the shape `ai_groundblow 0.5` implies (an assist, dialled down for the AI).
+
+  ⚠ **Traps on batch 1.**
+  (a) **On its own it could not separate a body force from the pilot** — a friend flew these holding
+  pitch throughout, so a max-elevator pull-out explained everything in it equally well. Batch 2
+  settles this the other way round: the pull *is* the mechanism, amplified.
+  (b) **Its `V·ω` numbers are artifacts — do not quote them.** `V·ω` against `BL-109`'s max pull
+  read 59.6 and 77.0 (1.8× and 2.3×), but γ **saturates at −90°** through the steepest part
+  (`|climb/v| > 0.98`) and those peaks are the *first sample after* the gate re-opens, which is
+  exactly the ±60 °/s unpinning artifact `BL-109` documents. Use batch 2's γ-free estimator instead;
+  that the two happen to land on a similar multiple is luck, not corroboration.
+  (c) **Batch 1 alone could not reach `groundblow_elev`/`groundblow_mag`.** Its altimeter reading is
+  MSL over unknown terrain, so "arrested at 456–556 ft" was not an AGL height. Batch 2's water
+  surface is what fixed this.
+  (d) **The compass cannot test the reported yaw.** The user describes a sideways yaw (either
+  direction) at the flick; on these takes the tape's own self-calibration lands at 0.833 px/deg
+  against the established 1.4937 and reports 2,600° of travel in 24 s. Heading is degenerate near a
+  vertical dive, so a clip containing one cannot give yaw at all. **Still open.**
   ⚠ **Traps.** (a) `yaw_max 50` and `yaw_fade_out 400` are not in the same units as our `eff`
   — do not map names onto our terms without deriving the units, because our yaw 360° currently
   matches the original to 4% and a mis-scaled substitution would break a passing suite check.
