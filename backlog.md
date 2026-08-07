@@ -2286,6 +2286,35 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   than closing it: a drag there competes with a per-frame read-back and nothing scripted can prove
   that feels right. `PT-29` is the owed test.
 
+- `BL-302` `[Bug]` **`dotnet test` dies with an `AccessViolationException` on roughly a third of runs — the
+  `Log.ConsoleSink` save/restore races itself across xunit's parallel classes.** The run aborts
+  part-way (seen at 505/517/528 of 572) with `Der Testhostprozess ist abgestürzt. : Fatal error.`
+  and no failing test named, so `RunTests.ps1` reports FAIL for a tree whose units are green.
+  Captured stack (2026-08-06; re-capture with the filter below):
+  `Godot.NativeInterop.NativeFuncs.godotsharp_string_new_with_utf16_chars` ← `GD.Print` ←
+  `Log.WriteConsole` ← `Log.Info` ← `StuntMission.Load` ← `StuntGatesTests.Run` — GodotSharp's
+  native string marshalling called with no engine behind it. **Diagnosis (traced to code, with a
+  deterministic repro):** `Log.ConsoleSink` is a static, and the three classes that need it —
+  `StuntGatesTests`, `StuntRaceTests`, `StallWarningTests` — each install a no-op sink and restore
+  the PREVIOUS value in a `finally`. xunit runs test classes in parallel collections, so two
+  overlapping bodies interleave: the first to finish restores the sink to what it saw (null),
+  and the still-running one's next log line falls through to the real `GD.Print`. *Measured
+  2026-08-06:* running those three classes together crashes **6 of 6** runs
+  (`dotnet test --filter "FullyQualifiedName~StuntGatesTests|FullyQualifiedName~StuntRaceTests|FullyQualifiedName~StallWarningTests"`),
+  while `StuntGatesTests` alone is clean 6 of 6 — the race is the mechanism, and the full run's
+  ~1-in-3 rate is just how often the scheduler overlaps them among 572 tests. Also reproduces
+  with `TemplateStageTests` filtered out, so it predates PLAN-template-stage A3.
+  ⚠ **Traps.** (1) On the FULL run the rate is ~1 in 3, so a single green `dotnet test` proves
+  nothing — verify a fix against the three-class filter above, which is 6/6 today. (2) A per-class `finally` that restores the
+  previous value is exactly the bug — the fix has to remove the shared mutable static from the
+  race (an assembly-level sink installed once, an xunit collection that serialises the three
+  classes, or `Log` refusing `GD.*` when no engine is loaded), not tighten the save/restore.
+  (3) Don't "fix" it by disabling xunit parallelism repo-wide without measuring the cost: the
+  units are the fast stage of `RunTests.ps1` (~4 s) and that is what keeps them run-every-time.
+  (4) The engine-free-suites work (`docs/plans/PLAN-engine-free-suites.md`) cites this same
+  `ConsoleSink` shim as the precedent for future off-engine ports — every new port widens the
+  race until this is fixed.
+
 ## Misc
 
 - `BL-072` `[Feature]` **Paint scheme follow-ups** (the core landed 2026-07-20 — see `docs/formats/paint.md`
