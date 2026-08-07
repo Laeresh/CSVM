@@ -1279,9 +1279,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   30/37/55 return spurious seam spacings of 31/31/90 against the true 240). Use a half-width of a
   full half-period.
 
-- `BL-110` `[Tuning]` `[Blocked: CAP-11]` **`SunIncidence` 0.46** (item-6 world brightness) rests on a single overcast reference —
-  a C1B-night and a bright-day original screenshot would confirm/refine the self-scaling (`CAP-11`).
-
 - `BL-118` `[Tuning]` **Cloud deck** — the `CloudDeck` **mesh** brightness reads ~40 units lighter than the
   original (measured 2026-08-07: **+54, and only from below** — see the `CAP-12` block) — **plus a
   post-`BL-273` density judgement of the now-authored ambient cloud field.**
@@ -1314,6 +1311,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   - **The original shows no comb.** Grazing passes along tops and base (stills t=44/59/97/124,
     t=29.2) show soft continuous structure only — no 130 m lattice at any angle. Whether *our*
     field shows one at the controls is still `PT-42`'s check; the original side is now on file.
+  - **Night puffs are directionally moonlit in the original (`CAP-11` C1B, 2026-08-07):** cloud
+    cores near the moon reach p90 **218** (t=16) while the away-from-moon cloud sits at p90 **70**
+    (t=5); our uniform `WorldLight` 0.426 renders p90 **102** — matching the away side and ~2×
+    dark against the lit side (`playtest/CAP-11/`). Any night-cloud brightness judgement must say
+    which side of the moon the measured puff faces.
   - ~~Discrete puff balls above the tops in ours, none in the original~~ — **explained, not a
     defect (user, 2026-08-07): the placed/scattered puffs exist only over the base map**, and the
     clip had left it (a straight run at ~300 mph covers the 12,288 m map in under a minute),
@@ -1455,6 +1457,42 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   line/point primitives, and rain streaking along fall-direction-vs-velocity is a documented
   deviation pending an A/B). Needs original rain and snow footage to calibrate — worth a CAP
   when weather work resumes.
+  ⚠ One calibration fact is already on file (`CAP-11`, 2026-08-07, user): C2B IA1's rain falls
+  below the cloud cover as **one-pixel-wide streaks** — narrow enough that the 2560-wide Game DVR
+  capture swallows them entirely, while ours are plainly visible in the same scene
+  (`playtest/CAP-11/csvm-c2b-low.png`). Streak width is the first constant to revisit.
+
+- `BL-303` `[Bug]` **Three scenes render permanent murk or a black sky the original doesn't have —
+  and all three sit against zones authoring a 9000–10000 m fog band** (`CAP-11` A/B, 2026-08-07;
+  evidence `playtest/CAP-11/README.md`; surfaced closing `BL-110`). The cases:
+  - **C3**, matched canyon pose (`--pos=-3504,710,-3619 --direction=-0.40673,0,-0.91355`,
+    identical 2329 ft both sides): original near slope 36.5, far hills 19.9–60.3, blue-gradient
+    sky 194.9; ours near slope 130.4 (×3.6), far hills flat **201.0 = full `c9c9c9` fog**, sky =
+    fog. The authored near 1000 / far 4500 cannot full-fog a hill 1–2 km out, and C3's
+    CLOUD_COVER sits at 10000–11000 m — this is not the whiteout band.
+  - **C2B above the deck**: original dark blue-gray dome 82.7 (t=50); ours flat b0b0b0 fog
+    **176.0** at 1230, 1350 and 1500 m — identical at every altitude, so not an altitude miss.
+  - **C5**: our sky pure black 0.1 vs the original's dark-blue night dome 15.3 (C5 authors fog
+    000000; the `Weather.cs` NoFog-fallback note is adjacent).
+  Every *healthy* scene's active zone authors either a reachable deck band (C1C/C2B zone1 ~1000,
+  C2 zone1 256–1024) or 10000–11000 (C1/C1B zone1) — how the fog-altitude fade treats a band
+  wholly above the flight envelope is the common suspect; start where `ZoneFog`'s
+  fog_low/fog_high are consumed. Adjacent from the same capture, probably NOT fog: C5's lit
+  facades read ×0.58–0.66 of the original (tower faces 10.2 vs 15.5, low-rise 21.7 vs 37.6)
+  with WorldLight already at clamp 1.
+  *Playtest after fix:* re-shoot the three poses named in `playtest/CAP-11/README.md` against
+  the same original stills.
+
+- `BL-304` `[Bug]` **Water gets the WorldLight dim; the original renders it unmodulated** (`CAP-11`
+  A/B, 2026-08-07; surfaced closing `BL-110`; evidence `playtest/CAP-11/README.md`). C2B ocean
+  foreground, same world, matched spawn pose: original 53.9 vs ours 42.0–42.5 — ratio
+  **0.78 ≈ our `world_light` 0.784 exactly**, i.e. dividing our value by the dim reproduces the
+  original within 7%. C1B's night ocean points the same way (original 37–42 vs ours 9–23) but is
+  noisy — moon glitter and wave texture vary with screen position — so the night number is
+  support, not proof. Candidate: exempt the water material from `csky_world_light`, the same
+  should-be-exempt family as `BL-070`'s poleflare glows.
+  *Playtest after fix:* the C2B low pose (`--pos=-3843,200,-1101`) against
+  `playtest/CAP-11/t0.5-c2b-spawn-ocean.png`.
 
 ## Effects & animation runtime
 
@@ -2162,25 +2200,21 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ Trap: near-matches between authored fields and hand-picked values are suggestive, not
   decodes — wire nothing on one coincidence; each remaining camera waits for its capture.
 
-- `BL-266` `[Research]` **Camera shake: the laws ARE authored — the missing pieces are their inputs**
-  (re-scoped 2026-08-05 by the first read of `shakes.zrd.json`/`damage_shakes.zrd.json`; the
-  decode landed as [`docs/formats/shakes.md`](docs/formats/shakes.md), no code). Six oscillator
-  sources are authored (freq/damping/waveform/`magnitude_factor`: fire_bullet, bullet_impact,
-  missile_impact, explosion, high_speed, nitro) plus complete `ON_CALL`
-  `small/medium/large_camshake` defs. Unauthored, so unwired: what `magnitude_factor`
-  multiplies (damage, caliber and velocity are all plausible and several candidates land
-  one-coincidence-close to nitro's absolute 0.05), and which hit severity calls
-  small/medium/large (exe-side). Open work: (a) decode the `magnitude_factor` input — candidate
-  instrument: `Gun Wobble and animation.mp4`; (b) settle the damage-shake triggers (footage, or
-  a declared TUNE). Where the shake is applied (user observation of the original,
-  2026-08-07): in 3rd-person views it is definitely the **plane** that wobbles against the
-  world; cockpit/nose views read as camera shake — consistent with one mechanism rocking the
-  plane node, which a plane-mounted camera inherits for free (mirroring how `damage_shakes`
-  rocks the plane's `healthy` node). ⚠ Traps: `SHAKES_CAMERA` is NOT the fire-path shake mechanism — its sole
-  carrier among all 48 weapons is `wep_26` "FW", a zero-damage scripted fake weapon (a scripted
-  detonation-shake marker); the player fire path would be the unflagged `fire_bullet` source.
-  And the near-match trap bites hard here: several magnitude candidates coincide with authored
-  constants — wire nothing on one coincidence.
+- `BL-266` `[Research]` `[Owed-playtest]` **Plane wobble: residual decode questions after the
+  wiring landed.** The oscillators are wired (`ShakeDefs`/`PlaneShake`, visual-only roll on the
+  plane node; law and measurement in [`docs/formats/shakes.md`](docs/formats/shakes.md) and
+  `analysis/gun-wobble-shake/`). Still open, all data questions: (a) the pure-caliber magnitude
+  law is measured on ONE clip (Bloodhawk, 40-cal) — whether plane model/weight also enter waits
+  on `CAP-30`; (b) the impact sources' per-event quantities are stand-ins declared TUNE (gun
+  hits reuse caliber, rockets use armor damage) — a being-hit capture pins them; (c) the
+  `ON_CALL` `small/medium/large` `damage_shakes` defs stay unwired — unknown caller, likely
+  script/set-piece; (d) `high_speed`'s normalised-by-`fd_speed` reading fits the quiet-cruise
+  evidence but is unverified against a calibrated dive. *Playtest:* `PT-44`.
+  ⚠ Traps: `SHAKES_CAMERA` is NOT the fire-path shake mechanism — its sole carrier among all
+  48 weapons is `wep_26` "FW", a zero-damage scripted fake weapon (a scripted detonation-shake
+  marker); the fire path is the unflagged `fire_bullet` source. And the near-match trap: several
+  magnitude candidates coincide with authored constants — wire nothing on one coincidence (the
+  caliber law stood because the candidates separated by an order of magnitude each way).
 
 ## HUD & UI
 

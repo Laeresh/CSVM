@@ -102,7 +102,6 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
-| `CAP-11` | `SunIncidence` per chapter | World brightness framed like `OriginalScreenshots/C1 IA1 Zone1 environment Spawn3.png`, for every chapter, plus a few seconds of video each. **Priority pair: a C1B night mission and a C1C bright-day mission** — the two extremes the self-scaling model predicts (0.43 / clamp 1.0) and is riskiest on | `BL-110` |
 | `CAP-22` | C5 city building density | A low pass through C5's downtown city blocks (IA1), close enough to street level to tell whether buildings sit as one consistent skyline or visibly overlap/interpenetrate each other. Our build currently draws two disjoint building districts on the same footprint (`cb00a`–`cb11a` over `cb12a`–`cb24a`) — this settles whether the original shows only one | `BL-250` |
 | `CAP-23` | Water vs shoreline order | A low pass over a C1B shoreline where surf meets open water (the recorded pose is around `-7700,49,-5798`), close enough to tell **which of the two draws on top** — does the surf/foam strip lie over the water, or does the water edge cover it? Any chapter's shore/water boundary answers it; C1B is where our build's contested pair sits | `BL-251` |
 
@@ -114,6 +113,7 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 | `CAP-27` | Does the original spark on the airframe at all? | Take damage in the original — a light scrape is enough — with the aircraft in frame (external/chase fine), and look for a **spark burst on the airframe itself**, distinct from smoke at the contact point. ⚠ This capture can **delete** a feature rather than tune one: `BL-090`'s per-impact spark burst is driven by a 0.99 `injure_anims` entry that exists on **1 of 11** aircraft (the Devastator), which the backlog already calls "plausibly an authoring leftover". If the original never sparks, our implementation goes. If it does, `BL-281`'s ricochet mix can be judged | `BL-281`, `BL-090` (item 2) |
 | `CAP-25` | The `chunk` debris quad at a slug dirt hit | Sustained slug fire into flat dirt, camera as close to the impacts as the original allows (external/chase view fine — no gauges needed), slow-motion or high frame rate if possible. Decides whether the original ever shows the `gunhit` def's `chunk` debris node — a ~0.5 m quad textured with the perforated `gun_barrel` shroud band (dark dot grid on tan; gamez model 27 → material 4, UVs u 1→2), flung by the three **slug** defs only (`3040`/`5060`/`70slug_gunhit`, all chapters; ap/dum/mag have no debris nodes). Our build draws it faithfully from the data (`Screenshots/Mystery debris.png`, 2026-08-04, freeze-frame zoom); we keep it unless the original provably suppresses it. *Look for:* any small tumbling textured scrap distinct from smoke/chips in the ~2–4 s after each hit — presence or absence both settle it | `BL-203` (landed — this judges a leftover) |
 | `CAP-28` | Torpedo flight dynamics | The aerial torpedo (`TORPDO`) released in level flight, ideally at high speed, filmed external/chase with the surface in frame and held from release to impact — long enough to read the speed decay the user saw at the controls (a max/cruise speed, slowing after launch). HUD in frame lets `analysis/video-flight-calibration` decode speed over time; without it the decay is still readable against fixed terrain | `BL-290` |
+| `CAP-30` | Firing-wobble amplitude across calibers and airframes | Dead-astern external/chase clips, level flight, guns held 3 s+: **(a)** one plane with two well-separated calibers (30 vs 70), **(b)** one caliber on a light vs a heavy plane. ⚠ Dead-astern framing is load-bearing: it makes the on-screen roll angle the world roll angle with no projection model (`analysis/gun-wobble-shake/FINDINGS.md`, capture spec there). Confirms or refutes the pure-caliber magnitude law (7e-5 × caliber, measured on one 40-cal clip) and whether plane model/weight enter; a being-hit clip on the same sortie also pins the impact sources' stand-in quantities | `BL-266` |
 | `CAP-29` | Panel-damage semantics | Take controlled damage per part in the original, own aircraft in frame (external/chase), damage display visible if possible. Three questions: **(a) location** — take fire ONLY on the nose: do sparks/debris/fuel vapor ever appear at the WINGS, or does everything stay at the struck part? **(b) armor gate** — on a fresh plane with armor still absorbing, do any skin panels tear, or only once a part's armor is gone (health damage)? **(c) repetition & look** — watch one panel cross its tear threshold: how many debris bursts fire, does that panel's debris ever repeat later in the same flight, does the flung debris read as a piece of that panel or as generic flakes, and what visibly changes on the airframe | `BL-297` |
 
 ### World
@@ -130,6 +130,23 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 ```powershell
 ./RunGame.ps1 --plane=player_bhawk --chapter=C1
 ```
+
+- `PT-44` `[A/B: OriginalScreenshots/Videos/Gun Wobble and animation.mp4]` **The plane wobble
+  (`BL-266`).** The authored shake oscillators are wired as visual-only roll on the plane node:
+  gunfire buzz (measured amplitude law: 7e-5 × caliber, radians), overspeed rattle (gated at
+  rated max speed), and being-hit rocks. Fire a long burst in chase view with the reference clip
+  open, dive past rated max, then take hits in `--vs`. *Look for:*
+  - (a) firing: a subtle fast roll buzz while the trigger is held, matching the clip's
+    character — visible against the world, small, stops with the trigger. The engine A/B read
+    ~2–4× weaker than the clip per frame (`analysis/gun-wobble-shake/FINDINGS.md` "Engine A/B");
+    judge whether that reads too tame at the controls.
+  - (b) overspeed: no rattle in level cruise at any throttle; sets in only past rated max in a
+    dive and grows with speed.
+  - (c) being hit (`--vs`, second player): a short rock on gun hits, a harder one on a rocket.
+  - (d) view coupling: in chase view the **plane** wobbles against the world (the camera holds);
+    the wobble also moves muzzle flashes/tracer origins with the wings.
+  *Blocks:* nothing tracks a pass — a fail (too tame / wrong character) re-opens the amplitude
+  half of `BL-266` with `CAP-30`'s captures as the instrument.
 
 - `PT-42` `[A/B: OriginalScreenshots/C1 IA1 Cloud Puffs and Moon.png]` **The `fogvol.zrd` cloud
   field (C10 / `BL-273` landed 2026-08-06).** The hand-tuned `CloudPuffs` field is deleted; what
@@ -235,8 +252,19 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   - (d) the four chapters the rule deliberately leaves alone — C1, C1C, C2B, C4 — look exactly as
     they did.
 
-  *Blocks:* `BL-100`'s remaining four chapters are the A/B this sets up; `CAP-11` still judges C1B's
-  night brightness separately.
+  *CAP-11 evidence (2026-08-07, `playtest/CAP-11/`; the capture is retired, `BL-110` closed):*
+  three of the look-fors already have numbers. (b) is **failing** — at the matched canyon pose
+  (`--pos=-3504,710,-3619`, 2329 ft) the original is nearly clear (near slope 36, far hills
+  20–60, blue-gradient sky 195) while our C3 renders full `c9c9c9` murk (near slope 130, far
+  hills flat 201, sky = fog): the "daylight grey haze" is far too dense and the sky the wrong
+  colour. (d) fails for **C2B above the deck** — original dark-blue dome 82.7, ours flat b0b0b0
+  fog 176 at 1230–1500 m. Both, plus C5's black sky, are now `BL-303` (shared 9000–10000 m
+  fog-band suspect). And C1B's night brightness is judged: terrain at the matched spawn −12%
+  (`WorldLight` 0.426 confirmed, `git log --grep=BL-110`), but our zone1 dome is **−26%** vs the
+  original's night sky and **no moon renders** where the original shows a large one
+  (`t0.5`/`t5` stills) — `WorldBuilder.BuildHorizon` knows how to billboard a moon, so the (a)
+  sweep should check whether the built zone1 subtree simply lacks the node.
+  *Blocks:* `BL-100`'s remaining four chapters are the A/B this sets up.
   *Variations:* one flight each — repeat with `--chapter=C3`, then `--chapter=C2`; (d)'s four
   untouched chapters need only a glance in each.
 

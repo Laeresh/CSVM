@@ -71,6 +71,7 @@ The plane as a flying, shooting, damageable thing, plus its HUD and stunt mode. 
 from the extracted zrdr; owns the arcade physics and everything drawn over the pilot's view.
 
 - `src/Flight/PlaneStats.cs` — typed per-plane stats from vehicle/engines/player.json: dynamics, engine sound, destroyable parts.
+- `src/Flight/ShakeDefs.cs` — typed reader over shakes.json: the six shake-oscillator sources (law + per-source magnitude term).
 - `src/Flight/WeaponDefs.cs` — typed reader over `weapons.json` `BALLISTICS`: 48 `WeaponDef`s; inspect with `--dump-weapons`.
 - `src/Flight/Loadout.cs` — `stock_loadouts.json` reader + `Bind` to a built plane: gun groups + hardpoints, markers→muzzle nodes; `--dump-loadout`.
 - `src/Flight/WeaponBench.cs` — the world-less 48-weapon mount-and-fire pass check behind `--weapon-test` and `weapons-fire`; fires the whole `ForRig` rig, no lab node involved.
@@ -105,6 +106,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/ControlSurfaceAnimator.cs` — deflects ailerons/elevators/rudders to an absolute pose from slewed stick input; `--fly` only.
 - `src/Flight/WingLightBlinker.cs` — blinks the wingtip flares 0.08 s every 1.5 s, reset off on respawn; `--fly` only.
 - `src/Flight/PylonOrdnance.cs` — the rockets under the wings: one FLYOUT-model body per loaded pylon, hidden as its ammo depletes; `--fly` only.
+- `src/Flight/PlaneShake.cs` — the plane-wobble oscillators (gunfire buzz, overspeed rattle, being-hit rocks) summed to visual-only roll on the rig's ShakePivot.
 - `src/Flight/PlaneCollider.cs` — derives 5–8 plane-frame collision boxes from the built model's triangles, with no per-plane data.
 - `src/Flight/CollisionLayers.cs` — the named physics layers (world / aircraft): the one place a layer bit is assigned a meaning.
 - `src/Flight/AircraftBody.cs` — the flying plane's physics body: the shared `PlaneCollider` boxes on the aircraft layer; struck shape → part name.
@@ -1922,6 +1924,28 @@ Single-sourced: the terrain sweep casts these boxes AND `AircraftBody` mounts th
   strike. The half-span is known here — do not side-split in PlaneDamage instead.
 ⚠ Boxes deliberately overlap; the earliest in Parts order is what gets reported.
 ⚠ Known limit: the Bloodhawk's canard tips stay uncovered.
+
+## src/Flight/ShakeDefs.cs
+Typed reader over the shared `shakes.zrd.json` — the six shake-oscillator sources
+(`docs/formats/shakes.md`), modelled on `WeaponDefs`: load once (`GameSession` →
+`FlightRigAssembler.Inputs.Shakes`), named accessors per source, unhandled-key tripwire.
+Each source is one law (frequency/damp/sawtooth) plus exactly one magnitude-term variant
+(`magnitude_factor` [+ `he_factor`], `min_speed`+`magnitude_quotient`, or absolute `magnitude`);
+absent sources read as null and `PlaneShake` no-ops them.
+
+## src/Flight/PlaneShake.cs
+The plane-wobble oscillators: gunfire buzz (`fire_bullet`), overspeed rattle (`high_speed`),
+and being-hit rocks (`bullet_impact`/`missile_impact`/`explosion`), summed each sim tick into
+`Roll` — radians the controller writes to `ShakePivot`, the node the assembler hung the plane
+model under. Engine-free on purpose (unit-tested); the pivot write is the controller's one line.
+Amplitude = `magnitude_factor × caliber` in radians of roll, **measured** off original footage
+(`analysis/gun-wobble-shake/`); a rocket hit stands in its armor damage (declared TUNE).
+`high_speed`'s input is speed over the plane's `fd_speed`, so the authored `min_speed` 1.0 gate
+means "beyond rated max" — the dive rattle; cruise stays silent like the footage's idle floor.
+⚠ **Visual-only by construction:** physics, aim, spread and the chase camera read the
+  controller's transform, which sits *above* the pivot — route any new consumer of the plane's
+  pose to the controller, never to a node inside the pivot, or the wobble leaks into it.
+⚠ `nitro` and the ON_CALL `damage_shakes` defs stay unwired (no nitro system; unknown caller).
 
 ## src/Flight/FlightController.cs
 The flying-aircraft node: input → FlightModel → transform, text HUD + telemetry, weapon fire as

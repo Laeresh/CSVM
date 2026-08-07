@@ -100,7 +100,15 @@ public sealed class FlightRigAssembler
             HudParent = rig.Viewport,
             AllowPause = _in.RigCount == 1,
         };
-        controller.AddChild(planeModel);
+        // The wobble pivot: the plane model and everything resolved inside it — muzzle nodes,
+        // puffer anchors, mounted ordnance — rides the shake, while the controller's own
+        // transform (physics, aim, chase camera) never sees it. In the original the plane
+        // visibly rocks against the world in external views (docs/formats/shakes.md).
+        controller.Shake = new PlaneShake(_in.Shakes);
+        var shakePivot = new Node3D { Name = "ShakePivot" };
+        controller.ShakePivot = shakePivot;
+        controller.AddChild(shakePivot);
+        shakePivot.AddChild(planeModel);
 
         // Guns/hardpoints: bind this plane's stock loadout (or the --loadout override) to
         // its built model — resolves markers to muzzle nodes + weapons to WeaponDefs.
@@ -436,6 +444,8 @@ public sealed class FlightRigAssembler
         public WeaponDefs WeaponDefs = null!;
         public Messages WeaponMessages = null!;
         public StockLoadouts StockLoadouts = null!;
+        /// The shake-oscillator sources (shakes.json) — one load, one PlaneShake per rig.
+        public ShakeDefs Shakes = null!;
         /// The one shared projectile/effect pool every player's guns fire into.
         public ProjectilePool Projectiles = null!;
         /// The game's HUD bitmap font and the reticle pipper texture — null when absent, which

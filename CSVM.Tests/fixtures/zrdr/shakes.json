@@ -1,0 +1,33 @@
+[
+  "fire_bullet",
+  [
+    "frequency", [15.0],
+    "damp", [12.5],
+    "sawtooth", [1],
+    "magnitude_factor", [0.0002]
+  ],
+  "missile_impact",
+  [
+    "frequency", [2.2],
+    "damp", [6.5],
+    "sawtooth", [0],
+    "magnitude_factor", [0.001],
+    "he_factor", [2.0],
+    "PROBE_FUTURE_KEY", [1]
+  ],
+  "high_speed",
+  [
+    "frequency", [15.0],
+    "damp", [12.5],
+    "sawtooth", [1],
+    "min_speed", [1.0],
+    "magnitude_quotient", [70.0]
+  ],
+  "nitro",
+  [
+    "frequency", [4.0],
+    "damp", [3.0],
+    "sawtooth", [1],
+    "magnitude", [0.05]
+  ]
+]
