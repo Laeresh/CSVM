@@ -1,0 +1,558 @@
+<title>CSVM Playtest — Captures &amp; Flights</title>
+<style>
+  :root {
+    --bg: #f4f5f3;
+    --panel: #ffffff;
+    --ink: #1b2321;
+    --ink-dim: #5b6560;
+    --line: #d8dcd7;
+    --line-soft: #e7e9e5;
+    --accent: #b5731f;
+    --accent-ink: #7a4d14;
+    --accent-soft: #f4e3cc;
+    --tag-ab: #2f5f8a;
+    --tag-ab-bg: #e2ecf3;
+    --tag-own: #6a4a94;
+    --tag-own-bg: #ece3f4;
+    --warn: #a23b3b;
+    --warn-bg: #f7e3e1;
+    --focus: #b5731f;
+  }
+  :root[data-theme="dark"] {
+    --bg: #14181a;
+    --panel: #1c2124;
+    --ink: #e9ece9;
+    --ink-dim: #97a19b;
+    --line: #333a3d;
+    --line-soft: #262b2e;
+    --accent: #d99a4e;
+    --accent-ink: #f0c691;
+    --accent-soft: #3a2c17;
+    --tag-ab: #8fbde0;
+    --tag-ab-bg: #1f2c38;
+    --tag-own: #c1a4e6;
+    --tag-own-bg: #2a2438;
+    --warn: #e08585;
+    --warn-bg: #3a2222;
+    --focus: #e0b579;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14181a;
+      --panel: #1c2124;
+      --ink: #e9ece9;
+      --ink-dim: #97a19b;
+      --line: #333a3d;
+      --line-soft: #262b2e;
+      --accent: #d99a4e;
+      --accent-ink: #f0c691;
+      --accent-soft: #3a2c17;
+      --tag-ab: #8fbde0;
+      --tag-ab-bg: #1f2c38;
+      --tag-own: #c1a4e6;
+      --tag-own-bg: #2a2438;
+      --warn: #e08585;
+      --warn-bg: #3a2222;
+      --focus: #e0b579;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: ui-sans-serif, "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.45;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+
+  .eyebrow {
+    font-family: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    margin: 0 0 0.5rem;
+  }
+  h1 { font-size: 1.85rem; margin: 0 0 0.35rem; text-wrap: balance; letter-spacing: -0.01em; }
+  .sub { color: var(--ink-dim); font-size: 0.95rem; margin: 0; max-width: 68ch; }
+
+  .preamble {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1.15rem 1.3rem;
+    margin: 1.5rem 0;
+    font-size: 0.92rem;
+  }
+  .preamble p { margin: 0 0 0.7rem; }
+  .preamble p:last-child { margin-bottom: 0; }
+  .preamble strong { color: var(--ink); }
+  .preamble .warn-line {
+    background: var(--warn-bg);
+    color: var(--warn);
+    border-radius: 7px;
+    padding: 0.55rem 0.75rem;
+    font-weight: 600;
+  }
+  .preamble .report-line {
+    color: var(--ink-dim);
+    font-style: italic;
+  }
+
+  .tabs { display: flex; gap: 0.5rem; margin: 1.5rem 0 1.25rem; border-bottom: 1px solid var(--line); }
+  .tab-btn {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--ink-dim);
+    font-size: 0.95rem;
+    font-weight: 600;
+    font-family: inherit;
+    padding: 0.6rem 0.2rem;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .tab-btn:hover { color: var(--ink); }
+  .tab-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .tab-btn[aria-selected="true"] { color: var(--accent-ink); border-bottom-color: var(--accent); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.9rem 1.4rem;
+    align-items: flex-end;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1rem 1.15rem;
+    margin: 0 0 1.25rem;
+  }
+  .filter-group { display: flex; flex-direction: column; gap: 0.4rem; }
+  .filter-group label.group-label {
+    font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-dim);
+  }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+  .chip-toggle {
+    appearance: none;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink-dim);
+    font-size: 0.78rem;
+    padding: 0.3rem 0.65rem;
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
+  }
+  .chip-toggle:hover { border-color: var(--accent); color: var(--ink); }
+  .chip-toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .chip-toggle[aria-pressed="true"] {
+    background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); font-weight: 600;
+  }
+  .search-group { flex: 1 1 220px; min-width: 200px; }
+  .search-group input {
+    width: 100%; padding: 0.45rem 0.7rem; border-radius: 7px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--ink); font-size: 0.85rem; font-family: inherit;
+  }
+  .search-group input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .reset-btn {
+    appearance: none; border: 1px solid var(--line); background: transparent; color: var(--ink-dim);
+    font-size: 0.78rem; padding: 0.4rem 0.75rem; border-radius: 7px; cursor: pointer;
+    font-family: inherit; align-self: flex-end;
+  }
+  .reset-btn:hover { border-color: var(--accent); color: var(--ink); }
+  .reset-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .count-line { font-size: 0.8rem; color: var(--ink-dim); margin: 0 0 0.9rem; font-variant-numeric: tabular-nums; }
+  .count-line strong { color: var(--ink); }
+
+  .id-cell {
+    font-family: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+    font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--ink); font-size: 0.85rem;
+  }
+  code {
+    font-family: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+    background: var(--line-soft); padding: 0.05rem 0.3rem; border-radius: 4px; font-size: 0.87em;
+  }
+
+  /* Captures tab */
+  .theme-block { margin-bottom: 1.75rem; }
+  .theme-block:last-child { margin-bottom: 0; }
+  .theme-heading {
+    font-size: 0.85rem; font-weight: 700; color: var(--accent-ink); margin: 0 0 0.55rem;
+    display: flex; align-items: baseline; gap: 0.5rem;
+  }
+  .theme-heading .count { font-weight: 400; color: var(--ink-dim); font-size: 0.78rem; }
+  .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.87rem; min-width: 640px; }
+  thead th {
+    text-align: left; font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-dim); padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--line);
+  }
+  td { padding: 0.6rem 0.9rem; vertical-align: top; border-bottom: 1px solid var(--line-soft); }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--line-soft); }
+
+  /* Flights tab */
+  .profile-block { margin-bottom: 2rem; }
+  .profile-block:last-child { margin-bottom: 0; }
+  .profile-heading {
+    font-size: 0.95rem; font-weight: 700; color: var(--ink); margin: 0 0 0.6rem;
+    display: flex; align-items: baseline; gap: 0.5rem;
+  }
+  .profile-heading .count { font-weight: 400; color: var(--ink-dim); font-size: 0.78rem; }
+  .menu-step {
+    background: var(--accent-soft); border: 1px solid var(--line); border-radius: 8px;
+    padding: 0.7rem 0.9rem; margin-bottom: 0.75rem; font-size: 0.85rem;
+  }
+  .menu-plain { color: var(--accent-ink); margin-bottom: 0.4rem; }
+  .menu-plain b { font-weight: 700; }
+  .menu-cli { color: var(--ink-dim); font-size: 0.8rem; }
+  .menu-cli .cli-label { text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.68rem; margin-right: 0.4rem; }
+
+  .pt-item {
+    border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+    margin-bottom: 0.6rem; overflow: hidden;
+  }
+  .pt-item:last-child { margin-bottom: 0; }
+  .pt-item-toggle {
+    appearance: none; border: none; background: transparent; width: 100%; text-align: left;
+    display: flex; align-items: flex-start; gap: 0.7rem; padding: 0.65rem 0.9rem; cursor: pointer;
+    font-family: inherit; color: var(--ink);
+  }
+  .pt-item-toggle:hover { background: var(--line-soft); }
+  .pt-item-toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+  .pt-summary { flex: 1; min-width: 0; }
+  .pt-title { font-weight: 600; margin-bottom: 0.2rem; }
+  .pt-blocks-line { font-size: 0.82rem; color: var(--ink-dim); }
+  .pt-blocks-line .label { font-weight: 600; color: var(--ink-dim); }
+  .chevron { color: var(--ink-dim); font-size: 0.9rem; transition: transform 0.12s; flex-shrink: 0; margin-top: 0.15rem; }
+  .pt-item[data-expanded="true"] .chevron { transform: rotate(90deg); }
+  .tag {
+    display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.14rem 0.5rem;
+    border-radius: 5px; white-space: nowrap; margin-top: 0.05rem; flex-shrink: 0;
+  }
+  .tag-ab { color: var(--tag-ab); background: var(--tag-ab-bg); }
+  .tag-own { color: var(--tag-own); background: var(--tag-own-bg); }
+
+  .pt-item-body { padding: 0 0.9rem 0.9rem 0.9rem; font-size: 0.87rem; }
+  .pt-item-body[hidden] { display: none; }
+  .pt-item-body .context { margin: 0 0 0.6rem; color: var(--ink); }
+  .pt-item-body .block-label {
+    font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-dim);
+    margin: 0.7rem 0 0.3rem;
+  }
+  .pt-item-body ul { margin: 0; padding-left: 1.2rem; }
+  .pt-item-body li { margin-bottom: 0.35rem; }
+  .pt-item-body li:last-child { margin-bottom: 0; }
+  .pt-item-body .notes, .pt-item-body .variations { color: var(--ink); }
+
+  .empty-state { padding: 2.5rem 1rem; text-align: center; color: var(--ink-dim); font-size: 0.9rem; }
+
+  footer.note { margin-top: 1.5rem; font-size: 0.78rem; color: var(--ink-dim); }
+  footer.note code { padding: 0.05rem 0.35rem; }
+</style>
+
+<div class="wrap">
+  <header class="page">
+    <p class="eyebrow">CSVM · playtest.md</p>
+    <h1>Testing CSVM — start here</h1>
+    <p class="sub">Two kinds of tasks below. Read this once, then jump to whichever tab you're doing.</p>
+  </header>
+
+  <div class="preamble">
+    <p>CSVM is a from-scratch remake of <strong>Crimson Skies</strong> (2000), built to play using
+    your own legally-owned game files. We're checking it against the original — that's where you
+    come in.</p>
+    <p><strong>CAP — film the original.</strong> Each row under <strong>Owed Captures</strong> asks
+    for a short clip or screenshot of the <em>original</em> Crimson Skies — the "Unblocks" column
+    just tells us which of our own questions it settles.</p>
+    <p class="warn-line">⚠ For any cockpit-gauge capture: auto head-turn must be OFF in the
+    original's settings, and the gauges must stay in frame — otherwise the clip can't be used.</p>
+    <p><strong>PT — fly our remake.</strong> Each item under <strong>Actionable Flights</strong>
+    asks you to fly a specific setup in CSVM and judge specific things ("Look for"). Every section
+    shows how to get into that flight; click an item to see the full checklist.</p>
+    <p class="report-line">Found something, good or bad? Send footage/notes to [wherever you're
+    collecting this from testers].</p>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button class="tab-btn" id="tab-cap" role="tab" aria-selected="true" aria-controls="panel-cap" type="button">Owed Captures</button>
+    <button class="tab-btn" id="tab-pt" role="tab" aria-selected="false" aria-controls="panel-pt" type="button">Actionable Flights</button>
+  </div>
+
+  <div class="tab-panel active" id="panel-cap" role="tabpanel" aria-labelledby="tab-cap">
+    <div class="toolbar">
+      <div class="filter-group">
+        <span class="group-label">Theme</span>
+        <div class="chip-row" id="cap-theme-filters"></div>
+      </div>
+      <div class="filter-group search-group">
+        <span class="group-label">Search</span>
+        <input id="cap-search" type="text" placeholder="Search ID, capture, or detail…" autocomplete="off" />
+      </div>
+      <button class="reset-btn" id="cap-reset" type="button">Reset filters</button>
+    </div>
+    <p class="count-line" id="cap-count-line"></p>
+    <div id="cap-body"></div>
+  </div>
+
+  <div class="tab-panel" id="panel-pt" role="tabpanel" aria-labelledby="tab-pt">
+    <div class="toolbar">
+      <div class="filter-group">
+        <span class="group-label">Chapter</span>
+        <div class="chip-row" id="pt-chapter-filters"></div>
+      </div>
+      <div class="filter-group">
+        <span class="group-label">Reference</span>
+        <div class="chip-row" id="pt-tag-filters"></div>
+      </div>
+      <div class="filter-group search-group">
+        <span class="group-label">Search</span>
+        <input id="pt-search" type="text" placeholder="Search ID, title, or checklist…" autocomplete="off" />
+      </div>
+      <button class="reset-btn" id="pt-reset" type="button">Reset filters</button>
+    </div>
+    <p class="count-line" id="pt-count-line"></p>
+    <div id="pt-body"></div>
+  </div>
+
+  <footer class="note">Source: <code>playtest.md</code>. Regenerated by <code>/update-playtest-artifact</code>.</footer>
+</div>
+
+<script>
+  // Regenerated by the update-playtest-artifact skill from playtest.md — do not hand-edit these
+  // arrays, edit playtest.md and re-run the skill instead.
+  const CAP_DATA = __CAP_DATA__;
+  const PT_DATA = __PT_DATA__;
+
+  function escapeHtml(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function formatInline(s) {
+    let out = escapeHtml(s);
+    out = out.replace(/`([^`]+)`/g, "<code>$1</code>");
+    out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    out = out.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    return out;
+  }
+
+  /* ---------- Captures tab ---------- */
+
+  const capState = { themes: new Set(), query: "" };
+  const CAP_THEMES = CAP_DATA.map(t => t.theme);
+
+  function buildChips(container, values, set, onChange) {
+    values.forEach(v => {
+      const btn = document.createElement("button");
+      btn.className = "chip-toggle";
+      btn.type = "button";
+      btn.textContent = v;
+      btn.setAttribute("aria-pressed", "false");
+      btn.addEventListener("click", () => {
+        if (set.has(v)) { set.delete(v); btn.setAttribute("aria-pressed", "false"); }
+        else { set.add(v); btn.setAttribute("aria-pressed", "true"); }
+        onChange();
+      });
+      container.appendChild(btn);
+    });
+  }
+  buildChips(document.getElementById("cap-theme-filters"), CAP_THEMES, capState.themes, renderCaptures);
+
+  document.getElementById("cap-search").addEventListener("input", e => {
+    capState.query = e.target.value.trim().toLowerCase();
+    renderCaptures();
+  });
+  document.getElementById("cap-reset").addEventListener("click", () => {
+    capState.themes.clear(); capState.query = "";
+    document.getElementById("cap-search").value = "";
+    document.querySelectorAll("#cap-theme-filters .chip-toggle").forEach(b => b.setAttribute("aria-pressed", "false"));
+    renderCaptures();
+  });
+
+  function renderCaptures() {
+    const body = document.getElementById("cap-body");
+    body.innerHTML = "";
+    let shown = 0;
+    let total = 0;
+
+    CAP_DATA.forEach(themeObj => {
+      total += themeObj.rows.length;
+      if (capState.themes.size && !capState.themes.has(themeObj.theme)) return;
+
+      const rows = themeObj.rows.filter(r => {
+        if (!capState.query) return true;
+        const hay = (r.id + " " + r.capture + " " + r.detail + " " + r.unblocks).toLowerCase();
+        return hay.includes(capState.query);
+      });
+      if (!rows.length) return;
+      shown += rows.length;
+
+      const block = document.createElement("div");
+      block.className = "theme-block";
+      block.innerHTML = `
+        <h3 class="theme-heading">${escapeHtml(themeObj.theme)} <span class="count">(${rows.length})</span></h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr>
+              <th style="width:5.5rem">ID</th>
+              <th style="width:16rem">Capture</th>
+              <th>${escapeHtml(themeObj.detailLabel)}</th>
+              <th style="width:12rem">Unblocks</th>
+            </tr></thead>
+            <tbody>
+              ${rows.map(r => `
+                <tr>
+                  <td class="id-cell">${escapeHtml(r.id)}</td>
+                  <td>${formatInline(r.capture)}</td>
+                  <td>${formatInline(r.detail)}</td>
+                  <td>${formatInline(r.unblocks)}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+      body.appendChild(block);
+    });
+
+    document.getElementById("cap-count-line").innerHTML =
+      `Showing <strong>${shown}</strong> of ${total} owed captures.`;
+    if (!shown) body.innerHTML = `<div class="empty-state">No captures match the current filters.</div>`;
+  }
+
+  /* ---------- Flights tab ---------- */
+
+  const ptState = { chapters: new Set(), tagTypes: new Set(), query: "" };
+  const PT_CHAPTERS = [...new Set(PT_DATA.map(p => p.chapter))];
+  const PT_TAG_TYPES = ["A/B", "Own"];
+
+  buildChips(document.getElementById("pt-chapter-filters"), PT_CHAPTERS, ptState.chapters, renderFlights);
+  buildChips(document.getElementById("pt-tag-filters"), PT_TAG_TYPES, ptState.tagTypes, renderFlights);
+
+  document.getElementById("pt-search").addEventListener("input", e => {
+    ptState.query = e.target.value.trim().toLowerCase();
+    renderFlights();
+  });
+  document.getElementById("pt-reset").addEventListener("click", () => {
+    ptState.chapters.clear(); ptState.tagTypes.clear(); ptState.query = "";
+    document.getElementById("pt-search").value = "";
+    document.querySelectorAll("#pt-chapter-filters .chip-toggle, #pt-tag-filters .chip-toggle")
+      .forEach(b => b.setAttribute("aria-pressed", "false"));
+    renderFlights();
+  });
+
+  function itemMatchesQuery(item, q) {
+    const hay = [item.id, item.title, item.context, item.blocks, item.variations, item.notes,
+      (item.tag.ref || ""), ...(item.lookFor || [])].join(" ").toLowerCase();
+    return hay.includes(q);
+  }
+
+  function menuLine(profile) {
+    const plane = profile.menu.plane ? `<b>${escapeHtml(profile.menu.plane)}</b>` : "each pilot picks their own plane";
+    let line = `Chapter <b>${escapeHtml(profile.menu.chapter)}</b> · ${plane}`;
+    if (profile.menu.notes && profile.menu.notes.length) {
+      line += ` <span style="opacity:0.85">(${profile.menu.notes.map(escapeHtml).join(", ")})</span>`;
+    }
+    return line;
+  }
+
+  function renderPtItem(item) {
+    const tagClass = item.tag.type === "A/B" ? "tag-ab" : "tag-own";
+    const tagText = item.tag.type === "A/B" ? `A/B: ${item.tag.ref}` : "Own";
+    const bodyParts = [];
+    if (item.context) bodyParts.push(`<p class="context">${formatInline(item.context)}</p>`);
+    if (item.lookFor && item.lookFor.length) {
+      bodyParts.push(`<p class="block-label">Look for</p><ul>${item.lookFor.map(l => `<li>${formatInline(l)}</li>`).join("")}</ul>`);
+    }
+    if (item.notes) bodyParts.push(`<p class="block-label">Notes</p><p class="notes">${formatInline(item.notes)}</p>`);
+    if (item.variations) bodyParts.push(`<p class="block-label">Variations</p><p class="variations">${formatInline(item.variations)}</p>`);
+
+    const wrap = document.createElement("div");
+    wrap.className = "pt-item";
+    wrap.dataset.expanded = "false";
+    wrap.innerHTML = `
+      <button class="pt-item-toggle" type="button" aria-expanded="false">
+        <span class="id-cell">${escapeHtml(item.id)}</span>
+        <span class="tag ${tagClass}">${escapeHtml(tagText)}</span>
+        <span class="pt-summary">
+          <div class="pt-title">${formatInline(item.title)}</div>
+          <div class="pt-blocks-line"><span class="label">Blocks:</span> ${formatInline(item.blocks)}</div>
+        </span>
+        <span class="chevron">›</span>
+      </button>
+      <div class="pt-item-body" hidden>${bodyParts.join("")}</div>
+    `;
+    const toggle = wrap.querySelector(".pt-item-toggle");
+    const bodyEl = wrap.querySelector(".pt-item-body");
+    toggle.addEventListener("click", () => {
+      const expanded = wrap.dataset.expanded === "true";
+      wrap.dataset.expanded = expanded ? "false" : "true";
+      toggle.setAttribute("aria-expanded", expanded ? "false" : "true");
+      bodyEl.hidden = expanded;
+    });
+    return wrap;
+  }
+
+  function renderFlights() {
+    const body = document.getElementById("pt-body");
+    body.innerHTML = "";
+    let shown = 0;
+    let total = 0;
+
+    PT_DATA.forEach(profile => {
+      total += profile.items.length;
+      if (ptState.chapters.size && !ptState.chapters.has(profile.chapter)) return;
+
+      const items = profile.items.filter(item => {
+        if (ptState.tagTypes.size && !ptState.tagTypes.has(item.tag.type)) return false;
+        if (ptState.query && !itemMatchesQuery(item, ptState.query)) return false;
+        return true;
+      });
+      if (!items.length) return;
+      shown += items.length;
+
+      const block = document.createElement("div");
+      block.className = "profile-block";
+      block.innerHTML = `
+        <h3 class="profile-heading">${escapeHtml(profile.heading)} <span class="count">(${items.length})</span></h3>
+        <div class="menu-step">
+          <div class="menu-plain">${menuLine(profile)}</div>
+          <div class="menu-cli"><span class="cli-label">Dev build</span><code>${escapeHtml(profile.command)}</code></div>
+        </div>
+      `;
+      const itemsWrap = document.createElement("div");
+      items.forEach(item => itemsWrap.appendChild(renderPtItem(item)));
+      block.appendChild(itemsWrap);
+      body.appendChild(block);
+    });
+
+    document.getElementById("pt-count-line").innerHTML =
+      `Showing <strong>${shown}</strong> of ${total} flight checks.`;
+    if (!shown) body.innerHTML = `<div class="empty-state">No flight items match the current filters.</div>`;
+  }
+
+  /* ---------- Tabs ---------- */
+
+  const tabCap = document.getElementById("tab-cap");
+  const tabPt = document.getElementById("tab-pt");
+  const panelCap = document.getElementById("panel-cap");
+  const panelPt = document.getElementById("panel-pt");
+  function selectTab(which) {
+    const capSel = which === "cap";
+    tabCap.setAttribute("aria-selected", String(capSel));
+    tabPt.setAttribute("aria-selected", String(!capSel));
+    panelCap.classList.toggle("active", capSel);
+    panelPt.classList.toggle("active", !capSel);
+  }
+  tabCap.addEventListener("click", () => selectTab("cap"));
+  tabPt.addEventListener("click", () => selectTab("pt"));
+
+  renderCaptures();
+  renderFlights();
+</script>
