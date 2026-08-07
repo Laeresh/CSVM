@@ -55,16 +55,15 @@ public class TemplateStageTests
     [Fact]
     public void TakeNextSlotUnpooledOrSingleCopyReturnsEveryAnchor()
     {
+        var unpooled = new Harness(pooled: false);
+        var (def, _) = unpooled.PooledRoot("boom", slots: 3);
+        Assert.Equal(3, unpooled.Stage.TakeNextSlot(def).Count);
+
         var h = new Harness();
-        var (def, copies) = h.PooledRoot("boom", slots: 3);
-
-        h.Stage.Pooled = false;
-        Assert.Equal(3, h.Stage.TakeNextSlot(def).Count);
-
-        h.Stage.Pooled = true;
         var (single, one) = h.PooledRoot("flash", slots: 1);
         Assert.Same(one[0], Assert.Single(h.Stage.TakeNextSlot(single)));
         Assert.Equal(0, h.Stage.Recycles);
+        Assert.Equal(0, unpooled.Stage.Recycles);
     }
 
     // ---- RootsFor: a call resolves to the copy in ITS OWN slot ----
@@ -143,12 +142,13 @@ public class TemplateStageTests
     [Fact]
     public void CallerSlotClaimNoOpsOffPoolSingleCopyAndInSlotAnchors()
     {
+        var unpooled = new Harness(pooled: false);
+        var (offPool, _) = unpooled.PooledRoot("planeflakes", slots: 2);
+        unpooled.Stage.AssignCallerSlot(offPool, unpooled.Node("pdp1")); // off the pool: no claim
+        Assert.Equal(2, unpooled.Stage.RootsFor(offPool, unpooled.Node("pdp1")).Count);
+
         var h = new Harness();
         var (def, copies) = h.PooledRoot("planeflakes", slots: 2);
-
-        h.Stage.Pooled = false;
-        h.Stage.AssignCallerSlot(def, h.Node("pdp1")); // off the pool: no claim
-        h.Stage.Pooled = true;
 
         var (single, _) = h.PooledRoot("gimmeflakes", slots: 1);
         h.Stage.AssignCallerSlot(single, h.Node("pdp2")); // single copy: no claim
@@ -265,7 +265,7 @@ public class TemplateStageTests
     [Fact]
     public void RevealLightsOnlyTheCallsOwnSlotCopy()
     {
-        var h = new Harness { Stage = { Shown = true } };
+        var h = new Harness(shown: true);
         var (def, copies) = h.PooledRoot("boom", slots: 2);
         h.Live.Add((def, copies[0]));
 
@@ -279,7 +279,7 @@ public class TemplateStageTests
     {
         // `biggun_flying_parts`: one CALL_ANIMATION, finished inside Start, so it never reaches the
         // retire walk — the reveal must schedule the hide itself or the copy stays lit forever.
-        var h = new Harness { Stage = { Shown = true } };
+        var h = new Harness(shown: true);
         var (def, copies) = h.PooledRoot("biggun_flying_parts", slots: 1);
 
         h.Stage.Reveal(def, copies[0], visible: true); // nothing live, nothing animating
@@ -289,7 +289,7 @@ public class TemplateStageTests
     [Fact]
     public void RetireWhenIdleHoldsTheCopyLitWhileSomethingStillAnimatesItAndTheSweepDrainsIt()
     {
-        var h = new Harness { Stage = { Shown = true } };
+        var h = new Harness(shown: true);
         var (def, copies) = h.PooledRoot("he_ring1", slots: 1);
         h.Live.Add((def, copies[0]));
         h.Stage.Reveal(def, copies[0], visible: true);
@@ -313,7 +313,7 @@ public class TemplateStageTests
     {
         // The rear muzzle flash's shape: caller and callee share one root, so hiding on the
         // caller's finish would blank the flash the callee just revealed there.
-        var h = new Harness { Stage = { Shown = true } };
+        var h = new Harness(shown: true);
         var (defA, copies) = h.PooledRoot("rear_flash_control", slots: 1);
         var defB = Def("rear_flash_effect");
         h.Roots["rear_flash_effect"] = new List<TestNode> { copies[0] };
@@ -332,7 +332,7 @@ public class TemplateStageTests
     [Fact]
     public void ARevealSettlesAPendingHideSoAReplayIsNotSweptDark()
     {
-        var h = new Harness { Stage = { Shown = true } };
+        var h = new Harness(shown: true);
         var (def, copies) = h.PooledRoot("he_ring1", slots: 1);
         h.Live.Add((def, copies[0]));
         h.Animating.Add(copies[0]);
@@ -365,7 +365,11 @@ public class TemplateStageTests
 
         public bool Debug;
 
-        public Harness()
+        /// <summary>The stage's three policy flags are sealed at construction (PLAN-template-stage
+        /// A4), so a harness picks the role it is asserting rather than flipping a property
+        /// mid-test — the same shape production has, where <c>WorldEffectsFactory</c> builds a
+        /// sealed stage and hands it to the runtime.</summary>
+        public Harness(bool pooled = true, bool shown = false)
         {
             Stage = new TemplateStage<TestNode>(
                 EqualityComparer<TestNode>.Default,
@@ -386,10 +390,9 @@ public class TemplateStageTests
                 },
                 (n, visible) => n.Visible = visible,
                 Printed.Add,
-                () => Debug)
-            {
-                Pooled = true,
-            };
+                () => Debug,
+                pooled,
+                shown);
             Stage.Wire(
                 (name, _) => Roots.TryGetValue(name, out var r) ? new List<TestNode>(r) : new List<TestNode>(),
                 def => (Roots.TryGetValue(def.Name, out var r) ? r : new List<TestNode>()).Cast<TestNode?>().ToList(),

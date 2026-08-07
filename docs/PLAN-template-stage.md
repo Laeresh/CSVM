@@ -21,8 +21,9 @@ BL-023, BL-061, BL-224, BL-225, BL-253 and the 2026-08-06 ghost-trail fix all la
 cluster. The two entry points re-implement the same place→start→reveal→hide ritual 1,200 lines
 apart (`PlayEffectAt` ~:1093–1129; the `CallAnimation` arm ~:2300–2492), and the seam already
 leaks on the record — `AnimRuntime`'s architecture entry's *accepted shallow spot*:
-`WorldEffectsFactory.cs:391` sets `ShowPlacedTemplates`/`PooledTemplates` AFTER sealing, working
-only by accident of read order.
+`WorldEffectsFactory.cs:391` (drifted to `:441–442`) sets `ShowPlacedTemplates`/`PooledTemplates`
+AFTER sealing, working only by accident of read order. *(Closed by A4, 2026-08-07 — the flags are
+sealed stage constructor state and the ⚠ is deleted from `architecture.md`.)*
 
 The proposal: extract `TemplateStage<TNode>` to `src/Mech3/Anim/`, beside `NameResolver`,
 `MotionSet` and `EmitterDirector` — the three prior extractions of exactly this shape. Callers
@@ -35,8 +36,9 @@ cannot keep them identical stops rather than repins.
 
 - The template stage is one module with one interface; both entry points perform the ritual
   through the same implementation, so a fix (e.g. the ghost-trail class) lands once.
-- The sealing leak is closed structurally: the two flags become constructor arguments, and the
-  accepted-shallow-spot ⚠ is deleted from `architecture.md`, not re-documented.
+- The sealing leak is closed structurally: the flags become constructor arguments (all three, per
+  Decision 4), and the accepted-shallow-spot ⚠ is deleted from `architecture.md`, not re-documented.
+  ☑ A4.
 - Slot arithmetic (cursor wrap, modulo fallback, `PoolRecycles`), the "which copy is mine" rule
   and the reveal/hide deferral are asserted **off-engine** in `CSVM.Tests` against a token node
   type.
@@ -100,7 +102,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ Grilling session: Decisions table settled 2026-08-06; all nine recommendations accepted (two with substantive findings: the caller-slot trio joins the move scope, and the honest hook count is ~8)
 2. ☑ `TemplateStage<TNode>` landed: slots/placement/identity + the BL-288 caller-slot claim moved (10 members, 5 fields), generic with 7 ctor hooks + 9 `Wire`d runtime hooks; `TemplateStageTests` (15 facts) asserts wrap/modulo/recycles/stickiness/placement/tolerance off-engine; 566 units + 24 suites + 13/13 goldens identical, and the two `--debug-anim` A/B scenarios (destroy + crash, frame 120) pixel-identical AND anim-log-identical to HEAD
 3. ☑ Reveal/retire/sweep landed: `Reveal`/`RetireWhenIdle`/`Sweep` + the pending-hides list moved in (the still-animated hold stays in `AnimRuntime` as the supplied predicate, Decision 3's hook list), both entry points drive the one module, `ShowPlacedTemplates` forwards to `Shown`, Decision 6's second literal folded onto `MoveToleranceSq`; 6 new off-engine facts (572 units) + 24 suites + 13/13 goldens identical, both `--debug-anim` A/B scenarios pixel- and anim-log-identical to HEAD
-4. ☐ Sealing-leak closure: the three flags become stage ctor state, `ForEffects`/`ForCrashRig` take the stage as an argument, plain construction gets the inert default (Decision 4); the accepted-shallow-spot ⚠ is deleted from `architecture.md`
+4. ☑ Sealing-leak closure landed: the three flags are sealed `TemplateStage` ctor state (`Pooled`/`Shown`/`Places`, get-only), `ForEffects`/`ForCrashRig` take the stage as their first argument, `new AnimRuntime()` takes the inert all-off default and `AnimRuntime.NewTemplateStage` is the one Godot adapter; the anim lab's post-`Bind` write became `WorldSession.Options.PlacesCalledTemplates`. Census: no reader or writer of the three flags outside the module (`AnimRuntime` reads `Places` at one site). The accepted-shallow-spot ⚠ is deleted from `architecture.md`, not re-documented; 572 units + 24 suites + 13/13 goldens identical, both `--debug-anim` A/B scenarios pixel- and anim-log-identical to HEAD
 
 ### Wave B — the ride-along (kept; decided after A4 lands)
 
@@ -186,12 +188,27 @@ boundary. Liveness/still-animated checks become supplied predicates per A1 Q3.
 **⚠ Traps.** The hide sweep interacts with `TemplateStillAnimated` across defs sharing a slot —
 the BL-253 ghost-trail class. If any golden moves, stop and diagnose; do not re-pin.
 
-## A4 ☐ Close the sealing leak
+## A4 ☑ Close the sealing leak — landed 2026-08-07
 
 **Goal.** `PlaceCalledTemplates` / `ShowPlacedTemplates` / `PooledTemplates` are constructor
-state; `WorldEffectsFactory.cs:391`'s post-seal writes are deleted; the accepted-shallow-spot ⚠
+state; `WorldEffectsFactory.cs:441–442`'s post-seal writes are deleted (the cite drifted from
+`:391`, ⚠ #4 in action — as did the crash rig's own `:312`, which this item found and deleted
+too); the accepted-shallow-spot ⚠
 is removed from `AnimRuntime`'s architecture entry and the new `TemplateStage` entry records the
 closure.
+
+**What landed.** The three flags are `TemplateStage<TNode>` constructor state, get-only
+(`Pooled`/`Shown`/`Places`) with no setter anywhere; `AnimRuntime` gained
+`NewTemplateStage(pooled, shown, placesCalled, debugMotions)` — the one place the Godot adapter
+hooks are spelled — plus an `AnimRuntime(TemplateStage<Node3D>)` ctor, with the parameterless one
+delegating to an inert all-off stage. `ForEffects`/`ForCrashRig` take the stage as their first
+argument and bake three role flags instead of four. The one caller the draft's construction census
+missed is the anim lab: `GameSession` wrote `PlaceCalledTemplates = true` onto the WORLD runtime
+after `Bind`, which became `WorldSession.Options.PlacesCalledTemplates = _spec.AnimLab` beside the
+existing `AutoStart = !_spec.AnimLab` — behaviourally identical because a quiet-stage bootstrap
+dispatches only RESET_STATEs, which are `instant` and never reach the relocation test. The
+off-engine suite's harness takes the role as constructor parameters rather than flipping `Pooled`
+mid-test, which is the production shape.
 
 **Evidence (confidence: traced).** The ⚠ itself, quoted in the header paragraph.
 

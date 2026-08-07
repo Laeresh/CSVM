@@ -286,7 +286,14 @@ public sealed class WorldEffectsFactory
         // render effects, not sound. The seed drives wreckage scatter and the
         // crash def's RANDOM_WEIGHT verdicts: one draw per player off the advancing crash stream, so
         // splitscreen crashes differ from each other but repeat run to run.
-        var crashRuntime = AnimRuntime.ForCrashRig(Rng.NewIntSeed(Rng.Crash),
+        // The template stage, sealed before the runtime exists (PLAN-template-stage A4): pooled,
+        // because the slot containers above are what the caller-slot assignment picks a copy out of
+        // (`BL-288` — a template staged single-copy, which is most of the crash set, behaves exactly
+        // as before it); relocating its called templates onto the call site; and NOT staged hidden —
+        // crash templates hide by their own reset states, so the reveal ritual stays off here.
+        var crashRuntime = AnimRuntime.ForCrashRig(
+            AnimRuntime.NewTemplateStage(pooled: true, placesCalled: true, debugMotions: _spec.DebugAnim),
+            Rng.NewIntSeed(Rng.Crash),
             new PufferEmitterFactory(textures, _worldRoot), _spec.DebugAnim);
         // Excuses the ground splash from the momentum nudge FlightController.Crash sets on
         // InheritedWorldVelocity (BL-274) — set once here, unlike the velocity itself (which is
@@ -307,9 +314,6 @@ public sealed class WorldEffectsFactory
         // choreography and the authored damage-stage menu — every def that plays ON this aircraft.
         // Both crash variants are bound because the surface is only known at the moment of impact
         // (FlightController.ClassifySurface); Air stays out, having no trigger.
-        // The pooled-copy selection above needs the flag; a template staged single-copy (most of
-        // the crash set) behaves exactly as before it.
-        crashRuntime.PooledTemplates = true;
         crashRuntime.Bind(controller, crashProgram.Subset(EffectCatalogue.CrashRigAnimNames));
         controller.AddChild(crashRuntime);
         controller.CrashRuntime = crashRuntime;
@@ -380,8 +384,8 @@ public sealed class WorldEffectsFactory
     /// not suppress them.
     ///
     /// <para>The stage itself is visible and each template ROOT starts hidden
-    /// (<see cref="AnimRuntime.ShowPlacedTemplates"/> reveals one for as long as an effect plays on
-    /// it): a template's meshes are half the effect — the rocket's authored per-type rings, the
+    /// (<see cref="Mech3.Anim.TemplateStage{TNode}.Shown"/> reveals one for as long as an effect
+    /// plays on it): a template's meshes are half the effect — the rocket's authored per-type rings, the
     /// fireball facades, the splash models — and hiding the whole stage rendered none of them
     /// (D31). Inside a revealed root the data still decides what shows: every ring is reset
     /// INACTIVE or opacity-OFF at bootstrap and its own def turns it on.</para>
@@ -432,14 +436,20 @@ public sealed class WorldEffectsFactory
         // Puffer.Create pairs the depth fade with the blend it derives — off for MIX, whose dark
         // sprites emit at these ground-level sites and measured near-invisible with it on (the
         // damage-stage black smoke), on for additive fire, which leaks through the fade anyway.
-        var effects = AnimRuntime.ForEffects(Rng.IntSeedFor(Rng.Effects),
+        // The template stage, sealed before the runtime exists (PLAN-template-stage A4, Decision 4):
+        // pooled over the slot containers built above, staged hidden so the reveal ritual lights the
+        // one root a call lands on (the ⚠ above), and relocating a called template onto the call
+        // site. Until A4 the last two were written onto the runtime AFTER this factory call returned
+        // — the sealing leak, which worked only because both happened to be read after Bind.
+        var effects = AnimRuntime.ForEffects(
+            AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true,
+                debugMotions: _spec.DebugAnim),
+            Rng.IntSeedFor(Rng.Effects),
             new PufferEmitterFactory(textures, _worldRoot),
             _spec.DebugAnim, EffectRuntimeTtl, _playerPosition);
         // Bind name resolution to the template stage — so the effect names resolve to these
         // templates and not to the world's or the crash roots' same-named nodes — but parent the
         // runtime node itself under the visible world root, a plain logic node that self-ticks.
-        effects.ShowPlacedTemplates = true;
-        effects.PooledTemplates = true;
         effects.Bind(stage, worldProgram.Subset(EffectCatalogue.EffectAnimNames));
         _worldRoot.AddChild(effects);
         int wanted = 0;

@@ -1566,17 +1566,17 @@ public static class Suites
             stage.AddChild(new Node3D { Name = name });
         }
         var fake = new CountingEmitterFactory();
-        var runtime = new AnimRuntime
+        // The two role flags AnimRuntime.ForCrashRig sets, for a definition the crash rig is the
+        // only production caller of: the splash is played by the per-player rig, which resolves
+        // and relocates its own called templates and holds no ExternalEffect, so the start and
+        // the stop meet on ONE director. Reproducing that here is the point. The relocation half
+        // is stage construction state (PLAN-template-stage A4), so it arrives sealed.
+        var runtime = new AnimRuntime(AnimRuntime.NewTemplateStage(placesCalled: asCrashRig))
         {
             AutoStart = false,
             ManualAdvance = true,
             SoundHandledElsewhere = true,
             EmitterFactory = fake,
-            // The two role flags AnimRuntime.ForCrashRig sets, for a definition the crash rig is the
-            // only production caller of: the splash is played by the per-player rig, which resolves
-            // and relocates its own called templates and holds no ExternalEffect, so the start and
-            // the stop meet on ONE director. Reproducing that here is the point.
-            PlaceCalledTemplates = asCrashRig,
             NameResolveFallback = asCrashRig,
         };
         ctx.Host.AddChild(stage);
@@ -1598,7 +1598,7 @@ public static class Suites
     /// <summary>`BL-061`: an effect's template MESHES — half of what it looks like — must be visible
     /// at the call site while it plays, and dark once it is over. The world-effects stage keeps
     /// every template ROOT hidden and the engine reveals the one a call lands on
-    /// (<c>ShowPlacedTemplates</c>), so both halves are engine rules and both are asserted here,
+    /// (<c>TemplateStage.Shown</c>), so both halves are engine rules and both are asserted here,
     /// because either alone is satisfied by a broken runtime: revealing and never hiding leaves a
     /// mesh burning at the last hit point for the session, and hiding eagerly (or never revealing)
     /// shows nothing at all.
@@ -1671,8 +1671,8 @@ public static class Suites
     /// real gamez into one pool slot, each hidden, under an effects-role runtime bound to the
     /// subset of the program the effect needs. Real geometry on purpose — this suite is about mesh
     /// VISIBILITY, which named empty nodes cannot express — and the roles are the production ones
-    /// (<c>ShowPlacedTemplates</c> + <c>PooledTemplates</c>, the pair
-    /// <c>WorldEffectsFactory</c> sets), since the reveal exists only under them.</summary>
+    /// (<c>TemplateStage.Shown</c> + <c>Pooled</c>, the pair <c>WorldEffectsFactory</c> seals into
+    /// the stage it builds), since the reveal exists only under them.</summary>
     private static void WithEffectStage(TestContext ctx, TestWorld world, string animName,
         IEnumerable<string> rootNames, System.Action<Node3D, AnimRuntime, Vector3> body)
     {
@@ -1689,11 +1689,11 @@ public static class Suites
                 root.Visible = false;
             }
 
-        var runtime = AnimRuntime.ForEffects(1, new CountingEmitterFactory(), false, 32f,
+        var runtime = AnimRuntime.ForEffects(
+            AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true),
+            1, new CountingEmitterFactory(), false, 32f,
             () => ctx.Camera.GlobalPosition);
         runtime.ManualAdvance = true;
-        runtime.ShowPlacedTemplates = true;
-        runtime.PooledTemplates = true;
         ctx.Host.AddChild(stage);
         ctx.Host.AddChild(runtime);
         try
@@ -1717,7 +1717,7 @@ public static class Suites
     /// previous anchor's burst is still flying on. Reproduces the shipped shape exactly: two of
     /// the authored `pdpanelN` menu defs each CALL <c>gimmeflakes</c> AT_NODE their own
     /// <c>pdpN</c>, on a runtime carrying the crash rig's role flags plus the pool
-    /// (<c>PooledTemplates</c> + <see cref="AnimRuntime.PoolSlotMeta"/> slot containers, the
+    /// (<c>TemplateStage.Pooled</c> + <see cref="AnimRuntime.PoolSlotMeta"/> slot containers, the
     /// shape <c>WorldEffectsFactory.BuildFlightCrashRuntime</c> builds). Before the fix the
     /// second call relocated and restarted the single shared <c>planeflakes</c> root mid-flight —
     /// the "panels fly away repeatedly, and from the wrong site" report.</summary>
@@ -1748,15 +1748,14 @@ public static class Suites
                 }
             }
 
-            var runtime = new AnimRuntime
+            var runtime = new AnimRuntime(
+                AnimRuntime.NewTemplateStage(pooled: true, placesCalled: true))
             {
                 AutoStart = false,
                 ManualAdvance = true,
                 SoundHandledElsewhere = true,
                 EmitterFactory = new CountingEmitterFactory(),
-                PlaceCalledTemplates = true,
                 NameResolveFallback = true,
-                PooledTemplates = true,
             };
             ctx.Host.AddChild(stage);
             ctx.Host.AddChild(runtime);
@@ -1849,11 +1848,11 @@ public static class Suites
                 }
 
             var point = new Vector3(150, 40, 90);
-            var runtime = AnimRuntime.ForEffects(1, new CountingEmitterFactory(), false, 32f,
+            var runtime = AnimRuntime.ForEffects(
+                AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true),
+                1, new CountingEmitterFactory(), false, 32f,
                 () => point);
             runtime.ManualAdvance = true;
-            runtime.ShowPlacedTemplates = true;
-            runtime.PooledTemplates = true;
             ctx.Host.AddChild(stage);
             ctx.Host.AddChild(runtime);
             try

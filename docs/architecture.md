@@ -634,7 +634,11 @@ which trails ~25 m behind). Also hosts the destructible-damage entries (`DamageA
 `FlightController.CollideDamageSink`) and the world-effects runtime (`PlayEffectAt` over a hidden
 template stage). Second instances serve per-player crash rigs and the world-effects closure, built
 unbound via the `ForEffects`/`ForCrashRig` static factories (construction-only; the caller still
-`Bind`s + adds the returned node) — the world runtime stays a plain inline `new AnimRuntime`. The
+`Bind`s + adds the returned node) — the world runtime stays a plain inline `new AnimRuntime`. Every
+construction site hands over a **sealed `TemplateStage`** as the constructor argument
+(`AnimRuntime.NewTemplateStage(pooled, shown, placesCalled, debugMotions)` is the one place the
+Godot adapter hooks are spelled); the parameterless ctor takes an inert all-off one, which is what
+the ambient world and the plain testing runtimes get. The
 sequence interpreter (event clock / LOOP / IF-ELSEIF) lives in `SequenceRunner.cs` and the live
 motions in `Anim/MotionSet.cs` (`Motions`); this class
 satisfies its `ISequenceHost` seam by explicit interface implementation (`Dispatch`,
@@ -663,13 +667,16 @@ and the `active_state` read, then forwards; `DefScopedPufferKeys` is the one rol
 carries, read once when the director is built. `OBJECT_ACTIVE_STATE … false` forwards to
 `Emitters.EndOn` with `sparingSameInstant: !instant` — a PLAYED deactivation spares an emitter
 started in its own instant (`BL-229`, the rule and its census live on the director), a RESET_STATE
-one does not. Effect templates are **pooled** on the effects runtime (`PooledTemplates`, `BL-225`): the stage holds
+one does not. Effect templates are **pooled** on the effects runtime (`TemplateStage.Pooled`,
+`BL-225`): the stage holds
 `WorldEffectsFactory.EffectPoolSlots` copies of each template, one per slot container carrying
 `PoolSlotMeta`, and each `PlayEffectAt` takes the next slot (`TemplateStage.TakeNextSlot`, cursor
 per template ROOT name, not per anim name — two defs on one root must not both be handed slot 0).
-The slot arithmetic, placement and copy-identity questions live in `Anim/TemplateStage.cs`
-(PLAN-template-stage A2 — read its entry, which carries the Decision-16 reinterpretation): this
-class supplies the engine and runtime hooks in its constructor and calls through. Everything
+The slot arithmetic, placement, copy-identity questions and the three template policy flags live in
+`Anim/TemplateStage.cs`
+(PLAN-template-stage A2–A4 — read its entry, which carries the Decision-16 reinterpretation): this
+class supplies the engine and runtime hooks and calls through; it reads exactly one of the flags
+itself (`Places`, in the `CALL_ANIMATION` arm's relocation test) and owns none of them. Everything
 template-shaped is slot-scoped through `TemplateStage.RootsFor(def, node)`: which copy is placed
 (`PlaceAt`/`PlaceOn`), revealed (`Reveal`), tested for a move
 (`IsAt`) and searched for the def's own names (the resolver's own-root tier, which `RootsFor`
@@ -727,9 +734,9 @@ letting `MotionSet`'s per-`(Target,Channel)` eviction pick the winner: the user-
 mechanism (`planeflakes`/`planeflakes2`, `short_firetrail`, `large_firetrail`,
 `small_injure_fireball`, `flame_ball_02`, `yellow_spark_02`) and is pooled by the same fix; the
 `damage-template-pool` suite holds the regression shape (two panel defs, one template, two
-copies). `ForCrashRig` still sets neither flag itself — `BuildFlightCrashRuntime` sets
-`PooledTemplates` beside the slot containers it builds, mirroring where the world side sets its
-pair; `ShowPlacedTemplates` stays off (crash templates hide by their own reset states).
+copies). `ForCrashRig` bakes none of the template flags itself — `BuildFlightCrashRuntime` builds
+the stage `Pooled`+`Places` beside the slot containers it builds and hands it in, mirroring the
+world side; `Shown` stays off (crash templates hide by their own reset states).
 `PlayEffectAt(name, point, inputNode, ttl)` carries
 the call-site node: it resolves the callee's INPUT_NODE (the sputter emits on, and its `NodeActive`
 loop gate reads, the damaged object); `ttl` overrides `EffectTtl` per call (a gun hit passes 0.3 s,
@@ -744,8 +751,8 @@ is the stop for a def carrying an `ACTIVE_STATE 1` and neither authored stop (th
 fire, C1's refuel tanks). It cannot reach the ambient emitters: theirs are the 619 defs whose
 `LOOP {-1}` means the instance never finishes. **Instance-scoped, never sequence-scoped** — a lone
 `PufferState` in a one-tick sequence (`part1_trail`) is the debris-trail idiom.
-`ShowPlacedTemplates` forwards to `TemplateStage.Shown`, and the reveal/retire/sweep ritual it
-gates lives on the stage (`Reveal`/`RetireWhenIdle`/`Sweep`, PLAN-template-stage A3 — read its
+The staged-hidden reveal/retire/sweep ritual is `TemplateStage.Shown`'s
+(`Reveal`/`RetireWhenIdle`/`Sweep`, PLAN-template-stage A3 — read its
 entry for the holds and what each measured): both entry points drive it through the one module,
 `PlayEffectAt` and the relocating **CALL_ANIMATION** arm alike (`BL-061`,
 `analysis/bl-061-template-mesh/`), and `Advance`'s retire walk hands finished instances to
@@ -786,10 +793,6 @@ return path to poll the effects runtime's.
   (three minimal role interfaces vs. an immutable `AnimRole` record + consumer facets) BOTH
   declined the three-way split on that usage evidence; every shipped bug in this family
   (`BL-224`/`232`/`233`/`235`/`236`/`242`) was a selector/wiring error no mode interface catches.
-  Accepted shallow spot, on the record: `WorldEffectsFactory.cs:391` sets `ShowPlacedTemplates`/
-  `PooledTemplates` AFTER `ForEffects` returns — the factory's sealing leaks two flags, and it
-  works only because both happen to be read after `Bind`. If that ever bites, the fix is folding
-  the two flags into `ForEffects` (two lines), not the split.
 
 ## src/Mech3/Anim/
 `AnimRuntime`'s private nested types promoted to top-level `internal` types in their own
@@ -938,7 +941,7 @@ entry) refused per-mode *observation* interfaces; this plan extracted one concep
 share, unchanged — one resolver for all of them. No re-open.
 
 ## src/Mech3/Anim/TemplateStage.cs
-The effect-template stage as one module (`TemplateStage<TNode>`, PLAN-template-stage A2+A3): pool-slot
+The effect-template stage as one module (`TemplateStage<TNode>`, PLAN-template-stage A2–A4): pool-slot
 arithmetic (`SlotOf` memoized over a raw-walk hook, `TakeNextSlot`'s per-root cursor, `RootsFor`'s
 slot scoping with the modulo fallback for callees staged shallower than their caller's slot), the
 BL-288 caller-slot claim (`AssignCallerSlot` — sticky per (root, anchor), wraps through the same
@@ -950,9 +953,12 @@ wrap flavours, and the reveal/retire/sweep ritual both entry points drive (`Reve
 visibility write, gated on `Shown`, scheduling its own hide for a def whose t=0 events already
 finished it; `RetireWhenIdle`, deferring on the two measured holds, the supplied `stillAnimated`
 predicate asked of the ROOT and `SharedWithLiveInstance`; `Sweep`, draining the deferrals once a
-frame). Generic like `NameResolver<TNode>`: ~8 engine hooks at construction (identity, slot walk,
+frame). It also carries the **three template policy flags as sealed constructor state** — `Pooled`,
+`Shown` and `Places` (was `AnimRuntime.PooledTemplates`/`ShowPlacedTemplates`/`PlaceCalledTemplates`),
+get-only, no setter anywhere. Generic like `NameResolver<TNode>`: ~8 engine hooks at construction
+(identity, slot walk,
 transform read, the `TopLevel`+`GlobalTransform` placement write, the visibility write,
-print/debug), the runtime-dependent hooks late-bound via `Wire` at the handover (`findAll`,
+print/debug) plus those three flags, the runtime-dependent hooks late-bound via `Wire` at the handover (`findAll`,
 `anchors`, `isLive`, live instances, `LevelsTemplate`, `stillAnimated`, `NameOf`, the index/reset
 services) — they cannot be construction arguments, because the factory that builds the stage
 exists before any resolver does, and the resolver's own `ownRootsOf` hook is this class's
@@ -976,9 +982,20 @@ tier — nothing is asserted in both.
   `anchors` hook — once per call, census recorded once per def identity. Exactly the pre-move
   behaviour; do not "clean up" the asymmetry in either direction.
 ⚠ `SlotOf`'s memo assumes slot containers are built before `Bind` and never reparented — the same
-  snapshot terms as the resolver's `FindAll` cache. A4 staging: `Pooled` and `Shown` are still
-  mutable properties (the factory sets them post-construction) until A4 seals them into the ctor
-  — the accepted-shallow-spot ⚠ on `AnimRuntime`'s entry stands until then.
+  snapshot terms as the resolver's `FindAll` cache.
+**The sealing leak is closed structurally, not documented (A4, Decision 4).** Until A4 the factory
+wrote `ShowPlacedTemplates`/`PooledTemplates` onto the runtime AFTER `ForEffects` returned — an
+accepted shallow spot on `AnimRuntime`'s entry that worked only because both happened to be read
+after `Bind`. The stage is now built sealed by whoever knows the runtime's role and handed in as a
+constructor argument (`WorldEffectsFactory` for the world-effects and crash rigs, `WorldSession` for
+the world one via `Options.PlacesCalledTemplates`, the suites for their own); `AnimRuntime`'s
+parameterless ctor takes an inert all-off stage, and `AnimRuntime.NewTemplateStage` is the one place
+the Godot adapter hooks are spelled. There is no post-seal write to misorder, and the census that
+proves it is that no name outside this file reads or writes the three flags — `AnimRuntime` reads
+`Places` at exactly one site (the `CALL_ANIMATION` relocation test) and nothing else. Do not
+re-introduce a settable mirror on the runtime "for the labs": the anim lab's need is a construction
+option (`WorldSession.Options.PlacesCalledTemplates`), and reaching it after `Bind` is the exact
+shape that was leaking.
 
 ## src/Mech3/SequenceRunner.cs
 The engine-free sequence interpreter, extracted from `AnimRuntime` behind the `ISequenceHost` seam
@@ -2574,7 +2591,7 @@ running first means it builds the shared C1 world while the fake is in effect; `
   reads false regardless, since the death's debris motion is scheduled seconds in.
 ⚠ `effect-template-mesh` builds REAL geometry — `WorldEffectsFactory.BuildEffectStage` from the
   chapter gamez (`TestWorld.Gamez`) into one `pool0` slot, under an `AnimRuntime.ForEffects` runtime
-  carrying the production `ShowPlacedTemplates`/`PooledTemplates` pair. Named empty nodes cannot
+  whose sealed stage carries the production `Shown`/`Pooled` pair. Named empty nodes cannot
   express mesh visibility, which is the whole subject; and the reveal exists only under those flags,
   so a suite that dropped them would assert nothing. Both halves are asserted (a CALLED template
   showing, an ended effect leaving nothing lit) because either alone passes a broken runtime.
@@ -2834,10 +2851,11 @@ the surface is only known at impact, so both are bound and `FlightController.Cla
 `player` anim root, the plane's own `pdpN` panels as INPUT_NODEs, and a live emitter factory.
 Its templates are staged in **pool slots** like the world stage (`BL-288`): sizes per root from
 `effect_pools.json`'s crash section (most stay single-copy in slot 0; the per-panel damage-stage
-family gets one copy per authored call anchor), `PooledTemplates` set beside the slot build, and
-the runtime's caller-slot assignment pins each call anchor (`pdpN`, `prop1`, `pieceN`) to its own
+family gets one copy per authored call anchor), the runtime's `TemplateStage` built `Pooled`+`Places`
+beside the slot build and handed into `ForCrashRig` sealed, and
+the stage's caller-slot assignment pins each call anchor (`pdpN`, `prop1`, `pieceN`) to its own
 copy — see `AnimRuntime`'s pool paragraphs for the mechanism and the `damage-template-pool` suite
-for the regression shape. `LevelPlacedTemplateNames` is set beside `PooledTemplates`/
+for the regression shape. `LevelPlacedTemplateNames` is set beside
 `InheritedVelocityExempt`, once, from `EffectCatalogue.CrashSurfaceLevelAnimNames` (`BL-292`) — the
 named defs only ever play from within a crash sequence, so unlike `InheritedWorldVelocity` (set
 per-crash in `FlightController.Crash`, since it depends on the live impact speed/direction) this
@@ -2861,8 +2879,11 @@ The effects runtime's puffer factory passes `softParticles: false` for MIX-ramp 
 emit at ground-level sites, where the depth fade zeroes fresh dark puffs against the terrain (the
 crash-smokeball lesson; the damage-stage smoke measured near-invisible with it on) — and keeps the
 soft edge for additive fire. Templates build with collision suppressed and the stage is visible with
-each ROOT hidden (`AnimRuntime.ShowPlacedTemplates` reveals one while an effect plays on it), so a
-template's meshes render — the rocket's per-type explosion rings, the fireball facades (D31).
+each ROOT hidden (`TemplateStage.Shown` reveals one while an effect plays on it), so a
+template's meshes render — the rocket's per-type explosion rings, the fireball facades (D31). The
+runtime's stage is built here and handed into `ForEffects` **sealed** — `Pooled`+`Shown`+`Places`
+as constructor state (PLAN-template-stage A4). Until A4 the last two were written onto the returned
+runtime instead, which was the accepted sealing leak; do not re-introduce a post-`ForEffects` write.
 The world-effects stage is built in **pool slots** (`BL-225`): each root is staged in as many copies as
 `EffectPools` sizes it for this session, one copy per `pool<N>` container stamped with
 `AnimRuntime.PoolSlotMeta`, so overlapping calls to one effect each get their own copy (see

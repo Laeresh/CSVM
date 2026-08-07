@@ -10,12 +10,20 @@ namespace CSVM.Mech3.Anim;
 /// "which copy is mine" identity rule and the reveal/retire/sweep ritual that <c>PlayEffectAt</c>
 /// and the <c>CALL_ANIMATION</c> arm both perform (PLAN-template-stage A2 + A3). Generic over
 /// the node type like <see cref="NameResolver{TNode}"/>: the engine hands adapter hooks over at
-/// construction (<see cref="TemplateStage{TNode}(IEqualityComparer{TNode}, Func{TNode, int},
-/// Func{TNode?, bool}, Func{TNode, Transform3D}, Action{TNode, Transform3D}, Action{TNode, bool},
-/// Action{string}, Func{bool})"/>) and the runtime-dependent hooks at the handover (<see cref="Wire"/> — they
+/// construction, together with the three policy flags that say what kind of stage this is
+/// (<see cref="Pooled"/>, <see cref="Shown"/>, <see cref="Places"/>), and the runtime-dependent
+/// hooks at the handover (<see cref="Wire"/> — they
 /// cannot be construction arguments, because the factory that builds the stage exists before any
 /// resolver or runtime does), so slot wrap, modulo fallback, recycle counting and caller-slot
 /// stickiness are assertable off-engine against a token node type (<c>CSVM.Tests</c>).
+///
+/// <para>The three flags are sealed at construction (PLAN-template-stage A4, Decision 4) and have
+/// no setter anywhere: the stage is built by whoever knows what role its runtime plays
+/// (<c>WorldEffectsFactory</c> for the world-effects and crash rigs, <c>WorldSession</c> for the
+/// world runtime) and handed to <c>AnimRuntime</c> as a constructor argument. Before A4 they were
+/// <c>AnimRuntime</c> properties the factory wrote AFTER the role factories had returned — the
+/// accepted sealing leak `architecture.md` carried on the record, which worked only because both
+/// happened to be read after <c>Bind</c>. There is now no post-seal write to get wrong.</para>
 ///
 /// <para>Two prior texts pinned these members to <c>AnimRuntime</c>: PLAN-deepening Decision 16
 /// and PLAN-name-resolver's milestone goal (<i>"`SlotOf` / `TemplateRootsFor` /
@@ -131,8 +139,14 @@ public sealed class TemplateStage<TNode>
         Action<TNode, Transform3D> placeAt,
         Action<TNode, bool> setVisible,
         Action<string> print,
-        Func<bool> debug)
+        Func<bool> debug,
+        bool pooled = false,
+        bool shown = false,
+        bool placesCalled = false)
     {
+        Pooled = pooled;
+        Shown = shown;
+        Places = placesCalled;
         _identity = identity;
         _slotMarkOf = slotMarkOf;
         _isValid = isValid;
@@ -144,21 +158,42 @@ public sealed class TemplateStage<TNode>
         _slotOfNode = new Dictionary<TNode, int>(identity);
     }
 
-    /// <summary>Whether templates are pooled on this runtime (<c>AnimRuntime.PooledTemplates</c>
-    /// forwards here). Mutable until A4 seals it into construction — the factory still sets it
-    /// after the runtime factories return, which is the accepted-shallow-spot leak A4 closes.</summary>
-    public bool Pooled { get; set; }
+    /// <summary>Whether the staged effect templates exist in more than one copy, one per pool slot
+    /// (<c>AnimRuntime.PoolSlotMeta</c>), so each call takes the next copy instead of relocating the
+    /// one shared original (`BL-225`). Set on the WORLD-EFFECTS runtime and the per-player crash rig
+    /// (`BL-288`): two rockets landing a second apart then keep their own trails at their own sites,
+    /// where a single copy made the first blast's trails jump to the second's. Everything
+    /// template-shaped becomes slot-scoped under it — which copy a call places
+    /// (<see cref="PlaceAt"/>), reveals (<see cref="Reveal"/>), tests for a move
+    /// (<see cref="IsAt"/>) and resolves its own node names in (the resolver's own-root tier, fed by
+    /// <see cref="RootsFor"/>) — all keyed off the slot the call's anchor lives in, so a nested
+    /// CALL_ANIMATION stays inside its caller's slot.
+    ///
+    /// <para>⚠ Off on the WORLD runtime, deliberately, and this is not a keying scheme layered on
+    /// the puffer key: emitters there stay keyed by the collapsed <c>(name, host)</c> (see
+    /// <c>AnimRuntime.DefScopedPufferKeys</c> and <see cref="EmitterDirector"/>'s keying remark) —
+    /// the world's templates are the world's own nodes, not staged copies, and there is nothing to
+    /// pool. A pooled call gets distinct emitters for free, because each slot's host node is a
+    /// different node.</para></summary>
+    public bool Pooled { get; }
 
     /// <summary>Whether this runtime's templates are staged hidden, so the stage reveals a root
-    /// while an effect plays on it and hides it again when that effect is over
-    /// (<c>AnimRuntime.ShowPlacedTemplates</c> forwards here). Set on the world-effects runtime,
-    /// whose templates are staged hidden so nothing renders ambiently at the stage origin: without
-    /// it the templates' own MESHES — the rocket's per-type explosion rings, the fireball facades,
-    /// the splash models — never draw, only their puffers do (D31). Only the root's own visibility
-    /// is touched; what shows inside it stays the data's decision (the rings are reset INACTIVE or
-    /// opacity-OFF and their defs turn them on). Off everywhere else, where the stage is visible
-    /// anyway. Mutable until A4 seals it into construction, exactly like <see cref="Pooled"/>.</summary>
-    public bool Shown { get; set; }
+    /// while an effect plays on it and hides it again when that effect is over. Set on the
+    /// world-effects runtime, whose templates are staged hidden so nothing renders ambiently at the
+    /// stage origin: without it the templates' own MESHES — the rocket's per-type explosion rings,
+    /// the fireball facades, the splash models — never draw, only their puffers do (D31). Only the
+    /// root's own visibility is touched; what shows inside it stays the data's decision (the rings
+    /// are reset INACTIVE or opacity-OFF and their defs turn them on). Off everywhere else — the
+    /// crash rig included, whose templates hide by their own reset states — where the stage is
+    /// visible anyway.</summary>
+    public bool Shown { get; }
+
+    /// <summary>Whether a CALL_ANIMATION relocates its callee's effect-template root onto the call
+    /// site (<see cref="PlaceAt"/>). Off on the world runtime — the ambient world boot must stay
+    /// byte-identical, and today's retarget only re-scopes name resolution. On for the
+    /// world-effects runtime, the per-player crash rig and the animation debugger's stage, so a
+    /// placeless effect template plays where it is staged instead of at its gamez origin.</summary>
+    public bool Places { get; }
 
     /// <summary>Every wrap onto a still-occupied copy, both flavours (<see cref="TakeNextSlot"/>'s
     /// cursor recycling a live slot, <see cref="AssignCallerSlot"/>'s claims outnumbering the

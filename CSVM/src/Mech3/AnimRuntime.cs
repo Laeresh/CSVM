@@ -45,7 +45,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary>Pool-slot metadata key the effect-template pool stamps on each slot container
     /// (<c>WorldEffectsFactory.BuildWorldEffectsRuntime</c>): every staged template copy lives
     /// under exactly one of them, and the slot is what keeps one call's copy of a template apart
-    /// from another call's (see <see cref="PooledTemplates"/>). Never on a template node itself,
+    /// from another call's (see <see cref="TemplateStage{TNode}.Pooled"/>). Never on a template node itself,
     /// so name resolution is blind to it.</summary>
     public const string PoolSlotMeta = "cs_pool_slot";
 
@@ -162,13 +162,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// (fixed steps + wall dt), visible as 20 logged sim-seconds in a 610-frame scripted run.</summary>
     public bool ManualAdvance;
 
-    /// <summary>Whether a CALL_ANIMATION relocates its callee's effect-template root onto the call
-    /// site (see <see cref="TemplateStage{TNode}.PlaceAt"/>). Off by default â€” the ambient world boot must stay
-    /// byte-identical, and today's retarget only re-scopes name resolution. The animation debugger
-    /// (and, later, the crash runtime) turn it on so a placeless effect template plays where it is
-    /// staged instead of at its gamez origin.</summary>
-    public bool PlaceCalledTemplates;
-
     /// <summary>Named CALL_ANIMATION callees whose placed root levels to world axes instead of the
     /// inherited parent rotation (<see cref="TemplateStage{TNode}.PlaceOn"/>), keyed by <c>AnimName ?? Name</c>.
     /// Set by <see cref="FlightController.Crash"/> to the crash-def's own surface-hugging sub-effects
@@ -246,8 +239,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// build (<c>WorldSession</c>), which owns the raw <see cref="GameZ"/>/<see cref="SceneBuilder"/>
     /// this runtime deliberately has no reference to. Null on every runtime that never needs this â€”
     /// the anim-lab/crash runtime already stages its own templates eagerly via
-    /// <see cref="PlaceCalledTemplates"/>, and a headless/testing runtime with no session behind it
-    /// leaves relocation permission simply always false (see the <c>CallAnimation</c> case).
+    /// its stage's <see cref="TemplateStage{TNode}.Places"/>, and a headless/testing runtime with no
+    /// session behind it leaves relocation permission simply always false (see the
+    /// <c>CallAnimation</c> case).
     /// Deliberately returns the exact Node3D to relocate/re-anchor onto, not just a permission
     /// bool: the caller must drive THIS pooled copy specifically, never the def's name-wide
     /// <see cref="TemplateStage{TNode}.RootsFor"/> set, which would touch every copy at once.</summary>
@@ -500,7 +494,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // Nonzero while a death's own Start burst (RunDeathSequence) is on the call stack, including
     // any CALL_ANIMATION it dispatches directly (a counter, not a bool: a chained call can itself
     // call again). Lets a death-triggered CALL_ANIMATION relocate its callee's effect-template
-    // root the same way the anim-lab/crash runtime's PlaceCalledTemplates does, WITHOUT turning
+    // root the same way the anim-lab/crash runtime's stage-sealed TemplateStage.Places does, WITHOUT turning
     // that on for the ambient world boot (byte-identical goldens) or RESET_STATE — a struck C2
     // facade panel's facade_parts call needs its shared template moved onto the panel, not left at
     // its gamez origin (BL-253), and nothing about that should touch ON_STARTUP/mission-setup
@@ -546,25 +540,29 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // finishing. The second number is the one that matters — it must be 0.
     private int _waitsInstalled, _waitsAbandoned, _waitsRouted, _waitsInert;
 
-    /// <summary>Builds the template stage (engine hooks at construction, runtime hooks wired two
-    /// statements later — PLAN-template-stage Decision 7's late-bound handover, since the stage's
+    /// <summary>The inert stage: nothing pooled, nothing staged hidden, no called template
+    /// relocated. What the ambient world runtime and every plain testing runtime take
+    /// (PLAN-template-stage A4, Decision 4) — the three flags are sealed, so a runtime built this
+    /// way cannot be talked into a template role after the fact.</summary>
+    public AnimRuntime()
+        : this(NewTemplateStage())
+    {
+    }
+
+    /// <summary>Takes a SEALED template stage — the pool/reveal/relocate role, decided by whoever
+    /// knows the runtime's job and fixed before this runtime exists (PLAN-template-stage A4,
+    /// Decision 4: <c>WorldEffectsFactory</c> builds the world-effects and crash-rig stages,
+    /// <c>WorldSession</c> the world one). The runtime hooks are wired here rather than being
+    /// stage construction arguments — Decision 7's late-bound handover, since the stage's
     /// <c>findAll</c> needs the resolver and the resolver's <c>ownRootsOf</c> is the stage's
     /// <see cref="TemplateStage{TNode}.RootsFor"/>: both directions are delegates, invoked only
-    /// after this constructor completes). The pool reaches the resolver only as that resolved
+    /// after this constructor completes. The pool reaches the resolver only as that resolved
     /// root list — the slot arithmetic lives on the stage, and the resolver's anchor liveness
-    /// predicate is Godot's <c>IsInstanceValid</c>. The policy flags follow later, at the top of
-    /// <see cref="Bootstrap"/>.</summary>
-    public AnimRuntime()
+    /// predicate is Godot's <c>IsInstanceValid</c>. One stage per runtime; the remaining policy
+    /// flags (the resolver's) follow later, at the top of <see cref="Bootstrap"/>.</summary>
+    public AnimRuntime(TemplateStage<Node3D> stage)
     {
-        _templateStage = new TemplateStage<Node3D>(
-            Node3DIdentity.Instance,
-            SlotMarkOf,
-            IsInstanceValid,
-            n => n.GlobalTransform,
-            PlaceNodeAt,
-            (n, visible) => n.Visible = visible,
-            s => GD.Print(s),
-            () => DebugMotions);
+        _templateStage = stage;
         _resolver = new NameResolver<Node3D>(Node3DIdentity.Instance, _templateStage.RootsFor, IsInstanceValid);
         _templateStage.Wire(
             FindAll,
@@ -579,54 +577,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             ApplyResetStatesWithin);
     }
 
-    /// <summary>The staged effect templates exist in more than one copy, one per pool slot
-    /// (<see cref="PoolSlotMeta"/>), and each call takes the next copy instead of relocating the one
-    /// shared original (`BL-225`). Set on the WORLD-EFFECTS runtime only: two rockets landing a
-    /// second apart then keep their own trails at their own sites, where a single copy made the
-    /// first blast's trails jump to the second's. Everything template-shaped becomes slot-scoped
-    /// under it — which copy a call places (<see cref="TemplateStage{TNode}.PlaceAt"/>), reveals
-    /// (<see cref="TemplateStage{TNode}.Reveal"/>), tests for a move (<see cref="TemplateStage{TNode}.IsAt"/>) and resolves its
-    /// own node names in (the resolver's own-root tier, fed by <see cref="TemplateStage{TNode}.RootsFor"/>) —
-    /// all keyed off the slot the call's anchor lives in, so a nested CALL_ANIMATION stays inside
-    /// its caller's slot.
-    ///
-    /// <para>⚠ Off on the WORLD runtime, deliberately, and this is not a keying scheme layered on
-    /// the puffer key: emitters there stay keyed by the collapsed <c>(name, host)</c> (see
-    /// <see cref="DefScopedPufferKeys"/> and <see cref="EmitterDirector"/>'s keying remark) — the world's
-    /// templates are the world's own nodes, not staged copies, and there is nothing to pool. A
-    /// pooled call gets distinct emitters for free, because each slot's host node is a different
-    /// node.</para>
-    ///
-    /// <para>Forwards to <see cref="TemplateStage{TNode}.Pooled"/> — the flag is stage state
-    /// (PLAN-template-stage A2); the forwarding property stays until A4 seals it into the stage's
-    /// construction.</para></summary>
-    public bool PooledTemplates
-    {
-        get => _templateStage.Pooled;
-        set => _templateStage.Pooled = value;
-    }
-
-    /// <summary>Reveals an effect template's root while an effect plays on it, and hides it again
-    /// when that effect is over. Set on the world-effects runtime, whose templates are staged
-    /// hidden so nothing renders ambiently at the stage origin: without this the templates' own
-    /// MESHES — the rocket's per-type explosion rings, the fireball facades, the splash models —
-    /// never draw, only their puffers do (D31). Only the root's own visibility is touched; what
-    /// shows inside it stays the data's decision (the rings are reset INACTIVE or opacity-OFF and
-    /// their defs turn them on). Off everywhere else, where the stage is visible anyway.
-    ///
-    /// <para>Forwards to <see cref="TemplateStage{TNode}.Shown"/> — the flag is stage state
-    /// (PLAN-template-stage A3), and the reveal/retire/sweep ritual it gates lives there
-    /// (<see cref="TemplateStage{TNode}.Reveal"/>); the forwarding property stays until A4 seals it
-    /// into the stage's construction.</para></summary>
-    public bool ShowPlacedTemplates
-    {
-        get => _templateStage.Shown;
-        set => _templateStage.Shown = value;
-    }
-
     /// <summary>How many <see cref="PlayEffectAt"/> calls took a pool slot whose previous instance
     /// was still live â€” the pool being smaller than the concurrency it met, so those two calls
-    /// share a template copy exactly as every call did before <see cref="PooledTemplates"/>. Zero
+    /// share a template copy exactly as every call did before the pool
+    /// (<see cref="TemplateStage{TNode}.Pooled"/>). Zero
     /// is "the pool covered everything asked of it"; a growing count is the number to size against
     /// (the pool size itself is a TUNE, `WorldEffectsFactory.EffectPoolSlots`). Forwards to
     /// <see cref="TemplateStage{TNode}.Recycles"/>, which counts both wrap flavours.</summary>
@@ -711,20 +665,53 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// mechanism.</summary>
     internal MotionSet Motions { get; } = new();
 
+    /// <summary>Builds a sealed <see cref="TemplateStage{TNode}"/> over the Godot adapter — the one
+    /// place the engine hooks are spelled (node identity by instance id, the pool-slot ancestry
+    /// walk, the <c>TopLevel</c>+<c>GlobalTransform</c> placement write, the visibility write), so a
+    /// caller only decides the role. Public because the stage is a constructor argument and the
+    /// callers that know the role live outside this class (<c>WorldEffectsFactory</c>,
+    /// <c>WorldSession</c>, the suites); <paramref name="debugMotions"/> is baked rather than read
+    /// off the runtime because the stage exists first — it gates only the pooled caller-slot log
+    /// line, so it is inert unless <paramref name="pooled"/> is on.</summary>
+    public static TemplateStage<Node3D> NewTemplateStage(bool pooled = false, bool shown = false,
+        bool placesCalled = false, bool debugMotions = false)
+    {
+        return new TemplateStage<Node3D>(
+            Node3DIdentity.Instance,
+            SlotMarkOf,
+            IsInstanceValid,
+            n => n.GlobalTransform,
+            PlaceNodeAt,
+            (n, visible) => n.Visible = visible,
+            s => GD.Print(s),
+            () => debugMotions,
+            pooled,
+            shown,
+            placesCalled);
+    }
+
     /// <summary>Configures (but does not bind) the world-effects runtime's construction ritual: the
-    /// four invariant flags a "renders effects at a call site, no ambience of its own" role always
-    /// takes (<see cref="AutoStart"/>=false, <see cref="PlaceCalledTemplates"/>,
-    /// <see cref="NameResolveFallback"/>, <see cref="SoundHandledElsewhere"/>). The caller still calls
+    /// three invariant flags a "renders effects at a call site, no ambience of its own" role always
+    /// takes (<see cref="AutoStart"/>=false, <see cref="NameResolveFallback"/>,
+    /// <see cref="SoundHandledElsewhere"/>). The caller still calls
     /// <see cref="Bind"/> + adds the returned node to the tree — this only hides the invariant block.
     /// Where emitters are parented is <paramref name="emitterFactory"/>'s business now, not this
-    /// role's (see <see cref="PufferEmitterFactory"/>).</summary>
-    public static AnimRuntime ForEffects(int seed, IEmitterFactory emitterFactory,
+    /// role's (see <see cref="PufferEmitterFactory"/>).
+    ///
+    /// <para><paramref name="stage"/> arrives SEALED (PLAN-template-stage A4, Decision 4). The
+    /// fourth flag this ritual used to bake — relocate a called template onto the call site — is
+    /// stage state now, along with the pool and the staged-hidden reveal the caller used to write
+    /// AFTER this returned: the sealing leak `architecture.md` carried as an accepted shallow spot.
+    /// The caller builds the stage with the role it wants
+    /// (<see cref="NewTemplateStage"/>) and there is no post-seal write left to
+    /// misorder.</para></summary>
+    public static AnimRuntime ForEffects(TemplateStage<Node3D> stage, int seed,
+        IEmitterFactory emitterFactory,
         bool debugMotions, float effectTtl, Func<Vector3> playerPosition)
     {
-        return new AnimRuntime
+        return new AnimRuntime(stage)
         {
             AutoStart = false,
-            PlaceCalledTemplates = true,
             NameResolveFallback = true,
             SoundHandledElsewhere = true,
             DefScopedPufferKeys = true,
@@ -737,16 +724,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     }
 
     /// <summary>Configures (but does not bind) the per-player crash rig's construction ritual —
-    /// the same four invariant flags as <see cref="ForEffects"/>, but with no <c>EffectTtl</c> or
+    /// the same three invariant flags and the same sealed <paramref name="stage"/> handover as
+    /// <see cref="ForEffects"/>, but with no <c>EffectTtl</c> or
     /// <c>PlayerPosition</c> (the crash def has no PUFFER_STATE that needs either). The caller still
     /// calls <see cref="Bind"/> + adds the returned node to the tree.</summary>
-    public static AnimRuntime ForCrashRig(int seed, IEmitterFactory emitterFactory,
+    public static AnimRuntime ForCrashRig(TemplateStage<Node3D> stage, int seed,
+        IEmitterFactory emitterFactory,
         bool debugMotions)
     {
-        return new AnimRuntime
+        return new AnimRuntime(stage)
         {
             AutoStart = false,
-            PlaceCalledTemplates = true,
             NameResolveFallback = true,
             SoundHandledElsewhere = true,
             DebugMotions = debugMotions,
@@ -2440,7 +2428,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     {
                         // Relocation is allowed here — moving a callee's template root onto the
                         // call site — either from the anim-lab/crash runtime's
-                        // PlaceCalledTemplates, or because this call is death-triggered and the
+                        // stage (TemplateStage.Places), or because this call is death-triggered and the
                         // callee's own anchor resolves to a "library root" gamez node: staged with
                         // the world but never PLACED in it (docs/formats/gamez.md,
                         // GameZ.IsLibraryRoot) — so it has no meaningful position of its own and
@@ -2460,7 +2448,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         bool relocate = false;
                         if (!instant && callAnchor != null)
                         {
-                            if (PlaceCalledTemplates)
+                            if (_templateStage.Places)
                             {
                                 relocate = true;
                             }
@@ -2477,7 +2465,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         // the same compiled indices) and falls to the name rescue scoped to ITS OWN
                         // subtree, so the copy has to BE the anchor for that scope to find anything
                         // (the same shape genx12 uses, anchored on the call site instead).
-                        // PlaceCalledTemplates' un-pooled templates keep the old shape (anchored on
+                        // TemplateStage.Places' un-pooled templates keep the old shape (anchored on
                         // the call site, resolved by the def-wide TemplateStage.RootsFor/by-index map as
                         // always).
                         var startAnchor = libraryCopy ?? callAnchor;
@@ -3265,7 +3253,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <para><see cref="_deathCallDepth"/> brackets the whole burst so a <c>CALL_ANIMATION</c> the
     /// death dispatches (C2's facade panels calling the shared <c>facade_parts</c> template,
     /// `BL-253`) can relocate its callee's effect-template root onto the call site, exactly as the
-    /// anim-lab/crash runtime's <see cref="PlaceCalledTemplates"/> does â€” without turning that on
+    /// anim-lab/crash runtime's <see cref="TemplateStage{TNode}.Places"/> does â€” without turning that on
     /// for the ambient world boot.</para></summary>
     private void RunDeathSequence(DestructibleRegistry.Instance inst)
     {
