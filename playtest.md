@@ -102,7 +102,6 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
-| `CAP-11` | `SunIncidence` per chapter | World brightness framed like `OriginalScreenshots/C1 IA1 Zone1 environment Spawn3.png`, for every chapter, plus a few seconds of video each. **Priority pair: a C1B night mission and a C1C bright-day mission** — the two extremes the self-scaling model predicts (0.43 / clamp 1.0) and is riskiest on | `BL-110` |
 | `CAP-13` | Lens flare | The sun at several screen positions — centred, near-edge, and partially occluded by terrain — to read the streak count, colour and fade | `BL-165` |
 | `CAP-22` | C5 city building density | A low pass through C5's downtown city blocks (IA1), close enough to street level to tell whether buildings sit as one consistent skyline or visibly overlap/interpenetrate each other. Our build currently draws two disjoint building districts on the same footprint (`cb00a`–`cb11a` over `cb12a`–`cb24a`) — this settles whether the original shows only one | `BL-250` |
 | `CAP-23` | Water vs shoreline order | A low pass over a C1B shoreline where surf meets open water (the recorded pose is around `-7700,49,-5798`), close enough to tell **which of the two draws on top** — does the surf/foam strip lie over the water, or does the water edge cover it? Any chapter's shore/water boundary answers it; C1B is where our build's contested pair sits | `BL-251` |
@@ -236,8 +235,19 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   - (d) the four chapters the rule deliberately leaves alone — C1, C1C, C2B, C4 — look exactly as
     they did.
 
-  *Blocks:* `BL-100`'s remaining four chapters are the A/B this sets up; `CAP-11` still judges C1B's
-  night brightness separately.
+  *CAP-11 evidence (2026-08-07, `playtest/CAP-11/`; the capture is retired, `BL-110` closed):*
+  three of the look-fors already have numbers. (b) is **failing** — at the matched canyon pose
+  (`--pos=-3504,710,-3619`, 2329 ft) the original is nearly clear (near slope 36, far hills
+  20–60, blue-gradient sky 195) while our C3 renders full `c9c9c9` murk (near slope 130, far
+  hills flat 201, sky = fog): the "daylight grey haze" is far too dense and the sky the wrong
+  colour. (d) fails for **C2B above the deck** — original dark-blue dome 82.7, ours flat b0b0b0
+  fog 176 at 1230–1500 m. Both, plus C5's black sky, are now `BL-303` (shared 9000–10000 m
+  fog-band suspect). And C1B's night brightness is judged: terrain at the matched spawn −12%
+  (`WorldLight` 0.426 confirmed, `git log --grep=BL-110`), but our zone1 dome is **−26%** vs the
+  original's night sky and **no moon renders** where the original shows a large one
+  (`t0.5`/`t5` stills) — `WorldBuilder.BuildHorizon` knows how to billboard a moon, so the (a)
+  sweep should check whether the built zone1 subtree simply lacks the node.
+  *Blocks:* `BL-100`'s remaining four chapters are the A/B this sets up.
   *Variations:* one flight each — repeat with `--chapter=C3`, then `--chapter=C2`; (d)'s four
   untouched chapters need only a glance in each.
 

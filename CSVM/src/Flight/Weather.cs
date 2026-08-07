@@ -46,6 +46,9 @@ public sealed class WeatherState
     // deck 210→169 and terrain →~57). It then self-scales the scene from the data: C1B night
     // (0.15,0.6)→0.42, C1C day (0.6,2.0)→clamp 1.0. MinWorldLight floors it off pure black.
     // (This is the data-driven half; the gamma-space modulate is the other half.)
+    // Confirmed against original footage at 0.426/0.784/clamp-1.0 (CAP-11 matched-pose A/B,
+    // 2026-08-07; git log --grep=BL-110). Known exemptions in the original, not yet ours:
+    // water is unmodulated (BL-304); night cloud sprites are moonlit directionally (BL-118).
     private static readonly ZoneFog NoFog = new(new Color(0.69f, 0.69f, 0.69f), 1e8f, 1e9f, 1e8f, 1e9f, 1e9f, 1f);
 
     private readonly Dictionary<string, ZoneFog> _zones = new(StringComparer.OrdinalIgnoreCase);
