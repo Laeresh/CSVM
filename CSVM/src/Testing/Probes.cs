@@ -809,11 +809,13 @@ public static class Probes
 
         bool bhawk = planeNodeName.Equals("player_bhawk", StringComparison.OrdinalIgnoreCase);
         float fd = stats.FdSpeed;
-        float thrustAccel = stats.EnginePower * Config.GetFloat("flightModel.thrustConst", 184f)
+        // ⚠ The fallback here must track FlightModel.ThrustConst — it is a second copy of the same
+        // default, and a stale one silently mis-reports the header while the model itself is fine.
+        float thrustAccel = stats.EnginePower * Config.GetFloat("flightModel.thrustConst", 107f)
                             / (stats.VehWeight / 1000f);
 
         void Row(string name, string what, string unit, double model, double? measured,
-                 double tol, string detail = "", bool info = false)
+                 double tol, string detail = "", bool info = false, bool upperBound = false)
         {
             r.Rows.Add(new FlightRow
             {
@@ -825,6 +827,7 @@ public static class Probes
                 Tolerance = tol,
                 Detail = detail,
                 Informational = info,
+                UpperBound = upperBound,
             });
         }
 
@@ -834,13 +837,14 @@ public static class Probes
         var m = Fresh(stats, Level(), 0.5f * fd, 1f);
         Run(m, 1f, 180f, pitch: 0f);
         Row("level-top-speed", "level full throttle held to equilibrium", "mph",
-            m.Speed / Mph, 300.4, 4.0, $"fd_speed = {fd / Mph:0.0} mph");
+            m.Speed / Mph, 300.4, 4.0, $"fd_speed = {fd / Mph:0.0} mph, α {m.Alpha:0.0}°");
 
         // --- acceleration. THE measurement that sets ThrustConst: one constant fixes both this and
         // the terminal dive below, and the two agree, which is what makes the drag shape credible.
         m = Fresh(stats, Level(), 150f * Mph, 1f);
         double tAccel = RunUntil(m, 1f, 30f, () => m.Speed >= 290f * Mph);
-        Row("accel-150-290", "level full throttle, 150 -> 290 mph", "s", tAccel, 3.76, 0.40);
+        Row("accel-150-290", "level full throttle, 150 -> 290 mph", "s", tAccel, 3.76, 0.40,
+            $"α {m.Alpha:0.0}° at finish");
 
         // --- terminal dive. Nose (and path) 70.7° down, full throttle, held to terminal — the angle
         // the original's "vertical" dive clip actually came out at, so this compares like with like.
@@ -849,27 +853,35 @@ public static class Probes
         double pathDeg = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
         Row("terminal-dive", "70.7° dive at full throttle, held to terminal", "mph",
             m.Speed / Mph, 355.2, 6.0,
-            $"settled path {pathDeg:0.0}°, {m.Speed / fd:0.000} x fd_speed");
+            $"settled path {pathDeg:0.0}°, {m.Speed / fd:0.000} x fd_speed, α {m.Alpha:0.0}°");
 
         // --- roll. Accumulated body roll rate: no other axis is commanded, so this is the 360° the
         // stopwatch and the video's ADI bank centroid both timed.
         m = Fresh(stats, Level(), fd, 1f);
         double tRoll = RunUntil(m, 1f, 30f, RollAccum(m), roll: 1f);
-        Row("roll-360", "full aileron from level cruise, 360°", "s", tRoll, 2.05, 0.25);
+        Row("roll-360", "full aileron from level cruise, 360°", "s", tRoll, 2.05, 0.25,
+            $"α {m.Alpha:0.0}° at finish");
 
         // --- pitch. Steady rate after the 1/damp spin-up, at three speeds: ours is
         // speed-independent by construction, and the video says the original's is too, so the point
         // of the three is to catch anything else (stall, lift, eff) leaking into pitch at the ends.
+        // Also the cleanest B11 check of the plan's central inference: wings-level, full elevator,
+        // no bank — the exact scenario "α_ss = ω_pitch / align" was derived for. With AlignRate = 4
+        // and the 33 °/s this row itself asserts, that predicts α_ss ≈ 8.25°.
         var pitchRates = new List<double>();
+        var pitchAlphas = new List<double>();
         foreach (float mph in new[] { 120f, 200f, 280f })
         {
             m = Fresh(stats, Level(), mph * Mph, 1f);
             Run(m, 1f, 2f, pitch: 1f);
             pitchRates.Add(Mathf.RadToDeg(m.BodyRates.X));
+            pitchAlphas.Add(m.Alpha);
         }
         Row("pitch-rate", "sustained full-elevator body pitch rate", "°/s",
             pitchRates[1], 33.0, 3.0,
-            $"at 120/200/280 mph = {pitchRates[0]:0.0}/{pitchRates[1]:0.0}/{pitchRates[2]:0.0} °/s");
+            $"at 120/200/280 mph = {pitchRates[0]:0.0}/{pitchRates[1]:0.0}/{pitchRates[2]:0.0} °/s, "
+            + $"α = {pitchAlphas[0]:0.0}/{pitchAlphas[1]:0.0}/{pitchAlphas[2]:0.0}° "
+            + "(liftAOAs [5,9] predicts α_ss ≈ 8.25° here)");
 
         // --- yaw. The one axis 'eff' scales, so it is the axis a thrust change moves: faster
         // acceleration holds the plane nearer fd_speed, where eff is at its floor.
@@ -878,7 +890,8 @@ public static class Probes
         double tYaw = RunUntil(m, 1f, 60f, YawAccum(m), yaw: 1f,
                                onStep: () => { sumSpeed += m.Speed; samples++; });
         Row("yaw-360", "full rudder from 290 mph, 360°", "s", tYaw, 28.6, 3.0,
-            samples > 0 ? $"mean speed {sumSpeed / samples / Mph:0.0} mph" : "");
+            (samples > 0 ? $"mean speed {sumSpeed / samples / Mph:0.0} mph, " : "")
+            + $"α {m.Alpha:0.0}° at finish");
 
         // --- altitude cap. A fixed 22° nose-up hold from level cruise (pitch input
         // stays at 0 throughout — the attitude is set once via Pitched, matching the original clip's
@@ -890,7 +903,7 @@ public static class Probes
         Row("altitude-cap", "22° nose-up hold at full throttle, altitude settled against the clamp", "ft",
             m.Position.Y / Ft, 6571.6, 100.0,
             $"{m.Speed / Mph:0.0} mph at settle (original 173.7 mph — the existing stall model owns "
-            + "whatever bleed shape follows the clamp, not asserted here)");
+            + $"whatever bleed shape follows the clamp, not asserted here), α {m.Alpha:0.0}°");
 
         // --- level speed 15 m under the cap: the clamp must be a no-op this close to
         // the line — the original's level equilibrium measured flat to ±0.3 mph right up to 1988 m.
@@ -898,43 +911,135 @@ public static class Probes
         m.Position = new Vector3(0f, 1988f, 0f);
         Run(m, 1f, 180f, pitch: 0f);
         Row("level-speed-near-cap", "level full throttle at 1988 m, held to equilibrium", "mph",
-            m.Speed / Mph, 300.4, 4.0, "altitude clamp must not leak below the cap");
+            m.Speed / Mph, 300.4, 4.0, $"altitude clamp must not leak below the cap, α {m.Alpha:0.0}°");
 
-        // --- 1/8 throttle. Both rows are INFORMATIONAL: the original's throttle→thrust curve is
-        // undecoded, so a miss here indicts that curve or the low-speed drag blend and cannot say
-        // which. Asserting it would fail the build over an unscoped question.
+        // --- sustained turn. CAP-01: full throttle, stick full back throughout (pilot-confirmed),
+        // entered from the 298.96 mph cruise, held to a true equilibrium — 15.9 sim s and 449.8° of
+        // heading. Sampling early measures the bleed-in instead, which is a different number (0.369
+        // A against the plateau's 0.380) that happens to look plausible, so this settles for 10 s
+        // first and then averages over the original's own 15.9 s window.
+        //
+        // ⚠ The bank is set at entry and then LEFT FREE — no roll input, which is what the original's
+        // pilot was doing to the stick and is NOT what "hold 100°" would mean here. Forcing it is
+        // worse than useless: a roll controller keyed on atan2(-X.Y, Y.Y) stops measuring bank the
+        // moment the nose leaves the horizontal, and drove entry banks of 60°, 75° and 100° all into
+        // the same nose-down spiral at terminal speed — identically with and without the B12 lift
+        // term, i.e. an instrument artifact and not a model reading. Free-roll settles honestly, at
+        // its own bank rather than the original's; the row reports both, and asserts neither.
+        var turn = SustainedTurn(stats, 100f, 298.96f * Mph, settle: 10f, window: 15.9f);
+        Row("sustained-turn-speed", "full back stick from a banked entry, settled speed", "mph",
+            turn.SpeedMph, 222.94, 5.0,
+            $"entered at 100° bank, settled at {turn.BankDeg:0.0}° (emergent, not held), "
+            + $"α {turn.Alpha:0.0}°, swept {turn.SweptDeg:0} ° (original 449.8 in the same window)");
+
+        // ⚠ Asserted as an UPPER BOUND, not a band. BL-247's defect is the aircraft falling out of
+        // this manoeuvre — 83% of gravity across the flight path at a steep bank — so "sinks no
+        // harder than the original" is the claim the measurement supports. The other side is a
+        // different question: we currently come out slightly CLIMBING, which is its own divergence
+        // and is visible in the number rather than folded into this verdict.
+        Row("sustained-turn-sink", "sustained max-pull turn, sink rate", "ft/s",
+            turn.SinkFtS, 1.85, 0.0,
+            $"upper bound — the failure this guards is falling out of the turn (before the B12 lift "
+            + $"re-key this read 18.29). Negative = climbing.",
+            upperBound: true);
+
+        // ⚠ INFORMATIONAL and must stay so until the rate gap closes. We sweep heading far faster
+        // than the original, which is recorded, not fixed; inventing a rate limiter to close it is
+        // the wrong-mechanism fix BL-092 trap (b) and BL-124's history both warn about.
+        // ⚠ What the gap IS has narrowed: the original pulls 1.6x slower BANKED than wings-level
+        // (18.95 °/sim-s here against 30.16 round the `pitch` clip's 360° loop, same stick, same
+        // throttle), while we pull the same rate in both — so this is a bank/load-factor effect,
+        // not a pitch-authority error, and `zoom-climb` above is the row that shows our pitch is
+        // nearly right. player.json's unconsumed turn_fade_in/turn_fade_out/highGs are the only
+        // authored fields of that shape (BL-095). A lead; none of it is decoded.
+        // ⚠ The original's own turn is NOT internally consistent with a coordinated level turn, so
+        // do not promote this by matching the ADI's bank either: 18.95 °/sim-s at 222.94 mph is
+        // V·ω = 32.96 m/s² lateral, which implies atan(32.96/20) = 58.7° of bank, not the +100° the
+        // ADI sky-region centroid reads (trusted only to ±4°, BL-247 trap (b)). Ours IS consistent —
+        // it settles at exactly the bank its own lateral acceleration implies — which is why the
+        // two banks differ by more than the two rates do.
+        Row("sustained-turn-rate", "sustained max-pull turn, heading rate", "°/s",
+            turn.RateDegS, 18.95, 3.0,
+            $"{turn.RateDegS / 18.95:0.00}x the original — OPEN. The original pulls 1.6x slower "
+            + "BANKED than wings-level (18.95 vs 30.16 °/sim-s round its own loop) and we pull the "
+            + "same rate in both, so the gap is bank/load-factor, not pitch authority. Its 18.95 "
+            + "°/sim-s at 222.94 mph also implies a 58.7° coordinated-turn bank, not the +100° its "
+            + "ADI reads",
+            info: true);
+
+        // --- part throttle. These two are the ONLY place the drag shape is observable: the
+        // full-throttle equilibrium is fd_speed by construction for any curve, so it can never
+        // detect a wrong shape (BL-148 trap (b)). Both are informational pending a playtest of the
+        // "throttled-back plane barely decelerates" report that the old low-speed drag blend
+        // existed to answer — the new curve is far weaker down here and reopens exactly that
+        // question.
         m = Fresh(stats, Level(), 0.9f * fd, 0.125f);
         Run(m, 0.125f, 300f, pitch: 0f);
         double idlePath = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
         Row("eighth-throttle-speed", "1/8 throttle held to equilibrium", "mph",
             m.Speed / Mph, 137.9, 6.0,
-            $"{m.Speed / fd:0.000} x fd_speed (original 0.459), settled path {idlePath:0.0}° "
-            + "— it ends up below lift speed and sinks, so this is not a level equilibrium",
+            $"{m.Speed / fd:0.000} x fd_speed (original 0.459), settled path {idlePath:0.0}°, "
+            + $"α {m.Alpha:0.0}°",
             info: true);
 
-        m = Fresh(stats, Level(), 290f * Mph, 0.125f);
-        double tDecel = RunUntil(m, 0.125f, 60f, () => m.Speed <= 150f * Mph);
-        Row("decel-290-150", "throttle cut to 1/8, 290 -> 150 mph", "s", tDecel, 7.04, 1.0,
-            "", info: true);
+        // ⚠ This is a ZERO-throttle run, not 1/8. The clip it is measured against holds 8/8, cuts
+        // to 0/8, and touches nothing else in level flight (pilot-confirmed 2026-08-07) — it was
+        // modelled here at 1/8 for want of that fact, which made it a thrust-vs-drag scenario
+        // instead of the pure drag probe it actually is. At 1/8 the model reads 12.1 s against the
+        // same 7.04 target, and that miss is an artifact of the wrong throttle setting, not a
+        // finding: 150 mph sits only 8% above the 1/8-throttle equilibrium, so the approach is
+        // asymptotic and the time runs away. With no thrust there is no equilibrium to crowd.
+        m = Fresh(stats, Level(), 290f * Mph, 0f);
+        double tDecel = RunUntil(m, 0f, 60f, () => m.Speed <= 150f * Mph);
+        Row("decel-290-150", "throttle cut to ZERO, 290 -> 150 mph, level", "s", tDecel, 7.04, 1.0,
+            $"pure drag — no thrust term to assume, α {m.Alpha:0.0}° at finish", info: true);
 
-        // --- zoom climb. INFORMATIONAL, and it is the row that exposes the model's largest known
-        // gap: the original bled to 104 mph reaching its apex where we arrive still fast, because we
-        // model no induced drag at all — a hard pull costs us nothing. The altitude is close; the
-        // energy is not. (Its stick history is also unknown: a held full pull is a loop, and the
-        // same session's loop passed 180° in ~6 s, so 10.5 s to apex was some other input.)
+        // --- zoom climb. INFORMATIONAL. Measured off the `pitch` clip's loop — full throttle, full
+        // back stick from a 299.4 mph level cruise, which is the SAME take that pinned the 33 °/s
+        // pitch rate, so its stick history is known rather than inferred. The original bleeds to
+        // 127.9 mph 4.4 sim s into the pull and tops out 936 ft up at 6.5 s, still climbing past its
+        // own slowest point (the speed minimum leads the apex by 2.2 s and 63 mph, because speed
+        // bottoms where thrust − drag = g·sinγ, not where the climb stops).
+        //
+        // ⚠ These targets REPLACE the "+1635 ft, 104 mph, 10.5 s" figures this row carried until
+        // 2026-08-07. That set is a real measurement of a different flight, with an unknown stick
+        // history — it cannot be a held full pull, because a held full pull is this loop and this
+        // loop reaches its apex in 6.5 s, not 10.5. Do not average the two or split the difference.
+        //
+        // The C21 induced-drag term closed most of the speed gap (min speed 269 -> 205 mph against
+        // 128) and overshot the altitude in the other direction (1282 ft against 936), so the energy
+        // is now wrong the other way round and this stays the row to watch. Also a second,
+        // longer-duration B11 check of the wings-level-full-pull inference alongside pitch-rate
+        // above — a held pull becomes a sustained loop, so α should sit near the same ≈8°
+        // equilibrium at the point of minimum speed.
         m = Fresh(stats, Level(), 300f * Mph, 1f);
-        float apex = 0f, minSpeed = float.MaxValue;
+        float apex = 0f, minSpeed = float.MaxValue, alphaAtMinSpeed = 0f;
         double tApex = RunUntil(m, 1f, 30f,
             () => m.Position.Y < apex - 1f, pitch: 1f,
             onStep: () =>
             {
                 apex = Mathf.Max(apex, m.Position.Y);
-                minSpeed = Mathf.Min(minSpeed, m.Speed);
+                if (m.Speed < minSpeed)
+                {
+                    minSpeed = m.Speed;
+                    alphaAtMinSpeed = m.Alpha;
+                }
             });
         Row("zoom-climb", "full pull from 300 mph level, altitude gained", "ft",
-            apex / Ft, 1635.0, 200.0,
-            $"min speed {minSpeed / Mph:0.0} mph (original 104 — we model no induced drag), "
-            + $"apex at {tApex:0.0} s (original 10.5)",
+            apex / Ft, 936.0, 200.0,
+            $"min speed {minSpeed / Mph:0.0} mph (original 127.9), "
+            + $"apex at {tApex:0.0} s (original 6.5), α {alphaAtMinSpeed:0.0}° at min speed",
+            info: true);
+
+        // ⚠ INFORMATIONAL, same loop as the row above — a direction check, not an assertion. C21
+        // closed most of this gap (269 -> 205 mph against 127.9) but the energy split still reads
+        // wrong: the row above now OVERSHOOTS altitude (1282 ft against 936) while this UNDERSHOOTS
+        // speed, so C_i (fitted to the sustained-turn plateau only) does not yet reproduce this
+        // manoeuvre's energy balance. Asserting it would fail on that known-open gap, not a new one.
+        Row("zoom-climb-min-speed", "same loop, speed at its own minimum", "mph",
+            minSpeed / Mph, 127.9, 6.0,
+            $"α {alphaAtMinSpeed:0.0}° here (liftAOAs [5,9] predicts α_ss ≈ 8.25° at wings-level "
+            + "equilibrium; this loop has carried well past that regime by its own minimum)",
             info: true);
 
         var sb = new StringBuilder();
@@ -950,9 +1055,15 @@ public static class Probes
         foreach (var row in r.Rows)
         {
             string verdict = row.Asserted ? (row.Ok ? "ok" : "!! FAIL") : "(not asserted)";
+            // An upper-bound row's target is a ceiling, not a centre — print it as one, or a model
+            // value far BELOW it reads as a large error against a band it was never judged on.
+            string target = row.Measured is { } t
+                ? (row.UpperBound ? $"<= {t:0.00}" : t.ToString("0.00"))
+                : "-";
             sb.AppendLine($"{row.Name,-22} {row.Unit,-5} {row.Model,10:0.00} "
-                          + $"{(row.Measured?.ToString("0.00") ?? "-"),10} "
-                          + $"{(row.ErrorPct is { } p ? $"{p:+0.0;-0.0}%" : "-"),8}  {verdict}");
+                          + $"{target,10} "
+                          + $"{(row.UpperBound || row.ErrorPct is not { } p ? "-" : $"{p:+0.0;-0.0}%"),8}"
+                          + $"  {verdict}");
             sb.AppendLine($"{"",-22} {row.What}{(row.Detail.Length > 0 ? $" — {row.Detail}" : "")}");
         }
         r.Text = sb.ToString();
@@ -1089,6 +1200,11 @@ public static class Probes
     /// wings level. Verified by the report's own settled-path readout rather than assumed.</summary>
     private static Basis Pitched(float deg) => Basis.Identity.Rotated(Vector3.Right, Mathf.DegToRad(deg));
 
+    /// <summary>Attitude banked <paramref name="deg"/>° about the nose, nose level. Over 90° is past
+    /// vertical, which is where <c>CAP-01</c>'s ADI reads; this is the ENTRY only — the run's own
+    /// settled bank is reported beside it, because nothing holds this one there.</summary>
+    private static Basis Banked(float deg) => Basis.Identity.Rotated(Vector3.Forward, Mathf.DegToRad(deg));
+
     /// <summary>A model parked at an attitude and speed, with the flight path along the nose —
     /// <see cref="FlightModel.Reset"/>'s own convention, so a scenario starts trimmed.</summary>
     private static FlightModel Fresh(PlaneStats stats, Basis attitude, float speed, float throttle)
@@ -1124,6 +1240,46 @@ public static class Probes
             }
         }
         return limit;
+    }
+
+    /// <summary>Full throttle and full back stick from a banked entry, settled for
+    /// <paramref name="settle"/> s and then averaged over <paramref name="window"/> s — the shape
+    /// <c>CAP-01</c> was flown in. Heading is accumulated off the flight path with wrap unfolded, so
+    /// a turn past 360° reports what it swept rather than what is left over; sink is the window's
+    /// net altitude change over its own duration, which is the quantity the original's altimeter
+    /// gave. No roll input: see the call site for why forcing the bank cannot be measured.</summary>
+    private static (double SpeedMph, double SinkFtS, double RateDegS, double Alpha, double BankDeg,
+                    double SweptDeg) SustainedTurn(
+        PlaneStats stats, float entryBankDeg, float entrySpeed, float settle, float window)
+    {
+        var m = Fresh(stats, Banked(entryBankDeg), entrySpeed, 1f);
+        Run(m, 1f, settle, pitch: 1f);
+
+        double Heading() => Mathf.RadToDeg(Mathf.Atan2(m.VelocityDir.X, -m.VelocityDir.Z));
+        float startY = m.Position.Y;
+        double prev = Heading(), swept = 0, speedSum = 0, alphaSum = 0, bankSum = 0;
+        int samples = 0;
+        float elapsed = 0f;
+        for (float t = 0f; t < window; t += EnvDt)
+        {
+            m.Step(new FlightInput { Pitch = 1f, Throttle = 1f }, EnvDt);
+            double step = Heading() - prev;
+            if (step > 180.0) { step -= 360.0; } else if (step < -180.0) { step += 360.0; }
+            swept += step;
+            prev += step;
+            speedSum += m.Speed;
+            alphaSum += m.Alpha;
+            bankSum += Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(m.Attitude.Y.Dot(Vector3.Up), -1f, 1f)));
+            samples++;
+            elapsed = t + EnvDt;
+        }
+
+        return (speedSum / samples / Mph,
+                (startY - m.Position.Y) / Ft / elapsed,
+                Math.Abs(swept) / elapsed,
+                alphaSum / samples,
+                bankSum / samples,
+                Math.Abs(swept));
     }
 
     /// <summary>One level of a mip chain as a standalone image. Godot stores the chain as one buffer
@@ -1349,8 +1505,18 @@ public static class Probes
         public bool Informational;
         public string Detail = "";
 
+        /// <summary>Assert an UPPER BOUND (model ≤ original + tolerance) instead of a two-sided
+        /// band. For a measurement whose failure mode is one-directional and whose other side is a
+        /// different question: the sustained turn's sink is the original's worst case, so sinking
+        /// harder is the BL-247 defect while sinking less is a separate divergence that this row
+        /// would misreport as the same fault.</summary>
+        public bool UpperBound;
+
         public bool Asserted => !Informational && Measured != null;
-        public bool Ok => !Asserted || Math.Abs(Model - Measured!.Value) <= Tolerance;
+        public bool Ok => !Asserted
+                          || (UpperBound
+                              ? Model <= Measured!.Value + Tolerance
+                              : Math.Abs(Model - Measured!.Value) <= Tolerance);
 
         /// <summary>Signed miss against the original, as a percentage — the shape that tells a
         /// scale error (constant %) from drift (sign-random).</summary>

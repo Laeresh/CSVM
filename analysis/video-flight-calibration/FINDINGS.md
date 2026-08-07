@@ -66,6 +66,17 @@ for the 90°-bank turn). The roll is the apples-to-apples one and involves no al
 **Pitch rate does not fall off with speed** — binned round the loop it is 37.9 / 33.7 / 30.7 /
 36.5 °/sim-s over 120–160 / 160–200 / 200–240 / 240–280 mph, flat within the noise.
 
+⚠ **It DOES fall off with bank, and that is the sharpest unexplained thing in this file.** The same
+aircraft at the same full back stick sweeps **30.16 °/sim-s** round the wings-level loop (`pitch`,
+360° in 11.94 sim s) but only **18.95 °/sim-s** in the sustained 100°-banked turn (`CAP-01`) — the
+original is **1.6× slower when banked**. Both are full-throttle, both pilot-confirmed full
+deflection. This is not a speed effect: the loop passes clean through the turn's 222.94 mph on its
+way round. Our model has no such asymmetry — it pulls ~33 °/s in both, which is right for the loop
+and 71% fast for the turn — so the turn-rate gap is a
+**bank/load-factor effect, not a pitch-authority error**, and no capture is owed to establish that
+much (`BL-095`). `player.json` ships three unconsumed fields of the right shape — `turn_fade_in 10`,
+`turn_fade_out 50`, `highGs [9, 15]` (`BL-095`). A lead, not a decode: none has been tested.
+
 **Thrust and drag.**
 
 | scenario | measured |
@@ -75,9 +86,19 @@ for the 90°-bank turn). The roll is the apples-to-apples one and involves no al
 | full throttle, 150 → 290 mph | 2.685 wall s = **3.76 sim s** |
 | terminal dive (γ ≈ 70°) | **355.2 ± 0.4 mph** = 1.182 × level max |
 | 1/8 throttle equilibrium | **137.9 mph** (0.459 × fd) |
-| 8/8 → 1/8, 290 → 150 mph | 5.03 wall s = **7.04 sim s** |
-| zoom climb from 300 mph level, full pull | **+1635 ft**, bottoming at 104 mph in 10.5 sim s |
+| 8/8 → **0/8**, 290 → 150 mph, level | 5.03 wall s = **7.04 sim s** |
+| **loop from 300 mph level, held full pull** (`pitch`) | slowest **127.9 mph** at +4.36 sim s, apex **+936 ft** at +6.54 sim s, 360° in **11.94 sim s** |
+| zoom climb from 300 mph level, full pull | +1635 ft, bottoming at 104 mph in 10.5 sim s — **different flight, unknown stick history**, see below |
 | level top speed vs altitude | flat ~300 mph from 714 m to **1988 m**, i.e. right up to the cap |
+
+⚠ **The deceleration row is 0/8, not 1/8 — corrected 2026-08-07, pilot-confirmed.** It was labelled
+"8/8 → 1/8" and read that way for months; the clip holds full throttle, cuts to **zero**, and
+touches nothing else in level flight. The distinction is not cosmetic. At 0/8 the run is a pure drag
+probe with no thrust term and no equilibrium; at 1/8 there is an equilibrium at 137.9 mph and the
+150 mph endpoint sits only 8% above it, so the time is asymptotic and behaves completely
+differently. Modelled at the wrong setting the row reads 12.1 s against this 7.04 and cannot be
+fixed by *any* power law — which briefly looked like a contradiction in the original's own data
+rather than a mis-specified scenario. The 1/8 case has never actually been filmed; it is `CAP-31`.
 
 The acceleration and the terminal dive fall out of **one** number: a max thrust acceleration of
 **A ≈ 60 m/s²** reproduces the measured acceleration *and* predicts a 70.7° terminal dive of
@@ -166,8 +187,12 @@ zero-thrust clip is the cleanest drag probe in the whole set — no thrust term 
 The *ratio* is robust: across every `(g, C)` pair the fit tolerates, `D(x = 0.5)` lands in
 3.8–5.6 m/s² against our 20.25. The absolute deceleration is the model-free version — at 152.6 mph
 in a +5° climb with the engine off the original loses **6.24 m/s²**, where our curve would take
-21.6. This corroborates `BL-092`'s independent `x^2.67` from the 1/8-throttle equilibrium, by a
-route with no thrust in it at all.
+21.6. This clip is thrust-free, so it is independent evidence that the curve below cruise is much
+steeper than quadratic — solved point-by-point it gives p = 3.69/3.80/3.94/4.00, which
+`PLAN-flight-drag-lift` A1 fitted jointly with the other three measurements to `DragExpLow` 3.278 /
+`DragExpHigh` 2.663. ⚠ The `x^2.67` figure once quoted here as an independent confirmation was
+wrong — it is an artifact of assuming thrust is linear in throttle, not a drag measurement (see A1's
+landing commit).
 
 ⚠ **The clip cannot split `g` from the climb-gravity scale `C`, and the fit that looks like it can
 is degenerate.** A free 4-parameter fit runs `C` to its bound; holding `g` and refitting gives rms
@@ -337,6 +362,78 @@ crash: bounce_factor 0.6, armor/health_damage_range [50,300]
 autohead_turn_time 0.75  autohead_turn_max 2.86  autohead_turn_min_pitch -3.0
 ```
 
+`CAP-02` ran to 14 takes and found **no measurable amplification near terrain on either axis** —
+path-normal acceleration 0.91–1.03× free air, ADI body pitch rate 0.91–1.10× — including a
+controlled pair flying the same held full-deflection loop at 1,113 ft and at 90 ft. An earlier pass
+here claimed "1.95× max pull"; that was **wrong** (a borrowed yardstick) — the retraction and the
+one outstanding anomaly are on `BL-095`. Do not re-derive any of it from the clips.
+**Closed 2026-08-07**: the mechanism turned out to be *designed* — GDD §4.1.7 "Ground Blow"
+describes a proximity repulsion from large objects (the ground, cliff walls, zeppelins) that biases
+control response away from the emitter and never overpowers the stick. The lateral heading step
+below is that bias; `CAP-02` is retired (`BL-095`).
+
+⚠ **The ADI saturates above roughly +25° nose-up** — sky fraction pins at 0.729–0.730, identically
+in every `CAP-02` batch-4 clip. Only the first ~0.7 s of a hard pull is readable for pitch rate, so
+design the comparison to live in that window (a pull *from level flight* does; a pull out of a dive
+does not). This is the same ceiling `playtest.md`'s `CAP-20` row already records.
+
+⚠ **Thirteen `CAP-02` takes measured the wrong plane.** `a_n` and ADI pitch rate both live in the
+**vertical** plane, so a lateral effect leaves both flat — which is exactly the null they returned.
+The signal was on the compass all along: 17° of heading swing at 34 °/s in a level cliff pull
+against under 1° in matched free-air controls. **When a manoeuvre is described as "moving to the
+side", measure heading first.** The compass is usable only when the nose stays well clear of
+vertical (below γ ≈ +45° is comfortable; the same clips swing 30–44° spuriously once γ > 60°, where
+`a_n` simultaneously explodes to 10⁵) — which is why every earlier, steeper `CAP-02` take was
+unreadable for it.
+
+⚠ **There is no roll readout for a daylight scene.** `moon.py` recovers roll by tracking the moon
+and needs a night sky. An ADI sky-centroid bank estimator is the obvious substitute and a naive one
+does **not** work — it wrapped to ±178° on all three batch-4 clips. Until one exists, heading cannot
+be separated from a banked turn by measurement alone, so any future "it yawed" claim needs either a
+level-horizon landmark in frame or a night mission. (Ground blow no longer waits on this — the
+design document supplies the mechanism and the pilot flew the cliff pull wings-level; `BL-095`.)
+
+⚠ **`ψ̇ = g·tan φ / V` does not give bank in a manoeuvring clip.** It is a *level coordinated turn*
+identity, and the aircraft in these takes is pulling hard throughout. Run against `CAP-02`'s batch-5
+clips, whose bank is known to be ~45° because they were flown that way deliberately, it returns
+**85–86°**. Filming a known-bank control is what caught it; the same shape of error produced the
+retracted max-pull yardstick above. **Calibrate an inferred quantity against a clip where the answer
+is known before quoting it.**
+
+⚠ **`BL-109`'s 32.96 / 34.02 m/sim-s² is SPEED-SPECIFIC. Never reuse it as a general max-pull
+yardstick.** Lift ∝ V², and at ~300 mph this same aircraft pulls **72.6 m/sim-s²** in free air —
+2.17× that figure with nothing anywhere near it (`CAP-02 Run3 5`, 28 s at 2,634–3,939 ft over open
+water). Comparing a fast manoeuvre against the slower loop is what manufactured a phantom "×2".
+Film a free-air control in the same session, at the same speed, and compare inside a **matched
+speed band** — and note `a_n/V²` is *not* a safe substitute: it is proportional to `C_L` in
+principle but blows up as V falls, reading a spurious 4.07× at 80 mph on `CAP-02 Run3 1`.
+
+⚠ **Range, not altitude — and a shallow dive is what separates them.** Along-path range to a level
+surface is `alt / sin|γ|`, so in a −43° dive it is 1.47× the altitude and in a vertical dive the two
+are identical. Only a *shallow* pass can tell a range trigger from a height trigger, and only over
+**water** is the surface flat and at a known 0 ft. Both `CAP-02` batches' other dives are
+near-vertical and cannot distinguish them at all.
+
+⚠ **Path-normal acceleration without differentiating γ.** Every attempt that went through
+`ω = dγ/dt` failed on these clips, because γ saturates at ±90° in a steep dive and the unpinning
+frames throw the ±60 °/s artifacts recorded above. Use instead, from `h" = V' sin γ + a_n cos γ`:
+
+```
+a_n = (h" - V' sin γ) / cos γ           sin γ = climb / V     (a ratio, not a derivative)
+```
+
+`h"` by local *quadratic* fit on the PTS axis (one fit, not two chained first-derivatives), `V'` by
+local linear fit, and gate on `|sin γ| < 0.90` — the estimator only dies where `cos γ → 0`. On
+`CAP-02 Up Down` this reads 0% gated across the whole recovery and the peak moves by less than
+±15% across smoothing windows from 0.30 s to 0.90 s.
+
+⚠ **A clip that ends in a crash fails `checkclip` on its last second.** The gate is deliberately
+all-or-nothing (a head turn invalidates everything after it), so it returns REJECT for the whole
+clip. Re-run the same registration **in windows** to find where rigidity is actually lost, and
+decode only the prefix — `CAP-02 pull up to cras` is clean to t = 10.5 s of 12.8 s. Do not skip the
+windowed check and decode a rejected clip anyway; and note a REJECT's "consistent with auto head
+turn" wording names one cause among several — `CAP-02 C4 Canyon 2` shears from **damage wobble**.
+
 ⚠ **The design document's turn-rate ladder (30/45/60/75/90 °/s) is the *velocity-vector* turn
 rate, and it maps to pitch** — not a body-axis rate. Measured sustained pitch ~34 °/sim-s sits
 between the ladder's 30 and 45 steps, consistent with the ladder being pitch and the Bloodhawk
@@ -429,7 +526,12 @@ python -c "import sys;sys.path.insert(0,'analysis/video-flight-calibration');imp
 python -c "import sys;sys.path.insert(0,'analysis/video-flight-calibration');import run2;run2.main()"
 python -c "import sys;sys.path.insert(0,'analysis/video-flight-calibration');import anchor;[anchor.resolve(s) for s in ['pitch','roll','yaw','dive','accel','decel','cap01']]"
 python analysis/video-flight-calibration/compass.py cap01   # heading, where a clip turns
+python analysis/video-flight-calibration/loop.py pitch      # slowest point vs apex vs loop exit
 ```
+
+⚠ `loop.py` exists because those are **three different moments** — on `pitch` the speed minimum
+leads the apex by 2.2 sim s and 63 mph, and the loop exit is 112 mph faster again. Quoting one for
+another is where the stale "+1635 ft / 104 mph" zoom-climb target came from.
 
 PTS timestamps come from the bundled ffmpeg — **required**, see the VFR trap below:
 
@@ -440,6 +542,39 @@ ffmpeg -i <clip> -vf showinfo -f null - 2>&1 | grep -oE "pts_time:[0-9.]+"
 Needs `imageio_ffmpeg`, `numpy`, `scipy`, `pillow`, `matplotlib`. No game data is read
 except the extracted dial textures (`extracted/C1/texture/{altimeter,speedometer}.png`)
 and `extracted/zrdr/{vehicle,player,engines}.zrd.json`.
+
+**Running it from a git worktree** (added 2026-08-07 for `CAP-02`). Both inputs above are
+git-ignored, so a worktree has *neither* `OriginalScreenshots/` nor `extracted/`. Two env vars
+point the pipeline at the main checkout's copies:
+
+```
+$env:CSVM_VIDEOS    = "Z:\CSVM\OriginalScreenshots\Videos"   # extract.py
+$env:CSVM_EXTRACTED = "Z:\CSVM\extracted"                    # fitdial.py
+```
+
+⚠ **Never junction the media in instead** — PowerShell 5.1's recursive delete follows a junction
+into its *target*, so a link left in a worktree turns a later sweep into a deletion of
+irreplaceable original-game footage (`CLAUDE.md`).
+
+**A third capture geometry: 1920×1080** (`CAP-02`). 1080p is 16:9 but reaches canonical 1280×720
+at **1.5×**, which the block-mean in `extract.py` cannot do — it takes an integer factor and raises
+on anything else rather than guessing. Those clips are therefore pre-resampled **once** with
+ffmpeg/lanczos into `playtest/CAP-02/` and enter through the new `LAYOUTS[(1280, 720)] = (0, 0, 1)`;
+a single high-quality resample beats a two-step. It registers: the cockpit pool rebuilt to the same
+2,529 frames, `fitdial` returned altimeter NCC **0.9787** / speedometer **0.9808** against the
+published 0.978/0.981, and all four 1080p cockpit takes landed at **dx = dy = 0** (peaks 0.61–0.68).
+On the chase side MPH / gun / rockets also land at dx = dy = 0 (peaks 0.48–0.82) — so the
+screen-space HUD does scale with render resolution, which was not obvious in advance. The chase ALT
+and ADI cannot be checked this way at all: their ROI sits hard against the screen edge and the
+padded search window runs off the array, returning the window edge with peak 0.000. That is the
+gate's limit, not the clip's.
+
+⚠ **`run2chase.pts()` silently returned an EMPTY time axis for a staged clip** (fixed 2026-08-07).
+`extract()` has always accepted a repo-relative `playtest/<ID>/…` path; `pts()` did not, and hard-
+prefixed `OriginalScreenshots/Videos`. The ffmpeg call then failed, the list comprehension yielded
+`[]`, and **nothing raised** — `alt`/`mph` decoded and printed healthy statistics while `_pts.npy`
+was zero-length, so the failure only surfaced downstream as an empty analysis window. Both helpers
+now share the same fallback.
 
 ## How each instrument works
 
@@ -636,7 +771,7 @@ the spread only a trigger for computing it.
 | 2 | Full loop from level | ✅ this is what pinned the clock |
 | 3 | Sustained level turn, max pull | ✅ **decoded 2026-08-03** from `CAP-01.mp4` — 222.9 mph sustained against 299.0 level, at 18.95 °/sim-s and 100° bank (`BL-092`, `BL-247`) |
 | 4 | 360° aileron roll | ✅ |
-| 5 | Low pass along a canyon wall | ❌ owed — the only source for ground blow |
+| 5 | Low pass along a canyon wall | ✅ **decoded 2026-08-07** across the `CAP-02` batches — ground blow is a lateral control bias away from the surface ahead (17° heading step at a cliff, nothing in the vertical plane), matching GDD §4.1.7's designed repulsion (`BL-095`; `CAP-02` closed) |
 | 7 | Sustained knife-edge | ✅ **decoded 2026-08-04** from the two `CAP-05` knife clips — a 4° nose step then an unbounded 0.7–0.9 °/sim-s sag, 540 m lost in 38.9 sim s, turning only 0.7–1.1 °/sim-s at 100° bank (`BL-247`; closed `BL-124`) |
 | 8 | Stall entry and recovery, engine off | ✅ **decoded 2026-08-04** from `CAP-05 Stall 0% Thrust no input` — break at 0.25 fd, nose drop 3.4 °/sim-s to a −22° floor, and the low-speed drag curve (`BL-115`, `BL-092`) |
 | 6 | Level top speed at 5500 / 6000 / 6500 ft, plus the cap | ✅ **decoded 2026-08-03** from the four `CAP-03` clips — flat 300 mph to 1988 m, then a hard altitude clamp at 2003 m (`BL-094`). 6800 ft is unreachable: the aircraft cannot be flown above the clamp |

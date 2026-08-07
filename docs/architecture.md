@@ -1828,8 +1828,16 @@ a public `Camera` accessor — all inert in plain `--freecam`. Rates TUNE.
 ## src/Flight/FlightModel.cs
 Velocity-vector arcade flight model: body rates = control torque × reciprocal inertia vs
 ang_momentum_damp, scaled per axis (PitchTune/YawTune/RollTune). Thrust/drag/gravity integrate on
-the velocity vector (speed passes through zero); lift cancels gravity's cross-path share; drag is
-normalized so drag(fd_speed) = max thrust. The stall is TWO measured thresholds over one margin
+the velocity vector (speed passes through zero); lift cancels gravity's cross-path share; drag is a
+speed power law normalized so drag(fd_speed) = max thrust, PLUS an induced term in α (below).
+`Alpha` (deg) is angle(nose, VelocityDir), read once per
+step right after the nose vector — an emergent LAG from the nose-chase, not a modelled aerodynamic
+state, and reported in every `--dump-flight` row's detail. Lift consumes it as the pull's stand-in:
+`liftFrac = min(1, speedLift × |up·Y| × n(α))`, `n` ramping 1 g → `LiftLoadMax` over the authored
+`liftAOAs [5,9]` read as degrees (a hypothesis, not a decode — `BL-095`). `|up·Y|` stays the carrier
+and must NOT be flattened: it is what makes knife-edge depart, and the α ramp is what lets a hard
+pull hold altitude through a steep bank without a bank term. The stall is TWO measured thresholds
+over one margin
 (`StallFraction` = speed/fd_speed): `isStalled()` is the nose-drop at 0.25 fd, `IsStallWarned()` the
 STALL lamp at 0.30 — the lamp leads the break by 2.64 sim s (`BL-148`/`CAP-06`); never drive both
 off one number, and never recompute the margin beside them.
@@ -1840,8 +1848,10 @@ off one number, and never recompute the margin beside them.
   the drag curve and lands within 0.3% of the original, so a value that binds replaces a measured
   number with a guess. Keep it above every airframe's emergent terminal — worst is the Balmoral,
   1.678 in a 71° dive (`--dump-flight=player_balmoral`) and ~1.71 vertical.
-⚠ Accepted artifacts, not bugs: loop energy pump, steep-climb equilibrium, stall hang. Known
-  MISSING, measured: no induced drag (a hard pull costs no speed). A hard altitude clamp (2003 m,
+⚠ Accepted artifacts, not bugs: loop energy pump, steep-climb equilibrium, stall hang. Induced
+  drag is `A · C_i · sin²α` — `InducedDragCoef` is the one genuinely FITTED constant here and is
+  NOT transferable: it absorbs our 1.71× turn-rate error, so closing that gap means refitting it.
+  A hard altitude clamp (2003 m,
   `BL-094`/`CAP-03`) deletes climbing velocity at/above the cap rather than fading thrust/lift/drag
   toward it — traced to one mission (C1B IA1) only, not assumed global/per-chapter/per-aircraft.
 
@@ -2660,7 +2670,10 @@ verdicts and the suite's assertions cannot drift apart.
 ⚠ `FlightEnvelope` steps a throwaway `FlightModel` through the manoeuvres the ORIGINAL was
   recorded flying; its targets are the Bloodhawk's only, since it is the only airframe on video.
   A row with `Informational` set is measured but deliberately not asserted (an open question) —
-  never promote one to a verdict without the measurement that closes it.
+  never promote one to a verdict without the measurement that closes it. A row with `UpperBound`
+  set asserts a CEILING, not a band, for a measurement whose failure is one-directional
+  (`sustained-turn-sink`: sinking harder than the original is the defect; sinking less is a
+  different divergence and must not be folded into the same verdict).
 ⚠ **One source of truth.** The flags in `ProbeRunner` are thin wrappers over these; a check added
   to a probe reaches both the report and the suite. Never re-implement a check in a suite.
 ⚠ `Probes.SweepCap` (16) caps the swept ROWS, not the registry totals — a census must read

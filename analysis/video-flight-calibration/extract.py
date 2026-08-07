@@ -31,7 +31,11 @@ import numpy as np
 
 import hud as hudlib
 
-VID = "OriginalScreenshots/Videos"
+# The recordings are git-ignored, so they exist only in the main checkout - a
+# worktree has no OriginalScreenshots/ at all, by design. Point CSVM_VIDEOS at
+# the main checkout's folder to decode from one (never link it in: PowerShell's
+# recursive delete follows junctions into their target, see CLAUDE.md).
+VID = os.environ.get("CSVM_VIDEOS", "OriginalScreenshots/Videos")
 OUT = ".scratch/vidcal/cache"
 
 # capture (w, h) -> game rect origin + integer downscale to reach 1280x720.
@@ -49,6 +53,12 @@ LAYOUTS = {
     # weapon readouts are not the pooled median's) and an 8 s city pass does not smear
     # the world away.
     (2560, 728): (640, 6, 1),
+    # 1280x720: canonical size already. CAP-02 was captured at 1920x1080, which is
+    # 1.5x - not an integer, so the block-mean above cannot reach canonical coords
+    # from it. Those clips are pre-resampled to 1280x720 once with ffmpeg/lanczos
+    # into playtest/CAP-02/ and enter here at 1x; a single high-quality resample
+    # beats any two-step, and the registration check below is what validates it.
+    (1280, 720): (0, 0, 1),
 }
 
 CLIPS = {
@@ -154,6 +164,70 @@ CLIPS = {
     # asked for. Recorded at 2560x728, a geometry that needed its own LAYOUTS row.
     "cap14bldgraze": ("CAP-14 Building Hard graze Balmoral.mp4", "chase"),
     "cap14bldcrash": ("CAP-14 Building crash Balmoral.mp4", "chase"),
+    # 2026-08-07 CAP-02 (BL-095, ground blow). Recorded at 1920x1080 and staged
+    # pre-resampled to canonical 1280x720 (see LAYOUTS). The question is whether
+    # AIRSPEED FALLS WHILE ALTITUDE IS STILL FALLING at the terrain-avoidance
+    # flick - a sink that gains no speed is energy going somewhere gravity did
+    # not put it, which is the signature a body force leaves and a pull does not.
+    "cap02s9": ("playtest/CAP-02/s9_720.mp4", "chase"),
+    "cap02s23": ("playtest/CAP-02/s23_720.mp4", "chase"),
+    # The two cockpit takes of the same event. `ht12` has AUTO HEAD TURN ON and is
+    # therefore invalid for gauge decode (FINDINGS.md); kept only so checkclip can
+    # say so out of its own gate rather than from the filename.
+    "cap02ck10": "playtest/CAP-02/ck10_720.mp4",
+    "cap02ht12": "playtest/CAP-02/ht12_720.mp4",
+    # The CONTROL, and the reason CAP-02 was filmed as a canyon pass in the first
+    # place: three long runs hugging a canyon FACE, where the terrain that is close
+    # is beside the aircraft rather than under it. If the arrest the other takes
+    # show is triggered by height above ground, these must not show it.
+    "cap02can1": "playtest/CAP-02/canyon1_720.mp4",
+    "cap02can2": "playtest/CAP-02/canyon2_720.mp4",
+    "cap02can3": "playtest/CAP-02/canyon3_720.mp4",
+    # 2026-08-07 CAP-02 second batch, and the pair that makes the question
+    # answerable: the flick only happens WHEN PULLING (hands off is a crash), so
+    # the measurement is the SAME max-elevator pull at two heights.
+    #   updown = repeated pulls in free air        -> the aircraft's own max pull
+    #   pullcrash = the same pull down at the sea  -> max pull plus whatever the
+    #                                                 ground adds
+    # Cockpit at 2560x720, the original 32:9 geometry the pool was built from, so
+    # these need no resampling at all - and being over open WATER the surface is
+    # flat, which is what makes MSL altitude usable as height above ground.
+    "cap02updown": "CAP-02 Up Down.mp4",
+    "cap02pullcrash": "CAP-02 pull up to cras.mp4",
+    # 2026-08-07 CAP-02 third batch: runs AT terrain rather than down at it. These
+    # are what test the range rule in the horizontal, where altitude is constant and
+    # only the distance ahead closes - and, being shallow, they are also the first
+    # CAP-02 takes on which the compass is meaningful (heading is degenerate near a
+    # vertical dive, which is why no earlier take could measure the lateral escape).
+    "cap02r31": "CAP-02 Run3 1.mp4",
+    "cap02r32": "CAP-02 Run3 2.mp4",
+    "cap02r33": "CAP-02 Run3 3.mp4",
+    "cap02r34": "CAP-02 Run3 4.mp4",
+    "cap02r35": "CAP-02 Run3 5.mp4",
+    # 2026-08-07 CAP-02 batch 4: THE matched pair, and the one that removes the
+    # pilot-timing confound. The stick is held at full pull throughout BOTH, so the
+    # input is constant and identical and only the terrain differs:
+    #   r4c1  pull held all the way down to the deck
+    #   r4c2  the same manoeuvre high up with nothing near - the plateau's height
+    # A constant max pull must give a FLAT a_n plateau; a rise above the control's
+    # plateau as range closes is the game, not the pilot.
+    "cap02r4c1": "CAP-02 Run4 Clip1.mp4",
+    "cap02r4c2": "CAP-02 Run4 Clip2.mp4",
+    # Clip 3: the LEVEL run straight at a cliff. Constant altitude with only the
+    # range ahead closing is what separates a range trigger from a height one in
+    # the horizontal - and being level and shallow these are the first CAP-02
+    # takes where the ADI (body pitch rate) and the compass (lateral escape) are
+    # both meaningful. The second one ends in the cliff.
+    "cap02r4c3": "CAP-02 Run4 Clip3.mp4",
+    "cap02r4c3x": "CAP-02 Run4 Clip3 with crash.mp4",
+    # Batch 5, the counter-example to the Clip3 yaw. Clip3 was flown WINGS LEVEL,
+    # so its 17 deg heading swing is either a yaw or a bank nobody commanded; these
+    # two are deliberate ~45 deg banked turns at the same speed, which is what a
+    # commanded bank looks like in the same instruments. A coordinated turn gives
+    # psi_dot = g tan(phi) / V, so 45 deg predicts roughly 8 deg/wall-s - a quarter
+    # of Clip3's 34 deg/wall-s, which would need about 80 deg of bank to explain.
+    "cap02r5l": "CAP-02 Run 5 45° left.mp4",
+    "cap02r5r": "CAP-02 Run 5 45° right.mp4",
 }
 
 

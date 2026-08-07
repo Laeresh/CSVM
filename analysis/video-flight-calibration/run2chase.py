@@ -8,6 +8,7 @@ registers every chase clip at dx=dy=0), so the per-frame seed is (0, 0).
 
 PTS, not frame/fps: these captures are VFR (FINDINGS.md's VFR trap).
 """
+import os
 import subprocess
 import sys
 
@@ -25,8 +26,15 @@ DIAL_ORDER = ["altimeter", "speedometer", "horizonindicator", "gungauge", "rocke
 def pts(short):
     """Presentation timestamps, in wall-clock seconds."""
     path, _ = clip_hud(short)
+    # Same staged-clip fallback extract.extract() uses: a clip owned by an open
+    # item lives at playtest/<ID>/ and is named repo-relative. Without this the
+    # ffmpeg call silently fails and the time axis comes back EMPTY while the
+    # needle decode still looks healthy - alt/mph with no t is not a trace.
+    p = os.path.join(VID, path)
+    if not os.path.exists(p) and os.path.exists(path):
+        p = path
     out = subprocess.run(
-        [iio.get_ffmpeg_exe(), "-i", f"{VID}/{path}", "-vf", "showinfo", "-f", "null", "-"],
+        [iio.get_ffmpeg_exe(), "-i", p, "-vf", "showinfo", "-f", "null", "-"],
         stderr=subprocess.PIPE, stdout=subprocess.DEVNULL, text=True).stderr
     return np.array([float(l.split("pts_time:")[1].split()[0])
                      for l in out.splitlines() if "pts_time:" in l])

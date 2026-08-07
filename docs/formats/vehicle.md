@@ -66,6 +66,10 @@ document, so they are shipped-only features.
 
 Also worth naming, all data-confirmed: `crash` (`armor_damage_range`, `health_damage_range`,
 `bounce_factor` — see [the hp pair](#the-hp-pair-armor--hit-points));
+`groundblow_elev 400` / `groundblow_mag 10` / `ai_groundblow 0.5` (ground blow — the design's
+§4.1.7 proximity repulsion from large objects, its named emitters the ground, cliff walls and
+zeppelins; measured 2026-08-07 as a lateral control bias away from the surface ahead, decode on
+`BL-095`);
 `autohead_turn_time`/`_max`/`_min_pitch` (the padlock/look camera's head-turn rate limits — see
 the [command inventory](strings.md#the-bindable-command-table-messagesjson)); `rogue` (three
 `[fameThreshold, soundName]` steps warning a player who is shooting allies);
