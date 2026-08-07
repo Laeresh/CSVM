@@ -3,7 +3,7 @@
 **COMPLETE** (2026-08-06). Drafted 2026-08-06 from that day's architecture review, candidate 3;
 the A1 grilling session ran 2026-08-06 and filled the Decisions table below, which is the
 authority where prose disagrees. Sibling handoffs:
-[`PLAN-template-stage.md`](../PLAN-template-stage.md) (still live).
+[`PLAN-template-stage.md`](PLAN-template-stage.md) (completed 2026-08-07, archived here).
 [`PLAN-engine-free-suites.md`](PLAN-engine-free-suites.md) is a completed sibling, archived
 2026-08-06.
 

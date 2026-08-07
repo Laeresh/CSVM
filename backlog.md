@@ -2304,6 +2304,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   while `StuntGatesTests` alone is clean 6 of 6 — the race is the mechanism, and the full run's
   ~1-in-3 rate is just how often the scheduler overlaps them among 572 tests. Also reproduces
   with `TemplateStageTests` filtered out, so it predates PLAN-template-stage A3.
+  ⚠ **"No failing test named" is not a reliable tell — the crashed run can also name a victim.**
+  Seen 2026-08-07 (520 passed / 1 failed of 521, on a docs-only tree): `FlightEnvelopeTests` FAILed
+  with `An item with the same key has already been added. Key: [flightModel.thrustConst, 184]` out
+  of `Config.Register` (`Config.cs:296`) in the same run that then died with the usual
+  `AccessViolationException`. A `SortedDictionary` **indexer** assignment cannot throw on a
+  duplicate key single-threaded, so that is a second shared mutable static torn by the same
+  parallel-collection overlap, not a flight-model regression — it passed alone, and the full re-run
+  was 572/572. Whatever fixes the sink should be measured against `Config`'s static too.
   ⚠ **Traps.** (1) On the FULL run the rate is ~1 in 3, so a single green `dotnet test` proves
   nothing — verify a fix against the three-class filter above, which is 6/6 today. (2) A per-class `finally` that restores the
   previous value is exactly the bug — the fix has to remove the shared mutable static from the

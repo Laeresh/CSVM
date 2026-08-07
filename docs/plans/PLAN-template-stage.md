@@ -1,11 +1,13 @@
 # TemplateStage — the pool/slot/place/reveal/hide cluster leaves `AnimRuntime`
 
-**ACTIVE — decisions settled** (written 2026-08-06 from that day's architecture review,
+**COMPLETE** (2026-08-07). Written 2026-08-06 from that day's architecture review,
 candidate 2; the A1 grilling session ran 2026-08-06 and filled the Decisions table below, which
-is the authority where prose disagrees). Sibling handoffs from the same review:
-[`PLAN-puffer-interface.md`](plans/PLAN-puffer-interface.md) (completed 2026-08-06); the review's
+is the authority where prose disagrees. Wave A landed A1–A4; B11 was closed ❌ no-go at its
+Decision 9 gate — its reasoning is in its own section, and the dead end is recorded in
+`architecture.md`'s `WorldEffectsFactory` entry so it is not re-chased. Sibling handoffs from the
+review: [`PLAN-puffer-interface.md`](PLAN-puffer-interface.md) (completed 2026-08-06); the review's
 candidate 1 already landed as `FireControl` (BL-295, commit `7410cbe`), and candidate 4 as
-[`PLAN-engine-free-suites.md`](plans/PLAN-engine-free-suites.md) (completed 2026-08-06).
+[`PLAN-engine-free-suites.md`](PLAN-engine-free-suites.md) (completed 2026-08-06).
 
 "Where does this pooled effect draw, and when does it show and hide" is one concept spread over
 ~360 lines of `AnimRuntime.cs` (219 KB, the hottest file in the repo — 77 changes since
@@ -106,15 +108,15 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — the ride-along (kept; decided after A4 lands)
 
-11. ☐ `EnsureWorldEffects`'s 6-param call-order-dependent signature folds into the stage handover (the BL-232 failure family) — go/no-go decision is part of starting this item, per Decision 9
+11. ❌ `EnsureWorldEffects`'s 6-param signature fold — **no-go at the Decision 9 gate** (2026-08-07): A4's handover builds the stage from `_spec` alone, so there is no wiring to ride; the call-order dependence is in the signature only (all four sites pass one and the same five objects); and every fold shape either re-expresses the ordering contract or restructures session construction. No code landed
 
 ## Dependency and parallelism notes
 
 A1 blocks everything. A2 → A3 → A4 is a chain (each goldens-identical); B11 depends on A4. **File
 ownership:** `CSVM/src/Mech3/Anim/TemplateStage.cs` (new), `CSVM/src/Mech3/AnimRuntime.cs`,
 `CSVM/src/Session/WorldEffectsFactory.cs`, a new `CSVM.Tests/TemplateStageTests.cs`.
-[`PLAN-puffer-interface.md`](plans/PLAN-puffer-interface.md) and
-[`PLAN-engine-free-suites.md`](plans/PLAN-engine-free-suites.md) are both completed
+[`PLAN-puffer-interface.md`](PLAN-puffer-interface.md) and
+[`PLAN-engine-free-suites.md`](PLAN-engine-free-suites.md) are both completed
 (2026-08-06) — no longer a live contention.
 
 ---
@@ -223,9 +225,48 @@ outside the module.
 
 # Wave B — the ride-along
 
-## B11 ☐ `EnsureWorldEffects` stops re-taking what the session already gave it
+## B11 ❌ `EnsureWorldEffects` stops re-taking what the session already gave it — no-go 2026-08-07
 
-**Goal.** The 6-param, 4-call-site, call-order-dependent `EnsureWorldEffects(gamez, worldScene,
+**The call (Decision 9's gate).** No-go; no code landed. Three findings, each independently
+sufficient, all re-verified against the tree at `79945b4` rather than taken from the citations
+below (⚠ #4):
+
+1. **The ride does not exist.** Decision 9 kept B11 alive *only* because it rides A4's wiring.
+   It does not: A4's handover (`WorldEffectsFactory.cs:444–449`) builds the stage from `_spec`
+   alone — `_spec.DebugAnim`, plus `_spec.Players` for the slot depth — and not one of
+   `EnsureWorldEffects`' four world parameters reaches it. A4 changed `ForEffects`' argument list;
+   `EnsureWorldEffects` and its four call sites are untouched by it. The item's sole stated reason
+   for being in this plan is false at execution.
+2. **The bug the signature suggests is not in the program.** The Evidence's claim is confirmed and
+   is *stronger* than it reads: `GameSession.cs:665–667` assigns `state.CrashProgram =
+   session.Program`, `state.WorldScene = session.Builder.Scene`, `state.WorldRuntime =
+   session.Runtime`, and the damage lab's locals (`:755–757`) are copies of those same references
+   taken after that line. All four sites (`:719`, `:761`, `:1340`, `:1564`) therefore pass one and
+   the same five objects. "The winning argument triple depends on which caller got there first" is
+   true of the signature and false of the code — whoever wins, wins with identical arguments. The
+   `BL-232` defect was the *cache-population* hole, and `PLAN-deepening` F17 closed it by making
+   `BuildWorldEffectsRuntime` private. There is no live defect here to remove.
+3. **Every fold shape costs more than it buys.** The factory is constructed at `GameSession.cs:249`,
+   ~410 lines before those values exist. So the params can only move onto it as (a) a
+   `Bind`/`Attach` two-phase birth — literally Decision 4's rejected losing option, and it
+   re-expresses the ordering dependence this item exists to delete, in a worse form: the damage
+   lab's site is a **lambda** (`:761`) fired on the first damage action, so "did anyone attach
+   before the first demand" becomes a live implicit contract whose failure is a null-ref rather
+   than four identical objects; or (b) moving the factory's construction after the world build,
+   which forks it across the world / empty-stage / plane-only paths and breaks the "constructed
+   once per session, same lifetime as `LiveryResolver`/`SpawnPicker`" invariant the teardown story
+   hangs on. Both are session-construction restructuring in the second-hottest file, under this
+   plan's zero-delta rule, for a signature that would read shorter and behave identically.
+
+**What survives the no-go, for whoever asks again.** The interesting version is not this item: the
+crash rig re-takes the *same* four objects a second time through `FlightRigAssembler.Inputs`
+(`GameSession.cs:1402–1409` → `FlightRigAssembler.cs:348–349`), so a factory that owned the
+world's build inputs would shorten two signatures, not one. That is a construction-order
+deepening of `WorldEffectsFactory`, needs its own grilling, and hits the same `:249`-vs-`:665`
+wall — it is not a ride-along on a template-stage plan. Recorded in `architecture.md`'s
+`WorldEffectsFactory` entry as the dead end, per the ground rules.
+
+**Goal (as proposed).** The 6-param, 4-call-site, call-order-dependent `EnsureWorldEffects(gamez, worldScene,
 textures, worldProgram, worldRuntime, projectiles?)` shape — the BL-232 failure family, where the
 lazily-cached build's winning argument triple depends on which caller got there first — collapses
 into the A4 handover.

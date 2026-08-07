@@ -3,8 +3,9 @@
 **COMPLETE** (2026-08-06). Written that day from the day's architecture review, candidate 4;
 decisions settled the same day in A1's grilling session — the Decisions table below is the
 authority where prose disagrees. Every checklist item landed except `tex-dropin`, closed ❌ in A1
-as engine-bound. Sibling handoffs (live, in `docs/`): [`PLAN-template-stage.md`](../PLAN-template-stage.md),
-[`PLAN-puffer-interface.md`](../PLAN-puffer-interface.md).
+as engine-bound. Sibling handoffs, both since completed and archived here:
+[`PLAN-template-stage.md`](PLAN-template-stage.md) (2026-08-07),
+[`PLAN-puffer-interface.md`](PLAN-puffer-interface.md) (2026-08-06).
 
 This is a **seam relocation, not a redesign**: nine of `Suites.cs`'s ~31 in-engine suites touch no
 live Node — they call `Probes.*` functions that take paths and return records (`Probes.cs` has
@@ -115,8 +116,8 @@ each other, A4 needs both, B11 runs last by choice not dependency. **File owners
 `CSVM/src/Testing/Suites.cs`, new `CSVM.Tests/*` files, `CSVM/src/Flight/StuntMission.cs`,
 `CSVM/src/Flight/Loadout.cs` (print site only), Wave B adds `CSVM/src/Flight/GaugeCluster.cs`
 only (`FlightController.cs` excluded by Decision 5). Contended with
-[`PLAN-puffer-interface.md`](../PLAN-puffer-interface.md) on `Suites.cs` — not in parallel
-worktrees with it. No contention with [`PLAN-template-stage.md`](../PLAN-template-stage.md).
+[`PLAN-puffer-interface.md`](PLAN-puffer-interface.md) on `Suites.cs` — not in parallel
+worktrees with it. No contention with [`PLAN-template-stage.md`](PLAN-template-stage.md).
 
 ---
 

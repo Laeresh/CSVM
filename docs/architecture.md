@@ -2921,6 +2921,20 @@ a puffer count cannot see whether a template's geometry drew, and the two halves
   same session found the cache empty and built a second runtime. `EnsureWorldEffects` is now the only
   way in, and it also wires `ProjectilePool.EffectSink` when a pool is passed (gated on "unset", same
   as `ExternalEffect`) — the wiring `GameSession`'s raw call used to do inline.
+  ⚠ **`EnsureWorldEffects` keeps its 6-param signature — folding it was examined and declined**
+  (`PLAN-template-stage` B11, no-go 2026-08-07). Its four world params look call-order-dependent and
+  are not: `GameSession.cs:665–667` assigns `state.CrashProgram`/`WorldScene`/`WorldRuntime` from
+  `session.Program`/`Builder.Scene`/`Runtime`, so all four call sites pass one and the same five
+  objects — whichever caller populates the cache first, it does so with identical arguments. Moving
+  them onto the factory is blocked by construction order: it is built at `GameSession.cs:249`, long
+  before the world exists, so the fold is either a two-phase `Bind` (which re-expresses the ordering
+  dependence — the damage lab's site is a lambda fired on first damage, so the contract becomes
+  "attach before the first demand", failing as a null-ref) or a move of the factory's construction
+  past the world build, forking it across the world/empty-stage/plane-only paths and breaking the
+  one-per-session lifetime above. The `BL-232` defect was the cache-population hole, already closed
+  by F17's `private`. The version worth doing one day is bigger and needs its own plan: the crash rig
+  re-takes the same four objects through `FlightRigAssembler.Inputs` (`GameSession.cs:1402–1409`), so
+  a factory owning the world's build inputs would shorten two signatures — and it hits the same wall.
 ⚠ `BuildEffectStage` and `BuildCrashAnchorSet` are `public static` (no session state) —
   `GameSession`'s anim-lab stage calls them as `Session.WorldEffectsFactory.X`, not through the
   instance. The lab builds its crash-anchor set FIRST and parents it AFTER the templates, so it can
