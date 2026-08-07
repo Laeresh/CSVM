@@ -27,6 +27,13 @@ the "Current status" pointer. This file holds only what's specific to Claude Cod
   Read/Edit/Write tools; when a script must write a repo file, pass `-Encoding utf8` (or use
   `[IO.File]` with an explicit `UTF8Encoding`) and keep the script itself pure ASCII, building
   any non-ASCII characters from `[char]` codes. Hook (5) above is the backstop, not the plan.
+- ⚠ **PowerShell must never touch `videodata/`** — the per-clip decode sidecars written by
+  `analysis/video-flight-calibration/clipdata.py`. They are git-ignored, so hook (5) *cannot* see
+  them: a PS round-trip would mojibake the prose shot-index with no backstop at all. Read and write
+  them only through `clipdata.py` (`show` / `slice` / `where` / `note` / `build`), which uses
+  explicit UTF-8 and refuses a file that already looks double-encoded. Clip filenames carry
+  non-ASCII too (`CAP-10 90° Banked Pith Up Down.mp4`), so this covers the paths as well as the
+  contents.
 - ⚠ **Multi-line commit messages: `Write` the message to a file, then `git commit -F <file>`.**
   Shell quoting is where this goes wrong: PowerShell's `@'…'@` needs its closing delimiter at
   column 0, and the same text handed to Bash (still allowed for `git`) is silently accepted as

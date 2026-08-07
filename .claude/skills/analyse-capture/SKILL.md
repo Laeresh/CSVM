@@ -54,6 +54,38 @@ already staged. Four traps, all of them live in the current file set:
 List what you found with durations and resolutions before analysing, so the user can correct the
 set early. Say plainly if nothing matches.
 
+## 2b. Check the sidecar before you touch ffmpeg
+
+A previous session may already have decoded this clip. `videodata/` holds one CSV per video
+(git-ignored, **not** swept), and `show` prints a ~40-line header — stamps, a digest with every
+column's extrema and when they occur, the cached `checkclip` gate verdict, and a prose shot-index:
+
+```
+python analysis/video-flight-calibration/clipdata.py show  <clip>
+python analysis/video-flight-calibration/clipdata.py where <clip> "climb_fpm < -4000"
+python analysis/video-flight-calibration/clipdata.py slice <clip> --from 7.5 --to 9.0
+```
+
+Read that header **first**, for every clip in the set. Three things it decides for you:
+
+- **A cached `REJECT`** means the clip has auto head turn and cannot be decoded. Stop; do not
+  re-derive that verdict, and do not sample frames hoping otherwise.
+- **The digest's extrema and their timestamps** answer a surprising share of "where does X happen"
+  outright — no sheet needed.
+- **`⚠ STALE` on a column** means the producing script changed since the decode. Re-run
+  `clipdata.py build <clip>` before quoting that column; other columns are unaffected.
+
+⚠ **Never read a sidecar file whole** — 1,000–2,000 rows costs more context than the dumps it
+replaces. `show`, `slice` and `where` are the interface.
+
+⚠ **The shot-index is NAVIGATIONAL ONLY.** It tells you which second to open. It is *not* evidence
+and is never cited in `backlog.md` — the ⚠ rule at the top of this skill stands unchanged: every claim cites a
+timestamp, frame or number **you** produced this session. An index line by a previous session is a
+lead, and a wrong one is exactly as wrong as a filename.
+
+⚠ **An `UNINDEXED` span means nobody looked, not that nothing happens.** Never report absence from
+a gap.
+
 ## 3. Classify the capture — the two paths are different work
 
 **Gauge-decode** (`CAP-01` `CAP-03` `CAP-04` `CAP-05` `CAP-06`, and any clip whose answer is a
@@ -115,9 +147,19 @@ FF=$(python -c "import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())")
 still is black and the gauges come out too small to read. `ffprobe` the size first: **2560×720**
 needs `crop=1280:720:640:0`; **2560×1440** is already full-frame and needs no crop.
 
-- **Contact sheet first**, to find the interesting seconds without watching blind:
+⚠ **Images are the single largest cost of a capture session** — a measured run spent most of its
+context on ~20 sheets and stills, many at 2304×2160 or larger, and context once spent cannot be
+recovered. Every sheet must be justified by a question the numbers could not answer.
+
+- **Ask the sidecar first, not ffmpeg.** Sheets exist to find the interesting second; `clipdata.py
+  show`'s digest and a `where` query usually name it outright, for zero pixels. If the clip has a
+  decoded track, go to a timestamp — don't survey.
+- **Contact sheet as the fallback**, when the question is genuinely visual (an effect, a camera
+  move, world art) or the clip has no numeric track:
   `"$FF" -i "<clip>" -vf "crop=1280:720:640:0,fps=1,scale=420:-1,tile=5x3" -frames:v 1 sheet.png`
   (drop the `crop` for a 16:9 clip; raise `fps` and the tile count for a short, fast event).
+  Scale it down and keep the tile count low — a sheet you can read at 420 px wide costs a fraction
+  of a full-res one and answers the same "which second" question.
 - **Stills at a moment**, high quality: `"$FF" -ss <t> -i "<clip>" -frames:v 1 -q:v 2 out.png`
   (put `-ss` *before* `-i` for speed, after it for exact-frame accuracy).
 - **Audio**: `"$FF" -i "<clip>" -vn -ac 1 -ar 22050 out.wav`, then analyse the spectrum in numpy —
@@ -171,6 +213,33 @@ distribution, a plateau is worth more than a transient, and a number read off a 
 that frame's noise. `FINDINGS.md` has several traps about consistency checks that confirm whatever
 value you feed them — re-read them before declaring a match.
 
+## 7b. Write back to the sidecar — required, not optional
+
+Before reporting, record what you learned about the *footage* so the next session does not pay for
+it again. This has the same standing as updating `playtest.md`: the analysis is not finished
+without it.
+
+- **A clip you decoded** gets a sidecar: `clipdata.py build <clip>`. This also caches its gate
+  verdict, which is what stops a `REJECT` clip ever being decoded twice.
+- **Every span you opened frames on** gets one index line, in the clip's own terms:
+
+  ```
+  python analysis/video-flight-calibration/clipdata.py note <clip> 7.8 8.4 "wing contact with cliff, sparks; camera unshaken"
+  ```
+
+**Bound it to what you actually looked at.** Do not go exploring to fill the file — the cost is
+writing down what you already know, not indexing the whole clip. Everything you did not open stays
+`UNINDEXED`, which is a true statement and a useful one.
+
+Write it in the voice of someone pointing, not concluding: *"nose drops here"*, not *"the stall
+breaks at 8.1 s"*. The index is navigational; the conclusion belongs on the `BL-NNN` entry with its
+own cited evidence.
+
+⚠ `clipdata.py` writes to the **main checkout's** `videodata/`, resolved via `git rev-parse
+--git-common-dir` — so it works unchanged from inside your worktree, and needs no junction (CLAUDE.md
+forbids those) and no path typed by hand. Each index line records the branch that wrote it, so an
+abandoned branch's observations stay traceable rather than anonymous.
+
 ## 8. Report
 
 Before reporting, re-read the capture's `CAP-nn` row in `playtest.md` §0 and check it against what
@@ -179,10 +248,11 @@ open — and Section 7 discharged it or moved every open question onto the `BL-N
 prose is stale and must be updated or removed so the row doesn't contradict the backlog it points
 to. Do not silently leave a discharged row reading as if the capture is still needed.
 
-Give the user: which files were analysed (with the gate verdict for each gauge clip), the finding
-per `BL-NNN` in plain prose with its evidence cited by timestamp or frame, what remains open, and
-the files touched. Quote real numbers and real command output — never a summary of what a run
-"should" produce.
+Give the user: which files were analysed (with the gate verdict for each gauge clip, saying whether
+it was cached or freshly run), the finding per `BL-NNN` in plain prose with its evidence cited by
+timestamp or frame, what remains open, and the files touched — including which sidecars you built or
+added index lines to, and which spans are still `UNINDEXED`. Quote real numbers and real command
+output — never a summary of what a run "should" produce.
 
 Then stop. **Do not commit** unless asked; offer it in one line. If you entered a worktree, leave it
 in place (`keep`) — mention its path and branch so the user can review and merge it.

@@ -2420,6 +2420,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Tooling, platform & docs
 
+- `BL-308` `[Tooling]` **Per-clip sidecar cache, so a CAP task decodes a clip once instead of every
+  session.** `analysis/video-flight-calibration/clipdata.py` writes one CSV per video at
+  `videodata/<repo-relative clip path>.csv` (git-ignored, **not** swept — unlike `.scratch/`, which
+  is why every session started cold). Header block carries the stamps, a digest, and a prose
+  shot-index; per-frame rows follow. **The saving is in never reading it whole**: `show` prints the
+  ~40-line header, `slice`/`where` return bounded row sets. A measured session reported the cost as
+  ~20 contact sheets and stills *plus* 50–250-line numeric dumps, mostly re-deriving what an earlier
+  session already had.
+  - ⚠ **The shot-index is NAVIGATIONAL ONLY** — it says where to look, never what is true, and is
+    never cited in this file. That keeps `/analyse-capture`'s "cite a frame you actually produced"
+    rule intact; the index only cuts 20 sheets down to 2–3 targeted stills.
+  - Only **measured** columns are stored (`pts`, `alt_ft`, `mph`, `heading_deg`, quality, shake).
+    Climb rate, γ and sim-seconds derive on demand, because k = 1.390 ± 0.021 is itself a
+    measurement — baking it into 60 files makes all of them wrong the day it moves.
+  - Staleness is **per column**, fingerprinted on the *contents* of the producing scripts (an
+    uncommitted edit changes the numbers as much as a committed one), so a `compass.py` fix does not
+    invalidate 60 altimeter traces.
+  - The `checkclip` gate verdict is cached per clip: a `REJECT` (auto head turn) stops anyone ever
+    paying to decode that clip again.
+  - Found while building it: `showinfo` and `read_frames` disagree on frame count (3,422 vs 3,427 on
+    `cap12c4`) with **no interior gap** and ~1 frame of tail. Unexplained. Rows align at the head and
+    the header stamps the worst-case timing error (~0.17 s); **do not quote a clip time finer than
+    that stamp**. Worth running down — it silently affects `run2chase.py` too.
+  - Open: measure it. Re-run a settled CAP (the CAP-14 graze pair) cold against the cache and
+    compare images read and tokens spent to the original session — and confirm the conclusion is
+    unchanged, not merely cheaper.
+
 - `BL-030` `[Cleanup]` `[Blocked: M4]` **`docs/SCOPING-M4-ai.md` still names `PlaneViewer.cs:<line>`.** The C11 final sweep
   (PLAN-planeviewer-split) re-pointed the three `docs/formats/` hits to their real post-split
   owners (`WeatherRig.Build`, `WorldEffectsFactory.BuildWorldEffectsRuntime`) but deliberately left

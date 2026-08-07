@@ -70,6 +70,15 @@ __pycache__/
 HANDOFF*.md
 playtest-notes.md
 
+# Decoded per-clip sidecars written by analysis/video-flight-calibration/clipdata.py --
+# one CSV per video, mirroring the clip's repo-relative path. Bulk mechanical extractions
+# of the original game's footage, so the HARD RULE at the top of this file applies: never
+# committed. (FINDINGS.md is the opposite case and stays tracked -- it is small, curated
+# conclusions, not a dump.) Unlike .scratch/ this is NOT swept by CleanScratch.ps1: the
+# whole point is that a decode survives the session that paid for it.
+# ⚠ PowerShell must never read or write in here -- see the encoding note in CLAUDE.md.
+/videodata/
+
 # Playtest evidence: captures staged for an at-the-controls A/B against the original,
 # one subfolder per playtest.md item (playtest/PT-23/...). These are renders of the
 # player's own game files, so they never go into version control -- see the asset rule

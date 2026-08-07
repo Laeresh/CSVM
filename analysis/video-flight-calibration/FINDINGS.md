@@ -345,6 +345,36 @@ a coincidence.
 
 ## Running it
 
+### First: is it already decoded?
+
+Everything below rebuilds a **swept** cache, which is why every session used to start cold.
+`clipdata.py` keeps the *result* instead, one CSV per clip under `videodata/` (git-ignored, not
+swept). Check there before running a single stage:
+
+```
+python analysis/video-flight-calibration/clipdata.py show  cap14graze     # ~40-line header
+python analysis/video-flight-calibration/clipdata.py where cap14graze "climb_fpm < -4000"
+python analysis/video-flight-calibration/clipdata.py slice cap14graze --from 7.5 --to 9.0
+python analysis/video-flight-calibration/clipdata.py build cap14graze     # (re)decode
+```
+
+⚠ **Never read a sidecar whole.** A 35 s VFR clip is 1,000–2,000 rows — more context than the
+per-frame dumps it replaces. `show`/`slice`/`where` are the interface; the raw file is for pandas.
+
+⚠ **Its prose shot-index is navigational only.** It says where to look, never what is true. A
+finding still cites a frame opened in the current session — see `/analyse-capture`.
+
+Stored columns are the **measured** ones only. Climb rate, γ and sim-seconds are derived on demand,
+because k is itself a measurement (the VFR/sim-clock trap below) and must not be frozen into the
+files. Staleness is tracked per column against the *contents* of the producing scripts, so a fix to
+one stage does not invalidate every clip.
+
+⚠ **`showinfo` and `read_frames` can disagree on frame count** — 3,422 vs 3,427 on `cap12c4`, with
+no interior gap and ~1 frame of tail. Unexplained (`BL-308`). Sidecars align at the head and stamp
+the worst-case timing error; `run2chase.py`'s `pts(short)[:n]` has the same exposure and no stamp.
+
+### Cold start
+
 From the repo root, in order (each writes into `.scratch/vidcal/cache/`). `.scratch` is swept
 by `CleanScratch.ps1`, so this is the cold-start order — **`extract` and `pool` first**, since
 everything after them differences against the pooled median:
