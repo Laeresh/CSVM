@@ -849,6 +849,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     by construction, not a drag measurement). Solving each of the four points above for its own
     exponent gives 3.69–4.00, which is what the fitted 3.278/2.663 piecewise curve actually
     reproduces.
+    **`CAP-31` decoded 2026-08-07 — the 1/8 case, and it clears the curve rather than condemning
+    it.** This is the capture that was owed against this bullet, and it is the discriminator
+    `PLAN-flight-drag-lift` A1 asked for: at 1/8 throttle there is an equilibrium, so the 290 → 150
+    time tests the drag curve's *shape* between x = 0.5 and 0.96 and not its scale. Gate `OK` (dial
+    dx corr +1.00, freshly run), level throughout (+0.96 ft/sim-s over 38 sim s), entry plateau
+    299.29 ± 0.13 mph. Measured **290 → 150 mph in 13.94 ± 0.29 sim s** against the model's published
+    **12.10**, i.e. the original **coasts longer than we do**. ⚠ Both alternatives `playtest.md`
+    offered were "12.1, or markedly faster"; neither happened, and the *faster* branch was the one
+    that would have made the user's unmodelled-airbrake hypothesis live. It is **not supported** —
+    the "feels like coasting" report is faithful reproduction. ⚠ **The chop is not instantaneous:**
+    deceleration builds for 3.5 sim s after the speed leaves the plateau (peaking at 244 mph, which
+    constant thrust and a monotone drag cannot produce), and the panel carries no throttle indicator,
+    so pilot key cadence and engine spool-down are indistinguishable here. That makes 13.94 an upper
+    bound on the instant chop the probe runs — estimated **12.8–13.3 sim s** two ways — while
+    **240 → 150 mph = 11.33 ± 0.24 sim s** is transient-free and needs no extrapolation. ⚠ Separately,
+    **`Probes.cs`'s `eighth-throttle-speed` target of 137.9 mph is ~2% high.** `CAP-31` is at
+    134.84 mph and still falling at its last frame, and the `accel` clip's 1/8 entry leg — re-decoded
+    the same day — is not a plateau either but a rise from 134.25 to 135.56 mph. The two bracket
+    **≈135 mph (0.449 fd) ± 1**, and our 137.87 "match" was against a number no clip supports.
+    Retargeting that row and running the model over the two new times is model work and is not done
+    here (`FINDINGS.md`, `CAP-31`).
+    ⚠ `CAP-31` says **nothing** about the three constants still open below — it is a level
+    deceleration, so it carries no stall, no climb and no knife-edge.
   - **`KnifeAlignFloor` 0.35, plus `KnifeNoseSag` 0.07 rad / `KnifeNoseRate` 0.2 rad/s (all
     `FlightModel.cs`) — still open.** `PLAN-flight-drag-lift` B12 re-keyed `liftFrac` by
     *multiplying* `wingVert` rather than displacing it, so these three constants still run on exactly
@@ -2462,8 +2485,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     the entry and stops, scoring a saving that measures the backlog rather than the cache. New
     footage cannot A/B it either — a fresh clip has no sidecar in *either* arm.
   - Open: run the A/B in `analysis/session-cost/FINDINGS.md` §"The A/B protocol". It needs a *second
-    visit* — first analyse a new capture normally (`CAP-31` is next), then ask one follow-up
-    question it did not answer, twice, cold, with and without `videodata/`. ⚠ `CleanScratch.ps1`
+    visit* — **the first visit is now done: `CAP-31` was analysed cold on 2026-08-07 and left
+    sidecars for `cap31` and `accel`** — so what remains is to ask one follow-up question it did not
+    answer, twice, cold, with and without `videodata/`. A ready one: the clip's throttle-chop
+    transient (`BL-115`) is indexed but its *shape* was never pinned down.
+    ⚠ `CleanScratch.ps1`
     before the no-cache arm or it inherits the `.npy` cache and the result understates the tool.
     Falsification is explicit: if both arms read a similar number of images, the shot-index is not
     displacing contact sheets and the saving is confined to numeric traces.

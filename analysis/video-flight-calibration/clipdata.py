@@ -159,19 +159,25 @@ def clip_relpath(name):
 
     Mirrors `extract.extract`'s own resolution: a CLIPS value is normally under
     `OriginalScreenshots/Videos`, but a clip still staged in `playtest/<ID>/` is
-    given repo-relative instead."""
+    given repo-relative instead.
+
+    ⚠ Every branch relativises against the repo root, because `ex.VID` is
+    ABSOLUTE in the one flow FINDINGS.md documents for a worktree (`CSVM_VIDEOS`
+    pointed at the main checkout's media folder, since a worktree has none of its
+    own). An earlier version returned the joined candidate as-is, so an absolute
+    `VID` made this hand back an absolute path that callers then re-joined onto
+    the root, doubling the repo name — which `build` reported as a
+    FileNotFoundError from deep inside `extract`."""
     if name in ex.CLIPS:
         path, _ = ex.clip_hud(name)
     else:
         path = name
     root = repo_root()
     cand = os.path.join(ex.VID, path)
-    if os.path.exists(os.path.join(root, cand)):
-        return cand.replace("\\", "/")
-    if os.path.exists(os.path.join(root, path)):
-        return path.replace("\\", "/")
-    if os.path.exists(path):
-        return os.path.relpath(os.path.abspath(path), root).replace("\\", "/")
+    for c in (cand, path):
+        full = c if os.path.isabs(c) else os.path.join(root, c)
+        if os.path.exists(full):
+            return os.path.relpath(os.path.abspath(full), root).replace("\\", "/")
     raise SystemExit(f"no video found for {name!r} (tried {cand!r} and {path!r})")
 
 
