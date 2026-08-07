@@ -80,7 +80,35 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
-| `CAP-20` | Throttle equilibria + a shallow held climb | Two level runs held to equilibrium at **1/4** and **1/2** throttle (the thrust-vs-throttle curve), then a **shallow, steady climb** at fixed throttle — shallow enough that the ADI does **not** saturate, i.e. keep the nose under ~+25°, and hold it 10 s+. `CAP-05`'s 50%-throttle clip failed on exactly this: it was a zoom, the ADI pinned at sky fraction 0.730, and the nose angle became unreadable | `BL-115` (`ClimbGravityScale`), `BL-092` |
+| `CAP-20` | Throttle equilibria + a shallow held climb | Two level runs held to equilibrium at **1/4** and **1/2** throttle (the thrust-vs-throttle curve), then a **shallow, steady climb** at fixed throttle — shallow enough that the ADI does **not** saturate, i.e. keep the nose under ~+25°, and hold it 10 s+. `CAP-05`'s 50%-throttle clip failed on exactly this: it was a zoom, the ADI pinned at sky fraction 0.730, and the nose angle became unreadable | `BL-115` (`ClimbGravityScale`) |
+| `CAP-31` | **8/8 → 1/8 throttle deceleration, level** | Level flight at full throttle, settled at top speed. Cut to **1/8 — not 0/8** — and hold it, **touching nothing else**, until the speed stops falling (or for 25 s+, whichever is first). Speedo and altimeter in frame throughout. The pair of numbers wanted: the **time from 290 → 150 mph**, and the **speed it finally settles at**. ⚠ The whole point is that this is 1/8 and not zero — `CAP-05`'s existing clip already covers 0/8, and the two probe entirely different things (see below) | `BL-115` |
+| `CAP-32` | A deliberately **part-deflected** pull, level entry | Full throttle, level cruise, then a held **partial** back-stick pull (clearly less than full deflection — a light, steady pull, not a tap), sustained long enough for speed to settle. Speedo, altimeter and ADI in frame. Gives a second load-factor point below `CAP-01`'s max-pull plateau, so the induced-drag exponent (`n`, `n²` or `ω²` in the pull) stops being a free choice | `BL-307` |
+| `CAP-33` | A sustained turn at a bank other than ~100° | Full throttle, full back stick, banked turn held to a settled equilibrium (speed and heading rate both flat) at a bank clearly different from `CAP-01`'s ~100° — a ~60–70° bank is the useful target. ADI, speedo, altimeter, compass tape all in frame throughout | `BL-307` |
+
+**Why `CAP-31` is worth a separate sit-down, given `CAP-05` already filmed a zero-throttle
+deceleration.** The two clips probe different things, and the difference is the whole point. At
+**0/8** there is no thrust, so the run is a pure drag probe with no equilibrium to approach — the
+refitted curve reproduces it at 6.48 s against the measured 7.04. At **1/8** there *is* an
+equilibrium, at 137.9 mph, and 150 mph sits only **8% above it** — so the approach is asymptotic and
+the 290 → 150 time becomes acutely sensitive to the shape of the drag curve between x = 0.5 and
+x = 0.96. That sensitivity is exactly what makes it a good discriminator: the equilibrium *speed* is
+already matched (we settle at 137.87 against 137.90), so the *time* tests the curve shape and
+nothing else.
+
+**The model's prediction, stated before the capture so it can fail:** 290 → 150 mph at 1/8 throttle
+takes **12.1 sim s**, settling at **137.9 mph**. If the original does that, the curve is right and
+the "feels like coasting" report is faithful reproduction rather than a bug. If the original gets
+there markedly faster while *still* settling near 137.9, then no power law fits — its drag between
+half and full speed is stronger than any curve that also matches `CAP-05`'s low-speed points — and
+the user's standing hypothesis of an unmodelled drag source (something airbrake-like on throttle
+chop) becomes the live explanation. Either outcome is a result; there is no reading of this clip
+that leaves things where they are.
+
+⚠ **Do not fly this at 0/8 by mistake.** `decel-290-150` was modelled at 1/8 for months on the
+assumption that `FINDINGS.md`'s "8/8 → 1/8" row described the throttle actually used; the clip was
+flown at 0/8, and the 12.1 s "miss" that assumption produced looked for a while like a sixth
+contradictory measurement of the original. `FINDINGS.md`'s row label is being corrected to 0/8;
+this capture is the 1/8 case that was never actually filmed.
 
 ### HUD — ammo gauge in frame
 

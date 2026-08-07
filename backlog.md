@@ -703,78 +703,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   data port. (`rof/ui_strings.json` carries "NITRO-BOOST: %4!s!" on the purchase screen and the
   buyable engines come in plain and "… nitro" variants, so the engine choice is what grants it.)
 
-- `BL-092` `[Bug]` **No induced drag: a hard pull costs us no speed.** Measured, `--dump-flight`'s `zoom-climb` row:
-  from 300 mph level at full throttle our full-pull apex arrives still doing **266 mph** where the
-  original bottomed at **104 mph**. The same signal appears in the loop the clock was measured from
-   — the original's loop spans 120–280 mph, so it bleeds most of its speed round one. Altitude gained
-  is close (1450 ft vs 1635), the energy is not. This is the sharp form of the older "the original
-  visibly bled speed in a sustained full-pitch 360°" observation, which can now be retired as vague.
-  Wanted: a load-factor term in the drag, i.e. drag rising with commanded pitch rate / lift.
-  **Unblocked and the magnitude is now measured — `CAP-01` decoded 2026-08-03.** Full throttle,
-  stick full back throughout (pilot-confirmed), Bloodhawk, ~3,200 ft. The clip holds a **+100 ± 4°
-  banked turn for 15.9 sim s** and sweeps **449.8°** of heading, so it is a true sustained
-  equilibrium, not a transient:
-
-  | segment | speed | dV/dt | altitude |
-  |---|---|---|---|
-  | cruise, pre-pull (7.6 sim s) | **298.96 ± 0.20 mph** | +0.06 mph/sim-s | +5.7 ft/sim-s |
-  | bleed-in (5.6 sim s) | 237.2 mph mean | **−7.50 mph/sim-s** | +6.6 ft/sim-s |
-  | **sustained turn (15.9 sim s)** | **222.94 ± 1.77 mph** | −0.35 mph/sim-s | −1.85 ft/sim-s |
-
-  So a max-pull turn costs the original **25% of its top speed**, held indefinitely. The pre-pull
-  cruise re-measures the full-throttle level equilibrium at 298.96 mph in a *different session* from
-  the 300.4 mph in `FINDINGS.md` — 0.5% apart, which is what makes the comparison a clean A/B.
-  **The number to fit: our drag law needs a further `+0.38 × maxThrustAccel` at this load factor.**
-  At the plateau `x = V/fd = 0.7457`, so `lerp(x², x, 0.35) = 0.6225 A` of level drag against `1.000 A`
-  of thrust; since the turn is level the gravity-along-path term is ~0, so the deficit is real
-  along-path force. The bleed-in transient gives **0.369 A** by a completely different route (from
-  its deceleration, at a different speed) against the plateau's **0.380 A** — 2.9% apart.
-  Turn geometry, for keying the term: **18.95 °/sim-s** (fit residual sd 0.39°) at 222.9 mph, i.e.
-  `V·ω = 32.96 m/s²` lateral = **1.65 × `nom_gravity` 20.0** (3.36 g at 9.81).
-  ⚠ **Traps.** (a) The candidate data ships: `player.json`'s `highGs [9,15]` / `lowGs [-6,-9]` /
-  `maxAOA 46` / `liftAOAs [5,9]` / `lift_accel_rate 0.75` are an angle-of-attack model we have no
-  equivalent of — decode that before inventing a term (see `BL-095`).
-  (b) **It must not slow the sustained pitch RATE**, which is measured flat across 120–280 mph and
-  asserted by the suite: the original bleeds speed in a pull *without* losing pitch authority, so a
-  naive "less speed ⇒ less pitch" coupling would break a passing check. **`CAP-01` sharpens this
-  and may complicate it:** at max pull the *heading* rate is only 18.95 °/sim-s, well under the
-  ~33 °/sim-s sustained pitch rate the loop gave and under the design ladder's bottom rung of 30.
-  A compass reads the nose, not the flight path, so this is not simply path-lag — either pitch
-  authority in a banked turn is lower than the loop implies, or bank/AoA geometry eats the
-  difference. Do not assume the loop's flat pitch rate transfers to a banked turn.
-  (c) **0.380 A is one point on the curve, not the curve.** Both segments sit at essentially the
-  same load factor (`V·ω` 32.96 vs 34.02 m/s², 3%), so the clip pins the magnitude at max pull and
-  says nothing about the exponent — a term in `n`, `n²` or `ω²` all fit it equally. A second
-  capture at a *deliberately part-deflected* pull is what would separate them.
-  (d) **The deficit is shape-dependent — quote the drag law with it.** Same plateau, other laws:
-  pure linear needs +0.254 A, our β = 0.35 blend +0.378 A, pure quadratic +0.444 A, pure cubic
-  +0.585 A (total drag 1.34× / 1.61× / 1.80× / 2.41× the level drag at that speed). This is the
-  same fork `FINDINGS.md` flags on λ.
-  (e) **Part of the 0.38 A may be thrust vectoring, not drag.** Thrust acts along the nose and drag
-  opposes the path; a sustained AoA of α puts `1 − cos α` of it into the deficit (α = 25° ⇒ 0.09,
-  a quarter of the total). The clip cannot measure AoA, so 0.38 A is honestly a bound on the
-  *combined* along-path deficit — which is nonetheless exactly what a load-factor term must supply.
-  (f) **A 100° bank that holds altitude is not something our lift model can do.** `liftFrac` scales
-  by `wingVert = |Attitude.Y · Up|` ≈ 0.17 there, so we would shed ~83% of gravity across the path
-  and drop; the original sinks at 1.85 ft/sim-s. Fixing drag without looking at this will not
-  reproduce the manoeuvre — see `BL-247`.
-  **Cockpit-confirmed 2026-07-30**, not just decoded from video: the user reports the original visibly
-  slows through a sustained pitch pull, and climb bleed is stronger in the original than ours, from
-  the controls — this is the felt form of the same gap, not a second finding.
-  *Playtest after fix:* once a load-factor drag term lands, fly a full-pull 360° and a sustained climb
-  and compare the bleed by feel before closing this.
-
 - `BL-095` `[Research]` **`player.json` ships a physics block we consume almost none of.** Alongside the used
   `nom_gravity 20.0` / `stall_mag 1.25`: `maxAOA 46.0`, `liftAOAs [5,9]`, `lift_accel_rate 0.75`,
   `highGs [9,15]`, `lowGs [-6,-9]`, `drag_factor 1.5`, `drag_fade_speed 40`, `turn_fade_in 10`,
   `turn_fade_out 50`, `high_speed_pitch_fade [1000,1001]`, `yaw_low_speed 0.0625`,
   `yaw_high_speed 0.17`, `yaw_fade_in 10`, `yaw_max 50`, `yaw_fade_out 400`, `groundblow_elev 400`,
   `groundblow_mag 10`, `ai_groundblow 0.5`, and the `crash` block's `bounce_factor 0.6`. Units are
-  unverified; decoding it deserves its own pass, and it is the upstream of two other entries here:
+  unverified; decoding it deserves its own pass, and it is the upstream of other entries here:
   the `yaw_*` fade set is the original's own speed-dependent yaw authority behind `BL-108`'s
   interim `eff` (`1.4 − clamp(v/fd)`, whose comment already admits it is "still not same as
-  original"), and the AoA/G block (`maxAOA`, `liftAOAs`, `highGs`/`lowGs`, `lift_accel_rate`)
-  gates `BL-092`'s induced-drag term.
+  original"), and the AoA/G block (`maxAOA`, `liftAOAs`, `highGs`/`lowGs`, `lift_accel_rate`) is
+  now partially consumed by the landed lift re-key — as a hypothesis under test, not a decode
+  (`docs/plans/PLAN-flight-drag-lift.md` B12) — with the induced-drag exponent question owned by
+  `BL-307`.
 
   **Ground blow: DECODED — settled 2026-08-07 by the design document plus `CAP-02` (five batches),
   and `CAP-02` is closed.** It is a *designed* feature, not a shipped-only one: the GDD has a
@@ -827,8 +768,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   Implementing ground blow itself is unowned follow-on work — mint a `[Feature]` item when it is
   scheduled.
 
-  Still to decode in the block: the `yaw_*` set (`BL-108`), the AoA/G set (`BL-092`), the `turn_*`
-  fades, `high_speed_pitch_fade`, `drag_fade_speed`, and `bounce_factor`'s units (`BL-172`).
+  **`turn_fade_in 10` / `turn_fade_out 50` / `highGs [9,15]` now have a measurement waiting for
+  them (2026-08-07).** The original pulls **1.6× slower when banked**: 30.16 °/sim-s round a
+  wings-level 360° loop against 18.95 °/sim-s in `CAP-01`'s 100°-banked turn, same aircraft, same
+  full back stick, same full throttle — and not a speed effect, since the loop passes through the
+  turn's 222.94 mph on its way round (`analysis/video-flight-calibration/FINDINGS.md`). Our model
+  has no such asymmetry and is 71% fast in the banked case while being right to ~11% in the loop.
+  These three fields are the only authored ones shaped like a bank/load-factor rate fade, so
+  decoding them is now the concrete next step rather than a wish. ⚠ **A lead, not a decode** — the
+  names have not been mapped to units and `maxAOA`/`liftAOAs` were consumed as a hypothesis under
+  test, not as a decode (`docs/PLAN-flight-drag-lift.md` B12). Do not implement a rate limiter from
+  the names alone — a naive speed/bank coupling that quietly costs pitch authority is exactly the
+  wrong-mechanism fix `BL-124`'s history warns about, and induced drag already supplies the
+  sustained-turn energy cost (`PLAN-flight-drag-lift` C21) without touching the rate.
+
+  Still to decode in the block: the `yaw_*` set (`BL-108`), the AoA/G and `turn_*` fade sets
+  (above; exponent on `BL-307`), `high_speed_pitch_fade`, `drag_fade_speed`, and `bounce_factor`'s
+  units (`BL-172`).
   One GDD lead for the AoA/G set: the design's "Elements not Simulated" list explicitly excludes
   red-outs, so `highGs [9,15]` / `lowGs [-6,-9]` are read as the lift model's load-factor envelope,
   not pilot-physiology thresholds.
@@ -856,12 +812,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-108` `[Research]` **The yaw `eff` speed shape** (`1.4 − clamp(v/fd)`) is an unvalidated interim model away from
   cruise: the 360° rudder turn matches the original to 4%, but that is one speed. The original's
   own version of this ships as `player.json`'s `yaw_*` fade set — see `BL-095`, which owns the
-  `player.json` decode; the two closed halves of this entry went to `BL-092` (the
+  `player.json` decode; the two closed halves of this entry are answered: the
   original's pitch rate is measured **flat** with speed, and it bleeds speed in a hard pull because
-  of induced drag rather than a falling pitch rate).
+  of induced drag (modelled in `PLAN-flight-drag-lift` C21) rather than a falling pitch rate.
 
-- `BL-115` `[Tuning]` `[Owed-playtest]` **Flight model** — `StallNoseRate`, `ClimbGravityScale`, `LowSpeedDragBlend`
-  (`KnifeAlignFloor` moved to `BL-247`).
+- `BL-115` `[Tuning]` `[Owed-playtest]` **Flight model** — `StallNoseRate`, `ClimbGravityScale`, `KnifeAlignFloor`
+  (`LowSpeedDragBlend` closed 2026-08-07 by `PLAN-flight-drag-lift` A1).
   **`PitchTune` / `YawTune` / `RollTune` / `ThrustConst` are not on this list**: all four are
   measured against the original frame by frame and asserted by the `flight-envelope` suite, so they
   are not TUNE knobs and a feel A/B cannot overrule them.
@@ -880,16 +836,43 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     there — while the *nose-drop* is at 0.25 fd, measured in the same frames of the same clip.
     `StallSpeedFrac` is now the nose-drop at **0.25** and `StallWarnFrac` the lamp at 0.30, so the
     rate/target question in this bullet is the only part of the stall model still open.
-  - **`LowSpeedDragBlend` 0.35 gives 4–6× too much drag below cruise.** The same clip is a
-    thrust-free drag probe: measured `D` is **0.36 / 1.11 / 2.82 / 3.74 m/s²** at x = 0.25 / 0.35 /
-    0.46 / 0.50 against our **7.69 / 12.13 / 17.91 / 20.25**. The ratio survives every `(g, C)` pair
-    the fit tolerates. The model-free form: engine off at 152.6 mph in a +5° climb the original
-    decelerates at **6.24 m/s²** where ours would take 21.6. This is an independent confirmation of
-    `BL-092`'s `x^2.67` — see that entry, which owns the drag-law rewrite.
-  - **`KnifeAlignFloor` 0.35** — the footage gives the observable (path lags nose by 4.8° at +3 s,
-    7.2° at +24 s, 8.3° at +36 s of knife-edge) but *not* the constant, because gravity is pulling
-    the path down over the same interval and this clip cannot separate the two. **The constant now
-    lives on `BL-247`**, which inherited the knife-edge attitude terms when `BL-124` closed.
+  - **`LowSpeedDragBlend` 0.35 gave 4–6× too much drag below cruise — closed 2026-08-07.** The same
+    clip is a thrust-free drag probe: measured `D` is **0.36 / 1.11 / 2.82 / 3.74 m/s²** at
+    x = 0.25 / 0.35 / 0.46 / 0.50 against the blend's **7.69 / 12.13 / 17.91 / 20.25**. The model-free
+    form: engine off at 152.6 mph in a +5° climb the original decelerates at **6.24 m/s²** where ours
+    took 21.6. `PLAN-flight-drag-lift` A1 replaced the blend with a piecewise power law
+    (`DragExpLow` **3.278** / `DragExpHigh` **2.663**) fitted numerically against the real integrator
+    and all four independent measurements at once (this clip, `accel-150-290`, `terminal-dive`, the
+    1/8-throttle equilibrium) — within 4% of every point above. ⚠ The `x^2.67` figure once quoted
+    here as an independent confirmation was **wrong**: it is an artifact of assuming thrust is linear
+    in throttle (`0.459^2.67 = 0.125` exactly — the exponent that makes 1/8 throttle give 1/8 thrust
+    by construction, not a drag measurement). Solving each of the four points above for its own
+    exponent gives 3.69–4.00, which is what the fitted 3.278/2.663 piecewise curve actually
+    reproduces.
+  - **`KnifeAlignFloor` 0.35, plus `KnifeNoseSag` 0.07 rad / `KnifeNoseRate` 0.2 rad/s (all
+    `FlightModel.cs`) — still open.** `PLAN-flight-drag-lift` B12 re-keyed `liftFrac` by
+    *multiplying* `wingVert` rather than displacing it, so these three constants still run on exactly
+    the quantity they were measured against — confirmed bit-identical on 10 of 11 airframes. The
+    original's knife-edge trajectory they have to reproduce (`CAP-05`, both takes, 143/300 mph,
+    agreeing to ~13%, so driven by time-since-roll-in, not airspeed):
+
+    | time since roll-in | nose | path | sink |
+    |---|---|---|---|
+    | 0–3 s | −4° step, then drifting | ≈0° | **0.5 ft/sim-s — genuinely holds altitude** |
+    | +12 s | −12.0° | −6.0° | 24 ft/sim-s |
+    | +24 s | −20.0° | −12.8° | 60 ft/sim-s |
+    | +36 s | −27.0° | −18.7° | 93 ft/sim-s, still steepening |
+
+    So the sag is an immediate ≈4° step (`KnifeNoseSag` 0.07 rad is the right magnitude) followed by
+    an **unbounded linear drift of 0.69–0.89 °/sim-s that a bounded sag cannot produce**. ⚠ **Do not
+    retune `KnifeNoseSag`/`KnifeNoseRate` to fit this — the shape is what is wrong**, not the
+    magnitude: raising the bound to 27° would destroy the first three seconds, which the original
+    gets flat and we currently get worst. For `KnifeAlignFloor`: the observable is the path lagging
+    the nose by 4.8° at +3 s / 7.2° at +24 s / 8.3° at +36 s, but `CAP-05` cannot separate that from
+    gravity pulling the path down over the same interval — do not back an align rate out of it.
+    *Playtest after fix:* (1) does the knife-edge sink feel like the original's; (2) does the
+    full-pull zoom still feel nose-heavy (the `knife`-at-zero-bank leak — pure pitch at zero bank
+    still fires this term); (3) stall-into-knife-edge recovery should not feel "doubled".
   - **`ClimbGravityScale` 0.6 is NOT settled and `CAP-05` cannot settle it.** ⚠ The fit is
     degenerate: holding `g` and refitting leaves rms flat (0.218–0.280 m/s²) over `g` = 17…25 m/s²,
     with `C` = 1.18 / **0.59** / 0.00 at `g` = 17 / 20 / 25. That `nom_gravity` 20.0 lands on
@@ -1018,8 +1001,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   monotonically as the window tightens (`FINDINGS.md`'s "a peak found by differentiating a smoothed
   signal is a smoothing artifact", in its exact form); the sweep's points are not at one operating
   point. The sweep refutes a *shape*; it does not fit a constant. (c) Don't fold this into `BL-097` — same shape of gap,
-  different axis, and pitch's own coupling to speed (`BL-092`'s induced-drag gap) makes conflating the
-  two easy to get wrong. (d) The digital-input finding is not pitch-specific — it means **`BL-097`'s
+  different axis, and pitch's own coupling to speed (induced drag, modelled in `PLAN-flight-drag-lift`
+  C21) makes conflating the two easy to get wrong. (d) The digital-input finding is not pitch-specific — it means **`BL-097`'s
   roll question has the same defect**: there is no partial aileron deflection either, so a "moderate
   roll input" clip cannot be flown, and `BL-097` should be re-read as a held-key step question too.
 
@@ -1096,105 +1079,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   slide — expect them to need re-tuning once a normal-direction impulse is added, not to survive
   unchanged.
 
-- `BL-247` `[Bug]` **The original holds altitude at 100° of bank; our `wingVert` lift model cannot** (decoded
-  out of `CAP-01`, 2026-08-03). Measured off the ADI: the Bloodhawk rolls to **+100 ± 4°** — past
-  vertical — and holds it for 15.9 sim s while altitude stays at 3217.5 ± 14.4 ft, sinking at only
-  **1.85 ft/sim-s**. `FlightModel.cs:275` scales lift by `wingVert = |Attitude.Y · Up|`, which is
-  **0.17** at that bank, so `gAcross * (1 - liftFrac)` would put ~83% of gravity across our flight
-  path and drop the aircraft out of the manoeuvre entirely.
-  This is the same `player.json` angle-of-attack block `BL-092` (a) points at — `maxAOA 46`,
-  `liftAOAs [5,9]`, `lift_accel_rate 0.75` — seen from the lift side rather than the drag side, and
-  the two should be decoded together: `CAP-01` is one clip that constrains both.
-  **This entry also owns the knife-edge attitude terms** — `KnifeNoseSag` 0.07 rad, `KnifeNoseRate`
-  0.2 rad/s and `KnifeAlignFloor` 0.35, all `FlightModel.cs` — inherited when `BL-124` closed
-  answered on 2026-08-04 (`docs/HISTORY.md`). They are the same mechanism seen from the attitude
-  side: `knife = 1 − |up·Y|` is `1 − wingVert`, so whatever replaces the lift keying has to replace
-  these at the same time. The landed behaviour is nose −4°, path −10°, sink 19.4 m/s, 634 m lost in
-  35 s, reached within a second of roll-in.
-  ⚠ **Traps.** (a) **Do not "fix" this by flattening `wingVert`.** The same quantity drives the
-  knife-edge nose-sag, whose *presence and direction* are proven by scripted test, so a
-  bank-independent lift term would reproduce this turn and break that. Whatever carries the turn
-  has to vanish by 90° *without* being a function of bank alone — pull/AoA is the obvious
-  candidate, since knife-edge is flown near neutral stick and this turn at full back.
-  **The knife-edge side had independently guessed the same fix** — "gate on actual bank instead of
-  `1−wingVert`", because `knife` grows with pure pitch at *zero* bank and a full-pull zoom therefore
-  loses ~11° of apex to a term that should not be firing at all. `CAP-01` is the first hard evidence
-  that `wingVert` alone is wrong.
-  **`CAP-05` (decoded 2026-08-04) now supplies the other end of the curve, and it confirms the
-  hypothesis in (a).** Its two knife-edge takes sit at **+94…+104° of bank — the same bank as
-  `CAP-01`, by the same ADI measure — but at near-neutral stick**, and the outcome is the opposite:
-  the aircraft falls out of the sky (nose sagging without bound, sink reaching 93 ft/sim-s, 540 m
-  lost in 38.9 sim s) while sweeping only **0.68 / 1.13 °/sim-s** of heading against `CAP-01`'s
-  **18.95** — 17–28× slower, tracked off the compass tape at peak median 0.998.
-  **So lift is not a function of bank.** A term keyed on bank alone must give these two clips the
-  same answer, and they differ by a factor of 25 in turn rate and by everything in altitude. What
-  carries the `CAP-01` turn has to be **pull / angle-of-attack**, exactly as (a) guessed — which
-  also promotes `player.json`'s `maxAOA 46` / `liftAOAs [5,9]` / `lift_accel_rate 0.75` from
-  "candidate data" to the most likely home for the term. Design the replacement against **both**
-  clips: it must hold altitude at 100° bank under full pull, and must not at 100° bank with neutral
-  stick.
-  ⚠ One caveat on the pairing: the neutral-stick reading is inferred from the footage (the turn rate
-  and the monotone nose sag both say no pull was held), not pilot-confirmed the way `CAP-01`'s "stick
-  full back throughout" is. If it turns out the knife-edge takes carried some back pressure, the
-  factor-of-25 gap narrows but does not close.
-  **The knife-edge trajectory the replacement has to reproduce** (from `CAP-05`, both takes, at
-  143 mph and 300 mph, agreeing to ~13% — so it is driven by time-since-roll-in, *not* airspeed):
-
-  | time since roll-in | nose | path | sink |
-  |---|---|---|---|
-  | 0–3 s | −4° step, then drifting | ≈0° | **0.5 ft/sim-s — it genuinely holds altitude** |
-  | +12 s | −12.0° | −6.0° | 24 ft/sim-s |
-  | +24 s | −20.0° | −12.8° | 60 ft/sim-s |
-  | +36 s | −27.0° | −18.7° | 93 ft/sim-s, still steepening |
-
-  So the sag is an immediate **≈4° step** (fitted intercepts −3.4°/−4.2°, i.e. `KnifeNoseSag` 0.07 rad
-  is the right *magnitude*) followed by an **unbounded linear drift of 0.69–0.89 °/sim-s**. ⚠ **Do
-  not retune `KnifeNoseSag`/`KnifeNoseRate` to fit this — the shape is what is wrong.** A bounded sag
-  cannot produce a linear 36-second drift, and raising the bound to 27° would destroy the first three
-  seconds, which are the part we currently get *worst* and the original gets flat. Whatever replaces
-  it must be near-flat at roll-in and unbounded after. Total altitude lost is nearly the same either
-  way (540 m original vs our 634 m over ~35 s) — the shape is the whole difference, which is why a
-  feel A/B on sink alone would have passed a wrong model.
-  For `KnifeAlignFloor`: the observable is that the path lags the nose by **4.8° at +3 s, 7.2° at
-  +24 s, 8.3° at +36 s**. ⚠ Do not back an align rate out of that — gravity is pulling the path down
-  over the same interval and `CAP-05` cannot separate the two effects.
-  *Playtest after fix:* inherited from `BL-124` and still owed, because the fix has not landed — (1)
-  does the knife-edge sink feel like the original's; (2) does the full-pull zoom still feel nose-heavy
-  (the `knife`-at-zero-bank leak above); (3) stall-into-knife-edge recovery should not feel "doubled".
-  (b) The bank is read from the ADI sky-region centroid, which measured the 360° roll and is
-  trusted for bank, but 100° is past vertical where the aircraft symbol painted on the ball is
-  least helpful — treat "past vertical" as solid and the exact 100° as ±4°.
-  Measured: the original settles at **137.9 mph** (0.459 × fd_speed) at 1/8 throttle and takes
-  **7.04 sim s** to fall 290 → 150 mph. We settle at **93 mph** (0.309, and below lift speed, so
-  ours is sinking rather than holding level) and decelerate in **2.47 s** — 2.8× too fast. Both are
-  printed by `--dump-flight` as `(not asserted)`.
-  ⚠ **Traps.** (a) **These two numbers cannot separate the two candidates.** We model thrust as
-  linear in throttle; if the original's is not, the equilibrium moves with no drag change at all.
-  Solving it as drag alone needs `x^2.67` at low speed, which contradicts the *other* reading in
-  the same data (the acceleration's fall-off near fd_speed is steeper than a single power law fits,
-  implying ~7.8 below fd against ~3.5 above — probably a soft governor near fd_speed). One more
-  measurement discriminates: a level run at 1/4 and 1/2 throttle held to equilibrium. (b) The full
-  throttle equilibrium is exactly fd_speed **for any drag blend** by construction, so it cannot
-  detect a wrong shape here — the low-throttle end is the only place the shape is observable.
-  (c) `LowSpeedDragBlend` 0.35 exists to answer a user report that a throttled-back plane barely
-  decelerated; whatever lands here must not reintroduce that.
-  **`CAP-05` (2026-08-04) breaks trap (a)'s deadlock from the drag side, with no thrust term in it
-  at all.** `CAP-05 Stall 0% Thrust no input` is a zero-thrust deceleration from 159 to 70 mph, so
-  `dV/dt` is drag plus gravity and nothing else. Measured drag is **0.36 / 1.11 / 2.82 / 3.74 m/s²**
-  at x = 0.25 / 0.35 / 0.46 / 0.50, against our blend's **7.69 / 12.13 / 17.91 / 20.25** — 4–21×
-  less, and the ratio holds across every `(g, climb-scale)` pair the fit tolerates. Model-free
-  version: engine off at 152.6 mph in a +5° climb the original decelerates at **6.24 m/s²** where
-  ours takes 21.6. Because the full-throttle equilibrium pins `D(fd) = A` (trap (b)), a curve this
-  weak at x = 0.5 and equal to `A` at x = 1 **must be much steeper than quadratic below cruise** —
-  which is `x^2.67`, arrived at here by a completely independent route. So the fork is resolved in
-  favour of drag shape: the low-speed drag really is far weaker than ours, and thrust non-linearity
-  is no longer needed to explain the 1/8-throttle equilibrium (137.9 mph ⇒ thrust(1/8) ≈ 2.8–4.5
-  m/s², against 7.5 for a linear model — still sublinear, but only mildly).
-  ⚠ Trap (c) is now the binding constraint, not a footnote: whatever replaces the blend cuts
-  low-speed drag by a large factor, which is exactly the direction of the original user report. The
-  fix has to come from the *shape* (a steeper exponent, so drag still bites approaching fd) and be
-  re-playtested against that report specifically.
-
 - `BL-271` `[Tuning]` `[Owed-playtest]` **The survivable-graze and stop laws are invented physics with player-facing
   consequences** (`FlightController.cs:271-295,1652-1672`, header "all TUNE"): attitude kick
   `GrazeKick` 1.2 rad/s, `GrazeFriction` 0.35, quadratic severity damage, "sliding below
@@ -1205,7 +1089,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   wings level, no visible attitude kick at that severity. Judge the kick and the stop rule
   against that footage and `BL-120`'s corner feel item before tuning further.
 
-- `BL-306` `[Feature]` **Engine torque is a designed, one-sided turn assist — unmodelled.** GDD §4.1.8
+- `BL-307` `[Research]` `[Blocked: CAP-32, CAP-33]` **The induced-drag exponent and the `CAP-01` turn's
+  bank are each pinned by one data point.** `PLAN-flight-drag-lift` C21 fitted `InducedDragCoef`
+  10.75 to `CAP-01`'s single sustained-turn plateau — a real fit, but the *functional form* (`sin²α`
+  vs `n` vs `n²` vs `ω²`) is a choice (Decision 8), not a measurement, because both segments of that
+  clip sit at essentially the same load factor (`V·ω` 32.96 vs 34.02 m/s², 3% apart). B12 also found
+  `CAP-01`'s own numbers are not those of a coordinated level turn: 18.95 °/sim-s at 222.94 mph is
+  `V·ω` = 32.96 m/s² lateral, which for a level turn implies **58.7°** of bank — not the **100°** the
+  ADI sky-centroid reads (trusted only to ±4°). Either the ADI reading is not bank, or the original
+  is not flying coordinated; nothing measured so far says which.
+  **What would settle it.** A capture at a *deliberately part-deflected* pull (`CAP-32`) gives a
+  second load-factor point, separating the candidate exponents. A capture of a sustained turn at a
+  bank other than ~100° (`CAP-33`) gives a second point on the bank/rate curve and an independent
+  read on the 58.7°-vs-100° question.
+  ⚠ Neither blocks anything currently asserted — `InducedDragCoef` and the landed lift re-key both
+  stand regardless of how this resolves; this is about confidence in the fit, not a known defect.
+  *Blocked on `CAP-32`, `CAP-33`* (`playtest.md` §0).
+
+- `BL-309` `[Feature]` **Engine torque is a designed, one-sided turn assist — unmodelled.** GDD §4.1.8
   ("Engine Torque", Motion Model/Flight Dynamics → Simulated Elements; restated, no prose): torque
   is simulated selectively so the player never fights it — no effect in straight-and-level flight,
   no effect turning *against* the torque direction, but turning *with* it is **faster**. The
@@ -1221,7 +1122,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Needs:* an original A/B — a full roll and a full rudder 360° in **both** directions at matched
   speed (a `CAP` when scheduled).
 
-- `BL-307` `[Feature]` **Pitch-down on aileron roll is designed — unmodelled, and measurable from footage
+- `BL-310` `[Feature]` **Pitch-down on aileron roll is designed — unmodelled, and measurable from footage
   we already hold.** GDD §4.1.5: a roll carries a "small but noticeable" nose-over effect. We model
   no roll→pitch coupling. Before inventing a constant, measure it: the decoded 360° aileron-roll
   capture (manoeuvre #4, `analysis/video-flight-calibration/`) should show the nose-over as an
@@ -1229,7 +1130,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   closes as won't-do. ⚠ Distinct from `BL-097` (the roll's spin-up *rate* shape); this is the
   cross-axis coupling.
 
-- `BL-308` `[Feature]` **Ambient turbulence is designed and absent.** GDD §4.1.10: subtle, random jostling
+- `BL-311` `[Feature]` **Ambient turbulence is designed and absent.** GDD §4.1.10: subtle, random jostling
   of the player's plane to sell moving through air — explicitly zero effect on speed, heading or
   performance. Visual-only is exactly the contract of the `PlaneShake` oscillators
   (`src/Flight/PlaneShake.cs`, visual-only roll on `ShakePivot`), so it slots in as one more
@@ -2511,6 +2412,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ Do not retune or delete `DzRadius` as dead code — it is reserved, and the 15 m is the user's.
 
 ## Tooling, platform & docs
+
+- `BL-306` `[Bug]` **`RunTests.ps1` reddens at random: four xUnit classes race over the process-wide
+  `Log.ConsoleSink`.** Caught 2026-08-07 —
+  `StuntRaceTests.FinishOrderAssignsPlacingsInFinishOrderNotEntryOrder` failed with
+  `Assert.Equal(4, lines.Count)` reading **0**, on a change that touched only comments and a
+  detail string. Reproduction attempts: **5/5 pass** for that class alone and **4/4 pass** for the
+  full 616 afterwards, so it is intermittent, not a regression — the failing run is the only one
+  seen so far.
+  **Mechanism, read off the source rather than guessed.** `Log.ConsoleSink` is a plain mutable
+  static. `StuntRaceTests:32` swaps in its own `lines.Add` collector and asserts on what it
+  collected, while `StallWarningTests:120`, `StuntGatesTests:34` and `StuntRaceTests:132` each
+  install a `_ => { }` no-op over the same static (plus `TestHostLogSink.Install()` process-wide).
+  xUnit runs distinct test **classes** in parallel and the assembly sets no `CollectionBehavior`,
+  so a concurrent class can replace the collector between its install and its assertions — after
+  which the collector receives nothing, which is exactly the observed `0` rather than a partial
+  count.
+  *Fix options, not yet chosen:* put the sink-swapping classes in one non-parallel xUnit
+  collection; or give `Log` an `AsyncLocal`/scoped sink so a swap cannot leak across threads. The
+  second is the real fix and also removes the `try/finally` restore dance from four call sites.
+  ⚠ **Traps.** (a) **Do not "fix" it by deleting the `lines.Count` assertion** — the comment above
+  it names that count as the seam the test exists to prove (one line per racer plus the completion
+  line, reaching the installed sink rather than the real `GD.Print`), so dropping it makes the test
+  pass while checking nothing. (b) A green run is not
+  evidence: it passed 4/4 immediately after failing, so any fix needs a deliberate control —
+  hammer the full suite, or force the interleaving — not one clean run (`METHOD-9`, `INSTR-6`).
+  (c) The failure lands on whatever change happens to be in flight, so it will be misattributed;
+  that is the main cost of leaving it.
 
 - `BL-030` `[Cleanup]` `[Blocked: M4]` **`docs/SCOPING-M4-ai.md` still names `PlaneViewer.cs:<line>`.** The C11 final sweep
   (PLAN-planeviewer-split) re-pointed the three `docs/formats/` hits to their real post-split
