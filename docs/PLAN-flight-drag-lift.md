@@ -339,6 +339,13 @@ for that explanation at 0/8 — 6.48 s against 7.04 — but says nothing about p
 model still takes 12.10 s to reach 150 mph at 1/8. **This is unresolved and blocks nothing in Wave
 B/C, but it must not be forgotten at D31.**
 
+**`CAP-31` opened 2026-08-07** to settle it (`playtest.md` §0): 8/8 → **1/8** level, held until the
+speed stops falling, speedo and altimeter in frame. The 1/8 case has never been filmed — `CAP-05`
+covers 0/8 only. Prediction recorded there before the capture so it can fail: **12.1 sim s** to
+150 mph, settling at **137.9**. If the original gets there markedly faster while still settling near
+137.9, no power law fits and the user's unmodelled-drag ("airbrake-like on throttle chop")
+hypothesis becomes live.
+
 **Original approach (kept for reference).**
 
 **Goal.** `FlightModel.cs` carries the fitted drag curve and a sublinear throttle→thrust curve; the

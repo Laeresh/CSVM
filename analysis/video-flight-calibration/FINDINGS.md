@@ -75,9 +75,18 @@ for the 90°-bank turn). The roll is the apples-to-apples one and involves no al
 | full throttle, 150 → 290 mph | 2.685 wall s = **3.76 sim s** |
 | terminal dive (γ ≈ 70°) | **355.2 ± 0.4 mph** = 1.182 × level max |
 | 1/8 throttle equilibrium | **137.9 mph** (0.459 × fd) |
-| 8/8 → 1/8, 290 → 150 mph | 5.03 wall s = **7.04 sim s** |
+| 8/8 → **0/8**, 290 → 150 mph, level | 5.03 wall s = **7.04 sim s** |
 | zoom climb from 300 mph level, full pull | **+1635 ft**, bottoming at 104 mph in 10.5 sim s |
 | level top speed vs altitude | flat ~300 mph from 714 m to **1988 m**, i.e. right up to the cap |
+
+⚠ **The deceleration row is 0/8, not 1/8 — corrected 2026-08-07, pilot-confirmed.** It was labelled
+"8/8 → 1/8" and read that way for months; the clip holds full throttle, cuts to **zero**, and
+touches nothing else in level flight. The distinction is not cosmetic. At 0/8 the run is a pure drag
+probe with no thrust term and no equilibrium; at 1/8 there is an equilibrium at 137.9 mph and the
+150 mph endpoint sits only 8% above it, so the time is asymptotic and behaves completely
+differently. Modelled at the wrong setting the row reads 12.1 s against this 7.04 and cannot be
+fixed by *any* power law — which briefly looked like a contradiction in the original's own data
+rather than a mis-specified scenario. The 1/8 case has never actually been filmed; it is `CAP-31`.
 
 The acceleration and the terminal dive fall out of **one** number: a max thrust acceleration of
 **A ≈ 60 m/s²** reproduces the measured acceleration *and* predicts a 70.7° terminal dive of

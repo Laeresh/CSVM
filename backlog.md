@@ -1104,10 +1104,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (b) The bank is read from the ADI sky-region centroid, which measured the 360° roll and is
   trusted for bank, but 100° is past vertical where the aircraft symbol painted on the ball is
   least helpful — treat "past vertical" as solid and the exact 100° as ±4°.
-  Measured: the original settles at **137.9 mph** (0.459 × fd_speed) at 1/8 throttle and takes
-  **7.04 sim s** to fall 290 → 150 mph. We settle at **93 mph** (0.309, and below lift speed, so
-  ours is sinking rather than holding level) and decelerate in **2.47 s** — 2.8× too fast. Both are
-  printed by `--dump-flight` as `(not asserted)`.
+  Measured: the original settles at **137.9 mph** (0.459 × fd_speed) at 1/8 throttle, and — in a
+  *separate* clip at **0/8**, not 1/8 (mislabelled here until 2026-08-07; pilot-confirmed) — takes
+  **7.04 sim s** to fall 290 → 150 mph. Both are printed by `--dump-flight` as `(not asserted)`.
+  **Largely answered 2026-08-07** by `PLAN-flight-drag-lift` A1/A2: with the refitted drag law and a
+  sublinear throttle→thrust curve we settle at **137.87 mph** holding level (was 93 and sinking) and
+  decelerate at zero throttle in **6.48 s** (was 1.86). What remains open is the **1/8**
+  deceleration, which no clip has ever filmed — the model says 12.1 s and `CAP-31` is what tests it.
   ⚠ **Traps.** (a) **These two numbers cannot separate the two candidates.** We model thrust as
   linear in throttle; if the original's is not, the equilibrium moves with no drag change at all.
   Solving it as drag alone needs `x^2.67` at low speed, which contradicts the *other* reading in
