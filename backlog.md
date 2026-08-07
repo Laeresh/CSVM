@@ -829,6 +829,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
   Still to decode in the block: the `yaw_*` set (`BL-108`), the AoA/G set (`BL-092`), the `turn_*`
   fades, `high_speed_pitch_fade`, `drag_fade_speed`, and `bounce_factor`'s units (`BL-172`).
+  One GDD lead for the AoA/G set: the design's "Elements not Simulated" list explicitly excludes
+  red-outs, so `highGs [9,15]` / `lowGs [-6,-9]` are read as the lift model's load-factor envelope,
+  not pilot-physiology thresholds.
   ⚠ **Traps.** (a) `yaw_max 50` and `yaw_fade_out 400` are not in the same units as our `eff`
   — do not map names onto our terms without deriving the units, because our yaw 360° currently
   matches the original to 4% and a mis-scaled substitution would break a passing suite check.
