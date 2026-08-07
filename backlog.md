@@ -899,6 +899,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     thrust cannot be formed. *What would settle it:* an independent `g`, or a capture with a
     **readable** nose angle in a sustained climb — i.e. a shallow, held climb at fixed throttle
     rather than a zoom.
+    **The mechanism itself is designed (GDD §4.1.1, read 2026-08-07):** gravity is pitch-angle-
+    scaled by design — minor effect near level, stronger when climbing or diving, and *reduced on
+    upward pitch relative to downward* so climbs stay flyable while dives still build speed.
+    Existence, sign and shape of the asymmetry are design intent; only the constant's value is
+    still unmeasured.
 
 - `BL-120` `[Tuning]` `[Owed-playtest]` **Collision feel** — behaviour against building corners.
 
@@ -1199,6 +1204,38 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (2026-08-04) already bounds part of this — the original's graze cost ~5% speed + sink with
   wings level, no visible attitude kick at that severity. Judge the kick and the stop rule
   against that footage and `BL-120`'s corner feel item before tuning further.
+
+- `BL-306` `[Feature]` **Engine torque is a designed, one-sided turn assist — unmodelled.** GDD §4.1.8
+  ("Engine Torque", Motion Model/Flight Dynamics → Simulated Elements; restated, no prose): torque
+  is simulated selectively so the player never fights it — no effect in straight-and-level flight,
+  no effect turning *against* the torque direction, but turning *with* it is **faster**. The
+  behaviour to look for is a directional asymmetry in roll/turn rate that only ever assists.
+  Nothing in `CSVM/src` models it, and no shipped key is known to carry it — the `dynamics` block's
+  `pitch_torque`/`roll_torque`/`rudder_torque` are control torques, not this. A hint already on
+  film: `CAP-02 Run 5`'s banked 45° right peaked at 123.8 °/s against left's 96.0 — but that pair
+  was flown for heading calibration, the right take decodes badly outside heading, and the
+  sustained rates point the other way; a lead to re-measure, not evidence. ⚠ The suite asserts
+  direction-blind rates measured from single-direction captures (yaw 360° to 4%, roll time to 3%) —
+  if the original's assist is real, those measured rates may already *contain* it for whichever
+  direction was flown. Establish the flown directions before touching any constant.
+  *Needs:* an original A/B — a full roll and a full rudder 360° in **both** directions at matched
+  speed (a `CAP` when scheduled).
+
+- `BL-307` `[Feature]` **Pitch-down on aileron roll is designed — unmodelled, and measurable from footage
+  we already hold.** GDD §4.1.5: a roll carries a "small but noticeable" nose-over effect. We model
+  no roll→pitch coupling. Before inventing a constant, measure it: the decoded 360° aileron-roll
+  capture (manoeuvre #4, `analysis/video-flight-calibration/`) should show the nose-over as an
+  altitude/ADI dip across the roll — if it cannot be read there, it is too small to model and this
+  closes as won't-do. ⚠ Distinct from `BL-097` (the roll's spin-up *rate* shape); this is the
+  cross-axis coupling.
+
+- `BL-308` `[Feature]` **Ambient turbulence is designed and absent.** GDD §4.1.10: subtle, random jostling
+  of the player's plane to sell moving through air — explicitly zero effect on speed, heading or
+  performance. Visual-only is exactly the contract of the `PlaneShake` oscillators
+  (`src/Flight/PlaneShake.cs`, visual-only roll on `ShakePivot`), so it slots in as one more
+  source. Check `shakes.zrd.json`/`docs/formats/shakes.md` for an ambient source before inventing
+  one; if no data carries it, magnitude and cadence are a TUNE against feel. Low priority; pairs
+  with `BL-266`'s open shake data questions.
 
 ## Environment & world
 
