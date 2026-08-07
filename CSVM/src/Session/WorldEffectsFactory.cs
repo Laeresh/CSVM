@@ -148,6 +148,53 @@ public sealed class WorldEffectsFactory
         Node3D rigScope) =>
         EffectCatalogue.CrashStageRoots(program, StageRootResolver(gamez, rigScope));
 
+    /// <summary>Stages the crash rig's pooled effect-template copies under
+    /// <paramref name="crashRoot"/> — one <c>poolN</c> slot container per depth level, every copy
+    /// hidden, exactly as the world-effects stage stages its templates (D31): the flake/gunhit
+    /// family carries meshes its own defs never deactivate, so an unhidden copy draws stacked at
+    /// the plane's centre for the whole session. The stage's reveal ritual (<c>Shown</c>) lights
+    /// the CALL's own copy while its effect plays. One staging for the production rig and the
+    /// <c>crash-rig-anchors</c> suite. Returns (copies staged, of which in slot 0).</summary>
+    public static (int Roots, int Slot0) StageCrashTemplates(GameZ gamez, SceneBuilder worldScene,
+        Node3D crashRoot, IReadOnlyList<string> rootNames, Utils.EffectPools pools)
+    {
+        int depth = pools.CrashDepthFor(rootNames);
+        int effectRoots = 0, slot0Roots = 0;
+        for (int slot = 0; slot < depth; slot++)
+        {
+            var pool = new Node3D { Name = $"pool{slot}" };
+            pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
+            crashRoot.AddChild(pool);
+            int at = slot;
+            int built = BuildEffectStage(gamez, worldScene, pool,
+                rootNames.Where(r => pools.CrashSlotsFor(r) > at));
+            foreach (var child in pool.GetChildren())
+            {
+                if (child is Node3D copy)
+                    copy.Visible = false;
+            }
+            if (slot == 0)
+                slot0Roots = built;
+            effectRoots += built;
+        }
+
+        return (effectRoots, slot0Roots);
+    }
+
+    /// <summary>The crash rig's sealed template stage — pooled, relocating called templates,
+    /// staged hidden like the world-effects stage (the flake/gunhit family carries meshes its own
+    /// defs never deactivate — before BL-288 pooled them here they lived in the world-effects
+    /// stage, whose reveal ritual was what kept them dark), and place-exempt for the
+    /// airframe-scoped anchor NAMEs (<see cref="EffectCatalogue.AirframeScopedAnchors"/>): the
+    /// player damage/reset defs are authored NAME=<c>player_pfighter</c>, which on the Devastator
+    /// is the aircraft's own model root, and a placing call must resolve it (the defs' node ops run
+    /// on the plane) without ever relocating it. One factory for the production rig and the
+    /// <c>crash-rig-anchors</c> suite, so the two cannot drift apart on this policy.</summary>
+    public static TemplateStage<Node3D> NewCrashTemplateStage(bool debugMotions = false) =>
+        AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true,
+            debugMotions: debugMotions,
+            placeExempt: EffectCatalogue.AirframeScopedAnchors);
+
     /// <summary>Builds the meshless <see cref="CrashAnchorNodes"/> under a 'player' root — the crash
     /// def's local anchor set (see the field remark).</summary>
     public static Node3D BuildCrashAnchorSet()
@@ -227,7 +274,7 @@ public sealed class WorldEffectsFactory
             crashRoot.Transform = controller.PlaneModel.Transform;
 
         // Effect-template roots (world gamez nodes WorldBuilder skips) — one instance per player, so
-        // splitscreen crashes do not collide. Hidden by their reset states at bind. Derived from
+        // splitscreen crashes do not collide. Staged hidden below, revealed per call. Derived from
         // the defs this rig is about to bind, against this aircraft's own scope: an anchor that
         // resolves nowhere throws EffectAnchorException naming the def and the node, which is the
         // whole point — the failure it replaces was a def silently anchored on nothing. Asked
@@ -247,20 +294,8 @@ public sealed class WorldEffectsFactory
         // templates stay single-copy in slot 0; the per-panel family gets one copy per authored
         // call anchor. The runtime's caller-slot assignment (AnimRuntime.AssignCallerSlot) pins
         // each call anchor to its own slot on the first tear.
-        int depth = _pools.CrashDepthFor(rootNames);
-        int effectRoots = 0, slot0Roots = 0;
-        for (int slot = 0; slot < depth; slot++)
-        {
-            var pool = new Node3D { Name = $"pool{slot}" };
-            pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
-            crashRoot.AddChild(pool);
-            int at = slot;
-            int built = BuildEffectStage(gamez, worldScene, pool,
-                rootNames.Where(r => _pools.CrashSlotsFor(r) > at));
-            if (slot == 0)
-                slot0Roots = built;
-            effectRoots += built;
-        }
+        var (effectRoots, slot0Roots) = StageCrashTemplates(gamez, worldScene, crashRoot,
+            rootNames, _pools);
 
         // The plane's destroyed wreck (pieceN meshes), built hidden; the crash def shows + flings it.
         var destroyed = planeBuilder.BuildDestroyed(planeName);
@@ -289,10 +324,13 @@ public sealed class WorldEffectsFactory
         // The template stage, sealed before the runtime exists: pooled,
         // because the slot containers above are what the caller-slot assignment picks a copy out of
         // (a template staged single-copy, which is most of the crash set, behaves identically);
-        // relocating its called templates onto the call site; and NOT staged hidden —
-        // crash templates hide by their own reset states, so the reveal ritual stays off here.
+        // relocating its called templates onto the call site; staged hidden with the reveal
+        // ritual on, because the flake/gunhit family's meshes have no authored deactivation (see
+        // NewCrashTemplateStage); and place-exempt for the airframe-scoped anchor NAMEs, so the
+        // Devastator's own model — the one airframe those defs' NAME resolves on — is never
+        // relocated like a template.
         var crashRuntime = AnimRuntime.ForCrashRig(
-            AnimRuntime.NewTemplateStage(pooled: true, placesCalled: true, debugMotions: _spec.DebugAnim),
+            NewCrashTemplateStage(_spec.DebugAnim),
             Rng.NewIntSeed(Rng.Crash),
             new PufferEmitterFactory(textures, _worldRoot), _spec.DebugAnim);
         // Excuses the ground splash from the momentum nudge FlightController.Crash sets on
@@ -330,7 +368,7 @@ public sealed class WorldEffectsFactory
         foreach (var unknown in _pools.UnknownCrashRoots(rootNames))
             Log.Warn("anim", $"effect pools: crash root '{unknown}' is not staged by this rig — it sizes nothing");
         if (verbose)
-            GD.Print($"data-crash: {effectRoots} effect template cop(ies) over {depth} pool slot(s) "
+            GD.Print($"data-crash: {effectRoots} effect template cop(ies) over {_pools.CrashDepthFor(rootNames)} pool slot(s) "
                      + $"+ {restPoses.Count} wreck node(s) — crash runtime bound (scoped, no auto-start)");
     }
 

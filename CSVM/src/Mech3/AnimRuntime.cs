@@ -675,7 +675,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// off the runtime because the stage exists first — it gates only the pooled caller-slot log
     /// line, so it is inert unless <paramref name="pooled"/> is on.</summary>
     public static TemplateStage<Node3D> NewTemplateStage(bool pooled = false, bool shown = false,
-        bool placesCalled = false, bool debugMotions = false)
+        bool placesCalled = false, bool debugMotions = false,
+        IEnumerable<string>? placeExempt = null)
     {
         return new TemplateStage<Node3D>(
             Node3DIdentity.Instance,
@@ -688,7 +689,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             () => debugMotions,
             pooled,
             shown,
-            placesCalled);
+            placesCalled,
+            placeExempt);
     }
 
     /// <summary>Configures (but does not bind) the world-effects runtime's construction ritual: the

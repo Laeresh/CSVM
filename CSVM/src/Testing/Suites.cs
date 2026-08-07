@@ -122,6 +122,8 @@ public static class Suites
             "a trail emitter under a rotated carrier anchors at world identity and drops puffs where it is fed", TrailWorldAnchor));
         into.Add(new TestHarness.Suite("damage-template-pool",
             "a second panel's tear takes its own pooled gimmeflakes copy and leaves the first burst flying at its site (BL-288)", DamageTemplatePool));
+        into.Add(new TestHarness.Suite("crash-rig-anchors",
+            "binding the crash rig leaves the airframe model under the controller — even the Devastator, whose model root shares the crash defs' authored NAME — and stages every pooled copy in the same reset pose", CrashRigAnchors));
     }
 
     // ---- emitter lifetime is observable with no GPU ---------------------------------------------
@@ -2129,7 +2131,7 @@ public static class Suites
             }
 
             var runtime = new AnimRuntime(
-                AnimRuntime.NewTemplateStage(pooled: true, placesCalled: true))
+                Session.WorldEffectsFactory.NewCrashTemplateStage())
             {
                 AutoStart = false,
                 ManualAdvance = true,
@@ -2188,6 +2190,150 @@ public static class Suites
     private static bool AtPoolSite(Node3D? copy, Node3D site) =>
         copy != null
         && copy.GlobalTransform.Origin.DistanceTo(site.GlobalTransform.Origin) < 0.5f;
+
+    // ---- binding the crash rig must leave the airframe under the controller --------------------
+
+    /// <summary>Builds the crash rig the way <c>WorldEffectsFactory.BuildFlightCrashRuntime</c>
+    /// does — real plane model, <c>player</c> crash root, pooled template slots, wreck — binds the
+    /// crash-rig subset, and asserts two things a live Dogfight showed going wrong. (1) The
+    /// airframe model is still a plain child of the controller, not world-pinned: the damage/reset
+    /// defs' authored NAME is <c>player_pfighter</c>, which on the Devastator is the model root
+    /// itself, and the bind's reset chain (crash reset → <c>player_destruction_reset</c> →
+    /// CALL <c>plane_reset</c>) must not relocate the aircraft the way it places effect templates.
+    /// (2) Every pooled template copy of one root shows the same number of lit meshes as its
+    /// slot-0 sibling — a copy the reset pass missed stays lit at the plane's centre for the whole
+    /// session.</summary>
+    private static void CrashRigAnchors(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            try
+            {
+                foreach (var model in new[] { "player_bhawk", "player_pfighter" })
+                {
+                    var controller = new Node3D { Name = "controller_replica" };
+                    var runtime = AnimRuntime.ForCrashRig(
+                        Session.WorldEffectsFactory.NewCrashTemplateStage(),
+                        1, new CountingEmitterFactory(), false);
+                    runtime.ManualAdvance = true;
+                    try
+                    {
+                        var builder = new PlaneBuilder(planesGamez, textures);
+                        var planeModel = builder.Build(model);
+                        controller.AddChild(planeModel);
+                        var crashRoot = new Node3D { Name = "player" };
+                        crashRoot.SetMeta(AnimRuntime.NameMeta, "player");
+                        crashRoot.Transform = planeModel.Transform;
+                        controller.AddChild(crashRoot);
+                        var rootNames = Session.WorldEffectsFactory.CrashStageRootNames(
+                            world.Session.Program, world.Gamez, controller);
+                        Session.WorldEffectsFactory.StageCrashTemplates(world.Gamez,
+                            world.Session.Builder.Scene, crashRoot, rootNames,
+                            Utils.EffectPools.Load());
+                        var copies = new List<(string Root, int Slot, Node3D Copy)>();
+                        foreach (var child in crashRoot.GetChildren())
+                        {
+                            if (child is Node3D pool && pool.HasMeta(AnimRuntime.PoolSlotMeta))
+                            {
+                                int slot = (int)pool.GetMeta(AnimRuntime.PoolSlotMeta);
+                                foreach (var staged in pool.GetChildren())
+                                {
+                                    if (staged is Node3D copy)
+                                    {
+                                        string root = copy.HasMeta(AnimRuntime.NameMeta)
+                                            ? (string)copy.GetMeta(AnimRuntime.NameMeta)
+                                            : copy.Name;
+                                        copies.Add((root, slot, copy));
+                                    }
+                                }
+                            }
+                        }
+
+                        if (builder.BuildDestroyed(model) is { } wreck)
+                        {
+                            wreck.Visible = false;
+                            crashRoot.AddChild(wreck);
+                        }
+
+                        ctx.Host.AddChild(controller);
+                        ctx.Host.AddChild(runtime);
+                        var restOrigin = planeModel.GlobalTransform.Origin;
+                        runtime.Bind(controller,
+                            world.Session.Program.Subset(Session.EffectCatalogue.CrashRigAnimNames));
+                        for (int i = 0; i < 6; i++)
+                        {
+                            runtime.Advance(1f / 60f);
+                        }
+
+                        ctx.Check(!planeModel.TopLevel,
+                            $"{model}: the airframe model is not world-pinned (TopLevel) by the rig's bind");
+                        ctx.Check(planeModel.GetParent() == controller,
+                            $"{model}: the airframe model still hangs under the controller");
+                        ctx.Check(planeModel.GlobalTransform.Origin.DistanceTo(restOrigin) < 0.5f,
+                            $"{model}: the airframe model has not moved off its rig position");
+                        // Staged dark: a copy left lit sits at the plane's centre for the whole
+                        // session (the flake/gunhit family has no authored deactivation).
+                        var lit = string.Join("; ", copies
+                            .Select(c => (c.Root, c.Slot, Lit: LitMeshCount(c.Copy)))
+                            .Where(c => c.Lit > 0)
+                            .Select(c => $"'{c.Root}' slot{c.Slot} lights {c.Lit}"));
+                        ctx.Check(lit.Length == 0,
+                            $"{model}: every staged template copy is dark after the bind{(lit.Length == 0 ? "" : $" — {lit}")}");
+
+                        // A real tear: the damage sink's own call shape. The CALLed gimmeflakes
+                        // copy must light at its pdp5 site, and the panel def's instance ending on
+                        // the AIRFRAME anchor must not drag the model into the retire-hide.
+                        runtime.Play("pdpanel5", planeModel, applyReset: false);
+                        for (int i = 0; i < 6; i++)
+                        {
+                            runtime.Advance(1f / 60f);
+                        }
+
+                        ctx.Check(copies.Any(c => c.Root == "planeflakes" && LitMeshCount(c.Copy) > 0),
+                            $"{model}: the tear's planeflakes copy is revealed while its burst flies");
+                        for (int i = 0; i < 120; i++)
+                        {
+                            runtime.Advance(1f / 60f);
+                        }
+
+                        ctx.Check(copies.All(c => c.Root != "planeflakes" || LitMeshCount(c.Copy) == 0),
+                            $"{model}: the burst's copy goes dark again once the effect is over");
+                        ctx.Check(!planeModel.TopLevel
+                                  && planeModel.GlobalTransform.Origin.DistanceTo(restOrigin) < 0.5f
+                                  && planeModel.Visible,
+                            $"{model}: the airframe model is still parented, placed and visible after the tear");
+                    }
+                    finally
+                    {
+                        runtime.Free();
+                        controller.Free();
+                    }
+                }
+            }
+            finally
+            {
+                textures.Dispose();
+            }
+        });
+    }
+
+    /// <summary>Meshes drawing under one staged template copy — visibility taken in-tree, so a
+    /// parent the reset pass switched off darkens the whole copy the way it does on screen.</summary>
+    private static int LitMeshCount(Node3D copy)
+    {
+        int n = copy is MeshInstance3D lit && lit.IsVisibleInTree() ? 1 : 0;
+        foreach (var child in copy.GetChildren())
+        {
+            if (child is Node3D sub)
+            {
+                n += LitMeshCount(sub);
+            }
+        }
+        return n;
+    }
 
     // ---- the full effects sweep as suite verdicts ----------------------------------------------
 

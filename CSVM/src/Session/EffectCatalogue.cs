@@ -149,6 +149,13 @@ public static class EffectCatalogue
     // ten it has nothing of the name and the def is simply inert. Not a staging gap: no chapter's
     // gamez carries a `player_pfighter` node at all (0 occurrences in all 8), so there is no
     // template to stage either way.
+    //
+    // ⚠ Also the crash stage's PLACE-EXEMPT set (WorldEffectsFactory.NewCrashTemplateStage): on
+    // the Devastator these names resolve to the AIRCRAFT, and a relocating CALL treating that as
+    // an effect template TopLevel-pins the whole plane at the call site — the model stays at
+    // spawn while the FlightController flies away with only the crash rig's debris. The defs'
+    // node ops still resolve and run on the model; only placement is refused
+    // (`crash-rig-anchors` suite, TemplateStageTests.PlaceAtNeverMovesAPlaceExemptCallee).
     public static readonly string[] AirframeScopedAnchors = { "player_pfighter" };
 
     /// <summary>The graze reaction's per-surface touchdown def (<c>FlightController.GrazeReaction</c>):

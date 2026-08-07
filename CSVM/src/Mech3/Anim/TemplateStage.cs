@@ -86,6 +86,15 @@ public sealed class TemplateStage<TNode>
     // and not an error. Recycles counts every one of them.
     private readonly HashSet<string> _recyclesLogged = new(StringComparer.OrdinalIgnoreCase);
 
+    // Template-root NAMEs a placing stage must never relocate: an authored NAME that is a live
+    // scene node rather than a staged template copy. The crash defs' player damage/reset family is
+    // all authored NAME=player_pfighter — on ten airframes that resolves to nothing, but on the
+    // Devastator it IS the aircraft's model root, and placing it TopLevel-pins the whole plane at
+    // the call site while the FlightController flies on with only the crash rig's debris in tow.
+    // Sealed at construction with the flags: which names are airframe-scoped is catalogue
+    // knowledge the stage's builder has and the runtime must not rediscover per call.
+    private readonly HashSet<string> _placeExempt;
+
     // A relocating CALL_ANIMATION on a pooled runtime whose anchor sits in no slot
     // container — the crash rig's pdpN panels, its wreck pieces, prop1: plane nodes, never pool
     // copies — claims a slot per (template root, anchor) here on its first call and keeps it, so
@@ -135,11 +144,15 @@ public sealed class TemplateStage<TNode>
         Func<bool> debug,
         bool pooled = false,
         bool shown = false,
-        bool placesCalled = false)
+        bool placesCalled = false,
+        IEnumerable<string>? placeExempt = null)
     {
         Pooled = pooled;
         Shown = shown;
         Places = placesCalled;
+        _placeExempt = placeExempt == null
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(placeExempt, StringComparer.OrdinalIgnoreCase);
         _identity = identity;
         _slotMarkOf = slotMarkOf;
         _isValid = isValid;
@@ -247,7 +260,8 @@ public sealed class TemplateStage<TNode>
     /// world-effects runtime's calls, whose anchors are the pooled copies themselves).</summary>
     public void AssignCallerSlot(AnimDefinition callee, TNode anchor)
     {
-        if (!Pooled || string.IsNullOrEmpty(callee.Name) || SlotOf(anchor) >= 0)
+        if (!Pooled || string.IsNullOrEmpty(callee.Name) || SlotOf(anchor) >= 0
+            || _placeExempt.Contains(callee.Name))
             return;
         if (!_callerSlots.TryGetValue(callee.Name, out var byAnchor))
             _callerSlots[callee.Name] = byAnchor = new Dictionary<TNode, int>(_identity);
@@ -359,6 +373,11 @@ public sealed class TemplateStage<TNode>
     /// frame.</summary>
     public void PlaceAt(AnimDefinition callee, TNode site, Vector3 offset)
     {
+        // An airframe-scoped NAME is a live scene node, never a staged template — placing it
+        // would TopLevel-pin the aircraft itself (see _placeExempt). Resolution is untouched:
+        // the callee's own node ops still run on that root, exactly as authored.
+        if (!string.IsNullOrEmpty(callee.Name) && _placeExempt.Contains(callee.Name))
+            return;
         var xf = _transformOf(site);
         PlaceOn(RootsFor(callee, site), xf.Origin + xf.Basis * offset, _levels(callee));
     }
@@ -399,7 +418,9 @@ public sealed class TemplateStage<TNode>
     /// being re-issued from somewhere new.</summary>
     public bool IsAt(AnimDefinition callee, TNode site, Vector3 offset)
     {
-        if (string.IsNullOrEmpty(callee.Name))
+        // A place-exempt callee is never moved (PlaceAt), so it is never "moved away" either —
+        // reporting a distance here would make every poll-idiom re-call restart it while live.
+        if (string.IsNullOrEmpty(callee.Name) || _placeExempt.Contains(callee.Name))
             return true;
         var xf = _transformOf(site);
         var want = xf.Origin + xf.Basis * offset;
@@ -456,8 +477,13 @@ public sealed class TemplateStage<TNode>
         // Either direction settles a deferred hide: a replay re-reveals this copy (its old hide is
         // about an effect that is over), and an explicit hide has already done the job.
         _hidesPending.RemoveAll(p => p.Def == def && NodesEqual(p.Anchor, anchor));
+        // On a pooled stage only STAGED COPIES (nodes in a pool slot) take the visibility write.
+        // Instance retirement runs this for every ended def, template or not — and a crash-rig
+        // def whose "root" is the aircraft's own model (the place-exempt family), the `player`
+        // crash scaffold or the wreck must never be blanked by the ritual that darkens an ended
+        // effect's copy.
         foreach (var root in RootsOf(def, anchor))
-            if (root != null && _isValid(root))
+            if (root != null && _isValid(root) && (!Pooled || SlotOf(root) >= 0))
                 _setVisible(root, visible);
         // A def whose t=0 events complete it never reaches the retire walk — Start removes such an
         // instance itself — so a reveal for one would stand for the rest of the session.
