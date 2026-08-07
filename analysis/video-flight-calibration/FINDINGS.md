@@ -518,8 +518,10 @@ files. Staleness is tracked per column against the *contents* of the producing s
 one stage does not invalidate every clip.
 
 ⚠ **`showinfo` and `read_frames` can disagree on frame count** — 3,422 vs 3,427 on `cap12c4`, with
-no interior gap and ~1 frame of tail. Unexplained (`BL-308`). Sidecars align at the head and stamp
-the worst-case timing error; `run2chase.py`'s `pts(short)[:n]` has the same exposure and no stamp.
+no interior gap and ~1 frame of tail. **Unexplained, and never run down** — found while building
+`clipdata.py`, and it outlived the item that found it. Sidecars align at the head and stamp the
+worst-case timing error (~0.17 s), so **do not quote a clip time finer than that stamp**;
+`run2chase.py`'s `pts(short)[:n]` has the same exposure and no stamp at all.
 
 ### Cold start
 

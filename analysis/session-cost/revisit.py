@@ -1,9 +1,10 @@
 """Does the sidecar cache's premise hold? Count how often a clip is REVISITED.
 
 A decode cache only pays on the SECOND visit to a clip. If the workflow analysed
-each clip once and closed the item, `BL-308` would be worth little however good
+each clip once and closed the item, the cache would be worth little however good
 the tool is. This counts, per clip on disk, how many DISTINCT sessions mention
-it across every transcript in the project.
+it across every transcript in the project. The premise held (89 of 94 clips);
+the payoff was never measured -- see FINDINGS.md.
 
 ⚠ This counts MENTIONS, not re-decodes. A clip named in `FINDINGS.md` or
 `backlog.md` is counted whenever that file is read into context, so the absolute

@@ -4,9 +4,16 @@
 on the claim that CAP tasks were burning context re-deriving what earlier sessions had already
 measured. Is that claim true, and does the cache measurably reduce it?
 
-**Answer so far: the premise holds; the payoff is unmeasured.** Clips are revisited constantly, so
-there is a second visit for a cache to serve. Whether the cache actually makes that second visit
-cheaper has **not** been tested — the protocol is below and needs footage that does not exist yet.
+**Answer: the premise holds; the payoff was never measured, and the item was closed anyway.**
+Clips are revisited constantly, so there is a second visit for a cache to serve. Whether the cache
+makes that second visit cheaper was never tested — `BL-308` was retired on 2026-08-07 by user
+decision, because the measurement work kept costing more than the answer was worth.
+
+⚠ **This file is a record, not a task list.** The cache itself stays: `clipdata.py`, `videodata/`
+and the `/analyse-capture` §2b read-first / §7b write-back steps are unchanged and still in force.
+What was dropped is the effort to prove its value. The A/B design below is kept only so that anyone
+who revives the question does not re-derive the contaminated version of it — **it is not owed
+work**, and nothing is waiting on it.
 
 ## The measured baseline: `CAP-14`, session `3ca1a395`
 
@@ -68,7 +75,7 @@ not analysed once and forgotten, so the second visit a cache exists to serve is 
 A sharper version of this measurement would count only sessions that actually invoked `extract.py`
 or `ffmpeg` on the clip; it has not been done.
 
-## The A/B protocol — not yet run
+## The A/B protocol — designed, never run
 
 ⚠ **The obvious test is contaminated and must not be used.** "Re-run a settled CAP and compare"
 fails, because a settled CAP's answer is written in `backlog.md`: a cold session reads the entry,
@@ -79,7 +86,9 @@ cache. `BL-308`'s original success criterion said exactly this and was wrong.
 store changes nothing. The cache is a second-visit instrument and has to be measured on a second
 visit.
 
-The design that works, once a capture with real open questions exists (`CAP-31` is the next one):
+The design that works, once a capture with real open questions exists. Step 1 did in fact happen —
+`CAP-31` was analysed cold on 2026-08-07 and left sidecars for `cap31` and `accel` — so a revival
+would start at step 2 with a follow-up question that session did not answer. It got no further:
 
 1. **First visit — real work, not overhead.** A cold session runs `/analyse-capture CAP-31`,
    answers its `BL-`, and writes the sidecar plus shot-index as the mandated write-back. Score for

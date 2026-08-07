@@ -1,9 +1,10 @@
 """Score a Claude Code session transcript for what a capture task actually cost.
 
-Built for `BL-308`: the sidecar cache is only worth keeping if it makes a CAP
-session measurably cheaper, and "cheaper" has to mean the same thing on both
-sides of the comparison. This reads the raw `.jsonl` and counts identically
-either way:
+Built to answer whether the per-clip sidecar cache makes a CAP session
+measurably cheaper -- a question retired unanswered on 2026-08-07 (see
+FINDINGS.md), leaving this as a general-purpose transcript scorer. "Cheaper"
+has to mean the same thing on both sides of a comparison, so this reads the raw
+`.jsonl` and counts identically either way:
 
   images    image blocks arriving in tool results (contact sheets, stills).
             The reported dominant cost of a capture session.
