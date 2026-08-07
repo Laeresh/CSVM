@@ -71,10 +71,7 @@ public static class Suites
         into.Add(new TestHarness.Suite("emitter-lifetime",
             "a destructible's death starts a PUFFER_STATE emitter and BL-236's own retirement rule stops it", EmitterLifetime));
         into.Add(new TestHarness.Suite("puffer-modes",
-            "the emitter's burst, distance-trail and sustain modes, driven through a fake renderer with no GPU", PufferModes));
-        into.Add(new TestHarness.Suite("stall-warning",
-            "the STALL lamp lights at CAP-06's 0.30 fd while the nose-drop keeps its own 0.25, and " +
-            "its blink half-period ramps 643 → 296 ms sim with airspeed (BL-148)", StallWarning));
+            "every continuous emitter path through Emit/Stop (plus Burst), driven through a fake renderer with no GPU", PufferModes));
         into.Add(new TestHarness.Suite("loadout-bind",
             "every stock loadout binds to its model with every marker resolved", LoadoutBind));
         into.Add(new TestHarness.Suite("weapons-fire",
@@ -210,7 +207,8 @@ public static class Suites
 
     // ---- E15b: the emitter's own modes, with no GPU ---------------------------------------------
 
-    /// <summary>Drives all three <see cref="Puffer"/> emission modes through a
+    /// <summary>Drives every <see cref="Puffer"/> emission path through the collapsed
+    /// <c>Emit</c>/<c>Stop</c> pair (plus the still-separate <c>Burst</c>) over a
     /// <see cref="RecordingEmitterRenderer"/> — the seam `E15b` cut so that 847 lines reachable by
     /// nothing could be reached by something. No atlas, no <c>TextureArchive</c> and no
     /// <c>MultiMesh</c> is constructed anywhere in this suite, which is also its own tripwire: if it
@@ -220,7 +218,9 @@ public static class Suites
     /// expected number below is derived from authored data: <c>flame_ball.json</c>'s
     /// <c>fierypuffer</c> (TIME_INTERVAL 0.2, NUMBER 18, LIFETIME 0.8–1.0, a six-frame
     /// TEXTURE_SEQUENCE, no COLORS) and <c>pufftrails.json</c>'s <c>smokepuffer</c>
-    /// (DISTANCE_INTERVAL 2, LIFETIME 1.5–4.5, a COLORS ramp).</para>
+    /// (DISTANCE_INTERVAL 2, LIFETIME 1.5–4.5, a COLORS ramp — and NO authored TIME_INTERVAL or
+    /// NUMBER, so its still-host cadence is the parsers' synthetic 0.1 s at one puff per batch,
+    /// asserted below because the sputter counts derive from it).</para>
     ///
     /// <para>⚠ The suite detaches <see cref="GameClock.Current"/> for its duration. <c>_Process</c>
     /// takes its dt from the clock when one is installed, and the harness's clock is a FixedStep one
@@ -247,6 +247,9 @@ public static class Suites
         ctx.Same(0, burstState.Colors.Count, $"fierypuffer has no COLORS ramp");
         ctx.Check(Mathf.IsEqualApprox(2f, trailState.DistanceInterval), $"smokepuffer DISTANCE_INTERVAL is 2 m");
         ctx.Check(trailState.Colors.Count > 0, $"smokepuffer carries a COLORS ramp");
+        ctx.Check(Mathf.IsEqualApprox(0.1f, trailState.TimeInterval),
+            $"smokepuffer authors no TIME_INTERVAL — the still-host cadence is the synthetic 0.1 s");
+        ctx.Same(1, trailState.Number, $"smokepuffer authors no NUMBER — a still-host batch is one puff");
 
         var clock = GameClock.Current;
         GameClock.Current = null;
@@ -255,7 +258,9 @@ public static class Suites
             PufferBurstMode(ctx, burstState);
             PufferSustainMode(ctx, burstState);
             PufferTrailMode(ctx, trailState);
-            PufferTrailRevive(ctx, trailState);
+            PufferStillSputter(ctx, trailState);
+            PufferStaticBurn(ctx, trailState);
+            PufferStopRevive(ctx, trailState);
         }
         finally
         {
@@ -300,9 +305,10 @@ public static class Suites
         }
     }
 
-    /// <summary>Sustain: the pool is sized to the steady-state population, emission starts on the
-    /// very first frame, a long frame cannot overrun the pool, and <c>SustainEnd</c> stops emission
-    /// without cutting the live particles short.</summary>
+    /// <summary>A TIME_INTERVAL state through <c>Emit</c>: the authored state, not the caller,
+    /// picks the sustain path; the pool is sized to the steady-state population, emission starts
+    /// on the very first frame, a long frame cannot overrun the pool, and <c>Stop</c> ends
+    /// emission without cutting the live particles short.</summary>
     private static void PufferSustainMode(TestContext ctx, PufferState state)
     {
         var gpu = new RecordingEmitterRenderer();
@@ -314,24 +320,24 @@ public static class Suites
             ctx.Same(108, gpu.Capacity, $"sustain pool = the steady-state population, not a burst count");
 
             var origin = new Vector3(0f, 800f, 0f);
-            puffer.SustainAt(origin, Basis.Identity, 1f / 60f);
+            puffer.Emit(origin, Basis.Identity, 1f / 60f);
             puffer._Process(1f / 60f);
-            ctx.Same(18, gpu.Shown, $"sustain emits on its very first frame");
+            ctx.Same(18, gpu.Shown, $"a time state through Emit sustains, on its very first frame");
             ctx.Check(gpu.LastFrame.All(p => p.Position.DistanceTo(origin) < 3f),
                 $"sustained particles spawn at the world point they are driven at, not at the node");
 
             // A 5 s hitch asks for 25 batches; the catch-up cap and the pool between them must keep
             // that inside 108. Integrated at a normal dt so the spawns are observable before they age
             // out — the cap is a spawn-path rule, and this is where it is read.
-            puffer.SustainAt(origin, Basis.Identity, 5f);
+            puffer.Emit(origin, Basis.Identity, 5f);
             puffer._Process(1f / 60f);
             ctx.Same(108, gpu.Shown, $"a 5 s hitch fills the pool and stops there");
             ctx.Check(gpu.MaxIndex == gpu.Capacity - 1,
                 $"the hitch reached the pool's last slot and no further max={gpu.MaxIndex} pool={gpu.Capacity}");
 
-            puffer.SustainEnd();
+            puffer.Stop();
             puffer._Process(0.05f);
-            ctx.Check(gpu.Shown > 0, $"SustainEnd stops emission without clearing the live particles");
+            ctx.Check(gpu.Shown > 0, $"Stop ends emission without clearing the live particles");
             for (int i = 0; i < 30; i++)  // 1.5 s, past LIFETIME_RANGE's 1 s
                 puffer._Process(0.05f);
             ctx.Same(0, gpu.Shown, $"the live particles finish their own lifetimes and the emitter goes quiet");
@@ -342,8 +348,10 @@ public static class Suites
         }
     }
 
-    /// <summary>Distance trail: the first call homes the trail rather than emitting at it, and the
-    /// per-meter emission carries its remainder across frames instead of rounding it away.</summary>
+    /// <summary>A DISTANCE_INTERVAL state through <c>Emit</c>: the first call homes the trail and
+    /// time-sputters one batch (the still-host rule — on the homing frame no motion has elapsed
+    /// yet), a moving host emits one puff per interval of actual motion with the remainder carried
+    /// across frames instead of rounded away.</summary>
     private static void PufferTrailMode(TestContext ctx, PufferState state)
     {
         var gpu = new RecordingEmitterRenderer();
@@ -353,20 +361,21 @@ public static class Suites
         {
             ctx.Same(640, gpu.Capacity, $"trail pool is the live-particle cap, not a burst count");
 
-            puffer.TrailAdvance(new Vector3(0f, 600f, 0f));
+            puffer.Emit(new Vector3(0f, 600f, 0f), Basis.Identity, 1f / 60f);
             puffer._Process(1f / 60f);
-            ctx.Same(0, gpu.Shown, $"the trail's first call homes it at the muzzle and emits nothing");
+            ctx.Same(1, gpu.Shown, $"the first call homes the trail and time-sputters one still-host batch");
 
-            // 10 m at one puff per 2 m = 5, then 3 m more = 1 puff with 1 m carried, not 2 rounded up.
-            puffer.TrailAdvance(new Vector3(10f, 600f, 0f));
+            // 10 m at one puff per 2 m = 5 (+ the homing sputter), then 3 m more = 1 puff with
+            // 1 m carried, not 2 rounded up.
+            puffer.Emit(new Vector3(10f, 600f, 0f), Basis.Identity, 1f / 60f);
             puffer._Process(1f / 60f);
-            ctx.Same(5, gpu.Shown, $"the trail emits one puff per DISTANCE_INTERVAL of motion");
+            ctx.Same(6, gpu.Shown, $"a moving host emits one puff per DISTANCE_INTERVAL of motion");
             ctx.Check(gpu.LastFrame.All(p => Mathf.IsEqualApprox(p.Alpha, 1f)),
                 $"a COLORS ramp owns the fade, so the life envelope stays out of it");
 
-            puffer.TrailAdvance(new Vector3(13f, 600f, 0f));
+            puffer.Emit(new Vector3(13f, 600f, 0f), Basis.Identity, 1f / 60f);
             puffer._Process(1f / 60f);
-            ctx.Same(6, gpu.Shown, $"a partial interval carries into the next frame instead of rounding");
+            ctx.Same(7, gpu.Shown, $"a partial interval carries into the next frame instead of rounding");
             ctx.Check(gpu.MaxIndex < gpu.Capacity, $"trail never writes past its pool max={gpu.MaxIndex} pool={gpu.Capacity}");
         }
         finally
@@ -375,33 +384,27 @@ public static class Suites
         }
     }
 
-    /// <summary>The runtime's pause + far revive, through its own adapter
-    /// (<see cref="PufferEmitter"/>): a pooled effect-template slot is teleported to each new call
-    /// site, so a distance-state emitter stopped at one blast and revived at the next must re-home
-    /// there — a kept trail origin draws a puff line across the whole jump (the rocket-explosion
-    /// ghost trails).</summary>
-    private static void PufferTrailRevive(TestContext ctx, PufferState state)
+    /// <summary>A distance state whose host stands still keeps the time cadence (the damaged
+    /// building's sputter): the authored interval can never elapse, so <c>Emit</c> with no burn
+    /// rate falls back to one batch per synthetic 0.1 s TIME_INTERVAL, at the held point.</summary>
+    private static void PufferStillSputter(TestContext ctx, PufferState state)
     {
         var gpu = new RecordingEmitterRenderer();
-        var puffer = Puffer.CreateWith(state, gpu, sustained: true);
+        var puffer = Puffer.CreateWith(state, gpu);
         ctx.Host.AddChild(puffer);
         try
         {
-            var emitter = new PufferEmitter(puffer);
+            var p0 = new Vector3(0f, 900f, 0f);
             const float dt = 1f / 60f;
-            var a = new Vector3(0f, 700f, 0f);
-            emitter.SustainAt(a, Basis.Identity, dt);                              // homes at A
-            emitter.SustainAt(a + new Vector3(10f, 0f, 0f), Basis.Identity, dt);   // trails 10 m
-            puffer._Process(dt);
-            ctx.Check(gpu.Shown > 0, $"the emitter trailed at the first site shown={gpu.Shown}");
-
-            emitter.SustainEnd();
-            var b = a + new Vector3(1000f, 0f, 0f);
-            emitter.SustainAt(b, Basis.Identity, dt);
-            puffer._Process(dt);
-            int strays = gpu.LastFrame.Count(p => p.Position.X > 20f && p.Position.X < 980f);
-            ctx.Same(0, strays,
-                $"a paused trail revived at a far site re-homes there, no puff line across the jump");
+            for (int i = 0; i < 60; i++)   // 1 s held still — no particle dies (LIFETIME ≥ 1.5 s)
+            {
+                puffer.Emit(p0, Basis.Identity, dt);
+                puffer._Process(dt);
+            }
+            ctx.Check(gpu.Shown >= 10 && gpu.Shown <= 12,
+                $"a still host sputters on the 0.1 s time cadence, ~11 batches in 1 s shown={gpu.Shown}");
+            ctx.Check(gpu.LastFrame.All(p => p.Position.DistanceTo(p0) < 3f),
+                $"the sputter stays at the held point");
         }
         finally
         {
@@ -409,99 +412,69 @@ public static class Suites
         }
     }
 
-    /// <summary>BL-148: the stall cues are TWO thresholds on one margin, and the STALL lamp's blink
-    /// is a rate ramp. Asserts the split (the lamp leads the nose-drop over a real fd band), the
-    /// blink law against both of CAP-06's measured anchors, and the integrator that carries it —
-    /// including the case the fixed-period predecessor could not express, a dwell that changes
-    /// length while the lamp is already lit.
-    ///
-    /// <para>Everything here is in SIM seconds. The capture's wall figures are 1/1.390 of these, so
-    /// a wrong-clock implementation lands ~39% short of every dwell asserted below — which is what
-    /// makes the two anchor checks able to fail rather than decorative.</para></summary>
-    private static void StallWarning(TestContext ctx)
+    /// <summary>A host that CANNOT move (the damage lab's parked plane) declares a burn rate:
+    /// <c>Emit</c> with <c>staticBurnMps</c> spends virtual metres at the held point — the
+    /// authored per-metre density, not the time cadence — through the same carry as the moving
+    /// trail.</summary>
+    private static void PufferStaticBurn(TestContext ctx, PufferState state)
     {
-        // One game frame of the original, in sim ms (33.37 ms wall × 1.390) — the resolution the
-        // lamp was measured at, and so the tolerance every period assertion gets.
-        const float gameFrameSimMs = 46.4f;
-        const float simDt = 1f / 60f;
-
-        // --- the split: one margin (StallFraction), two thresholds on it. Measured inside a single
-        // CAP-05 clip — the lamp lights 2.64 sim s / 14.9 mph before the nose breaks.
-        var model = new FlightModel(new PlaneStats());
-        float fd = model.Stats.FdSpeed;
-        void At(float frac, bool warned, bool stalled, string what)
-        {
-            model.Reset(Vector3.Zero, Basis.Identity, frac * fd, 0f);
-            bool w = model.IsStallWarned(), s = model.isStalled();
-            ctx.Check(w == warned && s == stalled,
-                $"{what}: at {frac:0.000} fd warned={w} stalled={s}, expected warned={warned} stalled={stalled}");
-        }
-
-        At(0.310f, false, false, $"above both thresholds neither cue shows");
-        At(0.299f, true, false, $"the lamp lights at 0.30 fd");
-        At(0.260f, true, false, $"mid-lead: lamp lit, nose still held");
-        At(0.249f, true, true, $"the nose drops at 0.25 fd");
-        ctx.Check(Mathf.IsEqualApprox(model.StallFraction, 0.249f, 1e-4f),
-            $"both cues read one stall margin, StallFraction={model.StallFraction:0.0000}");
-
-        // --- the blink law against CAP-06's two anchors.
-        float half030 = GaugeCluster.StallBlinkHalfPeriodS(0.30f) * 1000f;
-        float half015 = GaugeCluster.StallBlinkHalfPeriodS(0.15f) * 1000f;
-        ctx.Check(Mathf.Abs(half030 - 643f) < gameFrameSimMs,
-            $"half-period at the 0.30 fd threshold {half030:0} ms sim vs CAP-06's 643 ms");
-        ctx.Check(Mathf.Abs(half015 - 296f) < gameFrameSimMs,
-            $"half-period at 0.15 fd {half015:0} ms sim vs CAP-06's 296 ms");
-        ctx.Check(half030 > GaugeCluster.StallBlinkHalfPeriodS(0.25f) * 1000f
-                  && GaugeCluster.StallBlinkHalfPeriodS(0.25f) > GaugeCluster.StallBlinkHalfPeriodS(0.20f),
-            $"the blink shortens monotonically with stall depth");
-        ctx.Check(Mathf.IsEqualApprox(GaugeCluster.StallBlinkHalfPeriodS(0.02f), GaugeCluster.StallBlinkHalfPeriodS(0.15f)),
-            $"below the deepest measured speed the law holds instead of extrapolating to a strobe");
-
-        // --- the integrator, driven on a sim clock of its own.
-        var gauges = new GaugeCluster { StallWarning = true, StallFrac = 0.30f };
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu);
+        ctx.Host.AddChild(puffer);
         try
         {
-            ctx.Check(gauges.StallLampLit, $"the lamp is lit on the tick the warning arrives");
-            float Dwell()
+            var p0 = new Vector3(0f, 1000f, 0f);
+            // 15 m/s × 0.2 s = 3 m/call over DISTANCE_INTERVAL 2: puff counts 1,2,1,2 as the
+            // carry wraps — 6 total for 12 virtual metres. The time cadence over the same 0.8 s
+            // would be 9 batches, so the count also proves which fallback ran.
+            for (int i = 0; i < 4; i++)
             {
-                bool lit = gauges.StallLampLit;
-                int steps = 0;
-                while (gauges.StallLampLit == lit && steps < 1000)
-                {
-                    gauges.AdvanceStallLamp(simDt);
-                    steps++;
-                }
-                return steps * simDt * 1000f;
+                puffer.Emit(p0, Basis.Identity, 0.2f, staticBurnMps: 15f);
+                puffer._Process(0.2f);
             }
-
-            float dwell030 = Dwell();
-            ctx.Check(Mathf.Abs(dwell030 - 643f) < gameFrameSimMs + simDt * 1000f,
-                $"a dwell at the threshold spans {dwell030:0} ms sim (CAP-06: 643)");
-            gauges.StallFrac = 0.15f;
-            float dwell015 = Dwell();
-            ctx.Check(Mathf.Abs(dwell015 - 296f) < gameFrameSimMs + simDt * 1000f,
-                $"a dwell deep in the stall spans {dwell015:0} ms sim (CAP-06: 296) — the RATE ramped, not the brightness");
-
-            // The old fixed-period blink read the phase off a clock; this one integrates, so a speed
-            // change part-way through a dwell shortens the REMAINDER rather than jumping the lamp.
-            gauges.StallFrac = 0.30f;
-            bool before = gauges.StallLampLit;
-            gauges.AdvanceStallLamp(simDt);
-            gauges.StallFrac = 0.15f;
-            gauges.AdvanceStallLamp(simDt);
-            ctx.Check(gauges.StallLampLit == before,
-                $"a mid-dwell speed change does not toggle the lamp, only its remaining time");
-
-            // No hysteresis: the cue follows speed both ways, and clearing it re-arms the lamp lit.
-            gauges.StallWarning = false;
-            gauges.AdvanceStallLamp(simDt);
-            ctx.Check(!gauges.StallLampLit, $"the lamp is dark once the warning clears");
-            gauges.StallWarning = true;
-            ctx.Check(gauges.StallLampLit, $"re-entering the warning lights the lamp again at once");
+            ctx.Same(6, gpu.Shown, $"a declared burn rate spends virtual metres, not the time cadence");
+            ctx.Check(gpu.LastFrame.All(p => p.Position.DistanceTo(p0) < 6f),
+                $"the burn stays at the held point");
         }
         finally
         {
-            gauges.Free();
+            puffer.Free();
+        }
+    }
+
+    /// <summary>The pause + far revive, through <c>Stop</c> itself: a pooled effect-template slot
+    /// is teleported to each new call site, so a distance-state emitter stopped at one blast and
+    /// revived at the next must re-home there — a kept trail origin draws a puff line across the
+    /// whole jump (the rocket-explosion ghost trails). <c>Stop</c> ends trail AND sustain
+    /// unconditionally; the revive's first call sputters fresh at the new site.</summary>
+    private static void PufferStopRevive(TestContext ctx, PufferState state)
+    {
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu, sustained: true);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            const float dt = 1f / 60f;
+            var a = new Vector3(0f, 700f, 0f);
+            puffer.Emit(a, Basis.Identity, dt);                              // homes at A
+            puffer.Emit(a + new Vector3(10f, 0f, 0f), Basis.Identity, dt);   // trails 10 m
+            puffer._Process(dt);
+            ctx.Check(gpu.Shown > 0, $"the emitter trailed at the first site shown={gpu.Shown}");
+
+            puffer.Stop();
+            puffer.Stop();   // idempotent — a second stop is a no-op, not an error
+            var b = a + new Vector3(1000f, 0f, 0f);
+            puffer.Emit(b, Basis.Identity, dt);
+            puffer._Process(dt);
+            int strays = gpu.LastFrame.Count(p => p.Position.X > 20f && p.Position.X < 980f);
+            ctx.Same(0, strays,
+                $"a stopped trail revived at a far site re-homes there, no puff line across the jump");
+            ctx.Check(gpu.LastFrame.Any(p => p.Position.DistanceTo(b) < 3f),
+                $"the revive restarted emission fresh at the new site");
+        }
+        finally
+        {
+            puffer.Free();
         }
     }
 
@@ -748,8 +721,8 @@ public static class Suites
 
             var a = pose.Origin;
             var b = a + new Vector3(3f, 0f, -2f); // several DISTANCE_INTERVALs of motion
-            trail.TrailAdvance(a);
-            trail.TrailAdvance(b);
+            trail.Emit(a, pose.Basis, 0f);
+            trail.Emit(b, pose.Basis, 0f);
             ctx.Check(trail.LiveCount > 0, $"puffs spawned over {a.DistanceTo(b):0.0} m of motion live={trail.LiveCount}");
             ctx.Check(trail.GlobalTransform.Basis.IsEqualApprox(Basis.Identity),
                 $"emitter basis is world identity under the rotated carrier basis={trail.GlobalTransform.Basis}");
@@ -1973,17 +1946,17 @@ public static class Suites
             stage.AddChild(new Node3D { Name = name });
         }
         var fake = new CountingEmitterFactory();
-        var runtime = new AnimRuntime
+        // The two role flags AnimRuntime.ForCrashRig sets, for a definition the crash rig is the
+        // only production caller of: the splash is played by the per-player rig, which resolves
+        // and relocates its own called templates and holds no ExternalEffect, so the start and
+        // the stop meet on ONE director. Reproducing that here is the point. The relocation half
+        // is stage construction state (PLAN-template-stage A4), so it arrives sealed.
+        var runtime = new AnimRuntime(AnimRuntime.NewTemplateStage(placesCalled: asCrashRig))
         {
             AutoStart = false,
             ManualAdvance = true,
             SoundHandledElsewhere = true,
             EmitterFactory = fake,
-            // The two role flags AnimRuntime.ForCrashRig sets, for a definition the crash rig is the
-            // only production caller of: the splash is played by the per-player rig, which resolves
-            // and relocates its own called templates and holds no ExternalEffect, so the start and
-            // the stop meet on ONE director. Reproducing that here is the point.
-            PlaceCalledTemplates = asCrashRig,
             NameResolveFallback = asCrashRig,
         };
         ctx.Host.AddChild(stage);
@@ -2005,7 +1978,7 @@ public static class Suites
     /// <summary>`BL-061`: an effect's template MESHES — half of what it looks like — must be visible
     /// at the call site while it plays, and dark once it is over. The world-effects stage keeps
     /// every template ROOT hidden and the engine reveals the one a call lands on
-    /// (<c>ShowPlacedTemplates</c>), so both halves are engine rules and both are asserted here,
+    /// (<c>TemplateStage.Shown</c>), so both halves are engine rules and both are asserted here,
     /// because either alone is satisfied by a broken runtime: revealing and never hiding leaves a
     /// mesh burning at the last hit point for the session, and hiding eagerly (or never revealing)
     /// shows nothing at all.
@@ -2078,8 +2051,8 @@ public static class Suites
     /// real gamez into one pool slot, each hidden, under an effects-role runtime bound to the
     /// subset of the program the effect needs. Real geometry on purpose — this suite is about mesh
     /// VISIBILITY, which named empty nodes cannot express — and the roles are the production ones
-    /// (<c>ShowPlacedTemplates</c> + <c>PooledTemplates</c>, the pair
-    /// <c>WorldEffectsFactory</c> sets), since the reveal exists only under them.</summary>
+    /// (<c>TemplateStage.Shown</c> + <c>Pooled</c>, the pair <c>WorldEffectsFactory</c> seals into
+    /// the stage it builds), since the reveal exists only under them.</summary>
     private static void WithEffectStage(TestContext ctx, TestWorld world, string animName,
         IEnumerable<string> rootNames, System.Action<Node3D, AnimRuntime, Vector3> body)
     {
@@ -2096,11 +2069,11 @@ public static class Suites
                 root.Visible = false;
             }
 
-        var runtime = AnimRuntime.ForEffects(1, new CountingEmitterFactory(), false, 32f,
+        var runtime = AnimRuntime.ForEffects(
+            AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true),
+            1, new CountingEmitterFactory(), false, 32f,
             () => ctx.Camera.GlobalPosition);
         runtime.ManualAdvance = true;
-        runtime.ShowPlacedTemplates = true;
-        runtime.PooledTemplates = true;
         ctx.Host.AddChild(stage);
         ctx.Host.AddChild(runtime);
         try
@@ -2124,7 +2097,7 @@ public static class Suites
     /// previous anchor's burst is still flying on. Reproduces the shipped shape exactly: two of
     /// the authored `pdpanelN` menu defs each CALL <c>gimmeflakes</c> AT_NODE their own
     /// <c>pdpN</c>, on a runtime carrying the crash rig's role flags plus the pool
-    /// (<c>PooledTemplates</c> + <see cref="AnimRuntime.PoolSlotMeta"/> slot containers, the
+    /// (<c>TemplateStage.Pooled</c> + <see cref="AnimRuntime.PoolSlotMeta"/> slot containers, the
     /// shape <c>WorldEffectsFactory.BuildFlightCrashRuntime</c> builds). Before the fix the
     /// second call relocated and restarted the single shared <c>planeflakes</c> root mid-flight —
     /// the "panels fly away repeatedly, and from the wrong site" report.</summary>
@@ -2155,15 +2128,14 @@ public static class Suites
                 }
             }
 
-            var runtime = new AnimRuntime
+            var runtime = new AnimRuntime(
+                AnimRuntime.NewTemplateStage(pooled: true, placesCalled: true))
             {
                 AutoStart = false,
                 ManualAdvance = true,
                 SoundHandledElsewhere = true,
                 EmitterFactory = new CountingEmitterFactory(),
-                PlaceCalledTemplates = true,
                 NameResolveFallback = true,
-                PooledTemplates = true,
             };
             ctx.Host.AddChild(stage);
             ctx.Host.AddChild(runtime);
@@ -2256,11 +2228,11 @@ public static class Suites
                 }
 
             var point = new Vector3(150, 40, 90);
-            var runtime = AnimRuntime.ForEffects(1, new CountingEmitterFactory(), false, 32f,
+            var runtime = AnimRuntime.ForEffects(
+                AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true),
+                1, new CountingEmitterFactory(), false, 32f,
                 () => point);
             runtime.ManualAdvance = true;
-            runtime.ShowPlacedTemplates = true;
-            runtime.PooledTemplates = true;
             ctx.Host.AddChild(stage);
             ctx.Host.AddChild(runtime);
             try

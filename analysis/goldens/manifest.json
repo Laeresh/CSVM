@@ -84,8 +84,8 @@
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "67a003353413d951e8fac6b93d05e187",
-      "exercises": "a flying plane: chase camera on the sim clock, prop and control-surface animators, gauges, compass tape, weapon readout, impact reticle; frame-sensitive 34.52 %, the strongest tripwire here.",
+      "hash": "1730429f39d88745971fd20858dc5cd3",
+      "exercises": "a flying plane: chase camera on the sim clock, prop and control-surface animators, gauges, compass tape, weapon readout, impact reticle; the --hold throttle 0.5→1 jump also crosses ThrottleSlamSmoke's slam threshold, so this is the one golden carrying a live exhaust-trail Puffer; frame-sensitive 34.52 %, the strongest tripwire here.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {

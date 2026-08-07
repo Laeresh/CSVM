@@ -198,7 +198,12 @@ public sealed class WorldSession
         // Options.TexturesOutliveBuild.
         var lights = new WorldLights();
         s.Lights = lights;
-        var animRuntime = new AnimRuntime
+        // The world runtime's template stage, sealed at construction (PLAN-template-stage A4): the
+        // ambient world pools nothing and stages nothing hidden — its templates ARE the world's own
+        // nodes — and only the animation debugger's quiet stage relocates a called template onto the
+        // call site, which is why that one flag is an Option rather than a constant.
+        var animRuntime = new AnimRuntime(AnimRuntime.NewTemplateStage(
+            placesCalled: o.PlacesCalledTemplates, debugMotions: o.DebugAnim))
         {
             DebugMotions = o.DebugAnim,
             QualityLod = o.AnimLod,
@@ -426,6 +431,15 @@ public sealed class WorldSession
         /// lab sets false for its quiet stage and runs them on demand through
         /// <see cref="AnimRuntime.StartAmbient"/>.</summary>
         public bool AutoStart { get; init; } = true;
+
+        /// <summary>Whether a CALL_ANIMATION relocates its callee's effect-template root onto the
+        /// call site (<see cref="Anim.TemplateStage{TNode}.Places"/>). False — the default — in
+        /// every game/viewer/flight session, where the ambient world boot must stay byte-identical;
+        /// the animation lab sets true so the templates it stages in front of the camera play at the
+        /// call site instead of at their gamez origin. Read once, at construction: the flag is
+        /// sealed onto the runtime's template stage (PLAN-template-stage A4), not writable
+        /// afterwards, which is what makes the old post-<c>Bind</c> write unexpressible.</summary>
+        public bool PlacesCalledTemplates { get; init; }
 
         /// <summary>Pins the runtime's RNG for a reproducible run (see
         /// <see cref="AnimRuntime.Seed"/>). Null — the default — leaves it unseeded: the game.</summary>

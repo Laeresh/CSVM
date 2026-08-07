@@ -45,6 +45,13 @@ public static class Config
     private static readonly HashSet<string> _warnedMissing = new(StringComparer.Ordinal);
     private static readonly HashSet<string> _warnedType = new(StringComparer.Ordinal);
 
+    // Guards _registry and the warn-once sets. xunit runs test classes in parallel, and an
+    // unguarded check-then-act on these shared statics tears — BL-302's second victim was this
+    // registry's SortedDictionary throwing "duplicate key" from an indexer assignment, which is
+    // impossible single-threaded. _values/_doc stay unguarded on purpose: they are written only
+    // by Load/ClearOverrides, which nothing calls concurrently with reads.
+    private static readonly object Gate = new();
+
     private static JsonDocument? _doc;
     private static bool _fileLoaded;   // a config.json existed and parsed (vs. pure-defaults run)
 
@@ -65,8 +72,11 @@ public static class Config
         _doc?.Dispose();
         _doc = null;
         _fileLoaded = false;
-        _warnedMissing.Clear();
-        _warnedType.Clear();
+        lock (Gate)
+        {
+            _warnedMissing.Clear();
+            _warnedType.Clear();
+        }
     }
 
     /// <summary>Parse <paramref name="resPath"/> into the override dictionary. Missing file → no
@@ -78,8 +88,11 @@ public static class Config
         _doc?.Dispose();
         _doc = null;
         _fileLoaded = false;
-        _warnedMissing.Clear();
-        _warnedType.Clear();
+        lock (Gate)
+        {
+            _warnedMissing.Clear();
+            _warnedType.Clear();
+        }
 
         string path = ProjectSettings.GlobalizePath(resPath);
         if (!File.Exists(path))
@@ -183,11 +196,14 @@ public static class Config
     /// been exercised (the startup registry warmup does this), so the registry is populated.</summary>
     public static void ReportOrphans()
     {
-        foreach (string key in _values.Keys)
+        lock (Gate)
         {
-            if (!_registry.ContainsKey(key))
+            foreach (string key in _values.Keys)
             {
-                Log.Warn("core", $"config key matches no tunable key={key} — ignored (typo? wrong block?)");
+                if (!_registry.ContainsKey(key))
+                {
+                    Log.Warn("core", $"config key matches no tunable key={key} — ignored (typo? wrong block?)");
+                }
             }
         }
     }
@@ -247,20 +263,23 @@ public static class Config
     {
         // Rebuild the nested object from the dot-keyed registry.
         var root = new SortedDictionary<string, object>(StringComparer.Ordinal);
-        foreach (var (key, def) in _registry)
+        lock (Gate)
         {
-            string[] parts = key.Split('.');
-            var node = root;
-            for (int i = 0; i < parts.Length - 1; i++)
+            foreach (var (key, def) in _registry)
             {
-                if (!node.TryGetValue(parts[i], out object? child) || child is not SortedDictionary<string, object> dict)
+                string[] parts = key.Split('.');
+                var node = root;
+                for (int i = 0; i < parts.Length - 1; i++)
                 {
-                    dict = new SortedDictionary<string, object>(StringComparer.Ordinal);
-                    node[parts[i]] = dict;
+                    if (!node.TryGetValue(parts[i], out object? child) || child is not SortedDictionary<string, object> dict)
+                    {
+                        dict = new SortedDictionary<string, object>(StringComparer.Ordinal);
+                        node[parts[i]] = dict;
+                    }
+                    node = dict;
                 }
-                node = dict;
+                node[parts[^1]] = def;
             }
-            node[parts[^1]] = def;
         }
 
         string? dir = Path.GetDirectoryName(path);
@@ -291,9 +310,12 @@ public static class Config
     // Record the key's default the first time it is queried (for the template dump).
     private static void Register(string key, object fallback)
     {
-        if (!_registry.ContainsKey(key))
+        lock (Gate)
         {
-            _registry[key] = fallback;
+            if (!_registry.ContainsKey(key))
+            {
+                _registry[key] = fallback;
+            }
         }
     }
 
@@ -308,7 +330,12 @@ public static class Config
         // Info, not Warn: a sparse config.json is the intended shape, so most of these misses are
         // expected and must not read as problems. (Log.Warn is plain text either way — the reason
         // this was never GD.PushWarning is that Godot appends a useless C# stack trace to each.)
-        if (_fileLoaded && _warnedMissing.Add(key))
+        bool firstMiss;
+        lock (Gate)
+        {
+            firstMiss = _fileLoaded && _warnedMissing.Add(key);
+        }
+        if (firstMiss)
         {
             Log.Info("core", $"config key absent key={key} — using its in-code default");
         }
@@ -317,7 +344,12 @@ public static class Config
 
     private static void WarnType(string key, string want, JsonValueKind got)
     {
-        if (_warnedType.Add(key))
+        bool first;
+        lock (Gate)
+        {
+            first = _warnedType.Add(key);
+        }
+        if (first)
         {
             Log.Warn("core", $"config key is wrong-typed key={key} got={got} want={want} — using its in-code default");
         }

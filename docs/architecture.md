@@ -41,6 +41,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/Clutter.cs` — stamps interp.json clutter templates onto matching-textured terrain: sprites, plus C2/C5's solid 3D city blocks.
 - `src/Mech3/FogVolumes.cs` — the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
 - `src/Mech3/Zrdr.cs` — zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's list.
+- `src/Mech3/AiNets.cs` — the chapter AI patrol nets: `ne0NNNNN` waypoint graphs + the `neindex` id→name table, raw tags/trailer included.
 - `src/Mech3/Messages.cs` — the game's localized string table: the `messages.json` key→value map behind every `MSG_*` key.
 - `src/Mech3/MarkerRig.cs` — a plane's firepoint/pylon/target rig from planes.zbd: plane-frame positions + co-located mounts; feeds `--dump-markers`.
 - `src/Mech3/CompiledAnim.cs` — reader for the compiled `cam_anim`/`mis_anim` archives: anim defs, sequences/events, lazy SI-script pool.
@@ -134,6 +135,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/MeshLab.cs` — the geometry/shading lab (M): normal lines, smoothing seams, cull/normal overrides; on the parked plane, or on the selection.
 - `src/UI/ColliderOverlay.cs` — the collider wireframes (C): every built collision shape drawn, coloured by owner class; needs `--collision` outside flight.
 - `src/UI/ClassOverlay.cs` — the colour-by-class overlay (X): every drawn mesh tinted destructible/facade/clutter/scenery, a findable-targets view.
+- `src/UI/AiNetsOverlay.cs` — the AI patrol-net overlay (F13, `--debug-ainets`): the chapter's nets as coloured graphs with labels + census log.
 - `src/UI/WeaponLab.cs` — the weapon lab panel (B): steppers that arm the held plane's live loadout, click-to-place on a real world surface. Fires nothing itself.
 - `src/UI/PanelFocus.cs` — the one-line rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
@@ -194,7 +196,7 @@ clusters they delegate to.
 - `src/SessionPaths.cs` — resolves extracted-data paths (per-chapter gamez/texture/zrdr; `PreferUnzipped`); extracted from `GameSession`.
 - `src/SessionSpec.cs` — the launch args as one immutable, engine-free value: `Parse` parses **and** resolves (closed `SessionMode`, `--det` bundle, placement, `BuildsCollision`), plus the pure arg parsers.
 
-- `CSVM.Tests/` — the xUnit project (`dotnet test`): engine-free reader units on hand-authored fixtures + `extracted/` golden counts, skipped when absent; plus, since `PLAN-engine-free-suites.md` A3, the six former in-engine suites moved here as `Probes.*`-calling facts.
+- `CSVM.Tests/` — the xUnit project (`dotnet test`): engine-free reader units on hand-authored fixtures + `extracted/` golden counts, skipped when absent; plus, since `PLAN-engine-free-suites.md` (A3/A4/B11), eight former in-engine suites moved here as `Probes.*`/plain-static/`StuntMission`/`GaugeCluster` facts.
 
 ## Cross-module conventions
 
@@ -478,6 +480,7 @@ plus a UV-clamp variant from `SceneBuilder.UvsWithinUnitSquare` over the kind's 
 
 ## src/Mech3/Zrdr.cs
 Zrdr extraction reader (zip or unpacked dir): `LoadFile`, content-sniffing `LoadMatchingFiles`,
+name-predicate `LoadFilesNamed` (for families with nothing to sniff, e.g. the `ne0*` nets),
 and `ZrdrDict`, the key/[values…] view over a reader's alternating list.
 ⚠ `LoadFile` accepts both entry namings — v0.6.1 writes `X.json`, the fork writes `X.zrd.json` —
   in both the zip and directory branches.
@@ -485,6 +488,16 @@ and `ZrdrDict`, the key/[values…] view over a reader's alternating list.
   walks the raw lists instead.
 ⚠ It also DROPS an unkeyed value in the root list. `FogVolumeSpec.Parse` walks by hand for that
   reason — three chapters' `fogvol.zrd` carries its clutter block with no key in front of it.
+
+## src/Mech3/AiNets.cs
+The chapter patrol-net reader (`docs/formats/ai-nets.md`): every `ne0NNNNN.zrd.json` in a chapter
+zrdr scope joined with its `neindex.zrd.json` name — nodes, the explicit edge list, raw per-node
+tags, and the trailer attach target. First consumer: `UI/AiNetsOverlay.cs`; M4's net-following
+(B5/F17) is the intended second. Golden counts asserted in `CSVM.Tests/AiNetsTests.cs`.
+⚠ A net is a GRAPH: only `Edges` is connectivity — node order is not a route, loops are one
+  authoring choice. Tags and the trailer are exposed raw, never interpreted (undecoded).
+⚠ The `neindex` first element is NOT the pair count (C1: 46 over 29 pairs) — parse pairs to the
+  list's end.
 
 ## src/Mech3/FogVolumes.cs
 The chapter's `fogvol.zrd` (`FogVolumeSpec.Load`/`Parse`) plus `VolumesOf`, the gamez census of
@@ -624,7 +637,11 @@ which trails ~25 m behind). Also hosts the destructible-damage entries (`DamageA
 `FlightController.CollideDamageSink`) and the world-effects runtime (`PlayEffectAt` over a hidden
 template stage). Second instances serve per-player crash rigs and the world-effects closure, built
 unbound via the `ForEffects`/`ForCrashRig` static factories (construction-only; the caller still
-`Bind`s + adds the returned node) — the world runtime stays a plain inline `new AnimRuntime`. The
+`Bind`s + adds the returned node) — the world runtime stays a plain inline `new AnimRuntime`. Every
+construction site hands over a **sealed `TemplateStage`** as the constructor argument
+(`AnimRuntime.NewTemplateStage(pooled, shown, placesCalled, debugMotions)` is the one place the
+Godot adapter hooks are spelled); the parameterless ctor takes an inert all-off one, which is what
+the ambient world and the plain testing runtimes get. The
 sequence interpreter (event clock / LOOP / IF-ELSEIF) lives in `SequenceRunner.cs` and the live
 motions in `Anim/MotionSet.cs` (`Motions`); this class
 satisfies its `ISequenceHost` seam by explicit interface implementation (`Dispatch`,
@@ -643,30 +660,39 @@ anchoring, twin narrowing, root lift, the bind census and the three-tier scope o
 staged templates reuse node names, `fly_trail1`-`5` is `he_trails` AND `ap_trails` AND
 `carnage_trails`) — is resolver-owned (`NameResolver` — read its entry): this class resolves only
 through its `Resolve`/`ResolveScoped`/`Anchors` forwards, hands its
-`NameResolveFallback`/`SuppressRootLift`/`ReportResolution` flags over at `Bind`, and supplies the
-pool's per-slot root list as the resolver's `ownRootsOf` constructor hook (`TemplateRootsFor` —
-the slot arithmetic never leaves this class).
+`NameResolveFallback`/`SuppressRootLift`/`ReportResolution` flags over at `Bind`, and wires the
+pool's per-slot root list as the resolver's `ownRootsOf` hook (`TemplateStage.RootsFor` — the
+slot arithmetic lives on the stage, PLAN-template-stage A2, and the resolver still sees only a
+resolved root list).
 Puffer emitters live in `Anim/EmitterDirector.cs` (`Emitters`) — read its entry before touching
 anything emitter-shaped. This class keeps only the dispatch case, the `at_node` sentinel resolution
 and the `active_state` read, then forwards; `DefScopedPufferKeys` is the one role flag it still
 carries, read once when the director is built. `OBJECT_ACTIVE_STATE … false` forwards to
 `Emitters.EndOn` with `sparingSameInstant: !instant` — a PLAYED deactivation spares an emitter
 started in its own instant (`BL-229`, the rule and its census live on the director), a RESET_STATE
-one does not. Effect templates are **pooled** on the effects runtime (`PooledTemplates`, `BL-225`): the stage holds
+one does not. Effect templates are **pooled** on the effects runtime (`TemplateStage.Pooled`,
+`BL-225`): the stage holds
 `WorldEffectsFactory.EffectPoolSlots` copies of each template, one per slot container carrying
-`PoolSlotMeta`, and each `PlayEffectAt` takes the next slot (`NextPooledAnchors`, cursor per template
-ROOT name, not per anim name — two defs on one root must not both be handed slot 0). Everything
-template-shaped is then slot-scoped through `TemplateRootsFor(def, node)`: which copy is placed
-(`PlaceTemplateAt`/`PlaceTemplateOn`), revealed (`ShowTemplate`), tested for a move (`TemplateIsAt`)
-and searched for the def's own names (the resolver's own-root tier, which `TemplateRootsFor` feeds
-as its `ownRootsOf` hook) — all off the slot the CALL's anchor sits in, so a nested CALL_ANIMATION
-stays inside its caller's copy instead of driving all four `fly_trail*` sets. The cursor wraps: past the pool a call recycles a still-live slot, which is the
-old shared-template collapse, counted in `PoolRecycles` and named once per effect.
+`PoolSlotMeta`, and each `PlayEffectAt` takes the next slot (`TemplateStage.TakeNextSlot`, cursor
+per template ROOT name, not per anim name — two defs on one root must not both be handed slot 0).
+The slot arithmetic, placement, copy-identity questions and the three template policy flags live in
+`Anim/TemplateStage.cs`
+(PLAN-template-stage A2–A4 — read its entry, which carries the Decision-16 reinterpretation): this
+class supplies the engine and runtime hooks and calls through; it reads exactly one of the flags
+itself (`Places`, in the `CALL_ANIMATION` arm's relocation test) and owns none of them. Everything
+template-shaped is slot-scoped through `TemplateStage.RootsFor(def, node)`: which copy is placed
+(`PlaceAt`/`PlaceOn`), revealed (`Reveal`), tested for a move
+(`IsAt`) and searched for the def's own names (the resolver's own-root tier, which `RootsFor`
+feeds as its `ownRootsOf` hook) — all off the slot the CALL's anchor sits in, so a nested
+CALL_ANIMATION stays inside its caller's copy instead of driving all four `fly_trail*` sets. The
+cursor wraps: past the pool a call recycles a still-live slot, which is the
+old shared-template collapse, counted in `PoolRecycles` (a forward of `TemplateStage.Recycles`)
+and named once per effect.
 The pool is NOT a third keying scheme (the rule and its ⚠ live on `EmitterDirector`); distinct
-emitters per call fall out of the host node being a different node per slot, and `SlotOf` /
-`NextPooledAnchors` / `PlaceTemplateAt` stay here — the director is handed already-resolved host and
-anchor nodes.
-⚠ `PlaceTemplateOn` sets `TopLevel = true` on a placed root before writing its `GlobalTransform`
+emitters per call fall out of the host node being a different node per slot, and the director is
+handed already-resolved host and anchor nodes — the property PLAN-deepening Decision 16 pinned,
+preserved by construction across the stage extraction (see `TemplateStage.cs`'s entry).
+⚠ The stage's `PlaceOn` write (`AnimRuntime.PlaceNodeAt`) sets `TopLevel = true` on a placed root before writing its `GlobalTransform`
   (`BL-288`, one half of the fix — the pool paragraph below is the other) — a staged root stays parented
   where it was built (the per-player crash rig's roots sit under the controller subtree,
   `WorldEffectsFactory.BuildFlightCrashRuntime`), so without `TopLevel` a still-flying caller drags
@@ -681,7 +707,7 @@ anchor nodes.
   (`WorldEffectsFactory.BuildFlightCrashRuntime`'s own note) — the fourth bite of the
   plane-parented-effect trap: a template that is supposed to lie flat on the struck surface (the
   water splash's spray column/rings, the dirt burst's dust plane) instead sprayed off at the plane's
-  impact angle (`BL-292`). `PlaceTemplateOn`'s `level` parameter — driven by
+  impact angle (`BL-292`). `TemplateStage.PlaceOn`'s `level` parameter — driven by
   `LevelPlacedTemplateNames`, a named allowlist keyed by `AnimName ?? Name` — overwrites the placed
   root's basis to `Basis.Identity` for exactly those defs. **Named, not blanket**: an earlier,
   whole-runtime version of this flag also releveled `call_crash_trails`' flying debris chunks
@@ -695,14 +721,14 @@ anchor nodes.
 The crash rig pools its templates too (`BL-288`), with a twist the world pool does not need:
 its calls anchor on the PLANE's own nodes (each `pdpanelN` tear CALLs `gimmeflakes` onto its own
 `pdpN`; the crash defs CALL `large_firetrail` onto their four `pieceN`), which sit in no slot
-container — so slot choice cannot be read off the anchor's ancestry. `AssignCallerSlot` (invoked
-from the CALL dispatch, before the placed-where test) pins each (template root, call anchor) pair
-to its own slot on the anchor's first call, sticky for the session: a re-tear restarts ITS OWN
-copy, and `TemplateRootsFor` consults the claim (`AssignedCallerSlot`) whenever the ancestry walk
+container — so slot choice cannot be read off the anchor's ancestry. `TemplateStage.AssignCallerSlot`
+(invoked from the CALL dispatch, before the placed-where test) pins each (template root, call
+anchor) pair to its own slot on the anchor's first call, sticky for the session: a re-tear
+restarts ITS OWN copy, and `RootsFor` consults the claim whenever the ancestry walk
 comes back empty. Sizes are the AUTHORED distinct-anchor counts per root
 (`effect_pools.json`'s crash section — not TUNE; re-count only if the shared damage-stage defs
-change), and more anchors than copies wrap by `TemplateRootsFor`'s modulo, counted in
-`PoolRecycles`. Before this, `TemplateRootsFor` returned the same single node for every caller,
+change), and more anchors than copies wrap by `RootsFor`'s modulo, counted in
+`PoolRecycles`. Before this, the root lookup returned the same single node for every caller,
 and a second panel's `CALL_ANIMATION` found `IsLive(target, startAnchor)` false (keyed on the
 FIRST anchor), teleported the shared root to the new site and restarted it from rest pose —
 discarding the first burst mid-flight, leaving the stale instance under the old anchor alive, and
@@ -711,9 +737,9 @@ letting `MotionSet`'s per-`(Target,Channel)` eviction pick the winner: the user-
 mechanism (`planeflakes`/`planeflakes2`, `short_firetrail`, `large_firetrail`,
 `small_injure_fireball`, `flame_ball_02`, `yellow_spark_02`) and is pooled by the same fix; the
 `damage-template-pool` suite holds the regression shape (two panel defs, one template, two
-copies). `ForCrashRig` still sets neither flag itself — `BuildFlightCrashRuntime` sets
-`PooledTemplates` beside the slot containers it builds, mirroring where the world side sets its
-pair; `ShowPlacedTemplates` stays off (crash templates hide by their own reset states).
+copies). `ForCrashRig` bakes none of the template flags itself — `BuildFlightCrashRuntime` builds
+the stage `Pooled`+`Places` beside the slot containers it builds and hands it in, mirroring the
+world side; `Shown` stays off (crash templates hide by their own reset states).
 `PlayEffectAt(name, point, inputNode, ttl)` carries
 the call-site node: it resolves the callee's INPUT_NODE (the sputter emits on, and its `NodeActive`
 loop gate reads, the damaged object); `ttl` overrides `EffectTtl` per call (a gun hit passes 0.3 s,
@@ -728,25 +754,14 @@ is the stop for a def carrying an `ACTIVE_STATE 1` and neither authored stop (th
 fire, C1's refuel tanks). It cannot reach the ambient emitters: theirs are the 619 defs whose
 `LOOP {-1}` means the instance never finishes. **Instance-scoped, never sequence-scoped** — a lone
 `PufferState` in a one-tick sequence (`part1_trail`) is the debris-trail idiom.
-`ShowPlacedTemplates` pairs a staged template root's visibility with the EFFECT's life, not its
-instance's: revealed after `Start`, because the authored
-scale/opacity motions outlive the sequence that launched them — hiding on instance-finish would cut
-an explosion ring off mid-expansion (D31). What shows INSIDE the root stays the data's call.
-Both ends are the engine's, and both were half-written (`BL-061`, `analysis/bl-061-template-mesh/`).
-The reveal also fires on a relocating **CALL_ANIMATION**, not only on `PlayEffectAt`: a called
-template used to be moved to the site and left dark while its puffers — world-level particles that
-do not read the root — emitted there, so the whole D31 ring set (`he_ring1`, `sonic_ring1`-`5`, the
-torpedo `ripple`/`huge_splash_model`) was staged, placed, animated and invisible. The hide is
-`HideTemplateWhenIdle`, off the instance-retire walk plus `SweepTemplateHides`: `Stop` reaches a
-template only THROUGH a live instance, so a def that ends by running out of its own events left its
-mesh lit at the site for the session (measured: the ap/dum/mag `dum_gunhit` chunk, whose authored
-`ACTIVE_STATE 0` finishes it inside its own TTL — the slug hit, which ships no stop, was covered by
-the TTL sweep and looked fine). It defers on two holds, each measured: `TemplateStillAnimated`
-(asked of the ROOT, since a template's pieces are driven by the CALLEE's motions on the CALLER's
-copy) and `TemplateSharedWithLiveInstance` (`rear_flash_effect` finishes on the tick it starts and
-its callee is still lighting the same root). A def whose t=0 events complete it never reaches the
-retire walk at all — `Start` drops that instance itself — so `ShowTemplate`'s own reveal schedules
-the hide for it.
+The staged-hidden reveal/retire/sweep ritual is `TemplateStage.Shown`'s
+(`Reveal`/`RetireWhenIdle`/`Sweep`, PLAN-template-stage A3 — read its
+entry for the holds and what each measured): both entry points drive it through the one module,
+`PlayEffectAt` and the relocating **CALL_ANIMATION** arm alike (`BL-061`,
+`analysis/bl-061-template-mesh/`), and `Advance`'s retire walk hands finished instances to
+`RetireWhenIdle` while the frame's `Sweep` drains the deferrals. This class keeps only the
+motion-domain half as the stage's supplied `stillAnimated` predicate (`TemplateStillAnimated` —
+asked of the ROOT, and an endless spin excluded, the `MotionSet.OwesBounce` narrowness).
 `WAIT_FOR_COMPLETION`'s host half is `InstallWait`, off the `CallAnimation` case: it closes over the
 `(target, startAnchor)` pairs the call resolved — collected as the loop runs, whether or not the
 live guard let it Start, since "wait until that animation completes" is about the animation, not
@@ -781,10 +796,6 @@ return path to poll the effects runtime's.
   (three minimal role interfaces vs. an immutable `AnimRole` record + consumer facets) BOTH
   declined the three-way split on that usage evidence; every shipped bug in this family
   (`BL-224`/`232`/`233`/`235`/`236`/`242`) was a selector/wiring error no mode interface catches.
-  Accepted shallow spot, on the record: `WorldEffectsFactory.cs:391` sets `ShowPlacedTemplates`/
-  `PooledTemplates` AFTER `ForEffects` returns — the factory's sealing leaks two flags, and it
-  works only because both happen to be read after `Bind`. If that ever bites, the fix is folding
-  the two flags into `ForEffects` (two lines), not the split.
 
 ## src/Mech3/Anim/
 `AnimRuntime`'s private nested types promoted to top-level `internal` types in their own
@@ -795,8 +806,9 @@ the one member reached from outside this namespace without going through `AnimRu
 `Flight/PropAnimator.cs` calls it directly so a plane's own props spin through the identical
 accumulate-from-rest decode instead of a second hand conversion; it takes a rest `Basis` and a
 rate, no `AnimRuntime`/`MotionSet` state, so the reach-in is inert to everything else here.
-`MotionSet`, `EmitterDirector`
-and `NameResolver` share the namespace but ARE independently owned — their own entries below.
+`MotionSet`, `EmitterDirector`,
+`NameResolver` and `TemplateStage` share the namespace but ARE independently owned — their own
+entries below.
 `MotionRuntime`'s `translation_range` is a SPHERICAL launch — `xz` azimuth, `y` elevation, both in
 degrees, `initial` the speed (`analysis/object-motion-range/`, decoded 2026-08-01) — and a launch
 seeds from the node's authored rest pose, since a shared effect template's children are re-homed by
@@ -908,7 +920,7 @@ engine-free instantiation over a plain token type (plus plain `AnimDefinition`s)
 suite.
 ⚠ **The three-tier scope order is structural: `ResolvePath` is private to the module.**
   `ResolveScoped` runs call-anchor subtree → the def's OWN template roots (the constructor's
-  `ownRootsOf(def, anchor)` hook — `AnimRuntime.TemplateRootsFor`, so the pool reaches the
+  `ownRootsOf(def, anchor)` hook — `TemplateStage.RootsFor`, so the pool reaches the
   resolver only as a resolved root list and the slot arithmetic stays out) → global unless
   `LOCAL_NODES_ONLY`; a null/dead anchor (the `isLive` predicate) drops the scoped tiers for the
   plain whole-index walk. The order once diverged caller-side (the emitter host and the motion
@@ -922,7 +934,7 @@ suite.
 ⚠ `Anchors` is the ONE census-recording resolution call (once per def identity — the bootstrap asks
   on several passes). `FindAll` and the private census-free paths (`ComputeAnchors`, `ResolvePath`,
   the own-root tier) record nothing; the `ownRootsOf` hook and per-event callers
-  (`TemplateRootsFor`) must keep resolving through those, never through `Anchors` or a second
+  (`TemplateStage.RootsFor`) must keep resolving through those, never through `Anchors` or a second
   recording path.
 `FindAll`'s memoized result must be treated as read-only — the same list instance is returned on
 every repeat query (a single-name `ResolveScoped` hands it back directly), which is what makes it
@@ -930,6 +942,63 @@ cheap for C5's ~400 live poll loops re-dispatching every frame. **This is not th
 split** — G18 ("⚠ Do not re-propose splitting the modes into three interfaces", the `AnimRuntime`
 entry) refused per-mode *observation* interfaces; this plan extracted one concept all three modes
 share, unchanged — one resolver for all of them. No re-open.
+
+## src/Mech3/Anim/TemplateStage.cs
+The effect-template stage as one module (`TemplateStage<TNode>`, PLAN-template-stage A2–A4): pool-slot
+arithmetic (`SlotOf` memoized over a raw-walk hook, `TakeNextSlot`'s per-root cursor, `RootsFor`'s
+slot scoping with the modulo fallback for callees staged shallower than their caller's slot), the
+BL-288 caller-slot claim (`AssignCallerSlot` — sticky per (root, anchor), wraps through the same
+modulo), template placement (`PlaceAt`/`PlaceOn`, the BL-292 `level` basis reset), the
+copy-identity questions (`IsAt` on the ONE named move tolerance — 0.25 m², the two coincident
+0.25 f literals merged per Decision 6 —, `RootsOf`, `SharedWithLiveInstance`), the pooled-copy
+staging entry (`IndexPooledCopy` over supplied runtime hooks), `Recycles`, which counts BOTH
+wrap flavours, and the reveal/retire/sweep ritual both entry points drive (`Reveal` — the one
+visibility write, gated on `Shown`, scheduling its own hide for a def whose t=0 events already
+finished it; `RetireWhenIdle`, deferring on the two measured holds, the supplied `stillAnimated`
+predicate asked of the ROOT and `SharedWithLiveInstance`; `Sweep`, draining the deferrals once a
+frame). It also carries the **three template policy flags as sealed constructor state** — `Pooled`,
+`Shown` and `Places` (was `AnimRuntime.PooledTemplates`/`ShowPlacedTemplates`/`PlaceCalledTemplates`),
+get-only, no setter anywhere. Generic like `NameResolver<TNode>`: ~8 engine hooks at construction
+(identity, slot walk,
+transform read, the `TopLevel`+`GlobalTransform` placement write, the visibility write,
+print/debug) plus those three flags, the runtime-dependent hooks late-bound via `Wire` at the handover (`findAll`,
+`anchors`, `isLive`, live instances, `LevelsTemplate`, `stillAnimated`, `NameOf`, the index/reset
+services) — they cannot be construction arguments, because the factory that builds the stage
+exists before any resolver does, and the resolver's own `ownRootsOf` hook is this class's
+`RootsFor` (both directions are delegates). The off-engine charter is
+`CSVM.Tests/TemplateStageTests.cs` (slot wrap, modulo fallback, recycle counting both flavours,
+caller-slot stickiness, placement, the tolerance, the hide-deferral holds and the sweep drain);
+`effect-template-mesh`/`effects-census`/`damage-template-pool` stay the in-engine integration
+tier — nothing is asserted in both.
+⚠ **Decision 16, reinterpreted — not reopened, and not silently overridden.** Two prior texts pin
+  these members to `AnimRuntime`: PLAN-deepening Decision 16, and PLAN-name-resolver's milestone
+  goal (*"`SlotOf` / `TemplateRootsFor` / `NextPooledAnchors` / `PlaceTemplateAt` stay where
+  Decision 16 of PLAN-deepening pinned them"*), echoed by the `AnimRuntime` entry's own "the
+  director is handed already-resolved host and anchor nodes". PLAN-template-stage Decision 1
+  reads the pins' letter as blocking a move into `EmitterDirector` and their spirit as the
+  property that the pool never becomes a third keying scheme. That property survives this peer
+  module by construction: the stage resolves roots and hands them out; nothing here keys an
+  emitter, and `EmitterDirector` still receives resolved host and anchor nodes.
+⚠ Root resolution goes through the `findAll` hook with one deliberate asymmetry: per-EVENT paths
+  (`RootsFor`, `IsAt`, the resolver's own-root tier) run on poll loops and must never re-enter
+  `NameResolver.Anchors`' census; per-CALL paths (`TakeNextSlot`, `RootsOf`) may use the
+  `anchors` hook — once per call, census recorded once per def identity. Exactly the pre-move
+  behaviour; do not "clean up" the asymmetry in either direction.
+⚠ `SlotOf`'s memo assumes slot containers are built before `Bind` and never reparented — the same
+  snapshot terms as the resolver's `FindAll` cache.
+**The sealing leak is closed structurally, not documented (A4, Decision 4).** Until A4 the factory
+wrote `ShowPlacedTemplates`/`PooledTemplates` onto the runtime AFTER `ForEffects` returned — an
+accepted shallow spot on `AnimRuntime`'s entry that worked only because both happened to be read
+after `Bind`. The stage is now built sealed by whoever knows the runtime's role and handed in as a
+constructor argument (`WorldEffectsFactory` for the world-effects and crash rigs, `WorldSession` for
+the world one via `Options.PlacesCalledTemplates`, the suites for their own); `AnimRuntime`'s
+parameterless ctor takes an inert all-off stage, and `AnimRuntime.NewTemplateStage` is the one place
+the Godot adapter hooks are spelled. There is no post-seal write to misorder, and the census that
+proves it is that no name outside this file reads or writes the three flags — `AnimRuntime` reads
+`Places` at exactly one site (the `CALL_ANIMATION` relocation test) and nothing else. Do not
+re-introduce a settable mirror on the runtime "for the labs": the anim lab's need is a construction
+option (`WorldSession.Options.PlacesCalledTemplates`), and reaching it after `Bind` is the exact
+shape that was leaking.
 
 ## src/Mech3/SequenceRunner.cs
 The engine-free sequence interpreter, extracted from `AnimRuntime` behind the `ISequenceHost` seam
@@ -1305,7 +1374,8 @@ assertion say the same thing, which is what makes a "these two surfaces look the
 answerable without a lucky screenshot (`BL-019`); rockets fly
 their FLYOUT model body via `BuildFlyoutBody` (shared with `PylonOrdnance`) and trail their FLYOUT
 `MODEL_ANIMATION` smoke (C21): the def's DISTANCE_INTERVAL puffers resolved from the world
-`AnimProgram` (ctor `flyoutAnims`), one pooled/reused `Puffer.TrailAdvance` set per live round,
+`AnimProgram` (ctor `flyoutAnims`), one pooled/reused `Puffer.Emit`/`Stop` set per live round
+(PLAN-puffer-interface A3),
 plus the sonic's authored 8.73 rad/s body roll (weapon-effects.md). Gun shots add the
 `muzzle_burst` secondaries (C22): a pooled per-shot `gunshell` casing instance flying the def's
 OBJECT_MOTION verbatim (per-shot nodes on purpose — a shared anchor under `CallAnimation`'s
@@ -1501,10 +1571,12 @@ Its console lines, and `StuntScoreboard`/`StuntRaceBoard`'s, route through `Log.
   correctly after a rematch has reset the missions.
 ⚠ Deliberately not a Node — it is freed with the session, so the `RunCompleted` subscriptions
   need no teardown.
-⚠ `StuntMission` (its `Racer.Mission`) is NOT part of this seam — `Load`/`Complete` still call
-  `GD.Print`/`GD.PushWarning` directly and crash the test host outside the engine (an unmanaged
-  `AccessViolationException`, not a catchable one). `StuntRaceTests` never calls either: it builds
-  a `StuntMission` via reflection on the private constructor and fires `RunCompleted` the same way.
+⚠ `StuntMission` (its `Racer.Mission`) logs through `Log` since the engine-free-suites A2/A4
+  conversion (zero direct `GD.*` sites), and `CSVM.Tests` installs a process-wide no-op
+  `Log.ConsoleSink` before any test runs (`TestHostLogSink.cs`, BL-302) — so calling `Load` from a
+  test is safe now (`StuntGatesTests` calls it). `StuntRaceTests` still builds a `StuntMission`
+  via reflection on the private constructor and fires `RunCompleted` directly — it has no public
+  constructor, and a real `Complete()` does more than the finish-ordering check wants.
 
 ## src/Flight/StuntRaceBoard.cs
 The race's shared ranked results overlay: same clean-Godot-UI construction as StuntScoreboard,
@@ -1638,15 +1710,31 @@ The original engine's billboard-particle emitter, data-driven from `PUFFER_STATE
 (schema: docs/formats/effects.md). `PufferState.Load` finds the fully-defined state in an
 effects reader; `Puffer.Create` builds the atlas and hands it to an `IEmitterRenderer`
 (`EmitterRenderer.cs`) — the class itself owns only the CPU integration, so `CreateWith` builds any
-mode with no atlas, no `TextureArchive` and no GPU. Modes: `Burst`, `TrailAdvance` /
-`TrailBurnAt` (distance trails), `SustainAt` (continuous at a moving node — pool sized to steady
-state, catch-up capped); `DriveAt` is the animation runtime's per-frame drive, dispatching on the
-authored state — DISTANCE_INTERVAL trails per interval of actual host motion (CAP-15's density,
-`BL-259`; TrailPool-sized even on the sustained path, since the time-cadence pool floor silently
-dropped ~85% of a flight-speed trail), a still host keeps the time cadence (the static building
-sputters, whose distance can never elapse), and the runtime's stop ends the trail as well as the
-emission (`PufferEmitter.SustainEnd` → `TrailEnd`), so a revived emitter re-homes rather than
-drawing a puff line from its pooled slot's previous call site (the rocket ghost trails);
+mode with no atlas, no `TextureArchive` and no GPU. The continuous surface is ONE pair
+(PLAN-puffer-interface A2): `Emit(worldPos, worldBasis, dt, staticBurnMps = 0f)` / `Stop()`,
+plus the one-shot `Burst` and the hard-kill `Clear` — the authored state picks the mode, callers
+never do. `Emit` dispatches: DISTANCE_INTERVAL trails per interval of actual host motion (CAP-15's
+density, `BL-259`; TrailPool-sized even on the sustained path, since the time-cadence pool floor
+silently dropped ~85% of a flight-speed trail); a still host keeps the time cadence (the static
+building sputters, whose distance can never elapse — every distance state carries the parsers'
+synthetic 0.1 s TIME_INTERVAL, so that cadence always exists); a host that CANNOT move declares
+`staticBurnMps` and spends virtual metres at the held pose instead (the damage lab's parked
+plane). `Stop` ends the trail as well as the emission, unconditionally and idempotently, so a
+revived emitter re-homes rather than drawing a puff line from its pooled slot's previous call
+site (the rocket ghost trails). **All four external callers (`PufferEmitter`, `ProjectilePool`,
+`DamageVisuals`, `ThrottleSlamSmoke`) drive the emitter through `Emit`/`Stop` only** — the six
+mode verbs (`TrailAdvance`/`TrailEnd`/`TrailBurnAt`/`SustainAt`/`SustainEnd`) are `private`
+(PLAN-puffer-interface A3); `DriveAt` was deleted (it had been a straight `Emit` alias with no
+remaining caller once `PufferEmitter` moved to calling `Emit` directly).
+⚠ `Emit`'s very first call on a DISTANCE_INTERVAL state that hasn't moved yet (a trail's homing
+frame) also fires one `SustainAt` batch — a single 1-puff burst at the muzzle/exhaust, since a
+distance state's synthetic TIME_INTERVAL cadence is always live underneath the distance dispatch.
+`EmitterDirector`'s own callers always had this; migrating `ProjectilePool`'s rocket trails and
+`ThrottleSlamSmoke`'s exhaust trail onto `Emit` gave them the same one-puff homing sputter they
+didn't carry under raw `TrailAdvance` — judged negligible-to-desirable and confirmed at the
+controls (rocket-volley capture: a continuous, non-ghosted trail; the `c1-flight` golden's
+one-golden move is exactly this, its `--hold` throttle jump crossing `ThrottleSlamSmoke`'s slam
+threshold on the capture's first frame).
 `PufferState.FromAnimEvent` parses the compiled anim payloads.
 Three config knobs scale `BaseSize` per spawn path — `puffer.burstSizeScale` /
 `puffer.trailSizeScale` / `puffer.sustainSizeScale` (`SizeScaleDefault` **1**, the authored
@@ -1670,7 +1758,8 @@ live emitter).
   the master seed: measured, the C1 waterfall mist moved 0.47% of a `--det` frame before and 0.00%
   after. Its seed depends on how many puffers were built before it — deterministic under `--det`,
   and pinned to WHERE `new Puffer()` sits in `Create`. Moving it, or constructing one anywhere on a
-  capture path, re-pins all four puffer-bearing goldens; `CreateWith` is a test entry point only.
+  capture path, re-pins all five puffer-bearing goldens (the `SizeScaleDefault` list above — an
+  earlier "four" here was a stale count); `CreateWith` is a test entry point only.
 
 ## src/Effects/EmitterRenderer.cs
 `Puffer`'s lower seam: `IEmitterRenderer` takes live particles (`Attach` sizes the pool, `Write`
@@ -1771,9 +1860,9 @@ boost. `Update(dt, throttle)` runs an edge-triggered gate: it tracks the throttl
 current unbroken climb and fires once per climb the instant the cumulative rise crosses
 `SlamThreshold`, never again for that climb and never on a flat or falling throttle — so tapping one
 notch at a time (each tap separated by a flat/falling frame) evaluates fresh every time. Drives the
-puffers via `Puffer.TrailAdvance`/`TrailEnd` (DISTANCE_INTERVAL, the same mechanism `DamageVisuals`
-uses for the nose smoke trail), not `SustainAt` — the authored def is a distance-triggered trail, not
-a time-interval burst. `Reset(throttle)` (crash/respawn) hard-stops any plume and re-anchors the
+puffers via `Puffer.Emit`/`Stop` (PLAN-puffer-interface A3; DISTANCE_INTERVAL, the same mechanism
+`DamageVisuals` uses for the nose smoke trail) — the authored def is a distance-triggered trail,
+not a time-interval burst. `Reset(throttle)` (crash/respawn) hard-stops any plume and re-anchors the
 climb tracker so the throttle jump those moments make is never itself read as a slam.
 ⚠ `SlamThreshold` 0.25 (TUNE): the capture only bounds it between a firing idle→5/8 (0.625) and a
   silent single 1/8 (0.125) — 2/8-4/8 is unobserved. 0.25 is the smallest round two-notch jump
@@ -2010,12 +2099,17 @@ it), `yellowAt`/`orangeAt`/`redAt` are mined per-part from the data's own
 `*_damage_green/yellow/red` injure_anims. Both `Border` and `Fill` always take the same colour
 index — `BL-173`'s refuted fix shape was a synthetic per-pool ring split; there is only ever one
 colour per zone. `GunIndicatorColor`/`HardpointIndicatorColor`/`SlotIndicatorColor`/
-`DamageZoneColor`/`TargetArrowAngle`/`TweenArrow`/`IndicatorLowFrac`/`ArrowSweepDegPerSimS` are
-`public` (not `internal`) so `CSVM.Tests` (`GaugeColoursTests`, `GaugeArrowTweenTests`) can call
-them from outside the assembly — moved from the in-engine `gauge-colours`/`gauge-arrow-tween`
-suites (`PLAN-engine-free-suites.md` A3). `StallBlinkHalfPeriodS`/`AdvanceStallLamp` and the
-stall-specific consts stay `internal`: `stall-warning` is Wave B, scoped to a future
-`GaugeCluster`-only deepening, not this move.
+`DamageZoneColor`/`TargetArrowAngle`/`TweenArrow`/`IndicatorLowFrac`/`ArrowSweepDegPerSimS`/
+`StallBlinkHalfPeriodS` are `public` (not `internal`) so `CSVM.Tests` (`GaugeColoursTests`,
+`GaugeArrowTweenTests`, `StallWarningTests`) can call them from outside the assembly — moved from
+the in-engine `gauge-colours`/`gauge-arrow-tween`/`stall-warning` suites (`PLAN-engine-free-suites.md`
+A3, B11). The two animated cues are plain nested structs, `GaugeCluster.ArrowSweep`
+(`Angle`/`Advance`/`Reset`) and `GaugeCluster.StallLamp` (`Lit`/`Advance`/`Set`) — B11 retired the
+`internal` testability-escape hatches (`StallLampLit`, `AdvanceStallLamp`, the private
+`_gunArrowAngle`/`_missileArrowAngle`/`_stallBlinkPhase`/`_stallDwellS`/`_stallLampOn`/
+`_stallWarnPrev` fields) that existed only so the in-engine suite could reach a live `GaugeCluster`;
+the structs need no `Control` to construct, so `CSVM.Tests` drives them directly. Scoped to
+`GaugeCluster` only (Decision 5) — `FlightController`'s stall/arrow feed predicates are untouched.
 ⚠ The gauge textures lie — compare pixel values, never appearances: the faces hold dark UNLIT
   copies of the STALL / LOW ALT windows (~58,0,0 unlit vs 180+,0,0 lit); bitten twice. The needle
   draws its shipped RGBA art untouched (the pointer silhouette is the rtexture-tier alpha, BL-048)
@@ -2027,13 +2121,15 @@ stall-specific consts stay `internal`: `stall-warning` is Wave B, scoped to a fu
   raw frame delta or `_time` — their rates are video-decoded in sim seconds and the wall figures
   would run them 39% fast. (1) The gun/missile arrow SWEEPS at a shared constant 168.7 °/sim-s
   (`ArrowSweepDegPerSimS`, `BL-184`/`CAP-18`, `TweenArrow`, shortest-way wrap), not drawn from
-  `Selected` — `_Draw` reads the already-advanced `_gunArrowAngle`/`_missileArrowAngle`, and the
-  readout digits/type name still snap on the sweep's first frame; do not tween those too. (2) The
-  STALL lamp's blink is a RATE ramp (`AdvanceStallLamp`, `BL-148`/`CAP-06`): binary brightness, duty
-  0.50, half-period ∝ the fd fraction the controller feeds as `StallFrac`. It is INTEGRATED, not
-  read off a clock — a period that changes mid-dwell must shorten the remainder, not jump the lamp.
-  `Reset()` clears the arrows to NaN and re-arms the lamp lit, so a respawn snaps. The LOW ALT cue
-  is legitimately a plain fixed blink (`WarnBlinkPeriod`) — do not generalise the ramp onto it.
+  `Selected` — `_Draw` reads the already-advanced `_gunArrow.Angle`/`_missileArrow.Angle`
+  (`GaugeCluster.ArrowSweep`), and the readout digits/type name still snap on the sweep's first
+  frame; do not tween those too. (2) The STALL lamp's blink is a RATE ramp
+  (`GaugeCluster.StallLamp.Advance`, `BL-148`/`CAP-06`): binary brightness, duty 0.50, half-period
+  ∝ the fd fraction the controller feeds as `StallFrac`. It is INTEGRATED, not read off a clock —
+  a period that changes mid-dwell must shorten the remainder, not jump the lamp. `Reset()` calls
+  each struct's own `Reset`/`Set` to clear the arrows to NaN and re-arm the lamp lit, so a respawn
+  snaps. The LOW ALT cue is legitimately a plain fixed blink (`WarnBlinkPeriod`) — do not
+  generalise the ramp onto it.
 ⚠ The gungauge/missilegauge face is on a generic child (`g815`/`g819`) on ALL planes (no Bloodhawk
   special case, unlike the damage dial) — "any unrecognised child = face" is the extraction rule.
 ⚠ The hardpoint gauge's `WeaponGauge.Slots`/`Selected` index by PYLON NUMBER
@@ -2214,6 +2310,19 @@ node-backed shapes + 10k–14k clutter placements.
   the wireframe by 0.25% of position — ~20 m at a map corner, invisible near the origin (BL-198).
 ⚠ Cost with it up (C4, `--perf --no-vsync`): draws 2,181 → 2,532, prims 217k → 257k, `render_cpu`
   1.05 → 1.42 ms, memory 225 → 266 MB. Read those, never `fps`/`frame_ms` (PERF-11).
+
+## src/UI/AiNetsOverlay.cs
+The AI patrol-net overlay (F13; `--debug-ainets[=name,…]` scripts it) — added to every chapter
+world by `GameSession.BuildWorldStage` (skipped on the `--node=` partial stage). Draws each net in
+a stable id-derived colour (golden-ratio hue): edges as individual segments off the edge list,
+sphere markers per node (tagged nodes bigger), one fixed-size `Label3D` per net with the trailer
+(`M4ReinfAce#10 → player`), all depth-tested. Nets load lazily on first toggle; the census — one
+line per net — goes to the `world` log. A HUD text field narrows the drawn set live by
+case-insensitive name prefix. F13 is the first tenant of the F13–F24 debug-overlay key
+range (`docs/controls.md`).
+⚠ Never draw node order as the route — the graph branches; only the edge list is connectivity.
+⚠ The filter field is a deliberate PanelFocus exception (a text filter cannot work unfocusable):
+  focus arrives only by clicking the field, and Enter releases it back to the aircraft.
 
 ## src/UI/ClassOverlay.cs
 The colour-by-class overlay (key X, `--debug-classoverlay` scripts it) — same mode set as
@@ -2457,7 +2566,12 @@ The diagnostic log: `Log.Info("world", $"…")` / `Warn` / `Error` / `Debug` ove
 jobs — the console is the human's, the `.scratch/logs/<mode>-<stamp>.log` file is the machine's.
 `Log.ConsoleSink` (`Action<string>?`, default null) overrides where console lines go; null means
 `GD.Print`/`GD.PrintErr` as before. Installed by a test host so a plain (non-`Node`) class that
-logs is callable from `CSVM.Tests` without an engine.
+logs is callable from `CSVM.Tests` without an engine. `CSVM.Tests` installs a process-wide no-op
+default once, before any test runs (`TestHostLogSink.cs`, `[ModuleInitializer]`, BL-302) — the
+per-class save/restore alone raced across xunit's parallel classes and could restore the sink to
+null mid-run, and the resulting `GD.Print` fallthrough killed the test host with an unmanaged
+`AccessViolationException` on ~1 in 3 full runs. A test that asserts on console lines still swaps
+in its own capturing sink for its duration.
 ⚠ **The file sink always takes EVERYTHING** — every category, every level, no filter, and is
   untouched by `ConsoleSink`; `--log=` only moves the *console* threshold, so a post-hoc grep can
   never miss a category.
@@ -2586,11 +2700,12 @@ flattening, and glTF/collision/node visibility. `emitter-lifetime` is registered
 the only suite installing a fake `IEmitterFactory`, and `WithWorld` caches one world per chapter, so
 running first means it builds the shared C1 world while the fake is in effect; `damage-hd`'s
 `collision:true` immediately after forces a real rebuild for everyone downstream.
-⚠ **Seven suites moved out** (`PLAN-engine-free-suites.md` A3+A4, 2026-08-06): `flight-envelope`,
-  `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` (A3) and
-  `stunt-gates` (A4, once `StuntMission` itself went engine-free in A2) are now `CSVM.Tests` facts
-  calling the same `Probes.*`/plain statics/`StuntMission.Load` — the units count grew by 17 facts
-  and this registry shrank from 32 to 25. `stall-warning` (Wave B) stays here for now.
+⚠ **Eight suites moved out** (`PLAN-engine-free-suites.md` A3+A4+B11, 2026-08-06): `flight-envelope`,
+  `gauge-colours`, `gauge-arrow-tween`, `weapons-defs`, `weapon-blast`, `markers-rig` (A3),
+  `stunt-gates` (A4, once `StuntMission` itself went engine-free in A2) and `stall-warning` (B11,
+  once its `StallLamp`/`ArrowSweep` cues became plain `GaugeCluster` structs) are now `CSVM.Tests`
+  facts calling the same `Probes.*`/plain statics/`StuntMission.Load`/`GaugeCluster.StallLamp` —
+  this registry shrank from 32 to 24.
 ⚠ **`loadout-bind` does NOT split, correcting the plan's Decision 1.** `Probes.Loadouts` — the
   function the plan's A1 classification called "pure" — calls `StockLoadouts.Load()` (its
   no-arg default reads `res://data/stock_loadouts.json` through `Godot.FileAccess`) and then
@@ -2614,7 +2729,7 @@ running first means it builds the shared C1 world while the fake is in effect; `
   reads false regardless, since the death's debris motion is scheduled seconds in.
 ⚠ `effect-template-mesh` builds REAL geometry — `WorldEffectsFactory.BuildEffectStage` from the
   chapter gamez (`TestWorld.Gamez`) into one `pool0` slot, under an `AnimRuntime.ForEffects` runtime
-  carrying the production `ShowPlacedTemplates`/`PooledTemplates` pair. Named empty nodes cannot
+  whose sealed stage carries the production `Shown`/`Pooled` pair. Named empty nodes cannot
   express mesh visibility, which is the whole subject; and the reveal exists only under those flags,
   so a suite that dropped them would assert nothing. Both halves are asserted (a CALLED template
   showing, an ended effect leaving nothing lit) because either alone passes a broken runtime.
@@ -2835,7 +2950,7 @@ vertical-only shape as a launched wreck piece, so only the name can tell "stay p
 `flydirt_plane`) names the crash def's own sub-effects that belong flat on the struck surface for
 `AnimRuntime.LevelPlacedTemplateNames` (`BL-292`) — the water splash's spray column/rings and the
 dirt burst's dust plane; the fireball/smoke/debris family and `large_steam_spray` are deliberately
-excluded (own comment carries why — `AnimRuntime`'s `PlaceTemplateOn` entry has the mechanism). It also derives what
+excluded (own comment carries why — `TemplateStage.PlaceOn`'s ⚠ in `AnimRuntime`'s entry has the mechanism). It also derives what
 those names need staged: `StageRootsFor(program, names, resolveRoot)` walks `AnimProgram.Subset`'s
 CALL_ANIMATION closure, takes each reached definition's NAME (the gamez node its instance anchors on),
 and resolves it three ways — a parentless gamez root is **staged**, a name the bind's own scope
@@ -2876,10 +2991,11 @@ the surface is only known at impact, so both are bound and `FlightController.Cla
 `player` anim root, the plane's own `pdpN` panels as INPUT_NODEs, and a live emitter factory.
 Its templates are staged in **pool slots** like the world stage (`BL-288`): sizes per root from
 `effect_pools.json`'s crash section (most stay single-copy in slot 0; the per-panel damage-stage
-family gets one copy per authored call anchor), `PooledTemplates` set beside the slot build, and
-the runtime's caller-slot assignment pins each call anchor (`pdpN`, `prop1`, `pieceN`) to its own
+family gets one copy per authored call anchor), the runtime's `TemplateStage` built `Pooled`+`Places`
+beside the slot build and handed into `ForCrashRig` sealed, and
+the stage's caller-slot assignment pins each call anchor (`pdpN`, `prop1`, `pieceN`) to its own
 copy — see `AnimRuntime`'s pool paragraphs for the mechanism and the `damage-template-pool` suite
-for the regression shape. `LevelPlacedTemplateNames` is set beside `PooledTemplates`/
+for the regression shape. `LevelPlacedTemplateNames` is set beside
 `InheritedVelocityExempt`, once, from `EffectCatalogue.CrashSurfaceLevelAnimNames` (`BL-292`) — the
 named defs only ever play from within a crash sequence, so unlike `InheritedWorldVelocity` (set
 per-crash in `FlightController.Crash`, since it depends on the live impact speed/direction) this
@@ -2903,15 +3019,18 @@ The effects runtime's puffer factory passes `softParticles: false` for MIX-ramp 
 emit at ground-level sites, where the depth fade zeroes fresh dark puffs against the terrain (the
 crash-smokeball lesson; the damage-stage smoke measured near-invisible with it on) — and keeps the
 soft edge for additive fire. Templates build with collision suppressed and the stage is visible with
-each ROOT hidden (`AnimRuntime.ShowPlacedTemplates` reveals one while an effect plays on it), so a
-template's meshes render — the rocket's per-type explosion rings, the fireball facades (D31).
+each ROOT hidden (`TemplateStage.Shown` reveals one while an effect plays on it), so a
+template's meshes render — the rocket's per-type explosion rings, the fireball facades (D31). The
+runtime's stage is built here and handed into `ForEffects` **sealed** — `Pooled`+`Shown`+`Places`
+as constructor state (PLAN-template-stage A4). Until A4 the last two were written onto the returned
+runtime instead, which was the accepted sealing leak; do not re-introduce a post-`ForEffects` write.
 The world-effects stage is built in **pool slots** (`BL-225`): each root is staged in as many copies as
 `EffectPools` sizes it for this session, one copy per `pool<N>` container stamped with
 `AnimRuntime.PoolSlotMeta`, so overlapping calls to one effect each get their own copy (see
 `AnimRuntime`'s pool paragraph for how a call picks its slot). The containers carry no `cs_name` and
 are invisible to name resolution. Sizes are **per root and per player count**, so the deeper slots
 hold only the roots sized that deep and a def whose root has no copy in its slot falls back to one
-that exists (`TemplateRootsFor` picks by modulo — never "all of them", which would be the collapse
+that exists (`TemplateStage.RootsFor` picks by modulo — never "all of them", which would be the collapse
 again). The build line names the sizes, not just the total, because a bare count cannot say whether a
 root someone just re-sized actually got its copies.
 `EffectStage` exposes that stage node read-only, for `--effects-test`'s mesh census (`BL-061`) —
@@ -2942,6 +3061,20 @@ a puffer count cannot see whether a template's geometry drew, and the two halves
   same session found the cache empty and built a second runtime. `EnsureWorldEffects` is now the only
   way in, and it also wires `ProjectilePool.EffectSink` when a pool is passed (gated on "unset", same
   as `ExternalEffect`) — the wiring `GameSession`'s raw call used to do inline.
+  ⚠ **`EnsureWorldEffects` keeps its 6-param signature — folding it was examined and declined**
+  (`PLAN-template-stage` B11, no-go 2026-08-07). Its four world params look call-order-dependent and
+  are not: `GameSession.cs:665–667` assigns `state.CrashProgram`/`WorldScene`/`WorldRuntime` from
+  `session.Program`/`Builder.Scene`/`Runtime`, so all four call sites pass one and the same five
+  objects — whichever caller populates the cache first, it does so with identical arguments. Moving
+  them onto the factory is blocked by construction order: it is built at `GameSession.cs:249`, long
+  before the world exists, so the fold is either a two-phase `Bind` (which re-expresses the ordering
+  dependence — the damage lab's site is a lambda fired on first damage, so the contract becomes
+  "attach before the first demand", failing as a null-ref) or a move of the factory's construction
+  past the world build, forking it across the world/empty-stage/plane-only paths and breaking the
+  one-per-session lifetime above. The `BL-232` defect was the cache-population hole, already closed
+  by F17's `private`. The version worth doing one day is bigger and needs its own plan: the crash rig
+  re-takes the same four objects through `FlightRigAssembler.Inputs` (`GameSession.cs:1402–1409`), so
+  a factory owning the world's build inputs would shorten two signatures — and it hits the same wall.
 ⚠ `BuildEffectStage` and `BuildCrashAnchorSet` are `public static` (no session state) —
   `GameSession`'s anim-lab stage calls them as `Session.WorldEffectsFactory.X`, not through the
   instance. The lab builds its crash-anchor set FIRST and parents it AFTER the templates, so it can

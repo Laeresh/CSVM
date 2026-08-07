@@ -1525,7 +1525,7 @@ public static class Probes
 
         /// <summary>Counts meshes that would draw if the template ROOT were revealed — the root's
         /// own flag is skipped and every flag below it honoured, since the root's is the engine's
-        /// to set (<c>ShowPlacedTemplates</c>) and everything under it is the data's.</summary>
+        /// to set (<c>TemplateStage.Shown</c>) and everything under it is the data's.</summary>
         private static void CountSelfVisible(Node node, bool shown, ref int selfVisible,
             ref int total)
         {

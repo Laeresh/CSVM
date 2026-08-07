@@ -1,0 +1,7 @@
+{
+  // Pin the C# Dev Kit to the real solution. Without this it auto-generates a
+  // virtual solution by scanning the workspace, which picks up the CSVM.csproj
+  // copies inside .claude/worktrees/ and fails with
+  // "MSB5004: The solution file has two projects named \"z:\"".
+  "dotnet.defaultSolution": "CSVM/CSVM.sln"
+}

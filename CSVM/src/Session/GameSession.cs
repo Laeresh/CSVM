@@ -663,8 +663,14 @@ public partial class GameSession : Node3D
                 // flags come from LoadArchives's ArchiveIntent, not set here by hand.
                 TexturesOutliveBuild = state.TexturesOutliveBuild,
                 SoundsOutliveBuild = state.SoundsOutliveBuild,
-                // The lab: quiet stage, ambient playback deferred to its A toggle.
+                // The lab: quiet stage, ambient playback deferred to its A toggle, and its staged
+                // templates relocated onto the (in-front-of-camera) call site. The second used to be
+                // written onto the runtime after BuildAnimLabStage indexed the stage; it is stage
+                // construction state now (PLAN-template-stage A4), and reaches the same place —
+                // a quiet-stage bootstrap dispatches only RESET_STATEs, which are instant and never
+                // consult it.
                 AutoStart = !_spec.AnimLab,
+                PlacesCalledTemplates = _spec.AnimLab,
                 // The world's dice — RANDOM_WEIGHT verdicts, SOUND_GROUPS picks, crash-debris
                 // scatter — in every mode, not just the lab.
                 RuntimeSeed = Rng.IntSeedFor(Rng.Anim),
@@ -680,6 +686,19 @@ public partial class GameSession : Node3D
         state.CrashProgram = session.Program;
         state.WorldScene = session.Builder.Scene;
         state.WorldRuntime = session.Runtime;
+
+        // F13 / --debug-ainets: the chapter's AI patrol nets (ne0NNNNN + neindex — AI route
+        // data the original never renders; docs/formats/ai-nets.md). Chapter-scoped data, so
+        // the --node= partial stage skips it with the rest of the mission dressing.
+        if (state.NodeSubtree == null)
+        {
+            _plane.AddChild(new UI.AiNetsOverlay(
+                SessionPaths.ChapterZrdr(state.DataRoot, _spec.Chapter), _spec.Chapter)
+            {
+                DebugShow = _spec.DebugAiNets != null,
+                Filter = _spec.DebugAiNets ?? "",
+            });
+        }
 
         // --node=: the built subtree's WORLD-frame box. Computed from the built meshes and
         // the node transforms rather than from GlobalTransform, because the subtree has not
@@ -915,8 +934,9 @@ public partial class GameSession : Node3D
         // ambiently), plus a meshless player crash-anchor set (healthy/destroyed/pieces
         // the crash def targets). Indexed so a played crash/effect def resolves its
         // puffer hosts AND its healthy/destroyed anchors HERE — scoped to this subtree —
-        // instead of onto one of C1's 217 generic 'healthy' world nodes. With
-        // PlaceCalledTemplates on, a CALL_ANIMATION relocates the called template onto
+        // instead of onto one of C1's 217 generic 'healthy' world nodes. With the runtime's
+        // template stage built with Places on (WorldSession.Options.PlacesCalledTemplates,
+        // sealed at construction above), a CALL_ANIMATION relocates the called template onto
         // the (in-front-of-camera) call site. IndexStage runs the reset states, hiding
         // the templates.
         var labStage = new Node3D { Name = "lab_stage_anchor" };
@@ -929,7 +949,6 @@ public partial class GameSession : Node3D
         labStage.AddChild(labAnchors);
         session.Root.AddChild(labStage);
         session.Runtime.IndexStage(labStage);
-        session.Runtime.PlaceCalledTemplates = true;
         GD.Print($"anim-lab: stage — {effectRoots} effect template(s) + player anchor set built + indexed");
 
         // The spawn the mission would place the player at — the camera starts here so

@@ -19,7 +19,7 @@ be scanned across all three:
 | Scope | Archive | Typical readers |
 |---|---|---|
 | shared | top-level `zrdr.zbd` | `vehicle.json`, `engines.json`, `player.json`, `sounds.json`, effect readers (`flame_ball`, `pufftrails`, `fire`, …), building/zeppelin/prop anims, `player_plane_destruct.json` |
-| chapter | `<Cx>/zrdr.zbd` | chapter scenery anims (`hangar3`, `train`, `fuel_tanks`, `st_light`, `dock_light`, `ap_*`), `cars_moving`/`trucks_moving` |
+| chapter | `<Cx>/zrdr.zbd` | chapter scenery anims (`hangar3`, `train`, `fuel_tanks`, `st_light`, `dock_light`, `ap_*`), `cars_moving`/`trucks_moving`, the `ne0NNNNN.zrd` patrol nets + `neindex.zrd` |
 | mission | `<Cx>/<mission>/zrdr.zbd` | `ia.json`, `objectives.json`, `weather.json`, `zepstate.json`, `startanims.json`, `mis_anim.json`, `zeppelins.json`, `egen.json`, `dzones.json`, `aiv.json`, `location.json`, `map.json`, `Briefing` |
 
 ## Reader family index
@@ -30,6 +30,7 @@ be scanned across all three:
 | `ia.json` (spawns, mission type, enemy groups, the ace), `objectives.json` `PLAYER_INIT` + mission map | [spawns.md](spawns.md) |
 | `dzones.json` (per-mission zone overrides) | [missions.md](missions.md) |
 | `zeppelins.json`, `egen.json` (mission entities) | [mission-entities.md](mission-entities.md) |
+| `ne0NNNNN.zrd` patrol nets + `neindex.zrd` (the chapter AI waypoint graphs) | [ai-nets.md](ai-nets.md) |
 | `sounds.json` SETS, `player.json` sound curves, WAV format | [sounds.md](sounds.md) |
 | `weather.json` (fog / sunlight / cloud cover / wind / precipitation) | [weather.md](weather.md) |
 | `zepstate.json`, `startanims.json`, `mis_anim.json`, building/vehicle anims, the compiled `cam_anim.zbd`/`mis_anim.zbd` | [anim-definitions.md](anim-definitions.md) |

@@ -96,6 +96,27 @@ still parsed-then-discarded; `DamagesZeppelin` still parsed-never-consumed; stil
 subtitle/voice-line path. All data-side measurements are untouched (`extracted/` is static;
 `analysis/m4-ai-data/` intact).
 
+## Delta — 2026-08-06: the patrol-net half of A3 landed early
+
+A pre-M4 debug-tool session (`--debug-ainets` / F13, `UI/AiNetsOverlay.cs`) landed the
+`ne`/`neindex` decode ahead of the milestone. Read §1 ("Patrol graphs") through this lens:
+
+- **Nets are now decoded, documented, and read by the engine.** Format page
+  `docs/formats/ai-nets.md`; reader `CSVM/src/Mech3/AiNets.cs` (nodes, edges, raw undecoded
+  tags, trailer); this section's counts (222 nets, 2,268 nodes, 2,149 edges, the per-chapter
+  split, the 1:1 index) re-measured 2026-08-06 and asserted as goldens in
+  `CSVM.Tests/AiNetsTests.cs`. The headline "nothing in the engine reads any of it" is no
+  longer true for this family, and B5/F17's data seam exists. **A3's remaining gap: the
+  `aiv` rosters, the `ai.zrd.json` turrets, and `--dump-ai`.**
+- **Trailer correction.** §1's "TRAILER — `[-1]` on 133 files, otherwise
+  `[nodeIndex, "nodeName"]`" hides five exceptions: **4 files carry `[-1, "name"]`** — a
+  named follow target with no attach node (C2 net 21, C4 nets 6 and 24, C5 net 25, all
+  zeppelin/player targets) — and **1 carries an index-only `[3]`** (C2 net 33). The full
+  `[nodeIndex, "name"]` shape is on 76 files, not 81.
+- **`neindex`'s first element is not a slot count.** §1's `[[ slotCount, id0, … ]]` gloss
+  misleads: the leading number is an allocation figure ≥ the pair count (C1: 46 over 29
+  pairs). Parse pairs to the end of the list, never the header.
+
 ---
 
 ## Milestone goal
