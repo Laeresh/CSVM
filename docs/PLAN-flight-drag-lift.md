@@ -166,7 +166,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — Angle of attack and lift (`BL-247`)
 
-11. ☐ Introduce α as a modelled quantity
+11. ☑ Introduce α as a modelled quantity
 12. ☐ Re-key lift on `f(α)`; revisit the knife-edge terms
 13. ☐ Sustained-turn probe rows
 
@@ -386,17 +386,57 @@ A1 baseline. Then the full 8-chapter `--freecam --chapter=<X>` regression. `RunT
 
 # Wave B — Angle of attack and lift (`BL-247`)
 
-## B11 ☐ Introduce α as a modelled quantity
+## B11 ☑ Introduce α as a modelled quantity
+
+**Landed** 2026-08-07. `FlightModel.Alpha` (deg) = angle(nose, `VelocityDir`), computed once per
+step right after `var nose = -Attitude.Z`, before liftFrac/drag/gravity are computed — a new,
+separate read from the existing `pathDot` guard further down (that one re-reads the dot product
+*after* the translation update, to condition `Slerp`'s axis for align; α reads the frame-start
+value so a later lift/drag re-key would see one consistent number). Reported in every
+`--dump-flight` row's detail string, all eleven airframes.
+
+**Verified.** `.\RunTests.ps1`: build clean, **616/616** units, **26/26** engine suites, engine
+errors clean, **13/13** goldens hash-identical (this item touches no rendered state). The flight
+suite (`FlightEnvelopeTests`) stayed green with all eight asserted rows unmoved — α is observed-only,
+nothing consumes it yet.
+
+**The central inference, tested as B11 asked.** Only two of the plan's four reference manoeuvres are
+reachable at this stage — knife-edge and the `CAP-01` sustained turn both need lift re-keyed (B12)
+and a probe row (B13) before they're flyable at all. Of the two that are:
+
+| manoeuvre | scenario used | predicted | measured (Bloodhawk) |
+|---|---|---|---|
+| cruise (α → 0 safety) | `level-top-speed`, `accel-150-290`, etc. | ≈0° | **0.0°**, every level/near-level row |
+| wings-level full pull | `pitch-rate` (full elevator, level, 120/200/280 mph) | α_ss ≈ 8.25° (`α_ss = ω_pitch / align`) | **9.7°** at all three speeds |
+| wings-level full pull (sustained loop) | `zoom-climb` (full pull from 300 mph, α at min speed) | ≈8° | **12.5°** |
+
+`pitch-rate` is the more faithful test of the equilibrium argument — short enough (2 s) that the
+loop hasn't carried the plane far from the wings-level, near-constant-speed regime the formula
+assumes. It lands **9.7°**, 1.45° above the 8.25° prediction and just outside the authored
+`liftAOAs [5,9]` upper edge — close enough to call the inference **supported, not disproven**, but
+not a clean hit either. `zoom-climb`'s 12.5° reads higher still; it is a longer, genuine loop (the
+comment above it already notes a held full pull becomes one), so as the plane pitches through
+inverted and back, `eff`, gravity's along-path share and speed all move away from the level-cruise
+values the `α_ss` formula assumed, which plausibly accounts for the gap. Across all eleven
+airframes the same shape holds — every plane's `pitch-rate` α sits within a couple of degrees of
+its own `α_ss` prediction from its own pitch rate, and every plane's `zoom-climb` α reads higher
+(`player_balmoral`, the slowest/heaviest, most extremely: 2.5° at `pitch-rate` vs 25.1° at
+`zoom-climb`, because its zoom-climb loop takes 30 s and stalls near the top rather than settling).
+**Not a disproof** — B12/C21 can proceed — but the margin is real and not free; C21's `C_i` fit
+(which only ever sees `CAP-01`'s bank, not this straight-pull reading) is the next place this could
+still go wrong, and the traps below carry forward accordingly.
+
+**Evidence (confidence: lead-only for the interpretation; traced for the quantity).** The quantity
+itself was already implicit — `pathDot = nose.Dot(VelocityDir)`, computed just before the align
+slerp. What was a *lead* is the claim that our α lands in the authored `liftAOAs [5,9]` band; that
+rested on `α_ss = ω_pitch / align` with `AlignRate` = 4, an equilibrium argument this item has now
+checked against the real integrator (above) rather than by hand.
+
+**Original approach (kept for reference).**
 
 **Goal.** α = angle(nose, `VelocityDir`) is computed once per step, available to lift and drag, and
 observable in `--dump-flight` — with its settled values in the four reference manoeuvres measured
 and written down.
-
-**Evidence (confidence: lead-only for the interpretation; traced for the quantity).** The quantity
-itself is already implicit — `pathDot = nose.Dot(VelocityDir)` at `FlightModel.cs:357` is its
-cosine, computed for the `align` slerp. What is a *lead* is the claim that our α lands in the
-authored `liftAOAs [5,9]` band; that rests on `α_ss = ω_pitch / align` with `AlignRate` = 4, which is
-an equilibrium argument, not a measurement of our own model.
 
 **Approach.** Hoist α out of the existing `pathDot` computation to just after `var nose = -Attitude.Z`
 (line 309), so lift, drag and `align` all read one consistent value for the frame. Keep the existing

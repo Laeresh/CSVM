@@ -836,13 +836,14 @@ public static class Probes
         var m = Fresh(stats, Level(), 0.5f * fd, 1f);
         Run(m, 1f, 180f, pitch: 0f);
         Row("level-top-speed", "level full throttle held to equilibrium", "mph",
-            m.Speed / Mph, 300.4, 4.0, $"fd_speed = {fd / Mph:0.0} mph");
+            m.Speed / Mph, 300.4, 4.0, $"fd_speed = {fd / Mph:0.0} mph, α {m.Alpha:0.0}°");
 
         // --- acceleration. THE measurement that sets ThrustConst: one constant fixes both this and
         // the terminal dive below, and the two agree, which is what makes the drag shape credible.
         m = Fresh(stats, Level(), 150f * Mph, 1f);
         double tAccel = RunUntil(m, 1f, 30f, () => m.Speed >= 290f * Mph);
-        Row("accel-150-290", "level full throttle, 150 -> 290 mph", "s", tAccel, 3.76, 0.40);
+        Row("accel-150-290", "level full throttle, 150 -> 290 mph", "s", tAccel, 3.76, 0.40,
+            $"α {m.Alpha:0.0}° at finish");
 
         // --- terminal dive. Nose (and path) 70.7° down, full throttle, held to terminal — the angle
         // the original's "vertical" dive clip actually came out at, so this compares like with like.
@@ -851,27 +852,35 @@ public static class Probes
         double pathDeg = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
         Row("terminal-dive", "70.7° dive at full throttle, held to terminal", "mph",
             m.Speed / Mph, 355.2, 6.0,
-            $"settled path {pathDeg:0.0}°, {m.Speed / fd:0.000} x fd_speed");
+            $"settled path {pathDeg:0.0}°, {m.Speed / fd:0.000} x fd_speed, α {m.Alpha:0.0}°");
 
         // --- roll. Accumulated body roll rate: no other axis is commanded, so this is the 360° the
         // stopwatch and the video's ADI bank centroid both timed.
         m = Fresh(stats, Level(), fd, 1f);
         double tRoll = RunUntil(m, 1f, 30f, RollAccum(m), roll: 1f);
-        Row("roll-360", "full aileron from level cruise, 360°", "s", tRoll, 2.05, 0.25);
+        Row("roll-360", "full aileron from level cruise, 360°", "s", tRoll, 2.05, 0.25,
+            $"α {m.Alpha:0.0}° at finish");
 
         // --- pitch. Steady rate after the 1/damp spin-up, at three speeds: ours is
         // speed-independent by construction, and the video says the original's is too, so the point
         // of the three is to catch anything else (stall, lift, eff) leaking into pitch at the ends.
+        // Also the cleanest B11 check of the plan's central inference: wings-level, full elevator,
+        // no bank — the exact scenario "α_ss = ω_pitch / align" was derived for. With AlignRate = 4
+        // and the 33 °/s this row itself asserts, that predicts α_ss ≈ 8.25°.
         var pitchRates = new List<double>();
+        var pitchAlphas = new List<double>();
         foreach (float mph in new[] { 120f, 200f, 280f })
         {
             m = Fresh(stats, Level(), mph * Mph, 1f);
             Run(m, 1f, 2f, pitch: 1f);
             pitchRates.Add(Mathf.RadToDeg(m.BodyRates.X));
+            pitchAlphas.Add(m.Alpha);
         }
         Row("pitch-rate", "sustained full-elevator body pitch rate", "°/s",
             pitchRates[1], 33.0, 3.0,
-            $"at 120/200/280 mph = {pitchRates[0]:0.0}/{pitchRates[1]:0.0}/{pitchRates[2]:0.0} °/s");
+            $"at 120/200/280 mph = {pitchRates[0]:0.0}/{pitchRates[1]:0.0}/{pitchRates[2]:0.0} °/s, "
+            + $"α = {pitchAlphas[0]:0.0}/{pitchAlphas[1]:0.0}/{pitchAlphas[2]:0.0}° "
+            + "(liftAOAs [5,9] predicts α_ss ≈ 8.25° here)");
 
         // --- yaw. The one axis 'eff' scales, so it is the axis a thrust change moves: faster
         // acceleration holds the plane nearer fd_speed, where eff is at its floor.
@@ -880,7 +889,8 @@ public static class Probes
         double tYaw = RunUntil(m, 1f, 60f, YawAccum(m), yaw: 1f,
                                onStep: () => { sumSpeed += m.Speed; samples++; });
         Row("yaw-360", "full rudder from 290 mph, 360°", "s", tYaw, 28.6, 3.0,
-            samples > 0 ? $"mean speed {sumSpeed / samples / Mph:0.0} mph" : "");
+            (samples > 0 ? $"mean speed {sumSpeed / samples / Mph:0.0} mph, " : "")
+            + $"α {m.Alpha:0.0}° at finish");
 
         // --- altitude cap. A fixed 22° nose-up hold from level cruise (pitch input
         // stays at 0 throughout — the attitude is set once via Pitched, matching the original clip's
@@ -892,7 +902,7 @@ public static class Probes
         Row("altitude-cap", "22° nose-up hold at full throttle, altitude settled against the clamp", "ft",
             m.Position.Y / Ft, 6571.6, 100.0,
             $"{m.Speed / Mph:0.0} mph at settle (original 173.7 mph — the existing stall model owns "
-            + "whatever bleed shape follows the clamp, not asserted here)");
+            + $"whatever bleed shape follows the clamp, not asserted here), α {m.Alpha:0.0}°");
 
         // --- level speed 15 m under the cap: the clamp must be a no-op this close to
         // the line — the original's level equilibrium measured flat to ±0.3 mph right up to 1988 m.
@@ -900,7 +910,7 @@ public static class Probes
         m.Position = new Vector3(0f, 1988f, 0f);
         Run(m, 1f, 180f, pitch: 0f);
         Row("level-speed-near-cap", "level full throttle at 1988 m, held to equilibrium", "mph",
-            m.Speed / Mph, 300.4, 4.0, "altitude clamp must not leak below the cap");
+            m.Speed / Mph, 300.4, 4.0, $"altitude clamp must not leak below the cap, α {m.Alpha:0.0}°");
 
         // --- part throttle. These two are the ONLY place the drag shape is observable: the
         // full-throttle equilibrium is fd_speed by construction for any curve, so it can never
@@ -913,7 +923,8 @@ public static class Probes
         double idlePath = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
         Row("eighth-throttle-speed", "1/8 throttle held to equilibrium", "mph",
             m.Speed / Mph, 137.9, 6.0,
-            $"{m.Speed / fd:0.000} x fd_speed (original 0.459), settled path {idlePath:0.0}°",
+            $"{m.Speed / fd:0.000} x fd_speed (original 0.459), settled path {idlePath:0.0}°, "
+            + $"α {m.Alpha:0.0}°",
             info: true);
 
         // ⚠ This is a ZERO-throttle run, not 1/8. The clip it is measured against holds 8/8, cuts
@@ -926,26 +937,33 @@ public static class Probes
         m = Fresh(stats, Level(), 290f * Mph, 0f);
         double tDecel = RunUntil(m, 0f, 60f, () => m.Speed <= 150f * Mph);
         Row("decel-290-150", "throttle cut to ZERO, 290 -> 150 mph, level", "s", tDecel, 7.04, 1.0,
-            "pure drag — no thrust term to assume", info: true);
+            $"pure drag — no thrust term to assume, α {m.Alpha:0.0}° at finish", info: true);
 
         // --- zoom climb. INFORMATIONAL, and it is the row that exposes the model's largest known
         // gap: the original bled to 104 mph reaching its apex where we arrive still fast, because we
         // model no induced drag at all — a hard pull costs us nothing. The altitude is close; the
         // energy is not. (Its stick history is also unknown: a held full pull is a loop, and the
-        // same session's loop passed 180° in ~6 s, so 10.5 s to apex was some other input.)
+        // same session's loop passed 180° in ~6 s, so 10.5 s to apex was some other input.) Also a
+        // second, longer-duration B11 check of the wings-level-full-pull inference alongside
+        // pitch-rate above — a held pull becomes a sustained loop, so α should sit near the same
+        // ≈8° equilibrium at the point of minimum speed.
         m = Fresh(stats, Level(), 300f * Mph, 1f);
-        float apex = 0f, minSpeed = float.MaxValue;
+        float apex = 0f, minSpeed = float.MaxValue, alphaAtMinSpeed = 0f;
         double tApex = RunUntil(m, 1f, 30f,
             () => m.Position.Y < apex - 1f, pitch: 1f,
             onStep: () =>
             {
                 apex = Mathf.Max(apex, m.Position.Y);
-                minSpeed = Mathf.Min(minSpeed, m.Speed);
+                if (m.Speed < minSpeed)
+                {
+                    minSpeed = m.Speed;
+                    alphaAtMinSpeed = m.Alpha;
+                }
             });
         Row("zoom-climb", "full pull from 300 mph level, altitude gained", "ft",
             apex / Ft, 1635.0, 200.0,
             $"min speed {minSpeed / Mph:0.0} mph (original 104 — we model no induced drag), "
-            + $"apex at {tApex:0.0} s (original 10.5)",
+            + $"apex at {tApex:0.0} s (original 10.5), α {alphaAtMinSpeed:0.0}° at min speed",
             info: true);
 
         var sb = new StringBuilder();

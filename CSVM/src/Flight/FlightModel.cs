@@ -18,7 +18,8 @@ public struct FlightInput
 /// only when the plane is fast enough AND the wings carry vertically (lift ∝
 /// speed² × |up·Y|, so knife-edge flight is near-ballistic and a slow plane
 /// sinks), and the arcade handling is the flight path chasing the nose
-/// (alignment lag). In a knife-edge the nose itself also sags to a bounded angle
+/// (alignment lag, exposed each step as <see cref="Alpha"/> — observation-only for now, BL-247
+/// B11). In a knife-edge the nose itself also sags to a bounded angle
 /// below the horizon, so the plane noses down as it sinks rather than descending
 /// wings-level-nosed — ⚠ the original's sag is NOT bounded (a known divergence —
 /// see <see cref="KnifeNoseSag"/>). Below stall speed the nose is additionally pulled toward
@@ -40,6 +41,10 @@ public sealed class FlightModel
     public Vector3 VelocityDir = Vector3.Forward;
     public float Speed;                           // m/s along VelocityDir
     public float Throttle;
+    // deg: angle(nose, VelocityDir) at frame start, i.e. before this step's forces move
+    // VelocityDir — see Step()'s "α" comment. An emergent LAG from the nose-chase, not a modelled
+    // aerodynamic incidence (BL-247 B11); observation-only until B12/C21 key lift/drag on it.
+    public float Alpha;
 
     // m/s² per engine-power unit per tonne. NOT a free TUNE, but NOT independently measurable
     // either — it is only ever pinned *jointly with the drag shape below*, and that is the trap the
@@ -352,6 +357,18 @@ public sealed class FlightModel
         // instead of freezing mid-air at a clamped 0 (a plane visibly stopped in the air
         // while the HUD mph crept back up, user-reported).
         var nose = -Attitude.Z;
+
+        // α = angle(nose, VelocityDir), read here — before this step's forces move VelocityDir —
+        // so lift, drag and align could all key on the SAME value once B12/C21 re-key them (they
+        // don't yet: this is observation-only). Hoisted out of the near-parallel pathDot check
+        // below rather than replacing it: that one re-reads pathDot AFTER the translation update,
+        // to decide whether Slerp's cross-product axis is well-conditioned for THIS frame's actual
+        // chase, which is a distinct question from what α reports here.
+        // ⚠ α is an emergent LAG in this model (the flight path chasing the nose at a finite rate),
+        // not an aerodynamic state — do not describe it as modelled incidence. Near-parallel nose
+        // and path is the normal cruise state, so this must stay well-defined as α → 0: Acos of a
+        // clamped dot product is, unlike Slerp's axis, safe at zero.
+        Alpha = Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(nose.Dot(VelocityDir), -1f, 1f)));
 
         // lift fraction: quadratic in speed up to the lift speed, scaled by how much of
         // the wings' lift points vertically — |up·Y| is 1 level OR inverted (arcade:

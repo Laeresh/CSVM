@@ -1829,7 +1829,11 @@ a public `Camera` accessor — all inert in plain `--freecam`. Rates TUNE.
 Velocity-vector arcade flight model: body rates = control torque × reciprocal inertia vs
 ang_momentum_damp, scaled per axis (PitchTune/YawTune/RollTune). Thrust/drag/gravity integrate on
 the velocity vector (speed passes through zero); lift cancels gravity's cross-path share; drag is
-normalized so drag(fd_speed) = max thrust. The stall is TWO measured thresholds over one margin
+normalized so drag(fd_speed) = max thrust. `Alpha` (deg) is angle(nose, VelocityDir), read once per
+step right after the nose vector — an emergent LAG from the nose-chase, not a modelled aerodynamic
+state; observation-only (BL-247 B11), reported in every `--dump-flight` row's detail so B12/C21 can
+check their premise against it before keying lift/drag on it. The stall is TWO measured thresholds
+over one margin
 (`StallFraction` = speed/fd_speed): `isStalled()` is the nose-drop at 0.25 fd, `IsStallWarned()` the
 STALL lamp at 0.30 — the lamp leads the break by 2.64 sim s (`BL-148`/`CAP-06`); never drive both
 off one number, and never recompute the margin beside them.
