@@ -6731,7 +6731,7 @@ reproduced by the stage's independent code path on the first run.
 
 **The encoding bug the first regeneration found, now rule 97.** `Get-Content -Raw` decodes a
 BOM-less UTF-8 file as the system ANSI codepage in PowerShell 5.1, so the round-trip turned every
-em-dash in the manifest's prose into `â€”` (4,879 → 4,894 bytes). Reading through
+em-dash in the manifest's prose into `—` (4,879 → 4,894 bytes). Reading through
 `[System.IO.File]::ReadAllText` fixes it; rule 68's other half.
 
 **Stray-Godot scoping (rule 66) is now per stage.** `Stop-StrayGodots` takes the marker to match:
@@ -6956,7 +6956,7 @@ usability are the user's call (`playtest.md`, beside D31's zeppelin case). The p
 checked at 1280×720 only, where the anim lab's variant is cramped between the breadcrumb and the
 timeline. The name index is a snapshot taken on first search; freed nodes are skipped at query time
 rather than triggering a rebuild.
-## 2026-07-25 â€” Mesh lab on the selection (M) + collider wireframes (C), `--collision` (PLAN-testing D33 + D35)
+## 2026-07-25 — Mesh lab on the selection (M) + collider wireframes (C), `--collision` (PLAN-testing D33 + D35)
 
 **What landed.** `MeshLab` is no longer viewer-only: given a `SelectionService` it becomes the
 *scoped* lab, and **M** in `--freecam`/`--anim-lab` attaches every overlay and override to the
@@ -6972,8 +6972,8 @@ key state, so sharing C descended on every overlay toggle).
 hand-written replica could only stand in for the *aircraft's* shaded variant; a world surface's
 shader carries `unshaded`, the sRGB vertex modulate, LIGHT_STATE spill, cylindrical fog, UV scroll
 and its alpha term, and rendering it through the replica would have re-lit the very thing under
-inspection. `DerivedShader` rewrites two things in the original text â€” the cull token in
-`render_mode`, and a `csky_lab_normal_mode` block injected at the top of `fragment()` â€” and copies
+inspection. `DerivedShader` rewrites two things in the original text — the cull token in
+`render_mode`, and a `csky_lab_normal_mode` block injected at the top of `fragment()` — and copies
 every uniform by name. Measured with the new `--debug-mesh=force` (build the overrides at the
 data's own settings, the able-to-fail control): **0 px** change against the shipped render on both
 the C1 water tower and the parked Bloodhawk (the viewer's 960-px delta is the panel's own status
@@ -6981,31 +6981,31 @@ line), where the replica path moved **1,682 px** of the tower's ~2,500 px. `veri
 
 **Verified.** C1 freecam, `--pos=-6140,185,-4340 --direction=0.71,-0.17,0.68`, pick at (640,360)
 walked 4 rungs to `ap_h2otwr1` (12 surfaces, 264 tris, 12 fullbright): overlays on moved **1,278 of
-921,600 px, every one inside the tower's own 31Ã—81 px rect** â€” the identical second tower 250 px
-away untouched; `--debug-mesh=â€¦,restore` (attach then detach) returned the exact pre-toggle md5
-`33e2beâ€¦`; `cull=inverted` moved **626 px, max delta 89**, all inside the same rect (able to fail),
+921,600 px, every one inside the tower's own 31×81 px rect** — the identical second tower 250 px
+away untouched; `--debug-mesh=…,restore` (attach then detach) returned the exact pre-toggle md5
+`33e2be…`; `cull=inverted` moved **626 px, max delta 89**, all inside the same rect (able to fail),
 and 3.88 % of the frame on the parked plane. C2 with `--collision=show`: 1,848 node-backed shapes
-(the same count rule 72 measured) + 10kâ€“14k clutter placements, `switched on 521 Â· switched off
-1349`; with `--destroy=gate1`, `on 528 Â· off 1342` â€” the two directions reported separately, never
+(the same count rule 72 measured) + 10k–14k clutter placements, `switched on 521 · switched off
+1349`; with `--destroy=gate1`, `on 528 · off 1342` — the two directions reported separately, never
 the +7 net, and `--damage-test=gate1 --damage-hd=25` independently reads `col[off 1, on 8]`. The
 gate's lintel wireframe is one healthy box before and three wreck-piece boxes after. A live
 in-run flip logged itself on the propane chain: `switched OFF 4: tbridg2a, tbridg2b, tbridg1a,
 tbridg1b`. Without `--collision`, `--debug-colliders` prints the notice once and the only pixels
-that move are its 306Ã—51 px text. `--collision` startup, warm, 3 runs each (C2 freecam): total
-2,462 â†’ 3,106 ms, `world` 352 â†’ 865, `clutter` 47 â†’ 56 â€” the clutter BVH is no longer the dominant
-term rule 39 measured (C5: 3,188 â†’ 4,304, `world` 448 â†’ 1,240). 8-chapter `--freecam` regression
+that move are its 306×51 px text. `--collision` startup, warm, 3 runs each (C2 freecam): total
+2,462 → 3,106 ms, `world` 352 → 865, `clutter` 47 → 56 — the clutter BVH is no longer the dominant
+term rule 39 measured (C5: 3,188 → 4,304, `world` 448 → 1,240). 8-chapter `--freecam` regression
 with sound on: zero errors bar C3's known `!is_inside_tree()`. Overlay cost, C4 at the golden pose
-(`--perf --no-vsync`): draws 2,181 → 2,532, prims 217k → 257k, `render_cpu` 1.05 → 1.42 ms. `.\RunTests.ps1` green â€” 152 units,
+(`--perf --no-vsync`): draws 2,181 → 2,532, prims 217k → 257k, `render_cpu` 1.05 → 1.42 ms. `.\RunTests.ps1` green — 152 units,
 8 suites, **11 goldens hash-identical**, which is the inertness proof for both flags absent.
 
 **The bug the first cut had, and its rule.** Scoped normal lines drew 163 m spikes across the whole
 chapter: `BoundingRadius` was `max |v|`, and a world subtree's vertices are absolute under an
-identity node transform, so the tower "measured" 7,420 m â€” its distance from the map corner. Now
+identity node transform, so the tower "measured" 7,420 m — its distance from the map corner. Now
 the geometry's own box half-diagonal (`verification.md` 103). Also: one `ImmediateMesh` surface per
-*body*, not per shape â€” a C2 clutter region carries thousands of placements and the cap is 256.
+*body*, not per shape — a C2 clutter region carries thousands of placements and the cap is 256.
 
 **Residuals.** Every keypress half is by construction (live input is unscriptable here): M, C, the
-light steering, and re-targeting the lab by clicking something else while it is attached â€” all in
+light steering, and re-targeting the lab by clicking something else while it is attached — all in
 `playtest.md`. The overlay's counts are pose-dependent (the map-edge extender adds clutter bodies),
 big trimeshes draw as bounding boxes over 2,000 tris, and `--viewer` binds no C overlay because C
 is the mesh lab's cull cycler there (it says so when `--collision` is passed).
@@ -11699,11 +11699,11 @@ the dumped template. The three complaint paths were run end to end: `--volume=4`
 `WARN --volume=4 is outside 0-1 — using 1`, `--volume=loud` → `WARN … is not a number (0-1) —
 leaving the volume alone` and a launch that carries on, `--mute --volume=0` → the conflict `WARN`.
 
-## 2026-08-03 â€” emitter lifetime becomes a module behind a seam (`PLAN-deepening` E13)
+## 2026-08-03 — emitter lifetime becomes a module behind a seam (`PLAN-deepening` E13)
 
 **What landed.** `CSVM/src/Mech3/Anim/EmitterDirector.cs` plus `IEmitter.cs` and
-`PufferEmitterFactory.cs`: an emitter's whole life â€” the keying rule, the start, all four stops, the
-respawn wipe, the per-frame follow and a `Census` â€” is one module per runtime instead of five methods
+`PufferEmitterFactory.cs`: an emitter's whole life — the keying rule, the start, all four stops, the
+respawn wipe, the per-frame follow and a `Census` — is one module per runtime instead of five methods
 over two private `AnimRuntime` collections. `AnimRuntime` keeps the dispatch case, the `at_node`
 sentinel resolution and the `active_state` read, and forwards. Gone from it: `_puffers`,
 `_activePuffers`, `_hostOffsets`, `HostOffsetOf`, `PufferFactory`, `PufferParent`,
@@ -11711,12 +11711,12 @@ sentinel resolution and the `active_state` read, and forwards. Gone from it: `_p
 the host resolve. `PuffersBuilt` is now a forwarding property, so its four external readers are
 untouched. The three byte-identical `st => Puffer.Create(st, textures, sustained: true)` closures
 (`WorldSession`, the effects runtime, each crash rig) consolidate into `PufferEmitterFactory`, which
-also owns the parent node â€” so the "world root, never the per-player crash root" rule is one type's
+also owns the parent node — so the "world root, never the per-player crash root" rule is one type's
 doc instead of prose repeated in two role factories. `WorldSession`'s post-bootstrap
 `PufferFactory = null` becomes `Emitters.RetireFactory()`, installing a `SpentEmitterFactory` that
 names the miss and warns once, exactly as the old null branch did.
 
-Interface per the `E12` grilling session (Decisions 9â€“18). Three deviations from the sketch, each
+Interface per the `E12` grilling session (Decisions 9–18). Three deviations from the sketch, each
 forced by the code: `IEmitterFactory.Create` carries an `out string? miss` (three distinct report
 counts, and Decision 14's shared real factory cannot hold the per-runtime counter, so the factory
 names the miss and the director counts it); `Assert` takes the raw `AnimData` rather than a parsed
@@ -11729,14 +11729,14 @@ for it.
 **How verified.** Emitter census before/after, identical at every sampled second: the C1
 `--freecam --destroy=refuel --debug-anim --frames=600` run (30 census + motion lines, byte-identical)
 and the `BL-236` regression set `c3-island` / `c4-snow` / `c5-city-night` (5 lines each). Full
-`RunTests` pass â€” 389 units, 18/18 engine suites, **13/13 goldens hash-identical**, engine errors
+`RunTests` pass — 389 units, 18/18 engine suites, **13/13 goldens hash-identical**, engine errors
 clean. 8-chapter `--freecam` sweep, zero errors in all eight.
 
 **The able-to-fail control** (Decision 6, for a wave whose only evidence is unchanged output):
-forcing the emitter key def-scoped on every runtime â€” the one rule the extraction had to carry across
-intact â€” moved **two** goldens, `c5-city-night` (the measured C5 `m_crane_go` six-twin stack) *and*
+forcing the emitter key def-scoped on every runtime — the one rule the extraction had to carry across
+intact — moved **two** goldens, `c5-city-night` (the measured C5 `m_crane_go` six-twin stack) *and*
 `c3-island`, which the item did not predict. So the goldens do reach inside the extracted module, and
-an unchanged 13/13 is evidence rather than an absence of it. Restored â†’ 13/13 again. The wave's own
+an unchanged 13/13 is evidence rather than an absence of it. Restored → 13/13 again. The wave's own
 new assertion is still owed: it is `E15`, which is what `BL-241` is waiting for.
 
 ## 2026-08-03 — the counting fake, and proof it is reachable (`PLAN-deepening` E14)

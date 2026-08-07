@@ -10,13 +10,23 @@ the "Current status" pointer. This file holds only what's specific to Claude Cod
   other `.agents/`-aware tools — see [`AGENTS.md`](AGENTS.md)). Written by
   `/setup-matt-pocock-skills`; edit the files directly. Invoke with their slash commands, e.g.
   `/domain-modeling`, `/commit-next`, `/new-plan`.
-- **Hooks:** `.claude/settings.json` runs three `PreToolUse` hooks. (1) A shell-syntax guard that
+- **Hooks:** `.claude/settings.json` runs five `PreToolUse` hooks. (1) A shell-syntax guard that
   rejects a PowerShell here-string (`@'…'@`) sent to the **Bash** tool, and a heredoc or
   `/dev/null` sent to the **PowerShell** tool. (2) The **Bash** tool is blocked outright with
   "Use Powershell instead of bash" — the one exception is a command whose every `&&`/`||`/`;`/`|`
   segment starts with `git` or `gh`, since those behave identically in either shell.
   (3) `dotnet format` / `dotnet build` before `RunTests.ps1`, `dotnet test`, and `git commit`,
-  blocking on remaining StyleCop warnings.
+  blocking on remaining StyleCop warnings. (4) A duplicate item-ID check before `git commit`:
+  `backlog.md`/`playtest.md` defining the same `BL-`/`PT-`/`CAP-` ID twice fails the commit.
+  (5) An encoding tripwire before `git commit`: any changed text file containing double-encoded
+  UTF-8 (mojibake) fails the commit, naming the file and line.
+- ⚠ **PowerShell 5.1 corrupts UTF-8 silently.** It reads BOM-less files as ANSI, so a
+  `Get-Content`/`Set-Content` round-trip without `-Encoding utf8` on **both** ends turns every
+  em dash, arrow and warning sign into double-encoded garbage — and a BOM-less `.ps1` containing
+  non-ASCII is mangled by the *interpreter itself* before it runs. Edit repo text with the
+  Read/Edit/Write tools; when a script must write a repo file, pass `-Encoding utf8` (or use
+  `[IO.File]` with an explicit `UTF8Encoding`) and keep the script itself pure ASCII, building
+  any non-ASCII characters from `[char]` codes. Hook (5) above is the backstop, not the plan.
 - ⚠ **Multi-line commit messages: `Write` the message to a file, then `git commit -F <file>`.**
   Shell quoting is where this goes wrong: PowerShell's `@'…'@` needs its closing delimiter at
   column 0, and the same text handed to Bash (still allowed for `git`) is silently accepted as

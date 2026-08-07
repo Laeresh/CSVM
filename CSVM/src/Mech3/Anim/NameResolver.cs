@@ -76,8 +76,8 @@ public sealed class NameResolver<TNode>
     public bool ReportResolution;
 
     /// <summary>ANIMATION_ROOT_NAME matches above this count are generic per-object roots
-    /// ('healthy' appears 217Ã— in C1) â€” those defs belong to game objects (planes, zeppelin
-    /// parts), not to world nodes. The genuine building templates lift â‰¤ 9 instances.</summary>
+    /// ('healthy' appears 217× in C1) — those defs belong to game objects (planes, zeppelin
+    /// parts), not to world nodes. The genuine building templates lift ≤ 9 instances.</summary>
     public int MaxRootLift = 16;
 
     private const int CensusCap = 12;
@@ -277,7 +277,7 @@ public sealed class NameResolver<TNode>
     public List<TNode?> Anchors(AnimDefinition def)
     {
         // Multi-target NAME1 definitions (zeppelin nacelles/turrets) parse with an empty
-        // NAME; they animate per-object sub-parts and are object-wiring scope â€” never anchor
+        // NAME; they animate per-object sub-parts and are object-wiring scope — never anchor
         // them (their generic ROOT names would anchor them onto every building in the world).
         if (string.IsNullOrEmpty(def.Name))
         {
@@ -337,7 +337,7 @@ public sealed class NameResolver<TNode>
     }
 
     /// <summary>
-    /// The bind-time resolution census, ready to log â€” empty unless <see cref="ReportResolution"/>
+    /// The bind-time resolution census, ready to log — empty unless <see cref="ReportResolution"/>
     /// was set. It exists because <b>two different failures look identical from outside</b> a
     /// partial world: a definition that never instantiated (its NAME/ANIMATION_ROOT_NAME matches
     /// nothing here, so <i>no handler ever fires</i>) and a definition that IS running but whose
@@ -346,7 +346,7 @@ public sealed class NameResolver<TNode>
     ///
     /// <para>The line nobody expects is <c>root_lift_suppressed</c>: an <c>ANIMATION_ROOT_NAME</c>
     /// lift is capped at <see cref="MaxRootLift"/> matches precisely so a generic root like
-    /// <c>healthy</c> (217Ã— in C1) cannot anchor a definition onto every building â€” and a
+    /// <c>healthy</c> (217× in C1) cannot anchor a definition onto every building — and a
     /// single-subtree stage drops under that cap, so defs that never anchor in the full world would
     /// anchor here, onto whatever generic child the subtree happens to own.
     /// <see cref="SuppressRootLift"/> refuses them and this reports the refusal, because a
@@ -367,32 +367,32 @@ public sealed class NameResolver<TNode>
                   + $"unanchored={_censusUnanchored} target_missing_ops={_censusMissing}");
         if (_censusUnanchored > 0)
         {
-            lines.Add($"bind unanchored={_censusUnanchored} â€” no handler ever fires for these: "
+            lines.Add($"bind unanchored={_censusUnanchored} — no handler ever fires for these: "
                       + Sample(_censusUnanchoredNames, _censusUnanchored));
         }
         if (_censusLifted > 0)
         {
-            lines.Add($"bind root_lifted={_censusLifted} â€” anchored only because this subtree has "
-                      + $"â‰¤{MaxRootLift} of the def's ANIMATION_ROOT_NAME, which the full world does not: "
+            lines.Add($"bind root_lifted={_censusLifted} — anchored only because this subtree has "
+                      + $"≤{MaxRootLift} of the def's ANIMATION_ROOT_NAME, which the full world does not: "
                       + Sample(_censusLiftedNames, _censusLifted));
         }
         if (_censusSuppressed > 0)
         {
-            lines.Add($"bind root_lift_suppressed={_censusSuppressed} â€” these WOULD have anchored on "
+            lines.Add($"bind root_lift_suppressed={_censusSuppressed} — these WOULD have anchored on "
                       + $"this subtree's generic ANIMATION_ROOT_NAME children, which the full world's "
                       + $"node count rules out; refused so the stage shows only defs that name it: "
                       + Sample(_censusSuppressedNames, _censusSuppressed));
         }
         if (_censusMissing > 0)
         {
-            lines.Add($"bind target_missing={_censusMissing} â€” the def IS running, the node is not in "
+            lines.Add($"bind target_missing={_censusMissing} — the def IS running, the node is not in "
                       + $"this subtree: " + Sample(_censusMissingTargets, _censusMissing));
         }
         return lines;
     }
 
     private static string Sample(List<string> shown, int total) =>
-        string.Join(", ", shown) + (total > shown.Count ? $", â€¦ (+{total - shown.Count} more)" : "");
+        string.Join(", ", shown) + (total > shown.Count ? $", … (+{total - shown.Count} more)" : "");
 
     // A parent->child NAME path: the first element within scope (falling back to the whole index
     // when that misses and localOnly is false), then each further element inside the previous
@@ -536,7 +536,7 @@ public sealed class NameResolver<TNode>
         return kept.Count > 0 && kept.Count < anchors.Count ? kept : null;
     }
 
-    // One census entry per definition identity (anchor name + animation name â€” AnimProgram's own
+    // One census entry per definition identity (anchor name + animation name — AnimProgram's own
     // dedupe key), because the bootstrap asks for a def's anchors on more than one pass.
     private void RecordAnchoring(AnimDefinition def, AnchorKind how)
     {
@@ -557,14 +557,14 @@ public sealed class NameResolver<TNode>
                 _censusLifted++;
                 if (_censusLiftedNames.Count < CensusCap)
                 {
-                    _censusLiftedNames.Add($"{label}â†’{def.RootName}");
+                    _censusLiftedNames.Add($"{label}→{def.RootName}");
                 }
                 break;
             case AnchorKind.LiftSuppressed:
                 _censusSuppressed++;
                 if (_censusSuppressedNames.Count < CensusCap)
                 {
-                    _censusSuppressedNames.Add($"{label}â†’{def.RootName}");
+                    _censusSuppressedNames.Add($"{label}→{def.RootName}");
                 }
                 break;
             default:

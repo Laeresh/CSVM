@@ -43,14 +43,14 @@
       "name": "c2b-rain",
       "frame": 120,
       "hash": "0323f640be19770bd6c737d3e700c883",
-      "exercises": "rain over open water â€” the surface A3 measured at 4.75 % unpinned; frame-sensitive 3.47 %.",
+      "exercises": "rain over open water — the surface A3 measured at 4.75 % unpinned; frame-sensitive 3.47 %.",
       "args": ["--freecam", "--chapter=C2B", "--pos=-3843,200,-1101", "--direction=-0.052,-0.1,-0.999", "--det", "--mute"]
     },
     {
       "name": "c3-island",
       "frame": 120,
       "hash": "4ef962ea8619d2ee1585435513d77fbe",
-      "exercises": "coastline, surf edge and open water at close range; static â€” 9 px at 120 vs 360, so it proves geometry and shading, not the clock.",
+      "exercises": "coastline, surf edge and open water at close range; static — 9 px at 120 vs 360, so it proves geometry and shading, not the clock.",
       "args": ["--freecam", "--chapter=C3", "--pos=-4518,400,-2015", "--direction=-0.35,-0.35,-1", "--det", "--mute"]
     },
     {
@@ -78,7 +78,7 @@
       "name": "empty-stage",
       "frame": 120,
       "hash": "054ed5caaffdcfa9ed4043e594934367",
-      "exercises": "the synthetic stage with no gamez at all â€” code-drawn grid, default sky and sun, flight model, HUD; frame-sensitive 12.21 %, and the one shot that still renders with extracted/ absent.",
+      "exercises": "the synthetic stage with no gamez at all — code-drawn grid, default sky and sun, flight model, HUD; frame-sensitive 12.21 %, and the one shot that still renders with extracted/ absent.",
       "args": ["--stage=empty", "--plane=player_bhawk", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
