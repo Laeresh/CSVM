@@ -2463,13 +2463,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (c) The failure lands on whatever change happens to be in flight, so it will be misattributed;
   that is the main cost of leaving it.
 
-- `BL-030` `[Cleanup]` `[Blocked: M4]` **`docs/SCOPING-M4-ai.md` still names `PlaneViewer.cs:<line>`.** The C11 final sweep
-  (PLAN-planeviewer-split) re-pointed the three `docs/formats/` hits to their real post-split
-  owners (`WeatherRig.Build`, `WorldEffectsFactory.BuildWorldEffectsRuntime`) but deliberately left
-  this one — it's a future-milestone planning doc whose line numbers were already invalidated by
-  B7's extraction and the B8 `git mv`, so re-numbering it now is pure churn. Fix when M4 is picked
-  up and the doc gets rewritten anyway.
-
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
   RunGame.ps1/RunDev.ps1) once tools/godot ships a Godot bundling **SDL ≥ 3.4.4**: the bundled
   SDL (3.2.28 up to Godot 4.7.1) hard-freezes the engine when a >255-button DirectInput device
@@ -2494,7 +2487,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   already turning is by design; becomes relevant with a landing/shutdown flow
   (`FlightAudio.OnEngineStop` is already wired for the audio half).
 
-- `BL-284` `[Bug]` **Wing-light flare: soft round glow vs the original's sharp star burst; view-dependence
+- `BL-284` `[Bug]` `[Blocked: CAP-34]` **Wing-light flare: soft round glow vs the original's sharp star burst; view-dependence
   unproven.** Follow-up from `BL-119` (landed 2026-08-05): with the authored one-sided quad restored
   and the blink at the measured ~1 frame, the flare reads as a compact soft amber glow — much closer
   than the old billboard blob, but the PT-03 reference still shows sharp radiating star points that

@@ -35,7 +35,8 @@ Every claim below was re-verified against the tree at `04d2dfc` (~60 commits aft
 was written). **Every architectural premise and the wave ordering survive.** What follows is the
 complete list of deltas; the body text is left as written — read it through this lens.
 
-**Citation drift (mechanical, tracked as `BL-030` — re-point when M4 is scheduled):**
+**Citation drift (mechanical — not tracked separately; re-point as part of rewriting this document
+when M4 is scheduled):**
 
 - `PlaneViewer.cs` no longer exists — PLAN-planeviewer-split (2026-07-30) moved it to
   `Session/GameSession.cs`, `Launcher.cs`, `FlightRigAssembler.cs` and friends. Every
