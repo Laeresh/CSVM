@@ -2430,6 +2430,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   - Staleness is **per column**, fingerprinted on the *contents* of the producing scripts (an
     uncommitted edit changes the numbers as much as a committed one), so a `compass.py` fix does not
     invalidate 60 altimeter traces.
+  - ⚠ Scripts are not the only input. `pool_med.npy` and `dial_affines.npy` — the pooled reference
+    and fitted dial geometry every needle is read against — decide the numbers just as much, and are
+    **cache artifacts, not source files**, so a script-content hash cannot see them. Rebuild the pool
+    from a different clip set and every stored `alt_ft` silently disagrees with it. They are now
+    hashed into a `# artifacts` stamp governing `alt_ft`/`mph`/`alt_q`/`mph_q`. Because `.scratch/`
+    is swept, an absent pool reports "cannot verify" rather than "fresh" — the honest answer.
+    Sidecars written by the first backfill pre-date the stamp and say so; a rebuild makes them
+    checkable.
   - The `checkclip` gate verdict is cached per clip: a `REJECT` (auto head turn) stops anyone ever
     paying to decode that clip again.
   - Found while building it: `showinfo` and `read_frames` disagree on frame count (3,422 vs 3,427 on

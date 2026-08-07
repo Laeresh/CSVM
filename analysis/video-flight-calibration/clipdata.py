@@ -109,6 +109,35 @@ def fingerprints():
     return {c: _sha(v) for c, v in PRODUCERS.items()}
 
 
+# Columns whose values depend on the pooled reference and the fitted dial
+# geometry, not just on code.
+DIAL_COLS = ("alt_ft", "mph", "alt_q", "mph_q")
+
+
+def artifact_fp(hud):
+    """Fingerprint of the CACHE ARTIFACTS every dial reading is differenced
+    against: the pooled median and the fitted dial affines.
+
+    ⚠ These determine the numbers as much as the scripts do, and they are NOT
+    source files, so `_sha` over PRODUCERS cannot see them. Rebuild the pool from
+    a different clip set and every stored `alt_ft` becomes inconsistent with it —
+    silently, which is the one failure mode this file exists to prevent.
+
+    Returns None when the artifacts are absent: `.scratch/` is swept, so after a
+    sweep the hash cannot be recomputed and the honest answer is "cannot verify",
+    not "fresh"."""
+    sfx = hudlib.suffix(hud)
+    paths = [f".scratch/vidcal/cache/pool_med{sfx}.npy",
+             f".scratch/vidcal/cache/dial_affines{sfx}.npy"]
+    if not all(os.path.exists(p) for p in paths):
+        return None
+    h = hashlib.sha1()
+    for p in paths:
+        with open(p, "rb") as f:
+            h.update(f.read())
+    return h.hexdigest()[:12]
+
+
 # --- where things live -------------------------------------------------------
 def repo_root():
     """The MAIN checkout's root, from anywhere including a git worktree.
@@ -192,7 +221,11 @@ def _hdr_get(head, prefix):
 
 
 def stale_columns(head, cols):
-    """Columns whose producing scripts changed since the sidecar was written."""
+    """Columns that can no longer be trusted at face value.
+
+    Two independent causes, both checked: the producing SCRIPTS changed, or the
+    cache ARTIFACTS the dials are read against (pooled median, dial affines)
+    changed. The second is not visible in any source file — see `artifact_fp`."""
     now = fingerprints()
     stored = {}
     for h in _hdr_get(head, "# col "):
@@ -205,6 +238,27 @@ def stale_columns(head, cols):
             out[c] = "producer unknown"
         elif c in stored and stored[c] != now[c]:
             out[c] = f"STALE (written {stored[c]}, now {now[c]})"
+
+    # --- the pooled reference / dial geometry
+    hud = next((h.split("hud=")[1].strip() for h in _hdr_get(head, "# clipdata ")
+                if "hud=" in h), hudlib.DEFAULT_HUD)
+    was = next((h.split("fp=")[1].strip() for h in _hdr_get(head, "# artifacts ")
+                if "fp=" in h), None)
+    isnow = artifact_fp(hud)
+    if was is None:
+        note = ("pool/dial fingerprint not recorded (sidecar pre-dates artifact "
+                "stamping) — rebuild to make it checkable")
+    elif isnow is None:
+        note = f"pool/dial artifacts absent (.scratch swept) — cannot verify {was}"
+    elif was != isnow:
+        note = (f"STALE POOL — the pooled median or dial fit changed "
+                f"(written {was}, now {isnow}); re-run build before quoting")
+    else:
+        note = None
+    if note:
+        for c in cols:
+            if c in DIAL_COLS:
+                out[c] = f"{out[c]}; {note}" if c in out else note
     return out
 
 
@@ -317,6 +371,9 @@ def write_sidecar(name, cols, rows, gate, notes=None, extra=None, pts_short=0):
             L.append(f"# col {c} producers={len(PRODUCERS[c])} fp={fp[c]}")
         else:
             L.append(f"# col {c} producers=? fp=unknown")
+    afp = artifact_fp(clip_hud_of(name))
+    L.append(f"# artifacts pool_med+dial_affines fp={afp or 'absent-at-write'}"
+             f"   (governs {', '.join(DIAL_COLS)})")
     L += [
         "#",
         "# SHOT-INDEX — NAVIGATIONAL ONLY. Says where to look, never what is true.",
