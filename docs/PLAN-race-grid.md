@@ -101,7 +101,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — the starting grid
 
 1. ☑ `IFlightStarts` — the whole-field seam, with `SpawnPicker` as its plain implementation
-2. ☐ `RaceGrid` — centred fan, injected ground sampler, uniform lift, headless tests
+2. ☑ `RaceGrid` — centred fan, injected ground sampler, uniform lift, headless tests
 3. ☐ Select the implementation once at session build; races get the grid, everything else does not
 4. ☐ Config-backed grid width and clearance, reported in the spawn log
 5. ☐ Correct the best-time persistence rationale in `StuntRace`
@@ -159,7 +159,7 @@ Check an unpinned launch varies too. Do not move the `_spec.SpawnAt` override br
 (`SpawnPicker.cs:47`): it is tested before the list branch, which is what makes `--pos` beat the
 spawn list, and A2 depends on that ordering surviving untouched.
 
-## A2 ☐ `RaceGrid` — centred fan, injected ground sampler, uniform lift, headless tests
+## A2 ☑ `RaceGrid` — centred fan, injected ground sampler, uniform lift, headless tests
 
 **Goal.** Given an anchor and a player count, every pilot gets a slot on one level line through that
 anchor, symmetric about it, with the whole field raised as one by whatever the worst slot needs to
