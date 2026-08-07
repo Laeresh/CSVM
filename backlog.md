@@ -2436,9 +2436,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     `cap12c4`) with **no interior gap** and ~1 frame of tail. Unexplained. Rows align at the head and
     the header stamps the worst-case timing error (~0.17 s); **do not quote a clip time finer than
     that stamp**. Worth running down — it silently affects `run2chase.py` too.
-  - Open: measure it. Re-run a settled CAP (the CAP-14 graze pair) cold against the cache and
-    compare images read and tokens spent to the original session — and confirm the conclusion is
-    unchanged, not merely cheaper.
+  - **Premise confirmed, payoff still unmeasured** (`analysis/session-cost/FINDINGS.md`). Baseline,
+    scored off the real transcript: the CAP-14 session read **25 images** — corroborating the
+    self-report the design was built on — for 347 k output tokens and **85.8 M cache reads** over
+    375 turns. Cache reads dominate and scale with *turn count*, so fewer images and fewer printed
+    rows are the same lever: both keep the transcript small for every later turn.
+  - Clips are genuinely revisited, so there is a second visit for a cache to serve: **89 of 94
+    clips (95%) appear in more than one session**, 71 in more than two. ⚠ Those are *mentions*, not
+    re-decodes — a clip named in `FINDINGS.md` is counted whenever that file is read — so treat it
+    as a direction, not a rate.
+  - ⚠ **The success criterion first written here was wrong and is retracted.** "Re-run a settled CAP
+    and compare" is contaminated: a settled CAP's answer is in this file, so a cold session reads
+    the entry and stops, scoring a saving that measures the backlog rather than the cache. New
+    footage cannot A/B it either — a fresh clip has no sidecar in *either* arm.
+  - Open: run the A/B in `analysis/session-cost/FINDINGS.md` §"The A/B protocol". It needs a *second
+    visit* — first analyse a new capture normally (`CAP-31` is next), then ask one follow-up
+    question it did not answer, twice, cold, with and without `videodata/`. ⚠ `CleanScratch.ps1`
+    before the no-cache arm or it inherits the `.npy` cache and the result understates the tool.
+    Falsification is explicit: if both arms read a similar number of images, the shot-index is not
+    displacing contact sheets and the saving is confined to numeric traces.
 
 - `BL-306` `[Bug]` **`RunTests.ps1` reddens at random: four xUnit classes race over the process-wide
   `Log.ConsoleSink`.** Caught 2026-08-07 —
