@@ -348,6 +348,21 @@ in every `CAP-02` batch-4 clip. Only the first ~0.7 s of a hard pull is readable
 design the comparison to live in that window (a pull *from level flight* does; a pull out of a dive
 does not). This is the same ceiling `playtest.md`'s `CAP-20` row already records.
 
+⚠ **Thirteen `CAP-02` takes measured the wrong plane.** `a_n` and ADI pitch rate both live in the
+**vertical** plane, so a lateral effect leaves both flat — which is exactly the null they returned.
+The signal was on the compass all along: 17° of heading swing at 34 °/s in a level cliff pull
+against under 1° in matched free-air controls. **When a manoeuvre is described as "moving to the
+side", measure heading first.** The compass is usable only when the nose stays well clear of
+vertical (below γ ≈ +45° is comfortable; the same clips swing 30–44° spuriously once γ > 60°, where
+`a_n` simultaneously explodes to 10⁵) — which is why every earlier, steeper `CAP-02` take was
+unreadable for it.
+
+⚠ **There is no roll readout for a daylight scene.** `moon.py` recovers roll by tracking the moon
+and needs a night sky. An ADI sky-centroid bank estimator is the obvious substitute and a naive one
+does **not** work — it wrapped to ±178° on all three batch-4 clips. Until one exists, heading cannot
+be separated from a banked turn, so any "it yawed" claim needs either a level-horizon landmark in
+frame or a night mission.
+
 ⚠ **`BL-109`'s 32.96 / 34.02 m/sim-s² is SPEED-SPECIFIC. Never reuse it as a general max-pull
 yardstick.** Lift ∝ V², and at ~300 mph this same aircraft pulls **72.6 m/sim-s²** in free air —
 2.17× that figure with nothing anywhere near it (`CAP-02 Run3 5`, 28 s at 2,634–3,939 ft over open

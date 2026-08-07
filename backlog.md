@@ -776,10 +776,37 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   is the original's own speed-dependent yaw authority, which our hand-rolled `eff`
   (`1.4 − clamp(v/fd)`) stands in for and whose comment already admits is "still not same as
   original".
-  **`CAP-02` (2026-08-07, four batches, 14 takes). No amplification is measurable, on either axis.**
-  The pilot reports a collision-avoidance assist on the **elevator** channel that fires near terrain.
-  Every controlled comparison filmed says the pull near the ground is the *same* pull as in free
-  air — to within ±10% on both the quantity that could show it:
+  **`CAP-02` (2026-08-07, four batches, 14 takes). The effect is LATERAL, which is why thirteen
+  takes of vertical-plane analysis found nothing.** During a pull at a cliff the **heading swings
+  17° at up to 34 °/s**, while two matched free-air controls flying the identical held pull over the
+  identical flight-path-angle range move **under 1°**. The user's very first description of this —
+  "the plane moves sharply to the side" — was right, and every measurement axis chosen since then
+  was blind to it by construction.
+
+  | during the pull, γ = 0° → +23° | Δ heading | peak rate |
+  |---|---|---|
+  | **`Run4 Clip3`, level 250 ft at a cliff** | **−16.9°** | **−34.1 °/s** |
+  | `Run4 Clip1` control, 1,113 ft free air | −0.2° | −0.7 °/s |
+  | `Run4 Clip2` control, **90 ft over water** | +0.2° | +0.3 °/s |
+
+  The 90 ft control is what makes this terrain-specific rather than altitude-specific: same held
+  pull, same speed, twenty times closer to the surface than the cliff run's *lateral* clearance, and
+  its heading does not move. The compass tracks at correlation **median 0.999** here, and all of it
+  happens below γ = +23°, so none of it is the near-vertical degeneracy that made every earlier
+  `CAP-02` take unreadable for heading. (The controls *do* swing 30–44° later, at γ > 60°, where
+  `a_n` simultaneously explodes to 10⁵ — that is the degeneracy, and it is excluded here.)
+
+  ⚠ **Bank is the alternative and it is NOT excluded.** Heading alone cannot tell a yaw from a
+  banked turn. `moon.py` is the pipeline's only roll readout and needs a night sky, so it does not
+  apply to these daylight takes; an ad-hoc ADI sky-centroid estimator tried here wrapped (±178° in
+  all three clips) and was discarded rather than reported. If the swing *were* a banked turn it
+  would need roughly **48° of bank**, implying a total normal acceleration near 48 m/sim-s² — which
+  sits inside the free-air envelope, so magnitude does not exclude it either. What stands against it
+  is the pilot's own statement that the input was **pitch only**.
+
+  **In the vertical plane there is still no amplification** — that part of the earlier work stands,
+  and now has an explanation. Every controlled comparison says the pull near the ground is the same
+  pull as in free air, to within ±10%: 
 
   | | free air | near terrain | ratio |
   |---|---|---|---|
@@ -802,10 +829,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *slower*. ⚠ The ADI **saturates above ~+25° of nose-up** (sky fraction pins at 0.729–0.730 in all
   three clips) — only the first ~0.7 s of each pull is usable, which is the matched part anyway.
 
-  **What this does and does not say.** It bounds the effect: in the geometries filmed — down at
-  water, held pull at the deck, level at a cliff — nothing amplifies flight-path curvature or nose
-  rate by more than ~10%. It does **not** call the pilot's experience mistaken; the same pull genuinely
-  is far more violent-looking with the ground close, and one anomaly is still unexplained (below).
+  **What the vertical-plane result does and does not say.** It bounds the effect *in its own plane*:
+  nothing amplifies flight-path curvature or nose pitch rate by more than ~10%. Read together with
+  the heading result above, the natural reading is that the assist turns the aircraft **away from
+  what it is aimed at**, and when that is a cliff the escape is sideways — leaving pitch untouched
+  and putting the whole signal on an axis nothing was measuring.
 
   ⚠ **Retraction (batch 3).** An earlier pass here — and the message of commit `13d9fbe` — claimed
   ground blow "roughly doubles pitch authority (1.95× max pull)". **That was an artifact of a
