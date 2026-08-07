@@ -1242,7 +1242,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   a C1B-night and a bright-day original screenshot would confirm/refine the self-scaling (`CAP-11`).
 
 - `BL-118` `[Tuning]` **Cloud deck** — the `CloudDeck` **mesh** brightness reads ~40 units lighter than the
-  original — **plus a post-`BL-273` density judgement of the now-authored ambient cloud field.**
+  original (measured 2026-08-07: **+54, and only from below** — see the `CAP-12` block) — **plus a
+  post-`BL-273` density judgement of the now-authored ambient cloud field.**
   ⚠ **RE-SCOPED 2026-08-06, `BL-273` landed.** Everything this item used to say about the sprite
   field went with `CloudPuffs.cs`: the field is now `fogvol.zrd`'s authored clutter scattered
   through the gamez `fvol*` volumes, and it carries no TUNE constant at all
@@ -1257,10 +1258,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   jitter. That is what the authored numbers produce under the documented grid reading of `distance`
   (fogvol.md, "What is decoded and what is inferred"); if the original shows no such structure, the
   reading of `distance` is what to revisit — **not** a new tuning constant.
-  *`CAP-12`* stays owed for the deck-density judgement; film the sprite field only if a difference
-  survives the reader (user's call, 2026-08-05). *Playtest:* `PT-42` ([`playtest.md`](playtest.md)).
+  **`CAP-12` delivered and analysed 2026-08-07** (evidence in `playtest/CAP-12/`, decode via the
+  chase pipeline — gate dx=dy=0 peak 0.758, altimeter NCC 0.9900). What the footage settles:
+  - **The deck band is the authored `fogvol` slab.** Full whiteout spans **3290–3560 ft
+    (1003–1085 m)** across six crossings, top edge 3560 ± 6 ft over five of them; first wisps at
+    ~3222 ft (982 m), clear above by ~3700 ft. Authored slab: 970–1090 m — congruent to within
+    metres, so deck placement is data, not a constant to tune.
+  - **(a) is confirmed, signed, and localized to the underside.** Matched-box A/B against our
+    build at the same altitudes (`--pos` shots, same 480×110 game-coord box): deck from below
+    original **167** vs ours **221** (+54, ours too bright); inside 248/243; tops from above
+    211/214; from 5570 ft 196/202. The interior and tops already match within a few units —
+    only the base lighting is wrong. Original base: flat dark-gray sheet, soft mottling; ours:
+    white, top-lit, hard-edged crenellation.
+  - **The original shows no comb.** Grazing passes along tops and base (stills t=44/59/97/124,
+    t=29.2) show soft continuous structure only — no 130 m lattice at any angle. Whether *our*
+    field shows one at the controls is still `PT-42`'s check; the original side is now on file.
+  - Our `csvm-above-1160m.png` shows **discrete puff balls floating above the tops**; the
+    original's tops are smooth (C1 has no build-up towers — those are C1C).
+  *Playtest:* `PT-42` ([`playtest.md`](playtest.md)) keeps the at-the-controls look judgement.
   ⚠ **Trap.** The "~40 units lighter" brightness reading is about the `CloudDeck` **mesh**, a
-  different object from the sprite field — do not read one as evidence for the other.
+  different object from the sprite field — do not read one as evidence for the other. (The +54
+  measurement above is the mesh underside; the sprite field sits *inside* the whiteout band.)
 
 - `BL-165` `[Feature]` `[Blocked: CAP-13]` **The sun renders no lens flare; the original does.** Confirmed absent: `Launcher.cs:569`
   builds only a plain `DirectionalLight3D` (`Sun`) + a `WorldEnvironment` with no glow/bloom
