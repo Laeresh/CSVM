@@ -809,7 +809,9 @@ public static class Probes
 
         bool bhawk = planeNodeName.Equals("player_bhawk", StringComparison.OrdinalIgnoreCase);
         float fd = stats.FdSpeed;
-        float thrustAccel = stats.EnginePower * Config.GetFloat("flightModel.thrustConst", 184f)
+        // ⚠ The fallback here must track FlightModel.ThrustConst — it is a second copy of the same
+        // default, and a stale one silently mis-reports the header while the model itself is fine.
+        float thrustAccel = stats.EnginePower * Config.GetFloat("flightModel.thrustConst", 107f)
                             / (stats.VehWeight / 1000f);
 
         void Row(string name, string what, string unit, double model, double? measured,
@@ -900,22 +902,31 @@ public static class Probes
         Row("level-speed-near-cap", "level full throttle at 1988 m, held to equilibrium", "mph",
             m.Speed / Mph, 300.4, 4.0, "altitude clamp must not leak below the cap");
 
-        // --- 1/8 throttle. Both rows are INFORMATIONAL: the original's throttle→thrust curve is
-        // undecoded, so a miss here indicts that curve or the low-speed drag blend and cannot say
-        // which. Asserting it would fail the build over an unscoped question.
+        // --- part throttle. These two are the ONLY place the drag shape is observable: the
+        // full-throttle equilibrium is fd_speed by construction for any curve, so it can never
+        // detect a wrong shape (BL-148 trap (b)). Both are informational pending a playtest of the
+        // "throttled-back plane barely decelerates" report that the old low-speed drag blend
+        // existed to answer — the new curve is far weaker down here and reopens exactly that
+        // question.
         m = Fresh(stats, Level(), 0.9f * fd, 0.125f);
         Run(m, 0.125f, 300f, pitch: 0f);
         double idlePath = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
         Row("eighth-throttle-speed", "1/8 throttle held to equilibrium", "mph",
             m.Speed / Mph, 137.9, 6.0,
-            $"{m.Speed / fd:0.000} x fd_speed (original 0.459), settled path {idlePath:0.0}° "
-            + "— it ends up below lift speed and sinks, so this is not a level equilibrium",
+            $"{m.Speed / fd:0.000} x fd_speed (original 0.459), settled path {idlePath:0.0}°",
             info: true);
 
-        m = Fresh(stats, Level(), 290f * Mph, 0.125f);
-        double tDecel = RunUntil(m, 0.125f, 60f, () => m.Speed <= 150f * Mph);
-        Row("decel-290-150", "throttle cut to 1/8, 290 -> 150 mph", "s", tDecel, 7.04, 1.0,
-            "", info: true);
+        // ⚠ This is a ZERO-throttle run, not 1/8. The clip it is measured against holds 8/8, cuts
+        // to 0/8, and touches nothing else in level flight (pilot-confirmed 2026-08-07) — it was
+        // modelled here at 1/8 for want of that fact, which made it a thrust-vs-drag scenario
+        // instead of the pure drag probe it actually is. At 1/8 the model reads 12.1 s against the
+        // same 7.04 target, and that miss is an artifact of the wrong throttle setting, not a
+        // finding: 150 mph sits only 8% above the 1/8-throttle equilibrium, so the approach is
+        // asymptotic and the time runs away. With no thrust there is no equilibrium to crowd.
+        m = Fresh(stats, Level(), 290f * Mph, 0f);
+        double tDecel = RunUntil(m, 0f, 60f, () => m.Speed <= 150f * Mph);
+        Row("decel-290-150", "throttle cut to ZERO, 290 -> 150 mph, level", "s", tDecel, 7.04, 1.0,
+            "pure drag — no thrust term to assume", info: true);
 
         // --- zoom climb. INFORMATIONAL, and it is the row that exposes the model's largest known
         // gap: the original bled to 104 mph reaching its apex where we arrive still fast, because we

@@ -161,8 +161,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Base drag and thrust
 
-1. ☐ Fit `(A, p_lo, p_hi, k)` numerically against all four measurements
-2. ☐ Land the fitted constants and the drag/thrust probe rows
+1. ☑ Fit `(A, p_lo, p_hi, k)` numerically against all four measurements
+2. ☑ Land the fitted constants and the drag/thrust probe rows
 
 ### Wave B — Angle of attack and lift (`BL-247`)
 
@@ -199,7 +199,57 @@ File contention: A2, B11, B12, C21 all edit `FlightModel.cs`; A2, B13, C22 all e
 
 # Wave A — Base drag and thrust
 
-## A1 ☐ Fit `(A, p_lo, p_hi, k)` numerically against all four measurements
+## A1 ☑ Fit `(A, p_lo, p_hi, k)` numerically against all four measurements
+
+**Landed** 2026-08-07. `ThrustConst` **184 → 107** (A = 60.04 → 34.92 m/s² on the Bloodhawk),
+`LowSpeedDragBlend` 0.35 replaced by `DragExpLow` **3.278** / `DragExpHigh` **2.663**, and thrust
+made sublinear with `ThrottleExp` **1.236**.
+
+**Verified** against the real `FlightModel.Step` integrator via `Probes.FlightEnvelope`, on all
+eleven airframes. Five independent measurements of the original now reproduce:
+
+| scenario | before | after | original |
+|---|---|---|---|
+| `accel-150-290` | 3.73 s | **3.75 s** | 3.76 ± 0.40 |
+| `terminal-dive` | 355.92 mph | **355.37 mph** | 355.20 ± 6 |
+| `eighth-throttle-speed` | 85.96 mph | **137.87 mph** | 137.90 |
+| `decel-290-150` (zero throttle) | 1.86 s | **6.48 s** | 7.04 ± 1.0 |
+| `CAP-05` drag ×4 | 4–21× high | **within 4%** | 0.36/1.11/2.82/3.74 m/s² |
+
+All eight previously-asserted rows stayed green and unmoved. Piecewise was **necessary and the data
+chose it**: a single exponent puts the terminal dive at 344.5 mph against 355.2 ± 6, outside by 1.8×
+the tolerance.
+
+**Three findings that were not what the item went looking for.**
+
+1. **The 1/8-throttle equilibrium is airframe-independent, and now falls out rather than being
+   fitted.** Every one of the eleven planes settles at exactly **0.457 × fd with a settled path of
+   0.0°** — a true level equilibrium — against the original's measured 0.459. Before, they scattered
+   0.271–0.347 and all *sank*. The fraction is `(throttle^k)^(1/p_lo)`, which depends only on the
+   exponents and not on `A`, so the airframe-independence is structural.
+2. **`decel-290-150` was flying the wrong throttle setting.** The probe modelled it at 1/8; the clip
+   holds 8/8, cuts to **0/8**, and touches nothing else in level flight (pilot-confirmed
+   2026-08-07). At 1/8 the model reads 12.10 s against the 7.04 target and *no* power law can fix
+   it — 150 mph sits 8% above the 1/8 equilibrium, so the approach is asymptotic and the required
+   e-folding rate is unreachable at any exponent. That looked like a sixth contradictory
+   measurement and was not one. Corrected to zero throttle, it is a pure drag probe and lands at
+   6.48 s. **The 7.04 s measurement was right; our scenario was wrong.**
+3. **`MaxDiveSpeedFrac` did not need raising** — the opposite of what was predicted. The fitted
+   `p_hi` = 2.663 is steeper than the ~1.64 the hand-estimate assumed, so every airframe's terminal
+   moved *down*: the Balmoral went 1.678 → **1.590 fd**, further clear of the 1.75 backstop.
+
+**⚠ Deviation from this item as written.** A1 said it would produce numbers without touching
+`FlightModel.cs`, by sweeping `Config` keys. That is not possible: `Config.Load` resolves through
+`ProjectSettings.GlobalizePath`, a Godot native call unavailable in the headless test host, and
+there is no programmatic setter. A `Config.SetOverride` seam was considered and **rejected by the
+user** — `Config.cs:64-68` warns that overrides make a capture a function of uncommitted state, and
+the repo has no test that overrides config at all. Fitting was done instead by editing the in-code
+constants and re-running the real probe suite, with closed-form algebra
+(`scratchpad/startvals.py`, not committed — game-data-free but throwaway) only to seed the search.
+The trap the item raised still held: the seed values were re-checked against the integrator and the
+integrator is what the numbers above come from.
+
+**Original approach (kept for reference).**
 
 **Goal.** A defensible set of numbers for maximum thrust acceleration, the drag exponent(s) and the
 throttle→thrust exponent, produced by a fit that reproduces `CAP-05`'s four absolute drag points,
@@ -254,7 +304,42 @@ you have seen it able to move.
   is 11 (Lvl-2, 0.62); using the level-1 row (0.47) inflates the constant by 32% and survives every
   check that only ever sees `A`.
 
-## A2 ☐ Land the fitted constants and the drag/thrust probe rows
+## A2 ☑ Land the fitted constants and the drag/thrust probe rows
+
+**Landed** 2026-08-07 with A1 (the two are one commit — the Config seam's rejection collapsed the
+produce-numbers/land-numbers split that separated them).
+
+**Verified.** `.\RunTests.ps1`: build clean, **616/616** units, **26/26** engine suites, engine
+errors clean. Goldens: **4 of 13 moved**, rebaselined — `empty-stage`, `c1-flight`,
+`c1-destroy-effects`, `c1-crash`. Those are exactly the four shots that fly a plane on a `--hold`
+path; the nine freecam/viewer/static shots are byte-identical. Two of the four hold **part
+throttle** (0.6 and 0.5), which is where `ThrottleExp` bites hardest. Confirmed able-to-fail and
+deterministic before rebaselining: all 13 pass at the branch point `c1861f3`, and two independent
+runs with the change produced identical new hashes. Both flight images inspected — level, stable,
+gauges and HUD rendering; not a plane falling out of the sky.
+
+**Deviations from this item as written.**
+- `decel-290-150` was **not** promoted to asserted. Its stated reason for being informational (the
+  throttle curve is undecoded) did expire, but the row was found to be flying the wrong throttle
+  setting (A1 finding 2) and the user's call was to keep it informational pending the playtest.
+  `eighth-throttle-speed` was likewise left informational for the same reason.
+- The four `CAP-05` drag points were **not** added as probe rows. They were used as fit targets and
+  are reproduced within 4%, but they are not yet defended against regression. **Carried to B13.**
+- `MaxDiveSpeedFrac` untouched (A1 finding 3), but its comment was corrected — it cited the
+  Balmoral at 1.678 and A = 13, both now stale.
+- `Probes.cs:812` carried a **second hardcoded copy** of the `thrustConst` default (184) that the
+  model change did not reach, so the dump header mis-reported max thrust accel while the model
+  itself was correct. Fixed, with a comment naming it as a duplicate.
+
+**⚠ Owed, not done.** The playtest. The user flew this build and reports it **"feels like
+coasting"** — which is precisely the `BL-148` trap (c) complaint that `LowSpeedDragBlend` 0.35
+existed to answer, and this commit removes that guard. Their hypothesis: the original may have
+something like airbrakes (not visible) when slowing. The zero-throttle correction removes the need
+for that explanation at 0/8 — 6.48 s against 7.04 — but says nothing about part throttle, where the
+model still takes 12.10 s to reach 150 mph at 1/8. **This is unresolved and blocks nothing in Wave
+B/C, but it must not be forgotten at D31.**
+
+**Original approach (kept for reference).**
 
 **Goal.** `FlightModel.cs` carries the fitted drag curve and a sublinear throttle→thrust curve; the
 suite asserts the `CAP-05` low-speed drag points and the two 1/8-throttle rows; every previously
