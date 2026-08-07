@@ -18,7 +18,7 @@ A destructible is any animation definition whose header carries these:
 | Field | Reader key | Compiled key | Meaning |
 |---|---|---|---|
 | Hit points | `HEALTH [n]` | `health` (float) | The object's HP pool. **Any def with `health > 0` is destructible** — this is the whole test. |
-| Damage mode | `ACTIVATION` (usually absent) | `activation` | What can damage it: `WeaponHit` (weapon fire only) or `WeaponOrCollideHit` (weapon **or** a plane ramming it). |
+| Damage mode | `ACTIVATION` (usually absent) | `activation` | The plane's fate on contact: `WeaponHit` (solid — graze/crash) or `WeaponOrCollideHit` (breaks, plane flies through). Both take collision damage (`BL-302`). |
 | Damage script | `DAMAGE_SEQUENCE [ … ]` | a sequence named `DAMAGE_SEQUENCE` | A threshold script of `IF ANIM_HEALTH n` branches escalating visible damage as HP falls. |
 
 Everything else is ordinary sequences and events. When the object dies, a normal named
@@ -34,11 +34,18 @@ The reader source usually omits `ACTIVATION` on a destructible entirely (the wat
 below has no `ACTIVATION` key); the compiler assigns the default `WeaponHit`. The compiled form
 always states it explicitly. The two values:
 
-- **`WeaponHit`** — damaged only by weapon fire. Ramming the object with a plane damages the
-  *plane*, not the object. This is the overwhelming majority (2,565 defs): buildings, tanks,
-  towers, refinery structures, AA guns.
-- **`WeaponOrCollideHit`** — also destroyed by a plane flying into it. Exactly **44 defs** in the
-  whole install, and they are a deliberate, hand-picked set (below).
+- **`WeaponHit`** — the object is **solid**: a plane flying into it grazes or crashes. This is
+  the overwhelming majority (2,565 defs): buildings, tanks, towers, refinery structures, AA guns.
+- **`WeaponOrCollideHit`** — the object **breaks and the plane flies through unharmed**. Exactly
+  **44 defs** in the whole install, and they are a deliberate, hand-picked set (below).
+
+> ⚠ **Superseded reading (corrected 2026-08-07, `BL-302`).** This page originally read the enum as
+> "what can damage it" — `WeaponHit` = weapon fire only, ramming damages the plane and leaves the
+> object intact. Original-game tests refute that: ramming a C1 hangar (a plain `WeaponHit` def)
+> plays both the plane crash and the hangar's destruction, and a survivable graze advances its
+> `DAMAGE_SEQUENCE` stages. **Every destructible takes severity-scaled collision damage; the enum
+> gates the *plane's* fate (solid vs fly-through), not the object's.** The crash explosion has no
+> blast radius (crashing beside a destructible damages nothing), so the damage is contact-borne.
 
 `proximity_damage` is a **separate** header flag and is `false` on every case examined here,
 including both collide members and plain `WeaponHit` destructibles — it does *not* encode the
@@ -54,7 +61,7 @@ collide mode. The collide behaviour is carried entirely by the `activation` enum
 
 39 + 4 + 1 = 44. All but the autogyro have `health 0.01`, i.e. they shatter on the lightest
 touch: they exist to break when you fly through them, not to be a combat target. Everything
-outside this set is weapon-only.
+outside this set is solid on contact — but still takes collision damage (see the ⚠ above).
 
 ## `ANIM_HEALTH` is an absolute threshold, and the order matters
 

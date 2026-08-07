@@ -415,6 +415,47 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`docs/plans/PLAN-m3-polish-10.md` A1), `DamageVisuals.cs` (the consumer),
   `extracted/zrdr/vehicle.zrd.json` (the authority).
 
+- `BL-302` `[Bug]` **Every destructible takes collision damage in the original — `ACTIVATION` gates the
+  *plane's* fate, not the object's. Refutes M3 Decision 6's behavioural reading.** We currently damage
+  only the 44 `WeaponOrCollideHit` defs on contact and leave every `WeaponHit` destructible untouched
+  by a ram ("ramming a water tower kills *you*, and the tower is untouched" —
+  `docs/plans/PLAN-M3-weapons.md`, wave item C27). That reading was inferred from the activation
+  census alone and never tested against the original. **Three original-game tests (user, C1,
+  2026-08-07) overturn it:**
+  1. **Full ram into a C1 hangar: the plane crash AND the hangar's destruction both play.** No C1 def
+     is in the 44-def collide set (all are C2 facades / C5 windows / C5 `agyrobus`,
+     `docs/formats/destructibles.md`), so the hangar is a plain `WeaponHit` destructible — and the
+     collision still killed it.
+  2. **A survivable graze along a hangar advanced it to its stage-2 smoke-and-burn damage stage**
+     while the plane flew on — so collision damage is *severity-scaled* and flows through the ordinary
+     `DAMAGE_SEQUENCE` thresholds, not an instant kill.
+  3. **Crashing on bare ground next to a destructible damages nothing** — the plane's death explosion
+     has no blast radius (consistent with the data: rockets are the only blast-radius carriers), so
+     test 1's hangar died from the *contact*, not the boom.
+  **What stands:** the 2,565 `WeaponHit` / 44 `WeaponOrCollideHit` census is a data fact. **What the
+  enum actually means:** `WeaponOrCollideHit` = the object breaks and the plane flies *through*
+  unharmed (fly-through set dressing); `WeaponHit` = the object is solid — the plane grazes or
+  crashes on it — but it still takes the collision damage.
+  *Fix shape:* apply collision damage to ANY struck destructible (`FlightController.cs:882-894`
+  currently consults `CollideDamageSink` and `AnimRuntime.CollideDamageAt:1257-1269` rejects
+  non-`WeaponOrCollideHit` defs — lift that gate for the damage half), keeping the fly-through-on-break
+  behaviour gated on `WeaponOrCollideHit` exactly as now, and dealing the damage on the crash branch
+  too, not only the graze/fly-through one.
+  *Playtest after fix:* ram + graze a C1 hangar in our build and A/B the damage stages against the
+  original.
+  ⚠ **Traps.** (a) Do **not** add a crash blast radius — test 3 refuted it directly. (b)
+  `CollideDamagePerVn` 8 (`FlightController.cs:313`) has only ever fed 0.01-HP set dressing, where any
+  value shatters it; once 40–60 HP buildings take collision damage the constant is live and untuned —
+  test 2 (a graze reaching stage 2, not death) is the first calibration point, once the struck
+  hangar's def and its HP/thresholds are identified (the C1 building def is not `hangar3` — that
+  zrdr def is the ON_CALL *doors* anim; one lookup owed during the fix). (c) The `--damage-hd`
+  `collide[✓/✗]` gate (`Probes.cs:683`) *asserts the old semantics* — WeaponHit towers ignoring
+  collision is its ✗ leg — and must flip with the code, or it will fail green. (d) Plane-vs-plane
+  ram damage is NOT this item — no original evidence yet; the struck plane taking damage stays
+  unowned. *Supersedes:* the "decision 6 upheld" caveat (`PLAN-M3-weapons.md:1281`,
+  `docs/HISTORY.md:5295` records the old behaviour landing) and `docs/formats/destructibles.md`'s
+  `ACTIVATION` reading (⚠-noted in place).
+
 ## Weapons & combat
 
 - `BL-062` `[Research]` **Rocket firing order — the H-selector fidelity question.** Settle from the original
@@ -1242,7 +1283,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   a C1B-night and a bright-day original screenshot would confirm/refine the self-scaling (`CAP-11`).
 
 - `BL-118` `[Tuning]` **Cloud deck** — the `CloudDeck` **mesh** brightness reads ~40 units lighter than the
-  original — **plus a post-`BL-273` density judgement of the now-authored ambient cloud field.**
+  original (measured 2026-08-07: **+54, and only from below** — see the `CAP-12` block) — **plus a
+  post-`BL-273` density judgement of the now-authored ambient cloud field.**
   ⚠ **RE-SCOPED 2026-08-06, `BL-273` landed.** Everything this item used to say about the sprite
   field went with `CloudPuffs.cs`: the field is now `fogvol.zrd`'s authored clutter scattered
   through the gamez `fvol*` volumes, and it carries no TUNE constant at all
@@ -1257,10 +1299,57 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   jitter. That is what the authored numbers produce under the documented grid reading of `distance`
   (fogvol.md, "What is decoded and what is inferred"); if the original shows no such structure, the
   reading of `distance` is what to revisit — **not** a new tuning constant.
-  *`CAP-12`* stays owed for the deck-density judgement; film the sprite field only if a difference
-  survives the reader (user's call, 2026-08-05). *Playtest:* `PT-42` ([`playtest.md`](playtest.md)).
+  **`CAP-12` delivered and analysed 2026-08-07** (evidence in `playtest/CAP-12/`, decode via the
+  chase pipeline — gate dx=dy=0 peak 0.758, altimeter NCC 0.9900). What the footage settles:
+  - **The deck band is the authored `fogvol` slab.** Full whiteout spans **3290–3560 ft
+    (1003–1085 m)** across six crossings, top edge 3560 ± 6 ft over five of them; first wisps at
+    ~3222 ft (982 m), clear above by ~3700 ft. Authored slab: 970–1090 m — congruent to within
+    metres, so deck placement is data, not a constant to tune.
+  - **(a) is confirmed, signed, and localized to the underside.** Matched-box A/B against our
+    build at the same altitudes (`--pos` shots, same 480×110 game-coord box): deck from below
+    original **167** vs ours **221** (+54, ours too bright); inside 248/243; tops from above
+    211/214; from 5570 ft 196/202. The interior and tops already match within a few units —
+    only the base lighting is wrong. Original base: flat dark-gray sheet, soft mottling; ours:
+    white, top-lit, hard-edged crenellation.
+  - **The original shows no comb.** Grazing passes along tops and base (stills t=44/59/97/124,
+    t=29.2) show soft continuous structure only — no 130 m lattice at any angle. Whether *our*
+    field shows one at the controls is still `PT-42`'s check; the original side is now on file.
+  - ~~Discrete puff balls above the tops in ours, none in the original~~ — **explained, not a
+    defect (user, 2026-08-07): the placed/scattered puffs exist only over the base map**, and the
+    clip had left it (a straight run at ~300 mph covers the 12,288 m map in under a minute),
+    while our `csvm-above-1160m.png` sits at (-4974,-3861) — on it. The edge extension carries
+    no puffs in the original; same phenomenon on C2's world-placed puffs. Any future above-deck
+    A/B must say which side of the map edge both frames are on.
+  **C4 take analysed 2026-08-07** (`CAP-11 C4 and CAP-12 Clouddeck.mp4`, gate dx=dy=0 peak
+  0.848, d2 sd 0.99 ft; evidence in `playtest/CAP-12/c4/`) — the clear-air chapter separates
+  what C1's murk hid, and it bears on the **uniform-vertical-fill inference** in
+  [`docs/formats/fogvol.md`](docs/formats/fogvol.md):
+  - **C4's authored numbers put the puffers above the deck, uniquely among chapters.** Deck mesh
+    y=1050 (`Sky1.tif` tiles), `CLOUD_COVER` 1000–1100 (colors authored 192-gray), `fvol` slab
+    **1060–1180.5** — the slab tops out **80 m above** the cover band (C1's 970–1090.5 nests
+    inside its 970–1124). Puffs riding visibly above the deck are data, not a bug.
+  - **The user-reported gap is real in the footage, and uniform fill cannot produce it.** At
+    1135 m (t=19.5) the original flies in *clear air* — gray sheet below, puff bases above; the
+    whole climb 1003→1230 m never fully obscures (lum ≤ 195). Under uniform fill the 132.3 m
+    cards (scale ≤1.5) hang to ~956–990 m, piercing the deck — no gap is expressible. Our build
+    at the same spot (`csvm-c4-1135m.png`) sits in murk, and at 1050 m
+    (`csvm-c4-1050m-deck.png`) renders a **243 whiteout where the original's obscuration is a
+    GRAY-out** (user, 2026-08-07): C4 authors `CLOUD_COVER` `TOP_COLOR`/`BOTTOM_COLOR` =
+    192,192,192, and the original's veil measures exactly that flat 192 — so C4 carries a
+    *second*, in-cloud brightness delta (243 vs 192, +51) on top of the C1 underside one, and
+    the target value is authored data, not a judgement call. A **top-anchored** scatter
+    (centres near the volume top, perp jitter) puts card bottoms at ~1076–1127 m — a 30–75 m
+    clear band over the sheet, which is what the clip shows. C1 cross-checks: top-anchoring at
+    1090 predicts bottoms ~991–1027, matching the measured whiteout onset 1003 m / wisps 982 m.
+  - ⚠ Confound to keep separate: C4 also ships **45 `cloudparent` clusters parked at the world
+    origin** in gamez (runtime-placed by mission setup, altitude not in `nodes.json`); the big
+    cumulus towers at 1200–1600 m in the same clip are likely those, not `fvol` scatter.
+  *Fix shape:* revisit fogvol.md's vertical-spread inference (anchor at/near the volume top
+  rather than filling it), per this entry's own rule — an inference correction, not a TUNE.
+  *Playtest:* `PT-42` ([`playtest.md`](playtest.md)) keeps the at-the-controls look judgement.
   ⚠ **Trap.** The "~40 units lighter" brightness reading is about the `CloudDeck` **mesh**, a
-  different object from the sprite field — do not read one as evidence for the other.
+  different object from the sprite field — do not read one as evidence for the other. (The +54
+  measurement above is the mesh underside; the sprite field sits *inside* the whiteout band.)
 
 - `BL-165` `[Feature]` `[Blocked: CAP-13]` **The sun renders no lens flare; the original does.** Confirmed absent: `Launcher.cs:569`
   builds only a plain `DirectionalLight3D` (`Sun`) + a `WorldEnvironment` with no glow/bloom

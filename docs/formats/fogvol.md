@@ -116,6 +116,12 @@ no `cloudsprite*` template, no `clutter` key, degenerate ranges).
   reduced-detail mode, so it takes the farther band. Both are read and kept.
 - **The vertical spread inside a volume is uniform.** The box is a volume, so the field fills it;
   `perp_dist_range` is applied on top.
+  ⚠ **Under challenge from footage (2026-08-07, `CAP-12` C4 take — see `BL-118`):** C4's clear
+  air shows the plane in *clear sky at 1135 m*, inside the 1060–1180.5 volume, with puff bases
+  well above the 1050 m deck sheet — a gap uniform fill cannot produce (132.3 m cards would hang
+  to ~956 m). A top-anchored scatter (centres near the volume top + `perp_dist_range`) fits both
+  the C4 gap and C1's measured whiteout onset at 1003 m. Not yet implemented; the correction
+  belongs here, not in a tuning constant.
 
 **Undecoded / not implemented:**
 

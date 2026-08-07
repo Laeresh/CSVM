@@ -344,6 +344,66 @@ public class TemplateStageTests
         Assert.True(copies[0].Visible); // the stale hide was about an effect that is over
     }
 
+    // ---- place-exempt names: an airframe-scoped NAME is never a movable template ----
+
+    [Fact]
+    public void PlaceAtNeverMovesAPlaceExemptCallee()
+    {
+        // The Devastator trap: the crash defs' authored NAME (player_pfighter) resolves to the
+        // aircraft's own model root on that one airframe. Placing it would TopLevel-pin the plane
+        // at the call site while the FlightController flies on without it.
+        var h = new Harness(placeExempt: new[] { "player_pfighter" });
+        var model = h.Node("player_pfighter");
+        h.Roots["player_pfighter"] = new List<TestNode> { model };
+        var site = h.Node("pdp5");
+        site.Xf = new Transform3D(Basis.Identity, new Vector3(50, 0, 0));
+
+        h.Stage.PlaceAt(Def("player_pfighter"), site, Vector3.Zero);
+
+        Assert.False(model.Placed);
+        // Never moved → never "moved away": a poll-idiom re-call must not restart it while live.
+        Assert.True(h.Stage.IsAt(Def("player_pfighter"), site, Vector3.Zero));
+    }
+
+    [Fact]
+    public void AssignCallerSlotSkipsAPlaceExemptCallee()
+    {
+        var h = new Harness(placeExempt: new[] { "player_pfighter" });
+        var (def, _) = h.PooledRoot("player_pfighter", slots: 2);
+        var panel = h.Node("pdp1");
+
+        h.Stage.AssignCallerSlot(def, panel);
+
+        // No claim was made, so resolution stays def-wide — the exempt family's node ops keep
+        // reaching everything the NAME resolves, exactly as authored.
+        Assert.Equal(2, h.Stage.RootsFor(def, panel).Count);
+    }
+
+    // ---- the reveal ritual only writes on staged pool copies ----
+
+    [Fact]
+    public void RevealOnAPooledStageTouchesOnlySlotCopies()
+    {
+        // Retirement runs the hide half for EVERY ended def, template or not. A def whose
+        // resolved roots include a live scene node outside the pool (the crash rig's airframe
+        // model, its `player` scaffold, the wreck) must not have it blanked or lit by the ritual.
+        var h = new Harness(shown: true);
+        var copy = h.NodeUnder(h.SlotContainer(0));
+        var model = h.Node("player_pfighter");
+        model.Visible = true;
+        h.Roots["boom"] = new List<TestNode> { copy, model };
+        var def = Def("boom");
+        var panel = h.Node("pdp1");
+        h.Live.Add((def, panel));
+
+        h.Stage.Reveal(def, panel, visible: true);
+        Assert.True(copy.Visible);
+
+        h.Stage.Reveal(def, panel, visible: false);
+        Assert.False(copy.Visible);
+        Assert.True(model.Visible);
+    }
+
     private static AnimDefinition Def(string name) => new() { Name = name };
 
     /// <summary>The token adapter: reference-equality nodes, a parent-chain slot walk, transform
@@ -369,7 +429,8 @@ public class TemplateStageTests
         /// so a harness picks the role it is asserting rather than flipping a property
         /// mid-test — the same shape production has, where <c>WorldEffectsFactory</c> builds a
         /// sealed stage and hands it to the runtime.</summary>
-        public Harness(bool pooled = true, bool shown = false)
+        public Harness(bool pooled = true, bool shown = false,
+            IEnumerable<string>? placeExempt = null)
         {
             Stage = new TemplateStage<TestNode>(
                 EqualityComparer<TestNode>.Default,
@@ -392,7 +453,9 @@ public class TemplateStageTests
                 Printed.Add,
                 () => Debug,
                 pooled,
-                shown);
+                shown,
+                placesCalled: false,
+                placeExempt: placeExempt);
             Stage.Wire(
                 (name, _) => Roots.TryGetValue(name, out var r) ? new List<TestNode>(r) : new List<TestNode>(),
                 def => (Roots.TryGetValue(def.Name, out var r) ? r : new List<TestNode>()).Cast<TestNode?>().ToList(),

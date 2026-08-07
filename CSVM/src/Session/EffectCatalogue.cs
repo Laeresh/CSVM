@@ -149,7 +149,23 @@ public static class EffectCatalogue
     // ten it has nothing of the name and the def is simply inert. Not a staging gap: no chapter's
     // gamez carries a `player_pfighter` node at all (0 occurrences in all 8), so there is no
     // template to stage either way.
+    //
+    // ⚠ Also the crash stage's PLACE-EXEMPT set (WorldEffectsFactory.NewCrashTemplateStage): on
+    // the Devastator these names resolve to the AIRCRAFT, and a relocating CALL treating that as
+    // an effect template TopLevel-pins the whole plane at the call site — the model stays at
+    // spawn while the FlightController flies away with only the crash rig's debris. The defs'
+    // node ops still resolve and run on the model; only placement is refused
+    // (`crash-rig-anchors` suite, TemplateStageTests.PlaceAtNeverMovesAPlaceExemptCallee).
     public static readonly string[] AirframeScopedAnchors = { "player_pfighter" };
+
+    // The crash rig's own anim-root scaffold NAME. `player_crash_dirt`/`_water`,
+    // `player_destruction_reset`, `cpejectstop` and `random_gun_impact` are all authored
+    // NAME=`player` — the crash root the rig builds — and a relocating CALL reaching any of them
+    // (the dirt crash CALLs `cpejectstop` live) must never place that scaffold like a template:
+    // TopLevel-pinning it at the first crash site takes the wreck and every pooled template copy
+    // with it, so every later crash's destroyed plane and dirt burst replay at the FIRST crash's
+    // position (`crash-rig-anchors`' crash→respawn→move→crash leg is the regression test).
+    public static readonly string[] CrashScaffoldAnchors = { "player" };
 
     /// <summary>The graze reaction's per-surface touchdown def (<c>FlightController.GrazeReaction</c>):
     /// sparks off a hard building surface, dust off unclassified terrain, a splash off water — the

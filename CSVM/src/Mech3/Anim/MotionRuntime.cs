@@ -271,7 +271,13 @@ internal sealed class MotionRuntime : IAnimMotion
         // than the one before. The two readings agree everywhere a
         // launch is re-homed by something else (the crash's CrashRestPoses, ResetDestructible), so
         // this only changes the case nothing was resetting.
-        if (m._hasBallistic)
+        //
+        // ⚠ EXCEPT a placed template ROOT itself (TopLevel — only the stage's placement write ever
+        // sets that): the CALL that started this motion just put it at THIS call's site, and the
+        // recorded rest is wherever the FIRST placement froze it — re-basing to it replayed every
+        // crash-after-the-first's dirt burst at the first crash's position. The live pose IS the
+        // authoritative site for a root; its children keep the authored-rest re-home above.
+        if (m._hasBallistic && !target.TopLevel)
         {
             m._heldOrigin = rest.Origin;
             m._heldRot = rest.Basis.Orthonormalized();
