@@ -664,16 +664,43 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ Trap: the pick-one single-quad reading (+ `_muzzle1`→`_muzzle2` flip) was implemented and
   rejected at the controls — do not re-land it without new footage evidence.
 
-- `BL-289` `[Tuning]` `[Owed-playtest]` **Gun-impact looks (A2/`BL-203`, landed 2026-08-01)** — `Projectile.cs`: dirt chips
-  `DirtDebrisSprites` **5**, `DirtDebrisSize` **0.45 m**, `DirtDebrisLife` **0.9 s** (authored bit
-  RUN_TIME is 1–2 s), `DirtDebrisSpeed` **4 m/s**, `DirtDebrisSpreadDeg` **60°**, `DirtDebrisSpinMax`
-  **25 rad/s**; building ricochet `RicochetSparks` **8**, `RicochetSparkSize` **0.55 m**,
+- `BL-289` `[Tuning]` `[Owed-playtest]` **Gun-impact looks (A2/`BL-203`, landed 2026-08-01)** —
+  ⚠ **The six `DirtDebris*` constants left this entry 2026-08-07: `BL-313` deletes the effect they
+  tune, so there is nothing to A/B.** What remains here is the building ricochet:
+  `RicochetSparks` **8**, `RicochetSparkSize` **0.55 m**,
   `RicochetSparkLife` **0.55 s**, `RicochetSparkSpeed` **22 m/s**, `RicochetSpreadDeg` **90°** (a
   stand-in — both authored assets are missing from the install). The water-splash column width
   is settled and out of this entry: `SplashColumnWidthScale` **8×** confirmed at the controls
   2026-08-06 with the fades in (`BL-265` closed — the authored quad is 5 cm wide, sub-pixel past
   ~30 m; the reference ticks measure ~0.35 m, which 8× matches). A/B the rest against
   `Dirt Splash.png` at the controls; the splash *height/timing* curves are authored data, not TUNE.
+
+- `BL-313` `[Bug]` **Our gun hits on dirt fling `bit01`–`bit04` chips the original never draws — delete
+  the sprite half of `SpawnDirtDebris`** (`PT-27` at the controls + `OriginalScreenshots/Videos/70 DD
+  Dirt.mp4`, 2026-08-07). Three independent lines agree, which is why this is a deletion and not a
+  tune:
+  - **The data, read literally.** The slug gunhit defs fling `bit1`/`bit2`/`bit3`/`chunk` at
+    `PLAYER_RANGE 200`, and **`bit1`–`bit3` carry 0 vertices in this install** (measured C1/C2)
+    while **`chunk` has one 4-vertex quad** (`docs/formats/weapon-effects.md`). Read as written,
+    that draws the chunk quad — the perforated `gun_barrel` shroud band — and nothing else.
+  - **The footage.** `70 DD Dirt.mp4`: a 70-slug burst into dirt shows **only the chunk and one
+    very faint black puff**, no chips. The puff is the authored slug `blacksmokepuffer`
+    (`TIME_INTERVAL` 1.1 s, one puff per hit), so both visible elements are accounted for.
+  - **The inference's motive is answered elsewhere.** `architecture.md` recorded the leap as *"the
+    def's bit1–3 gamez nodes carry no geometry, the textures ARE the chips"* — motivated by the
+    `bit01`–`bit04` textures shipping in every chapter archive. They are **not** orphans, but their
+    consumer is **`zep_skin_fire3`/`zepskinfire_3`** (user, 2026-08-07), a pooled template whose
+    siblings each carry a real child mesh index (`gamez.md:48–53`). The textures earn their place
+    without the zero-vertex gunhit nodes drawing anything, so the leap has nothing left holding it
+    up.
+  *Fix shape:* delete `SpawnDirtDebris`'s sprite emission and `Projectile.cs:245`'s
+  `DirtDebrisTextures`; the `chunk` quad stays exactly as it draws today (`CAP-25` retired
+  2026-08-07 having confirmed the original shows it). Retract the inference in
+  `docs/architecture.md` and `docs/formats/weapon-effects.md` rather than silently overwriting it.
+  `BL-289`'s six `DirtDebris*` constants go with the effect.
+  ⚠ Trap: **do not generalise "zero-vertex node ⇒ draw its texture as a sprite" anywhere else** —
+  that is the reading this item retracts. If another effect is found relying on it, it needs its
+  own evidence, not this precedent.
 
 - `BL-290` `[Bug]` `[Blocked: CAP-28]` **Torpedo flight dynamics: the original's torpedo has a max/cruise speed and
   visibly slows after firing; ours flies the generic projectile model** (PT-38, 2026-08-06). Data
@@ -1310,9 +1337,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   30/37/55 return spurious seam spacings of 31/31/90 against the true 240). Use a half-width of a
   full half-period.
 
-- `BL-118` `[Tuning]` **Cloud deck** — the `CloudDeck` **mesh** brightness reads ~40 units lighter than the
-  original (measured 2026-08-07: **+54, and only from below** — see the `CAP-12` block) — **plus a
-  post-`BL-273` density judgement of the now-authored ambient cloud field.**
+- `BL-118` `[Tuning]` **Cloud deck mesh brightness** — the `CloudDeck` **mesh** brightness reads ~40 units
+  lighter than the original (measured 2026-08-07: **+54, and only from below** — see the `CAP-12`
+  block). **Second symptom, same defect (`PT-42`(a), 2026-08-07): from above, the deck mesh and the
+  `cloudsprite` field meet in a hard colour cut** — the two populations do not agree in ours, where
+  the original blends. ⚠ That puts a caveat on the `CAP-12` tops-from-above match (ours 211 vs
+  original 214): both populations cannot match at 211 if ours has a visible cut between them, so
+  that box sampled one of the two — re-measure per population before reading it as a pass.
+  ⚠ **Scope narrowed 2026-08-07:** the sprite field's *density* and the scatter's grid structure
+  left this entry for `BL-312`. What stays here is the mesh's own brightness, which is a lighting
+  defect, not a scatter one.
   ⚠ **RE-SCOPED 2026-08-06, `BL-273` landed.** Everything this item used to say about the sprite
   field went with `CloudPuffs.cs`: the field is now `fogvol.zrd`'s authored clutter scattered
   through the gamez `fvol*` volumes, and it carries no TUNE constant at all
@@ -1320,13 +1354,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   was the deleted `BandBelow`/`BandAbove` (120/280 m) + `VertFull`/`VertFade` (200/560 m) margins,
   which seeded visible puffs across [290 m, 1964 m] of a 2003 m envelope; "not on every map" is
   authored (C1B/C2/C3 ship no fog volumes and no `cloudsprite*` template). What is left here is
-  (a) the deck mesh's brightness, which `fogvol` never explained, and (b) whether the authored
-  field's density and look match the original at the controls.
-  *Specific thing to judge (b) on:* at a grazing angle the 130 m scatter grid is visible as a faint
-  comb in the cloud sheet — a 10–20 m `perturb_dist_range` on a 130 m `distance` is only ±15 %
-  jitter. That is what the authored numbers produce under the documented grid reading of `distance`
-  (fogvol.md, "What is decoded and what is inferred"); if the original shows no such structure, the
-  reading of `distance` is what to revisit — **not** a new tuning constant.
+  the deck mesh's brightness, which `fogvol` never explained; the field's density and grid
+  structure are `BL-312`.
   **`CAP-12` delivered and analysed 2026-08-07** (evidence in `playtest/CAP-12/`, decode via the
   chase pipeline — gate dx=dy=0 peak 0.758, altimeter NCC 0.9900). What the footage settles:
   - **The deck band is the authored `fogvol` slab.** Full whiteout spans **3290–3560 ft
@@ -1339,20 +1368,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     211/214; from 5570 ft 196/202. The interior and tops already match within a few units —
     only the base lighting is wrong. Original base: flat dark-gray sheet, soft mottling; ours:
     white, top-lit, hard-edged crenellation.
-  - **The original shows no comb.** Grazing passes along tops and base (stills t=44/59/97/124,
-    t=29.2) show soft continuous structure only — no 130 m lattice at any angle. Whether *our*
-    field shows one at the controls is still `PT-42`'s check; the original side is now on file.
+  - **The original shows no comb** — grazing passes along tops and base (stills t=44/59/97/124,
+    t=29.2) show soft continuous structure only, no 130 m lattice at any angle. **Our side is now
+    answered too: ours combs** (`PT-42`(b) at the controls, 2026-08-07). Both halves moved to
+    `BL-312`.
   - **Night puffs are directionally moonlit in the original (`CAP-11` C1B, 2026-08-07):** cloud
     cores near the moon reach p90 **218** (t=16) while the away-from-moon cloud sits at p90 **70**
     (t=5); our uniform `WorldLight` 0.426 renders p90 **102** — matching the away side and ~2×
     dark against the lit side (`playtest/CAP-11/`). Any night-cloud brightness judgement must say
     which side of the moon the measured puff faces.
   - ~~Discrete puff balls above the tops in ours, none in the original~~ — **explained, not a
-    defect (user, 2026-08-07): the placed/scattered puffs exist only over the base map**, and the
-    clip had left it (a straight run at ~300 mph covers the 12,288 m map in under a minute),
-    while our `csvm-above-1160m.png` sits at (-4974,-3861) — on it. The edge extension carries
-    no puffs in the original; same phenomenon on C2's world-placed puffs. Any future above-deck
-    A/B must say which side of the map edge both frames are on.
+    defect (user, 2026-08-07): the world-placed `cloudparent` clusters exist only over the base
+    map**, and the clip had left it (a straight run at ~300 mph covers the 12,288 m map in under a
+    minute), while our `csvm-above-1160m.png` sits at (-4974,-3861) — on it. The edge extension
+    carries no `cloudparent` in the original; same phenomenon on C2's. Any future above-deck A/B
+    must say which side of the map edge both frames are on.
+    ⚠ **Vocabulary — two populations, never one phrase for both** (they were conflated here until
+    2026-08-07, which is what made this bullet look like it contradicted `BL-312`):
+    **`cloudsprite1`/`cloudsprite2`** are the `fvol*` clutter scatter — the *deck field*,
+    world-locked and tiled (`PT-42`(b) at the controls); **`cloudparent`** are discrete
+    world-placed clusters (C1B's 70, C4's 45 parked at the world origin) — *stationary, not
+    tiled*, and the population this bullet is about. "Placed/scattered puffs" spans both and is
+    banned in this entry.
   **C4 take analysed 2026-08-07** (`CAP-11 C4 and CAP-12 Clouddeck.mp4`, gate dx=dy=0 peak
   0.848, d2 sd 0.99 ft; evidence in `playtest/CAP-12/c4/`) — the clear-air chapter separates
   what C1's murk hid, and it bears on the **uniform-vertical-fill inference** in
@@ -1379,10 +1416,44 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     cumulus towers at 1200–1600 m in the same clip are likely those, not `fvol` scatter.
   *Fix shape:* revisit fogvol.md's vertical-spread inference (anchor at/near the volume top
   rather than filling it), per this entry's own rule — an inference correction, not a TUNE.
-  *Playtest:* `PT-42` ([`playtest.md`](playtest.md)) keeps the at-the-controls look judgement.
+  *Playtest after fix:* re-shoot the C1 underside and the from-above deck/field boundary against
+  `CAP-12`'s stills. (`PT-42` was flown 2026-08-07 and retired — its verdicts are here and on
+  `BL-312`.)
   ⚠ **Trap.** The "~40 units lighter" brightness reading is about the `CloudDeck` **mesh**, a
   different object from the sprite field — do not read one as evidence for the other. (The +54
   measurement above is the mesh underside; the sprite field sits *inside* the whiteout band.)
+
+- `BL-312` `[Bug]` **Our `fvol` cloud scatter combs on a regular 130 m lattice and reads far denser than
+  the original; the original shows no lattice at all and tiles unboundedly** (`PT-42`(a)(b)(c) at the
+  controls + `CAP-12`, both 2026-08-07; split out of `BL-118`, which keeps the deck **mesh**
+  brightness). Two sides, both now on file:
+  - **Ours combs.** At a grazing angle the 130 m scatter grid shows as a faint comb in the sheet —
+    `perturb_dist_range` 10–20 m on a 130 m `distance` is only ±15 % jitter, which is what the
+    authored numbers produce under the *grid* reading of `distance` (`docs/formats/fogvol.md`,
+    "What is decoded and what is inferred").
+  - **The original does not.** `CAP-12` grazing passes along tops and base (stills t=44/59/97/124,
+    t=29.2) show soft continuous structure only, at any angle — and at the controls the original's
+    deck field reads **world-locked and tiled**: puffs stay put as you fly through them, there are
+    simply always more, in every direction over the base map, with no volume edge anywhere.
+  - **Density:** ours is "a lot denser" (`PT-42`(c)); opacity not callable by eye.
+  ⚠ **This is a decode correction, not a TUNE — `fogvol.md` and `BL-118` both say so outright, and
+  the entry is tagged `[Bug]` to keep it out of the tuning pile.** The argument that settles it:
+  `fogvol.md`'s *entire* corroboration for reading `distance` as a grid period is a **density**
+  argument — "130 m period over a 132.3 m card gives ~1.0 sprite-areas of cover, an overcast
+  exactly one sprite deep." Mean spacing is invariant under randomisation, so that evidence only
+  ever supported the **spacing**; the **regularity** was never evidenced, and it is the regularity
+  the render contradicts.
+  *Fix shape (two candidates, not exclusive):* (1) scatter randomly at the same mean spacing —
+  same density, same one-sprite-deep cover, no lattice, therefore no comb; (2) tile unboundedly
+  around the camera on the `distance` period, as `templates.zrd` ground clutter does (the grammar
+  `fogvol.md:106` says the two files share), rather than placing a bounded set inside finite
+  `fvol*` volumes — which is what gives ours edges and structure the original has none of.
+  ⚠ Trap: **the two cloud populations are different objects** — this entry is the
+  `cloudsprite1`/`cloudsprite2` `fvol` scatter only. The discrete world-placed `cloudparent`
+  clusters are stationary and untiled, stop at the map edge, and are `BL-118`'s business; a claim
+  about one is not evidence about the other (see `BL-118`'s vocabulary note).
+  *Playtest after fix:* re-fly C1 at a grazing angle along the deck, and compare density against
+  `CAP-12`.
 
 - `BL-165` `[Feature]` **The sun renders no lens flare; the original does — layout now decoded from `CAP-13`.** Confirmed absent: `Launcher.cs:569`
   builds only a plain `DirectionalLight3D` (`Sun`) + a `WorldEnvironment` with no glow/bloom
@@ -2233,7 +2304,45 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   hits reuse caliber, rockets use armor damage) — a being-hit capture pins them; (c) the
   `ON_CALL` `small/medium/large` `damage_shakes` defs stay unwired — unknown caller, likely
   script/set-piece; (d) `high_speed`'s normalised-by-`fd_speed` reading fits the quiet-cruise
-  evidence but is unverified against a calibrated dive. *Playtest:* `PT-44`.
+  evidence but is unverified against a calibrated dive.
+  **`PT-44` flown 2026-08-07 and retired — three verdicts, and (d) is now half-answered:**
+  - **(d) the normalisation is right, the OFFSET is missing — a decode correction.** At the
+    controls the overspeed rattle is "too strong, and should ramp up the more we are over the
+    speed" (user). The numbers agree: `PlaneShake.cs` computes `speedRatio / magnitude_quotient`,
+    so at the gate it switches on at **1.0/70 = 0.0143 rad — 5.1× the 40-cal gun buzz
+    (7e-5 × 40 = 0.0028)** — then grows only **27 %** across the whole remaining envelope
+    (0.0181 at the 1.27× `fd_speed` dive terminal). Read instead as **excess over the gate**,
+    `(speedRatio − min_speed) / magnitude_quotient`: zero at rated max, 0.0039 at the dive
+    terminal — it enters imperceptibly, ramps with overspeed, and lands in the same order as the
+    gun buzz instead of 5× above it. That is also why `min_speed` is authored as a gate *value*
+    at all. Falsifiable against a calibrated dive.
+  - **The frequency is NOT to be tuned** (user suggested lowering it): 15 Hz / damp 12.5 /
+    sawtooth 1 is authored data, identical to `fire_bullet`. Expect the "too buzzy" complaint to
+    dissolve once the magnitude drops — a 15 Hz buzz at 0.0143 rad reads nothing like the same
+    buzz at 0.002.
+  - **(a) the gun buzz is too small, and it is a pipeline loss, not a wrong constant.** Two
+    independent sources agree: "barely noticeable" at the controls, and `engine_check.py` reads
+    **~2–4× under the original clip**. But the `7e-5 × caliber` law was *measured from that very
+    clip*, so a render 2–4× weaker than the clip means the chain from law to pixels loses
+    amplitude — raising `magnitude_factor` would write a false number into decoded data to hide
+    it. ⚠ `FINDINGS.md`'s leading explanation does not carry the gap: with `damp` 12.5 the
+    envelope's mean over a kick cycle is 0.506 at 8 rounds/s vs 0.645 at 13, a factor of
+    **1.27×**, not 2–4×. The wiring is not the problem either — `FlightController.cs:1417` kicks
+    once per round per muzzle. *Approach, decided with the user 2026-08-07:* **(B) find the
+    missing amplitude first** — reconcile the counter-derived 12–13 rounds/s against authored
+    `FIRE_RATE` 8.0 (two guns at 8/s would be 16/s; check whether the probe fired one gun group
+    or two), re-run `engine_check.py` rate-matched, and check what the 60 fps render-interpolated
+    pose does to a 15 Hz buzz. Only if nothing survives that does it fall back to **(C)** a
+    second amplitude measurement from `CAP-30` (whose row was extended for exactly this — as
+    originally written it asks only about caliber and plane weight and **could not** have
+    answered a uniform shortfall).
+  - **Passing:** being-hit rocks read right — guns give a short rock, rockets read ok (user,
+    2026-08-07, `--vs`).
+  - **Unjudged:** (d) view coupling — the plane wobbling against the world in chase view cannot
+    be seen while (a) is too small to see at all.
+  *Playtest after fix:* re-fly the `PT-44` sortie once the offset correction and (a)'s residual
+  land — the overspeed ramp, the gun-buzz magnitude, and the view-coupling check that (a)
+  currently blocks.
   ⚠ Traps: `SHAKES_CAMERA` is NOT the fire-path shake mechanism — its sole carrier among all
   48 weapons is `wep_26` "FW", a zero-damage scripted fake weapon (a scripted detonation-shake
   marker); the fire path is the unflagged `fire_bullet` source. And the near-match trap: several

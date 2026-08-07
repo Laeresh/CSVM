@@ -122,9 +122,8 @@ an upper bound, and the correction to the 137.9 mph equilibrium are on `BL-115` 
 |---|---|---|---|
 | `CAP-26` | Rocket impacts, one clip per type, **with audio** | Fire each rocket type at open ground and film it close enough to count and orient the rings, with clean audio on the same take: `wep_04` (9M/incendiary), `wep_05` (ARMOR), `wep_06` (BOOM/HE), `wep_08` (SONIC). Two playtests point here: `PT-17` found HE's second ring present but its orientation "kinda random", and `PT-20` judged the sounds "a lot better" but not settleable by ear alone. *Look for:* ring count, ring orientation and how fast the burst reads (`BL-016`'s open "faster than the original" half), plus the launch bark and the per-type impact sound | `BL-016` (open half), `BL-211` |
 | `CAP-27` | Does the original spark on the airframe at all? | Take damage in the original — a light scrape is enough — with the aircraft in frame (external/chase fine), and look for a **spark burst on the airframe itself**, distinct from smoke at the contact point. ⚠ This capture can **delete** a feature rather than tune one: `BL-090`'s per-impact spark burst is driven by a 0.99 `injure_anims` entry that exists on **1 of 11** aircraft (the Devastator), which the backlog already calls "plausibly an authoring leftover". If the original never sparks, our implementation goes. If it does, `BL-281`'s ricochet mix can be judged | `BL-281`, `BL-090` (item 2) |
-| `CAP-25` | The `chunk` debris quad at a slug dirt hit | Sustained slug fire into flat dirt, camera as close to the impacts as the original allows (external/chase view fine — no gauges needed), slow-motion or high frame rate if possible. Decides whether the original ever shows the `gunhit` def's `chunk` debris node — a ~0.5 m quad textured with the perforated `gun_barrel` shroud band (dark dot grid on tan; gamez model 27 → material 4, UVs u 1→2), flung by the three **slug** defs only (`3040`/`5060`/`70slug_gunhit`, all chapters; ap/dum/mag have no debris nodes). Our build draws it faithfully from the data (`Screenshots/Mystery debris.png`, 2026-08-04, freeze-frame zoom); we keep it unless the original provably suppresses it. *Look for:* any small tumbling textured scrap distinct from smoke/chips in the ~2–4 s after each hit — presence or absence both settle it | `BL-203` (landed — this judges a leftover) |
 | `CAP-28` | Torpedo flight dynamics | The aerial torpedo (`TORPDO`) released in level flight, ideally at high speed, filmed external/chase with the surface in frame and held from release to impact — long enough to read the speed decay the user saw at the controls (a max/cruise speed, slowing after launch). HUD in frame lets `analysis/video-flight-calibration` decode speed over time; without it the decay is still readable against fixed terrain | `BL-290` |
-| `CAP-30` | Firing-wobble amplitude across calibers and airframes | Dead-astern external/chase clips, level flight, guns held 3 s+: **(a)** one plane with two well-separated calibers (30 vs 70), **(b)** one caliber on a light vs a heavy plane. ⚠ Dead-astern framing is load-bearing: it makes the on-screen roll angle the world roll angle with no projection model (`analysis/gun-wobble-shake/FINDINGS.md`, capture spec there). Confirms or refutes the pure-caliber magnitude law (7e-5 × caliber, measured on one 40-cal clip) and whether plane model/weight enter; a being-hit clip on the same sortie also pins the impact sources' stand-in quantities | `BL-266` |
+| `CAP-30` | Firing-wobble amplitude across calibers and airframes | Dead-astern external/chase clips, level flight, guns held 3 s+: **(a)** one plane with two well-separated calibers (30 vs 70), **(b)** one caliber on a light vs a heavy plane, **(c)** — added 2026-08-07 — a **Bloodhawk 40-cal** clip framed and fire-rate-matched to `Gun Wobble and animation.mp4`, giving a *second independent amplitude measurement* of the same case the law was derived from. (c) is what lets this capture serve as `BL-266`(a)'s fallback instrument: (a)/(b) alone ask only whether caliber and plane weight enter the law, and **cannot** settle the uniform ~2–4× shortfall our render shows against the reference clip. ⚠ Dead-astern framing is load-bearing: it makes the on-screen roll angle the world roll angle with no projection model (`analysis/gun-wobble-shake/FINDINGS.md`, capture spec there). Confirms or refutes the pure-caliber magnitude law (7e-5 × caliber, measured on one 40-cal clip) and whether plane model/weight enter; a being-hit clip on the same sortie also pins the impact sources' stand-in quantities | `BL-266` |
 | `CAP-29` | Panel-damage semantics | Take controlled damage per part in the original, own aircraft in frame (external/chase), damage display visible if possible. Three questions: **(a) location** — take fire ONLY on the nose: do sparks/debris/fuel vapor ever appear at the WINGS, or does everything stay at the struck part? **(b) armor gate** — on a fresh plane with armor still absorbing, do any skin panels tear, or only once a part's armor is gone (health damage)? **(c) repetition & look** — watch one panel cross its tear threshold: how many debris bursts fire, does that panel's debris ever repeat later in the same flight, does the flung debris read as a piece of that panel or as generic flakes, and what visibly changes on the airframe | `BL-297` |
 
 ### World
@@ -135,74 +134,6 @@ an upper bound, and the correction to the 137.9 mph equilibrium are on `BL-115` 
 ---
 
 ## 1 · Actionable now (`PT-nn`)
-
-### C1 · Bloodhawk — climbing through the overcast
-
-```powershell
-./RunGame.ps1 --plane=player_bhawk --chapter=C1
-```
-
-- `PT-44` `[A/B: OriginalScreenshots/Videos/Gun Wobble and animation.mp4]` **The plane wobble
-  (`BL-266`).** The authored shake oscillators are wired as visual-only roll on the plane node:
-  gunfire buzz (measured amplitude law: 7e-5 × caliber, radians), overspeed rattle (gated at
-  rated max speed), and being-hit rocks. Fire a long burst in chase view with the reference clip
-  open, dive past rated max, then take hits in `--vs`. *Look for:*
-  - (a) firing: a subtle fast roll buzz while the trigger is held, matching the clip's
-    character — visible against the world, small, stops with the trigger. The engine A/B read
-    ~2–4× weaker than the clip per frame (`analysis/gun-wobble-shake/FINDINGS.md` "Engine A/B");
-    judge whether that reads too tame at the controls.
-  - (b) overspeed: no rattle in level cruise at any throttle; sets in only past rated max in a
-    dive and grows with speed.
-  - (c) being hit (`--vs`, second player): a short rock on gun hits, a harder one on a rocket.
-  - (d) view coupling: in chase view the **plane** wobbles against the world (the camera holds);
-    the wobble also moves muzzle flashes/tracer origins with the wings.
-  *Blocks:* nothing tracks a pass — a fail (too tame / wrong character) re-opens the amplitude
-  half of `BL-266` with `CAP-30`'s captures as the instrument.
-
-- `PT-42` `[A/B: OriginalScreenshots/C1 IA1 Cloud Puffs and Moon.png]` **The `fogvol.zrd` cloud
-  field (C10 / `BL-273` landed 2026-08-06).** The hand-tuned `CloudPuffs` field is deleted; what
-  draws now is the chapter's own clutter table scattered through its `fvol*` volumes, with no
-  tuning constant anywhere in it ([`docs/formats/fogvol.md`](docs/formats/fogvol.md)). C1 places
-  9,025 sprites in a 120 m slab at 970–1090 m — climb to ~3,500 ft and back down through it.
-  *Look for:*
-  - (a) does it read as a real overcast with depth — base, interior, tops — or as a flat sheet;
-  - (b) **the grid.** At a grazing angle the 130 m scatter lattice shows as a faint comb. If the
-    original has no such structure that is evidence against the reading of `distance`, and the fix
-    is in fogvol.md's inference list — *not* a new tuning constant;
-  - (c) density and opacity against the reference shot;
-  - (d) C1B, C2 and C3 must show **no** ambient field at all — they ship no fog volumes. C1B still
-    has its 70 placed `cloudparent` sprites; C2 and C3 have nothing. That is the data, not a
-    regression.
-
-  *Blocks:* `BL-118`'s reopened density judgement is exactly this. `CAP-12` is delivered and
-  analysed (2026-08-07, `playtest/CAP-12/`): the original's deck band is 3290–3560 ft — the
-  authored slab — its base reads luma 167 vs our 221, and it shows **no** grazing-angle comb, so
-  (b) above now has its reference: if our field combs, the original doesn't. (The C4 take's last
-  third — due-north over the river — was reused 2026-08-07 for `BL-105`'s map-edge unit size:
-  `playtest/CAP-12/c4-mapedge/`.)
-  *Variations:* `--chapter=C1C` for the twelve authored build-up towers above the deck, and
-  `--chapter=C5` at street level for its low night haze between the skyscrapers.
-
-### C1 · Devastator — strafing terrain
-
-```powershell
-./RunGame.ps1 --plane=player_pfighter --chapter=C1 --infinite-ammo
-```
-
-- `PT-27` `[Own]` **Gun-impact smoke (C8 / `BL-061` item 1 landed 2026-08-01).** Strafe
-  **terrain** — not a building; a gun's `buildings` entry is the install-missing `bld_damage.flt` —
-  and get inside 500 m of where the rounds land, which is the effect's own `PLAYER_RANGE` gate. Each
-  hit should leave one small black smoke puff that drifts and fades, with nothing left parked at the
-  last hit once you stop firing. *Look for:*
-  - (a) is one puff per hit the right density at gun rates, or does the 0.1 s per-group throttle
-    read as gaps;
-  - (b) does 0.3 s of emission read as too brief;
-  - (c) the authored puff is 0.1–0.5 m and black — against dark terrain it is subtle by design, so
-    the call is whether the original reads more strongly at the same range.
-
-  *Blocks:* nothing open — `BL-061` is closed; a fail mints a new `BL` item.
-  *Variations:* try the other ammo too if you fit it: `dum`/`ap` give a white-hot flash and `mag`
-  adds fire (a different look, not a different bug).
 
 ### C1 · two pilots — Dogfight (splitscreen VS)
 

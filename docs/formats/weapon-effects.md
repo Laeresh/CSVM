@@ -67,8 +67,15 @@ bound name (`3040slug_gunhit`, …) and whose body is distance-gated:
   **mag** (`fire_f01`–`04`). Beyond 500 m the impact is silent visual-wise.
 - **`PLAYER_RANGE 200`** adds flung debris via ballistic `OBJECT_MOTION` (`bit1`/`bit2`/`bit3`/
   `chunk`, `RUN_TIME` 1–4 s). The `bit1`–`bit3` gamez nodes carry **no geometry** in this install
-  (0 vertices, measured C1/C2; `chunk` has one 4-vertex quad) — the debris art is the `bit01`–
-  `bit04` textures every chapter archive ships.
+  (0 vertices, measured C1/C2; `chunk` has one 4-vertex quad), **so read literally this draws the
+  `chunk` quad and nothing else** — confirmed in the original 2026-08-07:
+  `OriginalScreenshots/Videos/70 DD Dirt.mp4` shows a 70-slug dirt hit producing only the `chunk`
+  and one faint black `blacksmokepuffer` puff.
+  ⚠ **RETRACTED 2026-08-07 (`BL-313`):** this line used to read *"the debris art is the `bit01`–
+  `bit04` textures every chapter archive ships"* — i.e. the zero-vertex nodes were taken as
+  pointers to those textures. The footage refutes it, and the motive behind it (why ship the
+  textures at all) is answered by an unrelated consumer, `zep_skin_fire3`/`zepskinfire_3`, whose
+  pooled sibling templates each carry a real child mesh ([gamez.md](gamez.md)).
 - **`PLAYER_RANGE 1000` + `ANIMATION_LOD HIGH`** randomly flashes a short `gunhit_lt` light.
 
 Puffer definitions are shared with [effects.md](effects.md); the range gates are the reason a
@@ -107,7 +114,8 @@ effect **animation**, splits by what the bound name resolves to:
   and relocates the effect templates onto the hit point — the same machinery the per-player crash
   runtime already proves (`BuildFlightCrashRuntime`) and that **destruction effects (D32)** share,
   so the impact-puffer wiring folds into D32. The per-class stand-ins these names fall to (A2):
-  dirt → tumbling chips on the authored `bit01–04` textures, alpha-blended; a gun round on a
+  dirt → tumbling chips on the authored `bit01–04` textures, alpha-blended (**scheduled for
+  deletion, `BL-313` — the original draws no chips**, see the `PLAYER_RANGE 200` note above); a gun round on a
   buildings-classed surface → a ricochet spark burst + flash (judged by eye — `bld_damage.flt`
   and the `rcochet1` `EFFECT` are both install-missing, see the unresolved-names table).
 

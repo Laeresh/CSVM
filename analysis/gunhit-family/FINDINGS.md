@@ -47,8 +47,13 @@ nodes carry no geometry in this install anyway (`bit1`–`bit3` 0 vertices; `chu
 freeze-frame zoom of our build (`Screenshots/Mystery debris.png`): gamez model 27's one polygon uses
 material 4 → `gun_barrel.tif`, UVs u 1→2 / v ≈0.29–0.66 — with repeat, exactly the perforated
 shroud's dot band. Almost certainly a stale material index in the shipped data; at gameplay zoom the
-~0.5 m scrap is a sub-pixel speck for ≤`GunEffectTtl`. Kept as authored; `CAP-25` (playtest.md) is
-owed to check whether the original ever shows it.
+~0.5 m scrap is a sub-pixel speck for ≤`GunEffectTtl`. Kept as authored.
+**`CAP-25` answered and retired 2026-08-07: the original does show it.**
+`OriginalScreenshots/Videos/70 DD Dirt.mp4` — a 70-slug dirt hit produces the `chunk` quad and one
+faint black `blacksmokepuffer` puff, and **nothing else**. The same clip settles the other half the
+opposite way: our `bit01`–`bit04` tumbling chips have no counterpart in the original, which is
+`BL-313` (delete them) — the zero-vertex `bit1`–`bit3` nodes draw nothing, exactly as the vertex
+counts above say.
 
 ## Two things that make a probe of this lie
 

@@ -1303,9 +1303,17 @@ is 5 cm wide, sub-pixel past ~30 m, while the reference ticks measure ~0.35 m, w
 the authored 1× stays reachable, `static readonly` not `const`, so the branch stays compiled). A dirt
 (unclassified-terrain) hit spawns tumbling chips (`SpawnDirtDebris`) drawn on the gunhit def's own
 `bit01–04` chip textures in alpha-blended per-texture pools (through the additive
-muzzle-flash-textured impact pool they read as a small flame — the BL-203 mechanism; the def's
-bit1–3 gamez nodes carry no geometry, the textures ARE the chips), launched outward and arcing via
-`Sprite.Vel`/`SpinAxis`/`SpinRate`, zero and inert for every other sprite; a gun hit on a
+muzzle-flash-textured impact pool they read as a small flame — the BL-203 mechanism), launched
+outward and arcing via `Sprite.Vel`/`SpinAxis`/`SpinRate`, zero and inert for every other sprite.
+⚠ **RETRACTED 2026-08-07 — this effect is scheduled for deletion (`BL-313`).** It rested on the
+inference *"the def's bit1–3 gamez nodes carry no geometry, so the textures ARE the chips."* The
+original draws no such chips: `OriginalScreenshots/Videos/70 DD Dirt.mp4` shows a 70-slug dirt hit
+producing only the `chunk` quad and one faint black `blacksmokepuffer` puff. Read literally, the
+zero-vertex `bit1`–`bit3` nodes draw nothing and only `chunk` (one 4-vertex quad) does. The
+inference's sole motive — why ship `bit01`–`bit04` if nothing draws them — is answered by a
+different consumer, `zep_skin_fire3`. **Do not generalise "zero-vertex node ⇒ draw its texture as a
+sprite" anywhere else.**
+A gun hit on a
 buildings-classed surface spawns a ricochet spark burst + flash (`SpawnRicochet`, additive — a
 judged stand-in: the authored `bld_damage.flt`/`rcochet1` are 2 of the 5 install-missing names). Each burst sprite carries its own orientation basis (`Sprite.Orient`): the muzzle flash
 rolls in the firing plane's basis, the impact spark/explosion/debris faces the struck surface

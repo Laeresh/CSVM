@@ -72,8 +72,16 @@ Per-frame amplitude reads ~2–4× under the original clip's after normalising l
 frame rate; known contributors: the engine kicks at the authored `FIRE_RATE` 8/s while the
 original clip's counter ran ~12–13 rounds/s (higher envelope refresh), and the 60 fps
 render-interpolated pose smooths a near-Nyquist buzz more than the original's 30 fps capture.
-Whether the residual matters is a feel call — `PT-44` judges it at the controls against
-`Gun Wobble and animation.mp4`.
+Whether the residual matters is a feel call — **`PT-44` judged it at the controls 2026-08-07 and
+it FAILS: "gun wobble is too small, barely noticable."** The residual matters.
+⚠ **Neither named contributor carries the gap, so do not treat this table as explained.** With
+`damp` 12.5 the envelope's mean over a kick cycle is 0.506 at 8 rounds/s vs 0.645 at 13 — a factor
+of **1.27×**, not 2–4×. And the law being tested was *measured from this very clip*, so a render
+2–4× under it is a loss in the chain from law to pixels, **not** a wrong `magnitude_factor`:
+raising the constant would write a false number into decoded data to hide a pipeline bug. The
+wiring is not the suspect either (`FlightController.cs:1417` kicks once per round per muzzle).
+Next step is the fire-rate reconciliation in the caveat below — re-run rate-matched, then check
+what the 60 fps render-interpolated pose does to a 15 Hz buzz. `BL-266` carries it.
 
 ## Caveats
 

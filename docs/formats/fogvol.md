@@ -108,6 +108,15 @@ no `cloudsprite*` template, no `clutter` key, degenerate ranges).
   corroboration: C1's 130 m period over a 132.3 m card gives ~1.0 sprite-areas of cover per unit
   of layer, i.e. an overcast **exactly one sprite deep**. A period much larger or smaller than
   the card would not land there.
+  ⚠ **Contradicted at the render (2026-08-07, `PT-42` + `CAP-12` — see `BL-312`): ours combs on
+  the 130 m lattice at grazing angles and the original shows no lattice at any angle.** Note what
+  the corroboration above can and cannot carry: it is a **density** argument, and mean spacing is
+  invariant under randomisation — so it only ever supported the *spacing*, never the *regularity*,
+  and the regularity is what the footage kills. Two candidate corrections, both preserving the
+  density: scatter randomly at the same mean spacing; or tile unboundedly around the camera on the
+  `distance` period (which is what the shared `templates.zrd` grammar actually does, and what the
+  original reads as at the controls — world-locked puffs, always more in every direction, no
+  volume edge) rather than placing a bounded set inside each finite `fvol*`.
 - **`perp_dist_range` is vertical.** "Perpendicular" to the volume's horizontal plane. The
   asymmetry supports it: `cloudsprite1` gets `[-5, 5]` and `cloudsprite2` `[-5, 10]`, so one kind
   floats slightly higher — which is a reading a horizontal offset makes no sense of.

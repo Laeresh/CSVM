@@ -195,7 +195,7 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 **No active plan.** `docs/plans/PLAN-flight-drag-lift.md` completed 2026-08-07
 ([`docs/plans/plans.md`](docs/plans/plans.md)). Run **`/new-plan`** to start the next one; until
 then, `backlog.md` names the open items.
-Owed at the controls: `PT-27`, `PT-28`, `PT-41`, `PT-42`, `PT-43` and `PT-44`
+Owed at the controls: `PT-28`, `PT-41` and `PT-43`
 ([`playtest.md`](playtest.md)). Verify any change with
 **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read
 [`docs/verification.md`](docs/verification.md) first.
