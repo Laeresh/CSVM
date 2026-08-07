@@ -143,16 +143,16 @@ public sealed class CaptureDirector
         if (spec.Fly && rigs.Count > 0 && rigs[0].Controller is { } controller)
         {
             var xform = controller.GlobalTransform;
-            Log.Info("core", $"placement: --pos={Vec3Arg(xform.Origin)} --direction={DirArg(-xform.Basis.Z)}");
+            Log.Info("core", $"placement: --pos=\"{Vec3Arg(xform.Origin)}\" --direction=\"{DirArg(-xform.Basis.Z)}\"");
             return;
         }
         var pos = camera.GlobalPosition;
         if (spec.Freecam || spec.AnimLab || spec.Fly)
         {
-            Log.Info("core", $"placement: --pos={Vec3Arg(pos)} --direction={DirArg(-camera.GlobalTransform.Basis.Z)}");
+            Log.Info("core", $"placement: --pos=\"Vec3Arg(pos)}}\" --direction=\"{DirArg(-camera.GlobalTransform.Basis.Z)}\"");
             return;
         }
-        Log.Info("core", $"placement: --pos={Vec3Arg(pos)} --lookat={Vec3Arg(orbit.OrbitCenter)}");
+        Log.Info("core", $"placement: --pos=\"{Vec3Arg(pos)}\" --lookat=\"{Vec3Arg(orbit.OrbitCenter)}\"");
     }
 
     /// <summary>Insert a zero-padded frame index before the extension:
