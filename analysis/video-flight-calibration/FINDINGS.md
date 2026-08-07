@@ -363,6 +363,13 @@ does **not** work — it wrapped to ±178° on all three batch-4 clips. Until on
 be separated from a banked turn, so any "it yawed" claim needs either a level-horizon landmark in
 frame or a night mission.
 
+⚠ **`ψ̇ = g·tan φ / V` does not give bank in a manoeuvring clip.** It is a *level coordinated turn*
+identity, and the aircraft in these takes is pulling hard throughout. Run against `CAP-02`'s batch-5
+clips, whose bank is known to be ~45° because they were flown that way deliberately, it returns
+**85–86°**. Filming a known-bank control is what caught it; the same shape of error produced the
+retracted max-pull yardstick above. **Calibrate an inferred quantity against a clip where the answer
+is known before quoting it.**
+
 ⚠ **`BL-109`'s 32.96 / 34.02 m/sim-s² is SPEED-SPECIFIC. Never reuse it as a general max-pull
 yardstick.** Lift ∝ V², and at ~300 mph this same aircraft pulls **72.6 m/sim-s²** in free air —
 2.17× that figure with nothing anywhere near it (`CAP-02 Run3 5`, 28 s at 2,634–3,939 ft over open

@@ -220,6 +220,14 @@ CLIPS = {
     # both meaningful. The second one ends in the cliff.
     "cap02r4c3": "CAP-02 Run4 Clip3.mp4",
     "cap02r4c3x": "CAP-02 Run4 Clip3 with crash.mp4",
+    # Batch 5, the counter-example to the Clip3 yaw. Clip3 was flown WINGS LEVEL,
+    # so its 17 deg heading swing is either a yaw or a bank nobody commanded; these
+    # two are deliberate ~45 deg banked turns at the same speed, which is what a
+    # commanded bank looks like in the same instruments. A coordinated turn gives
+    # psi_dot = g tan(phi) / V, so 45 deg predicts roughly 8 deg/wall-s - a quarter
+    # of Clip3's 34 deg/wall-s, which would need about 80 deg of bank to explain.
+    "cap02r5l": "CAP-02 Run 5 45° left.mp4",
+    "cap02r5r": "CAP-02 Run 5 45° right.mp4",
 }
 
 

@@ -796,13 +796,34 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `CAP-02` take unreadable for heading. (The controls *do* swing 30–44° later, at γ > 60°, where
   `a_n` simultaneously explodes to 10⁵ — that is the degeneracy, and it is excluded here.)
 
-  ⚠ **Bank is the alternative and it is NOT excluded.** Heading alone cannot tell a yaw from a
-  banked turn. `moon.py` is the pipeline's only roll readout and needs a night sky, so it does not
-  apply to these daylight takes; an ad-hoc ADI sky-centroid estimator tried here wrapped (±178° in
-  all three clips) and was discarded rather than reported. If the swing *were* a banked turn it
-  would need roughly **48° of bank**, implying a total normal acceleration near 48 m/sim-s² — which
-  sits inside the free-air envelope, so magnitude does not exclude it either. What stands against it
-  is the pilot's own statement that the input was **pitch only**.
+  **The banked counter-example (batch 5) rules out a commanded turn.** `Clip3` was flown wings
+  level; `Run 5 45° left/right` are deliberate ~45° banked turns at the same speed, filmed to show
+  what a commanded bank looks like in the same instrument:
+
+  | | peak heading rate | sustained (p75) | net swing | shape |
+  |---|---|---|---|---|
+  | `Clip3` at the cliff, **wings level** | 34.6 °/s | **3.0 °/s** | −27.9° | a **step**: swings 17° in ~1 s, then holds |
+  | `Run 5 45° left` (clean decode) | **96.0 °/s** | 35.0 °/s | +128.5° | a sustained turn |
+  | `Run 5 45° right` | 123.8 °/s | 13.1 °/s | −131.2° | a sustained turn |
+
+  A commanded 45° bank turns roughly **three times faster at peak and ten times faster sustained**,
+  and it keeps turning. The cliff event is a one-off heading *offset* — the aircraft is displaced
+  onto a new heading and stays there, which is what "turned away from the obstacle" looks like and
+  is not what any turn looks like. ⚠ It does **not** exclude a small *transient* roll: scaling the
+  batch-5 calibration, ~15° of brief bank would produce 34.6 °/s. Against that stands the pilot's
+  statement that the wings were level and the input was pitch only. A direct roll readout would
+  still close it — see `playtest.md`.
+
+  ⚠ **Do not use the coordinated-turn relation `ψ̇ = g·tanφ/V` to infer bank in these manoeuvres.**
+  Applied to the batch-5 clips, whose bank is *known* to be ~45°, it returns **85–86°**; on `Clip3`
+  it would have "derived" 76.6°. The aircraft is pulling hard throughout, so a level-turn identity
+  does not hold. This was caught only because a known-bank control existed — the same lesson as the
+  retracted yardstick.
+
+  ⚠ `Run 5 45° right` decoded its **altitude and airspeed badly** (d2 sd 51.6 ft, mph to 699,
+  shake railed at ±30 px) and its anchor margin is 1.10×; only its *heading* is used above, which
+  comes from the independently-tracked compass tape (correlation median 0.963). `45° left` is clean
+  (d2 sd 1.06 ft) and is the one to quote.
 
   **In the vertical plane there is still no amplification** — that part of the earlier work stands,
   and now has an explanation. Every controlled comparison says the pull near the ground is the same
