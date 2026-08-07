@@ -146,8 +146,8 @@ public class SequenceRunnerTests
         var inst = Instance(Seq(Swap("wing"), Loop(1000, "Sequence", 0.01f)));
 
         // Stepped finer than the authored period, so the period itself is under test rather than
-        // the step it quantises onto. The COARSE-step case is its own test below (BL-237): before
-        // the timed path carried its overshoot, this passed at 1/600 and failed at 1/60.
+        // the step it quantises onto. The COARSE-step case is its own test below: a timed path
+        // that drops its overshoot passes here at 1/600 yet fails at 1/60.
         float dt = 1f / 600f, elapsed = 0f;
         for (int i = 0; i < 20000 && !inst.Finished; i++)
         {
@@ -162,7 +162,7 @@ public class SequenceRunnerTests
         Assert.InRange(elapsed, 9.9f, 10.2f);
     }
 
-    // ---- 3b. an authored PERIOD is seconds at every step, including one coarser than it (BL-237) ----
+    // ---- 3b. an authored PERIOD is seconds at every step, including one coarser than it ----
 
     [Theory]
     [InlineData(1f / 30f)]     // coarser than either period under test
@@ -171,11 +171,11 @@ public class SequenceRunnerTests
     [InlineData(1f / 600f)]
     public void AuthoredPeriodIsHonouredAtStepsCoarserThanItself(float dt)
     {
-        // The timed rollover used to reset the clock to zero, so a period that did not land on a
-        // whole step rounded UP to the next one — every iteration, forever. `ww_balmoral1/2/3`
-        // (LOOP 1000 @ 0.01 s, authored 10 s) measured 16.7 s at 60 Hz, 12.5 s at 240 Hz and only
-        // reached 10.0 s at 600 Hz: the exact frame-rate dependence the count path had removed,
-        // still sitting on the period path. Carrying `_clock - _due` is what makes an authored
+        // A timed rollover that resets the clock to zero rounds any period that does not land on
+        // a whole step UP to the next one — every iteration, forever: `ww_balmoral1/2/3`
+        // (LOOP 1000 @ 0.01 s, authored 10 s) then measures 16.7 s at 60 Hz, 12.5 s at 240 Hz and
+        // only reaches 10.0 s at 600 Hz — frame-rate dependence the count path must never have.
+        // Carrying `_clock - _due` is what makes an authored
         // period mean seconds at any step; the residual is bounded by one step, never by the count.
         var host = new RecordingHost();
         var inst = Instance(Seq(Swap("wing"), Loop(1000, "Sequence", 0.01f)));
@@ -494,8 +494,8 @@ public class SequenceRunnerTests
     public void WaitForCompletionHoldsTheNextEventUntilTheCalleeFinishes()
     {
         // The authored case (player_crash_water/destroy_crash): a flagged CALL_ANIMATION of
-        // plane_big_splash, then large_steam_spray. Both used to retarget on the SAME tick because
-        // every call returned immediately; the splash's own choreography runs 3.0 s.
+        // plane_big_splash, then large_steam_spray. If every call returned immediately, both would
+        // retarget on the SAME tick; the splash's own choreography runs 3.0 s.
         var host = new RecordingHost();
         host.Running["plane_big_splash"] = true;
         var inst = Instance(Seq(Call("plane_big_splash", wait: true), Call("large_steam_spray")));

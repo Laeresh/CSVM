@@ -22,8 +22,8 @@ namespace CSVM.Flight;
 /// <c>ZONE1</c>+<c>ZONE2</c>, but all 8 C5 missions ship <c>ZONE1</c>+<b><c>ZONE3</c></b> — so
 /// the zone table is read from whatever <c>ZONE*</c> keys the file carries, and
 /// <see cref="ResolveZone"/> falls the default back to the file's first zone where the
-/// requested one is absent. Before that, C5's `zone2` lookup missed and every C5 flight
-/// silently rendered with <see cref="NoFog"/>: no fog and <c>WorldLight</c> 1 = fullbright.</para>
+/// requested one is absent. Without that fallback, C5's `zone2` lookup misses and every C5 flight
+/// silently renders with <see cref="NoFog"/>: no fog and <c>WorldLight</c> 1 = fullbright.</para>
 ///
 /// <para>The <c>CLOUD_COVER</c> and <c>WIND</c> blocks pair each key with a bare scalar (e.g.
 /// <c>"TOP", 1124</c>), not a list, so <see cref="ZrdrDict.FromAlternating"/> — which expects
@@ -74,9 +74,9 @@ public sealed class WeatherState
     public Color? CloudBottomColor { get; private set; }
 
     /// <summary>Steady wind (m/s) plus the random-gust bounds. Parsed so the loader is complete;
-    /// currently unconsumed — it drove the drift of the hand-tuned <c>CloudPuffs</c> field, which
-    /// the authored <c>fogvol.zrd</c> clutter replaced (<c>BL-273</c>, docs/formats/fogvol.md).
-    /// That field is static world geometry, and no reader says wind moves it.</summary>
+    /// currently unconsumed — the cloud clutter is the authored <c>fogvol.zrd</c> geometry
+    /// (docs/formats/fogvol.md), which is static world geometry, and no reader says wind
+    /// moves it.</summary>
     public Vector3 WindStatic { get; private set; }
 
     public float WindRandomMaxSpeed { get; private set; }
@@ -198,7 +198,7 @@ public sealed class WeatherState
     /// flies is in no reader file, so it is settled per chapter by A/B against the original.
     ///
     /// <para><b>C5 = <c>zone1</c>, confirmed by playtest.</b> The fallback already
-    /// lands there, so this is not a special case — but it is no longer an accident either, and
+    /// lands there, so this is not a special case — but it is deliberate rather than accidental, and
     /// it is stable: all 8 C5 missions list <c>ZONE1</c> before <c>ZONE3</c>, so every one of
     /// them resolves to <c>zone1</c>. Do not "fix" the fallback into picking <c>zone3</c>; the
     /// user flew C5/IA1 in the original and can see across the city, which its 50–250 m fog and
@@ -218,7 +218,7 @@ public sealed class WeatherState
     /// <c>zone2</c> request resolved to itself (they <i>do</i> define <c>ZONE2</c> fog), so the
     /// dome built with zero meshes and the fog came from the wrong zone — C3's night-blue on a
     /// mission its own data lights at diffuse 1.5, C1B's 1128–1256 m band under a 10000–11000 m
-    /// one. Nothing on disk names the zone a mission flies (searched exhaustively 2026-07-22),
+    /// one. Nothing on disk names the zone a mission flies (searched exhaustively),
     /// so the horizon's own contents are the evidence, not a lookup table.</para></summary>
     public string ResolveZone(string requested, IReadOnlyList<HorizonZone> horizonZones)
     {

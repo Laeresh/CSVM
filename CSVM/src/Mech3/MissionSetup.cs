@@ -273,7 +273,7 @@ public sealed class MissionSetup
     private static string Strip(string s) =>
         s.EndsWith(".flt", StringComparison.OrdinalIgnoreCase) ? s[..^4] : s;
 
-    // BL-249: the shipped data does not use one unit consistently — C1/M05's boat rotations are
+    // The shipped data does not use one unit consistently — C1/M05's boat rotations are
     // small integers that only make sense as degrees (0 45 0, 0 172 0), C3/MP1-2's cargozep1 is a
     // high-precision radians triple (-0.000010 -3.144009 -0.000000, i.e. pi on Y) — and the two
     // families are cleanly separable by magnitude, so the decision is made once per script rather

@@ -80,7 +80,7 @@ public sealed partial class AircraftBody : AnimatableBody3D
     /// <summary>The collision box nearest a world point: its shape index (for
     /// <see cref="PartName"/>), the distance to its surface (0 inside), and that nearest surface
     /// point — the blast pass's falloff geometry, measured to the box skin rather than any
-    /// transform origin (the same rule the destructible blast applies, BL-239). -1 with no
+    /// transform origin (the same rule the destructible blast applies). -1 with no
     /// boxes.</summary>
     public int NearestShape(Vector3 worldPoint, out float distance, out Vector3 nearestPoint)
     {

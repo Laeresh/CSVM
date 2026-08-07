@@ -11,7 +11,7 @@ namespace CSVM.Tests;
 /// <summary>
 /// The <c>fogvol.zrd</c> reader (<see cref="FogVolumeSpec"/>) and the gamez census it pairs with
 /// (<see cref="FogVolumeSpec.VolumesOf"/>) — the two halves of the authored ambient cloud field
-/// (<c>BL-273</c>, docs/formats/fogvol.md).
+/// (docs/formats/fogvol.md).
 ///
 /// <para>The grammar half runs on a hand-authored fixture; the data half pins all eight chapters,
 /// because the interesting fact about this format is a per-chapter SPLIT: five chapters carry

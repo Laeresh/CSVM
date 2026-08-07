@@ -6,7 +6,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// Every <c>weapons.json</c> <c>BALLISTICS</c> entry reads through the typed reader, against the
-/// retail install (moved from the in-engine <c>weapons-defs</c> suite — <c>Probes.Weapons</c>
+/// retail install (engine-free: <c>Probes.Weapons</c>
 /// touches no live Node). Golden count: 48 entries, matching <see cref="WeaponDefsTests"/>'s
 /// per-key coverage on the trimmed fixture.
 /// </summary>

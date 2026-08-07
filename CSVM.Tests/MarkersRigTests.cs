@@ -6,7 +6,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// Every player airframe has a firepoint/pylon rig in <c>planes.zbd</c>, against the retail
-/// install (moved from the in-engine <c>markers-rig</c> suite — <c>Probes.Markers</c> touches no
+/// install (engine-free: <c>Probes.Markers</c> touches no
 /// live Node). Not to be confused with <see cref="MarkerRigTests"/>, which covers
 /// <c>MarkerRig</c>'s own extraction/classification logic on a hand-authored fixture.
 /// </summary>

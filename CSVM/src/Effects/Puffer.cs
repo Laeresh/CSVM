@@ -280,21 +280,21 @@ public sealed partial class Puffer : Node3D
     /// documents the keys.</summary>
     public const float SizeScaleDefault = 1f;
 
-    /// <summary>`BL-275` TUNE defaults (config.json <c>puffer.fireRiseScale</c> /
+    /// <summary>TUNE defaults (config.json <c>puffer.fireRiseScale</c> /
     /// <c>puffer.fireLifetimeScale</c>): multiply the fire puffer's world-vertical spawn velocity
     /// and its per-puff lifetime. INVENTED against the original's footage, not decoded — the
     /// authored numbers integrate to a ~10–12 m column for the 30 s fire under FRICTION 0.6,
     /// while the original's tank/destruction fire columns read as an unbroken ~3+
     /// building-height plume (`OriginalScreenshots/C1 IA1 Burning Fuel Tanks.png`, the
     /// `C1 IA1 Destruction.mp4` t≈176 s columns). 2.5×/1.5× puts the 30 s fire's apex at
-    /// ~30–45 m and lets particles live to it. Recorded in backlog.md's TUNE list.</summary>
+    /// ~30–45 m and lets particles live to it.</summary>
     public const float FireRiseScaleDefault = 2.5f;
     public const float FireLifetimeScaleDefault = 1.5f;
 
     /// <summary>The authored fire-column family — the crash fire (<c>large_10sec_fire</c>), the
     /// destruction fires (<c>large_30sec_fire</c>/<c>huge_30sec_fire</c>) and the burning fuel
-    /// tanks all emit a sustained puffer of exactly this name, and it is the family the user
-    /// judged "climbs but not as high as the original" (`BL-275`, PT-04/PT-22). The two scales
+    /// tanks all emit a sustained puffer of exactly this name, and it is the family playtesting
+    /// judged "climbs but not as high as the original". The two scales
     /// above apply only to it, so gun smoke, trails, sputters and the ambient
     /// steam/torch/waterfall emitters keep their authored numbers.</summary>
     private const string FirePufferName = "fire_n_smoke";
@@ -329,7 +329,7 @@ public sealed partial class Puffer : Node3D
     private float _trailSizeScale = SizeScaleDefault;
     private float _sustainSizeScale = SizeScaleDefault;
 
-    // The BL-275 fire-column scales — 1 (inert) unless this emitter IS the fire puffer family
+    // The fire-column scales — 1 (inert) unless this emitter IS the fire puffer family
     // (FirePufferName), which only ever spawns on the sustained path.
     private float _fireRiseScale = 1f;
     private float _fireLifeScale = 1f;
@@ -398,7 +398,7 @@ public sealed partial class Puffer : Node3D
     /// <summary>Builds an emitter over a supplied <paramref name="renderer"/> — the same modes, the
     /// same pool sizing and the same spawn paths as <see cref="Create"/>, with no atlas, no
     /// <c>TextureArchive</c> and no <see cref="MultiMesh"/> in the path. This is what makes the
-    /// three modes assertable (`docs/PLAN-deepening.md` `E15b`); the real path never calls it.
+    /// three modes assertable; the real path never calls it.
     ///
     /// <para>⚠ Constructing a <c>Puffer</c> draws one seed off the shared <see cref="Rng.Puffer"/>
     /// stream, so every emitter built after it scatters differently. That is why this is a test
@@ -458,8 +458,8 @@ public sealed partial class Puffer : Node3D
     /// <summary>The one continuous drive: feed the host's current world pose + dt every frame and
     /// the authored state picks the mode — a TIME_INTERVAL state sustains, a DISTANCE_INTERVAL
     /// state emits per interval of the host's actual motion (<see cref="TrailAdvance"/> — the
-    /// density CAP-15's wing burn shows, ~160 puffs/s at flight speed against the 10/s the time
-    /// cadence produced, `BL-259`), and a host that stands still keeps the time cadence: the
+    /// density the original's wing-burn footage shows, ~160 puffs/s at flight speed against the
+    /// 10/s the time cadence would produce), and a host that stands still keeps the time cadence: the
     /// damaged building's sputter is a distance state whose authored interval can never elapse on
     /// a static object, and it has always emitted on time there (every distance state carries the
     /// parsers' synthetic 0.1 s TIME_INTERVAL, so that cadence always exists). A caller whose host
@@ -775,7 +775,7 @@ public sealed partial class Puffer : Node3D
             // measured as the c1-waterfall golden moving with the fire tune inert there.
             var pos = origin + new Vector3(Rand(-d, d), Rand(-d, d), Rand(-d, d));
             var vel = baseVel + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z));
-            // The BL-275 fire tune: scale the world-vertical rise (and the puff's lifetime below)
+            // The fire tune: scale the world-vertical rise (and the puff's lifetime below)
             // of the fire family only — 1 for every other emitter, so this is the identity there.
             vel.Y *= _fireRiseScale;
             _particles[_liveCount++] = new Particle

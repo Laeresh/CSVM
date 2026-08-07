@@ -91,12 +91,12 @@ public partial class FlightController : Node3D
     /// canvas so it scales with the pane. Null unless the flag is set.</summary>
     public HudFontTest? FontTest;
 
-    /// <summary>The selected-weapon text readout (E36): the gun group + rocket type and their live
+    /// <summary>The selected-weapon text readout: the gun group + rocket type and their live
     /// ammo, drawn in the game's HUD font from the <c>MSG_HUD_GUNGAUGE</c>/<c>MSG_HUD_MISSLES</c>
     /// templates. Added to the HUD canvas and fed each frame; null (no font / no loadout) hides it.</summary>
     public WeaponReadout? WeaponReadout;
 
-    /// <summary>The gun aiming reticle (E37): the game's pipper drawn at the SELECTED gun group's
+    /// <summary>The gun aiming reticle: the game's pipper drawn at the SELECTED gun group's
     /// ballistic impact point at the convergence distance — trailing the nose in a hard turn, on the
     /// rounds in steady flight. Added to the HUD canvas and fed the world impact point each frame;
     /// null when the plane carries no firable gun (or the reticle texture was absent).</summary>
@@ -104,28 +104,28 @@ public partial class FlightController : Node3D
 
     /// <summary>The airframe collision boxes (fuselage/wings/tail), swept along each
     /// physics frame's motion so wingtips and tail collide with obstacles. Null falls
-    /// back to the old center-ray-only test.</summary>
+    /// back to the center-ray-only test.</summary>
     public PlaneCollider? Collider;
 
     /// <summary>The airframe's physics body on the aircraft collision layer, built in
     /// <c>_Ready</c> from <see cref="Collider"/>'s own boxes: what a projectile ray or another
     /// plane's sweep strikes. This plane's own queries exclude it (<see cref="AircraftBody.ExcludeSelf"/>).
-    /// Null when no collider boxes could be derived — the plane is then unhittable, as before.</summary>
+    /// Null when no collider boxes could be derived — the plane is then unhittable.</summary>
     public AircraftBody? Body;
 
     /// <summary>Per-part hit points from the vehicle def's destroyable_parts.
     /// When set, collisions below the crash threshold damage the struck
-    /// part and the plane flies on; null keeps the old any-hit-crashes behavior.</summary>
+    /// part and the plane flies on; null means any hit crashes.</summary>
     public PlaneDamage? Damage;
 
-    /// <summary>C27: applies a plane collision to the struck world node, returning true iff it was a
+    /// <summary>Applies a plane collision to the struck world node, returning true iff it was a
     /// <c>WeaponOrCollideHit</c> destructible (the 44 facades/windows/agyrobus) — in which case the
     /// object breaks and the plane flies THROUGH it. Wired to <c>AnimRuntime.CollideDamageAt</c>; null
-    /// (a viewer/static build with no world runtime) makes every collision solid, as before.</summary>
+    /// (a viewer/static build with no world runtime) makes every collision solid.</summary>
     public System.Func<Node?, float, bool>? CollideDamageSink;
 
     /// <summary>Plays a named effect def at a world point through the session's world-effects
-    /// runtime — the survivable graze's authored <c>touchdown_*</c> reaction (B3). Same sink shape
+    /// runtime — the survivable graze's authored <c>touchdown_*</c> reaction. Same sink shape
     /// as <c>ProjectilePool.EffectSink</c>; null (no world, or a build with no effects runtime)
     /// leaves the scrape's sound without its sparks/dust/splash.</summary>
     public System.Action<string, Vector3>? GrazeEffectSink;
@@ -143,7 +143,7 @@ public partial class FlightController : Node3D
     /// disables weapons.</summary>
     public ProjectilePool? Projectiles;
 
-    /// <summary>D44: the FLYOUT-model rockets mounted under the wings, one per loaded pylon, hidden as
+    /// <summary>The FLYOUT-model rockets mounted under the wings, one per loaded pylon, hidden as
     /// each pylon's ammo depletes. Rides the plane; null when nothing could be mounted (viewer, or a
     /// chapter gamez lacking the prototype roots).</summary>
     public PylonOrdnance? Ordnance;
@@ -218,7 +218,7 @@ public partial class FlightController : Node3D
     /// the run's RunCompleted. Null in free flight.</summary>
     public StuntScoreboard? Scoreboard;
 
-    /// <summary>The Dogfight per-pane HUD (PLAN-vs-mode C23): the match timer/K-D/leader line and
+    /// <summary>The Dogfight per-pane HUD: the match timer/K-D/leader line and
     /// the kill banner. Added to the HUD canvas; fed nothing per frame (it pulls VersusMatch's own
     /// live state) beyond the kill facts GameSession pushes through its OnKill. Null outside
     /// <c>--vs</c>.</summary>
@@ -299,7 +299,7 @@ public partial class FlightController : Node3D
                                                    // ballistic solution to (the sight's zero range).
                                                    // NOT in the data (weapons.json carries no
                                                    // convergence field; guns have RANGE 1000) — a
-                                                   // TUNE pending an original-game playtest (E37).
+                                                   // TUNE pending an original-game playtest.
     private const float UnderMapY = 0f;        // C1 terrain sits at y≈100+; below this we're lost
     private const float CollisionMargin = 6f;   // m of look-ahead past the nose (airframe half-length)
     private const float AutoRespawnDelay = 1.5f; // s a HoldInput run stays crashed before auto-respawn
@@ -310,7 +310,7 @@ public partial class FlightController : Node3D
     // struck part (quadratic in severity), slides the velocity along the surface
     // with some tangential loss, and kicks the attitude.
     private const float CrashSpeed = 25f;        // m/s along the normal ⇒ outright crash
-    private const float CollideDamagePerVn = 8f;  // C27: HEALTH_DAMAGE a collision deals to a WeaponOrCollideHit
+    private const float CollideDamagePerVn = 8f;  // HEALTH_DAMAGE a collision deals to a WeaponOrCollideHit
                                                   // object, per m/s of impact severity — a real flight-speed
                                                   // hit (vn≥~9) breaks even agyrobus (health 70); the 43
                                                   // 0.01-health facades/windows shatter at any motion.
@@ -350,7 +350,7 @@ public partial class FlightController : Node3D
     private float _throttle;
     private double _sinceTelemetry;
     private bool _crashed;                       // frozen at the impact point, waiting for respawn
-    private WarningShotCue? _warningShots;       // the near-miss cue's shipped accumulator (BL-087)
+    private WarningShotCue? _warningShots;       // the near-miss cue's shipped accumulator
     private FlightInput _lastInput;              // this physics frame's stick input (drives the surfaces)
     private float _autoRespawnIn;                // s until auto-respawn (HoldSegments runs only)
     private float _autoRestartIn = AutoRespawnDelay; // s until auto-rematch on a finished race (HoldSegments runs only)
@@ -364,7 +364,7 @@ public partial class FlightController : Node3D
     private float _damageFlash;                  // s left on the HUD impact line
     private string _damageFlashText = "";
     private int _projectileHitsLogged;           // verification breadcrumb: the first few hits log
-    private FireControl? _fire;                  // the fire-control state machine (BL-295); built in _Ready with the loadout
+    private FireControl? _fire;                  // the fire-control state machine; built in _Ready with the loadout
     private GunGroup[] _firableGuns = Array.Empty<GunGroup>(); // the firable gun groups in _fire's slot order (muzzle nodes, live ammo)
     private bool _gunLoopOn;                     // the firing loop sound is currently playing
     private bool[] _gunLoggedFirst = Array.Empty<bool>(); // verification breadcrumb: each group logs its first live round once
@@ -377,7 +377,7 @@ public partial class FlightController : Node3D
     private Vector3 _heldPos;                    // the pinned position, re-applied through the model every held step
     private Basis _heldAttitude;                 // the pinned attitude, ditto
 
-    // The gungauge / missilegauge HUD state (E35), pushed to GaugeCluster each frame. Persistent
+    // The gungauge / missilegauge HUD state, pushed to GaugeCluster each frame. Persistent
     // objects mutated in place (the belt-fraction lists too) so the HUD readout costs no per-frame
     // allocation. Null until _Ready binds them, and only for a system the plane actually carries.
     private GaugeCluster.WeaponGauge? _gunGaugeState;
@@ -403,7 +403,7 @@ public partial class FlightController : Node3D
     /// death was reported here.</summary>
     public event Action<int, int?>? Downed;
 
-    /// <summary>The weapon lab (A2): the airframe holds the pose it had when this was set — it does
+    /// <summary>The weapon lab's hold: the airframe holds the pose it had when this was set — it does
     /// not fly, stall, fall or collide — while everything else in the session keeps running. The
     /// props still spin, the guns still fire through the normal trigger, the rounds still fly and
     /// the world sim is untouched. Deliberately NOT the P halt (<see cref="GameClock.Halted"/>),
@@ -432,7 +432,7 @@ public partial class FlightController : Node3D
     /// for respawn. The fact the session (and the in-engine suites) read; only Respawn clears it.</summary>
     public bool Crashed => _crashed;
 
-    /// <summary>The weapon lab's free camera (D8): while set, this controller writes NOTHING to the
+    /// <summary>The weapon lab's free camera: while set, this controller writes NOTHING to the
     /// camera — no chase, no fixed view, no orbit, and <see cref="SnapCamera"/> is a no-op — because
     /// the lab has handed the same <see cref="Camera3D"/> to a <see cref="SpectatorCamera"/> so the
     /// tester can fly out and watch an impact from a metre away. Clearing it re-seeds the orbit from
@@ -462,7 +462,7 @@ public partial class FlightController : Node3D
         Respawn();
     }
 
-    /// <summary>Registers this aircraft with the shared pool as a near-miss cue target (BL-087):
+    /// <summary>Registers this aircraft with the shared pool as a near-miss cue target:
     /// any round not fired by this pilot that passes inside <see cref="WarningShotCue.PassRadius"/>
     /// sounds <c>bullet_warning_sg</c> here, rate-limited by the shipped accumulator. Call after
     /// <see cref="PlayerIndex"/> is set — the index IS the self-exclusion identity.</summary>
@@ -500,7 +500,7 @@ public partial class FlightController : Node3D
         if (Scoreboard != null)
             canvas.AddChild(Scoreboard); // end-of-run results, drawn over everything
         if (FontTest != null)
-            canvas.AddChild(FontTest); // --hud-font-test: the E34 bitmap-font proof overlay
+            canvas.AddChild(FontTest); // --hud-font-test: the bitmap-font proof overlay
         // Splitscreen parents the HUD into this player's SubViewport so it draws in that pane
         // only (and scales off the pane's height); single player keeps it on this node.
         (HudParent ?? this).AddChild(canvas);
@@ -573,7 +573,7 @@ public partial class FlightController : Node3D
                 AutoFireRockets, InfiniteAmmo, InitialGunSelect);
             _gunLoggedFirst = new bool[n];
 
-            // Bind the two weapon gauges (E35) — only for a system this plane actually carries.
+            // Bind the two weapon gauges — only for a system this plane actually carries.
             if (Gauges != null)
             {
                 if (n > 0)
@@ -648,9 +648,9 @@ public partial class FlightController : Node3D
             SnapCamera();
     }
 
-    /// <summary>Weapon lab (A2): pin the held airframe at <paramref name="pos"/> with its nose on
-    /// <paramref name="lookAt"/>, at zero speed — the lab's re-park (click-to-place, C6, and the
-    /// scripted <c>--weapon-target=</c> twin, C7). Goes in through the same
+    /// <summary>Weapon lab: pin the held airframe at <paramref name="pos"/> with its nose on
+    /// <paramref name="lookAt"/>, at zero speed — the lab's re-park (click-to-place, and the
+    /// scripted <c>--weapon-target=</c> twin). Goes in through the same
     /// <see cref="FlightModel.Reset"/> + <see cref="SnapCamera"/> pair <see cref="Respawn"/> uses,
     /// so the sim pose, the drawn pose and the chase camera all land together with nothing left to
     /// interpolate from. Sets the pin whether or not <see cref="Held"/> is on; on a free-flying
@@ -673,13 +673,13 @@ public partial class FlightController : Node3D
             SnapCamera();
     }
 
-    /// <summary>Weapon lab (B5): point the gun selector at a firable gun group (0-based, clamped) —
+    /// <summary>Weapon lab: point the gun selector at a firable gun group (0-based, clamped) —
     /// the programmatic twin of G / D-pad Left, which only cycles. Interactively that cycle still
     /// wins the next time it is pressed; <see cref="InitialGunSelect"/> is the _Ready-time
     /// equivalent and cannot be re-applied once the rig is built.</summary>
     public void SelectGunGroup(int index) => _fire?.SelectGunGroup(index);
 
-    /// <summary>Weapon lab (B5): point the hardpoint selector at a pylon (0-based, clamped) — the
+    /// <summary>Weapon lab: point the hardpoint selector at a pylon (0-based, clamped) — the
     /// programmatic twin of H. Unlike H this lands on an EMPTY pylon too (the lab picks a mount to
     /// look at, not a mount to fire); the firing path's own armed scan still advances off it when
     /// the trigger is pulled.</summary>
@@ -777,7 +777,7 @@ public partial class FlightController : Node3D
             && (Race == null || Stunt.Elapsed >= PlayerIndex * DebugFinishStagger))
             Stunt.DebugCompleteAll(Race != null ? PlayerIndex * 2f : 0f);
 
-        // Dogfight (VS, C25): once the match is decided the results board is up — Visible mirrors
+        // Dogfight: once the match is decided the results board is up — Visible mirrors
         // Match.Completed exactly, same as the race board mirrors Race.AllFinished — and any
         // player's R there is a rematch, not a respawn. Checked before the crash branch (a still-
         // crashed loser's R means "rematch", not "respawn me alone"; RestartMatch already respawns
@@ -829,7 +829,7 @@ public partial class FlightController : Node3D
             return;
         }
 
-        // Weapon lab (A2): a HELD airframe skips input, the flight model and the whole collision
+        // Weapon lab: a HELD airframe skips input, the flight model and the whole collision
         // sweep, and re-asserts its pinned pose instead — but only those. Everything from the pose
         // commit down (weapons, gauges, telemetry) runs exactly as it does in flight, which is the
         // whole point: the lab fires through the same code path free flight does. The pose goes
@@ -861,7 +861,7 @@ public partial class FlightController : Node3D
             // buildings, trees). The airframe boxes (fuselage/wings/tail) are swept along
             // the frame's motion so a wingtip or tail fin collides, not just the center
             // line; the center ray stays as an anti-tunnelling backstop. Only the shapeless
-            // fallback keeps the old nose margin on the ray — with real boxes it would fire
+            // fallback keeps a nose margin on the ray — with real boxes it would fire
             // ~6 m before the fuselage box reaches the wall.
             var to = _model.Position;
             var step = to - prev;
@@ -879,10 +879,10 @@ public partial class FlightController : Node3D
             }
             if (_probe != null)
                 DrawProbe(prev, probeEnd, prev + step * stopFrac, hit);
-            // C27: a collision with a WeaponOrCollideHit destructible (the 44 facades/windows/agyrobus)
+            // A collision with a WeaponOrCollideHit destructible (the 44 facades/windows/agyrobus)
             // breaks IT and the plane flies through — apply severity-scaled damage and clear the hit.
             // Every other object (WeaponHit towers/gates, plain geometry) stays solid and falls through
-            // to the crash/graze below (decision 6: the 0.01 health marks these as fly-through set dressing).
+            // to the crash/graze below (the 0.01 health marks these as fly-through set dressing).
             if (hit && CollideDamageSink != null)
             {
                 var cv = _model.VelocityDir * _model.Speed;
@@ -905,7 +905,7 @@ public partial class FlightController : Node3D
 
         // The dynamic chase radius advances on the sim step, not the render frame: the
         // acceleration derivative needs the fixed dt, and the transient's relaxation is a
-        // SIM-time rate (BL-248). A crash or halt stops the calls, freezing the radius too.
+        // SIM-time rate. A crash or halt stops the calls, freezing the radius too.
         _cam.UpdateDynamics(dt, _model.Speed);
 
         // Weapons: poll the raw held controls, let FireControl decide (selector edges, fire
@@ -927,7 +927,7 @@ public partial class FlightController : Node3D
             };
             ApplyFireOutcome(_fire.Step(dt, fireInputs));
         }
-        Ordnance?.Update();   // hide a pylon's mounted rocket the moment it fired its last (D44)
+        Ordnance?.Update();   // hide a pylon's mounted rocket the moment it fired its last
 
         // Stunt run: flew-through-a-danger-zone test against this frame's committed position.
         Stunt?.Update(_model.Position);
@@ -984,7 +984,7 @@ public partial class FlightController : Node3D
             // one-shots already in flight are left to play out.
             Audio?.SetPaused(halted);
         }
-        // The orbit camera serves both the P freeze and the weapon lab's HELD airframe (D8): in
+        // The orbit camera serves both the P freeze and the weapon lab's HELD airframe: in
         // both the plane is standing still and the point is to fly the view around it. Seeding on
         // the edge starts it where the chase camera left off, so neither entry jumps — and so does
         // the hand-back from the lab's free camera, which leaves the eye somewhere else entirely.
@@ -1010,7 +1010,7 @@ public partial class FlightController : Node3D
         }
         if (CameraOwned)
         {
-            // The lab's free camera has the view (D8) — every camera write here would fight it.
+            // The lab's free camera has the view — every camera write here would fight it.
         }
         else if (orbiting)
         {
@@ -1073,7 +1073,7 @@ public partial class FlightController : Node3D
             Marker.PlanePos = _model.Position;
             Marker.HeadingDeg = headingDeg;
         }
-        // Dogfight opponent markers (C24): this pane's own pose, so the HUD can compute each
+        // Dogfight opponent markers: this pane's own pose, so the HUD can compute each
         // opponent's clock bearing off it — same feed Marker gets, for the same reason.
         if (VersusHud != null)
         {
@@ -1091,10 +1091,10 @@ public partial class FlightController : Node3D
             Gauges.StallWarning = !_crashed && !halted && !_held && _model.IsStallWarned();
             Gauges.StallFrac = _model.StallFraction;
         }
-        // Feeds the E35 gauges (if built) and the E36 readout (if built) — both draw from the live
+        // Feeds the weapon gauges (if built) and the text readout (if built) — both draw from the live
         // loadout, so this runs whenever there is one, independent of the dial cluster.
         UpdateWeaponGauges();
-        // Points the E37 gun reticle at the selected group's ballistic impact point (if built).
+        // Points the gun reticle at the selected group's ballistic impact point (if built).
         UpdateReticle();
         // Splitscreen: the text block shrinks with the pane, like every other HUD element
         // (HudMetrics). PaneFactor is exactly 1 in single player, so the original 22 px at
@@ -1107,8 +1107,8 @@ public partial class FlightController : Node3D
             _hud.Position = new Vector2(HudMargin.X * paneFactor, HudMargin.Y * paneFactor);
         }
         // A splitscreen pane is proportionally WIDER than it is tall, so a height-scaled single
-        // line still ran into the top-centre compass tape in a 4P quarter pane — break the
-        // throttle onto its own line there. Full screen keeps the original one-liner.
+        // line would run into the top-centre compass tape in a 4P quarter pane — break the
+        // throttle onto its own line there. Full screen keeps the one-liner.
         string speedAlt = $"SPD {mph,4:0} MPH   ALT {ft,5:0} FT";
         string throttle = $"THR {_model.Throttle * 100,3:0}%";
         _hud.Text = paneFactor < 1f ? $"{speedAlt}\n{throttle}" : $"{speedAlt}   {throttle}";
@@ -1121,9 +1121,9 @@ public partial class FlightController : Node3D
         }
         if (Damage?.Summary() is { Length: > 0 } dmgSummary)
             _hud.Text += $"\nDMG {dmgSummary}";
-        // The weapon ammo readout is now the E35 gauges + the E36 WeaponReadout (drawn in the game's
+        // The weapon ammo readout is the weapon gauges + the WeaponReadout (drawn in the game's
         // own HUD font from MSG_HUD_GUNGAUGE/MSG_HUD_MISSLES), not this text block.
-        // Stunt run status now lives in the marker HUD; keep the compact text line only
+        // Stunt run status lives in the marker HUD; keep the compact text line only
         // as a fallback if the marker somehow wasn't built.
         if (Stunt != null && Marker == null)
             _hud.Text += $"\n{Stunt.StatusLine()}";
@@ -1162,7 +1162,7 @@ public partial class FlightController : Node3D
         }
     }
 
-    /// <summary>The rocket name the E36 readout shows: the resolved <c>MSG_WEAP_*</c> display name
+    /// <summary>The rocket name the text readout shows: the resolved <c>MSG_WEAP_*</c> display name
     /// (e.g. "High-explosive rocket") when it resolved, else the short internal handle ("BOOM") — a
     /// raw, unresolved <c>MSG_*</c> key falls back to the handle rather than being shown verbatim.</summary>
     private static string RocketReadoutName(WeaponDef w) =>
@@ -1230,7 +1230,7 @@ public partial class FlightController : Node3D
     /// edge-detects.</summary>
     private bool RocketSelectPressed() => KeyDown(Key.H) || PadPressed(JoyButton.DpadRight);
 
-    /// <summary>Feeds the two cockpit weapon gauges (E35) from the same live ammo the firing code
+    /// <summary>Feeds the two cockpit weapon gauges from the same live ammo the firing code
     /// draws down. The gun gauge shows the SELECTED group (its rounds, its short NAME, and one belt
     /// light per firable group by remaining fraction, the arrow on the selected one); the missile
     /// gauge shows the SELECTED pylon's rounds, its NAME, one belt light per pylon, and points the
@@ -1245,7 +1245,7 @@ public partial class FlightController : Node3D
         int gunSel = _fire?.GunSel ?? 0;
 
         // Guns: the SELECTED firable group. The gauge takes the caliber+ammo short NAME and the belt
-        // fractions; the readout (E36) takes the group's mount name and its per-group rounds.
+        // fractions; the text readout takes the group's mount name and its per-group rounds.
         GunGroup? selectedGun = null;
         int firable = 0;
         _gunGaugeSlots.Clear();
@@ -1282,7 +1282,7 @@ public partial class FlightController : Node3D
             var selectedHp = hps[sel];
             // The belt lights index by PYLON NUMBER (Hardpoint.Index), not by position in this
             // compacted list — a partial stock fit must leave gaps at the unfitted physical
-            // positions rather than piling its lit slots at the ring's start (BL-294). The ring is
+            // positions rather than piling its lit slots at the ring's start. The ring is
             // always the full 8; unfitted positions default to 0f, which already reads red like a
             // spent one (GaugeCluster.HardpointIndicatorColor).
             _missileGaugeSlots.Clear();
@@ -1314,7 +1314,7 @@ public partial class FlightController : Node3D
         }
     }
 
-    /// <summary>Points the gun reticle (E37) at the SELECTED gun group's ballistic impact point at
+    /// <summary>Points the gun reticle at the SELECTED gun group's ballistic impact point at
     /// the convergence distance. It integrates the round exactly as <see cref="ProjectilePool"/>
     /// fires it — muzzle-forward × <c>VELOCITY</c> plus the plane's inherited velocity, stepped
     /// through any <c>ACCELERATION</c>/<c>GRAVITY</c> — so the pipper and the rounds agree; it drops
@@ -1541,7 +1541,7 @@ public partial class FlightController : Node3D
             // whatever plays next, and matters once a shutdown can leave the airframe visible.
             CrashRuntime.Play("stopprops", PlaneModel, applyReset: false);
         }
-        // The authored crash camera (BL-260): hard-cut to the static elevated vantage and hide
+        // The authored crash camera: hard-cut to the static elevated vantage and hide
         // the HUD — both straight off the original's crash footage. The pose is set once here
         // and _Process writes nothing to the camera while crashed, so it holds until respawn.
         if (!CameraOwned)
@@ -1771,7 +1771,7 @@ public partial class FlightController : Node3D
         Log.Info("weapons", $"near miss P{PlayerIndex + 1} at {distance:0.0} m intensity={_warningShots.Intensity:0.00} snd={variant ?? "none"}");
     }
 
-    /// <summary>The survivable scrape's authored per-surface reaction (B3): the struck collider's
+    /// <summary>The survivable scrape's authored per-surface reaction: the struck collider's
     /// <see cref="SceneBuilder.SurfaceMeta"/> class picks one of touchdown.zrd's three defs —
     /// <c>touchdown_default</c> sparks off a hard building surface, <c>touchdown_dirt</c> raises
     /// dust off terrain, <c>touchdown_water</c> splashes — which the world-effects runtime stages at
@@ -1784,7 +1784,7 @@ public partial class FlightController : Node3D
     /// instead of a stutter.</para>
     ///
     /// <para><b>Where the def is staged is an open A/B</b> (<c>graze.siteAtContact</c>, default the
-    /// CONTACT POINT — the user's judgement at the controls, 2026-08-01). The data argues for the
+    /// CONTACT POINT — the user's judgement at the controls). The data argues for the
     /// aircraft: every offset the def carries is authored against <c>MAIN_ROOT_NODE</c>, the node
     /// the engine invokes it on, and its SOUND is <c>AT_NODE MAIN_ROOT_NODE</c> too — staging at the
     /// contact point puts the puffer's own −0.5 Y half a metre UNDER the struck surface. But the
@@ -1792,7 +1792,7 @@ public partial class FlightController : Node3D
     /// burial anyway, and smoke visibly leaving the SURFACE reads better than smoke leaving the
     /// plane. Set the flag false to stage on the aircraft instead.</para>
     ///
-    /// <para>⚠ Effects (BL-061) keep ONE live instance per def across the session — two players
+    /// <para>⚠ Effects keep ONE live instance per def across the session — two players
     /// scraping at once collapse onto the later site, as every PlayEffectAt caller does.</para></summary>
     private void GrazeReaction(Vector3 impact, string hitName, Node? hitBody)
     {
@@ -1926,7 +1926,7 @@ public partial class FlightController : Node3D
 
     /// <summary>Places the camera at its settled pose immediately (spawn, respawn, the weapon
     /// lab's re-park) — there is nothing to interpolate from at those moments.</summary>
-    // Silent no-op while the lab's free camera owns the view (D8): a respawn or a lab re-park must
+    // Silent no-op while the lab's free camera owns the view: a respawn or a lab re-park must
     // not yank the eye back onto the plane the tester just flew away from.
     private void SnapCamera()
     {

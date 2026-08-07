@@ -6,7 +6,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The shared results board for splitscreen "Dogfight" (PLAN-vs-mode C25) — mirrors
+/// The shared results board for splitscreen "Dogfight" — mirrors
 /// <see cref="StuntRaceBoard"/> almost exactly: the match ends for everybody at once, so this
 /// covers the WHOLE window on its own CanvasLayer over the splitscreen panes, not a per-pane
 /// overlay. Winner (or "DRAW" on a tie) on top, then one ranked row per player — tag, kills,

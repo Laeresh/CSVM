@@ -30,7 +30,7 @@ namespace CSVM.Mech3.Anim;
 /// studebakers, its sailboats and yachts) the value to hold differs from the authored rest,
 /// up to <c>sailboat1</c>'s 300 s leg held 180° out. The components are kept SEPARATE
 /// rather than as one transform for `ScriptPlayback`'s reason: it keeps <c>Seek(t)</c> a
-/// pure function of <c>t</c>, and a rotate channel can no longer silently discard the
+/// pure function of <c>t</c>, and a rotate channel cannot silently discard the
 /// node's scale. They are seeded ONCE per event rather than re-read per frame, so a tween
 /// cannot compound into itself.</para>
 ///

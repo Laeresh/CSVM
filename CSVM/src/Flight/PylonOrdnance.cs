@@ -4,7 +4,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The ordnance hanging under a plane's wings (D44): one <c>FLYOUT</c> <c>MODEL</c> body instanced at
+/// The ordnance hanging under a plane's wings: one <c>FLYOUT</c> <c>MODEL</c> body instanced at
 /// each loaded pylon and hidden the moment that pylon runs dry. The mounted body is the SAME gamez
 /// prototype the round flies (<c>he_rocket</c>, <c>ap_rocket</c>, <c>sonic</c>, …), instanced through
 /// <see cref="ProjectilePool.BuildFlyoutBody"/> and parented to the pylon marker with an identity

@@ -95,7 +95,7 @@ public class EffectCatalogueTests
         Assert.True(found > 0, "no plane's data carried a *_damage_effects entry — the check ran on nothing");
     }
 
-    /// <summary>The authored damage-stage menu (`BL-259`): across every player airframe's
+    /// <summary>The authored damage-stage menu: across every player airframe's
     /// injure_anims — per-part AND the vehicle-level list — every entry
     /// <see cref="DamageVisuals.RigAnimFor"/> maps to a rig anim must be a name the crash rig
     /// binds (<see cref="EffectCatalogue.PlayerDamageStageAnims"/> or
@@ -133,7 +133,7 @@ public class EffectCatalogueTests
         Assert.Equal("player_damage_trail", DamageVisuals.RigAnimFor("player_smoketrail"));
     }
 
-    /// <summary>`BL-270`: the healthy↔torn candidate sets derive from the authored defs — the
+    /// <summary>The healthy↔torn candidate sets derive from the authored defs — the
     /// hideable skins are exactly the two `*_h` nodes `plane_reset` re-ACTIVEs (pdp2_h/pdp3_h,
     /// one shared def OPERAND_NODE-retargeted at every airframe) and the torn set is exactly the
     /// eight `pdpN` targets of the `pdpanelN` defs. A parse change that drops either set silently

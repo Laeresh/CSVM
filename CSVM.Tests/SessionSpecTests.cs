@@ -9,11 +9,9 @@ namespace CSVM.Tests;
 /// <summary>
 /// The launch-argument resolution truth table: what each command line settles, rule by rule.
 ///
-/// <para>Everything here used to be statement order inside a 571-line <c>_Ready</c>, reachable only
-/// by launching the engine, and checked only by a whole-command-line baseline that could report
-/// THAT a row moved but never which rule moved it. These facts name the rule, and they are what
-/// paid for deleting that baseline's instrument — so this file is now the only thing standing
-/// behind the launch surface. Add the fact with the rule.</para>
+/// <para>Each fact here names the rule that settles its row — not merely that a row moved. This
+/// file is the only thing standing behind the launch surface (no whole-command-line baseline
+/// backs it up), so when a rule is added or changed, add the fact with the rule.</para>
 ///
 /// <para>Two known defects are asserted AS THEY ARE, marked below. Both are reproduced on purpose;
 /// fixing either is a behaviour change and needs its own item.</para>
@@ -127,7 +125,7 @@ public class SessionSpecTests
     public void TheseFlagsVoteForTheAnimLab(string arg) => Assert.Equal(SessionMode.AnimLab, S(arg).Mode);
 
     /// <summary>The four mode bools are computed from <c>Mode</c>, so exactly one is ever true —
-    /// which is the property four hand-written predicates used to get wrong one term at a time.</summary>
+    /// the property hand-written per-mode predicates get wrong one term at a time.</summary>
     [Theory]
     [InlineData("--fly")]
     [InlineData("--viewer")]
@@ -429,7 +427,7 @@ public class SessionSpecTests
         Assert.Equal(S("--fly").PinnedSeed, S("--fly").PinnedSeed);
     }
 
-    // ---- BuildsCollision: the predicate three consumers used to spell for themselves ------------
+    // ---- BuildsCollision: the one shared predicate — consumers must not spell it themselves -----
 
     [Theory]
     [InlineData("--fly")]

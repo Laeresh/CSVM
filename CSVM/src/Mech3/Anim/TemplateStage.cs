@@ -8,7 +8,7 @@ namespace CSVM.Mech3.Anim;
 /// <summary>
 /// The effect-template stage as one module: pool-slot arithmetic, template placement, the
 /// "which copy is mine" identity rule and the reveal/retire/sweep ritual that <c>PlayEffectAt</c>
-/// and the <c>CALL_ANIMATION</c> arm both perform (PLAN-template-stage A2 + A3). Generic over
+/// and the <c>CALL_ANIMATION</c> arm both perform. Generic over
 /// the node type like <see cref="NameResolver{TNode}"/>: the engine hands adapter hooks over at
 /// construction, together with the three policy flags that say what kind of stage this is
 /// (<see cref="Pooled"/>, <see cref="Shown"/>, <see cref="Places"/>), and the runtime-dependent
@@ -17,22 +17,16 @@ namespace CSVM.Mech3.Anim;
 /// resolver or runtime does), so slot wrap, modulo fallback, recycle counting and caller-slot
 /// stickiness are assertable off-engine against a token node type (<c>CSVM.Tests</c>).
 ///
-/// <para>The three flags are sealed at construction (PLAN-template-stage A4, Decision 4) and have
+/// <para>The three flags are sealed at construction and have
 /// no setter anywhere: the stage is built by whoever knows what role its runtime plays
 /// (<c>WorldEffectsFactory</c> for the world-effects and crash rigs, <c>WorldSession</c> for the
-/// world runtime) and handed to <c>AnimRuntime</c> as a constructor argument. Before A4 they were
-/// <c>AnimRuntime</c> properties the factory wrote AFTER the role factories had returned — the
-/// accepted sealing leak `architecture.md` carried on the record, which worked only because both
-/// happened to be read after <c>Bind</c>. There is now no post-seal write to get wrong.</para>
+/// world runtime) and handed to <c>AnimRuntime</c> as a constructor argument, so there is no
+/// post-seal write to get wrong.</para>
 ///
-/// <para>Two prior texts pinned these members to <c>AnimRuntime</c>: PLAN-deepening Decision 16
-/// and PLAN-name-resolver's milestone goal (<i>"`SlotOf` / `TemplateRootsFor` /
-/// `NextPooledAnchors` / `PlaceTemplateAt` stay where Decision 16 of PLAN-deepening pinned
-/// them"</i>). PLAN-template-stage Decision 1 reinterprets rather than reopens them: the pins'
-/// letter blocked moving slot arithmetic into <see cref="EmitterDirector"/> — their spirit is the
-/// property that the director is handed already-resolved host and anchor nodes and the pool never
-/// becomes a third keying scheme. That property survives this move by construction: the stage
-/// resolves roots and hands them out; nothing here keys an emitter.</para>
+/// <para>⚠ Do not move slot arithmetic into <see cref="EmitterDirector"/>: the director is handed
+/// already-resolved host and anchor nodes, and the pool must never become a third emitter-keying
+/// scheme. That property holds by construction: the stage resolves roots and hands them out;
+/// nothing here keys an emitter.</para>
 ///
 /// <para>⚠ Root resolution goes through the <c>findAll</c> hook, never <c>Anchors</c> — with one
 /// deliberate asymmetry. Per-EVENT paths (<see cref="RootsFor"/>, <see cref="IsAt"/>, and the
@@ -40,20 +34,19 @@ namespace CSVM.Mech3.Anim;
 /// <c>NameResolver.Anchors</c> is the one census-recording resolution call, which must not be
 /// re-entered there. Per-CALL paths (<see cref="TakeNextSlot"/>, <see cref="RootsOf"/>) may use
 /// the <c>anchors</c> hook: they run once per <c>PlayEffectAt</c>/hide decision and the census
-/// records once per def identity, exactly as before the move.</para>
+/// records once per def identity.</para>
 /// </summary>
 public sealed class TemplateStage<TNode>
     where TNode : class
 {
-    /// <summary>Decision 6's one named contract: the squared-metres tolerance below which a
+    /// <summary>The squared-metres tolerance below which a
     /// placed template already sits "at" a call site — 0.5 m. Separates "the data is re-issuing
     /// the same call from a poll loop" (leave the live instance alone) from "a second explosion
     /// needs this template somewhere else" (relocate and restart). Metre-scale on purpose:
     /// distinct impacts are metres apart, and an exact compare on kilometre-scale world
-    /// coordinates would call a float round-trip a move. Before A2 this was two literal
-    /// <c>0.25f</c>s written ~700 lines apart (<c>TemplateIsAt</c> and the <c>CallAnimation</c>
-    /// arm's <c>libraryCopy</c> distance test) that agreed by coincidence; verified one rule
-    /// during the A1 grilling, merged here.</summary>
+    /// coordinates would call a float round-trip a move. One named constant so the two distance
+    /// tests that share it (<c>TemplateIsAt</c> and the <c>CallAnimation</c>
+    /// arm's <c>libraryCopy</c> test) cannot drift apart.</summary>
     public const float MoveToleranceSq = 0.25f;
 
     private readonly IEqualityComparer<TNode> _identity;
@@ -93,7 +86,7 @@ public sealed class TemplateStage<TNode>
     // and not an error. Recycles counts every one of them.
     private readonly HashSet<string> _recyclesLogged = new(StringComparer.OrdinalIgnoreCase);
 
-    // BL-288: a relocating CALL_ANIMATION on a pooled runtime whose anchor sits in no slot
+    // A relocating CALL_ANIMATION on a pooled runtime whose anchor sits in no slot
     // container — the crash rig's pdpN panels, its wreck pieces, prop1: plane nodes, never pool
     // copies — claims a slot per (template root, anchor) here on its first call and keeps it, so
     // each panel's tear owns its own template copy while every other panel's burst flies on.
@@ -106,7 +99,7 @@ public sealed class TemplateStage<TNode>
     private readonly Dictionary<string, int> _callerSlotCursor = new(StringComparer.OrdinalIgnoreCase);
 
     // Effects whose instance has ended but whose template copy is still revealed — something is
-    // still animating it, or another def is still playing on it (BL-061 — see RetireWhenIdle, and
+    // still animating it, or another def is still playing on it (see RetireWhenIdle, and
     // Sweep for when they drain).
     private readonly List<(AnimDefinition Def, TNode? Anchor)> _hidesPending = new();
 
@@ -160,8 +153,8 @@ public sealed class TemplateStage<TNode>
 
     /// <summary>Whether the staged effect templates exist in more than one copy, one per pool slot
     /// (<c>AnimRuntime.PoolSlotMeta</c>), so each call takes the next copy instead of relocating the
-    /// one shared original (`BL-225`). Set on the WORLD-EFFECTS runtime and the per-player crash rig
-    /// (`BL-288`): two rockets landing a second apart then keep their own trails at their own sites,
+    /// one shared original. Set on the WORLD-EFFECTS runtime and the per-player crash rig:
+    /// two rockets landing a second apart then keep their own trails at their own sites,
     /// where a single copy made the first blast's trails jump to the second's. Everything
     /// template-shaped becomes slot-scoped under it — which copy a call places
     /// (<see cref="PlaceAt"/>), reveals (<see cref="Reveal"/>), tests for a move
@@ -201,8 +194,8 @@ public sealed class TemplateStage<TNode>
     /// Zero on the goldens; what <c>effect_pools.json</c> is sized against.</summary>
     public int Recycles { get; private set; }
 
-    /// <summary>The runtime-dependent hooks, wired at the handover rather than construction
-    /// (Decision 7): the stage is built before any resolver exists, and the resolver's own
+    /// <summary>The runtime-dependent hooks, wired at the handover rather than construction:
+    /// the stage is built before any resolver exists, and the resolver's own
     /// <c>ownRootsOf</c> hook is <see cref="RootsFor"/> — both directions are delegates.</summary>
     public void Wire(
         Func<string, TNode?, List<TNode>> findAll,
@@ -244,8 +237,8 @@ public sealed class TemplateStage<TNode>
 
     /// <summary>Claims a pool slot for a relocating CALL_ANIMATION whose anchor sits in no slot
     /// container — the crash rig's damage-stage calls, anchored on the plane's own nodes
-    /// (`BL-288`: every `pdpanelN` tear CALLs `gimmeflakes` onto its own `pdpN`, and the one
-    /// shared `planeflakes` root was teleported to each new tear, restarting the previous panel's
+    /// (every `pdpanelN` tear CALLs `gimmeflakes` onto its own `pdpN`; a single
+    /// shared `planeflakes` root would teleport to each new tear, restarting the previous panel's
     /// burst mid-flight). Sticky per (template root, anchor), so a re-call from the same anchor
     /// restarts ITS OWN copy and never a sibling's. More anchors than staged copies wrap through
     /// <see cref="RootsFor"/>'s modulo — the effects pool's own exhaustion behaviour — counted in
@@ -266,8 +259,8 @@ public sealed class TemplateStage<TNode>
         int next = _callerSlotCursor.TryGetValue(callee.Name, out int cur) ? cur : 0;
         _callerSlotCursor[callee.Name] = next + 1;
         byAnchor[anchor] = next;
-        // The per-anchor claim, log-visible beside the retarget line it pairs with — the BL-288
-        // verify reads this to confirm a new tear takes a fresh copy instead of the live one.
+        // The per-anchor claim, log-visible beside the retarget line it pairs with — a debug
+        // run reads this to confirm a new tear takes a fresh copy instead of the live one.
         if (_debug())
         {
             _print($"anim: caller slot {next % copies} of '{callee.Name}' ({copies} cop(ies)) "
@@ -306,7 +299,7 @@ public sealed class TemplateStage<TNode>
             return roots;
         int slot = SlotOf(inSlotOf);
         if (slot < 0)
-            slot = AssignedCallerSlot(callee, inSlotOf); // a crash-rig call anchor's claim (BL-288)
+            slot = AssignedCallerSlot(callee, inSlotOf); // a crash-rig call anchor's claim
         if (slot < 0)
             return roots;
         var staged = roots.Select(SlotOf).Where(s => s >= 0).Distinct().OrderBy(s => s).ToList();
@@ -320,10 +313,10 @@ public sealed class TemplateStage<TNode>
     /// <summary>Takes the next pool slot for one <c>PlayEffectAt</c> call and returns that
     /// slot's copy of the definition's template root(s) — the anchor the new instance runs on, so
     /// two overlapping calls to one effect animate two different copies at two different sites.
-    /// Empty (and unpooled) runtimes return every anchor, which is the pre-pool behaviour.
+    /// Empty (and unpooled) runtimes return every anchor unchanged.
     ///
     /// <para>The cursor wraps: a burst deeper than the pool recycles its oldest slot, relocating
-    /// and restarting a copy that may still be live — the shared-template collapse, now bounded to
+    /// and restarting a copy that may still be live — the shared-template collapse, bounded to
     /// the wrap instead of every call. That is the exhaustion signal, so it is counted and named
     /// once (<see cref="Recycles"/>).</para></summary>
     public List<TNode?> TakeNextSlot(AnimDefinition def)
@@ -374,7 +367,7 @@ public sealed class TemplateStage<TNode>
     /// <c>placeAt</c> hook world-stages each root once placed: <c>TopLevel</c> decouples it from a
     /// moving/rotating caller (a flying plane's pdpN panel) so it holds this pose instead of being
     /// dragged and re-yawed every later frame the caller moves — the same plane-parented-effect
-    /// trap as Puffer's TrailAdvance/Burst fix (BL-229 family). A caller that calls again later
+    /// trap Puffer's TrailAdvance/Burst guards against. A caller that calls again later
     /// (or the pooled-copy path re-placing a recycled slot) simply overwrites this transform.</summary>
     public void PlaceOn(IEnumerable<TNode?> roots, Vector3 origin, bool level = false)
     {
@@ -384,7 +377,7 @@ public sealed class TemplateStage<TNode>
                 continue;
             var xf = _transformOf(root);
             xf.Origin = origin;
-            // BL-292: a named crash-def template (the water splash's flat rings/spray column, the
+            // A named crash-def template (the water splash's flat rings/spray column, the
             // dirt burst's dust plane) inherits crashRoot's rotation otherwise — the plane's
             // attitude at impact, not the struck surface. Basis only; the origin above still places
             // at the call site. Named, not blanket (see LevelPlacedTemplateNames's own ⚠): a crash
@@ -455,8 +448,7 @@ public sealed class TemplateStage<TNode>
     ///
     /// <para>The one place the ritual lives: <c>PlayEffectAt</c> and the <c>CALL_ANIMATION</c> arm
     /// both reveal through here after their Start, and the retire walk and instance teardown both
-    /// hide through here (PLAN-template-stage A3 — before the move each entry point carried its
-    /// own copy of the same steps ~1,200 lines apart).</para></summary>
+    /// hide through here — one shared spelling, so the entry points cannot drift apart.</para></summary>
     public void Reveal(AnimDefinition def, TNode? anchor, bool visible)
     {
         if (!Shown)
@@ -480,10 +472,10 @@ public sealed class TemplateStage<TNode>
     /// (<see cref="Reveal"/>), and the reason a staged template does not stay lit at the last hit
     /// site for the rest of the session. An explicit stop already hides what it tears down, but an
     /// instance that ends by reaching the end of its OWN sequences is removed without one: the
-    /// ap/dum/mag gun hit authors an <c>ACTIVE_STATE 0</c> stop, finishes 0.3 s in and left its
-    /// <c>dum_gunhit</c> chunk mesh visible at the impact point permanently (measured by
+    /// ap/dum/mag gun hit authors an <c>ACTIVE_STATE 0</c> stop, finishes 0.3 s in and would leave
+    /// its <c>dum_gunhit</c> chunk mesh visible at the impact point permanently (measured by
     /// <c>--effects-test</c>'s residual line), while the slug hit — which ships no stop and so runs
-    /// to its TTL — was hidden by the Stop the sweep does and looked fine.
+    /// to its TTL — is hidden by the Stop the sweep does.
     ///
     /// <para>Deferred while the instance's motions still run, because the reveal is paired with the
     /// EFFECT's life and not its instance's: the ring defs' scale/opacity motions outlive the
@@ -520,7 +512,7 @@ public sealed class TemplateStage<TNode>
 
     /// <summary>Indexes a lazily-built pooled copy for name resolution and applies its RESET_STATE
     /// poses — the staging entry a copy passes through exactly once, when its provider builds it
-    /// (BL-253's `facdsticks`). The three steps are runtime services supplied as hooks: the
+    /// (`facdsticks` is the worked example). The three steps are runtime services supplied as hooks: the
     /// pointer-free index pass (a copy shares its source's compiled indices, so it must NOT join
     /// the by-index map), the resolver's find-cache clear (ancestry is snapshotted at index time),
     /// and the reset-state pass that puts the copy in its authored base pose.</summary>

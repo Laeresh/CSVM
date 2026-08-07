@@ -236,7 +236,7 @@ public sealed class ProbeRunner
     }
 
     /// <summary>--dump-weapons[=id|name]: load the typed <see cref="Flight.WeaponDefs"/> reader
-    /// (B11) over <c>weapons.json</c>, print one line per def (id, name, key ballistics, flags,
+    /// over <c>weapons.json</c>, print one line per def (id, name, key ballistics, flags,
     /// bindings) to stdout and <c>./.scratch/weapons_dump.txt</c>, and report any unmapped keys,
     /// then quit. The committed verification instrument the weapons.md table is checked against —
     /// a clean run (no UNHANDLED lines) is the B11 pass. An optional value filters by id
@@ -287,7 +287,7 @@ public sealed class ProbeRunner
     /// quits. <c>--loadout=&lt;def&gt;</c> binds that def's loadout instead of each plane's own (a
     /// cross-binding test — e.g. binding a def that wants <c>firepoint8</c> to the Kestrel proves
     /// the missing-marker error fires). An optional value filters by def / model / display.
-    /// Combined with <c>--weapon-lab</c> (B4), binds each plane's <see cref="Flight.Loadout.ForRig"/>
+    /// Combined with <c>--weapon-lab</c>, binds each plane's <see cref="Flight.Loadout.ForRig"/>
     /// full-rig loadout instead of the stock one, so the report lists mounts the stock file never
     /// names.</summary>
     /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
@@ -330,12 +330,12 @@ public sealed class ProbeRunner
         return r.Ok;
     }
 
-    /// <summary>--effects-test: the D32 headless verify — see <see cref="Probes.Effects"/>, whose
+    /// <summary>--effects-test: the world-effects headless verify — see <see cref="Probes.Effects"/>, whose
     /// census the <c>effect-template-mesh</c> suite counts through.
     /// Plays every effect at the camera point so range-gated ones (gunhit's PLAYER_RANGE) pass;
     /// <paramref name="effectAnimNames"/> is the caller's static name table
     /// (<c>EffectCatalogue.EffectAnimNames</c>), <paramref name="stage"/> its template stage
-    /// for the MESH half (`BL-061`). Reports to stdout and <c>./.scratch/effects_test.txt</c>.</summary>
+    /// for the MESH half. Reports to stdout and <c>./.scratch/effects_test.txt</c>.</summary>
     public void RunEffectsTest(SessionSpec spec, Camera3D camera, Mech3.AnimRuntime effects,
         string[] effectAnimNames, Node3D? stage = null)
     {

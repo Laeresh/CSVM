@@ -46,7 +46,7 @@ public static class Config
     private static readonly HashSet<string> _warnedType = new(StringComparer.Ordinal);
 
     // Guards _registry and the warn-once sets. xunit runs test classes in parallel, and an
-    // unguarded check-then-act on these shared statics tears — BL-302's second victim was this
+    // unguarded check-then-act on these shared statics tears — observed as this
     // registry's SortedDictionary throwing "duplicate key" from an indexer assignment, which is
     // impossible single-threaded. _values/_doc stay unguarded on purpose: they are written only
     // by Load/ClearOverrides, which nothing calls concurrently with reads.
@@ -223,7 +223,7 @@ public static class Config
             // ProjectilePool reads this only on a live rocket shot, which the warmup never fires —
             // register it here so --dump-config still documents the weapon-fire tunable.
             GetFloat("weapons.rocketSpeedScale", ProjectilePool.RocketSpeedScale);
-            // Tracer look (C23) reads only from a live Spawn/RenderTracers, which the warmup never
+            // Tracer look reads only from a live Spawn/RenderTracers, which the warmup never
             // drives (no ProjectilePool here) — register them here so --dump-config documents them.
             GetFloat("weapons.tracerLength", ProjectilePool.TracerLength);
             GetFloat("weapons.tracerWidth", ProjectilePool.TracerWidth);
@@ -239,7 +239,7 @@ public static class Config
             // Same reason as whineMixGain: the damaged-engine loop is only read from a live
             // FlightAudio.Update with damage data, which the warmup never drives.
             GetFloat("flightAudio.damagedEngineMixGain", FlightAudio.DamagedEngineMixGain);
-            // Same reason: the engine dual-stack detune ratio (BL-078) is only read from a live
+            // Same reason: the engine dual-stack detune ratio is only read from a live
             // FlightAudio.Update, which the warmup never drives.
             GetFloat("flightAudio.engineDetuneRatio", FlightAudio.EngineDetuneRatio);
             // Puffer emitters read these at Init, which the warmup never reaches (an emitter needs

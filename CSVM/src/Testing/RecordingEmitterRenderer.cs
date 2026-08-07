@@ -7,7 +7,7 @@ namespace CSVM.Testing;
 /// <summary>A no-GPU stand-in for <c>MultiMeshEmitterRenderer</c>: it keeps the particles a
 /// <see cref="Puffer"/> hands it instead of drawing them, so a suite can assert on the emitter's
 /// three modes — burst, distance trail and sustain — with no atlas, no <c>TextureArchive</c> and no
-/// <c>MultiMesh</c> anywhere in the path (`docs/PLAN-deepening.md` Wave E, `E15b`).
+/// <c>MultiMesh</c> anywhere in the path.
 ///
 /// <para>The mirror of <see cref="CountingEmitterFactory"/> one seam lower: that fake stands in for
 /// the whole emitter so <c>EmitterDirector</c>'s LIFETIME is assertable; this one stands in for the

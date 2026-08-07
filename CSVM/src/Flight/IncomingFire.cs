@@ -7,7 +7,7 @@ namespace CSVM.Flight;
 /// <summary>
 /// <c>--incoming[=metres[,wep_id]]</c> — the near-miss test rig: a phantom shooter sitting on each
 /// player's six, walking a burst past the canopy at a chosen pass distance. It exists because
-/// nothing in the world shoots back yet (M4 AI), so the incoming-fire cue (BL-087) would otherwise
+/// nothing in the world shoots back yet (M4 AI), so the incoming-fire cue would otherwise
 /// be reachable only with a second pilot in splitscreen.
 ///
 /// <para>It fires the target's OWN gun (or the named weapon) into the shared pool under a shooter

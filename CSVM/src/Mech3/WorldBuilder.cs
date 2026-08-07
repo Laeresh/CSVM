@@ -350,7 +350,7 @@ public sealed class WorldBuilder
     /// and C2's <c>rocket</c>. Hence hide-then-restore: everything suspicious goes off immediately
     /// (so none of it is ever seen), and anything that subsequently MOVES is put back.</para>
     ///
-    /// <para>Deciding it from the animation program instead was tried and abandoned as too
+    /// <para>Do not decide this from the animation program instead — that approach is too
     /// fragile: sparing the anchors of ON_STARTUP / <c>startanims</c> definitions still misses the
     /// train cars (driven by events inside a definition anchored on <c>passenger_trengine</c>, not
     /// on themselves) and C2's rocket, would need the CallAnimation graph walked transitively, and
@@ -454,11 +454,10 @@ public sealed class WorldBuilder
         DisableShadows(built);
         BillboardMoon(built);
         DisableLightRangeFade(built);
-        // NOT opted out of fog (user change with the fog remodel, and the
-        // cylinder model is what makes that correct): high dome fragments stay clear via the
+        // NOT opted out of fog (a deliberate choice taken with the cylindrical-fog remodel,
+        // which is what makes it correct): high dome fragments stay clear via the
         // FOG_ALTITUDE fade, while the horizon band fogs toward the same gray as the terrain
-        // fog wall. The `csky_fog_on = 0` walk this used to call was deleted —
-        // it had been dead since that change.
+        // fog wall.
         return built;
     }
 

@@ -5,11 +5,11 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// BL-184 (CAP-18): the weapon-gauge pointer sweeps at a single measured constant rate —
-/// 168.7 °/sim-s — toward the selected belt slot, routed the shortest way round, and snaps
+/// The weapon-gauge pointer sweeps at a single constant rate measured from original-game
+/// footage — 168.7 °/sim-s — toward the selected belt slot, routed the shortest way round, and snaps
 /// instead of sweeping in when it has no prior pose (NaN: gauge just appeared, or a respawn
-/// cleared it via <c>GaugeCluster.Reset</c>). Moved from the in-engine <c>gauge-arrow-tween</c>
-/// suite — every member here is a pure static with no engine dependency.
+/// cleared it via <c>GaugeCluster.Reset</c>). Every member here is a pure static with no engine
+/// dependency.
 /// </summary>
 public class GaugeArrowTweenTests
 {
@@ -30,11 +30,11 @@ public class GaugeArrowTweenTests
 
     /// <summary>A 90° step at 168.7 °/sim-s is 533 ms of pure interior-rate sim time; one 16.6 ms
     /// sim-step (1/60 s) advances it by exactly the rate — neither clamped early nor overshooting.
-    /// CAP-18's end-to-end capture reads ~633 ms for the same step because it also carries a
-    /// ~97 ms ease unimplemented here — the Approach was a constant-rate tween with no easing, and
+    /// The original's end-to-end footage reads ~633 ms for the same step because it also carries a
+    /// ~97 ms ease unimplemented here — this is a constant-rate tween with no easing, and
     /// the ease's own shape is only known as "not a smoothstep", not measured well enough to build
-    /// (a lead, not a finding); the gap is real and owed a follow-up if the capture A/B this item
-    /// still owes reads as visibly wrong at the ends.</summary>
+    /// (a lead, not a finding); the gap is real and owed a follow-up if an A/B against footage
+    /// reads as visibly wrong at the ends.</summary>
     [Fact]
     public void OneSimStepAdvancesByRateTimesDt()
     {

@@ -58,7 +58,7 @@ public partial class GameSession : Node3D
     // Per-player pad binding chosen in the launchscreen's join flow (null = derive from the
     // connected roster in AssignPads, which is what every CLI launch does).
     private readonly int[][]? _menuPads;
-    // The --screenshot=/--shots=/--frames= state machine (PLAN-planeviewer-split A2) — see
+    // The --screenshot=/--shots=/--frames= state machine — see
     // src/Testing/CaptureDirector.cs's entry. Process-scoped and owned by the Launcher (which
     // Ticks it); held here for the Pending reads that gate display choices during the build.
     private readonly Testing.CaptureDirector _captureDirector;
@@ -111,7 +111,7 @@ public partial class GameSession : Node3D
     // time regardless of the sim being halted.
     private readonly HoldToRepeat _stepHold = new(initialDelay: 0.3f, repeatInterval: 0f);
 
-    // Resolves each player's livery and spawn point against _spec (PLAN-planeviewer-split A3);
+    // Resolves each player's livery and spawn point against _spec;
     // see src/Session/LiveryResolver.cs and src/Session/SpawnPicker.cs.
     private LiveryResolver _liveryResolver = null!;
     private SpawnPicker _spawnPicker = null!;
@@ -132,12 +132,12 @@ public partial class GameSession : Node3D
     // The aircraft damage lab (F5, --viewer/--fly/--stunt): per-part HP sliders on the parked
     // plane's visuals, or on P1's real PlaneDamage in flight.
     private DamageLab? _damageLab;
-    // The effect/crash stage factory (PLAN-planeviewer-split A4) — builds the world-effects runtime
-    // (D32, lazily, on demand for a plane-less session: --destroy, the damage lab's first kill) and
+    // The effect/crash stage factory — builds the world-effects runtime
+    // (lazily, on demand for a plane-less session: --destroy, the damage lab's first kill) and
     // each player's crash runtime. Constructed once per session, same lifetime as _liveryResolver.
     private WorldEffectsFactory _worldEffectsFactory = null!;
     // Loads/applies the flown mission's weather and drives its per-frame rig state
-    // (PLAN-planeviewer-split A5) — see src/Session/WeatherRig.cs's entry. Constructed once per
+    // — see src/Session/WeatherRig.cs's entry. Constructed once per
     // session (same lifetime as _worldEffectsFactory); null before the first weathered build and
     // nulled by ReturnToMenu so _Process's null guard covers the frame before the deferred free.
     private WeatherRig? _weatherRig;
@@ -306,7 +306,7 @@ public partial class GameSession : Node3D
             // node owns its disposal so effects can build at any playhead time; until that node
             // exists a failed lab build must close it from the catch below. The TEXTURE archive is
             // not here at all — LoadArchives gives it to the session in every mode, which is what
-            // lets the world runtime keep baking puffers all session (BL-234).
+            // lets the world runtime keep baking puffers all session.
             using var soundsScope = _spec.AnimLab ? null : state.Sounds;
             if (!ResolveNodeSubtree(state))
                 return false;
@@ -471,7 +471,7 @@ public partial class GameSession : Node3D
         }
         // Everything below is anchored to *a* camera, so it runs once per rig — one in single
         // player, one per pane in splitscreen (each on that player's own visual layer). See
-        // src/Session/WeatherRig.cs's Tick (PLAN-planeviewer-split A5).
+        // src/Session/WeatherRig.cs's Tick.
         _weatherRig?.Tick(_rigs);
 
         // Map-edge continuation: re-center the mirrored-tile window on the cameras. One window
@@ -658,17 +658,15 @@ public partial class GameSession : Node3D
                 // The texture archive belongs to the SESSION in every mode (LoadArchives hands it
                 // to _sessionTextures, or to the lab node), not to this build scope — so the world
                 // runtime keeps a live PufferFactory and a death's fire/trails, or a car's dust,
-                // still bakes when it is first reached (BL-234). The sound archive does NOT: it is
+                // still bakes when it is first reached. The sound archive does NOT: it is
                 // a `using` of this build below except in the lab, and the prewarm covers it. Both
                 // flags come from LoadArchives's ArchiveIntent, not set here by hand.
                 TexturesOutliveBuild = state.TexturesOutliveBuild,
                 SoundsOutliveBuild = state.SoundsOutliveBuild,
                 // The lab: quiet stage, ambient playback deferred to its A toggle, and its staged
-                // templates relocated onto the (in-front-of-camera) call site. The second used to be
-                // written onto the runtime after BuildAnimLabStage indexed the stage; it is stage
-                // construction state now (PLAN-template-stage A4), and reaches the same place —
-                // a quiet-stage bootstrap dispatches only RESET_STATEs, which are instant and never
-                // consult it.
+                // templates relocated onto the (in-front-of-camera) call site. The second is stage
+                // construction state — safe to set this early, since a quiet-stage bootstrap
+                // dispatches only RESET_STATEs, which are instant and never consult it.
                 AutoStart = !_spec.AnimLab,
                 PlacesCalledTemplates = _spec.AnimLab,
                 // The world's dice — RANDOM_WEIGHT verdicts, SOUND_GROUPS picks, crash-debris
@@ -821,7 +819,7 @@ public partial class GameSession : Node3D
         {
             long weatherMark = StartupProfile.Mark();
             // The ambient cloud field: the chapter's own fogvol.zrd clutter scattered through the
-            // fvol* boxes its gamez authors (BL-273). World-anchored authored geometry, so it is
+            // fvol* boxes its gamez authors. World-anchored authored geometry, so it is
             // built once beside the world rather than per rig, and needs no per-frame driving —
             // unlike the dome/deck/whiteout below, which follow a camera. Gated with them because
             // it is atmosphere: a plain --viewer inspection shows the data, not the sky, and it
@@ -838,7 +836,7 @@ public partial class GameSession : Node3D
 
             _weatherRig = new WeatherRig(_spec, _worldRoot!);
             // The horizon's zone children go in with the mission's weather: the zone the fog and
-            // the dome share is picked from both (BL-277 — three chapters ship an empty zone2).
+            // the dome share is picked from both (three chapters ship an empty zone2).
             _weatherRig.Build(state.MissionZrdrPath, _rigs, builder.HorizonZones(),
                 activeZone =>
             {
@@ -862,10 +860,10 @@ public partial class GameSession : Node3D
         if (builder.ScrollingModelCount > 0)
             GD.Print($"texture scroll: {builder.ScrollingModelCount} model(s) animating UVs");
         // The evidence that the authored render flags reached the materials — a night chapter
-        // reporting 0 self-lit models means they did not (BL-214).
+        // reporting 0 self-lit models means they did not.
         GD.Print($"model flags: {builder.UnlitModelCount} self-lit (lighting: false), "
                  + $"{builder.UnfoggedModelCount} unfogged (fog: false)");
-        // The per-polygon second material pass (BL-056). A declined count above zero means a
+        // The per-polygon second material pass. A declined count above zero means a
         // sprite/facade mesh carried one and it was dropped — never observed in this install.
         if (builder.OverlayPassSurfaceCount > 0 || builder.OverlayPassDeclinedCount > 0)
             GD.Print($"overlay passes: {builder.OverlayPassSurfaceCount} surface(s) built, "
@@ -889,7 +887,7 @@ public partial class GameSession : Node3D
     /// would otherwise cut into the terrain. It is a MAXIMUM, not a constant: every chapter's dome
     /// is 6.4–12.0 km and clears the 40 km far plane at 2.5x — except <b>C1B's zone1 at 21.8 km</b>,
     /// which 2.5x puts at 54.5 km, so its far wall clipped and the engine's clear colour showed
-    /// through the sky (seen at the controls the moment <c>BL-277</c> started selecting that zone).
+    /// through the sky.
     /// Clamped, C1B lands at ~1.65x and every other chapter keeps 2.5x exactly, which is why no
     /// other chapter's sky moves.</para>
     ///
@@ -1079,7 +1077,7 @@ public partial class GameSession : Node3D
                 for (int i = 0; i < 8; i++) // pool one per pdp panel — the lab can flip all of them
                     if (Effects.Puffer.MakePuffer(state.ZrdrPath, state.Textures, _worldRoot!, "pufftrails.json", "firepuffer") is { } pt)
                         panelTrails.Add(pt);
-                // The healthy↔torn candidate sets from the authored defs (BL-270) — the viewer
+                // The healthy↔torn candidate sets from the authored defs — the viewer
                 // has no anim program, so the two reader files are loaded directly.
                 var pairingDefs = new List<Mech3.AnimDefinition>();
                 pairingDefs.AddRange(Mech3.AnimDefs.LoadFileDefs(state.ZrdrPath, "player_destruct_reset.json"));
@@ -1176,7 +1174,7 @@ public partial class GameSession : Node3D
             long mark = StartupProfile.Mark();
             var labWeapons = WeaponDefs.Load(state.ZrdrPath, Messages.Load(state.MessagesPath));
             StartupProfile.Record("zrdr", mark);
-            // The bench fires the airframe's WHOLE rig (D9): ForRig's 4 gun groups + every pylon,
+            // The bench fires the airframe's WHOLE rig: ForRig's 4 gun groups + every pylon,
             // seeded from the plane's stock entry where it has one, so a weapon that stock never
             // mounts still gets a mount of its own class rather than a skip. A plane the table omits
             // passes a null stock def — ForRig synthesizes the rig from the markers regardless.
@@ -1192,8 +1190,8 @@ public partial class GameSession : Node3D
             var benchLoadout = Loadout.ForRig(_plane, labWeapons, stock);
             // The bench's own scene-less pool: rockets fly streak-only, gun impacts show the spark,
             // hardpoint impacts the pool's explosion stand-in, and there is no DamageSink. No
-            // WeaponLab is built here at all — the lab is a flight-mode panel that fires nothing
-            // (B5); the pass check is WeaponBench's (D9).
+            // WeaponLab is built here at all — the lab is a flight-mode panel that fires nothing;
+            // the pass check is WeaponBench's.
             var benchPool = new ProjectilePool(state.Textures, null, null);
             _worldRoot!.AddChild(benchPool);
             benchPool.Listener = _camera;
@@ -1263,8 +1261,7 @@ public partial class GameSession : Node3D
     /// <summary>--fly (and --stunt): builds every rendered rig's aircraft — model, loadout,
     /// HUD, audio, stunt/crash hookup — sharing the session-wide flight data (planes gamez,
     /// per-plane stats, weapons, the projectile pool) loaded once above the per-player loop.
-    /// PLAN-planeviewer-split C10 is the follow-up that splits the per-player body out of this
-    /// method into its own FlightRigAssembler.</summary>
+    /// The per-player body lives in its own FlightRigAssembler.</summary>
     private void BuildFlightRigs(BuildState state)
     {
         // Session-wide flight data, loaded once and shared by every player: the aircraft
@@ -1325,21 +1322,21 @@ public partial class GameSession : Node3D
         // (projectiles live in the shared world, so every splitscreen pane sees them). The
         // pool reuses the session texture/sound archives (tracer/muzzle textures, impact sounds)
         // and the world gamez + its SceneBuilder, so rockets instance their FLYOUT MODEL body
-        // (`he_rocket` …) from the chapter's own prototype roots (B14).
+        // (`he_rocket` …) from the chapter's own prototype roots.
         mark = StartupProfile.Mark();
         var weaponMessages = Messages.Load(state.MessagesPath);
         var weaponDefs = WeaponDefs.Load(state.ZrdrPath, weaponMessages);
         var stockLoadouts = StockLoadouts.Load();
         StartupProfile.Record("zrdr", mark);
         // flyoutAnims: the world program also carries the rockets' FLYOUT MODEL_ANIMATION defs
-        // (cam_anim / missile_puffers), from which the pool builds each type's smoke trail (C21).
+        // (cam_anim / missile_puffers), from which the pool builds each type's smoke trail.
         // Null on the empty stage (no world program) — rockets there fly trail-less, like the body.
         var projectiles = new ProjectilePool(state.Textures, state.Sounds, state.SoundDefs,
             flyoutGamez: state.Gamez, flyoutScene: state.WorldScene, flyoutAnims: state.CrashProgram,
             soundGroups: state.SoundGroups)
         {
             Listener = _rigs.Count > 0 ? _rigs[0].Camera : _camera,
-            // Route weapon hits to the world's destructibles (C23): the pool's raycast
+            // Route weapon hits to the world's destructibles: the pool's raycast
             // reports the struck collider, the runtime resolves it to a destructible and
             // spends the weapon's HEALTH_DAMAGE. Null runtime ⇒ impacts stay cosmetic.
             DamageSink = state.WorldRuntime != null ? state.WorldRuntime.DamageAt : null,
@@ -1347,13 +1344,13 @@ public partial class GameSession : Node3D
         _worldRoot!.AddChild(projectiles);
         _projectiles = projectiles;
 
-        // The world-effects runtime (D32): one per session, rendering the impact/destruction
+        // The world-effects runtime: one per session, rendering the impact/destruction
         // puffer effects the world runtime cannot (its factory is gone after the build). A
         // rocket impact plays its named effect here; the world runtime routes a death's
         // CALL_ANIMATION of a curated effect here too. Needs the world's SceneBuilder to stage
         // the templates, so it is built only when the world was. Through EnsureWorldEffects (not
         // built directly) so a later --destroy=/damage-lab demand on the SAME session finds the
-        // cache instead of building a second one (`BL-232`) — it also wires projectiles.EffectSink,
+        // cache instead of building a second one — it also wires projectiles.EffectSink,
         // since this is the one call site that has a ProjectilePool to wire it to.
         AnimRuntime? worldEffects = null;
         if (state.WorldScene != null && state.WorldRuntime != null)
@@ -1392,12 +1389,12 @@ public partial class GameSession : Node3D
             : null;
 
         // The game's own HUD bitmap font (extracted/rimage/5pointhud*.png), loaded once and
-        // shared across panes — the E36 weapon readout and the --hud-font-test proof overlay
+        // shared across panes — the weapon readout and the --hud-font-test proof overlay
         // both draw with it. Null (one log line) if the rimage atlas is absent; both are then
         // simply not built.
         HudFont? hudFont = HudFont.Load(Path.Combine(_dataRoot, "extracted", "rimage"));
 
-        // The gun aiming reticle's pipper (E37): the game's own impact_point.png, loaded once
+        // The gun aiming reticle's pipper: the game's own impact_point.png, loaded once
         // and shared across panes (it carries its own alpha — no colour-keying). Null (no file)
         // simply omits the reticle.
         Texture2D? reticleTex = ImpactReticle.LoadTexture(
@@ -1405,8 +1402,7 @@ public partial class GameSession : Node3D
 
         // Per-player rigs: one FlightRigAssembler over the session data above, run in
         // ascending player order — the paint rng and the spawn index wrap are shared
-        // streams, so the draw order is load-bearing (PLAN-planeviewer-split C10; see
-        // src/Session/FlightRigAssembler.cs).
+        // streams, so the draw order is load-bearing (see src/Session/FlightRigAssembler.cs).
         var assembler = new FlightRigAssembler(_spec, _liveryResolver, _spawnPicker,
             _worldEffectsFactory, _worldRoot!, new FlightRigAssembler.Inputs
             {
@@ -1473,11 +1469,11 @@ public partial class GameSession : Node3D
             GD.Print($"damage lab: '{_spec.PlaneName}' has no destroyable_parts");
         }
 
-        // The weapon lab in flight (A3): the panel the viewer used to host, now bound to player 1's
-        // HELD aircraft (A2) inside a real chapter world — so it fires through the session's own
+        // The weapon lab in flight: the panel bound to player 1's
+        // HELD aircraft inside a real chapter world — so it fires through the session's own
         // fully-wired ProjectilePool (flyout gamez/scene/anims, the world-effects EffectSink and the
-        // destructible DamageSink, all built above) instead of the scene-less pool it used to build
-        // for itself. Nothing here is per-player: the lab is one overlay on one aircraft, like the
+        // destructible DamageSink, all built above), never a scene-less pool of its own.
+        // Nothing here is per-player: the lab is one overlay on one aircraft, like the
         // damage lab above. --weapon-test never reaches this path (it stays a parked-plane probe).
         if (_spec.WeaponLab && _rigs.Count > 0 && _rigs[0] is { Controller: { PlaneModel: not null } p1c } labRig)
         {
@@ -1560,7 +1556,7 @@ public partial class GameSession : Node3D
                 if (rig.Controller is { } pilot)
                 {
                     pilot.AutoRespawnAfter = VersusRespawnDelay; // crash cam, then back in — R skips
-                    pilot.Match = match;                  // R-ownership gate (C25): board-up ⇒ rematch
+                    pilot.Match = match;                  // R-ownership gate: board-up ⇒ rematch
                     pilot.RestartMatch = () => RestartMatch(match);
                     pilot.Downed += (victim, killer) =>
                     {
@@ -1569,7 +1565,7 @@ public partial class GameSession : Node3D
                         else
                             match.RegisterDeath(victim);
                     };
-                    // The kill banner (C23): a SEPARATE subscription from the scoring one above —
+                    // The kill banner: a SEPARATE subscription from the scoring one above —
                     // every pane's HUD hears every Downed report, not just the shooter's/victim's,
                     // so the whole field sees who went down.
                     pilot.Downed += (victim, killer) =>
@@ -1584,7 +1580,7 @@ public partial class GameSession : Node3D
                      (match.KillTarget > 0 ? $"first to {match.KillTarget} kills" : "no kill target") + ", " +
                      (match.TimeLimit > 0f ? $"{match.TimeLimit / 60f:0.#} min limit" : "no time limit"));
 
-            // The match's shared results board (C25): same construction as the race board above —
+            // The match's shared results board: same construction as the race board above —
             // one CanvasLayer over the whole window (the match ends for everybody at once), R
             // routed back through this session via RestartMatch.
             var board = VersusBoard.Build(match, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
@@ -1928,16 +1924,15 @@ public partial class GameSession : Node3D
             {
                 rig.Controller?.SimStep(dt);
             }
-            // The weapon lab has no sim step of its own any more (A3): it is hosted by player 1's
+            // The weapon lab has no sim step of its own: it is hosted by player 1's
             // FlightController, which owns the fire clock, and fires into _projectiles above.
             _versus?.Advance(dt);
         }
     }
 
     /// <summary>Per-build state threaded through StartSession's phase methods — the archives,
-    /// world-build outputs and running counts that used to be locals shared across one flat try
-    /// block (PLAN-planeviewer-split C9). Local to a single StartSession call; nothing here is
-    /// cached across a rebuild.</summary>
+    /// world-build outputs and running counts. Local to a single StartSession call; nothing here
+    /// is cached across a rebuild.</summary>
     private sealed class BuildState
     {
         public string DataRoot = "", ZrdrPath = "", SoundsPath = "", InterpPath = "",

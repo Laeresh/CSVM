@@ -241,7 +241,7 @@ public sealed partial class WorldDamageLab : Node
         // panel's own height is under our control below rather than stretched to fill the screen —
         // ResizeToContent sets OffsetBottom to hug whatever the rows need, capped at BottomMargin
         // above the bottom edge, so a short pool list is a compact block instead of a tall panel
-        // with dead translucent space over the debris line (BL-045).
+        // with dead translucent space over the debris line.
         var panel = new PanelContainer { SelfModulate = new Color(1, 1, 1, 0.88f) };
         panel.AnchorLeft = 1;
         panel.AnchorRight = 1;

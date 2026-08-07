@@ -8,7 +8,7 @@ namespace CSVM.UI;
 /// The <c>--viewer</c> marker overlay (key <b>K</b>): draws every gun firepoint, ordnance pylon
 /// and the aim <c>target</c> on the parked aircraft as a labelled gizmo, so the user can read
 /// which physical mount is which and hand back the airframe gun-group table
-/// (<c>docs/formats/markers.md</c>, PLAN-M3 item A3/A8). Firepoints, pylons and the target draw
+/// (<c>docs/formats/markers.md</c>). Firepoints, pylons and the target draw
 /// in distinct colours; the firepoints that <b>share one mount</b> — two gun groups at the same
 /// coordinate, the Balmoral/Brigand duplicate-coordinate case the user most needs to
 /// disambiguate — draw in a fourth colour and stack their names so both are legible instead of

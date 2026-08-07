@@ -20,9 +20,9 @@ namespace CSVM.Effects;
 /// multiplier (<c>scale_range</c>), the draw distance (<c>far_fade_range</c>) and the altitude
 /// band (the <c>fvol*</c> boxes' own geometry) are all authored. The sprite's size, texture,
 /// billboard mode and its <c>lighting</c>/<c>fog</c> render flags come from the gamez model. This
-/// class holds <b>no TUNE constant</b> — it replaced <c>CloudPuffs</c>, whose whole field (count,
-/// radius, size, opacity, band margins, vertical fades) was hand-tuned because this reader had not
-/// been found (<c>BL-273</c>).</para>
+/// class holds <b>no TUNE constant</b> — do not re-introduce a hand-tuned cloud field (count,
+/// radius, size, opacity, band margins, vertical fades); every one of those is authored data
+/// read above.</para>
 ///
 /// <para><b>Model — world-anchored, built once, zero per-frame cost.</b> The field is static
 /// geometry, not a camera-following pool: the volumes are fixed boxes and the grid is anchored on

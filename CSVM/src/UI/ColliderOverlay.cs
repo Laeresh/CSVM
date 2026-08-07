@@ -64,7 +64,7 @@ public sealed partial class ColliderOverlay : Node
     private static readonly Color OtherColor = new(1f, 0.3f, 1f);
 
     // The legend's own class list — the full fixed palette, always shown regardless of what
-    // actually drew this session (BL-205): a map legend describes the key, not just what is
+    // actually drew this session: a map legend describes the key, not just what is
     // currently on screen. Colour still comes from ColorFor alone, so a palette change here
     // cannot desync the legend from the wireframes.
     private static readonly string[] LegendClasses = { "water", "buildings", "clutter", "plane", "world", "other" };
@@ -634,7 +634,7 @@ public sealed partial class ColliderOverlay : Node
 
     // ---- notice --------------------------------------------------------------------------------
 
-    // showLegend is false for the "no collision built" notice (BL-205's own trap: a legend for
+    // showLegend is false for the "no collision built" notice (the trap: a legend for
     // wireframes that were never drawn is the same false "nothing is collidable" read the overlay
     // exists to avoid) and true only for the summary shown once wireframes are actually up.
     private void ShowNotice(string text, bool showLegend = false)

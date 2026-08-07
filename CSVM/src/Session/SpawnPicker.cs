@@ -8,7 +8,7 @@ namespace CSVM.Session;
 /// <summary>Picks each player's flight spawn against a <see cref="SessionSpec"/>: the shared
 /// spawn-list index (<c>--spawn=</c> or a random pick), the per-player point from that list or
 /// objectives.json's PLAYER_INIT, and the <c>--spawn-at=</c>/<c>--pos=</c> debug override.
-/// Constructed once per session (PLAN-planeviewer-split A3).</summary>
+/// Constructed once per session.</summary>
 public sealed class SpawnPicker
 {
     /// <summary>Splitscreen: fan the players out abreast so they don't spawn inside each other.</summary>

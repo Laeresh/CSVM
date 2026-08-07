@@ -87,9 +87,9 @@ public sealed partial class AnimLab : Node
     private readonly List<int> _rows = new();
 
     // Render-pose smoothing for the interactive FixedAccum clock: the sim advances in whole
-    // 1/60 s steps while the lab renders faster, so a moving target's transform used to freeze
-    // on the rendered frames between steps — the same cadence stutter the flown plane had
-    // before its _renderPose fix, visible as ghosted/jittery cars on any FromTo drive. Each
+    // 1/60 s steps while the lab renders faster, so an unsmoothed moving target's transform
+    // freezes on the rendered frames between steps — the same cadence stutter the flown plane's
+    // own _renderPose smoothing prevents, visible as ghosted/jittery cars on any FromTo drive. Each
     // live transform-motion target keeps its last two SIM poses; every rendered frame draws it
     // at the clock's sub-step fraction between them. Sim purity is kept by restoring the true
     // sim pose before any step runs, so event held-pose seeding never reads a render pose; in
@@ -812,7 +812,8 @@ public sealed partial class AnimLab : Node
     private Button TBtn(string text, Action pressed)
     {
         // FocusMode None keeps a clicked button from holding keyboard focus and swallowing the
-        // transport keys — the failure that made Space (formerly pause) re-trigger the picker.
+        // transport keys — a focused button turns Space into "press me again" instead of a
+        // transport key.
         // Every press also releases the picker's text field, so clicking any transport control
         // hands the keyboard (camera + shortcuts) back after typing a filter (user-reported).
         var b = new Button { Text = text, FocusMode = Control.FocusModeEnum.None };

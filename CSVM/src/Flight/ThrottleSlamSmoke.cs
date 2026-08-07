@@ -7,7 +7,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The throttle-slam exhaust smoke (`CAP-21` re-read): a large, sudden throttle INCREASE streams
+/// The throttle-slam exhaust smoke (observed in the original's footage): a large, sudden throttle INCREASE streams
 /// dark trail smoke from the engine's exhaust nodes for a few seconds; a single small step, a
 /// sustained high setting, and any throttle decrease all show nothing. The shape is
 /// <c>plane_props.json</c>'s <c>nitro_boost</c> puffers (<c>nitropuff1..4</c>, AT_NODE

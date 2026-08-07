@@ -6,13 +6,13 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>Why the archives are being opened — fixes the <see cref="WorldSession.Options"/>
-/// lifetime flags that come back with them, so a caller cannot forget one (`BL-241`'s own fix
-/// note: the harness forgot <c>TexturesOutliveBuild</c>).</summary>
+/// lifetime flags that come back with them, so a caller cannot forget one (forgetting
+/// <c>TexturesOutliveBuild</c> is exactly the shipped-bug shape this guards against).</summary>
 public enum ArchiveIntent
 {
     /// <summary>A game/viewer/flight session: the texture archive belongs to the session (freed on
     /// return-to-menu), so the world runtime keeps baking `PUFFER_STATE` atlases at RUNTIME
-    /// (`BL-234`) — <c>TexturesOutliveBuild = true</c>. The sound archive stays a `using` local of
+    /// — <c>TexturesOutliveBuild = true</c>. The sound archive stays a `using` local of
     /// the build (the prewarm is what makes that survivable) — <c>SoundsOutliveBuild = false</c>.</summary>
     Session,
 

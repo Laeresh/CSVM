@@ -16,7 +16,7 @@ namespace CSVM.Flight;
 /// each physics frame. One pool serves every player (projectiles live in the shared world, so every
 /// splitscreen pane sees them).
 ///
-/// <para>Hit detection is a per-step raycast (B15) over world + aircraft: a round can strike an
+/// <para>Hit detection is a per-step raycast over world + aircraft: a round can strike an
 /// opponent's <see cref="AircraftBody"/> (the <c>player</c> IMPACT class), with the shooter's own
 /// body excluded per shot by identity — a pilot's rounds never hit their own launcher. World
 /// surfaces classify as <c>default</c>/<c>water</c>/<c>buildings</c> from the struck collider's
@@ -32,14 +32,14 @@ public sealed partial class ProjectilePool : Node3D
     /// It matches no player, so such a round can still warn every aircraft it passes.</summary>
     public const int NoShooter = -1;
 
-    /// <summary>Where a hit's damage goes (C23): given the struck collider and the weapon's
+    /// <summary>Where a hit's damage goes: given the struck collider and the weapon's
     /// <c>HEALTH_DAMAGE</c>, apply it to the destructible that collider belongs to. Wired to
     /// <c>AnimRuntime.DamageAt</c> in flight; null when there is no destructible system (the static
     /// viewer, a chapter with no anim runtime), where impacts stay purely cosmetic.</summary>
     public System.Func<Node?, float, bool>? DamageSink;
 
     /// <summary>Plays a named IMPACT effect (its puffer half) at a hit point through the world-effects
-    /// runtime (D32): the gun/rocket smoke and fireballs whose <c>ANIMATION</c> is an ON_CALL effect
+    /// runtime: the gun/rocket smoke and fireballs whose <c>ANIMATION</c> is an ON_CALL effect
     /// def rather than a gamez model. Null in views with no anim runtime. The third argument is the
     /// instance's time bound in seconds (0 = the runtime's own): gun hits pass
     /// <see cref="GunEffectTtl"/>, rockets/ordnance take the default.</summary>
@@ -51,8 +51,8 @@ public sealed partial class ProjectilePool : Node3D
                                                 // 1.0 = neutral. Rocket feel is a pending playtest A/B — scales
                                                 // both launch velocity and acceleration together so the whole
                                                 // profile stays proportional and the round still expires at RANGE.
-                                                // C25 retune toward the reference shots' short discrete dashes (was 3m/0.156m, read as a long
-                                                // glowing streak) — magnitudes are user-owned tuning. C23 routes all three
+                                                // Tuned to the reference shots' short discrete dashes (longer/wider values read as a long
+                                                // glowing streak) — magnitudes are user-owned tuning, and all three route
                                                 // through Config (weapons.tracerLength/tracerWidth/tracerBrightness) so the user can retune the
                                                 // look without a rebuild; these consts are only the defaults now (Config.GetFloat falls through
                                                 // to them verbatim with no config.json, so the defaults stay byte-identical for goldens).
@@ -63,15 +63,15 @@ public sealed partial class ProjectilePool : Node3D
     // clipped by the additive blend itself) is the only lever available without a bloom pipeline.
     // Uniform across channels so it brightens rather than recolours the per-ammo texture's own hue.
     internal const float TracerBrightness = 3.0f; // default; user tunes via weapons.tracerBrightness
-    // C23 distance-visibility floor: the minimum screen footprint (px) a tracer's drawn width/length
+    // Distance-visibility floor: the minimum screen footprint (px) a tracer's drawn width/length
     // are allowed to shrink below at range, so a round many hundred metres out still reads as a
     // fleck instead of vanishing into sub-pixel geometry (the original screenshots show distant fire
     // as visible streaks). 0 disables the floor outright. Off the default screenshots/goldens (none
-    // fire a weapon) so this never moves a golden hash — magnitude is TUNE (BL-210), owed the
+    // fire a weapon) so this never moves a golden hash — magnitude is TUNE, owed the
     // cockpit A/B via weapons.tracerMinPixels.
     internal const float TracerMinPixels = 2.0f;
 
-    // How long a gun hit's `<caliber><ammo>_gunhit` instance may run (C8). The family's own
+    // How long a gun hit's `<caliber><ammo>_gunhit` instance may run. The family's own
     // authored emission windows are the bound: ap/dum stop their `whitehotpuffer` at +0.1 s and mag
     // stops `firepuffer`+`whitehotpuffer` at +0.3 s, while the four **slug** defs — the stock ammo
     // on every gun — ship no ACTIVE_STATE 0 at all for their `blacksmokepuffer`. The longest
@@ -81,7 +81,7 @@ public sealed partial class ProjectilePool : Node3D
     internal const float GunEffectTtl = 0.3f;
 
     // Minimum sim seconds between two plays of one gun's impact effect. The effect templates are
-    // shared and relocated, not copied (BL-225), so two plays inside one emission window only move
+    // shared and relocated, not copied, so two plays inside one emission window only move
     // a single emitter — below this the extra plays buy nothing and only restart sequences. Sits at
     // the ap/dum emission window (0.1 s) and just under the fastest gun's FIRE_RATE (10.5/s), so a
     // single group still gets its smoke on essentially every round.
@@ -101,7 +101,7 @@ public sealed partial class ProjectilePool : Node3D
     private const float RocketStreakScale = 2.4f; // fatter/longer streak, the fallback when a rocket has
                                                   // NO FLYOUT model (a chapter missing the prototype)
     private const float RocketExhaustScale = 0.5f; // a slim exhaust streak behind a rocket that HAS a
-                                                   // MODEL body (B14): the body is the round, this is its trail
+                                                   // MODEL body: the body is the round, this is its trail
     private const float MuzzleSize = 0.5f;    // m
     private const float MuzzleLife = 0.05f;   // s
     // The flash triad: three quads 120 degrees apart sharing one continuous per-shot roll, matched
@@ -145,13 +145,13 @@ public sealed partial class ProjectilePool : Node3D
     // event tick, so the flash lives ~2 frames here; energy is ours to pick (TUNE).
     private const int MaxMuzzleLights = 8;
     private const float MuzzleLightLife = 0.03f;   // s
-    private const float MuzzleLightEnergy = 2.5f;  // the def carries range/colour only; magnitude signed off 2026-08-06 (weapon-lab, BL-286a)
+    private const float MuzzleLightEnergy = 2.5f;  // the def carries range/colour only; magnitude judged at the controls in the weapon lab
 
     // A dirt impact's tumbling-debris burst: a few small chips that fly outward and arc under
     // gravity, in place of the single 3 m stand-in spark. Count/size/speed/spin are TUNE; the
     // life leans on the gunhit def's own debris OBJECT_MOTIONs (bit1 RUN_TIME 1 s, bit2/3/chunk
     // 2 s). Drawn on the authored chip textures below, alpha-blended — through the additive
-    // muzzle-flash-textured impact pool they read as a small flame, not debris (BL-203).
+    // muzzle-flash-textured impact pool they read as a small flame, not debris.
     private const int DirtDebrisSprites = 5;
     private const float DirtDebrisSize = 0.45f;   // m
     private const float DirtDebrisLife = 0.9f;    // s
@@ -173,7 +173,7 @@ public sealed partial class ProjectilePool : Node3D
     // the instanced model's `*_base` disc scales xz 1→2 over 0.2 s then eases back to 1.8 over
     // [1.0,2.0] s, while the `*_splash` column pops to its authored scale (1,100,1) and collapses
     // to zero over the 2 s run (OBJECT_MOTION SCALE initial+delta·u — MotionRuntime's decode).
-    // Values verbatim from the defs. C6 (BL-265) adds the two pieces that were missing: the
+    // Values verbatim from the defs, including the
     // 0.05 s opacity fade-in / 1 s fade-out (OBJECT_OPACITY_FROM_TO targets the WHOLE
     // `splash1.flt`/`bsplsh.flt` root, i.e. base disc AND column together, not the column
     // alone) and the column's `splash01→03` flipbook.
@@ -193,11 +193,11 @@ public sealed partial class ProjectilePool : Node3D
     // 3 frames @4 fps verbatim (C1B's own materials.json: material 135's `cycle` block). See
     // SplashFlipbookTextures below for why this needs its own registration path.
     private const float SplashFlipbookFps = 4f;
-    // TUNE, source-visible for the A/B (same pattern as A3's MuzzleFlashCount): the authored
+    // TUNE, source-visible for the A/B (same pattern as MuzzleFlashCount): the authored
     // splash1_splash quad is literally 5 cm wide — sub-pixel past ~30 m — while the reference
     // ticks in `Water Splash.png` measure ~0.35 m, which 8× matches. Judged at the controls
-    // 2026-08-06 with the fades in: 1× still reads as a thin stripe, so 8× is the shipped
-    // width (BL-265 closed). Set to 1 to reach the authored literal width. Not a `const`: both
+    // with the fades in: 1× still reads as a thin stripe, so 8× is the shipped
+    // width. Set to 1 to reach the authored literal width. Not a `const`: both
     // paths stay reachable without deleting either.
     private static readonly float SplashColumnWidthScale = 8f;
     // The column's authored flipbook frame textures. Reuses TextureCycler's frame-swap machinery
@@ -218,7 +218,7 @@ public sealed partial class ProjectilePool : Node3D
     private static readonly Color DirtTint = new(1f, 1f, 1f); // the bit textures carry the colour
     private static readonly Color MuzzleSmokeTint = new(0.85f, 0.85f, 0.85f);
 
-    // Muzzle-flash sprite tint (C24) — unrelated to the tracer tint below, which is a separate,
+    // Muzzle-flash sprite tint — unrelated to the tracer tint below, which is a separate,
     // uniform overbright multiplier so each ammo's own tracer texture colour shows through unshifted.
     private static readonly Color SlugTint = new(1.0f, 0.85f, 0.35f);   // warm yellow
     private static readonly Color RocketTint = new(1.0f, 0.6f, 0.25f);  // orange exhaust
@@ -230,7 +230,7 @@ public sealed partial class ProjectilePool : Node3D
     // heavy-mount `muzzle_burst2` carry no ammo suffix and default to slug, the common case.
     private static readonly string[] MuzzleAmmoTextures = { "slug_muzzle1", "dum_muzzle1", "ap_muzzle1", "mag_muzzle1" };
 
-    // The tracer ammo-type axis (weapon-effects.md "Muzzle & tracer textures", C25): each chapter's
+    // The tracer ammo-type axis (weapon-effects.md "Muzzle & tracer textures"): each chapter's
     // texture archive also carries a per-ammo tracer streak (`tracer_slug`/`_dumdum`/`_armorpierce`/
     // `_magnesium`), same four-way axis as the muzzle flash — TracerIndex reuses MuzzleAmmoIndex for
     // guns. Ordnance carries no FIRE ammo-type binding, so it falls back to the generic `tracer1`
@@ -264,7 +264,7 @@ public sealed partial class ProjectilePool : Node3D
     // System.Random stream — SoundGroup.Pick's signature (docs/formats/sounds.md).
     private readonly System.Random _soundGroupRng = Rng.NewSystemRandom(Rng.Weapons);
 
-    // The FLYOUT MODEL body (B14): rockets fly the original's own projectile mesh, instanced from a
+    // The FLYOUT MODEL body: rockets fly the original's own projectile mesh, instanced from a
     // chapter-gamez prototype root (`he_rocket`, `ap_rocket`, …) via the world's SceneBuilder — the
     // roots exist once per chapter and their geometry is nose-along-(-Z). Only rockets get a body:
     // guns fire ≤~10 rounds/s that live ~1 s each (dozens alive) and stay on the cheap MultiMesh
@@ -274,7 +274,7 @@ public sealed partial class ProjectilePool : Node3D
     private readonly SceneBuilder? _flyoutScene;
     private readonly Dictionary<string, GameZNode?> _flyoutNodes = new(); // model name → prototype (cached)
 
-    // The FLYOUT MODEL_ANIMATION smoke trail (C21): each rocket type's def (`he_rocket`, `sonic`, …,
+    // The FLYOUT MODEL_ANIMATION smoke trail: each rocket type's def (`he_rocket`, `sonic`, …,
     // compiled in cam_anim, reader source missile_puffers.zrd.json) carries one or two
     // DISTANCE_INTERVAL PUFFER_STATEs AT_NODE the round itself — the authored thick trail with its
     // per-type colour ramp (HE orange→grey, flak orange→near-black, incendiary red→white, sonic
@@ -284,25 +284,26 @@ public sealed partial class ProjectilePool : Node3D
     private readonly Dictionary<string, TrailSpec?> _trailSpecs = new(); // anim name → parsed spec (null = none)
     private readonly List<TrailEmitter> _trailEmitters = new();          // reusable emitters, all states
 
-    // Casing ejection (C22): each gun shot ejects the authored `gunshell` casing — the chapter-gamez
+    // Casing ejection: each gun shot ejects the authored `gunshell` casing — the chapter-gamez
     // mesh (its child `g1` carries model 60, the shell1/shell2-textured shell) flying the gunshell
     // def's own OBJECT_MOTION verbatim (LOCAL gravity, ranged ballistic launch, forward-rotation
     // tumble over RUN_TIME 2 s). Instances are pooled and reused once a casing expires; the spec is
     // read once from the anim program the way the rocket trails are (see BuildCasingSpec).
     private readonly List<CasingSlot> _casings = new();
 
-    // Pooled muzzle-light flashes (C22): real OmniLight3Ds, reused round-robin.
+    // Pooled muzzle-light flashes: real OmniLight3Ds, reused round-robin.
     private readonly List<LightFlash> _lights = new();
 
-    // The named IMPACT effect models (D30): a per-surface IMPACT `ANIMATION` whose name is a chapter
+    // The named IMPACT effect models: a per-surface IMPACT `ANIMATION` whose name is a chapter
     // gamez node (the water splash prototypes) is instanced at the hit point via the same flyout
     // GameZ/SceneBuilder above. Names that resolve to a reader/control def or nothing (the gun
     // `3040slug_gunhit` smoke, `he_ground_effect`, `bld_damage.flt`) stay on the stand-in spark —
-    // their runtime PUFFER_STATE half is D32 (the puffer factory is torn down after the world build).
+    // their runtime PUFFER_STATE half plays through EffectSink (the puffer factory is torn down
+    // after the world build).
     private readonly Dictionary<string, GameZNode?> _impactNodes = new(); // impact anim name → prototype (cached)
     private readonly HashSet<string> _impactFxLogged = new();
     private readonly List<ImpactFx> _impactFx = new();
-    // C6 (BL-265): the splash fade's per-instance translucent twin, cached per SOURCE material —
+    // The splash fade's per-instance translucent twin, cached per SOURCE material —
     // installed as a surface override on every splash instance that shares it (never edited in
     // place, the same rule AnimRuntime's own fade-twin cache follows), each instance then driven
     // independently through its own SetInstanceShaderParameter. Null once cached means the source
@@ -312,7 +313,7 @@ public sealed partial class ProjectilePool : Node3D
     // set rather than a bool since the gun and HE splash defs build different underlying
     // materials (see SplashFlipbookTextures).
     private readonly HashSet<Material> _splashFlipbookRegistered = new();
-    // Gun-impact effect throttle (C8): effect name → the sim time it last played. Keyed by name,
+    // Gun-impact effect throttle: effect name → the sim time it last played. Keyed by name,
     // which is exactly "per firing group" — a group's rounds all carry one weapon and one
     // `<caliber><ammo>_gunhit`. Advanced by SimStep, so it follows the sim clock like everything
     // else here and a `--det` run throttles identically.
@@ -382,7 +383,7 @@ public sealed partial class ProjectilePool : Node3D
     public Camera3D? Listener { get => _listener; set => _listener = value; }
 
     /// <summary>The aircraft each round's swept step is measured against for the near-miss cue
-    /// (BL-087), one per flight rig. Empty in every build that has no player aircraft (the weapon
+    /// one per flight rig. Empty in every build that has no player aircraft (the weapon
     /// lab, the dump probes), which costs the scan nothing.</summary>
     public List<NearMissTarget> NearMissTargets { get; } = new();
 
@@ -449,7 +450,7 @@ public sealed partial class ProjectilePool : Node3D
         // rather than additive so the puffs read as smoke.
         _smokeMm = AddMultiMesh("smoke101", MaxSmoke, additive: false, billboard: false, out _);
         // Dirt-debris chips: the authored bit0N art, alpha-blended so the chips read as debris
-        // rather than glowing through the additive flash pool (BL-203).
+        // rather than glowing through the additive flash pool.
         for (int i = 0; i < DirtDebrisTextures.Length; i++)
             _debrisMm[i] = AddMultiMesh(DirtDebrisTextures[i], MaxFlashes, additive: false, billboard: false, out _);
         _flyoutModels = new Node3D { Name = "flyout" };
@@ -474,10 +475,10 @@ public sealed partial class ProjectilePool : Node3D
     /// <para><paramref name="shooterId"/> is who fired — a <c>FlightController.PlayerIndex</c>, or
     /// <see cref="NoShooter"/> for a round nobody owns (the weapon lab). It exists for the
     /// near-miss cue's self-exclusion, so a pilot flying through their own line of fire never
-    /// warns themselves; identity, not weapon, is what excludes (BL-087).</para></summary>
+    /// warns themselves; identity, not weapon, is what excludes.</para></summary>
     public void Spawn(WeaponDef weapon, Transform3D muzzle, Vector3 inheritVel, int shooterId = NoShooter, Node3D? muzzleAnchor = null)
     {
-        // The launch bark (BL-211): only rockets/ordnance carry a FIRE.SOUND — every cannon's is
+        // The launch bark: only rockets/ordnance carry a FIRE.SOUND — every cannon's is
         // null in the data (LOOPED_SOUND_NAME covers continuous gunfire instead), so this is a
         // one-shot with no double-up risk.
         if (weapon.Fire?.Sound is { } fireSnd)
@@ -500,7 +501,7 @@ public sealed partial class ProjectilePool : Node3D
         // FIRE-binding resolution as the muzzle flash); ordnance carries no ammo-type FIRE binding,
         // so it falls back to the generic tracer1 (the array's last entry).
         int tracerIdx = weapon.IsRocket ? TracerTextures.Length - 1 : MuzzleAmmoIndex(weapon);
-        // Brightness is baked into the tint at spawn (C23, weapons.tracerBrightness) rather than read
+        // Brightness is baked into the tint at spawn (weapons.tracerBrightness) rather than read
         // per frame — a round's tint stands for its whole life, same as everything else in Proj.
         float brightness = Config.GetFloat("weapons.tracerBrightness", TracerBrightness);
         var tracerTint = new Color(brightness, brightness, brightness);
@@ -590,7 +591,7 @@ public sealed partial class ProjectilePool : Node3D
             }
         }
 
-        // The gun shot's authored secondaries (C22): the ejected casing, the muzzlepuffer smoke,
+        // The gun shot's authored secondaries: the ejected casing, the muzzlepuffer smoke,
         // and the dynamic muzzle-light flash. Guns only — the muzzle_burst def is bound by the
         // guns; rockets carry their own FIRE effects.
         if (weapon.IsGun)
@@ -605,8 +606,8 @@ public sealed partial class ProjectilePool : Node3D
     /// in the chapter gamez (<c>he_rocket</c>, <c>ap_rocket</c>, <c>sonic</c>, …) — as a fresh,
     /// collision-exempt <see cref="Node3D"/>, returned <b>un-parented</b> for the caller to place. The
     /// resolved prototype node is cached per model name; the geometry is authored nose-along-(-Z).
-    /// Shared by the in-flight rocket body and the mounted pylon ordnance (<see cref="PylonOrdnance"/>,
-    /// D44): the round hanging on the wing and the round that flies off it are the same asset. Null
+    /// Shared by the in-flight rocket body and the mounted pylon ordnance
+    /// (<see cref="PylonOrdnance"/>): the round hanging on the wing and the round that flies off it are the same asset. Null
     /// when no world scene is bound (viewer / headless dump), the weapon carries no <c>FLYOUT</c>
     /// <c>MODEL</c>, or the chapter gamez lacks the prototype root.</summary>
     public Node3D? BuildFlyoutBody(WeaponDef weapon)
@@ -704,7 +705,7 @@ public sealed partial class ProjectilePool : Node3D
             p.Pos = next;
             p.Age += dt;
             // The FLYOUT smoke trail rides the round: one authored puff per DISTANCE_INTERVAL
-            // meters of flight, emitted in world space and left behind (C21).
+            // meters of flight, emitted in world space and left behind.
             if (p.Trails != null)
             {
                 var trailBasis = FlyoutPose(next, p.Vel).Basis;
@@ -833,10 +834,10 @@ public sealed partial class ProjectilePool : Node3D
                 f.SplashRest.Basis.Orthonormalized().Scaled(
                     new Vector3(SplashColumnWidthScale, y, SplashColumnWidthScale)), f.SplashRest.Origin);
         }
-        // OBJECT_OPACITY_FROM_TO (C6, BL-265): 0->1 over 0.05 s, hold, 1->0 over the last second —
+        // OBJECT_OPACITY_FROM_TO: 0->1 over 0.05 s, hold, 1->0 over the last second —
         // applied to base AND column together (the def's target is the model root), each through
         // its own per-instance csky_opacity so concurrent splashes fade independently even though
-        // they may share one twinned material (EnsureSplashFade). This alone kills the old pop-in:
+        // they may share one twinned material (EnsureSplashFade). This is what prevents pop-in:
         // t=0 is posed before the first tick (see SpawnImpactModel), so a fresh splash starts
         // invisible rather than snapping to full scale.
         float alpha = SplashOpacity(t);
@@ -1017,13 +1018,13 @@ public sealed partial class ProjectilePool : Node3D
             // None of these quads tile — every one draws exactly one whole texture. Left at the
             // engine default (true), bilinear filtering at the UV=0/1 edge blends in the OPPOSITE
             // edge (wrap), which is the tail artifact on a tracer streak (bright front bleeding into
-            // the dark tail) — C25. (A `Uv1Scale.x=-1` mirror lived here from the same C25 tuning
-            // pass with no matching `Uv1Offset` — with `TextureRepeat` off, that clamped every
+            // the dark tail). (⚠ Do not add a `Uv1Scale.x=-1` mirror here: with `TextureRepeat`
+            // off and no matching `Uv1Offset`, it clamps every
             // sample to the texture's single U=0 column instead of mirroring it, so every sprite
-            // drawn by this pool — tracer, muzzle flash, impact, smoke — rendered as a flat colour
-            // stripe instead of its texture. C21 removed it; a texture that needs flipping now gets
+            // drawn by this pool — tracer, muzzle flash, impact, smoke — renders as a flat colour
+            // stripe instead of its texture. A texture that needs flipping gets
             // that from its own geometry — e.g. RenderTracers rotates the streak quad 180° about its
-            // own facing normal — never from another `Uv1Scale` mirror on this shared material.)
+            // own facing normal — never from a `Uv1Scale` mirror on this shared material.)
             TextureRepeat = false,
         };
         quad.Material = mat;
@@ -1073,7 +1074,7 @@ public sealed partial class ProjectilePool : Node3D
         return inst;
     }
 
-    /// <summary>Starts the round's FLYOUT smoke trail (C21): one <see cref="Puffer"/> per
+    /// <summary>Starts the round's FLYOUT smoke trail: one <see cref="Puffer"/> per
     /// DISTANCE_INTERVAL <c>PUFFER_STATE</c> in the weapon's <c>MODEL_ANIMATION</c> def, taken
     /// from the free-list when an earlier round's emitter has fully decayed, else freshly built.
     /// <paramref name="rollRate"/> is the def's spinner rate (rad/s about the nose axis; the
@@ -1179,7 +1180,7 @@ public sealed partial class ProjectilePool : Node3D
     /// freed. Returns false — leaving the stand-in spark to show — when there is no world scene, the
     /// name is a reader/control def or an unresolved binding (no such node), or the node built no
     /// mesh (an empty puffer-host root such as <c>gunhit</c>).</summary>
-    // C6 (BL-265): installs THIS instance's own translucent twin as a surface override, so its
+    // Installs THIS instance's own translucent twin as a surface override, so its
     // own SetInstanceShaderParameter(OpacityParam, ...) drives the fade without editing the
     // shared cached material every other splash's mesh also points at (the same never-edit-in-
     // place rule AnimRuntime's fade-twin cache follows, reusing its derivation —
@@ -1208,7 +1209,7 @@ public sealed partial class ProjectilePool : Node3D
             mi.SetSurfaceOverrideMaterial(0, twin);
     }
 
-    // C6 (BL-265): registers the column's built material with the shared TextureCycler the first
+    // Registers the column's built material with the shared TextureCycler the first
     // time it is seen — see the SplashFlipbookTextures field comment for why this cannot rely on
     // SceneBuilder's automatic per-polygon registration for the gun splash (splash1_splash's own
     // polygon binds to a sibling non-cycling material, confirmed against C1B's materials.json).
@@ -1269,12 +1270,12 @@ public sealed partial class ProjectilePool : Node3D
         bool animated = baseNode != null || splashNode != null;
         // The splash models are authored `lighting: false` + `fog: false` (self-lit effect
         // geometry — the reference captures show white splashes at night). SceneBuilder honours
-        // both flags on every model now, so the hand-rolled unshaded override this used to install
-        // is gone: the instance takes the shared world materials and comes out self-lit, unfogged
+        // both flags on every model, so no hand-rolled unshaded override is needed here: the
+        // instance takes the shared world materials and comes out self-lit, unfogged
         // and billboarded per its own `Facade` mode, from the data rather than from a guess.
         var baseMesh = baseNode?.GetNodeOrNull<MeshInstance3D>("mesh");
         var splashMesh = splashNode?.GetNodeOrNull<MeshInstance3D>("mesh");
-        // C6 (BL-265): the fade targets base AND column; the flipbook only the column, per the defs.
+        // The fade targets base AND column; the flipbook only the column, per the defs.
         if (baseMesh != null)
             EnsureSplashFade(baseMesh);
         if (splashMesh != null)
@@ -1312,15 +1313,16 @@ public sealed partial class ProjectilePool : Node3D
         // attempt, so the first resolve is only for the effect NAME to attempt; the second carries
         // the answer. Everything after this line obeys `outcome` — Impact itself decides nothing.
         var outcome = ImpactOutcome.Resolve(weapon, surface, modelResolved: false, hasEffectsRuntime);
-        // The named IMPACT effect (D30): when its `ANIMATION`/`SURFACE_ANIMATION` names a chapter
+        // The named IMPACT effect: when its `ANIMATION`/`SURFACE_ANIMATION` names a chapter
         // gamez node (the water splash prototypes), instance it at the hit point and skip the spark
         // — the authored model IS the effect. The gun/rocket smoke+fireball names resolve to reader
-        // defs or nothing, so nothing instances and the spark stands in (their PUFFER_STATE is D32).
+        // defs or nothing, so nothing instances and the spark stands in (their PUFFER_STATE half
+        // plays through EffectSink).
         if (outcome.EffectName is { } fxName && SpawnImpactModel(fxName, point))
             outcome = ImpactOutcome.Resolve(weapon, surface, modelResolved: true, hasEffectsRuntime);
 
         // Verification breadcrumb: the first few impacts confirm hit detection, surface
-        // classification (B15) and which per-surface IMPACT entry the classification selected,
+        // classification and which per-surface IMPACT entry the classification selected,
         // without needing a lucky screenshot; then it goes quiet. It prints the resolved outcome, so
         // the probe line and the unit assertion say the same thing — `fx=`/`snd=`/`standin=` are
         // what make a "these two surfaces look the same" report answerable.
@@ -1345,10 +1347,10 @@ public sealed partial class ProjectilePool : Node3D
         // The impact sprites face the struck surface (SurfaceBasis(normal)) rather than a fixed world
         // plane — a supplier distinct from the muzzle flash's plane basis (both feed Sprite.Orient).
         var orient = SurfaceBasis(normal);
-        // The puffer half (D32): when the effect is not a gamez model — i.e. a stand-in is owed —
+        // The puffer half: when the effect is not a gamez model — i.e. a stand-in is owed —
         // hand its name to the world-effects runtime, which builds the smoke/fireball at the hit. The
         // runtime no-ops on a name it does not carry (the inert `bld_damage.flt`/`f18sparks2`/…), so
-        // the stand-in below still draws for those. A gun hit is throttled and time-bounded (C8) —
+        // the stand-in below still draws for those. A gun hit is throttled and time-bounded —
         // see GunEffectInterval / GunEffectTtl; a rocket fires at most ~1/s and takes the defaults.
         if (outcome.StandIn != ImpactStandIn.None && outcome.EffectName is { } fxName
             && (!weapon.IsGun || GunEffectDue(fxName)))
@@ -1383,9 +1385,9 @@ public sealed partial class ProjectilePool : Node3D
     }
 
     /// <summary>The DETONATION_DISTANCE proximity fuse: armed against AIRCRAFT only — the
-    /// original fuses on enemies, never terrain (BL-233; a world fuse detonated every rocket
-    /// 15-50 m short of the surface it was aimed at and, handing Impact a null collider, locked
-    /// every hardpoint weapon out of its per-surface IMPACT entry). The round detonates at its
+    /// original fuses on enemies, never terrain (do not re-add a world fuse: it detonates every
+    /// rocket 15-50 m short of the surface it was aimed at and, handing Impact a null collider,
+    /// locks every hardpoint weapon out of its per-surface IMPACT entry). The round detonates at its
     /// CLOSEST APPROACH to a candidate's collision boxes within the swept step, not at first
     /// entry into fuse range: most rockets author DETONATION_DISTANCE equal to IMPACT_PROXIMITY,
     /// so a first-entry fuse would always detonate exactly where the linear blast falls to zero
@@ -1441,7 +1443,7 @@ public sealed partial class ProjectilePool : Node3D
         return body.GlobalPosition;
     }
 
-    // BL-239: a neighbour's splash falloff distance must be measured to the nearest point on ITS
+    // A neighbour's splash falloff distance must be measured to the nearest point on ITS
     // OWN collision shape, not to the shape owner's transform origin — a large body (a zeppelin
     // gasbag, a long building mesh) otherwise soaks less splash than a small one, or none at all
     // when its origin happens to fall outside the sweep sphere entirely even though its skin does
@@ -1571,7 +1573,7 @@ public sealed partial class ProjectilePool : Node3D
     /// from the surface normal and arcing under gravity, replacing the single 3 m spark so a
     /// gun/rocket round hitting terrain reads as scattered debris rather than one orange flash.
     /// Drawn on the gunhit def's own <c>bit0N</c> chip textures, alpha-blended (their own pools) —
-    /// through the additive muzzle-flash-textured impact pool they read as a small flame (BL-203).</summary>
+    /// through the additive muzzle-flash-textured impact pool they read as a small flame.</summary>
     private void SpawnDirtDebris(Vector3 point, Basis orient)
     {
         for (int i = 0; i < DirtDebrisSprites; i++)
@@ -1603,7 +1605,7 @@ public sealed partial class ProjectilePool : Node3D
     /// <summary>A gun round ricocheting off a buildings-classed surface: fast, bright sparks
     /// flying off the wall (additive, on the impact pool) plus the brief hit flash. A stand-in —
     /// the authored `bld_damage.flt`/`rcochet1` assets do not exist in the install; magnitudes
-    /// are TUNE (BL-203).</summary>
+    /// are TUNE.</summary>
     private void SpawnRicochet(Vector3 point, Basis orient)
     {
         if (_impact.Count < MaxFlashes)
@@ -1624,7 +1626,7 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    /// <summary>Ejects one shell casing (C22): a pooled instance of the chapter-gamez
+    /// <summary>Ejects one shell casing: a pooled instance of the chapter-gamez
     /// <c>gunshell</c> prototype (its <c>g1</c> child carries the shell mesh), launched with the
     /// gunshell def's own <c>OBJECT_MOTION</c> read verbatim from the anim program — the ranged
     /// ballistic drop and the forward-rotation tumble over its <c>RUN_TIME</c>, same semantics as
@@ -1657,7 +1659,7 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    /// <summary>The authored muzzlepuffer smoke (C22): a few short-lived puffs at the muzzle with
+    /// <summary>The authored muzzlepuffer smoke: a few short-lived puffs at the muzzle with
     /// the def's aft velocity, size, lifetime and deviation — the aircraft flies out of them, so
     /// they read as the smoke the shot leaves behind.</summary>
     private void SpawnMuzzleSmoke(Transform3D muzzle)
@@ -1683,7 +1685,7 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    /// <summary>The dynamic muzzle-light flash (C22): a pooled <see cref="OmniLight3D"/> set to one
+    /// <summary>The dynamic muzzle-light flash: a pooled <see cref="OmniLight3D"/> set to one
     /// of the muzzle_burst def's three third-person variants — the same 3-way RandomWeight over
     /// range and colour the data rolls — shown for a couple of frames at the muzzle.</summary>
     private void FlashMuzzleLight(Vector3 pos)
@@ -1870,7 +1872,7 @@ public sealed partial class ProjectilePool : Node3D
         return null;
     }
 
-    // The incoming-fire near-miss cue (BL-087): the round's ACTUAL travelled segment this step —
+    // The incoming-fire near-miss cue: the round's ACTUAL travelled segment this step —
     // muzzle-ward end to wherever it ended up, including a hit or fuse point — measured against
     // every registered aircraft. A round is silent for the pilot who fired it: exclusion is by
     // shooter IDENTITY, not by weapon, so flying through your own line of fire (a hard turn into a
@@ -1913,7 +1915,7 @@ public sealed partial class ProjectilePool : Node3D
     // A weapon's SOUND binding (FIRE/IMPACT) may name a SOUND_GROUPS entry (e.g. the incendiary
     // rocket's ground_mixed_exp_sg default impact) rather than a plain sounds.json SETS def —
     // resolve it through the group first, same as WorldSounds.PlayOneShot, or the lookup below
-    // misses and the call silently no-ops (BL-211).
+    // misses and the call silently no-ops.
     private void PlaySound(string sndName)
     {
         if (_sounds == null || _soundDefs == null)
@@ -1934,7 +1936,7 @@ public sealed partial class ProjectilePool : Node3D
     }
 
     // The minimum world-space size (m) that projects to `pixels` on screen at `distance` from the
-    // listener camera (C23) — inverts Godot's default vertical (KEEP_HEIGHT) perspective projection:
+    // listener camera — inverts Godot's default vertical (KEEP_HEIGHT) perspective projection:
     // screenPx = worldSize * viewportHeight / (2 * distance * tan(fov/2)). 0 with no bound camera or
     // a degenerate distance/viewport (the weapon lab, a headless dump with no listener).
     private float MinWorldSizeForPixels(float distance, float pixels)
@@ -1955,7 +1957,7 @@ public sealed partial class ProjectilePool : Node3D
         // allows, and local X is the width. Not billboarded, so the streak keeps its length instead
         // of collapsing to a screen-vertical bar. The quad trails behind the round by half its length.
         var eye = _listener?.GlobalPosition;
-        // Config-driven look (C23): read once per frame, not per round — a session-wide setting,
+        // Config-driven look: read once per frame, not per round — a session-wide setting,
         // not a per-shot one. Falls through to the in-code defaults verbatim with no config.json.
         float cfgLength = Config.GetFloat("weapons.tracerLength", TracerLength);
         float cfgWidth = Config.GetFloat("weapons.tracerWidth", TracerWidth);
@@ -1966,7 +1968,7 @@ public sealed partial class ProjectilePool : Node3D
             ref var p = ref _proj[i];
             if (!p.Alive)
                 continue;
-            // Carry the rocket body along with the round, nose down its velocity (B14).
+            // Carry the rocket body along with the round, nose down its velocity.
             if (p.Model != null)
             {
                 var pose = FlyoutPose(p.Pos, p.Vel);
@@ -2000,7 +2002,7 @@ public sealed partial class ProjectilePool : Node3D
             float scale = p.Model != null ? RocketExhaustScale
                 : p.Weapon.IsRocket ? RocketStreakScale
                 : 1f;
-            // The distance-visibility floor (C23): the minimum world size that still covers
+            // The distance-visibility floor: the minimum world size that still covers
             // minPixels on screen at this round's distance from the listener camera — 0 with no
             // camera bound (the weapon lab). Raises the streak's baseline size before the muzzle-growth
             // cap below, so a round that has flown far enough to need it still gets to show it; a
@@ -2014,7 +2016,7 @@ public sealed partial class ProjectilePool : Node3D
             // The authored texture's head sits at the opposite end of its V axis from where this
             // quad's +local-Y (the round's current position, per the trailing offset below) lands —
             // rotate the quad 180° about its own facing normal (negate X and Y together, a proper
-            // rotation, not a mirror) so the bright head reads at the round instead of the tail (C21).
+            // rotation, not a mirror) so the bright head reads at the round instead of the tail.
             var basis = new Basis(-yAxis * len, -xAxis * width, zAxis);
             var mm = _tracerMm[p.TracerIdx];
             int n = _tracerCounts[p.TracerIdx]++;
@@ -2034,10 +2036,10 @@ public sealed partial class ProjectilePool : Node3D
         public float Accel;      // ACCELERATION along the velocity direction, m/s²
         public float Grav;       // GRAVITY scale × world gravity, m/s² (0 throughout this install)
         public WeaponDef Weapon;
-        public Color Tint;       // tracer brightness multiplier (uniform, TracerTint) — C25
+        public Color Tint;       // tracer brightness multiplier (uniform, TracerTint)
         public int TracerIdx;    // which TracerTextures entry/MultiMesh this round's streak draws into
-        public Node3D? Model;    // the FLYOUT MODEL body (rockets only; null for gun tracers) — B14
-        public TrailEmitter[]? Trails; // the FLYOUT MODEL_ANIMATION smoke-trail emitters (C21)
+        public Node3D? Model;    // the FLYOUT MODEL body (rockets only; null for gun tracers)
+        public TrailEmitter[]? Trails; // the FLYOUT MODEL_ANIMATION smoke-trail emitters
         public float RollRate;   // rad/s about the nose axis (the sonic spinner); 0 = no roll
         public float Age;        // s since launch — drives the roll angle
         public int Shooter;      // who fired it (PlayerIndex); NoShooter when nobody owns it
@@ -2058,7 +2060,7 @@ public sealed partial class ProjectilePool : Node3D
         public float SpinRate; // rad/s about SpinAxis; zero for every sprite but dirt debris
         public bool NoGravity; // smoke puffs drift on their spawn velocity; debris arcs (false)
         public bool AnchorLeft; // Pos is the texture's left edge (UV x=0), not the quad centre —
-                                // the muzzle flash triad (C21); the centre is derived in RenderSprites
+                                // the muzzle flash triad; the centre is derived in RenderSprites
                                 // from the *current* (shrinking) size so the anchor doesn't drift.
         public Node3D? Anchor;  // when set, Pos/Orient are LOCAL to this node and resolve to world
                                 // per frame — the muzzle flash rides the firing plane; null keeps
@@ -2066,9 +2068,9 @@ public sealed partial class ProjectilePool : Node3D
     }
 
     // A named IMPACT effect that resolved to a chapter-gamez MODEL prototype (the authored water
-    // splash `splash1.flt`/`bsplsh.flt`), instanced at the hit point (D30). A splash model's
+    // splash `splash1.flt`/`bsplsh.flt`), instanced at the hit point. A splash model's
     // `*_base`/`*_splash` children are driven along the authored scale curves for the def's 2 s
-    // run (A2); a model with neither child just shows briefly.
+    // run; a model with neither child just shows briefly.
     private struct ImpactFx
     {
         public Node3D Model;
@@ -2078,7 +2080,7 @@ public sealed partial class ProjectilePool : Node3D
         public Node3D? Splash;      // the `*_splash` column child
         public Transform3D BaseRest;
         public Transform3D SplashRest;
-        // The children's own mesh instances (C6, BL-265) — resolved once at spawn so the fade
+        // The children's own mesh instances — resolved once at spawn so the fade
         // drives SetInstanceShaderParameter directly each tick instead of re-walking the tree.
         // Null exactly when the corresponding Base/Splash is null, or its fade twin failed.
         public MeshInstance3D? BaseMesh;
@@ -2112,7 +2114,7 @@ public sealed partial class ProjectilePool : Node3D
         public float RollRate;
     }
 
-    // The gunshell def's OBJECT_MOTION, read once from the anim program (C22): the authored
+    // The gunshell def's OBJECT_MOTION, read once from the anim program: the authored
     // ranged ballistic launch + tumble every ejected casing flies.
     private sealed class CasingSpec
     {

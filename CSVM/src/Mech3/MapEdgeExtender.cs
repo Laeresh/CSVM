@@ -20,11 +20,11 @@ namespace CSVM.Mech3;
 /// a shared mirror plane (heights match exactly; straight repetition would step). That
 /// also keeps the continuation type-matched to the local edge — sea edge → sea forever,
 /// forest edge → forest — as user-observed in the original.
-/// <b>The alternating reflection is CONFIRMED original behavior (2026-08-04, `CAP-17`)</b> —
-/// 67 s of straight flight south off C2's coast, read as a spatio-temporal strip: reflection
-/// seams recur every 240 ± 2 frames at NCC 0.89–0.94, with a translational period of exactly
-/// twice that (471 frames, NCC +0.90…+0.95). Do NOT swap this to plain repetition; the older
-/// "the user believes the original does not mirror" note is withdrawn (`BL-105`).
+/// <b>The alternating reflection is CONFIRMED original behavior</b> — measured from
+/// original-game footage: 67 s of straight flight south off C2's coast, read as a
+/// spatio-temporal strip, shows reflection seams recurring every 240 ± 2 frames at
+/// NCC 0.89–0.94, with a translational period of exactly twice that (471 frames,
+/// NCC +0.90…+0.95). Do NOT swap this to plain repetition.
 /// ⚠ What is still wrong here is the <b>unit</b>: the measured mirror period is ~3.2 cells
 /// (3.3 km), not the one border cell this class clamps to, and C2's south border row is nearly
 /// all water — repeating it southward would give a coastline invariant in z, which the footage
@@ -40,9 +40,9 @@ namespace CSVM.Mech3;
 /// the map's own (see ClutterBuilder), but extension <b>3D decorations are</b> —
 /// attaching the kind's shared collision shape at each mirrored placement costs
 /// one <c>BodyAddShape</c> call each, so the whole cell's city is solid for well under a
-/// millisecond. That was impossible while the map's own collision was one merged region
-/// trimesh: rebuilding one at a boundary crossing would have hitched the frame that crosses,
-/// which is exactly why it was originally left out. Float precision is no concern at these ranges (a
+/// millisecond. This depends on collision being per-shape — do not merge it back into one
+/// region trimesh, which would have to rebuild at a boundary crossing and hitch the frame
+/// that crosses. Float precision is no concern at these ranges (a
 /// 10-min flight ≈ 50 km; float keeps sub-centimeter precision past 100 km — no recenter
 /// needed).</para>
 /// </summary>
@@ -240,12 +240,11 @@ public sealed partial class MapEdgeExtender : Node3D
     // The reflection flips winding; world geometry renders double-sided
     // and fullbright, so nothing reads the inverted normals.
     //
-    // Extension 3D decorations ARE collidable, which they originally were not.
-    // The blocker then was that the map's own building collision was one merged trimesh per
-    // 1024 m region: rebuilding one on the frame the camera crosses a cell boundary would have
-    // hitched. Now that ClutterBuilder shares ONE shape per decoration mesh, making a cell
-    // solid is one PhysicsServer3D.BodyAddShape per building against a shape that already
-    // exists — a few hundred pointer-sized calls, no geometry work at all. Sprites stay
+    // Extension 3D decorations ARE collidable. Cheap because ClutterBuilder shares ONE shape
+    // per decoration mesh: making a cell solid is one PhysicsServer3D.BodyAddShape per
+    // building against a shape that already exists — a few hundred pointer-sized calls, no
+    // geometry work at all. (A merged per-region trimesh could not do this: rebuilding one on
+    // the frame the camera crosses a cell boundary would hitch.) Sprites stay
     // pass-through, matching the map's own (a billboard has no side to hit).
     //
     // The shared shapes stay alive because this node holds `_clutter` (the KindExport list)
@@ -263,11 +262,7 @@ public sealed partial class MapEdgeExtender : Node3D
         }
 
         // One body for the whole cell's buildings, named so a crash log locates the cell.
-        // (It used to also have to avoid the suffix "clutter_col", FlightController's soft
-        // fly-through branch. This file DID build a "clutter_col" body until `a795548`
-        // confined clutter collision to kind.Solid; that left the branch unreachable and
-        // it was deleted too.) Created lazily: most cells are sea or forest and have no solid
-        // decoration at all.
+        // Created lazily: most cells are sea or forest and have no solid decoration at all.
         StaticBody3D? solidBody = null;
 
         foreach (var (kindIndex, placements) in byKind)

@@ -17,7 +17,7 @@ namespace CSVM.Flight;
 /// way: player_fuelleak (0.85 — the fuel-vapor stream from a random pdp1–3) and, for
 /// the 0.10 player_smoketrail entry, player_damage_trail — short_firetrail at prop1
 /// plus the flickering fire_lt nose light (see <see cref="RigAnimFor"/> for why that
-/// one name is mapped, `BL-259`).
+/// one name is mapped).
 ///
 /// The healthy twin is found BY POSITION, not by name: on player_bhawk,
 /// player_fbrand and player_brigand the _h numbering is crossed in the model
@@ -112,7 +112,7 @@ public sealed class DamageVisuals
 
     public int PanelCount => _panels.Count;
 
-    /// <summary>The panel candidate sets the authored data names (`BL-270`): the healthy skins
+    /// <summary>The panel candidate sets the authored data names: the healthy skins
     /// damage may hide are exactly the `*_h` nodes `plane_reset` re-ACTIVEs on reset (pdp2_h and
     /// pdp3_h, one shared def OPERAND_NODE-retargeted at every airframe), and the torn panels are
     /// the `pdpN` nodes the `pdpanelN` defs activate. What the defs do NOT encode is which torn
@@ -149,7 +149,7 @@ public sealed class DamageVisuals
     /// <summary>The rig anim an injure_anims entry plays, or null for the entries that are not
     /// rig-runtime work (the cockpit gauge cycles, got_hit_anim). One deliberate mapping: the
     /// data's 0.10 entry names <c>player_smoketrail</c>, whose def calls the dense_firetrail pair,
-    /// but `BL-259`/CAP-15 pin the heavy stage the player sees as <c>player_damage_trail</c> —
+    /// but the original's damage footage pins the heavy stage the player sees as <c>player_damage_trail</c> —
     /// short_firetrail at prop1 plus the fire_lt nose light — so that is what plays.</summary>
     public static string? RigAnimFor(string injureAnim)
     {
@@ -323,8 +323,8 @@ public sealed class DamageVisuals
 
     /// <summary>Pairs every healthy pdpN_h skin with the torn panel occupying the same
     /// spot on the airframe (nearest mesh-AABB center within <see cref="MaxPairDistance"/>,
-    /// same side of the centerline). The CANDIDATE sets come from the authored defs when given
-    /// (`BL-270`): only skins `plane_reset` re-ACTIVEs are hideable, only `pdpanelN` targets are
+    /// same side of the centerline). The CANDIDATE sets come from the authored defs when
+    /// given: only skins `plane_reset` re-ACTIVEs are hideable, only `pdpanelN` targets are
     /// torn panels — an `_h` node outside the authored list is never hidden, by construction.
     /// The assignment inside those sets stays positional: the defs never say which torn panel
     /// hides which skin, and name-based pairing is wrong on three planes — see the class

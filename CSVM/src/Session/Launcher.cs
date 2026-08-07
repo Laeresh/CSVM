@@ -36,7 +36,7 @@ public partial class Launcher : Node3D
     private const int MasterBus = 0;
 
     /// <summary>Master output gain, linear, when neither <c>--volume=</c> nor the
-    /// <c>audio.volume</c> config key says otherwise. 0 since 2026-08-05: launches are silent
+    /// <c>audio.volume</c> config key says otherwise. 0: launches are silent
     /// unless someone asks for sound (the Run scripts pass <c>--volume=1.0</c>), so a scripted
     /// or agent run never sounds by accident — see <see cref="ApplyMasterVolume"/>.</summary>
     private const float MasterVolumeDefault = 0f;
@@ -396,7 +396,7 @@ public partial class Launcher : Node3D
             GetTree().Quit(_probeRunner.DumpMarkers(_spec) ? 0 : 1);
             return;
         }
-        // --dump-weapons: the same pure-data pattern for the typed weapons.json reader (B11) —
+        // --dump-weapons: the same pure-data pattern for the typed weapons.json reader —
         // dump every def and assert no key went unmapped.
         if (_spec.DumpWeapons)
         {
@@ -404,7 +404,7 @@ public partial class Launcher : Node3D
             return;
         }
         // --dump-loadout: bind each plane's stock loadout to its built model and report the
-        // resolved gun groups + hardpoints (B12) — a missing marker is a loud error here.
+        // resolved gun groups + hardpoints — a missing marker is a loud error here.
         if (_spec.DumpLoadout)
         {
             GetTree().Quit(_probeRunner.DumpLoadout(_spec) ? 0 : 1);

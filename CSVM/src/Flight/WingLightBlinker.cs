@@ -91,7 +91,7 @@ public sealed class WingLightBlinker
 
     /// <summary>Hands the named flare (its Godot node name, e.g. <c>wing_flare2</c>) to
     /// whatever just deactivated it, so the next <see cref="Advance"/> stops re-asserting
-    /// the blink over it — BL-287: <c>player_fuelleak</c>'s <c>OBJECT_ACTIVE_STATE</c>
+    /// the blink over it — <c>player_fuelleak</c>'s <c>OBJECT_ACTIVE_STATE</c>
     /// turns a flare off for the rest of the leak, and the def never turns it back on.
     /// Sets the flare and its lamp hidden immediately. A no-op if no managed lamp carries
     /// that name — e.g. below the LOD gate, where none were built as lit at all is still

@@ -8,7 +8,7 @@ namespace CSVM.Utils;
 
 /// <summary>The parsed <c>CSVM/data/effect_pools.json</c> — how many copies of each world-effects
 /// template the stage builds, per effect template ROOT, scaled by the session's player count
-/// (`BL-225`; the number itself is `BL-231` in the TUNE list). Hand-authored engine config, not
+/// (the numbers are TUNE values). Hand-authored engine config, not
 /// extracted data: the original instances a fresh copy per CALL_ANIMATION, so every value here is a
 /// finite approximation of "unbounded" and belongs in a file the user can edit rather than in a
 /// <c>const</c>.
@@ -16,7 +16,7 @@ namespace CSVM.Utils;
 /// <para>Pure data — it answers "how many copies of this root" and nothing else.
 /// <c>Session.WorldEffectsFactory</c> builds the slots and <c>Mech3.AnimRuntime</c> hands one out
 /// per call; <c>Mech3.WorldSession</c> uses the SAME file's <see cref="LocalCallPoolSize"/> for its
-/// own, unrelated library-root call-template pool (BL-253) — the reason this class lives in
+/// own, unrelated library-root call-template pool — the reason this class lives in
 /// <c>CSVM.Utils</c> rather than <c>CSVM.Session</c>: both a Session-layer and a Mech3-layer
 /// consumer need it, and Session already depends on Mech3, never the reverse.</para>
 ///
@@ -59,12 +59,12 @@ public sealed class EffectPools
 
     private readonly Dictionary<string, Entry> _roots = new(StringComparer.OrdinalIgnoreCase);
 
-    // The separate, smaller pool for library-root call templates (BL-253) — see the file's own
+    // The separate, smaller pool for library-root call templates — see the file's own
     // "_localCallAbout" for why this is not just another entry in _roots (that map is validated
     // against WorldEffectsFactory.EffectStageRoots, and these names never are one).
     private readonly Dictionary<string, Entry> _localCallRoots = new(StringComparer.OrdinalIgnoreCase);
 
-    // The crash rig's own pool (BL-288) — per-airframe damage/crash templates staged under the
+    // The crash rig's own pool — per-airframe damage/crash templates staged under the
     // rig's crash root, kept apart from _roots (validated against the WORLD stage's derived root
     // set) and from _localCallRoots (library-root clones). No per-player term: the whole rig is
     // already built once per player.
@@ -79,7 +79,7 @@ public sealed class EffectPools
     /// <summary>The committed config's default location (res://), independent of
     /// <c>--data-root</c>: it is engine config, not extracted game data. Kept as a res:// path and
     /// read through <see cref="Godot.FileAccess"/>, because in an exported build the file lives in
-    /// the pck, where <c>GlobalizePath</c> + System.IO cannot reach it (B11, 2026-08-05).</summary>
+    /// the pck, where <c>GlobalizePath</c> + System.IO cannot reach it.</summary>
     public static string DefaultPath => "res://data/effect_pools.json";
 
     /// <summary>The hard ceiling on any root's slot count — the memory guard, since each slot is one
@@ -173,7 +173,7 @@ public sealed class EffectPools
     }
 
     /// <summary>How many copies of a death-triggered library-root call template
-    /// (<c>AnimRuntime.ResolveLibraryRoot</c>, <c>BL-253</c>) to keep — the SAME clamp as
+    /// (<c>AnimRuntime.ResolveLibraryRoot</c>) to keep — the SAME clamp as
     /// <see cref="SlotsFor"/> but against <c>localCallRoots</c>/<c>localCallDefault</c>, never
     /// <c>roots</c>/<c>default</c> (those are validated against
     /// <c>WorldEffectsFactory.EffectStageRoots</c>, which these names are never a member of). A
@@ -187,7 +187,7 @@ public sealed class EffectPools
     }
 
     /// <summary>How many copies of a crash-rig template root the per-player crash stage builds
-    /// (`BL-288`) — against <c>crashRoots</c>/<c>crashDefault</c>, never <c>roots</c>/<c>default</c>
+    /// — against <c>crashRoots</c>/<c>crashDefault</c>, never <c>roots</c>/<c>default</c>
     /// (those are the WORLD stage's, validated against its derived root set). No player scaling:
     /// the whole crash rig is already one per player. A root with no entry stays single-copy —
     /// right for the crash choreography templates, which play once per crash; the per-panel

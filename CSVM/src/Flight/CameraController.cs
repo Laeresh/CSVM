@@ -47,8 +47,8 @@ public sealed class CameraController
 
     private const float Diag = 0.70710678f;     // sin/cos 45° — the four diagonal views' components
 
-    // The throttle transient's relaxation rate, in 1/SIM-second. MEASURED off CAP-21's Bloodhawk
-    // staircase clips (BL-248), NOT authored: after a throttle slam the excess distance decays
+    // The throttle transient's relaxation rate, in 1/SIM-second. MEASURED off the original's
+    // Bloodhawk staircase clips, NOT authored: after a throttle slam the excess distance decays
     // exponentially with τ = 1.11 wall-s = 1.55 sim-s (wall→sim k = 1.390), i.e. 0.65 /sim-s.
     // It matches no authored camparam constant — dist_catch_up 1.0 is 1.54× it, pos_catch_up 2.0
     // is 3× and look_catch_up 3.0 is 4.6× too fast. Applied per SIM dt; using the wall figure
@@ -113,9 +113,9 @@ public sealed class CameraController
     private float _simTime, _logAccum;           // chase breadcrumb bookkeeping
 
     // The smoothed plane→camera offset, world space. The offset eases, never the world position:
-    // CAP-21 shows the original's apparent size at 300 mph within 0.5% of its 118 mph value once
-    // dist_factor is accounted for, which a first-order WORLD-position follower cannot do — it
-    // would trail by V/rate, several chase radii at speed (BL-248).
+    // the original's footage shows its apparent size at 300 mph within 0.5% of its 118 mph value
+    // once dist_factor is accounted for, which a first-order WORLD-position follower cannot do —
+    // it would trail by V/rate, several chase radii at speed.
     private Vector3 _offset;
 
     private float _orbitYaw, _orbitPitch, _orbitDist; // free orbit-camera state while paused
@@ -193,7 +193,7 @@ public sealed class CameraController
     /// its own: the min bites for the smallest airframes (the Kestrel's 14.5 m radius is lifted
     /// to 15.5 — looking back past a plane needs clearance) and the max is never reached in
     /// practice. That reading is the data's shape, not a capture-verified decode — no look-behind
-    /// footage exists (BL-260). Rigid in the plane's frame and instant, like the numpad views and
+    /// footage exists (open as BL-260). Rigid in the plane's frame and instant, like the numpad views and
     /// for the same scripted-capture reason.</summary>
     public void BackView(in Transform3D renderPose)
     {
@@ -203,7 +203,7 @@ public sealed class CameraController
         _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, Vector3.Up);
     }
 
-    /// <summary>The authored crash camera (camparam <c>crash_horiz</c>/<c>crash_y</c>, BL-260):
+    /// <summary>The authored crash camera (camparam <c>crash_horiz</c>/<c>crash_y</c>):
     /// on a fatal crash the original hard-cuts to a STATIC elevated vantage looking down at the
     /// impact point. Framing decoded off <c>C1 IA1 Crash.mp4</c> / <c>C1 IA1 Crash 2.mp4</c>
     /// (OriginalScreenshots\Videos): the cut is instant, the HUD disappears, the camera then
@@ -237,12 +237,12 @@ public sealed class CameraController
     }
 
     /// <summary>Advance the dynamic chase radius one SIM step: <c>d = dist + dist_factor·V</c>
-    /// (both authored, per plane — CAP-21 measured the speed slope at 5.65e-4·d(0) per m/s on the
-    /// Bloodhawk, i.e. dist_factor 0.0105 against the shipped 0.01, 5% agreement, so the authored
-    /// value is used as-is), plus a first-order acceleration transient relaxing at the measured
-    /// 0.65 /sim-s. Deliberately NOT clamped into [dist_min, dist_max]: that pair is not a clamp —
-    /// the default block's own dist 13.0 sits below its dist_min 15.7, and CAP-21's realised
-    /// distances never reach dist_max (BL-248). Called by the host once per sim step (never per
+    /// (both authored, per plane — the original's footage measures the speed slope at 5.65e-4·d(0)
+    /// per m/s on the Bloodhawk, i.e. dist_factor 0.0105 against the shipped 0.01, 5% agreement, so
+    /// the authored value is used as-is), plus a first-order acceleration transient relaxing at the
+    /// measured 0.65 /sim-s. Deliberately NOT clamped into [dist_min, dist_max]: that pair is not a
+    /// clamp — the default block's own dist 13.0 sits below its dist_min 15.7, and the footage's
+    /// realised distances never reach dist_max. Called by the host once per sim step (never per
     /// render frame) so the acceleration derivative is clean and the relaxation runs in sim
     /// time; a halted or crashed sim takes no steps, freezing the radius with everything else.</summary>
     public void UpdateDynamics(float dt, float speed)
@@ -273,13 +273,13 @@ public sealed class CameraController
     /// behind-and-above direction at the current dynamic radius (expressed in the plane's frame,
     /// so it banks with the plane), then slerp the orientation toward a look-at of the point
     /// ahead of the nose with the plane's own up. Smoothing the offset rather than the world
-    /// position is what CAP-21's footage demands — a world-position follower trails by V/rate,
-    /// which the original's speed-flat apparent size rules out (BL-248). Smoothing the basis —
+    /// position is what the original's footage demands — a world-position follower trails by V/rate,
+    /// which the original's speed-flat apparent size rules out. Smoothing the basis —
     /// rather than re-deriving a hard LookAt each frame from a near-world up — lets the horizon
     /// roll fully through inverted flight, while the rotational lag keeps fast rolls reading
     /// dynamic instead of glued. Takes the SIM clock's dt, but the DRAWN pose (the fixed views'
     /// rule): riding the plane exactly means any sim-vs-render pose gap becomes plane jitter in
-    /// frame, one sim step's travel worth — the old world-position lerp masked that mismatch,
+    /// frame, one sim step's travel worth — a world-position lerp would mask that mismatch,
     /// an offset-rigid camera cannot.</summary>
     public void Chase(float dt, Vector3 planePos, Basis attitude)
     {

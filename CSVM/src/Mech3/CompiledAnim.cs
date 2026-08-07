@@ -217,7 +217,7 @@ public sealed class AnimDefinition
 
     /// <summary>The compiled destruction slot — mech3ax's <c>unknown_seq</c>, a third
     /// <c>Initial</c> block the listed <c>sequences</c> never contain. Censused over all 12,693
-    /// compiled defs (2026-08-05): every one of the 1,430 non-empty blocks sits on a
+    /// compiled defs: every one of the 1,430 non-empty blocks sits on a
     /// HEALTH &gt; 0 destructible, and 1,429 of them dispatch calls no listed sequence reaches —
     /// the death's <c>large_30sec_fire</c>/flying-parts/part-hide choreography. Deliberately kept
     /// OFF <see cref="Sequences"/> so bootstrap, RESET application and every derivation that walks

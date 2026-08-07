@@ -209,7 +209,7 @@ public class NameResolverTests
     public void OwnRootTierIsConsultedOnAnchorMissBeforeGlobal()
     {
         // The anchor subtree misses; the def's own placed copy must win over the stray global
-        // match (which is the BL-219 shape: a copy parked at the stage origin).
+        // match (the shape real chapter data produces: a copy parked at the stage origin).
         var anchor = Node("he_ring");
         var ownRoot = Node("he_trails");
         var ownTrail = Node("fly_trail1");

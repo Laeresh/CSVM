@@ -734,7 +734,7 @@ public sealed class TextureArchive : IDisposable
         Authored,
 
         /// <summary>Every level is box-filtered from the base by <c>Image.GenerateMipmaps()</c> —
-        /// the pre-<c>BL-055</c> path, kept as <c>--mips=generated</c> so the two are A/B-able in
+        /// kept as <c>--mips=generated</c> so the two are A/B-able in
         /// one build and the goldens of either can be reproduced.</summary>
         Generated,
     }

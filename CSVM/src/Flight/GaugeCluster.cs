@@ -36,19 +36,16 @@ namespace CSVM.Flight;
 public sealed partial class GaugeCluster : Control
 {
     // A gun belt indicator's colour by remaining fraction: green healthy, yellow low, red empty.
-    // Gun-only (BL-024): hardpoints/pylons never show this intermediate tier. TUNE (BL-142,
-    // re-tuned 2026-08-04): the prior 0.34 was inherited from the unrelated 3-round rocket-pylon
-    // coincidence (1/3), never watched against a real gun belt. A screenshot sweep
-    // (`--ammo=200 --gun-select=0 --fire`, a scaled-down stand-in for the 30-cal's real 2800-round
-    // CLUSTER_SIZE) drained the belt from full to empty: at 0.34 the light turned yellow with 68 of
-    // 200 rounds left — at the real capacity that's ~950 rounds, ~119 sim s of sustained fire at
-    // the weapon's 8 rounds/s, so the cue lit while the belt was still nearly two-thirds full.
-    // Lowered to 0.15 (~420 rounds / ~53 sim s at real capacity) so yellow reads as genuinely low
-    // rather than "still comfortably stocked"; still pending an eyes-on playtest against the
-    // original (no capture exists to trace this to).
+    // Gun-only: hardpoints/pylons never show this intermediate tier. TUNE: judged via a
+    // screenshot sweep (`--ammo=200 --gun-select=0 --fire`, a scaled-down stand-in for the
+    // 30-cal's real 2800-round CLUSTER_SIZE) draining the belt from full to empty — 0.15 is
+    // ~420 rounds / ~53 sim s of sustained fire at real capacity, so yellow reads as genuinely
+    // low. Do not raise it toward 1/3 (the 3-round rocket-pylon coincidence): that lights the
+    // cue while the belt is still nearly two-thirds full. Still pending an eyes-on playtest
+    // against the original (no capture exists to trace this to).
     public const float IndicatorLowFrac = 0.15f;
-    // Weapon-gauge arrow sweep rate, shared by both gauges (BL-184, CAP-18: 168.7 ± 1.6 °/sim-s,
-    // linear — the measured ~2-frame ease at each end is within noise and NOT a smoothstep).
+    // Weapon-gauge arrow sweep rate, shared by both gauges (measured off original-game footage:
+    // 168.7 ± 1.6 °/sim-s, linear — the ~2-frame ease at each end is within noise and NOT a smoothstep).
     // Public so CSVM.Tests (GaugeArrowTweenTests) can assert the rate directly.
     public const float ArrowSweepDegPerSimS = 168.7f;
 
@@ -73,11 +70,11 @@ public sealed partial class GaugeCluster : Control
 
     // ---- tuning ----
     // The hardpoint dial's belt-light ring is 8 positions on every airframe regardless of the
-    // loadout's pylon count (user-confirmed 2026-08-04, PLAN-m3-polish-7 A1/BL-184; markers.md) —
-    // never derive it from the bound Hardpoints count. Indicator i is pylon i+1 (BL-294): the belt
+    // loadout's pylon count (user-confirmed against the original; markers.md) —
+    // never derive it from the bound Hardpoints count. Indicator i is pylon i+1: the belt
     // light and arrow-target math both index by PYLON NUMBER, not by position in a compacted list.
     internal const int HardpointRingSize = 8;
-    // The STALL lamp is a blink-RATE ramp (BL-148, CAP-06 + the two CAP-05 stall clips): brightness
+    // The STALL lamp is a blink-RATE ramp (measured off the original's stall clips): brightness
     // is BINARY at every speed and the duty cycle 0.50, while the half-period shortens in proportion
     // to airspeed — 643 ms sim at the 0.30 fd threshold down to 296 ms at 0.15 fd. Fitted through
     // the origin over the five measured speed bins; the affine `5.9·V(mph) − 62` ms wall form fits
@@ -155,7 +152,7 @@ public sealed partial class GaugeCluster : Control
     private GaugePoly? _spdNeedle;
     private double _time;
     // Live sweep state of each weapon-gauge pointer and the STALL lamp's blink — plain structs
-    // (PLAN-engine-free-suites B11) so CSVM.Tests can drive them without a live Control.
+    // so CSVM.Tests can drive them without a live Control.
     private ArrowSweep _gunArrow = new();
     private ArrowSweep _missileArrow = new();
     private StallLamp _stallLamp = new();
@@ -234,8 +231,8 @@ public sealed partial class GaugeCluster : Control
     // assert both colour paths directly.
     public static int GunIndicatorColor(float frac) => frac <= 0f ? 2 : frac <= IndicatorLowFrac ? 1 : 0;
 
-    // Hardpoints/pylons: green > empty, no intermediate colour (confirmed against the original —
-    // BL-024). Never reuse IndicatorLowFrac here.
+    // Hardpoints/pylons: green > empty, no intermediate colour (confirmed against the
+    // original). Never reuse IndicatorLowFrac here.
     public static int HardpointIndicatorColor(float frac) => frac <= 0f ? 2 : 0;
 
     // The colour of belt indicator i, including positions past the end of the loadout: an unfitted
@@ -247,10 +244,10 @@ public sealed partial class GaugeCluster : Control
         : isGun ? GunIndicatorColor(slots[i]) : HardpointIndicatorColor(slots[i]);
 
     // Damage zones: green > yellow > orange > red, over the zone's COMBINED armor+health fraction
-    // (BL-085's PartState.Fraction) against thresholds MINED per-part from the data's own
-    // *_damage_green/yellow/red injure_anims (never hand-authored — BL-173's refuted fix shape was
-    // an armor-fraction/health-fraction ring split; the manual's four bands fall out of the shipped
-    // combined-scale numbers instead, docs/formats/hud.md "Thresholds"). Crosses to the next
+    // (PartState.Fraction) against thresholds MINED per-part from the data's own
+    // *_damage_green/yellow/red injure_anims — never hand-authored, and do not re-shape this as
+    // an armor-fraction/health-fraction ring split (refuted); the manual's four bands fall out of
+    // the shipped combined-scale numbers instead (docs/formats/hud.md "Thresholds"). Crosses to the next
     // (worse) colour once frac drops TO OR BELOW its threshold, the same convention
     // DamageVisuals/DamageLab use for injure_anims thresholds. Public so CSVM.Tests can assert the
     // sequence directly.
@@ -262,7 +259,7 @@ public sealed partial class GaugeCluster : Control
         positions > 0 ? -(360f / positions) * selected : 0f;
 
     /// <summary>Advances a weapon-gauge arrow angle at most <see cref="ArrowSweepDegPerSimS"/> ×
-    /// simDt toward target, routed the shortest way round (BL-184). NaN snaps instead of sweeping
+    /// simDt toward target, routed the shortest way round. NaN snaps instead of sweeping
     /// in from an undefined pose (gauge just appeared, or a respawn cleared it via Reset). Public
     /// so CSVM.Tests (GaugeArrowTweenTests) can assert the sweep directly.</summary>
     public static float TweenArrow(float current, float target, float simDt)
@@ -277,8 +274,8 @@ public sealed partial class GaugeCluster : Control
     /// <summary>Half of the STALL lamp's blink period, in SIM seconds, at an airspeed of
     /// <paramref name="stallFrac"/> × fd_speed — proportional to speed, held flat below the deepest
     /// speed the capture reached. Duty is 0.50, so the full period is twice this. Public so
-    /// CSVM.Tests (<c>StallWarningTests</c>) can assert the law against CAP-06's two anchors
-    /// directly.</summary>
+    /// CSVM.Tests (<c>StallWarningTests</c>) can assert the law against the capture's two measured
+    /// anchors directly.</summary>
     public static float StallBlinkHalfPeriodS(float stallFrac) =>
         StallBlinkHalfPeriodPerFrac * Mathf.Max(stallFrac, StallBlinkFracFloor);
 
@@ -714,8 +711,8 @@ public sealed partial class GaugeCluster : Control
 
     /// <summary>One weapon-gauge arrow's live sweep angle (degrees, same convention as
     /// <see cref="DrawGaugePoly"/>'s rotDeg). <see cref="Angle"/> starts NaN — "not yet drawn" — so
-    /// the first <see cref="Advance"/> snaps to target instead of sweeping in from zero. Moved out
-    /// of GaugeCluster's private fields (PLAN-engine-free-suites B11) so CSVM.Tests
+    /// the first <see cref="Advance"/> snaps to target instead of sweeping in from zero. A plain
+    /// struct outside GaugeCluster's private fields so CSVM.Tests
     /// (<c>GaugeArrowTweenTests</c>) can drive it without constructing a live Control.</summary>
     public struct ArrowSweep
     {
@@ -726,7 +723,7 @@ public sealed partial class GaugeCluster : Control
         }
 
         /// <summary>Advances toward <paramref name="target"/> at <see cref="ArrowSweepDegPerSimS"/>,
-        /// the shortest way round (BL-184).</summary>
+        /// the shortest way round.</summary>
         public void Advance(float target, float simDt) => Angle = TweenArrow(Angle, target, simDt);
 
         /// <summary>Clears to NaN so the next <see cref="Advance"/> snaps instead of sweeping in
@@ -734,10 +731,10 @@ public sealed partial class GaugeCluster : Control
         public void Reset() => Angle = float.NaN;
     }
 
-    /// <summary>The STALL lamp's blink (BL-148, CAP-06): binary brightness, duty 0.50, integrated on
+    /// <summary>The STALL lamp's blink: binary brightness, duty 0.50, integrated on
     /// its own sim clock rather than read off a wall clock — a rate change mid-dwell shortens the
-    /// remainder rather than jumping the lamp. Moved out of GaugeCluster's private fields
-    /// (PLAN-engine-free-suites B11) so CSVM.Tests (<c>StallWarningTests</c>) can drive it without
+    /// remainder rather than jumping the lamp. A plain struct outside GaugeCluster's private fields
+    /// so CSVM.Tests (<c>StallWarningTests</c>) can drive it without
     /// constructing a live Control.</summary>
     public struct StallLamp
     {
@@ -793,7 +790,7 @@ public sealed partial class GaugeCluster : Control
                 _phase -= 1.0;
                 _lampOn = !_lampOn;
                 // The dwell that just ended, in sim ms — the one number the blink law is measured
-                // in, so a run can be checked against CAP-06 without eyes on the lamp. Carries its
+                // in, so a run can be checked against the capture without eyes on the lamp. Carries its
                 // own times as values: the log has no timestamp column by design.
                 Log.Debug("flight", $"stall lamp {(_lampOn ? "lit" : "dark")} dwell_ms={_dwellS * 1000f:0} frac={frac:0.000} half_ms={StallBlinkHalfPeriodS(frac) * 1000f:0}");
                 _dwellS = 0f;

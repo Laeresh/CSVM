@@ -66,7 +66,7 @@ public sealed class FogVolumeSpec
 {
     /// <summary><c>fog_zone</c> — present in the five chapters that ship fog volumes (0, except
     /// C5's 1). Read and reported; nothing consumes it. It is NOT the sky/fog zone selector
-    /// (<c>BL-277</c>/<c>BL-100</c>) — see the open question in docs/formats/fogvol.md.</summary>
+    /// (<c>BL-100</c>) — see the open question in docs/formats/fogvol.md.</summary>
     public int? FogZone { get; init; }
 
     /// <summary><c>distance</c> — the scatter's world-space grid period in metres (130 in

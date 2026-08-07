@@ -6,15 +6,14 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The patrol-net reader (docs/formats/ai-nets.md): fixture units for the record grammar and
-/// the four trailer shapes, plus golden counts over the install — the numbers
-/// docs/SCOPING-M4-ai.md measured on 2026-07-25, now asserted so a reader or extraction change
-/// moves a test instead of silently drifting from the doc.
+/// the four trailer shapes, plus golden counts measured over the install — asserted so a
+/// reader or extraction change moves a test instead of silently drifting.
 /// </summary>
 public class AiNetsTests
 {
     private static readonly string[] Chapters = { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5" };
 
-    /// <summary>Net files per chapter — SCOPING-M4-ai.md's 2026-07-25 census.</summary>
+    /// <summary>Net files per chapter — measured census of the install.</summary>
     public static TheoryData<string, int> ChapterNetCounts => new()
     {
         { "C1", 29 },

@@ -5,19 +5,16 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// <see cref="FireControl"/> (BL-295) as extracted from <see cref="FlightController"/>: trigger
+/// <see cref="FireControl"/>, the firing half extracted from <see cref="FlightController"/>: trigger
 /// edges, per-group fire-rate accumulators, muzzle rotation, ammo draw-down, the two weapon
-/// selectors with their on-empty auto-advance, the rocket launch gate and both dry-clip cues. None
-/// of this was under test before the extraction — it lived as statement order inside the flight
-/// node's per-frame update, reachable only by flying a plane. These facts are what stand behind the
-/// module now that it is a plain engine-free class: give it fakes for <see cref="IGunSlot"/> and
+/// selectors with their on-empty auto-advance, the rocket launch gate and both dry-clip cues.
+/// The module is a plain engine-free class: give it fakes for <see cref="IGunSlot"/> and
 /// <see cref="IPylonSlot"/>, drive <see cref="FireControl.Step"/> tick by tick with held inputs (no
 /// engine, no clock), and read the decisions back off the reused <see cref="FireOutcome"/>.
 ///
-/// <para>The slot-selection cursor cases below port the ones <c>WeaponCursorTests</c> proved against
-/// the (now internal) <see cref="WeaponCursor"/> directly — the cursor itself didn't change, only
-/// its visibility, so the same facts are re-proven here through the interface that actually calls
-/// it.</para>
+/// <para>The slot-selection cursor cases below prove the internal <see cref="WeaponCursor"/>'s
+/// facts through the interface that actually calls it, rather than against the cursor
+/// directly.</para>
 ///
 /// <para>Several cases below depend on exact fire-rate/ammo/tick arithmetic (when a burst spans more
 /// than one shot per tick, when a group hand-off lands in the same tick as the drain versus a tick
@@ -106,7 +103,7 @@ public class FireControlTests
         Assert.Equal(0, gun.Ammo);
     }
 
-    /// <summary>BL-216/BL-217: the selected group runs dry mid-burst and the selector hands off to
+    /// <summary>The selected group runs dry mid-burst and the selector hands off to
     /// the next armed group WITHOUT a gap in the firing loop's sound. Group 0 is given FireRate=60 so
     /// its accumulator threshold (interval == dt exactly) is only ever crossed by an exact multiple of
     /// dt — the drain and the "found it empty, hand off" tick land where the arithmetic below says
@@ -246,7 +243,7 @@ public class FireControlTests
         Assert.False(second.RocketDryCue); // the pylon is still armed -- this is a cooldown gate, not a dry clip
     }
 
-    /// <summary>BL-026: an empty-pylon pull sounds the dry cue even while the launch cooldown from
+    /// <summary>An empty-pylon pull sounds the dry cue even while the launch cooldown from
     /// the very last shot is still hot, because the code checks "is anything armed" before it checks
     /// the cooldown. Drains two single-round pylons (waiting out the cooldown between each REAL
     /// launch, as the case calls for), then pulls again immediately -- cooldown still hot, but every

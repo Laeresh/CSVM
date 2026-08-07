@@ -12,7 +12,7 @@ namespace CSVM.UI;
 /// renders. Every net gets one stable id-derived colour; edges are drawn as individual
 /// segments from the explicit edge list, <b>never</b> as a closed polygon or a node-order
 /// polyline — the graph branches, and assuming a loop draws fiction (the mistake the dzpath
-/// "polygon" already invited, BL-249-era). Nodes get markers (tagged nodes bigger — the raw
+/// "polygon" already invited). Nodes get markers (tagged nodes bigger — the raw
 /// undecoded stop/valve candidates), each net a fixed-size name label with its trailer
 /// (<c>M4ReinfAce → player</c>). Depth-tested on purpose: an x-ray view lies about where a
 /// route threads terrain. While the overlay is up, a HUD text field narrows the drawn set

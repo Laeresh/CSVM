@@ -13,7 +13,7 @@ namespace CSVM.UI;
 ///
 /// <para><b>Classification reuses the exact mechanisms a hit already uses, never a guess.</b>
 /// Destructible is <see cref="DestructibleRegistry.Resolve"/> — the SAME climb a weapon hit takes —
-/// so an object that only LOOKS breakable (BL-009's C2 SeaHangar doors: no HEALTH &gt; 0 anywhere)
+/// so an object that only LOOKS breakable (the C2 SeaHangar doors: no HEALTH &gt; 0 anywhere)
 /// reads as scenery here too, which is the correct finding, not a bug in the overlay. Facade is
 /// <see cref="SceneBuilder.ClassifyBillboard"/> off the source <c>GameZMesh</c>, resolved back
 /// through the built node's <see cref="AnimRuntime.IndexMeta"/> — the same gamez-node-index stamp
@@ -47,7 +47,7 @@ public sealed partial class ClassOverlay : Node
     private static readonly Color Untinted = new(0f, 0f, 0f, 0f);
 
     // The legend's own class list, always shown regardless of what actually drew this session
-    // (BL-205's rule, carried over from ColliderOverlay: a map legend describes the key, not just
+    // (same rule as ColliderOverlay: a map legend describes the key, not just
     // what is currently on screen).
     private static readonly string[] LegendClasses = { "destructible", "facade", "clutter", "scenery" };
 

@@ -5,14 +5,14 @@ using Godot;
 namespace CSVM.Mech3.Anim;
 
 /// <summary>Builds real <see cref="Puffer"/> emitters from a session's textures and parents them.
-/// One instance stands in for the three byte-identical factory closures the world, world-effects and
-/// per-player crash runtimes each used to carry.
+/// One shared factory for the world, world-effects and per-player crash runtimes, whose needs are
+/// byte-identical.
 ///
 /// <para>⚠ <paramref name="parent"/> is the WORLD root, never a per-player crash root: a
 /// PUFFER_STATE emitter goes TopLevel (world space) the moment it emits, and parenting it under the
 /// controller subtree leaves it drawn-but-unrendered — every particle correctly positioned,
-/// <c>IsVisibleInTree</c> true, and nothing on screen. Owning the parent here is what stopped that
-/// rule being prose in two role factories.</para>
+/// <c>IsVisibleInTree</c> true, and nothing on screen. Owning the parent here is what keeps that
+/// rule structural instead of prose repeated per role factory.</para>
 ///
 /// <para>⚠ Valid only while <paramref name="textures"/> is open — an emitter bakes its atlas at
 /// construction. A caller whose archive dies with its build retires the director's factory rather
@@ -57,7 +57,7 @@ public sealed class PufferEmitterFactory : IEmitterFactory
 /// names the miss, and says so once out loud.
 ///
 /// <para>⚠ The warning is the point, and it stays. A null object that swallows the request silently
-/// is exactly `BL-234` — a world with no fire, no dust and no smoke reading as a clean log — however
+/// is a world with no fire, no dust and no smoke reading as a clean log — however
 /// polite its type name. The bootstrap census cannot cover this: it prints before the first death,
 /// ON_CALL sequence or range-deferred def can reach a PUFFER_STATE. Once per runtime rather than
 /// once per name, because the condition is one build-time contract rather than one datum per

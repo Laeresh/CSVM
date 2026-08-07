@@ -45,9 +45,9 @@ namespace CSVM.Mech3;
 /// </list>
 ///
 /// <para><b>Sprites are NOT collidable; 3D decorations are</b> (both user decisions).
-/// Sprites used to get a crossed-quad trimesh each, justified by a claim that "trees are
-/// hittable like the original, `spruce_destroy` anims exist". <b>That was a misreading and the
-/// anims are not trees.</b> The two strings in the data are
+/// Do NOT give sprites a crossed-quad trimesh on the claim that "trees are
+/// hittable like the original, `spruce_destroy` anims exist" — <b>that claim is a misreading and
+/// the anims are not trees.</b> The two strings in the data are
 /// <c>..\data\common\zrdr\planes\spruce_destroy{1,2}.zrd</c> — the <c>planes\</c> folder —
 /// and the file's contents are an aircraft's engine/propeller destruction sequence
 /// (<c>g_engine*</c>, <c>prop_part</c>, <c>spin</c>/<c>counterspin</c>,
@@ -388,11 +388,11 @@ public sealed class ClutterBuilder
     // the camera (the source decorations are single one-sided cards — the original engine
     // must face them too, or trees would vanish edge-on). Fullbright like the world, hard
     // scissor cutout, and the same cylindrical distance fog as SceneBuilder's shader.
-    // `lit`/`fogged` are the decoration model's own authored render flags (BL-214): every tree
+    // `lit`/`fogged` are the decoration model's own authored render flags: every tree
     // and bush card in this install is `lighting: false` — a camera-facing card has no
-    // meaningful normal to light — so the sprites stop being dimmed by the mission SUNLIGHT,
-    // exactly as the placed world's self-lit models now are. Emitted as shader VARIANTS, so a
-    // lit, fogged kind's code is byte-for-byte what it always was.
+    // meaningful normal to light — so the sprites are not dimmed by the mission SUNLIGHT,
+    // exactly as the placed world's self-lit models are. Emitted as shader VARIANTS, so a
+    // lit, fogged kind's code is byte-for-byte the base form.
     private static string ShaderCode(bool lit, bool fogged, bool clampUv) => $$"""
         shader_type spatial;
         render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled;
@@ -461,8 +461,8 @@ public sealed class ClutterBuilder
         var kinds = new Dictionary<int, Kind>();
         // What is left in the skip list is only genuinely unusable:
         // a decoration node with no mesh anywhere under it, or a sprite card whose material
-        // resolves no texture. The 3D building/car decorations that used to dominate this
-        // list now take the solid path below. Collected and logged as ONE summary line.
+        // resolves no texture. 3D building/car decorations take the solid path below.
+        // Collected and logged as ONE summary line.
         List<string>? skipped = null;
         foreach (var childIndex in ground.Children)
         {
@@ -804,14 +804,7 @@ public sealed class ClutterBuilder
                            Mathf.FloorToInt(xf.Origin.Z / CollisionRegion));
                 if (!regions.TryGetValue(key, out var body))
                 {
-                    // Named to locate the cell in a crash log. (It used to also have to
-                    // avoid the suffix "clutter_col", which FlightController read as a
-                    // soft fly-through obstacle — a skyscraper being the opposite of
-                    // soft. That constraint is gone: clutter collision now exists only
-                    // for kind.Solid, so `a795548` removed the "clutter_col" body this
-                    // file used to build, which left the soft branch unreachable and it
-                    // was deleted too. The soft-tree behaviour was real while that
-                    // body existed.)
+                    // Named to locate the cell in a crash log.
                     regions[key] = body = new StaticBody3D { Name = $"clutter_bld_{key.Item1}_{key.Item2}" };
                     root.AddChild(body);
                 }

@@ -9,7 +9,7 @@ namespace CSVM.Session;
 /// <summary>Resolves which livery each player flies: the shipped paint catalog, the per-pattern
 /// region-mask library, and the per-player scheme pick that reads them against a
 /// <see cref="SessionSpec"/>'s <c>--paint=</c>/<c>--paint-color=</c>/<c>--paint-decal=</c>
-/// overrides. Constructed once per session (PLAN-planeviewer-split A3); caches the catalog and
+/// overrides. Constructed once per session; caches the catalog and
 /// library across the calls that build every player's plane.</summary>
 public sealed class LiveryResolver
 {

@@ -8,7 +8,7 @@ namespace CSVM.Testing;
 /// <summary>A no-GPU stand-in for <c>PufferEmitterFactory</c>: every <see cref="Create"/> succeeds
 /// and hands back a <see cref="CountingEmitter"/>, which holds no Godot type in its own state, so a
 /// suite can observe emitter lifetime with neither a <c>TextureArchive</c> nor a <c>MultiMesh</c>
-/// anywhere in the path (`docs/PLAN-deepening.md` Wave E, Decision 10).</summary>
+/// anywhere in the path.</summary>
 public sealed class CountingEmitterFactory : IEmitterFactory
 {
     private readonly List<CountingEmitter> _built = new();

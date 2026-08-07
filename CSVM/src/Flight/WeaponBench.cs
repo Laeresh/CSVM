@@ -9,7 +9,7 @@ namespace CSVM.Flight;
 /// <summary>
 /// The cheap, world-less "do all 48 weapons mount and fire without throwing" pass check behind
 /// <c>--weapon-test</c> and the <c>weapons-fire</c> in-engine suite. It is deliberately NOT part of
-/// the weapon lab: the lab is a flight-mode panel that fires nothing of its own (M3 B5), while this
+/// the weapon lab: the lab is a flight-mode panel that fires nothing of its own, while this
 /// is a one-shot harness over a <b>parked</b> plane that spawns straight into a caller-supplied
 /// <see cref="ProjectilePool"/> and needs no world, no colliders and no frame — <c>Spawn</c> does the
 /// muzzle math and the pool insert synchronously.

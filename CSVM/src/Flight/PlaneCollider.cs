@@ -10,8 +10,8 @@ namespace CSVM.Flight;
 /// The flying aircraft's collision silhouette: a handful of
 /// plane-frame boxes — fuselage, wing slab(s), tail — that FlightController sweeps
 /// along each physics frame's motion (PhysicsDirectSpaceState3D.CastMotion), so a
-/// wingtip or tail fin clips a building corner like the original. The old test was a
-/// single center-line ray, which let everything but the nose pass through obstacles.
+/// wingtip or tail fin clips a building corner like the original. A single
+/// center-line ray alone would let everything but the nose pass through obstacles.
 ///
 /// Built once from the plane model's actual mesh triangles (PropAnimator-style tree
 /// walk), transformed into the FlightController's frame. Hidden subtrees (the wing

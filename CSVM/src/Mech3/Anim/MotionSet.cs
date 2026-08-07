@@ -65,9 +65,9 @@ internal sealed class MotionSet
             var done = _motions[i];
             _motions.RemoveAt(i);
             // BOUNCE_SEQUENCE: the piece has come back down, which for a bounce-terminated
-            // launch is the whole meaning of its flight ending (BL-240). The named sequence
+            // launch is the whole meaning of its flight ending. The named sequence
             // belongs to the same definition — `sparkoutN` deactivates the piece and pops its
-            // fireball, and that OBJECT_ACTIVE_STATE is what stops the trail through BL-224's
+            // fireball, and that OBJECT_ACTIVE_STATE is what stops the trail through the
             // EndSustainedOn path, with no effects-side change here.
             if (done is MotionRuntime { PendingBounce: { } bounce })
             {
@@ -92,7 +92,7 @@ internal sealed class MotionSet
     /// the end of its runners. Ordinarily "finished" means an instance's runners have all ended —
     /// but a bounce-terminated launch is the last event of its sequence, so the runner is done the
     /// frame the piece leaves the ground while the flight has seconds to run, and the landing needs
-    /// a live instance to dispatch into (BL-240). Measured before this existed: killing C1's seven
+    /// a live instance to dispatch into. Measured without this hold: killing C1's seven
     /// <c>m_build</c> at once, one instance in seven lost its <c>part4</c> bounce — and which one
     /// depends on the randomised launch draw, so it is an intermittent miss, not a fixed one.
     ///
@@ -100,7 +100,7 @@ internal sealed class MotionSet
     /// <see cref="SpinMotion.Finished"/> is <c>_runTime > 0f &amp;&amp; _t >= _runTime</c> and the
     /// OBJECT_MOTION handler builds spins with <c>run_time ?? 0f</c>, so an unbounded steady spin
     /// is never finished — 2,181 of them across 1,037 definition files. Pinning on those would make
-    /// every one of their instances immortal and re-open BL-236's emitter teardown install-wide.
+    /// every one of their instances immortal and break end-of-instance emitter teardown install-wide.
     /// A pending bounce self-expires; a spin does not.</para></summary>
     public bool OwesBounce(AnimDefinition def, Node3D? anchor) =>
         _motions.Any(m => m is MotionRuntime { PendingBounce: not null }

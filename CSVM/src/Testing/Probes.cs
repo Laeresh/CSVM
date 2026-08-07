@@ -83,8 +83,8 @@ public static class Probes
             var rig = MarkerRig.Extract(gamez, model);
             if (rig == null)
             {
-                // Recorded, not swallowed: a missing airframe used to reduce the final count with
-                // nothing naming it.
+                // Recorded, not swallowed: a silently skipped airframe would reduce the final
+                // count with nothing naming it.
                 r.Missing.Add(model);
                 sb.AppendLine($"=== {display} ({model}) — root node not found ===").AppendLine();
                 continue;
@@ -302,7 +302,7 @@ public static class Probes
 
     /// <summary>What a chapter's texture archive actually installed as levels 1 and 2, beside the
     /// authored <c>_1</c>/<c>_2</c> siblings the chapter ships — one row per level, with the
-    /// measurement <c>BL-055</c> turns on: mean luminance, and the share of pixels above 128 (the
+    /// deciding measurement: mean luminance, and the share of pixels above 128 (the
     /// street lights the artists kept and a box filter averages away).
     ///
     /// <para>The chain is built through <see cref="TextureArchive.BuildMipped"/>, i.e. the code a
@@ -880,7 +880,7 @@ public static class Probes
         Row("yaw-360", "full rudder from 290 mph, 360°", "s", tYaw, 28.6, 3.0,
             samples > 0 ? $"mean speed {sumSpeed / samples / Mph:0.0} mph" : "");
 
-        // --- altitude cap (BL-094/CAP-03). A fixed 22° nose-up hold from level cruise (pitch input
+        // --- altitude cap. A fixed 22° nose-up hold from level cruise (pitch input
         // stays at 0 throughout — the attitude is set once via Pitched, matching the original clip's
         // fixed pull rather than a continuous full-elevator input, which would loop instead of climb).
         // Without the clamp this settles into the model's accepted "steep-climb equilibrium" artifact
@@ -892,8 +892,8 @@ public static class Probes
             $"{m.Speed / Mph:0.0} mph at settle (original 173.7 mph — the existing stall model owns "
             + "whatever bleed shape follows the clamp, not asserted here)");
 
-        // --- level speed 15 m under the cap (BL-094/CAP-03): the clamp must be a no-op this close to
-        // the line — CAP-03 measured level equilibrium flat to ±0.3 mph right up to 1988 m.
+        // --- level speed 15 m under the cap: the clamp must be a no-op this close to
+        // the line — the original's level equilibrium measured flat to ±0.3 mph right up to 1988 m.
         m = Fresh(stats, Level(), 0.5f * fd, 1f);
         m.Position = new Vector3(0f, 1988f, 0f);
         Run(m, 1f, 180f, pitch: 0f);
@@ -962,7 +962,7 @@ public static class Probes
         return r;
     }
 
-    // ---- effects (D32 / BL-061) ----------------------------------------------------------------
+    // ---- effects -------------------------------------------------------------------------------
 
     /// <summary>Play every impact/destruction effect through the world-effects runtime at
     /// <paramref name="playPoint"/> and report, per effect, whether it RESOLVES (its def is bound)
@@ -971,7 +971,7 @@ public static class Probes
     /// (the gun family shares <c>gunhit</c>) get an independent count.
     ///
     /// <para>With <paramref name="stage"/> (the world-effects template stage) it also reports the
-    /// MESH half (`BL-061`): how many of the stage's mesh instances become visible while the effect
+    /// MESH half: how many of the stage's mesh instances become visible while the effect
     /// plays, on which template root, and how far from the play point. A puffer count cannot see
     /// this — the two halves fail independently, and an effect whose meshes never show, or show at
     /// the STAGE origin, reads as a full pass on puffers alone. The whole stage is counted because
@@ -1294,8 +1294,8 @@ public static class Probes
         public bool Ok => Error == null && Bound > 0 && Failed == 0;
     }
 
-    /// <summary>One destructible def's sweep — the checks that used to be <c>✓</c>/<c>✗</c> glyphs
-    /// inside the report line, as fields.</summary>
+    /// <summary>One destructible def's sweep — the report line's <c>✓</c>/<c>✗</c> checks,
+    /// as fields.</summary>
     public sealed class DamageRow
     {
         public string Def = "";
@@ -1409,7 +1409,7 @@ public static class Probes
     /// <summary>The mesh half's counting semantics, in one place: which of a template stage's
     /// meshes are drawing, per root, folded to a peak over a window. Counts are visible-IN-TREE,
     /// never <c>Visible</c> — a mesh whose own flag is set under a hidden template root draws
-    /// nothing, and that difference IS the bug this census exists to catch (`BL-061`). Both the
+    /// nothing, and that difference IS the bug this census exists to catch. Both the
     /// <see cref="Effects"/> sweep and the <c>effect-template-mesh</c> suite count through this
     /// type, so the sweep's verdicts and the suite's assertions cannot drift apart.</summary>
     public sealed class MeshCensus
@@ -1468,7 +1468,7 @@ public static class Probes
         /// (kilometres away in a chapter world) are different readings rather than the same count.
         /// Roots are named, so a row says WHICH template showed — a pooled stage holds several
         /// copies of one name, and they are folded together on purpose: which SLOT a call took is
-        /// the pool's business (`BL-225`), not this census's.</summary>
+        /// the pool's business, not this census's.</summary>
         public void Sample(Node3D stage, Vector3 point)
         {
             foreach (var pool in stage.GetChildren())

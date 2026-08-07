@@ -313,8 +313,9 @@ public sealed partial class SpectatorCamera : Node
         // Vertical stays WORLD up regardless of where the camera looks — climbing while
         // pitched down is what you want when repositioning over a target. Q/E is the documented
         // pair; Z/U is the alternate — neither collides with another raw-polled toggle (C is the
-        // collider overlay, X the class overlay) nor with the gun trigger (Space, BL-279: firing
-        // in the weapon lab's free camera used to also nudge the camera up).
+        // collider overlay, X the class overlay) nor with the gun trigger (Space — binding
+        // vertical to Space would nudge the camera up on every shot in the weapon lab's free
+        // camera).
         move += Vector3.Up * (kb * (Axis(Key.Q, Key.E) + Axis(Key.Z, Key.U)) + PadButtonAxis());
         if (move.LengthSquared() < 1e-8f)
             return;

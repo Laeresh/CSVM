@@ -8,7 +8,7 @@ namespace CSVM.Flight;
 /// <summary>
 /// Own-plane sound, all from the player's own game data: the plane's engine loop
 /// (per-plane WAV via vehicle.json 'engine_sound', throttle-driven pitch/volume, played as a
-/// detuned dual voice per BL-078), the overspeed whine (player.json 'prop_sound' curves —
+/// detuned dual voice), the overspeed whine (player.json 'prop_sound' curves —
 /// silent until past fd_speed in a dive), the airframe rattle (player.json 'rattle' block),
 /// plus the prop start/stop one-shots (snd_propstart/snd_propstop). Non-positional players:
 /// these are what the pilot hears; positional 3D emitters are for other aircraft, later.
@@ -32,10 +32,10 @@ public partial class FlightAudio : Node
     // without a rebuild.
     internal const float DamagedEngineMixGain = 1f;
 
-    // BL-078: the original plays its engine loop as a detuned dual stack (the 2026-07-19
-    // dive-sound analysis found combs consistent with ~5% separation between two voices; the
-    // Doppler half of that entry's reading was later retracted, the detune half was not — see
-    // docs/HISTORY.md 2026-07-19 and 2026-08-04). No exact ratio was measured, only "~5%", so
+    // The original plays its engine loop as a detuned dual stack: spectral analysis of the
+    // reference dive recording found combs consistent with ~5% separation between two voices
+    // (a Doppler reading of those same combs was refuted; the detune reading was not).
+    // No exact ratio was measured, only "~5%", so
     // this is a TUNE seeded from that figure. Config-wired so it can move without a rebuild.
     internal const float EngineDetuneRatio = 0.05f;
 
@@ -50,7 +50,7 @@ public partial class FlightAudio : Node
     private const float SilenceThreshold = 0.002f;
     // s for the loop to fade to full behind snd_propstart. Sourced from startprops' authored prop
     // cross-fade (plane_props.zrd.json, OBJECT_OPACITY_FROM_TO RUN_TIME 2.0 on staticpropN→propN)
-    // — the nearest authored duration to the old bare-literal 1.8f. TUNE pending a listen A/B.
+    // — the nearest authored duration. TUNE pending a listen A/B.
     private const float EngineStartRamp = 2.0f;
 
     private readonly List<(string name, AudioStreamWav stream, float volume)> _crashSounds = new();
@@ -67,7 +67,7 @@ public partial class FlightAudio : Node
     private float _propStartVol = 1f, _propStopVol = 1f;
     private float _engineRamp = 1f; // 0→1 gain envelope while the engine catches after a start
 
-    // Gun firing (B16): kept references so the looped firing sound + empty-clip cue can be built
+    // Gun firing: kept references so the looped firing sound + empty-clip cue can be built
     // on demand from any caliber's LOOPED_SOUND_NAME. Own-ship, non-positional (like the engine).
     private SoundArchive? _archive;
     private IReadOnlyDictionary<string, SoundDef>? _defs;
@@ -77,7 +77,7 @@ public partial class FlightAudio : Node
     private AudioStreamPlayer? _emptyClip;
     private float _emptyClipVol = 1f;
 
-    // The near-miss cue (BL-087): warning_shot_sound names a SOUND_GROUPS entry
+    // The near-miss cue: warning_shot_sound names a SOUND_GROUPS entry
     // (bullet_warning_sg → snd_bulletpass1-3), so the variant is picked per pass through the
     // group's own weighted-recency draw rather than fixed at Setup. One player, restreamed —
     // two passes closer together than the wav is long is exactly what the interval prevents.
@@ -94,7 +94,7 @@ public partial class FlightAudio : Node
         // The shared empty-clip cue (weapons.json NO_AMMO_WARNING = snd_emptyclip).
         _emptyClip = MakeOneShot(archive, defs, "snd_emptyclip", out _emptyClipVol);
         _engine = MakeLoop(archive, defs, stats.EngineSound, out _engineVol);
-        // BL-078: a second voice of the same loop, detuned a few percent off the first in Update,
+        // A second voice of the same loop, detuned a few percent off the first in Update,
         // reproduces the original's dual-stack chorus. Same def/stream, its own player so the two
         // voices run independent playback positions.
         _engine2 = MakeLoop(archive, defs, stats.EngineSound, out _);
@@ -294,7 +294,7 @@ public partial class FlightAudio : Node
     public void OnGraze(bool water) => PlayOneShot(water ? _grazeWater : _grazeGround,
         (water ? _grazeWaterVol : _grazeGroundVol) * MixGain);
 
-    /// <summary>A round passed close enough to hear (BL-087): one draw from the warning-shot group,
+    /// <summary>A round passed close enough to hear: one draw from the warning-shot group,
     /// already rate-limited by <see cref="WarningShotCue"/> in FlightController — same split as
     /// <see cref="OnGraze"/>. Returns the variant that played, or null when the cue is unbuilt.</summary>
     public string? OnWarningShot()
@@ -365,7 +365,7 @@ public partial class FlightAudio : Node
         var stream = archive.Find(def.WavName, def.Looped);
         if (stream == null)
             return null;
-        // BL-268: sounds.json's authored VOLUME plays unscaled here, same as WorldSounds' 3D
+        // sounds.json's authored VOLUME plays unscaled here, same as WorldSounds' 3D
         // emitters and OnCrash's plane-explosion pick — the only other own-ship path that ever
         // read this field, and it never carried a blanket factor. MixGain/WhineMixGain/
         // DamagedEngineMixGain are the deliberate, named attenuations layered on top per loop.
@@ -388,7 +388,7 @@ public partial class FlightAudio : Node
         var stream = archive.Find(def.WavName, looped: false);
         if (stream == null)
             return null;
-        baseVolume = def.Volume; // BL-268: unscaled, same convention as MakeLoop above
+        baseVolume = def.Volume; // unscaled, same convention as MakeLoop above
         var player = new AudioStreamPlayer { Stream = stream };
         AddChild(player);
         return player;

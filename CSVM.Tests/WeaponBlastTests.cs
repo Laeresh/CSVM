@@ -8,7 +8,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// Blast falloff, authored fuse/radius independence, and zero-damage special exclusion, against
-/// the retail install (moved from the in-engine <c>weapon-blast</c> suite — <c>WeaponDefs.Load</c>
+/// the retail install (engine-free: <c>WeaponDefs.Load</c>
 /// and <see cref="ProjectilePool"/>'s blast statics touch no live Node).
 /// </summary>
 public class WeaponBlastTests

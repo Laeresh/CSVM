@@ -8,8 +8,7 @@ using Godot;
 
 namespace CSVM.Session;
 
-/// <summary>Assembles one player's flight rig (PLAN-planeviewer-split C10, moved verbatim off
-/// <c>GameSession.BuildFlightRigs</c>): the painted plane model, the
+/// <summary>Assembles one player's flight rig: the painted plane model, the
 /// <see cref="FlightController"/> and everything hung on it — loadout/ordnance, compass, gauges,
 /// HUD readout/reticle, damage visuals, audio, this player's stunt run, the spawn placement, and
 /// the crash runtime built once the controller is in the tree.
@@ -44,7 +43,7 @@ public sealed class FlightRigAssembler
     public int MeshInstances { get; private set; }
 
     /// <summary>What the assembled rigs add to the build summary line (the stunt zone count).
-    /// Accumulated so the caller appends it in the same place the loop used to.</summary>
+    /// Accumulated here so the caller can append it to its own summary.</summary>
     public string WhatSuffix { get; private set; } = "";
 
     /// <summary>Builds player <paramref name="pi"/>'s aircraft into <paramref name="rig"/> and
@@ -76,7 +75,7 @@ public sealed class FlightRigAssembler
             HoldSegments = _spec.HoldSets == null ? null
                 : _spec.HoldSets[Math.Min(pi, _spec.HoldSets.Length - 1)],
             DebugCollision = _in.DebugCollision,
-            // Set here, not in the stunt block below (where it used to live): the index is this
+            // Set here, not in the stunt block below: the index is this
             // pilot's identity for the rounds they fire, so free flight needs it too.
             PlayerIndex = pi,
             PlaneModel = planeModel,
@@ -214,7 +213,7 @@ public sealed class FlightRigAssembler
                 GD.Print($"hud-font-test: '{_spec.HudFontTestText}' via 5pointhud font");
         }
 
-        // The selected-weapon text readout (E36): the gun group + rocket type and their
+        // The selected-weapon text readout: the gun group + rocket type and their
         // live ammo, drawn in the game's HUD font from the MSG_HUD_GUNGAUGE/MSG_HUD_MISSLES
         // templates. Built whenever the font loaded and the plane carries a loadout.
         if (_in.HudFont != null && controller.Loadout != null)
@@ -224,7 +223,7 @@ public sealed class FlightRigAssembler
                 GD.Print("weapon readout: MSG_HUD_GUNGAUGE/MSG_HUD_MISSLES via 5pointhud font");
         }
 
-        // The gun aiming reticle (E37): the ballistic impact point of the selected gun
+        // The gun aiming reticle: the ballistic impact point of the selected gun
         // group at the convergence distance, drawn as the game's pipper — visibly
         // trailing the nose in a hard turn, on the rounds in steady flight.
         if (_in.ReticleTex != null && controller.Loadout != null)
@@ -238,7 +237,7 @@ public sealed class FlightRigAssembler
         // (player-1.zrd.json's pdpanelN / player_fuelleak / player_damage_trail menu), played
         // through the rig runtime once it exists (the sink wiring below, after the runtime builds).
         // The healthy↔torn candidate sets come from the same defs (plane_reset's re-ACTIVE list +
-        // the pdpanelN targets, BL-270); a missing program leaves DamageVisuals' geometric
+        // the pdpanelN targets); a missing program leaves DamageVisuals' geometric
         // fallback to engage, loudly.
         if (controller.Damage != null)
         {
@@ -311,7 +310,7 @@ public sealed class FlightRigAssembler
             }
         }
 
-        // Dogfight (--vs): the per-pane match timer/K-D/leader line + kill banner (C23). Bound to
+        // Dogfight (--vs): the per-pane match timer/K-D/leader line + kill banner. Bound to
         // the match GameSession built before this loop ran (mirrors Race above); the kill facts
         // themselves arrive later, once every rig exists, through GameSession's own Downed
         // subscription.
@@ -329,7 +328,7 @@ public sealed class FlightRigAssembler
         var (spawnPos, spawnLookAt) = _spawns.ChooseSpawn(_in.SpawnList, _in.MissionZrdrPath, _in.SpawnBase, pi, tag);
         controller.Setup(new FlightModel(stats), rig.Camera, _in.CamParamsFor(planeName),
             spawnPos, spawnLookAt);
-        // --weapon-lab (A2): the lab is a flight session whose aircraft is pinned at the spawn pose
+        // --weapon-lab: the lab is a flight session whose aircraft is pinned at the spawn pose
         // — everything else (world, pool, effects, the trigger itself) runs exactly as in free
         // flight. Set AFTER Setup, which places the plane: the pin is captured at the first held
         // sim step, so it takes the spawn pose Setup just wrote.
@@ -339,13 +338,13 @@ public sealed class FlightRigAssembler
             if (verbose)
                 GD.Print($"weapon lab: P{pi + 1} held at the spawn pose (world sim running)");
         }
-        // The throttle-slam exhaust smoke (CAP-21 re-read): needs the plane's own exhaust marker
+        // The throttle-slam exhaust smoke: needs the plane's own exhaust marker
         // nodes plus the live throttle Setup just wrote, so it builds after Setup rather than
         // alongside Props/WingLights above.
         controller.ThrottleSmoke = ThrottleSlamSmoke.Build(planeModel, _in.ZrdrPath, _in.Textures,
             controller, controller.Throttle);
 
-        // The incoming-fire near-miss cue (BL-087): this aircraft becomes a target every OTHER
+        // The incoming-fire near-miss cue: this aircraft becomes a target every OTHER
         // pilot's rounds are measured against. After Setup — the target reads the live flight
         // model — and after PlayerIndex, the identity that excludes this pilot's own rounds.
         controller.AttachWarningShotCue(_in.Projectiles);
@@ -365,8 +364,8 @@ public sealed class FlightRigAssembler
             // The start choreography for the very first spawn: Respawn() plays this same def on
             // every later respawn, but Setup() above called Respawn() before this runtime existed.
             controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);
-            // That runtime also carries the authored damage-stage menu (BL-259) and the
-            // <part>_damage_effects shims (B4), so a part crossing an injure_anims threshold plays
+            // That runtime also carries the authored damage-stage menu and the
+            // <part>_damage_effects shims, so a part crossing an injure_anims threshold plays
             // its authored def — panel burn, fuel leak, heavy prop1 trail, spark burst. Wired here
             // because the runtime is built after the controller joins the tree, later than
             // DamageVisuals itself.
@@ -377,14 +376,14 @@ public sealed class FlightRigAssembler
                     // applyReset:false for the same reason the crash trigger passes it — a reset
                     // here would re-pose nodes the damage state owns, not just the effect's. The
                     // plane model is the fallback anchor: the menu defs' NAME (player_pfighter)
-                    // resolves on no other airframe, exactly the startprops shape (C7).
+                    // resolves on no other airframe, exactly the startprops shape.
                     int started = rigRuntime.Play(anim, planeModel, applyReset: false).Count;
                     // ⚠ started is instances, NOT emitters — the def's PufferState events dispatch on
                     // the runtime's NEXT tick, so a puffer-count delta taken here reads 0 no matter
                     // what renders (verification.md WORLD-12 needs the count sampled later, which is
                     // what the rig's cumulative total below does).
                     Log.Info("anim", $"damage stage anim={anim} started={started} rig_puffers_total={rigRuntime.PuffersBuilt}");
-                    // BL-287: player_fuelleak's ELSE branch deactivates wing_flare2 for the rest of
+                    // player_fuelleak's ELSE branch deactivates wing_flare2 for the rest of
                     // the leak (the def never re-activates it) — hand that lamp to the leak so
                     // WingLightBlinker's 1.5 s cycle stops re-asserting the blink over it.
                     if (anim.Equals("player_fuelleak", StringComparison.OrdinalIgnoreCase))
@@ -459,7 +458,7 @@ public sealed class FlightRigAssembler
         public GameZ Gamez = null!;
         public SceneBuilder? WorldScene;
         public AnimRuntime? WorldRuntime;
-        /// The session's one world-effects runtime, so a graze plays its touchdown_* def (B3).
+        /// The session's one world-effects runtime, so a graze plays its touchdown_* def.
         /// Null on a world-less build — the scrape then keeps its sound and loses its effect.
         public AnimRuntime? WorldEffects;
         public AnimProgram? CrashProgram;

@@ -6,7 +6,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The Bloodhawk's flown envelope against the original's, measured off cockpit-gauge video
-/// (moved from the in-engine <c>flight-envelope</c> suite — <c>Probes.FlightEnvelope</c> touches
+/// (engine-free: <c>Probes.FlightEnvelope</c> touches
 /// no live Node). These are golden numbers in the same sense as the destructible census — the
 /// original is a fixed artifact, so "150 → 290 mph in 3.76 s" is an invariant of it.
 ///

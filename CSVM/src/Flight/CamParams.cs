@@ -13,21 +13,21 @@ namespace CSVM.Flight;
 ///
 /// <para><b><see cref="Dist"/> and <see cref="DistFactor"/> drive the chase radius</b>
 /// (<see cref="CameraController"/>: <c>d = Dist + DistFactor·V</c>, V in m per sim-second —
-/// CAP-21-decoded, BL-248). Everything else is decoded and carried here so the next reader does
+/// decoded from the original's footage). Everything else is decoded and carried here so the next reader does
 /// not have to re-derive it, but is deliberately dormant — the mechanisms behind those keys are
 /// not settled:</para>
 ///
 /// <para>⚠ <b><see cref="DistMin"/>/<see cref="DistMax"/> is NOT a clamp, and their mechanism is
 /// still undecoded.</b> In the <c>default</c> block <see cref="Dist"/> is 13.0 while
-/// <see cref="DistMin"/> is 15.7 — the minimum is LARGER than the base — and CAP-21's realised
+/// <see cref="DistMin"/> is 15.7 — the minimum is LARGER than the base — and the footage's realised
 /// distances never reach <see cref="DistMax"/>. For all seven per-plane overrides min equals the
 /// base instead. Do not wire a clamp. <see cref="DistVary"/> has no identified input either
-/// (CAP-21 does not touch it).</para>
+/// (the capture footage never exercises it).</para>
 ///
 /// <para>⚠ <b>The catch-up triplet's units are undecoded.</b>
 /// <see cref="PosCatchUp"/>/<see cref="LookCatchUp"/>/<see cref="DistCatchUp"/> read plausibly as
 /// the 1/s exponential rates <see cref="CameraController"/> already uses, but could as easily be
-/// frame counts or seconds-to-settle. CAP-21's one measured rate — the throttle transient's
+/// frame counts or seconds-to-settle. The footage's one measured rate — the throttle transient's
 /// 0.65 /sim-s — matches none of them (DistCatchUp 1.0 is the nearest, 1.54× it), so the
 /// transient is wired as that measured figure, not through this triplet. Confirm any further
 /// reading against a capture first.</para>
@@ -38,8 +38,8 @@ public sealed class CamParams
     /// airframes with no override of their own take.</summary>
     public float Dist = 13f;
 
-    /// <summary>Metres of extra chase distance per m/s of speed (CAP-21 measured the Bloodhawk's
-    /// slope as 0.0105 against this shipped 0.01 — 5% agreement).</summary>
+    /// <summary>Metres of extra chase distance per m/s of speed (the original's footage measures
+    /// the Bloodhawk's slope as 0.0105 against this shipped 0.01 — 5% agreement).</summary>
     public float DistFactor = 0.01f;
 
     // The rest of the dynamic-distance block. Undecoded — see the type's second ⚠.

@@ -30,7 +30,7 @@ namespace CSVM.Mech3;
 /// keeps both. Sounds are also prewarmed while the archive is open regardless, which is what makes
 /// clearing the loader survivable; puffers have no equivalent, since a puffer bakes per authored
 /// state rather than per name — so a retired factory is no fire, no dust, no smoke for
-/// every <c>PUFFER_STATE</c> reached after the bootstrap, which is why it says so once (`BL-234`).</para>
+/// every <c>PUFFER_STATE</c> reached after the bootstrap, which is why it says so once.</para>
 ///
 /// <para><b>The <c>--node=</c> stage is the same pipeline with three steps switched off.</b>
 /// <see cref="Options.NodeSubtree"/> replaces the world build with one named gamez subtree
@@ -198,7 +198,7 @@ public sealed class WorldSession
         // Options.TexturesOutliveBuild.
         var lights = new WorldLights();
         s.Lights = lights;
-        // The world runtime's template stage, sealed at construction (PLAN-template-stage A4): the
+        // The world runtime's template stage, sealed at construction: the
         // ambient world pools nothing and stages nothing hidden — its templates ARE the world's own
         // nodes — and only the animation debugger's quiet stage relocates a called template onto the
         // call site, which is why that one flag is an Option rather than a constant.
@@ -246,7 +246,7 @@ public sealed class WorldSession
         // A death-triggered CALL_ANIMATION whose callee anchors on a "library root" gamez node —
         // staged with the game but never PLACED in it (docs/formats/gamez.md; GameZ.IsLibraryRoot)
         // — needs that root built before AnimRuntime can drive it: WorldBuilder's own walk never
-        // reaches it (`BL-253`: C2's facade panels' shared `facdsticks` template is exactly this
+        // reaches it (C2's facade panels' shared `facdsticks` template is exactly this
         // shape). Built LAZILY, the first time a call actually needs it, rather than eagerly with
         // the rest of the ~150-member library: eager construction has no reliable way to also
         // exclude every OTHER subsystem that already claims some of these same roots by name — the
@@ -260,7 +260,7 @@ public sealed class WorldSession
         // when its node is constructed).
         //
         // POOLED, not one shared copy: the original runs several call sites' copies of one
-        // template in parallel (`BL-253`'s CAP-24 A/B, 2026-08-04 — several broken facade panels'
+        // template in parallel (measured from original-game footage — several broken facade panels'
         // four-log sets airborne at once, not "latest wins"). Pool SIZE is the same three-layer
         // answer `EffectPools`/`effect_pools.json` already gives the effects-runtime side: the
         // gamez census is checked FIRST for an authored duplicate-copy count (several effect
@@ -403,7 +403,7 @@ public sealed class WorldSession
         /// of the build, i.e. the test harness.
         /// <para>⚠ Default false is the SAFE answer, not the common one. Left false by a caller
         /// that does own its archive, every runtime-reached puffer in the world silently builds
-        /// nothing and the log stays clean (`BL-234`) — the miss is counted as
+        /// nothing and the log stays clean — the miss is counted as
         /// <c>PufferState(after build)</c> into a census printed at the end of the bootstrap, which
         /// is before the first death can happen.</para></summary>
         public bool TexturesOutliveBuild { get; init; }
@@ -437,8 +437,8 @@ public sealed class WorldSession
         /// every game/viewer/flight session, where the ambient world boot must stay byte-identical;
         /// the animation lab sets true so the templates it stages in front of the camera play at the
         /// call site instead of at their gamez origin. Read once, at construction: the flag is
-        /// sealed onto the runtime's template stage (PLAN-template-stage A4), not writable
-        /// afterwards, which is what makes the old post-<c>Bind</c> write unexpressible.</summary>
+        /// sealed onto the runtime's template stage, not writable
+        /// afterwards, which makes a post-<c>Bind</c> write unexpressible.</summary>
         public bool PlacesCalledTemplates { get; init; }
 
         /// <summary>Pins the runtime's RNG for a reproducible run (see

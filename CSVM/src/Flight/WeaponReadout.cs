@@ -4,8 +4,8 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The selected-weapon HUD text readout (E36): two lines in the game's own <c>5pointhud</c> bitmap
-/// font (E34) at the bottom centre of the pane — the currently-selected gun group and rocket type
+/// The selected-weapon HUD text readout: two lines in the game's own <c>5pointhud</c> bitmap
+/// font at the bottom centre of the pane — the currently-selected gun group and rocket type
 /// with their live ammo. The text comes from the game's own message templates, resolved through
 /// <see cref="Messages"/> and NOT hardcoded: <c>MSG_HUD_GUNGAUGE</c> (<c>"GUNS: %1: %2!d!"</c>) and
 /// <c>MSG_HUD_MISSLES</c> (<c>"MISSILES: %1: %2!d!"</c>, the data's spelling). <c>%1</c> names the

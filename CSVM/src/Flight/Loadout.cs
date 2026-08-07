@@ -28,7 +28,7 @@ public sealed class StockLoadouts
     /// <summary>The committed config's default location (res://), independent of <c>--data-root</c>:
     /// it is engine config, not extracted game data. Kept as a res:// path and read through
     /// <see cref="Godot.FileAccess"/>, because in an exported build the file lives in the pck,
-    /// where <c>GlobalizePath</c> + System.IO cannot reach it (B11, 2026-08-05).</summary>
+    /// where <c>GlobalizePath</c> + System.IO cannot reach it.</summary>
     public static string DefaultPath => "res://data/stock_loadouts.json";
 
     public IReadOnlyDictionary<string, LoadoutDef> All => _byDef;
@@ -142,7 +142,7 @@ public sealed class HardpointSpec
 /// A plane's stock loadout <b>bound to its built model</b>: each gun group's authored markers
 /// resolved to live muzzle <see cref="Node3D"/>s and its caliber+ammo resolved to a
 /// <see cref="WeaponDef"/>, each hardpoint bound to its pylon node — a live set of gun groups and
-/// hardpoints with independent ammo counters, ready for the firing code (B16/B17) to draw from.
+/// hardpoints with independent ammo counters, ready for the firing code to draw from.
 ///
 /// <para>Marker resolution is against the built tree's <c>cs_name</c> meta (as
 /// <see cref="UI.MarkerOverlay"/> reads it). A named marker that is absent is a <b>loud error</b>
@@ -152,7 +152,7 @@ public sealed class HardpointSpec
 public sealed class Loadout
 {
     /// <summary>The original's hardpoint fill order — alternating wings, not sequential
-    /// (`BL-294`/`PT-31`, user-observed at the controls against the weapon gauge's belt lights):
+    /// (user-observed at the controls against the weapon gauge's belt lights):
     /// a stock fit with fewer than 8 pylons leaves physical gaps rather than filling pylon1..N
     /// contiguously. <c>hp.Count</c> takes a PREFIX of this sequence.</summary>
     public static readonly int[] PylonFillOrder = { 1, 5, 2, 6, 3, 7, 4, 8 };
@@ -221,7 +221,7 @@ public sealed class Loadout
             var weapon = weapons.Get(hp.Stock)
                 ?? throw new InvalidOperationException(
                     $"loadout {def.Def}: hardpoint stock '{hp.Stock}' not in weapons.json");
-            // Pylons bind via PylonFillOrder, not sequentially 1..N (BL-294) — count N takes the
+            // Pylons bind via PylonFillOrder, not sequentially 1..N — count N takes the
             // sequence's first N entries, so a partial stock fit lands on both wings alternately
             // instead of piling onto one side.
             int perPylon = weapon.ClusterSize ?? 0;
@@ -394,7 +394,7 @@ public sealed class GunGroup : IGunSlot
 }
 
 /// <summary>One live hardpoint (pylon): its resolved ordnance weapon and a per-pylon ammo counter
-/// (rocket capacity = pylon count × CLUSTER_SIZE, per pylon — A9). The <see cref="IPylonSlot"/>
+/// (rocket capacity = pylon count × CLUSTER_SIZE, per pylon). The <see cref="IPylonSlot"/>
 /// face is what <see cref="FireControl"/> launches through — the node-free slice of this class.</summary>
 public sealed class Hardpoint : IPylonSlot
 {

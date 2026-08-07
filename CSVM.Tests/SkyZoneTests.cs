@@ -11,7 +11,7 @@ namespace CSVM.Tests;
 /// cref="WeatherState.PreferPopulatedHorizonZone"/>) and the census it reads (<see
 /// cref="WorldBuilder.HorizonZonesOf"/>).
 ///
-/// <para>Nothing on disk names the zone a mission flies (searched exhaustively 2026-07-22 —
+/// <para>Nothing on disk names the zone a mission flies (searched exhaustively —
 /// docs/formats/weather.md), so the <c>zone2</c> request is a default, not a datum. What IS on
 /// disk is whether a zone has a dome to build, and three chapters ship a <c>zone2</c> that has
 /// none. These tests pin both halves: the rule's shape on hand-built censuses, and the real
@@ -67,7 +67,8 @@ public class SkyZoneTests
     [Fact]
     public void TwoBuildableZonesLeaveTheRequestAlone()
     {
-        // The choice is then a fidelity question the geometry cannot settle (BL-100), not a bug.
+        // The choice is then a fidelity question the geometry cannot settle — still open as
+        // BL-100; check it before changing which zone wins here.
         Assert.Equal("zone2", WeatherState.PreferPopulatedHorizonZone("zone2", Zones(("zone1", 1), ("zone2", 4))));
     }
 

@@ -9,14 +9,14 @@ namespace CSVM.Mech3;
 /// Every animation definition visible to one mission, merged from the two sources that
 /// carry them, plus the startanims list that says which run at mission start.
 ///
-/// Why two sources (measured 2026-07-21, see docs/formats/anim-definitions.md): the
+/// Why two sources (see docs/formats/anim-definitions.md): the
 /// compiled <c>cam_anim.zbd</c>/<c>mis_anim.zbd</c> archives are the better data — typed
 /// events, node references resolved to names, and the SI motion scripts, which exist
 /// nowhere else — but they are not complete. <c>startanims</c> is reader-only and never
 /// appears compiled. Hence: load both, prefer compiled on collision, keep the remainder.
 ///
-/// **The mission zrdr scope is a library, not a manifest** (corrected 2026-07-21 against
-/// user observation of the original). A mission folder ships reader files it never uses:
+/// **The mission zrdr scope is a library, not a manifest** (confirmed against user
+/// observation of the original). A mission folder ships reader files it never uses:
 /// C1/IA1 carries a <c>zepstate.zrd.json</c> hiding <c>dliner1</c> and <c>cargotrain</c>,
 /// but its <c>mis_anim</c> compiles neither — and in the original both ARE present in
 /// Instant Action (the passenger-hangar zeppelin and the parked train in the cut). The

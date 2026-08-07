@@ -24,7 +24,7 @@ public static class Suites
     private const int PlayerAirframes = 11;
     private const int WeaponDefCount = 48;
 
-    /// <summary>Gun-group slots <see cref="Loadout.ForRig"/> seats on any airframe (B4) — the
+    /// <summary>Gun-group slots <see cref="Loadout.ForRig"/> seats on any airframe — the
     /// weapon bench fires every gun from all of them, so a drop here would quietly shrink its
     /// coverage without changing the 48/48 line.</summary>
     private const int RigGunGroups = 4;
@@ -35,7 +35,7 @@ public static class Suites
     ///
     /// <para>Both columns are far below what plain NAME matching yields, and that is the point: a
     /// compiled def binds the ONE instance its symbol table names (<c>AnimRuntime.Anchors</c>), so
-    /// a mission's zeppelin defs no longer register every other zeppelin in the shared chapter
+    /// a mission's zeppelin defs never register every other zeppelin in the shared chapter
     /// gamez as a destructible of the same name. Every group the narrowing removes sits on an
     /// object the loaded mission authors no def for.</para></summary>
     private static readonly (string Chapter, int Instances, int Anchors)[] Census =
@@ -124,16 +124,16 @@ public static class Suites
             "a second panel's tear takes its own pooled gimmeflakes copy and leaves the first burst flying at its site (BL-288)", DamageTemplatePool));
     }
 
-    // ---- BL-241: emitter lifetime is observable with no GPU -------------------------------------
+    // ---- emitter lifetime is observable with no GPU ---------------------------------------------
 
-    /// <summary>Closes `BL-241`: kills a <c>refuel*</c> tank with a <see cref="CountingEmitterFactory"/>
+    /// <summary>Kills a <c>refuel*</c> tank with a <see cref="CountingEmitterFactory"/>
     /// installed and asserts on its <c>fire_n_smoke</c> emitter — the def whose <c>ACTIVE_STATE 1</c>
-    /// carries no authored stop of its own, so only `BL-236`'s instance-retirement rule
+    /// carries no authored stop of its own, so only the instance-retirement rule
     /// (<see cref="AnimRuntime.Retirable"/> → <c>FinishEffectInstance</c> → <see cref="EmitterDirector.EndFor"/>)
     /// ever ends it.
     ///
-    /// <para>Asserts THREE distinct facts, not one — the traps `BL-241`'s own fix note and `E15`
-    /// both name: the fake was actually reached (a name census, not a count — several runtimes could
+    /// <para>Asserts THREE distinct facts, not one — the traps this family's bugs shipped
+    /// through: the fake was actually reached (a name census, not a count — several runtimes could
     /// otherwise mask each other); the emitter started (the census reads a row that is
     /// <see cref="EmitterCensusRow.Emitting"/>); and once the death instance retires, it stops
     /// WITHOUT being forgotten (the row is still present, `Emitting` false) — `EndFor`'s disposition,
@@ -500,7 +500,7 @@ public static class Suites
             ctx.Check(false, $"loadout binding {f}");
         }
 
-        // BL-294/PT-31: a partial stock fit takes the FILL ORDER's prefix (1,5,2,6,3,7,4,8), not
+        // A partial stock fit takes the FILL ORDER's prefix (1,5,2,6,3,7,4,8), not
         // pylon1..pylonN — Hardpoint.Index must be the true pylon number so the weapon gauge's
         // belt lights land at the original's physical positions, gaps included.
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
@@ -575,7 +575,7 @@ public static class Suites
                 }
             }
             ctx.Check(stock != null, $"stock loadout found for plane={ctx.PlaneName}");
-            // The whole rig, not just what stock names (D9) — so every weapon has a mount of its
+            // The whole rig, not just what stock names — so every weapon has a mount of its
             // own class and a skip means a real gap, not a fallback that did not fire.
             var loadout = Loadout.ForRig(plane, weapons, stock);
             pool = new ProjectilePool(textures, null, null);
@@ -753,7 +753,7 @@ public static class Suites
     /// <summary>Exports a built plane to a temp <c>.glb</c> and asserts the file lands and re-imports
     /// with at least one textured mesh — the round trip the viewer's <c>--export-gltf=</c>/F10 path
     /// relies on, including that the shader skins convert to a glTF-serializable material.</summary>
-    /// <summary>The incoming-fire near-miss cue's wiring (BL-087), with its able-to-fail baseline:
+    /// <summary>The incoming-fire near-miss cue's wiring, with its able-to-fail baseline:
     /// a real round from another pilot flying past registers a pass, the SAME round fired by the
     /// target's own identity registers none, and a round on a track a hundred metres wide of the
     /// aircraft registers none either — so a pass count of 1 means the geometry, not a threshold
@@ -823,7 +823,7 @@ public static class Suites
         }
     }
 
-    /// <summary>BL-239's repro pair, on controlled geometry: a torpedo detonates against a thin
+    /// <summary>The neighbour-splash repro pair, on controlled geometry: a torpedo detonates against a thin
     /// wall placed right next to one end of a long neighbouring body. The neighbour's transform
     /// origin sits well OUTSIDE the blast radius (the bug's exact symptom — origin-scored falloff
     /// reads zero splash), while its near face sits well inside it, so a real fix must score it
@@ -858,8 +858,8 @@ public static class Suites
             wall.GlobalTransform = new Transform3D(Basis.Identity, detonation);
             ctx.Host.AddChild(wall);
 
-            // The neighbour: a long body (a zeppelin gasbag/long building mesh, per BL-239's
-            // evidence) whose CENTRE (transform origin) sits well past `radius`, while its near
+            // The neighbour: a long body (a zeppelin gasbag/long building mesh, the shape the
+            // original bug showed) whose CENTRE (transform origin) sits well past `radius`, while its near
             // face sits `nearFaceDistance` from the detonation — well inside `radius`.
             float nearFaceDistance = 2f;
             float halfLen = radius + 20f;
@@ -922,12 +922,12 @@ public static class Suites
     /// sustained fire zeroes the critical nose and triggers the real Crash; a crashed plane soaks
     /// no further rounds; and a burst fired through the shooter's OWN airframe registers zero
     /// self-hits — the regression that would otherwise arrive silently as "guns too strong".
-    /// The Downed reports feed a real VersusMatch through the same forwarding GameSession uses
-    /// (B11): the weapon kill scores exactly the shooter, a wreck reports no second death, a
+    /// The Downed reports feed a real VersusMatch through the same forwarding GameSession
+    /// uses: the weapon kill scores exactly the shooter, a wreck reports no second death, a
     /// killer-less crash and an unowned round's kill each tally a death and score nobody. The tail
-    /// pins the VS respawn loop (B13): without AutoRespawnAfter a crash waits for R; armed at the
+    /// pins the VS respawn loop: without AutoRespawnAfter a crash waits for R; armed at the
     /// session's 3 s it auto-respawns at that mark in sim frames, and the respawn reports nothing.
-    /// The rocket phases (B14) pin the proximity fuse and blast: a rocket crossing a fixed gap
+    /// The rocket phases pin the proximity fuse and blast: a rocket crossing a fixed gap
     /// ahead of the target's nose fuses there and blasts the nose by exactly the linear falloff at
     /// that gap; a second plane farther inside the radius takes less, a plane outside it nothing;
     /// sustained fused passes down the target with the kill attributed through the same Downed
@@ -1004,7 +1004,7 @@ public static class Suites
             ctx.Check(ProjectilePool.ClassifySurface(target.Body) == SurfaceClass.Player,
                 $"an aircraft body classifies as the player IMPACT surface");
 
-            // The kill-attribution seam (B11), scored exactly the way GameSession does in --vs:
+            // The kill-attribution seam, scored exactly the way GameSession does in --vs:
             // each rig's Downed report forwarded into a real (unlimited, untimed) VersusMatch —
             // a killer inside the roster is a kill, anything else a plain death.
             var match = new VersusMatch(2, killTarget: 0, timeLimit: 0f);
@@ -1139,7 +1139,7 @@ public static class Suites
             ctx.Check(match.DeathsOf(1) == 3 && match.KillsOf(0) == 1 && match.KillsOf(1) == 0,
                 $"an unowned round's kill is a death with no killer deaths(P2)={match.DeathsOf(1)} kills={match.KillsOf(0)}/{match.KillsOf(1)}");
 
-            // The VS respawn loop (B13), in sim frames. Default (AutoRespawnAfter null): a crash
+            // The VS respawn loop, in sim frames. Default (AutoRespawnAfter null): a crash
             // waits for R — 4 s of crash-cam sim steps respawn nothing.
             for (int i = 0; i < 240; i++)
                 target.SimStep(1f / 60f);
@@ -1608,14 +1608,14 @@ public static class Suites
         });
     }
 
-    // ---- BL-276: the compiled destruction slot dispatches at death ------------------------------
+    // ---- the compiled destruction slot dispatches at death --------------------------------------
 
     /// <summary>The live-path start check the direct-Start <c>stop-sequence</c> suite cannot make:
     /// a real kill must dispatch the def's compiled destruction slot
     /// (<see cref="AnimDefinition.DeathSlot"/> — mech3ax's <c>unknown_seq</c>), the block that
-    /// carries ~all of <c>large_30sec_fire</c>'s 1,035 death calls. Before `BL-276` the block was
-    /// never parsed, every one of those calls silently no-oped, and every "the fire ends on time"
-    /// check read the absence as a pass — an effect that never starts satisfies any stop assertion.
+    /// carries ~all of <c>large_30sec_fire</c>'s 1,035 death calls. An unparsed block silently
+    /// no-ops every one of those calls, and every "the fire ends on time"
+    /// check reads the absence as a pass — an effect that never starts satisfies any stop assertion.
     /// Subject: a C1 AA gun, whose slot is the healthy/destroyed swap plus
     /// <c>CallAnimation genx12</c>. Able to fail: with <c>RunDeathSlot</c> deleted, no
     /// <c>destruction_slot</c> lane ever dispatches.</summary>
@@ -1673,15 +1673,15 @@ public static class Suites
         });
     }
 
-    // ---- BL-228: WAIT_FOR_COMPLETION ------------------------------------------------------------
+    // ---- WAIT_FOR_COMPLETION --------------------------------------------------------------------
 
-    /// <summary>`BL-228` on the authored case, with its own control beside it in the same sequence.
+    /// <summary>WAIT_FOR_COMPLETION on the authored case, with its own control beside it in the same sequence.
     ///
     /// <para><c>player_crash_water</c>'s <c>destroy_crash</c> is the install's clean discriminator:
     /// eleven events, of which exactly ONE carries the flag — <c>plane_big_splash</c>, whose own
     /// choreography runs 3.0 s (<c>plane_sp_polys</c>' scale and <c>plane_sp_polyfade</c>' opacity
-    /// ramp) — followed immediately by an UNFLAGGED <c>large_steam_spray</c>. Before this landed
-    /// both retargeted on the same tick and the spray started with the splash instead of after it.
+    /// ramp) — followed immediately by an UNFLAGGED <c>large_steam_spray</c>. Without the hold,
+    /// both retarget on the same tick and the spray starts with the splash instead of after it.
     /// </para>
     ///
     /// <para>The control is the other nine calls in that same sequence. <c>call_crash_trails</c>
@@ -1772,10 +1772,10 @@ public static class Suites
         });
     }
 
-    // ---- BL-229: what a host deactivation may and may not stop ---------------------------------
+    // ---- what a host deactivation may and may not stop ------------------------------------------
 
-    /// <summary>`BL-229`: an <c>OBJECT_ACTIVE_STATE … INACTIVE</c> ends the emitters under that host
-    /// (`BL-224`) — but not one that started in the same instant, and this asserts BOTH halves,
+    /// <summary>An <c>OBJECT_ACTIVE_STATE … INACTIVE</c> ends the emitters under that host
+    /// — but not one that started in the same instant, and this asserts BOTH halves,
     /// because either alone is satisfied by a broken runtime. Dropping the stop entirely passes the
     /// splash half; shipping the stop unconditioned passes the debris half. They are the two
     /// populations the install-wide census splits, and the split is total
@@ -1793,7 +1793,7 @@ public static class Suites
     /// <c>part1</c> is activated, given <c>trailpuffer1</c> in the same instant, flown by a 5 s
     /// <c>OBJECT_MOTION</c> and only then switched off. That deactivation is the trail's ONLY
     /// authored stop, so it has to keep working — this is the subtree swap whose emitters would leak
-    /// forever if `BL-229` had been fixed by weakening the stop instead of dating it.</para></summary>
+    /// forever if the same-instant exemption were built by weakening the stop instead of dating it.</para></summary>
     private static void EmitterHostDeactivation(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -1875,7 +1875,7 @@ public static class Suites
         }
         WithEmitterStage(ctx, program, "DebrisStage", nodes, (stage, runtime, fake) =>
         {
-            // Asserted against the DISPATCH MOMENT, never a fixed second: part3 is a BL-240
+            // Asserted against the DISPATCH MOMENT, never a fixed second: part3 is a
             // bounce-solved launch, so when it lands (and its `sparkout3` switches it off) is
             // computed, not authored. Anything else that could stop this trail — the instance
             // retiring — happens a second later, so "stopped on the deactivation's own frame" is
@@ -1950,7 +1950,7 @@ public static class Suites
         // only production caller of: the splash is played by the per-player rig, which resolves
         // and relocates its own called templates and holds no ExternalEffect, so the start and
         // the stop meet on ONE director. Reproducing that here is the point. The relocation half
-        // is stage construction state (PLAN-template-stage A4), so it arrives sealed.
+        // is stage construction state, so it arrives sealed.
         var runtime = new AnimRuntime(AnimRuntime.NewTemplateStage(placesCalled: asCrashRig))
         {
             AutoStart = false,
@@ -1973,9 +1973,9 @@ public static class Suites
         }
     }
 
-    // ---- BL-061: the template MESH half renders at the call site --------------------------------
+    // ---- the template MESH half renders at the call site ----------------------------------------
 
-    /// <summary>`BL-061`: an effect's template MESHES — half of what it looks like — must be visible
+    /// <summary>An effect's template MESHES — half of what it looks like — must be visible
     /// at the call site while it plays, and dark once it is over. The world-effects stage keeps
     /// every template ROOT hidden and the engine reveals the one a call lands on
     /// (<c>TemplateStage.Shown</c>), so both halves are engine rules and both are asserted here,
@@ -2036,7 +2036,7 @@ public static class Suites
                 $"the ap gun hit's chunk mesh is visible while it plays ({Probes.MeshCensus.VisibleMeshesUnder(stage, "dum_gunhit")})");
 
             // Past the def's own authored ACTIVE_STATE 0 at +0.1 s, which ends the instance well
-            // inside the 0.3 s TTL — the case that used to leave the mesh lit for the session.
+            // inside the 0.3 s TTL — the case that would otherwise leave the mesh lit for the session.
             for (int i = 0; i < 30; i++)
             {
                 runtime.Advance(1f / 60f);
@@ -2090,17 +2090,17 @@ public static class Suites
         }
     }
 
-    // ---- BL-288: a new panel's tear must not steal a live panel's template copy ----------------
+    // ---- a new panel's tear must not steal a live panel's template copy ------------------------
 
-    /// <summary>`BL-288`: the crash rig's damage-stage templates are pooled, and a relocating
+    /// <summary>The crash rig's damage-stage templates are pooled, and a relocating
     /// CALL_ANIMATION from a NEW anchor takes its own copy instead of teleporting the one a
     /// previous anchor's burst is still flying on. Reproduces the shipped shape exactly: two of
     /// the authored `pdpanelN` menu defs each CALL <c>gimmeflakes</c> AT_NODE their own
     /// <c>pdpN</c>, on a runtime carrying the crash rig's role flags plus the pool
     /// (<c>TemplateStage.Pooled</c> + <see cref="AnimRuntime.PoolSlotMeta"/> slot containers, the
-    /// shape <c>WorldEffectsFactory.BuildFlightCrashRuntime</c> builds). Before the fix the
-    /// second call relocated and restarted the single shared <c>planeflakes</c> root mid-flight —
-    /// the "panels fly away repeatedly, and from the wrong site" report.</summary>
+    /// shape <c>WorldEffectsFactory.BuildFlightCrashRuntime</c> builds). Without the pool the
+    /// second call relocates and restarts the single shared <c>planeflakes</c> root mid-flight —
+    /// the "panels fly away repeatedly, and from the wrong site" symptom.</summary>
     private static void DamageTemplatePool(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -2210,7 +2210,7 @@ public static class Suites
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             var names = Session.EffectCatalogue.EffectAnimNames;
-            // The staged set is DERIVED (PLAN-effect-catalogue B3), so this census stages what the
+            // The staged set is DERIVED, so this census stages what the
             // real world-effects build stages, from the same call — a root the closure gains and
             // this chapter's gamez cannot supply throws here, naming the def and the anchor.
             var roots = Session.WorldEffectsFactory.EffectStageRootNames(world.Session.Program, world.Gamez);
@@ -2254,12 +2254,9 @@ public static class Suites
                     $"no template mesh left lit after its effect was stopped{(lit.Count == 0 ? "" : $" — {string.Join("; ", lit)}")}");
                 ctx.Check(r.Puffered == 30,
                     $"the puffer half's tally holds under suite conditions ({r.Puffered} built one, expected 30)");
-                // 17 → 18 on 2026-08-06 (BL-257): `biggun_flying_parts` went `mesh[0]
-                // (light/container effect)` → `mesh[8] zep_ng_dstry1_flt 8/8 @0.0 m`. Its eight
-                // parts used to be switched off on the tick they launched, so no sample in the
-                // window ever caught one drawing; they now fly their solved parabola first. Sole
-                // mover — the `--effects-test` row table differs in exactly this one line across
-                // the gate A/B, and all 13 goldens stayed hash-identical.
+                // The 18 includes `biggun_flying_parts` (`mesh[8] zep_ng_dstry1_flt 8/8 @0.0 m`):
+                // its eight parts fly their solved parabola before their own deactivation switches
+                // them off, so samples in the window catch them drawing.
                 ctx.Check(r.Meshed == 18,
                     $"the mesh half's tally holds under suite conditions ({r.Meshed} showed meshes, expected 18)");
             }
@@ -2269,8 +2266,8 @@ public static class Suites
                 stage.Free();
             }
 
-            // The derivation IS the staged set now (B3), so "derived == hand table" is gone with
-            // the table. What still needs saying, per chapter, because chapter data decides it:
+            // The derivation IS the staged set — there is no hand table to compare against.
+            // What still needs saying, per chapter, because chapter data decides it:
             // the pool config sizes the set that is really staged — a root renamed on one side
             // sizes nothing, silently.
             var unsized = Utils.EffectPools.Load().UnknownRoots(roots);
@@ -2332,12 +2329,12 @@ public static class Suites
         }
     }
 
-    // ---- BL-240: bounce-terminated launches fly and land ---------------------------------------
+    // ---- bounce-terminated launches fly and land ------------------------------------------------
 
-    /// <summary>BL-240: an <c>OBJECT_MOTION</c> that omits <c>RUN_TIME</c> and names a
+    /// <summary>An <c>OBJECT_MOTION</c> that omits <c>RUN_TIME</c> and names a
     /// <c>BOUNCE_SEQUENCE</c> is the data's "fly until you hit something" idiom. It must solve its
-    /// own flight time, actually fly, and dispatch that sequence on landing — before the fix all
-    /// ~150 such pieces were posed at rest on the wreck they should have left.
+    /// own flight time, actually fly, and dispatch that sequence on landing — without the solve
+    /// all ~150 such pieces sit posed at rest on the wreck they should have left.
     ///
     /// <para>Kills one <c>refuel*</c> tank through <see cref="AnimRuntime.DamageAt"/>, the same
     /// call a rocket makes, and asserts on the dispatch timeline. The def is the clean A/B: the
@@ -2347,10 +2344,10 @@ public static class Suites
     ///
     /// <para>⚠ What this suite is shown able to fail on is the SOLVE and the DISPATCH: with the
     /// flight solve disabled it reports 2 launches instead of 4 and no <c>sparkout</c> at all. The
-    /// two zero-miss checks are carried invariants, not guards — removing A4's retirement hold
+    /// two zero-miss checks are carried invariants, not guards — removing the retirement hold
     /// leaves them green at this seed, because every C1 def with a solvable launch also runs an
-    /// unbounded <c>fire_n_smoke</c> loop that keeps its instance alive anyway. A4's able-to-fail
-    /// control is the <c>--destroy=m_build</c> probe on the record, not this suite.</para>
+    /// unbounded <c>fire_n_smoke</c> loop that keeps its instance alive anyway. The retirement
+    /// hold's able-to-fail control is the <c>--destroy=m_build</c> probe, not this suite.</para>
     ///
     /// <para>⚠ Assert a BAND, never an exact time. Both launches draw speed and elevation from
     /// <c>translation_range</c> per instance, so the flight is a random variable whose support the
@@ -2465,7 +2462,7 @@ public static class Suites
             ctx.Same(2, timeline.Count(e => e.Seq == "sparkout4"), $"sparkout4 events dispatched");
             ctx.Same(0, Missed() - missedBefore, $"refuel bounces landing after their instance ended");
 
-            // ---- the retirement hold (A4) ----
+            // ---- the retirement hold ----
             // A landing must reach a LIVE instance, and the launch is the LAST event of its
             // sequence, so nothing but the hold keeps one reachable. refuel* cannot show that: its
             // own fire_n_smoke Loop keeps the instance alive whatever the hold does. The yard
@@ -2545,20 +2542,20 @@ public static class Suites
             $"{node}'s solved flight is inside its authored band flight={flight:0.000} band={min:0.000}…{max:0.000}");
     }
 
-    // ---- BL-257: a launch that names neither RUN_TIME nor BOUNCE_SEQUENCE ------------------------
+    // ---- a launch that names neither RUN_TIME nor BOUNCE_SEQUENCE -------------------------------
 
-    /// <summary>`BL-257`: the third launch shape. 167 <c>OBJECT_MOTION</c> events install-wide (119
+    /// <summary>The third launch shape. 167 <c>OBJECT_MOTION</c> events install-wide (119
     /// distinct defs — <c>analysis/bl-257-nulled-launch/</c>) omit <c>RUN_TIME</c> <b>and</b>
     /// <c>BOUNCE_SEQUENCE</c>, and follow the launch with the flying piece's own null-start
-    /// <c>ACTIVE_STATE 0</c>. Gated on a bounce being named, BL-240's flight solve declined all of
-    /// them: the launch reported duration 0, the deactivation landed on the same tick, and the
-    /// piece was hidden before it moved. The zeppelin cannon's eight parts are the reachable repro
+    /// <c>ACTIVE_STATE 0</c>. A flight solve gated on a bounce being named declines all of
+    /// them: the launch reports duration 0, the deactivation lands on the same tick, and the
+    /// piece is hidden before it moves. The zeppelin cannon's eight parts are the reachable repro
     /// — <c>biggun_flying_parts</c> is one <c>CALL_ANIMATION</c> onto <c>dblcannon_flying_parts</c>,
     /// whose eight sequences are each exactly this pair.
     ///
     /// <para>⚠ The measurement is the GAP between each part's launch and its own deactivation, not
-    /// a mesh count. <c>--effects-test</c> read this def as <c>8/8</c> mesh throughout the bug
-    /// (INSTR-11): the root IS revealed and the parts ARE self-visible, and the census's peak fold
+    /// a mesh count. <c>--effects-test</c> reads this def as <c>8/8</c> mesh even with the solve
+    /// declined (INSTR-11): the root IS revealed and the parts ARE self-visible, and the census's peak fold
     /// catches the tick before the hide. A gap is 0 with the solve declined and the solved flight
     /// with it, so it discriminates and a visibility count does not. Displacement is asserted
     /// beside it — DIAG-13, a dispatched launch is not a moved piece.</para>
@@ -2676,12 +2673,12 @@ public static class Suites
         }
     }
 
-    // ---- BL-044: node lab tree rows must follow live Visible ------------------------------------
+    // ---- node lab tree rows must follow live Visible --------------------------------------------
 
     /// <summary>Hides a node through the lab's own Hide action, then re-shows it through a real
     /// <c>RESET_STATE</c> def (the same path a world animation uses) and checks the tree row both
     /// times — never through the button, only through <c>Node3D.Visible</c>. A def re-showing a
-    /// node the user hid is correct behaviour (see BL-044's trap), so the row must follow it.
+    /// node the user hid is correct behaviour (the trap: it looks like a bug), so the row must follow it.
     ///
     /// <para>Deliberately a chapter other than <see cref="TestContext.Chapter"/>: that one is
     /// cached and shared with <c>damage-hd</c>, which leaves its swept defs re-killed, so reusing

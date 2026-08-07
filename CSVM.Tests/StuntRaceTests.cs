@@ -9,16 +9,16 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// Splitscreen stunt-race bookkeeping (<see cref="StuntRace"/>), off-engine: who placed in what
-/// order, a rematch's reset, and the standings sort — none of it asserted anywhere before this
-/// item (M3 <c>PLAN-deepening.md</c> C7). <see cref="StuntRace"/> is a plain sealed class with no
-/// engine dependency once its own <c>GD.Print</c> calls route through <see cref="Log"/> (C6/C7);
-/// its collaborator <see cref="StuntMission"/> is not part of C7's family and still calls
+/// order, a rematch's reset, and the standings sort.
+/// <see cref="StuntRace"/> is a plain sealed class with no
+/// engine dependency — its own <c>GD.Print</c> calls route through <see cref="Log"/> —
+/// but its collaborator <see cref="StuntMission"/> calls
 /// <c>GD.Print</c>/<c>GD.PushWarning</c> directly from <c>Load</c> and <c>Complete</c> — either one
 /// crashes the whole test host outside the engine (an unmanaged <c>AccessViolationException</c>,
-/// verified empirically while writing this file), not just fails the one test. So these tests never
+/// verified empirically), not just fails the one test. So these tests never
 /// call either: a fake mission comes from <see cref="StuntMission"/>'s private constructor
-/// (reflection — it has no public one, and adding one would be an edit outside the family this item
-/// scopes to), and a finish is simulated by setting <c>Elapsed</c> and raising the private
+/// (reflection — it has no public one, and adding one only for tests would widen its
+/// surface), and a finish is simulated by setting <c>Elapsed</c> and raising the private
 /// <c>RunCompleted</c> backing delegate directly — exactly what <c>Complete()</c> itself does once
 /// every zone is in, minus the call that would crash.
 /// </summary>

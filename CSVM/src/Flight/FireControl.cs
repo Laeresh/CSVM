@@ -75,7 +75,7 @@ public sealed class FireOutcome
     }
 }
 
-/// <summary>The fire-control state machine (BL-295), extracted from <see cref="FlightController"/>:
+/// <summary>The fire-control state machine behind <see cref="FlightController"/>:
 /// trigger edges, per-group fire-rate accumulators, muzzle rotation, ammo draw-down, the two weapon
 /// selectors with their on-empty auto-advance, the rocket launch gate and both dry-clip cues — as a
 /// plain engine-free class. <see cref="Step"/> consumes raw held inputs and returns spawn/sound

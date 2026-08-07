@@ -26,10 +26,10 @@ public enum AnchorPlacement
 
 /// <summary>The record of which authored anims are playable effects, and what their defs need
 /// staged. Owns the name tables every effect producer must stay inside — <see cref="WorldEffectsFactory"/>
-/// consumes these names to build and stage the runtime; it no longer owns the naming itself.</summary>
+/// consumes these names to build and stage the runtime; the naming lives here, never there.</summary>
 public static class EffectCatalogue
 {
-    // The impact/destruction effect ANIMATION names the world-effects runtime (D32) is bound to —
+    // The impact/destruction effect ANIMATION names the world-effects runtime is bound to —
     // the closure of these is staged and playable via PlayEffectAt. IMPACT names come from
     // weapons.json (the non-model `default`/`buildings` effects of rockets/ordnance, plus the gun
     // `*_gunhit` family, which a gun hit plays throttled and time-bounded — C8);
@@ -73,12 +73,12 @@ public static class EffectCatalogue
     // indistinguishable from a wreck piece's own translation (also vertical-only, relying entirely on
     // `AnimRuntime.InheritedWorldVelocity` for horizontal spread), so only the name tells them apart.
     // Wired into `InheritedVelocityExempt` so the crash's momentum nudge, which correctly scatters
-    // `piece1..4`, does not also drag this splash off with the sliding wreck (BL-274).
+    // `piece1..4`, does not also drag this splash off with the sliding wreck.
     public static readonly string[] GroundSplashAnimNames = { "flydirt_plane" };
 
     // The crash def's own sub-effects that are meant to lie flat on the struck surface, not co-rotate
     // with the plane's impact attitude — the ONLY crash-rig templates `AnimRuntime
-    // .LevelPlacedTemplateNames` levels to world axes (BL-292). `plane_big_splash` (the water splash's
+    // .LevelPlacedTemplateNames` levels to world axes. `plane_big_splash` (the water splash's
     // spray column + flat rings, `huge_splash_model`) and its two own CALL_ANIMATION children
     // `plane_big_ripple` (the fading ripple rings, `ripple`) and `hg_splasher` (the water-squirt
     // puffer, no owned mesh — leveling only turns its local_velocity upright); `flydirt_plane` (the
@@ -90,7 +90,7 @@ public static class EffectCatalogue
     public static readonly string[] CrashSurfaceLevelAnimNames =
         { "plane_big_splash", "plane_big_ripple", "hg_splasher", "flydirt_plane" };
 
-    // The per-player rig's non-crash defs (B4): the four `<part>_damage_effects` shims the
+    // The per-player rig's non-crash defs: the four `<part>_damage_effects` shims the
     // Devastator's 0.99 injure_anims entry names. Bound alongside the crash def because they need
     // exactly what the crash rig already has — the `player` anim root, the plane's own `pdpN`
     // panels as INPUT_NODEs, and a live puffer factory. Each is a one-event shim calling
@@ -104,7 +104,7 @@ public static class EffectCatalogue
     // above, FlightController plays these directly (spawn/engine-death), never through a CALL.
     public static readonly string[] PropChoreographyAnims = { "startprops", "stopprops" };
 
-    // The authored player damage-stage menu (player-1.zrd.json, `BL-259`): the per-panel burn
+    // The authored player damage-stage menu (player-1.zrd.json): the per-panel burn
     // (torn pdpN shown + gimmeflakes debris + the staged short_firetrail / loop_short_firetrail
     // burn-down), the partial-damage fuel vapor leak, and the heavy prop1 trail with the fire_lt
     // nose light. DamageVisuals plays these through the rig runtime as the vehicle.zrd.json

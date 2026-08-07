@@ -5,8 +5,8 @@ using CSVM.Mech3;
 namespace CSVM.Flight;
 
 /// <summary>Which surface a projectile struck — the key <c>weapons.json</c>'s <c>IMPACT</c> block
-/// selects its hit effect by (<see cref="WeaponDef.Impact"/>). <c>Enemy</c> has no meaning in M3
-/// (nothing else flies) but is carried so B15's classifier and M4 stay in step with the data.</summary>
+/// selects its hit effect by (<see cref="WeaponDef.Impact"/>). <c>Enemy</c> has no meaning yet
+/// (nothing else flies) but is carried so the classifier and the future AI stay in step with the data.</summary>
 public enum SurfaceClass { Default, Water, Buildings, Player, Enemy, Quicksand }
 
 /// <summary>A muzzle (<c>FIRE</c>) or per-surface (<c>IMPACT</c>) effect binding: any slot may be
@@ -117,7 +117,7 @@ public sealed class WeaponDef
     public WeaponFlyout? Flyout;
 
     /// <summary>Keys present on this entry that the reader does not map — empty for every entry
-    /// in this install (asserted by the B11 verify). A non-empty list means the data grew a key
+    /// in this install (asserted by a verify pass). A non-empty list means the data grew a key
     /// this reader has not learned, and is a signal to update it, not to fail silently.</summary>
     public IReadOnlyList<string> UnhandledKeys = Array.Empty<string>();
 
@@ -138,7 +138,7 @@ public sealed class WeaponDef
 /// <summary>
 /// Typed reader over the shared <c>weapons.zrd.json</c> <c>BALLISTICS</c> block — the whole
 /// install's 48-entry projectile catalogue (guns / rockets / ordnance). Modelled on
-/// <see cref="PlaneStats"/>: load once, index by <c>wep_*</c> id. The single source every wave-B
+/// <see cref="PlaneStats"/>: load once, index by <c>wep_*</c> id. The single source every
 /// weapon handler reads a <see cref="WeaponDef"/> from.
 /// </summary>
 public sealed class WeaponDefs
@@ -173,7 +173,7 @@ public sealed class WeaponDefs
     private readonly Dictionary<string, WeaponDef> _byId = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<WeaponDef> _all = new();
 
-    /// <summary>The shared empty-clip sound def (<c>NO_AMMO_WARNING</c>), for B16's dry-gun cue.</summary>
+    /// <summary>The shared empty-clip sound def (<c>NO_AMMO_WARNING</c>), for the dry-gun cue.</summary>
     public string EmptyClipSound { get; private set; } = "snd_emptyclip";
 
     /// <summary>Every def, in file order.</summary>

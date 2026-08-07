@@ -136,7 +136,7 @@ public sealed class GameZ
     /// instead has one or the other. Beyond the handful of engine roots (<c>world1</c>,
     /// <c>display</c>, <c>camera1</c>, …, none of them <c>Object3d</c>), that set IS the library:
     /// every effect template, weapon/projectile model, zeppelin wreck template, clutter template,
-    /// cutscene prop — and both call-template roots BL-253 diagnosed (<c>facdsticks</c>,
+    /// cutscene prop — and both death-call template roots (<c>facdsticks</c>,
     /// <c>genx12</c>). <c>zone_id == -1</c> and Object3d's own <c>signs == 128</c> are the
     /// corroborating bits (world-placed nodes carry a real zone and <c>signs == 4108</c>); this
     /// method tests only placement, the load-bearing signal, and <c>Kind == "Object3d"</c> (every
@@ -622,7 +622,7 @@ public sealed class GameZMesh
     // this model, so it draws at full texture × vertex-colour brightness instead of being
     // modulated by the mission SUNLIGHT (the remake's csky_world_light) — self-lit effect
     // geometry, billboards, glows, clutter cards. `fog: false` = exempt from distance fog.
-    // Absent (legacy v0.6.1 tree) → both true, i.e. the pre-BL-214 behaviour.
+    // Absent (legacy v0.6.1 tree) → both true (drawn lit and fogged).
     public bool Lighting = true;
     public bool Fog = true;
 
@@ -661,8 +661,8 @@ public sealed class GameZPolygon
     // SubfaceBias. Carried by terrain patches (terpat*), cliff/river transitions, piers
     // and C5's cblock street layer — 658 polygons in C5, none at all in C1B.
     public bool Subface;
-    // Per-polygon weather-zone membership (unified-shape "zone_set"; decoded 2026-08-04,
-    // BL-057). Null when the field is absent (legacy tree) or the array is empty; every
+    // Per-polygon weather-zone membership (unified-shape "zone_set").
+    // Null when the field is absent (legacy tree) or the array is empty; every
     // polygon in this install carries at most one value where present, matching the
     // node-level zone_id's -1/1/2/3 numbering (see docs/formats/world-structure.md's
     // census). Nothing reads this yet — which zone is active is not in any data file

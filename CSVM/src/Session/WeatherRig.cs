@@ -8,23 +8,20 @@ using Godot;
 
 namespace CSVM.Session;
 
-/// <summary>Loads and applies the flown mission's weather, and drives its per-frame rig state
-/// (PLAN-planeviewer-split A5, moved verbatim off <c>GameSession</c>): <c>LoadWeather</c> +
-/// <c>SetupWeather</c> become <see cref="Build"/>, and the per-rig skydome/whiteout/deck
-/// update block from <c>_Process</c> becomes <see cref="Tick"/>. Constructed once per session
+/// <summary>Loads and applies the flown mission's weather (<see cref="Build"/>), and drives its
+/// per-frame rig state — the per-rig skydome/whiteout/deck update — in <see cref="Tick"/>.
+/// Constructed once per session
 /// (<c>_weatherRig</c> in <c>GameSession.StartSession</c>, same lifetime as
 /// <see cref="LiveryResolver"/>/<see cref="SpawnPicker"/>/<see cref="WorldEffectsFactory"/>).
-/// The horizon (skydome) build loop itself stays on <c>GameSession</c> — it is a
+/// The horizon (skydome) build loop itself lives on <c>GameSession</c> — it is a
 /// <c>SceneBuilder</c> concern, not weather state — so <see cref="Build"/> takes it as a callback
-/// invoked between the zone resolving and the fog/whiteout/precip setup, at exactly the
-/// point the original code ran it.
+/// invoked between the zone resolving and the fog/whiteout/precip setup.
 ///
-/// <para>⚠ The ambient cloud field is <b>not</b> weather state and is not built here. It is the
+/// <para>⚠ The ambient cloud field is <b>not</b> weather state and is not built here — do not
+/// re-add a hand-tuned per-rig cloud field keyed off <c>CLOUD_COVER</c>. It is the
 /// chapter's authored <c>fogvol.zrd</c> clutter scattered through its <c>fvol*</c> volumes —
 /// gamez + chapter-zrdr data, world-anchored and shared by every pane — built beside the world in
-/// <c>GameSession</c> (<see cref="CSVM.Effects.FogVolumeClutter"/>, <c>BL-273</c>). Until
-/// 2026-08-06 a hand-tuned per-rig <c>CloudPuffs</c> field lived here, keyed off
-/// <c>CLOUD_COVER</c>, because that reader had not been found.</para></summary>
+/// <c>GameSession</c> (<see cref="CSVM.Effects.FogVolumeClutter"/>).</para></summary>
 public sealed class WeatherRig
 {
     private static readonly Color WhiteoutColor = new(0.95f, 0.95f, 0.96f);

@@ -6,12 +6,11 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// BL-148: the stall cues are TWO thresholds on one margin, and the STALL lamp's blink is a rate
+/// The stall cues are TWO thresholds on one margin, and the STALL lamp's blink is a rate
 /// ramp. Asserts the split (the lamp leads the nose-drop over a real fd band), the blink law
-/// against both of CAP-06's measured anchors, and the integrator that carries it — including the
-/// case the fixed-period predecessor could not express, a dwell that changes length while the
-/// lamp is already lit. Moved from the in-engine <c>stall-warning</c> suite
-/// (PLAN-engine-free-suites B11) now that <see cref="GaugeCluster.StallLamp"/> is a plain struct —
+/// against both anchors measured from original-game footage, and the integrator that carries it —
+/// including the case a fixed-period blink cannot express, a dwell that changes length while the
+/// lamp is already lit. <see cref="GaugeCluster.StallLamp"/> is a plain struct —
 /// no live Control needs constructing. <see cref="Log.Debug"/> still runs through
 /// <see cref="Log.ConsoleSink"/>; with no sink installed that falls through to the real
 /// <c>GD.Print</c>, which crashes the whole test host outside the engine (the
@@ -32,7 +31,7 @@ public class StallWarningTests
     public void TheLampLeadsTheNoseDropOverARealFdBand()
     {
         // The split: one margin (StallFraction), two thresholds on it. Measured inside a single
-        // CAP-05 clip — the lamp lights 2.64 sim s / 14.9 mph before the nose breaks.
+        // original-game clip — the lamp lights 2.64 sim s / 14.9 mph before the nose breaks.
         var model = new FlightModel(new PlaneStats());
         float fd = model.Stats.FdSpeed;
         void At(float frac, bool warned, bool stalled, string what)
@@ -86,7 +85,7 @@ public class StallWarningTests
             Assert.True(Mathf.Abs(dwell015 - 296f) < GameFrameSimMs + SimDt * 1000f,
                 $"a dwell deep in the stall spans {dwell015:0} ms sim (CAP-06: 296) — the RATE ramped, not the brightness");
 
-            // The old fixed-period blink read the phase off a clock; this one integrates, so a
+            // A fixed-period blink would read the phase off a clock; this one integrates, so a
             // speed change part-way through a dwell shortens the REMAINDER rather than jumping the
             // lamp.
             bool before = lamp.Lit;

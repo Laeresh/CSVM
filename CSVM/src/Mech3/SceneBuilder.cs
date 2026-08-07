@@ -81,7 +81,7 @@ public sealed class SceneBuilder
     //
     // Why files rather than C# const strings: these blocks are shared by four independently
     // generated shaders (this one, the cloud billboards, the cylindrical facades, and Clutter's
-    // trees), and three of them used to be copy-pasted duplicates. A const string
+    // trees), and a shared file keeps the copies from drifting apart. A const string
     // single-sources the text but still lets each shader choose whether and where to emit it;
     // for the instance-uniform block that choice is exactly the bug (see the ordering contract in
     // csky_instance_uniforms.gdshaderinc). The combinatorial parts — render_mode, the
@@ -552,7 +552,7 @@ void fragment() {
             || t.Contains("wakefront") || t.Contains("watersquirt"))
             return "water";
         // 'empire'/'chrysler' are the C2/C5 film-set skyscraper walls (empire1, chrysler1/2 —
-        // the only 3 matching textures install-wide, measured before widening per BL-041's rule).
+        // the only 3 matching textures install-wide, measured before widening the classifier).
         if (t.Contains("build") || t.StartsWith("hangar") || t.StartsWith("bld")
             || t.Contains("cblock") || t.Contains("warehouse") || t.Contains("roof")
             || t.Contains("filmblock") || t.StartsWith("empire") || t.StartsWith("chrysler"))
@@ -798,12 +798,12 @@ void fragment() {
     /// <c>water*</c>/<c>wtr*</c>/<c>srf*</c>/<c>wakefront</c>; buildings:
     /// <c>hangar*</c>/<c>*build*</c>/<c>cblock</c>/<c>warehouse</c>/<c>roof</c>/<c>empire*</c>/<c>chrysler*</c>; everything else,
     /// untagged) — each polygon's OWN texture decides which shape it joins, triangulated exactly
-    /// as <see cref="EmitPolygon"/> does. Replaces an earlier area-weighted vote that gave the
-    /// WHOLE mesh one winning tag: real, sizeable water polygons on an otherwise-dry shoreline
-    /// tile (a coastal tile is mostly beach/cliff by area) lost that vote outright and read as
+    /// as <see cref="EmitPolygon"/> does. Do NOT collapse this to one area-weighted tag for the
+    /// whole mesh: real, sizeable water polygons on an otherwise-dry shoreline
+    /// tile (a coastal tile is mostly beach/cliff by area) lose that vote outright and read as
     /// dry ground to every weapon impact — 7.9% of C2's classified water area, measured in
-    /// <c>analysis/surface-classification/</c> (`BL-204`). A polygon with a merely name-matching
-    /// but literally zero-area texture reference (`BL-041`'s stray-polygon case) still contributes
+    /// <c>analysis/surface-classification/</c>. A polygon with a merely name-matching
+    /// but literally zero-area texture reference (a stray polygon) still contributes
     /// nothing, because its own triangulated area is zero — no separate area threshold needed.
     /// Cached per mesh index.</summary>
     private List<(string? Surface, ConcavePolygonShape3D Shape)> CollidersForMesh(int meshIndex)
@@ -1001,7 +1001,7 @@ void fragment() {
         if (scroll != Vector2.Zero)
             ScrollingModelCount++;
 
-        // The model's own authored render flags (BL-214). `lighting: false` is the original
+        // The model's own authored render flags. `lighting: false` is the original
         // turning D3D lighting off for this model — it draws at full texture × vertex-colour
         // brightness rather than dimmed by the mission SUNLIGHT — and `fog: false` exempts it
         // from distance fog. Both flow into the material/shader keys, so one texture can skin a

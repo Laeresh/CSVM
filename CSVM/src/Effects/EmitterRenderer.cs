@@ -9,9 +9,8 @@ namespace CSVM.Effects;
 ///
 /// <para>The atlas is built <b>above</b> this seam (`Puffer.Create` calls `BuildAtlas` and hands the
 /// result to the renderer's constructor), which is what makes a <c>Puffer</c> constructible with no
-/// <c>TextureArchive</c> anywhere in the path — the point of the lower of Wave E's two seams
-/// (`docs/PLAN-deepening.md`, Decision 9). A renderer below the atlas would have delivered nothing
-/// testable.</para>
+/// <c>TextureArchive</c> anywhere in the path. A renderer below the atlas would have delivered
+/// nothing testable.</para>
 ///
 /// <para>The contract per frame is: <see cref="Write"/> for indices <c>0 … liveCount-1</c>, packed
 /// and ascending, then one <see cref="Show"/> publishing how many of them are live. Slots past

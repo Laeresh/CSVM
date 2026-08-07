@@ -6,7 +6,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// Per-pane Dogfight HUD (PLAN-vs-mode C23/C24): one compact status line — remaining time
+/// Per-pane Dogfight HUD: one compact status line — remaining time
 /// (omitted once <see cref="VersusMatch.TimeLimit"/> is disabled), this player's own
 /// kills/deaths, and the current leader's tag — a transient "P2 DOWNED P3" banner on every
 /// Downed report anywhere in the match (a plain "P3 DOWN" when the crash carried no killer), and

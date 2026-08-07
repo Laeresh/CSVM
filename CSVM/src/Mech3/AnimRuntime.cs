@@ -165,7 +165,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary>Named CALL_ANIMATION callees whose placed root levels to world axes instead of the
     /// inherited parent rotation (<see cref="TemplateStage{TNode}.PlaceOn"/>), keyed by <c>AnimName ?? Name</c>.
     /// Set by <see cref="FlightController.Crash"/> to the crash-def's own surface-hugging sub-effects
-    /// only (`BL-292`): the crash rig's effect-template pool slots sit under <c>crashRoot</c>, whose
+    /// only: the crash rig's effect-template pool slots sit under <c>crashRoot</c>, whose
     /// <c>Transform</c> is the plane's own attitude (<see cref="WorldEffectsFactory.BuildFlightCrashRuntime"/>)
     /// — needed so the wreck subtree lands at the crash pose, but wrong for a template that is
     /// supposed to lie on the struck surface (flat ground/water, always world-up here — the fourth
@@ -178,16 +178,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// frame — leveling it strips the co-rotation that made debris continue roughly along the crash's
     /// own attitude/momentum (already reinforced by <see cref="InheritedWorldVelocity"/>), and instead
     /// launches it in a fixed world direction unrelated to how the plane hit, i.e. off to the side of
-    /// the impact. Confirmed at the controls 2026-08-06 on the `c1-crash` golden (`--crash=5`): late
-    /// frames (t≈1.3s, past the fireball) showed debris peeling off on a wrong fixed heading with an
-    /// early blanket-runtime version of this flag, while `plane_big_splash`/`plane_big_ripple`
-    /// leveled correctly. `large_fireball`/`large_10sec_fire`/`large_black_smokeball` are pure puffers
-    /// (no owned mesh) already unaffected by a host's basis; `large_steam_spray` is explicitly
-    /// out of scope per the item's own goal ("fire and steam stay correct").</para>
+    /// the impact. Confirmed at the controls on the `c1-crash` golden (`--crash=5`): with a
+    /// blanket every-template flag, late
+    /// frames (t≈1.3s, past the fireball) show debris peeling off on a wrong fixed heading,
+    /// while `plane_big_splash`/`plane_big_ripple`
+    /// level correctly. `large_fireball`/`large_10sec_fire`/`large_black_smokeball` are pure puffers
+    /// (no owned mesh) already unaffected by a host's basis; `large_steam_spray` is deliberately
+    /// left un-leveled — fire and steam must stay correct.</para>
     ///
     /// <para>Off everywhere else, including the SAME runtime's in-flight damage-stage effects
     /// (`gimmeflakes` etc., played before a crash while the plane is still flying, where inheriting
-    /// the current attitude is correct and already verified — `BL-288`/`BL-287`) — <c>Crash</c> sets
+    /// the current attitude is correct and already verified) — <c>Crash</c> sets
     /// this only once the crash def itself plays, and <c>Respawn</c> clears it.</para></summary>
     public HashSet<string>? LevelPlacedTemplateNames;
 
@@ -233,8 +234,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// the first time a death-triggered <c>CALL_ANIMATION</c> actually needs it, and returns the
     /// copy this exact caller (<paramref name="callAnchor"/>, the second parameter) owns: the same
     /// caller reusing the name gets its OWN prior copy back; a DIFFERENT caller gets a fresh one up
-    /// to the configured pool size, then the oldest-owned copy recycles (<c>BL-253</c>'s CAP-24
-    /// A/B: the original runs several call sites' copies of one template in parallel, not one
+    /// to the configured pool size, then the oldest-owned copy recycles (measured from
+    /// original-game footage: the original runs several call sites' copies of one template in parallel, not one
     /// shared "latest wins"). Null when the name is not a library root at all. Set by the session
     /// build (<c>WorldSession</c>), which owns the raw <see cref="GameZ"/>/<see cref="SceneBuilder"/>
     /// this runtime deliberately has no reference to. Null on every runtime that never needs this â€”
@@ -277,7 +278,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// Null (the default) means every ballistic motion inherits, unchanged from before this existed.
     /// The crash rig sets this alongside <see cref="InheritedWorldVelocity"/> so the world-space
     /// nudge that legitimately scatters wreck pieces does not also drag the crash splash off with
-    /// them (BL-274).</summary>
+    /// them.</summary>
     public HashSet<string>? InheritedVelocityExempt;
 
     // ---- PUFFER_STATE ----
@@ -361,10 +362,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // hook (TemplateStage.RootsFor) — the slot arithmetic lives on the stage.
     private readonly NameResolver<Node3D> _resolver;
 
-    // The effect-template pool + placement as a module (PLAN-template-stage A2/A3): slot
-    // arithmetic, the caller-slot claim (BL-288), template placement, the copy-identity questions
+    // The effect-template pool + placement as a module: slot
+    // arithmetic, the caller-slot claim, template placement, the copy-identity questions
     // and the reveal/retire/sweep ritual live in TemplateStage.cs; this class supplies the engine
-    // and runtime hooks in the constructor and calls through. The flags seal in A4.
+    // and runtime hooks in the constructor and calls through. The flags are sealed at construction.
     private readonly TemplateStage<Node3D> _templateStage;
 
     private readonly Dictionary<Node3D, Transform3D> _rest = new(); // authored pose per touched node
@@ -378,7 +379,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // caller's own site) register itself on that instance's <see
     // cref="DestructibleRegistry.Instance.LocalCallTargets"/>, so a reset (C28) can Stop and
     // restore it too — otherwise a reset before the called def's own motions finish (facade_parts'
-    // 8 s flight) leaves its pieces flown and never returns them to RESET (BL-253).
+    // 8 s flight) leaves its pieces flown and never returns them to RESET.
     private readonly Stack<DestructibleRegistry.Instance> _dyingInstances = new();
 
     // The instance whose OWN t=0 burst is directly dispatching right now, one entry per nested
@@ -497,7 +498,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // root the same way the anim-lab/crash runtime's stage-sealed TemplateStage.Places does, WITHOUT turning
     // that on for the ambient world boot (byte-identical goldens) or RESET_STATE — a struck C2
     // facade panel's facade_parts call needs its shared template moved onto the panel, not left at
-    // its gamez origin (BL-253), and nothing about that should touch ON_STARTUP/mission-setup
+    // its gamez origin, and nothing about that should touch ON_STARTUP/mission-setup
     // calls, which never run through RunDeathSequence.
     private int _deathCallDepth;
 
@@ -523,7 +524,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private float _debugClock;
 
-    // WAIT_FOR_COMPLETION (BL-228). The completion test the CallAnimation case just installed,
+    // WAIT_FOR_COMPLETION. The completion test the CallAnimation case just installed,
     // handed to the sequence runner through ISequenceHost.PendingWait and read exactly once —
     // Dispatch clears it on entry, so it can never leak onto a later event. A closure over the
     // (target, anchor) pairs THIS call reached, because that is the only thing that identifies
@@ -541,8 +542,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private int _waitsInstalled, _waitsAbandoned, _waitsRouted, _waitsInert;
 
     /// <summary>The inert stage: nothing pooled, nothing staged hidden, no called template
-    /// relocated. What the ambient world runtime and every plain testing runtime take
-    /// (PLAN-template-stage A4, Decision 4) — the three flags are sealed, so a runtime built this
+    /// relocated. What the ambient world runtime and every plain testing runtime take —
+    /// the three flags are sealed, so a runtime built this
     /// way cannot be talked into a template role after the fact.</summary>
     public AnimRuntime()
         : this(NewTemplateStage())
@@ -550,10 +551,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     }
 
     /// <summary>Takes a SEALED template stage — the pool/reveal/relocate role, decided by whoever
-    /// knows the runtime's job and fixed before this runtime exists (PLAN-template-stage A4,
-    /// Decision 4: <c>WorldEffectsFactory</c> builds the world-effects and crash-rig stages,
+    /// knows the runtime's job and fixed before this runtime exists
+    /// (<c>WorldEffectsFactory</c> builds the world-effects and crash-rig stages,
     /// <c>WorldSession</c> the world one). The runtime hooks are wired here rather than being
-    /// stage construction arguments — Decision 7's late-bound handover, since the stage's
+    /// stage construction arguments — a late-bound handover, since the stage's
     /// <c>findAll</c> needs the resolver and the resolver's <c>ownRootsOf</c> is the stage's
     /// <see cref="TemplateStage{TNode}.RootsFor"/>: both directions are delegates, invoked only
     /// after this constructor completes. The pool reaches the resolver only as that resolved
@@ -698,11 +699,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// Where emitters are parented is <paramref name="emitterFactory"/>'s business now, not this
     /// role's (see <see cref="PufferEmitterFactory"/>).
     ///
-    /// <para><paramref name="stage"/> arrives SEALED (PLAN-template-stage A4, Decision 4). The
-    /// fourth flag this ritual used to bake — relocate a called template onto the call site — is
-    /// stage state now, along with the pool and the staged-hidden reveal the caller used to write
-    /// AFTER this returned: the sealing leak `architecture.md` carried as an accepted shallow spot.
-    /// The caller builds the stage with the role it wants
+    /// <para><paramref name="stage"/> arrives SEALED. Template policy — relocate-on-call, the
+    /// pool, the staged-hidden reveal — is stage state, not runtime properties:
+    /// the caller builds the stage with the role it wants
     /// (<see cref="NewTemplateStage"/>) and there is no post-seal write left to
     /// misorder.</para></summary>
     public static AnimRuntime ForEffects(TemplateStage<Node3D> stage, int seed,
@@ -952,7 +951,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     }
 
     /// <summary>Indexes one POOLED copy of a library-root call template (<c>AnimRuntime.
-    /// ResolveLibraryRoot</c>, <c>BL-253</c>) — everything <see cref="IndexStage"/> does, EXCEPT
+    /// ResolveLibraryRoot</c>) — everything <see cref="IndexStage"/> does, EXCEPT
     /// the resolver's by-index map: every copy is built from the SAME source <c>GameZNode</c>, so
     /// they all carry the SAME compiled node indices, and that map (runtime-wide, index-keyed)
     /// can hold only the first copy that ever claims each index — a second copy's
@@ -1078,7 +1077,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             _startDepth--;
         }
         // Its t=0 events can finish the instance â€” or a nested CALL_ANIMATION's own t=0 burst can
-        // have stopped it (a same-name SELF stop no longer can, see _startingInstances) â€” so only
+        // have stopped it (a same-name SELF stop cannot, see _startingInstances) â€” so only
         // notify a finish that actually removed something, keeping the start/finish notifications
         // balanced against the live count for the timeline.
         if (Retirable(inst) && _instances.Remove(inst))
@@ -1137,7 +1136,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             // Anchor the instance on the def's own template root when it resolves (its at_node/
             // motion targets live under that root); fall back to null (global name resolution).
             // Pooled, that root is the NEXT copy in the pool — this call's own — and only that
-            // copy is moved onto the site (BL-225).
+            // copy is moved onto the site.
             var roots = _templateStage.TakeNextSlot(def);
             _templateStage.PlaceOn(roots, worldPoint, LevelsTemplate(def));
             var anchor = roots.FirstOrDefault();
@@ -1291,7 +1290,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         Stop(def.AnimName, inst.Anchor);
         // Undoes a called def's own live death, exactly like the outer Stop/RestoreRestPoses
         // below but for a def that is not `inst.Def` itself, on whatever anchor its own call
-        // actually ran on (a pooled library-root copy — BL-253 — not necessarily `inst.Anchor`):
+        // actually ran on (a pooled library-root copy, not necessarily `inst.Anchor`):
         // tears down its motions (a called template's own ballistic pieces), restores their rest
         // pose, and — since a called template's RESET_STATE is its own, never inherited from the
         // caller's — re-applies it, so an ACTIVE_STATE the call flipped (facade_parts' part1-4 ON)
@@ -1311,7 +1310,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // Every CALL_ANIMATION target the death dispatched onto its OWN anchor (facade_parts on
         // its own fcpanNN; also re-covers ChainedDeathDef's target, harmlessly) — reset the same
         // way, so a reset lands the same whether it comes before or after the called def's own
-        // motions finish (BL-253).
+        // motions finish.
         foreach (var (local, localAnchor) in inst.LocalCallTargets)
             ResetCalled(local, localAnchor);
         inst.LocalCallTargets.Clear();
@@ -1465,8 +1464,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// (<c>ObjectMotionFromTo</c>/<c>ObjectMotion</c>), faded (<c>ObjectOpacityFromTo</c>/
     /// <c>ObjectOpacityState</c>), or switched off (<c>ObjectActiveState … false</c>)? gate1's
     /// door1/door2 are exactly this: the doors falling and fading over ~1–6.7 s IS the authored
-    /// death, and the data simply never gives the archway a destroyed variant to swap to (BL-254,
-    /// 2026-08-04 — the user's recall of the original: gate1's archway is not destructible at
+    /// death, and the data simply never gives the archway a destroyed variant to swap to
+    /// (the user's recall of the original: gate1's archway is not destructible at
     /// all). Used by <see cref="RunDeathSequence"/> to withhold <see cref="ApplyDeathSwap"/>'s
     /// RESET-derived rescue from a def whose death look was a deliberate choice, reserving the
     /// rescue for the C1 AA guns' shape: a <c>DAMAGE_SEQUENCE</c> of puffer calls only, nothing
@@ -1574,7 +1573,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     }
 
     /// <summary>The stage's one placement write (see <see cref="TemplateStage{TNode}.PlaceOn"/>
-    /// for why <c>TopLevel</c> — the plane-parented-effect trap, BL-229 family/BL-288).</summary>
+    /// for why <c>TopLevel</c> — the plane-parented-effect trap).</summary>
     private static void PlaceNodeAt(Node3D root, Transform3D xf)
     {
         root.TopLevel = true;
@@ -1596,12 +1595,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // Duplicate(), so it detaches from any TextureCycler flipbook for the fade's duration.
     //
     // âš  Tests for the USE (`SceneBuilder.OpacityTerm`, i.e. " * csky_opacity"), not the uniform
-    // NAME. Those used to be equivalent â€” the uniform was declared exactly in the
-    // variants that multiplied by it â€” but the declaration has since moved into the shared
-    // ordered preamble (csky_instance_uniforms.gdshaderinc), so it is now present in shaders
+    // NAME. The two are NOT equivalent â€” the uniform is NOT declared only in the
+    // variants that multiply by it: the declaration sits in the shared
+    // ordered preamble (csky_instance_uniforms.gdshaderinc), so it is present even in shaders
     // with no alpha path at all. Testing the name would report true for every one of them.
-    // Testing the include line would be worse still: the declaration is no longer textually in
-    // `sh.Code`, so a name test would report FALSE everywhere and quietly invert this tally.
+    // Testing the include line would be worse still: the declaration is not textually in
+    // `sh.Code`, so that test would report FALSE everywhere and quietly invert this tally.
     private bool EnsureOpacityPath(GeometryInstance3D g, float alpha)
     {
         if (g is not MeshInstance3D mi || mi.Mesh is not { } mesh)
@@ -1685,7 +1684,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // chapter gamez holds every mission's content and this script switches off what this
         // mission does not show (C1/IA1: hk_zep, both MP zeppelins, the CTF props, â€¦). Runs
         // first so an animation state can still override it, which is the engine's load order.
-        // Translate/rotate (BL-249) reuse PoseTranslate/PoseRotate — the same absolute
+        // Translate/rotate reuse PoseTranslate/PoseRotate — the same absolute
         // parent-frame convention OBJECT_TRANSLATE_STATE/OBJECT_ROTATE_STATE use, and safe to
         // call before anything else has touched these nodes, so the RestOf capture inside them
         // records the mission's placed pose as rest for any later anim state on the same node.
@@ -1897,7 +1896,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     }
 
     // Re-runs the quiet-stage RESET_STATE posing pass (bootstrap pass 1) for whatever now anchors
-    // within a subtree added after the fact — IndexStage's (BL-253's IndexPooledCopy's) own tail.
+    // within a subtree added after the fact — IndexStage's (and IndexPooledCopy's) own tail.
     private void ApplyResetStatesWithin(Node3D subtree)
     {
         foreach (var def in _program.Defs)
@@ -2019,15 +2018,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// stop for a def that ships none. The data's stop paths are an <c>ACTIVE_STATE 0</c> on the
     /// emitter (<see cref="EmitterDirector.End"/>) or a deactivated host
     /// (<see cref="EmitterDirector.EndOn"/>); a def carrying an <c>ACTIVE_STATE 1</c> and neither has no other
-    /// way to stop, and before this rule existed such an emitter burned for the whole session.
+    /// way to stop — without this rule such an emitter burns for the whole session.
     ///
     /// <para>Reached on both runtimes deliberately. On the effects runtime it is what stops
     /// <c>torpedo_ground_effect</c>'s <c>fire_n_smoke</c>: the def's sequences end ~1.2 s in (its
     /// <c>LOOP 70</c> runs one instantaneous pass per frame), the instance leaves
     /// <c>_instances</c>, and the <see cref="EffectTtl"/> backstop then has nothing to reach â€”
     /// <see cref="Stop"/> finds resources only THROUGH a live instance. On the world runtime it is
-    /// what stops the C1 refuel tanks' <c>fire_n_smoke</c> (<c>BL-236</c>): the tank's death
-    /// instance drains at ~5 s and the emitter outlived it by the session.</para>
+    /// what stops the C1 refuel tanks' <c>fire_n_smoke</c>: the tank's death
+    /// instance drains at ~5 s and the emitter would otherwise outlive it by the session.</para>
     ///
     /// <para>Instance-scoped, never sequence-scoped: <c>part1_trail</c> is a lone
     /// <c>PufferState</c> in a sequence that ends on the same tick, so a sequence rule would kill
@@ -2113,7 +2112,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     bool active = ev.Data.Bool("state");
                     SetSubtreeActive(t, active);
                     if (!active)
-                        // BL-229: a played deactivation spares an emitter started in this same
+                        // A played deactivation spares an emitter started in this same
                         // instant (the splash idiom writes both halves and means the second); the
                         // RESET_STATE path does not, being base state where the last write wins.
                         Emitters.EndOn(t, sparingSameInstant: !instant);
@@ -2234,13 +2233,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         // The duration this event reports. A launch with no authored time solves
                         // its own from the parabola it just drew, so the flight is read BACK off
                         // each body rather than assumed here — and the longest of them is what the
-                        // sequence waits on (BL-240 for the bounce-terminated ones, BL-257 for the
+                        // sequence waits on (both for the bounce-terminated launches and for the
                         // ones that name neither a run time nor a bounce and whose next null-start
                         // event is the flying piece's own deactivation).
                         float ballTime = authored;
                         bool bounceArmed = false;
                         // Opt this def's nodes out of InheritedWorldVelocity when the crash rig named
-                        // it exempt (BL-274) — checked once per event, not per target, since every
+                        // it exempt — checked once per event, not per target, since every
                         // target of one event shares the owning def.
                         bool inheritVelocity = InheritedVelocityExempt == null
                             || !InheritedVelocityExempt.Contains(def.AnimName ?? def.Name);
@@ -2434,14 +2433,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         // GameZ.IsLibraryRoot) — so it has no meaningful position of its own and
                         // MUST be moved onto whichever site called it. `ResolveLibraryRoot` also
                         // lazily builds (and, per its own pool config, clones) that root the first
-                        // time a given caller needs it (BL-253: `facdsticks`), returning the exact
-                        // POOLED COPY this call owns — the original runs several call sites' copies
-                        // of one template in parallel, not one shared "latest wins" (CAP-24 A/B).
+                        // time a given caller needs it (`facdsticks` the worked example), returning
+                        // the exact POOLED COPY this call owns — measured from original-game
+                        // footage, the original runs several call sites' copies
+                        // of one template in parallel, not one shared "latest wins".
                         // Never every death call: most LOCAL_CHOREOGRAPHY targets (kkgate's
                         // `tbridg1_fire`) sit at a meaningful, already-PLACED authored position, and
-                        // `IsLibraryRoot` correctly refuses those (measured: an earlier, name-based
-                        // cut of this fix moved `tbridg1_fire` onto `kkgate` before this data-driven
-                        // rule replaced it). Gated + non-instant so it never touches the ambient
+                        // `IsLibraryRoot` correctly refuses those (measured: a name-based rule
+                        // instead moves `tbridg1_fire` onto `kkgate` — keep this one
+                        // data-driven). Gated + non-instant so it never touches the ambient
                         // world boot (byte-identical goldens) or RESET_STATE — those run neither
                         // path.
                         Node3D? libraryCopy = null;
@@ -2476,7 +2476,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         // about whether this particular call is what started it.
                         waitOn?.Add((target, startAnchor));
                         // A relocating call from an anchor OUTSIDE the pool (the crash rig's own
-                        // plane nodes — BL-288) claims its sticky slot BEFORE the placed-where
+                        // plane nodes) claims its sticky slot BEFORE the placed-where
                         // test and the placement below ask for this call's copy. The library-copy
                         // path carries its own pool, and a call anchored on a pooled copy already
                         // has a slot — both skip this.
@@ -2488,15 +2488,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         {
                             wantSite = callAnchor!.GlobalTransform.Origin + callAnchor.GlobalTransform.Basis * siteOffset;
                             // A placed template called at a DIFFERENT site restarts even while
-                            // live: one shared template can only be in one place, so a second
-                            // rocket landing inside the first explosion's 2.5 s run was skipped by
-                            // the live guard and showed no trails at all. Pooled (BL-225 on the
-                            // effects side, BL-253's own pool here), overlapping calls each hold
+                            // live: one shared template can only be in one place, and a second
+                            // rocket landing inside the first explosion's 2.5 s run would be
+                            // skipped by the live guard and show no trails at all. Pooled (the
+                            // effects-side template pool, and the library-copy pool here),
+                            // overlapping calls each hold
                             // their own copy and this is the wrap case only — the pool exhausted,
-                            // recycling its oldest copy exactly like the single-copy path always
-                            // collapsed onto the newest call.
+                            // recycling its oldest copy exactly as a single copy collapses onto
+                            // the newest call.
                             // Both arms ask the identical question on the one named tolerance
-                            // (Decision 6) and differ only in root resolution: a library copy is
+                            // and differ only in root resolution: a library copy is
                             // not in the def's own root set, so TemplateStage.RootsFor cannot see
                             // it and the distance is measured on the copy directly.
                             movedAway = libraryCopy != null
@@ -2520,11 +2521,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                                     _templateStage.PlaceAt(target, callAnchor!, siteOffset);
                             }
                             Start(target, startAnchor);
-                            // The MESH half (BL-061). Moving the template is only half of placing
-                            // it: on a runtime that stages its templates hidden, a CALLED template
-                            // used to stay dark while its puffers — which draw at world level,
-                            // independent of the root — emitted at the site, so an effect showed
-                            // its particles and none of its authored geometry. Measured on the
+                            // The MESH half. Moving the template is only half of placing
+                            // it: on a runtime that stages its templates hidden, an un-revealed
+                            // CALLED template stays dark while its puffers — which draw at world
+                            // level, independent of the root — emit at the site, so the effect
+                            // shows its particles and none of its authored geometry. Measured on the
                             // rocket rings the D31 staging exists for: `he_ground_effect` calls
                             // `call_he_ring1` (root `he_ring1`), `sonic_ground_effect` calls
                             // `ring_up1`-`4`/`ring_down1` (roots `sonic_ring1`-`5`), and every one
@@ -2538,7 +2539,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             // SAME anchor as the dying instance, is the caller's own choreography
                             // (facade_parts on its own fcpanNN) — a reset (C28) has to stop and
                             // restore it too, or its motions (facade_parts' 8 s flight) can leave
-                            // pieces flown past the reset (BL-253). Tracked against the actual
+                            // pieces flown past the reset. Tracked against the actual
                             // Start anchor (the pooled copy, not the call site), since that is what
                             // Stop/RestoreRestPoses need to find this specific copy again. Scoped
                             // to the SAME test as relocation, not every death call landing on the
@@ -2981,7 +2982,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary>
     /// The site a CALL_ANIMATION hands its callee: the target node plus the AT_NODE trailing
     /// offset (in that node's frame). The node is null when the call names no target (then the
-    /// caller's own anchor stands, which is what every call used to get); the offset is zero
+    /// caller's own anchor stands); the offset is zero
     /// unless the call carries a <c>position</c>.
     ///
     /// The target is written in the CALLER's namespace, so it resolves through the caller's
@@ -2990,7 +2991,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// also what the reader front-end normalizes to; <c>OPERAND_NODE</c> stays a bare name.
     ///
     /// A named-but-unresolvable target falls back to the caller's anchor rather than dropping
-    /// the call â€” that is the pre-change behaviour, so a node the builder skipped can't make
+    /// the call â€” so a node the builder skipped can't make
     /// an effect disappear â€” but it is counted, since silently mis-placing an effect is
     /// exactly the failure this method exists to fix.
     /// </summary>
@@ -3045,7 +3046,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// counting it would pin the template revealed for the rest of the session — the leak this hold
     /// exists to close, with extra steps.</para>
     ///
-    /// <para>The stage's <c>stillAnimated</c> hook (PLAN-template-stage A3, Decision 3): the hold
+    /// <para>The stage's <c>stillAnimated</c> hook: the hold
     /// is a motion-domain question — which of <see cref="Motions"/>' live entries count — so the
     /// walk stays here and the deferral it feeds lives on the stage.</para></summary>
     private bool TemplateStillAnimated(IReadOnlyList<Node3D?> roots)
@@ -3244,15 +3245,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// on a node outside the healthy/destroyed/dbase role set (<see
     /// cref="AuthorsVisibleDeath"/>) â€” gate1's studio doors, whose fall-and-fade over ~1â€“6.7 s IS
     /// the authored death; the data simply never gives its archway a destroyed variant, because in
-    /// the original gate1's archway is not destructible at all (BL-254, 2026-08-04). Firing the
-    /// fallback there swapped the healthy archway for a wreck it does not own and opened a passage
+    /// the original gate1's archway is not destructible at all. Firing the
+    /// fallback there swaps the healthy archway for a wreck it does not own and opens a passage
     /// that should stay solid. The AA guns are the opposite shape the fallback still has to
     /// rescue: their only Initial sequence is a <c>DAMAGE_SEQUENCE</c> of puffer calls, so without
     /// it they would die with nothing at all switching off â€” invisibly.</para>
     ///
     /// <para><see cref="_deathCallDepth"/> brackets the whole burst so a <c>CALL_ANIMATION</c> the
-    /// death dispatches (C2's facade panels calling the shared <c>facade_parts</c> template,
-    /// `BL-253`) can relocate its callee's effect-template root onto the call site, exactly as the
+    /// death dispatches (C2's facade panels calling the shared <c>facade_parts</c>
+    /// template) can relocate its callee's effect-template root onto the call site, exactly as the
     /// anim-lab/crash runtime's <see cref="TemplateStage{TNode}.Places"/> does â€” without turning that on
     /// for the ambient world boot.</para></summary>
     private void RunDeathSequence(DestructibleRegistry.Instance inst)
@@ -3282,7 +3283,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary>Dispatches the def's compiled destruction slot
     /// (<see cref="AnimDefinition.DeathSlot"/>) alongside the Initial sequences
     /// <see cref="Start"/> just ran — the block that carries ~all of <c>large_30sec_fire</c>'s
-    /// 1,035 death calls, which the listed sequences never reach (`BL-276`; the slot census is on
+    /// 1,035 death calls, which the listed sequences never reach (the slot census is on
     /// the field's own doc). Runs as a runner ON the live instance so its timed events keep
     /// advancing with the death, and so a reset's <see cref="Stop"/> tears it down with everything
     /// else; a def whose Initial sequences already drained at t=0 gets its instance re-created for
@@ -3501,7 +3502,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// in one method, called from one statement in <see cref="Advance"/>, because the instance walk
     /// must not run between them: an instance whose only hold is a landed piece would be
     /// <c>Finished</c> with nothing owed, so it retires and <c>FinishEffectInstance</c> SustainEnds
-    /// the piece's trail emitter — BL-236's machinery.</summary>
+    /// the piece's trail emitter mid-flight.</summary>
     private void TickMotions(float dt)
     {
         foreach (var landing in Motions.Tick(dt))

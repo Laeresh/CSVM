@@ -9,7 +9,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The effect-template pool sizes (<c>CSVM/data/effect_pools.json</c>, <c>BL-225</c>/<c>BL-231</c>) —
+/// The effect-template pool sizes (<c>CSVM/data/effect_pools.json</c>) —
 /// committed engine config, so these run without an extraction. Parsing is tested through
 /// <see cref="EffectPools.Parse"/> rather than <c>Load</c>: the sizing decision is pure, while
 /// <c>Load</c> adds file IO and engine warnings that need a session.
@@ -23,7 +23,7 @@ public class EffectPoolsTests
     public void TheShippedFileSizesTheGunFamilyAtOneAndTheDamageSputtersDeeperThanTheDefault()
     {
         var pools = Load();
-        // The gun roots stay SHARED on purpose (C8's throttle owns them), so a pool would be
+        // The gun roots stay SHARED on purpose (the gun-effect throttle owns them), so a pool would be
         // copies nothing uses — this is the one deliberate 1.
         Assert.Equal(1, pools.SlotsFor("gunhit", players: 1));
         Assert.Equal(1, pools.SlotsFor("dum_gunhit", players: 1));
@@ -120,7 +120,7 @@ public class EffectPoolsTests
     public void TheCrashSectionSizesThePerPanelFamilyAndDefaultsEverythingElseToOne()
     {
         var pools = Load();
-        // The per-panel damage-stage family carries one copy per authored call anchor (BL-288);
+        // The per-panel damage-stage family carries one copy per authored call anchor;
         // the exact counts live in the file's own why lines.
         Assert.Equal(8, pools.CrashSlotsFor("planeflakes"));
         Assert.True(pools.CrashSlotsFor("short_firetrail") > 1);
@@ -146,9 +146,8 @@ public class EffectPoolsTests
     private static EffectPools Load() => EffectPools.Parse(File.ReadAllBytes(ConfigPath));
 
     /// <summary>The stage-root set the shipped config is sized against — derived from C1's bound
-    /// program and gamez by exactly the call the world-effects build makes
-    /// (<c>PLAN-effect-catalogue</c> B3: the hand table is gone, so the answer is chapter data and
-    /// these two checks need the player's extraction). No Godot node is built: the resolver is
+    /// program and gamez by exactly the call the world-effects build makes: the answer is chapter
+    /// data, not a hand table, so these two checks need the player's extraction. No Godot node is built: the resolver is
     /// asked with no scope, and the closure walk is engine-free.</summary>
     private static IReadOnlyList<string> StageRoots()
     {

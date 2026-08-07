@@ -4,11 +4,11 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// BL-024: the belt indicator's yellow tier belongs to guns only — a per-pylon hardpoint steps
-/// straight from green to red at empty, matching the original. BL-085/BL-173: a damage zone's
+/// The belt indicator's yellow tier belongs to guns only — a per-pylon hardpoint steps
+/// straight from green to red at empty, matching the original. A damage zone's
 /// four colour bands walk the combined armor+health fraction, armor spent first, matching the
-/// game manual's Crispen Mark V description. Moved from the in-engine <c>gauge-colours</c> suite —
-/// every member here is a pure static with no engine dependency.
+/// game manual's Crispen Mark V description. Every member here is a pure static with no engine
+/// dependency.
 /// </summary>
 public class GaugeColoursTests
 {
@@ -46,10 +46,10 @@ public class GaugeColoursTests
         Assert.Equal(2, GaugeCluster.SlotIndicatorColor(new float[0], 7, isGun: false));
     }
 
-    /// <summary>BL-085/BL-173 (PLAN-armour-layer C21): a damage zone's colour is the COMBINED
+    /// <summary>A damage zone's colour is the COMBINED
     /// armor+health fraction (<see cref="PlaneDamage.PartState.Fraction"/>), armor spent first,
     /// against the shipped thresholds (docs/formats/hud.md "Thresholds") — never a synthetic split
-    /// from one pool. The three checkpoints reproduce Decision 6's own reconciliation with the
+    /// from one pool. The three checkpoints reproduce the reconciliation with the
     /// game manual's four bands as a regression: on a stock zone (armor == hp), 56% of the armor
     /// gone lands exactly on the shipped yellow threshold, armor-zero-plus-8%-airframe on orange,
     /// and 60%-airframe on red. Each pool is spent through its own single-pool

@@ -9,9 +9,9 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The off-engine charter for <c>src/Mech3/Anim/TemplateStage.cs</c> (PLAN-template-stage
-/// Decision 8): slot-cursor wrap, the modulo fallback for callees staged shallower than their
-/// caller's slot, <c>Recycles</c> counting in both wrap flavours, the BL-288 caller-slot
+/// The off-engine charter for <c>src/Mech3/Anim/TemplateStage.cs</c>:
+/// slot-cursor wrap, the modulo fallback for callees staged shallower than their
+/// caller's slot, <c>Recycles</c> counting in both wrap flavours, the caller-slot
 /// stickiness, placement and the move tolerance — asserted against a plain token node type with
 /// no Godot engine anywhere in the path (the Godot structs used are pure math). The integration
 /// tier stays the in-engine <c>effect-template-mesh</c>/<c>effects-census</c>/
@@ -102,7 +102,7 @@ public class TemplateStageTests
         Assert.Equal(2, h.Stage.RootsFor(def, stray).Count);
     }
 
-    // ---- the BL-288 caller-slot claim: sticky per (root, anchor) ----
+    // ---- the caller-slot claim: sticky per (root, anchor) ----
 
     [Fact]
     public void CallerSlotClaimIsStickyPerAnchor()
@@ -188,7 +188,7 @@ public class TemplateStageTests
         Assert.True(root.Xf.Basis.IsEqualApprox(tilted)); // un-leveled placement keeps the basis
 
         h.Stage.PlaceOn(new[] { root }, new Vector3(20, 0, 0), level: true);
-        Assert.True(root.Xf.Basis.IsEqualApprox(Basis.Identity)); // BL-292's named leveling
+        Assert.True(root.Xf.Basis.IsEqualApprox(Basis.Identity)); // level:true squares the basis to identity
     }
 
     [Fact]
@@ -365,8 +365,8 @@ public class TemplateStageTests
 
         public bool Debug;
 
-        /// <summary>The stage's three policy flags are sealed at construction (PLAN-template-stage
-        /// A4), so a harness picks the role it is asserting rather than flipping a property
+        /// <summary>The stage's three policy flags are sealed at construction,
+        /// so a harness picks the role it is asserting rather than flipping a property
         /// mid-test — the same shape production has, where <c>WorldEffectsFactory</c> builds a
         /// sealed stage and hands it to the runtime.</summary>
         public Harness(bool pooled = true, bool shown = false)

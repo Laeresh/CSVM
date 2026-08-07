@@ -419,8 +419,8 @@ public sealed class TestWorld
     public required Node3D Stage { get; init; }
 
     /// <summary>The chapter's parsed gamez, kept past the build so a suite can build real geometry
-    /// of its own from it — the effect-template stage the world-effects runtime stages
-    /// (`BL-061`), which is meshes and cannot be faked with named empty nodes. Not disposable, and
+    /// of its own from it — the effect-template stage the world-effects runtime stages,
+    /// which is meshes and cannot be faked with named empty nodes. Not disposable, and
     /// not the texture archive, which IS and is closed with the build.</summary>
     public required GameZ Gamez { get; init; }
 

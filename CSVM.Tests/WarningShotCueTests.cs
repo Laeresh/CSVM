@@ -4,7 +4,7 @@ using Xunit;
 
 namespace CSVM.Tests;
 
-/// <summary>The near-miss cue's shipped accumulator and its geometry (BL-087) — the half that runs
+/// <summary>The near-miss cue's shipped accumulator and its geometry — the half that runs
 /// without an engine. The shipped values are player.json's: max 2.0, dissipation 2.0/s,
 /// interval 1.0 s.</summary>
 public class WarningShotCueTests

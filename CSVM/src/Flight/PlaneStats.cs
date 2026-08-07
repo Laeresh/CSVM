@@ -22,8 +22,8 @@ public readonly struct SoundCurve
 /// <summary>One entry of a vehicle def's 'destroyable_parts' block:
 /// a damageable airframe section — nose / tail / leftwing / rightwing for the
 /// player planes — with its hit points, its armor pool, and state-change anims.
-/// The pair is (hit points, armor) — armor is spent first (`BL-085`,
-/// docs/formats/vehicle.md "The hp pair: armor + hit points"); a def with only one
+/// The pair is (hit points, armor) — armor is spent first
+/// (docs/formats/vehicle.md "The hp pair: armor + hit points"); a def with only one
 /// float carries no armor (`MaxArmor` stays 0), it is not duplicated from MaxHp.
 /// 'critical' means the plane is destroyed when this part's HP reaches 0; the tail
 /// additionally carries 'engine' (power loss on destruction — flight-handling

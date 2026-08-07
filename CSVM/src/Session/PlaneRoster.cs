@@ -4,8 +4,8 @@ using CSVM.Flight;
 namespace CSVM.Session;
 
 /// <summary>Pure lookups over a <see cref="SessionSpec"/>'s plane roster: which plane a player
-/// flies and a readable display name for it. Extracted from GameSession (PLAN-planeviewer-split
-/// A3) — no session state, so these take the spec explicitly rather than caching one.</summary>
+/// flies and a readable display name for it. No session state, so these take the spec explicitly
+/// rather than caching one.</summary>
 public static class PlaneRoster
 {
     /// <summary>The plane player <paramref name="index"/> flies: their own pick when the

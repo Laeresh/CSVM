@@ -24,7 +24,7 @@ public interface ISequenceHost
     /// immediately after a <see cref="Dispatch"/> that returned true. Only a
     /// <c>WAIT_FOR_COMPLETION</c> CALL_ANIMATION installs one; it reads true while the callee
     /// the call actually reached is still running, and the runner holds its next event until it
-    /// reads false (<c>BL-228</c>).
+    /// reads false.
     ///
     /// <para>A predicate rather than a duration because that is what the mechanism is: the
     /// callee's own length is not knowable at the call (its sequences can call further
@@ -136,7 +136,7 @@ public sealed class SequenceRunner
     /// <summary>One authored ANIMATION FRAME, in seconds — the unit a <c>LOOP</c> count is
     /// denominated in. A <c>LOOP n</c> over an instantaneous body can only advance one pass per
     /// engine update, so it is a timer of n updates; 1/60 s is where that update sits — measured
-    /// against the original 2026-08-02, not assumed. `ref_fueltanks`' <c>fire_n_smoke</c>
+    /// against the original, not assumed. `ref_fueltanks`' <c>fire_n_smoke</c>
     /// (<c>LOOP 200</c>) burns ~3 s, giving 200/3 ≈ 60, and the same burn was then timed at 60 fps
     /// and at 120 fps: it took the SAME time at both. Per-rendered-frame ticking would have halved
     /// it at 120, so the original's sequence tick is decoupled from rendering and every untimed
@@ -144,7 +144,7 @@ public sealed class SequenceRunner
     ///
     /// <para>⚠ Deliberately its OWN constant, not <see cref="Utils.GameClock.FixedDt"/>, though the
     /// two are equal today. That equality is what keeps every `--det` capture byte-identical
-    /// (one pass per fixed step, exactly as before this was rate-locked) — but "the rate the
+    /// (one pass per fixed step) — but "the rate the
     /// original's artists counted frames at" and "the rate we step the simulation at" are
     /// independent facts. Re-stepping the sim at 1/120 for physics reasons must NOT halve every
     /// authored animation timer.</para></summary>
@@ -206,7 +206,7 @@ public sealed class SequenceRunner
     /// already launched (motions, puffers) are untouched: their lifetimes are authored
     /// independently and outlive the sequence that launched them. ⚠ One exception, at INSTANCE end
     /// rather than here: a motion still owing a BOUNCE_SEQUENCE holds its instance open, because
-    /// the landing has to dispatch into one (<c>MotionSet.OwesBounce</c>, BL-240).</summary>
+    /// the landing has to dispatch into one (<c>MotionSet.OwesBounce</c>).</summary>
     public void Halt() => _done = true;
 
     public void Advance(ISequenceHost rt, AnimInstance inst, float dt)
@@ -249,7 +249,7 @@ public sealed class SequenceRunner
                 }
                 _pc++;
                 SetDue();
-                // WAIT_FOR_COMPLETION (BL-228). The hold gates this sequence's NEXT event and
+                // WAIT_FOR_COMPLETION. The hold gates this sequence's NEXT event and
                 // nothing else — it is not a lifetime hold on the runner, and the data is what
                 // says so. Censused over both front-ends
                 // (analysis/wait-for-completion/FINDINGS.md): of the 2,999 flagged calls the
@@ -326,7 +326,7 @@ public sealed class SequenceRunner
                     // condition above passed on it, and nothing between here and there rewrites
                     // it). An authored period is SECONDS, so dropping the overshoot rounded every
                     // iteration up to the next whole step — the same frame-rate dependence, one
-                    // level down. Measured over the install's 599 timed loops (`BL-237`): a 0.02 s
+                    // level down. Measured over the install's 599 timed loops: a 0.02 s
                     // period cost 2 steps instead of 1.2 at 60 Hz, so the 126 loops carrying it
                     // (`patrolboat`, `ptboat*`, `ftank_boom*`, `m_build0*`, `pass_plane0*`,
                     // `sub_destruction`, `balloont_die*`, `refuel*`) ran at 60% speed; C3/M05's
@@ -389,8 +389,7 @@ public sealed class SequenceRunner
             }
             // Control flow moved _pc without firing anything, so re-gate on whatever
             // event we landed on. Its own offset applies (LOOP included — the bowl
-            // sign's trailing `Loop {Event 1.2}` is its inter-cycle pause, and that
-            // offset used to be discarded).
+            // sign's trailing `Loop {Event 1.2}` is its inter-cycle pause).
             SetDue();
             if (_frameGatePending)
             {
@@ -426,23 +425,23 @@ public sealed class SequenceRunner
     ///
     /// An event's START_TIME says when *that* event fires — see
     /// <see cref="AnimEvent.StartOffset"/>: "Event" = since the previous event fired,
-    /// null = immediately after it. This used to be computed from the event just
-    /// FIRED and applied to its successor, which shifted **every sequence in the
-    /// install** by one slot: a timestamped event fired one slot early and its
-    /// unstamped partner one slot late.
+    /// null = immediately after it. Do NOT read the offset off the event just FIRED
+    /// and apply it to its successor — that shifts **every sequence in the install**
+    /// by one slot: a timestamped event fires one slot early and its unstamped
+    /// partner one slot late.
     ///
     /// C1's `bowl` sign is the clean demonstration. Its compiled
     /// sequence is nine strict `des_on`/`des_off` SWAP pairs plus an infinite Loop,
-    /// and only the FIRST of each pair carries a timestamp — so the shift split every
-    /// pair, leaving both variants lit at t=0 and then **nothing at all** for each
-    /// gap. Measured face-on at the sign: 38.0% of frames completely blank before,
-    /// 0% after. The user's report was "the bowl sign flashes in the original, but
-    /// ours disables and re-enables it instead".
+    /// and only the FIRST of each pair carries a timestamp — the one-slot shift splits
+    /// every pair, leaving both variants lit at t=0 and then **nothing at all** for
+    /// each gap. Measured face-on at the sign: 38.0% of frames completely blank under
+    /// the shifted reading, 0% under this one — in-game the sign disables and
+    /// re-enables itself instead of flashing as the original does.
     ///
     /// Control-flow events (LOOP/IF/ELSEIF/…) do not advance <see cref="_base"/> —
     /// they take no time — but they ARE gated, which is what gives the sign's trailing
-    /// `Loop {Event 1.2}` its inter-cycle pause. That offset was previously discarded
-    /// outright, since the Loop branch hard-reset the gate to zero.
+    /// `Loop {Event 1.2}` its inter-cycle pause (a Loop branch that hard-reset the
+    /// gate to zero would discard that offset outright).
     /// </summary>
     private void SetDue()
     {
@@ -461,7 +460,7 @@ public sealed class SequenceRunner
             _ => _base + ev.StartTime,
         };
         // "Did the DATA schedule time?" — an authored offset counts even when the clock has
-        // already run past it, which is the whole of BL-237. Testing only `_due > _clock` made
+        // already run past it. Testing only `_due > _clock` made
         // that a question about the STEP: an absolute ("Animation"/"Sequence") period shorter
         // than one step is already behind the clock by the time it is gated, so the iteration
         // read as instantaneous and collected the AnimFrame floor meant for untimed poll loops.

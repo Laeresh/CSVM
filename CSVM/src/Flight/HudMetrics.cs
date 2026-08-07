@@ -5,19 +5,19 @@ namespace CSVM.Flight;
 /// <summary>
 /// The one place the flight HUD decides how big it draws. Every HUD element
 /// (compass tape, gauge cluster, marker HUD, results scoreboard, the text block) is calibrated
-/// against a 1440p reference — <c>OriginalScreenshots/HUD.png</c> — and used to scale by a plain
-/// <c>viewportHeight / 1440</c>. That breaks in splitscreen: a HUD element in a quarter-height 4P
+/// against a 1440p reference — <c>OriginalScreenshots/HUD.png</c>. A plain
+/// <c>viewportHeight / 1440</c> scale breaks in splitscreen: a HUD element in a quarter-height 4P
 /// pane would draw at a quarter size while the pane is still half the screen WIDE, so the dials
 /// shrink to unreadable dots in a lot of empty space.
 ///
-/// <para>The rule here separates the two factors: the <b>window</b> height still sets the base
-/// scale (so a 4K screen gets a big HUD and a 720p one a small one, exactly as before), and the
+/// <para>The rule here separates the two factors: the <b>window</b> height sets the base
+/// scale (so a 4K screen gets a big HUD and a 720p one a small one), and the
 /// pane's share of that window is damped through a square root — a half-height 2P pane draws at
 /// ~71% instead of 50%, a quarter-height 4P pane at 50% instead of 25%. Console splitscreen does
 /// the same thing for the same reason. The damping exponent is TUNE; what is NOT tunable is the
 /// single-player identity: with one full-screen view the pane fraction is exactly 1, so
-/// <see cref="PaneFactor"/> is 1 and <see cref="Scale"/> returns the old
-/// <c>viewportHeight / reference</c> unchanged — that is why enabling this could not move a
+/// <see cref="PaneFactor"/> is 1 and <see cref="Scale"/> returns plain
+/// <c>viewportHeight / reference</c> unchanged — the pane damping cannot move a
 /// single-player pixel.</para>
 ///
 /// <para>Note that damped sizes only stay on screen if positions are anchored to a pane EDGE
@@ -45,7 +45,7 @@ public static class HudMetrics
 
     /// <summary>The scale factor a HUD element should apply to its reference-space metrics:
     /// the window's height against the calibration reference, damped by the pane share.
-    /// Identical to the old <c>viewportHeight / reference</c> whenever there is one full view.</summary>
+    /// Identical to plain <c>viewportHeight / reference</c> whenever there is one full view.</summary>
     public static float Scale(Control control, float reference = ReferenceHeight)
     {
         float windowH = control.GetTree()?.Root?.Size.Y ?? 0f;

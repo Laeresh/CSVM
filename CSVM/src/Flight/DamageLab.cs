@@ -141,8 +141,8 @@ public sealed class FlightDamageTarget : IDamageLabTarget
 /// F5 toggles the lab — panel AND gauges together, so it is genuinely present or absent
 /// (clean F12 shots). Every viewer and flight session builds one: with --damage it opens
 /// straight away, otherwise it waits hidden behind F5, which is what makes F5 mean something in
-/// a plain launch (previously the lab only existed when --damage was passed, so the key
-/// silently did nothing — user-reported). --damage=part:frac,… presets both sliders to the same
+/// a plain launch (a lab that exists only under --damage would leave the key
+/// silently doing nothing — user-reported). --damage=part:frac,… presets both sliders to the same
 /// raw fraction and lands through the same write path as a hand drag, so a fraction below 1
 /// still floors armor at 0; --screenshot runs capture damage states deterministically in either
 /// mode.
