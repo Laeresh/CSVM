@@ -22,12 +22,15 @@ public sealed class FlightRigAssembler
 {
     private readonly SessionSpec _spec;
     private readonly LiveryResolver _liveries;
-    private readonly SpawnPicker _spawns;
+    private readonly IFlightStarts _spawns;
     private readonly WorldEffectsFactory _worldEffects;
     private readonly Node3D _worldRoot;
     private readonly Inputs _in;
 
-    public FlightRigAssembler(SessionSpec spec, LiveryResolver liveries, SpawnPicker spawns,
+    /// <summary>Every player's start, resolved in one call (see <see cref="Assemble"/>).</summary>
+    private IReadOnlyList<FlightStart>? _starts;
+
+    public FlightRigAssembler(SessionSpec spec, LiveryResolver liveries, IFlightStarts spawns,
         WorldEffectsFactory worldEffects, Node3D worldRoot, Inputs inputs)
     {
         _spec = spec;
@@ -333,7 +336,13 @@ public sealed class FlightRigAssembler
                 GD.Print("dogfight HUD: match timer/K-D/leader line + kill banner + opponent markers");
         }
 
-        var (spawnPos, spawnLookAt) = _spawns.ChooseSpawn(_in.SpawnList, _in.MissionZrdrPath, _in.SpawnBase, pi, tag);
+        // Every player's start comes from ONE call, because a grid start is not decomposable: the
+        // fan is centred on the player count and the whole field is lifted by its worst slot, so no
+        // single pilot's answer exists until all of them do. Resolved lazily here rather than in the
+        // constructor so it happens at the same point in the build it always did — the first rig —
+        // and so the caller keeps constructing the assembler before the rigs are known.
+        var (spawnPos, spawnLookAt) = (_starts ??= _spawns.ChooseStarts(
+            _in.SpawnList, _in.MissionZrdrPath, _in.SpawnBase, _in.RigCount))[pi];
         controller.Setup(new FlightModel(stats), rig.Camera, _in.CamParamsFor(planeName),
             spawnPos, spawnLookAt);
         // --weapon-lab: the lab is a flight session whose aircraft is pinned at the spawn pose

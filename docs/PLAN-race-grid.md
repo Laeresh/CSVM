@@ -100,7 +100,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the starting grid
 
-1. ☐ `IFlightStarts` — the whole-field seam, with `SpawnPicker` as its plain implementation
+1. ☑ `IFlightStarts` — the whole-field seam, with `SpawnPicker` as its plain implementation
 2. ☐ `RaceGrid` — centred fan, injected ground sampler, uniform lift, headless tests
 3. ☐ Select the implementation once at session build; races get the grid, everything else does not
 4. ☐ Config-backed grid width and clearance, reported in the spawn log
@@ -120,7 +120,7 @@ dialable.
 
 # Wave A — the starting grid
 
-## A1 ☐ `IFlightStarts` — the whole-field seam, with `SpawnPicker` as its plain implementation
+## A1 ☑ `IFlightStarts` — the whole-field seam, with `SpawnPicker` as its plain implementation
 
 **Goal.** Spawn placement is decided by one call that answers for the whole field at once, and
 nothing about where any plane starts has changed.

@@ -8,8 +8,9 @@ namespace CSVM.Session;
 /// <summary>Picks each player's flight spawn against a <see cref="SessionSpec"/>: the shared
 /// spawn-list index (<c>--spawn=</c> or a random pick), the per-player point from that list or
 /// objectives.json's PLAYER_INIT, and the <c>--spawn-at=</c>/<c>--pos=</c> debug override.
-/// Constructed once per session.</summary>
-public sealed class SpawnPicker
+/// Constructed once per session. As an <see cref="IFlightStarts"/> it is the plain whole-field
+/// answer: every pilot simply takes the next entry in the list.</summary>
+public sealed class SpawnPicker : IFlightStarts
 {
     /// <summary>Splitscreen: fan the players out abreast so they don't spawn inside each other.</summary>
     private const float SpawnAbreast = 60f;
@@ -31,6 +32,24 @@ public sealed class SpawnPicker
         return _spec.SpawnIndex >= 0
             ? Mathf.Clamp(_spec.SpawnIndex, 0, spawns.Count - 1)
             : (int)(Rng.Stream(Rng.Spawn).Randi() % (uint)spawns.Count);
+    }
+
+    /// <summary>The whole field, the plain way: each player picked independently, in ascending
+    /// order, so P1 takes <paramref name="spawnBase"/> and everyone else the next list entry
+    /// (wrapping). No player's start depends on another's, so the loop is the whole
+    /// implementation.</summary>
+    public IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns,
+        string missionZrdrPath, int spawnBase, int playerCount)
+    {
+        var starts = new FlightStart[playerCount];
+        for (int pi = 0; pi < playerCount; pi++)
+        {
+            // The log tag names the pane in splitscreen and is empty when flying alone.
+            string tag = playerCount > 1 ? $"P{pi + 1} " : "";
+            var (pos, lookAt) = ChooseSpawn(spawns, missionZrdrPath, spawnBase, pi, tag);
+            starts[pi] = new FlightStart(pos, lookAt);
+        }
+        return starts;
     }
 
     /// <summary>Picks one player's flight spawn: a world position + a look-at point one unit
