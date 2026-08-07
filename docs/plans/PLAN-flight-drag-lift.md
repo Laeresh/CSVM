@@ -1,8 +1,6 @@
 # Flight model — drag law, angle of attack, and induced drag
 
-**ACTIVE PLAN** (written 2026-08-07). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE** (2026-08-07). Written 2026-08-07; every wave landed the same day.
 
 This is the focused flight-model plan that `PLAN-m3-polish-6.md` and `PLAN-m3-polish-10.md` both
 deferred: `BL-092` (no induced drag — a hard pull costs us no speed) and `BL-247` (the original
@@ -187,7 +185,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Records
 
-31. ☐ `backlog.md`, `PROJECT_CONTEXT.md` and docs
+31. ☑ `backlog.md`, `PROJECT_CONTEXT.md` and docs
 
 ## Dependency and parallelism notes
 
@@ -806,7 +804,60 @@ as an informational row (original 104 mph) — informational because its stick h
 
 # Wave D — Records
 
-## D31 ☐ `backlog.md`, `PROJECT_CONTEXT.md` and docs
+## D31 ☑ `backlog.md`, `PROJECT_CONTEXT.md` and docs
+
+**Landed** 2026-08-07. `BL-092` and `BL-247` deleted from `backlog.md` outright (Ground rules); the
+closing record is this item's landing commit (`git log --grep=BL-092` / `--grep=BL-247`).
+
+`BL-115` absorbed both survivors named in the item's approach. Its `LowSpeedDragBlend` bullet closes
+in place — replaced by A1's fitted `DragExpLow` 3.278 / `DragExpHigh` 2.663, with the `x^2.67` claim
+corrected rather than repeated (it was an artifact of assuming linear thrust, not a drag
+measurement — solving the four `CAP-05` points for their own exponent gives 3.69–4.00, which the
+fitted curve actually reproduces). Its title swaps `LowSpeedDragBlend` for `KnifeAlignFloor`, which
+returns from `BL-247` along with `KnifeNoseSag`/`KnifeNoseRate` and the full knife-edge trajectory
+table and traps — B12 left those three constants untouched by design (multiplies `wingVert`, does
+not displace it), so the divergence they were measured against is still open and needed a surviving
+home. `BL-247`'s three-point Owed-playtest (knife-edge sink, full-pull-zoom nose-heavy, doubled
+stall-into-knife-edge recovery) rides along with them.
+
+Two things `BL-247` owned had no open residue to carry forward: the 100°-bank lift deficit is fixed
+(B12) and the banked-turn cockpit A/B is already done — the user flew it during C21's playtest
+("about the same between both"). Nothing further was owed there.
+
+The `x^2.67` claim was corrected everywhere it was found repeated, not just in `backlog.md`:
+`analysis/video-flight-calibration/FINDINGS.md`'s stall-clip corroboration (was citing `BL-092`
+directly). Three more citations pointed a future reader at the deleted entries rather than carrying
+the fact itself, and were rewritten in place: `BL-095`'s rate-limiter trap (was "`BL-092` trap (b)"),
+`BL-108`'s closed-halves note (was "went to `BL-092`"), and `BL-147`'s conflation trap (was
+"`BL-092`'s induced-drag gap") — all three now name the landed mechanism (induced drag,
+`PLAN-flight-drag-lift` C21) or the still-live warning directly. `docs/architecture.md`'s
+`FlightModel` entry needed no further change — B11/B12/C21/C22 already kept it current as they
+landed.
+
+**What this plan leaves open, given a surviving home.** `BL-092` trap (c) — `CAP-01` pins the
+induced-drag magnitude at one load factor and says nothing about its exponent, and B12 separately
+found `CAP-01`'s own numbers imply a 58.7° coordinated bank against the ADI's 100° reading — had no
+survivor to land on, so it became a new entry, `BL-307`, blocked on two new captures: `CAP-32` (a
+part-deflected pull, for a second load-factor point) and `CAP-33` (a sustained turn at a bank other
+than ~100°, for a second point on the bank/rate curve). `CAP-31` (the 1/8-throttle deceleration,
+already open pre-`D31`) had its `Unblocks` column corrected from the now-dead `BL-148` to `BL-115`,
+which is where its remaining question (`BL-247`'s former trap (c) content, largely answered by A1)
+now lives.
+
+`PROJECT_CONTEXT.md`'s "Current status" is advanced past this plan; the plan itself gets its
+`COMPLETE` banner and a row in `docs/plans/plans.md` in the same commit, per its own opening
+paragraph ("move it… when every item lands").
+
+**Verified.** Docs-only — no `CSVM/src` touched, so no build/test run. `./New-ItemId.ps1` minted
+`BL-307`/`CAP-32`/`CAP-33` from the shared locked counter (safe under concurrent sessions, no
+hand-picked numbers). Grepped `BL-092`/`BL-247` across every live `*.md`: `backlog.md` and
+`playtest.md` are clean. The only remaining hits are narrative, not pointers a reader would follow
+for evidence — `docs/HISTORY.md` (frozen), this plan file's own Wave A–C landing records (what those
+items were fixing at the time), and `FINDINGS.md`'s decode-status table (which item's decode each
+clip answered, a historical log entry, not a claim). The duplicate-ID commit hook and the encoding
+tripwire are checked at commit time, not before it.
+
+**Original approach (kept for reference).**
 
 **Goal.** The record says what the data chose, including the four claims this plan disproved.
 

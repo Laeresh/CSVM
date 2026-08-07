@@ -72,9 +72,9 @@ aircraft at the same full back stick sweeps **30.16 °/sim-s** round the wings-l
 original is **1.6× slower when banked**. Both are full-throttle, both pilot-confirmed full
 deflection. This is not a speed effect: the loop passes clean through the turn's 222.94 mph on its
 way round. Our model has no such asymmetry — it pulls ~33 °/s in both, which is right for the loop
-and 71% fast for the turn — so the "turn-rate gap" recorded against `BL-092`/`BL-247` is a
+and 71% fast for the turn — so the turn-rate gap is a
 **bank/load-factor effect, not a pitch-authority error**, and no capture is owed to establish that
-much. `player.json` ships three unconsumed fields of the right shape — `turn_fade_in 10`,
+much (`BL-095`). `player.json` ships three unconsumed fields of the right shape — `turn_fade_in 10`,
 `turn_fade_out 50`, `highGs [9, 15]` (`BL-095`). A lead, not a decode: none has been tested.
 
 **Thrust and drag.**
@@ -187,8 +187,12 @@ zero-thrust clip is the cleanest drag probe in the whole set — no thrust term 
 The *ratio* is robust: across every `(g, C)` pair the fit tolerates, `D(x = 0.5)` lands in
 3.8–5.6 m/s² against our 20.25. The absolute deceleration is the model-free version — at 152.6 mph
 in a +5° climb with the engine off the original loses **6.24 m/s²**, where our curve would take
-21.6. This corroborates `BL-092`'s independent `x^2.67` from the 1/8-throttle equilibrium, by a
-route with no thrust in it at all.
+21.6. This clip is thrust-free, so it is independent evidence that the curve below cruise is much
+steeper than quadratic — solved point-by-point it gives p = 3.69/3.80/3.94/4.00, which
+`PLAN-flight-drag-lift` A1 fitted jointly with the other three measurements to `DragExpLow` 3.278 /
+`DragExpHigh` 2.663. ⚠ The `x^2.67` figure once quoted here as an independent confirmation was
+wrong — it is an artifact of assuming thrust is linear in throttle, not a drag measurement (see A1's
+landing commit).
 
 ⚠ **The clip cannot split `g` from the climb-gravity scale `C`, and the fit that looks like it can
 is degenerate.** A free 4-parameter fit runs `C` to its bound; holding `g` and refitting gives rms
