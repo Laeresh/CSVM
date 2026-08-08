@@ -314,6 +314,20 @@ the "Debris tumbles" bullet below for which pieces each covers. A format reader 
         hull, and the airframes fall from rest, so an apex gate would never arm them.
       - A session that builds no colliders hands the runtime no mask (`AnimRuntime.ContactMask`)
         and keeps the flag-free behaviour exactly — which is why every golden capture is unchanged.
+      - ⚠ **90 of the 166 name `MAIN_ROOT_NODE`, and until 2026-08-08 they resolved to nothing.**
+        That sentinel (and `INPUT_NODE`) means "the node this definition was invoked on"; nothing is
+        NAMED it, so `AnimRuntime.Targets` matched no node and dropped the event silently. It is the
+        eleven airframes' whole-hull fall in all 8 chapters plus `agyrobus`' two — i.e. the entire
+        self-referencing half of the flagged population, none of which ever launched. Reachable only
+        through `agyrobus`: at the controls the shot-down bus exploded and **flew on along its
+        route**, because the launch that should have taken its root over targeted nothing.
+        `Targets` now applies `IsSelfNodeRef` the way `PufferState`'s `AT_NODE` and the condition
+        nodes always did, which also un-drops `genx12`'s two `ACTIVE_STATE`s and the `map` prop's
+        four pose ops (154 events in all, 13/13 goldens unmoved).
+      - A launch onto a node **another live motion is driving** starts from the live pose, not the
+        authored rest: it is a takeover, and `MotionSet.Add` evicts the incumbent on the transform
+        channel. `agyrobus` is why — it has no placement of its own, so its "rest" is the map origin
+        and re-homing threw the wreck 13.9 km away.
     - **The other 379 have no apex and are still deferred (Layer-1.5, `BL-245`).** 335 free-falling
       zeppelin `gasbag1`/`crashnode1` pieces start from rest, ~17 lifeboats
       and turret parts are thrown downward, and 8 zero-gravity `chuteman` descents fall at a constant

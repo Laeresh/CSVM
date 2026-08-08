@@ -147,10 +147,11 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 5. ◐ The two cockpit checks, and the arming epsilon TUNEd from what they show
 6. ☑ A bounce follow-up continues from the landing, not from the authored rest pose (from B5 round 1)
 7. ☑ The stopper idiom must not relaunch a piece that has already landed (from B5 round 2)
+8. ☑ The `MAIN_ROOT_NODE` sentinel must resolve, and its launch must take the node over (from B5 check 2)
 
 ### Wave C — record it
 
-8. ☐ Land the decode, close `BL-059` item 1, retag `BL-245`
+9. ☐ Land the decode, close `BL-059` item 1, retag `BL-245`
 
 ## Dependency and parallelism notes
 
@@ -459,9 +460,64 @@ plan's 166 events, and the golden is byte-identical again.
 `4 by contact, 0 on their run time`. Full `.\RunTests.ps1`: 696 units, 27/27 suites, **13/13 goldens
 hash-identical**.
 
+## B8 ☑ The `MAIN_ROOT_NODE` sentinel must resolve, and its launch must take the node over — **landed 2026-08-08**
+
+**Why it exists.** B5 check 2, from the controls: *"the agyrobus exploded but continued on its
+animation path."* First read as a `STOP_ANIMATION agbus_fly` failure and proposed as a separate
+backlog item; the user chose to fix it inside this plan, and the diagnosis that followed showed why
+that was right — it is **this plan's own population**, not a neighbouring bug.
+
+**The mechanism, in two halves.**
+
+*The sentinel never resolved.* `MAIN_ROOT_NODE` / `INPUT_NODE` mean "the node this definition was
+invoked on". `AnimRuntime` already knows that — `IsSelfNodeRef` is applied to `PufferState`'s
+`AT_NODE` and to condition nodes — but **`Targets` did not**, so it fell through to the symbol table
+(no binding) and then to name matching (no node is called that), counted one unresolved op and
+dropped the event in silence. A headless probe on the C5 bus reads the whole bug in one line:
+`randomdestseq/ObjectMotion:MAIN_ROOT_NODE` dispatched, `launches+0`, and the only driver still on
+the root is `ScriptPlayback@agbus_fly`. **154 events install-wide** carry the sentinel under a key
+`Targets` resolves, and a census of the OBJECT_MOTION ones is stark:
+
+| kind | key | count | carriers |
+|---|---|---|---|
+| `ObjectMotion` | `node` | **90** | the 11 airframes' whole-hull fall (8 chapters × 11) + `agyrobus` ×2 — **all 90 author `do_intersections: true`** |
+| `ObjectRotateState` | `name` | 32 | the `map` prop's `open_map`/`close_map` |
+| `ObjectActiveState` | `node` | 16 | `genx12`, the generic exploder template |
+| `ObjectMotionFromTo` | `name` | 16 | the `map` prop |
+
+So 90 of this plan's 166 flagged events — the entire self-referencing half, including every one of
+the eleven airframe falls A1 was written for — never launched at all. The sweep could only ever have
+been exercised on the other 76.
+
+*And the launch must not re-home.* Resolving the target alone made it worse: the bus has **no
+placement of its own** (the world reports it "unplaced, left at the origin" and `agbus_fly`'s SI
+script flies it), so its authored rest is the map origin and B6's re-home teleported the wreck
+**13.9 km** away to fall out of sight. `MotionRuntime.Create` now also skips the re-home when another
+live motion is driving the node — a *takeover*, the same family as B6's landing resume: the live pose
+is authoritative when something else just put the node there. `MotionSet.Add`'s existing
+one-per-(target, channel) rule then evicts the playback, and the bus falls where it was hit.
+
+**Verified — and shown able to fail twice, once per half.** New `self-ref-launch` engine suite on the
+real C5 world: fly the bus for 2 s, assert the SI script is what carries it and that it is >100 m
+from its authored rest, kill it, then assert the anchor carries a `MotionRuntime`, that the launch
+starts within 5 m of where the bus was, that `agbus_fly` no longer drives it, and that it goes down
+rather than on. Disabling the sentinel branch reddens four checks (`driver=ScriptPlayback`,
+`launches+0`, 338.6 m of route in 5 s, *climbing*); disabling the takeover reddens the second with a
+`jump=13907.1 m`. Deliberately **branch-agnostic**: `randomdestseq` opens with `IF RandomWeight(0.5)`
+and only one branch stops the fly script, so every assertion holds for both draws.
+
+⚠ **`STOP_ANIMATION agbus_fly` was never broken** — the first read was wrong. It sits in only one of
+the two branches, and the branch without it relies on the launch displacing the playback, which is
+what the original must have done and what this item restores.
+
+Full `.\RunTests.ps1`: 696 units, **28/28** suites, **13/13 goldens hash-identical** — which is the
+answer to the obvious worry, since this newly resolves `genx12`'s two `ACTIVE_STATE`s and the `map`
+prop's four pose ops as well, and `c1-destroy-effects` is a `genx12` carrier. The B7 crash repro is
+unmoved: 4 landings per crash, one per piece.
+
 # Wave C — record it
 
-## C8 ☐ Land the decode, close `BL-059` item 1, retag `BL-245`
+## C9 ☐ Land the decode, close `BL-059` item 1, retag `BL-245`
 
 **Goal.** The next session finds the decision recorded where it looks, and no item claims to be
 blocked on something that now exists.

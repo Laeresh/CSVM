@@ -337,7 +337,17 @@ internal sealed class MotionRuntime : IAnimMotion
         // flatter motion), so re-basing teleports it back to the crash point before it flies —
         // seen at the controls as the wreck "jumping back to the crash point" once per piece. The
         // mark is one-shot and consumed here.
-        if (m._hasBallistic && !target.TopLevel && !rt.ConsumeLandingResume(target))
+        //
+        // ⚠ AND except a TAKEOVER: a node another motion is driving RIGHT NOW is somewhere its
+        // authored rest knows nothing about, and the launch displaces that motion (MotionSet.Add
+        // evicts on the transform channel) rather than replacing a static pose. C5's `agyrobus`
+        // is the case — it has no placement of its own at all, so its "authored rest" is the map
+        // origin and its whole visible position is `agbus_fly`'s SI-script playback; re-basing
+        // there teleported the shot-down bus kilometres away to fall out of sight. Same family as
+        // the landing resume above: the live pose is authoritative when something else just put
+        // the node there.
+        if (m._hasBallistic && !target.TopLevel && !rt.ConsumeLandingResume(target)
+            && !rt.Motions.DrivesTransform(target))
         {
             m._heldOrigin = rest.Origin;
             m._heldRot = rest.Basis.Orthonormalized();

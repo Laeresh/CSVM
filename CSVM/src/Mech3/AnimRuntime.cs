@@ -3613,6 +3613,27 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// which upstream spells inconsistently per event type).</summary>
     private List<Node3D> Targets(AnimEvent ev, AnimDefinition def, Node3D? anchor)
     {
+        // MAIN_ROOT_NODE / INPUT_NODE are the "the node this definition was invoked on" sentinels
+        // (see IsSelfNodeRef) — the same rule PufferState's AT_NODE and ConditionNode already
+        // apply, resolved the same way. No node is NAMED that, and the symbol table does not bind
+        // it either, so without this the event resolves to nothing and is silently dropped:
+        // 154 events install-wide, and all 90 of the OBJECT_MOTION ones — the eleven airframes'
+        // whole-hull fall (8 chapters × 11) and `agyrobus`' two — author `do_intersections: true`,
+        // i.e. the entire self-referencing half of this plan's population never launched at all.
+        // At the controls: the shot-down C5 autogyro bus exploded and flew on along its route,
+        // because its death's OBJECT_MOTION targeted nothing and never displaced `agbus_fly`'s
+        // SI-script playback. The other 64 are `genx12`'s two ACTIVE_STATEs and the `map` prop's
+        // open/close pose ops.
+        if ((ev.Data.Str("node") ?? ev.Data.Str("name")) is { } selfRef && IsSelfNodeRef(selfRef))
+        {
+            var host = InputNodeOf(def, anchor) ?? anchor;
+            if (host != null)
+                return new List<Node3D> { host };
+            _opsUnresolved++;
+            _resolver.RecordMissingTarget(def, selfRef, "self-ref-no-anchor");
+            return new List<Node3D>();
+        }
+
         // Compiled definitions carry a symbol table binding each referenced name to an exact
         // gamez node index — always prefer it. Name matching resolves C1's `caboose` to the
         // real consist AND to an unrelated `caboose.flt` in the rail yard, and drives both.

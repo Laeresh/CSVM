@@ -108,6 +108,8 @@ public static class Suites
             "a bounce-terminated OBJECT_MOTION flies its solved parabola and fires its BOUNCE_SEQUENCE on landing", BounceLaunch));
         into.Add(new TestHarness.Suite("ground-contact",
             "a do_intersections OBJECT_MOTION is cut short by real geometry, rests on the surface and picks its BOUNCE_SEQUENCE branch from what it struck — and does none of it without a mask", GroundContact));
+        into.Add(new TestHarness.Suite("self-ref-launch",
+            "an OBJECT_MOTION naming the MAIN_ROOT_NODE sentinel launches the node its def was invoked on, taking that node over from whatever was driving it", SelfRefLaunch));
         into.Add(new TestHarness.Suite("nulled-launch",
             "an OBJECT_MOTION naming NEITHER RUN_TIME nor BOUNCE_SEQUENCE flies its solved parabola before its own deactivation switches it off (BL-257)", NulledLaunch));
         into.Add(new TestHarness.Suite("destructible-census",
@@ -2752,6 +2754,120 @@ public static class Suites
             ctx.Check(free.EndY < surfaceY - 100f,
                 $"the unmasked body falls straight through endY={free.EndY:0.00} surfaceY={surfaceY:0.00}");
             ctx.Note($"contact {hit.Flight:0.00}s ending {hit.EndY - surfaceY:0.00} m from the surface; unmasked {free.Flight:0.00}s ending {free.EndY - surfaceY:0.00} m from it");
+        });
+    }
+
+    // ---- the MAIN_ROOT_NODE self-reference: a launch onto the def's own anchor -------------------
+
+    /// <summary><c>MAIN_ROOT_NODE</c> / <c>INPUT_NODE</c> mean "the node this definition was
+    /// invoked on" — a sentinel, not a name, so a resolver that only matches names finds nothing
+    /// and drops the event without a word. 154 events install-wide carry it under a key
+    /// <c>AnimRuntime.Targets</c> resolves, and <b>all 90 of the OBJECT_MOTION ones author
+    /// <c>do_intersections: true</c></b>: the eleven airframes' whole-hull fall (8 chapters × 11,
+    /// unreachable today — nothing kills an AI plane) and <c>agyrobus</c>' two, which are reachable.
+    /// So the self-referencing half of this plan's own population never launched at all.
+    ///
+    /// <para>C5's <c>agyrobus</c> is the whole test, because it is the only carrier a player can
+    /// reach and because it also fixes the second half of the bug. The bus has no placement of its
+    /// own — the world leaves it at the map origin and <c>agbus_fly</c>'s looping SI script flies
+    /// it — so its "authored rest" is the origin, and a launch that re-homes to rest teleports the
+    /// wreck kilometres away. The launch must instead take the node over from the live playback.
+    /// Both halves are asserted here, and the second is why this cannot be a data-only check.</para>
+    ///
+    /// <para>⚠ Branch-agnostic on purpose. <c>randomdestseq</c> opens with
+    /// <c>IF RandomWeight(0.5)</c>: one branch drops the whole hull on a 20 s run time, the other
+    /// drops it on 3 s and breaks it into four pieces, and only the second issues
+    /// <c>STOP_ANIMATION agbus_fly</c>. Which one this seed draws depends on how many times the
+    /// shared <c>anim</c> stream has been drawn from before this suite runs, so every assertion
+    /// here is true of BOTH: the sentinel resolved, the launch started where the bus was, and the
+    /// fly script stopped driving the root. Where it comes to rest is <c>ground-contact</c>'s
+    /// question, not this one.</para></summary>
+    private static void SelfRefLaunch(TestContext ctx)
+    {
+        const float Tick = 1f / 60f;
+        const float Settle = 2f;    // let the fly script get the bus clear of the origin first
+
+        ctx.WithWorld("C5", collision: true, world =>
+        {
+            var runtime = world.Runtime;
+            var bus = runtime.Destructibles.All.FirstOrDefault(
+                i => i.Def.AnimName is { } n && n.Equals("agyrobus", System.StringComparison.OrdinalIgnoreCase));
+            ctx.Check(bus != null, $"C5 ships the agyrobus destructible pools={runtime.Destructibles.All.Count}");
+            if (bus?.Anchor is not { } anchor)
+            {
+                return;
+            }
+
+            if (bus.Status == DestructibleRegistry.State.Destroyed)
+            {
+                runtime.ResetDestructible(bus);
+            }
+
+            IAnimMotion? DriverOf(Node3D node) => runtime.Motions.Live
+                .FirstOrDefault(m => m.Target == node && m.Channel == MotionChannel.Transform);
+
+            var origin = anchor.GlobalPosition;   // where the world PLACED it: the map origin
+            for (int i = 0; i < (int)(Settle / Tick); i++)
+            {
+                runtime.Advance(Tick);
+            }
+
+            // The precondition, and the thing that makes the re-home wrong: the bus's whole
+            // position is the SI script's doing, and its authored rest is nowhere near it.
+            var flown = anchor.GlobalPosition;
+            ctx.Check(DriverOf(anchor) is ScriptPlayback,
+                $"agbus_fly's SI script drives the bus before the kill driver={DriverOf(anchor)?.GetType().Name ?? "(none)"}");
+            ctx.Check((flown - origin).Length() > 100f,
+                $"the fly script has carried the bus clear of its authored rest flown={(flown - origin).Length():0} m");
+
+            uint maskWas = runtime.ContactMask;
+            runtime.ContactMask = CollisionLayers.World;   // what a real session wires; a suite world does not
+            try
+            {
+                int launchesWas = runtime.Motions.LaunchCount;
+                runtime.DamageAt(anchor, bus.MaxHealth + 1f);
+                // TWO frames, and the second is load-bearing: the death's sequence runs during an
+                // Advance, AFTER that frame's motions have ticked, so one frame in the launch is
+                // registered but has not yet written a pose — the node still carries the SI
+                // script's last write and a re-homed launch would look like it had not moved.
+                runtime.Advance(Tick);
+                runtime.Advance(Tick);
+
+                // 1 — the sentinel resolved. Without it the OBJECT_MOTION dispatches, targets
+                // nothing, and registers no body at all: launches+0, which is exactly what the
+                // bug looked like from the log.
+                var driver = DriverOf(anchor);
+                ctx.Check(driver is MotionRuntime,
+                    $"the MAIN_ROOT_NODE launch drives the def's own anchor driver={driver?.GetType().Name ?? "(none)"} launches+{runtime.Motions.LaunchCount - launchesWas}");
+
+                // 2 — and it took over from the playback rather than re-basing on the map origin.
+                var launchedAt = anchor.GlobalPosition;
+                ctx.Check((launchedAt - flown).Length() < 5f,
+                    $"the launch starts where the bus was, not at its authored rest jump={(launchedAt - flown).Length():0.0} m rest={(launchedAt - origin).Length():0} m away");
+
+                for (int i = 0; i < (int)(5f / Tick); i++)
+                {
+                    runtime.Advance(Tick);
+                }
+
+                // 3 — the wreck falls instead of flying on. Both halves show here: the fly script
+                // is off the node, and the horizontal travel collapses from the ~60 m/s route to
+                // the ballistic drift of a hull with no launch velocity.
+                var after = anchor.GlobalPosition;
+                ctx.Check(DriverOf(anchor) is not ScriptPlayback,
+                    $"agbus_fly no longer drives the wreck driver={DriverOf(anchor)?.GetType().Name ?? "(none)"}");
+                float horizontal = new Vector2(after.X - launchedAt.X, after.Z - launchedAt.Z).Length();
+                float routeSpeed = new Vector2(flown.X - origin.X, flown.Z - origin.Z).Length() / Settle;
+                ctx.Check(horizontal < routeSpeed,   // one second of route, against five of falling
+                    $"the wreck falls rather than continuing its route horizontal={horizontal:0.0} m over 5 s (route was {routeSpeed:0} m/s)");
+                ctx.Check(after.Y < launchedAt.Y - 10f,
+                    $"and it is going down drop={launchedAt.Y - after.Y:0.0} m");
+                ctx.Note($"contact tallies: {runtime.Motions.ContactLandings} landed on a collider, {runtime.Motions.ClockEndings} ran their clock out");
+            }
+            finally
+            {
+                runtime.ContactMask = maskWas;
+            }
         });
     }
 

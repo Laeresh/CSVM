@@ -126,6 +126,13 @@ internal sealed class MotionSet
         _motions.Any(m => m is MotionRuntime { PendingBounce: not null }
                           && m.Owner.Def == def && m.Owner.Anchor == anchor);
 
+    /// <summary>Is some live motion already driving this node's transform? A launch onto such a
+    /// node is a TAKEOVER, not a fresh throw — see <see cref="MotionRuntime.Create"/>'s re-home
+    /// rule. Asked before <see cref="Add"/> evicts the incumbent, which is the only moment the
+    /// answer exists.</summary>
+    public bool DrivesTransform(Node3D target) =>
+        _motions.Any(m => m.Target == target && m.Channel == MotionChannel.Transform);
+
     /// <summary>Whether this exact spin is already running on the node, so a looping sequence
     /// re-asserting it can be left alone instead of restarted. The other half of the registration
     /// rule, and it cannot fold into <see cref="Add"/>: the guard has to run before the
