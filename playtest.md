@@ -161,6 +161,57 @@ an upper bound, and the correction to the 137.9 mph equilibrium are on `BL-115` 
   *Variations:* `--players=4` for pane-size readability; `--vs-kills=1` for a fast board check;
   `--scenario=zeppelin_run` to judge whether `dogfight_ace` spawns are actually the better pick.
 
+### C1 · two pilots — stunt race (splitscreen starting grid)
+
+```powershell
+./RunGame.ps1 --stunt --players=2 --chapter=C1
+```
+
+- `PT-45` `[Own]` **The abreast race starting grid** (`docs/PLAN-race-grid.md`, landed 2026-08-08;
+  it closed `BL-084`, whose record is in that commit — `git log --grep=BL-084`).
+  Two pads (or pad + keyboard); menu path: Stunt → C1 → both press Start. Splitscreen stunt racing is
+  our invention — the original had no splitscreen at all — so every call here is a judgement on our
+  own remake, with no reference to A/B against.
+
+  **Why this sitting is the only evidence there will ever be.** The grid is selected only when a
+  session is an actual race, and a `--det` run is explicitly given the old per-player spawn walk
+  instead, so no scripted run, screenshot or golden can exercise this path — by design, since that
+  bypass is what keeps every scripted spawn byte-identical. The grid geometry is also not
+  photographable: the panes are chase-cam only, so at the default 60 m spacing your neighbour sits
+  outside your own frustum. **Read the geometry off the console instead** — every launch logs one
+  line per slot, e.g. `spawn [P1 grid slot 1 of 4] pos=(-4974,260,-3771) heading=90° spacing=60m
+  lift=81m`, with the anchor's own line above them. On C1 with `--spawn=0` the field lifts 81 m.
+
+  **Both numbers are live config, and settling them is the point of this sitting.** `slotSpacing`
+  (default **60 m** between neighbouring slots) and `groundClearance` (default **100 m** of air the
+  lowest slot must have under it) are read from `config.json` as `raceGrid.slotSpacing` and
+  `raceGrid.groundClearance`, listed by `--dump-config`, and take effect on the next launch with no
+  rebuild. Neither is a finding — 60 m is just the figure already in the tree — so dial them between
+  launches until the start looks right and record what you landed on.
+  *Look for:*
+  - (a) **does it read as a starting line** — at the moment of spawn, does the field feel like a
+    grid you are lined up on, at 2 panes and at `--players=4`;
+  - (b) **spacing at the wingtips** — 60 m: too far apart to feel like a race start, or too close
+    for comfort in the first seconds of manoeuvring? Try 30 m and 100 m before deciding;
+  - (c) **the uniform lift** — the whole field rises together by whatever its worst slot needs, so
+    over broken ground it can look absurd (the field hovering high over a valley) or, if clearance
+    is dialled too low, too tight (an outer wingtip in a hillside). Watch an outer slot, not P1;
+  - (d) **a felt end-of-grid advantage** — do the outer slots feel meaningfully better or worse than
+    the middle for reaching the first Danger Zone? Slots are fixed by player index today; a *felt*
+    bias is the trigger to randomise the slot order per race (not to rotate it per rematch);
+  - (e) **the anchor still varies** — relaunch a few times without `--spawn=`: the whole grid should
+    sit somewhere else each time (the anchor is a random pick from the mission's spawn list), not on
+    the same point every launch;
+  - (f) **`--pos` still wins** — `--pos=x,y,z` must still place the field where you asked, grid or
+    no grid, since the override is resolved beneath the grid rather than beside it.
+
+  *Blocks:* the two config values in (b)/(c) hardening from fallbacks into decisions; the
+  slot-rotation call in (d); and `BL-314`, the race countdown, which must not be started until the
+  grid it counts down over has been flown. A structural fail — a plane in terrain, a field that is
+  not level or not on one heading — mints its own `BL` item.
+  *Variations:* `--players=4` for the case (a)/(b)/(d) are really about; `--chapter=C2` for a
+  different terrain profile under (c).
+
 ### C1B · Bloodhawk, night — sky, clouds, self-lit art
 
 ```powershell

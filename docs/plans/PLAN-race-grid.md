@@ -1,8 +1,19 @@
 # Race spawn fairness — the abreast starting grid
 
-**ACTIVE PLAN** (written 2026-08-08). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**✅ COMPLETE** (written 2026-08-08, completed 2026-08-08 on branch `worktree-bl-084-race-grid`).
+All six items landed, each by a subagent and verified before merge: `.\RunTests.ps1` green at every
+step (639 unit tests, 26 engine suites, 13/13 goldens hash-identical), and the headline guarantee —
+a `--det` splitscreen stunt launch emitting the same spawn lines it emitted before the grid existed
+— checked against a baseline captured on the clean tree *before* any edit, at both 2 and 4 players.
+Indexed in [`plans.md`](plans.md).
+
+**What this bought, in one line:** a 4-player C1 race used to put P4 at `(-6957,230,-2684)` heading
+`-23°` while P1 sat at `(-4974,179,-3861)` heading `90°` — two kilometres and a different direction.
+It now puts all four on one line, 60 m apart, on one heading, at one altitude.
+
+**Owed:** `PT-45` (hand-flown, two controllers) is the only evidence this feature can ever have —
+`--det` is given the old spawn walk by design, so no scripted run can photograph a grid. `BL-314`
+(the race countdown) is minted and blocked on it.
 
 This plan closes `BL-084`. A splitscreen stunt race currently hands each pilot the *next* entry in
 the mission's `stunt_flying` spawn list (`SpawnPicker.ChooseSpawn`, `CSVM/src/Session/SpawnPicker.cs:61`),
@@ -105,7 +116,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 3. ☑ Select the implementation once at session build; races get the grid, everything else does not
 4. ☑ Config-backed grid width and clearance, reported in the spawn log
 5. ☑ Correct the best-time persistence rationale in `StuntRace`
-6. ☐ Docs, close `BL-084`, mint the countdown `BL-` and the race `PT-`
+6. ☑ Docs, close `BL-084`, mint the countdown `BL-` and the race `PT-`
 
 ## Dependency and parallelism notes
 
@@ -285,7 +296,7 @@ longer exists. `.\RunTests.ps1` green (nothing should move).
 silent absence leaves the next reader unable to tell whether persistence is off by decision or by
 oversight, which is the cold-reading failure this repo's commenting style exists to prevent.
 
-## A6 ☐ Docs, close `BL-084`, mint the countdown `BL-` and the race `PT-`
+## A6 ☑ Docs, close `BL-084`, mint the countdown `BL-` and the race `PT-`
 
 **Goal.** The plan's record is complete: the modules are documented, `BL-084` is gone from
 `backlog.md`, and the two follow-ups exist as real items with real IDs.
