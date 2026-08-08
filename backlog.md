@@ -1280,11 +1280,37 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-101` `[Tuning]` `[Owed-playtest]` **Fine-tune fog and environment** — method: record video from a spawn point flying straight for a
   fixed number of seconds, in both engines, and compare.
 
-- `BL-105` `[Research]` **Map-edge continuation — the mirror half is ANSWERED 2026-08-04 from `CAP-17`; the unit
-  size is not.** **The original mirrors.** Our alternating reflection in `MapEdgeExtender.MirrorAxis`
-  is correct and must NOT be swapped to plain repetition — the long-standing user belief that it
-  plain-repeats (NOTES.md) is withdrawn, and the class doc's "user believes the original does NOT
-  mirror" caveat with it.
+- `BL-105` `[Research]` **Map-edge continuation — ANSWERED 2026-08-08 at the controls: it REPEATS,
+  over a per-chapter block. What is left is a contradiction between that verdict and `CAP-17`'s
+  metre figures, and four chapters assumed rather than measured.**
+  **The verdict** (user A/B against the original, 2026-08-08, flying the `--map-edge-block=` /
+  `--map-edge-mode=` prototype): plain **repetition** matches the original exactly, with **no seam
+  gaps** — **C1 2 cells, C2 2 cells, C4 2 cells, C5 1 cell**. No mirroring anywhere. Landed as
+  `MapEdgeExtender.DefaultBlockCells` with `repeat` the default; `mirror` is kept only to look at.
+  The four remaining chapters (C1B, C1C, C2B, C3) take **1** as an **assumption, not a
+  measurement**: their borders carry only water tiles, so the block depth is unobservable there
+  (repeating one water cell and repeating two are the same picture). That assumption can only fail
+  if a border turns out not to be water-only, which would be visible at once.
+  ⚠ **This reverses the 2026-08-04 reading of `CAP-17` below. Read that section as data, not as a
+  conclusion.** The reversal is about the *reading*: `CAP-17`'s strongest measurement — consecutive
+  translational periods matching **as-is +0.899…+0.949 against time-reversed −0.086…+0.080** — is
+  exactly what plain repetition predicts and reflection does not. The mirroring claim rested on a
+  separate reflection scan finding seams at half the period, which is the zigzag-coast symmetry
+  *this very entry* documents as a trap; and a signal of period P correlates at 2P for free, so the
+  471-frame period follows from a 240-frame tiling without any reflection.
+  ⚠ **What is still unexplained, and is the open half of this item: the SCALE.** C2's 240-frame
+  spacing converts to ~3.2 cells and its 471-frame period to ~6.4, against the **2** that matches
+  at the controls. C4 is the near-miss that lands — its 2.26 against a measured 2. So one of the
+  metre conversions is wrong by ~1.6× and the other is right, and the difference between them is
+  the reflection interpretation now overturned. **Do not re-derive a block depth from these metre
+  figures.** Settling it is now cheap and is the next step: our build has a *known* repeat period,
+  so pushing our own footage through the `CAP-17` strip pipeline calibrates the instrument rather
+  than estimating with it — if it reports "3.2 cells with reflection seams" for a known 2-cell
+  repeat, the pipeline is the fault and every metre figure below gets reinterpreted at once.
+  ⚠ The long-standing user belief that the original plain-repeats (NOTES.md) is **reinstated** — it
+  was withdrawn on 2026-08-04 and that withdrawal was wrong.
+  **Also found while flying it:** a void strip through C5's continuation, present in **both** fold
+  modes and therefore not a repetition artefact — split out as `BL-316`.
   **How it was measured** (`playtest/CAP-17/`, method and traps in its README). One take,
   `CAP-17 C2 south.mp4`, 67.6 s of straight nose-view flight south over the C2 coast. For a fixed
   screen row, that row from all 2027 frames is stacked into a **spatio-temporal strip**, so the
@@ -1323,36 +1349,31 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   measurements sit on **n + ¼ cells** (2304 m and 3328 m); a single k·V systematic cannot make
   both integers (+12.5 % vs +7 % needed), so if the pattern is real it is about where the
   mirrored block is anchored, not a scale error.
-  ⚠ **The cell count is the soft number, the mirroring is the hard one.** The metre conversion
-  inherits both V and k, and k = 1.390 is a machine/session property measured on *other* clips, so
-  read each unit as soft ("about three cells" on C2, "about two and a quarter" on C4 — definitely
-  not one, definitely not equal) rather than exact integers. Settling it needs either a level
-  constant-altitude pass with a known start position, or an A/B against our own
-  build once `Rings`/the clamp granularity is changed.
-  **The clamp granularity IS now changeable (2026-08-08) — the prototype landed, unchosen.**
-  `MapEdgeExtender.MirrorAxis` became `FoldAxis(i, n, block, repeat)`, a reflect-fold over a
-  `block`-deep band of border cells; `--map-edge-block=N` sets it, `--map-edge-mode=mirror|repeat`
-  picks the fold, and the F14 tile-grid overlay (`--debug-tilegrid`) colours every ground tile by
-  fold parity so **one colour band is one block** and N is readable at the controls. F15 steps N
-  (1/2/3/4/12), F16 swaps the mode. **The default stays 1** — nothing changes until a value is
-  chosen. ⚠ Pair the overlay with `--no-fog`: C2 zone1's fog-far is 2400 m, under one 3-cell band,
-  so fog desaturates the parity hue before a full band is in view.
-  **Confirmed at the controls the same day:** at block 1 on C2 south the continued coastline is a
-  dead straight line in z, exactly as this entry predicted from the border row being nearly all
-  water; at block 3 it wiggles and reflects. That is the prediction observed rather than argued.
-  **Two findings from 2026-08-08 that narrow the field:**
-  - **The airport observation independently bounds N, and it agrees with the strips.** The
-    map-centre airfield sits ≥3 cells from any edge (`docs/formats/world-structure.md`), so a block
-    deeper than ~3 folds the map interior back into view — which the 10+ minute east flight in
-    `C1 IA1 Tile Loading.mp4` says never happened. Measured 3.25 (C2) and 2.26 (C4); bounded ≤ ~3 by
-    the video. Two unrelated lines of evidence, both excluding 1 and both excluding whole-map.
-  - **Whole-map mirroring is the other constant-free implementation, and it is refuted.** Reflecting
-    about the `area` bounds needs no authored block size either — the same parsimony argument that
-    favours a bare clamp — and it would explain the C2/C4 disagreement outright, since the measured
-    period would then be each map's own headland/river spacing rather than a tiling seam. It is
-    excluded by the airport: whole-map mirroring returns the interior every 2 map widths (24.6 km,
-    ~59 wall s at 300 units/s). Recorded so it is not re-raised; `--map-edge-block=12` renders it in
-    one keypress if it ever needs re-checking.
+  ⚠ **The cell count was always the soft number — and 2026-08-08 showed the mirroring was the soft
+  one too.** The metre conversion inherits both V and k, and k = 1.390 is a machine/session property
+  measured on *other* clips, so read each unit as soft rather than as exact integers. Both figures
+  are now superseded by the controls A/B at the top of this entry; they survive here as the
+  calibration target, not as the answer.
+  **The instrument (2026-08-08).** `MapEdgeExtender.MirrorAxis` became
+  `FoldAxis(i, n, block, repeat)`, a fold over a `block`-deep band of border cells;
+  `--map-edge-block=N` sets the depth, `--map-edge-mode=mirror|repeat` the fold, and the F14
+  tile-grid overlay (`--debug-tilegrid`) colours every ground tile by fold parity so **one colour
+  band is one block** and the depth is readable at the controls. F15 steps the depth (1/2/3/4/12),
+  F16 swaps the mode; a fold change rebuilds the window in 4–34 ms (C1 / C5), one frame, and logs
+  it. ⚠ Pair the overlay with `--no-fog`: C2 zone1's fog-far is 2400 m, under one 3-cell band, so
+  fog desaturates the parity hue before a full band is in view. This is what produced the verdict,
+  and it is still the tool for the four assumed chapters and for a per-edge (rather than
+  per-chapter) block, which has never been ruled out.
+  **The airport observation bounds the depth, and it holds under the new verdict.** The map-centre
+  airfield sits ≥3 cells from any edge (`docs/formats/world-structure.md`), so a block deeper than
+  ~3 folds the map interior back into view — which the 10+ minute east flight in
+  `C1 IA1 Tile Loading.mp4` says never happened. That excludes whole-map continuation outright, and
+  it is comfortably satisfied by the measured 1–2.
+  **Whole-map continuation is the other constant-free implementation, and it is refuted** — by the
+  same airport bound: it returns the interior every 2 map widths (24.6 km, ~59 wall s at
+  300 units/s). Recorded so it is not re-raised, since "nothing in the data authors a block size"
+  argues for it exactly as it argues for a bare 1-cell clamp; `--map-edge-block=12` renders it in
+  one keypress if it ever needs re-checking.
   ⚠ **Dead end, do not re-run: the unit does not track visibility.** Tested 2026-08-08 against the
   weather data — C2 zone1 `FOG_RANGES` far 2400 m / `CLIP_RANGES` far 2600 m, C4 zone2 4500 m /
   4800 m. C4 sees nearly twice as far and has the *smaller* unit, so the relationship is inverted,
@@ -1360,18 +1381,45 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ **The clock cannot rescue the n + ¼ pattern.** Snapping C2 to 3 cells needs k 7.7 % low and C4
   to 2 cells needs 11.3 % low — 5σ and 7σ against `FINDINGS.md`'s k = 1.390 ± 0.021, by *different*
   amounts, and that k was shown stable across two separate sessions (loop and dive-2 agree to 2 %).
-  No single clock error works, so if the ¼ is real it is about anchoring, as noted below.
-  **Size, corrected:** the code half is small and now done — `MirrorTransform`'s offset
+  No single clock error works. With the reflection reading withdrawn the ¼ pattern probably has
+  nothing to explain — it was an artefact of quoting the *seam* spacing as the unit — but the
+  calibration run is what would confirm that rather than assume it.
+  **Size:** the code is done and it was small — `MirrorTransform`'s offset
   `2·x0 + (sx+ix+1)·tileX` already placed any source cell onto any target cell, and the window size
-  is `Rings`, not the block, so a deeper block changes only *which* source each cell mirrors. No
-  extra cells, no extra memory, no perf cost. What remains open is purely the number.
-  **Extent:** the clip covers ~28 km ≈ **2.3 × the 12,288 m map** and the mirrored tiling continues
+  is `Rings`, not the block, so the depth changes only *which* source each cell repeats. No extra
+  cells, no extra memory, no perf cost. What remains open is the calibration and the four assumed
+  chapters.
+  **Extent:** the clip covers ~28 km ≈ **2.3 × the 12,288 m map** and the tiling continues
   undegraded to the last frame — no limit, no change, no fade found within that range.
   ⚠ **A symmetric border feature cannot discriminate mirror from repeat, and a zigzag coast is
   locally symmetric about every headland.** The 2026-07-22 open-ocean check was inconclusive for the
   first reason; a reflection scan with too small a half-width fails for the second (half-widths
   30/37/55 return spurious seam spacings of 31/31/90 against the true 240). Use a half-width of a
   full half-period.
+
+- `BL-316` `[Bug]` **C5's map-edge continuation has a void strip through it** (found 2026-08-08
+  while flying the `BL-105` prototype). A gap of empty space — sky/void, no terrain, no collision —
+  runs outward through C5's extension cells, wide enough to fly through and visible from altitude.
+  **Repro:** `--freecam --chapter=C5 --no-fog --debug-tilegrid
+  --pos=-15230.31,1500.932,-3736.541 --direction=-0.8993,-0.42368,-0.10847`. The tile-grid overlay
+  is what makes it legible (C5 is a night map, so the void and the unlit ground are both black
+  without it).
+  ⚠ **Not a repetition artefact — it is present in BOTH fold modes**, identically placed and
+  shaped, at `--map-edge-mode=repeat` and `=mirror` alike. So it is not the translated-copy seam
+  problem that mirroring would paper over, and changing the fold will not fix it.
+  **Two candidate causes, neither confirmed.** (1) A source border cell with no ground tile bound
+  to it in `MapEdgeExtender.ScanTiles` — `_tiles` simply has no entry, so `BuildCell` emits an
+  empty cell. (2) A source tile that does not span its full cell: `IsGroundTile` accepts anything
+  from 0.4× to 1.35× the cell size (to catch the split half-tiles), and `MirrorTransform`
+  translates by a whole `_tileX`/`_tileZ`, so a short tile leaves a sliver of void at every copy.
+  (2) fits the observed *constant-width strip* better than (1), which would leave a whole missing
+  cell. Distinguishing them is a census of C5's per-cell tile coverage — which cells `ScanTiles`
+  binned, and what each tile's AABB actually spans against 1024 m.
+  **Note the scope:** C5 is the only chapter where this has been seen, and C5 is also the only
+  chapter measured at a **1-cell** block (`BL-105`) — worth checking whether those are related
+  before assuming they are not.
+  **How you'd know it worked:** the repro pose shows unbroken terrain, and a sweep of C5's four
+  edges at altitude with `--debug-tilegrid --no-fog` finds no void.
 
 - `BL-118` `[Tuning]` **Cloud deck mesh brightness** — the `CloudDeck` **mesh** brightness reads ~40 units
   lighter than the original (measured 2026-08-07: **+54, and only from below** — see the `CAP-12`

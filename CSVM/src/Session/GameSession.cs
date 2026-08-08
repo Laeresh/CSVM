@@ -807,13 +807,16 @@ public partial class GameSession : Node3D
         if (_spec.Fly || _spec.Freecam || _spec.SkyZoneExplicit)
         {
             long edgeMark = StartupProfile.Mark();
-            _edgeExtender = builder.CreateEdgeExtender(session.Clutter, _spec.MapEdgeBlock, _spec.MapEdgeRepeat);
+            // Block depth is per chapter (BL-105, A/B'd against the original); --map-edge-block=
+            // overrides it, which is why the spec keeps it nullable rather than pre-defaulted.
+            int block = _spec.MapEdgeBlock ?? Mech3.MapEdgeExtender.DefaultBlockCells(_spec.Chapter);
+            _edgeExtender = builder.CreateEdgeExtender(session.Clutter, block, _spec.MapEdgeRepeat);
             StartupProfile.Record("edge", edgeMark);
             if (_edgeExtender != null)
             {
                 _plane.AddChild(_edgeExtender);
                 GD.Print($"map edge: rolling tile window active — block {_edgeExtender.BlockCells} cell(s), "
-                    + (_edgeExtender.RepeatInsteadOfMirror ? "repeat (refuted; see BL-105)" : "mirror"));
+                    + (_edgeExtender.RepeatInsteadOfMirror ? "repeat" : "mirror (not what the original does; see BL-105)"));
             }
         }
         if (_spec.Fly || _spec.Freecam || _spec.SkyZoneExplicit)

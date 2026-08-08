@@ -37,7 +37,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/ControlSurfaces.cs` — classifies aileron/elevator/rudder mesh nodes and their hinge axes (X ailerons/elevators, Y rudders).
 - `src/Mech3/WingLights.cs` — the one source for wingtip nav lights: flare node names, glow texture, warm-amber colour, blink period.
 - `src/Mech3/WorldBuilder.cs` — builds a chapter world: placed + partition subtrees, cloud deck, camera-anchored skydome, edge extender.
-- `src/Mech3/MapEdgeExtender.cs` — rolling window of mirrored border-cell blocks + clutter continuing the world past the map edge, per camera; block depth is `BL-105`'s open question.
+- `src/Mech3/MapEdgeExtender.cs` — rolling window of repeated border-cell blocks + clutter continuing the world past the map edge, per camera; block depth is per chapter (`DefaultBlockCells`).
 - `src/Mech3/Clutter.cs` — stamps interp.json clutter templates onto matching-textured terrain: sprites, plus C2/C5's solid 3D city blocks.
 - `src/Mech3/FogVolumes.cs` — the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
 - `src/Mech3/Zrdr.cs` — zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's list.
@@ -451,14 +451,18 @@ Rolling window (`Rings`=5 of 1024 m cells, diffed only on cell crossings) of rep
 clutter (grown from `ClutterBuilder.ExportedKinds`) continuing the world past the map edge.
 ⚠ Repeats a BORDER-CELL BLOCK, never the map interior (whole-map tiling brings the airport back,
   which 10+ minutes of flight past the edge says never happens). `FoldAxis(i, n, block, repeat)`
-  folds an outside index into the nearest `block`-deep band and alternately reflects it; at
-  `block`=1 it reduces exactly to the old clamp, which `MapEdgeFoldTests` pins.
-⚠ **The alternating reflection is CONFIRMED original behaviour** (`CAP-17`, 2026-08-04: reflection
-  seams at half the translational period — what reflection produces and repetition cannot). Do not
-  swap it to plain repetition; `--map-edge-mode=repeat` exists to look at the refuted hypothesis.
-⚠ **`BlockCells` defaults to 1 and 1 is known wrong** — the unit measures ~3.2 cells on C2 south and
-  ~2.26 on C4 north, so it is neither one cell nor one constant (`BL-105`). The default holds only
-  until the value is chosen; `--map-edge-block=` + F14/F15 (`TileGridOverlay`) are the instrument.
+  folds an outside index into the nearest `block`-deep band; at `block`=1 with `repeat`=false it
+  reduces exactly to the pre-2026-08-08 clamp, which `MapEdgeFoldTests` pins.
+⚠ **It REPEATS, it does not mirror** — A/B'd against the original at the controls 2026-08-08
+  (`BL-105`), matching exactly on C1/C2/C4/C5 with no seam gaps. This REVERSES the earlier `CAP-17`
+  reading; the reversal is about that reading, not its data (its as-is-vs-time-reversed asymmetry
+  was always what repetition predicts). `--map-edge-mode=mirror` keeps the old behaviour to look at.
+⚠ **`BlockCells` is per chapter** — `DefaultBlockCells`: 2 on C1/C2/C4, 1 on C5 and on the four
+  water-bordered chapters (C1B/C1C/C2B/C3), where the depth is unobservable and so assumed. Unknown
+  chapters fall back to 1. ⚠ The metre figures in `BL-105` disagree with the controls on C2 (~3.2
+  cells vs 2) — do not re-derive a depth from them until the strip pipeline is calibrated.
+⚠ C5 has a void strip through the continuation (`BL-316`) — present in BOTH fold modes, so it is a
+  tile-coverage defect, not a repetition artefact.
 ⚠ Extension sprites carry no collider (matching the map); buildings DO — one lazy `clutter_bld_ext`
   body per cell attaches the shared `KindExport.CollisionShape`; 3D kinds mirror as whole transforms.
 ⚠ The window is the UNION of all player cameras' neighbourhoods — one focus strands the other pane.

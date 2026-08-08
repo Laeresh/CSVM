@@ -8,12 +8,11 @@ namespace CSVM.Tests;
 /// The map-edge continuation's per-axis fold (<see cref="MapEdgeExtender.FoldAxis"/>): which source
 /// cell an out-of-map index maps to, and whether that copy is reflected.
 ///
-/// <para><b>The load-bearing test is <see cref="BlockOfOneMirrorIsTheHistoricalClamp"/>.</b> The
-/// fold generalizes a function that used to clamp to a single border cell, and it is landing
-/// <i>before</i> the block depth is decided (`BL-105`: the measured unit is ~3.2 cells on C2 and
-/// ~2.26 on C4, so 1 is known wrong but no replacement is chosen). That is only safe if block=1
-/// still reproduces the shipped behaviour exactly, so this suite pins it against the old
-/// closed-form rather than against hand-copied expectations.</para>
+/// <para><see cref="BlockOfOneMirrorIsTheHistoricalClamp"/> pins the generalization against the
+/// closed form it replaced, rather than against hand-copied expectations. That equivalence is no
+/// longer the shipping path — the original <b>repeats</b> rather than mirrors (`BL-105`, A/B'd at
+/// the controls 2026-08-08) — but it stays as the fold's algebraic anchor: mirror at block 1 is
+/// the one case with an independent reference implementation.</para>
 /// </summary>
 public class MapEdgeFoldTests
 {
@@ -179,6 +178,87 @@ public class MapEdgeFoldTests
             int src = MapEdgeExtender.FoldAxis(i, Grid, block, repeat: false).Src;
             Assert.True(src >= Grid - block, $"index {i} folded to {src}, inside the map's interior");
         }
+    }
+
+    // ---- the overlay's band index: constant across a block, alternating between them ----
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void BandIndexIsConstantAcrossABlockAndStepsBetweenThem(int block)
+    {
+        // High edge: bands are [n, n+block), [n+block, n+2*block), ...
+        for (int band = 1; band <= 4; band++)
+        {
+            for (int k = 0; k < block; k++)
+            {
+                Assert.Equal(band, MapEdgeExtender.FoldBandIndex(Grid + ((band - 1) * block) + k, Grid, block));
+            }
+        }
+        // Low edge mirrors that outward, so index -1 is the block adjacent to the map.
+        for (int band = 1; band <= 4; band++)
+        {
+            for (int k = 0; k < block; k++)
+            {
+                Assert.Equal(-band, MapEdgeExtender.FoldBandIndex(-1 - ((band - 1) * block) - k, Grid, block));
+            }
+        }
+    }
+
+    [Fact]
+    public void BandIndexIsZeroInsideTheMap()
+    {
+        for (int i = 0; i < Grid; i++)
+        {
+            Assert.Equal(0, MapEdgeExtender.FoldBandIndex(i, Grid, 3));
+        }
+    }
+
+    // Under MIRRORING the band parity and the flip are the same thing, which is what makes keying
+    // the overlay on the band a strict generalization rather than a change of appearance.
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void BandParityEqualsMirrorFlip(int block)
+    {
+        for (int i = -4 * Grid; i < 5 * Grid; i++)
+        {
+            bool flip = MapEdgeExtender.FoldAxis(i, Grid, block, repeat: false).Flip;
+            bool oddBand = (MapEdgeExtender.FoldBandIndex(i, Grid, block) & 1) != 0;
+            Assert.Equal(flip, oddBand);
+        }
+    }
+
+    // ---- the per-chapter block depths, A/B'd against the original 2026-08-08 (BL-105) ----
+
+    [Theory]
+    [InlineData("C1", 2)]
+    [InlineData("C2", 2)]
+    [InlineData("C4", 2)]
+    [InlineData("C5", 1)]
+    [InlineData("C1B", 1)]
+    [InlineData("C1C", 1)]
+    [InlineData("C2B", 1)]
+    [InlineData("C3", 1)]
+    public void ChapterBlockDepthsAreTheMeasuredOnes(string chapter, int expected)
+    {
+        Assert.Equal(expected, MapEdgeExtender.DefaultBlockCells(chapter));
+        Assert.Equal(expected, MapEdgeExtender.DefaultBlockCells(chapter.ToLowerInvariant()));
+    }
+
+    // An unknown or absent chapter must fall back to 1 — right or indistinguishable everywhere it
+    // has been looked at — never to 2, which is only known right where it was measured.
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("C9")]
+    public void UnknownChapterFallsBackToOne(string? chapter)
+    {
+        Assert.Equal(1, MapEdgeExtender.DefaultBlockCells(chapter));
     }
 
     // The implementation this replaced, verbatim: clamp to the border cell, reflect on odd rings.

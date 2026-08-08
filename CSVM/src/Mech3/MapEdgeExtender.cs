@@ -7,7 +7,7 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// Map-edge continuation: a rolling window of mirrored terrain tiles that
+/// Map-edge continuation: a rolling window of repeated terrain tiles that
 /// follows the plane past the map boundary, so the world continues indefinitely under the
 /// fog — terrain over terrain edges, sea over sea — instead of ending in a void.
 ///
@@ -17,36 +17,35 @@ namespace CSVM.Mech3;
 /// back out — with clutter trees on the continued terrain). What it repeats is a block of
 /// <b>border cells</b>, not the map: user-tested — flying east, the map interior (the
 /// airport) never reappears. Each axis outside the map folds back into the nearest
-/// <see cref="BlockCells"/>-deep band of border cells, repeated forever and <b>alternately
-/// reflected</b> so every seam is a shared mirror plane (heights match exactly; straight
-/// repetition would step). That also keeps the continuation type-matched to the local edge —
-/// sea edge → sea forever, forest edge → forest — as user-observed in the original.
-/// <b>The alternating reflection is CONFIRMED original behavior</b> — measured from
-/// original-game footage: 67 s of straight flight south off C2's coast, read as a
-/// spatio-temporal strip, shows reflection seams recurring every 240 ± 2 frames at
-/// NCC 0.89–0.94, with a translational period of exactly twice that (471 frames,
-/// NCC +0.90…+0.95). Do NOT make plain repetition the default — <see cref="RepeatInsteadOfMirror"/>
-/// exists to look at the refuted hypothesis, not to ship it.</para>
+/// <see cref="BlockCells"/>-deep band of border cells, <b>translated</b>, and that block is
+/// per chapter (<see cref="DefaultBlockCells"/>). That keeps the continuation type-matched to
+/// the local edge — sea edge → sea forever, forest edge → forest — as user-observed.</para>
 ///
-/// <para>⚠ <b><see cref="BlockCells"/> is unsettled and its default of 1 is known wrong</b> —
-/// see `BL-105`. The measured mirror unit is ~3.2 cells on C2 south and ~2.26 cells on C4
-/// north, so it is neither one cell nor one universal constant, and C2's south border row is
-/// nearly all water: clamping to it and repeating southward gives a coastline invariant in z,
-/// which the footage contradicts. The default stays 1 only so that this prototype changes
-/// nothing until the value is chosen; `--map-edge-block=` and F15 are how it gets chosen.
-/// Two independent bounds agree on 2–3: the strip measurements, and the airport observation
-/// above — the map-centre airfield sits ≥3 cells from any edge (`docs/formats/world-structure.md`),
-/// so a block deeper than that would put the map interior back on screen, which 10+ minutes of
-/// flight says never happened. That same bound is what refutes whole-map mirroring
-/// (<see cref="BlockCells"/> = the grid size), the other implementation that needs no authored
-/// constant.</para>
+/// <para>⚠ <b>It REPEATS; it does not mirror. Settled 2026-08-08 by A/B against the original
+/// at the controls</b> — `repeat` at the per-chapter block below matches the original exactly,
+/// on C1, C2, C4 and C5, with no seam gaps. <see cref="RepeatInsteadOfMirror"/> defaults true
+/// for that reason, and alternating reflection is the mode kept only to look at.</para>
+///
+/// <para>⚠ <b>This reverses what `CAP-17` was read as saying, and the reversal is about the
+/// READING, not the data.</b> That strip analysis measured a translational period of 471 frames
+/// whose consecutive periods matched <i>as-is</i> at +0.899…+0.949 against time-reversed
+/// −0.086…+0.080 — which is exactly what plain repetition predicts and reflection does not. The
+/// mirroring claim rested on a separate reflection scan finding "seams" at half that spacing;
+/// the same entry documents the trap that produces them, since a zigzag coast is locally
+/// symmetric about every headland, and a signal of period P correlates at 2P for free.
+/// What is still unexplained is the SCALE — C2's spacing converts to ~3.2 cells against the 2
+/// measured at the controls, while C4's 2.26 lands on its 2. See `BL-105`; do not re-derive a
+/// block depth from those metre figures until the pipeline has been calibrated against a known
+/// repeat period.</para>
 ///
 /// <para><b>Deliberately not offered: repetition that shares the map-edge vertex row</b>
 /// (floated in `docs/formats/world-structure.md`), which would repeat without stepping. Mirror
 /// and repeat are both pure per-cell transforms and cost a few lines each; sharing a vertex row
-/// is mesh surgery — welding or re-stitching edge vertices in <c>BuildCell</c> — and plain
-/// repeat's visible stepping already shows what it needs to show. Build it only if the step
-/// turns out to be the sole thing making repeat look wrong.</para>
+/// is mesh surgery — welding or re-stitching edge vertices in <c>BuildCell</c>. It has not been
+/// needed: plain repeat at the per-chapter block shows no step and no gap at the controls, the
+/// tile meshes evidently spanning their cells exactly. ⚠ Except on C5, where a void strip runs
+/// through the continuation — but that is present in BOTH fold modes, so it is not a repetition
+/// artefact; it is `BL-316`.</para>
 ///
 /// <para>The window covers all cells within <see cref="Rings"/> of the focus (the camera),
 /// excluding in-map cells (the real world renders those). It re-diffs only when the focus
@@ -77,10 +76,10 @@ public sealed partial class MapEdgeExtender : Node3D
     // creeps onto the void even mid-cell and regardless of the fogRangeFactor TUNE. TUNE.
     private const int Rings = 5;
 
-    // Tile-grid overlay palette, indexed by fold parity: [0] neither axis flipped, [1] x flipped,
-    // [2] z flipped, [3] both. Four strongly separated hues, because at TintStrength a subtle
-    // palette is a grey smear over textured ground. In-map cells take InMapTint instead, so the
-    // map boundary itself is never in doubt.
+    // Tile-grid overlay palette, indexed by repetition-band parity: [0] both axes on an even band,
+    // [1] x odd, [2] z odd, [3] both odd. Four strongly separated hues, because at TintStrength a
+    // subtle palette is a grey smear over textured ground. In-map cells take InMapTint instead, so
+    // the map boundary itself is never in doubt.
     private static readonly Color[] ParityTints =
     {
         new(0.20f, 0.85f, 1.00f),
@@ -115,7 +114,7 @@ public sealed partial class MapEdgeExtender : Node3D
     private readonly List<(int, int)> _centerCells = new();
 
     private int _blockCells = 1;
-    private bool _repeat;
+    private bool _repeat = true;
     private bool _tinted;
     // Starts true so the FIRST window build is timed too: it builds the whole window from nothing,
     // which is the same work an F15 fold change costs. That makes the hitch a measured number in
@@ -140,14 +139,14 @@ public sealed partial class MapEdgeExtender : Node3D
     /// <summary>Extension cells currently instantiated (diagnostics).</summary>
     public int LiveCellCount => _live.Count;
 
-    /// <summary>How many border cells deep the repeated block is. 1 = the historical clamp to a
-    /// single border cell. ⚠ Unsettled — see the class doc and `BL-105`; 1 is the default only
-    /// because it is what shipped, not because it is right.</summary>
+    /// <summary>How many border cells deep the repeated block is; per chapter, see
+    /// <see cref="DefaultBlockCells"/>.</summary>
     public int BlockCells => _blockCells;
 
-    /// <summary>Translate the block instead of alternately reflecting it. <b>Refuted for the
-    /// original</b> (`CAP-17`) and kept only so the hypothesis can be looked at: it butts the
-    /// map's opposite edge heights together, so every seam steps.</summary>
+    /// <summary>Translate the block rather than alternately reflecting it. <b>True by default —
+    /// this is what the original does</b>, A/B'd at the controls on four chapters (`BL-105`).
+    /// False alternately reflects, which was the shipped behaviour until 2026-08-08 and is now
+    /// kept only to look at.</summary>
     public bool RepeatInsteadOfMirror => _repeat;
 
     /// <summary>The widest block this world can take — a block deeper than the grid has no more
@@ -165,7 +164,7 @@ public sealed partial class MapEdgeExtender : Node3D
     /// <summary>The shader's identity mix — what the overlay stamps to clear a tint.</summary>
     internal static Color UntintedMix => Untinted;
 
-    /// <summary>The four fold-parity colours, indexed <c>(x flipped ? 1 : 0) | (z flipped ? 2 : 0)</c>
+    /// <summary>The four band-parity colours, indexed <c>(x band odd ? 1 : 0) | (z band odd ? 2 : 0)</c>
     /// — for the overlay's legend, so a palette edit here cannot drift out of sync with the key on
     /// screen (the rule <c>ClassOverlay.BuildLegendText</c> follows).</summary>
     internal static IReadOnlyList<Color> ParityLegendColors => ParityTints;
@@ -174,6 +173,43 @@ public sealed partial class MapEdgeExtender : Node3D
     internal static Color InMapLegendColor => InMapTint;
 
     // ---------------------------------------------------------------- fold mapping
+
+    /// <summary>How many border cells deep this chapter's repeated block is, measured by A/B
+    /// against the original at the controls (2026-08-08, `BL-105`).
+    ///
+    /// <para><b>C1, C2 and C4 are 2; everything else is 1.</b> C5 was measured at 1 directly. The
+    /// remaining four — C1B, C1C, C2B, C3 — are <i>assumed</i> 1 rather than observed, on the
+    /// grounds that their borders carry only water tiles, which makes the block depth
+    /// unobservable there: repeating one water cell and repeating two are the same picture. That
+    /// assumption is self-checking, in that the only way it can be wrong is if a border turns out
+    /// not to be water-only, which would be visible immediately.</para>
+    ///
+    /// <para>⚠ An unknown chapter falls back to 1, the value that is right or indistinguishable
+    /// everywhere it has been looked at — never to 2, which is only known right where it was
+    /// measured.</para></summary>
+    public static int DefaultBlockCells(string? chapter) => chapter?.ToUpperInvariant() switch
+    {
+        "C1" or "C2" or "C4" => 2,
+        _ => 1,
+    };
+
+    /// <summary>Which repetition band an out-of-map index falls in: 0 inside the map, then ±1, ±2…
+    /// outward, one step per <paramref name="block"/> cells. The tile-grid overlay colours by this
+    /// rather than by <see cref="FoldAxis"/>'s flip, because <b>under repetition nothing ever
+    /// flips</b> — keying the hue on the flip painted the entire continuation one colour in the
+    /// mode that is now the default, and the whole point of the overlay is that one colour band is
+    /// one block.
+    /// <para>Under mirroring the two are the same thing (a band is odd exactly when its copy is
+    /// reflected), so this changes nothing there — it is a strict generalization.</para></summary>
+    public static int FoldBandIndex(int i, int n, int block)
+    {
+        if (i >= 0 && i < n)
+            return 0;
+        int b = Math.Clamp(block, 1, n);
+        int t = i - (i >= n ? n - b : 0);
+        // Floor division: C# truncates toward zero, and the low edge's offsets are all negative.
+        return t >= 0 ? t / b : ((t + 1) / b) - 1;
+    }
 
     /// <summary>Continuation along one axis: outside the map, the nearest <paramref name="block"/>
     /// border cells repeat forever, alternately reflected so every seam is a shared mirror plane
@@ -305,12 +341,13 @@ public sealed partial class MapEdgeExtender : Node3D
     /// area/partition grid. <paramref name="clutter"/> (the chapter's built ClutterBuilder,
     /// if any) lets the extension grow the same trees the map grows — the original shows
     /// clutter on the continued terrain (see the class doc video evidence).</summary>
-    /// <param name="blockCells">Initial <see cref="BlockCells"/> (<c>--map-edge-block=</c>).
+    /// <param name="blockCells">Initial <see cref="BlockCells"/> — normally
+    /// <see cref="DefaultBlockCells"/> for the chapter, overridden by <c>--map-edge-block=</c>.
     /// Clamped to the grid, so the caller may pass anything.</param>
-    /// <param name="repeat">Initial <see cref="RepeatInsteadOfMirror"/>
-    /// (<c>--map-edge-mode=repeat</c>).</param>
+    /// <param name="repeat">Initial <see cref="RepeatInsteadOfMirror"/>; true is the original's
+    /// behaviour, <c>--map-edge-mode=mirror</c> is what turns it off.</param>
     internal static MapEdgeExtender? Create(GameZ gamez, SceneBuilder scene, GameZNode world,
-        ClutterBuilder? clutter, int blockCells = 1, bool repeat = false)
+        ClutterBuilder? clutter, int blockCells = 1, bool repeat = true)
     {
         if (!world.HasArea || world.PartitionCols <= 0 || world.PartitionRows <= 0
             || world.AreaRight <= world.AreaLeft || world.AreaBottom <= world.AreaTop)
@@ -422,12 +459,16 @@ public sealed partial class MapEdgeExtender : Node3D
         Walk(cell);
     }
 
-    /// <summary>The tile-grid colour for a cell. Hue is the fold parity, so one run of a single
-    /// hue spans exactly <see cref="BlockCells"/> cells and the <b>width of a colour band reads
-    /// off N directly</b>; the two axes get independent parities so corner regions — folded on
-    /// both — stay unambiguous. Value alternates on a per-cell checker inside the band, which is
-    /// what turns "wide-ish" into a countable number of cells. In-map cells take a neutral tint so
-    /// the map boundary is never in doubt.</summary>
+    /// <summary>The tile-grid colour for a cell. Hue is the <b>repetition band</b>'s parity
+    /// (<see cref="FoldBandIndex"/>), so one run of a single hue spans exactly
+    /// <see cref="BlockCells"/> cells and the <b>width of a colour band reads off the block depth
+    /// directly</b>; the two axes band independently so corner regions stay unambiguous. Value
+    /// alternates on a per-cell checker inside the band, which is what turns "wide-ish" into a
+    /// countable number of cells. In-map cells take a neutral tint so the map boundary is never in
+    /// doubt.
+    /// <para>⚠ Keyed on the band, <b>not</b> on <see cref="FoldAxis"/>'s flip. Under repetition —
+    /// the default — nothing ever flips, and keying on the flip painted the whole continuation one
+    /// colour, destroying the only thing the overlay is for.</para></summary>
     private Color TintFor(int ix, int iz)
     {
         bool inMap = ix >= 0 && ix < _cols && iz >= 0 && iz < _rows;
@@ -438,9 +479,9 @@ public sealed partial class MapEdgeExtender : Node3D
         }
         else
         {
-            var (_, fx) = FoldAxis(ix, _cols, _blockCells, _repeat);
-            var (_, fz) = FoldAxis(iz, _rows, _blockCells, _repeat);
-            baseColor = ParityTints[(fx ? 1 : 0) | (fz ? 2 : 0)];
+            int bx = FoldBandIndex(ix, _cols, _blockCells);
+            int bz = FoldBandIndex(iz, _rows, _blockCells);
+            baseColor = ParityTints[(int)((uint)bx & 1) | ((int)((uint)bz & 1) << 1)];
         }
         // Godot's '%' on ints keeps the dividend's sign, and extension indices go negative.
         bool dark = (((ix + iz) % 2) + 2) % 2 == 1;

@@ -133,22 +133,23 @@ last reconciled 2026-08-07 merging `--debug-ainets` with `PLAN-vs-mode`'s three 
   "fog is a thing to switch off, not tolerate" rule the texture-census work established applies
   here. Debug-only shader-parameter mix, exactly as `--debug-classoverlay`: mesh/node counts and
   goldens are unaffected)
-- `--map-edge-block=N` (how many border cells deep the mirrored block past the map edge is;
-  **default 1**, the historical clamp to a single border cell, so an unset flag changes nothing.
-  Clamped to the chapter's grid, at which point the continuation mirrors the whole map. ⚠ **1 is
-  known wrong and no replacement is chosen yet** — the mirror unit measures ~3.2 cells on C2 south
-  and ~2.26 on C4 north, so it is neither one cell nor one universal constant; this flag and **F15**
-  are how `BL-105` gets settled. At block 1 on C2, the south border row is nearly all water, so the
-  continued coastline is a dead straight line in z — visible immediately with `--debug-tilegrid`,
-  and the thing the original's footage contradicts)
-- `--map-edge-mode=mirror|repeat` (default `mirror`: alternately reflect the block, so every seam is
-  a shared mirror plane and heights match exactly across it. `repeat` translates it instead —
-  **a refuted hypothesis**, kept only so it can be looked at: `CAP-17` measured reflection seams at
-  half the translational period, which is what alternating reflection produces and plain repetition
-  cannot. Expect a visible step at every seam in `repeat`, because it butts the map's opposite edge
-  heights together; that is the honest rendering of the hypothesis, not a fault. **F16** toggles it
-  live. Repetition that shares the map-edge vertex row — which would repeat without stepping — is
-  deliberately not offered: it is mesh surgery rather than a per-cell transform)
+- `--map-edge-block=N` (how many border cells deep the repeated block past the map edge is.
+  **Default is per chapter** — `MapEdgeExtender.DefaultBlockCells`: **2** on C1/C2/C4, **1** on C5
+  and on C1B/C1C/C2B/C3, whose borders carry only water tiles and where the depth is therefore
+  unobservable. Those four are assumed rather than measured; the other four were A/B'd against the
+  original at the controls (2026-08-08, `BL-105`). An unknown chapter falls back to 1. Clamped to
+  the chapter's grid, at which point the continuation repeats the whole map. ⚠ Do not re-derive a
+  depth from the metre figures in `BL-105` — they disagree with the controls on C2, ~3.2 cells
+  against the 2 that matches, and settling that needs the strip pipeline calibrated against a known
+  repeat period first)
+- `--map-edge-mode=mirror|repeat` (**default `repeat`: translate the block, which is what the
+  original does** — A/B'd at the controls on C1/C2/C4/C5, matching exactly with no seam gaps.
+  `mirror` alternately reflects it instead, so every seam is a shared mirror plane; that was the
+  shipped behaviour until 2026-08-08 and is now kept only to look at. **F16** toggles it live. ⚠
+  This reverses what `CAP-17` was read as showing — see `BL-105`; the reversal is about the reading
+  rather than the data. Repetition that shares the map-edge vertex row is deliberately not offered:
+  it is mesh surgery rather than a per-cell transform, and plain repeat shows no step at the
+  measured block depths anyway)
 - `--plane=` (a comma-separated list gives one plane per splitscreen player — `--plane=player_bhawk,player_fury` — and implies that player count unless `--players=` says otherwise)
 - `--rof=` (default `extracted/rof` — the extracted UI archive holding the paint patterns; run `ExtractRof.ps1` to produce it)
 - `--paint=<pattern|random|none>` (aircraft livery, 2026-07-20: a pattern name, or `random`, or `none`. **Patterns are per aircraft** — the Fury has FORTUNE/BLCKSWAN/HUGHES/STUDIO, the Balmoral only FORTUNE/BRITISH; naming one the plane lacks logs its actual set and paints decals only. `random` draws from that plane's set. Comma-separated per player like `--plane=`, last covers the rest. **Defaults: `--fly`/`--stunt` randomize a fresh livery per player on every map load; static `--plane`/`--damage` views build unpainted**, so every pre-paint orbit/damage screenshot still renders byte-identically)

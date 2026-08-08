@@ -12,12 +12,16 @@ namespace CSVM.UI;
 /// is and how it was folded, so the shape of the continuation can be read at the controls instead
 /// of only out of a spatio-temporal strip.
 ///
-/// <para><b>What the colours say.</b> Hue is the fold parity, so a run of one hue is exactly
+/// <para><b>What the colours say.</b> Hue is the repetition band's parity
+/// (<see cref="MapEdgeExtender.FoldBandIndex"/>), so a run of one hue is exactly
 /// <see cref="MapEdgeExtender.BlockCells"/> cells wide and <b>the width of a band reads off the
-/// block depth directly</b>. The two axes carry independent parities, so a corner region — folded
-/// on both — is its own colour rather than an ambiguous blend. Value alternates cell by cell inside
-/// a band, which is what turns "wide-ish" into a countable number. In-map cells take a neutral
-/// tint, so the map boundary is unmistakable.</para>
+/// block depth directly</b>. The two axes band independently, so a corner region is its own colour
+/// rather than an ambiguous blend. Value alternates cell by cell inside a band, which is what turns
+/// "wide-ish" into a countable number. In-map cells take a neutral tint, so the map boundary is
+/// unmistakable.
+/// <para>⚠ Keyed on the band, not on whether the copy is reflected. Under <c>repeat</c> — the
+/// default, and what the original does — nothing is ever reflected, so a flip-keyed hue painted the
+/// entire continuation one colour and made the block unreadable in the one mode that matters.</para></para>
 ///
 /// <para><b>Why the strength is 0.2 and not <c>ClassOverlay</c>'s 0.5.</b> This overlay is read
 /// while flying, over terrain that has to stay legible as terrain; the information is in where the
@@ -32,11 +36,12 @@ namespace CSVM.UI;
 /// <c>MaterialOverride</c>/<c>MaterialOverlay</c>, which is a different shader entirely (see
 /// <see cref="SceneBuilder.TintLine"/>).</para>
 ///
-/// <para><b>Prototype.</b> F15 and F16 exist to settle `BL-105` — the mirrored unit is measured at
-/// ~3.2 cells on C2 and ~2.26 on C4, so the shipped default of one border cell is known wrong but
-/// no replacement is chosen yet. F16's repeat mode is a <i>refuted</i> hypothesis (`CAP-17` showed
-/// the original mirrors) kept only so it can be looked at; it will show a step at every seam,
-/// which is the honest rendering of it and not a fault in the fold.</para>
+/// <para><b>What it settled.</b> F15/F16 were built to answer `BL-105` and did, on 2026-08-08:
+/// A/B against the original at the controls found that the continuation <b>repeats</b> — it does
+/// not mirror — over a block of 2 cells on C1/C2/C4 and 1 on C5, with no seam gaps. Both are now
+/// the defaults, and F16's `mirror` is the mode kept only to look at. The keys remain because the
+/// four water-bordered chapters are assumed rather than measured, and because a per-edge (rather
+/// than per-chapter) block has never been ruled out.</para>
 ///
 /// <para>F14/F15/F16 sit in the F13–F24 range reserved for debug overlays (docs/controls.md);
 /// F13 is the patrol nets.</para>
@@ -49,9 +54,12 @@ public sealed partial class TileGridOverlay : Node
     // inserts its own value in sorted position, so a CLI choice is never stranded off the cycle.
     private static readonly int[] BaseCycle = { 1, 2, 3, 4, 12 };
 
+    // Band-parity swatches. Named for what they ARE — alternating repetition bands — rather than
+    // for the fold, because the fold is no longer what they encode and "mirrored" would be a lie
+    // in the default repeat mode.
     private static readonly string[] LegendLabels =
     {
-        "copied", "x-mirrored", "z-mirrored", "xz-mirrored",
+        "band even", "band odd x", "band odd z", "band odd xz",
     };
 
     private readonly Node3D _world;
@@ -200,6 +208,7 @@ public sealed partial class TileGridOverlay : Node
         {
             parts.Add($"[color=#{colors[i].ToHtml(false)}]{LegendLabels[i]}[/color]");
         }
+        parts.Add("(one band = one block)");
         return string.Join("   ", parts);
     }
 
@@ -209,7 +218,7 @@ public sealed partial class TileGridOverlay : Node
     private string StatusText()
     {
         var ext = _extender!;
-        string mode = ext.RepeatInsteadOfMirror ? "repeat (refuted — CAP-17)" : "mirror";
+        string mode = ext.RepeatInsteadOfMirror ? "repeat" : "mirror (not the original)";
         // The rebuild cost is only known after the first fold change, so it appears rather than
         // sitting at a meaningless zero.
         string cost = ext.LastRebuildMs > 0 ? $" · rebuild {ext.LastRebuildMs:F0} ms" : "";

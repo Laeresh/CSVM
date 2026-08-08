@@ -438,16 +438,18 @@ public sealed record SessionSpec
     // ---- Map-edge continuation (BL-105 prototype knobs) ----------------------------------------
 
     /// <summary><c>--map-edge-block=N</c>: how many border cells deep the repeated block is.
-    /// Default 1 = the historical clamp to a single border cell, so an unset flag changes nothing.
-    /// ⚠ 1 is known wrong — the measured unit is ~3.2 cells on C2 and ~2.26 on C4 — but no
-    /// replacement is chosen yet; see `BL-105`. <c>MapEdgeExtender</c> clamps this to the
-    /// chapter's grid, so an out-of-range value is not an error here.</summary>
-    public int MapEdgeBlock { get; private set; } = 1;
+    /// <b>Null = not given</b>, which resolves to <c>MapEdgeExtender.DefaultBlockCells</c> for the
+    /// chapter (2 on C1/C2/C4, 1 elsewhere — `BL-105`). Kept nullable rather than defaulted here
+    /// precisely so "the user asked for 2" stays distinguishable from "this chapter is 2", which a
+    /// plain int would erase. <c>MapEdgeExtender</c> clamps it to the chapter's grid, so an
+    /// out-of-range value is not an error.</summary>
+    public int? MapEdgeBlock { get; private set; }
 
-    /// <summary><c>--map-edge-mode=repeat</c>: translate the block instead of alternately
-    /// reflecting it. <b>Refuted</b> for the original by `CAP-17`; available so the hypothesis can
-    /// be looked at, and it will step at every seam.</summary>
-    public bool MapEdgeRepeat { get; private set; }
+    /// <summary><c>--map-edge-mode=mirror</c> turns this off. <b>True by default: repetition is
+    /// what the original does</b>, A/B'd at the controls on four chapters (`BL-105`). Alternating
+    /// reflection was the shipped behaviour until 2026-08-08 and is now only a thing to look
+    /// at.</summary>
+    public bool MapEdgeRepeat { get; private set; } = true;
 
     // ---- Where the data comes from: override VALUES only, null = not given ---------------------
 
@@ -597,16 +599,16 @@ public sealed record SessionSpec
                 }
                 else
                 {
-                    notes.Add(new Note("world", $"--map-edge-block='{want}' is not a cell count >= 1 — keeping the default 1 (the historical single-border-cell clamp)"));
+                    notes.Add(new Note("world", $"--map-edge-block='{want}' is not a cell count >= 1 — keeping the chapter's measured default"));
                 }
             }
             else if (arg.StartsWith("--map-edge-mode="))
             {
                 string want = arg["--map-edge-mode=".Length..];
-                s.MapEdgeRepeat = want == "repeat";
-                if (!s.MapEdgeRepeat && want != "mirror")
+                s.MapEdgeRepeat = want != "mirror";
+                if (s.MapEdgeRepeat && want != "repeat")
                 {
-                    notes.Add(new Note("world", $"--map-edge-mode='{want}' is not a mode it takes (mirror|repeat) — keeping 'mirror', the behaviour CAP-17 confirmed"));
+                    notes.Add(new Note("world", $"--map-edge-mode='{want}' is not a mode it takes (mirror|repeat) — keeping 'repeat', the behaviour the original was A/B'd against"));
                 }
             }
             else if (arg == "--debug-damage") { s.DebugDamage ??= ""; }
