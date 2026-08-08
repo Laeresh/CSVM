@@ -63,6 +63,11 @@ public sealed class AnimInstance
     public readonly Node3D? Anchor;
     public readonly List<SequenceRunner> Runners = new();
 
+    /// <summary>Every sequence name this instance has ever started a runner for. Only
+    /// <see cref="StopSequence"/> reads it, and only to tell "nothing ever called this" from
+    /// "it ran and finished" — see the stopper idiom there.</summary>
+    private readonly HashSet<string> _everStarted = new(StringComparer.OrdinalIgnoreCase);
+
     public AnimInstance(AnimDefinition def, Node3D? anchor)
     {
         Def = def;
@@ -95,8 +100,21 @@ public sealed class AnimInstance
             string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
         if (seq == null)
             return false;
-        Runners.Add(new SequenceRunner(seq));
+        AddRunner(seq);
         return true;
+    }
+
+    /// <summary>Starts a runner for one sequence and records that this instance has now run it —
+    /// the ONE way a runner joins an instance, so the bookkeeping cannot be bypassed. The
+    /// bootstrap that starts a definition's non-ON_CALL sequences goes through here too: those
+    /// are exactly the ones nothing ever CALLs (`player_crash_dirt`'s `pieceNseq` are reached by
+    /// no call site in the whole def), and <see cref="StopSequence"/>'s stopper idiom has to be
+    /// able to tell them from a sequence that has genuinely never run.</summary>
+    public void AddRunner(AnimSequence seq)
+    {
+        Runners.Add(new SequenceRunner(seq));
+        if (seq.Name is { Length: > 0 } named)
+            _everStarted.Add(named);
     }
 
     /// <summary>STOP_SEQUENCE: halts every active runner named <paramref name="name"/> —
@@ -115,7 +133,45 @@ public sealed class AnimInstance
             r.Halt();
             halted = true;
         }
-        return halted || CallSequence(name);
+
+        if (halted)
+            return true;
+
+        // ⚠ The stopper idiom — "nothing is running under this name, so START it" — stays exactly
+        // as it was, with ONE exception, because the idiom is load-bearing install-wide (removing
+        // it wholesale moves the `c1-destroy-effects` golden).
+        //
+        // The exception: a sequence that has ALREADY RUN on this instance and whose body launches
+        // a `do_intersections` body. Restarting that re-throws a piece that has already landed,
+        // and the landing dispatches the very sequence that stops it — a loop. Measured on
+        // `player_crash_dirt` (PLAN-ground-contact B5): `p1hit`, dispatched when `piece1` lands,
+        // opens with `STOP_SEQUENCE piece1seq`; `piece1seq` is a single OBJECT_MOTION, so its
+        // runner is finished the instant the piece leaves, and the "stop" relaunched it from the
+        // crash point. At the controls: the wreck "jumps back to the crash point 4 times". Pieces
+        // 2-4 never did — and the data says why, since only `p1hit` carries a STOP_SEQUENCE.
+        var seq = Def.Sequences.FirstOrDefault(s =>
+            string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (seq != null && _everStarted.Contains(name) && LaunchesContactTestedBody(seq))
+            return true;
+
+        return CallSequence(name);
+    }
+
+    /// <summary>Whether this sequence throws a body the engine ground-tests — an OBJECT_MOTION
+    /// authoring <c>do_intersections</c>. The narrow gate on <see cref="StopSequence"/>'s stopper
+    /// idiom: only these can loop, because only these land and dispatch a sequence back.</summary>
+    private static bool LaunchesContactTestedBody(AnimSequence seq)
+    {
+        foreach (var ev in seq.Events)
+        {
+            if (ev.Kind == "ObjectMotion"
+                && (ev.Data.Obj("gravity")?.Bool("do_intersections") ?? false))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 

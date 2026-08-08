@@ -146,10 +146,11 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 5. ◐ The two cockpit checks, and the arming epsilon TUNEd from what they show
 6. ☑ A bounce follow-up continues from the landing, not from the authored rest pose (from B5 round 1)
+7. ☑ The stopper idiom must not relaunch a piece that has already landed (from B5 round 2)
 
 ### Wave C — record it
 
-7. ☐ Land the decode, close `BL-059` item 1, retag `BL-245`
+8. ☐ Land the decode, close `BL-059` item 1, retag `BL-245`
 
 ## Dependency and parallelism notes
 
@@ -428,9 +429,39 @@ contact, mark it the way the dispatch path does, create the follow-up, and asser
 1 m of the landing rather than 60 m up at the authored rest. Reverting the fix turns it red. Full
 `.\RunTests.ps1`: 696 units, 27/27 suites, 13/13 goldens identical.
 
+## B7 ☑ The stopper idiom must not relaunch a piece that has already landed — **landed 2026-08-08**
+
+**Why it exists.** B5 round 2: the jumping was still there after B6. A deterministic headless repro
+(`--collision --hold=-1,0,0,1`, dive into the ground, `--debug-anim`) showed **`piece1` landing four
+times per crash while pieces 2–4 landed once** — and the data says exactly why: only `p1hit` carries
+`STOP_SEQUENCE piece1seq`.
+
+**The mechanism.** `AnimInstance.StopSequence` implements the *stopper idiom*: when nothing is
+running under the name, START it, the way an ON_CALL teardown block nobody calls gets reached.
+`piece1seq` is a single OBJECT_MOTION, so its runner is finished the instant the piece leaves —
+which means the landing's own `p1hit` "stopped" a finished sequence and thereby **relaunched the
+piece from the crash point**, which landed, which dispatched `p1hit` again. Before this plan the
+bounce never dispatched, so the idiom never bit.
+
+**Landed.** Two parts. `AnimInstance.AddRunner` is now the one way a runner joins an instance, so
+"has this instance ever run that sequence?" cannot be bypassed — the bootstrap that starts
+non-ON_CALL sequences goes through it too, which matters because **no call site in the whole def
+ever calls `pieceNseq`**. And `StopSequence` suppresses the restart only for a sequence that has
+already run **and** whose body launches a `do_intersections` motion.
+
+⚠ **The narrowness is not fastidiousness — it is measured.** Suppressing the restart for *any*
+already-run sequence moved the **`c1-destroy-effects` golden**: some world def genuinely relies on
+the stopper idiom re-running a finished sequence. That is a real, separate decode question about the
+idiom, left untouched here. Gating on "launches a contact-tested body" confines the change to this
+plan's 166 events, and the golden is byte-identical again.
+
+**Verified.** Repro now shows exactly 4 landings, one per piece, and the counter reads
+`4 by contact, 0 on their run time`. Full `.\RunTests.ps1`: 696 units, 27/27 suites, **13/13 goldens
+hash-identical**.
+
 # Wave C — record it
 
-## C7 ☐ Land the decode, close `BL-059` item 1, retag `BL-245`
+## C8 ☐ Land the decode, close `BL-059` item 1, retag `BL-245`
 
 **Goal.** The next session finds the decision recorded where it looks, and no item claims to be
 blocked on something that now exists.

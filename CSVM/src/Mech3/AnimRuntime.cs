@@ -1106,7 +1106,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         RemoveInstances(def.AnimName, anchor, tearDown: false);
         var inst = new AnimInstance(def, anchor);
         foreach (var seq in def.Sequences.Where(s => !s.OnCallOnly))
-            inst.Runners.Add(new SequenceRunner(seq));
+            inst.AddRunner(seq);
         if (inst.Runners.Count == 0)
             return;
         _instances.Add(inst);
@@ -1257,7 +1257,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // CALL_ANIMATION. The effect it starts becomes its own live instance; this host is
         // discarded.
         var host = new AnimInstance(inst.Def, inst.Anchor);
-        host.Runners.Add(new SequenceRunner(seq));
+        host.AddRunner(seq);
         host.Advance(this, 0f);
         return true;
     }
@@ -3364,7 +3364,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             _instances.Add(live);
             OnInstanceStarted?.Invoke(def, anchor);
         }
-        live.Runners.Add(new SequenceRunner(slot));
+        live.AddRunner(slot);
         _startDepth++;
         _startingInstances.Push((live, true));
         try
