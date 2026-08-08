@@ -2612,14 +2612,16 @@ public static class Suites
             static Dictionary<string, object?> Vec(float x, float y, float z) =>
                 new() { ["x"] = x, ["y"] = y, ["z"] = z };
 
-            AnimData Body() => new(new Dictionary<string, object?>
+            // `flagged: false` is how a `pNhit` settle hop is authored — the same body with
+            // do_intersections off, which must still be swept because it CONTINUES a landing.
+            AnimData Body(bool flagged = true) => new(new Dictionary<string, object?>
             {
                 ["gravity"] = new Dictionary<string, object?>
                 {
                     ["value"] = -9.8f,
                     ["complex"] = true,
                     ["no_altitude"] = false,
-                    ["do_intersections"] = true,
+                    ["do_intersections"] = flagged,
                 },
                 ["translation"] = new Dictionary<string, object?>
                 {
@@ -2733,11 +2735,43 @@ public static class Suites
 
                     ctx.Check(landed, $"the first flight landed by contact before the follow-up y={node.GlobalPosition.Y:0.00}");
                     float restedY = node.GlobalPosition.Y;
-                    var second = MotionRuntime.Create(runtime, node, Body(), Authored);
+                    // The follow-up is built the way `pNhit` authors one: the SAME body with the
+                    // flag OFF. It must still resume from the landing AND still test contact —
+                    // otherwise it runs its whole clock and buries the piece (3t − 4.9t² is 107 m
+                    // under the airfield at t=5, which is what "the plane went through ground"
+                    // was).
+                    var settle = Body(flagged: false);
+                    // A dive hands the crash rig a large downward momentum. The FIRST launch spends
+                    // it; a hop off the ground must not be handed it again, or it covers the 2 m
+                    // arming epsilon in 0.044 s and is under the terrain before the sweep can look.
+                    var inheritWas = runtime.InheritedWorldVelocity;
+                    runtime.InheritedWorldVelocity = new Vector3(0f, -45f, 0f);
+                    var second = MotionRuntime.Create(runtime, node, settle, Authored);
+                    runtime.InheritedWorldVelocity = inheritWas;
                     second?.Seek(0f);
                     float relaunchY = node.GlobalPosition.Y;
                     ctx.Check(Mathf.Abs(relaunchY - restedY) < 1f,
                         $"the follow-up launch starts from the landing, not the authored rest relaunchY={relaunchY:0.00} restedY={restedY:0.00} rest={restPose.Y:0.00}");
+                    ctx.Check(second is { TestsContact: true },
+                        $"the settle hop inherits the contact test from the landing it continues despite authoring do_intersections=false tests={second?.TestsContact}");
+                    second?.Seek(0.2f);
+                    float hopY = node.GlobalPosition.Y;
+                    // The band, not a point: this synthetic body is authored throwing DOWNWARD at
+                    // 5 m/s, so 0.2 s of it is −1.20 m on its own. Inheriting the −45 m/s dive on
+                    // top would put it another 9 m under.
+                    ctx.Check(hopY > relaunchY - 3f,
+                        $"and it inherits none of the dive's momentum hopY={hopY:0.00} relaunchY={relaunchY:0.00} (inherited it would be ≈{relaunchY - 10.2f:0.00})");
+
+                    // And a plain launch on a node that did NOT just land keeps the data's word:
+                    // the same false-flagged body, no mark, no test. This is the Decision 3 line
+                    // the inheritance must not cross.
+                    var elsewhere = new Node3D { Name = "ground-contact-unflagged" };
+                    root.AddChild(elsewhere);
+                    elsewhere.GlobalPosition = restPose;
+                    var plain = MotionRuntime.Create(runtime, elsewhere, settle, Authored);
+                    ctx.Check(plain is { TestsContact: false },
+                        $"a false-flagged launch that continues nothing still declines the sweep tests={plain?.TestsContact}");
+                    elsewhere.QueueFree();
                 }
                 finally
                 {

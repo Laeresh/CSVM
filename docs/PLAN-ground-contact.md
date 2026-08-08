@@ -148,10 +148,11 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 6. ☑ A bounce follow-up continues from the landing, not from the authored rest pose (from B5 round 1)
 7. ☑ The stopper idiom must not relaunch a piece that has already landed (from B5 round 2)
 8. ☑ The `MAIN_ROOT_NODE` sentinel must resolve, and its launch must take the node over (from B5 check 2)
+9. ☑ The settle hop must not bury the piece it just landed (from B5 round 3)
 
 ### Wave C — record it
 
-9. ☐ Land the decode, close `BL-059` item 1, retag `BL-245`
+10. ☐ Land the decode, close `BL-059` item 1, retag `BL-245`
 
 ## Dependency and parallelism notes
 
@@ -515,9 +516,56 @@ answer to the obvious worry, since this newly resolves `genx12`'s two `ACTIVE_ST
 prop's four pose ops as well, and `c1-destroy-effects` is a `genx12` carrier. The B7 crash repro is
 unmoved: 4 landings per crash, one per piece.
 
+## B9 ☑ The settle hop must not bury the piece it just landed — **landed 2026-08-09**
+
+**Why it exists.** B5 round 3, from the controls: *"check 1 no repetition but plane went through
+ground."* The looping was gone (B7); the burial was not.
+
+**What it actually was — and the first reading was wrong again.** The obvious culprit is the
+`pNhit` settle hop's own `do_intersections: false`, so the first fix was to let a hop **inherit** the
+test from the landing it continues. That was necessary but did nothing on its own: the repro still
+read `4 by contact, 0 on their run time`, four landings for eight bodies. Tracing the sweep showed
+why — the hop was already **underground when it armed**:
+
+```
+DIAG sweep piece1 t=0.20 from=(…, 176.92, …) to=(…, 176.18, …) hits=0
+DIAG sweep piece1 t=0.40 from=(…, 167.98, …) to=(…, 167.24, …) hits=0
+```
+
+45 m/s downward, from a body authored at **+3 m/s up**. That is the aircraft's dive momentum,
+handed to the hop by `InheritedWorldVelocity` — the rule that makes launched debris scatter along
+the plane's travel. The first launch spends that momentum; the hop is a piece lying at rest on the
+ground, and re-inheriting it covered the 2 m arming epsilon in **0.044 s**, so by the time the sweep
+armed, every ray started below the terrain and found nothing. Not a missing test: a body that
+tunnelled before the test could look.
+
+**Landed.** One question — *does this motion continue a contact landing?* — asked once at the top of
+`MotionRuntime.Create` (the resume mark is one-shot; consuming it **is** the answer), with three
+consequences: no inherited momentum, no re-home to the authored rest (B6), and the contact test
+carries over.
+
+⚠ **That last one is a judged divergence, not a decode** — the one place this plan reads
+`do_intersections: false` as *unset* rather than *opted out*. Its defence is its narrowness: the
+mark is set only by a contact landing, so the only motions it can reach are follow-ups the sweep
+itself dispatched onto a node the data **did** flag. It does not touch Decision 3's line — a
+false-flagged launch that continues nothing still declines the sweep, and the suite asserts exactly
+that as a second case. A compiled `gravity` block always carries all four bits, so "false" here
+cannot be told from "not re-stated", and it is the object, not the event, the original tests.
+
+**Why it matters:** `player_crash_dirt`'s four pieces are 4 of the 16 `(def, node)` pairs the census
+calls ground-tested **and** left lying there — the only debris a player can walk up to. Burying them
+100 m under the airfield (3t − 4.9t² at t=5) defeats the item outright.
+
+**Verified.** Repro: **8 by contact, 0 on their run time** — every launch and every hop — where it
+read 4 and 4 buried before. Three new checks in the `ground-contact` suite (hop inherits the test;
+hop inherits no momentum; an unmarked false-flagged launch still declines), the middle one
+band-asserted because the synthetic body is authored throwing downward. Full `.\RunTests.ps1`: 696
+units, 28/28 suites, 13/13 goldens hash-identical — structurally safe, since a capture that builds
+no colliders never lands by contact, so the mark is never set and none of the three rules can fire.
+
 # Wave C — record it
 
-## C9 ☐ Land the decode, close `BL-059` item 1, retag `BL-245`
+## C10 ☐ Land the decode, close `BL-059` item 1, retag `BL-245`
 
 **Goal.** The next session finds the decision recorded where it looks, and no item claims to be
 blocked on something that now exists.

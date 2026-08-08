@@ -324,6 +324,15 @@ the "Debris tumbles" bullet below for which pieces each covers. A format reader 
         `Targets` now applies `IsSelfNodeRef` the way `PufferState`'s `AT_NODE` and the condition
         nodes always did, which also un-drops `genx12`'s two `ACTIVE_STATE`s and the `map` prop's
         four pose ops (154 events in all, 13/13 goldens unmoved).
+      - ⚠ **A motion that CONTINUES a contact landing is treated as the same body settling**, and
+        that means three things at once: it inherits the contact test whatever its own flag says, it
+        keeps the live pose instead of re-homing, and it inherits **none** of the aircraft's
+        momentum. `player_crash_dirt`'s `pNhit` hop is the case — authored `+3 m/s` up with
+        `do_intersections: false` over a 5–7 s `RUN_TIME`, it was handed the dive's ~45 m/s downward,
+        crossed the 2 m arming epsilon in 0.044 s and was under the terrain before the sweep armed,
+        burying the four pieces a player can actually walk up to. The test inheritance is a **judged
+        divergence** from Decision 3, kept narrow by the mark being one-shot and set only by a
+        contact landing: a false-flagged launch that continues nothing still declines the sweep.
       - A launch onto a node **another live motion is driving** starts from the live pose, not the
         authored rest: it is a takeover, and `MotionSet.Add` evicts the incumbent on the transform
         channel. `agyrobus` is why — it has no placement of its own, so its "rest" is the map origin

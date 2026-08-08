@@ -193,6 +193,16 @@ internal sealed class MotionRuntime : IAnimMotion
         m._bounce = data.Obj("bounce_sequence");
         m._surfaceIsWater = rt.SurfaceIsWater;
 
+        // Does this motion CONTINUE a contact landing — i.e. is it the `pNhit` settle hop the
+        // sweep itself dispatched onto the very node that just came to rest? One question, three
+        // consequences below (no inherited momentum, no re-home to the authored rest, and the
+        // contact test carries over), so it is asked once, here, before any of them. The mark is
+        // one-shot and consuming it IS the answer. Read `_hasBallistic`'s own condition off the
+        // data, since the field is not set until the translation block below.
+        bool continuesLanding = !target.TopLevel
+                                && (data.Has("translation") || data.Has("translation_range"))
+                                && rt.ConsumeLandingResume(target);
+
         // The plane's momentum (world-space), carried by the launched pieces so they scatter
         // along its travel instead of just popping up in place. Converted into the node's parent
         // frame, where the launch velocity lives (v0 drives Target.Transform, a local pose).
@@ -200,9 +210,17 @@ internal sealed class MotionRuntime : IAnimMotion
         // splash) authors the exact same near-zero-horizontal, vertical-only translation shape as a
         // launched piece, so the data alone cannot tell "debris" from "a decal that must stay put"
         // apart — only the caller (which knows which def this is) can.
+        //
+        // ⚠ A settle hop inherits NOTHING. The momentum belongs to the aircraft's last moment and
+        // the FIRST launch already spent it: the piece is lying on the ground, at rest, and a
+        // vertical dive hands its `pNhit` hop ~45 m/s straight down on top of the authored +3.
+        // Measured — the hop then covered the 2 m arming epsilon in 0.044 s, i.e. it was already
+        // BELOW the terrain when the sweep armed, and every ray after that started underground and
+        // found nothing. That is the whole of "the plane went through ground": not a missing test,
+        // a body that tunnelled before the test could look.
         Vector3 InheritedLocal()
         {
-            if (!inheritVelocity || rt.InheritedWorldVelocity == Vector3.Zero)
+            if (!inheritVelocity || continuesLanding || rt.InheritedWorldVelocity == Vector3.Zero)
                 return Vector3.Zero;
             var parentBasis = (target.GetParent() as Node3D)?.GlobalTransform.Basis ?? Basis.Identity;
             return parentBasis.Inverse() * rt.InheritedWorldVelocity;
@@ -346,12 +364,30 @@ internal sealed class MotionRuntime : IAnimMotion
         // there teleported the shot-down bus kilometres away to fall out of sight. Same family as
         // the landing resume above: the live pose is authoritative when something else just put
         // the node there.
-        if (m._hasBallistic && !target.TopLevel && !rt.ConsumeLandingResume(target)
+        if (m._hasBallistic && !target.TopLevel && !continuesLanding
             && !rt.Motions.DrivesTransform(target))
         {
             m._heldOrigin = rest.Origin;
             m._heldRot = rest.Basis.Orthonormalized();
         }
+
+        // ⚠ A settle hop INHERITS the test from the landing it continues, whatever its own flag
+        // says — the one place this plan reads `do_intersections: false` as "unset" rather than
+        // "opted out", and it is a judged divergence, not a decode. `player_crash_dirt`'s pieces are
+        // the case: `pieceNseq` lands the piece on the ground (flag true), the dispatched `pNhit`
+        // throws the SAME node again at +3 m/s over a 5-7 s RUN_TIME with the flag false, and
+        // nothing stops it — 3t − 4.9t² is 107 m under the airfield at t=5. At the controls,
+        // B5 round 3: "no repetition but plane went through ground". These four pieces are 4 of the
+        // 16 (def, node) pairs the census calls ground-tested AND left lying there — the only debris
+        // a player can walk up to — so burying them defeats the item outright.
+        //
+        // The narrowness is the whole defence. This is not "widen to the 379 that author false"
+        // (Decision 3, BL-245's population, confirmed correct at the controls by PT-46 (d)): the
+        // mark is set only by a CONTACT landing, is one-shot, and is consumed above, so the only
+        // motions it can reach are follow-ups the sweep itself dispatched on a node the data DID
+        // flag. A compiled gravity block always carries all four bits, so "false" here cannot be
+        // told from "not re-stated" — and the object, not the event, is what the original tests.
+        m._contactTest |= continuesLanding && rt.ContactMask != 0;
 
         // Nothing to drive → no motion (a bare gravity/bounce stub, handled by the caller).
         bool any = m._hasBallistic || m._hasScale || m._tumbleRate != 0f || !m._spinRate.IsZeroApprox();

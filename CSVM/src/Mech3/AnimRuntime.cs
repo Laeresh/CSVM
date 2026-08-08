@@ -3525,7 +3525,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // behaviour this replaced.
         if (Motions.ContactLandings + Motions.ClockEndings > 0)
         {
-            GD.Print($"anim/debug: do_intersections bodies ended: {Motions.ContactLandings} by contact, "
+            // "contact-tested", not "do_intersections": a settle hop inherits the test from the
+            // landing it continues even though its own flag is false (MotionRuntime.Create).
+            GD.Print($"anim/debug: contact-tested bodies ended: {Motions.ContactLandings} by contact, "
                      + $"{Motions.ClockEndings} on their run time"
                      + (Motions.ContactLandings == 0 ? " — NO CONTACT AT ALL (is a mask wired?)" : ""));
         }
