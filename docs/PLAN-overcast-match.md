@@ -130,6 +130,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 4. ☐ A4 — Scatter A/B vs CAP-12 + the river twin; close `BL-312`
 5. ☐ A5 — Continue the field past the map edge (user playtest 2026-08-08: the original's field is everywhere)
 6. ☑ A6 — Why does flight mode show puffs below the deck when freecam doesn't? (investigate, then fix or reclassify)
+7. ☐ A7 — The deck is engine trickery: regime model + cloud layer gate (user decode, 2026-08-08)
 
 ### Wave B — fog semantics and zones (BL-100 + BL-303 + BL-101)
 
@@ -152,8 +153,10 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 Waves run strictly A → B → C (decision 3). Inside Wave A: A1 blocks A2/A3; A2 and A3 both edit
 `FogVolumeClutter.cs` — sequence them, never parallel worktrees. **A6 (investigation) runs before
-A5 (both may touch `FogVolumeClutter.cs`), and A4 closes the wave only after A5 and A6 land** —
-the 2026-08-08 playtest reopened the wave with both. Inside Wave B: B11, B12, B13 are
+A5 (both may touch `FogVolumeClutter.cs`), and A4 closes the wave only after A5, A6 and A7 land** —
+the 2026-08-08 playtest reopened the wave with A5/A6, and the user's deck-regime decode from the
+A6 re-fly minted A7 (runs after A6, before A5 — A7 touches `FogVolumeClutter.cs` layer
+assignment beside `WeatherRig.cs`/`GameSession.cs`). Inside Wave B: B11, B12, B13 are
 independent research and may interleave (B13 may park on a [USER] capture — proceed with the
 others); B14 needs all three; B15 and B16 follow B14 and both touch the weather/fog path
 (`Weather.cs`/`WeatherRig.cs`/`SceneBuilder.cs`) — sequence them; B17 last. Inside Wave C: C21
@@ -946,6 +949,53 @@ verdict lands as evidence on the appropriate item and this item closes as reclas
 The whiteout band is a separate system; a sprite seen through whiteout murk is not "below the
 deck". — *both respected: `cloudparent` was not touched, and every probe above ran `--no-fog`
 (whiteout off) or measured flattened colours, so no reading is a whiteout artifact.*
+
+## A7 ☐ The deck is engine trickery: regime model + cloud layer gate
+
+**Goal.** The deck behaves as the original's does, per regime: below the band a camera-following
+ceiling whose texture look never changes while climbing; the above/below flip hidden inside the
+opaque whiteout core; above the band a world-fixed floor at the band centre — and BOTH cloud
+populations (fvol clutter and `cloudparent`) hidden below the band, visible above, per camera.
+
+**Evidence (confidence: direction traced — user at the controls of the original, 2026-08-08;
+magnitudes open).** Three observations from the A6 re-fly: (1) climbing below the deck, the
+texture's look is *exactly the same* at every altitude — a world-fixed sheet would grow and
+parallax, so the below-band ceiling follows the camera vertically; (2) after the whiteout the
+sheet lies below at a **fixed height ≈ the whiteout centre** (C1: 1047 m) — which is exactly the
+altitude A6 found the old code pinning at, i.e. the old pin was the *above-band half* of the
+original's trick applied in both regimes; (3) from below, the view is the pure sheet — **"not
+even the cloud groups"** (`cloudparent`) show, so the gate covers both populations. CAP-12's
+"first wisps at ~982 m" are reattributed to the always-present plane-local wisp population
+(`BL-317`), not the field appearing.
+
+**Approach.** `WeatherRig.Tick` deck regime: camera below band centre → ceiling at
+`camera.y + K` (K constant — derive from the original stills: texture tiles are 1024 m, so the
+apparent mottling scale in `C1 IA1 Fog river.png` at its known 934 m camera fixes the ceiling
+distance; if underdetermined, K is a marked TUNE matched to that still, which is the plan's own
+target); camera at/above band centre → floor at the band centre, world-fixed. The flip happens
+at the centre crossing, inside the opaque core (C1: 1032–1062), so it cannot be seen. Cloud
+layer gate: put the fvol MultiMeshes and the `cloudparent` subtrees on a dedicated visual layer;
+toggle each camera's **cull mask** by that camera's own altitude vs the band centre — never node
+visibility, which would leak across splitscreen panes. Read how `cloudparent` instances are
+built (WorldBuilder/SceneBuilder) to tag the instances, not just a template root.
+
+**Model recommendation.** high — camera/layer machinery with splitscreen and per-chapter data
+variation; the flip masking is easy to get subtly wrong.
+
+**Verify.** Climb ladder 900→1250 m every ~25 m: no visible pop anywhere (frames inside the core
+are near-uniform white, so the flip is unobservable); texture-look constancy below (mottling
+feature scale identical at 300/600/900 m); above-band floor parallaxes normally from 1100+;
+both pinned poses re-shot; C4 regime check (band centre = its authored 1050); **C5's street haze
+still visible at street level** (see Traps); C1C build-ups visible from above the band;
+splitscreen `--players=2` with panes on opposite sides of the band each render their own regime;
+`.\RunTests.ps1` (goldens will move again — list, don't re-pin).
+
+**⚠ Traps.** **Chapters with no deck mesh must bypass the gate entirely** — C5 has clutter, no
+deck, and an unreachable band at 9950–10150 m: an unguarded gate hides its street haze forever.
+The gate is per-camera cull mask, per view. Do not touch the whiteout band's own altitudes or
+opacity — if the core doesn't fully mask the flip somewhere, that is a finding about the
+whiteout (new item), not a licence to move the flip altitude. K is TUNE-marked with its
+derivation cited. `cloudparent` stays untouched apart from layer assignment.
 
 # Wave B — fog semantics and zones
 

@@ -1619,6 +1619,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Playtest after fix:* re-fly the clip's approach into the same street volume and compare
   visibility collapse distance.
 
+- `BL-317` `[Research]` **The original renders ambient wisp puffs around the plane at all times —
+  a third cloud population we don't have** (user at the controls of the original, 2026-08-08).
+  Identified while re-reading CAP-12's climb: the "first wisps at ~982 m" are these plane-local
+  puffs, not the `fvol` field appearing and not the whiteout ramp — "another disjunct feature."
+  ⚠ Vocabulary: this is a THIRD population beside the `fvol` `cloudsprite` field and the
+  world-placed `cloudparent` clusters (`BL-118`'s note) — a claim about one is not evidence
+  about the others. Note the deleted hand-tuned `CloudPuffs.cs` (removed by `BL-273`,
+  2026-08-06) accidentally imitated exactly this; its constants survive in git history as a
+  starting point, but the decode should come from footage: when they are visible, their size,
+  count, and whether they move with the air or hang world-fixed. Needs a dedicated original
+  capture at several altitudes in clear air away from the deck band.
+
 - `BL-304` `[Bug]` **Water gets the WorldLight dim; the original renders it unmodulated** (`CAP-11`
   A/B, 2026-08-07; surfaced closing `BL-110`; evidence `playtest/CAP-11/README.md`). C2B ocean
   foreground, same world, matched spawn pose: original 53.9 vs ours 42.0–42.5 — ratio
