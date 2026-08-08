@@ -170,7 +170,12 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 25. ☑ C25 — The below-band ceiling covers to the horizon and fades like the original's — landed as
     a `K` correction (400 → 135 m); `C21`'s refutation meant no extension and no baked fade were
     needed at all
-26. ☐ C26 — The last strip: the dome wall's base must meet the fog wall seamlessly (user at the controls, 2026-08-09)
+26. ◐ C26 — The last strip: the dome wall's base must meet the fog wall seamlessly (user at the
+    controls, 2026-08-09) — **reproduced and traced, no code**: the wall's base ring IS `FOG_COLOR`
+    and lands to the decimal (candidate (a) refuted three ways); the strip is the wall's own
+    authored gradient over the 13 px the deck rim leaves open. ⚠ **Ends at a fork only the user can
+    take** — every mechanism that reproduces the original's flat band reopens `C25`'s `K`/extent,
+    `B16`'s no-fog verdict or `B18`'s geometry. See the section.
 
 ## Dependency and parallelism notes
 
@@ -3026,7 +3031,114 @@ geometry change at all, so the geometry baseline was not needed — the before/a
 
 # Wave C — deck mesh brightness
 
-## C26 ☐ The last strip: the dome wall's base must meet the fog wall seamlessly
+## C26 ◐ The last strip: the dome wall's base must meet the fog wall seamlessly
+
+**STOPPED at candidate (b) — no code written, by this item's own brief.** (2026-08-09) The symptom
+reproduces exactly and its mechanism is now traced to the byte: **the strip is the dome wall's own
+authored vertex gradient, rendered correctly.** Candidate (a) — "our render is off (sRGB, mip
+selection, a vertex-colour product)" — is **refuted three independent ways**; the base ring lands on
+`FOG_COLOR` to the decimal. So the residual is candidate (b) — the data itself darkens immediately
+above the base — and per the brief that "needs a user decision, not an invention". **The fork the
+user must take is below.** Nothing in `CSVM/` changed; `git diff` over the tree is the plan section,
+the checklist line and one `weather.md` decode.
+
+### The repro — a 13-px band, altitude-invariant, hard-edged at the deck rim
+
+C1 freecam, west from the pinned x/z (`--pos=-7323,<y>,-3829 --direction=-1,0,0`) — open water past
+the map's west edge, no terrain in frame, level pose so the horizon is row 360 (`SHOT-23`).
+`.scratch/c26/ladder/`, measured by `.scratch/c26/rung.py` (flat rows only, `SHOT-22`):
+
+| rung | dip below `FOG_COLOR` | at | rim step | reading |
+|---|---|---|---|---|
+| 300 m | **3.47** (172.53) | 8 px | +1.76 | terrain still covers the lowest rows |
+| 400–900 m | **7.40** (168.60) | 13 px | **+5.25** at 13→14 px | **bit-identical at every rung** |
+| 1000 m | — | — | +2.73 | inside `CLOUD_COVER`'s whiteout (970–1124), band reads 204 |
+
+Both surfaces are camera-anchored — the dome by construction, the deck ceiling at `camera.y + K` —
+so the strip does not move with altitude at all. What changes while climbing is only that the
+terrain silhouette sinks below it, which is why the user sees it appear on a climb and why `C25`'s
+river-pose prep (terrain onset 14–17 px) under-called it at 168.67.
+
+The band's shape, row by row (500 m rung): 176.00 at the horizon, 175.11 / 174.39 / 173.93 …
+168.60 at 13 px, then **173.85 / 176.00** — the deck rim's hard edge at `f·K/6144` = 13.2 px, exactly
+where `C21`'s rim formula puts it.
+
+### Why it is NOT a render defect — candidate (a), refuted three ways
+
+C1 `zone2`'s wall (`h_zone2scroll`, model 773) authors its base ring **(176,176,176) = `FOG_COLOR`
+byte-exact**, grading to (99,112,154) at the ring above it, which sits at only **9.8°** elevation.
+At the same pose:
+
+| probe | result | what it proves |
+|---|---|---|
+| `--tex-override=Sky1.tif=00ff00` | strip → (0, G, 0) with **G equal to the base render's G at every row** (176.00, 175.00, 174.41 … 168.49) | the strip is the wall, and the texture factor is exactly 1.0 in G |
+| `--tex-override=Sky1.tif=ffffff` | **byte-identical frame** (0 / 921,600 px changed) | the texture contributes nothing at all here — nothing to mis-sample, no mip artifact |
+| `--tex-census --no-fog` | strip = (119,59,176) against `sky1`'s census colour (175,89,255) ⇒ ×(176/255) | the modulate is one clean multiply by the authored vertex colour |
+
+The white override is an able-to-fail control, not a null result: the **same** override at the
+above-deck pose moves 261,029 px (28.3 %, max 48), so the instrument works and the strip really is
+texture-free. The reason is in the data — the shipped `rtexture*` `sky1` carries a **27-row white
+band** at top and bottom, and the wall's base UV (`v = 0.97265625`) sits inside it; the band runs out
+at **13.6 px** of elevation, just past the deck rim. So the authored colour lands **once**,
+unsquared and unmodulated: 176.00 at elevation 0, and 166.99/168.49/173.38 (RGB) at 13 px against the
+authored interpolation's 166.4/166.7/172.8. **B18's family of defect is simply not present on the
+wall.**
+
+The design is install-wide and now in `weather.md`: every chapter's wall base ring wears its flown
+zone's `FOG_COLOR` — C1/C1C/C2B 176, C1B (16,24,48), C2 (205,215,255), C3 200, C4 192, C5 0 — the
+wall-side sibling of `B18`'s skirt decode. The dome is *authored* to meet the fog wall seamlessly,
+and ours does. What is authored above that ring is a steep sky gradient.
+
+### What the original does instead — and why only the user can pick the fix
+
+The original does not show the gradient near its horizon, and the frames say so flatly:
+
+| original frame | horizon row | above it |
+|---|---|---|
+| `C1 IA1 Fog river.png` (below band) | **370** — terrain onset row 411 minus `C21`'s measured 41 px | rows 335–370 are **exactly 175.00, per-row sd 0.00, for 36 px**; the deck's mottling only starts at 334 |
+| `CAP-12 t20` 670 m (below band, no terrain in frame at all) | inside its flat band | a ~17-row dead-flat 175.00 run, then structure both sides |
+
+⇒ **The bar and our number: the original's step at the wall base is 0.00 over ≥17 px; ours is 7.40
+with a +5.25 edge.** Side by side, magnified, at `.scratch/c26/AB-horizon-strip.png`.
+
+Three mechanisms can produce the original's flat band, and **every one of them is outside this
+item's licence**:
+
+1. **The ceiling's rim is higher than ours.** Our rim sits at 13 px (`K` = 135 over the sheet's
+   6144 m half-span); the original's below-band frames keep FOG_COLOR flat to 36 px. Either `K`
+   or the sheet's *extent* would hide the gradient by construction — but `K` = 135 is the **user's
+   own pick at the controls** (`C25`), and the extension is the approach `C21` refuted. Cheapest to
+   test, and it is a `C25` reopening, not a C26 fix. ⚠ Note the rim elevation is `atan(K/R)`: extending
+   the sheet alone (R 6144 → 20 km) moves the rim 13 px → 4 px **without touching `K`**, so the two
+   halves of `C25` are separable if the user wants only one of them.
+2. **Fog on the dome, with the altitude term doing the work.** C1 `zone2`'s `FOG_ALTITUDE` is
+   4000→5000 m, and at our 2.5× dome scale the wall crosses it — low fragments would pull to
+   `FOG_COLOR`, high ones stay clear, which is the observed shape. **`B16` is a landed verdict:
+   no fog on the dome, in any form.** Recorded because it fits, not because it may be built.
+3. **A different dome anchor or vertical scale.** `B18` settled the geometry (camera-anchored,
+   uniformly scaled), and uniform scale cannot change an angle, so this means a *non-uniform* Y
+   scale or a lower anchor — a real geometry change to a landed decode.
+
+**Recommendation for the fork: (1), and specifically the extent half.** It is the only one that
+touches neither a landed verdict nor the user's own `K` choice, it is bounded and deterministic
+(`A5`'s map-edge precedent), and it predicts the original's flat band by construction rather than by
+taste. But it changes an approved look, so it is the user's call — same shape as `C25`'s.
+
+### Files
+
+`docs/formats/weather.md` (the wall-base-ring decode + the ⚠ not-a-defect warning), this section and
+the checklist line. **No engine code, no shader, no `docs/architecture.md`, no `PROJECT_CONTEXT.md`,
+no `backlog.md`** — nothing about the render changed, so nothing there can have. Probes and
+instruments in `.scratch/c26/`: `scout.ps1` (the clean-horizon search), `identify.ps1` (the three
+identification probes), `texcontrib.ps1` (the able-to-fail control), `ladder.ps1` + `ladder/`,
+`band.py` / `rung.py` / `diff.py` / `texrows.py` / `mat.py` / `montage.py`, and
+`AB-horizon-strip.png`.
+
+⚠ **`RunTests.ps1` was not run and no golden can have moved** — `git diff` over `CSVM/` is empty, so
+a run could only reproduce `C22`/`C25`'s six standing un-repinned movers (`METHOD-10`, the same call
+`C23` made).
+
+### Original brief (kept for reference)
 
 **Goal.** Climbing below the band over a clean horizon shows no residual strip between the fog
 wall and the deck rim — the dome wall's lowest rows read as the fog colour, as the original's do.
@@ -3059,6 +3171,9 @@ list, C24 re-pins).
 **⚠ Traps.** B16/B18 are landed verdicts — no fog on the dome, no re-fogging the skirt. SHOT-23:
 compare like-pitched frames or state the pitch. The strip rows overlap the rim math from
 C21/C25 — change the WALL's rendering, not K.
+— *all three held, and the last one is what stopped the item: the WALL's rendering turned out to be
+correct, so there was nothing there to change and the surviving mechanisms all live on the other
+side of that line.*
 
 ## C25 ☑ The below-band ceiling covers to the horizon and fades like the original's
 

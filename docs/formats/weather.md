@@ -231,6 +231,32 @@ was to stop applying that one authored colour twice (`docs/architecture.md`, `Sc
 ⚠ **A skirt colour that does not match its zone's `FOG_COLOR` means the wrong zone is being flown**,
 not that the dome needs painting — the pair is the check.
 
+#### The wall's LOWEST ring is painted `FOG_COLOR` too, then grades to sky (2026-08-09, `C26`)
+
+The wall shares more than a ring with the skirt: its bottom row of vertices carries the same
+`FOG_COLOR` value, so the two pieces meet at one continuous colour and the join is invisible by
+construction. Install-wide, flown zone, no exceptions:
+
+| chapter | `FOG_COLOR` | wall base ring | grades to (next ring up) |
+|---|---|---|---|
+| C1 / C1C / C2B | 176,176,176 | 176,176,176 | 99,112,154 |
+| C1B | 16,24,48 | 16,24,48 | 36,48,72 |
+| C2 | 205,215,255 | 205,215,255 | 178,193,255 |
+| C3 | 200,200,200 | 200,200,200 | 199,207,218 |
+| C4 | 192,192,192 | 192,192,192 | 173,180,203 |
+| C5 | 0,0,0 | 0,0,0 | 16,18,27 |
+
+⚠ **The gradient above that ring is authored and steep, and it is NOT a defect to paint over.** On
+C1's wall the next ring up sits at only **9.8° elevation**, so the first degree above the horizon has
+already lost ~7 units — measured on our own render as **176.00 at the horizon falling to 168.60 at
+13 px** (1.24°), which is the authored interpolation to the decimal. The wall's texture cannot mask
+it either: the shipped `rtexture*` `sky1` carries a **27-row white band** top and bottom, so the
+lowest ~13 px of wall multiplies the vertex colour by exactly 1.0 and the authored value lands once,
+unmodulated (a flat-white `--tex-override` there leaves the frame byte-identical). **The original's
+own frames show no such gradient near the horizon** — `C1 IA1 Fog river.png` is dead-flat `175.00`
+(per-row sd 0.00) for 36 px above its horizon — so whatever hides it in the original is *not* a wall
+painting rule. Do not "fix" the wall's colours; see `PLAN-overcast-match` `C26`.
+
 #### The remaining four are settled: C1, C1C, C2B and C4 all fly `zone2` (2026-08-08)
 
 These four define `ZONE2` *and* build a dome for it, so the geometry above cannot decide them, and
