@@ -159,7 +159,13 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
     fog (the fog-exempt/baked-fade lead is refuted, C25) and `DeckCeilingHeight` re-estimates to
     **135 m**, not 400 — needs a user verdict, see the section
 22. ☑ C22 — Implement the underside darkening
-23. ☐ C23 — Re-measure the tops per population; blend the mesh↔sprite cut
+23. ☑ C23 — Re-measure the tops per population; blend the mesh↔sprite cut — **measurement +
+    four disproofs, no engine code**: the tops boxes are 65–97 % sprite (the deck bleeds 3–35 %
+    through card alpha, which the flat mask could not see), our card plateau **222.7** is faithful
+    to the data while the original's is **209**, and the cut has two independent causes —
+    `A7`'s above-band floor sits *inside* the card band, and `C22`'s dimming put that floor 54
+    units under the cards. ⚠ **Ends at a fork only the user can take — see the section; `C24`
+    must not close `PT-42`(a) through it.**
 24. ☐ C24 — Final match: both stills within the bar; mint PT + night-moonlit BL; close `BL-118`
 25. ☑ C25 — The below-band ceiling covers to the horizon and fades like the original's — landed as
     a `K` correction (400 → 135 m); `C21`'s refutation meant no extension and no baked fade were
@@ -3556,7 +3562,249 @@ special handling: `forceLit` is baked into the built material at world-build tim
 frame, so it survives the deck's X/Z/regime follow the same way `forceDoubleSided` already does.
 Nothing here is keyed to face normals.
 
-## C23 ☐ Re-measure the tops per population; blend the mesh↔sprite cut
+## C23 ☑ Re-measure the tops per population; blend the mesh↔sprite cut
+
+**Landed.** (2026-08-09) **No engine code, no shader, no `fogvol.md` rule change.** This item is a
+measurement, four disproofs and a fork. The tops caveat is resolved — with a *correction* to how
+`C21`/`C22` read it — and both halves of the cut are now traced to an exact mechanism and
+quantified. What is NOT landed is the fix, because the two mechanisms that survive the data fit it
+equally well and produce visibly different renders (ground rules; the item's own brief says stop
+rather than pick by taste).
+
+### ⚠ BLOCKED — the fork, and what `C24` must not do
+
+The from-above world reads **~210 and flat** in every original above-band frame; ours reads
+**222.7 cards over a 168.9 floor**. Two mechanisms close that, both consistent with everything
+measured below, and **they differ visibly**:
+
+| | what it says | what it looks like |
+|---|---|---|
+| **M-a** | the card's own rendered value is **~209**, not 222.7 (the original's saturated plateau measures 208.88 / 209.16 in two independent frames) — **and** the above-band floor is un-dimmed to 210.5 | the field stays: a cloud carpet with ragged tops above the band, one flat tone with the floor |
+| **M-b** | the `fvol` field is **not drawn above the band at all** — the mirror of `A7`'s below-band gate — and the from-above sheet is the un-dimmed deck mesh at 210.5 | the carpet and the ragged tops above the band go away entirely; a smooth sheet, which is what `t97` shows |
+
+Both need the **same second half**: the above-band deck floor must not carry `C22`'s `WorldLight`
+dimming (evidence below — the original's above-band frames contain **no pixel below `FOG_COLOR`
+175**, and ours contain 168.9 ones). Neither half is landable alone: un-dimming the floor by itself
+moves every tops box **1–15 units further from** the original, because the sprite half is still
+wrong.
+
+⇒ **`C24` cannot close `BL-118`'s `PT-42`(a) symptom.** Either the user picks M-a/M-b at the
+controls (the A/B pair is `.scratch/c23/AB-1700-nearfield.png`, and shooting M-b is a one-line
+probe: invert `WeatherRig.DeckRegime`'s `CloudsVisible`), or `PT-42`(a) and the above-band deck
+brightness are minted as a fresh item and `BL-118` closes on its underside half only.
+
+### The instrument the tops caveat actually needed — and the correction it forces
+
+`C21`/`C22` read the tops boxes as **0.0 % deck mesh** and concluded they were a pure `cloudsprite`
+measurement. That reading is an artifact of the instrument: `population.py`'s flat-red mask
+classifies only **fully** red pixels, and above the band the deck is behind alpha-blended cards
+almost everywhere, so a blended deck pixel counts as "not mesh". Shooting the same pose twice with
+the deck texture flattened to **black** and to **white** (`--no-fog`, so the only difference is the
+deck's own colour) gives, per pixel, `T = (L_white − L_black) / (255 · WorldLight)` — the exact
+fraction of that pixel the deck contributes through whatever alpha sits in front of it
+(`.scratch/c23/bleed.ps1` + `bleed.py`):
+
+| pose | `tops-L` | `tops-R` | `tops-M` | whole lower 45 % |
+|---|---|---|---|---|
+| above-deck 1192 m | **13.6 %** | **14.4 %** | **6.2 %** | 7.3 % |
+| CAP-12 1160 m | 3.4 % | 13.3 % | 0.5 % | 5.4 % |
+| CAP-12 1700 m | **35.2 %** | 14.1 % | 11.7 % | 16.6 % |
+
+⇒ **`BL-118`'s caveat resolves as "65–97 % sprite, 3–35 % deck", not "100 % sprite".** `C22`'s own
+"the two tops boxes moved a little where C21 predicted flat-zero … most likely translucent-edge
+bleed" is confirmed and now has a number; the movement is exactly this weight times `C22`'s own
+−42 on the deck. Keep the vocabulary: every row below is labelled with which population it is.
+
+### Per-population tables
+
+**The pinned above-deck pose**, `--pos=-7323,1192,-3829 --direction=0,0,-1`, natural vs
+`--tex-override=cloudlayer.tif=ff0000`, boxes `.scratch/c21/capboxes.py`:
+
+| box | ours (all) | deck weight | original | Δ |
+|---|---|---|---|---|
+| `tops-L` | 210.29 | 13.6 % | 169.00 | +41.3 ⚠ |
+| `tops-R` | 207.60 | 14.4 % | 169.42 | +38.2 ⚠ |
+| `tops-M` | **215.45** | 6.2 % | **207.75** | **+7.7** |
+
+⚠ **`tops-L`/`tops-R` are NOT comparable at this pose and the +41 is not brightness** (`SHOT-23`).
+The original still's pitch differs: its sky stays 72–80 down to row 0.53 and its cloud-top line
+sits at rows 0.60–0.73, so those two boxes sample *cloud-tops-against-dark-sky* on the original
+side and solid sheet on ours. Only `tops-M` (the near, bottom-centre box) samples the same thing in
+both, and it reads **+7.7**. The comparable ladder is CAP-12's, below.
+
+**CAP-12's own level ladder**, `--pos=-4974,{1160,1700},-3861 --direction=-1,0,0`, against the
+stills at the matching altitudes:
+
+| box | ours 1160 | orig `t33` 1133 m | orig `t124` 1208 m | ours 1700 | orig `t97` 1698 m |
+|---|---|---|---|---|---|
+| `tops-L` | 219.31 | 204.88 | 213.01 | 202.82 | 182.68 |
+| `tops-R` | 210.48 | 194.57 | 213.33 | 213.78 | 183.37 |
+| `tops-M` | 222.23 | 213.33 | 209.07 | 212.79 | 201.16 |
+
+**The 1160 m rung is essentially at the bar** against the altitude-matched `t124` (+6.3 / −2.8 /
++13.1); **the 1700 m rung fails everywhere** (+20.1 / +30.4 / +11.6). The deficit grows with
+altitude, i.e. with how much *distance* is in the frame — which is the shape of the finding.
+
+### The plateau: ours is 222.7, the original's is 209 — measured five ways
+
+Our saturated card value is **222.7 exactly** — `p90 = 222.7` at every above-band pose, matching
+`C21`'s prediction `236.65 × 240/255` to the decimal, so our render is faithful to the naive
+reading of the data. The original never reaches it. In the *near-field* patch
+(x 0.30–0.45, y 0.90–0.99 — closest surface, HUD-free, fog ≈ 0):
+
+| frame | mean | sd | min | max |
+|---|---|---|---|---|
+| orig `t124` 1208 m | **208.88** | 0.54 | 207 | 210 |
+| orig `t59` 1219 m | **209.16** | 1.77 | 202 | 213 |
+| orig `t97` 1698 m | 201.42 | 2.12 | 195 | 207 |
+| **ours 1160 m** | **222.18** | 0.38 | 221 | 223 |
+| **ours 1700 m** | 211.49 | **14.37** | **168** | 223 |
+| ours 1192 m | 216.15 | 1.68 | 211 | 219 |
+
+Whole-frame `p99`, HUD/plane excluded: original **213–216** at `t33`/`t59`/`t124` and **max 215**
+on the pinned above-deck still; ours 224–229. The original's cloud pixels are also perfectly
+neutral (`RGB(214,214,214)`, `(215,215,215)`, `(216,216,216)` are the three most common values in
+its near box) while ours carry the texture's own `(239,235,239)` tint. **Nothing in five
+independent original above-band frames renders at 222.7.**
+
+### Why our sprite tops read too bright — the four candidates, all refuted on data
+
+1. **A `cloudsprite` opacity like `cloudparent`'s 0.6 — does not exist.**
+   `extracted/C1/zrdr/clouds.zrd.json`, read in full, is ONE `ANIMATION_DEFINITION`: `NAME`
+   `cloudparent#`, `ACTIVATION` `ON_STARTUP`, `EXECUTION_BY_RANGE` 1900, `RESET_TIME` −1, and both
+   its `RESET_STATE` and its `LOOP{-1}` sequence are `OBJECT_OPACITY_STATE` `NAME cloudparent`
+   `STATE ON 0.6`. It never names `cloudsprite`, and **C1 is the only chapter that ships a
+   `clouds.zrd` at all**. A sweep of every `zrdr/*.json` in all eight chapters finds `cloudsprite`
+   named ONLY in the eight `fogvol.zrd` files (plus `interp.json`'s `LoadGameGen
+   c1\horizon\cloudsprite1.flt` load lines). The `cloudparent` 0.6 is already applied and
+   range-gated in our build — the probe log prints `anim: EXECUTION_BY_RANGE reached - starting
+   cloudparent# at 1864 m (range 1900 m)` (`METHOD-15`).
+2. **`WorldLight` on the sprites — refuted, and the data varies the flag per chapter.**
+   C1/C4 cards author `lighting: false`; **C1C/C2B author `lighting: true`** (`fogvol.md`), and we
+   already honour both. Applying 0.802 to C1's cards puts them at **178.6**, *below* the
+   original's own 204.9–213.3 at the 1160 m rung — it would overshoot by more than the error it
+   fixes. The able-to-fail control passes as authored: C1C at the same above-deck pose measures
+   `tops-L`/`tops-R`/`tops-M` = **168.62 / 196.04 / 165.79** against its predicted field value
+   `222.7 × 0.784 = 174.6` — our C1C field is dark exactly where its data says it should be.
+   (This also disposes of the B15 night worry the brief raised: no sprite change is proposed, so
+   `C1B`'s moonlit numbers cannot move, and `c1b-night-sea` is byte-identical below.)
+3. **Fogging the sprites — refuted three ways, and it was the tempting one.**
+   The *shape* fits beautifully (the original's from-above sheet ramps smoothly from `FOG_COLOR`
+   175 at range to ~209 near; ours steps +35 in 30 rows at the `far_fade` edge). The data says no:
+   (a) the same clutter reader's **tree** templates — `firtree1`, `firtree2`, `dougfirtree1`,
+   `bush1`, `bush2` — all author **`fog: true`**; (b) the world's own **placed** cloud facades
+   author `fog: true` with vertex colour 255 (C1's 52 `cloudparent`/`o7xx` children, C2B's 108);
+   (c) `B16` verified the flag is honoured for the dome. `fog: false` on the `fvol` card is a
+   deliberate per-model authored distinction inside the very system that authors `fog: true` next
+   to it — **do not re-chase this.**
+4. **Carrying the field up with the relocated deck — refuted by CAP-12's own altimetry.**
+   The authored invariant (`fogvol.md`: deck tiles 10 m *below* the `fvol1`–`fvol9` slab floor,
+   all four deck chapters) suggests moving the field by the same `bandCentre − authoredDeck` that
+   `A7` moves the deck: +87 m for C1. That puts card tops at **1177–1277 m** against CAP-12's
+   measured "clear above by ~3700 ft (**1128 m**)". Dead.
+
+### ⚠ The C1C frame the user reported holds THREE cloud tones, and the widest gap is not the deck
+
+Re-shot at C1C's own above-band pose (`--chapter=C1C --pos=-7323,1192,-3829 --direction=0,0,-1`,
+110 m over its 1082.5 band centre — `.scratch/c23/c1c-abovedeck-nat.png`). C1C carries **106**
+placed cloud facade models wearing `cloud1`/`cloud2` beside its **2** `fvol` template cards, and
+the gamez gives the two populations *opposite* `lighting` flags:
+
+| population in C1C | authored | our rendered value | measured in the frame |
+|---|---|---|---|
+| placed cloud facades (`cloudparent`) | vcol **255**, `lighting: false`, `fog: true` | 236.65 | **235.25** (bright right column) |
+| `fvol` `cloudsprite1/2` cards | vcol **240**, `lighting: **true**`, `fog: false` | **174.6** (`× WorldLight` 0.784) | — |
+| deck floor (`C22`) | `cloudlayer.tif` 197.42 `× 0.784` | 154.8 | 168.2 mean / 151.0 min (lower sheet) |
+
+**That is an 80-unit spread across three populations in one frame, and 62 of it is between the two
+CLOUD populations, not between cloud and deck.** C1 does not have it (both of its cloud
+populations author `lighting: false`; 236.65 vs 222.7 = 14 units); C1C and C2B both do, because
+their `fvol` card is the only cloud model in the chapter that authors `lighting: true`.
+
+⇒ **The user's C1C report is most likely this split, not the mesh↔sprite boundary at all.** It is
+a *fifth* candidate for the tops question and it is same-chapter and data-level: if the `lighting`
+flag on a `Facade` cloud card is not a `WorldLight` gate, C1C's field is 222.7 and sits 14 units
+from its own placed clouds — the identical relationship C1 has. Not tested here (it would move
+C1C/C2B/C5 and nothing about C1's two reference stills), but it belongs in whatever item inherits
+`PT-42`(a), and it must be settled before anyone reads a C1C frame as evidence about the deck.
+
+### The cut — two independent causes, both quantified
+
+**(a) Geometric: `A7`'s above-band floor sits INSIDE the card band, so it slices every near card.**
+`A3` top-anchors each card's *centre* at the slab top **1090.5 m** (+ `perp_dist_range` −5…+10)
+with half-height `66.14 × scale`, `scale ∈ [0.95, 1.5]` ⇒ **62.8–99.2 m** ⇒ **card bottoms
+991–1028 m**. `A7`'s above-band floor is the `CLOUD_COVER` centre, **1047 m**. The opaque floor
+therefore cuts **19–56 m** off the bottom of every card, and each cut is a straight silhouette
+across a soft sprite — *the* "many hard lines". Visible directly in
+`.scratch/c23/abovedeck-mesh.png` (the flat-red deck shows through in straight-edged wedges) and
+in `AB-cut-lines.png`. This is `A7`'s own finding 1 handed forward — "if those plates read badly
+at the controls, the item is the deck-mesh↔sprite intersection (C23)".
+
+**(b) Brightness: `C22` did not soften C1's cut — it CREATED it, and it barely moved C1C's.**
+
+| chapter | deck floor before `C22` | after `C22` | field | gap before → after |
+|---|---|---|---|---|
+| **C1** (cards `lighting: false`) | 210.5 | **168.9** | **222.7** | 12 → **54** |
+| **C1C** (cards `lighting: true`) | 197.4 | **154.8** | **174.6** (`222.7 × 0.784`) | 23 → **20** |
+| **C2B** (cards `lighting: true`) | 186.3 | **146.0** | 174.6 | 12 → 29 |
+| **C4** (`WorldLight` clamps to 1.0) | — | unchanged | 222.7 | unchanged |
+
+The user's report was at **C1C** and pre-`C22`; its own gap is now the smallest of the four. C1's
+is the one that is 54 units wide today. ⚠ Per-chapter `cloudlayer.tif` means differ and were not
+on record: **C1 210.54, C1C 197.42, C2B 186.27** (C4 wears `Sky1.tif`) — `C21`'s "C1C/C2B would go
+212 → 166.5" used C1's texture for all three.
+
+**The evidence that the above-band floor should not be dimmed at all.** Fog can only pull a
+surface *toward* `FOG_COLOR`, so a surface whose own colour is 168.9 can never render above 175.
+In the outboard HUD-free column (x 0.00–0.13, y 0.65–0.99):
+
+| frame | p1 | p5 | median | % below 180 |
+|---|---|---|---|---|
+| orig `t97` 1698 m | **175.0** | 175.0 | 186.7 | 32.7 % |
+| **ours 1700 m** | **166.2** | 176.0 | 217.7 | 17.1 % |
+| orig `t124` 1208 m | **208.0** | 209.0 | 213.0 | 0.0 % |
+| ours 1160 m | 209.9 | 211.8 | 219.7 | 0.0 % |
+
+**The original's above-band frames bottom out exactly at `FOG_COLOR` and never below it. Ours go
+to 166** — that tail is `C22`'s dimmed floor showing between the cards, and it is also what makes
+our 1700 m near-field `sd` **14.37** against the original's **2.12**. `C22`'s mechanism is
+verified from BELOW (the original's underside 167.7, and `C21`'s free-parameter fog fit recovering
+168.1–169.2 from the river still) and is contradicted from ABOVE. Under `A7`'s own regime model
+those are two different objects — below the band a ceiling carried at `camera.y + K`, above it a
+world-fixed floor — so "dimmed below, authored `lighting: false` (i.e. raw 210.5) above" is a
+regime rule, not face-dependent lighting. `rig.Deck` is already per rig, so it is implementable
+per camera; that is the second half of the fork above, not landed here.
+
+### Verification
+
+- **`.\RunTests.ps1`** — build PASS (0 warnings), **units 682/682**, **engine 26/26, errors
+  clean**, goldens **6 moved, 0 broken of 13**; exit 1 is the golden stage alone. **This item moved
+  none of them** — it changes no code (`git diff` empty over `CSVM/`). The six are the standing
+  un-repinned set: `C22`'s five (`c1-waterfall`, `c1-flight`, `c1-destroy-effects`, `c1c-rain`,
+  `c2b-rain`) plus `C25`'s `c4-snow` (`K` 400 → 135; C4's golden camera sits at y = 958, below its
+  1050 band centre, so it is in the *ceiling* regime `C25` changed) — `GOLD-8`, still `C24`'s to
+  re-pin. `c1b-night-sea` **ok**, which is the B15 night control: no sprite rule changed.
+- **The baseline replays byte-for-byte.** `.scratch/c23/cap12-{1160,1700}-nat.png` reproduce
+  `C22`'s own numbers to the decimal (219.31 / 210.48 / 222.23 and 202.82 / 213.78 / 212.79),
+  which is the `METHOD-3` check that this item measured the build `C22` left behind.
+- **Probes worth human eyes**: `AB-1700-nearfield.png` (orig `t97` | ours 1700 m — the original's
+  sheet is smooth, ours is a lumpy carpet cut by straight lines), `AB-abovedeck.png`,
+  `AB-cut-lines.png` (natural over flat-red deck, the same frame).
+- Not run, deliberately: the 8-chapter freecam regression and the C4 tops spot check. Both verify
+  a *change*; with zero code changed they can only reproduce `C22`/`C25`'s own results
+  (`METHOD-10`).
+
+### Files
+
+`.scratch/c23/` — `shoot.ps1` (the pose set: the pinned above-deck pose natural + flat-deck, the
+CAP-12 1160/1700 rungs, C1C's own above-deck pose), `bleed.ps1` + `bleed.py` (the deck-weight
+instrument and the re-composite predictor), `AB-*.png`, `runtests-output.txt`, and every PNG the
+tables cite. `docs/PLAN-overcast-match.md` (this section, the checklist line, a pointer in `C24`).
+**No engine code, no shader, no `docs/formats/`, no `docs/architecture.md`, no
+`PROJECT_CONTEXT.md`, no `backlog.md`** — the sprite render rule did not change, so `fogvol.md`'s
+entries stand exactly as written.
+
+### Original brief (kept for reference)
 
 **Goal.** The CAP-12 tops caveat resolved (mesh and sprite tops measured separately), and the
 from-above boundary between deck mesh and sprite field blending as the original does — no hard
@@ -3567,19 +3815,34 @@ The 211-vs-214 tops match sampled an unknown mix of the two populations (BL-118'
 Re-confirmed post-Wave-A at the controls (user, 2026-08-08, C1C): "the color difference between
 fogvol puffs and the cloud deck texture is jarring. many hard lines" — the scatter fixes did not
 touch it, as expected; it is this item's target.
+— *the C1C half is answered: that report is a pre-`C22` build, where C1C's deck was 197.4 against
+its 174.6 field; `C22` narrowed it to 20 units. The "many hard lines" are the geometric cut (a)
+above, and they are C1/C1C/C2B-only — C4's band centre equals its authored deck altitude, so its
+floor never enters the card band.*
 
 **Approach.** Per-population boxes via `--tex-override` isolation at the above-deck pose; whichever
 population is off gets the correction (sprite vertex colours are authored 240/240/240 — data first,
 per ground rules). If the cut survives matched brightnesses, the blend is geometric (sprite bases
 vs sheet altitude — Wave A's anchor) — re-check A3's numbers before inventing a shader blend.
+— *followed, and it needed one instrument the approach did not anticipate: `--tex-override`
+isolation alone reads 0.0 % mesh at every above-band pose because the deck is behind alpha, so the
+two-flat-colour bleed pair had to be built to get a per-population number at all. The blend IS
+partly geometric and A3's numbers are what proves it (card bottoms 991–1028 m against a floor at
+1047 m).*
 
 **Model recommendation.** high — two interacting populations, easy to fix the wrong one.
 
 **Verify.** Above-deck pose: per-population boxes within ±10 of the original's respective regions;
 the boundary region shows no step in a horizontal luminance profile.
+— *the horizontal profile was replaced by the vertical one, which is where the boundary actually
+lies: the field's `far_fade` rim is a horizontal ring in world space, so it crosses ROWS. At
+1700 m ours steps 181 → 216 between rows 450 and 480 where the original ramps 175 → 200 over 240
+rows.*
 
 **⚠ Traps.** A claim about one population is not evidence about the other — keep the vocabulary
 (`BL-118`'s note) in every measurement label.
+— *respected; and the trap bit once already, in `C21`/`C22`'s "0.0 % mesh" reading, which is
+corrected above rather than repeated.*
 
 ## C24 ☐ Final match: both stills within the bar; mint PT + night-moonlit BL; close BL-118
 
@@ -3602,3 +3865,12 @@ PROJECT_CONTEXT "Current status" swapped to the next work with this plan archive
 **⚠ Traps.** If any region can't reach the bar without touching another wave's landed mechanism,
 that's a finding — record it and mint an item; do not re-open a landed wave inside the close-out
 commit.
+
+⚠ **`C23` left a fork and this item must not close through it.** The mesh↔sprite cut (`PT-42`(a))
+is traced and quantified but NOT fixed: two mechanisms fit the data equally (`C23`'s own
+BLOCKED block), both require un-dimming the above-band deck floor, and one of them
+deletes the `fvol` field above the band. Either put the A/B to the user first, or close `BL-118`
+on its **underside half only** and mint a fresh item carrying `PT-42`(a), the above-band deck
+brightness, the 222.7-vs-209 card plateau and the C1C/C2B `lighting: true` cloud-card split.
+Also inherited from `C23`: the goldens list to re-pin is **six**, not five — `C22`'s five plus
+`C25`'s `c4-snow`.
