@@ -1551,6 +1551,36 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Effects & animation runtime
 
+- `BL-326` `[Bug]` **A magenta rectangle draws below the player's aircraft and moves relative to
+  it.** Seen at the controls by the user 2026-08-09, and confirmed by them to be present on
+  **`main`** — it is not from the `BL-165` lens-flare worktree, which touches nothing on the
+  aircraft.
+  *Prime suspect: the aircraft model's own `shadow` node, drawing with an unresolved texture.*
+  Magenta is not a colour any art uses — it is `SceneBuilder`'s **unresolvable-texture fallback**,
+  and `TextureArchive.DefaultOverride` (`TextureArchive.cs:51-54`) deliberately shares it so the
+  two read alike. Every plane model carries a node named `shadow` in its own subtree, beside
+  `healthy`/`destroyed`/`markers`/`cockpit1` (`WorldEffectsFactory.cs:51-55` `CrashAnchorNodes`;
+  the same list in `Suites.cs:1771`) — a quad under the aircraft, which is exactly "a rectangle
+  below the plane that moves with it".
+  ⚠ **Not reproduced yet, and that narrows it.** A scripted C3 flight — `--fly --chapter=C3
+  --plane=player_bhawk --frames=90`, chase camera, 2861 ft — renders **zero** magenta pixels
+  (threshold R>170, B>170, G<120). So the fault is **airframe-, chapter-, view- or
+  altitude-dependent**, not universal, and the Bloodhawk over C3 is a *negative* control rather
+  than a missing repro.
+  *Do this first, before hunting:* `TextureArchive` already reports **each distinct unresolved
+  name once**, as a plain `Log.Warn` "not found" line (`TextureArchive.cs:801-804`). The log of a
+  session that shows the rectangle names the offending texture outright, which turns this from a
+  search into a lookup. So the first ask is the **plane, chapter and log** of a run that shows it,
+  not more code reading.
+  ⚠ **Traps.** (a) `--tex-override` with no explicit colour paints magenta *by design* — confirm
+  no override/census flag was on the run before treating the colour as a fault. (b)
+  `TextureArchive.IsKnownAbsent` exists for textures the retail data genuinely lacks; those are
+  supposed to render a **neutral** fallback, not the debug magenta. If the offending name is in
+  that set, the bug is not a missing texture at all but the neutral path failing to be taken, and
+  the fix is in a different place. (c) Do not assume it is the shadow until the log names the
+  texture — "a rectangle below the plane" also fits a marker gizmo or a pooled effect quad parked
+  at the wrong anchor.
+
 - `BL-032` `[Feature]` `[Blocked: user decision]` **Burning-object fires (`fire1`/`fire2` templates + `EFFECTS` flipbooks)** — **POSTPONED
   2026-07-21 by user decision: minor detail, and the trigger is not findable.** Fully decoded,
   so nothing needs re-deriving; what is missing is *when* to start a fire, not how. Blocked on
