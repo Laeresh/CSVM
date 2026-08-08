@@ -28,20 +28,24 @@ namespace CSVM.Session;
 /// space is — see the production closure built at session build, not this class.</para></summary>
 public sealed class RaceGrid : IFlightStarts
 {
-    /// <summary>Metres between neighbouring grid slots, measured across the line.</summary>
+    /// <summary>Default metres between neighbouring grid slots, measured across the line;
+    /// overridable as <c>raceGrid.slotSpacing</c>. Referenced by
+    /// <see cref="Config.WarmTuningRegistry"/> so <c>--dump-config</c> lists the key on a launch
+    /// that never builds a race.</summary>
     /// <remarks>TUNE, not a fact: 60 m is the figure already in this tree (<c>SpawnAbreast</c>, a
-    /// different job on the <c>--pos</c> path) and there is no evidence for another yet. A later
-    /// item moves this to <c>Config.GetFloat</c> so the owed playtest can dial it without a
-    /// rebuild; <c>SpawnAbreast</c> itself stays where it is and keeps its own value.</remarks>
-    private const float SlotSpacing = 60f;
+    /// different job on the <c>--pos</c> path) and there is no evidence for another yet — a
+    /// fallback nobody has judged at the controls, not a decision. Config is what settles it:
+    /// the owed playtest dials the key and the spawn log below reports what was in force.
+    /// <c>SpawnAbreast</c> stays where it is and keeps its own value.</remarks>
+    public const float SlotSpacingDefault = 60f;
 
-    /// <summary>Metres of air the lowest slot must have under it before the field is left alone.</summary>
+    /// <summary>Default metres of air the lowest slot must have under it before the field is left
+    /// alone; overridable as <c>raceGrid.groundClearance</c>.</summary>
     /// <remarks>TUNE, not a fact, and deliberately loose. An aircraft's collision shapes are boxes
     /// that overhang the airframe, which already produces false terrain contacts in close stunt
     /// flying; tightening this until it hugs the terrain would spawn a race into that known defect
-    /// rather than clear it. A later item moves this to <c>Config.GetFloat</c> beside the
-    /// spacing.</remarks>
-    private const float GroundClearance = 100f;
+    /// rather than clear it. Dial it at the playtest, not from a screenshot.</remarks>
+    public const float GroundClearanceDefault = 100f;
 
     private readonly SpawnPicker _picker;
     private readonly Func<Vector3, float?> _groundAt;
@@ -69,6 +73,11 @@ public sealed class RaceGrid : IFlightStarts
     public IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns,
         string missionZrdrPath, int spawnBase, int playerCount)
     {
+        // Read-through at the point of use, once per session: the grid is constructed at session
+        // build and asked exactly once, so this is also the moment the values in force are logged.
+        float spacing = Config.GetFloat("raceGrid.slotSpacing", SlotSpacingDefault);
+        float clearance = Config.GetFloat("raceGrid.groundClearance", GroundClearanceDefault);
+
         var (anchorPos, anchorLookAt) = _picker.ChooseSpawn(spawns, missionZrdrPath, spawnBase, 0, "grid anchor ");
 
         // The heading comes from the anchor's own pos→look-at pair, never from the spawn's
@@ -84,7 +93,7 @@ public sealed class RaceGrid : IFlightStarts
         var slots = new Vector3[playerCount];
         for (int i = 0; i < playerCount; i++)
         {
-            slots[i] = anchorPos + across * ((i - (playerCount - 1) / 2f) * SlotSpacing);
+            slots[i] = anchorPos + across * ((i - (playerCount - 1) / 2f) * spacing);
         }
 
         float lift = 0f;
@@ -96,7 +105,7 @@ public sealed class RaceGrid : IFlightStarts
                 unprobed++;
                 continue;
             }
-            lift = Mathf.Max(lift, ground + GroundClearance - slot.Y);
+            lift = Mathf.Max(lift, ground + clearance - slot.Y);
         }
         // A slot with no ground under it asks for no lift — but says so. The anchor is an authored,
         // flyable point, so with no terrain answer the honest move is to leave the field at the
@@ -109,11 +118,24 @@ public sealed class RaceGrid : IFlightStarts
         }
         lift = Mathf.Max(lift, 0f);
 
+        // The heading every slot shares, back in the units the spawn data states it in, so the
+        // grid's lines read against the anchor's own line above them. The +360 before the wrap is
+        // what keeps a due-north field from printing IEEE negative zero as "heading=-0°".
+        float headingDeg = Mathf.PosMod(Mathf.RadToDeg(Mathf.Atan2(-dir.X, -dir.Z)) + 360f, 360f);
+
+        // ⚠ The per-slot line below is the primary field instrument for this geometry, not a
+        // convenience: a grid is not photographable. The panes are chase-cam only, so at this
+        // spacing a neighbour is outside the frustum and no screenshot of a race can show whether
+        // the field is abreast, evenly spaced, on one heading or at one altitude. Everything the
+        // grid is judged by therefore has to be readable here — the slot, the point it landed on,
+        // the lift the field took as a whole, and the spacing in force, which is what makes an
+        // overridden raceGrid.slotSpacing visible at the controls without a rebuild.
         var starts = new FlightStart[playerCount];
         for (int i = 0; i < playerCount; i++)
         {
             var pos = slots[i] + Vector3.Up * lift;
             starts[i] = new FlightStart(pos, pos + dir);
+            Log.Info("flight", $"spawn [P{i + 1} grid slot {i + 1} of {playerCount}] pos=({pos.X:0},{pos.Y:0},{pos.Z:0}) heading={headingDeg:0}° spacing={spacing:0.#}m lift={lift:0.#}m");
         }
         return starts;
     }

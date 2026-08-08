@@ -103,7 +103,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ `IFlightStarts` — the whole-field seam, with `SpawnPicker` as its plain implementation
 2. ☑ `RaceGrid` — centred fan, injected ground sampler, uniform lift, headless tests
 3. ☑ Select the implementation once at session build; races get the grid, everything else does not
-4. ☐ Config-backed grid width and clearance, reported in the spawn log
+4. ☑ Config-backed grid width and clearance, reported in the spawn log
 5. ☐ Correct the best-time persistence rationale in `StuntRace`
 6. ☐ Docs, close `BL-084`, mint the countdown `BL-` and the race `PT-`
 
@@ -232,7 +232,7 @@ Decision 6 is that the grid type is never constructed on a scripted path. Do not
 which is a balance change to Dogfight and belongs to `BL-301`, to be judged from `PT-43` evidence
 rather than assumed here.
 
-## A4 ☐ Config-backed grid width and clearance, reported in the spawn log
+## A4 ☑ Config-backed grid width and clearance, reported in the spawn log
 
 **Goal.** The two judge-by-eye values can be dialled at the playtest without a rebuild, and the
 values actually in force are visible from the console.

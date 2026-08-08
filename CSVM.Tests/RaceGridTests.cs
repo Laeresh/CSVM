@@ -25,7 +25,8 @@ namespace CSVM.Tests;
 public class RaceGridTests
 {
     /// <summary>The grid's own spacing and clearance, restated so a change to either fails here
-    /// rather than passing silently.</summary>
+    /// rather than passing silently. Both are config fallbacks now; these tests run with no
+    /// config.json, which is the state a scripted run and a fresh checkout are also in.</summary>
     private const float Spacing = 60f;
     private const float Clearance = 100f;
 
@@ -292,6 +293,60 @@ public class RaceGridTests
             Assert.Equal(800f, s.Pos.Y, 3);
             Assert.Equal(1000f, s.Pos.Z, 3);
         }
+    }
+
+    // ---- The values in force, and the report of them --------------------------------------------
+
+    /// <summary>The two dialable values fall back to exactly the numbers the rest of this file
+    /// asserts, so an absent config.json places a field identically to the consts that preceded it —
+    /// and reading the key is what these tests are measuring, not a stale copy of the default.</summary>
+    [Fact]
+    public void TheConfigFallbacksAreTheGeometryTheseTestsAssert()
+    {
+        Assert.Equal(Spacing, RaceGrid.SlotSpacingDefault, 3);
+        Assert.Equal(Clearance, RaceGrid.GroundClearanceDefault, 3);
+        Assert.Equal(Spacing, Config.GetFloat("raceGrid.slotSpacing", RaceGrid.SlotSpacingDefault), 3);
+        Assert.Equal(Clearance, Config.GetFloat("raceGrid.groundClearance", RaceGrid.GroundClearanceDefault), 3);
+    }
+
+    /// <summary>Every slot reports itself. This is the only instrument a hand-flown race has for the
+    /// fan — the panes are chase-cam only, so a neighbour a spacing away is out of frame and no
+    /// screenshot can show whether the field is abreast, level or evenly spaced. The line therefore
+    /// has to carry the slot, the point, the field's lift and the spacing in force.</summary>
+    [Fact]
+    public void EverySlotIsReportedWithItsIndexPositionSpacingAndTheFieldsLift()
+    {
+        var anchor = new Vector3(0f, 500f, 0f);
+        var lines = new List<string>();
+        using (Log.PushConsoleSink(lines.Add))
+        {
+            // Flat ground at 450 ⇒ the whole field lifts 50 m, to y = 550.
+            Grid(Flat(450f)).ChooseStarts(Spawns(anchor, 0f), "", 0, 4);
+        }
+
+        for (int i = 0; i < 4; i++)
+        {
+            float x = (i - 1.5f) * Spacing;
+            string expected = $"spawn [P{i + 1} grid slot {i + 1} of 4] pos=({x:0},550,0) " +
+                $"heading=0° spacing=60m lift=50m";
+            Assert.Contains(lines, l => l.Contains(expected, StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>The reported heading is the field's real one, asserted off-axis where a hardcoded
+    /// zero would still read as plausible.</summary>
+    [Fact]
+    public void TheReportedHeadingIsTheAnchorHeading()
+    {
+        var lines = new List<string>();
+        using (Log.PushConsoleSink(lines.Add))
+        {
+            Grid(Flat(0f)).ChooseStarts(Spawns(HighAnchor, 37f), "", 0, 2);
+        }
+
+        // The anchor's own line carries the heading too, so the count is qualified to slot lines.
+        Assert.Equal(2, lines.Count(l => l.Contains("grid slot", StringComparison.Ordinal)
+            && l.Contains("heading=37°", StringComparison.Ordinal)));
     }
 
     // ---- Helpers -------------------------------------------------------------------------------
