@@ -337,6 +337,22 @@ the "Debris tumbles" bullet below for which pieces each covers. A format reader 
         authored rest: it is a takeover, and `MotionSet.Add` evicts the incumbent on the transform
         channel. `agyrobus` is why — it has no placement of its own, so its "rest" is the map origin
         and re-homing threw the wreck 13.9 km away.
+      - **The three `gravity` flags take only four combinations install-wide**, which is what makes
+        `do_intersections` legible as the whole of the question:
+
+        | `complex` | `no_altitude` | `do_intersections` | events |
+        |---|---|---|---|
+        | false | false | false | 1,378 |
+        | **true** | false | **true** | **166** |
+        | true | false | false | 88 |
+        | false | **true** | false | 8 (`gunshell`, one per chapter) |
+
+        `do_intersections: true` is a strict subset of `complex: true`. ⚠ **`no_altitude` is NOT a
+        second, default terrain test** — a tempting reading, since the 8 events carrying it are
+        exactly the spent-shell casings you would opt out of one. It dies on the same evidence: if
+        the other 1,632 events ground-tested, the original's debris would not sink, and `PT-46` (d)
+        says it does. It most likely means gravity or spawn positioning reckoned relative to terrain
+        altitude, which is precisely what a casing ejected at height would skip.
     - **The other 379 have no apex and are still deferred (Layer-1.5, `BL-245`).** 335 free-falling
       zeppelin `gasbag1`/`crashnode1` pieces start from rest, ~17 lifeboats
       and turret parts are thrown downward, and 8 zero-gravity `chuteman` descents fall at a constant

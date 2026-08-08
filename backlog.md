@@ -86,47 +86,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     events, −10 on 400), NOT an offset to the aircraft's arcade `nom_gravity` of 20 — considered and
     disproven by the same census, and `MotionRuntime` applies the authored value alone. (c) A piece that
     flies *through* the ground is not this item and not a defect — `PT-46` check (d) confirmed the original
-    does the same, and the data agrees: `do_intersections` is false on all 120 bounce-shape events, all 159
-    vanish-shape, and 924 of the `run_time` shape. Only 16 `(def,node)` pairs in all 8 chapters author it
-    true (`player_crash_dirt` `piece1`–`4`, the eleven C1B airframes' `MAIN_ROOT_NODE`, `agyrobus`), and
-    those are `BL-059`/`BL-245`'s.
+    does the same, and the data agrees: `do_intersections` is false on all 120 bounce-shape events, all 167
+    vanish-shape, and 1,118 of the `run_time` shape. The 166 events that DO author it true — 16 `(def,node)`
+    pairs that survive in the world (`player_crash_dirt` `piece1`–`4`, the eleven airframes'
+    `MAIN_ROOT_NODE`, `agyrobus`) — are ground-tested as of 2026-08-09 and land on real geometry
+    (`PLAN-ground-contact`, landed; `docs/formats/destructibles.md`). So a *flagged* piece sinking is now a
+    regression worth filing; an unflagged one still is not, and the remaining 379 falls are `BL-245`'s
+    judgement call, not a missing ray.
 
 - `BL-059` `[Feature]` **Data-driven crash — the remaining variants/follow-ups.** The dirt/ground crash is
   complete and the default (`PLAN-data-driven-crash`, `docs/HISTORY.md`). What is still open:
-  1. **The real ground-contact query behind `do_intersections` (Layer-1.5).** **Planned as
-     [`PLAN-ground-contact.md`](docs/PLAN-ground-contact.md) (2026-08-08) — that plan is the
-     authority; this entry is the pointer.** Two thirds of the bullet have since landed.
-     **Landed:** the `bounce_sequence` dispatch itself — `BL-240`/`PLAN-bounce-launch` solves a
-     bounce-terminated launch's flight time and fires the named sequence when the piece comes down
-     (`MotionRuntime.cs:242-255` arms `PendingBounce`, `MotionSet.Tick` emits the `Landing`,
-     `MotionSet.OwesBounce` holds the instance open for it); and the `SOUND_GROUPS` resolver, so
-     `air_mixed_exp_sg`/`ground_mixed_exp_sg` resolve for real (`SoundDefs.cs:60-72`,
-     `AnimRuntime.HandleSound`). **Open:** the **166 events that author `do_intersections: true`** —
-     150 of them `run_time`+bounce — which run their authored clock out and finish wherever the
-     parabola left them, routinely underground. They want a swept segment ray along the body's own
-     trajectory, ending the flight at the first collider and dispatching the bounce there.
-     (`CrashBreakup.Advance`, on branch `bespoke-crash-animation`, is the reference integrator.)
-     ⚠ **Not the 120 `bounce`-shape launches `BL-240` already solves**, nor the 167 vanish-shape:
-     all author `do_intersections: false`, and `PT-46` (d) confirmed the original sinks those
-     through the ground too. Widening the query to them is a divergence, not a fix.
-     ⚠ **Settled in the plan, not open questions:** the apex guard stays (it is what keeps
-     `BL-257`'s widened gate off `BL-245`'s falls); and where a session builds no colliders
-     (`SessionSpec.cs:183` — `--freecam`, every golden capture) the current launch-height path is
-     the stated fallback, so goldens are unaffected.
-     ⚠ **`do_intersections` is probably a COLLIDER intersection test, not a down-ray to terrain**
-     (user, 2026-08-08). A down-ray is therefore a *stand-in*, not the mechanism: it cannot land a
-     piece on a rooftop or bounce it off a wall, which is what the original appears to do — the
-     `agyrobus` case was lost from sight between C5 buildings precisely because it may have bounced
-     off one. Scope the work as a collision query and the ray as the cheap first cut, and say which
-     one shipped. Same caveat applies to `BL-245`, whose `[Blocked: ground ray]` tag is the narrower
-     reading of the same blocker.
-     ⚠ **This is the whole of the former `BL-008`.** That item claimed world destructibles were limp
-     because they inherit no launch momentum (`InheritedWorldVelocity` is assigned only by the plane
-     crash rig). Answered at the controls 2026-08-08 via `PT-46`: **the original shows no inherited
-     velocity on world debris either** — no directional bias with the attack heading — so there is
-     nothing to add and no world-side `WreckMomentum` analogue to build. Do not re-mint it. The
-     ground-contact half is what survived, and it is this bullet. `git log --grep=BL-008`.
-  2. **The air variant.** `player_crash_default` — no-impact destruct, `destroyed=false`, pieces arc
+  1. **The air variant.** `player_crash_default` — no-impact destruct, `destroyed=false`, pieces arc
      away, per-piece `large_firetrail` — has **no trigger**: it fires when the plane is destroyed with
      no impact at all, and nothing shoots the player down yet. A building crash is `_dirt`, not air, so
      `CrashSurface.Air` is deliberately unreachable from `ClassifySurface`, which reads a *struck
@@ -1707,7 +1677,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   still-flying set) on a longer one. Unmeasured against an actual in-cockpit pass — the playtest
   this pool wants is the same one `BL-253`'s own owed playtest already asks for.
 
-- `BL-245` `[Bug]` `[Blocked: ground ray]` **The other 379 bounce-terminated `OBJECT_MOTION`s are FALLS, not launches — no apex to
+- `BL-245` `[Bug]` `[Blocked: a decision to diverge]` **The other 379 bounce-terminated `OBJECT_MOTION`s are FALLS, not launches — no apex to
   solve, and a live `water`/`lava` surface table to choose between (split out of `BL-240` when the
   census separated them, 2026-08-02).** Same authored idiom as `BL-240` — no `RUN_TIME`, a
   `BOUNCE_SEQUENCE` naming the landing — but these start at rest or head downward, so
@@ -1729,17 +1699,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ For the spherical `translation_range` form the vertical speed is `sin(elevation)·speed` — **a
   negative speed inverts an upward elevation**, which is why the rockerarms are not solvable
   launches; any later census of this family must read the speed range, not the elevation alone.
-  **Blocked on a ground ray**, and blocked on it twice: the fall distance is unknowable without one,
-  and unlike `BL-240`'s 150 these carry populated `water`/`lava` branches, which need the struck
-  collider to select. The engine already has both halves of the second problem —
-  `ProjectilePool.ClassifySurface` (`Projectile.cs:377`) maps a collider's group to a
-  `SurfaceClass`, and `Projectile.cs:296/625` shows the reusable ray query — so this is wiring, not
-  decode, once something casts the ray.
+  ⚠ **Retagged 2026-08-09: the ray is no longer the blocker — it exists.** `PLAN-ground-contact`
+  landed `MotionRuntime.TryContact`, a swept segment along the trajectory that ends a body at the
+  first collider and picks its `BOUNCE_SEQUENCE` branch from the struck surface, water branch
+  included (`ProjectilePool.ClassifySurface`, already wired). Every piece of machinery this item
+  said it was waiting for is in the tree. What it is **actually** blocked on is a *decision*: all
+  379 of these author **`do_intersections: false`** (8 for 8 across `gasbag`/`cargozep`/`chuteman`/
+  `lifesaver`), i.e. the original was not collision-testing them, and `PT-46` (d) confirmed at the
+  controls that its debris sinks through terrain the same way. Turning the sweep on for them is a
+  deliberate divergence from authored data — a **playability** argument (a shot-down zeppelin
+  hanging in mid-air reads as broken) and not a faithfulness one. Decide that first; the wiring
+  afterwards is an hour. The one narrow precedent for reading `false` as "unset" is a settle hop
+  continuing a contact landing (`PLAN-ground-contact` B9), and its whole defence is that it cannot
+  reach a body the data never flagged.
   ⚠ Traps:
-  - **Colliders are conditional.** `SessionSpec.cs:157` is
+  - **Colliders are conditional.** `SessionSpec.cs:183` is
     `BuildsCollision => Fly || DamageTest || ForceCollision || DebugDamage != null` — a `--freecam`
     run and every golden-capture mode build **no world colliders at all**. A ray-based fix silently
-    does nothing there, so it needs a stated fallback, not an assumption of ground.
+    does nothing there, so it needs a stated fallback, not an assumption of ground. `TryContact`
+    already answers this the structural way — it gates on the live `DirectSpaceState` and on a mask
+    the *session* hands over, so a runtime nobody wires keeps the old behaviour exactly, and all 13
+    goldens stayed byte-identical across the whole of `PLAN-ground-contact`. Copy that shape.
   - **Do not give these a constant fall time.** Same trap `BL-240` carries: it would invent a
     landing altitude for 335 zeppelins.
   - `chuteman` has **zero gravity**. Any solve phrased as a parabola divides by zero on it; it is a

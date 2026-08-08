@@ -1,8 +1,7 @@
 # Ground contact — the `do_intersections` query behind `BL-059` item 1
 
-**ACTIVE PLAN** (written 2026-08-08). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans/plans.md), when every item lands.
+**✅ COMPLETE** — written 2026-08-08, landed 2026-08-09, all ten items. Both cockpit checks passed
+(B5); the three rounds it took are recorded there, and each round's defect is its own item.
 
 This plan implements the one thing left open in `BL-059` item 1: the **166 `ObjectMotion` events
 that author `do_intersections: true`** must end their flight where the world says it ends, instead
@@ -152,7 +151,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — record it
 
-10. ☐ Land the decode, close `BL-059` item 1, retag `BL-245`
+10. ☑ Land the decode, close `BL-059` item 1, retag `BL-245`
 
 ## Dependency and parallelism notes
 
@@ -601,7 +600,38 @@ no colliders never lands by contact, so the mark is never set and none of the th
 
 # Wave C — record it
 
-## C10 ☐ Land the decode, close `BL-059` item 1, retag `BL-245`
+## C10 ☑ Land the decode, close `BL-059` item 1, retag `BL-245` — **landed 2026-08-09**
+
+**Landed.** Four edits, all to files a future session trusts:
+
+- **`BL-059` item 1 deleted** (this repo deletes rather than marks FIXED; the record is in the
+  landing commit). Its item 2, the air variant, is renumbered 1 and is now the whole of the entry —
+  still a missing *trigger*, not a missing query.
+- **`BL-245` retagged** `[Blocked: ground ray]` → `[Blocked: a decision to diverge]`, with the
+  reasoning inline: the ray exists, the surface classifier is wired, and every piece of machinery
+  the item said it waited for is in the tree. What is left is the judgement call — its 379 falls all
+  author `do_intersections: false`, so switching the sweep on for them is a deliberate divergence on
+  playability grounds. Its collider trap now cites `SessionSpec.cs:183` (it said `:157`) and points
+  at `TryContact`'s structural fallback as the shape to copy.
+- **`BL-022` trap (c) corrected.** It cited 159 vanish-shape and 924 `run_time` events (the real
+  figures are 167 and 1,118) and handed the 16 surviving pairs to "`BL-059`/`BL-245`". Those pairs
+  are now ground-tested, so the trap's rule has flipped for them: a *flagged* piece sinking is a
+  regression worth filing; an unflagged one still is not.
+- **`docs/formats/destructibles.md`** gained the four-way flag cross-tab and the disproven
+  `no_altitude` reading, so the next reader meets the dead end with its cause of death attached
+  rather than re-deriving it.
+
+⚠ **`PROJECT_CONTEXT.md`'s "Current status" is deliberately untouched.** The pre-landing note said to
+refresh it here, but it never named this plan — the plan was isolated to its worktree by the user's
+"stay isolated until the plan lands", and the pointer names a *different* live plan
+(`PLAN-overcast-match`) belonging to a concurrent session. Swapping it would delete that session's
+next-step. Re-check it against `main` at merge, not from the worktree.
+
+**Verified.** `.\RunTests.ps1` green (696 units, 28/28 suites, 13/13 goldens hash-identical) — these
+are doc and backlog edits, so the run is a tripwire on the encoding/duplicate-ID hooks rather than a
+behavioural check. The plan is archived to `docs/plans/` with its row in `plans.md`.
+
+### Original approach (kept for reference)
 
 **Goal.** The next session finds the decision recorded where it looks, and no item claims to be
 blocked on something that now exists.
