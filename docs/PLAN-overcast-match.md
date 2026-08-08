@@ -145,8 +145,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ B11 — All-chapter zone-table survey; test H1–H4 on paper
 12. ☑ B12 — Dome-identity discriminator at the above-deck pose (**C1/C1C/C2B/C4 = `zone2`**; the `zone_id` census retired as evidence)
 13. ☑ B13 — Footage discriminators — settled at the controls: H2 (fragment fade) confirmed, no capture needed
-14. ☐ B14 — Implement the winning fog model
-15. ☐ B15 — Re-calibrate or delete `fogRangeFactor` 2.0
+14. ☑ B14 — Implement the winning fog model — **nothing to implement**; the shipped fragment fade IS the original's, landed as the `weather.md` corrections it owed
+15. ☑ B15 — `fogRangeFactor` **deleted** (authored ranges unscaled) and the range fade is a **linear** ramp, per the gamez's own `fog_state == 1`; the river-pose residual is measured to be the deck's own brightness, not the fog
 16. ☑ B16 — The dome's authored `fog: false` — landed, the primary fix for BL-303
 17. ☐ B17 — Fog A/B at both reference poses + BL-303's three; close `BL-303`/`BL-100`/`BL-101`
 18. ☑ B18 — The dome's cap/skirt seam: the skirt is painted `FOG_COLOR`, and we were applying it twice
@@ -174,7 +174,12 @@ every dome fragment under H1 AND H2; runs before B14, and **B14 must not be tune
 BL-303's skies come out right**) → B13 (footage + CAP) → B14 → B15 → B17. B15 note from B11:
 `VIEWING_RANGE` `FOG_SCALE`/`CLIP_SCALE` are 1.0 in all eight chapters — `fogRangeFactor` 2.0
 has no data support; and the original's `World` nodes declare `fog_type: "Linear"` (low
-confidence) against our smoothstep. Inside Wave C: C21
+confidence) against our smoothstep. *(Both landed in B15; the "low confidence" was raised —
+`fog_state` is a written `1` that the reader asserts, and `0` there would be OFF.)* ⚠ **B15 hands
+Wave C a re-measured target and a warning**: the deck's underside is **213.9 against the
+original's 167.7** on the landed build (`CAP-12`'s own box, re-shot), and removing the range factor
+made the ceiling *look* worse (205.6 → 214.8 at `CAP-12` `t8.0`) because that factor had been
+hiding the deck's brightness — so C21/C22 own the river pose's remaining fog symptom too. Inside Wave C: C21
 blocks C22; C22 before C23 (the cut can only be judged with the underside fixed); C24 last.
 
 ---
@@ -1492,6 +1497,13 @@ which is the item's own point.
    against the original's ~330 px. That is `fogRangeFactor` 2.0 halving the authored range
    (B15) and/or the fade model (B14) — measured here, not fixed here, and it is the same
    "our fog hides more of the clouddeck" symptom B15 already owns.
+   — *`B15`'s verdict (2026-08-08): **half right.** Deleting the factor moved the reach from row
+   165 to **236** (with the same instrument re-run; the curve change is worth ~3 rows), but the
+   rest is **not fog at all** — the original's ceiling reads 166–175 in that still while ours
+   renders 200–220 with `--no-fog`, so the remainder is the deck's own +54 underside brightness
+   (`BL-118`, Wave C). B15 also found the raw px numbers compare two differently-pitched frames:
+   at this pose terrain ends our sky ~17 px above the true horizon, so row 330 is unreachable
+   whatever the fog does — see `SHOT-23`.*
 
 ### Probe images (`.scratch/a7/`)
 
@@ -2148,7 +2160,57 @@ explicitly.
 regions within one frame, not absolute values across clips. Game DVR swallowed 1-px rain streaks
 once (BL-302's calibration note) — thin wisps may be capture-invisible too.
 
-## B14 ☐ Implement the winning fog model
+## B14 ☑ Implement the winning fog model — there was nothing to implement
+
+**Landed.** (2026-08-08) **A disproof-of-change landing: the model is confirmed as shipped.**
+`B13` settled the semantics at the controls of the original — fog fades by **FRAGMENT** altitude —
+and that is precisely what `csky_fog_amount` has always computed
+(`CSVM/shaders/csky_atmosphere.gdshaderinc:27`). H1 (camera fade) is dead, H3 died on C2 in `B11`,
+and `B16` already owns the dome. So no fog model was left to write, and the item collapses to the
+documentation it owed. **No engine code, no shader, no zone-resolution code, no whiteout, no
+`backlog.md`, no `PROJECT_CONTEXT.md`** — the fade *shape* and the fade *range* are `B15`'s, and
+they are the only render questions the wave has left.
+
+⚠ **Do not read this as "the fog is right".** Three things are settled — which zone (B12), whether
+the dome fogs (B16), and what the altitude term fades by (B13) — and the two that are not are
+exactly the two `B15` measures: the range factor and the ramp shape.
+
+### What changed in `docs/formats/weather.md`
+
+1. **The `FOG_ALTITUDE` semantics keep their description and swap their evidence.** The old
+   corroboration — "C1/IA1 `zone1` 970→1047 is exactly cloud-band-bottom → whiteout-centre" — is
+   **retired**, because `B12` proved C1 flies `zone2`, whose band is 4000–5000 m: it is an identity
+   in a zone C1 never flies, so it cannot say what `FOG_ALTITUDE` *does*. The identity is kept as a
+   recorded, unexplained property of the authoring, with the full 3/3 (C1 970/1047, C1C
+   1055/1082.5, C2B 924/1024 against `WeatherState.CloudBandCentre`) — deleting it would lose a
+   real fact. The **new** evidence is `B13`'s C2 at-the-controls observation, cited with the reason
+   it is categorical rather than a judgement of degree (~100 luminance units on distant ground).
+2. **A new ⚠ on the flight envelope.** Every flown `FOG_ALTITUDE` band in the install except C2
+   `ZONE1`'s 256–1024 m sits above the 2500 m ceiling — 4000–5000 (C1, C1C), 9000–10000 (C2B, C3,
+   C5), 10000–11000 (C1B, C4) — so the altitude term is a constant 1.0 everywhere else and the
+   whole install exercises it in exactly **one** chapter. Anything that touches that term is
+   measured in C2 or it is not measured (`INSTR-7`).
+3. **The zone-selection section records `B12`'s four verdicts** in place of the "still open for C1,
+   C1C, C2B and C4" paragraph: C1/C1C/C2B/C4 = `zone2`, the shipped default. Cited to the moon in
+   `C1 IA1 Cloud Puffs and Moon.png` and `CAP-12 c4/t21.5`, the star field in the above-deck still,
+   and the sky-colour numbers (C1 ours `(66.1, 74.6, 105.0)` vs original `(64.9, 73.6, 103.1)`;
+   C2B `(64.3, 72.3, 100.5)` vs `(71.7, 77.6, 110.3)`; C4's B−R shift), with **C1C flagged as
+   asset-parity only**. The `--no-fog` method constraint and the `zone_id`-census retirement travel
+   with it, so the dead argument cannot be re-cited from the format page. The per-chapter "flown"
+   table and the intro's "settling the rest needs an A/B" line are updated to match.
+4. **`B18`'s skirt/`FOG_COLOR` cross-check is recorded as agreeing — and as unable to discriminate
+   here**, which is the honest form: all four chapters ship the *same* `FOG_COLOR` in both zones
+   (C1/C1C/C2B `0.69³`, C4 `192³`), so the skirt looks right under either verdict. It corroborates,
+   it does not vote.
+5. **Two stale H3 restatements fixed** in passing, both of which said `FOG_ALTITUDE` reads as a
+   zone-selecting altitude band: the C5 `ZONE1`/`ZONE3` comparison note, and (by the new ⚠) the
+   `FOG_ALTITUDE` row's own surroundings. H3 died unconditionally on C2 in `B11`.
+
+### Files
+
+`docs/formats/weather.md`, this section, and the checklist line. Nothing else.
+
+### Original brief (kept for reference)
 
 **Goal.** The fog our shader computes is the model B11–B13 evidenced, and the above-deck still's
 clear sky falls out of it.
@@ -2178,7 +2240,229 @@ Splitscreen: two players on opposite sides of the switch altitude must each get 
 globals that are per-mission today may become per-view; the far-fade-per-view pattern in
 `FogVolumeClutter` is the precedent.
 
-## B15 ☐ Re-calibrate or delete `fogRangeFactor` 2.0
+## B15 ☑ Re-calibrate or delete `fogRangeFactor` 2.0 — deleted, and the fade is linear
+
+**Landed.** (2026-08-08) **`fogRangeFactor` is gone — the authored `FOG_RANGES` are the ranges —
+and `csky_fog_amount`'s range term is a LINEAR ramp instead of a `smoothstep`.** Both replace an
+invented value with an authored one. Every measured pose improves; two healthy scenes are exactly
+unchanged and the rest move by ≤ 1 unit. **The river pose is much better and still not matched, and
+the reason is now measured rather than guessed: it is not the fog** — see "What this does not fix".
+
+### The 2×2, at the calibrated poses
+
+Four cells, `factor ∈ {2.0, 1.0} × curve ∈ {smoothstep, linear}`, nine poses each, all in
+`.scratch/b15/`. **METHOD-15 on both levers:** `SetupWeather` now logs the APPLIED range beside the
+authored one (`fog 0.69 gray 1000–4000 m (authored 1000–4000)`), and every cell's line is kept at
+`.scratch/b15/logs/<cell>-<pose>.weather.txt`; the shader swap was confirmed by pixel diff before
+any of it was read (river 27.8 % of pixels moved on the curve alone). The landed build re-shot all
+nine poses **bit-identical** to the `f1-linear` cell (`mean|d| = 0.000, max 0`), so what was chosen
+is what shipped (METHOD-16).
+
+**1. C1 river pose** (`-7323,192,-3829` / `-0.997,-0.1,0.070`) vs
+`OriginalScreenshots/C1 IA1 Fog river.png`. The instrument (`.scratch/b15/reach.py`) is a per-row
+horizontal HIGH-PASS RMS over a HUD-free column band — fog washes texture out while leaving a
+smooth gradient, so a plain row sd measures the gradient — thresholded at 25 % of each image's own
+top-of-frame plateau, because the original's mottling runs at hp ≈ 0.59 and ours at ≈ 0.26 and an
+absolute cut would measure the deck texture's CONTRAST rather than how far the fog lets it live.
+Reach is reported three ways: A7's own depth-from-top row, the elevation above the TRUE horizon
+(framing-independent — the two frames' cameras differ in pitch), and the saturation distance that
+elevation implies through A7's own `f·h = 2.40e5 px·m`.
+
+| cell | mottling dies at row | elevation above horizon | ⇒ saturation distance |
+|---|---|---|---|
+| **ORIGINAL** | **337** | **19 px** | **12.6 km** |
+| `factor 2.0` + smoothstep (**before**) | 165 | 135 px | 1.8 km |
+| `factor 2.0` + linear | 173 | 127 px | 1.9 km |
+| `factor 1.0` + smoothstep | 233 | 67 px | 3.6 km |
+| **`factor 1.0` + linear (LANDED)** | **236** | **64 px** | **3.7 km** |
+| *control:* `--no-fog` | 299 | 1 px | — (nothing left to saturate) |
+
+⚠ **A7's "~140 px vs ~330 px" reproduces (165 vs 337) but the two frames are not framing-matched**,
+and the difference is not small: the original's camera is level with its terrain horizon 41 px
+BELOW the true horizon, ours pitches 5.7° down with terrain rising to 17 px ABOVE it. So the raw
+330 target is unreachable at our pose *whatever the fog does* — the `--no-fog` control tops out at
+row 299 because terrain, not fog, ends the sky there. The honest target is the elevation: the
+original's ceiling survives to 19 px above the horizon, our own sky ends at ~17 px, and the landed
+build reaches 64 px.
+
+**2. C3 canyon** (`-3504,710,-3619` / `-0.40673,0,-0.91355`), region means, plus a framing-robust
+vegetation fraction (`G − R > 8` over the lower frame) because the original is a chase frame and a
+fixed box lands on different terrain on the two sides:
+
+| region | f2+smooth (before) | f2+linear | f1+smooth | **f1+linear (landed)** | ORIGINAL (`CAP-11`) |
+|---|---|---|---|---|---|
+| near slope | 177.8 | 170.8 | **85.6** | 106.1 | **36.5** |
+| mid ridge | 200.8 | 200.2 | **139.9** | 143.7 | 19.9 |
+| far ridge | 201.0 flat | 201.0 flat | 187.2 | **182.4** | 60.3 |
+| vegetation, lower frame | 8.8 % | 8.7 % | **29.2 %** | 22.1 % | **47.8 %** |
+| sky | 202.9 | 202.9 | 202.9 | 202.9 | 194.9 |
+
+`B16` left C3's near slope at **162.0, byte-identical before/after**, and named B14/B15 as its
+owner. This item moves it to **106.1** and the frame from 8.8 % to 22.1 % vegetation — the "murk"
+half of `BL-303`'s C3 case is materially better and still not closed (see below). The sky is B16's
+already-fixed dome and does not move.
+
+**3. The other pinned pose (C1 above deck, `-7323,1192,-3829`).** Apex rows 0–150 **75.5 →
+75.5, byte-identical** (original 74.3, `B12`) — the dome is unfogged, so it cannot move. The
+horizon band (B16's rows 265–355) goes 153.4 → 164.8 with sd 28.1 → 38.1: more distant cloud tops
+survive instead of washing to 176. 13.4 % of the frame moved, all of it below the apex.
+
+### Why LINEAR, when the renders split
+
+**The render evidence does not decide the curve, and this record does not pretend it does.** A
+smoothstep sits *below* the linear ramp over the near half of the range and *above* it over the far
+half, so it trades one end for the other, and every pose splits exactly that way: smoothstep wins
+C3's near slope (85.6 vs 106.1) and its vegetation fraction (29.2 % vs 22.1 %); linear wins the
+river reach (236 vs 233), C3's far ridge (182.4 vs 187.2) and C1B's moonlit cloud tops (p90 187.5
+vs 193.5 against originals at 155.4/181.9). Both cells read "our fog is still too strong", at
+opposite ends. That is a statement about a **residual**, not evidence for a curve.
+
+So the tie goes to the data, and the data is stronger than `B11` could see: every chapter's `world1`
+node carries a `World` struct whose `fog_state` field is the raw **u32 1 = LINEAR**, and mech3ax
+**asserts** it (`crates/nodes/src/cs/world/data.rs:97,234` — `const FOG_STATE_LINEAR: u32 = 1`).
+`0` there would be OFF and `2` EXPONENTIAL. B11 marked this low-confidence because "the rest of
+that struct is zeroed" — but that is what makes a *written* 1 significant rather than doubtful: the
+node declares the fog MODE and nothing else (its `fog_color`/`fog_range`/`fog_altitude`/
+`fog_density` are all 0, because the parameters live in weather.json). The `smoothstep` was ours
+and rested on nothing.
+
+⚠ **Only the RANGE term changed.** The ALTITUDE term keeps its `smoothstep`: `fog_state` is D3D's
+distance-fog mode and says nothing about a vertical fade, the cylinder's altitude fade is the
+remake's own model, and exactly one flown band in the install (C2 `ZONE1`, 256–1024 m) is inside
+the flight envelope, so seven of eight chapters cannot tell one altitude curve from another
+(`INSTR-7`, `B14`). Making it "symmetric" would be a guess dressed as tidiness.
+
+### What this does NOT fix — and it is not the fog
+
+**At the river pose the landed build reaches 64 px above the horizon against the original's 19 px,
+and no cell of the 2×2 closes that.** It cannot: at the authored 1000–4000 m the fog is fully
+saturated by 4000 m, which is 60 px in this frame, so the whole family of (factor, curve) choices
+is bounded away from 19 px. Per the item's own instruction, that is stated rather than tuned
+around — and the measurement that explains it was taken:
+
+⚠ **The original's overcast ceiling is ALREADY at the fog colour, and ours is 40–50 units above
+it.** Row-mean luminance down the original river still's sky runs **166.5 → 175.0** from the top of
+frame to the horizon — a total dynamic range of ~9 units against a `FOG_COLOR` of 176 — while our
+`--no-fog` control renders the same ceiling at **200–220**. Re-measured on the landed build at
+`CAP-12`'s own underside box (`-4974,670,-3861`, its 2200 ft still): original **167.7**, ours
+**213.9** (CAP-12 recorded 220.4 pre-wave). So the original's fog is nearly invisible on its deck
+because the deck is already 170; ours produces a visible wash from 220 down to 176 *however* the
+fog is calibrated. **The river-pose fog symptom and `BL-118`'s +54 underside are the same defect
+seen from two sides**, and it is Wave C's `C21`/`C22`, not a fog range. That also predicts a
+short-term worsening, and it is measured: at `CAP-12`'s `t8.0` below-deck pose our ceiling goes
+205.6 → **214.8** against the original's **167.3** — removing the factor removed a compensation
+that had been hiding the deck's brightness. Exactly the trap this item's own brief names.
+
+**Two candidates for the terrain residual (C3's 106.1 against 36.5), neither implemented here:**
+
+1. **The fog mix happens in LINEAR space; the DX7 chain blended in FRAMEBUFFER (gamma) space.**
+   Every consumer does `ALBEDO = mix(ALBEDO, csky_fog_color, fog_amt)` with both operands already
+   linearised. At half fog between a dark slope (40 sRGB) and 176 the two spaces differ by **21
+   units** — gamma 108, linear 129 — with the linear result always the washier one, and the effect
+   peaks in the mid-range where C3's slope sits. This is the same class of bug as the two already
+   landed here (`csky_world_light`'s gamma-space dimming and `SceneBuilder`'s gamma-space vertex
+   modulate), and it is a one-line-per-shader experiment. **This is the first thing to try.**
+2. **A7's `f·h ≈ 2.4e5` (hence `DeckCeilingHeight` 400 m) may be ~3× too large.** The original's
+   ceiling saturates at 19 px; if that is its authored 4000 m far range — which is what every other
+   chapter's fog does — then `f·h ≈ 7.6e4` and `K ≈ 128 m`. A7 derived 400 m from apparent mottling
+   *period*, assuming one texture repeat per 1024 m tile. The two readings disagree by the same
+   factor of ~3 and cannot both be right; the fogged still now offers a second, independent
+   estimator of the same product, which A7 did not have.
+
+Neither is a `B15` change and neither is guessed at here.
+
+### Regression — nothing healthy moved
+
+Before shots were taken FIRST, in the `f2-smooth` cell, at the poses the `BL-110` record names
+(`playtest/CAP-11/README.md`), each at its spawn's own heading (`dir = (sin h, 0, −cos h)` from the
+chapter's `ia.zrd.json`):
+
+| pose | region | before | **landed** | original |
+|---|---|---|---|---|
+| **C2B** spawn `-3843,200,-1101` | sky | 170.8 | **169.9** | 177.0 (`t0.5-c2b-spawn-ocean.png`) |
+| **C2B** spawn | ocean near | 41.4 | **41.0** | 52.1 (the gap is `BL-304`'s water/WorldLight exemption, untouched) |
+| **C1B** spawn `-5406,55,-7200` | island/sea | 23.4 | **23.4 — byte-identical** | 26.8 / 27.4 (`CAP-11`) |
+| **C1B** spawn | moonlit cloud tops, p90 | 43.4 | **187.5** | 155.4 (`t5`) / 181.9 (`t16`) |
+| **C2** `dogfight_ace[4]` `-6862,160,-4335` | ground near | 105.7 | **105.7 — byte-identical** | 89.1 / 88.0 |
+| **C2** | ground mid | 165.3 | **109.4** | ≈ 88 |
+| **C5** `dogfight_ace[3]` `-9187,90,-2037` | street | 30.2 | **30.2 — byte-identical** | — |
+| **C5** | sky | 16.6 | **16.6 — byte-identical** | 15.3 (`BL-303`) |
+| **C4** `-4974,300,-3861` | every box | 191.5–191.9 | **191.5–191.9 — unchanged** | — (degenerate, below) |
+| **C1** `CAP-12` `t8.0` `-4974,255,-3861` | near ground | 74.5 | **74.5 — byte-identical** | 108.2 |
+
+**The three healthy anchors `CAP-11` actually pinned are byte-identical or within 1 unit**: C1B's
+island terrain, C2's near suburb grid, C5's street and sky, C2B's ocean and sky. What moved at those
+chapters moved toward the original — C2's mid-distance ground 165.3 → 109.4 against ≈ 88, and
+C1B's moonlit cloud tops from 43.4 to 187.5 against the original's own 155–182, which is the
+`CAP-11` residual "our night clouds are ~2× dark against the moonlit side" partly answered as a
+side effect. (It is not a healthy-scene regression: `CAP-11` recorded those clouds as a *miss*, not
+a match.)
+
+⚠ **The C4 pose is a degenerate instrument, and it is reported as one** (`INSTR-7`). C4 authors
+`FOG_COLOR` `192³` and flies over snow, so its terrain and its fog are the same luminance: every
+box reads 191.5–191.9 in all four cells and 4.2 % of the frame moves at all. C4's valley haze is
+not *unchanged-and-therefore-safe* here; it is **unmeasurable at this pose**, and a C4 fog claim
+needs a pose with dark timber or rock in frame.
+
+⚠ **One consumer had the factor baked into its sizing argument, and it survives — checked, not
+assumed.** `MapEdgeExtender.Rings = 5` (5 × 1,024 m = **5,120 m** window radius) is sized so the
+terrain's void edge never appears before the fog has saturated, and its comment said "regardless of
+the `fogRangeFactor` TUNE" because it was deliberately sized against the **raw** authored far. That
+is exactly the case that is now live, and it still holds with margin: the longest authored
+`FOG_RANGES` far in any **flown** zone in the install is **C1B's 4,700 m** (then C3/C4 4,500,
+C1/C1C/C2B 4,000, C2 2,400, C5 2,250), all inside 5,120 m, so the void starts where fog is already
+1.0 along every axis. Comment corrected to say so; `Rings` untouched.
+
+### Tests, goldens and the 8-chapter regression
+
+- **8-chapter `--freecam` regression: zero errors in all eight**, every census identical to `A7`'s
+  (decks C1/C1C/C2B 144 @ 960, C4 144 @ 1050; clusters C1 28 · C1B 70 · C1C 30 · C4 45; sprites
+  C1/C2B/C4 22,201 · C1C 22,748 · C5 16,170). `.scratch/b15/regress-C*.png`.
+- **`.\RunTests.ps1`** — build PASS (0 warnings), **units 682/682**, **engine 26/26, errors clean**,
+  goldens **11 moved, 0 broken of 13**. Exit 1 is the golden stage alone.
+
+| golden | moved? | why |
+|---|---|---|
+| `c1-waterfall`, `c1b-night-sea`, `c1c-rain`, `c2-city`, `c2b-rain`, `c3-island`, `c4-snow`, `c5-city-night`, `c1-flight`, `c1-destroy-effects`, `c1-crash` | **moved** (11) | **every shot that builds a chapter world.** The fog globals are read by the world, the clutter sprites, the solid city blocks and the aircraft alike, so any framing containing anything past `near` moves |
+| `viewer-bhawk`, `empty-stage` | **ok** | the only two shots with **no chapter world**: `--viewer` builds one aircraft and `--stage=empty` has no gamez, so `WeatherRig` never runs and the fog globals keep their registered no-op range. Inert by construction (`DIAG-10`) |
+
+**That partition — 11 world shots moved, 2 worldless shots did not — is the `GOLD-5` pattern for a
+global fog change, and it is sharper than the dome items' was.** Two shots are the able-to-fail
+controls for it: `c1-waterfall` and `c1-crash` were **unchanged** through both `B16` and `B18`
+(no dome in frame — a top-of-frame strip and a straight-down fireball) and both move here, which
+is exactly right for a change that fogs terrain rather than sky. **Not re-pinned — `B17` re-pins
+once**, per the wave's own convention (`GOLD-1`/`GOLD-8`).
+
+⚠ **Unrelated flake seen twice, recorded so the next runner does not chase it:** the `viewer-bhawk`
+golden **renders and reports its hash** (`71d5c3bf…`, identical to its pin) and then never exits;
+`RunTests.ps1`'s `Invoke-Godot` uses an unbounded `WaitForExit()`, so the stage blocks forever.
+It reproduced on two consecutive runs and it cannot be this item's doing — `--viewer` builds no
+chapter world, so nothing in `WeatherRig` runs at all. Killing that one process lets the stage
+finish and it records `ok`. Worth a `BL` on `RunTests.ps1` (a per-shot timeout, the way
+`RunProbe.ps1` already has one).
+
+### Files
+
+`CSVM/src/Session/WeatherRig.cs` (`fogRangeFactor` deleted with its stale comment; the applied
+range added to the weather log line, which is what makes `METHOD-15` possible on this at all),
+`CSVM/shaders/csky_atmosphere.gdshaderinc` (the linear range ramp, and the header's retired
+`zone1 970→1047` corroboration struck per `B14`), `CSVM/src/Flight/Weather.cs` (`ZoneFog`'s doc
+restated the same retired corroboration — corrected, not deleted),
+`CSVM/src/Mech3/MapEdgeExtender.cs` (its `Rings` comment named the now-deleted factor; the sizing
+is unchanged and re-checked above), `docs/formats/weather.md` (the `FOG_RANGES` linear-ramp decode
++ the `VIEWING_RANGE` note), `docs/architecture.md` (the `WeatherRig.cs` entry),
+`docs/verification.md` (`SHOT-23`), this section and the checklist line. `PROJECT_CONTEXT.md` and
+`backlog.md` untouched — `BL-303`/`BL-101` close at `B17`. Probes, instruments (`reach.py`,
+`boxes.py`, `shoot.ps1`, `regress.ps1`) and the four cells' 36 renders in `.scratch/b15/`.
+
+**Probe pairs worth human eyes** (`.scratch/b15/`): `f2-smooth-c3canyon.png` vs
+`landed-c3canyon.png` (the biggest visible change in the wave — a white-out wash becomes a green
+canyon with a visible coastline), `f2-smooth-c1bspawn.png` vs `landed-c1bspawn.png` (C1B's moonlit
+cloud tops going from grey to white), and `f2-smooth-river.png` vs `landed-river.png` vs
+`ctl-river-nofog.png` beside `OriginalScreenshots/C1 IA1 Fog river.png` (the ceiling's reach, and
+how much of the residual the `--no-fog` control shows is not fog).
+
+### Original brief (kept for reference)
 
 **Goal.** The factor is either 1.0 (authored ranges, matching `VIEWING_RANGE` HIGH `FOG_SCALE` 1.0)
 or a value defended by a fresh A/B — no stale TUNE.
@@ -2575,6 +2859,17 @@ darker — do the arithmetic against candidate models before coding.
 compute each candidate's predicted underside/top values; pick the one that hits 167 AND keeps tops
 at 211/214 and interior at 248/243. With Waves A+B landed, re-shoot the underside box first — the
 +54 was measured through the old sprite field.
+— **already done, by `B15`:** `CAP-12`'s own underside box re-shot on the landed Wave-B build
+(`.\RunProbe.ps1 --freecam --chapter=C1 --det --mute --pos=-4974,670,-3861 --direction=-1,0,0`,
+`.scratch/b15/landed-deck-below-670.png`) reads **213.9 against the original's 167.7** — so the
+delta is **+46**, not +54, and the item stands. Two `B15` findings feed this one: (a) the deck
+tiles author `lighting: false` and `fog: true` (checked in `models.json`, all 144 in C1), so the
+underside is fullbright × `WorldLight` and nothing about the deck's own shading is currently
+data-driven; (b) **the original's whole overcast ceiling reads 166–175 in `C1 IA1 Fog river.png`,
+within ~9 units of its own `FOG_COLOR` 176 across the entire visible sky** — which is why the
+original's deck barely fogs and ours washes out, and it means fixing 167 also fixes the river
+pose's fog symptom. Expect the ceiling to look *worse* until it lands: removing `fogRangeFactor`
+took away the compensation that was hiding this (205.6 → 214.8 at `CAP-12` `t8.0`).
 
 **Model recommendation.** high — the mechanism choice decides C22 and risks the WorldLight
 calibration.

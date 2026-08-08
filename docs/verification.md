@@ -81,6 +81,18 @@ and leave gaps when retiring old ones.
   bounded by a hard jump — measure it as the largest jump whose rows are BOTH flat, never as the
   largest jump.** Unrestricted, terrain silhouettes and cloud edges dominate the statistic and a
   55-luminance flat-band edge reads as ordinary scene contrast (`PLAN-overcast-match` B18).
+- **SHOT-23** — **Measure how far fog lets a texture survive as a PLATEAU-RELATIVE high-pass, and
+  compare it in ELEVATION ABOVE THE TRUE HORIZON — never in rows from the top of frame.** Both
+  halves bit at C1's river pose (`PLAN-overcast-match` B15). (a) Fog scales a surface's texture
+  contrast by `1 − φ` while leaving a smooth gradient behind, so a per-row sd measures the gradient
+  and an *absolute* contrast threshold measures the texture's own contrast rather than the fog: the
+  original's overcast mottling runs at high-pass RMS ≈ 0.59 and ours at ≈ 0.26, so only a threshold
+  set as a fraction of each image's own unfogged plateau compares the same thing. (b) Two frames of
+  "the same pose" routinely differ in pitch and aspect — the original is level at 1250×713 with its
+  terrain 41 px *below* the true horizon, our matched render pitches 5.7° down at 1280×720 with
+  terrain rising 17 px *above* it — so a depth-from-top row number silently compares different
+  angles and can name a target the pose cannot reach whatever the change does. Convert to elevation
+  (and, where a ceiling's `f·h` is known, to a distance in metres) before drawing a conclusion.
 - **SHOT-21** — **`--tex-override` cannot separate the `fvol` cloud-sprite field from
   `cloudparent` clusters — they share their textures.** All 626 of C1's `cloudparent` facades are
   skinned `cloud1.tif`/`cloud2.tif`, the same two textures the `cloudsprite1`/`cloudsprite2`

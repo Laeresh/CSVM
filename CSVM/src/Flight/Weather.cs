@@ -418,10 +418,15 @@ public sealed class WeatherState
     /// the original's fog volume is a vertical cylinder around the camera, not a sphere
     /// (user-diagnosed) — scaled by an altitude fade from <c>FOG_ALTITUDE</c>: full
     /// fog below <see cref="FogLow"/>, none above <see cref="FogHigh"/>, so the cloud deck /
-    /// sky overhead stays clear. C1/IA1 corroborates: zone1's 970→1047 is exactly cloud-band
-    /// bottom → whiteout-band centre (fog hands over to the whiteout while climbing into the
-    /// overcast); zone2's 4000→5000 sits above the 2500 m flight ceiling (night fog at every
-    /// flyable altitude). <see cref="ClipFar"/> is the original's hard far clip (informational —
+    /// sky overhead stays clear. The fade is by FRAGMENT altitude, settled at the controls of the
+    /// original in C2 — the only chapter whose flown band (256–1024 m) is inside the flight
+    /// envelope (<c>PLAN-overcast-match</c> B13, docs/formats/weather.md).
+    /// ⚠ The old corroboration "zone1's 970→1047 is exactly cloud-band bottom → whiteout centre"
+    /// is RETIRED: C1 flies zone2, whose band is 4000→5000 m — above the 2,500 m flight ceiling,
+    /// i.e. night fog at every flyable altitude — so that identity lives in a zone C1 never flies
+    /// (B12). It is real and unexplained, not evidence.
+    /// The ramp between near and far is LINEAR, per the gamez world node's own
+    /// <c>fog_state == 1</c> (B15). <see cref="ClipFar"/> is the original's hard far clip (informational —
     /// our far plane is much larger; the fog is what hides distant terrain, matching the
     /// original's short view distance).</summary>
     public readonly record struct ZoneFog(Color FogColor, float FogNear, float FogFar, float FogLow, float FogHigh, float ClipFar, float WorldLight);

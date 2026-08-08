@@ -270,11 +270,19 @@ public sealed class WeatherRig
         var fogLinear = fog.FogColor.SrgbToLinear();
         RenderingServer.GlobalShaderParameterSet("csky_fog_color",
             new Vector3(fogLinear.R, fogLinear.G, fogLinear.B));
-        //Range is halved because this does not seem to be radius but diameter. See Screenshot C1 IA1 Fog Range.png vs Screenshots\Fog Range.png
-        // NOTE: that calibration predates the fog-color sRGB fix below (the old washed-out
-        // near-white read weaker than true 176 gray) — worth a fresh in-game A/B; factor 1
-        // makes the overcast deck's texture persist further down toward the horizon.
-        float fogRangeFactor = 2.0f;
+        // The AUTHORED ranges ARE the ranges. A `fogRangeFactor = 2.0` used to halve them here
+        // ("this does not seem to be radius but diameter"); it was a TUNE predating the fog-colour
+        // sRGB fix and it is gone (PLAN-overcast-match B15, 2026-08-08). The data never supported
+        // it: `VIEWING_RANGE` ships `FOG_SCALE 1.0` at HIGH detail in all eight chapters, and
+        // every other multiplier in that block is <= 1 (MED 0.85, LOW 0.7), so nothing in the file
+        // shortens a range at all. Measured: at the C1 river pose the halved range saturated the
+        // overcast ceiling into flat fog at ~1.8 km against the original's ~12.6 km, and the
+        // authored range takes that to ~3.7 km; C3's over-fogged canyon slope moves 178 -> 106
+        // against the original's 36.5.
+        // ⚠ The residual at both poses is NOT this factor. The original's whole overcast ceiling
+        // reads 166-175 in its own river still while ours renders 200-220 BEFORE any fog, so what
+        // is left of "our fog eats the clouddeck" is the deck's own +54 underside brightness
+        // (`BL-118`, CAP-12) seen from below — a Wave C question, not a fog one.
         // --no-fog pushes the range out of reach instead of touching `csky_fog_on`. That uniform
         // would work — every shader still honours it — but it is an INSTANCE uniform declared at
         // index 1 in SceneBuilder's shader and index 0 in Clutter's, and Godot merges that mapping
@@ -284,11 +292,11 @@ public sealed class WeatherRig
         // sprites, the solid city blocks and the dome with no ordering hazard at all.
         var fogRange = _spec.NoFog
             ? new Vector2(1e8f, 1e9f)   // same no-op range Weather.NoFog uses
-            : new Vector2(fog.FogNear, fog.FogFar) / fogRangeFactor;
+            : new Vector2(fog.FogNear, fog.FogFar);
         RenderingServer.GlobalShaderParameterSet("csky_fog_range", fogRange);
         // FOG_ALTITUDE: the fog cylinder's vertical extent — full fog below FogLow, fading to
-        // none at FogHigh (fragment altitude; see SceneBuilder's fog shader block). Absolute
-        // altitudes, so the range factor doesn't apply.
+        // none at FogHigh (FRAGMENT altitude, settled in C2 at the controls of the original —
+        // see csky_atmosphere.gdshaderinc and weather.md).
         RenderingServer.GlobalShaderParameterSet("csky_fog_alt", new Vector2(fog.FogLow, fog.FogHigh));
         // World brightness from the zone's SUNLIGHT (see WeatherState.WorldLight): the original
         // dims the baked-vertex world by the mission's ambient+diffuse; we apply it as a scalar
@@ -301,7 +309,8 @@ public sealed class WeatherRig
         float worldLightLinear = new Color(fog.WorldLight, fog.WorldLight, fog.WorldLight).SrgbToLinear().R;
         RenderingServer.GlobalShaderParameterSet("csky_world_light", worldLightLinear);
         GD.Print($"weather [{_activeZone}]{(_spec.NoFog ? " --no-fog: fog + whiteout OFF, world light unchanged;" : ":")} " +
-                 $"fog {fog.FogColor.R:0.00} gray {fog.FogNear:0}–{fog.FogFar:0} m, " +
+                 $"fog {fog.FogColor.R:0.00} gray {fogRange.X:0}–{fogRange.Y:0} m " +
+                 $"(authored {fog.FogNear:0}–{fog.FogFar:0}), " +
                  $"altitude {fog.FogLow:0}–{fog.FogHigh:0} m; world light {fog.WorldLight:0.00}; " +
                  $"cloud band {_weather.CloudBottom:0}–{_weather.CloudTop:0} m (±{_weather.CloudThickness:0})");
 

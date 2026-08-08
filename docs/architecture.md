@@ -3344,6 +3344,20 @@ are built from, and it is logged with the meshed counts it was decided on.
 ⚠ **`GlobalShaderParameterSet`, never `Add`.** `GlobalShaderParameterAdd` runs once per process in
   `Launcher._Ready`; `Build`'s fog/whiteout writes must stay `Set`-only, or every in-process menu
   relaunch that flies a second foggy mission crashes on the duplicate `Add`.
+⚠ **`csky_fog_range` carries the AUTHORED `FOG_RANGES` unscaled** (`B15`, 2026-08-08). The
+  `fogRangeFactor = 2.0` that used to halve them is deleted: `VIEWING_RANGE` ships HIGH
+  `FOG_SCALE` 1.0 in all eight chapters and every multiplier in that block is ≤ 1, so no shipped
+  datum shortens a range. Do not re-introduce a scale here — a chapter that looks over-fogged is a
+  question about the fog COLOUR, the surface's own brightness or the mix space, not about a
+  factor. `SetupWeather` logs the applied range beside the authored one, which is how an A/B on
+  this proves which range it rendered with. The fade between `near` and `far` is a **linear** ramp
+  in `shaders/csky_atmosphere.gdshaderinc` (the gamez `world1` node's `fog_state == 1` = LINEAR,
+  asserted by the reader in every chapter), not the `smoothstep` it shipped with; the ALTITUDE
+  term keeps its smoothstep on purpose — see that file's own comment and `docs/formats/weather.md`.
+⚠ **A residual known at landing, so it is not re-diagnosed as fog:** the original's overcast
+  ceiling reads 166–175 in `OriginalScreenshots/C1 IA1 Fog river.png` while ours renders 200–220
+  before any fog at all (CAP-12's +54 underside, `BL-118`). Any remaining "our fog eats the
+  clouddeck" at that pose is the deck's own brightness seen from below, and it belongs to Wave C.
 ⚠ `SetDeckCenter` is called separately from `Build`, whenever a chapter's cloud deck geometry loads
   (`GameSession`'s `cloudDeck != null` branch) — broader than "this rig has weather", so it is
   guarded with `_weatherRig?.SetDeckCenter(...)` rather than assumed non-null.

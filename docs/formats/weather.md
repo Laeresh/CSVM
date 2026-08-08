@@ -110,10 +110,12 @@ remaining `BL-100` A/B. The two C1 strings are not two zone selections: one name
 not have, the other scrolls a texture. Nothing in `interp.json` bears on which zone a mission
 flies.
 
-So the remake selects it via `--sky-zone` (default `zone2` = night) — but see
-[the horizon's own say](#the-horizons-own-geometry-settles-three-chapters-2026-08-06) below, which
-settles C1B, C2 and C3 from the data. Settling the rest needs an A/B against the original — C5 most
-of all, whose two candidates are far apart:
+So the remake selects it via `--sky-zone` (default `zone2` = night). **Every chapter is now
+settled**, in three passes and by three different instruments:
+[the horizon's own geometry](#the-horizons-own-geometry-settles-three-chapters-2026-08-06) decides
+C1B, C2 and C3 from the data; C5 fell to a user A/B in 2026-07; and
+[the last four](#the-remaining-four-are-settled-c1-c1c-c2b-and-c4-all-fly-zone2-2026-08-08) fell to
+a dome-identity render in 2026-08. C5's two candidates were the far-apart pair:
 
 | | `ZONE1` | `ZONE3` |
 |---|---|---|
@@ -122,8 +124,12 @@ of all, whose two candidates are far apart:
 | `CLIP_RANGES` | 5 – 2500 | **5 – 300** |
 | `FOG_ALTITUDE` | 9000 – 10000 | 9000 – 10000 (identical) |
 
-Note the identical `FOG_ALTITUDE`: in C1 the zones read as altitude bands (zone1 970–1047 at
-the cloud floor, zone2 4000–5000), but in C5 altitude cannot be what selects between them.
+Note the identical `FOG_ALTITUDE`: whatever else distinguishes C5's two zones, altitude cannot be
+it. ⚠ **`FOG_ALTITUDE` does not select a zone in any chapter** — the altitude-triggered
+zone-switch reading died on C2, whose `ZONE1` band top (1024 m) is routinely flown while its
+`horizon/zone2` holds **zero** meshes, so a switch there would open a hole in the sky
+(`PLAN-overcast-match` B11). It is a fade inside one zone's fog, nothing more; see
+[the zone keys](#zone-keys) below.
 
 #### C5 is settled: `zone1` (user A/B against the original, 2026-07-22)
 
@@ -158,13 +164,13 @@ order — which is **not** zone-number order):
 
 | chapter | horizon zones | flown |
 |---|---|---|
-| C1 | zone1 **2**, zone2 **4** | zone2 (both build — open) |
+| C1 | zone1 **2**, zone2 **4** | **zone2** (both build — settled by render, below) |
 | **C1B** | zone1 **4**, zone2 **0** | **zone1** |
-| C1C | zone2 **4**, zone1 **1** | zone2 (both build — open) |
+| C1C | zone2 **4**, zone1 **1** | **zone2** (both build — settled by asset parity, below) |
 | **C2** | zone2 **0**, zone1 **3** | **zone1** |
-| C2B | zone2 **2**, zone1 **1** | zone2 (both build — open) |
+| C2B | zone2 **2**, zone1 **1** | **zone2** (both build — settled by render, below) |
 | **C3** | zone2 **0**, zone1 **3** | **zone1** |
-| C4 | zone2 **4**, zone1 **1** | zone2 (both build — open) |
+| C4 | zone2 **4**, zone1 **1** | **zone2** (both build — settled by render, below) |
 | C5 | zone3 **1**, zone1 **2** | zone1 (no `zone2` at all — the fallback above) |
 
 `BL-036`'s node counts agree: C1B and C3 author their worlds under zone 1 (2,101 and 1,647 nodes,
@@ -225,10 +231,43 @@ was to stop applying that one authored colour twice (`docs/architecture.md`, `Sc
 ⚠ **A skirt colour that does not match its zone's `FOG_COLOR` means the wrong zone is being flown**,
 not that the dome needs painting — the pair is the check.
 
-**Still open for C1, C1C, C2B and C4**, which define `zone2` *and* build a dome for it, so the
-geometry cannot decide. There is no longer a data reason to rank one of the four first — the
-`interp.json` re-read above retired the "C1's scripts disagree" tiebreak — so the A/B is a plain
-four-chapter sweep against the original.
+#### The remaining four are settled: C1, C1C, C2B and C4 all fly `zone2` (2026-08-08)
+
+These four define `ZONE2` *and* build a dome for it, so the geometry above cannot decide them, and
+the `interp.json` re-read had already retired the "C1's scripts disagree" tiebreak. The **render**
+decides, at a pose where the dome fills the frame — and all four land on the zone the remake
+already defaults to, so nothing in the selection code changes (`PLAN-overcast-match` B12).
+
+| chapter | verdict | what settled it |
+|---|---|---|
+| **C1** | **`zone2`** | `OriginalScreenshots/C1 IA1 Cloud Puffs and Moon.png` shows a crater-textured **moon**; `C1 IA1 Fog above clouddeck.png` shows a **faint star field** (8 isolated 1–2 px points, +13…+29 over a sky of sd 3.4). Only `horizon/zone2` holds a `moon` or `stars` mesh — `zone1` is `h_zone1scroll` + `o28`. At the pinned above-deck pose our `zone2` measures **(66.1, 74.6, 105.0)** against the original's **(64.9, 73.6, 103.1)**, inside ±10 on every channel; `zone1` renders flat **(169.4, 169.6, 170.7)** — off by +104/+96/+68 and neutral grey where the original is blue |
+| **C4** | **`zone2`** | `playtest/CAP-12/c4/t21.5-1230m-above.png` shows the same moon disc cut by the top-left frame edge. C4's originals are video-graded, so absolute levels are not comparable and the within-frame statistic is the blue shift: the original runs **B−R +8.6…+15.6**, our `zone2` **+29.7**, our `zone1` **exactly 0.0** |
+| **C2B** | **`zone2`** | `playtest/CAP-11/t50-c2b-above-deck.png` sky **(71.7, 77.6, 110.3)** vs our `zone2` **(64.3, 72.3, 100.5)** — inside ±10; `zone1` is flat `176³` |
+| **C1C** | **`zone2`** — **asset parity only** | no original C1C footage exists. Its `horizon/zone2` is the *same four meshes with the same bboxes* as C1's (`moon`, `stars`, `g1155`, `h_zone2scroll`); its `zone1` is a single mesh rendering a featureless field. This one verdict rests on identity with a settled chapter, not on a comparison |
+
+⚠ **A daylit mission does render a moon and a star field.** Three arguments pointed at `zone1` —
+the moon/stars read as nocturnal on missions lit as day; only `ZONE1` is per-mission-tuned across
+the 53 weather files; `zone1`'s `FOG_ALTITUDE` equals `[CLOUD_COVER BOTTOM, band centre]` exactly
+3/3 — and all three rest on that single unstated premise, which the original's own stills refute.
+
+⚠ **Shoot the comparison with fog neutralised on BOTH sides** (`--no-fog`). With the dome fogged,
+either zone renders the same flat grey below the band and the test is degenerate (`METHOD-1`).
+
+⚠ **The gamez `zone_id` node census is not admissible evidence about which zone a mission flies**,
+even though it happened to agree. Nothing in `CSVM/src` reads `zone_id`; its agreement with the
+four already-settled chapters is degenerate (three of them have no zone-2 world to disagree with,
+and C5 — the one that could speak — disagrees); and in C1 the visibility reading contradicts
+itself, since `zone_id 1` holds the mission's own `ap_transmitter` and `dz1`–`dz5` targets while
+`zone_id 2` holds the entire cloud deck, all 9 `fvol` volumes and the dome, so a draw-only-the-flown-zone
+gate leaves mission content unbuilt whichever zone is chosen. It is a partition tag of one world
+whose runtime meaning is unknown. Do not re-cite it.
+
+**The skirt/`FOG_COLOR` pair agrees — but it cannot discriminate here.** Each dome's untextured
+skirt is authored in its zone's own `FOG_COLOR` (above), and every render of these four is
+consistent with that: C1/C1C/C2B show a 176 skirt against 176 fog, C4 a 192 skirt against 192. It
+is a *consistency* check only in these four chapters, because both of their zones ship the **same**
+`FOG_COLOR` (C1/C1C/C2B `0.69³`, C4 `192³`) — so the pair would look right under either verdict.
+Where the two zones' colours differ it is a real check, which is the form the ⚠ above states it in.
 
 ### Zone keys
 
@@ -237,14 +276,67 @@ List-valued dict keys:
 | Key | Meaning |
 |---|---|
 | `FOG_COLOR` | fog colour (dual-encoded, above) |
-| `FOG_RANGES` | `[near, far]` metres of **horizontal** view distance (the original's fog volume is a vertical cylinder around the camera, not a sphere) |
+| `FOG_RANGES` | `[near, far]` metres of **horizontal** view distance (the original's fog volume is a vertical cylinder around the camera, not a sphere). A D3D `FOGSTART`/`FOGEND` pair, ramped **linearly** between them — see below |
 | `FOG_ALTITUDE` | `[low, high]` metres: full fog at/below `low`, none at/above `high` — the cylinder's vertical fade. C4's `[10000, 11000]` sits above every flyable altitude ⇒ a pure cylinder, full fog at all heights (matches RM's valley haze) |
 | `CLIP_RANGES` | `[near, far]` hard clip; `far` kept as informational (the remake's far plane is much larger — fog, not the clip, hides distant terrain) |
 
-C1/IA1 corroborates the altitude semantics: `zone1` 970→1047 is exactly cloud-band-bottom
-→ whiteout-centre (fog hands over to the whiteout while climbing into the overcast);
-`zone2` 4000→5000 sits above the 2500 m flight ceiling (night fog at every flyable
-altitude).
+#### The ramp between `near` and `far` is LINEAR, and the authored values are used unscaled (2026-08-08, B15)
+
+**Confidence: the curve is traced to a field in the data; the render could not discriminate it.**
+
+`FOG_RANGES` is a D3D `FOGSTART`/`FOGEND` pair, and the *mode* is declared beside it in the
+gamez: every chapter's `world1` node carries a `World` struct whose `fog_state` field is the raw
+u32 **1 = LINEAR** (mech3ax `nodes/src/cs/world/data.rs` **asserts** it, so it is present and
+identical in all eight chapters; `0` in that field would mean OFF and `2` EXPONENTIAL). The rest
+of that struct — `fog_color`, `fog_range`, `fog_altitude`, `fog_density` — is zeroed, which is
+what makes a *written* 1 significant rather than doubtful: the runtime fog parameters come from
+this file, and the node declares only the mode. So `csky_fog_amount` ramps
+`clamp((d − near) / (far − near), 0, 1)`; it used a `smoothstep` until B15, and that S-curve was
+the remake's own invention with nothing behind it.
+
+⚠ **The renders did not decide this, and the record should not pretend they did.** A smoothstep
+is *below* the linear ramp for the near half of the range and *above* it for the far half, so it
+trades one end for the other and every measured pose splits accordingly: at C3's canyon pose the
+smoothstep leaves more terrain unwashed (canyon slope 86 vs 106, vegetation 29 % vs 22 % of the
+lower frame, against the original's 36.5 and 47.8 %), while at C1's river pose and on C1B's
+moonlit cloud tops the linear ramp reaches further (deck-ceiling texture surviving to 3.7 km vs
+3.6 km; cloud p90 187 vs 193 against originals at 155–182). Both are "our fog is still too
+strong", at opposite ends — which is a statement about a residual, not evidence for a curve. The
+authored field breaks the tie.
+
+**`VIEWING_RANGE` does not scale them.** All eight chapters ship HIGH `FOG_SCALE`/`CLIP_SCALE`
+**1.0** (MED 0.85, LOW 0.7) — every multiplier in the block is ≤ 1, so nothing in the shipped data
+shortens a range. The remake used to halve them with a `fogRangeFactor = 2.0` in `WeatherRig`
+("this does not seem to be radius but diameter"); that TUNE predated the fog-colour sRGB fix and
+is **deleted**. Measured at C1's river pose, the halved range washed the overcast ceiling to flat
+fog at ~1.8 km against the original still's ~12.6 km; the authored range takes that to ~3.7 km.
+
+**The fade is by FRAGMENT altitude, not by the camera's** (2026-08-08, `PLAN-overcast-match`
+B13). Settled at the controls of the original in **C2** — the only chapter whose flown band sits
+inside the flight envelope, so the only place the two readings differ at all: climbing well above
+`ZONE1`'s 1024 m top, the distant city **"still dissolves into haze"**. A camera-altitude fade
+would have switched the fog off entirely up there and handed the ground back its unfogged
+luminance, ~100 units away on distant ground, so the observation is categorical rather than a
+judgement of degree. That is exactly what `csky_fog_amount` computes
+(`CSVM/shaders/csky_atmosphere.gdshaderinc`), and this observation is the whole of the evidence
+for it.
+
+⚠ **The old corroboration is retired: "C1/IA1 `zone1` 970→1047 is exactly cloud-band-bottom →
+whiteout-centre" belongs to a zone C1 never flies.** C1 flies `zone2` (settled above), whose band
+is 4000→5000 m — above the 2500 m flight ceiling, i.e. night fog at every flyable altitude. The
+identity itself is real and it is **3/3** across every chapter whose band is reachable at all —
+C1 970/1047, C1C 1055/1082.5, C2B 924/1024, each exactly `[CLOUD_COVER BOTTOM,
+WeatherState.CloudBandCentre]` — but it is an identity in the **unflown** zone in all three, so it
+cannot be evidence for what `FOG_ALTITUDE` does at runtime. It is recorded here as a real and
+unexplained property of the authoring, not deleted (`PLAN-overcast-match` B11/B12).
+
+⚠ **Exactly one flown band in the whole install is inside the flight envelope, so exactly one
+chapter exercises the altitude term.** Every other chapter's flown zone authors 4000–5000 m
+(C1, C1C), 9000–10000 m (C2B, C3, C5) or 10000–11000 m (C1B, C4) — all above the 2500 m ceiling,
+where the term is a constant 1.0 and `FOG_ALTITUDE` is inert. Only **C2 `ZONE1`'s 256–1024 m** can
+tell one altitude rule from another. A degenerate census is a fact about the instrument, not about
+the question (`INSTR-7`): measure any change to the altitude term in C2, and do not tune it
+against a scene that cannot exercise it.
 
 ## World lighting (`SUNLIGHT_*`, the item-6 decode, 2026-07-18)
 
