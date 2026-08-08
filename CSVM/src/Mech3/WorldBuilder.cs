@@ -1029,8 +1029,15 @@ public sealed class WorldBuilder
         if (!node.Active)
             return; // the build script's own NodeSetActive off — never built, like the original
         bool isDeck = _deckNodes.Contains(nodeIndex);
+        // forceLit: PLAN-overcast-match C22. The deck tiles author `lighting: false` like the
+        // dome and the cloudsprite field, but C21 traced the original's dark mottled underside
+        // to the mission's own SUNLIGHT dimming, which is authored ON for the deck alone among
+        // those three `lighting: false` populations — `SunIncidence` was calibrated on this
+        // exact surface (see `Flight/Weather.cs`). Deck-local, beside the existing
+        // forceDoubleSided override; never a change to the `lighting` gate or to
+        // `csky_world_light` itself.
         var built = _scene.BuildSubtree(node, SkipWorldNode, NoCollisionNode,
-            forceDoubleSided: isDeck);
+            forceDoubleSided: isDeck, forceLit: isDeck);
         if (built != null)
         {
             if (IsParkedAtOrigin(node, built))

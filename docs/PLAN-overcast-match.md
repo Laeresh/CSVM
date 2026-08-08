@@ -158,7 +158,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
     210.5 × 0.802 = 168.9 vs the original's 167.7. Also: the ceiling's fade is ordinary authored
     fog (the fog-exempt/baked-fade lead is refuted, C25) and `DeckCeilingHeight` re-estimates to
     **135 m**, not 400 — needs a user verdict, see the section
-22. ☐ C22 — Implement the underside darkening
+22. ☑ C22 — Implement the underside darkening
 23. ☐ C23 — Re-measure the tops per population; blend the mesh↔sprite cut
 24. ☐ C24 — Final match: both stills within the bar; mint PT + night-moonlit BL; close `BL-118`
 25. ☐ C25 — The below-band ceiling covers to the horizon and fades like the original's (user proposal 2026-08-08)
@@ -3318,26 +3318,124 @@ before C22 starts.
 `csky_world_light` globally is wrong; the fix is deck-local. Per-population measurement (decision
 8): `--tex-override` on `cloudlayer.tif`/`cloud1`/`cloud2` isolates mesh from sprites cheaply.
 
-## C22 ☐ Implement the underside darkening
+## C22 ☑ Implement the underside darkening
 
-**Goal.** The deck underside measures 167 ± 10 at the CAP-12 pose; tops and interior stay within
-their matched values.
+**Landed.** (2026-08-08) Exactly C21's mechanism, deck-local: `WorldBuilder.Add` now builds every
+deck tile with `forceLit: isDeck` beside its existing `forceDoubleSided: isDeck`. `SceneBuilder`
+threads `forceLit` through `BuildSubtree`/`GetMesh`/`BuildMesh` the same way as
+`forceDoubleSided` (inherited by descendants, joins the mesh-cache key), and the one substantive
+line is `bool lit = mesh.Lighting || forceLit;` — the deck's authored `lighting: false` no longer
+gates off `ALBEDO *= csky_world_light`. This selects an existing lit+fogged shader **variant**
+(the ordering-contract note in `SceneBuilder.cs`: `lighting`/`fog` pick shader text, not a
+uniform), so it cannot perturb any surface that doesn't ask for it — confirmed below by the C4
+control (byte-identical) and the dome/sprite controls (untouched code paths, unaffected).
 
-**Evidence (confidence: direction sound, magnitude from C21).** Wrong-claim #4: underside only.
+### The four CAP-12 boxes — predicted vs measured vs original
 
-**Approach.** Per C21's mechanism — plausibly a two-sided material treatment on the deck tiles
-(down-facing term dark, up-facing unchanged) applied where `WorldBuilder` builds `CloudDeck`.
-Touch only the deck path.
+`--freecam --chapter=C1 --det --mute --pos=-4974,{670,1040,1160,1700},-3861 --direction=-1,0,0`,
+`.scratch/c21/capboxes.py` + `population.py`, before shot first on the pre-C22 build
+(`.scratch/c21/`), after on this build (`.scratch/c22/`):
 
-**Model recommendation.** high — shader/material work with a tight numeric target.
+| box | original | before (ours) | **predicted (C21)** | **measured (C22)** | verdict |
+|---|---|---|---|---|---|
+| underside 670 m, `under-L`/`under-R` (fogged) | 169.7 / 168.7 | 201.2 / 195.9 | 171 ± 3 | **172.6 / 168.4** | ✓ Δ +2.9 / −0.3 |
+| underside 670 m, deck's own colour (`--no-fog`) | — (arithmetic ref 168.9) | 212.7 / 207.2 | 170.6 | **170.4 / 165.9** | ✓ matches the arithmetic almost exactly |
+| underside, CAP-12's own tight box (fogged, 79.8 % mesh) | 168.1 | 211.2 | 171 ± 2 | **170.6** (mesh-only 171.7) | ✓ Δ +2.5 |
+| interior 1040 m, `inside` (0 % mesh — the whiteout overlay) | 249.8 | 242.3 | 242.3 — unchanged | **242.34 — byte-identical** | ✓ inert by construction |
+| tops 1160 m, `tops-L`/`tops-R`/`tops-M` (0 % mesh) | 204.9–213.3 | 222.3 / 220.9 / 222.6 | unchanged | **219.3 / 210.5 / 222.2** | still open → `C23` (see note below) |
+| tops 1700 m, `tops-L`/`tops-R`/`tops-M` (0 % mesh) | 182.7–201.2 | 205.8 / 217.7 / 219.6 | unchanged | **202.8 / 213.8 / 212.8** | still open → `C23` |
 
-**Verify.** The four CAP-12 boxes re-measured (underside/interior/tops/5570 ft); river-pose
-underside region vs the original still; C4's deck (Sky1.tif) gets the same treatment — verify at
-the CAP-12 C4 poses; 8-chapter regression.
+The underside rows are the item's own target and land exactly where C21 predicted, including the
+`--no-fog` deck-own-colour control landing almost exactly on `210.54 × 0.802 = 168.9` — the
+clearest confirmation that the mechanism is what C21 traced it to, not a coincidence of the fogged
+mix. The interior box is byte-identical (0 % mesh, the whiteout overlay fully occludes it — inert
+by construction, exactly as A2/A3's controls establish that pattern).
 
-**⚠ Traps.** The deck flips above/below at the cloud band and follows the player
-(`GameSession`/`WeatherRig.Tick`) — test both sides of the flip; a fix keyed to face normals must
-survive the deck's follow behaviour.
+**⚠ The two tops boxes moved a little, where C21 predicted flat-zero.** `population.py`'s
+flat-red mesh mask still reads **0.0 % mesh** in both boxes at both altitudes on this build (the
+override's own math survives dimming: `255 × 0.802 ≈ 204 > 200`, the mask's own threshold, so a
+darkened deck tile would still be caught if it were there) — so no *pure* deck-mesh pixel entered
+either box. The few-unit movement (up to 10 on `tops-R` at 1160 m) is most likely translucent-edge
+bleed: at 1160/1700 m the camera is above the `CLOUD_COVER` band centre, where `A7`'s regime puts
+the deck as a world-fixed floor sitting *below* the camera, and these boxes sit in the lower 35–40
+% of a level frame — close enough to the horizon to catch the floor's darkened colour showing
+through a `cloudsprite` card's own soft alpha edge, a blend the flat-mask can't see (it only
+classifies *fully*-red pixels). This does not change the box's own verdict — both were already
+predicted to miss the bar and wait on `C23` — and it is recorded here rather than chased, per this
+item's own scope (`C23` owns the mesh↔sprite blend and should fold this in).
+
+### Controls — C4, the dome, the sprite field
+
+- **C4 (`Sky1.tif` deck, `WorldLight` clamps to `1.0`): byte-identical**, no special-casing. Same
+  pose, same box, before vs after: below-band `-4974,900,-3861` **190.63 → 190.63** (identical
+  RGB triple), above-band `-4974,1300,-3861` **212.49 → 212.49** (identical RGB triple). The
+  `c4-snow` golden did not move either (see below) — three independent readings, none moved,
+  because the clamp does the work exactly as C21 said it would.
+- **Dome (`horizon`, untouched code path): unaffected.** Pinned above-deck pose
+  `-7323,1192,-3829` / `0,0,-1`, apex box (rows 0–150, full width): **75.43** fog-on and
+  `--no-fog` alike (byte-identical to each other, matching B12/B16's own "above the fog altitude
+  ceiling" finding) — consistent with the on-record **74.3** original / **~75.3–75.5** ours.
+  `BuildHorizon` never passes `forceDoubleSided`/`forceLit`, so this is expected, not merely
+  measured.
+- **`cloudsprite` field (`Effects/FogVolumeClutter`, a wholly separate builder): unaffected.**
+  It never calls `WorldBuilder.Add` or `SceneBuilder.BuildSubtree` with `forceLit`, so nothing in
+  its own code path changed; the tops-box movement above is read-through from the deck floor, not
+  a change to the sprite population itself (unchanged sprite counts, below).
+
+### River pose — the fogged ceiling moves toward the original's band, the K residual does not
+
+`-7323,192,-3829` / `-0.997,-0.1,0.070`, `.scratch/c21/fitfog.py` (horizon row 301, this render's
+own pitch — `SHOT-23`), before on `.scratch/c21/river-fog.png`, after on `.scratch/c22/`:
+
+| reading | before | after | original |
+|---|---|---|---|
+| `f·h` fit's recovered `L0` (the ceiling's own unfogged colour, read from the fog ramp alone) | **210.63** | **170.00** | 168.1–169.2 (C21's own fit on the original still) |
+| row-mean, elevation 71–81 px (B15's HUD-free column bands) | 178.6 / 183.5 | **175.4 / 173.5** | 166–175 flat band (C21) |
+| row-mean, elevation ≤ 41 px (the rim/dome-stripe region) | 158.7 / 144.4 / 164.0 / 165.2 / 161.4 | **158.7 / 144.4 / 164.0 / 165.2 / 161.4 — byte-identical** | — (this is `K`, `C25`) |
+
+`L0` lands almost exactly on the predicted 168.9, and the upper part of the ceiling gradient moves
+visibly toward the original's flat 166–175 band. **Rows below elevation ≈ 41 px are byte-identical
+before and after** — that region is the dome-wall sky stripe C21 attributed to `K`
+(`DeckCeilingHeight`, still 400 m, still `C25`'s), not to the deck's own brightness, and this item
+correctly does not move it. Stated, not chased, exactly as the brief asked.
+
+### Tests, goldens and the 8-chapter regression
+
+`.\RunTests.ps1` — build PASS (0 warnings), **units 682/682**, **engine 26/26, errors clean**,
+goldens **5 moved, 0 broken of 13**. Exit 1 is the golden stage alone. Goldens were clean (0
+moved) going into this item — `B17` re-pinned Wave B's movers and `C21` touched no code — so this
+list is this item's own, not a `GOLD-8` conflation:
+
+| golden | moved? | why |
+|---|---|---|
+| `c1-waterfall`, `c1-flight`, `c1-destroy-effects` | **moved** | C1, deck in frame, `WorldLight` 0.802 ⇒ deck visibly darkens |
+| `c1c-rain` | **moved** | C1C, same deck signature, `WorldLight` 0.784 |
+| `c2b-rain` | **moved** | C2B, same deck signature, `WorldLight` 0.784 |
+| `c4-snow` | **ok** | C4's deck is present but `WorldLight` clamps to `1.0` — a no-op by construction, confirmed above at the pixel level too |
+| `c1b-night-sea`, `c2-city`, `c3-island`, `c5-city-night`, `c1-crash`, `viewer-bhawk`, `empty-stage` | **ok** | no deck (`C1B`/`C2`/`C3`/`C5`), no chapter world (`viewer-bhawk`/`empty-stage`), or no deck in frame (`c1-crash`'s straight-down frame, per `A2`) |
+
+**Not re-pinned — `C24` re-pins once**, per the plan's own convention (`GOLD-1`/`GOLD-8`).
+
+8-chapter `--freecam --chapter=<X> --frames=20` regression: **zero errors in all eight**, every
+census identical to the on-record numbers (decks C1/C1C/C2B 144 tiles @ y=960, C4 144 @ y=1050;
+clusters C1 28 · C1B 70 · C1C 30 · C4 45; sprites C1/C2B/C4 22,201 · C1C 22,748 · C5 16,170;
+gamez-node/mesh-instance counts per chapter unchanged) — a material/lighting change touches no
+geometry or placement, so an unchanged census is the expected result, not a coincidence.
+
+### Files
+
+`CSVM/src/Mech3/SceneBuilder.cs` (`forceLit` threaded through `BuildSubtree` (public + private
+overloads), `GetMesh`, `BuildMesh`; `_meshCache` keyed on `(Model, Force, ForceLit)`),
+`CSVM/src/Mech3/WorldBuilder.cs` (`Add` passes `forceLit: isDeck`), `docs/architecture.md` (both
+module entries), `docs/PLAN-overcast-match.md` (this section, the checklist line).
+`.scratch/c22/` — `shoot.ps1` (the after-build probe set, mirroring `.scratch/c21/shoot.ps1` +
+`shoot2.ps1` pose-for-pose), `regress.ps1` (the 8-chapter census sweep), `repro.ps1` (the
+determinism check), plus every PNG/`.weather.txt` the tables above cite.
+
+**⚠ Traps, addressed.** The deck-follow behaviour (`GameSession`/`WeatherRig.Tick`) needed no
+special handling: `forceLit` is baked into the built material at world-build time, not read per
+frame, so it survives the deck's X/Z/regime follow the same way `forceDoubleSided` already does.
+Nothing here is keyed to face normals.
 
 ## C23 ☐ Re-measure the tops per population; blend the mesh↔sprite cut
 

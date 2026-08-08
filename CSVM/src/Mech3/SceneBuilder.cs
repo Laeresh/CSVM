@@ -245,11 +245,14 @@ void fragment() {
     private readonly Dictionary<int, Shader> _biasShaderCache = new(); // keyed by feature bits
     private readonly Dictionary<int, Shader> _billboardShaderCache = new(); // cloud sprites, keyed by blend/scissor bits
     private readonly Dictionary<int, Shader> _cylindricalShaderCache = new(); // Y/X-axis facades, keyed by axis/blend/scissor/glow bits
-    // Keyed by (model index, force-double-sided): sidedness is baked into the built surfaces, so
-    // a deck tile's forced build must not be handed back for the same model referenced normally.
-    // No model in this install is referenced both ways (the deck's 144 tiles have exclusive model
-    // indices in every chapter that has a deck), so this is defence, not a live case.
-    private readonly Dictionary<(int Model, bool Force), ArrayMesh?> _meshCache = new();
+    // Keyed by (model index, force-double-sided, force-lit): both overrides are baked into the
+    // built surfaces (sidedness into the geometry groups, `lit` into which material/shader a
+    // surface gets), so a deck tile's forced build must not be handed back for the same model
+    // referenced normally. No model in this install is referenced both ways (the deck's 144
+    // tiles have exclusive model indices in every chapter that has a deck), so this is defence,
+    // not a live case. `ForceLit` is `PLAN-overcast-match` C22's deck-underside fix — see
+    // `WorldBuilder.Add`.
+    private readonly Dictionary<(int Model, bool Force, bool ForceLit), ArrayMesh?> _meshCache = new();
     private readonly Dictionary<int, Vector3> _meshPivotCache = new(); // billboard meshes only: local quad center
     private readonly Dictionary<int, ArrayMesh> _lightMeshCache = new();
     private readonly Dictionary<int, List<(string? Surface, ConcavePolygonShape3D Shape)>> _colliderCache = new();
@@ -468,9 +471,16 @@ void fragment() {
     /// <param name="forceDoubleSided">Render this subtree's polygons from both sides whatever
     /// their SHOW_BACKFACE flag says — the cloud deck's exception to <c>cullBackfaces</c>, see
     /// <see cref="WorldBuilder"/>. Inherited by all descendants.</param>
+    /// <param name="forceLit">Apply <c>csky_world_light</c> to this subtree regardless of its
+    /// own authored <c>lighting</c> flag — the deck mesh's exception, beside
+    /// <paramref name="forceDoubleSided"/>: `PLAN-overcast-match` C21 traced the original's dark
+    /// mottled underside to the mission's own SUNLIGHT dimming, which the deck tiles' authored
+    /// `lighting: false` currently gates off (see <see cref="WorldBuilder"/>). Inherited by all
+    /// descendants; never changes <c>csky_world_light</c> itself or the gate for any other
+    /// model.</param>
     public Node3D? BuildSubtree(GameZNode node, Predicate<GameZNode>? skip = null,
-        Predicate<GameZNode>? collisionSkip = null, bool forceDoubleSided = false) =>
-        BuildSubtree(node, skip, collisionSkip, _generateCollision, forceDoubleSided);
+        Predicate<GameZNode>? collisionSkip = null, bool forceDoubleSided = false, bool forceLit = false) =>
+        BuildSubtree(node, skip, collisionSkip, _generateCollision, forceDoubleSided, forceLit);
 
     /// <summary>Re-resolves every textured material through the current substitution hook and
     /// writes the result back into the live material. Used by the viewer's livery lab: the
@@ -690,7 +700,7 @@ void fragment() {
     }
 
     private Node3D? BuildSubtree(GameZNode node, Predicate<GameZNode>? skip,
-        Predicate<GameZNode>? collisionSkip, bool collidable, bool forceDoubleSided)
+        Predicate<GameZNode>? collisionSkip, bool collidable, bool forceDoubleSided, bool forceLit)
     {
         if (skip != null && skip(node))
             return null;
@@ -715,7 +725,7 @@ void fragment() {
         if (node.MeshIndex >= 0 && node.MeshIndex < _gamez.Meshes.Count
             && !_gamez.IsMarkerGizmo(node.MeshIndex))
         {
-            var mesh = GetMesh(node.MeshIndex, forceDoubleSided);
+            var mesh = GetMesh(node.MeshIndex, forceDoubleSided, forceLit);
             if (mesh != null)
             {
                 var mi = new MeshInstance3D { Mesh = mesh, Name = "mesh" };
@@ -748,7 +758,7 @@ void fragment() {
             if (childIndex < 0 || childIndex >= _gamez.Nodes.Count)
                 continue;
             var child = BuildSubtree(_gamez.Nodes[childIndex], skip, collisionSkip, collidable,
-                forceDoubleSided);
+                forceDoubleSided, forceLit);
             if (child != null)
                 n3d.AddChild(child);
         }
@@ -888,16 +898,16 @@ void fragment() {
         return mesh;
     }
 
-    private ArrayMesh? GetMesh(int meshIndex, bool forceDoubleSided = false)
+    private ArrayMesh? GetMesh(int meshIndex, bool forceDoubleSided = false, bool forceLit = false)
     {
-        if (_meshCache.TryGetValue((meshIndex, forceDoubleSided), out var cached))
+        if (_meshCache.TryGetValue((meshIndex, forceDoubleSided, forceLit), out var cached))
             return cached;
-        var mesh = BuildMesh(_gamez.Meshes[meshIndex], meshIndex, forceDoubleSided);
-        _meshCache[(meshIndex, forceDoubleSided)] = mesh;
+        var mesh = BuildMesh(_gamez.Meshes[meshIndex], meshIndex, forceDoubleSided, forceLit);
+        _meshCache[(meshIndex, forceDoubleSided, forceLit)] = mesh;
         return mesh;
     }
 
-    private ArrayMesh? BuildMesh(GameZMesh mesh, int meshIndex, bool forceDoubleSided)
+    private ArrayMesh? BuildMesh(GameZMesh mesh, int meshIndex, bool forceDoubleSided, bool forceLit)
     {
         if (mesh.Polygons.Count == 0)
             return null;
@@ -1000,7 +1010,16 @@ void fragment() {
         // brightness rather than dimmed by the mission SUNLIGHT — and `fog: false` exempts it
         // from distance fog. Both flow into the material/shader keys, so one texture can skin a
         // lit world surface and a self-lit effect model without either borrowing the other's look.
-        bool lit = mesh.Lighting;
+        //
+        // `forceLit` is `PLAN-overcast-match` C22's regression fix, deck-local (see
+        // `WorldBuilder.Add`): the deck tiles author `lighting: false` like the dome and the
+        // `cloudsprite` field, but C21 traced the original's underside to the ONE surface the
+        // original actually dims by the mission's own SUNLIGHT — `SunIncidence` 0.46 was
+        // calibrated on this exact deck texture (`Flight/Weather.cs`), so the deck left that
+        // match when `lighting`/`fog` became shader variants. This never touches the gate for
+        // any other model, and it selects an existing lit+fogged shader VARIANT rather than
+        // adding a uniform, so it cannot perturb geometry that doesn't ask for it.
+        bool lit = mesh.Lighting || forceLit;
         bool fogged = mesh.Fog;
         if (!lit)
             UnlitModelCount++;

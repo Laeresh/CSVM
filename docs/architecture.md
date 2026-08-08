@@ -300,6 +300,12 @@ and `EmitPolygon` answers by writing white corners, so the value lands once. `PL
   (16-vec4 per-instance buffer cost). The model's `lighting`/`fog` flags therefore select shader
   VARIANTS (and join the material cache keys) rather than adding a uniform: a lit, fogged surface
   keeps byte-identical shader text, so honouring the flags cannot perturb the rest of the world.
+  `BuildSubtree`/`GetMesh`/`BuildMesh` all carry a `forceLit` override beside `forceDoubleSided`
+  (`PLAN-overcast-match` C22, `WorldBuilder.Add`'s deck path): `bool lit = mesh.Lighting ||
+  forceLit` still only PICKS an existing lit/fogged variant, so this composes with the ordering
+  contract rather than working around it. Both overrides join the mesh cache key
+  (`(Model, Force, ForceLit)`) because sidedness and the lit choice are baked into the built
+  surfaces, not read per frame.
 ⚠ UV scroll reads the `csky_time` global, never Godot's `TIME` — it must keep TIME's 3600 s wrap
   because every install rate (0.07/0.4/0.5/0.7/1.0) × 3600 is a whole number of texture repeats.
 ⚠ `BuildSubtree` sets the built root's transform from the node's OWN `Local` — a caller slicing a
@@ -445,6 +451,14 @@ debug-only custom renderer: material-matched gate polygons green/red at 50% alph
 white line strip (never a filled or closed polygon).
 Splits the overcast deck into
 `CloudDeck` (GameSession moves it with the player); hides origin-parked unplaced vehicles.
+`Add` builds every deck tile with `forceLit: isDeck` beside its existing `forceDoubleSided:
+isDeck` (`PLAN-overcast-match` C22): the deck tiles author `lighting: false` like the dome and
+the `cloudsprite` field, but the deck alone was actually SUNLIGHT-dimmed in the original —
+`SunIncidence` was calibrated on this exact texture (`Flight/Weather.cs`) — so `forceLit`
+applies `csky_world_light` to the deck regardless of its own authored flag, deck-local, never a
+change to the `lighting` gate or to `csky_world_light` itself. C4's deck is unaffected by
+construction (its `WorldLight` clamps to 1.0), which is the control that proves the fix is
+deck-local rather than a hidden global change.
 `CloudClusters` censuses the OTHER ambient cloud population after the walk — every `cloudparent`
 subtree the world places (C1 28, C1B 70, C1C 30, C4 45; C2/C2B/C3/C5 none), logged per chapter so
 "none" cannot read like a broken census. `GameSession` puts them on `UI.SplitScreen.CloudFieldLayer`
