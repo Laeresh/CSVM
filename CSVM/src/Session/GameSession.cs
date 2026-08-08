@@ -1404,7 +1404,25 @@ public partial class GameSession : Node3D
         // Per-player rigs: one FlightRigAssembler over the session data above, run in
         // ascending player order — the paint rng and the spawn index wrap are shared
         // streams, so the draw order is load-bearing (see src/Session/FlightRigAssembler.cs).
-        var assembler = new FlightRigAssembler(_spec, _liveryResolver, _spawnPicker,
+        // Which spawn placement this session flies is chosen ONCE, here, by picking an
+        // IFlightStarts implementation — never by a runtime flag inside one. A race gets the
+        // abreast starting grid; solo flight, Dogfight, the zone-less chapters (no dzones, so no
+        // race) and every --det run keep the plain per-player walk of the mission's spawn list and
+        // stay byte-identical to what they emitted before the grid existed. --det is bypassed by
+        // *not constructing* RaceGrid at all, which is what makes that guarantee structural rather
+        // than a promise about a branch inside it.
+        //
+        // ⚠ This sits here and NOT beside `new SpawnPicker(...)` at the top of StartSession, where
+        // it might look like it belongs: at that point the session does not yet know whether it
+        // will be a race. That is settled a few lines above — StuntMission.Load must have returned
+        // zones AND _rigs.Count must be > 1 — so this is the first site that has `race` in scope,
+        // and it still runs before any rig is assembled, which is all the grid needs. _spawnPicker
+        // itself stays exactly what it was: the weapon lab and the freecam spectator call
+        // ChooseSpawn on it directly, and the grid delegates to it for the anchor.
+        IFlightStarts flightStarts = race != null && !_spec.Det
+            ? new RaceGrid(_spawnPicker, GroundSampler())
+            : _spawnPicker;
+        var assembler = new FlightRigAssembler(_spec, _liveryResolver, flightStarts,
             _worldEffectsFactory, _worldRoot!, new FlightRigAssembler.Inputs
             {
                 PlanesGamez = planesGamez,
@@ -1767,6 +1785,61 @@ public partial class GameSession : Node3D
             // the parked aircraft IS the subject.
             Deprioritise = flownPlanes,
         });
+    }
+
+    /// <summary>The production ground sampler <see cref="RaceGrid"/> probes its slots with: the
+    /// world height under a point, or null when the physics space answered nothing there.
+    ///
+    /// <para>⚠ <b>The empty result is decided here, once, and this is the only place that knows
+    /// what it means.</b> A ray finds nothing for two very different reasons — there is genuinely
+    /// no collider in that column, or the space has not stepped since the world's bodies entered
+    /// the tree. The second was the expected hazard at this call site and it does <b>not</b> bite:
+    /// measured on a C1 four-player race, every slot answers and the warning below never fires
+    /// (Godot registers a static body with the space on tree entry, so a ray does not need a step
+    /// first). The warning is therefore a tripwire for a build order that changes, not a describing
+    /// of what happens today — if it ever appears, suspect the probe ran before the world stage was
+    /// added rather than an empty map.</para>
+    ///
+    /// <para>Either way the honest report to the grid is <c>null</c> — "no answer", never a
+    /// fabricated height — because the anchor is an authored, flyable point and a made-up
+    /// correction would move a race field for no reason. <see cref="RaceGrid"/> then leaves the
+    /// field at the spawn data's own altitude and warns that it did. One warning is emitted here
+    /// per session, naming the probe, so the log distinguishes "the sampler found nothing" from
+    /// "the grid chose not to lift".</para></summary>
+    private Func<Vector3, float?> GroundSampler()
+    {
+        // The probe column. Up first, so a slot fanned into a hillside still finds the surface
+        // above it rather than reporting the terrain it is buried in; then far enough down to
+        // clear any spawn's height above the deck. Deliberately generous — this is a placement
+        // probe run four times at build, not a per-frame cost.
+        const float ProbeAbove = 2000f;
+        const float ProbeBelow = 20000f;
+
+        bool warned = false;
+        return at =>
+        {
+            if (GetWorld3D()?.DirectSpaceState is { } space)
+            {
+                // World, NOT WorldAndAircraft: this is a placement pick, and CollisionLayers'
+                // own rule is that placement picks stay blind to planes on purpose. It makes no
+                // difference today — no aircraft body exists when this runs — but it is what keeps
+                // the rule true if a later caller (a respawn, the deferred rolling start) probes
+                // while the field is already in the air, where reading planes as solid would stack
+                // a grid slot on top of an aircraft.
+                var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                    at + (Vector3.Up * ProbeAbove), at - (Vector3.Up * ProbeBelow),
+                    CollisionLayers.World));
+                if (hit.Count > 0)
+                    return ((Vector3)hit["position"]).Y;
+            }
+
+            if (!warned)
+            {
+                warned = true;
+                Log.Warn("flight", $"grid ground probe found nothing under a slot (probe {ProbeAbove:0}m up / {ProbeBelow:0}m down, mask=World) — measured, this does not happen at session build, so suspect the probe ran before the world stage was added rather than an empty map; the field keeps the spawn data's own altitude. Reported once per session.");
+            }
+            return null;
+        };
     }
 
     /// <summary>Creates this session's <see cref="PlayerRig"/>s — one per rendered view.

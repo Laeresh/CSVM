@@ -102,7 +102,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ `IFlightStarts` — the whole-field seam, with `SpawnPicker` as its plain implementation
 2. ☑ `RaceGrid` — centred fan, injected ground sampler, uniform lift, headless tests
-3. ☐ Select the implementation once at session build; races get the grid, everything else does not
+3. ☑ Select the implementation once at session build; races get the grid, everything else does not
 4. ☐ Config-backed grid width and clearance, reported in the spawn log
 5. ☐ Correct the best-time persistence rationale in `StuntRace`
 6. ☐ Docs, close `BL-084`, mint the countdown `BL-` and the race `PT-`
@@ -202,7 +202,7 @@ closure built in A3, in one place with one log line, not threaded through this c
 clearance to the point where `BL-300`'s known box-overhang false positives trip it; convex hulls are
 that item's job, not this one's.
 
-## A3 ☐ Select the implementation once at session build; races get the grid, everything else does not
+## A3 ☑ Select the implementation once at session build; races get the grid, everything else does not
 
 **Goal.** A race constructs `RaceGrid`; solo flight, `--vs`, the zone-less chapters and any `--det`
 run never construct it at all.
