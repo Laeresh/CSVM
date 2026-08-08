@@ -164,6 +164,19 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// not solid to aircraft.</para></summary>
     public uint ContactMask;
 
+    /// <summary>Whether a struck collider is water — the only distinction a <c>BOUNCE_SEQUENCE</c>
+    /// draws: 104 of the install's 324 blocks name a live <c>water</c> branch (a shot-down
+    /// <c>agyrobus</c> piece pops <c>pN_wtr_hit</c> in the sea and <c>pNgrndhit</c> on land), and
+    /// <b>none</b> names a <c>lava</c> one. Null — the default — answers "not water" and every
+    /// contact takes <c>default</c>, which is the honest answer for a runtime with no session
+    /// behind it.
+    ///
+    /// <para>A hook rather than a call for the same reason as <see cref="ContactMask"/>: the one
+    /// surface classifier is <c>ProjectilePool.ClassifySurface</c>, in the flight layer. The session
+    /// binds this to it, so a round, a wingtip graze and a landing piece cannot disagree about what
+    /// they hit.</para></summary>
+    public Func<GodotObject?, bool>? SurfaceIsWater;
+
     // ---- live execution ----
     /// <summary>True when something else owns the clock (the animation debugger, which feeds
     /// <see cref="Advance"/> in fixed 1/60 s steps): <see cref="_Process"/> stops advancing.
@@ -2278,17 +2291,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             {
                                 Motions.Add(motion, def, anchor); // MotionSet.Add counts the launch
                                 ballTime = Mathf.Max(ballTime, flight);
-                                bounceArmed |= motion.PendingBounce != null;
+                                // A contact-tested body arms its bounce AT CONTACT, not here — the
+                                // struck surface is what picks the branch — so it counts as armed
+                                // on the strength of the test being on.
+                                bounceArmed |= motion.PendingBounce != null || motion.TestsContact;
                             }
                             _opsApplied++;
                         }
                         // A bounce this event ARMED is acted on — TickMotions dispatches it when the
                         // body lands — so it must not be filed as unhandled; doing so would report a
                         // working feature as a missing one, the same rule the retarget tallies follow.
-                        // What stays deferred is the rest: the falls, which have no apex to solve and
-                        // so never arm, and the 204 events carrying an authored RUN_TIME alongside a
-                        // bounce, half of which name a live `water` branch that cannot be chosen
-                        // without the struck collider. Both are BL-245, and both keep reporting.
+                        // What stays deferred is BL-245's: the falls that author
+                        // `do_intersections: false` — no apex to solve, so they never arm, and the
+                        // data does not ask for a collider test that would tell us where they land.
+                        // ⚠ The 204 RUN_TIME+bounce events are NOT that case, whatever this comment
+                        // said before: 150 of them author `do_intersections: true` and now arm at
+                        // contact, water branch and all.
                         if (ev.Data.Has("bounce_sequence") && !bounceArmed)
                             Count("ObjectMotion(bounce_sequence deferred)");
                         duration = instant ? 0f : ballTime;
@@ -3478,6 +3496,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (_debugClock < 1f)
             return;
         _debugClock = 0f;
+        // The contact tally: is the `do_intersections` sweep actually finding anything? Printed
+        // whenever a flagged body has ended at all, because the answer that matters is the one
+        // nobody would otherwise notice — all clock, no contact, which looks identical to the
+        // behaviour this replaced.
+        if (Motions.ContactLandings + Motions.ClockEndings > 0)
+        {
+            GD.Print($"anim/debug: do_intersections bodies ended: {Motions.ContactLandings} by contact, "
+                     + $"{Motions.ClockEndings} on their run time"
+                     + (Motions.ContactLandings == 0 ? " — NO CONTACT AT ALL (is a mask wired?)" : ""));
+        }
+
         var emitting = Emitters.Census.Where(r => r.Emitting).ToList();
         if (emitting.Count > 0)
         {

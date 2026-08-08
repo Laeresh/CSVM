@@ -352,7 +352,15 @@ public sealed class WorldEffectsFactory
         // builds no colliders hands nothing and they keep flying their authored clock out, which is
         // exactly the behaviour every golden capture recorded.
         if (_spec.BuildsCollision)
+        {
             crashRuntime.ContactMask = CollisionLayers.World;
+            // `player_crash_dirt`'s own pieces author no `water` branch — the wet crash is a
+            // separate def — so this changes nothing for them today. Bound anyway: the rig plays
+            // both crash variants, and the hook is what keeps the branch choice reading the same
+            // classifier the crash surface itself was picked with.
+            crashRuntime.SurfaceIsWater =
+                body => ProjectilePool.ClassifySurface(body as Node) == SurfaceClass.Water;
+        }
         // Bind only the named defs' transitive CALL_ANIMATION closures (Subset), never the whole
         // world program: the full 800+ defs include ~150 generic-named world defs that would
         // mis-anchor onto this plane's parts and run their reset states on the aircraft. The set

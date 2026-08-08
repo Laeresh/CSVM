@@ -33,6 +33,17 @@ internal sealed class MotionSet
     /// event, so zeroing it here would make a crash respawn read as a negative launch count.</summary>
     public int LaunchCount { get; private set; }
 
+    /// <summary>How many <c>do_intersections</c> bodies ended on a collider, and how many ran their
+    /// authored clock out instead. Only bodies that actually TEST contact are counted, so the pair
+    /// answers one question: is the sweep doing anything? A <c>--fly</c> session that launched
+    /// flagged bodies and reports <see cref="ContactLandings"/> 0 is the failure mode worth
+    /// catching — the query silently finding nothing looks exactly like the old behaviour.
+    /// ⚠ Left standing by <see cref="Reset"/>, the same rule (and for the same reason) as
+    /// <see cref="LaunchCount"/>: every reader takes a delta across an event.</summary>
+    public int ContactLandings { get; private set; }
+
+    public int ClockEndings { get; private set; }
+
     /// <summary>Registers a motion, replacing any motion already driving the same node's channel. An
     /// object has exactly one motion in the original, and the data relies on it: C1/IA1's
     /// startanims run `hangar3_doors` (doors to ±50) and then `mp_hangar3_open` (the same
@@ -64,6 +75,14 @@ internal sealed class MotionSet
                 continue;
             var done = _motions[i];
             _motions.RemoveAt(i);
+            if (done is MotionRuntime { TestsContact: true } tested)
+            {
+                if (tested.LandedByContact)
+                    ContactLandings++;
+                else
+                    ClockEndings++;
+            }
+
             // BOUNCE_SEQUENCE: the piece has come back down, which for a bounce-terminated
             // launch is the whole meaning of its flight ending. The named sequence
             // belongs to the same definition — `sparkoutN` deactivates the piece and pops its

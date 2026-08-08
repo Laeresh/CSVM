@@ -689,7 +689,13 @@ public partial class GameSession : Node3D
         // a flight-layer constant and the runtime is the animation layer; this is where the two
         // legitimately meet. Left at 0 in a collider-less build, which is the whole fallback.
         if (BuildsCollision)
+        {
             session.Runtime.ContactMask = CollisionLayers.World;
+            // Bound to the ONE surface classifier, so a landing piece, a round's impact and a
+            // wingtip graze cannot disagree about what they hit.
+            session.Runtime.SurfaceIsWater =
+                body => ProjectilePool.ClassifySurface(body as Node) == SurfaceClass.Water;
+        }
 
         // F13 / --debug-ainets: the chapter's AI patrol nets (ne0NNNNN + neindex — AI route
         // data the original never renders; docs/formats/ai-nets.md). Chapter-scoped data, so

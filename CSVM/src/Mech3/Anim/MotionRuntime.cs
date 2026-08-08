@@ -1,3 +1,4 @@
+using System;
 using CSVM.Mech3;
 using Godot;
 
@@ -36,21 +37,24 @@ namespace CSVM.Mech3.Anim;
 ///   constant acceleration. It is an ABSOLUTE m/s², not an offset to the aircraft's arcade
 ///   <c>nom_gravity</c> of 20: the census carries a literal <b>−9.8</b> on 173 events (and −10
 ///   on 400), which is Earth gravity spelled out. The weak values (−1/−2/−3) sit on smoke
-///   trails, where floating is the authored look. <c>do_intersections</c> ground-rest and the
-///   <c>bounce_sequence</c> re-launch are still a Layer-1.5 follow-up (they need a physics ray;
-///   <c>BL-245</c>) for the 379 events that FALL — no apex, so no parabola to solve — which the
-///   body still integrates freely over the run time and then holds at rest.
+///   trails, where floating is the authored look. What is still deferred is <c>BL-245</c>'s: the
+///   379 events that FALL with <c>do_intersections: false</c> — no apex to solve, and no authored
+///   collider test to tell us where they land — which the body still integrates freely over the
+///   run time and then holds at rest.
 ///   ⚠ For every event that LAUNCHES upward with no authored <c>RUN_TIME</c> — the 152 (150
 ///   reachable) that name a bounce, plus the 167 that name neither a bounce nor a run time
 ///   and end with the piece's own deactivation instead — <see cref="FlightToLaunchHeight"/> ends
-///   the flight when the parabola returns to launch height: a CHOICE, not a decode — the original
-///   tested real geometry via <c>do_intersections</c>, which a down-ray would only approximate
-///   (⚠ that flag is probably a COLLIDER intersection, not a terrain ray: it can land a piece on a
-///   rooftop or bounce it off a wall, which no down-ray reproduces). It agrees
-///   wherever the ground under the piece is flat, which is every reachable case measured (debris
-///   off a ground-sitting structure). The apex is the ADMISSION TEST, not the bounce: anything
-///   with no apex is declined here and stays BL-245's. See
-///   <c>docs/formats/destructibles.md</c>'s "Debris tumbles" bullet for the split.</item>
+///   the flight when the parabola returns to launch height: a CHOICE, not a decode. It stands, and
+///   deliberately: all 120 of the bounce shape and all 167 of the vanish shape author
+///   <c>do_intersections: false</c>, so the original was not collision-testing them either, and
+///   <c>PT-46</c> (d) confirmed at the controls that its debris sinks through terrain the same way.
+///   The choice agrees wherever the ground under the piece is flat, which is every reachable case
+///   measured. The apex is the ADMISSION TEST, not the bounce: anything with no apex is declined
+///   here and stays BL-245's.
+///   <para>Where the flag IS authored — 166 events, 150 of them RUN_TIME+bounce —
+///   <see cref="TryContact"/> sweeps the trajectory against real colliders and ends the body
+///   there, which is the original's own test rather than an approximation of it. See
+///   <c>docs/formats/destructibles.md</c>'s "Debris tumbles" bullet for the split.</para></item>
 /// <item><c>forward_rotation.Time.initial</c> is a tumble RATE (rad/s) about the node's local
 ///   X axis (a piece = 15.708 = 900°/s). ⚠ the axis is a reasoned choice — the data carries a
 ///   scalar rate, not an axis — an end-over-end tumble about the local X reads well for
@@ -114,6 +118,7 @@ internal sealed class MotionRuntime : IAnimMotion
     private bool _contactTest;
     private uint _contactMask;
     private AnimData? _bounce;      // the BOUNCE_SEQUENCE block, chosen from AT CONTACT
+    private Func<GodotObject?, bool>? _surfaceIsWater;
     private bool _landed;
     private Vector3 _landedOrigin;  // parent frame — the pose the body holds from contact onward
     private float _landedAt;        // the clock at contact; rotation and scale freeze there too
@@ -145,9 +150,10 @@ internal sealed class MotionRuntime : IAnimMotion
     /// time this class SOLVED <b>and</b> which names a bounce; the bounce-less shape solves the
     /// same way but names none, so it owes nothing and simply advances its sequence when the
     /// flight ends.
-    /// The 204 events that carry both an authored run time and a bounce are left
-    /// alone: 102 of them name a live <c>water</c> branch (<c>p1grndhit</c> vs its wet twin), and
-    /// choosing between the branches needs the struck collider that <c>BL-245</c> will cast for.
+    /// <para>The 204 events carrying both an authored run time and a bounce arm somewhere else
+    /// entirely — at CONTACT (<see cref="TryContact"/>), since 150 of them author
+    /// <c>do_intersections: true</c> and their branch is chosen from the surface they strike. Their
+    /// run time is a ceiling, not a duration.</para>
     /// </summary>
     public string? PendingBounce { get; private set; }
 
@@ -185,6 +191,7 @@ internal sealed class MotionRuntime : IAnimMotion
         m._contactMask = rt.ContactMask;
         m._contactTest = (gravityBlock?.Bool("do_intersections") ?? false) && rt.ContactMask != 0;
         m._bounce = data.Obj("bounce_sequence");
+        m._surfaceIsWater = rt.SurfaceIsWater;
 
         // The plane's momentum (world-space), carried by the launched pieces so they scatter
         // along its travel instead of just popping up in place. Converted into the node's parent
@@ -468,7 +475,24 @@ internal sealed class MotionRuntime : IAnimMotion
     /// needs both ends of the step it is about to take. Never consulted for a landed body.</summary>
     private Vector3 BallisticOrigin(float t) => _heldOrigin + _v0 * t + 0.5f * t * t * _accel;
 
-    /// <summary>The <c>BOUNCE_SEQUENCE</c> branch a contact selects. <c>default</c> for now; the
-    /// struck body chooses between the branches in the next item.</summary>
-    private string? ChooseBounce(GodotObject? struck) => _bounce?.Str("default");
+    /// <summary>The <c>BOUNCE_SEQUENCE</c> branch a contact selects, from the surface it struck.
+    ///
+    /// <para>Water is the only distinction drawn, and only where the block authors one: a null
+    /// <c>water</c> branch means the author did not distinguish, so it falls back to
+    /// <c>default</c> — it does not mean suppress the bounce. Everything that is not water takes
+    /// <c>default</c> too, quicksand included: no bounce sequence names it, and mapping it to water
+    /// would invent a splash on sand.</para>
+    ///
+    /// <para>⚠ No <c>lava</c> path, and it is not an omission: 0 of the install's 324
+    /// <c>BOUNCE_SEQUENCE</c> blocks name a lava branch. The field is engine baggage from another
+    /// title on the same engine — the only lava in this game is C3's volcano, far too small to
+    /// throw debris into. A lava path would be untestable dead code.</para></summary>
+    private string? ChooseBounce(GodotObject? struck)
+    {
+        if (_bounce == null)
+            return null;
+        if (_surfaceIsWater?.Invoke(struck) == true && _bounce.Str("water") is { } wet)
+            return wet;
+        return _bounce.Str("default");
+    }
 }

@@ -191,11 +191,12 @@ loop of 13 iterations on the `splashbase` texture (`PUFFER_STATE` schema in
 HP (C21), the progressive damage stages (C22), weapon fire that spends that HP (C23), the death
 sequence at zero (C24), the collision that goes with it (C25), the debris **tumble** (C26), the
 **`WeaponOrCollideHit` collision path** (C27), and **reset/restore** (C28). Two pieces are deliberately
-deferred out of Wave C: the death **audio** (the one-shot `Sound` events — D31) and, for most of the
-debris, **ground-rest** (the `do_intersections`/`bounce_sequence` half — a Layer-1.5 follow-up needing
-a physics ray, `BL-245`). `PLAN-bounce-launch` closed the other slice: a bounce-terminated launch with
-an apex now flies its own parabola and lands for real — see the "Debris tumbles" bullet below for
-which pieces that covers. A format reader should know the current wiring:
+deferred out of Wave C: the death **audio** (the one-shot `Sound` events — D31) and the **no-apex
+falls** that author no collider test (`BL-245`). Two slices have since closed:
+`PLAN-bounce-launch` made a bounce-terminated launch with an apex fly its own parabola and land for
+real, and `PLAN-ground-contact` (2026-08-08) gave the 166 `do_intersections: true` bodies the
+original's own collider test instead of letting them run their clock out below the terrain — see
+the "Debris tumbles" bullet below for which pieces each covers. A format reader should know the current wiring:
 
 - **Both source forms of `DAMAGE_SEQUENCE` are read.** The compiled archives deliver it as an
   ordinary sequence literally named `DAMAGE_SEQUENCE`; `AnimDefs.cs`'s reader front-end now parses
@@ -288,18 +289,39 @@ which pieces that covers. A format reader should know the current wiring:
       **⚠ CHOICE, not a decode** — the original tested real collision via `do_intersections`;
       a down-ray would only approximate it, and agrees with the launch-height solve wherever the
       ground under the piece is flat, which is every one of the 150 measured (debris off a
-      ground-sitting structure). ⚠ `DO_INTERSECTIONS` is most likely a **collider** intersection
-      test rather than a terrain ray — it can land a piece on a rooftop or bounce it off a wall,
-      which no down-ray reproduces. Scope any implementation as a collision query and record which
-      of the two shipped. Landing then dispatches the named `BOUNCE_SEQUENCE` (`default` only — none of the
+      ground-sitting structure). **All 120 of this shape author `do_intersections: false`, so the
+      original was not collision-testing them either** — the launch-height solve stands, and
+      `PT-46` (d) confirmed at the controls that the original's debris sinks through terrain the
+      same way. Landing then dispatches the named `BOUNCE_SEQUENCE` (`default` only — none of the
       150 carry a `water`/`lava` branch), which runs the piece's own `OBJECT_ACTIVE_STATE …
       INACTIVE` and stops its trail puffer.
-    - **The other 379 have no apex and are still deferred (Layer-1.5, `BL-245`, blocked on a ground
-      ray).** 335 free-falling zeppelin `gasbag1`/`crashnode1` pieces start from rest, ~17 lifeboats
+    - **Where `do_intersections` IS authored, the engine now runs the original's own test
+      (`PLAN-ground-contact`, 2026-08-08).** 166 events install-wide carry it — 150
+      `RUN_TIME`+bounce, 16 `RUN_TIME` — and they are exactly the bodies that used to run their
+      clock out and finish below the terrain: `player_crash_dirt`'s `piece1`–`4`, the eleven C1B
+      airframes' `MAIN_ROOT_NODE`, and every `agyrobus` motion. `MotionRuntime.TryContact` sweeps a
+      **segment along the trajectory** (last origin → next origin, in world space) each frame and
+      ends the body at the first collider, arming the `BOUNCE_SEQUENCE` there. A segment, not a
+      down-ray, and the difference is the point: it can rest a piece on a rooftop or stop it
+      against a wall. `RUN_TIME` becomes a ceiling rather than a duration.
+      - The branch is chosen from the **struck surface** — water where the block authors one
+        (`agyrobus`' `pN_wtr_hit` vs `pNgrndhit`), `default` otherwise, through the same
+        `ProjectilePool.ClassifySurface` a round's impact reads. ⚠ **`lava` is dead data**: 0 of the
+        install's 324 `BOUNCE_SEQUENCE` blocks name a lava branch. It is engine baggage from
+        another title — the only lava here is C3's volcano, far too small to throw debris into.
+      - ⚠ Arming is a **launch-relative epsilon** (2 m or 0.1 s, whichever comes first, both TUNE),
+        not an apex test: a piece starts inside the wreck it left and an airframe inside its own
+        hull, and the airframes fall from rest, so an apex gate would never arm them.
+      - A session that builds no colliders hands the runtime no mask (`AnimRuntime.ContactMask`)
+        and keeps the flag-free behaviour exactly — which is why every golden capture is unchanged.
+    - **The other 379 have no apex and are still deferred (Layer-1.5, `BL-245`).** 335 free-falling
+      zeppelin `gasbag1`/`crashnode1` pieces start from rest, ~17 lifeboats
       and turret parts are thrown downward, and 8 zero-gravity `chuteman` descents fall at a constant
-      rate — none has a parabola to solve, and their `BOUNCE_SEQUENCE` tables carry live
-      `water`/`lava` branches that need a struck collider to choose between, which the analytic solve
-      above cannot supply. `MotionRuntime` still integrates these freely over the run time and then
+      rate — none has a parabola to solve. ⚠ **Not blocked on a ground ray, whatever the older
+      framing said**: the ray exists now, and these author `do_intersections: false` (8 for 8 across
+      `gasbag`/`cargozep`/`chuteman`/`lifesaver`), so the data says do not test them. What they are
+      blocked on is a *decision* to diverge from that — a zeppelin hanging in the air looks broken
+      to a player, which is a playability argument, not a faithfulness one. `MotionRuntime` still integrates these freely over the run time and then
       holds the final pose; the pieces arc/fall and are then hidden by the sequence's own
       `OBJECT_ACTIVE_STATE`, so they read fine without it.
   - **No `RUN_TIME`, no `BOUNCE_SEQUENCE` — the third launch shape, `BL-257` (2026-08-06).** A

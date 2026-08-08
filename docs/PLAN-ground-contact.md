@@ -138,8 +138,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — the query
 
 1. ☑ A contact sweep ends a `do_intersections: true` body where the world stops it
-2. ☐ The struck surface picks the `BOUNCE_SEQUENCE` branch
-3. ☐ Make the tallies and the code comments tell the truth about who owns what
+2. ☑ The struck surface picks the `BOUNCE_SEQUENCE` branch
+3. ☑ Make the tallies and the code comments tell the truth about who owns what
 4. ☐ A collider-backed suite pins contact truncation, branch choice and the fallback
 
 ### Wave B — confirm at the controls
@@ -237,7 +237,23 @@ truncated body must stay idempotent under a later `Seek`. `AnimRuntime.cs:2282` 
 and is correct as an upper bound, but do not "fix" it to match the shortened flight. Finally, the
 epsilon is TUNE, not fact: give it a name and the reasoning, never a bare `2f`.
 
-## A2 ☐ The struck surface picks the `BOUNCE_SEQUENCE` branch
+## A2 ☑ The struck surface picks the `BOUNCE_SEQUENCE` branch — **landed 2026-08-08**
+
+**Landed.** `ChooseBounce` now reads the struck body: water with a live `water` branch takes it,
+everything else takes `default` — a null `water` branch falls back rather than suppressing the
+bounce, and quicksand is not water. No `lava` path, and the doc comment says why (0 of 324 blocks;
+engine baggage from another title on the same engine, C3's volcano being the only lava here and far
+too small). The classifier arrives as `AnimRuntime.SurfaceIsWater`, bound by the session to
+`ProjectilePool.ClassifySurface` — the same read a round's impact and a wingtip graze make — so
+Mech3 still has no dependency on the flight layer. Unbound (null) answers "not water".
+
+⚠ **Landed in one commit with A3**, whose comment corrections sit in the same two files. The split
+was bookkeeping, not two changes.
+
+**Verified.** Full `.\RunTests.ps1`: 696 units, 26/26 suites, 13/13 goldens identical. That the
+branch is *selected correctly* is A4's assertion — this run only shows nothing regressed.
+
+### Original approach (kept for reference)
 
 **Goal.** A flagged body that lands on water fires its `water` branch — an `agyrobus` piece pops
 `pN_wtr_hit` in the sea and `pNgrndhit` on land — and everything else takes `default`.
@@ -261,7 +277,23 @@ or the `Landing` dispatch — they carry whatever string is armed.
 `default` — it does not mean suppress the bounce. Do not add a `lava` path "for symmetry": there is
 no data behind it and it would be untestable dead code.
 
-## A3 ☐ Make the tallies and the code comments tell the truth about who owns what
+## A3 ☑ Make the tallies and the code comments tell the truth about who owns what — **landed 2026-08-08**
+
+**Landed.** `MotionSet.ContactLandings` / `ClockEndings` count only bodies that actually test
+contact, and `LogMotions` prints them once a second under `--debug-anim`, with an explicit
+"NO CONTACT AT ALL (is a mask wired?)" when the first is zero — the silent-zero failure mode named
+in the plan. Left standing by `Reset`, the same rule as `LaunchCount`. The deferred tally at the
+`OBJECT_MOTION` handler no longer files a contact-tested body as unhandled (`bounceArmed` now
+accounts for a body that arms its bounce at contact rather than at creation), and the three comment
+sites that attributed the 204 `RUN_TIME`+bounce events to `BL-245` now say what is true: 150 of them
+author `do_intersections: true` and are this plan's. `docs/formats/destructibles.md`'s "Debris
+tumbles" bullet carries the new mechanism, the lava finding, the arming rule, and the corrected
+`BL-245` framing ("not blocked on a ground ray — blocked on a decision to diverge from the data").
+
+**Verified.** Full `.\RunTests.ps1` green as above. ⚠ The counter itself is unproven until something
+makes it non-zero; A4 is what does that.
+
+### Original approach (kept for reference)
 
 **Goal.** The runtime's own reporting stops describing this work as deferred, and starts reporting
 whether contact is actually happening.
