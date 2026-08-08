@@ -1568,6 +1568,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   with WorldLight already at clamp 1.
   *Playtest after fix:* re-shoot the three poses named in `playtest/CAP-11/README.md` against
   the same original stills.
+  **2026-08-08 (`PLAN-overcast-match` `B16`, landed):** the sky half of all three is fixed —
+  `SceneBuilder.ForceFogged` deleted, dome materials now build unfogged as authored. C3 sky
+  201.0 flat → 198.1 blue-gradient (orig 194.9); C2B above-deck 176.0 flat → 75.2 (orig 79.5–82.7);
+  C5 sky 0.0 flat black → 9.1–16.9 dark-blue gradient (orig 15.3). **Still open, not this item's
+  fix:** C3's near-slope terrain murk (162.0 both before and after B16, byte-identical — this is
+  fog-on-terrain, B14/B15's business, not the dome) and C5's lit-facade dimming (WorldLight-unrelated
+  per the note above). New finding surfaced doing B16's own crisp-edge regression check, not yet
+  triaged into an item: honouring the dome's authored `fog: false` exposes previously camouflaged
+  "unfinished" cap/skirt geometry as a hard-edged band at the horizon in 5 of 8 chapters (worst:
+  C1B, a near-black band) — see `PLAN-overcast-match` `B16`'s "New finding" for evidence and shots.
+  B17 still owns the close.
 
 - `BL-315` `[Feature]` **C5's fog volumes author their own interior fog and we don't render it**
   (user at the controls of the original, 2026-08-08; clip

@@ -343,16 +343,6 @@ void fragment() {
     public int MeshInstanceCount { get; private set; }
     public int ColliderCount { get; private set; }
 
-    /// <summary>Build models as though every one were authored <c>fog: true</c>, ignoring the
-    /// model's own <c>fog</c> flag. Set only for the skydome: every horizon model in every
-    /// chapter is authored <c>fog: false</c>, but our dome is not the original's — it is
-    /// camera-anchored, 2.5x scaled and sitting ~22 km out — and it was a deliberate decision
-    /// (with the cylindrical-fog remodel) that it fogs, so the horizon band greys toward the
-    /// same wall as the terrain instead of meeting it as a crisp edge. See
-    /// <c>WorldBuilder.BuildHorizon</c>; the <c>lighting</c> flag is honoured there as
-    /// everywhere else.</summary>
-    public bool ForceFogged { get; set; }
-
     /// <summary>Models built from an authored <c>lighting: false</c> / <c>fog: false</c> flag —
     /// the one-line evidence that a chapter's self-lit and unfogged geometry was actually read
     /// (a night chapter reporting zero means the flags are not reaching the materials).</summary>
@@ -1007,7 +997,7 @@ void fragment() {
         // from distance fog. Both flow into the material/shader keys, so one texture can skin a
         // lit world surface and a self-lit effect model without either borrowing the other's look.
         bool lit = mesh.Lighting;
-        bool fogged = mesh.Fog || ForceFogged;
+        bool fogged = mesh.Fog;
         if (!lit)
             UnlitModelCount++;
         if (!fogged)
@@ -1324,9 +1314,12 @@ void fragment() {
         sb.AppendLine("uniform float depth_bias = 0.0;");
         // The shared ordered instance-uniform block. This shader always carries instance
         // uniforms (node_bias, csky_fog_on), so it always takes the full preamble — see the
-        // contract in the .gdshaderinc itself. The camera-anchored skydome opts out of fog per
-        // instance (csky_fog_on = 0): its below-horizon skirt sits at low altitude ~22 km out
-        // and would otherwise fog solid gray.
+        // contract in the .gdshaderinc itself. `csky_fog_on` is a per-instance runtime opt-out
+        // for a model whose shader variant already carries the fog-mix code (`fogged` below);
+        // nothing sets it to 0 today. (`B16`: the skydome's below-horizon skirt was once
+        // described as using it, but no code ever did — the skirt is authored `fog: false` like
+        // the rest of the dome, so it takes the UNFOGGED variant and never emits the mix line
+        // this uniform would have gated.)
         sb.AppendLine(InstanceUniformsInclude);
         // Distance fog + the per-mission SUNLIGHT dimming.
         sb.AppendLine(AtmosphereInclude);

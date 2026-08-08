@@ -404,11 +404,24 @@ as authored, no billboard); WingLightBlinker flashes them and emits a matching O
 
 ## src/Mech3/WorldBuilder.cs
 Builds a chapter world (fullbright): World children + partition-referenced subtrees; skips `horizon`
-(`BuildHorizon` makes the camera-anchored skydome, and is the ONE caller that sets
-`SceneBuilder.ForceFogged` — every horizon model in every chapter is authored `fog: false`, and
-honouring that on a dome that is 2.5x scaled ~22 km out would delete the horizon band; its
-`lighting: false` is honoured), `fvol*` (`IsFogVolumeNode`, shared with `FogVolumeSpec.VolumesOf`
-so the skipped set and the cloud-scatter set are one list), `dzpaths`.
+(`BuildHorizon` makes the camera-anchored skydome; every horizon model in every chapter is authored
+`fog: false` and, since `PLAN-overcast-match` `B16` (2026-08-08), that flag is honoured like
+everywhere else — dome materials build unfogged; its `lighting: false` is honoured too, as before),
+`fvol*` (`IsFogVolumeNode`, shared with `FogVolumeSpec.VolumesOf` so the skipped set and the
+cloud-scatter set are one list), `dzpaths`.
+
+`B16` reverts the 2026-07 `SceneBuilder.ForceFogged` deviation, which force-fogged the whole dome
+on the premise that high fragments would stay clear via the `FOG_ALTITUDE` fade; `B16`'s arithmetic
+showed that fade never actually happens at the dome's own authored size (every dome tops out
++982…+4108 m over the camera, well under every reachable `FOG_ALTITUDE` band), so the "high
+fragments clear, horizon band greys" deal never delivered and the dome only ever painted flat fog
+colour (`BL-303`'s C3/C2B/C5 skies, and the C1 above-deck gray band one zone over). `ForceFogged`
+itself is deleted — `BuildHorizon` was its only setter.
+⚠ **New finding from the same item, not fixed by it:** honouring `fog: false` exposes the dome's
+own "unfinished" flat cap/skirt geometry — previously invisible because `ForceFogged` painted it
+the same uniform colour as everything around it — as a hard-edged band in 5 of 8 chapters (C1B,
+C1C, C2, C2B directly; C3 at its canyon pose). See `PLAN-overcast-match` `B16` for the evidence;
+do not re-add `ForceFogged` to camouflage it — the dome geometry itself needs the fix.
 `HorizonZonesOf`/`HorizonZones` census the `horizon` node's `zone*` children with the meshed-node
 count each subtree carries — read BEFORE the build, because the zone the dome and the fog share is
 picked from it (`Flight.WeatherState.PreferPopulatedHorizonZone`; three chapters ship a `zone2`

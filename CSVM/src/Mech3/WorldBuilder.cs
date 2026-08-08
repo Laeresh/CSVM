@@ -465,22 +465,23 @@ public sealed class WorldBuilder
             n.Name.StartsWith("zone", StringComparison.OrdinalIgnoreCase)
             && !n.Name.Equals(zone, StringComparison.OrdinalIgnoreCase);
         // Every horizon model in every chapter is authored `fog: false` (measured: 3-6 meshed
-        // dome nodes per chapter, all of them). Honouring that here would delete the horizon
-        // band — and the dome fogging is a deliberate decision taken with the cylindrical-fog
-        // remodel (see below), on a dome that is not the original's shape anyway. So the dome,
-        // and only the dome, builds as if fogged; its `lighting: false` is honoured normally.
-        _scene.ForceFogged = true;
+        // dome nodes per chapter, all of them), and it is honoured here like everywhere else
+        // (`lighting: false` always was). The 2026-07 cylindrical-fog remodel force-fogged the
+        // dome instead (`SceneBuilder.ForceFogged`, set only from here), reasoning that high
+        // dome fragments would stay clear via the FOG_ALTITUDE fade while the horizon band
+        // greyed toward the terrain fog wall. `B16` (`docs/PLAN-overcast-match.md`) found that
+        // premise false at the dome's own authored size: every chapter's dome tops out
+        // +982…+4108 m over the camera, while every broken scene's FOG_ALTITUDE band sits at
+        // 9000-11000 m — the altitude term is 1.0 on every dome fragment under either fog
+        // hypothesis, so the "high fragments stay clear" half of the deal never happened and the
+        // dome only ever painted flat fog colour (BL-303's C3/C2B/C5 skies, and the C1 above-deck
+        // gray band one zone over). Reverted: the dome now builds unfogged, as authored.
         var built = _scene.BuildSubtree(horizon, SkipOtherZones, collisionSkip: _ => true);
-        _scene.ForceFogged = false;
         if (built == null)
             return null;
         DisableShadows(built);
         BillboardMoon(built);
         DisableLightRangeFade(built);
-        // NOT opted out of fog (a deliberate choice taken with the cylindrical-fog remodel,
-        // which is what makes it correct): high dome fragments stay clear via the
-        // FOG_ALTITUDE fade, while the horizon band fogs toward the same gray as the terrain
-        // fog wall.
         return built;
     }
 

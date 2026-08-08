@@ -147,7 +147,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 13. ☐ B13 — Footage discriminators: camera-vs-fragment fade, switch point ([USER] capture as needed)
 14. ☐ B14 — Implement the winning fog model
 15. ☐ B15 — Re-calibrate or delete `fogRangeFactor` 2.0
-16. ☐ B16 — The dome's authored `fog: false` (lever, evidence-gated)
+16. ☑ B16 — The dome's authored `fog: false` — landed, the primary fix for BL-303
 17. ☐ B17 — Fog A/B at both reference poses + BL-303's three; close `BL-303`/`BL-100`/`BL-101`
 
 ### Wave C — deck mesh brightness (BL-118 core)
@@ -2181,7 +2181,7 @@ original still; C4 valley haze (CAP-12 `t8.0` terrain still) not regressed.
 **⚠ Traps.** Test only after B14 — the factor compensating for wrong semantics is exactly how it
 went stale last time.
 
-## B16 ☐ The dome's authored `fog: false` (PROMOTED by B11: the primary fix for BL-303)
+## B16 ☑ The dome's authored `fog: false` (PROMOTED by B11: the primary fix for BL-303)
 
 **⚠ Amended by B11 (2026-08-08) — no longer a conditional lever.** The evidence is arithmetic,
 not a render: every authored skydome tops out +982 m (C4 zone1) to +4,108 m (C1B zone1) above
@@ -2193,6 +2193,120 @@ originals 194.9-gradient / 82.7 / 15.3). At C3's canyon pose the original's own 
 2,611 m against a 9,000 m band floor — no altitude fade of any kind can un-fog it. Runs BEFORE
 B14; B14 must not be tuned to make BL-303's skies come out right. The C1 above-deck gray band
 is the same mechanism one zone over, which is why the worktree's un-fogged-dome probe removed it.
+
+**Landed.** (2026-08-08) `WorldBuilder.BuildHorizon` no longer sets `SceneBuilder.ForceFogged`
+around its `BuildSubtree` call — dome materials now build exactly as authored (`fog: false` on
+every horizon mesh in every chapter, `lighting: false` already honoured). `ForceFogged` itself is
+**deleted**: grepped first (`docs/HISTORY.md`/`docs/PLAN-overcast-match.md` references aside,
+`WorldBuilder.BuildHorizon` was its only setter and `SceneBuilder.BuildModel`'s `fogged` test —
+`mesh.Fog || ForceFogged` — its only reader), so nothing else needed updating to drop it. The
+skirt's documented per-instance `csky_fog_on = 0` opt-out (`SceneBuilder.cs`, near the ordered
+instance-uniform block) turned out to be **stale even before this item**: grepping the whole
+`CSVM/src` tree for a `SetInstanceShaderParameter("csky_fog_on", …)` call finds none — nothing
+ever wrote it, so the comment described an opt-out that was never implemented. Reworded rather
+than deleted outright (the uniform itself is real, shared, general-purpose, and still declared):
+it now says plainly that nothing sets it today, and that the skirt in particular takes the
+UNFOGGED shader variant now (authored `fog: false`, honoured), so it never reaches the fog-mix
+line this uniform would have gated even if something did.
+
+### Pose-by-pose numbers (ours-before / ours-after / original)
+
+Every pose shot with `.\RunProbe.ps1 --freecam --chapter=<X> --det --mute --pos=… --direction=…
+--screenshot=…`, `--det` for reproducibility, fog **on** (unlike B12's `--no-fog` dome-identity
+renders — this item is about what fog does to the dome, not the dome's identity). Region-mean
+luminance (ITU-R BT.601), `.scratch/b16/`.
+
+| pose | region | ours before | ours after | original |
+|---|---|---|---|---|
+| C3 canyon (`-3504,710,-3619` / `-0.40673,0,-0.91355`) | sky | **201.0 flat** (full `c9c9c9` fog) | **198.1**, RGB (174.6,203.3,232.9) — blue-gradient | 194.9 blue-gradient, B=221 (`CAP-11`) |
+| C3 canyon | near-slope murk (**not** this item's fix) | 162.0 | **162.0 — byte-identical** | 36.5 (BL-303) — still open, B14/B15 |
+| C2B above-deck (`-3843,1500,-1101` / `-0.391,0,-0.921`) | sky | **176.0 flat** | **75.2**, RGB (65.9,74.2,104.2) | 79.5–82.7 (`CAP-11`/B12 t=50) |
+| C5 night (`-9187,90,-2037` / `-0.1219,0,-0.9925`, `dogfight_ace[3]`) | clear sky patch | **0.0 flat black** | **9.1–16.9** (region-dependent, dark-blue gradient) | 15.3 (BL-303) |
+| C1 above-deck pinned (`-7323,1192,-3829` / `0,0,-1`) | apex/zenith (rows 0–150) | 75.3 | **75.3 — byte-identical** | 74.3 (B12's own above-deck still) |
+| C1 above-deck pinned | gray band (rows 265–355, full width) | mean 180.0, **sd 5.92** (near-flat) | mean 153.3, **sd 30.71** (textured — cloud/dome detail, min 77) | — (qualitative: band gone, replaced by real gradient) |
+
+**C3's near-slope figure is reported, not fixed, on purpose** (item step 1): the murk is
+fog-on-terrain, untouched by this item because `BuildHorizon`'s subtree is the only thing this
+change touches — the exact-byte match before/after on that box is the proof it's inert here,
+consistent with `DIAG-10`. B14/B15 own it.
+
+**C1's apex being byte-identical before/after is the mechanism confirming itself**, not a null
+result: B11's own arithmetic put the apex (local +2155 m × 2.5 scale ⇒ world ≈ +5387 m over the
+1192 m camera) above `zone2`'s 5000 m ceiling, where the *fragment-altitude* fog term was already
+0 under the old code — `mix(ALBEDO, fog_color, 0)` is a no-op regardless of `ForceFogged`. Only
+the **lower** dome (the part between the horizon and the ~5000 m ceiling, i.e. the gray band) was
+ever actually painted by `ForceFogged`, and that is exactly the region that moved.
+
+### ⚠ New finding — the dome's own "unfinished" cap/skirt geometry, previously invisible, is now a hard seam in five of eight chapters
+
+Not part of this item's fix, found doing the item 5 crisp-edge sweep it asks for. `WorldBuilder`'s
+own (now-removed) comment called the zone1 day-dome's flat cap "likely never player-visible" —
+true only because `ForceFogged` painted it the *same* uniform fog colour as everything around it.
+Honouring `fog: false` removes that camouflage and exposes it as a genuinely flat, hard-edged
+disc or ring, at a colour distinct from both the sky texture above and the terrain fog below:
+
+| chapter (low-altitude sweep pose) | what shows | edge character |
+|---|---|---|
+| C1B (`-5692,168,-6895` / `0.0872,0,-0.9962`) | full-width band, **RGB (0,0,3) — near-black**, ~17 px tall, between the (now-correct) dome gradient above and the terrain/water fog below | hard: 358→360 row jump `(16,24,48)→(0,0,3)`, `(0,0,3)→(16,24,48)` at 377→378 — see `.scratch/b16/finding-crisp-edge-c1b-horizon.png` (before/after stack) |
+| C1C (`-3843,200,-1101` / `0.0523,0,-0.9986`) | full-width flat **(120,120,120)** band, ~9 px | hard: 357→360 `174→120`, 369→372 `120→176` |
+| C2B (`-3843,200,-1101` / `-0.391,0,-0.921`) | same (120,120,120) band, same shape | same |
+| C2 (`-4808,277,-5496` / `0.8572,0,0.5150`) | **two** nested flat bands, **(164,181,255)** inside **(205,215,255)** (the latter is C2 `zone1`'s own authored `FOG_COLOR`, byte-exact) | hard: 338→341 `216→184`, 380→383 `184→217` |
+| C1 (`-7066,326,-5519` / `-0.7431,0,-0.6691`) | dome visible only through gaps in the ridge silhouette (not full-width) | moderate: 310→315 `176→137` over the gap |
+| C3 (canyon primary pose, not the sweep pose) | **same defect as C1B/C1C**, a flat **(156,156,156)** band, ~60 px | hard: row 320→325 `199→156`, 388→395 `156→201` |
+| C4, C5 (sweep poses) | not visibly seamed | C4: terrain fills nearly the whole frame at this pose (5,175/921,600 px changed, most of it terrain-fog-adjacent, not this artifact); C5: the dome fades *smoothly* to near-black near the horizon (no jump — `7.3→0.0` continuously over the same span other chapters jump in 1–3 rows), a gentler case worth re-checking at a different pose but not evidenced as a hard seam here |
+
+**This is the exact class of regression the 2026-07 `ForceFogged` deviation was written to
+guard against**, and it is real and broad (5 of 8 chapters show a hard version of it, plus C3's
+primary pose). Recorded here as a finding with evidence, per the item's own instruction — **not
+fixed, and `ForceFogged` is not re-added.** The worst-case shot is
+`.scratch/b16/finding-crisp-edge-c1b-horizon.png`. Candidate follow-up (not decided here): the
+dome mesh likely needs its own small-scale fix — either texturing/hiding the unfinished cap/skirt
+faces, or a narrow blend at the join — which is a `WorldBuilder`/dome-geometry item, not a fog-flag
+item; left for the user to triage into a fresh BL at wave close.
+
+### Tests and goldens
+
+`.\RunTests.ps1` — build PASS (0 warnings), **units 669/669**, **engine 26/26, errors clean**,
+goldens **9 moved, 0 broken of 13**. A bigger set than Wave A's six, exactly as predicted: deckless
+chapters' skies (C1B, C2, C3, C5 — none of which ship an `fvol` field, so A2/A3 were inert on them)
+now change too, on top of Wave A's own movers.
+
+| golden | moved? | sanity check (sky in frame?) |
+|---|---|---|
+| `c1b-night-sea` | **moved** | manifest's own `exercises` text names "night lighting, **skydome**, islands…" explicitly; matches the C1B sweep finding above (its zone1 dome is the same one showing the black band) |
+| `c1c-rain` | **moved** | pose pitches 25° down from 700 m — dome visible in the upper frame above the cloud deck/fog it also exercises |
+| `c2-city` | **moved** | pose pitches 15° down over the city — matches the C2 sweep finding (the nested flat-band artifact) directly |
+| `c2b-rain` | **moved** | pose is `-3843,200,-1101`, **the same position as this item's own C2B sweep shot** (direction differs only by a 0.1 pitch) — direct corroboration |
+| `c3-island` | **moved** | pitches 35° down at 400 m near open water; even a thin sky sliver at the top edge now shows the zone1 gradient instead of flat fog (this chapter's dome changes dramatically at the canyon pose, confirmed above) |
+| `c4-snow` | **moved** | pitches 20° down; C4 flies `zone2` (B12), whose dome (moon+stars) is now unfogged where visible |
+| `c5-city-night` | **moved** | manifest's own `exercises` text names "…**moon and stars**" explicitly; matches the primary C5 pose's 0.0→9–17 fix directly |
+| `c1-flight` | **moved** | chase camera on a flying plane — sky routinely in frame; was also one of A2's six movers ("sky in frame") |
+| `c1-destroy-effects` | **moved** | near-level view (`direction=1,-0.1,0`) of a radio-tower kill — sky visible in the upper frame; was also one of A2's six movers |
+| `c1-waterfall` | ok | a thin (~35 px) gray strip is visible at the very top of frame (`.scratch/b16/check-c1-waterfall.png`), measured (188.5,189.5,190.5) — close to but not exactly either chapter fog colour; `RunTests` confirms the raw pixel hash is unchanged, so whatever this strip is, it renders identically before/after. Not independently re-verified against the pre-B16 binary beyond RunTests' own hash compare (rebuilding the old code was judged not worth it for one non-mover); flagged rather than asserted |
+| `viewer-bhawk` | ok | no chapter world at all (`--viewer`) — `BuildHorizon` never runs; inert by construction (`DIAG-10`), same reasoning as A2 |
+| `empty-stage` | ok | `--stage=empty`, no gamez — its sky is a different, code-drawn default, not `BuildHorizon`; inert by construction |
+| `c1-crash` | ok | frame 20 looks straight down at the fireball/ground rig — no sky in frame (same reasoning A2 gave for this same golden) |
+
+That is the `GOLD-5` pattern this change should produce: every shot whose framing shows a chapter's
+sky moved, and nothing else did — now with the four deckless/no-`fvol` chapters (C1B, C2, C3, C5)
+joining Wave A's movers, since their skies were inert to the *scatter* fix but not to the *fog* fix.
+**Not re-pinned — B17 re-pins after the wave's remaining render changes land**, per this item's
+brief.
+
+### Files
+
+`CSVM/src/Mech3/WorldBuilder.cs` (`BuildHorizon`), `CSVM/src/Mech3/SceneBuilder.cs` (`ForceFogged`
+deleted, its one reader simplified, the stale skirt-opt-out comment reworded), `docs/architecture.md`
+(the `WorldBuilder.cs` entry — `SceneBuilder.cs`'s own entry never mentioned `ForceFogged`, only
+its now-deleted XML doc comment did, so it needed no change), `backlog.md` (`BL-303` — a dated line
+appended, not closed), this section and the checklist line. `weather.md` was grepped for the
+dome-fogging deviation and does not
+document it (its dome discussion is zone selection and far-plane clipping, unrelated) — left
+untouched, per the item's own instruction not to touch B14's `FOG_ALTITUDE` correction either.
+`PROJECT_CONTEXT.md` untouched. `.scratch/b16/` holds 24 before/after screenshots (12 poses × 2)
+plus the crisp-edge crop and the `c1-waterfall` sanity check.
+
+### Original brief (kept for reference)
 
 **Goal.** The dome fogs, or doesn't, per evidence — not per the 2026-07 deviation surviving by
 default.
@@ -2206,6 +2320,9 @@ band; but B14's semantics may already clear the above-deck sky with the dome sti
 pose (blue-gradient sky) and C2B above-deck — per decision 7 the river still can't judge this. If
 B14 already cleared it, record that and leave `ForceFogged` with an updated comment naming this
 item's verdict.
+— *superseded by B11's amendment: the arithmetic already proved the dome needed unfogging
+regardless of B14/B15's semantics, so this item ran BEFORE them instead of after, per the
+Dependency and parallelism notes' re-ordering.*
 
 **Model recommendation.** medium — one flag, but the regression surface is every chapter's horizon.
 
@@ -2215,6 +2332,10 @@ for the crisp-edge regression the deviation was guarding against.
 **⚠ Traps.** The dome's below-horizon skirt already opts out per instance (`csky_fog_on = 0`) — do
 not write that instance uniform globally; the index-mismatch hazard is documented at
 `WeatherRig.cs:183`.
+— *the skirt opt-out premise was checked and found stale — see "Landed" above: nothing ever wrote
+that uniform, so there was nothing to avoid writing globally. The index-mismatch hazard itself is
+real and unrelated to this item (it is about `csky_fog_on`/`csky_light_fade`/`node_bias` ordering
+across shaders in general); still documented at `WeatherRig.cs` and `csky_instance_uniforms.gdshaderinc`.*
 
 ## B17 ☐ Fog A/B at both reference poses + BL-303's three; close BL-303/BL-100/BL-101
 
