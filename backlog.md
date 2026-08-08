@@ -97,6 +97,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   already in this file (`WreckMomentum`, tumble-rate, debris-arc), and `BL-059`/`BL-245` for the
   ground-contact remainder.
   ⚠ Do **not** "fix" it by reviving the FROM_TO deltas — wrong mechanism.
+  *Playtest first:* **`PT-46`** — three fixes have landed under this item (the `translation_range`
+  decode, `BL-240`, `BL-257`) without anyone going back to look, so whether a symptom remains at all
+  is now the first question. Its check (c) is what decides whether cause 1 is a defect or an
+  aspiration nobody measured.
 
 - `BL-009` `[Research]` **C2 SeaHangar doors don't despawn and stay collidable after shooting the propane tank.** The
   SeaHangar doors are `sgh_door1`/`sgh_door2`, driven by `sghangar-opensgdoors` — a **HEALTH-0
@@ -127,8 +131,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     piece that still looks wrong is the momentum or the ground-rest, not the launch. (b) `gravity.value` is
     absolute m/s² (a literal −9.8 on 173 events), NOT an offset to the aircraft's arcade `nom_gravity` of 20
     — that reading was considered and disproven by the same census.
-    *Playtest after fix:* look for wreck pieces arcing along a correct trajectory, not just moving
-    further. `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`.
+    *Playtest:* **`PT-46`** (shared with `BL-008`, which owns the other half of the same report) —
+    look for wreck pieces arcing along a correct trajectory, not just moving further.
+    `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire --infinite-ammo`.
 
 - `BL-059` `[Feature]` **Data-driven crash — the remaining variants/follow-ups.** The dirt/ground crash is
   complete and the default (`PLAN-data-driven-crash`, `docs/HISTORY.md`). What is still open:

@@ -212,6 +212,51 @@ an upper bound, and the correction to the 137.9 mph equilibrium are on `BL-115` 
   *Variations:* `--players=4` for the case (a)/(b)/(d) are really about; `--chapter=C2` for a
   different terrain profile under (c).
 
+### C1 · Devastator — shooting up world destructibles
+
+```powershell
+./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire --infinite-ammo
+```
+
+- `PT-46` `[A/B: the original, any ground target]` **Is world break-apart debris still limp?
+  (`BL-008`, `BL-022`.)** Both items were minted off one report — "parts only move a short way",
+  "but not in the correct trajectory" — and three fixes have since landed under them without anyone
+  going back to look: the `translation_range` decode (2026-08-01: an azimuth/elevation launch with
+  `initial` a speed, not a distance travelled), `BL-240`'s solved bounce launch, and `BL-257`
+  (2026-08-06), which found 167 events / 119 defs carrying neither `RUN_TIME` nor `BOUNCE_SEQUENCE`
+  and reporting duration 0 — every one of those pieces was switched off by its own `ACTIVE_STATE 0`
+  on the tick it launched. That last one is most of the world-destructible population
+  (`m_stuff_blowup`, `m_gens_blowup`, both `loading_cranes`, `destroy_jsign`, `col_tower_destroy`,
+  `mineshack_destroy`, `shaft_destroy`, `sluice_destroy`, `switchhouse_destroy`,
+  `collapse_platform`, `dblcannon_flying_parts`).
+
+  **This sitting decides whether either item still has a symptom.** What is left in code is
+  `BL-008`'s cause 1: `InheritedWorldVelocity` is assigned in exactly one place in the tree
+  (`FlightController.cs:1566`, the plane crash rig), so a *world* piece adds nothing to its authored
+  launch. Whether that is a defect at all is the open question — a shot building has no host
+  velocity to inherit, so "world objects should inherit momentum" may be an aspiration nobody ever
+  measured against the original.
+  *Look for:*
+  - (a) **do the pieces fly** — shoot a ground structure and watch whether its parts leave the
+    building at all, or still pop a few metres and freeze. If they fly, `BL-257` closed the
+    reported symptom and both items are done;
+  - (b) **the arc** — `BL-022`'s half: does each piece travel a believable parabola and settle, or
+    march off along one bearing (the pre-2026-08-01 failure) or hang unnaturally;
+  - (c) **direction vs the hit** — A/B against the original: do its debris get thrown *downrange*,
+    away from where the shot came from, or does it launch the same way regardless of the attack
+    heading? This is the only check that can justify a world-side momentum source; if the original
+    shows no directional bias, `BL-008`'s cause 1 is not a defect and the item closes;
+  - (d) **rest pose** — pieces that land should stay put, not sink into or hover over the ground.
+
+  *Blocks:* closing `BL-008` and `BL-022` — a pass on (a)/(b)/(d) with no directional bias in (c)
+  retires both. A fail on (c) alone turns `BL-008` into a single concrete change: a world-object
+  launch-momentum TUNE mirroring the crash's `WreckMomentum`, plus an opt-out like
+  `InheritedVelocityExempt`. A fail on (d) is `BL-245`/`BL-059` (ground contact), not these two.
+  *Variations:* `--play-anim=<name>` in the anim lab plays one named def with the camera framed on
+  it — use it to see a specific destruction def (e.g. `mineshack_destroy`, `col_tower_destroy`) up
+  close rather than hunting for its building; `--effects-test` is the scripted reach for
+  `dblcannon_flying_parts`, the zeppelin case `BL-257` was diagnosed on.
+
 ### C1B · Bloodhawk, night — sky, clouds, self-lit art
 
 ```powershell
