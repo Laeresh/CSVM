@@ -245,6 +245,11 @@ as extra surfaces — 619 polygons install-wide, none in planes.zbd (docs/format
 Parses the per-polygon `zone_set` list into `GameZPolygon.ZoneSet` (`int?`, unified-only; at most
 one value per polygon install-wide — docs/formats/world-structure.md's census); nothing reads it
 yet, parse+census only (`BL-057`).
+`VertexColorsRestateMaterialColor(poly, materialIndex)` spots the redundantly-duplicated flat
+colour: an untextured (`Colored`) material whose colour every one of the polygon's vertex colours
+repeats. That is ONE authored value in two slots, so SceneBuilder applies it once instead of
+multiplying (which squares it — 176 → 120). 87 polygons install-wide, 85 of them the skydome
+skirts, censused per chapter by `CSVM.Tests/FlatColorTests.cs`.
 
 ## src/Mech3/TextureArchive.cs
 Texture lookup over an unzbd texture zip or unpacked PNG dir; absorbs the stored-name quirks
@@ -285,6 +290,11 @@ area-quorum vote it replaced gave real water polygons on it to `default` outrigh
 (`analysis/surface-classification/`). Each collider-bearing node is registered with
 `WorldCollision`, which owns its `Disabled` flag from then on. A `GameZ.IsMarkerGizmo` mesh draws nothing, but its Node3D is
 still built with its transform — animations attach puffers and sounds to those nodes by name.
+A surface's colour is `vertex colour × material` (the original's baked-lighting modulate) — except
+where the two are the same authored value, which `GameZ.VertexColorsRestateMaterialColor` detects
+and `EmitPolygon` answers by writing white corners, so the value lands once. `PLAN-overcast-match`
+`B18`: every skydome's below-horizon skirt is an untextured polygon authored in its zone's own
+`FOG_COLOR`, and squaring that is what made the horizon join a hard band in seven of eight chapters.
 ⚠ Instance-uniform block is an ORDERING CONTRACT — every shader on one instance declares the same
   block (csky_instance_uniforms); a shader with NO instance uniform must not take the preamble
   (16-vec4 per-instance buffer cost). The model's `lighting`/`fog` flags therefore select shader
@@ -417,11 +427,11 @@ showed that fade never actually happens at the dome's own authored size (every d
 fragments clear, horizon band greys" deal never delivered and the dome only ever painted flat fog
 colour (`BL-303`'s C3/C2B/C5 skies, and the C1 above-deck gray band one zone over). `ForceFogged`
 itself is deleted — `BuildHorizon` was its only setter.
-⚠ **New finding from the same item, not fixed by it:** honouring `fog: false` exposes the dome's
-own "unfinished" flat cap/skirt geometry — previously invisible because `ForceFogged` painted it
-the same uniform colour as everything around it — as a hard-edged band in 5 of 8 chapters (C1B,
-C1C, C2, C2B directly; C3 at its canyon pose). See `PLAN-overcast-match` `B16` for the evidence;
-do not re-add `ForceFogged` to camouflage it — the dome geometry itself needs the fix.
+`B18` then closed the seam honouring `fog: false` exposed: the dome is a textured wall from local
+Y=0 up plus an untextured **skirt** cone from Y=0 down, and that skirt is authored in the zone's own
+`FOG_COLOR` so it merges into the terrain's fog wall. It read as a hard band only because its flat
+colour was being applied twice (see `SceneBuilder.cs`); nothing about the geometry or the scaling
+was wrong, and `ForceFogged` was never needed to hide it.
 `HorizonZonesOf`/`HorizonZones` census the `horizon` node's `zone*` children with the meshed-node
 count each subtree carries — read BEFORE the build, because the zone the dome and the fog share is
 picked from it (`Flight.WeatherState.PreferPopulatedHorizonZone`; three chapters ship a `zone2`

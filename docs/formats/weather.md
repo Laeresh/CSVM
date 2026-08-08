@@ -195,6 +195,36 @@ wall sits at (its own radius × `GameSession.HorizonScale`) from the eye. Every 
 treats 2.5× as a maximum and fits the dome inside `HorizonFarFraction` of the far plane; C1B lands
 at ~1.65×, every other chapter keeps 2.5× exactly.
 
+#### The dome's below-horizon skirt is painted `FOG_COLOR` (2026-08-08, `PLAN-overcast-match` B18)
+
+Every chapter's dome is **two pieces sharing one ring at local Y = 0** — which, the dome being
+camera-anchored, is always the camera's own altitude, i.e. the horizon line:
+
+- the **wall**, textured (`Sky1.tif`/`c4sky2.tif`/`c5sky2.tif`/`sky2.tif`), running Y 0 → +1.6…+4.1 km
+  with a vertex-colour gradient, closed by a flat cap polygon at the top;
+- the **skirt**, an inward-tapering cone running Y 0 → −3.0…−11.7 km, closed by a flat disc.
+
+The skirt carries **no texture**: one `Colored` material, and its colour is the flown zone's own
+`FOG_COLOR`, byte-exact in six of the seven chapters that have one:
+
+| chapter (flown zone) | `FOG_COLOR` | skirt `Colored` | skirt node |
+|---|---|---|---|
+| C1 `zone2` | 176,176,176 | 176,176,176 | `g1155` |
+| C1B `zone1` | 16,24,48 | 16,24,48 | `g1165` |
+| C1C `zone2` | 176,176,176 | 176,176,176 | `g1155` |
+| C2 `zone1` | 205,215,255 | 205,215,255 | `g1155` |
+| C2B `zone2` | 176,176,176 | 176,176,176 | `g1168` |
+| C3 `zone1` | 201,201,201 (0.79) | 200,200,200 | `g1155` |
+| C4 `zone2` | 192,192,192 | 192,192,192 | `g1166` |
+| C5 `zone1` | 0,0,0 | textured `c5sky2.tif`, vertex colour 0,0,0 | `g1171` |
+
+**That is how the original hides the horizon seam.** Terrain fades to `FOG_COLOR` with distance and
+stops at the map edge; below the horizon the dome simply *is* that same colour, so there is nothing
+to blend. The seam needs no gradient, no fog on the dome, and no scaling change — B18's whole fix
+was to stop applying that one authored colour twice (`docs/architecture.md`, `SceneBuilder.cs`).
+⚠ **A skirt colour that does not match its zone's `FOG_COLOR` means the wrong zone is being flown**,
+not that the dome needs painting — the pair is the check.
+
 **Still open for C1, C1C, C2B and C4**, which define `zone2` *and* build a dome for it, so the
 geometry cannot decide. There is no longer a data reason to rank one of the four first — the
 `interp.json` re-read above retired the "C1's scripts disagree" tiebreak — so the A/B is a plain

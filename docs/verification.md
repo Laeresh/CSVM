@@ -77,6 +77,10 @@ and leave gaps when retiring old ones.
   period aperiodic in screen space, so a row/column ACF over the sheet found no peak above 0.33
   on either side of the A/B — including a 0.69 peak in the original's own underside that turned
   out to be capture noise at sd 0.91–2.58 (`PLAN-overcast-match` A2, METHOD-14).
+- **SHOT-22** — **A horizon-band artifact is a full-width, DEAD-FLAT run of rows (per-row sd ≈ 0)
+  bounded by a hard jump — measure it as the largest jump whose rows are BOTH flat, never as the
+  largest jump.** Unrestricted, terrain silhouettes and cloud edges dominate the statistic and a
+  55-luminance flat-band edge reads as ordinary scene contrast (`PLAN-overcast-match` B18).
 - **SHOT-21** — **`--tex-override` cannot separate the `fvol` cloud-sprite field from
   `cloudparent` clusters — they share their textures.** All 626 of C1's `cloudparent` facades are
   skinned `cloud1.tif`/`cloud2.tif`, the same two textures the `cloudsprite1`/`cloudsprite2`
@@ -107,6 +111,11 @@ and leave gaps when retiring old ones.
   — the crash fireball covers the frame. So judge a timing change by what the moved shots *are*
   (all four movers were particle shots) before concluding either that it broke something or that it
   is harmless.
+- **GOLD-8** — **When an earlier item deliberately left goldens un-repinned, a later item's "moved"
+  list is about BOTH changes — recover the current item's own movers by A/B-ing hashes against a
+  temporarily reverted build.** Measured (`PLAN-overcast-match` B18): the run reported the same 9
+  movers the previous item had, yet only 8 moved for this one — `c5-city-night` was byte-identical
+  across it, and the census predicting exactly that would have been credited to the wrong change.
 - **GOLD-7** — **A golden shot that exits nonzero with no PNG is retried once, with evidence kept
   either way.** `RunTests.ps1`'s `goldens` stage reuses `.scratch\goldens\` every run, so a silent
   exit-1 (`BL-039`: a `c1-flight` shot once built its world, rendered a frame, then died with no

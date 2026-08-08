@@ -1574,11 +1574,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   C5 sky 0.0 flat black → 9.1–16.9 dark-blue gradient (orig 15.3). **Still open, not this item's
   fix:** C3's near-slope terrain murk (162.0 both before and after B16, byte-identical — this is
   fog-on-terrain, B14/B15's business, not the dome) and C5's lit-facade dimming (WorldLight-unrelated
-  per the note above). New finding surfaced doing B16's own crisp-edge regression check, not yet
-  triaged into an item: honouring the dome's authored `fog: false` exposes previously camouflaged
-  "unfinished" cap/skirt geometry as a hard-edged band at the horizon in 5 of 8 chapters (worst:
-  C1B, a near-black band) — see `PLAN-overcast-match` `B16`'s "New finding" for evidence and shots.
-  B17 still owns the close.
+  per the note above). The crisp-edge band B16's own regression check surfaced at the horizon is
+  **closed by `B18` (2026-08-08)**: those pixels are the dome's untextured skirt, authored in the
+  zone's own `FOG_COLOR`, and our renderer was applying that one colour twice (material × vertex,
+  the same value) — 176 drew as 120, (16,24,48) as (0,0,3). Seven chapters' horizons now join their
+  fog wall seamlessly; no fog was re-added to the dome. B17 still owns the close.
 
 - `BL-315` `[Feature]` **C5's fog volumes author their own interior fog and we don't render it**
   (user at the controls of the original, 2026-08-08; clip

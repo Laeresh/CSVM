@@ -121,6 +121,35 @@ public sealed class GameZ
         return _markerGizmo[meshIndex] = true;
     }
 
+    /// <summary>An untextured (<c>Colored</c>) polygon whose every vertex colour restates the
+    /// material's OWN colour: one authored value written into two slots, not two terms meant to
+    /// modulate each other. Multiplying them squares the colour — 176 draws as 120, 200 as 156,
+    /// (16,24,48) as (0,0,3). Every chapter's skydome skirt (the below-horizon cone under the
+    /// textured dome wall) is authored this way in its zone's own <c>FOG_COLOR</c>, so squaring it
+    /// is what turns the join with the terrain's fog wall into a hard band. Install-wide: 87
+    /// polygons, 85 of them those skirts. A polygon carrying a real vertex gradient, or one whose
+    /// material colour is white, is never one of these — those two are the cases where the product
+    /// IS the authored intent, and they stay a product.</summary>
+    public bool VertexColorsRestateMaterialColor(GameZPolygon poly, int materialIndex)
+    {
+        if (materialIndex < 0 || materialIndex >= Materials.Count)
+            return false;
+        var mat = Materials[materialIndex];
+        if (mat.TextureName != null || poly.VertexColors == null || poly.VertexColors.Count == 0)
+            return false;
+        // Both sides come from the same /255f decode, so this is an equality test with room for
+        // float noise only — half a source byte.
+        const float eps = 0.5f / 255f;
+        foreach (var c in poly.VertexColors)
+        {
+            if (Mathf.Abs(c.R - mat.Color.R) > eps
+                || Mathf.Abs(c.G - mat.Color.G) > eps
+                || Mathf.Abs(c.B - mat.Color.B) > eps)
+                return false;
+        }
+        return true;
+    }
+
     public GameZNode? FindByName(string name)
     {
         foreach (var n in Nodes)

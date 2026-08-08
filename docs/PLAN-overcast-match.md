@@ -149,7 +149,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 15. ☐ B15 — Re-calibrate or delete `fogRangeFactor` 2.0
 16. ☑ B16 — The dome's authored `fog: false` — landed, the primary fix for BL-303
 17. ☐ B17 — Fog A/B at both reference poses + BL-303's three; close `BL-303`/`BL-100`/`BL-101`
-18. ☐ B18 — The dome's cap/skirt seam: how does the original hide it? (minted from B16's finding, user-approved 2026-08-08)
+18. ☑ B18 — The dome's cap/skirt seam: the skirt is painted `FOG_COLOR`, and we were applying it twice
 
 ### Wave C — deck mesh brightness (BL-118 core)
 
@@ -2360,7 +2360,147 @@ commit per convention.
 WorldLight already at clamp) — fixing the sky must not silently absorb that; it stays in BL-303's
 closing record as still-open if unfixed, minted fresh.
 
-## B18 ☐ The dome's cap/skirt seam: how does the original hide it?
+## B18 ☑ The dome's cap/skirt seam: how does the original hide it?
+
+**Landed.** (2026-08-08) **The band's pixels are the dome's own skirt** — not a gap, not the clear
+colour, not the cap. Every chapter's dome is a *textured wall* from local Y = 0 up (Y = 0 is the
+camera's altitude, so that ring IS the horizon line) plus an *untextured skirt* cone from Y = 0
+down to −3.0…−11.7 km, closed by a flat disc. **The skirt's one `Colored` material is authored in
+the flown zone's own `FOG_COLOR`** — byte-exact in six of seven chapters (C3 is 200 against
+0.79 × 255 = 201) — so below the horizon the dome simply *is* the fog wall the terrain fades into,
+and there is nothing to blend. That is the original's answer, and it needs no gradient, no fog on
+the dome and no scaling change.
+
+**We were applying that one authored colour twice.** The shader's `col = srgb_to_linear(COLOR.rgb)
+* albedo_color` is the right modulate for the install at large, but on these polygons the vertex
+colours *restate* the material colour, so the product squares it in linear space:
+176 → **120**, 200 → **156**, (205,215,255) → **(164,181,255)**, (16,24,48) → **(0,0,3)**. Those
+four are exactly B16's four measured band colours, to the byte — the arithmetic was checked against
+the measurement before a line of code was written. Fix: `GameZ.VertexColorsRestateMaterialColor`
+identifies the redundantly-duplicated value (SRC-5's inverse — a field authored twice, not a field
+missing) and `SceneBuilder.EmitPolygon` emits white corners for it, so the colour lands once. **The
+product is kept everywhere else**, because everywhere else it is right (below).
+
+**Files.** `CSVM/src/Mech3/GameZ.cs` (the predicate), `CSVM/src/Mech3/SceneBuilder.cs`
+(`EmitPolygon`/`EmitTriangle` + the group loop), `CSVM/src/Mech3/WorldBuilder.cs` (`BuildHorizon`'s
+doc — the dome's two-piece shape, replacing the "unfinished flat-gray cap, likely never
+player-visible" reading), `CSVM.Tests/FlatColorTests.cs` (new), `docs/architecture.md`
+(`GameZ.cs`, `SceneBuilder.cs`, `WorldBuilder.cs`), `docs/formats/weather.md` (the skirt/`FOG_COLOR`
+decode), `docs/verification.md` (`GOLD-8`, `SHOT-22`), this section and the checklist line.
+`PROJECT_CONTEXT.md` untouched. Probes and instruments in `.scratch/b18/`.
+
+### How the pixels were identified — one probe, no theorising past it
+
+At C1B's B16 sweep pose (`-5692,168,-6895` / `0.0872,0,-0.9962`), where the band is worst:
+
+| probe | rows 340–359 (above) | rows 360–376 (the band) | verdict |
+|---|---|---|---|
+| baseline | (16,24,48) | **(0,0,3)**, sd 0.00 | reproduces B16's numbers exactly |
+| `--tex-override=Sky1.tif=00ff00` | **green** | **(0,0,3) — unchanged** | the band is NOT the textured wall |
+| `--sky-zone=zone2` (C1B's zone2 is a bare marker ⇒ empty dome) | procedural-sky ≈(160,163,168) | **≈(160,163,168) — the same** | the band is NOT the background either: with no dome there is no band |
+
+So the band is dome geometry that carries no texture — which the gamez says is the skirt, and only
+the skirt. The band's angular extent corroborates it: 17 px ≈ 1.65° below the horizon at 720 rows,
+against `atan(168 m / 5393 m)` = **1.78°** to the top of the water at the map edge. **The `(0,0,3)`
+value then settles the rest by arithmetic**: `linear_to_srgb(srgb_to_linear(16/255)²) = 0.08 → 0`,
+`(24)² → 0`, `(48)² → 3`. Not a gap, not a scale artifact — a squared colour.
+
+### Why the product is right everywhere else (the rule's blast radius)
+
+Install-wide cross-tab of every polygon using a `Colored` material (`.scratch/b18/colored_census.py`):
+
+| material colour | vertex colours | polygons | what the product does |
+|---|---|---|---|
+| coloured | white | 677 | applies the material colour once — correct |
+| white | coloured | 99 | applies the vertex gradient once — correct (C1's `part3` debris runs 94→255) |
+| white | white | 366 | identity |
+| **coloured** | **restates it** | **87** | **squares it — the defect** |
+
+That kills the two tempting "simpler" rules outright: *vertex colour wins* would blank 677
+polygons to white, *material colour wins* would blank 99. Only the duplicate case is wrong, and
+only it is changed. Of the 87, **85 are the seven chapters' dome skirts** (C1 14, C1B 13, C1C 15,
+C2 13, C2B 15, C3 13, C4 2) and the other 2 are C4 `g206` polygons authored black on black, where
+`0 × 0 = 0` makes the change inert. C5 has **none** — its skirt is textured — which is why every C5
+render below is bit-identical. `CSVM.Tests/FlatColorTests.cs` pins that per-chapter census (plus
+five hand-authored unit cases, including the debris gradient and a textured material) so a future
+extraction growing the number is a failure, not a silent widening.
+
+### The five affected chapters' horizon poses, before → after
+
+Instrument (`SHOT-22`, `.scratch/b18/seamcheck.py`): the largest row-to-row luminance jump in
+rows 250–500 **whose two rows are both flat across the frame** (mean per-channel column sd < 2.0).
+Terrain silhouettes jump too, so an unrestricted jump statistic is degenerate here. Poses 1–6 are
+B16's own documented sweep poses; C4/C5's were not preserved on disk, so those two are fresh and
+documented in `.scratch/b18/shoot.ps1` with the rest.
+
+| pose | flat-band edge before | after | band colour before → after | changed px |
+|---|---|---|---|---|
+| C1B sweep `-5692,168,-6895` | **24.0** at row 359 | **0.5** | (0,0,3) → (16,24,48) | 24,498 (2.7 %) |
+| C1C sweep `-3843,200,-1101` | **55.7** at row 359 | **1.0** | (120,120,120) → (176,176,176) | 17,806 (1.9 %) |
+| C2B sweep `-3843,200,-1101` | **55.7** at row 359 | **1.0** | (120,120,120) → (176,176,176) | 16,772 (1.8 %) |
+| C2 sweep `-4808,277,-5496` | nested bands, rows 340–379 | gone | (164,181,255) → (205,215,255) | 68,106 (7.4 %) |
+| C3 canyon `-3504,710,-3619` | 60-row flat band, rows 326–385 | gone | (156,156,156) → (200,200,200) | 99,352 (10.8 %) |
+| C1 sweep `-7066,326,-5519` | visible only through ridge gaps | gone | (124,124,124) → (176,176,176) | 1,706 (0.2 %) |
+| **C4 sweep** `-4974,300,-3861` | **48.1** at row 359 | **0.2** | (144,144,144) → (192,192,192) | 450,293 (48.9 %) |
+| C5 sweep `-9187,90,-2037` | none | none | — | **0** |
+
+C2's and C3's edges are multi-row ramps, so the single-row statistic reads them low on both sides;
+the row scans in the table's colour column are the evidence there, and both now sit at one constant
+colour from the dome's lowest textured row all the way down into the terrain fog.
+
+⚠ **B16's "C4, C5 not visibly seamed" was a pose artifact, not a chapter fact** — at B16's C4 sweep
+pose terrain filled the frame. At a pose with open horizon, C4 was the *worst* case in the install:
+the squared skirt covered the entire lower half of the frame as a flat (144,144,144) plate with a
+razor edge at row 359 (`.scratch/b18/before-sweep-c4.png` vs `after-sweep-c4.png`). C5 genuinely is
+clean, for the reason the census gives.
+
+### The two pinned C1 poses — unchanged above the horizon band
+
+Per-row diff (`.scratch/b18/diffrows.py`), and both come out to a single contiguous run starting at
+the horizon line:
+
+| pose | changed rows | above the band | changed pixels |
+|---|---|---|---|
+| C1 river `-7323,192,-3829` / `-0.997,-0.1,0.070` | **300–322 only** — the pose pitches 0.1 down, putting the horizon at row 301, so this IS the horizon band | byte-identical | 8,166 (0.9 %), (122,122,122) → (176,176,176) |
+| C1 above-deck `-7323,1192,-3829` / `0,0,-1` | **360–374 only** (level pose ⇒ horizon at row 360) | byte-identical, including B16's own rows 265–355 gray-band box | 13,608 (1.5 %) |
+
+C2B above-deck (`-3843,1500,-1101`) behaves the same: rows 360–423 only. **No pose in the set
+changes a single pixel above its own horizon line** — which is the structural guarantee, since the
+skirt is the only geometry below Y = 0 and the wall is the only geometry above it.
+
+### Tests and goldens
+
+`.\RunTests.ps1` — build PASS (0 warnings), **units 682/682** (was 669; +13 from
+`FlatColorTests`), **engine 26/26, errors clean**, goldens **9 moved, 0 broken of 13**. Exit 1 is
+the golden stage alone. **Not re-pinned — B17 re-pins once**, per this item's brief.
+
+⚠ **B16 also left 9 movers unpinned, so the raw list is about both items** (`GOLD-8`). The hashes
+were A/B'd against a build with the one fix line temporarily neutralised (`git diff` clean
+afterwards, METHOD-17), which separates them:
+
+| golden | B18 moved it? | why |
+|---|---|---|
+| `c1b-night-sea`, `c1c-rain`, `c2-city`, `c2b-rain`, `c3-island`, `c4-snow` | **yes** | the six chapters whose flown zone has a non-white restated skirt and whose framing reaches the horizon |
+| `c1-flight`, `c1-destroy-effects` | **yes** | C1 chase / near-level kill shot — horizon in frame, and C1's skirt is 176 |
+| `c5-city-night` | **no — byte-identical** (`88c6df54…` both sides) | C5's skirt is textured, so the census says 0 restated non-white polygons; the shot still appears in the list because **B16** moved it. The able-to-fail control for the whole census |
+| `c1-waterfall`, `c1-crash`, `viewer-bhawk`, `empty-stage` | no | `c1-crash` looks straight down; `c1-waterfall`'s only sky is a strip at the top of frame, above the horizon; the other two build no chapter dome at all (`DIAG-10`) |
+
+### What was NOT the answer (the three candidates in the brief, each disproved)
+
+- **(a) "at the original's scale/anchor the skirt sits below the terrain horizon."** No: the skirt
+  starts exactly AT the horizon by construction (its top ring is the wall's bottom ring at local
+  Y = 0, and the dome is camera-anchored, so that ring is always at eye level). It is *meant* to be
+  seen there.
+- **(b) "our 40 km far plane renders past where the dome was meant to be seen."** No: at C1B's
+  1.65× the skirt's bottom ring sits ~32 km out, inside the far plane, and the `--sky-zone=zone2`
+  probe shows the band region is dome-covered, not clipped open. **The C1B scale-cap/worst-seam
+  coincidence the brief flagged is a coincidence**: C1B looked worst only because its `FOG_COLOR`
+  is the darkest in the install (16,24,48), so squaring it lands on near-black against a visible
+  night sky. `HorizonScaleFor` was not touched.
+- **(c) "a bottom cap we don't build."** No: the bottom disc is authored and built (poly 14 of
+  C1C's `g1155`, at Y = −4682) and never enters frame at flight altitudes.
+
+### Original brief (kept for reference)
 
 **Goal.** No hard band where the dome meets the horizon in any chapter, with the mechanism
 decoded rather than painted over — the dome stays authored-unfogged (B16 is not reopened).
@@ -2396,6 +2536,10 @@ sweep repeated clean; the two pinned C1 poses unchanged above the horizon band;
 `HorizonScaleFor`'s cap and the C1B 1.65× special case are documented in weather.md — read
 that section before touching any dome scaling. If the evidenced fix is a real geometry change
 to the dome build, take a golden baseline first.
+— *all three held: no fog was added, `HorizonScaleFor` was not touched (weather.md's dome-scale
+section was re-read and then extended rather than edited), and the fix turned out not to be a
+geometry change at all, so the geometry baseline was not needed — the before/after probe set in
+`.scratch/b18/` is the baseline that was taken.*
 
 # Wave C — deck mesh brightness
 

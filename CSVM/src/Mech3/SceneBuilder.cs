@@ -566,8 +566,12 @@ void fragment() {
                 ? poly.OverlayPasses[pass - 1].UvCoords
                 : null;
 
+    /// <param name="flatColorRestated">The polygon's vertex colours only restate its untextured
+    /// material's own colour (<see cref="GameZ.VertexColorsRestateMaterialColor"/>) — emit white
+    /// instead, so the shader's <c>vertex × albedo_color</c> applies that one authored value once
+    /// rather than squaring it.</param>
     private static void EmitPolygon(SurfaceTool st, GameZMesh mesh, GameZPolygon poly, Vector3 offset,
-        List<Vector2>? uvs)
+        List<Vector2>? uvs, bool flatColorRestated = false)
     {
         int n = poly.VertexIndices.Count;
         if (n < 3)
@@ -578,20 +582,20 @@ void fragment() {
             {
                 // alternate winding so all triangles of the strip face the same way
                 if ((i & 1) == 0)
-                    EmitTriangle(st, mesh, poly, i, i + 1, i + 2, offset, uvs);
+                    EmitTriangle(st, mesh, poly, i, i + 1, i + 2, offset, uvs, flatColorRestated);
                 else
-                    EmitTriangle(st, mesh, poly, i, i + 2, i + 1, offset, uvs);
+                    EmitTriangle(st, mesh, poly, i, i + 2, i + 1, offset, uvs, flatColorRestated);
             }
         }
         else
         {
             for (int i = 1; i + 1 < n; i++)
-                EmitTriangle(st, mesh, poly, 0, i, i + 1, offset, uvs);
+                EmitTriangle(st, mesh, poly, 0, i, i + 1, offset, uvs, flatColorRestated);
         }
     }
 
     private static void EmitTriangle(SurfaceTool st, GameZMesh mesh, GameZPolygon poly, int a, int b, int c,
-        Vector3 offset, List<Vector2>? uvs)
+        Vector3 offset, List<Vector2>? uvs, bool flatColorRestated = false)
     {
         Vector3 Pos(int corner) => mesh.Vertices[poly.VertexIndices[corner]] - offset;
         // flat normal fallback for polygons without normal data
@@ -608,7 +612,7 @@ void fragment() {
                     normal = mesh.Normals[ni].Normalized();
             }
             st.SetNormal(normal);
-            st.SetColor(poly.VertexColors != null && corner < poly.VertexColors.Count
+            st.SetColor(!flatColorRestated && poly.VertexColors != null && corner < poly.VertexColors.Count
                 ? poly.VertexColors[corner]
                 : Colors.White);
             if (uvs != null && corner < uvs.Count)
@@ -1010,7 +1014,8 @@ void fragment() {
             var st = new SurfaceTool();
             st.Begin(Mesh.PrimitiveType.Triangles);
             foreach (var poly in polys)
-                EmitPolygon(st, mesh, poly, offset, PassUvs(poly, pass));
+                EmitPolygon(st, mesh, poly, offset, PassUvs(poly, pass),
+                    _gamez.VertexColorsRestateMaterialColor(poly, materialIndex));
             // A surface whose UVs never leave the unit square never needs the sampler to wrap,
             // and wrapping it is what produces the hairline seams (see UvsWithinUnitSquare).
             // A scrolling surface is excluded: its UVs deliberately run past 1 and rely on

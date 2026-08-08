@@ -437,9 +437,16 @@ public sealed class WorldBuilder
     /// radius) while the world area is x,z ∈ [-12288, 0], so the original engine must have
     /// translated it with the viewer — it is a backdrop, not scenery. Zones are day/night
     /// variants: zone2 = moon + stars + Sky1.tif dusk-gradient night sky (what the original
-    /// shows at the C1 airfield, which always loads at night); zone1 = sky2.tif day haze
-    /// dome with an unfinished flat-gray cap, likely never player-visible.
+    /// shows at the C1 airfield, which always loads at night); zone1 = sky2.tif day haze dome.
     /// Never collidable, never casts shadows.
+    ///
+    /// <para><b>Every dome is a textured wall plus an untextured skirt.</b> The wall runs from
+    /// local Y=0 (the camera's own altitude, hence the horizon line) up to a flat cap; the skirt
+    /// is a cone from Y=0 down to −3.0…−11.7 km, closed by a flat disc. The skirt carries no
+    /// texture — one <c>Colored</c> material whose colour is the zone's own <c>FOG_COLOR</c>, so
+    /// below the horizon the dome IS the fog wall the terrain fades into and the join is
+    /// invisible. Nothing here paints that; it only has to not be doubled
+    /// (<see cref="GameZ.VertexColorsRestateMaterialColor"/>).</para>
     ///
     /// <para><b>The zone names are per chapter.</b> C1–C4's horizon has
     /// <c>zone1</c>/<c>zone2</c> children, but C5's has <c>zone3</c>/<c>zone1</c> — so a bare
