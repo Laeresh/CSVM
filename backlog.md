@@ -239,9 +239,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   fraction of impact velocity the wreck pieces inherit, so they scatter along travel vs. pop straight
   up); the **`forward_rotation.Time.initial` ÷ run_time** tumble-rate reading in `AnimRuntime`'s
   `MotionRuntime` (the pieces carry clean π multiples read as a *total* angle, not a rate); the
-  **debris-arc trajectory** (`translation_range` read as travel distance over `run_time` in a fanned
-  azimuth — the `fly_trailN` anchor is invisible, so only the arc's rough scale reads; `MotionRuntime`,
-  `initial`/`delta` unmapped); the **overall crash intensity** (the fireball, the cluster, the debris
+  **debris-arc trajectory** (the *decode* is settled since 2026-08-01 — `translation_range`'s xz/y are
+  an azimuth/elevation in degrees and `initial` the launch speed, `delta` a speed ramp, all three
+  mapped in `MotionRuntime`; what stays a TUNE is only the arc's judged *look*, and the `fly_trailN`
+  anchor being invisible means only the trail's rough scale reads); the **overall crash intensity** (the fireball, the cluster, the debris
   fire and the wreck fire are all additive, so a dirt crash can read as one big fireball — judge the
   whole against the original); and `snd_exp_ground_a` mix level + whether it should layer over
   `plane_destroy_sg` (the dirt def's only Sound is `snd_exp_ground_a`; we keep both). The retired
