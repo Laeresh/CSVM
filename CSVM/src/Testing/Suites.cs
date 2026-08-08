@@ -5,6 +5,7 @@ using CSVM.Effects;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
+using CSVM.Session;
 using CSVM.UI;
 using CSVM.Utils;
 using Godot;
@@ -110,6 +111,8 @@ public static class Suites
             "an OBJECT_MOTION naming NEITHER RUN_TIME nor BOUNCE_SEQUENCE flies its solved parabola before its own deactivation switches it off (BL-257)", NulledLaunch));
         into.Add(new TestHarness.Suite("destructible-census",
             "per-chapter destructible registry totals", DestructibleCensus));
+        into.Add(new TestHarness.Suite("lens-flare-gates",
+            "the sun's lens flare is gated on chapter data alone, and its two independent gates — the gamez `sun` node and init.gw's LensFlareTexture slots — agree chapter by chapter, in C2 and C3 and nowhere else (BL-165)", LensFlareGates));
         into.Add(new TestHarness.Suite("tex-dropin",
             "the census/override flatten repaints RGB and changes nothing else", TexDropIn));
         into.Add(new TestHarness.Suite("gltf-export",
@@ -1501,6 +1504,60 @@ public static class Suites
                 ctx.Same(anchors, registry.DistinctAnchors, $"{chapter} destructible node groups");
             });
         }
+    }
+
+    /// <summary>The lens flare's gating, chapter by chapter (BL-165).
+    ///
+    /// <para>The flare is deliberately gated on <b>chapter data</b>, never on a chapter name, and it
+    /// reads <b>two</b> independent gates: a gamez node called <c>sun</c> in the horizon subtree, and
+    /// <c>LensFlareTexture</c> slot registrations in <c>support\&lt;ch&gt;\init.gw</c>. Across the
+    /// retail install both are true of C2 and C3 and of nothing else — as is the presence of a
+    /// texture named <c>sun</c>, a third agreement this suite does not need to re-check.</para>
+    ///
+    /// <para>This is the check most likely to rot silently: nothing about C1 looking correct would
+    /// tell you a flare rig had started building there, and nothing about C3 looking correct would
+    /// tell you the C2 gate had stopped resolving. Both directions are asserted.</para>
+    ///
+    /// <para>Data-only on purpose — no world is built. The interp parse is a file read and the sun
+    /// node is a gamez lookup, so this stays a fast suite rather than a third full eight-chapter
+    /// world sweep beside <c>destructible-census</c> and <c>collision-visibility</c>.</para></summary>
+    private static void LensFlareGates(TestContext ctx)
+    {
+        ctx.RequireData(ctx.InterpPath, $"interp.json");
+        int withFlare = 0;
+        foreach (var (chapter, _, _) in Census)
+        {
+            bool expected = chapter is "C2" or "C3";
+
+            var slots = LensFlareRig.FlareTextureNames(ctx.InterpPath, chapter);
+            ctx.Same(expected ? 4 : 0, slots.Count, $"{chapter} LensFlareTexture slots");
+
+            string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+            ctx.RequireData(gamezPath, $"{chapter} gamez");
+            var gamez = GameZ.Load(gamezPath);
+            int sunNodes = 0;
+            foreach (var n in gamez.Nodes)
+            {
+                if (string.Equals(n.Name, "sun", System.StringComparison.OrdinalIgnoreCase))
+                    sunNodes++;
+            }
+
+            ctx.Same(expected ? 1 : 0, sunNodes, $"{chapter} gamez sun node");
+            // The gates must not merely each be right — they must AGREE. A chapter with textures
+            // and no sun (or the reverse) is data telling us something we have not decoded, and
+            // the rig logs a warning for exactly that case.
+            ctx.Check(slots.Count > 0 == sunNodes > 0, $"{chapter} both flare gates agree");
+            if (expected)
+            {
+                withFlare++;
+                ctx.Note($"{chapter} flare slots: {string.Join(",", slots)}");
+            }
+        }
+
+        ctx.Same(2, withFlare, $"chapters authoring a lens flare");
+        // ⚠ C2's flare is PREDICTED, not verified: the data says it has one and there is no
+        // footage of it. Only C3 was captured (CAP-13).
+        ctx.Note($"C2's flare is predicted from data only — no capture of the original exists");
     }
 
     /// <summary>The authored STOP_SEQUENCE stops must actually run — nothing else in the gate

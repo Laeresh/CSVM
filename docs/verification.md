@@ -26,6 +26,7 @@ and leave gaps when retiring old ones.
 - **METHOD-16** — **After restoring inputs, force or verify the rebuild.**
 - **METHOD-17** — **Use `git diff` to prove temporary edits are restored.**
 - **METHOD-19** — **Disable later mechanisms that would repair a deliberately restored fault.**
+- **METHOD-20** — **Reproduce a published measurement's pose *and* its statistic, not just its subject.** A number is only comparable under the conditions it was taken in: `CAP-13`'s ring brightnesses were read off frames that already carried the sun wash, which composites toward white and scales every difference by (1−α), and its script reports the *brightest pixel* in a window where a median around the annulus reads systematically lower. Matching the subject but not the pose or the estimator produces a confident calibration that is wrong in a direction nothing reveals (BL-165, `analysis/bl-165-lens-flare/`).
 
 ## DIAG — chasing a symptom
 
@@ -72,6 +73,9 @@ and leave gaps when retiring old ones.
 - **SHOT-16** — **Hide capture windows; never minimize them.**
 - **SHOT-17** — **Sample transitions mid-ramp.**
 - **SHOT-19** — **Use a time series and isolate overlapping emitters.**
+- **SHOT-20** — **Locate a saturated feature by the centroid of its plateau, not by `argmax`.** On a clipped highlight `argmax` returns wherever the tie happens to break — 16 px off the sun's centre in C3 — and any position derived from it inherits that error multiplied. Ring 2.0 of the lens flare sits at twice the sun→centre vector, so it inherited double and measured as pure sky (BL-165).
+- **SHOT-21** — **Keep radial probes clear of the frame edge.** A circular sample that runs off-frame reads clamped pixels as if they were content, so a thin annulus averages to background and reports a confident zero. Place the subject diagonally when the probe radius would otherwise cross an edge (BL-165).
+- **SHOT-22** — **A full-screen effect needs an off switch before it contaminates unrelated captures.** The lens flare's wash reaches α ≈ 0.66, survives terrain occlusion and whitens the HUD, so in C2/C3 every screenshot with the sun near centre becomes useless for judging terrain colour, fog gradient, deck brightness or clutter density. `--no-flare` exists for the same reason `--no-fog` does (BL-165).
 
 ## GOLD — golden images
 
@@ -177,6 +181,7 @@ and leave gaps when retiring old ones.
 - **WORLD-23** — **Range-test decoded fields and corroborate their units.**
 - **WORLD-24** — **Read authored range and condition gates before placing a probe.**
 - **WORLD-25** — **A registry total counts bindings, not coverage: a larger census can mean one definition claimed objects it does not describe.** 
+- **WORLD-26** — **Anchor an effect to the object it decorates, not to a parameter that merely describes it.** C3 authors `SUNLIGHT_ORIENTATION` yaw 135 while its gamez `sun` node sits at yaw 45 — the parameter is the shading direction, not the object's position, and a flare anchored to it draws 90° from the visible sun. Anchoring to the object also survives any coordinate-conversion error, since the object and its decoration go through the same conversion (BL-165).
 
 ## SHELL — Windows, PowerShell, and processes
 

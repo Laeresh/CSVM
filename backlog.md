@@ -1436,6 +1436,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   was recorded — check with them before assuming the chase-cam layering holds there. Full
   record: `playtest/CAP-13/README.md`.
 
+- `BL-324` `[Bug]` **Our sun shines from a hardcoded direction; every mission authors one and we
+  read none of it.** `Launcher.SetupLighting` builds the world's only `DirectionalLight3D` at a
+  fixed `RotationDegrees (-45, 150, 0)`, with the comment "shine onto the -Z (nose) side" — i.e.
+  the angle was picked to make the *plane model* read well, not to match any chapter. Meanwhile
+  every mission's `weather.zrd.json` carries a per-zone **`SUNLIGHT_ORIENTATION [pitch, yaw,
+  roll]°`** (`docs/formats/weather.md`, the item-6 decode), and it varies by chapter: C1
+  `[-25, 90]`, C1B/C1C/C2/C2B `[-65, 90]`, C3 `[-25, 135]`, C4 `[-45, 135]`, C5 `[-25, -135]`
+  (census 2026-08-08 over all 54 weather files; effectively constant across a chapter's zones,
+  C2 varying by mission). `Weather.cs` parses `SUNLIGHT_DIFFUSE`/`_AMBIENT` for the `WorldLight`
+  scalar and **never reads `ORIENTATION` at all** — zero hits install-wide.
+  *Why it is visible now:* `BL-165` landed the lens flare anchored to the gamez `sun` node, which
+  in C3 sits at **yaw 45**. The authored sunlight says **yaw 135**, and our light says **yaw 150**.
+  So in C3 the flare, the sun disc and the shadows currently point three different ways; the flare
+  and the disc agree with each other (both come from the node) and the light agrees with neither.
+  ⚠ **Traps.** (a) Do **not** "fix" this by re-anchoring the flare to `SUNLIGHT_ORIENTATION` —
+  that was tried and rejected on evidence: the parameter is the shading direction, not the sun
+  object's position, and the flare would draw 90° from the visible disc (`WORLD-26`,
+  `analysis/bl-165-lens-flare/FINDINGS.md`). The open question is whether the *light* should move,
+  not the flare. (b) The world is rendered fullbright with a per-mission scalar
+  (`WorldLight`/`SunIncidence` 0.46), so this light mostly shades **aircraft**, not terrain —
+  expect the change to show on planes and their shadows, and to be nearly invisible on the ground.
+  (c) Whether the node bearing and the authored orientation *should* agree is itself unsettled: if
+  the original's shadows fall along `SUNLIGHT_ORIENTATION` while its sun billboard sits elsewhere,
+  then the original disagrees with itself too and we should reproduce that, not reconcile it.
+  *Needs an original-game A/B:* a C3 pose showing aircraft shading and shadow direction against the
+  visible sun, which settles (c) before any value is adopted.
+
 - `BL-305` `[Bug]` **C5's city blocks are packed edge to edge where the original shows pavement
   between buildings — within-block clutter density/alignment is wrong.** Found by `CAP-22`
   (2026-08-07) while closing `BL-250` (the doubled-district bug, landed the same day — evidence
