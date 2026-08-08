@@ -153,7 +153,11 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — deck mesh brightness (BL-118 core)
 
-21. ☐ C21 — Find the original's underside mechanism (research)
+21. ☑ C21 — Find the original's underside mechanism: the deck is the one world surface the
+    original dims by the mission's SUNLIGHT and we do not (`lighting: false` gates it off);
+    210.5 × 0.802 = 168.9 vs the original's 167.7. Also: the ceiling's fade is ordinary authored
+    fog (the fog-exempt/baked-fade lead is refuted, C25) and `DeckCeilingHeight` re-estimates to
+    **135 m**, not 400 — needs a user verdict, see the section
 22. ☐ C22 — Implement the underside darkening
 23. ☐ C23 — Re-measure the tops per population; blend the mesh↔sprite cut
 24. ☐ C24 — Final match: both stills within the bar; mint PT + night-moonlit BL; close `BL-118`
@@ -3028,6 +3032,14 @@ fog fully saturates at 4 km — under our semantics a fogged deck cannot do that
 original's ceiling is plausibly **fog-exempt with its own baked fade toward `FOG_COLOR`**, the
 same authored pattern as B18's skirt (the horizon is built from pieces that already wear the
 fog's colour). C21's research pass owns confirming this from the stills before this item builds.
+— ⚠ **`C21` REFUTED this lead (2026-08-08): read its section before starting here.** The deck
+tiles author `fog: true` (the `cloudsprite` cards beside them author `fog: false`), and the
+original river still's ceiling fits the **authored** 1000→4000 m linear ramp to 1.3 units rms.
+The 12.6 km reading is retired — 19 px is where the authored far range saturates, not where a
+long fade ends, and it read as 12.6 km only through A7's `f·h`, which `C21` puts ~3× too large.
+`C21`'s verdict is that this item becomes **`K` = 135 m, then verify** — no extension, no
+authored fade, no `fog: false` — with the extension needed again only if the user rejects the
+`K` change (which alters an approved look, so it is a user decision).
 
 **Approach.** Per C21's verdict: extend the below-band ceiling well past the current rim (A5's
 map-edge-extension precedent — virtual tiles, deterministic, bounded by where the fade ends) and
@@ -3050,7 +3062,226 @@ stills-read contradicts the fog-exempt hypothesis, build what the stills show in
 (`DeckCeilingHeight`) may change under C21's re-estimate — re-verify the ceiling look at 192 m
 AND ~900 m so a K change and the extension are not conflated.
 
-## C21 ☐ Find the original's underside mechanism (research)
+## C21 ☑ Find the original's underside mechanism (research)
+
+### VERDICT (2026-08-08 — research only, no `.cs`, no shader, no `weather.md` touched)
+
+**The mechanism is the mission's own SUNLIGHT world dimming, and we are the ones not applying
+it.** `cloudlayer.tif` has a mean luminance of **210.54** (64×64, sd 8.05, range 190–223); the
+original's underside measures **167.7–169.7**; and `210.54 × 0.802 = 168.9`, where **0.802 is
+`WeatherState.WorldLight` for C1/IA1** (`AMBIENT 0.25 + DIFFUSE 1.2 × SunIncidence 0.46`). Our
+deck renders the **raw texture, modulated by nothing at all** — measured, not inferred:
+`--tex-override=cloudlayer.tif=808080 --no-fog` at CAP-12's own underside pose reads back
+**RGB(128,128,128) on 100.0 % of the box** (210,432 px, one value). The reason is one line:
+`SceneBuilder` gates `ALBEDO *= csky_world_light` on the model's `lighting` flag, and all 144 C1
+deck tiles author **`lighting: false`**.
+
+**This is a regression against a value that was once matched, not a new fit.** `SunIncidence`
+0.46 was *calibrated on this very surface*: `Flight/Weather.cs`'s own comment — "one TUNE
+calibrated to the C1/IA1 reference (A=0.25,D=1.2 → 0.80, **matching the original's deck 210→169**
+and terrain →~57)" — and `PLAN-M2-polish-2` recorded the result as "deck/sky **168 vs 169**". The
+deck left that match when the `lighting`/`fog` flags became shader variants. So C22 restores a
+calibrated number; it does not invent one.
+
+**Three independent confirmations, none of them the same measurement:**
+
+1. **Arithmetic.** Ours unfogged at CAP-12's box **212.74** → × 0.802 = **170.6**; original
+   **168.1** (same box) / 169.7 / 168.7 (the two wide side bands).
+2. **The fogged still fits it as a free parameter.** The `f·h` fit below (`fitfog.py`) leaves the
+   ceiling's own unfogged colour `L0` free and recovers **168.1–169.2** from the original river
+   still's near-horizon ramp alone — a number arrived at from the *fog*, with the texture never
+   consulted.
+3. **C4 is the cross-chapter control and it passes.** C4's `WorldLight` is
+   `clamp(0.5 + 1.5×0.46) = 1.19 → **1.0**`, so the mechanism predicts **no change to C4's deck**
+   — and C4's deck already matches: original 192.0/191.9 (`t100`) and 192.8/192.1 (`t85`) against
+   ours 191.6. A fixed "underside is 0.8× darker" rule would have broken C4 by −45.
+
+**The three candidates in the brief are all dead, by data read before any probe:**
+
+| candidate | how it died |
+|---|---|
+| authored per-face/vertex data we ignore (B18's restated-colour shape) | **All 144 C1 deck polygons carry vertex colours (255,255,255)** and a **`Textured`** material (`cloudlayer.tif`), so `VertexColorsRestateMaterialColor` cannot apply and there is nothing for a modulate to mishandle. (C4's 144 *do* carry 192,192,192 — and we already apply it correctly: the same flat override reads back **95** = 128 × 192/255, which is also the empirical proof that our vertex modulate lands in **gamma** space.) |
+| a directional / ambient-only term on a down-facing sheet | ambient-only is `0.25 / 0.802 = 0.31` of the lit value ⇒ **≈52**, not 168. And the mechanism must not be face-dependent: it is a per-mission scalar, which is what makes C4 come out right. |
+| a texture difference | none: our own unfogged render (212.7) reproduces the extracted texture's mean (210.5) to 2.2 units, so the texture we ship *is* the one the original draws. |
+
+**It must be DECK-LOCAL, and the two able-to-fail controls say why.** The **dome** is also
+`lighting: false` and is *correctly* undimmed — B12/B17 measure its apex at 74.3 original vs 75.5
+ours. The **`cloudsprite` field** is also `lighting: false` and also approximately undimmed:
+`cloudsprite1`/`cloudsprite2` are one `SphericalY` facade each, vertex colours **240,240,240**,
+textures `cloud1`/`cloud2` (alpha-weighted mean **236.65**) ⇒ `236.65 × 240/255 = 222.7`, and we
+render **222.3**; the original's near tops read 209–213, which a ×0.802 would have put at 178.6.
+So the fix is a `forceLit` on the deck path beside the `forceDoubleSided` that is already there
+(`WorldBuilder.Add`) — **never** a change to the `lighting` gate itself, and never to
+`csky_world_light`.
+
+### Predicted CAP-12 boxes under the mechanism — written before C22 exists
+
+Populations were separated first, because three of the four boxes turn out not to contain the
+deck mesh at all. `cloudlayer.tif` skins the **mesh alone** (SHOT-21's texture-sharing trap is
+`cloud1`/`cloud2` = `fvol` clutter + `cloudparent`, which the mesh does not use), so a flat-red
+override gives an exact per-pixel mesh mask (`.scratch/c21/population.py`):
+
+| CAP-12 pose | mesh % of the box | what the box actually measures |
+|---|---|---|
+| 670 m (`t20`, 2200 ft) | **79.8 %** (tight box) / 41.9 % (wide) | the deck **mesh** |
+| 1040 m (`t30.5`, 3430 ft) | **0 %** | the whiteout overlay, flat **242.34**, sd 0.00 |
+| 1160 m (`t33`/`t124`) | **0.0 %** | 100 % `cloudsprite` field |
+| 1700 m (`t97`, 5572 ft) | **0.0 %** | 100 % `cloudsprite` field |
+
+⚠ **That resolves `BL-118`'s tops caveat outright: the "tops from above" box was always a pure
+SPRITE measurement**, at every above-band altitude in the ladder. C22 cannot move it, and must
+not be tuned as if it could.
+
+| box | original | ours now | **predicted after C22** | Δ vs original |
+|---|---|---|---|---|
+| **underside** 670 m (`under-L`/`under-R`) | **169.7 / 168.7** | 201.2 / 195.9 (fogged) · 212.7 / 207.2 (`--no-fog`) | **171 ± 3** (deck's own colour 170.6, fog mixes it *up* toward 176 by ≤ +2 at this pose) | **+1 … +4** ✓ |
+| underside, CAP-12's own tight box | 168.1 | 211.2 (fogged) · 212.7 (`--no-fog`) | **171 ± 2** | +3 ✓ |
+| **interior** 1040 m | 249.8 | 242.3 | **242.3 — unchanged** (0 % mesh) | −7.5 ✓ |
+| **tops** 1160 m | 204.9–213.3 | 220.9–222.6 | **220.9–222.6 — unchanged** (0 % mesh) | +9 … +18 ✗ → **C23** |
+| **tops** 1700 m | 182.7–201.2 | 205.8–219.6 | **205.8–219.6 — unchanged** (0 % mesh) | +18 … +23 ✗ → **C23** |
+
+Boxes are `.scratch/c21/capboxes.py`'s, fractional and HUD/plane-free on the original side
+(gauges x 0.13–0.21 / 0.80–0.87, aircraft x 0.28–0.72, compass band top-centre), so 1250×713 and
+1280×720 read the same. Per-chapter: **C4 is a no-op** (WorldLight clamps to 1.0);
+**C1C/C2B** both compute `0.6 + 0.4×0.46 = 0.784` and their decks would go 212 → **166.5** — no
+original below-deck footage exists for either (C1C is unreachable in Instant Action, C2B's
+CAP-11 still is above the deck), so those two are mechanism-consistent and unverifiable, and
+should be recorded as such rather than tuned.
+
+### The ceiling's fade mechanism — for `C25`. The fog-exempt/baked-fade lead is REFUTED
+
+**The original's below-band ceiling is fogged, normally, with the flown zone's own authored
+ranges — there is no exemption and no baked fade.** The deck tiles author **`fog: true`** (all
+144, both C1 and C4; the `cloudsprite` cards next to them author `fog: **false**`, so the data
+distinguishes the two and puts the deck on the fogged side). What makes it *read* as continuous
+to the horizon needs no new mechanism at all:
+
+1. its own colour (168.9) is **7 units** from `FOG_COLOR` (175), so the entire fade is a 7-unit
+   ramp — invisible as a fade; and
+2. past saturation the **dome's skirt is painted that same `FOG_COLOR`** (`B18`), so ceiling, fog
+   wall and dome are one flat tone with no seam and no sky stripe to close.
+
+**Measured, on `OriginalScreenshots/C1 IA1 Fog river.png`** (level, true horizon row 356;
+`measure.py rows`, row-mean over B15's two HUD-free column bands):
+
+| elevation above the true horizon | row-mean luminance | horizontal high-pass |
+|---|---|---|
+| 346 → 29 px | **168–172, flat** (no trend over 300 rows) | 0.55–0.93 — full mottling throughout |
+| 29 → 17 px | monotone **172 → 175.0** | 0.42 → 0.03 |
+| **17 px → the horizon → −37 px** | **175.00, DEAD FLAT** | **exactly 0.000** |
+| below −37…−41 px | terrain returns | rises sharply |
+
+The −41 px terrain onset reproduces `B15`'s own "terrain 41 px below the true horizon", which
+is what validates the horizon row this whole reading rests on.
+
+**Fit** (`.scratch/c21/fitfog.py`): `L(e) = mix(L0, FOG, φ)` with `φ = clamp((f·h/e − 1000)/3000)`
+— the **authored** `FOG_RANGES` 1000→4000 and the **linear** ramp `B15` landed — returns
+`f·h = 80,000–91,500 px·m`, `L0 = 168.1–169.2`, residual **1.0–1.3 units rms** over ~200 rows.
+The able-to-fail control is our own fogged render at the same pose with `K = 400 m` **known**: it
+returns 273,500–290,000 against the true 240,000 (+14…+21 % bias), and its saturation elevation
+is **exactly 60 px** = `f·400/4000` (rows 300–320 read 176.00, sd 0). The instrument works and it
+is honest about its own bias.
+
+**So `B15`'s "the original's deck texture is readable to ~12.6 km" is retired.** The 19-px reach
+is not where a long fade ends — it is where the **authored 4000 m far range saturates**. 12.6 km
+came from dividing that elevation by A7's `f·h = 2.4e5`, which this item's fit puts ~3× too
+large. There is nothing for C25 to invent.
+
+**Numbers C25 needs**, all at C1/IA1 zone2 (`FOG_RANGES` 1000–4000, `FOG_COLOR` 175/176):
+
+- fade **onset** at `d = 1000 m` ⇒ elevation `f·K/1000`; **completion** at `d = 4000 m` ⇒
+  `f·K/4000`. Original: onset ≈ 70 px, completion **≈ 17.5 px**. Ours today (K = 400): onset 240,
+  completion **60 px**. At K = 135 ours becomes onset 80, completion **20 px**.
+- the sheet's **rim** sits at `f·K/6144` (half of the 144-tile, 12,288 m span, camera-followed).
+  Ours measures **exactly** where that predicts — the deck ends at row 321 = **39 px**, against
+  `599.1 × 400 / 6144 = 39.0`. **At K = 135 the rim moves to 13 px, i.e. *inside* the
+  fog-saturated zone, and can never be seen.** The original's own frame is only self-consistent
+  that way: at K = 400 its rim would sit at 39 px, where the original still plainly shows deck
+  (row 318: luminance 170.5, high-pass 0.69).
+- **the sky stripe is real and it is ours alone**: in `.scratch/c21/underside-nofog.png` /
+  `-fog.png` the rows between our rim (e ≈ 38) and the horizon read **143–174** — the dome wall,
+  which `B16` correctly un-fogged — while the original reads a flat 175.00 there. So the stripe is
+  a **K** artifact, not a missing extension: correct K and it closes itself.
+
+⇒ **C25's likely shape changes: no ceiling extension, no authored fade, no `fog: false` on the
+deck. Correct `K`, then verify.** If the user rejects the K change (below), C25's extension
+becomes necessary again — that is the fork.
+
+### K re-estimate — 135 m (bracket 110–155), superseding A7's 400 m, but it needs a user verdict
+
+| estimator | value | what it rests on |
+|---|---|---|
+| **fog-ramp fit (this item)** | **f·h 80–91.5 k ⇒ K = 135–154 m**; bias-corrected against the control, **115–132 m** | authored `FOG_RANGES` + the linear ramp + `FOG_COLOR`; **no texture and no cross-engine comparison**; control passes |
+| A7's apparent mottling scale, re-run on a properly matched **level** pair | 580–746 /u original vs 539–833 /u ours ⇒ K 279–618 m | a cross-*engine* comparison of texture appearance |
+| B15's arithmetic hint | ≈128 m | the same saturation reading, done by hand |
+
+**The two genuinely disagree by 3×, and this item does not average them — it says why the
+mottling estimator is the weaker one.** Two reasons, both new:
+
+1. **A7's calibration was a coincidence.** It reported "the recovered world period comes back
+   1062 m against the authored 1024 m tile (3.7 %)" as proof the method reproduces a tile it was
+   never told about. But the deck tiles' **authored UVs span 0.5 × 0.5 per 1024 m tile** (four
+   quadrant origins in a 2×2 checker — read from `models.json`, 144/144 in both C1 and C4), so
+   `cloudlayer.tif` repeats every **2048 m**, not 1024. The estimator locked onto the second
+   harmonic; matching "the tile" meant nothing.
+2. **Our own render is heavily mip-blurred at grazing angles and the original is not.**
+   `.scratch/c21/mottling-AB.png` (contrast-stretched, same rows, same pose) shows the original's
+   ceiling crisp and multi-scale and ours smoothed into broad bands. A zero-crossing rate on a
+   blurred profile under-counts, which biases the *ratio* — and therefore K — upward. The
+   fog-ramp fit reads a row **mean**, which no filter can move.
+
+**Recommendation: `DeckCeilingHeight = 135 m` for C22/C25 — with an A/B at the controls before it
+lands.** Confidence: high on the arithmetic, **medium on the decision**, because A7's `K = 400`
+carries a user "it looks a lot better. approved." at the controls, and 135 m makes the apparent
+mottling ~3× coarser. That is a visible change to an approved look, and it is the one thing in
+this item a measurement cannot settle. C25 should shoot 135 / 400 at the river pose beside the
+original and put it to the user.
+
+### The per-population measurement protocol for C22/C23
+
+1. **Mesh vs everything else — by texture, and it is legitimate.** `SHOT-21` bans
+   `--tex-override` for `fvol`-vs-`cloudparent` because both wear `cloud1`/`cloud2`; the deck
+   mesh wears **`cloudlayer.tif`** and neither other population does. Shoot each pose twice
+   (natural + `--tex-override=cloudlayer.tif=ff0000`), build the mesh mask from the flat frame
+   and take per-population means through it on the natural one — `.scratch/c21/population.py`
+   does exactly this and printed the table above. ⚠ **C4 is the exception**: its deck wears
+   `Sky1.tif`, which its **skydome also wears**, so on C4 separate by pose (from below the band
+   the deck fills the sky) rather than trusting the mask.
+2. **`fvol` clutter vs `cloudparent` — by altitude/position only** (`SHOT-21`, `A6`). C1's
+   `cloudparent` geometry spans 1069.7–1875.6 m on a 1024 m X/Z grid at Y = 1107.2; the `fvol`
+   slab is 970–1090.5. Below the band `A7`'s gate culls both, so every below-band box is pure
+   mesh by construction. Keep both frames on the same side of the map edge (CAP-12's own caveat).
+3. **Boxes**: `.scratch/c21/capboxes.py` — `under-L`/`under-R` (0.05–0.40 / 0.60–0.95 × 0.07–0.45),
+   `tops-L`/`tops-R`/`tops-M`, `inside`. Fractional, HUD- and plane-free on the original side.
+4. **Ladder**: `--freecam --chapter=C1 --det --mute --pos=-4974,{670,1040,1160,1700},-3861
+   --direction=-1,0,0`, against `t20` / `t30.5` / `t33`+`t124` / `t97`. Add `--no-fog` to read a
+   surface's own colour before the fog mix — that is what makes 212.7 → 170.6 a checkable step.
+
+### Two things that are NOT this item's, recorded so they are not re-found
+
+- **C4's deck renders untextured-white × its 192 vertex colour.** `--tex-override=Sky1.tif=808080`
+  reads back 95 (= 128 × 192/255, so the vertex colour is applied) while the natural render is a
+  flat **192** (= 255 × 192/255), i.e. `base_col` is white — and C4 ships `texture/sky1.png` as a
+  16×16 **195**-gray while every `rtexture*/sky1.png` is pure **255** white. The product lands on
+  192, which is exactly what the original measures, so **do not "fix" the texture without
+  re-measuring** — a 195-gray base would put C4's deck at 147 and miss the original by −45.
+- **The reach residual at the river pose is `K`, not brightness and not fog.** Fog saturation sits
+  at `f·K/4000` whatever the deck's colour is, so C22 alone cannot move 64 px toward 19 px; only
+  `K` can. `B15`/`B17` attributed the *luminance* half to `BL-118` correctly; the *elevation* half
+  is this item's K.
+
+### Files
+
+`.scratch/c21/` — `shoot.ps1` + `shoot2.ps1` (the probe set, every pose documented in-file),
+`measure.py` (flat/box/rows), `capboxes.py` (the matched HUD-free boxes), `population.py` (the
+mesh-mask split), `fitfog.py` (the `f·h` fit **and its able-to-fail control**), `ceiling_h.py`
+(a horizontal-ACF estimator that did **not** work — kept with its own negative result:
+the original's high-frequency content has a screen-fixed ~40 px correlation length at every
+elevation, so it is not perspective-scaled and cannot measure `h`), `mottling-AB.png`, and 20
+renders with their per-shot `weather` log lines (METHOD-15). `docs/PLAN-overcast-match.md` (this section, the checklist line, and a pointer line in
+`C25`). No engine code, no shader, no `weather.md`, no `PROJECT_CONTEXT.md`, no `backlog.md`.
+
+### Original brief (kept for reference)
 
 **Goal.** A named mechanism for the original's dark (167) mottled underside vs matched tops —
 directional lighting on the sheet, authored per-face data, or something else — with the evidence.
