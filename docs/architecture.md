@@ -461,8 +461,15 @@ clutter (grown from `ClutterBuilder.ExportedKinds`) continuing the world past th
 ⚠ **`BlockCells` is per chapter** — `DefaultBlockCells`: 2 on C1/C2/C4, 1 on C5 and on the four
   water-bordered chapters (C1B/C1C/C2B/C3), whose borders were measured to be water-only, which
   fixes them at 1 and makes the depth moot. Unknown chapters fall back to 1.
-⚠ C5 has a void strip through the continuation (`BL-316`) — present in BOTH fold modes, so it is a
-  tile-coverage defect, not a repetition artefact.
+⚠ **A cell's ground is not always ONE tile.** `AdoptComplements` runs after `ScanTiles`: a cell whose
+  accepted tiles do not span it adopts the full-cell-spanning FLAT strips `ClassifyGroundMesh`
+  refused for being thin. Without it three C5 border cells — a base tile plus a 256–384 m water
+  strip completing it — left a hole their own width in every copy: sky, no collision, outward
+  forever (`BL-316`, fixed). ⚠ Keyed on the CELL being short, never on the strip alone: flatness by
+  itself adopts hangar floors and rooftops, and the surface class cannot separate them either
+  (`cblock*`, the city GROUND texture, classifies as `buildings`). `ClassifyGroundMesh` and
+  `IsCompletionStrip` are pure statics pinned by `MapEdgeTileTests`; `--dump-tilegrid` writes the
+  per-cell coverage census that settled it — 16 adoptions on C5, 0 on the other seven.
 ⚠ Extension sprites carry no collider (matching the map); buildings DO — one lazy `clutter_bld_ext`
   body per cell attaches the shared `KindExport.CollisionShape`; 3D kinds mirror as whole transforms.
 ⚠ The window is the UNION of all player cameras' neighbourhoods — one focus strands the other pane.

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Text.Json;
 using CSVM.Utils;
 using Godot;
 
@@ -40,9 +41,17 @@ namespace CSVM.Mech3;
 /// and repeat are both pure per-cell transforms and cost a few lines each; sharing a vertex row
 /// is mesh surgery — welding or re-stitching edge vertices in <c>BuildCell</c>. It has not been
 /// needed: plain repeat at the per-chapter block shows no step and no gap at the controls, the
-/// tile meshes evidently spanning their cells exactly. ⚠ Except on C5, where a void strip runs
-/// through the continuation — but that is present in BOTH fold modes, so it is not a repetition
-/// artefact; it is `BL-316`.</para>
+/// tile meshes evidently spanning their cells exactly.</para>
+///
+/// <para>⚠ <b>A cell's ground is not always ONE tile</b> — and that was `BL-316`. Three C5 border
+/// cells are a base tile plus a flat water strip 256–384 m across that completes it, and the strip
+/// falls under <see cref="ClassifyGroundMesh"/>'s 0.4-cell floor. Dropped from the scan, it left a
+/// hole its own width in every copy: sky, no collision, wide enough to fly through, outward
+/// forever. <see cref="AdoptComplements"/> is the fix — a cell short of ground adopts the
+/// full-cell-spanning flat strips the classifier refused. ⚠ It is keyed on the CELL being short,
+/// never on the strip alone: flatness by itself adopts hangar floors and city-block rooftops
+/// (<c>cblock*</c>, the city ground texture, classifies as <c>buildings</c>, so the surface class
+/// cannot separate them either). <c>--dump-tilegrid</c> is the census that settled all of this.</para>
 ///
 /// <para>The window covers all cells within <see cref="Rings"/> of the focus (the camera),
 /// excluding in-map cells (the real world renders those). It re-diffs only when the focus
@@ -72,6 +81,15 @@ public sealed partial class MapEdgeExtender : Node3D
     // (C1 zone2: 4000 m ≈ 4 × 1024 m tiles) plus one margin ring, so the fog border never
     // creeps onto the void even mid-cell and regardless of the fogRangeFactor TUNE. TUNE.
     private const int Rings = 5;
+
+    // The ground-tile span gate, as fractions of a cell: the floor admits the split half-tiles,
+    // the ceiling keeps multi-cell sheets out. ⚠ Named, not inlined, because they are the numbers
+    // `BL-316` is about — a real C5 border strip falls under the floor and is dropped from the
+    // continuation. Do not retune them without reading the --dump-tilegrid census first: lowering
+    // the floor far enough to admit a strip also admits every prop mesh at the border, and
+    // BuildCell would then copy those, which the design forbids.
+    private const float MinSpanFraction = 0.4f;
+    private const float MaxSpanFraction = 1.35f;
 
     // Tile-grid overlay palette, indexed by repetition-band parity: [0] both axes on an even band,
     // [1] x odd, [2] z odd, [3] both odd. Four strongly separated hues, because at TintStrength a
@@ -103,12 +121,29 @@ public sealed partial class MapEdgeExtender : Node3D
     // colour the real world's own tiles through the same grid maths the extension uses, keyed on
     // the same AnimRuntime.IndexMeta stamp the built scene already carries.
     private readonly Dictionary<int, (int, int)> _tileCell = new();
+    // Flat sheets the classifier rejected for being thin, kept per cell as candidates for
+    // AdoptComplements — the `BL-316` fix. Cleared once adoption has run.
+    private readonly Dictionary<(int, int),
+        List<(int Idx, GameZNode Node, Transform3D ParentXf, Vector3 WorldCenter, Vector3 Span)>> _spares = new();
+    // Node indices adopted by AdoptComplements, so the census can say so rather than reporting
+    // them as rejections that are, since the fix, nothing of the kind.
+    private readonly HashSet<int> _adopted = new();
+    // Per cell, the world-space X/Z bounds its ACCEPTED tiles reach between them. ⚠ A union of
+    // AABBs, not a true union of footprints: two disjoint tiles that between them touch all four
+    // sides read as covering, which no chapter does (measured, all eight).
+    private readonly Dictionary<(int, int), (float MinX, float MaxX, float MinZ, float MaxZ)> _coverage = new();
     private readonly IReadOnlyList<ClutterBuilder.KindExport>? _clutter;
 
     private readonly Dictionary<(int, int), Node3D> _live = new();
     // The focus cells the current window was built around — one per player (splitscreen serves
     // every pane from one window). Empty until the first Update.
     private readonly List<(int, int)> _centerCells = new();
+
+    // --dump-tilegrid's raw material: one row per node ScanTiles CONSIDERED — every Object3d with
+    // a mesh it reached, accepted or rejected, with the reason. Null unless the census was asked
+    // for. This is the only view in which a rejection is visible: the tile-grid overlay tints the
+    // accepted set, so what it does NOT paint is exactly what the continuation will be missing.
+    private List<CensusCandidate>? _census;
 
     private int _blockCells = 1;
     private bool _repeat = true;
@@ -131,6 +166,32 @@ public sealed partial class MapEdgeExtender : Node3D
         _tileX = (world.AreaRight - world.AreaLeft) / _cols;
         _tileZ = (world.AreaBottom - world.AreaTop) / _rows;
         Name = "map_edge";
+    }
+
+    /// <summary>Why <see cref="ClassifyGroundMesh"/> did, or did not, take a node as a ground tile.
+    /// Recorded per candidate by the <c>--dump-tilegrid</c> census — the tile-grid overlay shows
+    /// only the accepted set, so a rejection is invisible at the controls except as the void it
+    /// leaves past the map edge.</summary>
+    public enum TileVerdict
+    {
+        /// <summary>Binned into its cell and copied by every extension cell that folds to it.</summary>
+        Accepted,
+
+        /// <summary>Not an <c>Object3d</c>, or its mesh index does not resolve, or it has no
+        /// vertices — not a tile candidate at all.</summary>
+        NoMesh,
+
+        /// <summary>A polygon carries a cloud/sky texture. The cloudlayer deck tiles are cell-sized
+        /// too, so this is what keeps the sky out of the ground.</summary>
+        SkyOrCloud,
+
+        /// <summary>Spans less than <see cref="MinSpanFraction"/> of the cell on X or Z. The
+        /// `BL-316` suspect: a real border terrain strip, dropped for being thin.</summary>
+        TooSmall,
+
+        /// <summary>Spans more than <see cref="MaxSpanFraction"/> of the cell on X or Z — a
+        /// multi-cell sheet, which the per-cell copy has no way to place.</summary>
+        TooLarge,
     }
 
     /// <summary>Extension cells currently instantiated (diagnostics).</summary>
@@ -230,6 +291,85 @@ public sealed partial class MapEdgeExtender : Node3D
         int m = (((i - a) % period) + period) % period;
         return m < b ? (a + m, false) : (a + ((2 * b) - 1 - m), true);
     }
+
+    /// <summary>The ground-tile decision, as a pure function of ONE mesh — its vertices, its
+    /// polygons' texture names and the cell size. Extracted from <see cref="IsGroundTile"/> so it
+    /// can be pinned by test the way <see cref="FoldAxis"/> is: this classifier decides what the
+    /// world looks like past the map edge, and until `BL-316` no test could reach it.
+    ///
+    /// <para><b>What a rejection costs.</b> A rejected node is absent from the per-cell tile map,
+    /// so <see cref="BuildCell"/> never copies it and every extension copy of its cell carries a
+    /// hole exactly its footprint — outward, forever, with no collision. That is `BL-316` on C5.
+    /// The verdict is returned rather than a bool precisely so the <c>--dump-tilegrid</c> census
+    /// can say WHY, which the accept-only tile-grid overlay cannot.</para>
+    ///
+    /// <para><paramref name="center"/> is the mesh AABB centroid in node-local space and
+    /// <paramref name="span"/> its full extent in metres — both filled on every verdict except
+    /// <see cref="TileVerdict.NoMesh"/>, so a rejected candidate still reports its footprint. The Y
+    /// extent is carried for the census's benefit, not the decision's: a dropped ground strip is
+    /// flat and a dropped lamp post is not, which is the distinction a span floor cannot make.</para></summary>
+    public static TileVerdict ClassifyGroundMesh(IReadOnlyList<Vector3> vertices,
+        IEnumerable<string?> polygonTextures, float tileX, float tileZ,
+        out Vector3 center, out Vector3 span)
+    {
+        center = Vector3.Zero;
+        span = Vector3.Zero;
+        if (vertices.Count == 0)
+        {
+            return TileVerdict.NoMesh;
+        }
+        Vector3 min = vertices[0], max = vertices[0];
+        foreach (var v in vertices)
+        {
+            min = min.Min(v);
+            max = max.Max(v);
+        }
+        center = (min + max) * 0.5f;
+        span = max - min;
+        float spanX = span.X, spanZ = span.Z;
+        // Before the span gate, as it always was: the cloudlayer deck tiles are cell-sized too, so
+        // size alone cannot tell them from ground. Node names are unreliable here (cloud layers
+        // ship under generic names like 'g27517') — WorldBuilder.IsCloudOrSkyTexture is the rule.
+        foreach (var tex in polygonTextures)
+        {
+            if (tex != null && WorldBuilder.IsCloudOrSkyTexture(tex))
+            {
+                return TileVerdict.SkyOrCloud;
+            }
+        }
+        if (spanX < MinSpanFraction * tileX || spanZ < MinSpanFraction * tileZ)
+        {
+            return TileVerdict.TooSmall;
+        }
+        if (spanX > MaxSpanFraction * tileX || spanZ > MaxSpanFraction * tileZ)
+        {
+            return TileVerdict.TooLarge;
+        }
+        return TileVerdict.Accepted;
+    }
+
+    /// <summary>Whether a mesh the classifier dropped for being thin looks like a strip of ground
+    /// that COMPLETES a cell — the `BL-316` shape. Two conditions, and both are needed:
+    ///
+    /// <para><b>Flat</b> — shorter than it is wide on both horizontal axes, which separates a strip
+    /// of ground from an upright object without a size threshold. C5's void-causing water strips
+    /// measure 0.0 m tall over 256–1024 m of ground; <c>ap_lightpole.flt</c> is tens of metres over
+    /// a footprint of centimetres. Strict, so a degenerate 0x0x0 marker gizmo is not a sheet.</para>
+    ///
+    /// <para><b>Full-cell on one axis</b> — a strip that fills a cell's gap runs the whole way
+    /// across it; a building floor, roof or awning does not. ⚠ This is the condition that carries
+    /// the fix, and it was NOT obvious: flatness alone adopted 89 nodes on C5, most of them hangar
+    /// floors and city-block rooftops, because <c>cblock*</c> — the city GROUND texture — classifies
+    /// as <c>buildings</c>, so the surface class cannot separate them either. Measured across all
+    /// eight chapters: every real completion strip spans a full cell on one axis, and no building
+    /// part reaches 0.63 of one.</para>
+    ///
+    /// <para>A qualifying mesh is a CANDIDATE for <see cref="AdoptComplements"/>, never an
+    /// acceptance on its own — whether a strip is owed a copy depends on whether its cell is short
+    /// of ground, which one mesh cannot say.</para></summary>
+    public static bool IsCompletionStrip(Vector3 span, float tileX, float tileZ) =>
+        span.Y < span.X && span.Y < span.Z
+        && (span.X >= 0.999f * tileX || span.Z >= 0.999f * tileZ);
 
     /// <summary>Re-points the continuation at a different block depth or fold mode, rebuilding the
     /// whole window. <b>Debug/prototype path only</b> — this frees and rebuilds every live cell in
@@ -340,8 +480,11 @@ public sealed partial class MapEdgeExtender : Node3D
     /// Clamped to the grid, so the caller may pass anything.</param>
     /// <param name="repeat">Initial <see cref="RepeatInsteadOfMirror"/>; true is the original's
     /// behaviour, <c>--map-edge-mode=mirror</c> is what turns it off.</param>
+    /// <param name="census">Record every tile candidate and its <see cref="TileVerdict"/> for
+    /// <see cref="WriteCensus"/> (<c>--dump-tilegrid</c>). Off in a normal session: it is a few
+    /// thousand rows nothing would read.</param>
     internal static MapEdgeExtender? Create(GameZ gamez, SceneBuilder scene, GameZNode world,
-        ClutterBuilder? clutter, int blockCells = 1, bool repeat = true)
+        ClutterBuilder? clutter, int blockCells = 1, bool repeat = true, bool census = false)
     {
         if (!world.HasArea || world.PartitionCols <= 0 || world.PartitionRows <= 0
             || world.AreaRight <= world.AreaLeft || world.AreaBottom <= world.AreaTop)
@@ -349,7 +492,12 @@ public sealed partial class MapEdgeExtender : Node3D
         var ext = new MapEdgeExtender(gamez, scene, world, clutter?.ExportedKinds);
         ext._blockCells = Math.Clamp(blockCells, 1, ext.MaxBlockCells);
         ext._repeat = repeat;
+        if (census)
+        {
+            ext._census = new List<CensusCandidate>();
+        }
         ext.ScanTiles(world);
+        ext.AdoptComplements();
         if (ext._tiles.Count == 0)
             return null;
         ext.BinClutter();
@@ -368,6 +516,24 @@ public sealed partial class MapEdgeExtender : Node3D
         _tileCell.TryGetValue(gamezNodeIndex, out var cell)
             ? new Color(TintFor(cell.Item1, cell.Item2), TintStrength)
             : null;
+
+    /// <summary>The <c>--dump-tilegrid</c> report (`BL-316`): every tile candidate with its
+    /// <see cref="TileVerdict"/>, plus a per-cell roll-up, as indented JSON.
+    ///
+    /// <para><b>It answers three questions at once</b>, deliberately, because the walk visits every
+    /// node either way and a second run costs a rebuild: a cell with NO accepted tile is a missing
+    /// cell; an accepted tile with <c>coverX</c>/<c>coverZ</c> below 1 is a short tile, whose copies
+    /// leave a sliver of void at every step; and an accepted cell that ALSO has a rejected
+    /// candidate is partial coverage — the copy builds something, just not all of it. The third is
+    /// what C5 shows, and the only view that can see it.</para>
+    ///
+    /// <para><c>suspect</c> marks a border cell — inside the current <see cref="BlockCells"/> band,
+    /// the only cells the continuation ever copies — that is missing, short or partial. A
+    /// non-border cell can be all three harmlessly: the real world builds it and nothing repeats
+    /// it.</para></summary>
+    /// <param name="chapter">Stamped into the report, so eight files stay tellable apart.</param>
+    /// <returns>The report text, or null when the extender was not built with a census.</returns>
+    internal string? WriteCensus(string? chapter) => BuildCensusReport(chapter);
 
     // World transform mapping source cell (sx, sz) geometry onto target cell (ix, iz):
     // pure translation on an unflipped axis, reflection about the shared mirror plane on a
@@ -571,7 +737,8 @@ public sealed partial class MapEdgeExtender : Node3D
             if (node.Kind == "Lod" && node.LodRangeMin != 0f)
                 return;
             var xf = node.Local is { } local ? parentXf * local : parentXf;
-            if (IsGroundTile(node, out var center))
+            var verdict = ClassifyNode(node, out var center, out var span);
+            if (verdict == TileVerdict.Accepted)
             {
                 var worldCenter = xf * center;
                 int cx = Mathf.Clamp(Mathf.FloorToInt((worldCenter.X - _x0) / _tileX), 0, _cols - 1);
@@ -580,6 +747,26 @@ public sealed partial class MapEdgeExtender : Node3D
                     _tiles[(cx, cz)] = list = new List<(GameZNode, Transform3D)>();
                 list.Add((node, parentXf));
                 _tileCell[idx] = (cx, cz);
+                AccumulateCoverage((cx, cz), worldCenter, span);
+            }
+            else if (verdict == TileVerdict.TooSmall && IsCompletionStrip(span, _tileX, _tileZ))
+            {
+                // A dropped strip of ground is the `BL-316` shape: a piece of terrain the
+                // classifier refuses for being thin, whose absence is a hole in every copy. Held
+                // here rather than accepted outright — whether it is owed a copy depends on its
+                // cell, which is not known until the whole scan has run (AdoptComplements).
+                var worldCenter = xf * center;
+                int cx = Mathf.Clamp(Mathf.FloorToInt((worldCenter.X - _x0) / _tileX), 0, _cols - 1);
+                int cz = Mathf.Clamp(Mathf.FloorToInt((worldCenter.Z - _z0) / _tileZ), 0, _rows - 1);
+                if (!_spares.TryGetValue((cx, cz), out var spares))
+                {
+                    _spares[(cx, cz)] = spares = new List<(int, GameZNode, Transform3D, Vector3, Vector3)>();
+                }
+                spares.Add((idx, node, parentXf, worldCenter, span));
+            }
+            if (_census != null && verdict != TileVerdict.NoMesh)
+            {
+                RecordCandidate(idx, node, xf * center, verdict, span);
             }
             foreach (var c in node.Children)
                 Walk(c, xf);
@@ -591,36 +778,109 @@ public sealed partial class MapEdgeExtender : Node3D
                 Walk(idx, Transform3D.Identity);
     }
 
+    // Widens a cell's accepted-coverage box by one tile's world-space footprint.
+    private void AccumulateCoverage((int, int) cell, Vector3 worldCenter, Vector3 span)
+    {
+        float minX = worldCenter.X - (span.X * 0.5f), maxX = worldCenter.X + (span.X * 0.5f);
+        float minZ = worldCenter.Z - (span.Z * 0.5f), maxZ = worldCenter.Z + (span.Z * 0.5f);
+        _coverage[cell] = _coverage.TryGetValue(cell, out var c)
+            ? (Math.Min(c.MinX, minX), Math.Max(c.MaxX, maxX), Math.Min(c.MinZ, minZ), Math.Max(c.MaxZ, maxZ))
+            : (minX, maxX, minZ, maxZ);
+    }
+
+    // How much of a cell its ground box spans, per axis, as a fraction of the cell — the census's
+    // coverX/coverZ. Clipped to the cell, so a tile overhanging its neighbour cannot report more
+    // than full coverage.
+    private void CoverageOf((int, int) cell, out float coverX, out float coverZ)
+    {
+        coverX = 0f;
+        coverZ = 0f;
+        if (!_coverage.TryGetValue(cell, out var c))
+        {
+            return;
+        }
+        float x0 = _x0 + (cell.Item1 * _tileX), z0 = _z0 + (cell.Item2 * _tileZ);
+        coverX = Math.Max(0f, Math.Min(x0 + _tileX, c.MaxX) - Math.Max(x0, c.MinX)) / _tileX;
+        coverZ = Math.Max(0f, Math.Min(z0 + _tileZ, c.MaxZ) - Math.Max(z0, c.MinZ)) / _tileZ;
+    }
+
+    // Whether a cell's accepted tiles reach all four of its sides. A metre of slack, because the
+    // spans are float differences of authored vertices and an exactly-cell-sized tile lands a hair
+    // either side of its bound.
+    private bool CellIsCovered((int, int) cell)
+    {
+        if (!_coverage.TryGetValue(cell, out var c))
+        {
+            return false;
+        }
+        const float Slack = 1f;
+        float x0 = _x0 + (cell.Item1 * _tileX), z0 = _z0 + (cell.Item2 * _tileZ);
+        return c.MinX <= x0 + Slack && c.MaxX >= x0 + _tileX - Slack
+            && c.MinZ <= z0 + Slack && c.MaxZ >= z0 + _tileZ - Slack;
+    }
+
+    // `BL-316`. A cell short of ground adopts the flat sheets the classifier dropped for being
+    // thin: without this, every extension copy of that cell carries a hole exactly the dropped
+    // sheet's footprint — sky, no collision, wide enough to fly through, outward forever.
+    //
+    // ⚠ The coverage test, not the sheet, is what decides. A dropped sheet in a cell the accepted
+    // tiles ALREADY span is not a hole and is not adopted — on C5 that is the two bridge/pier
+    // pieces at (9,0) and (10,0), which would otherwise repeat outward into open sea. Adoption is
+    // deliberately NOT a widening of ClassifyGroundMesh: the classifier still answers "is this a
+    // tile", and this answers the different question "is this cell missing ground".
+    private void AdoptComplements()
+    {
+        foreach (var (cell, spares) in _spares)
+        {
+            if (CellIsCovered(cell))
+            {
+                continue;
+            }
+            if (!_tiles.TryGetValue(cell, out var list))
+            {
+                _tiles[cell] = list = new List<(GameZNode, Transform3D)>();
+            }
+            foreach (var spare in spares)
+            {
+                list.Add((spare.Node, spare.ParentXf));
+                _tileCell[spare.Idx] = cell;
+                _adopted.Add(spare.Idx);
+                AccumulateCoverage(cell, spare.WorldCenter, spare.Span);
+                Log.Info("world", $"map edge: cell ({cell.Item1},{cell.Item2}) is short of ground — adopting dropped sheet '{spare.Node.Name}' ({spare.Span.X:F0} x {spare.Span.Z:F0} m). BL-316.");
+            }
+        }
+        _spares.Clear();
+    }
+
     // A ground tile: an Object3d whose own mesh is a single ~one-cell terrain/water sheet
     // (the regular 1024-unit tiles plus split half-tiles), NOT the cloudlayer deck / sky
     // sheets (one-cell too). `center` = the mesh AABB centroid in node-local space.
-    private bool IsGroundTile(GameZNode n, out Vector3 center)
+    private bool IsGroundTile(GameZNode n, out Vector3 center) =>
+        ClassifyNode(n, out center, out _) == TileVerdict.Accepted;
+
+    // The node-level half of the classifier: the Object3d requirement and the mesh lookup that
+    // ClassifyGroundMesh is deliberately free of, so the decision itself stays a pure function.
+    private TileVerdict ClassifyNode(GameZNode n, out Vector3 center, out Vector3 span)
     {
         center = Vector3.Zero;
+        span = Vector3.Zero;
         if (n.Kind != "Object3d" || n.MeshIndex < 0 || n.MeshIndex >= _gamez.Meshes.Count)
-            return false;
+            return TileVerdict.NoMesh;
         var mesh = _gamez.Meshes[n.MeshIndex];
-        if (mesh.Vertices.Count == 0)
-            return false;
+        return ClassifyGroundMesh(mesh.Vertices, PolygonTextures(mesh), _tileX, _tileZ,
+            out center, out span);
+    }
+
+    // One texture name per polygon, null where the material index does not resolve — the shape
+    // ClassifyGroundMesh and the census both read, so neither re-walks the material table.
+    private IEnumerable<string?> PolygonTextures(GameZMesh mesh)
+    {
         foreach (var poly in mesh.Polygons)
         {
-            if (poly.MaterialIndex < 0 || poly.MaterialIndex >= _gamez.Materials.Count)
-                continue;
-            var tex = _gamez.Materials[poly.MaterialIndex].TextureName;
-            if (tex != null && WorldBuilder.IsCloudOrSkyTexture(tex))
-                return false;
+            yield return poly.MaterialIndex >= 0 && poly.MaterialIndex < _gamez.Materials.Count
+                ? _gamez.Materials[poly.MaterialIndex].TextureName
+                : null;
         }
-        Vector3 min = mesh.Vertices[0], max = mesh.Vertices[0];
-        foreach (var v in mesh.Vertices)
-        {
-            min = min.Min(v);
-            max = max.Max(v);
-        }
-        float dx = max.X - min.X, dz = max.Z - min.Z;
-        if (dx < 0.4f * _tileX || dx > 1.35f * _tileX || dz < 0.4f * _tileZ || dz > 1.35f * _tileZ)
-            return false;
-        center = (min + max) * 0.5f;
-        return true;
     }
 
     // Bins the chapter's clutter sprites (world positions from the main build) into their
@@ -640,5 +900,177 @@ public sealed partial class MapEdgeExtender : Node3D
                     _sprites[(cx, cz)] = list = new List<(int, Transform3D)>();
                 list.Add((k, xf));
             }
+    }
+
+    // ---------------------------------------------------------------- census (--dump-tilegrid)
+
+    // One census row, taken at the moment ScanTiles decided. The cell is the CLAMPED bin the scan
+    // itself uses, so a candidate whose centre falls outside the grid reports the cell it would
+    // have been forced into rather than an index no cell can hold.
+    private void RecordCandidate(int idx, GameZNode node, Vector3 worldCenter, TileVerdict verdict,
+        Vector3 span)
+    {
+        var textures = new SortedSet<string>(StringComparer.Ordinal);
+        var surfaces = new SortedSet<string>(StringComparer.Ordinal);
+        if (node.MeshIndex >= 0 && node.MeshIndex < _gamez.Meshes.Count)
+        {
+            foreach (var tex in PolygonTextures(_gamez.Meshes[node.MeshIndex]))
+            {
+                if (tex == null)
+                {
+                    continue;
+                }
+                textures.Add(tex);
+                surfaces.Add(SceneBuilder.ClassifySurface(tex) ?? "default");
+            }
+        }
+        _census!.Add(new CensusCandidate
+        {
+            Node = idx,
+            Name = node.Name,
+            Verdict = verdict.ToString(),
+            Cx = Mathf.Clamp(Mathf.FloorToInt((worldCenter.X - _x0) / _tileX), 0, _cols - 1),
+            Cz = Mathf.Clamp(Mathf.FloorToInt((worldCenter.Z - _z0) / _tileZ), 0, _rows - 1),
+            CoverX = span.X / _tileX,
+            CoverZ = span.Z / _tileZ,
+            SpanX = span.X,
+            SpanY = span.Y,
+            SpanZ = span.Z,
+            Textures = string.Join(" ", textures),
+            Surfaces = string.Join(" ", surfaces),
+        });
+    }
+
+    // The report itself, down here with the other census members; WriteCensus up top is the
+    // documented entry point.
+    private string? BuildCensusReport(string? chapter)
+    {
+        if (_census == null)
+        {
+            return null;
+        }
+        var accepted = new Dictionary<(int, int), int>();
+        var rejected = new Dictionary<(int, int), List<string>>();
+        var adoptions = new List<string>();
+        foreach (var row in _census)
+        {
+            var key = (row.Cx, row.Cz);
+            // An adopted sheet is reported as what it now is — part of the cell's ground — with
+            // the classifier's original verdict kept in the row, so the fix stays legible.
+            if (row.Verdict == nameof(TileVerdict.Accepted) || _adopted.Contains(row.Node))
+            {
+                accepted.TryGetValue(key, out int count);
+                accepted[key] = count + 1;
+            }
+            else
+            {
+                if (!rejected.TryGetValue(key, out var list))
+                {
+                    rejected[key] = list = new List<string>();
+                }
+                list.Add($"{row.Verdict} {row.Name} {row.CoverX:F3}x{row.CoverZ:F3} [{row.Surfaces}]");
+            }
+            if (_adopted.Contains(row.Node))
+            {
+                adoptions.Add($"({row.Cx},{row.Cz}) {row.Name} {row.CoverX:F3}x{row.CoverZ:F3} [{row.Surfaces}]");
+            }
+        }
+        var cells = new List<object>();
+        int suspects = 0;
+        for (int cz = 0; cz < _rows; cz++)
+        {
+            for (int cx = 0; cx < _cols; cx++)
+            {
+                var key = (cx, cz);
+                bool border = cx < _blockCells || cx >= _cols - _blockCells
+                    || cz < _blockCells || cz >= _rows - _blockCells;
+                accepted.TryGetValue(key, out int count);
+                rejected.TryGetValue(key, out var r);
+                // Coverage is read off the cell's accumulated ground box, NOT off the widest single
+                // tile: a cell's ground is routinely two split half-tiles that each span half of it
+                // and together span all of it, and a per-tile maximum reports those as holes.
+                CoverageOf(key, out float coverX, out float coverZ);
+                bool covered = coverX >= 0.999f && coverZ >= 0.999f;
+                bool suspect = border && (count == 0 || !covered);
+                if (suspect)
+                {
+                    suspects++;
+                }
+                cells.Add(new
+                {
+                    cx,
+                    cz,
+                    border,
+                    accepted = count,
+                    coverX,
+                    coverZ,
+                    rejected = r?.Count ?? 0,
+                    suspect,
+                    why = r == null ? string.Empty : string.Join(" | ", r),
+                });
+            }
+        }
+        var report = new
+        {
+            chapter = chapter ?? string.Empty,
+            grid = new { cols = _cols, rows = _rows, tileX = _tileX, tileZ = _tileZ, x0 = _x0, z0 = _z0 },
+            blockCells = _blockCells,
+            repeat = _repeat,
+            candidateCount = _census.Count,
+            acceptedCount = accepted.Count,
+            adoptedCount = _adopted.Count,
+            adopted = adoptions,
+            suspectCells = suspects,
+            cells,
+            candidates = _census,
+        };
+        return JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    // A census row. A class rather than a tuple because it is serialized straight to JSON, and the
+    // property names ARE the report's column names.
+    private sealed class CensusCandidate
+    {
+        /// <summary>The gamez node index — the same stamp the built scene carries as
+        /// <c>AnimRuntime.IndexMeta</c>, so a row can be tied back to what is on screen.</summary>
+        public int Node { get; init; }
+
+        /// <summary>The gamez node name.</summary>
+        public string Name { get; init; } = string.Empty;
+
+        /// <summary><see cref="TileVerdict"/> as text.</summary>
+        public string Verdict { get; init; } = string.Empty;
+
+        /// <summary>Grid column it binned into (clamped to the grid).</summary>
+        public int Cx { get; init; }
+
+        /// <summary>Grid row it binned into (clamped to the grid).</summary>
+        public int Cz { get; init; }
+
+        /// <summary>X span as a fraction of the cell — 1.0 is a tile that spans its cell exactly,
+        /// and anything under <see cref="MinSpanFraction"/> is why a candidate was dropped.</summary>
+        public float CoverX { get; init; }
+
+        /// <summary>Z span as a fraction of the cell.</summary>
+        public float CoverZ { get; init; }
+
+        /// <summary>X span in metres.</summary>
+        public float SpanX { get; init; }
+
+        /// <summary>Y span in metres — the flat/upright test. A dropped ground strip is a sheet
+        /// (a few metres of terrain relief); a dropped lamp post is tens of metres tall on a
+        /// footprint of centimetres.</summary>
+        public float SpanY { get; init; }
+
+        /// <summary>Z span in metres.</summary>
+        public float SpanZ { get; init; }
+
+        /// <summary>Distinct texture names on its polygons, space-separated.</summary>
+        public string Textures { get; init; } = string.Empty;
+
+        /// <summary>Distinct <c>SceneBuilder.ClassifySurface</c> results, space-separated — the
+        /// field that decides whether a rejected candidate is terrain that SHOULD be copied or a
+        /// prop that must not be.</summary>
+        public string Surfaces { get; init; } = string.Empty;
     }
 }

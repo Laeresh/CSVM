@@ -51,7 +51,7 @@ found 2026-07-25). One flag, one description.
 `--debug-livery` · `--debug-mesh` · `--debug-select` · `--debug-nodelab` · `--debug-damage` · `--debug-names` · `--debug-join` · `--debug-scoreboard` · `--debug-anim-ui` · `--debug-collision` · `--debug-dzpaths` · `--debug-ainets` · `--collision` · `--debug-colliders` · `--debug-classoverlay` · `--debug-tilegrid` · `--markers`
 
 **Dumps and the test harness — report text plus a verdict, then quit**
-`--dump-markers` · `--dump-weapons` · `--dump-loadout` · `--dump-flight` · `--dump-config` · `--dump-mips` · `--run-tests` · `--damage-test` · `--effects-test` · `--hud-font-test`
+`--dump-markers` · `--dump-weapons` · `--dump-loadout` · `--dump-flight` · `--dump-config` · `--dump-mips` · `--dump-tilegrid` · `--run-tests` · `--damage-test` · `--effects-test` · `--hud-font-test`
 
 **Logging and profiling**
 `--log` · `--perf` · `--debug-anim` · `--anim-lod`
@@ -132,7 +132,19 @@ last reconciled 2026-08-07 merging `--debug-ainets` with `PLAN-vs-mode`'s three 
   the weather's fog-far (2.4 km on C2 zone1, under one 3-cell band), and the same
   "fog is a thing to switch off, not tolerate" rule the texture-census work established applies
   here. Debug-only shader-parameter mix, exactly as `--debug-classoverlay`: mesh/node counts and
-  goldens are unaffected)
+  goldens are unaffected. ⚠ **It paints only the tiles the extender ACCEPTED**, so a piece of ground
+  the classifier refused shows up here as unpainted terrain — and past the map edge as the void that
+  refusal leaves. That is how `BL-316` was found; `--dump-tilegrid` is the written form that names
+  the node and the reason)
+- `--dump-tilegrid[=path]` (build the chapter world, write the **map-edge tile census** and quit —
+  the written twin of `--debug-tilegrid`, and strictly more, since the overlay cannot show a
+  rejection. JSON to `./.scratch/tilegrid_<chapter>.json` unless a path is given. One row per tile
+  candidate — verdict (`Accepted` / `TooSmall` / `TooLarge` / `SkyOrCloud`), footprint in metres and
+  in cells, its grid cell, its texture names and surface class — plus a per-cell roll-up carrying
+  `coverX`/`coverZ` and a `suspect` flag for a border cell short of ground. **It answers three
+  questions at once**: no accepted tile = a missing cell; coverage under 1 = a short cell; an
+  adopted strip = a cell whose ground was refused for being thin (`BL-316` — 16 adoptions on C5, 0
+  on the other seven). Implies `--freecam`, since the extender it reports on is built only there)
 - `--map-edge-block=N` (how many border cells deep the repeated block past the map edge is.
   **Default is per chapter** — `MapEdgeExtender.DefaultBlockCells`: **2** on C1/C2/C4, **1** on C5
   and on C1B/C1C/C2B/C3, whose borders were measured to carry only water tiles, which fixes them at

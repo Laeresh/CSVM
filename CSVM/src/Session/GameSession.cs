@@ -810,13 +810,38 @@ public partial class GameSession : Node3D
             // Block depth is per chapter (A/B'd against the original); --map-edge-block= overrides
             // it, which is why the spec keeps it nullable rather than pre-defaulted.
             int block = _spec.MapEdgeBlock ?? Mech3.MapEdgeExtender.DefaultBlockCells(_spec.Chapter);
-            _edgeExtender = builder.CreateEdgeExtender(session.Clutter, block, _spec.MapEdgeRepeat);
+            _edgeExtender = builder.CreateEdgeExtender(session.Clutter, block, _spec.MapEdgeRepeat,
+                census: _spec.DumpTileGrid);
             StartupProfile.Record("edge", edgeMark);
             if (_edgeExtender != null)
             {
                 _plane.AddChild(_edgeExtender);
                 GD.Print($"map edge: rolling tile window active — block {_edgeExtender.BlockCells} cell(s), "
                     + (_edgeExtender.RepeatInsteadOfMirror ? "repeat" : "mirror (NOT what the original does)"));
+            }
+
+            // --dump-tilegrid: the census is complete the moment the extender exists (it is built
+            // in ScanTiles), so the report is written here and the session ends — no window is
+            // ever needed, and nothing later in the build can change what was scanned.
+            if (_spec.DumpTileGrid)
+            {
+                string? report = _edgeExtender?.WriteCensus(_spec.Chapter);
+                if (report == null)
+                {
+                    GD.PrintErr($"--dump-tilegrid: {_spec.Chapter} builds no map-edge continuation "
+                        + "(no area/partition grid, or no recognizable ground tiles at all).");
+                    GetTree().Quit(1);
+                    return false;
+                }
+                string name = _spec.DumpTileGridPath.Length > 0
+                    ? _spec.DumpTileGridPath
+                    : $"tilegrid_{_spec.Chapter}.json";
+                _probeRunner.WriteScratch(name, report);
+                // WriteScratch resolves a relative name under ./.scratch/ and passes an absolute
+                // one straight through, so the flag takes either.
+                GD.Print($"--dump-tilegrid: {_spec.Chapter} census → {name}");
+                GetTree().Quit();
+                return false;
             }
         }
         if (_spec.Fly || _spec.Freecam || _spec.SkyZoneExplicit)

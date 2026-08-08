@@ -1280,30 +1280,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-101` `[Tuning]` `[Owed-playtest]` **Fine-tune fog and environment** — method: record video from a spawn point flying straight for a
   fixed number of seconds, in both engines, and compare.
 
-- `BL-316` `[Bug]` **C5's map-edge continuation has a void strip through it** (found 2026-08-08
-  while A/B-ing the map-edge fold against the original). A gap of empty space — sky/void, no terrain, no collision —
-  runs outward through C5's extension cells, wide enough to fly through and visible from altitude.
-  **Repro:** `--freecam --chapter=C5 --no-fog --debug-tilegrid
-  --pos=-15230.31,1500.932,-3736.541 --direction=-0.8993,-0.42368,-0.10847`. The tile-grid overlay
-  is what makes it legible (C5 is a night map, so the void and the unlit ground are both black
-  without it).
-  ⚠ **Not a repetition artefact — it is present in BOTH fold modes**, identically placed and
-  shaped, at `--map-edge-mode=repeat` and `=mirror` alike. So it is not the translated-copy seam
-  problem that mirroring would paper over, and changing the fold will not fix it.
-  **Two candidate causes, neither confirmed.** (1) A source border cell with no ground tile bound
-  to it in `MapEdgeExtender.ScanTiles` — `_tiles` simply has no entry, so `BuildCell` emits an
-  empty cell. (2) A source tile that does not span its full cell: `IsGroundTile` accepts anything
-  from 0.4× to 1.35× the cell size (to catch the split half-tiles), and `MirrorTransform`
-  translates by a whole `_tileX`/`_tileZ`, so a short tile leaves a sliver of void at every copy.
-  (2) fits the observed *constant-width strip* better than (1), which would leave a whole missing
-  cell. Distinguishing them is a census of C5's per-cell tile coverage — which cells `ScanTiles`
-  binned, and what each tile's AABB actually spans against 1024 m.
-  **Note the scope:** C5 is the only chapter where this has been seen, and C5 is also the only
-  chapter measured at a **1-cell** block — worth checking whether those are related
-  before assuming they are not.
-  **How you'd know it worked:** the repro pose shows unbroken terrain, and a sweep of C5's four
-  edges at altitude with `--debug-tilegrid --no-fog` finds no void.
-
 - `BL-118` `[Tuning]` **Cloud deck mesh brightness** — the `CloudDeck` **mesh** brightness reads ~40 units
   lighter than the original (measured 2026-08-07: **+54, and only from below** — see the `CAP-12`
   block). **Second symptom, same defect (`PT-42`(a), 2026-08-07): from above, the deck mesh and the

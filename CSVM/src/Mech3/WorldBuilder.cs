@@ -318,10 +318,14 @@ public sealed class WorldBuilder
     /// parameter defaults here are the safe-everywhere 1-cell repeat, not a per-chapter value,
     /// because this method does not know the chapter.</para>
     /// </summary>
+    /// <param name="clutter">The chapter's built clutter, so the extension grows the same trees.</param>
+    /// <param name="blockCells">How many border cells deep the repeated block is.</param>
+    /// <param name="repeat">Translate the block rather than alternately reflecting it.</param>
+    /// <param name="census">Collect the <c>--dump-tilegrid</c> tile census while scanning.</param>
     public MapEdgeExtender? CreateEdgeExtender(ClutterBuilder? clutter = null,
-        int blockCells = 1, bool repeat = true) =>
+        int blockCells = 1, bool repeat = true, bool census = false) =>
         _builtWorld == null ? null
-            : MapEdgeExtender.Create(_gamez, _scene, _builtWorld, clutter, blockCells, repeat);
+            : MapEdgeExtender.Create(_gamez, _scene, _builtWorld, clutter, blockCells, repeat, census);
 
     /// <summary>
     /// Switches off the entities nothing ever placed. Call once AFTER the animation runtime's

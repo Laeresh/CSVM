@@ -153,7 +153,7 @@ public sealed record SessionSpec
     public string ModeName =>
         Mode == SessionMode.AnimLab ? "anim-lab"
         : DamageTest || EffectsTest || WeaponTest || RunTests ? "test"
-        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips ? "dump"
+        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpTileGrid ? "dump"
         : Mode == SessionMode.Freecam ? "freecam"
         : Mode == SessionMode.Viewer ? "viewer"
         : Versus ? "vs"
@@ -167,7 +167,7 @@ public sealed record SessionSpec
     /// <c>--dump-flight</c> run turns the bundle on yet still asks for focus.</summary>
     public bool IsScripted =>
         NoFocus || ScreenshotPath != null || ExportGltfPath != null || RunTests
-        || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips
+        || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpTileGrid
         || DamageTest || EffectsTest || WeaponTest;
 
     /// <summary><b>Resolved.</b> The chapter world is built instead of a single parked plane.</summary>
@@ -266,6 +266,7 @@ public sealed record SessionSpec
         : DumpFlight ? "--dump-flight"
         : DumpConfig ? "--dump-config"
         : DumpMips ? "--dump-mips"
+        : DumpTileGrid ? "--dump-tilegrid"
         : DamageTest ? "--damage-test"
         : EffectsTest ? "--effects-test"
         : WeaponTest ? "--weapon-test"
@@ -357,6 +358,17 @@ public sealed record SessionSpec
     public bool DumpConfig { get; private set; }
     public bool DumpMips { get; private set; }
     public string DumpMipsFilter { get; private set; } = "";
+
+    /// <summary><c>--dump-tilegrid</c>: build the chapter world, write the map-edge tile census
+    /// (`BL-316`) and quit. The written twin of <c>--debug-tilegrid</c>, and strictly more: the
+    /// overlay can only paint the tiles the extender ACCEPTED, so a rejected border tile — the
+    /// thing that leaves a void strip through the continuation — is visible on screen solely as
+    /// the hole it causes, and here as a row saying which node and why.</summary>
+    public bool DumpTileGrid { get; private set; }
+
+    /// <summary>Where <c>--dump-tilegrid=</c> writes; empty means <c>./.scratch/</c> under a
+    /// per-chapter name.</summary>
+    public string DumpTileGridPath { get; private set; } = "";
     public bool DamageTest { get; private set; }
     public string DamageTestFilter { get; private set; } = "";
     public float DamageHd { get; private set; }
@@ -738,6 +750,8 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--mips=")) { s.SetMips(arg["--mips=".Length..]); }
             else if (arg == "--dump-mips") { s.DumpMips = true; }
             else if (arg.StartsWith("--dump-mips=")) { s.DumpMips = true; s.DumpMipsFilter = arg["--dump-mips=".Length..]; }
+            else if (arg == "--dump-tilegrid") { s.DumpTileGrid = true; s.HasContentArg = true; }
+            else if (arg.StartsWith("--dump-tilegrid=")) { s.DumpTileGrid = true; s.DumpTileGridPath = arg["--dump-tilegrid=".Length..]; s.HasContentArg = true; }
             else if (arg.StartsWith("--tex-override=")) { texOverrides.Add(arg["--tex-override=".Length..]); }
             else if (arg == "--tex-census") { s.TexCensus = true; }
             else if (arg.StartsWith("--tex-census=")) { s.TexCensus = true; s.TexCensusFilter = arg["--tex-census=".Length..]; }
@@ -973,7 +987,10 @@ public sealed record SessionSpec
         bool vs = _vsArg;
         bool damageLab = _damageLabArg;
         bool viewer = _viewerArg || MarkersOverlay || WeaponTest;
-        bool freecam = _freecamArg || DamageTest || EffectsTest;
+        // --dump-tilegrid votes freecam for one reason: the map-edge extender is only built in the
+        // freecam/fly/sky-zone arm, and the census is a report ABOUT that extender. A dump that
+        // resolved to the viewer would build a world with no continuation and report nothing.
+        bool freecam = _freecamArg || DamageTest || EffectsTest || DumpTileGrid;
         bool animLab = _animLabArg || PlayAnim != null || DebugAnimUi;
 
         // --vs and --stunt are both flight modifiers, but not composable — one match mode has to

@@ -516,6 +516,31 @@ void fragment() {
         return new Shader { Code = code[..close] + $"    ALPHA = col.a{OpacityTerm};\n" + code[close..] };
     }
 
+    /// <summary>The surface class one texture name names — <c>"water"</c>, <c>"buildings"</c>, or
+    /// null for the untagged default. The collision buckets are built from this
+    /// (<see cref="CollidersForMesh"/>), and <c>MapEdgeExtender</c>'s <c>--dump-tilegrid</c> census
+    /// reports it for every tile candidate it rejected: what the dropped geometry IS, not how big
+    /// it was, is what says whether the continuation owed it a copy (`BL-316`).</summary>
+    internal static string? ClassifySurface(string? texture)
+    {
+        if (string.IsNullOrEmpty(texture))
+            return null;
+        var t = texture.ToLowerInvariant();
+        // 'bldgshadow'/'bld_shadow' are baked ground shadow decals, not building geometry.
+        if (t.Contains("shadow"))
+            return t.StartsWith("water") || t.Contains("splash") ? "water" : null;
+        if (t.StartsWith("water") || t.StartsWith("wtr") || t.StartsWith("srf")
+            || t.Contains("wakefront") || t.Contains("watersquirt"))
+            return "water";
+        // 'empire'/'chrysler' are the C2/C5 film-set skyscraper walls (empire1, chrysler1/2 —
+        // the only 3 matching textures install-wide, measured before widening the classifier).
+        if (t.Contains("build") || t.StartsWith("hangar") || t.StartsWith("bld")
+            || t.Contains("cblock") || t.Contains("warehouse") || t.Contains("roof")
+            || t.Contains("filmblock") || t.StartsWith("empire") || t.StartsWith("chrysler"))
+            return "buildings";
+        return null;
+    }
+
     /// <summary>The built <see cref="ArrayMesh"/> for one gamez model index, from this
     /// builder's shared cache and carrying this builder's materials (so a world builder hands
     /// back fullbright, fogged, correctly depth-biased world geometry).
@@ -538,26 +563,6 @@ void fragment() {
         // Absent = this node conflicts with nothing, which is rank 0 by construction.
         ConflictRanks.TryGetValue(nodeIndex, out int rank);
         return Math.Min(rank, ConflictRankCap) * ConflictRankBias;
-    }
-
-    private static string? ClassifySurface(string? texture)
-    {
-        if (string.IsNullOrEmpty(texture))
-            return null;
-        var t = texture.ToLowerInvariant();
-        // 'bldgshadow'/'bld_shadow' are baked ground shadow decals, not building geometry.
-        if (t.Contains("shadow"))
-            return t.StartsWith("water") || t.Contains("splash") ? "water" : null;
-        if (t.StartsWith("water") || t.StartsWith("wtr") || t.StartsWith("srf")
-            || t.Contains("wakefront") || t.Contains("watersquirt"))
-            return "water";
-        // 'empire'/'chrysler' are the C2/C5 film-set skyscraper walls (empire1, chrysler1/2 —
-        // the only 3 matching textures install-wide, measured before widening the classifier).
-        if (t.Contains("build") || t.StartsWith("hangar") || t.StartsWith("bld")
-            || t.Contains("cblock") || t.Contains("warehouse") || t.Contains("roof")
-            || t.Contains("filmblock") || t.StartsWith("empire") || t.StartsWith("chrysler"))
-            return "buildings";
-        return null;
     }
 
     private static CylAxis GetCylindricalAxis(GameZMesh mesh) => ClassifyBillboard(mesh) switch
