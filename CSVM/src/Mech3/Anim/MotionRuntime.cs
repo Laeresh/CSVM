@@ -81,7 +81,21 @@ internal sealed class MotionRuntime : IAnimMotion
     /// the sweep arms — distance covers the fast launches (10 m/s clears 2 m in 0.2 s), time covers
     /// the falls, which start at rest and would otherwise sit unarmed inside their own geometry
     /// (a warhawk drops 5 cm in the first 0.1 s). Arming on APEX instead was considered and
-    /// rejected: the eleven airframes and <c>agyrobus</c> never rise, so they would never arm.</summary>
+    /// rejected: the eleven airframes and <c>agyrobus</c> never rise, so they would never arm.
+    ///
+    /// <para><b>Measured, 2026-08-09</b> (B5's TUNE, C1 airfield dive, `--det`). Both values were
+    /// kept, and the A/B says why. With arming disabled outright the four LAUNCHES land at
+    /// byte-identical coordinates — so the epsilon suppresses no real contact and buys the launches
+    /// nothing here. What it buys is the SETTLE HOP: that body starts lying on the surface, so
+    /// unarmed it contacts on its first frame and the authored ~0.5 m hop is cancelled outright
+    /// (11 contact endings in the run became 13, all of them hops ending instantly). <c>ArmSeconds</c>
+    /// is therefore the limb that does the work and is bounded on both sides — above by the hop's
+    /// ~0.6 s round trip, below by one frame. <c>ArmDistance</c> binds only for a body fast enough
+    /// to clear 2 m inside 0.1 s (a launch inheriting a dive), and no measured case exercises it;
+    /// it stays as an unfalsified guard rather than a confirmed value, and that is the honest
+    /// status. ⚠ Do not read the 0.044 s tunnelling that buried the settle hops before B9 as an
+    /// argument to tighten this — that body had no business carrying the dive's momentum at all,
+    /// and removing it, not shrinking the window, is the fix that holds.</para></summary>
     private const float ArmDistance = 2f;
 
     private const float ArmSeconds = 0.1f;

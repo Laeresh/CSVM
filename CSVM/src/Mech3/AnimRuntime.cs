@@ -3599,7 +3599,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             else
                 Count("ObjectMotion(bounce landed after its instance ended)");
             if (DebugMotions)
-                GD.Print($"anim/debug: '{landing.Target.Name}' landed — bounce sequence '{landing.Bounce}'"
+                GD.Print($"anim/debug: '{landing.Target.Name}' landed at {landing.Target.GlobalPosition} "
+                         + $"— bounce sequence '{landing.Bounce}'"
                          + (live ? "" : " — NO LIVE INSTANCE, dispatched nothing"));
         }
     }

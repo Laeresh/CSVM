@@ -144,7 +144,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — confirm at the controls
 
-5. ◐ The two cockpit checks, and the arming epsilon TUNEd from what they show
+5. ☑ The two cockpit checks, and the arming epsilon TUNEd from what they show
 6. ☑ A bounce follow-up continues from the landing, not from the authored rest pose (from B5 round 1)
 7. ☑ The stopper idiom must not relaunch a piece that has already landed (from B5 round 2)
 8. ☑ The `MAIN_ROOT_NODE` sentinel must resolve, and its launch must take the node over (from B5 check 2)
@@ -380,7 +380,43 @@ nothing; assert that the collision world exists before asserting anything about 
 
 # Wave B — confirm at the controls
 
-## B5 ☐ The two cockpit checks, and the arming epsilon TUNEd from what they show
+## B5 ☑ The two cockpit checks, and the arming epsilon TUNEd from what they show — **landed 2026-08-09**
+
+**Landed — both checks confirmed at the controls, over three rounds.** Each round found a real
+defect and each became its own item, which is what the check was for:
+
+| round | report | became |
+|---|---|---|
+| 1 | *"the plane is looping … jumps back to the crash point 4 times"* | **B6** — a bounce follow-up continues from the landing |
+| 2 | *"check 1 still happening"* | **B7** — the stopper idiom must not relaunch a landed piece |
+| 2 | *"the agyrobus exploded but continued on its animation path"* | **B8** — `MAIN_ROOT_NODE` is a sentinel, not a name |
+| 3 | *"no repetition but plane went through ground"* | **B9** — the settle hop must not bury the piece it just landed |
+| 4 | *"works. flown into a wall and the plane dropped to the ground."* | ✅ both checks pass |
+
+Round 4 adds an unasked-for third look worth recording: flying into a **wall** also brings the wreck
+down onto the ground — the collide-destructible path reaching the same sweep, which is the case
+Decision 1 chose a swept segment over a down-ray for.
+
+**The epsilon: both values kept, and the A/B is the reason.** Measured 2026-08-09 on the C1 airfield
+dive under `--det`, arming disabled outright versus shipped:
+
+- the four **launches** land at **byte-identical coordinates** either way — the epsilon suppresses no
+  real contact and buys the launches nothing in any reachable case;
+- what it buys is the **settle hop**, which starts lying on the surface: unarmed it contacts on its
+  first frame and the authored ~0.5 m hop is cancelled (11 contact endings became 13, the extras
+  being hops that ended instantly).
+
+So `ArmSeconds = 0.1f` is the limb doing the work, bounded above by the hop's ~0.6 s round trip and
+below by one frame. `ArmDistance = 2f` binds only for a body fast enough to clear 2 m inside 0.1 s
+(a launch inheriting a dive) and **no measured case exercises it** — it stays an unfalsified guard
+rather than a confirmed value, and the constant's doc comment says exactly that rather than implying
+a measurement it does not have.
+
+⚠ The 0.044 s tunnelling that buried the hops before B9 is **not** an argument for tightening this.
+That body had no business carrying the dive's momentum; removing it, not shrinking the window, is
+the fix that holds.
+
+### Original approach (kept for reference)
 
 **Goal.** The defect that motivated the item is gone where a player can see it, and the epsilon is a
 measured value rather than a guess.
