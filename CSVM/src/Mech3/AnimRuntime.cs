@@ -268,8 +268,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// default. The crash sets it to a fraction of the plane's impact velocity so the wreck pieces
     /// carry the plane's momentum and scatter along its travel — the authored launch alone is a small
     /// relative pop (5–10 m/s straight up), which reads as "the pieces barely drift" against a plane
-    /// that hit at 60–90 m/s. It is the physical part the def leaves to the engine (the original does
-    /// the same); a TUNE on the fraction, not a decode.</summary>
+    /// that hit at 60–90 m/s. It is the physical part the def leaves to the engine; a TUNE on the
+    /// fraction, not a decode. The crash case is backed by footage (<c>CAP-16</c>: a wing panel
+    /// travels down-and-forward along the flight direction, it does not pop upward) — direction
+    /// confirmed, magnitude not pinned.
+    /// <para>⚠ Crash-only BY MEASUREMENT, not merely by wiring. The world runtime deliberately
+    /// leaves this zero: at the controls (2026-08-08) the original's world debris showed no
+    /// directional bias with the attack heading, so a shot building's pieces inherit nothing there
+    /// either. Giving world destructibles a <c>WreckMomentum</c> analogue would be a divergence,
+    /// not a fix — the former <c>BL-008</c>, closed on that evidence.</para></summary>
     public Vector3 InheritedWorldVelocity;
 
     /// <summary>Animation names <see cref="InheritedWorldVelocity"/> must not reach — the

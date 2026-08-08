@@ -174,7 +174,9 @@ live pose walked every repeat explosion's debris further from the blast than the
 - `GRAVITY.value` (negative) accelerates the launch, and is an **absolute m/s², not an offset to the
   aircraft's arcade `nom_gravity` of 20** — the census carries a literal −9.8 on 173 events (and −10
   on 400); the weak −1/−2/−3 values sit on smoke trails, where floating is the authored look.
-  `DO_INTERSECTIONS` ground-rest and the `BOUNCE_SEQUENCE` re-launch (need a physics ray) are a
+  `DO_INTERSECTIONS` ground-rest and the `BOUNCE_SEQUENCE` re-launch (need a physics query — ⚠ most
+  likely a *collider* intersection, not a terrain ray, so a rooftop landing or a bounce off a wall
+  is in scope and a down-ray is only the cheap first cut) are a
   **Layer-1.5 follow-up (`BL-245`) only for events that FALL rather than launch** — 379 of the 529
   bounce-terminated, no-`RUN_TIME` events install-wide, which the body still integrates freely over
   the run time and then holds at rest. The other 152 (150 reachable) LAUNCH upward with an apex, and

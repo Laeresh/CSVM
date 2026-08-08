@@ -69,39 +69,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Damage & destruction
 
-- `BL-008` `[Bug]` **Break-apart debris barely moves — "parts only move a short way."** The piece launch is
-  `MotionRuntime` (`CSVM/src/Mech3/Anim/MotionRuntime.cs`), and two things combine — **neither of
-  them the FROM_TO dropped-delta bug** (that is a different event kind; the debris
-  `translation.delta` *is* mapped):
-  1. **World destructibles inherit no momentum.** `InheritedWorldVelocity` is set **only** by the
-     plane crash (`FlightController.cs:1566` — the sole assignment in the codebase); the shared world
-     `AnimRuntime` never assigns it, so `InheritedLocal` (`MotionRuntime.cs:150-156`) returns zero and
-     a world piece gets only the small authored launch — a 5–10 m/s straight-up pop, which is exactly
-     "the pieces barely drift." **This is the half that is uniquely this item's.**
-  2. **Ground contact is only approximated** — *and this half has shrunk since this entry was
-     written.* The common case now ends at ground level: `FlightToLaunchHeight` solves the parabola
-     and ends the flight when it returns to launch height (`MotionRuntime.cs:223-250`), a deliberate
-     stand-in for `do_intersections`, valid wherever the ground under the piece is flat — every
-     reachable case measured. What is still unsimulated is the `bounce_sequence` re-launch (counted
-     deferred at `AnimRuntime.cs:2273`) and the 379 events that FALL, with no apex to solve. Those
-     remainders are owned by `BL-059` item 1 and `BL-245`, not by this item.
-  ⚠ A third cause once listed here — "the magnitude decode is unsettled TUNE", `translation_range`
-  xz/y read as distance ÷ run_time with `initial`/`delta` unmapped — is **settled and no longer a
-  cause**: xz/y are an azimuth/elevation in degrees and `initial` the launch speed, `delta` a speed
-  ramp (`docs/HISTORY.md` 2026-08-01, census of all 1,217 events). Do not re-open it. How much
-  limpness is left after that fix is itself worth a look before this item is scheduled.
-  **LARGER:** there is no single correct number — livelier world debris means a world-object launch
-  momentum source (a TUNE mirroring the crash's `WreckMomentum`, plus an opt-out like the crash rig's
-  `InheritedVelocityExempt`, `WorldEffectsFactory.cs:340` — the data alone cannot tell debris from a
-  decal that must stay put). Needs an original-game A/B. Cross-ref the "Data-driven crash" TUNEs
-  already in this file (`WreckMomentum`, tumble-rate, debris-arc), and `BL-059`/`BL-245` for the
-  ground-contact remainder.
-  ⚠ Do **not** "fix" it by reviving the FROM_TO deltas — wrong mechanism.
-  *Playtest first:* **`PT-46`** — three fixes have landed under this item (the `translation_range`
-  decode, `BL-240`, `BL-257`) without anyone going back to look, so whether a symptom remains at all
-  is now the first question. Its check (c) is what decides whether cause 1 is a defect or an
-  aspiration nobody measured.
-
 - `BL-009` `[Research]` **C2 SeaHangar doors don't despawn and stay collidable after shooting the propane tank.** The
   SeaHangar doors are `sgh_door1`/`sgh_door2`, driven by `sghangar-opensgdoors` — a **HEALTH-0
   `OnStartup` "open the doors" animation, not a weapon-destructible.** A destructible is any def with
@@ -120,30 +87,50 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   aspiration/data mismatch. ⚠ Even a working destructible door may leave wreck colliders — "clear
   passage" is its own playtest.
 
-- `BL-022` `[Bug]` `[Owed-playtest]` **Debris trajectory is wrong, not merely slow — RE-PLAYTEST, the magnitude half is no longer
-    a TUNE.** In-flight kills threw pieces "but not in the correct trajectory". **The largest cause landed
-    2026-08-01**: `translation_range` was read as a distance travelled when it is an azimuth/elevation launch
-    with `initial` the speed (`analysis/object-motion-range/`), which threw debris hundreds of metres along
-    one bearing — visible as the `c1-destroy-effects` golden's line of fireballs marching up the runway.
-    What remains of this item is what that fix does NOT cover: world objects inherit no launch momentum, and
-    `bounce_sequence` ground-rest is unsimulated (both need a physics ray).
-    ⚠ **Traps.** (a) Do not re-open the magnitude as a TUNE — the speeds are decoded and censused now; a
-    piece that still looks wrong is the momentum or the ground-rest, not the launch. (b) `gravity.value` is
-    absolute m/s² (a literal −9.8 on 173 events), NOT an offset to the aircraft's arcade `nom_gravity` of 20
-    — that reading was considered and disproven by the same census.
-    *Playtest:* **`PT-46`** (shared with `BL-008`, which owns the other half of the same report) —
-    look for wreck pieces arcing along a correct trajectory, not just moving further.
-    `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire --infinite-ammo`.
+- `BL-022` `[Tuning]` **Debris arcs read slightly LARGER than the original — all that is left of "the trajectory
+    is wrong."** In-flight kills once threw pieces "but not in the correct trajectory". **The largest cause
+    landed 2026-08-01**: `translation_range` was read as a distance travelled when it is an azimuth/elevation
+    launch with `initial` the speed (`analysis/object-motion-range/`), which threw debris hundreds of metres
+    along one bearing — visible as the `c1-destroy-effects` golden's line of fireballs marching up the runway.
+    *Evidence:* `PT-46`, flown 2026-08-08 (retired; verdicts in `git log --grep=PT-46`). At the controls the
+    pieces now fly and the arcs read as believable parabolas — **the only residue is scale: the original's
+    arcs are "a little bit smaller".** An impression, not a measurement, and nothing else in the sitting
+    disagreed with the build.
+    *Fix shape:* nothing to change until the shortfall is quantified — it wants an A/B against the original
+    (a `CAP-nn`, or a side-by-side of one destruction def), since "a little smaller" spans anything from a
+    launch-speed trim to a debris-specific gravity.
+    ⚠ **Traps.** (a) Do not re-open the magnitude as a decode — the speeds are censused and mapped; what is
+    open is a judged magnitude, not a reading. (b) `gravity.value` is absolute m/s² (a literal −9.8 on 173
+    events, −10 on 400), NOT an offset to the aircraft's arcade `nom_gravity` of 20 — considered and
+    disproven by the same census, and `MotionRuntime` applies the authored value alone. (c) A piece that
+    flies *through* the ground is not this item and not a defect — `PT-46` check (d) confirmed the original
+    does the same, and the data agrees: `do_intersections` is false on all 120 bounce-shape events, all 159
+    vanish-shape, and 924 of the `run_time` shape. Only 16 `(def,node)` pairs in all 8 chapters author it
+    true (`player_crash_dirt` `piece1`–`4`, the eleven C1B airframes' `MAIN_ROOT_NODE`, `agyrobus`), and
+    those are `BL-059`/`BL-245`'s.
 
 - `BL-059` `[Feature]` **Data-driven crash — the remaining variants/follow-ups.** The dirt/ground crash is
   complete and the default (`PLAN-data-driven-crash`, `docs/HISTORY.md`). What is still open:
   1. **`bounce_sequence` re-launch (Layer-1.5).** The piece/debris `ObjectMotion`s carry
      `do_intersections` + a `bounce_sequence` (`pNhit` → `ground_mixed_exp_sg` + a second ranged
-     launch) that `MotionRuntime` does not yet act on — it needs a ground-contact physics ray
+     launch) that `MotionRuntime` does not yet act on — it needs a ground-contact physics query
      (`CrashBreakup.Advance`, on branch `bespoke-crash-animation`, is the reference integrator). The
      pieces tumble to rest fine without it; the bounce is an embellishment. Also needs a real
      `SOUND_GROUPS` resolver for `air_mixed_exp_sg`/`ground_mixed_exp_sg` (`snd_exp_ground_a` already
      plays, hardcoded like `plane_destroy_sg`).
+     ⚠ **`do_intersections` is probably a COLLIDER intersection test, not a down-ray to terrain**
+     (user, 2026-08-08). A down-ray is therefore a *stand-in*, not the mechanism: it cannot land a
+     piece on a rooftop or bounce it off a wall, which is what the original appears to do — the
+     `agyrobus` case was lost from sight between C5 buildings precisely because it may have bounced
+     off one. Scope the work as a collision query and the ray as the cheap first cut, and say which
+     one shipped. Same caveat applies to `BL-245`, whose `[Blocked: ground ray]` tag is the narrower
+     reading of the same blocker.
+     ⚠ **This is the whole of the former `BL-008`.** That item claimed world destructibles were limp
+     because they inherit no launch momentum (`InheritedWorldVelocity` is assigned only by the plane
+     crash rig). Answered at the controls 2026-08-08 via `PT-46`: **the original shows no inherited
+     velocity on world debris either** — no directional bias with the attack heading — so there is
+     nothing to add and no world-side `WreckMomentum` analogue to build. Do not re-mint it. The
+     ground-contact half is what survived, and it is this bullet. `git log --grep=BL-008`.
   2. **The air variant.** `player_crash_default` — no-impact destruct, `destroyed=false`, pieces arc
      away, per-piece `large_firetrail` — has **no trigger**: it fires when the plane is destroyed with
      no impact at all, and nothing shoots the player down yet. A building crash is `_dirt`, not air, so
@@ -164,11 +151,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ground also needs `softParticles: false` or the depth-fade zeroes it. A fading additive fireball
   reads as smoke in a screenshot — isolate the emitter (suppress the others, freeze the crash with
   no `--hold`) before believing an effect is present. Anchor at the plane centre (`pose.Origin` =
-  `healthy`), not the impact point. For the debris arcs: `translation_range` is undocumented and
-  `AnimRuntime` never simulates it, so the `fly_trailN` trajectory is a *reasoned reading* (`xz`/`y`
-  = travel distance over `run_time`), not a settled decode — the anchor is invisible, only the
-  trail shows, so the arc shape is TUNE, not fidelity; and the DISTANCE interval hides behind an
-  inverted flag (`has_interval_value` false, key off `interval_type`).
+  `healthy`), not the impact point. For the debris arcs: `translation_range` **is** decoded and
+  **is** simulated now (2026-08-01 — xz/y an azimuth/elevation in degrees, `initial` the launch
+  speed, `delta` a speed ramp, all mapped in `MotionRuntime`), so the old "reasoned reading" caveat
+  is retired; what stays TUNE is only the arc's judged look, the `fly_trailN` anchor being invisible
+  so that only the trail shows; and the DISTANCE interval hides behind an inverted flag
+  (`has_interval_value` false, key off `interval_type`).
 
 - `BL-102` `[Research]` **Patrol boat: which HP governs?** (from `docs/plans/PLAN-M3-weapons.md` C23, 2026-07-22.)
   Two systems **agree on the damage-stage fractions and disagree on total HP by exactly 2×**: the

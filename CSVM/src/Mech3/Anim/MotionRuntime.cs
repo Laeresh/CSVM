@@ -44,7 +44,9 @@ namespace CSVM.Mech3.Anim;
 ///   reachable) that name a bounce, plus the 167 that name neither a bounce nor a run time
 ///   and end with the piece's own deactivation instead — <see cref="FlightToLaunchHeight"/> ends
 ///   the flight when the parabola returns to launch height: a CHOICE, not a decode — the original
-///   tested real ground via <c>do_intersections</c>, which a down-ray would replace. It agrees
+///   tested real geometry via <c>do_intersections</c>, which a down-ray would only approximate
+///   (⚠ that flag is probably a COLLIDER intersection, not a terrain ray: it can land a piece on a
+///   rooftop or bounce it off a wall, which no down-ray reproduces). It agrees
 ///   wherever the ground under the piece is flat, which is every reachable case measured (debris
 ///   off a ground-sitting structure). The apex is the ADMISSION TEST, not the bounce: anything
 ///   with no apex is declined here and stays BL-245's. See
@@ -222,7 +224,8 @@ internal sealed class MotionRuntime : IAnimMotion
         //     and every piece is hidden before it moves (`dblcannon_flying_parts` the repro).
         //
         // ⚠ Ending it when the parabola returns to LAUNCH HEIGHT is a CHOICE, not a decode. The
-        // original tested real ground through `do_intersections` — false on all 167 of the second
+        // original tested real geometry through `do_intersections` (probably a collider
+        // intersection rather than a terrain ray) — false on all 167 of the second
         // shape, and on the whole first one; this agrees wherever the ground under the object is
         // flat, which is every reachable case here — debris thrown off a ground-sitting structure.
         // A down-ray replaces it, and must, for the events that FALL rather than launch (a

@@ -285,10 +285,13 @@ which pieces that covers. A format reader should know the current wiring:
     - **152 (150 reachable in an executed `sequences`) are upward launches** — positive launch speed,
       negative gravity, so the parabola has an apex. For these, `MotionRuntime.FlightToLaunchHeight`
       solves `t = 2·v0.y / |accel.y|` and ends the flight there instead of holding the final pose: a
-      **⚠ CHOICE, not a decode** — the original tested real ground collision via `do_intersections`;
-      a down-ray would replace it, and agrees with the launch-height solve wherever the ground under
-      the piece is flat, which is every one of the 150 measured (debris off a ground-sitting
-      structure). Landing then dispatches the named `BOUNCE_SEQUENCE` (`default` only — none of the
+      **⚠ CHOICE, not a decode** — the original tested real collision via `do_intersections`;
+      a down-ray would only approximate it, and agrees with the launch-height solve wherever the
+      ground under the piece is flat, which is every one of the 150 measured (debris off a
+      ground-sitting structure). ⚠ `DO_INTERSECTIONS` is most likely a **collider** intersection
+      test rather than a terrain ray — it can land a piece on a rooftop or bounce it off a wall,
+      which no down-ray reproduces. Scope any implementation as a collision query and record which
+      of the two shipped. Landing then dispatches the named `BOUNCE_SEQUENCE` (`default` only — none of the
       150 carry a `water`/`lava` branch), which runs the piece's own `OBJECT_ACTIVE_STATE …
       INACTIVE` and stops its trail puffer.
     - **The other 379 have no apex and are still deferred (Layer-1.5, `BL-245`, blocked on a ground
