@@ -110,7 +110,8 @@ last reconciled 2026-08-07 merging `--debug-ainets` with `PLAN-vs-mode`'s three 
   overlay, unlike the freecam/anim-lab-only labs). Tints every drawn world mesh a flat colour by what
   it IS rather than what it looks like: destructible (red, from the exact `DestructibleRegistry.Resolve`
   climb a weapon hit takes — a door that only *looks* breakable reads as scenery, which is the correct
-  finding, not a bug — BL-009), facade (pink, `SceneBuilder.ClassifyBillboard` on the source
+  finding, not a bug: C2's `sgh_door1`/`sgh_door2` are a HEALTH-0 `OnStartup` open-the-doors
+  animation, never registered as destructibles), facade (pink, `SceneBuilder.ClassifyBillboard` on the source
   `GameZMesh`), clutter (green, every `MultiMeshInstance3D` under the world root — trees/bushes and
   C2/C5's instanced city blocks), everything else plain scenery (blue). Rebuilt on every X press
   rather than cached once, so a destructible's death (which swaps its subtree for wreck pieces) never

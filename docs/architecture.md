@@ -2409,7 +2409,9 @@ node's `csky_tint` first.
   here" (water/buildings/default, for impact-effect selection), not "what is this object"; two
   unrelated objects can share a surface tag.
 ⚠ **A door that only LOOKS breakable reads as scenery, and that is the correct finding, not a bug**
-  — `Resolve` requires a registered `HEALTH > 0` anchor (BL-009's C2 SeaHangar doors have none).
+  — `Resolve` requires a registered `HEALTH > 0` anchor, and the C2 SeaHangar's
+  `sgh_door1`/`sgh_door2` have none: they are driven by `sghangar-opensgdoors`, a HEALTH-0
+  `OnStartup` open-the-doors animation, so they are animated scenery and read as such.
 ⚠ No gamez world to classify (`--stage=empty`) prints the same "nothing to draw" notice
   `ColliderOverlay` prints for no collision built, rather than a silently empty overlay.
 
