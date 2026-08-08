@@ -143,7 +143,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — fog semantics and zones (BL-100 + BL-303 + BL-101)
 
 11. ☑ B11 — All-chapter zone-table survey; test H1–H4 on paper
-12. ☐ B12 — Dome-identity discriminator at the above-deck pose
+12. ☑ B12 — Dome-identity discriminator at the above-deck pose (**C1/C1C/C2B/C4 = `zone2`**; the `zone_id` census retired as evidence)
 13. ☐ B13 — Footage discriminators: camera-vs-fragment fade, switch point ([USER] capture as needed)
 14. ☐ B14 — Implement the winning fog model
 15. ☐ B15 — Re-calibrate or delete `fogRangeFactor` 2.0
@@ -1899,7 +1899,175 @@ scene named for every fail.
 the reader, not by eye. `VIEWING_RANGE` `FOG_SCALE` (HIGH = 1.0) is data the remake ignores; note
 it in the survey since it bears on B15's factor.
 
-## B12 ☐ Dome-identity discriminator at the above-deck pose
+## B12 ☑ Dome-identity discriminator at the above-deck pose
+
+**Landed.** (2026-08-08) Renders + `extracted/` reads only — no engine code, no `docs/formats/`
+page, no `backlog.md`, no `PROJECT_CONTEXT.md`. **No code change falls out of this item**: the
+`--sky-zone` default is already `zone2` and `PreferPopulatedHorizonZone` is untouched.
+
+### VERDICT
+
+**C1, C1C and C4 fly `zone2` — and so does C2B, shot with the same instrument because `B13`'s
+third discriminator hangs on it. All four open chapters land on the zone we already fly.**
+
+The conflict was never a tie. All three zone1 arguments rest on one unstated premise — *a daylit
+mission cannot render a moon and a star field* — and the original's own footage shows C1 IA1 and
+C4 IA1 doing exactly that. The fourth argument (the `zone_id` census) reached the right answer for
+the wrong reason and must **not** be carried forward: its visibility reading is self-contradictory
+(below), so it is retired as evidence even though it agreed. The verdict rests on the renders.
+
+| chapter | verdict | confidence | what settled it |
+|---|---|---|---|
+| **C1** | **`zone2`** | **verified against two original stills** | `C1 IA1 Cloud Puffs and Moon.png` shows a **moon**; the above-deck still shows a **faint star field**; only `horizon/zone2` has either |
+| **C4** | **`zone2`** | **verified against original footage** | `CAP-12` `c4/t21.5-1230m-above.png` shows the **moon** top-left over the deck; C4 `zone1` is one flat grey mesh |
+| **C2B** | **`zone2`** | **verified against original footage** | `CAP-11` `t50-c2b-above-deck.png` sky `(71.7, 77.6, 110.3)` vs our `zone2` `(64.3, 72.3, 100.5)` and `zone1` flat `176³` |
+| **C1C** | **`zone2`** | **asset identity + parity — no original C1C footage exists** | its `horizon/zone2` is the *same four meshes with the same bboxes* as C1's; its `zone1` is one mesh rendering a featureless field |
+
+### The renders (METHOD-5: fog neutralised identically on both sides)
+
+`.\RunProbe.ps1 --freecam --chapter=<X> --det --mute --no-fog --sky-zone=zone1|zone2 --pos=… --direction=… --screenshot=…`,
+all in `.scratch/b12/`. Both sides logged `weather [zoneN] --no-fog: fog + whiteout OFF, world
+light unchanged` (METHOD-15/METHOD-6 — the probe streams are in `.scratch/logs/`), so the
+comparison is of **domes**, not of fog. C1 at the pinned above-deck pose `-7323,1192,-3829`
+`0,0,-1`; C1C at `1750` (above its 1688 m `fvol` top), C4 at `1250`, C2B at `1600` pitched `+0.30`
+(at `1230` the deck and its `cloudparent` build-ups fill the frame — that pair was discarded).
+
+Sky-region mean RGB, and **isolated bright points** = pixels brighter than all eight neighbours by
+≥ 3 (the star metric; the gradient was deliberately *not* the test, per B11's amendment):
+
+| scene | sky mean RGB | luminance | star points |
+|---|---|---|---|
+| **ORIGINAL** C1 above-deck still | **(64.9, 73.6, 103.1)** | 74.3 | **8** |
+| **ORIGINAL** `C1 IA1 Cloud Puffs and Moon.png` | **(66.8, 74.7, 101.6)** | 75.6 | **5** (lum 197–216 over a 73 sky) |
+| ours C1 **`zone1`** `--no-fog` | (169.4, 169.6, 170.7) | 169.8 | **0** |
+| ours C1 **`zone2`** `--no-fog` | **(66.1, 74.6, 105.0)** | 75.5 | **13** |
+| ours C1 `zone1`, moon-framed heading | (173.7, 173.6, 174.0) | 173.7 | **0** |
+| ours C1 `zone2`, moon-framed heading | **(64.0, 72.0, 100.0)** | 72.8 | 3 + **the moon disc** |
+| ours C1C `zone1` | (176.0, 176.0, 176.0) sd **0.0** | 176.0 | **0** |
+| ours C1C `zone2` | (65.8, 74.7, 105.8) | 75.6 | **13** |
+| **ORIGINAL** C4 `CAP-12` t21.5, 1230 m | (194.4, 195.9, 210.0) **B−R +15.6** | 197.0 | 17 |
+| **ORIGINAL** C4 `CAP-12` t41.0, 1567 m | (210.2, 211.2, 218.8) **B−R +8.6** | 211.4 | 1 |
+| ours C4 `zone1` | (201.5, 200.6, 201.5) **B−R 0.0** | 200.9 | **0** |
+| ours C4 `zone2` | (159.8, 163.0, 189.5) **B−R +29.7** | 165.0 | **10** + the moon |
+| **ORIGINAL** C2B `CAP-11` t=50 | **(71.7, 77.6, 110.3)** | 79.5 | **0** |
+| ours C2B `zone1` | (176.0, 176.0, 176.0) | 176.0 | **0** |
+| ours C2B `zone2` | **(64.3, 72.3, 100.5)** | 73.1 | **0** |
+
+**C1 `zone2` reproduces the original to within (1.2, 1.0, 1.9) on the above-deck still and
+(2.8, 2.7, 1.6) on the moon still — inside decision 8's ±10 bar on every channel. C1 `zone1` misses
+by (+104, +96, +68) and is neutral grey where the original is blue.** C2B `zone2` is inside ±10 as
+well; C2B `zone1` misses by (+104, +98, +66). C4's originals are fogged and video-graded so the
+absolute levels are not comparable (verification.md — compare *within* a frame): the within-frame
+statistic is the blue shift, and the original is blue-shifted `B−R +9…+16` while our `zone1` is
+**exactly neutral, B−R 0.0** and our `zone2` is `+29.7`.
+
+**The moon is the unmistakable half, exactly as B11 asked.** `OriginalScreenshots\C1 IA1 Cloud
+Puffs and Moon.png` is a C1 IA1 flight frame with a crater-textured moon disc over the cloud deck;
+`playtest\CAP-12\c4\t21.5-1230m-above.png` is a C4 original with the same disc cut by the top-left
+frame edge. C1's `horizon/zone1` is `h_zone1scroll` + `o28` and C4's is a single `h_zone2scroll` —
+**neither contains a moon or a star mesh anywhere in the gamez.** A mission whose sky shows a moon
+is not flying a dome that has none.
+
+**The star field is real in the original, not a capture artifact.** The above-deck still's 8 points
+are 1–2 px, isolated, blue-white, `+13…+29` over a sky whose sd is 3.4; the higher-resolution moon
+still resolves the same thing unambiguously at `+122…+143` over its local median. Zoomed,
+contrast-stretched crops of both, beside ours, are in
+`.scratch/b12/b12-stars-zoom-original-vs-zone2.png`. **B11's caveat "a still could hide faint
+stars" is answered: the stills do not hide them, they show them.**
+
+### The `zone_id` census: right answer, dead argument (and it must not be re-cited)
+
+B11 called this the sharpest of the four and "4/4 against the settled verdicts". Both halves fail.
+
+**1. The horizon's own zones carry the same numbering — so there is nothing to decouple.** Every
+chapter's `horizon/zone<N>` node *and every dome mesh under it* carries `zone_id == N`: C1
+`zone1`→1 (`h_zone1scroll`, `o28`), `zone2`→2 (`moon`, `g1155`, `stars`, `h_zone2scroll`); likewise
+C1B/C1C/C2/C2B/C3/C4, and C5 `zone1`→1 / `zone3`→3. `zone_id` is not a layer or a render pass with
+its own private numbering — **it is the same zone concept the weather file names.** What decouples
+is `zone_id` from *render visibility*, and that is what points 2–4 show.
+
+**2. The 4/4 agreement is degenerate (INSTR-7).** Three of the four settled chapters have **no
+zone-2 world at all**: C1B `zone_id 2` = **2 nodes, 0 meshed**; C2 = **1 node, 0 meshed**; C3 =
+**2 nodes, 0 meshed**. "The flown zone holds the world" is *trivially* true where the other zone is
+empty — and "the other zone is empty" is the very same fact `weather.md` already used to settle
+those three from the horizon geometry. It is one datum counted twice, not two agreeing instruments.
+The one settled chapter where the census could have spoken is **C5, and it disagrees**: C5 flies
+`zone1` and carries **135 meshed nodes at `zone_id 3`** (127 `g*` city meshes at y 0–24 and 7
+`ap_lightpole.flt`), so the non-flown zone holds real ground geometry. Worse for a "world variant"
+reading, the *same class* of object is split across all three buckets there — `ap_lightpole.flt`
+×72 in `zone1`, ×7 in `zone3`, and 164 `lightpole` + 164 `w_lightglow` at `−1`.
+
+**3. In C1 the visibility reading is self-contradictory — neither zone contains a playable
+mission.** C1 IA1's own `targets.zrd.json` names `ap_transmitter` (`MSG_OBJ_RADIOTOWER`) and
+`dz1`–`dz5` (the fly-through passenger hangar, three train tunnels and Bloodhawk hangar).
+`ap_transmitter` is a 14-mesh radio tower with `rtwr_healthy`/`rtwr_destroyed` damage states and
+**every node in it is `zone_id 1`**; so are `dz1`–`dz5` and `dzpath1`–`dzpath5`. The cloud deck
+(145 nodes, 823–960 m), all 9 `fvol`, all 28 `cloudparent` and the moon/stars dome are **`zone_id
+2`**. Under a "draw only the flown zone" gate, C1 flying `zone2` has no radio tower and no
+fly-through structures, and C1 flying `zone1` has no deck. Generalised over the install: **every
+mission-named node that carries a zone at all is `zone_id 1`** — C1 29 name hits, C1B 16, C2 28,
+C3 13, C4 43, C5 1, and **zero** in `zone_id 2` (the lone C4 `zone_id 2` hit is the generic
+sub-node name `healthy` reached from `zeppelins.zrd.json`, an INSTR-10 name collision). The render
+says C1 flies `zone2` — the bucket *without* its own targets. **So `zone_id` cannot be a
+render-visibility gate.** `DIAG-6` is now settled positively: the correlation had no mechanism, and
+it now has a contradiction.
+
+**4. "Two complete alternative world variants" dies too.** C1's `zone_id 1` and `zone_id 2` meshed
+buckets share **0 node names** (451 vs 216 distinct). Two variants of one world would repeat their
+objects; these are complementary halves of a single world whose union is the mission. *(A 5 m
+co-location test looked like variant pairing at 880/1427 — its own control killed it, METHOD-14:
+zone1→zone1 excluding self scores 1200/1427. Do not re-run it.)*
+
+**5. One replacement reading was checked and dismissed, so it is not re-chased:** "`zone_id` picks
+the fog *zone* each node uses" would hand C1's entire deck, `fvol` field and `cloudparent`
+population `ZONE2`'s 1000–4000 range under a 4000–5000 altitude band — a flat `176` grey deck at
+every flyable altitude, which both C1 reference stills refute outright.
+
+**Bottom line:** `zone_id` is a partition tag of one world whose runtime meaning is still unknown,
+nothing in `CSVM/src` reads it, and **it is no longer admissible evidence about which weather zone
+a mission flies.** B11's zone-choice-conflict table should be read with that row struck.
+
+### What this changes downstream
+
+- **B13's discriminator 2 (C1 valley through a deck gap) DOES NOT EXIST.** C1's flown band is
+  `zone2`'s 4000–5000 m, unreachable under the 2500 m ceiling, so H1 and H2 predict full fog at
+  every flyable altitude. **B13's discriminator 3 (C2B t=50) DOES NOT EXIST** either — C2B is
+  `zone2`, band 9000–10000. **B13, discriminator 1 (C2 above 1024 m looking down) is the only one
+  left, and H1-vs-H2 is now a C2-only question**, exactly the branch B11 predicted for a `zone2`
+  verdict. B13's CAP should be minted for the C2 climb and nothing else.
+- **`weather.md`'s corroboration of the `FOG_ALTITUDE` semantics belongs to a zone C1 never flies.**
+  "C1/IA1 `zone1` 970→1047 is exactly cloud-band-bottom → whiteout-centre" is still an exact 3/3
+  identity in the data (C1 970/1047, C1C 1055/1082.5, C2B 924/1024 vs `CloudBandCentre`) but it is
+  an identity in the **unflown** zone, so it can no longer be cited as evidence for what
+  `FOG_ALTITUDE` *does*. **B14 owns the correction** (this item does not touch `weather.md`); the
+  identity itself is real and unexplained and must be recorded, not deleted.
+- **Every flown `FOG_ALTITUDE` band in the install except C2's is now unreachable**, which is
+  INSTR-7 for the whole altitude question: B14 must not tune the altitude term against a scene
+  that cannot exercise it.
+- **`B16` is unaffected** — the dome still must not fog, and this item's `--no-fog` renders are
+  another demonstration of it: the same `zone2` dome that paints a flat `176` band under
+  `ForceFogged` is a ±2-per-channel match to the original with fog off.
+- **`BL-100`'s four open chapters are settled** (C1/C1C/C2B/C4 = `zone2`, the shipped default), with
+  C1C the only one resting on asset identity rather than footage. `B17` owns the close.
+
+### Files
+
+`.scratch/b12/` (10 renders + 6 comparison sheets, listed below), this section, and the checklist
+line. Nothing else — no engine code, no `docs/formats/`, no `backlog.md`, no `PROJECT_CONTEXT.md`.
+
+- `b12-sxs-C1-abovedeck-original-vs-zone1-zone2.png` — the pinned pose, original vs both domes
+- `b12-sxs-C1-moon-original-vs-zone1-zone2.png` — the moon, original vs `zone2` vs `zone1`
+- `b12-sxs-C4-original-vs-zone1-zone2.png` — `CAP-12` t21.5 vs both C4 domes
+- `b12-sxs-C2B-original-vs-zone1-zone2.png` — `CAP-11` t=50 vs both C2B domes
+- `b12-sxs-C1C-zone1-vs-zone2.png` — C1C's two domes (no original exists)
+- `b12-stars-zoom-original-vs-zone2.png` — contrast-stretched 13× star crops, both originals + ours
+
+### Original brief (kept for reference)
+
+⚠ **Two claims below are now known false and are kept only as the record of what was believed:**
+"the above-deck original shows a smooth blue gradient and **no stars**" (it shows 8 star points,
+and a second C1 IA1 still shows the moon), and the `zone_id` census being "the sharpest" argument
+(it is not admissible at all — see the ruling above).
 
 **⚠ Amended by B11 (2026-08-08) — this is now a four-way data-conflict ruling, not a gradient
 comparison.** Three arguments point to zone1 for C1/C1C/C4 (their `zone2` carries `moon` +
