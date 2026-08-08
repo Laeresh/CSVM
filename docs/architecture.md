@@ -465,7 +465,7 @@ clutter (grown from `ClutterBuilder.ExportedKinds`) continuing the world past th
   accepted tiles do not span it adopts the full-cell-spanning FLAT strips `ClassifyGroundMesh`
   refused for being thin. Without it three C5 border cells — a base tile plus a 256–384 m water
   strip completing it — left a hole their own width in every copy: sky, no collision, outward
-  forever (`BL-316`, fixed). ⚠ Keyed on the CELL being short, never on the strip alone: flatness by
+  forever. ⚠ Keyed on the CELL being short, never on the strip alone: flatness by
   itself adopts hangar floors and rooftops, and the surface class cannot separate them either
   (`cblock*`, the city GROUND texture, classifies as `buildings`). `ClassifyGroundMesh` and
   `IsCompletionStrip` are pure statics pinned by `MapEdgeTileTests`; `--dump-tilegrid` writes the
