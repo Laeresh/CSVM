@@ -170,6 +170,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 25. ☑ C25 — The below-band ceiling covers to the horizon and fades like the original's — landed as
     a `K` correction (400 → 135 m); `C21`'s refutation meant no extension and no baked fade were
     needed at all
+26. ☐ C26 — The last strip: the dome wall's base must meet the fog wall seamlessly (user at the controls, 2026-08-09)
 
 ## Dependency and parallelism notes
 
@@ -3024,6 +3025,40 @@ geometry change at all, so the geometry baseline was not needed — the before/a
 `.scratch/b18/` is the baseline that was taken.*
 
 # Wave C — deck mesh brightness
+
+## C26 ☐ The last strip: the dome wall's base must meet the fog wall seamlessly
+
+**Goal.** Climbing below the band over a clean horizon shows no residual strip between the fog
+wall and the deck rim — the dome wall's lowest rows read as the fog colour, as the original's do.
+
+**Evidence (confidence: symptom user-confirmed at the controls 2026-08-09; mechanism lead-only).**
+C25's own prep measured the residual and under-called it: after K=135 the rim step is
+176.00 → 174.02 → 168.67 over 2 rows at 13–14 px elevation — "soft" in a still at the river pose
+(terrain hides the lowest rows there), visible in motion over a clean horizon. The strip is the
+dome **wall**'s base (textured, from local Y=0 up) rendering darker than the `FOG_COLOR` it must
+meet; B18 fixed exactly this family on the untextured **skirt** below Y=0 (authored to wear
+`FOG_COLOR`, we applied the colour twice). Candidates: (a) the wall's base row/vertex colours are
+authored to land on `FOG_COLOR` and our render is off (sRGB, mip selection at grazing angles, a
+vertex-colour product — B18's cross-tab found 99 real vertex-gradient polygons; the wall may be
+one, with a gradient our pipeline mis-lands); (b) the base is genuinely darker in the data and
+the original hides it otherwise (unlikely — the original shows no strip at any altitude).
+
+**Approach.** Reproduce first: a climb ladder over a clean horizon (open water/flat area, e.g.
+toward the map's south rim), 300→1000 m, measuring the 0–20 px elevation band per rung. Then read
+the wall's authored data (base vertex colours, texture bottom rows, per-chapter) and compare the
+predicted vs rendered base colour. Fix per the evidence — the B18 pattern (land the authored
+colour once, correctly) is the precedent; never fog, never an invented gradient.
+
+**Model recommendation.** high — same easy-to-fake-and-wrong shape as B18.
+
+**Verify.** The climb ladder clean at every rung (step at the wall base ≤ the original's own,
+measured from an original frame with a clean horizon); river + above-deck poses unchanged beyond
+the strip rows; 8-chapter freecam horizon sweep (B18's poses) unregressed; RunTests (goldens —
+list, C24 re-pins).
+
+**⚠ Traps.** B16/B18 are landed verdicts — no fog on the dome, no re-fogging the skirt. SHOT-23:
+compare like-pitched frames or state the pitch. The strip rows overlap the rim math from
+C21/C25 — change the WALL's rendering, not K.
 
 ## C25 ☑ The below-band ceiling covers to the horizon and fades like the original's
 
