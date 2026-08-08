@@ -93,13 +93,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 - `BL-059` `[Feature]` **Data-driven crash — the remaining variants/follow-ups.** The dirt/ground crash is
   complete and the default (`PLAN-data-driven-crash`, `docs/HISTORY.md`). What is still open:
-  1. **`bounce_sequence` re-launch (Layer-1.5).** The piece/debris `ObjectMotion`s carry
-     `do_intersections` + a `bounce_sequence` (`pNhit` → `ground_mixed_exp_sg` + a second ranged
-     launch) that `MotionRuntime` does not yet act on — it needs a ground-contact physics query
-     (`CrashBreakup.Advance`, on branch `bespoke-crash-animation`, is the reference integrator). The
-     pieces tumble to rest fine without it; the bounce is an embellishment. Also needs a real
-     `SOUND_GROUPS` resolver for `air_mixed_exp_sg`/`ground_mixed_exp_sg` (`snd_exp_ground_a` already
-     plays, hardcoded like `plane_destroy_sg`).
+  1. **The real ground-contact query behind `do_intersections` (Layer-1.5).** **Planned as
+     [`PLAN-ground-contact.md`](docs/PLAN-ground-contact.md) (2026-08-08) — that plan is the
+     authority; this entry is the pointer.** Two thirds of the bullet have since landed.
+     **Landed:** the `bounce_sequence` dispatch itself — `BL-240`/`PLAN-bounce-launch` solves a
+     bounce-terminated launch's flight time and fires the named sequence when the piece comes down
+     (`MotionRuntime.cs:242-255` arms `PendingBounce`, `MotionSet.Tick` emits the `Landing`,
+     `MotionSet.OwesBounce` holds the instance open for it); and the `SOUND_GROUPS` resolver, so
+     `air_mixed_exp_sg`/`ground_mixed_exp_sg` resolve for real (`SoundDefs.cs:60-72`,
+     `AnimRuntime.HandleSound`). **Open:** the **166 events that author `do_intersections: true`** —
+     150 of them `run_time`+bounce — which run their authored clock out and finish wherever the
+     parabola left them, routinely underground. They want a swept segment ray along the body's own
+     trajectory, ending the flight at the first collider and dispatching the bounce there.
+     (`CrashBreakup.Advance`, on branch `bespoke-crash-animation`, is the reference integrator.)
+     ⚠ **Not the 120 `bounce`-shape launches `BL-240` already solves**, nor the 167 vanish-shape:
+     all author `do_intersections: false`, and `PT-46` (d) confirmed the original sinks those
+     through the ground too. Widening the query to them is a divergence, not a fix.
+     ⚠ **Settled in the plan, not open questions:** the apex guard stays (it is what keeps
+     `BL-257`'s widened gate off `BL-245`'s falls); and where a session builds no colliders
+     (`SessionSpec.cs:183` — `--freecam`, every golden capture) the current launch-height path is
+     the stated fallback, so goldens are unaffected.
      ⚠ **`do_intersections` is probably a COLLIDER intersection test, not a down-ray to terrain**
      (user, 2026-08-08). A down-ray is therefore a *stand-in*, not the mechanism: it cannot land a
      piece on a rooftop or bounce it off a wall, which is what the original appears to do — the
