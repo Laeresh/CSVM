@@ -74,21 +74,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   them the FROM_TO dropped-delta bug** (that is a different event kind; the debris
   `translation.delta` *is* mapped):
   1. **World destructibles inherit no momentum.** `InheritedWorldVelocity` is set **only** by the
-     plane crash (`FlightController.cs:1433`); the shared world `AnimRuntime` never assigns it, so a
-     world piece gets only the small authored launch — a 5–10 m/s straight-up pop, which is exactly
-     "the pieces barely drift."
-  2. **Ground-rest / bounce is deferred.** `do_intersections` + `bounce_sequence` are not simulated
-     (counted deferred at `AnimRuntime.cs:2034`), so a piece integrates freely over `run_time` then
-     **holds its final pose** — translate a little, stop.
+     plane crash (`FlightController.cs:1566` — the sole assignment in the codebase); the shared world
+     `AnimRuntime` never assigns it, so `InheritedLocal` (`MotionRuntime.cs:150-156`) returns zero and
+     a world piece gets only the small authored launch — a 5–10 m/s straight-up pop, which is exactly
+     "the pieces barely drift." **This is the half that is uniquely this item's.**
+  2. **Ground contact is only approximated** — *and this half has shrunk since this entry was
+     written.* The common case now ends at ground level: `FlightToLaunchHeight` solves the parabola
+     and ends the flight when it returns to launch height (`MotionRuntime.cs:223-250`), a deliberate
+     stand-in for `do_intersections`, valid wherever the ground under the piece is flat — every
+     reachable case measured. What is still unsimulated is the `bounce_sequence` re-launch (counted
+     deferred at `AnimRuntime.cs:2273`) and the 379 events that FALL, with no apex to solve. Those
+     remainders are owned by `BL-059` item 1 and `BL-245`, not by this item.
   ⚠ A third cause once listed here — "the magnitude decode is unsettled TUNE", `translation_range`
   xz/y read as distance ÷ run_time with `initial`/`delta` unmapped — is **settled and no longer a
   cause**: xz/y are an azimuth/elevation in degrees and `initial` the launch speed, `delta` a speed
   ramp (`docs/HISTORY.md` 2026-08-01, census of all 1,217 events). Do not re-open it. How much
   limpness is left after that fix is itself worth a look before this item is scheduled.
-  **LARGER:** there is no single correct number — livelier world debris means either a world-object
-  launch multiplier (a TUNE mirroring the crash's `WreckMomentum`) or implementing `bounce_sequence`
-  ground-rest (the deferred Layer-1.5 physics-ray work). Both need an original-game A/B. Cross-ref the
-  "Data-driven crash" TUNEs already in this file (`WreckMomentum`, tumble-rate, debris-arc).
+  **LARGER:** there is no single correct number — livelier world debris means a world-object launch
+  momentum source (a TUNE mirroring the crash's `WreckMomentum`, plus an opt-out like the crash rig's
+  `InheritedVelocityExempt`, `WorldEffectsFactory.cs:340` — the data alone cannot tell debris from a
+  decal that must stay put). Needs an original-game A/B. Cross-ref the "Data-driven crash" TUNEs
+  already in this file (`WreckMomentum`, tumble-rate, debris-arc), and `BL-059`/`BL-245` for the
+  ground-contact remainder.
   ⚠ Do **not** "fix" it by reviving the FROM_TO deltas — wrong mechanism.
 
 - `BL-009` `[Research]` **C2 SeaHangar doors don't despawn and stay collidable after shooting the propane tank.** The
