@@ -149,7 +149,7 @@ public sealed class CaptureDirector
         var pos = camera.GlobalPosition;
         if (spec.Freecam || spec.AnimLab || spec.Fly)
         {
-            Log.Info("core", $"placement: --pos=\"Vec3Arg(pos)}}\" --direction=\"{DirArg(-camera.GlobalTransform.Basis.Z)}\"");
+            Log.Info("core", $"placement: --pos=\"{Vec3Arg(pos)}\" --direction=\"{DirArg(-camera.GlobalTransform.Basis.Z)}\"");
             return;
         }
         Log.Info("core", $"placement: --pos=\"{Vec3Arg(pos)}\" --lookat=\"{Vec3Arg(orbit.OrbitCenter)}\"");
