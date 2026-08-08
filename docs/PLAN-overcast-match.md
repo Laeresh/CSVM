@@ -161,7 +161,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ☑ C22 — Implement the underside darkening
 23. ☐ C23 — Re-measure the tops per population; blend the mesh↔sprite cut
 24. ☐ C24 — Final match: both stills within the bar; mint PT + night-moonlit BL; close `BL-118`
-25. ☐ C25 — The below-band ceiling covers to the horizon and fades like the original's (user proposal 2026-08-08)
+25. ☑ C25 — The below-band ceiling covers to the horizon and fades like the original's — landed as
+    a `K` correction (400 → 135 m); `C21`'s refutation meant no extension and no baked fade were
+    needed at all
 
 ## Dependency and parallelism notes
 
@@ -3017,7 +3019,112 @@ geometry change at all, so the geometry baseline was not needed — the before/a
 
 # Wave C — deck mesh brightness
 
-## C25 ☐ The below-band ceiling covers to the horizon and fades like the original's
+## C25 ☑ The below-band ceiling covers to the horizon and fades like the original's
+
+**Landed.** (2026-08-08) This item's original approach — extend the below-band ceiling past its
+rim and give it its own baked fade toward `FOG_COLOR` — was **refuted by `C21` before any of it
+was built**: the deck tiles author `fog: true` (not exempt), the original river still's ceiling
+fits the zone's own **authored** 1000→4000 m linear fog ramp to 1.0–1.3 units rms with no other
+mechanism needed, and the "~12.6 km reach" that motivated the extension was `A7`'s `f·h` read
+~3× too large, not evidence of a long fade. What was actually wrong is the ceiling's one free
+parameter, `DeckCeilingHeight` (`K`): at the shipped 400 m the sheet's rim sits at an elevation
+(39 px) where the original still plainly shows deck, so the region between our rim and the
+horizon shows the un-fogged dome instead — that gap is the "sky stripe," and it is a `K`
+artifact, not a missing extension or a missing fade. **The landing is `K`: 400 m → 135 m, nothing
+else.** No ceiling extension, no authored fade, no `fog: false` on the deck — the existing fogged
+sheet already covers to the horizon and fades exactly like the original's once its height is
+right. The bracket (110–155 m) is `C21`'s fog-ramp fit; the point inside it, 135, is the **user's
+pick from the controls**, not a further measurement — 135 and 400 were rendered side by side
+against the original still and the user chose 135 (`.scratch/c25/k-decision-montage.png`,
+2026-08-08, "K=135 (Recommended)" selected), because changing `K` revisits `A7`'s approved look
+("it looks a lot better. approved.") and no fit can make that call on its own.
+
+### The stripe is `K` alone, confirmed at the pixel
+
+`C21`'s rim-elevation formula, `f·K/6144` (half the 144-tile, 12,288 m span), predicted the fix
+before it was built: at `K` = 400 the rim sits at row 321 = **39 px**, matching our own render's
+deck edge to the pixel (`599.1×400/6144 = 39.0`); at `K` = 135 the rim moves to **13 px**, inside
+the fog-saturated band (completion ≈17.5 px) and inside this pose's own terrain onset
+(~14–17 px, `SHOT-23`) — so the deck's rim can never be reached before the ground silhouette
+covers the sky anyway, and the stripe cannot appear by construction, not by luck.
+
+### Verification
+
+**1. River pose — the stripe is gone, measured.** `-7323,192,-3829` / `-0.997,-0.1,0.070`, fog on,
+`.scratch/c21/measure.py rows` at horizon row 301 (this render's own pitch, `SHOT-23`) — before
+reused from `.scratch/c22/river-fog.png` (`K`=400, current HEAD at the time this item started),
+after shot fresh on this build (`.scratch/c25/river-fog-k135.png`):
+
+| elevation | K=400 (before) | K=135 (after) | reading |
+|---|---|---|---|
+| 44–46 px | 176.00, hp 0.000 (pure fog, d < 4000 m) | 174.5–174.6, hp ≈0.28 (deck, near-saturated) | both past the rim at their own `K` |
+| 34–40 px | **142.5–152.6, hp up to 3.26** — the dome's raw, unfogged colour showing through | **169.5–172.6, hp ≤0.30** — flat, fogged deck, no dome visible | **the stripe itself: present at 400, gone at 135** |
+| ≤12 px | 160.79–165.97, byte-identical between builds | 160.79–165.97, byte-identical between builds | terrain onset (`SHOT-23`) — independent of `K`, confirms the horizon row is right |
+
+The predicted mechanism and the measurement agree exactly: the K=400 dip (142.5 at its lowest) is
+the dome wall B16 correctly un-fogged, sitting exactly where the rim math places it; at K=135 that
+same elevation band is now inside the deck's own reach and reads as the deck's ordinary 7-unit
+fog fade, not the dome.
+
+**2. Above-deck pinned pose — byte-identical, both fog states.** `-7323,1192,-3829` / `0,0,-1`
+(above C1's ~1047 m band centre, where `DeckRegime` puts the deck on the world-fixed-floor
+branch that never reads `DeckCeilingHeight`) — verified, not assumed: full-frame diff
+(`.scratch/a7/compare.py`) against `.scratch/c22/abovedeck-dome-{fog,nofog}.png`, this build's
+`.scratch/c25/abovedeck-dome-{fog,nofog}-k135.png`:
+
+| variant | mean\|d\| | max | px changed |
+|---|---|---|---|
+| fog on | 0.000 | 0 | 0 / 921,600 (0.00 %) |
+| `--no-fog` | 0.000 | 0 | 0 / 921,600 (0.00 %) |
+
+**3. C4 spot check — same regime, no artefact.** C4's deck shares the one `DeckCeilingHeight`
+constant (`A7`), so a below-band C4 pose should move (the ceiling is genuinely closer now) without
+anything breaking. `-4974,900,-3861` / `-1,0,0` (below C4's 1050 m band centre), `--no-fog`,
+against `.scratch/c22/c4-900-nat.png`: **mean\|d\| = 1.046, max = 168, 3.49 % of pixels changed**
+— all of it in the sky/ceiling band; the terrain silhouette (including a pre-existing sharp
+mesh spike unrelated to weather, present identically in both frames) is pixel-for-pixel the same.
+Expected movement, no new artefact, no regime break.
+
+**4. Climb ladder 900→1250 m — the flip is still masked inside the whiteout core.** 25 m steps
+plus the 1046–1048 m bracket on the regime flip (`.scratch/c25/ladder/`): the four frames spanning
+the flip — **1035, 1046, 1048, 1060** — are **bit-identical to each other** (`mean|d| = 0.000,
+max = 0`, flat `mean lum = 243.00`), and the ramp either side is monotone (154.13 → 198.93 →
+233.31 → [243.00 ×4] → 237.91 → 229.83 → 159.41). The jump is now 135 m instead of 400 m, but the
+core it hides inside didn't move, so the flip is exactly as unobservable as `A7` found it.
+
+**5. 8-chapter `--freecam --frames=20` regression — zero errors, census unchanged.** Every count
+matches the on-record numbers exactly: decks C1/C1C/C2B 144 tiles @ y=960, C4 144 @ y=1050;
+clusters C1 28 · C1B 70 · C1C 30 · C4 45; sprites C1/C2B/C4 22,201 · C1C 22,748 · C5 16,170 — a
+constant-only change touches no geometry or placement, so an unchanged census is expected, not a
+coincidence.
+
+**`.\RunTests.ps1`** — build PASS (0 warnings), **units 682/682**, **engine 26/26, errors clean**,
+goldens **6 moved, 0 broken of 13**. Exit 1 is the golden stage alone, per convention. The movers
+are `A7`'s original six, not `C22`'s five — **`c4-snow` moves again**, because `K` is a shared
+constant read by every below-band deck regardless of `C22`'s `WorldLight` clamp, and C4's golden
+camera sits below its own band centre:
+
+| golden | moved? | why |
+|---|---|---|
+| `c1-waterfall`, `c1-flight`, `c1-destroy-effects`, `c1c-rain`, `c2b-rain`, `c4-snow` | **moved** | every below-band deck chapter with sky in frame — `K` changes what the ceiling projects to |
+| `c1b-night-sea`, `c2-city`, `c3-island`, `c5-city-night`, `c1-crash`, `viewer-bhawk`, `empty-stage` | **ok** | no deck (`C1B`/`C2`/`C3`/`C5`), no chapter world (`viewer-bhawk`/`empty-stage`), or no sky in frame (`c1-crash`, straight-down) |
+
+**Not re-pinned — `C24` re-pins once**, per the plan's own convention (`GOLD-1`/`GOLD-8`). The
+`viewer-bhawk` hang `BL-320` recorded did not reproduce this run.
+
+### Files
+
+`CSVM/src/Session/WeatherRig.cs` (`DeckCeilingHeight` 400f → 135f, its `TUNE` comment rewritten to
+carry `C21`'s fog-ramp derivation, the rim-math confirmation, and the user's choice from the
+bracket), `docs/architecture.md` (the `WeatherRig.cs` entry's `K` note), this section and the
+checklist line. `PROJECT_CONTEXT.md` untouched. `.scratch/c25/` — the decision montage, the
+before/after river and C4 renders, `river-fog-k135.png`, `abovedeck-dome-{fog,nofog}-k135.png`,
+`ladder/` (the climb-through set) and `regress/` (the 8-chapter sweep); reuses `.scratch/c21/`'s
+`measure.py` and `.scratch/a7/`'s `compare.py` as instruments, and `.scratch/c22/`'s renders as
+the `K`=400 "before" side (this build's own code had not changed since `C22` landed, so those
+stills are still valid controls).
+
+### Original brief (kept for reference)
 
 **Goal.** From below the band, no skybox is visible between the fog wall and the deck's edge —
 the ceiling reads continuous to the horizon, fading into the haze the way the original's does.
@@ -3040,6 +3147,8 @@ long fade ends, and it read as 12.6 km only through A7's `f·h`, which `C21` put
 `C21`'s verdict is that this item becomes **`K` = 135 m, then verify** — no extension, no
 authored fade, no `fog: false` — with the extension needed again only if the user rejects the
 `K` change (which alters an approved look, so it is a user decision).
+— *the user did not reject it: `K` = 135 was chosen at the controls from a side-by-side render,
+and the item landed exactly as `C21` scoped it — a constant change, nothing else.*
 
 **Approach.** Per C21's verdict: extend the below-band ceiling well past the current rim (A5's
 map-edge-extension precedent — virtual tiles, deterministic, bounded by where the fade ends) and
@@ -3047,20 +3156,30 @@ land the evidenced fade (deck `fog: false` + a fade toward the zone's `FOG_COLOR
 distance, if that is what the stills show — the fade's reach measured from the original, not
 invented). Above-band (the world-fixed floor) may need the same extension for the from-above
 horizon; verify at the above-deck pose.
+— *not followed: the extension and the fade were never built. `C21`'s refutation made them moot
+before this item started coding, and the verify section above confirms the existing fogged sheet
+covers to the horizon and fades correctly on its own once `K` is corrected.*
 
 **Model recommendation.** high — a render-mechanism change judged against the plan's own
 reference stills.
+— *revised down in practice: once `C21` closed off the mechanism question, this item was a
+one-constant change plus verification, not a render-mechanism change.*
 
 **Verify.** River pose: no sky stripe below the deck, mottling reach toward the original's
 row-337/19-px-above-horizon reading (SHOT-23 pitch caveat applies); above-deck pose horizon
 unchanged or improved; C4's deck (same regime) spot-checked; 8-chapter freecam; RunTests
 (goldens move — list, C24 re-pins).
+— *all done; see Verification above. The row-337/19-px original reading is the far-range
+saturation point (`C21`), not a fade target — the stripe check above is the item's real bar.*
 
 **⚠ Traps.** Do not touch the whiteout, the dome, or the fvol field — this is the DECK mesh
 population only. The fade must come from measured original behaviour, not taste; if C21's
 stills-read contradicts the fog-exempt hypothesis, build what the stills show instead. K
 (`DeckCeilingHeight`) may change under C21's re-estimate — re-verify the ceiling look at 192 m
 AND ~900 m so a K change and the extension are not conflated.
+— *moot: no extension was built, so there was nothing to conflate. The whiteout, dome and fvol
+field are untouched — confirmed by the ladder (whiteout), the above-deck byte-identity (dome path)
+and the unchanged sprite censuses (fvol field) above.*
 
 ## C21 ☑ Find the original's underside mechanism (research)
 

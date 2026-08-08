@@ -24,28 +24,49 @@ namespace CSVM.Session;
 /// <c>GameSession</c> (<see cref="CSVM.Effects.FogVolumeClutter"/>).</para></summary>
 public sealed class WeatherRig
 {
-    // ⚠ TUNE (A7, 2026-08-08) — how far above the camera the deck hangs while the camera is
-    // BELOW the cloud band. The original's deck is engine trickery, not a placed sheet: at the
-    // controls its texture looks exactly the same at every altitude on the way up, which a
+    // ⚠ TUNE (C21/C25, 2026-08-08) — how far above the camera the deck hangs while the camera
+    // is BELOW the cloud band. The original's deck is engine trickery, not a placed sheet: at
+    // the controls its texture looks exactly the same at every altitude on the way up, which a
     // world-fixed sheet cannot do (it would grow and parallax), so below the band it is a
     // ceiling carried with the camera and this is the only free parameter left in it.
     //
-    // Derived from `OriginalScreenshots/C1 IA1 Fog river.png` by APPARENT MOTTLING SCALE — the
-    // one thing a still of a featureless overcast can measure. A ceiling h metres up projects a
-    // world point at horizontal distance d to elevation e = f·h/d px above the horizon row, so
-    // resampling the sky's luminance profile against 1/e turns the deck texture into a periodic
-    // signal whose period is P/(f·h), P being the texture's world period. Calibrated on our own
-    // renders of the same `cloudlayer.tif` deck at known heights (.scratch/a7/ceiling_scale.py,
-    // ceiling_zcr.py): P came back 1062 m against the authored 1024 m tile, which is the
-    // method validating itself. Run on the original the same measurement lands f·h ≈ 2.4e5 px·m
-    // and, at the 62° vertical FOV our matched-pose twins are rendered with, h ≈ 400 m — the
-    // estimators bracketing it at 260–590 m. So: a TUNE matched to that still, not a decoded
-    // constant, and the bracket is the honest width. It scales with the assumed FOV
-    // (K ∝ tan(FOV_v/2)); nothing in the shipped data carries it.
+    // Supersedes A7's K = 400 m, which fit apparent mottling scale against the wrong texture
+    // period: A7 read the deck's "authored tile" as 1024 m, but the deck's authored UVs span
+    // 0.5x0.5 per tile in a 2x2 checker (`models.json`, 144/144 in both C1 and C4), so
+    // `cloudlayer.tif` actually repeats every 2048 m — the estimator locked onto the second
+    // harmonic and its "1062 m vs 1024 m" self-check was a coincidence, not a validation. A7's
+    // render is also heavily mip-blurred at grazing angles where the original is crisp
+    // (`.scratch/c21/mottling-AB.png`), which under-counts zero-crossings and biases that
+    // estimator's K upward on top of the period error.
     //
-    // One constant for every deck chapter, because C1's river still is the only original frame
-    // that can measure one. A per-chapter K needs a per-chapter still.
-    private const float DeckCeilingHeight = 400f;
+    // Re-derived (`C21`) from the same `OriginalScreenshots/C1 IA1 Fog river.png`, this time
+    // against the ZONE'S OWN AUTHORED fog ramp rather than the texture: the deck tiles author
+    // `fog: true` (not exempt), so a ceiling at height h should fade toward `FOG_COLOR` on
+    // exactly the authored linear ramp, elevation e = f·h/d px above the horizon at ground
+    // distance d. Fitting `L(e) = mix(L0, FOG_COLOR, clamp((f·h/e − 1000)/3000))` to the still's
+    // near-horizon row-means with L0 left free (`.scratch/c21/fitfog.py`) returns
+    // f·h = 80,000–91,500 px·m ⇒ K = 135–154 m, bias-corrected against the same fit run on our
+    // own render at a KNOWN K = 400 (which recovers +14…+21 % high, and reproduces that render's
+    // saturation elevation, f·400/4000 = 60 px, to sd 0) to a corrected 110–155 m bracket —
+    // residual 1.0–1.3 luminance units rms over ~200 rows either way.
+    //
+    // This K also predicts the "sky stripe below the deck" B16 exposed: the sheet's rim sits at
+    // f·K/6144 (half the 144-tile, 12,288 m span). At K = 400 that lands at row 321 = 39 px,
+    // matching our own render's rim to the pixel (599.1×400/6144 = 39.0) — but the original's
+    // frame plainly shows deck at that elevation (row 318, luminance 170.5), which only that
+    // frame's own K resolves: at K = 135 the rim moves to 13 px, INSIDE the fog-saturated band
+    // (completion at ≈17.5 px), so it can never be seen. No ceiling extension and no fog
+    // exemption is needed — the stripe was K putting the rim past where this zone's own fog
+    // already hides it; correct K and it closes itself (`C25`).
+    //
+    // K = 135 is the user's pick from that bracket (110–155), not a further measurement: 135 and
+    // 400 were rendered side by side against the original still and the user chose 135
+    // (`.scratch/c25/k-decision-montage.png`, 2026-08-08). Changing an approved look (A7's
+    // 400 m carried "it looks a lot better. approved.") is a call the fit cannot make on its
+    // own — the fit bounds the bracket, the user's eye picked the point inside it. Still one
+    // constant for every deck chapter (A7): C1's river still is the only original frame that
+    // can measure one; a per-chapter K needs a per-chapter still.
+    private const float DeckCeilingHeight = 135f;
 
     // ⚠ TUNE, and the FALLBACK only — a mission that authors CLOUD_COVER colours overrides it
     // (WeatherState.WhiteoutColor). It survives because the three reachable-band chapters that

@@ -3393,11 +3393,23 @@ are built from, and it is logged with the meshed counts it was decided on.
   flat white. Moving the flip altitude, or thinning `CLOUD_COVER`'s `THICKNESS`, makes it visible;
   if a pop ever shows, that is a finding about the whiteout band, not a licence to move the flip.
   `DeckRegimeTests` asserts the masking against the AUTHORED band, so the data moving fails a test.
-⚠ **`DeckCeilingHeight` (400 m) is a TUNE matched to one original still, and it is the only free
-  parameter in the model** — derived by apparent mottling scale from
-  `OriginalScreenshots/C1 IA1 Fog river.png` (the constant's own comment carries the method and the
-  260–590 m bracket; it scales with the assumed FOV). One value for every deck chapter: C1's river
-  still is the only original frame that can measure one.
+⚠ **`DeckCeilingHeight` (135 m) is a TUNE matched to one original still, and it is the only free
+  parameter in the model** (`C21`/`C25`, 2026-08-08). Supersedes `A7`'s 400 m, which fit apparent
+  mottling scale against the WRONG texture period — the deck's authored UVs make
+  `cloudlayer.tif` repeat every 2048 m, not the 1024 m tile `A7` assumed — and against a render
+  that is heavily mip-blurred at grazing angles where the original is not, both of which biased
+  that estimator's K upward. `C21` re-derived it by fitting the SAME still's ceiling to the
+  zone's own **authored fog ramp** instead of to texture appearance (the deck tiles author
+  `fog: true`, so this is the ceiling's actual fade mechanism, not a proxy for one): bracket
+  110–155 m. That fit also explains B16's "sky stripe below the deck" as a pure `K` artifact —
+  the sheet's rim sits at `f·K/6144`, and at 400 m it landed exactly where the original still
+  shows deck, exposing the un-fogged dome behind it; at 135 m the rim sits inside both the
+  fog-saturated band and this pose's own terrain onset, so it can never be seen. The user picked
+  135 from that bracket at the controls, side by side against 400 and the original still
+  (`.scratch/c25/k-decision-montage.png`, 2026-08-08) — changing K revisits `A7`'s approved look,
+  which is a call the fit alone cannot make. One value for every deck chapter: C1's river still
+  is the only original frame that can measure one; the constant's own comment carries the full
+  derivation.
 ⚠ **The cloud gate is a per-camera CULL MASK over `UI.SplitScreen.CloudFieldLayer`, never node
   visibility.** Both ambient populations — the `fvol` clutter MultiMeshes and the world's placed
   `cloudparent` clusters — are moved onto that one shared layer by `GameSession`; hiding them as
