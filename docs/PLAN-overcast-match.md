@@ -144,7 +144,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ B11 — All-chapter zone-table survey; test H1–H4 on paper
 12. ☑ B12 — Dome-identity discriminator at the above-deck pose (**C1/C1C/C2B/C4 = `zone2`**; the `zone_id` census retired as evidence)
-13. ☐ B13 — Footage discriminators: camera-vs-fragment fade, switch point ([USER] capture as needed)
+13. ☑ B13 — Footage discriminators — settled at the controls: H2 (fragment fade) confirmed, no capture needed
 14. ☐ B14 — Implement the winning fog model
 15. ☐ B15 — Re-calibrate or delete `fogRangeFactor` 2.0
 16. ☑ B16 — The dome's authored `fog: false` — landed, the primary fix for BL-303
@@ -2106,10 +2106,27 @@ record, don't force a verdict.
 remember the fog follows the *requested* zone; keep fog identical across the comparison or you're
 comparing fog, not domes.
 
-## B13 ☐ Footage discriminators: camera-vs-fragment fade, switch point
+## B13 ☑ Footage discriminators: camera-vs-fragment fade, switch point
 
-**Goal.** H1 vs H2 settled by what the original renders through/above the deck; if H3 survives B11,
-the switch point bracketed.
+**Landed (2026-08-08) — settled at the controls, no capture flown.** After B11 killed H3 and B12's
+zone2 ruling killed discriminators 2 and 3, the single surviving discriminator (C2 above its
+1024 m band top — the only flown fog band in the install inside the flight envelope) was answered
+by direct user observation in the original: **"Still dissolves into haze"** — the distant city
+keeps fading into the pale wash no matter how high the camera climbs. That is **H2: fog fades by
+FRAGMENT altitude**, exactly what our shader ships. H1 (camera fade) is dead. The two hypotheses
+were ~100 luminance units apart at that pose (B11's matrix), so the observation is categorical,
+the same evidence class that settled C5 = zone1 in 2026-07. `CAP-35` was minted for this and is
+retired unflown (removed from playtest.md the same turn); the user's attempt found the original's
+FOV too narrow to hold a single feature through a climb, and the feature-hold turned out to be
+unnecessary — the discriminator was always scene-level, not feature-level.
+
+**Consequence for B14:** there is no fog model to implement — the semantics we ship are the
+original's. B14 collapses to the documentation landing it already owed (weather.md's dead zone1
+corroboration, the C2 observation as the semantics' evidence) plus the fade-shape/range questions,
+which live in B15.
+
+**Original goal (kept for reference).** H1 vs H2 settled by what the original renders
+through/above the deck; if H3 survives B11, the switch point bracketed.
 
 **Evidence (confidence: lead-only).** CAP-12's six deck crossings may already contain
 valley-through-gap frames (fragment fade predicts the valley stays hazed from above; camera fade
