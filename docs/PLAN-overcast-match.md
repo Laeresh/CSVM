@@ -124,7 +124,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the scatter (BL-312 + the top-anchor correction)
 
-1. ☐ A1 — Decide the scatter mechanism from the evidence (research)
+1. ☑ A1 — Decide the scatter mechanism from the evidence (research)
 2. ☐ A2 — Kill the lattice and the field edge (horizontal mechanism)
 3. ☐ A3 — Top-anchor the vertical placement
 4. ☐ A4 — Scatter A/B vs CAP-12 + the river twin; close `BL-312`
@@ -159,7 +159,183 @@ blocks C22; C22 before C23 (the cut can only be judged with the underside fixed)
 
 # Wave A — the scatter
 
-## A1 ☐ Decide the scatter mechanism from the evidence
+## A1 ☑ Decide the scatter mechanism from the evidence
+
+### VERDICT (2026-08-08 — research only, no `.cs` touched)
+
+**Candidate (a): bounded random scatter inside the authored `fvol` volumes, at the authored mean
+spacing. Not (b) camera-tiling, not (c) a per-shape hybrid. Vertically: top-anchored, centre
+Y = volume top + `perp_dist_range`.** The `fvol` boxes are the field's *where* in all three axes;
+`distance` is its areal **density** (mean spacing), not a lattice phase. The RNG story does not
+change: one seeded stream, built once, world-anchored.
+
+**(b) is falsified by the authored data, not merely unsupported.** Four independent reasons:
+
+1. **The reader carries no altitude at all.** `extracted/<ch>/zrdr/fogvol.zrd.json` ships
+   `fog_zone`, `distance`, `clutter{weight, nodes, far_fade_range, perp_dist_range (±5 / −5…+10 m),
+   perturb_dist_range, scale_range}` — and nothing that could put the deck at 970–1090.55 m in C1,
+   1060–1180.55 m in C4 or −463…183 m in C5. `CAP-12` measures that deck (full obscuration
+   1003–1085 m, top edge 3560 ± 6 ft over five crossings), so the height **must** come from the
+   `fvol` geometry. A mechanism that reads a box's Y bounds and discards its X/Z bounds is not one
+   mechanism, it is two — and only one of them is authored.
+2. **C5 kills it outright.** Its seventeen volumes carry **8–20 vertices each** — polygonal prisms
+   following the streets, not boxes (`fvol7` is an 18-vertex hexagonal prism, `fvol34` a
+   20-vertex one) — and cover **102.4 Mm² of a 268.4 Mm² map, 38 %**. Camera-tiling on the authored
+   80 m period would place **41,943** sprites inside the map instead of ~16–19 k, and put
+   street-level haze over the whole city and the sea. "C5's seventeen street-level strips
+   preserved" fails by construction.
+3. **C1C kills it too.** Its twelve build-ups are **rotated, tapering frusta** authored over
+   particular places — `fvol10` is 854 × 294 m at its 1091.28 m base and ~464 × 160 m at its
+   1688.05 m top. "Extra cloud here and not there, narrowing as it rises" is inexpressible in a
+   field centred on the camera.
+4. **The `templates.zrd` shared-grammar argument does not survive reading `templates.zrd`.**
+   `extracted/C1/zrdr/templates.zrd.json` carries only `node`, `substitute`, `scale_range`,
+   `far_fade_range` — **no `distance` key and no `perturb_dist_range` key**. Ground clutter's
+   tiling period is the template's *ground-quad size in the gamez* (512 m for C1's `terpat02`,
+   [`clutter.md`](formats/clutter.md)) and its decoration offsets are **authored explicitly, one
+   transform per decoration**: that system contains no randomness at all. The genuinely shared keys
+   are `scale_range` + `far_fade_range` + weighted substitution, and `fogvol` already uses all three
+   the same way. `distance`, `perturb_dist_range` and `perp_dist_range` are fogvol-only and have no
+   ground-clutter meaning to inherit. `fogvol.md`'s "the shared grammar tiles unboundedly" was
+   reading a key that is not in the other file.
+
+**Why `PT-42`(b)'s "world-locked and tiled" is not evidence against (a).** Verified from
+`extracted/<ch>/gamez/nodes.json`: C1/C1C/C2B/C4's `fvol1`–`fvol9` are an **exact 3 × 3 partition of
+the world `area`** — the nine combinations of x ∈ {[−12288,−10240], [−10240,−2048], [−2048,0]} × z
+in the same three intervals, against a `World` node whose `area` is exactly
+`left −12288, top −12288, right 0, bottom 0`. **The field's footprint IS the base map, to the
+metre**, with no interior seams. So "puffs stay put as you fly through them, there are always more
+in every direction over the base map, no volume edge anywhere" is *predicted by* the bounded
+reading — it is not a discriminator. The two candidates can only differ within `far_fade_range.y`
+= 3500 m of the map boundary, looking outward. **At both pinned A/B poses (above-deck
+x −7323 z −3829, river x −7325 z −3829) the nearest map edge is 3829 m away — past the fade.**
+There the bounded and the unbounded field are identical by construction.
+
+**So, stated explicitly as decision 4 requires: the footage cannot discriminate bounded-random from
+unbounded-tiled at the ranges it samples**, and the smaller change wins. The criteria are the
+contract, and (a) meets all four — see the acceptance table below.
+
+### What A2 changes, and what it must not
+
+- **Keep** the per-volume decomposition into `distance` × `distance` cells, one placement per cell.
+  That is the density, and density is the one thing the old reading got right: C1 9,025 placements
+  over 12,288² m² = 5.977e−5 /m², **mean spacing 129.3 m** against the authored 130; mean card area
+  132.3² × E[scale²] (1.5258) = 26,707 m² ⇒ **1.60 sprite-areas of cover per unit of layer**, an
+  overcast one sprite deep. Counts stay 9,025 (C1/C2B/C4), 11,368 (C1C), 19,356 (C5) — all
+  reproduced here from the box extents, so a moved count in A2's log means a bug, not a design.
+- **Change** only *where inside the cell* the sprite lands. Today it is the cell corner
+  (`x = gx * period`) plus `perturb_dist_range` 10–20 m at a free bearing — ±15 % on 130 m, which
+  is the comb. Make it a **uniform draw inside the cell**, then apply the authored
+  `perturb_dist_range` on top exactly as now. No authored value is discarded, no constant invented.
+- **Stratified, not Poisson.** Do *not* replace the cells with N uniform draws over the whole
+  footprint: pure Poisson at this density opens holes, and an overcast that must read as continuous
+  would break up. One draw per cell keeps the mean spacing *and* the continuity.
+- **RNG: nothing changes, and that is a reason to prefer (a).** The field is built once,
+  world-anchored, never recycled, so a single `Rng.NewSystemRandom(Rng.Clouds)` sequence drawn in a
+  fixed volume/cell order already makes the whole field a pure function of the master seed — stable
+  under `--det`, identical run to run, shared by every splitscreen pane. **A2's cell-hashing trap is
+  moot under this verdict**: there is no camera-relative cell to hash. Do not introduce a
+  coordinate hash, and do not let placement depend on camera position, pane count or build order.
+
+### Vertical anchor (for A3)
+
+**Centre Y = volume top + `perp_dist_range`.** Predictions, from the verified box tops and
+card 132.3 m × scale 0.95–1.5:
+
+| chapter | volume top | centres | card bottoms | measured |
+|---|---|---|---|---|
+| C1 | 1090.55 | 1085.6–1100.6 | **986.3–1037.7** | first wisps 982 m, full obscuration from 1003 m ✓ |
+| C4 | 1180.55 | 1175.6–1190.6 | **1076.3–1127.7** | clear air at 1135 m with the sheet below ✓ |
+| C1C slab | 1091.28 | 1086.3–1101.3 | 987.1–1038.4 | — |
+
+⚠ **The C1 band is a degenerate instrument and must not be cited alone** (METHOD-1, INSTR-7):
+`CLOUD_COVER` `TOP 1124 / BOTTOM 970 / THICKNESS 30` (verified in
+`extracted/C1/IA1/zrdr/weather.zrd.json`) predicts full white **1000–1094**, and the `fvol` slab
+predicts a top at **1090.55**; the measurement is 1003–1085. Both fit. **C4's 1135 m clear-air
+frame is the only clean discriminator** for sprite placement, and it says top-anchored.
+
+⚠ **Top-anchoring is not safe for the two thick-volume shapes — A3 must check both.** C5's strips
+are 646 m thick with 70 m cards, so the rule puts every sprite in a sheet at **125–246 m** and
+leaves the streets below it empty; C1C's build-ups are 300–597 m tall, so the rule caps each tower
+at **1584–1797 m** (for the 1688 m ones) and hollows the shaft. If either reads wrong at the
+render, the anchor is per-volume-shape and A3 says so in `fogvol.md` — but it decides that from a
+frame, not from a threshold invented here.
+
+### ⚠ New finding — the volumes are filled by AABB, and half of them are not axis-aligned
+
+Not part of the mechanism choice, found while verifying it, and it lands in the same function.
+`FogVolumes.SubtreeBox` takes the world-space **AABB** of each `fvol` mesh, and `Scatter` fills
+that. For C1/C2B/C4's slab that is exact (the boxes are axis-aligned; hull/AABB = 1.000). It is not
+exact anywhere else:
+
+- **C1C's twelve build-ups are rotated rectangles, all at hull/AABB = 0.383.** Their authored
+  footprints are 2048 × 704 m (and 974 × 335, 1864 × 641, 854 × 294) — and the same twelve
+  footprints are cut into `fvol9`'s own top face as coplanar polygons, which is how the match was
+  confirmed (`fvol9` poly0/1/2/7–15 reproduce `fvol10`–`fvol23`'s footprints exactly). Filling the
+  AABB places **2,343** sprites where the authored shape holds ~**897**, in axis-aligned squares
+  2.6 × too large, and — combined with top-anchoring — puts a 1877 × 2006 m slab of cloud at 1688 m
+  where the frustum has narrowed to ~464 × 160 m.
+- **C5's strips run hull/AABB 0.566–1.000, 0.846 overall**: 19,356 placements where the authored
+  corridors hold ~16,375, with the surplus sitting off the streets.
+- C1C would go 11,368 → ~9,922 and C5 19,356 → ~16,375 if A2 fills the footprint instead.
+
+**Recommendation: fold footprint containment into A2** (same function, same turn, and A3's
+top-anchor makes the C1C error worse if left). It changes no C1 pixel — C1's boxes are already
+axis-aligned — so it cannot disturb this milestone's two reference stills. **If it is instead
+deferred, it needs its own item**, because it is a decode correction and not a tuning matter.
+
+### Evidence, still-by-still
+
+| evidence | what it shows |
+|---|---|
+| `playtest/CAP-12/t124.0-grazing-tops-3963ft.png` | grazing along the tops at 1208 m: soft continuous mottling to the fade, no lattice, no edge. Sky→tops 10–90 % transition **103 px** |
+| `playtest/CAP-12/t44.0-above-deck-5010ft.png` | 5010 ft looking down the sheet: same, transition **104 px** |
+| `playtest/CAP-12/t97.0-high-above-5572ft.png` | 5572 ft: same, transition **91 px** |
+| `playtest/CAP-12/t29.2-base-first-wisps-3270ft.png` | entering the base: wisps arrive as isolated soft patches, not a rank |
+| `playtest/CAP-12/csvm-above-1160m.png` (ours) | a **razor-flat white plate** with a hard lump line: transition **13 px**, peak \|dlum/drow\| 9.14 |
+| `Screenshots/C1 IA1 Fog above clouddeck.png` (ours) | same defect at the pinned pose: transition **20 px** vs the original's **193 px** at the same framing |
+| `OriginalScreenshots/C1 IA1 Fog river.png` | from 934 m the underside is a flat gray sheet — **no card bottoms below the deck at all** |
+| `Screenshots/C1 IA1 Fog river.png` (ours) | discrete cauliflower lumps hanging below the deck with a hard lower boundary — A3's target |
+| `extracted/*/gamez/nodes.json` | the 3 × 3 map partition; C1C's frusta; C5's polygonal prisms; `World.area` |
+| `extracted/C1/zrdr/templates.zrd.json` | no `distance`, no `perturb_dist_range` — reason 4 above |
+
+⚠ **Instrument warning for A2/A4.** A2's proposed "column-autocorrelation check on the sheet
+region" **is degenerate at these poses** and must not be used as written (METHOD-14): perspective
+makes a fixed world-space period aperiodic in screen space, and a row/column ACF over the sheet
+finds *no* peak above 0.33 in ours **or** the original — including a 0.69 peak in the *original's*
+underside that is capture noise at sd 0.91–2.58. Use the **sky→tops 10–90 % transition depth on
+HUD-free columns** instead: it separates the two sides by 5–10 × (original 91–193 px, ours 13–20 px)
+and is what A4 should quote.
+
+### Predicted look at the three CAP-12 grazing poses, before A2 renders it
+
+1. **`t124.0-grazing-tops-3963ft` (1208 m, ~120 m over the slab top).** The tops stop being a line
+   and become a band: the sky→tops transition deepens from 13–20 px to **~100 px**, individual
+   cards stop being separable anywhere along it, and the near sheet keeps mottling to the bottom of
+   the frame instead of going featureless. Sprite count unchanged at **9,025**. No repeating pitch
+   along the boundary at any bearing.
+2. **`t44.0-above-deck-5010ft` (1527 m, 440 m over the slab top).** One continuous mottled surface
+   out to the 3.1–3.5 km fade in every direction, with **no straight-line field edge** — and at the
+   pinned above-deck pose none is reachable, the nearest map edge being 3829 m out. Transition
+   ~**104 px**. The two big discrete balls that remain in ours are C1's **28 `cloudparent`**
+   clusters, a different population; both frames of any A/B here are **on the base map**, unlike the
+   original clip, which had left it.
+3. **`t29.2-base-first-wisps-3270ft` (997 m, just inside the slab floor).** Climbing in, the first
+   wisps arrive as **isolated soft patches at random bearings** rather than a rank of lumps
+   crossing together, from **~986 m** (predicted lowest card bottoms) against the measured 982 m
+   — and, once A3 lands, nothing hangs below the 960 m deck sheet, which is the river twin's
+   remaining defect.
+
+### Acceptance criteria (decision 4) against the verdict
+
+| criterion | met by |
+|---|---|
+| no lattice at any grazing angle | uniform-in-cell placement removes the period entirely; measured by transition depth, not ACF |
+| no visible field edge over the base map | the `fvol` footprint **is** the map, exactly; the only edge is the map boundary, and it is 3829 m from both pinned poses vs a 3500 m fade |
+| density reading like `CAP-12` | count and mean spacing are unchanged by construction (129.3 m, 1.60 sprite-areas of cover) |
+| C1C build-ups and C5 strips preserved | they survive because the volumes still bound the field — the whole reason (b) is rejected |
+
+---
 
 **Goal.** A written verdict (in this section + `fogvol.md`) on how the original places the
 `cloudsprite` field: randomised at the authored mean spacing inside the `fvol` boxes, tiled
@@ -170,8 +346,10 @@ vertical placement anchors. No code.
 candidates and the argument that the density corroboration only ever supported the spacing;
 PT-42(b): world-locked, tiled, no volume edge anywhere over the base map; CAP-12 grazing stills
 (t=44/59/97/124, t=29.2): soft continuous structure, no lattice; `fogvol.md`'s census: C1/C1C/C2B/C4
-map-spanning slabs, C1C's twelve stacked build-ups, C5's seventeen street-level strips. The
-`templates.zrd` shared grammar tiles ground clutter unboundedly.
+map-spanning slabs, C1C's twelve stacked build-ups, C5's seventeen street-level strips. ~~The
+`templates.zrd` shared grammar tiles ground clutter unboundedly.~~ — **withdrawn by the verdict
+above (reason 4): `templates.zrd` has no `distance` and no `perturb_dist_range`, its period is the
+gamez ground-quad size, and it randomises nothing.**
 
 **Approach.** Re-read `fogvol.md` + the CAP-12 stills; write the mechanism decision against the
 acceptance criteria (decision 4): no lattice at any grazing angle, no visible field edge over the

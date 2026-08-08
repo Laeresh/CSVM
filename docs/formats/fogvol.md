@@ -117,6 +117,26 @@ no `cloudsprite*` template, no `clutter` key, degenerate ranges).
   `distance` period (which is what the shared `templates.zrd` grammar actually does, and what the
   original reads as at the controls — world-locked puffs, always more in every direction, no
   volume edge) rather than placing a bounded set inside each finite `fvol*`.
+  ☑ **DECIDED 2026-08-08 (plan item `A1`), pending render verification `A2`–`A4`: the first
+  reading — bounded random scatter inside the volumes, at the authored mean spacing.** `distance`
+  is the field's **areal density** (mean spacing / cell size), not a lattice phase; the in-cell
+  position is randomised, and `perturb_dist_range` is still applied on top. Unbounded
+  camera-tiling is *falsified*, not merely unsupported: the reader carries **no altitude field at
+  all**, so the measured deck heights can only come from the `fvol` geometry, and a mechanism that
+  reads a box's Y bounds while discarding its X/Z bounds is two mechanisms; C5's seventeen
+  **polygonal** street prisms (38 % of its map) and C1C's twelve rotated, tapering build-up frusta
+  are inexpressible in a camera-centred field. **And the `templates.zrd` premise above is wrong on
+  the data:** that file carries only `node` / `substitute` / `scale_range` / `far_fade_range` —
+  **no `distance`, no `perturb_dist_range`** — its period is the template's gamez ground-quad size
+  and its decoration offsets are authored one-by-one, with no randomness anywhere. The genuinely
+  shared keys are `scale_range`, `far_fade_range` and weighted substitution.
+  ⚠ `PT-42`(b)'s "world-locked and tiled, no volume edge anywhere over the base map" is **not**
+  evidence against the bounded reading: C1/C1C/C2B/C4's `fvol1`–`fvol9` are an exact 3 × 3
+  partition of the `World` node's own `area` (x and z each split at −10240 and −2048 over
+  [−12288, 0]), so the field's footprint *is* the base map to the metre. The two readings can only
+  differ within `far_fade_range.y` (3500 m) of the map boundary, and the footage never samples
+  that; the argument is the authored geometry, not the frames. Full reasoning, the acceptance
+  criteria and the per-still evidence: `docs/PLAN-overcast-match.md` § `A1`.
 - **`perp_dist_range` is vertical.** "Perpendicular" to the volume's horizontal plane. The
   asymmetry supports it: `cloudsprite1` gets `[-5, 5]` and `cloudsprite2` `[-5, 10]`, so one kind
   floats slightly higher — which is a reading a horizontal offset makes no sense of.
@@ -131,6 +151,26 @@ no `cloudsprite*` template, no `clutter` key, degenerate ranges).
   to ~956 m). A top-anchored scatter (centres near the volume top + `perp_dist_range`) fits both
   the C4 gap and C1's measured whiteout onset at 1003 m. Not yet implemented; the correction
   belongs here, not in a tuning constant.
+  ☑ **DECIDED 2026-08-08 (plan item `A1`), pending render verification `A2`–`A4`: top-anchored —
+  centre Y = volume top + `perp_dist_range`.** C1 then predicts card bottoms 986.3–1037.7 m
+  (measured wisps 982, obscuration from 1003) and C4 1076.3–1127.7 m (measured clear air at
+  1135 m). ⚠ **C4's frame is the only clean discriminator; C1's band is degenerate** and must not
+  be cited alone — `CLOUD_COVER` `TOP 1124 / BOTTOM 970 / THICKNESS 30` predicts full white
+  1000–1094 and the slab predicts a 1090.55 m top, against a measurement of 1003–1085, so both
+  fit. ⚠ Open for `A3`: the rule is only tested on ~one-card-thick slabs. C5's 646 m strips would
+  put every sprite in a sheet at 125–246 m and empty the streets below, and C1C's 300–597 m
+  build-ups would be capped and hollow. If a frame shows either, the anchor is per-volume-shape.
+- **The volume is its axis-aligned bounding box.** `FogVolumes.SubtreeBox` takes the world-space
+  AABB of each `fvol` mesh, and the scatter fills that.
+  ⚠ **Wrong for every non-axis-aligned volume, measured 2026-08-08 (plan item `A1`); fix not yet
+  landed.** Exact for C1/C2B/C4's slab (hull/AABB = 1.000, and those nine boxes tile the map
+  exactly). But C1C's twelve build-ups are **rotated** rectangles at hull/AABB = **0.383** —
+  authored footprints 2048 × 704 m (also 974 × 335, 1864 × 641, 854 × 294), the same twelve shapes
+  that are cut into `fvol9`'s own top face as coplanar polygons — and they are **frusta**, not
+  boxes: `fvol10` is 854 × 294 m at its 1091.28 m base and ~464 × 160 m at its 1688.05 m top. C5's
+  strips run 0.566–1.000, 0.846 overall. Filling the AABB places 2,343 sprites in C1C's build-ups
+  where the authored shapes hold ~897 (C1C total 11,368 → ~9,922), and 19,356 in C5 where they
+  hold ~16,375.
 
 **Undecoded / not implemented:**
 
