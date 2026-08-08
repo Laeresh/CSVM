@@ -361,16 +361,25 @@ which pieces that covers. A format reader should know the current wiring:
   design. **`gate1`'s** archway never swaps at all — its collider census reads `off 0, on 0` at
   every kill, permanently — only its doors' own collider drop (on their own ~1–6.7 s rotate/fade
   timeline, unrelated to the swap) removes anything solid; see the RESET_STATE-fallback bullet
-  above for both. The one caveat for the rest is the **owed in-flight playtest**: the destroyed
-  variant re-adds its own colliders, so whether a blown-open door actually leaves a clear passage
-  is the original data's call, not something the swap can decide — fly through one to confirm.
+  above for both. The **in-flight playtest is now run, and a blown-open door does leave a clear
+  passage**: shooting the propane tank at the controls throws the door pieces, and they lose their
+  colliders as they begin to fade. The destroyed variant re-adds colliders of its own, so "clear
+  passage" was never something the swap alone could decide — what clears it is the fade path, which
+  is independent of the swap and of the registry: `ObjectOpacityState`/`ObjectOpacityFromTo` reach
+  `AnimRuntime.SetSubtreeOpacity` (`AnimRuntime.cs:1393`), and below `OpacityCollisionEpsilon`
+  (0.01) that calls `WorldCollision.SetFaded` (`WorldCollision.cs:52`) on the subtree. A fading
+  wreck piece is therefore non-solid whether or not anything up its chain has `HEALTH > 0`.
   - **The propane→door chain works end to end.** Hollywood's `kkgate` is a WeaponHit destructible
     whose `ANIMATION_ROOT_NAME` is the **`propane` tank** (a collidable, therefore shootable node),
     HEALTH 10; shooting *it* runs the gate's death — the healthy→destroyed swap plus `CallAnimation`
     to `genx12`, `tbridg1_fire`/`tbridg2_fire` (the bridges catch fire) and `free_the_goose`. The
     door itself is not directly damageable; the propane tank is the trigger, exactly as the original
-    plays it. (`sghangar-opensgdoors` is a *different*, HEALTH-0 OnStartup animation, not weapon-
-    destructible.)
+    plays it. Confirmed at the controls: the tank's kill throws the door pieces and they go
+    non-solid as they fade, leaving the gate flyable. ⚠ **The propane tank belongs to `kkgate`, and
+    its chain reaches nothing on the Seaplane Hangar.** `sghangar-opensgdoors` is a *different*,
+    HEALTH-0 OnStartup animation on `sgh_door1`/`sgh_door2` — those doors open and stay as solid
+    set-dressing by design, and no propane→`sghangar` chain is authored. A "the SeaHangar doors
+    didn't despawn" report from a propane kill is the Hollywood gate being misnamed.
   - **`genx12` is a parameterized exploder template — its `pt1..pt12` are placeholder nodes, not
     world pieces (D31).** The def is a parentless root (`genx12`, C2 gamez 39) whose own `pt*`
     children are meshless; a death calls it with `operand_node=<wreck node>` (kkgate:

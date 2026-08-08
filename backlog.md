@@ -69,24 +69,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Damage & destruction
 
-- `BL-009` `[Research]` **C2 SeaHangar doors don't despawn and stay collidable after shooting the propane tank.** The
-  SeaHangar doors are `sgh_door1`/`sgh_door2`, driven by `sghangar-opensgdoors` — a **HEALTH-0
-  `OnStartup` "open the doors" animation, not a weapon-destructible.** A destructible is any def with
-  `HEALTH > 0` (`AnimRuntime.cs:214-216`), so the doors are **never registered in
-  `DestructibleRegistry`**; `Resolve` never maps their collider, no death sequence runs, so nothing
-  hides them or removes their colliders — they open, then stay as solid set-dressing. The propane tank
-  the user shot is almost certainly **Hollywood's `kkgate`** (its `ANIMATION_ROOT_NAME` is `propane`,
-  HEALTH 10) — a *different* building, whose death chain (`genx12`/`tbridg*_fire`/`free_the_goose`)
-  does not touch `sghangar`. **LARGER — a data/design gap, not a collider bug** (the collider-removal
-  machinery is proven on `gate1`/`gate2` and `kkgate`). To settle: (a) confirm from the C2 gamez/zrdr
-  whether any propane→`sghangar` chain is authored at all (docs show only `kkgate`'s); (b) A/B the
-  original — does shooting a propane tank there destroy the SeaHangar doors?; (c) if it should, decide
-  how — give the doors their own destructible def, or a chain-reaction `CALL_ANIMATION` firing an
-  `OBJECT_ACTIVE_STATE` swap on them (the fuel-depot pattern). ⚠ The C25 plan text named
-  `sghangar_doors` as an intended case, but the shipped C2 data does not make them destructible — an
-  aspiration/data mismatch. ⚠ Even a working destructible door may leave wreck colliders — "clear
-  passage" is its own playtest.
-
 - `BL-022` `[Tuning]` **Debris arcs read slightly LARGER than the original — all that is left of "the trajectory
     is wrong."** In-flight kills once threw pieces "but not in the correct trajectory". **The largest cause
     landed 2026-08-01**: `translation_range` was read as a distance travelled when it is an azimuth/elevation
