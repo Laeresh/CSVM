@@ -106,6 +106,8 @@ public static class Suites
             "the full --effects-test sweep as verdicts: every effect resolves, template meshes show at the CALL SITE (not the stage origin), and none stays lit after its stop", EffectsCensus));
         into.Add(new TestHarness.Suite("bounce-launch",
             "a bounce-terminated OBJECT_MOTION flies its solved parabola and fires its BOUNCE_SEQUENCE on landing", BounceLaunch));
+        into.Add(new TestHarness.Suite("ground-contact",
+            "a do_intersections OBJECT_MOTION is cut short by real geometry, rests on the surface and picks its BOUNCE_SEQUENCE branch from what it struck — and does none of it without a mask", GroundContact));
         into.Add(new TestHarness.Suite("nulled-launch",
             "an OBJECT_MOTION naming NEITHER RUN_TIME nor BOUNCE_SEQUENCE flies its solved parabola before its own deactivation switches it off (BL-257)", NulledLaunch));
         into.Add(new TestHarness.Suite("destructible-census",
@@ -2538,6 +2540,170 @@ public static class Suites
         {
             textures.Dispose();
         }
+    }
+
+    // ---- do_intersections: the flight ends where the world says ---------------------------------
+
+    /// <summary>The 166 events that author <c>do_intersections: true</c> must be cut short by real
+    /// geometry instead of running their authored <c>RUN_TIME</c> out below the terrain, and must
+    /// pick their <c>BOUNCE_SEQUENCE</c> branch from the surface they struck.
+    ///
+    /// <para>Driven as a synthetic body rather than off a chapter's own debris, deliberately: the
+    /// reachable carriers are a crashed player's wreck and C5's <c>agyrobus</c>, both of which
+    /// reach their launch through a death sequence and a randomised draw. What is under test here
+    /// is the sweep, so the launch is authored by hand — thrown downward from a known height at
+    /// real chapter geometry — and the flight time, the resting height and the branch are all then
+    /// exactly predictable.</para>
+    ///
+    /// <para>⚠ The control is the THIRD case: the identical body with no mask handed over runs its
+    /// full 20 s and ends far below the surface. Without it a suite that never fired the query at
+    /// all would still pass its first two checks on a body that simply had not got anywhere yet —
+    /// and it is also the assertion that the no-collision-world fallback is the old behaviour and
+    /// not merely untested.</para>
+    ///
+    /// <para>⚠ Shown able to fail by disabling <c>TryContact</c>'s gate: the contact case then
+    /// reports the same 20.02 s / −2000 m as the unmasked control and four checks go red. It is
+    /// NOT able to fail on the arming rule — raising <c>ArmDistance</c> alone changes nothing here,
+    /// because arming is distance OR time and <c>ArmSeconds</c> still arms the body at 0.1 s, long
+    /// before a 60 m drop reaches anything. Arming is what the cockpit checks cover (the self-hit
+    /// at launch, where a piece starts inside the wreck); this suite covers truncation, resting
+    /// height, branch choice and the fallback.</para></summary>
+    private static void GroundContact(TestContext ctx)
+    {
+        const float Tick = 1f / 60f;
+        const float Authored = 20f;      // the run time these bodies carry; contact must beat it
+        const float DropHeight = 60f;    // above whatever the probe finds, well clear of the arming epsilon
+        const string Land = "testhit_ground";
+        const string Wet = "testhit_water";
+
+        ctx.WithWorld(ctx.Chapter, collision: true, world =>
+        {
+            var runtime = world.Runtime;
+            var root = world.Session.Root;
+
+            // A suite that builds no colliders would pass every contact check by taking the
+            // fallback and proving nothing, so the collision world is asserted before anything
+            // else is asked of it.
+            var space = root.GetWorld3D()?.DirectSpaceState;
+            ctx.Check(space != null, $"the world built a collision space to sweep against chapter={ctx.Chapter}");
+            if (space == null)
+            {
+                return;
+            }
+
+            // Somewhere with ground under it: probe straight down from high up over the origin
+            // column and take what the world actually offers, rather than assuming a height.
+            var from = new Vector3(0f, 400f, 0f);
+            var probe = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                from, new Vector3(0f, -400f, 0f), CollisionLayers.World));
+            ctx.Check(probe.Count > 0, $"a downward probe finds chapter geometry chapter={ctx.Chapter}");
+            if (probe.Count == 0)
+            {
+                return;
+            }
+
+            float surfaceY = probe["position"].AsVector3().Y;
+
+            // One authored OBJECT_MOTION, built by hand: a 5 m/s downward throw under Earth
+            // gravity from DropHeight above that surface, `do_intersections` on, a 20 s run time
+            // and both bounce branches named so the choice is observable.
+            static Dictionary<string, object?> Vec(float x, float y, float z) =>
+                new() { ["x"] = x, ["y"] = y, ["z"] = z };
+
+            AnimData Body() => new(new Dictionary<string, object?>
+            {
+                ["gravity"] = new Dictionary<string, object?>
+                {
+                    ["value"] = -9.8f,
+                    ["complex"] = true,
+                    ["no_altitude"] = false,
+                    ["do_intersections"] = true,
+                },
+                ["translation"] = new Dictionary<string, object?>
+                {
+                    ["initial"] = Vec(0f, -5f, 0f),
+                    ["delta"] = Vec(0f, 0f, 0f),
+                    ["rnd_xz"] = Vec(0f, 0f, 0f),
+                },
+                ["bounce_sequence"] = new Dictionary<string, object?>
+                {
+                    ["default"] = Land,
+                    ["water"] = Wet,
+                    ["lava"] = null,
+                },
+                ["run_time"] = Authored,
+            });
+
+            // Runs one body to a stop and reports what happened to it. `waterHook` stands in for
+            // the session's ProjectilePool.ClassifySurface binding — the classifier has its own
+            // coverage, and stubbing it is what makes the branch choice assertable without needing
+            // a chapter with reachable sea.
+            (float Flight, float EndY, string? Bounce, bool ByContact) Run(uint mask, System.Func<GodotObject?, bool>? waterHook)
+            {
+                var node = new Node3D { Name = "ground-contact-probe" };
+                root.AddChild(node);
+                node.GlobalPosition = new Vector3(0f, surfaceY + DropHeight, 0f);
+
+                uint maskWas = runtime.ContactMask;
+                var hookWas = runtime.SurfaceIsWater;
+                runtime.ContactMask = mask;
+                runtime.SurfaceIsWater = waterHook;
+                try
+                {
+                    var motion = MotionRuntime.Create(runtime, node, Body(), Authored);
+                    if (motion == null)
+                    {
+                        return (0f, node.GlobalPosition.Y, null, false);
+                    }
+
+                    var set = new MotionSet();
+                    set.Add(motion, world.Runtime.Destructibles.All.First().Def, null);
+                    float flown = 0f;
+                    string? bounce = null;
+                    for (int i = 0; i < (int)(Authored / Tick) + 2 && !motion.Finished; i++)
+                    {
+                        foreach (var landing in set.Tick(Tick))
+                        {
+                            bounce = landing.Bounce;
+                        }
+
+                        flown += Tick;
+                    }
+
+                    return (flown, node.GlobalPosition.Y, bounce, motion.LandedByContact);
+                }
+                finally
+                {
+                    runtime.ContactMask = maskWas;
+                    runtime.SurfaceIsWater = hookWas;
+                    node.QueueFree();
+                }
+            }
+
+            // 1 — contact cuts the flight short and rests the body ON the surface.
+            var hit = Run(CollisionLayers.World, _ => false);
+            ctx.Check(hit.ByContact, $"the sweep ended the body on a collider flight={hit.Flight:0.00}s");
+            ctx.Check(hit.Flight < Authored,
+                $"contact beat the authored run time flight={hit.Flight:0.00}s authored={Authored:0}s");
+            // A band, not a point: the hit lands between two frames and the body is a point, so
+            // "on the surface" is within a tick's fall of it, never below it.
+            ctx.Check(hit.EndY >= surfaceY - 1f && hit.EndY <= surfaceY + 2f,
+                $"the body rests at the struck surface endY={hit.EndY:0.00} surfaceY={surfaceY:0.00}");
+            ctx.Check(hit.Bounce == Land, $"contact dispatched the default branch bounce={hit.Bounce ?? "(none)"}");
+
+            // 2 — the same contact over water takes the water branch.
+            var wet = Run(CollisionLayers.World, _ => true);
+            ctx.Check(wet.Bounce == Wet, $"a water surface picks the water branch bounce={wet.Bounce ?? "(none)"}");
+
+            // 3 — THE CONTROL. No mask: no sweep, so the body runs its full clock and ends far
+            // below the surface, exactly as it did before this work — which is also the
+            // no-collision-world fallback every golden capture takes.
+            var free = Run(0u, _ => false);
+            ctx.Check(!free.ByContact, $"with no mask the body never tests contact flight={free.Flight:0.00}s");
+            ctx.Check(free.EndY < surfaceY - 100f,
+                $"the unmasked body falls straight through endY={free.EndY:0.00} surfaceY={surfaceY:0.00}");
+            ctx.Note($"contact {hit.Flight:0.00}s ending {hit.EndY - surfaceY:0.00} m from the surface; unmasked {free.Flight:0.00}s ending {free.EndY - surfaceY:0.00} m from it");
+        });
     }
 
     // ---- bounce-terminated launches fly and land ------------------------------------------------

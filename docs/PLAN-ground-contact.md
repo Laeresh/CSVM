@@ -140,7 +140,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ A contact sweep ends a `do_intersections: true` body where the world stops it
 2. ☑ The struck surface picks the `BOUNCE_SEQUENCE` branch
 3. ☑ Make the tallies and the code comments tell the truth about who owns what
-4. ☐ A collider-backed suite pins contact truncation, branch choice and the fallback
+4. ☑ A collider-backed suite pins contact truncation, branch choice and the fallback
 
 ### Wave B — confirm at the controls
 
@@ -320,7 +320,36 @@ failure this counter exists to catch.
 stops reporting reads as "solved". The counter must survive a crash respawn the way `LaunchCount`
 deliberately does (`MotionSet.cs:31-34`).
 
-## A4 ☐ A collider-backed suite pins contact truncation, branch choice and the fallback
+## A4 ☑ A collider-backed suite pins contact truncation, branch choice and the fallback — **landed 2026-08-08**
+
+**Landed.** New `ground-contact` suite (27 now, was 26). It builds the chapter world with
+`collision: true`, **asserts the collision space exists** before asking anything of it (the trap:
+a collider-less suite would pass by taking the fallback and prove nothing), probes down for the real
+surface height, then runs one hand-authored `do_intersections: true` body — 5 m/s downward from 60 m
+up, gravity −9.8, `run_time 20`, both branches named — three times:
+
+| run | result |
+|---|---|
+| mask + land | ends **3.03 s**, resting **0.00 m** from the surface, `default` branch |
+| mask + water hook | takes the `water` branch |
+| **no mask (control)** | runs the full **20.02 s** and ends **2,000 m below** the surface |
+
+Synthetic rather than a chapter's own debris on purpose: the reachable carriers reach their launch
+through a death sequence and a randomised draw, and what is under test is the sweep. The water case
+stubs `SurfaceIsWater` rather than hunting for reachable sea — the classifier has its own coverage,
+and the hook is the seam.
+
+**Verified — and shown able to fail.** Disabling `TryContact`'s gate makes the contact run report
+the same 20.02 s / −2000 m as the control and four checks go red. Full `.\RunTests.ps1`: 696 units,
+**27/27** suites, 13/13 goldens identical.
+
+⚠ **What the able-to-fail pass actually taught.** My first attempt broke `ArmDistance` alone and the
+suite stayed green with a byte-identical note — because arming is distance **or** time, and
+`ArmSeconds` still armed the body at 0.1 s, long before a 60 m drop reaches anything. So this suite
+does **not** cover the arming rule; B5's cockpit checks do, since arming only bites where a piece
+starts inside the wreck it launched from. Recorded in the suite's own doc comment.
+
+### Original approach (kept for reference)
 
 **Goal.** The behaviour is guarded headlessly, so a later refactor cannot quietly restore the sink.
 
