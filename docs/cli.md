@@ -48,7 +48,7 @@ found 2026-07-25). One flag, one description.
 `--loadout` · `--rocket` · `--gun-select` · `--fire` · `--fire-rockets` · `--incoming` · `--infinite-ammo` · `--ammo` · `--weapon-lab` · `--weapon-mount` · `--weapon-fire` · `--weapon-cycle` · `--weapon-click` · `--weapon-target` · `--weapon-surface` · `--weapon-standoff` · `--weapon-camera` · `--weapon-test` · `--damage` · `--damage-hd` · `--destroy` · `--crash`
 
 **Debug labs — the scripted twin of each interactive lab key**
-`--debug-livery` · `--debug-mesh` · `--debug-select` · `--debug-nodelab` · `--debug-damage` · `--debug-names` · `--debug-join` · `--debug-scoreboard` · `--debug-anim-ui` · `--debug-collision` · `--debug-dzpaths` · `--debug-ainets` · `--collision` · `--debug-colliders` · `--debug-classoverlay` · `--markers`
+`--debug-livery` · `--debug-mesh` · `--debug-select` · `--debug-nodelab` · `--debug-damage` · `--debug-names` · `--debug-join` · `--debug-scoreboard` · `--debug-anim-ui` · `--debug-collision` · `--debug-dzpaths` · `--debug-ainets` · `--collision` · `--debug-colliders` · `--debug-classoverlay` · `--debug-tilegrid` · `--markers`
 
 **Dumps and the test harness — report text plus a verdict, then quit**
 `--dump-markers` · `--dump-weapons` · `--dump-loadout` · `--dump-flight` · `--dump-config` · `--dump-mips` · `--run-tests` · `--damage-test` · `--effects-test` · `--hud-font-test`
@@ -58,6 +58,9 @@ found 2026-07-25). One flag, one description.
 
 **Rendering probes — is this thing drawing at all?**
 `--tex-override` · `--tex-census` · `--no-fog` · `--sky-zone` · `--mips`
+
+**Map-edge continuation — the `BL-105` prototype knobs**
+`--map-edge-block` · `--map-edge-mode`
 
 **Scripted input — fly a fixed stick input, no hands**
 `--hold` · `--yaw` · `--pitch`
@@ -116,6 +119,36 @@ last reconciled 2026-08-07 merging `--debug-ainets` with `PLAN-vs-mode`'s three 
   prints the same kind of "nothing to draw" notice as the C overlay's "no collision built", rather
   than a silently empty overlay. Debug-only material swap: mesh/node counts and goldens are
   unaffected)
+- `--debug-tilegrid` (open the **F14** map-edge tile-grid overlay at launch — the scripted twin of
+  the F14 press. Bound wherever a map-edge continuation exists (`--fly`, `--freecam`, and a
+  `--sky-zone` viewer), which is the same thing as "there is a grid to colour"; F14/F15/F16 sit in
+  the F13–F24 debug range so binding it in the viewer cannot collide with a lab key. Tints every
+  ground tile at 20 % by how it was folded: **in-map** neutral, then one hue per fold parity —
+  `copied` (a straight copy of the block), `x-mirrored`, `z-mirrored`, `xz-mirrored` for the corner
+  regions folded on both axes. **The width of one colour band is the block depth**, and a per-cell
+  light/dark checker inside the band makes the cells countable rather than estimated. Ground only;
+  clutter multimeshes are left alone deliberately, since tinting a forest buries the tile boundaries
+  the overlay exists to show. ⚠ **Pair it with `--no-fog`** — fog desaturates the parity hue past
+  the weather's fog-far (2.4 km on C2 zone1, under one 3-cell band), and the same
+  "fog is a thing to switch off, not tolerate" rule the texture-census work established applies
+  here. Debug-only shader-parameter mix, exactly as `--debug-classoverlay`: mesh/node counts and
+  goldens are unaffected)
+- `--map-edge-block=N` (how many border cells deep the mirrored block past the map edge is;
+  **default 1**, the historical clamp to a single border cell, so an unset flag changes nothing.
+  Clamped to the chapter's grid, at which point the continuation mirrors the whole map. ⚠ **1 is
+  known wrong and no replacement is chosen yet** — the mirror unit measures ~3.2 cells on C2 south
+  and ~2.26 on C4 north, so it is neither one cell nor one universal constant; this flag and **F15**
+  are how `BL-105` gets settled. At block 1 on C2, the south border row is nearly all water, so the
+  continued coastline is a dead straight line in z — visible immediately with `--debug-tilegrid`,
+  and the thing the original's footage contradicts)
+- `--map-edge-mode=mirror|repeat` (default `mirror`: alternately reflect the block, so every seam is
+  a shared mirror plane and heights match exactly across it. `repeat` translates it instead —
+  **a refuted hypothesis**, kept only so it can be looked at: `CAP-17` measured reflection seams at
+  half the translational period, which is what alternating reflection produces and plain repetition
+  cannot. Expect a visible step at every seam in `repeat`, because it butts the map's opposite edge
+  heights together; that is the honest rendering of the hypothesis, not a fault. **F16** toggles it
+  live. Repetition that shares the map-edge vertex row — which would repeat without stepping — is
+  deliberately not offered: it is mesh surgery rather than a per-cell transform)
 - `--plane=` (a comma-separated list gives one plane per splitscreen player — `--plane=player_bhawk,player_fury` — and implies that player count unless `--players=` says otherwise)
 - `--rof=` (default `extracted/rof` — the extracted UI archive holding the paint patterns; run `ExtractRof.ps1` to produce it)
 - `--paint=<pattern|random|none>` (aircraft livery, 2026-07-20: a pattern name, or `random`, or `none`. **Patterns are per aircraft** — the Fury has FORTUNE/BLCKSWAN/HUGHES/STUDIO, the Balmoral only FORTUNE/BRITISH; naming one the plane lacks logs its actual set and paints decals only. `random` draws from that plane's set. Comma-separated per player like `--plane=`, last covers the rest. **Defaults: `--fly`/`--stunt` randomize a fresh livery per player on every map load; static `--plane`/`--damage` views build unpainted**, so every pre-paint orbit/damage screenshot still renders byte-identically)

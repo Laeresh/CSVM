@@ -433,6 +433,21 @@ public sealed record SessionSpec
     public bool ShowColliders { get; private set; }
     public bool DebugCollision { get; private set; }
     public bool ShowClassOverlay { get; private set; }
+    public bool ShowTileGrid { get; private set; }
+
+    // ---- Map-edge continuation (BL-105 prototype knobs) ----------------------------------------
+
+    /// <summary><c>--map-edge-block=N</c>: how many border cells deep the repeated block is.
+    /// Default 1 = the historical clamp to a single border cell, so an unset flag changes nothing.
+    /// ⚠ 1 is known wrong — the measured unit is ~3.2 cells on C2 and ~2.26 on C4 — but no
+    /// replacement is chosen yet; see `BL-105`. <c>MapEdgeExtender</c> clamps this to the
+    /// chapter's grid, so an out-of-range value is not an error here.</summary>
+    public int MapEdgeBlock { get; private set; } = 1;
+
+    /// <summary><c>--map-edge-mode=repeat</c>: translate the block instead of alternately
+    /// reflecting it. <b>Refuted</b> for the original by `CAP-17`; available so the hypothesis can
+    /// be looked at, and it will step at every seam.</summary>
+    public bool MapEdgeRepeat { get; private set; }
 
     // ---- Where the data comes from: override VALUES only, null = not given ---------------------
 
@@ -572,6 +587,28 @@ public sealed record SessionSpec
             }
             else if (arg == "--debug-colliders") { s.ShowColliders = true; }
             else if (arg == "--debug-classoverlay") { s.ShowClassOverlay = true; }
+            else if (arg == "--debug-tilegrid") { s.ShowTileGrid = true; }
+            else if (arg.StartsWith("--map-edge-block="))
+            {
+                string want = arg["--map-edge-block=".Length..];
+                if (int.TryParse(want, out int block) && block >= 1)
+                {
+                    s.MapEdgeBlock = block;
+                }
+                else
+                {
+                    notes.Add(new Note("world", $"--map-edge-block='{want}' is not a cell count >= 1 — keeping the default 1 (the historical single-border-cell clamp)"));
+                }
+            }
+            else if (arg.StartsWith("--map-edge-mode="))
+            {
+                string want = arg["--map-edge-mode=".Length..];
+                s.MapEdgeRepeat = want == "repeat";
+                if (!s.MapEdgeRepeat && want != "mirror")
+                {
+                    notes.Add(new Note("world", $"--map-edge-mode='{want}' is not a mode it takes (mirror|repeat) — keeping 'mirror', the behaviour CAP-17 confirmed"));
+                }
+            }
             else if (arg == "--debug-damage") { s.DebugDamage ??= ""; }
             else if (arg.StartsWith("--debug-damage=")) { s.DebugDamage = arg["--debug-damage=".Length..]; }
             else if (arg == "--markers") { s.MarkersOverlay = true; s.HasContentArg = true; }

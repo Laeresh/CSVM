@@ -312,10 +312,14 @@ public sealed class WorldBuilder
     /// or no recognizable ground tiles. Extension ground is collidable exactly when the
     /// WorldBuilder was created with collision (it shares this SceneBuilder); extension
     /// clutter is never collidable, like the map's own clutter.
+    /// <para><paramref name="blockCells"/>/<paramref name="repeat"/> are the `BL-105` prototype
+    /// knobs (<c>--map-edge-block=</c>, <c>--map-edge-mode=</c>); their defaults are the
+    /// historical single-border-cell mirror, so an unaware caller gets exactly what shipped.</para>
     /// </summary>
-    public MapEdgeExtender? CreateEdgeExtender(ClutterBuilder? clutter = null) =>
+    public MapEdgeExtender? CreateEdgeExtender(ClutterBuilder? clutter = null,
+        int blockCells = 1, bool repeat = false) =>
         _builtWorld == null ? null
-            : MapEdgeExtender.Create(_gamez, _scene, _builtWorld, clutter);
+            : MapEdgeExtender.Create(_gamez, _scene, _builtWorld, clutter, blockCells, repeat);
 
     /// <summary>
     /// Switches off the entities nothing ever placed. Call once AFTER the animation runtime's

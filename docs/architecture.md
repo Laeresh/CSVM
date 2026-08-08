@@ -37,7 +37,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/ControlSurfaces.cs` — classifies aileron/elevator/rudder mesh nodes and their hinge axes (X ailerons/elevators, Y rudders).
 - `src/Mech3/WingLights.cs` — the one source for wingtip nav lights: flare node names, glow texture, warm-amber colour, blink period.
 - `src/Mech3/WorldBuilder.cs` — builds a chapter world: placed + partition subtrees, cloud deck, camera-anchored skydome, edge extender.
-- `src/Mech3/MapEdgeExtender.cs` — rolling window of mirrored border tiles + clutter continuing the world past the map edge, per camera.
+- `src/Mech3/MapEdgeExtender.cs` — rolling window of mirrored border-cell blocks + clutter continuing the world past the map edge, per camera; block depth is `BL-105`'s open question.
 - `src/Mech3/Clutter.cs` — stamps interp.json clutter templates onto matching-textured terrain: sprites, plus C2/C5's solid 3D city blocks.
 - `src/Mech3/FogVolumes.cs` — the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
 - `src/Mech3/Zrdr.cs` — zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's list.
@@ -138,6 +138,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/ColliderOverlay.cs` — the collider wireframes (C): every built collision shape drawn, coloured by owner class; needs `--collision` outside flight.
 - `src/UI/ClassOverlay.cs` — the colour-by-class overlay (X): every drawn mesh tinted destructible/facade/clutter/scenery, a findable-targets view.
 - `src/UI/AiNetsOverlay.cs` — the AI patrol-net overlay (F13, `--debug-ainets`): the chapter's nets as coloured graphs with labels + census log.
+- `src/UI/TileGridOverlay.cs` — the map-edge tile-grid overlay (F14, `--debug-tilegrid`): every ground tile tinted 20 % by fold parity, so one colour band is one mirrored block; F15 steps the block depth, F16 swaps mirror/repeat. The `BL-105` prototype.
 - `src/UI/WeaponLab.cs` — the weapon lab panel (B): steppers that arm the held plane's live loadout, click-to-place on a real world surface. Fires nothing itself.
 - `src/UI/PanelFocus.cs` — the one-line rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
@@ -448,9 +449,16 @@ taken from the gamez meshes, before there is a built tree to measure.
 ## src/Mech3/MapEdgeExtender.cs
 Rolling window (`Rings`=5 of 1024 m cells, diffed only on cell crossings) of repeated border tiles +
 clutter (grown from `ClutterBuilder.ExportedKinds`) continuing the world past the map edge.
-⚠ Repeats the LOCAL BORDER CELL, never the map interior (whole-map tiling brought the airport
-  back); `MirrorAxis` clamps to the border cell and alternately reflects copies — OUR seam-free
-  construction; the original may plainly repeat (open fidelity question; swapping is one line there).
+⚠ Repeats a BORDER-CELL BLOCK, never the map interior (whole-map tiling brings the airport back,
+  which 10+ minutes of flight past the edge says never happens). `FoldAxis(i, n, block, repeat)`
+  folds an outside index into the nearest `block`-deep band and alternately reflects it; at
+  `block`=1 it reduces exactly to the old clamp, which `MapEdgeFoldTests` pins.
+⚠ **The alternating reflection is CONFIRMED original behaviour** (`CAP-17`, 2026-08-04: reflection
+  seams at half the translational period — what reflection produces and repetition cannot). Do not
+  swap it to plain repetition; `--map-edge-mode=repeat` exists to look at the refuted hypothesis.
+⚠ **`BlockCells` defaults to 1 and 1 is known wrong** — the unit measures ~3.2 cells on C2 south and
+  ~2.26 on C4 north, so it is neither one cell nor one constant (`BL-105`). The default holds only
+  until the value is chosen; `--map-edge-block=` + F14/F15 (`TileGridOverlay`) are the instrument.
 ⚠ Extension sprites carry no collider (matching the map); buildings DO — one lazy `clutter_bld_ext`
   body per cell attaches the shared `KindExport.CollisionShape`; 3D kinds mirror as whole transforms.
 ⚠ The window is the UNION of all player cameras' neighbourhoods — one focus strands the other pane.
