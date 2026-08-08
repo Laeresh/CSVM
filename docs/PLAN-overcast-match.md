@@ -129,7 +129,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 3. ☑ A3 — Top-anchor the vertical placement
 4. ☐ A4 — Scatter A/B vs CAP-12 + the river twin; close `BL-312`
 5. ☐ A5 — Continue the field past the map edge (user playtest 2026-08-08: the original's field is everywhere)
-6. ☐ A6 — Why does flight mode show puffs below the deck when freecam doesn't? (investigate, then fix or reclassify)
+6. ☑ A6 — Why does flight mode show puffs below the deck when freecam doesn't? (investigate, then fix or reclassify)
 
 ### Wave B — fog semantics and zones (BL-100 + BL-303 + BL-101)
 
@@ -712,8 +712,10 @@ separate system per `docs/architecture.md`.
 **Evidence (confidence: n/a — this is the instrument).** CAP-12 stills + the pinned river pose;
 PT-42(c)'s "a lot denser" as the density reference. Wave-gate playtest (user, 2026-08-08, in
 engine): lattice/comb at grazing angles **confirmed gone**; puffs below the deck **still seen in
-flight** (→ `A6`); field ends at the base map where the original's is everywhere (→ `A5`) — A4
-closes the wave only after both land.
+flight** (→ `A6`, **landed 2026-08-08** — the deck was pinned 87 m above its authored altitude,
+not a scatter fault; C1/C1C/C2B pixels moved a third time, so re-pin against A6's build);
+field ends at the base map where the original's is everywhere (→ `A5`) — A4
+closes the wave only after `A5` lands.
 
 **Approach.** Matched shots at the CAP-12 grazing poses and both pinned poses; a density comparison
 (sheet-region sprite coverage vs the original's) recorded here; re-pin the goldens
@@ -760,7 +762,159 @@ extension radius; `--det` md5 stable across runs; C5/C1C counts unchanged.
 wrong population would invent content. The far fade (3500 m) must keep the working set bounded;
 state the extension's sprite budget.
 
-## A6 ☐ Why does flight mode show puffs below the deck when freecam doesn't?
+## A6 ☑ Why does flight mode show puffs below the deck when freecam doesn't?
+
+**Landed.** (2026-08-08) **It was never flight-vs-freecam, and it was never `cloudparent`. The
+deck was in the wrong place in BOTH modes, and A3's probe misread which surface was the deck.**
+`WeatherRig.Tick` re-pinned the deck's Y to the `CLOUD_COVER` band centre every frame — C1's
+**1047.0 m**, 87 m above the deck's own authored 960 m — while A3 had just top-anchored the
+`fvol` cards to the slab top, putting their bottoms at 986.3–1037.7 m. Every one of C1's 9,025
+sprites therefore hung **9.3–60.7 m below the deck sheet**, at every camera altitude, in flight
+and in freecam alike. The fix deletes the Y re-pin: the deck follows the camera in X/Z only and
+keeps the altitude its chapter's gamez authors. One line.
+
+**The user's "the fix only engages above the whiteout" hypothesis is REFUTED** — there is no
+altitude gate anywhere in the path, and the instrumented deck altitude is a flat 1047.0 m at
+cam_y 300 / 900 / 1000 / 1100 / 1200 m. What varies with altitude is only whether the defect is
+*visible*: below ~986 m every card is above you and the deck's underside fills the sky, so
+nothing projects below the horizon and the frame looks clean; from ~986 m up the cards hang past
+the deck plane and read as lumps on the underside. A3 sampled 934 m — inside the blind spot —
+which is why its probe and the user's controls disagreed.
+
+**Files.** `CSVM/src/Session/WeatherRig.cs` (the fix), `CSVM/src/Mech3/WorldBuilder.cs` (a
+comment that cited the removed pin), `docs/architecture.md` (`WeatherRig.cs` entry),
+`docs/formats/fogvol.md` (the authored deck/slab-floor invariant + a correction of A3's probe
+reading), `backlog.md` (`BL-118`'s two `cloudparent` bullets), this section.
+
+### The authored invariant that decides it
+
+Read from each chapter's `extracted/<ch>/gamez/nodes.json` `model_bbox` before any code changed:
+
+| chapter | deck tiles | `fvol1`–`fvol9` floor | gap | `CLOUD_COVER` centre | deck was pinned to |
+|---|---|---|---|---|---|
+| C1 | 960.0 | 970.00 | 10.00 | 1047.0 | 1047.0 (**+87.0**) |
+| C1C | 960.0 | 970.73 | 10.73 | 1082.5 | 1082.5 (**+122.5**) |
+| C2B | 960.0 | 970.00 | 10.00 | 1024.0 | 1024.0 (**+64.0**) |
+| C4 | 1050.0 | 1060.00 | 10.00 | **1050.0** | 1050.0 (**+0.0**) |
+
+**All four deck chapters ship the deck mesh exactly ~10 m below their slab floor** — the mesh and
+the sprite field are one sheet in the data, mesh underneath. The band-centre pin breaks that in
+three of four; in C4 it happens to *be* the authored altitude, which is both why C4 never showed
+the defect and the corroboration that the deck altitude and the cover band are one authored
+thing. The pin predates the `fvol` field entirely (it is older than the project's rename commit,
+written when a hand-tuned per-rig `CloudPuffs` was the only cloud population), and its stated
+purpose — hiding the ceiling→floor crossing inside the opaque whiteout core — is a cost this item
+knowingly gives up: the crossing now happens at the altitude the original's own static tiles sit
+at, which is the crossing the original renders.
+
+### Reproduced, then measured
+
+Temporary `GD.Print` in `Tick` (removed; `git diff` clean, METHOD-17) logging the deck's live Y
+against the camera's, over a `--fly --chapter=C1 "--pos=-7325,<alt>,-3829" "--direction=0,0,-1"
+"--hold=0,0,0,0"` ladder and the identical `--freecam` ladder:
+
+```
+A6 deck: cam_y=305.2  deck_authored_y=960.0 deck_live_y=1047.0 band=970-1124 mid=1047.0 whiteout=0.00
+A6 deck: cam_y=905.2  … deck_live_y=1047.0 … whiteout=0.00
+A6 deck: cam_y=1005.2 … deck_live_y=1047.0 … whiteout=0.57
+A6 deck: cam_y=1105.2 … deck_live_y=1047.0 … whiteout=0.30
+A6 deck: cam_y=1205.2 … deck_live_y=1047.0 … whiteout=0.00
+```
+
+Identical to the metre in `--freecam` at 300/900/1000/1100/1200 m. **The deck does not track the
+plane in Y and does not flip at the band** — suspect (a) as the plan phrased it was wrong about
+the mechanism but right about the module.
+
+Pixel measure, `--tex-override=cloud1.tif=00ff00 --tex-override=cloud2.tif=00ff00
+--tex-override=cloudlayer.tif=ff0000 --no-fog` (the deck flattened too, which is what A3 did not
+do — SHOT-13, DIAG-12):
+
+| pose | sprite px before | sprite px after |
+|---|---|---|
+| freecam river `-7325,934,-3829` (A3's own pose) | **85,507** | **0** |
+| `--fly` 900 m | 98,485 | 3,611 (all HUD text — the HUD is green) |
+| `--fly` 1000 m | 275,457 | 395,420 (correctly *above* the deck now: camera is inside the field) |
+
+### Why A3's probe read clean — both of its readings measured something else
+
+- **"Looking straight up, zero green pixels."** A `cloudsprite` is a `Facade`/`SphericalY`
+  billboard, so from *directly* below it is **edge-on**. That number is a fact about billboard
+  orientation and carries no altitude information (INSTR-11: a probe that reports one half of a
+  compound thing reads as a full pass on the half it can see).
+- **"The field's lower edge sits cleanly above a flat gray band — the `CloudDeck` mesh underside
+  at y=960."** The deck was at 1047 m, and the big pale surface filling the top of
+  `.scratch/a3/after-river-override-level.png` **is** that deck — the green is painted *over* it,
+  which is exactly "below the deck". The flat gray band A3 identified as the deck is the dome seen
+  under the deck's **far edge** (the deck follows the camera in X/Z, so its rim sits 6,144 m out,
+  1.05° above the horizon from 934 m). `.scratch/a6/before-a3riverpose-deck-red.png` is the same
+  frame with `cloudlayer.tif` flattened red and settles it at a glance.
+
+### `cloudparent` is cleared, with data — and BL-118 gains two corrections
+
+Read from `extracted/C1/gamez/nodes.json` before any probe, per the item's own instruction:
+C1 ships **28** `cloudparent` clusters, world pose on the **grandparent** g-node
+(`world1 → g0|g27816 → l2586 (Lod) → cloudparent`, the `cloudparent` node itself being identity),
+all at **Y = 1107.2379** on a 1024 m X/Z grid; their 626 child facades span **1069.7–1875.6 m** of
+world Y. **Every one of them is above both the pinned deck (1047 m) and the authored deck
+(960 m)**, so `cloudparent` cannot produce a puff below the deck at all and is not what the user
+saw. Two facts went to `BL-118`:
+
+1. **The two populations share their textures** — all 626 `cloudparent` facades are skinned
+   `cloud1.tif` (645 material refs) / `cloud2.tif` (362), the same two the `cloudsprite1/2`
+   templates use. `--tex-override` **cannot** separate them; separate by altitude or position.
+   (This is why the probes above are still sound: nothing of `cloudparent` reaches below 1069.7 m.)
+2. **`BL-118`'s "C4's 45 `cloudparent` parked at the world origin, runtime-placed by mission
+   setup, altitude not in `nodes.json`" is a misreading and is corrected there.** The identity
+   transform is on the `cloudparent` node; the pose is on its grandparent. C4's 45 are authored in
+   the gamez at Y 1382.815 (×25) / 1400.0 (×20), and nothing places them at runtime. C1's only
+   runtime touch is `extracted/C1/zrdr/clouds.zrd.json`, an `ON_STARTUP` `OBJECT_OPACITY_STATE`
+   holding every `cloudparent` at **0.6** within 1900 m forever — it never translates anything.
+
+Suspect (c), a transparency/draw-order path, was never reached: the ordering was correct
+throughout, the deck was simply at the wrong altitude.
+
+### Verification
+
+- **`.\RunTests.ps1`** — build PASS (0 warnings), **units 648/648**, **engine 26/26, errors
+  clean**, goldens **6 moved, 0 broken of 13**. Exit 1 is the golden stage alone. **The six are
+  the same six A2 and A3 moved and are not re-pinned — that is still A4's job** (GOLD-1).
+- **`c4-snow` is inert to THIS change and that was measured, not assumed** (GOLD-4/GOLD-5): its
+  own manifest args at its own `--frames=120` give `pixmd5=e83de4bc10177238f8d6040e6ba5e21b` on
+  the fixed build *and* on a temporarily-restored baseline build — **bit-identical**. Its MOVED
+  line is inherited from A2/A3, since the manifest still carries pre-A2 hashes. The A4 fix's
+  own footprint is therefore exactly the C1/C1C/C2B deck chapters, as the table above predicts.
+  A3's C4 clear-air probe is likewise bit-identical (`7E137451FADD05CB1AEB44916BF5247E`).
+- **8-chapter `--freecam` regression** — zero errors in all eight; deck census unchanged (C1/C1C/
+  C2B 144 tiles y=960, C4 144 tiles y=1050, four chapters no deck); sprite counts unchanged from
+  A3 (C1 9,025 · C1C 9,572 · C2B 9,025 · C4 9,025 · C5 16,170).
+- **A3's freecam river probe does NOT re-run unchanged, and must not** — it is the probe whose
+  reading was wrong. Its *conclusion* ("no sprite bottoms below the deck sheet") is now true for
+  the first time, and `fogvol.md`'s A3 entry carries the correction inline rather than silently.
+
+### Probe images (`.scratch/a6/`)
+
+| file | what it is |
+|---|---|
+| `before-a3riverpose-deck-red.png` / `after-a3riverpose-deck-red.png` | **the item's evidence** — A3's own pose with the deck flattened red: green all over the red before, none after |
+| `before-natural-river-934.png` / `after-natural-river-934.png` | the same pose in natural colours: cauliflower lumps hanging below the sheet → the flat gray underside the original still shows |
+| `before-fly-{300,900,1000,1100,1200}m-level.png` / `after-…` | the flight-mode ladder, override-isolated |
+| `before-freecam-…` / `ctrl-freecam-1000m-level.png` | the freecam control ladder — identical behaviour, which is what refuted the premise |
+| `before-natural-abovedeck-1192.png` / `after-natural-abovedeck-1192.png` | the pinned above-deck pose: the hard-edged rectangular plates in the near sheet (deck tiles cutting through the field at 1047) are gone |
+| `golden-c4-snow-baseline.png` / `golden-c4-snow-after.png` | the bit-identical C4 golden pair |
+| `after-c4-1135-override-level.png` / `before-…` | A3's C4 clear-air probe, bit-identical |
+| `regress-C{1,1B,1C,2,2B,3,4,5}.png` | the 8-chapter regression sweep |
+
+**⚠ Handover.** (1) **A4 re-pins the goldens and must fold this item's movers in with A2's and
+A3's** — the moved SET is unchanged, but C1/C1C/C2B pixels moved a third time. (2) **Wave C's
+underside measurements are now taken against a deck at a different altitude than CAP-12's
+matched-box A/B assumed** — re-take the +54 box at the new geometry before implementing C22, and
+do not carry the old row over. (3) The deck crossing at 960 m is no longer masked by the
+whiteout; if that reads badly at the controls it is a **new** item about the whiteout band's
+altitudes, not a reason to put the pin back. (4) The `--tex-override` texture-sharing trap
+(`cloudparent` = `cloud1/cloud2`) applies to every remaining item in this plan that isolates the
+field by texture.
+
+### Original approach (kept for reference)
 
 **Goal.** The user's at-the-controls report ("still showing below the deck") reproduced,
 mechanism named, and either fixed or reclassified with evidence.
@@ -774,6 +928,9 @@ so the deck sheet's live altitude in flight is not freecam's 960 m; (b) the `clo
 population — C1 ships 28 stationary clusters, untouched by Wave A, indistinguishable from fvol
 sprites at the controls (the BL-118 vocabulary trap in both directions); (c) a transparency/draw
 order path that lets sprites read through the deck sheet.
+— *(a) named the right module and the wrong behaviour (the deck is pinned to a constant, it does
+not track or flip); (b) is cleared by data; (c) was never reached. The premise itself — "flight
+shows it, freecam doesn't" — is false: both modes showed it, and A3's freecam probe was misread.*
 
 **Approach.** Reproduce in FLIGHT mode (not freecam): fly the river area below the deck with
 `--tex-override` isolating cloud1/cloud2 vs the deck texture vs cloudparent's textures (check
@@ -781,17 +938,14 @@ what cloudparent instances actually skin — read the template in the gamez data
 deck node's live Y while flying. Classify what is visible below 960 m; fix if it is fvol scatter
 or the deck-follow logic, reclassify to the correct item/backlog entry if it is cloudparent
 (that population is BL-118's business, not this wave's).
-
-**Model recommendation.** high — a contradiction between instruments; the risk is fixing the
-wrong population.
-
-**Verify.** A flight-mode capture sequence at the user's sighting conditions showing the
-classification; after any fix, the same sequence clean; freecam probes from A3 re-run unchanged.
+— *followed as written; "isolating … vs cloudparent's textures" turned out to be impossible —
+they are the same two textures — which is itself a finding and went to `BL-118`.*
 
 **⚠ Traps.** Do not "fix" cloudparent placement here — if the sighting is cloudparent, the
 verdict lands as evidence on the appropriate item and this item closes as reclassification.
 The whiteout band is a separate system; a sprite seen through whiteout murk is not "below the
-deck".
+deck". — *both respected: `cloudparent` was not touched, and every probe above ran `--no-fog`
+(whiteout off) or measured flattened colours, so no reading is a whiteout artifact.*
 
 # Wave B — fog semantics and zones
 

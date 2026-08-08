@@ -1387,9 +1387,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     2026-08-07, which is what made this bullet look like it contradicted `BL-312`):
     **`cloudsprite1`/`cloudsprite2`** are the `fvol*` clutter scatter — the *deck field*,
     world-locked and tiled (`PT-42`(b) at the controls); **`cloudparent`** are discrete
-    world-placed clusters (C1B's 70, C4's 45 parked at the world origin) — *stationary, not
-    tiled*, and the population this bullet is about. "Placed/scattered puffs" spans both and is
-    banned in this entry.
+    world-placed clusters (C1B's 70, C1's 28, C4's 45) — *stationary, not tiled*, and the
+    population this bullet is about. "Placed/scattered puffs" spans both and is banned in this
+    entry.
+    ⚠ **The two populations share their TEXTURES — `cloudparent` cannot be told from `fvol`
+    scatter by `--tex-override` (A6, 2026-08-08).** All 626 `cloudparent` child meshes in C1 are
+    `Facade`/`SphericalY` billboards skinned `cloud1.tif` (645 material refs) and `cloud2.tif`
+    (362) — the *same two textures* the `cloudsprite1`/`cloudsprite2` templates use. So a green
+    `--tex-override=cloud1.tif` probe paints BOTH; separate them by ALTITUDE or by cluster
+    position, never by texture. C1's are cleanly separable that way: their sprite geometry spans
+    **1069.7–1875.6 m**, entirely above both the deck (960 m) and the `fvol` slab's card bottoms.
+    ⚠ **C1's `cloudparent` census, measured from `extracted/C1/gamez/nodes.json` (A6):** 28
+    clusters, world pose on the **grandparent** g-node (`world1 → g0|g27816 → l2586 (Lod) →
+    cloudparent`), all at **Y = 1107.2379**, X/Z on a 1024 m grid offset −512 (X −11776…−512,
+    Z −11776…−1536), 17/19/35 children each. `extracted/C1/zrdr/clouds.zrd.json` is their only
+    runtime touch: an `ON_STARTUP` `OBJECT_OPACITY_STATE` holding every `cloudparent` at **0.6**
+    within 1900 m, looping forever. It never translates anything.
   **C4 take analysed 2026-08-07** (`CAP-11 C4 and CAP-12 Clouddeck.mp4`, gate dx=dy=0 peak
   0.848, d2 sd 0.99 ft; evidence in `playtest/CAP-12/c4/`) — the clear-air chapter separates
   what C1's murk hid, and it bears on the **uniform-vertical-fill inference** in
@@ -1411,9 +1424,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     (centres near the volume top, perp jitter) puts card bottoms at ~1076–1127 m — a 30–75 m
     clear band over the sheet, which is what the clip shows. C1 cross-checks: top-anchoring at
     1090 predicts bottoms ~991–1027, matching the measured whiteout onset 1003 m / wisps 982 m.
-  - ⚠ Confound to keep separate: C4 also ships **45 `cloudparent` clusters parked at the world
-    origin** in gamez (runtime-placed by mission setup, altitude not in `nodes.json`); the big
-    cumulus towers at 1200–1600 m in the same clip are likely those, not `fvol` scatter.
+  - ⚠ Confound to keep separate: C4 also ships **45 `cloudparent` clusters**; the big cumulus
+    towers at 1200–1600 m in the same clip are likely those, not `fvol` scatter.
+    ~~parked at the world origin in gamez (runtime-placed by mission setup, altitude not in
+    `nodes.json`)~~ — **wrong, corrected by A6 (2026-08-08): the pose is one level up.** Every
+    `cloudparent` node itself carries `transform: "Initial"`, which is what read as "parked at
+    the origin"; the world transform sits on its **grandparent** `g0` (`world1 → g0
+    (RotateTranslateScale) → l2586 (Lod) → cloudparent`). C4's 45 are fully authored in the
+    gamez at Y = **1382.815** (×25) and **1400.0** (×20), X/Z on the same 1024 m grid as C1's
+    (plus two off-grid at −3323.105/−4952.839). **Nothing places or moves them at runtime** —
+    grepping every JSON under `extracted/C4/` outside the gamez for `cloudparent` returns zero
+    hits, and C4 ships no `clouds.zrd` at all (so, unlike C1, its clusters are fully opaque).
+    The 1200–1600 m attribution survives the correction — for the opposite reason: they are
+    authored there, not placed there.
   *Fix shape:* revisit fogvol.md's vertical-spread inference (anchor at/near the volume top
   rather than filling it), per this entry's own rule — an inference correction, not a TUNE.
   *Playtest after fix:* re-shoot the C1 underside and the from-above deck/field boundary against

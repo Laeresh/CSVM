@@ -96,16 +96,26 @@ public sealed class WeatherRig
                 rig.Whiteout.Color = c;
             }
 
-            // Cloud deck follows the player: centered on the camera x/z and pinned to a fixed
-            // altitude at the whiteout-band centre. You climb toward it as a fixed ceiling (floor
-            // once above) and pass through it exactly where the whiteout is fully opaque, so the
-            // ceiling→floor transition is hidden.
+            // Cloud deck follows the player in X/Z ONLY — centred on the camera so the sheet has
+            // no reachable edge, at the altitude the chapter's gamez authors it.
+            //
+            // ⚠ Do NOT re-pin the deck's Y to the CLOUD_COVER band centre (it did until A6,
+            // 2026-08-08). That predates the authored `fvol` cloud field and it buries the deck
+            // INSIDE it: the four deck chapters ship the deck exactly ~10 m BELOW their
+            // `fvol1`–`fvol9` slab floor — C1 960/970.00, C1C 960/970.73, C2B 960/970.00,
+            // C4 1050/1060.00 (gamez `model_bbox`) — and the band centre is 87 / 122.5 / 64 m
+            // above the deck in the first three, past the top-anchored cards' own bottoms
+            // (C1: 986.3–1037.7 m), so every sprite hung below the sheet. C4's band centre is
+            // its authored 1050 exactly, which is why that chapter looked right and is the
+            // corroboration that the two altitudes are one thing in the data, not two.
+            // The cost is real and accepted: the ceiling→floor crossing is no longer hidden
+            // inside the opaque whiteout core. It happens at the altitude the original's own
+            // static tiles sit at, which is the crossing the original renders.
             if (rig.Deck != null && _weather is { HasCloudBand: true })
             {
-                float mid = (_weather.CloudTop + _weather.CloudBottom) * 0.5f;
                 rig.Deck.Position = new Vector3(
                     camPos.X - _deckCenter.X,
-                    mid - _deckCenter.Y,
+                    0f,
                     camPos.Z - _deckCenter.Z);
             }
         }

@@ -3245,6 +3245,22 @@ are built from, and it is logged with the meshed counts it was decided on.
 ⚠ `SetDeckCenter` is called separately from `Build`, whenever a chapter's cloud deck geometry loads
   (`GameSession`'s `cloudDeck != null` branch) — broader than "this rig has weather", so it is
   guarded with `_weatherRig?.SetDeckCenter(...)` rather than assumed non-null.
+⚠ **`Tick` follows the deck in X/Z ONLY — its Y is the chapter's authored altitude and must stay
+  there** (`A6`, 2026-08-08). It used to re-pin Y to the `CLOUD_COVER` band centre, to hide the
+  ceiling→floor crossing inside the opaque whiteout core. That rule predates the authored `fvol`
+  field and buried the deck *inside* it: all four deck chapters ship the deck ~10 m BELOW their
+  `fvol1`–`fvol9` slab floor (C1 960/970.00, C1C 960/970.73, C2B 960/970.00, C4 1050/1060.00), and
+  the band centre is +87/+122.5/+64 m in the first three — past `A3`'s top-anchored card bottoms
+  (C1 986.3–1037.7 m), so every sprite hung below the sheet in flight AND in freecam. Measured at
+  the C1 river pose: 85,507 sprite pixels visible below the deck → **0**. C4's band centre IS its
+  authored 1050, so that chapter is inert (`c4-snow` bit-identical either way,
+  `pixmd5=e83de4bc10177238f8d6040e6ba5e21b`) — which is the corroboration that the deck altitude
+  and the band are one authored thing, not two. The accepted cost: the crossing is no longer
+  hidden by the whiteout, and happens where the original's own static tiles sit.
+⚠ The deck and the `fvol` field are the SAME sheet seen from two sides, so they are read together:
+  the deck mesh is what an underside view shows and the sprite field is what a view from above
+  shows. Any change to either one's altitude has to be checked against the other's
+  (`Effects/FogVolumeClutter`, `docs/formats/fogvol.md`).
 
 ## src/Utils/Config.cs
 Dev-facing tuning-override layer: static `Config` parses an optional sparse `res://config.json`;

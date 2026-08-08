@@ -178,15 +178,41 @@ degenerate ranges).
     970 / THICKNESS 30` predicts full white 1000–1094; the slab predicts a 1090.55 m top; the
     measurement is 1003–1085 m and both fit) — **C4's 1135 m clear-air frame remains the clean
     discriminator**, and the render now reproduces it (below).
+  - ⚠ **The deck mesh is the slab's floor, authored: every deck chapter puts its `CloudDeck`
+    tiles ~10 m BELOW its `fvol1`–`fvol9` slab floor** (`A6`, 2026-08-08, from each gamez's
+    `model_bbox`). The invariant, all four:
+
+    | chapter | deck tiles | `fvol1`–`fvol9` floor | gap | `CLOUD_COVER` centre |
+    |---|---|---|---|---|
+    | C1 | 960.0 | 970.00 | 10.00 | 1047.0 |
+    | C1C | 960.0 | 970.73 | 10.73 | 1082.5 |
+    | C2B | 960.0 | 970.00 | 10.00 | 1024.0 |
+    | C4 | 1050.0 | 1060.00 | 10.00 | **1050.0** |
+
+    So the two populations are ONE sheet in the data: mesh underneath, sprite field on top of it,
+    and top-anchoring only makes sense read against the mesh at its authored altitude. Whatever
+    renders the deck must leave that altitude alone — `WeatherRig.Tick` re-pinned it to the
+    `CLOUD_COVER` centre until `A6` and thereby lifted it 64–122 m into the middle of the field in
+    three chapters of four. C4's centre lands on its authored deck exactly, which is the
+    corroboration and also why C4 never showed the defect.
   - **Verified at the render, `--pos`/`--tex-override` probes in `.scratch/a3/`:**
     - **C1 river pose** (`x -7325 y 934 z -3829`, matching `Screenshots/C1 IA1 Fog river.png`'s
-      pinned altitude): before, discrete cauliflower lumps hang below the 960 m deck sheet with a
+      pinned altitude): before, discrete cauliflower lumps hang below the deck sheet with a
       hard lower boundary (`before-river-pose.png`); after, the sheet's underside reads clean with
-      the cloud band sitting well above it (`after-river-pose.png`). `--tex-override=cloud1.tif=
-      00ff00 --tex-override=cloud2.tif=00ff00 --no-fog` looking straight up shows **zero** sprite
-      pixels (`after-river-override-up.png`); levelled and tilted up, the coloured field's lower
-      edge sits well clear of a flat gray band (the deck mesh) with visible terrain below and no
-      green intrusion at all (`after-river-override-level.png`).
+      the cloud band sitting well above it (`after-river-pose.png`).
+      ⚠ **`A3`'s `--tex-override` numbers at this pose were misread, and `A6` (2026-08-08) corrected
+      them — do not re-cite them as written.** ~~looking straight up shows **zero** sprite pixels
+      (`after-river-override-up.png`); levelled and tilted up, the coloured field's lower edge sits
+      well clear of a flat gray band (the deck mesh at y=960) with no green intrusion at all
+      (`after-river-override-level.png`)~~. Both readings measured something else. (a) A
+      `cloudsprite` card is a `Facade`/`SphericalY` billboard, so from *directly* below it is
+      **edge-on** — "zero green looking straight up" is a fact about billboard orientation and
+      carries no altitude information at all. (b) The deck was NOT at 960 m at the time: `WeatherRig.Tick`
+      re-pinned it to the `CLOUD_COVER` band centre, **1047 m**, and the big pale surface filling
+      `after-river-override-level.png` IS that deck — the green fringe is drawn *over* it, i.e.
+      below it. The "flat gray band" A3 identified as the deck is the dome seen under the deck's
+      far edge. Re-shot with the deck itself flattened (`--tex-override=cloudlayer.tif=ff0000`,
+      `.scratch/a6/`): **85,507 green pixels over red before, 0 after** the `A6` fix.
     - **C4 clear-air pose** (`x -4974 y 1135 z -3861`, the `csvm-c4-1135m.png` altitude): a
       level `--tex-override` sweep shows patchy, non-solid coverage at 1135 m — consistent with
       the predicted card-bottom band topping out at 1127.7 m, 7 m below this altitude — against

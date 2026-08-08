@@ -59,9 +59,9 @@ public sealed class WorldBuilder
     //
     // Deck tiles are the ONE exception to the backface culling below: they build
     // forceDoubleSided (see Add). Every one of the 144 tiles carries show_backface: false in both
-    // C1 (models 1004-1147) and C4, yet the player flies THROUGH the deck — Tick pins it to the
-    // whiteout-band centre and never re-orients it (WeatherRig.cs:86-97), so the same quad has to
-    // read as a ceiling from below and a floor from above.
+    // C1 (models 1004-1147) and C4, yet the player flies THROUGH the deck — Tick follows it in
+    // X/Z and never re-orients it (WeatherRig.cs), so the same quad has to read as a ceiling from
+    // below and a floor from above.
     //
     // The side culling lost is the UNDERSIDE: every tile's authored face points +Y, so the floor
     // seen from above was unaffected (a C1 camera at y=1400 renders bit-identical with and
