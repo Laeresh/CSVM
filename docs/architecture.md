@@ -2564,7 +2564,7 @@ The per-launch session node: `Session.Launcher` instantiates one per launch with
 `(SessionSpec, LauncherContext)` and runs `StartSession()` — an ordered sequence of phase methods
 sharing one `BuildState`; menu and CLI share that one build path. Owns the session `GameClock`
 and `StartupProfile`; delegates to the `src/Session/` clusters (LiveryResolver, SpawnPicker,
-PlaneRoster, FlightRigAssembler, WorldEffectsFactory, WeatherRig) and to `Testing.ProbeRunner`/
+PlaneRoster, FlightRigAssembler, WorldEffectsFactory, WeatherRig, LensFlareRig) and to `Testing.ProbeRunner`/
 `CaptureDirector` on the Launcher — read `src/Session/Launcher.cs`'s entry too before touching the
 build's edges. `BuildsCollision` is the only spelling of "does this session build colliders".
 `LoadArchives` opens the five session archives through `SessionArchives.OpenFor` (`ArchiveIntent.Lab`
@@ -3234,6 +3234,33 @@ are built from, and it is logged with the meshed counts it was decided on.
 ⚠ `SetDeckCenter` is called separately from `Build`, whenever a chapter's cloud deck geometry loads
   (`GameSession`'s `cloudDeck != null` branch) — broader than "this rig has weather", so it is
   guarded with `_weatherRig?.SetDeckCenter(...)` rather than assumed non-null.
+
+## src/Session/LensFlareRig.cs
+The sun's lens flare: four screen-space sprites strung along the sun→screen-centre vector at
+fractions 0.50/0.90/2.0, plus a full-screen white wash whose opacity is ~linear in the sun's screen
+distance from centre. Mirrors `WeatherRig` — constructed once per session beside it, `Build` once,
+`Tick` from the same per-rig block of `_Process`, one instance per pane. The whole spec is measured
+(`CAP-13`; method and calibration in `analysis/bl-165-lens-flare/`), and the per-pane state lives on
+this class rather than on `PlayerRig` because an instance is several nodes plus fade state — the
+whiteout could live there only because it is a bare `ColorRect`.
+⚠ **Anchored to the gamez `sun` node, never to `SUNLIGHT_ORIENTATION`.** The weather file's
+  orientation is the *shading* direction: C3 authors yaw 135 while the `sun` node sits at yaw 45, so
+  a flare keyed off the parameter draws 90° from the visible disc. Anchoring to the node also makes
+  the flare immune to any gamez→Godot axis error, since disc and flare share the conversion
+  (`WORLD-26`). That our own `DirectionalLight3D` agrees with neither is `BL-324`.
+⚠ **Two gates, from two files, that must agree**: a `sun` node in the horizon subtree, and
+  `LensFlareTexture` slots in `support\<ch>\init.gw`. Both are true of **C2 and C3 only** — as is the
+  `sun` texture, a third agreement. Nothing is keyed to a chapter name; a disagreement is logged, not
+  smoothed over, and the `lens-flare-gates` suite asserts both directions. C2's flare is **predicted,
+  never verified** — no footage of it exists.
+⚠ **Occlusion is one centre ray** against the existing colliders, for the sprites only. Terrain and
+  the own plane block; particles and billboard sprites carry no colliders and therefore cannot, which
+  is what the footage requires. A shape/sphere cast would be wrong — it triggers on any overlap and
+  would kill the flare under the partial cover that measurably changes nothing. The wash skips the
+  test entirely: it survives terrain occlusion.
+⚠ **Layer order is measured, not chosen**: world < flare sprites < HUD/cockpit < wash — see
+  `UI/HudLayers.cs`, which carries the whole canvas-layer table and why the debug bands sit above the
+  wash. `--no-flare` suppresses the effect so C2/C3 captures stay usable for unrelated comparisons.
 
 ## src/Utils/Config.cs
 Dev-facing tuning-override layer: static `Config` parses an optional sparse `res://config.json`;
