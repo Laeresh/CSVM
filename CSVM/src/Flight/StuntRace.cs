@@ -48,8 +48,11 @@ public sealed class Racer
 /// <see cref="StuntRaceBoard"/>.</para>
 ///
 /// <para>Best-time persistence stays single-player-only by decision (<see cref="ScoreStore"/> is
-/// not consulted here): race totals aren't comparable across player counts or spawn positions,
-/// since each player starts at a different point in the mission's spawn list.</para>
+/// not consulted here) — off because it was chosen to be, not because nothing implements it. A race
+/// field starts on an abreast grid, and a grid slot is a synthetic point by construction: it is the
+/// anchor spawn offset across the heading and the whole field raised to clear the ground, so no
+/// pilot sits on an authored spawn. A race total therefore measures a run from a place no solo run
+/// ever starts at, and filing it against a solo best would compare two different courses.</para>
 /// </summary>
 public sealed class StuntRace
 {

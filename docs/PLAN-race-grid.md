@@ -104,7 +104,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☑ `RaceGrid` — centred fan, injected ground sampler, uniform lift, headless tests
 3. ☑ Select the implementation once at session build; races get the grid, everything else does not
 4. ☑ Config-backed grid width and clearance, reported in the spawn log
-5. ☐ Correct the best-time persistence rationale in `StuntRace`
+5. ☑ Correct the best-time persistence rationale in `StuntRace`
 6. ☐ Docs, close `BL-084`, mint the countdown `BL-` and the race `PT-`
 
 ## Dependency and parallelism notes
@@ -258,7 +258,7 @@ into a decision. Leave `SpawnAbreast` alone: it is `BL-126`'s value, it does a d
 the two items stay separate. Sharing one constant would mean retuning the debug fan every time the
 grid width moves.
 
-## A5 ☐ Correct the best-time persistence rationale in `StuntRace`
+## A5 ☑ Correct the best-time persistence rationale in `StuntRace`
 
 **Goal.** The comment explaining why race best-times are not persisted states a reason that is still
 true.
