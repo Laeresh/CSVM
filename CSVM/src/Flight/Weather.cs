@@ -68,6 +68,13 @@ public sealed class WeatherState
 
     public bool HasCloudBand => CloudTop > CloudBottom;
 
+    /// <summary>The cloud band's midpoint: the altitude the fully-opaque core is centred on
+    /// (<see cref="WhiteoutAmount"/>) and the altitude the deck's ceiling/floor regime flips at
+    /// (<c>WeatherRig.Tick</c>, A7). One spelling for both, because the flip is unobservable
+    /// only for as long as it stays inside that core. Meaningless without
+    /// <see cref="HasCloudBand"/>.</summary>
+    public float CloudBandCentre => (CloudTop + CloudBottom) * 0.5f;
+
     /// <summary>The cloud band's own colours from CLOUD_COVER's <c>TOP_COLOR</c>/<c>BOTTOM_COLOR</c>,
     /// when the mission carries them (integer-RGB in the data — normalized by
     /// <see cref="ParseColor"/>). Null when absent (C1/IA1 has neither). Consumed by
@@ -247,7 +254,7 @@ public sealed class WeatherState
     {
         if (!HasCloudBand || altitude <= CloudBottom || altitude >= CloudTop)
             return 0f;
-        float mid = (CloudTop + CloudBottom) * 0.5f;
+        float mid = CloudBandCentre;
         float coreHalf = CloudThickness * 0.5f;       // half-depth of the opaque core, centred on mid
         float dist = MathF.Abs(altitude - mid);
         if (dist <= coreHalf)

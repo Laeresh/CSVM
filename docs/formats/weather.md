@@ -280,6 +280,17 @@ C1B, C3, C5 — ship **no `CloudDeck` mesh at all** (`WorldBuilder`'s coverage t
 is nothing there to tint. They track the cloud band, and the render confirms it: C4 authors
 `[192]³` and the original's in-cloud veil measures a flat 192 (`BL-118`, `CAP-12`).
 
+**The band's MIDPOINT is load-bearing twice over** (`WeatherState.CloudBandCentre`, one spelling
+for both; `A7`, 2026-08-08). It centres the opaque core above, and it is also the altitude at
+which the cloud **deck** changes regime — below it the deck is a ceiling carried with the camera,
+at/above it a world-fixed floor sitting exactly on the centre, and both ambient cloud populations
+are hidden below / shown above, per camera. That is a rendering rule, not a datum: nothing in
+`CLOUD_COVER` says so, and it is decoded from the original at the controls. What makes it
+invisible is that the two are the same altitude — the deck's jump happens in the middle of the
+fully opaque core, so **moving the band or thinning `THICKNESS` exposes a hard pop**. C1/IA1:
+flip at 1047, core 1032–1062. See `WeatherRig.DeckRegime` and `docs/architecture.md`'s
+`WeatherRig.cs` entry for the mechanism and the ceiling distance's derivation.
+
 **Inferred, and marked as such:** where a mission authors both keys the whiteout lerps
 `BOTTOM_COLOR` → `TOP_COLOR` across the band by camera altitude. **The shipped data cannot
 falsify this.** Of the four chapters whose band is reachable (C1 970–1124, C1C 1055–1110,

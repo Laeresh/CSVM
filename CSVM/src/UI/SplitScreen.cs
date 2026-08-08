@@ -24,11 +24,31 @@ namespace CSVM.UI;
 /// (<see cref="SetVisualLayer"/>) and the player's camera culls the whole band except its own bit
 /// (<see cref="PlayerCullMask"/>). Everything the world builds stays on the default layer 1 and
 /// is therefore visible in every pane — including the other players' aircraft.</para>
+///
+/// <para><b>The cloud-field layer</b> (<see cref="CloudFieldLayer"/>, layer 16) is the other
+/// named allocation out of the same 20. It is not per player: it is one SHARED layer carrying
+/// both ambient cloud populations (the <c>fvol</c> clutter MultiMeshes and the world's placed
+/// <c>cloudparent</c> clusters), so that <c>WeatherRig.Tick</c> can hide or show them per
+/// CAMERA — by that camera's own altitude against the cloud band — through the camera's cull
+/// mask. Every cull mask built here includes it, so a chapter or a mode that never runs the
+/// gate renders the clouds exactly as before.</para>
 /// </summary>
 public sealed partial class SplitScreen : CanvasLayer
 {
     /// <summary>Panes the rig supports — the reserved visual-layer band is this wide.</summary>
     public const int MaxPlayers = 4;
+
+    /// <summary>The one visual layer BOTH ambient cloud populations live on — the <c>fvol</c>
+    /// clutter MultiMeshes and the world's placed <c>cloudparent</c> clusters. Shared by every
+    /// pane (nothing about either population is per player); what is per pane is whether that
+    /// pane's camera has this bit in its cull mask, which <c>WeatherRig.Tick</c> decides from
+    /// that camera's own altitude (A7).
+    ///
+    /// <para>⚠ Instances are MOVED here, not added: the populations leave the default layer 1
+    /// entirely, or a camera that drops this bit would still see them. That is also why every
+    /// cull mask this class builds keeps the bit — a chapter with no deck, or a mode with no
+    /// weather rig, must render both populations exactly as it did before the gate existed.</para></summary>
+    public const uint CloudFieldLayer = 1u << CloudLayerBit;
 
     // First visual layer of the reserved per-player band. Godot has 20 layers (bits 0–19); the
     // world builds everything on layer 1 (bit 0), so taking the top four leaves the whole middle
@@ -36,6 +56,12 @@ public sealed partial class SplitScreen : CanvasLayer
     private const int PlayerLayerBit0 = 16;
     private const uint AllLayers = 0xFFFFF;              // Godot's 20 visual layers
     private const uint PlayerBand = 0xFu << PlayerLayerBit0;
+
+    // The shared cloud-field layer (bit 15 = layer 16), taken immediately below the per-player
+    // band. Outside PlayerBand on purpose: every camera's cull mask starts with it INCLUDED, so
+    // the gate is something WeatherRig switches OFF, never something a new camera has to
+    // remember to switch on.
+    private const int CloudLayerBit = 15;
 
     private const int Gutter = 2;   // px between panes (TUNE)
 

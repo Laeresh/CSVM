@@ -190,14 +190,24 @@ degenerate ranges).
     | C4 | 1050.0 | 1060.00 | 10.00 | **1050.0** |
 
     So the two populations are ONE sheet in the data: mesh underneath, sprite field on top of it,
-    and top-anchoring only makes sense read against the mesh at its authored altitude. Whatever
-    renders the deck must leave that altitude alone — `WeatherRig.Tick` re-pinned it to the
-    `CLOUD_COVER` centre until `A6` and thereby lifted it 64–122 m into the middle of the field in
-    three chapters of four. C4's centre lands on its authored deck exactly, which is the
-    corroboration and also why C4 never showed the defect.
+    and top-anchoring only makes sense read against the mesh at its authored altitude. C4's centre
+    lands on its authored deck exactly, which is the corroboration and also why C4 never showed
+    the `A6` defect.
+
+    ⚠ **The authored altitude is where the data puts the sheet; it is NOT where the deck mesh is
+    rendered** (`A7`, 2026-08-08). The original's deck is engine trickery — below the
+    `CLOUD_COVER` centre a ceiling carried 400 m above the camera, above it a world-fixed floor at
+    the centre — so `WeatherRig.Tick` places it at neither chapter's authored 960/1050. What the
+    table above still decides is the **relationship** the scatter is read against (mesh 10 m under
+    the slab floor, one sheet) and the fact that `A6`'s band-centre pin was wrong *in the
+    below-band regime*, where it buried the deck inside the field. Above the band that same pin is
+    what the original does, and A7 restores it there.
   - **Verified at the render, `--pos`/`--tex-override` probes in `.scratch/a3/`:**
-    - **C1 river pose** (`x -7325 y 934 z -3829`, matching `Screenshots/C1 IA1 Fog river.png`'s
-      pinned altitude): before, discrete cauliflower lumps hang below the deck sheet with a
+    - **C1 river pose** (`x -7325 y 934 z -3829` — ⚠ **not** the twin's altitude: `A7` re-read
+      `Screenshots/C1 IA1 Fog river.png`'s overlay in 2026-08-08 and it says **`y 192`**, which the
+      original's ALT gauge corroborates at ~700–750 ft. This probe is a self-consistent
+      before/after pair at 934 m and its conclusion stands; a matched-pose A/B against the
+      original needs 192): before, discrete cauliflower lumps hang below the deck sheet with a
       hard lower boundary (`before-river-pose.png`); after, the sheet's underside reads clean with
       the cloud band sitting well above it (`after-river-pose.png`).
       ⚠ **`A3`'s `--tex-override` numbers at this pose were misread, and `A6` (2026-08-08) corrected

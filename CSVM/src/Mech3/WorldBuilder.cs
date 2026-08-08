@@ -83,6 +83,8 @@ public sealed class WorldBuilder
     private readonly SceneBuilder _scene;
     // Walk-root indices belonging to the deck; filled by FindCloudDeck before the walk.
     private readonly HashSet<int> _deckNodes = new();
+    // The built `cloudparent` cluster subtrees; filled by CollectCloudClusters after the walk.
+    private readonly List<Node3D> _cloudClusters = new();
     // Entities the chapter parks at the world origin awaiting placement (see
     // HideUnplacedEntities): the gamez node and the subtree we built for it.
     private readonly List<(GameZNode Node, Node3D Built)> _parkedAtOrigin = new();
@@ -146,6 +148,17 @@ public sealed class WorldBuilder
     /// above/below at the cloud band, as in the original. A child of the world root at its
     /// original altitude; null if the world has no map-covering deck (C1B/C2/C3/C5).</summary>
     public Node3D? CloudDeck { get; private set; }
+
+    /// <summary>The world's placed <c>cloudparent</c> cluster subtrees, in walk order — the
+    /// ambient cloud population that is ordinary world geometry rather than <c>fvol</c> clutter
+    /// (C1 ships 28, C1B 70, C4 45; C2/C3 none). Censused so the caller can put them on the
+    /// shared cloud-field visual layer with the clutter, since the two are one population to a
+    /// camera's altitude gate (A7). Empty until <see cref="Build"/> has run.
+    ///
+    /// <para>⚠ Resolved by the node's ORIGINAL gamez name (<c>AnimRuntime.NameMeta</c>), never
+    /// by <c>Node.Name</c>: all 28 of C1's are literally named <c>cloudparent</c>, so Godot's
+    /// duplicate-sibling renaming is free to have touched the built name (WORLD-8).</para></summary>
+    public IReadOnlyList<Node3D> CloudClusters => _cloudClusters;
 
     /// <summary>This world's shared scene builder — its mesh/material/shape caches and its
     /// fullbright world materials. Handed to <see cref="ClutterBuilder"/> so the clutter's 3D
@@ -272,6 +285,16 @@ public sealed class WorldBuilder
             CloudDeck = deck;
             GD.Print($"cloud deck: {deck.GetChildCount()} tiles at y={_deckAltitude} "
                      + $"({_deckCoverage:P0} of the map)");
+        }
+
+        // The placed cloud clusters, censused after the walk (they are nested deep — C1's sit
+        // at world1 → g0|g27816 → l2586 (Lod) → cloudparent — so there is no walk root to
+        // recognise). Said out loud per chapter: "0 clusters" is a real answer for C2/C3 and
+        // must not read the same as a census that stopped working.
+        CollectCloudClusters(root);
+        if (_cloudClusters.Count > 0)
+        {
+            GD.Print($"cloud clusters: {_cloudClusters.Count} placed 'cloudparent' subtree(s)");
         }
 
         _builtWorld = world;
@@ -476,6 +499,13 @@ public sealed class WorldBuilder
         n.Name.Equals("horizon", StringComparison.OrdinalIgnoreCase)
         || n.Name.Equals("dzpaths", StringComparison.OrdinalIgnoreCase)
         || IsFogVolumeNode(n);
+
+    /// <summary>A placed ambient cloud cluster — the gamez node the original names
+    /// <c>cloudparent</c>, whose children are the individual cloud facades. This is the OTHER
+    /// ambient cloud population, world-placed rather than <c>fvol</c>-scattered, and the two are
+    /// gated together by camera altitude (<see cref="CloudClusters"/>, A7).</summary>
+    internal static bool IsCloudClusterName(string name) =>
+        name.StartsWith("cloudparent", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>A <c>fvol1</c>…<c>fvol34</c> fog-volume node: an invisible box the world walk
     /// skips (above) and <see cref="FogVolumeSpec.VolumesOf"/> measures. One predicate for both,
@@ -894,6 +924,23 @@ public sealed class WorldBuilder
         }
         altitude = first.Y;
         return true;
+    }
+
+    // Walks the built world for cloudparent subtrees. Stops descending at each hit: the whole
+    // subtree is the cluster, and cloud clusters do not nest. Matched on the name the DATA
+    // carries (AnimRuntime.NameMeta), never on Node.Name — see the CloudClusters remarks.
+    private void CollectCloudClusters(Node node)
+    {
+        if (node is Node3D n3d && n3d.HasMeta(AnimRuntime.NameMeta)
+            && IsCloudClusterName(n3d.GetMeta(AnimRuntime.NameMeta).AsString()))
+        {
+            _cloudClusters.Add(n3d);
+            return;
+        }
+        foreach (var child in node.GetChildren())
+        {
+            CollectCloudClusters(child);
+        }
     }
 
     /// <summary>Picks the deck out of the world's flat-quad roots: bucket them by altitude

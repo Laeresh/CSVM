@@ -833,6 +833,21 @@ public partial class GameSession : Node3D
                 GD.Print($"fogvol clouds: {cloudField.InstanceCount} sprites over "
                          + $"{fogVolumes.Count} volume(s) — {cloudField.Summary}");
             }
+            // Both ambient cloud populations onto the one shared cloud-field layer (A7): the
+            // fvol clutter MultiMeshes above and the world's own placed `cloudparent` clusters.
+            // They are one population to a camera looking up from under the deck — the original
+            // shows the bare sheet and no cloud groups at all from there — so they are gated
+            // together, per camera, in WeatherRig.Tick. Done HERE rather than where each is
+            // built because the layer band is a rendering-rig allocation (UI.SplitScreen) and
+            // neither WorldBuilder nor FogVolumeClutter knows about panes or cameras.
+            if (cloudField != null)
+            {
+                UI.SplitScreen.SetVisualLayer(cloudField, UI.SplitScreen.CloudFieldLayer);
+            }
+            foreach (var cluster in builder.CloudClusters)
+            {
+                UI.SplitScreen.SetVisualLayer(cluster, UI.SplitScreen.CloudFieldLayer);
+            }
 
             _weatherRig = new WeatherRig(_spec, _worldRoot!);
             // The horizon's zone children go in with the mission's weather: the zone the fog and
@@ -1855,6 +1870,13 @@ public partial class GameSession : Node3D
         if (count <= 1)
         {
             _camera.Current = true;
+            // ⚠ The main camera is the LAUNCHER's and outlives the session, so it can arrive
+            // carrying the last flight's cloud gate. Put the layer back before this session's
+            // first frame: WeatherRig.Tick only ever CLEARS the bit, and it does not run at all
+            // in a chapter with no deck — so a session that ended below C1's band would
+            // otherwise hide C5's street haze for the whole of the next flight (A7).
+            // The splitscreen cameras below are built fresh each session and need no reset.
+            _camera.CullMask |= SplitScreen.CloudFieldLayer;
             _rigs.Add(new PlayerRig { Index = 0, Camera = _camera, HudParent = _worldRoot!, VisualLayer = 0 });
             return;
         }

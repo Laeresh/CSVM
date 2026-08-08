@@ -422,6 +422,16 @@ debug-only custom renderer: material-matched gate polygons green/red at 50% alph
 white line strip (never a filled or closed polygon).
 Splits the overcast deck into
 `CloudDeck` (GameSession moves it with the player); hides origin-parked unplaced vehicles.
+`CloudClusters` censuses the OTHER ambient cloud population after the walk — every `cloudparent`
+subtree the world places (C1 28, C1B 70, C1C 30, C4 45; C2/C2B/C3/C5 none), logged per chapter so
+"none" cannot read like a broken census. `GameSession` puts them on `UI.SplitScreen.CloudFieldLayer`
+beside the `fvol` clutter, because a camera's altitude gate treats the two as one population
+(`Session/WeatherRig`, `A7`).
+⚠ `CloudClusters` matches on the node's ORIGINAL gamez name (`AnimRuntime.NameMeta`), never
+  `Node.Name`: all 28 of C1's are literally named `cloudparent`, so Godot's duplicate-sibling
+  renaming is free to have touched the built name (WORLD-8). They are nested too deep for a walk
+  root to recognise (`world1 → g0|g27816 → l2586` Lod `→ cloudparent`), which is why this is a
+  post-walk pass over the built tree rather than a `FindCloudDeck`-style pre-pass.
 `NoCollisionNode` exempts three rendered-but-not-solid classes, subtree-inherited: sky/cloud
 textures, billboards, and any node with gamez `intersect_surface` false — the original's own
 collision flag, false on props/debris/effects/glows and the C3 spiderweb (docs/formats/gamez.md);
@@ -1673,6 +1683,10 @@ every rig respawns), owned only while the board is visible via `FlightController
 trapezoid), `WIND`, and precipitation → `PrecipData`. Schema + colours + zone names: weather.md.
 ⚠ `CLOUD_COVER`/`WIND`/precip keys pair with BARE scalars — `ZrdrDict.FromAlternating` cannot
   read them; walked raw (`StringAfter`/`ScalarAfter`/…). Per-zone blocks are list-valued (dict).
+⚠ `CloudBandCentre` is the band midpoint and is deliberately ONE spelling for two consumers: the
+  opaque whiteout core is centred on it (`WhiteoutAmount`) and the cloud deck's ceiling→floor
+  regime flips on it (`Session/WeatherRig.DeckRegime`, `A7`). That coincidence is exactly what
+  hides the flip — do not give either consumer its own midpoint.
 ⚠ `ZoneKeys` collects `ZONE<digits>` keys from the raw list in FILE ORDER (a Dictionary loses
   order; `ResolveZone`'s fallback is the file's FIRST zone); `SW_ZONE*` twins are excluded.
 ⚠ The default stays `zone2` (user decision) — which zone a mission flies is in no file
@@ -1813,6 +1827,12 @@ VertFull/Fade) was hand-tuned because this reader had not been found.
 ⚠ Built ONCE, world-anchored, no per-frame hook and NOT per rig — unlike the dome/deck/whiteout,
   nothing here follows a camera. Splitscreen shares one field; the far fade is evaluated per view
   inside the shader, which is what makes that correct.
+⚠ Its GEOMETRY is shared but its VISIBILITY is per view (`A7`): `GameSession` moves these
+  MultiMeshes off the default layer onto `UI.SplitScreen.CloudFieldLayer` (with the world's placed
+  `cloudparent` clusters — one population to an altitude gate) and `Session/WeatherRig.Tick` adds
+  or drops that bit in each camera's cull mask by that camera's own altitude against the
+  `CLOUD_COVER` centre. Same principle as the far fade: one shared field, decided per view. Never
+  hide it by node visibility — that would take it out of every pane at once.
 ⚠ Sampling Y AT the volume's top (rather than a random band near it) still respects a sloped or
   tapered top: `Contains` runs the exact face test (`FogVolumes.cs`), so an XZ drawn in a cell is
   rejected exactly when it falls outside the true top footprint at that height — no separate
@@ -2254,6 +2274,12 @@ gutter backdrop, one `SubViewport` pane per player sharing the main `World3D`, p
   across; `RenderTargetUpdateMode` must be `Always`.
 ⚠ `PlayerVisualLayer` reserves layers 17–20 (`PlayerLayerBit0` = 16); the world stays on layer 1;
   `PlayerCullMask(i)` adds only that player's bit — a pane sees only its own sky/deck/puffs.
+⚠ `CloudFieldLayer` (bit 15, layer 16) is the other named allocation and is NOT per player: one
+  shared layer carrying BOTH ambient cloud populations (`fvol` clutter + placed `cloudparent`), so
+  `Session/WeatherRig.Tick` can gate them per CAMERA by cull mask (`A7`). It sits just below the
+  player band on purpose — every mask this file builds includes it, so the gate is something that
+  switches OFF and a mode or chapter that never runs the gate renders the clouds as before.
+  Instances are MOVED onto it, off layer 1, or dropping the bit would change nothing.
 
 ## src/Flight/PlayerRig.cs
 One rendered view's state bag: index, camera, optional `SubViewport`, `HudParent`, `VisualLayer`,
@@ -2261,6 +2287,9 @@ the player's FlightController, and private camera-anchored copies (`Horizon`/`De
 those re-anchor to the view's camera every frame, so N players need N of each.
 ⚠ The ambient cloud field is deliberately NOT one of them (`BL-273`): the authored fogvol clutter
   is world-anchored static geometry every pane shares, and the `Puffs` slot went with `CloudPuffs`.
+  It still gets a per-pane ANSWER, just not a per-pane copy — `WeatherRig.Tick` gates it (and the
+  world's `cloudparent` clusters) through `Camera.CullMask` on `SplitScreen.CloudFieldLayer`, so
+  the per-view decision lives on the rig's camera rather than in a duplicated subtree (`A7`).
 ⚠ Single player holds exactly one rig wrapping the main-viewport camera with `VisualLayer` 0, so
   every loop over the rigs degenerates to the old single-camera code.
 ⚠ In splitscreen the camera's parent is a `SubViewport`, not a Node3D — local `Position` IS the
@@ -3231,7 +3260,9 @@ null guard covers the frame before that deferred free lands (it can never be nul
   plus the gamez `fvol*` boxes — not mission weather, it is world-anchored rather than per rig, and
   it needs no `Tick`; `GameSession` builds it beside the world under the same fly/freecam/sky-zone
   gate. Until then a hand-tuned per-rig `CloudPuffs` lived here, keyed off `CLOUD_COVER`, and
-  `PlayerRig.Puffs` is gone with it. See `Effects/FogVolumeClutter`.
+  `PlayerRig.Puffs` is gone with it. See `Effects/FogVolumeClutter`. **`Tick` does own whether each
+  camera SEES it** (`A7`, below) — that is a per-view cull-mask decision about shared geometry, not
+  ownership of the geometry, and it must not become a reason to rebuild the field per rig.
 `Build` also takes the chapter's `WorldBuilder.HorizonZones()` census, because `LoadWeather`
 resolves the rendered zone from BOTH the mission's zone names and the horizon's geometry
 (`BL-277` — see `Flight/Weather.cs`). `_activeZone` is the single answer both the fog and the dome
@@ -3245,22 +3276,48 @@ are built from, and it is logged with the meshed counts it was decided on.
 ⚠ `SetDeckCenter` is called separately from `Build`, whenever a chapter's cloud deck geometry loads
   (`GameSession`'s `cloudDeck != null` branch) — broader than "this rig has weather", so it is
   guarded with `_weatherRig?.SetDeckCenter(...)` rather than assumed non-null.
-⚠ **`Tick` follows the deck in X/Z ONLY — its Y is the chapter's authored altitude and must stay
-  there** (`A6`, 2026-08-08). It used to re-pin Y to the `CLOUD_COVER` band centre, to hide the
-  ceiling→floor crossing inside the opaque whiteout core. That rule predates the authored `fvol`
-  field and buried the deck *inside* it: all four deck chapters ship the deck ~10 m BELOW their
-  `fvol1`–`fvol9` slab floor (C1 960/970.00, C1C 960/970.73, C2B 960/970.00, C4 1050/1060.00), and
-  the band centre is +87/+122.5/+64 m in the first three — past `A3`'s top-anchored card bottoms
-  (C1 986.3–1037.7 m), so every sprite hung below the sheet in flight AND in freecam. Measured at
-  the C1 river pose: 85,507 sprite pixels visible below the deck → **0**. C4's band centre IS its
-  authored 1050, so that chapter is inert (`c4-snow` bit-identical either way,
-  `pixmd5=e83de4bc10177238f8d6040e6ba5e21b`) — which is the corroboration that the deck altitude
-  and the band are one authored thing, not two. The accepted cost: the crossing is no longer
-  hidden by the whiteout, and happens where the original's own static tiles sit.
+⚠ **The deck is ENGINE TRICKERY in two regimes, not a placed sheet** (`A7`, 2026-08-08 — decoded
+  by the user at the controls of the original). `Tick` splits at the `CLOUD_COVER` band centre
+  (`WeatherState.CloudBandCentre`): **below** it the deck is a ceiling carried with the camera in
+  ALL THREE axes at `camera.y + DeckCeilingHeight`; **at/above** it a world-fixed floor sitting on
+  the band centre, still following in X/Z. The rule is the pure `DeckRegime(cameraY, bandCentre)`,
+  which also answers whether that camera renders the ambient clouds — assert against that, not
+  against the loop. Below-band consequence, and it is the item's own evidence: the sky is
+  BIT-IDENTICAL at 192/300/600/900 m, which is what "the texture looks the same at every altitude"
+  means and what a world-fixed sheet cannot do (the pre-A7 build moves 87 % of those pixels).
+  Above-band consequence: the pinned above-deck pose renders bit-identical to the pre-`A6` pin,
+  because that pin WAS the above-band half of this trick applied in both regimes.
+⚠ **The regime flip is a JUMP of `DeckCeilingHeight`, masked only by the whiteout core.** It is
+  placed at the band centre precisely because that is the middle of the fully-opaque core
+  (C1: total in 1032–1062) — measured: the ladder frames at 1035/1046/1048/1060 m are bit-identical
+  flat white. Moving the flip altitude, or thinning `CLOUD_COVER`'s `THICKNESS`, makes it visible;
+  if a pop ever shows, that is a finding about the whiteout band, not a licence to move the flip.
+  `DeckRegimeTests` asserts the masking against the AUTHORED band, so the data moving fails a test.
+⚠ **`DeckCeilingHeight` (400 m) is a TUNE matched to one original still, and it is the only free
+  parameter in the model** — derived by apparent mottling scale from
+  `OriginalScreenshots/C1 IA1 Fog river.png` (the constant's own comment carries the method and the
+  260–590 m bracket; it scales with the assumed FOV). One value for every deck chapter: C1's river
+  still is the only original frame that can measure one.
+⚠ **The cloud gate is a per-camera CULL MASK over `UI.SplitScreen.CloudFieldLayer`, never node
+  visibility.** Both ambient populations — the `fvol` clutter MultiMeshes and the world's placed
+  `cloudparent` clusters — are moved onto that one shared layer by `GameSession`; hiding them as
+  nodes would take them out of every splitscreen pane at once, and two players routinely sit on
+  opposite sides of the band. `Tick` writes each rig camera's own mask.
+⚠ **A chapter with NO deck mesh never arms the gate at all** — the whole block is inside
+  `rig.Deck != null && _weather is { HasCloudBand: true }`. C5 is why: it has 16,170 clutter
+  sprites, no deck, and a band at 9950–10150 m no one can reach, so an unguarded gate would hide
+  its street haze at street level for ever (measured: 161,541 cloud px at street level; C1B, no
+  deck and 70 `cloudparent`, 473,915). **The other half of that guard is
+  `GameSession.BuildRigs`**, which re-adds the layer to the main camera's mask at session start:
+  that camera is the Launcher's and outlives the session, `Tick` only ever CLEARS the bit, and a
+  chapter that never arms the gate never sets it back — so without the reset, quitting a C1 flight
+  from under the deck would hide the NEXT flight's clouds.
 ⚠ The deck and the `fvol` field are the SAME sheet seen from two sides, so they are read together:
   the deck mesh is what an underside view shows and the sprite field is what a view from above
   shows. Any change to either one's altitude has to be checked against the other's
-  (`Effects/FogVolumeClutter`, `docs/formats/fogvol.md`).
+  (`Effects/FogVolumeClutter`, `docs/formats/fogvol.md`). ⚠ But the deck's RENDERED altitude is now
+  neither chapter's authored one — the authored 960/1050 is what the scatter is read against
+  (fogvol.md's mesh-10 m-under-the-slab invariant), not where the mesh is drawn.
 
 ## src/Utils/Config.cs
 Dev-facing tuning-override layer: static `Config` parses an optional sparse `res://config.json`;

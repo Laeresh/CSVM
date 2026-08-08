@@ -24,6 +24,29 @@ namespace CSVM.Session;
 /// <c>GameSession</c> (<see cref="CSVM.Effects.FogVolumeClutter"/>).</para></summary>
 public sealed class WeatherRig
 {
+    // ⚠ TUNE (A7, 2026-08-08) — how far above the camera the deck hangs while the camera is
+    // BELOW the cloud band. The original's deck is engine trickery, not a placed sheet: at the
+    // controls its texture looks exactly the same at every altitude on the way up, which a
+    // world-fixed sheet cannot do (it would grow and parallax), so below the band it is a
+    // ceiling carried with the camera and this is the only free parameter left in it.
+    //
+    // Derived from `OriginalScreenshots/C1 IA1 Fog river.png` by APPARENT MOTTLING SCALE — the
+    // one thing a still of a featureless overcast can measure. A ceiling h metres up projects a
+    // world point at horizontal distance d to elevation e = f·h/d px above the horizon row, so
+    // resampling the sky's luminance profile against 1/e turns the deck texture into a periodic
+    // signal whose period is P/(f·h), P being the texture's world period. Calibrated on our own
+    // renders of the same `cloudlayer.tif` deck at known heights (.scratch/a7/ceiling_scale.py,
+    // ceiling_zcr.py): P came back 1062 m against the authored 1024 m tile, which is the
+    // method validating itself. Run on the original the same measurement lands f·h ≈ 2.4e5 px·m
+    // and, at the 62° vertical FOV our matched-pose twins are rendered with, h ≈ 400 m — the
+    // estimators bracketing it at 260–590 m. So: a TUNE matched to that still, not a decoded
+    // constant, and the bracket is the honest width. It scales with the assumed FOV
+    // (K ∝ tan(FOV_v/2)); nothing in the shipped data carries it.
+    //
+    // One constant for every deck chapter, because C1's river still is the only original frame
+    // that can measure one. A per-chapter K needs a per-chapter still.
+    private const float DeckCeilingHeight = 400f;
+
     // ⚠ TUNE, and the FALLBACK only — a mission that authors CLOUD_COVER colours overrides it
     // (WeatherState.WhiteoutColor). It survives because the three reachable-band chapters that
     // author nothing are measured right at this value: CAP-12 puts C1's in-cloud interior at 248
@@ -47,6 +70,25 @@ public sealed class WeatherRig
         _activeZone = spec.SkyZone;
     }
 
+    /// <summary>The deck's altitude regime for ONE camera: where its cloud-deck copy sits, and
+    /// whether that camera renders the two ambient cloud populations. Below the band's centre
+    /// the deck is a ceiling carried with the camera and the clouds are hidden; at or above it
+    /// the deck is a world-fixed floor at the centre and the clouds render (A7).
+    ///
+    /// <para>Pure and public because it is the whole rule, and the rule is what has to be
+    /// asserted: <see cref="Tick"/> only applies it once per rig. Two cameras on opposite sides
+    /// of <paramref name="bandCentre"/> must get opposite answers from it — that is the
+    /// splitscreen requirement, and it is a property of this function, not of the loop.</para>
+    ///
+    /// <para>⚠ The deck altitude JUMPS by <see cref="DeckCeilingHeight"/> at the crossing. It is
+    /// unobservable only because the crossing is the band centre, which is the middle of the
+    /// fully-opaque whiteout core (<see cref="WeatherState.WhiteoutAmount"/>).</para></summary>
+    public static (float DeckY, bool CloudsVisible) DeckRegime(float cameraY, float bandCentre)
+    {
+        bool below = cameraY < bandCentre;
+        return (below ? cameraY + DeckCeilingHeight : bandCentre, !below);
+    }
+
     /// <summary>Loads the mission's weather.json and resolves the rendered zone, builds the
     /// per-rig domes via <paramref name="buildDomes"/> (needs the resolved zone), then applies
     /// fog + whiteout + precipitation — the same order <c>StartSession</c> ran before the
@@ -65,11 +107,17 @@ public sealed class WeatherRig
     /// built whenever a chapter world loads — not only when this rig itself gets built.</summary>
     public void SetDeckCenter(Vector3 center) => _deckCenter = center;
 
-    /// <summary>Everything anchored to *a* camera, once per rig — one in single player, one per
-    /// pane in splitscreen (each on that player's own visual layer): re-centers the skydome,
-    /// fades the cloud-band whiteout and re-anchors the cloud deck. Moved verbatim off
-    /// <c>GameSession._Process</c>; the ambient-puff advance it also carried went with
-    /// <c>CloudPuffs</c> (the authored field is static geometry and needs no frame hook).</summary>
+    /// <summary>Everything decided per *camera*, once per rig — one in single player, one per
+    /// pane in splitscreen: re-centers the skydome, fades the cloud-band whiteout, places the
+    /// cloud deck in its altitude regime, and gates the two ambient cloud populations by that
+    /// camera's own altitude. The first three are per-rig NODES (each on that player's own
+    /// visual layer); the last is a per-camera CULL MASK over one shared layer, because the
+    /// cloud populations are world geometry no pane owns.
+    ///
+    /// <para>Every camera in the session comes through here, including the freecam/probe
+    /// camera — <c>GameSession.BuildRigs</c> gives a single-player or spectator session one rig
+    /// holding the main-viewport camera — so a scripted shot obeys the same altitude rules the
+    /// player does.</para></summary>
     public void Tick(IReadOnlyList<PlayerRig> rigs)
     {
         foreach (var rig in rigs)
@@ -96,28 +144,65 @@ public sealed class WeatherRig
                 rig.Whiteout.Color = c;
             }
 
-            // Cloud deck follows the player in X/Z ONLY — centred on the camera so the sheet has
-            // no reachable edge, at the altitude the chapter's gamez authors it.
+            // The deck is ENGINE TRICKERY, in two regimes split at the cloud band's centre
+            // (A7, 2026-08-08 — the user's decode at the controls of the original):
             //
-            // ⚠ Do NOT re-pin the deck's Y to the CLOUD_COVER band centre (it did until A6,
-            // 2026-08-08). That predates the authored `fvol` cloud field and it buries the deck
-            // INSIDE it: the four deck chapters ship the deck exactly ~10 m BELOW their
-            // `fvol1`–`fvol9` slab floor — C1 960/970.00, C1C 960/970.73, C2B 960/970.00,
-            // C4 1050/1060.00 (gamez `model_bbox`) — and the band centre is 87 / 122.5 / 64 m
-            // above the deck in the first three, past the top-anchored cards' own bottoms
-            // (C1: 986.3–1037.7 m), so every sprite hung below the sheet. C4's band centre is
-            // its authored 1050 exactly, which is why that chapter looked right and is the
-            // corroboration that the two altitudes are one thing in the data, not two.
-            // The cost is real and accepted: the ceiling→floor crossing is no longer hidden
-            // inside the opaque whiteout core. It happens at the altitude the original's own
-            // static tiles sit at, which is the crossing the original renders.
-            if (rig.Deck != null && _weather is { HasCloudBand: true })
+            //   camera BELOW the centre — a CEILING carried with the camera in all three axes,
+            //     DeckCeilingHeight above it. Climbing, the sheet's texture then looks exactly
+            //     the same at every altitude, which is what the original does and what a
+            //     world-fixed sheet cannot do: that would grow and parallax as you close on it.
+            //   camera AT/ABOVE the centre — a world-fixed FLOOR at the band centre, still
+            //     following in X/Z so the sheet has no reachable edge. After a climb through the
+            //     whiteout the original's sheet lies below at a fixed height ~ the band centre.
+            //
+            // ⚠ The flip is a JUMP of DeckCeilingHeight, and it is unobservable only because it
+            // happens exactly at the band centre — the middle of the fully-opaque whiteout core
+            // (C1: total in 1032–1062, WeatherState.WhiteoutAmount). Moving this altitude, or
+            // thinning that core, makes a hard pop visible; if one ever shows, that is a finding
+            // about the whiteout band, not a licence to move the flip.
+            //
+            // The two cloud POPULATIONS are gated on the same crossing, per camera, below —
+            // from underneath, the original shows the bare sheet and no cloud groups at all.
+            //
+            // (History: until A6 this pinned Y to the band centre in BOTH regimes — the
+            // above-band half of this trick applied everywhere — which buried the deck inside
+            // the `fvol` slab and hung every sprite below it. A6 removed the pin; A7 restores it
+            // for the regime it actually belongs to and gives the other regime its own rule.
+            // The authored altitudes it is NOT using: the four deck chapters ship the deck ~10 m
+            // below their `fvol1`–`fvol9` slab floor — C1 960/970.00, C1C 960/970.73,
+            // C2B 960/970.00, C4 1050/1060.00.)
+            if (rig.Deck != null && _weather is { HasCloudBand: true } weather)
             {
+                (float deckY, bool cloudsVisible) = DeckRegime(camPos.Y, weather.CloudBandCentre);
                 rig.Deck.Position = new Vector3(
                     camPos.X - _deckCenter.X,
-                    0f,
+                    deckY - _deckCenter.Y,
                     camPos.Z - _deckCenter.Z);
+                // ⚠ Per-camera CULL MASK, never node visibility: in splitscreen two players can
+                // sit on opposite sides of the band, and hiding the shared field as a node would
+                // take it out of BOTH panes. Only a chapter with a deck gets gated at all — see
+                // the guard in the `if` above: C5 has the clutter and a band at 9950–10150 m but
+                // no deck, so an ungated rule would hide its street haze at street level for
+                // ever.
+                SetCloudFieldVisible(rig.Camera, cloudsVisible);
             }
+        }
+    }
+
+    /// <summary>Adds or drops <see cref="SplitScreen.CloudFieldLayer"/> in one camera's cull
+    /// mask — the ambient cloud field and the placed <c>cloudparent</c> clusters both live
+    /// there, and this is the only thing that decides whether a given view renders them.</summary>
+    private static void SetCloudFieldVisible(Camera3D camera, bool visible)
+    {
+        uint mask = camera.CullMask;
+        uint want = visible
+            ? mask | SplitScreen.CloudFieldLayer
+            : mask & ~SplitScreen.CloudFieldLayer;
+        // Written only on a change: CullMask is a property setter into the RenderingServer, and
+        // this runs per camera per frame.
+        if (want != mask)
+        {
+            camera.CullMask = want;
         }
     }
 

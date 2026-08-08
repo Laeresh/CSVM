@@ -88,8 +88,13 @@ in any worktree here.
   the `fvol` slab sits at 970–1090.5 with 130 m `distance`, cards 132.3 m, scale ≤1.5
   ([`fogvol.md`](formats/fogvol.md) has the full 8-chapter census).
 - **Pinned A/B poses** (from the CSVM twins' freecam overlays, `Z:\CSVM\Screenshots\`): above-deck
-  `x -7323 y 1192 z -3829`; river `x ≈ -7325 y 934 z -3829`. View direction is NOT in the overlay —
+  `x -7323 y 1192 z -3829`; river **`x -7323 y 192 z -3829`**. View direction is NOT in the overlay —
   re-derive it by matching terrain features before the first A/B and record it here.
+  ⚠ **The river altitude read `934` here until `A7` re-read the overlay (2026-08-08): the twin says
+  `y 192`**, the above-deck twin says `1192` in the same font at the same zoom (so this is not a
+  cropped digit), and the original still's own ALT gauge reads ~700–750 ft ≈ 215–230 m. A3/A6/A7
+  probes cite `934`; they are self-consistent before/after pairs at a documented pose and their
+  conclusions stand, but **a matched-pose A/B against the original must use 192** (A4, B15).
 - **Measured targets on file** (CAP-12, `playtest/CAP-12/`): deck from below original **167** vs
   ours 221; interior 248/243; tops from above 211/214 (⚠ per-population caveat, item C23); from
   5570 ft 196/202. Whiteout band measured 1003–1085 m ≙ authored slab 970–1090.
@@ -130,7 +135,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 4. ☐ A4 — Scatter A/B vs CAP-12 + the river twin; close `BL-312`
 5. ☐ A5 — Continue the field past the map edge (user playtest 2026-08-08: the original's field is everywhere)
 6. ☑ A6 — Why does flight mode show puffs below the deck when freecam doesn't? (investigate, then fix or reclassify)
-7. ☐ A7 — The deck is engine trickery: regime model + cloud layer gate (user decode, 2026-08-08)
+7. ☑ A7 — The deck is engine trickery: regime model + cloud layer gate (user decode, 2026-08-08)
 
 ### Wave B — fog semantics and zones (BL-100 + BL-303 + BL-101)
 
@@ -950,7 +955,177 @@ The whiteout band is a separate system; a sprite seen through whiteout murk is n
 deck". — *both respected: `cloudparent` was not touched, and every probe above ran `--no-fog`
 (whiteout off) or measured flattened colours, so no reading is a whiteout artifact.*
 
-## A7 ☐ The deck is engine trickery: regime model + cloud layer gate
+## A7 ☑ The deck is engine trickery: regime model + cloud layer gate
+
+**Landed.** (2026-08-08) **All three of the user's observations reproduce, and the below-band
+half is now provably exact: with the ceiling carried at `camera.y + K`, the sky is
+BIT-IDENTICAL at 192 / 300 / 600 / 900 m** — the same frame to the pixel, which is the strongest
+form the "the texture's look is exactly the same at every altitude" report can take. The old
+world-fixed sheet moves 87 % of those pixels over the same climb, so the check can fail.
+`K = 400 m`, a **TUNE matched to the river still** by apparent mottling scale (derivation below);
+above the band the deck is a world-fixed floor at the `CLOUD_COVER` centre, and both cloud
+populations are gated per camera by cull mask on one shared visual layer.
+
+**Files.** `CSVM/src/Session/WeatherRig.cs` (the regime + the gate + `K`),
+`CSVM/src/Flight/Weather.cs` (`CloudBandCentre`, one spelling for whiteout core and regime flip),
+`CSVM/src/UI/SplitScreen.cs` (`CloudFieldLayer`), `CSVM/src/Mech3/WorldBuilder.cs`
+(`CloudClusters` — the `cloudparent` census), `CSVM/src/Session/GameSession.cs` (moves both
+populations onto the layer), `CSVM.Tests/DeckRegimeTests.cs` (new, 5 tests),
+`docs/architecture.md`, `docs/formats/weather.md`, this section.
+
+### What it does
+
+| camera | deck | fvol clutter + `cloudparent` |
+|---|---|---|
+| **below** the `CLOUD_COVER` band centre | ceiling at `camera.y + 400 m`, following in **all three** axes | **culled** for that camera |
+| **at/above** the centre | world-fixed floor **at the band centre**, following in X/Z | **rendered** for that camera |
+| chapter with **no deck mesh** | — | **rendered, always** — the gate is never armed |
+
+⚠ **The deckless guard has a second half, found while building this and easy to miss.** The
+single-player camera is the *Launcher's* and outlives the session; `Tick` only ever CLEARS the
+cloud bit, and a chapter that never arms the gate never sets it back. So quitting a C1 flight from
+under the deck and launching C5 would have left C5's street haze culled for the whole flight.
+`GameSession.BuildRigs` re-adds the layer to that camera's mask at session start (splitscreen
+cameras are built fresh and need no reset).
+
+The rule is one pure function, `WeatherRig.DeckRegime(cameraY, bandCentre)`, so what has to be
+asserted can be: `Tick` only applies it once per rig. The gate is a per-camera **cull mask** over
+`SplitScreen.CloudFieldLayer` (bit 15, layer 16 — taken below the per-player band so every cull
+mask starts with it *included*; the gate is something that switches OFF, never something a new
+camera must remember to switch on). Both populations are **moved** onto that layer, off the
+default layer 1, in `GameSession`: the `fvol` MultiMeshes and every `cloudparent` subtree
+`WorldBuilder.CloudClusters` censuses. That census matches on the node's **gamez** name
+(`AnimRuntime.NameMeta`) because all 28 of C1's are literally named `cloudparent` and Godot's
+duplicate-sibling renaming is free to have touched `Node.Name` (WORLD-8). New per-chapter line:
+`cloud clusters: N placed 'cloudparent' subtree(s)` — C1 **28**, C1B **70**, C1C **30**, C4
+**45**, and C2/C2B/C3/C5 none.
+
+### Deriving K = 400 m — apparent mottling scale, and it validates itself first
+
+A ceiling `h` metres above the camera projects a world point at horizontal distance `d` to
+elevation `e = f·h/d` px above the horizon row. So resampling the sky's luminance profile against
+`u = 1/e` turns the deck texture into a **strictly periodic** signal of period `P/(f·h)`, `P`
+being the texture's own world period. Two consequences: on a render where `f` and `h` are known
+it measures `P`; on the original still, with `P` known, it measures `f·h`.
+
+**Calibrated on our own renders first** (`.scratch/a7/ceiling_scale.py`), deck at its authored
+960 m and the camera at 560 / 760 / 160 m ⇒ h = 400 / 200 / 800 m, level camera so the horizon
+row is exactly the image centre: the recovered world period comes back **1062 m against the
+authored 1024 m tile** (3.7 %). The method reproduces the tile it was never told about, and
+confirms one texture repeat per tile.
+
+**Run on `OriginalScreenshots/C1 IA1 Fog river.png`** (`.scratch/a7/ceiling_zcr.py`, mottling
+crossings per unit `u`, horizon row 356 = the image centre — the gunsight sits there and the
+aircraft is wings-level):
+
+| frame | left half | right half |
+|---|---|---|
+| **the original** | **504 /u** | **798 /u** |
+| ours, ceiling at K = 400 m | 566 /u | 669 /u |
+| ours BEFORE, deck world-fixed at 960 m (h = 60 m at this camera) | 78 /u | 78 /u |
+
+Our K = 400 m sits **inside the original's own left/right spread**; the pre-A7 sheet is an order
+of magnitude off, which is the able-to-fail control (METHOD-9). The estimators bracket the
+original at **260–590 m**, and K scales with the assumed vertical FOV (K ∝ tan(FOV_v/2); 62° is
+what our matched-pose twins render at). So: **TUNE, matched to that still**, not a decoded
+constant — and one constant for every deck chapter, because C1's river still is the only original
+frame that can measure one.
+
+⚠ **The plan's "river ≈ `x -7325 y 934 z -3829`" is wrong about the altitude, and it is on
+record wrong in `fogvol.md:199` too.** The checked-in twin `Screenshots/C1 IA1 Fog river.png`
+reads **`x -7323 y 192 z -3829`** in its own freecam overlay (the above-deck twin reads `1192`,
+so this is not a cropped digit), and the original's own ALT gauge reads ~700–750 ft ≈ 215–230 m.
+**K is unaffected** — it is derived from mottling scale, which never uses the camera's altitude —
+and so is every A3/A6 conclusion, which were self-consistent before/after pairs at a documented
+pose. But "the river pose" as an altitude is not 934 m, and A4/B15's matched-pose A/Bs need the
+right one. Both were shot here (below, and `after-river-192*.png`); their skies are bit-identical,
+which is the item's own point.
+
+### Verification
+
+- **Texture-look constancy below the band — bit-identical.** `--no-fog`, level, sky rows 0–250:
+  192 / 300 / 600 / 900 m all `mean|d| = 0.000, max = 0, 0 px changed`. The same rows on the
+  **pre-A7** build move **87.1 % / 87.5 %** of pixels (mean |d| 8.0) over 300→600→900.
+- **Climb ladder 900→1250 m** (`.scratch/a7/after-ladder-*.png`, 25 m steps plus a 1 m bracket on
+  the flip). The four frames spanning the 1047 m flip — **1035, 1046, 1048, 1060** — are
+  **bit-identical to each other** (`step mean|d| = 0.000, max = 0`), frame std 1.41 on a mean of
+  243: a flat whiteout pane. The flip is unobservable, measured rather than argued. The largest
+  steps in the ladder are the whiteout's own ramps (975→1000 = 25.2, 1000→1025 = 24.8) and its
+  fade-out, all monotone.
+- **The gate, isolated** (`--tex-override=cloud1.tif=00ff00 --tex-override=cloud2.tif=00ff00
+  --no-fog` — both populations share those two textures, A6, which is exactly what makes one
+  pixel count the right instrument for a gate covering both):
+
+  | pose | cloud px |
+  |---|---|
+  | C1 900 m level / **looking straight up** | **0 / 0** |
+  | C1 1046 m looking up (1 m under the flip) | **0** |
+  | C1 1048 m looking up (1 m over the flip) | **921,600** (the whole frame) |
+  | C1 1192 m level | 530,742 |
+  | C4 900 m up (below its 1050 centre) / C4 1200 m level | **0** / 921,600 |
+  | C1C 1350 m (build-ups, above its 1082.5 centre) | 468,639 |
+  | **C5 street level, band at 9950–10150** | **161,541** — the guard |
+  | **C1B 500 m up, no deck, 70 `cloudparent`** | **473,915** — the guard |
+
+- **Above-band floor parallaxes.** Below-horizon rows across 1150 / 1200 / 1250 m move 32.5 % /
+  27.3 % of pixels — the sheet recedes as the camera climbs, the exact opposite of the below-band
+  invariant measured above.
+- **Splitscreen.** `--fly --players=2` instrumented (temporary `GD.Print`, removed, `git diff`
+  clean — METHOD-17): the two panes' masks are written independently, `P1 cull=0x17FFF /
+  P2 cull=0x27FFF` below the band (bit 15 cleared in each) and `0x1FFFF / 0x2FFFF` above. A
+  two-pane probe **cannot** put the panes on opposite sides — `SpawnPicker` fans players
+  `dir.Cross(Vector3.Up)`, which is horizontal for every direction — so the opposite-sides case is
+  a code-level assertion: `DeckRegimeTests.TwoCamerasOnOppositeSidesOfTheBandGetOppositeRegimes`.
+- **`CSVM.Tests/DeckRegimeTests.cs`**, 5 tests, including one on the **authored** C1/IA1
+  `CLOUD_COVER` asserting the flip altitude is inside the fully-opaque core
+  (`WhiteoutAmount(centre ± 1 m) == 1`), with its own able-to-fail leg (the core does end).
+- **8-chapter `--freecam` regression** — zero errors in all eight; every census unchanged from A6
+  (decks C1/C1C/C2B 144 @ 960, C4 144 @ 1050, four chapters none; sprites C1 9,025 · C1C 9,572 ·
+  C2B 9,025 · C4 9,025 · C5 16,170).
+- **`.\RunTests.ps1`** — build PASS (0 warnings), **units 653/653** (648 + this item's 5),
+  **engine 26/26, errors clean**, goldens **6 moved, 0 broken of 13**. Exit 1 is the golden stage
+  alone. **The six are the same six A2/A3/A6 moved and are NOT re-pinned — still A4's job**
+  (GOLD-1): `c1-waterfall`, `c1c-rain`, `c2b-rain`, `c4-snow`, `c1-flight`, `c1-destroy-effects`.
+- **The moved set is the predicted footprint** (GOLD-5): every mover is a **deck** chapter
+  (C1/C1C/C2B/C4); every deckless chapter's golden is untouched (`c1b-night-sea`, `c2-city`,
+  `c3-island`, `c5-city-night`), as are `viewer-bhawk`, `empty-stage` and `c1-crash` (a C1 shot
+  whose frame holds no sky). **`c4-snow` is A7's own, and that is measured**: A6 recorded it
+  bit-identical either side of its change at `pixmd5=e83de4bc10177238f8d6040e6ba5e21b`; it now
+  renders `fb631da4df2dfe2d6a2057ae2ae21d6f`. Its camera is at y = 958, **below** C4's 1050 band
+  centre, so A7 moves the chapter A6 could not — C4's coincidence (band centre = authored deck
+  altitude) only holds in the ABOVE regime.
+
+### Two findings for whoever takes the next item
+
+1. **The above-band regime is bit-identical to the pre-A6 pin at the pinned above-deck pose** —
+   `.scratch/a6/before-natural-abovedeck-1192.png` vs `.scratch/a7/after-abovedeck-1192.png`:
+   `mean|d| = 0.000, max = 0`. That is by design (the user's observation 2 says the old pin was
+   the above-band half of the trick), but it means A6's cited improvement at that pose — "the
+   hard-edged rectangular plates in the near sheet (deck tiles cutting through the field at 1047)
+   are gone" — **is reverted for cameras above the band**. If those plates read badly at the
+   controls, the item is the deck-mesh↔sprite intersection (C23 / `BL-118`'s mesh↔sprite cut),
+   not the regime.
+2. **Our fog still eats the ceiling the original shows.** With K = 400 m the geometry now matches
+   (table above), but at the river pose with fog on, our mottling dies ~140 px above the horizon
+   against the original's ~330 px. That is `fogRangeFactor` 2.0 halving the authored range
+   (B15) and/or the fade model (B14) — measured here, not fixed here, and it is the same
+   "our fog hides more of the clouddeck" symptom B15 already owns.
+
+### Probe images (`.scratch/a7/`)
+
+| file | what it is |
+|---|---|
+| `AB-river-ceiling.png` | **the item's evidence** — original / pre-A7 / A7, `--no-fog`: no ceiling → a matched one |
+| `AB-river-fogged.png` | the same three with fog on: geometry fixed, fog still eating it (finding 2) |
+| `AB-abovedeck.png` | the pinned above-deck pose, original / before / after |
+| `AB-ladder-flip.png` | 1025 / 1046 / 1048 / 1075 m — the flip inside the whiteout core |
+| `after-ladder-{0900…1250}.png` | the climb ladder, 25 m steps + the 1 m bracket |
+| `after-gate-*.png` | the `--tex-override` gate table above, one file per row |
+| `before-/after-const-{300,600,900}[-nofog].png` | the constancy pair |
+| `regress-C{1,1B,1C,2,2B,3,4,5}.png` | the 8-chapter regression sweep |
+| `ceiling_scale.py` / `ceiling_zcr.py` / `compare.py` / `green_px.py` | the instruments, kept |
+
+### Original approach (kept for reference)
 
 **Goal.** The deck behaves as the original's does, per regime: below the band a camera-following
 ceiling whose texture look never changes while climbing; the above/below flip hidden inside the
@@ -967,6 +1142,7 @@ original's trick applied in both regimes; (3) from below, the view is the pure s
 even the cloud groups"** (`cloudparent`) show, so the gate covers both populations. CAP-12's
 "first wisps at ~982 m" are reattributed to the always-present plane-local wisp population
 (`BL-317`), not the field appearing.
+— *all three reproduced; (1) is now an exact pixel identity rather than an impression.*
 
 **Approach.** `WeatherRig.Tick` deck regime: camera below band centre → ceiling at
 `camera.y + K` (K constant — derive from the original stills: texture tiles are 1024 m, so the
@@ -978,6 +1154,9 @@ layer gate: put the fvol MultiMeshes and the `cloudparent` subtrees on a dedicat
 toggle each camera's **cull mask** by that camera's own altitude vs the band centre — never node
 visibility, which would leak across splitscreen panes. Read how `cloudparent` instances are
 built (WorldBuilder/SceneBuilder) to tag the instances, not just a template root.
+— *followed as written. The mottling-scale derivation worked and did NOT need the camera's
+altitude, which is what saved it from the 934/192 error above. `cloudparent` instances are tagged
+by gamez name off a post-walk census in `WorldBuilder`, not by template root.*
 
 **Model recommendation.** high — camera/layer machinery with splitscreen and per-chapter data
 variation; the flip masking is easy to get subtly wrong.
@@ -989,6 +1168,7 @@ both pinned poses re-shot; C4 regime check (band centre = its authored 1050); **
 still visible at street level** (see Traps); C1C build-ups visible from above the band;
 splitscreen `--players=2` with panes on opposite sides of the band each render their own regime;
 `.\RunTests.ps1` (goldens will move again — list, don't re-pin).
+— *all done; the splitscreen half became a code-level assertion for the reason recorded above.*
 
 **⚠ Traps.** **Chapters with no deck mesh must bypass the gate entirely** — C5 has clutter, no
 deck, and an unreachable band at 9950–10150 m: an unguarded gate hides its street haze forever.
@@ -996,6 +1176,9 @@ The gate is per-camera cull mask, per view. Do not touch the whiteout band's own
 opacity — if the core doesn't fully mask the flip somewhere, that is a finding about the
 whiteout (new item), not a licence to move the flip altitude. K is TUNE-marked with its
 derivation cited. `cloudparent` stays untouched apart from layer assignment.
+— *all respected: the guard is measured on C5 (161,541 cloud px at street level) and C1B
+(473,915); the whiteout's altitudes and opacity are untouched and the core is asserted to mask
+the flip by a test on the authored band; `cloudparent` gained a visual layer and nothing else.*
 
 # Wave B — fog semantics and zones
 
