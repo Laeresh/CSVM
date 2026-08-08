@@ -80,4 +80,5 @@ call (see the output rule at the top; an `AskUserQuestion` here hides §3 entire
 - start work — run `/grill-me` on the item first, then work from what that settles;
 - stop here.
 
+If scaffold a plan or start work is chosen, ask if a worktree should be used.
 Take no action until the answer comes back.

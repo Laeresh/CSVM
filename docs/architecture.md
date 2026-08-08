@@ -186,7 +186,9 @@ clusters they delegate to.
 - `src/Session/GameSession.cs` — the per-launch session node (instantiated by `Launcher`): builds one session — rigs, world, plane, HUD, weather — from its `SessionSpec`; return-to-menu `QueueFree`s it.
 - `src/Session/ExtractionStamp.cs` — boot-time check of `extracted/VERSION.json` (the provenance stamp the extraction scripts write): schema const + at most one warning line when the stamp is stale, missing, or unreadable.
 - `src/Session/LiveryResolver.cs` — resolves each player's livery against a `SessionSpec`: the paint catalog, the pattern-mask library, and the per-player scheme pick.
-- `src/Session/SpawnPicker.cs` — resolves each player's flight spawn against a `SessionSpec`: the shared spawn-list index and the per-player point (or the `--spawn-at=` override).
+- `src/Session/SpawnPicker.cs` — resolves each player's flight spawn against a `SessionSpec`: the shared spawn-list index and the per-player point (or the `--spawn-at=` override); the plain `IFlightStarts`.
+- `src/Session/IFlightStarts.cs` — the spawn-placement seam: one call answering for the **whole field** at once, plus the `FlightStart` pos/look-at pair every rig is placed from.
+- `src/Session/RaceGrid.cs` — the race starting grid: every pilot fanned symmetrically about one anchor spawn on its heading, with the whole field lifted as one to clear terrain.
 - `src/Session/PlaneRoster.cs` — pure lookups over a `SessionSpec`'s plane roster: which plane a player flies, and its display name.
 - `src/Session/EffectCatalogue.cs` — the record of which authored anims are playable effects, and what their defs need staged: the effect/crash/damage-shim name tables, the pure `TouchdownFor` graze pick, and the anchor-root derivation both binds stage from.
 - `src/Session/EffectPools.cs` — the `data/effect_pools.json` reader: how many copies of each effect template the stage builds, per ROOT, scaled by player count.
@@ -2909,9 +2911,56 @@ Resolves each player's flight spawn:
 `ChooseSpawnBase` (the shared `--spawn=`-or-random list index), `ChooseSpawn` (a player's
 position/look-at from that list, objectives.json `PLAYER_INIT`, or the `--spawn-at=` debug
 override), and `LogSpawn`. Constructed once per session build (`_spawnPicker`, same lifetime as
-`LiveryResolver`).
+`LiveryResolver`). Also the plain `IFlightStarts`: `ChooseStarts` just loops its own `ChooseSpawn`,
+which is the placement every session flies except a splitscreen race. `RaceGrid` delegates to
+`ChooseSpawn` for its anchor, and the weapon lab and freecam spectator call it directly, so this
+type stays the single owner of spawn resolution.
 ⚠ `ChooseSpawnBase`'s random branch draws from `Rng.Stream(Rng.Spawn)` — under `--det` this is
   pinned by the master seed same as before the move; do not reorder relative to other RNG draws.
+⚠ **The `_spec.SpawnAt` override branch is tested BEFORE the list branch** — that ordering is the
+  whole reason `--pos` beats the mission spawn list, and `RaceGrid` inherits the override for free
+  by delegating rather than reimplementing. Do not move it.
+
+## src/Session/IFlightStarts.cs
+Where every pilot in a session starts: `ChooseStarts(spawns, missionZrdrPath, spawnBase,
+playerCount)` returns one `FlightStart` — the same `(pos, lookAt)` pair `FlightController.Setup`
+already took — per player. Two implementations: `SpawnPicker` (the plain per-player walk of the
+mission's spawn list) and `RaceGrid`. `FlightRigAssembler` holds the interface and resolves the
+field lazily on its first `Assemble`, so the resolve still happens where it always did.
+⚠ **Whole-field, never per-player — the shape is the point of the seam.** A centred fan needs the
+  player count before any slot is known, and a field lifted as one by its worst slot needs every
+  slot probed before *any* answer is final; a per-player signature was rejected because it forces an
+  implementation to accumulate state across four calls and leaves player 1's answer wrong until
+  player 4 has asked.
+⚠ **Ascending player order is a contract, not an implementation detail** — the spawn-list index
+  wraps on from `spawnBase` per player, and the `spawn [...]` lines are read in player order.
+
+## src/Session/RaceGrid.cs
+The abreast starting grid, and the second `IFlightStarts`: slot `i` of `n` sits
+`(i − (n−1)/2) × spacing` metres along the perpendicular to the anchor heading, so an even field
+straddles the anchor and an odd one puts its middle plane on it. The anchor is
+`SpawnPicker.ChooseSpawn(playerIndex: 0)` — delegated, so the ia.json list, objectives.json
+`PLAYER_INIT`, the C1 last-resort fallback and `--pos` all keep working without the grid knowing any
+of them exist. The heading comes from the anchor's own pos→look-at pair, never the spawn's
+`HeadingDeg`: `--pos` carries no heading field and re-reading the list entry would silently ignore
+`--direction`. Terrain arrives as an injected `Func<Vector3, float?>` so fan and lift are testable
+off-engine; the production closure is `GameSession.GroundSampler()`, which also owns what an empty
+probe means. `raceGrid.slotSpacing` (60 m) and `raceGrid.groundClearance` (100 m) are
+`Config.GetFloat` **TUNE** values self-registered in `Config.WarmTuningRegistry`, so `--dump-config`
+lists them even on a launch that never builds a race.
+⚠ **Lift the whole field by its worst slot — never each plane by its own ground.** Per-plane lift
+  starts a race at four different altitudes, which is the same unfairness the grid exists to remove
+  wearing a new coordinate, and unlike a bad fan no screenshot shows it. Three `CSVM.Tests`
+  assertions exist solely to go red on it.
+⚠ **Scripted paths bypass this by NOT CONSTRUCTING it** (`GameSession.cs:1422` picks the
+  implementation once) — `--det`, solo flight, `--vs` and the zone-less chapters get `SpawnPicker`.
+  Never add a bypass branch inside this class: the byte-identical `--det` spawn guarantee is
+  structural, and it is not a splitscreen spawner (four dogfighters abreast on one heading is an
+  instant head-on merge — Dogfight's spacing is `BL-301`'s call).
+⚠ **Grid geometry is not photographable** — the panes are chase-cam only, so at 60 m a neighbour
+  sits outside the frustum. The per-slot `spawn [Pn grid slot i of n] … spacing= lift=` line is
+  therefore the primary field instrument, and anything the grid is judged by has to be readable in
+  it. A uniform lift *is* visible, as one shared HUD altitude across the panes.
 
 ## src/Session/PlaneRoster.cs
 Static, spec-free lookups over a `SessionSpec`'s plane roster: `PlaneFor(spec, index)`,
