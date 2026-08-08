@@ -258,7 +258,8 @@ an upper bound, and the correction to the 137.9 mph equilibrium are on `BL-115` 
   original's night sky and **no moon renders** where the original shows a large one
   (`t0.5`/`t5` stills) — `WorldBuilder.BuildHorizon` knows how to billboard a moon, so the (a)
   sweep should check whether the built zone1 subtree simply lacks the node.
-  *Blocks:* `BL-100`'s remaining four chapters are the A/B this sets up.
+  *Blocks:* nothing open — `BL-100`'s remaining four chapters were settled by render evidence
+  instead (`PLAN-overcast-match` `B12`: C1/C2B/C4/C1C = `zone2`), not by a fresh flight.
   *Variations:* one flight each — repeat with `--chapter=C3`, then `--chapter=C2`; (d)'s four
   untouched chapters need only a glance in each.
 

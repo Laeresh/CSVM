@@ -1737,7 +1737,8 @@ sky and fog are always the same zone. Census + per-chapter table: weather.md; th
   fog. A request the horizon does not name at all is left to `ResolveZone`'s weather-file fallback,
   which is what already lands C5 on `zone1`.
 ⚠ It fires on a UNIQUE populated sibling only. Two buildable zones (C1, C1C, C2B, C4) means the
-  geometry cannot decide and the request stands — that is `BL-100`, still open, not a gap here.
+  geometry cannot decide — resolved by render evidence instead (`PLAN-overcast-match` `B12`, all
+  four = `zone2`), which is what the default already ships; not a gap here.
 
 ## src/Flight/FlightAudio.cs
 Own-plane non-positional loops (engine with throttle-driven pitch, overspeed whine, rattle,

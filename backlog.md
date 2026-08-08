@@ -1260,26 +1260,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-076` `[Feature]` **Star twinkle + undecoded light fields** (flags 523/…, the 0.17 float) — stars/beacons
   render as fixed-size soft sprites, no twinkle.
 
-- `BL-100` `[Research]` **Which weather/sky zone do C1, C1C, C2B and C4 actually use?** **C5 is
-  answered — `zone1`** (user A/B 2026-07-22; landed as polish-3 item 2). **C1B, C2 and C3 are
-  answered — `zone1`**, settled from the data rather than by A/B (2026-08-06, `BL-277`): their
-  gamez `horizon/zone2` is a bare marker with no dome at all, so the geometry decides it and
-  `WeatherState.PreferPopulatedHorizonZone` now selects it (`docs/formats/weather.md`).
-  **What stays open is the four chapters where BOTH zones build a dome** — C1, C1C, C2B, C4 — and
-  there the choice really is a fidelity call the geometry cannot make. ⚠ **The "C1 first, its own
-  scripts disagree" ranking is withdrawn** (2026-08-06, `interp.json` re-read in full): its two
-  strings are not two zone selections — `load.gw`'s `CameraSetHorizonXZ zone2_cloud_floor` names a
-  node **C1's gamez does not contain**, and `tex_fx.gw`'s `FindNode h_zone1scroll` is a UV scroll,
-  not a pick. All four zone-bearing strings in the 98 scripts are accounted for in
-  `docs/formats/weather.md`; none bears on zone choice. So this is a plain four-chapter sweep, with
-  no data reason to order it. C1 is still the most *visible* case (its two zones are genuinely
-  different skies — zone2 moon/stars night, zone1 day haze). Method: fly each candidate in the
-  original and compare against `--sky-zone=zone1` / `=zone2`, which still render a named zone
-  literally.
-
-- `BL-101` `[Tuning]` `[Owed-playtest]` **Fine-tune fog and environment** — method: record video from a spawn point flying straight for a
-  fixed number of seconds, in both engines, and compare.
-
 - `BL-105` `[Research]` **Map-edge continuation — the mirror half is ANSWERED 2026-08-04 from `CAP-17`; the unit
   size is not.** **The original mirrors.** Our alternating reflection in `MapEdgeExtender.MirrorAxis`
   is correct and must NOT be swapped to plain repetition — the long-standing user belief that it
@@ -1547,38 +1527,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   below the cloud cover as **one-pixel-wide streaks** — narrow enough that the 2560-wide Game DVR
   capture swallows them entirely, while ours are plainly visible in the same scene
   (`playtest/CAP-11/csvm-c2b-low.png`). Streak width is the first constant to revisit.
-
-- `BL-303` `[Bug]` **Three scenes render permanent murk or a black sky the original doesn't have —
-  and all three sit against zones authoring a 9000–10000 m fog band** (`CAP-11` A/B, 2026-08-07;
-  evidence `playtest/CAP-11/README.md`; surfaced closing `BL-110`). The cases:
-  - **C3**, matched canyon pose (`--pos=-3504,710,-3619 --direction=-0.40673,0,-0.91355`,
-    identical 2329 ft both sides): original near slope 36.5, far hills 19.9–60.3, blue-gradient
-    sky 194.9; ours near slope 130.4 (×3.6), far hills flat **201.0 = full `c9c9c9` fog**, sky =
-    fog. The authored near 1000 / far 4500 cannot full-fog a hill 1–2 km out, and C3's
-    CLOUD_COVER sits at 10000–11000 m — this is not the whiteout band.
-  - **C2B above the deck**: original dark blue-gray dome 82.7 (t=50); ours flat b0b0b0 fog
-    **176.0** at 1230, 1350 and 1500 m — identical at every altitude, so not an altitude miss.
-  - **C5**: our sky pure black 0.1 vs the original's dark-blue night dome 15.3 (C5 authors fog
-    000000; the `Weather.cs` NoFog-fallback note is adjacent).
-  Every *healthy* scene's active zone authors either a reachable deck band (C1C/C2B zone1 ~1000,
-  C2 zone1 256–1024) or 10000–11000 (C1/C1B zone1) — how the fog-altitude fade treats a band
-  wholly above the flight envelope is the common suspect; start where `ZoneFog`'s
-  fog_low/fog_high are consumed. Adjacent from the same capture, probably NOT fog: C5's lit
-  facades read ×0.58–0.66 of the original (tower faces 10.2 vs 15.5, low-rise 21.7 vs 37.6)
-  with WorldLight already at clamp 1.
-  *Playtest after fix:* re-shoot the three poses named in `playtest/CAP-11/README.md` against
-  the same original stills.
-  **2026-08-08 (`PLAN-overcast-match` `B16`, landed):** the sky half of all three is fixed —
-  `SceneBuilder.ForceFogged` deleted, dome materials now build unfogged as authored. C3 sky
-  201.0 flat → 198.1 blue-gradient (orig 194.9); C2B above-deck 176.0 flat → 75.2 (orig 79.5–82.7);
-  C5 sky 0.0 flat black → 9.1–16.9 dark-blue gradient (orig 15.3). **Still open, not this item's
-  fix:** C3's near-slope terrain murk (162.0 both before and after B16, byte-identical — this is
-  fog-on-terrain, B14/B15's business, not the dome) and C5's lit-facade dimming (WorldLight-unrelated
-  per the note above). The crisp-edge band B16's own regression check surfaced at the horizon is
-  **closed by `B18` (2026-08-08)**: those pixels are the dome's untextured skirt, authored in the
-  zone's own `FOG_COLOR`, and our renderer was applying that one colour twice (material × vertex,
-  the same value) — 176 drew as 120, (16,24,48) as (0,0,3). Seven chapters' horizons now join their
-  fog wall seamlessly; no fog was re-added to the dome. B17 still owns the close.
 
 - `BL-315` `[Feature]` **C5's fog volumes author their own interior fog and we don't render it**
   (user at the controls of the original, 2026-08-08; clip

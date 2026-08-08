@@ -148,8 +148,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 14. ☑ B14 — Implement the winning fog model — **nothing to implement**; the shipped fragment fade IS the original's, landed as the `weather.md` corrections it owed
 15. ☑ B15 — `fogRangeFactor` **deleted** (authored ranges unscaled) and the range fade is a **linear** ramp, per the gamez's own `fog_state == 1`; the river-pose residual is measured to be the deck's own brightness, not the fog
 16. ☑ B16 — The dome's authored `fog: false` — landed, the primary fix for BL-303
-17. ☐ B17 — Fog A/B at both reference poses + BL-303's three; close `BL-303`/`BL-100`/`BL-101`
-18. ☑ B18 — The dome's cap/skirt seam: the skirt is painted `FOG_COLOR`, and we were applying it twice
+17. ☑ B17 — Fog A/B at both reference poses + BL-303's three; close `BL-303`/`BL-100`/`BL-101`
+18. ☑ B18 — The dome's cap/skirt seam: the skirt is painted `FOG_COLOR`, and we were applying it twice **Wave B complete.**
 
 ### Wave C — deck mesh brightness (BL-118 core)
 
@@ -2639,7 +2639,171 @@ that uniform, so there was nothing to avoid writing globally. The index-mismatch
 real and unrelated to this item (it is about `csky_fog_on`/`csky_light_fade`/`node_bias` ordering
 across shaders in general); still documented at `WeatherRig.cs` and `csky_instance_uniforms.gdshaderinc`.*
 
-## B17 ☐ Fog A/B at both reference poses + BL-303's three; close BL-303/BL-100/BL-101
+## B17 ☑ Fog A/B at both reference poses + BL-303's three; close BL-303/BL-100/BL-101
+
+**Landed.** (2026-08-08) Measurement and bookkeeping only — no engine code. The final Wave B build
+(post `B11`–`B16`, `B18`, `B13`, `B14`, `B15` — that is this wave's actual commit order, `B15`
+landing last) was re-shot at all ten poses this item needs (`.scratch/b17/shoot.ps1` +
+`measure.py`, reusing `B15`'s `boxes.py`). Nine of the ten are **MD5-identical** to `B15`'s own
+`landed-*.png`, confirming the build has not moved since `B15` landed and that this item's fresh
+renders and `B15`'s own numbers describe the same current state; `c2babovedeck` is the one pose
+`B15` never shot. `.\RunTests.ps1` moved exactly the 11 goldens `B15`'s own record predicted, 0
+broken, 0 unexpected — re-pinned, and a clean run now exits 0 (BL-320's viewer-bhawk hang worked
+around per its own note: killing the one hung Godot process let the suite finish normally).
+
+### Table 1 — river pose (`-7323,192,-3829` / `-0.997,-0.1,0.070`) vs `OriginalScreenshots/C1 IA1 Fog river.png`
+
+| region | ours | original | Δ | verdict |
+|---|---|---|---|---|
+| sky (mid-sky gradient) | 180.6 | 169.4 | +11.2 | borderline — waits on Wave C (below) |
+| near valley (river + grass) | 58.8 | 62.2 | −3.3 | ✓ within ±10 |
+| mid terrain (horizon band, cliff/ridge) | 71.5 | 175.0 | −103.4 | ✗ waits on Wave C |
+
+Plus the established reach instrument (`SHOT-23`, `B15`'s own, re-confirmed here on a
+bit-identical frame): mottling dies at row 236 (elevation **64 px** above the true horizon,
+saturation distance ≈3.7 km) against the original's row 337 (elevation **19 px**, ≈12.6 km).
+
+**Population note (`SHOT-21`):** no `cloudsprite` billboard is visible anywhere in this frame —
+`A3`'s top-anchoring keeps every card ≥986 m, far above both the 192 m camera and the
+terrain-level view here. Every pixel measured is the `CloudDeck` **mesh** (seen from below) or
+bare terrain; the sprite population plays no part at this pose.
+
+**Both misses are the same, already-diagnosed residual, not a fresh fog defect.** `B15` measured
+it directly: the original's overcast ceiling is *already at the fog colour* (row-mean 166.5→175.0
+down the original's sky, against a 176 `FOG_COLOR`), while ours renders the same ceiling at
+200–220 unfogged — so no combination of range factor or ramp shape can close the gap, because the
+fog has nothing washed-out to hide the difference behind. `mid terrain` lands squarely on this
+ceiling-vs-terrain handover and reads the full 103-unit gap; `sky`'s milder +11.2 is the same
+mechanism sampled higher in the gradient, where the two images already sit closer together. This
+is `BL-118`/Wave C's own underside-brightness delta (**167.7 original vs 213.9 ours, +46**,
+`C21`), not this item's fog mechanism — attributed there, not logged as a fog failure.
+
+### Table 2 — above-deck pose (`-7323,1192,-3829` / `0,0,-1`) vs `OriginalScreenshots/C1 IA1 Fog above clouddeck.png`
+
+| region | ours | original | Δ | verdict |
+|---|---|---|---|---|
+| zenith / dome (apex) | 72.8 (B17) / 75.5 (`B12`/`B16`, same pose) | 69.4 (B17) / 74.3 (`B12`) | +3.5 / +1.2 | ✓ within ±10 |
+| horizon / gray band (`B16`'s rows 265–355) | mean 153.3, sd 30.71 (textured) | — (qualitative) | — | ✓ — the flat sd-5.92 band `B16` found is gone in both; both images now show a real mottled gradient into the cloud tops |
+| deck tops / plateau (sprite population) | 221.2 | 157.2 | +64.1 | ✗ waits on Wave C |
+
+**Population note (`SHOT-21`):** the plateau this pose looks down onto **is** the top-anchored
+`cloudsprite` field (the fvol slab tops out at 1090.55 m, 101 m below the 1192 m camera) — this is
+`C21`–`C23`'s own "tops from above" target (`CAP-12` already has this population reading 211/214
+ours vs 196/202 original at a different altitude), a sprite-population brightness/character
+question the plan hands to Wave C, not a fog miss. The zenith and horizon-band regions, which
+involve no deck content at all, both hold.
+
+### Table 3 — `BL-303`'s three poses
+
+**C3 canyon** (`-3504,710,-3619` / `-0.40673,0,-0.91355`) vs
+`playtest/CAP-11/t0.5-c3-spawn-canyon.png`. Numbers are `B15`'s own landed record, re-confirmed
+current here by the bit-identical rebuild check: `B17`'s own box replay against the ORIGINAL still
+reproduced `near slope`/`mid ridge` within ~1 unit but landed nowhere near `far ridge`/`sky`
+(14.2/180.1 against the recorded 60.3/194.9) — exactly `B15`'s own caveat for this pose, that a
+fixed fractional box lands on different terrain on the two sides because the CAP-11 original
+carries HUD/plane on a chase-cam pitch our matched freecam shot doesn't share. `B15`'s
+framing-robust numbers are cited below rather than a fresh, noisier re-derivation:
+
+| region | ours | original | Δ | verdict |
+|---|---|---|---|---|
+| sky | 202.9 / 198.1 blue-gradient (`B16`) | 194.9 blue-gradient, B=221 | ≈+4–8 | ✓ — dome fixed by `B16` |
+| near slope | 106.1 | 36.5 | +69.6 | ✗ still open |
+| mid ridge | 143.7 | 19.9 | +123.8 | ✗ still open |
+| far ridge | 182.4 | 60.3 | +122.1 | ✗ still open |
+| vegetation fraction (lower frame, `G−R>8`) | 22.1 % | 47.8 % | −25.7 pp | ✗ still open |
+
+**C2B above-deck** (`-3843,1500,-1101` / `-0.391,0,-0.921`) vs
+`playtest/CAP-11/t50-c2b-above-deck.png` — a fresh `B17` shot, not in `B15`'s set:
+
+| region | ours | original | Δ | verdict |
+|---|---|---|---|---|
+| sky/dome | 75.5 | 82.0 (B17) / 79.5–82.7 (CAP-11's clean-window citation) | −6.5 to −7.2 | ✓ within ±10 — matches `B16`'s own landed 75.2 (unaffected by `B15`'s range/curve change, since the dome doesn't fog at all) |
+
+**C5 night** (`-9187,90,-2037` / `-0.1219,0,-0.9925`) vs
+`playtest/CAP-11/t0.5-c5-spawn-night-city.png`:
+
+| region | ours | original | Δ | verdict |
+|---|---|---|---|---|
+| sky (clear patch) | 16.6 | 15.3 (`BL-303`/CAP-11) / 14.1 (B17 box) | +1.3 / +2.5 | ✓ within ±10 |
+| street/facades (adjunct, not this item's mechanism) | lit facades: tower 10.2, low-rise 21.7 (CAP-11) | tower 15.5, low-rise 37.6 (CAP-11) | ×0.58–0.66 | still open — flagged NOT-fog by `BL-303` itself (WorldLight already at clamp 1.0); untouched here per the item's own trap |
+
+**Verdict: two of `BL-303`'s three scenes are fully inside the bar (C2B, C5); C3's sky is inside
+the bar and C3's terrain murk is not.** The sky half of all three was `B16`'s fix; C3's terrain
+residual and C5's facade adjunct are named below, not fixed here.
+
+### Residuals the orchestrator must mint follow-up items for
+
+Per this item's own instruction, neither residual is minted here — both are named with their exact
+evidence so a fresh `BL` can cite it directly:
+
+1. **C3's near-slope terrain murk — 106.1 measured against the original's 36.5**, and the same
+   shape on `mid ridge` (143.7/19.9) and `far ridge` (182.4/60.3). `B15` tried the full
+   `{factor, curve} × 2×2` and every cell is bounded away from the target — the fog is not
+   calibrated wrong here, it is modeled wrong — and named two untried candidates in its own
+   landing record, neither implemented:
+   - *"The fog mix happens in LINEAR space; the DX7 chain blended in FRAMEBUFFER (gamma) space...
+     At half fog between a dark slope (40 sRGB) and 176 the two spaces differ by 21 units — gamma
+     108, linear 129 — with the linear result always the washier one... This is the first thing to
+     try."* (`B15`, "What this does NOT fix")
+   - *"A7's `f·h ≈ 2.4e5` (hence `DeckCeilingHeight` 400 m) may be ~3× too large... the fogged
+     still now offers a second, independent estimator of the same product, which A7 did not
+     have."* (`B15`, same section)
+2. **C5's lit-facade dimming — tower faces 10.2 vs 15.5 (×0.66), low-rise 21.7 vs 37.6 (×0.58),
+   WorldLight already at clamp 1.0.** `BL-303`'s own text: *"Adjacent from the same capture,
+   probably NOT fog: C5's lit facades read ×0.58–0.66 of the original... with WorldLight already
+   at clamp 1."* Unrelated to any fog/dome/scatter mechanism this plan touched; needs its own
+   investigation.
+
+### Table 4 — healthy-scene regression, final build
+
+Re-confirmed via the bit-identical rebuild check rather than re-derived: `B15`'s own table is
+still current, since nothing has rendered differently since it was measured (`B16`/`B18`/`B13`/
+`B14` all landed *before* `B15` in this wave's actual commit order).
+
+| pose | region | ours | original | note |
+|---|---|---|---|---|
+| C2B spawn | sky | 169.9 | 177.0 | ✓ |
+| C2B spawn | ocean near | 41.0 (B15) / 40.9 (B17) | 52.1 (B15) / 52.0 (B17) | open — `BL-304` water/WorldLight exemption, untouched, out of this plan's scope |
+| C1B spawn | island/sea | 23.4 | 26.8 / 27.4 | ✓ |
+| C1B spawn | moonlit cloud tops p90 | 187.5 | 155.4 (t5) / 181.9 (t16) | residual noted on `BL-118`, out of scope here |
+| C2 `dogfight_ace[4]` | ground near | 105.7 | 89.1 / 88.0 | pre-existing gap, out of this plan's three-defect scope |
+| C2 `dogfight_ace[4]` | ground mid | 109.4 | ≈88 | pre-existing gap, out of scope |
+| C5 `dogfight_ace[3]` | street | 30.2 | — | unchanged |
+| C5 `dogfight_ace[3]` | sky | 16.6 | 15.3 | ✓ |
+| C4 `-4974,300,-3861` | every box | 191.5–191.9 | — | degenerate instrument (`INSTR-7`): C4's snow terrain and 192-gray fog are near-isomorphic here, unmeasurable at this pose |
+| C1 `CAP-12` t8.0 | near ground | 74.5 (B15) / 74.9 (B17) | 108.2 (B15) / 115.3 (B17) | pre-existing gap, out of scope |
+| C1 `CAP-12` t8.0 | sky (overhead deck ceiling) | 213.9 | 167.7 / 167.8 | same reading as `C21`'s dedicated 670 m underside box — Wave C's own target |
+
+**Nothing regressed.** Every open delta above either pre-dates this plan (C2's suburb grid, C1's
+terrain-lighting gap, `BL-304`'s water exemption) or is Wave C's own scope (the deck
+underside/tops brightness) — none is a fresh miss from this wave's fog work.
+
+### `BL-303`/`BL-100`/`BL-101` closed
+
+- **`BL-303`** — deleted. Sky half of all three scenes fixed (`B16`); C2B and C5 are fully inside
+  the ±10 bar; C3's sky is inside the bar and its terrain murk is not — see the two residual
+  candidates above, left for the orchestrator to mint. C5's lit-facade adjunct likewise left for
+  the orchestrator.
+- **`BL-100`** — deleted, fully closed. All eight chapters now have a zone verdict: C1B/C2/C3/C5 =
+  `zone1` (settled before this plan, from geometry — `horizon/zone2` is a bare marker in each);
+  **C1/C2B/C4 = `zone2`, verified against original footage** (`B12`: C1's moon + star field, C4's
+  moon over the deck, C2B's sky-colour match) — **C1C = `zone2` on asset-identity + parity only**,
+  since no original C1C IA1 footage exists (C1C is unreachable in Instant Action; its
+  `horizon/zone2` is the same four meshes at the same bboxes as C1's, its `zone1` a single
+  featureless mesh).
+- **`BL-101`** — deleted per decision 10. This plan's three waves *are* the fine-tune-and-compare
+  method the item asked for, run to completion for the scenes this milestone measures; a future
+  chapter-specific fog mismatch mints its own item, not a reopened `BL-101`.
+
+### Files
+
+`.scratch/b17/` (`shoot.ps1`, `measure.py`, ten renders, per-pose weather logs, three
+`runtests-*.out.log` full runs, `run-tests-guarded.ps1` — the `BL-320` hang workaround, kept since
+the hazard is still live), `analysis/goldens/manifest.json` (11 hashes re-pinned), `backlog.md`
+(`BL-303`/`BL-100`/`BL-101` deleted), `PROJECT_CONTEXT.md` ("Current status" wave-position
+clause), this section and the checklist line.
+
+### Original brief (kept for reference)
 
 **Goal.** The fog half of the match bar met and recorded; three backlog items closed.
 

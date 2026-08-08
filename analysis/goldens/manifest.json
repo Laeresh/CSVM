@@ -14,56 +14,56 @@
     {
       "name": "c1-waterfall",
       "frame": 120,
-      "hash": "3fdd78ccd5d77962b0d7a9e88148e35d",
+      "hash": "eb5ea44e94d78e65ad0cb4cae89c8737",
       "exercises": "UV scroll on the falls sheet + the mist puffer; frame-sensitive 1.28 % at 120 vs 121.",
       "args": ["--freecam", "--chapter=C1", "--pos=-7720,60,-3380", "--lookat=-7868,40,-3449", "--det", "--mute"]
     },
     {
       "name": "c1b-night-sea",
       "frame": 120,
-      "hash": "f6af4e360ed099e52e583506348fa2c8",
+      "hash": "1ed1cfe33e917d704c65c500067d95fb",
       "exercises": "night lighting, skydome, islands, the ambient cloud-puff field; static at 120 vs 121, 0.13 % at 120 vs 360 (puff drift).",
       "args": ["--freecam", "--chapter=C1B", "--pos=-6748,300,-8885", "--direction=0.242,-0.25,0.970", "--det", "--mute"]
     },
     {
       "name": "c1c-rain",
       "frame": 120,
-      "hash": "77bfc26593c226c45ab6ddca8f261822",
+      "hash": "0957cd91ba239faae6d4e74ae27d72ab",
       "exercises": "rain precipitation (seeded field on the sim clock), cloud deck, heavy fog; frame-sensitive 2.50 %.",
       "args": ["--freecam", "--chapter=C1C", "--pos=-3843,700,-1101", "--direction=-0.052,-0.25,-0.999", "--det", "--mute"]
     },
     {
       "name": "c2-city",
       "frame": 120,
-      "hash": "10f85232e7b6d40ea1bd771f39f20650",
+      "hash": "52f714594d02fcacf1f3a1421ea2cc4d",
       "exercises": "C2's solid 3D city blocks, billboard clutter, backlot geometry, daylight fog; near-static, 51 px at 120 vs 121.",
       "args": ["--freecam", "--chapter=C2", "--pos=-5722,186,-3457", "--direction=-0.438,-0.15,-0.899", "--det", "--mute"]
     },
     {
       "name": "c2b-rain",
       "frame": 120,
-      "hash": "fbee0d0dfa146a3b24c1b28397d24500",
+      "hash": "08d1b51d5b17dbc8b27180d2f56f097f",
       "exercises": "rain over open water — the surface A3 measured at 4.75 % unpinned; frame-sensitive 3.47 %.",
       "args": ["--freecam", "--chapter=C2B", "--pos=-3843,200,-1101", "--direction=-0.052,-0.1,-0.999", "--det", "--mute"]
     },
     {
       "name": "c3-island",
       "frame": 120,
-      "hash": "4ef962ea8619d2ee1585435513d77fbe",
+      "hash": "f8819e5640f3ac8f328c3b6e8fbd0327",
       "exercises": "coastline, surf edge and open water at close range; static — 9 px at 120 vs 360, so it proves geometry and shading, not the clock.",
       "args": ["--freecam", "--chapter=C3", "--pos=-4518,400,-2015", "--direction=-0.35,-0.35,-1", "--det", "--mute"]
     },
     {
       "name": "c4-snow",
       "frame": 120,
-      "hash": "fb631da4df2dfe2d6a2057ae2ae21d6f",
+      "hash": "d6cdac7b1608204151d869b559ab99f7",
       "exercises": "snow precipitation plus the chapter carrying 6 UV-scroll models; frame-sensitive 3.74 %, the largest of the freecam set.",
       "args": ["--freecam", "--chapter=C4", "--pos=-3330,958,-9181", "--direction=-0.682,-0.2,0.731", "--det", "--mute"]
     },
     {
       "name": "c5-city-night",
       "frame": 120,
-      "hash": "a0c47e74ac7976b21e5276ba1c8dc027",
+      "hash": "f35fb68fa02b928f8726445f20bfba18",
       "exercises": "the night city: LIGHT_STATE point lights packed into csky_light_data, lit window skins, moon and stars; static, 11 px at 120 vs 360.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute"]
     },
@@ -84,21 +84,21 @@
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "cd80b02805f5eb5cfd824352a09ce351",
+      "hash": "0304511cf8dd830311c63ca594fe80d1",
       "exercises": "a flying plane: chase camera on the sim clock, prop and control-surface animators, gauges, compass tape, weapon readout, impact reticle; the --hold throttle 0.5→1 jump also crosses ThrottleSlamSmoke's slam threshold, so this is the one golden carrying a live exhaust-trail Puffer; frame-sensitive 34.52 %, the strongest tripwire here.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "fc5aab189c7686c433d42c071f5954fc",
+      "hash": "6a93a71de9803469838c4109ef5b2c54",
       "exercises": "the world-effects runtime (ForEffects/D32) built and rendering a puffer: a flight-session kill of the single ap_radiotwr instance CALL_ANIMATIONs great_balls_of_fire onto the world-effects stage; frame-sensitive (distinct hashes at 119/120/121), and moves off its Rng.Effects seed (PLAN-animruntime-role-factories A1).",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "f56546254951354c602abfa94545fb8b",
+      "hash": "dd5e03cb004828fe00204ec4a98c2639",
       "exercises": "the per-player crash rig (ForCrashRig/D32) constructing and playing player_crash_dirt: --crash=5 forces FlightController.Crash() at a fixed sim frame, the only headless trigger for this path (PLAN-animruntime-role-factories A2); moves off its Rng.Crash draw. The set's biggest puffer surface, so the TEXTURE_SEQUENCE lifetime-fraction fix moved 26.55 % of its pixels: the fireball holds its mid flipbook frames instead of the blown-out last one. Also exercises EffectCatalogue.CrashSurfaceLevelAnimNames (BL-292): flydirt_plane, the dirt burst's ground-scorch dust plane, levels to world axes instead of the plane's spawn-trim attitude at --crash=5's frame, moving a 2.16% halo ring around the fireball (>20/255 threshold) — the fireball/smoke/debris family is deliberately excluded from that set and is pixel-unchanged.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     }
