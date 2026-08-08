@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using CSVM.Mech3;
+using CSVM.Mech3.Anim;
 using CSVM.Testing;
 using CSVM.Utils;
 using Godot;
@@ -54,6 +55,9 @@ public sealed partial class WorldDamageLab : Node
     private readonly bool _collisionBuilt;
     private readonly List<PoolRow> _rows = new();
 
+    // The BL-022 arc sliders, each with the getter that re-reads its live value on a sync.
+    private readonly List<(HSlider Slider, Func<float> Get)> _tuneSliders = new();
+
     private CanvasLayer? _layer;
     private PanelContainer? _panel;
     private VBoxContainer? _box;
@@ -62,6 +66,7 @@ public sealed partial class WorldDamageLab : Node
     private Label? _reach;
     private Label? _status;
     private VBoxContainer? _rowBox;
+    private Label? _tuneReadout;
 
     private bool _open;
     private bool _syncing;
@@ -277,6 +282,8 @@ public sealed partial class WorldDamageLab : Node
         scroll.AddChild(_rowBox);
         box.AddChild(scroll);
 
+        box.AddChild(BuildDebrisTune());
+
         _status = Small("");
         box.AddChild(_status);
         box.AddChild(Small("slider = absolute HP (down damages, up resets then re-damages) · H hides this panel"));
@@ -318,6 +325,105 @@ public sealed partial class WorldDamageLab : Node
         _panel.OffsetBottom = _panel.OffsetTop + available;
         float overflow = natural - available;
         _scroll.CustomMinimumSize = new Vector2(0, Mathf.Max(0, rowsHeight - overflow));
+    }
+
+    /// <summary>The two <c>BL-022</c> debris-arc sliders, under the pool rows: launch-speed and
+    /// gravity multipliers on every launched <c>OBJECT_MOTION</c> body, live. They are global
+    /// rather than per-pool because the authoring is — <c>m_build03</c>, <c>refuel3</c>,
+    /// <c>ptboat1</c> and <c>m_build01</c> carry the same four speed/elevation rows verbatim, so a
+    /// per-def knob would invent a distinction the data does not make.
+    ///
+    /// <para>The workflow they exist for: pick the object, Kill, watch, drag, <b>Reset</b>, Kill
+    /// again. A new value only affects bodies launched after it, so an already-flying piece keeps
+    /// the arc it left with — re-kill rather than expecting the current debris to change
+    /// mid-flight.</para>
+    ///
+    /// <para>Log-scaled around 1 (⅛×…8×) so both halves get equal travel: a linear 0–8 slider
+    /// spends seven eighths of its length above the default, and the interesting region for an
+    /// arc that reads too big is entirely below it.</para></summary>
+    private VBoxContainer BuildDebrisTune()
+    {
+        var block = new VBoxContainer();
+        block.AddThemeConstantOverride("separation", 2);
+        var title = new Label { Text = "DEBRIS ARC (BL-022) — global, all launched pieces", Modulate = Amber };
+        title.AddThemeFontSizeOverride("font_size", 11);
+        block.AddChild(title);
+        _tuneReadout = Small("");
+        block.AddChild(_tuneReadout);
+
+        block.AddChild(TuneSlider("launch speed", () => DebrisTune.LaunchScale, v => DebrisTune.LaunchScale = v));
+        block.AddChild(TuneSlider("gravity", () => DebrisTune.GravityScale, v => DebrisTune.GravityScale = v));
+
+        var actions = new HBoxContainer();
+        actions.AddThemeConstantOverride("separation", 4);
+        actions.AddChild(Btn("Shipped", () =>
+        {
+            DebrisTune.Reset();
+            SyncTuneSliders();
+            Log.Info("anim", $"debris tune back to the shipped look (launch {DebrisTune.DefaultLaunchScale:0.###})");
+        }));
+        actions.AddChild(Btn("Authored 1:1", () =>
+        {
+            DebrisTune.UseAuthored();
+            SyncTuneSliders();
+            Log.Info("anim", $"debris tune at the raw authored arc — the A/B state, not the shipped one");
+        }));
+        actions.AddChild(Btn("Log value", () => Log.Info("anim",
+            $"debris tune --debris-launch={DebrisTune.LaunchScale:0.###} --debris-gravity={DebrisTune.GravityScale:0.###}")));
+        block.AddChild(actions);
+        block.AddChild(Small("drag, then Reset + Kill to replay · Log value prints the flags to paste back"));
+        UpdateTuneReadout();
+        return block;
+    }
+
+    /// <summary>One log-scaled multiplier slider. The slider's own units are log2 of the
+    /// multiplier in ⅛th steps, so the detent at 0 is exactly 1.0 and the ends are 1/8 and 8.</summary>
+    private HSlider TuneSlider(string what, Func<float> get, Action<float> set)
+    {
+        var slider = new HSlider
+        {
+            MinValue = -3,
+            MaxValue = 3,
+            Step = 0.125,
+            Value = Math.Log2(Math.Max(get(), 1e-3f)),
+            TickCount = 7,
+            TicksOnBorders = true,
+            CustomMinimumSize = new Vector2(240, 0),
+        };
+        slider.ValueChanged += v =>
+        {
+            if (_syncing)
+            {
+                return;
+            }
+            set((float)Math.Pow(2.0, v));
+            UpdateTuneReadout();
+            Log.Info("anim", $"debris tune {what}={Math.Pow(2.0, v):0.###}");
+        };
+        _tuneSliders.Add((slider, get));
+        return slider;
+    }
+
+    private void SyncTuneSliders()
+    {
+        _syncing = true;
+        foreach (var (slider, get) in _tuneSliders)
+        {
+            slider.Value = Math.Log2(Math.Max(get(), 1e-3f));
+        }
+        _syncing = false;
+        UpdateTuneReadout();
+    }
+
+    private void UpdateTuneReadout()
+    {
+        if (_tuneReadout == null)
+        {
+            return;
+        }
+        string what = DebrisTune.IsTuned ? (DebrisTune.IsAuthored ? "  (raw authored arc)" : "  (experimental)") : "  (shipped)";
+        _tuneReadout.Text = Log.Format($"launch ×{DebrisTune.LaunchScale:0.###}  gravity ×{DebrisTune.GravityScale:0.###}{what}");
+        _tuneReadout.Modulate = DebrisTune.IsTuned ? Loud : new Color(1, 1, 1, 0.65f);
     }
 
     private Button Btn(string text, Action pressed)

@@ -102,4 +102,6 @@ should sanity-check that the four shapes do **not** all come back `stays=True`.
 
 `analysis/bl-257-nulled-launch/` (the termination-field split these shapes come from) ·
 `analysis/object-motion-range/` (the 2026-08-01 azimuth/elevation/speed decode) · `BL-059` item 1 ·
-`BL-245` · `BL-022` · `docs/formats/destructibles.md` "Debris tumbles"
+`BL-245` · `BL-319` (`run_time` is not a flight duration — pieces cut mid-arc or flying long past
+landing; found closing `BL-022`, whose arc scale shipped as `DebrisTune.LaunchScale` 0.65,
+`git log --grep=BL-022`) · `docs/formats/destructibles.md` "Debris tumbles"

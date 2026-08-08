@@ -87,27 +87,31 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   aspiration/data mismatch. ⚠ Even a working destructible door may leave wreck colliders — "clear
   passage" is its own playtest.
 
-- `BL-022` `[Tuning]` **Debris arcs read slightly LARGER than the original — all that is left of "the trajectory
-    is wrong."** In-flight kills once threw pieces "but not in the correct trajectory". **The largest cause
-    landed 2026-08-01**: `translation_range` was read as a distance travelled when it is an azimuth/elevation
-    launch with `initial` the speed (`analysis/object-motion-range/`), which threw debris hundreds of metres
-    along one bearing — visible as the `c1-destroy-effects` golden's line of fireballs marching up the runway.
-    *Evidence:* `PT-46`, flown 2026-08-08 (retired; verdicts in `git log --grep=PT-46`). At the controls the
-    pieces now fly and the arcs read as believable parabolas — **the only residue is scale: the original's
-    arcs are "a little bit smaller".** An impression, not a measurement, and nothing else in the sitting
-    disagreed with the build.
-    *Fix shape:* nothing to change until the shortfall is quantified — it wants an A/B against the original
-    (a `CAP-nn`, or a side-by-side of one destruction def), since "a little smaller" spans anything from a
-    launch-speed trim to a debris-specific gravity.
-    ⚠ **Traps.** (a) Do not re-open the magnitude as a decode — the speeds are censused and mapped; what is
-    open is a judged magnitude, not a reading. (b) `gravity.value` is absolute m/s² (a literal −9.8 on 173
-    events, −10 on 400), NOT an offset to the aircraft's arcade `nom_gravity` of 20 — considered and
-    disproven by the same census, and `MotionRuntime` applies the authored value alone. (c) A piece that
-    flies *through* the ground is not this item and not a defect — `PT-46` check (d) confirmed the original
-    does the same, and the data agrees: `do_intersections` is false on all 120 bounce-shape events, all 159
-    vanish-shape, and 924 of the `run_time` shape. Only 16 `(def,node)` pairs in all 8 chapters author it
-    true (`player_crash_dirt` `piece1`–`4`, the eleven C1B airframes' `MAIN_ROOT_NODE`, `agyrobus`), and
-    those are `BL-059`/`BL-245`'s.
+- `BL-319` `[Research]` **`run_time` on a launched `OBJECT_MOTION` is not a flight duration — pieces are cut
+    mid-arc, or fly for seconds past their landing.** Found while settling `BL-022`'s arc scale
+    (`git log --grep=BL-022`), and it is why that item's 0.65 is a judged look rather than a decode.
+    **Only an event with NO authored `RUN_TIME` gets a solved flight** (`MotionRuntime.FlightToLaunchHeight`,
+    `MotionRuntime.cs:242-255`). Everything else integrates the parabola for exactly the authored time and is
+    then dropped by `MotionSet` (`MotionSet.cs:63-66`), holding its last pose. Both failure directions ship:
+    - **Cut mid-flight.** `m_build03` part1/5/9 author `run_time` 5.0 s against a 6.95 s parabola — the piece
+      stops at **72 % of its arc, still ~49 m up**. part2/6/7/8 stop at 67 %. Six of the nine.
+    - **Run long past landing.** `genx12` (the template `air_gen` calls, and the *vector* `translation`
+      branch, not the spherical one) authors 4.0–6.5 s against 1.1–2.0 s parabolas — every one of its twelve
+      pieces ends up roughly **135 m below** where it launched, i.e. deep under the terrain.
+    *To settle:* (a) does a following sequence event hide the frozen piece, or does it visibly hang in the
+    sky? — `--debug-anim` on a `--destroy=m_build03` run answers it; (b) then decide what `run_time` means
+    for a launch: a clamp on the flight, a hint the original overrode with real contact, or a duration the
+    parabola was meant to fit.
+    ⚠ **Traps.** (a) **Not a decode question about `translation_range`** — the speeds and angles are censused
+    and mapped (`analysis/object-motion-range/`); this is about the *duration* field. (b) **Not ground
+    contact.** `do_intersections` is false on all 120 bounce-shape events, all 159 vanish-shape and 924 of
+    the `run_time` shape; only 16 `(def,node)` pairs in all 8 chapters author it true, and those are
+    `BL-059` item 1 / `BL-245`'s. A piece passing *through* the ground is confirmed original behaviour
+    (`PT-46` check (d)) and is not this item. (c) `gravity.value` is absolute m/s² (a literal −9.8 on 173
+    events, −10 on 400), **not** an offset to the aircraft's arcade `nom_gravity` of 20 — considered and
+    disproven by the same census. (d) ⚠ **`BL-022`'s shipped `DebrisTune.LaunchScale` of 0.65 silently
+    absorbs whatever this turns out to be**, so settling it will likely move that number too — re-judge the
+    look at the controls afterwards rather than assuming 0.65 survives.
 
 - `BL-059` `[Feature]` **Data-driven crash — the remaining variants/follow-ups.** The dirt/ground crash is
   complete and the default (`PLAN-data-driven-crash`, `docs/HISTORY.md`). What is still open:
@@ -154,8 +158,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `healthy`), not the impact point. For the debris arcs: `translation_range` **is** decoded and
   **is** simulated now (2026-08-01 — xz/y an azimuth/elevation in degrees, `initial` the launch
   speed, `delta` a speed ramp, all mapped in `MotionRuntime`), so the old "reasoned reading" caveat
-  is retired; what stays TUNE is only the arc's judged look, the `fly_trailN` anchor being invisible
-  so that only the trail shows; and the DISTANCE interval hides behind an inverted flag
+  is retired; and the arc's judged look is settled too — `DebrisTune.LaunchScale` ships at **0.65**
+  (2026-08-08, matched at the controls against `OriginalScreenshots/Videos/m_build03 destruction.mp4`;
+  `git log --grep=BL-022`), and the crash pieces tightened with it, so a blend here starts from the
+  tuned arc, not the authored one. What stays TUNE is the `fly_trailN` anchor being invisible so that
+  only the trail shows; and the DISTANCE interval hides behind an inverted flag
   (`has_interval_value` false, key off `interval_type`).
 
 - `BL-102` `[Research]` **Patrol boat: which HP governs?** (from `docs/plans/PLAN-M3-weapons.md` C23, 2026-07-22.)

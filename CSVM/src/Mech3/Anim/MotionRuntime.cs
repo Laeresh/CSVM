@@ -68,6 +68,13 @@ namespace CSVM.Mech3.Anim;
 ///   scale is UNDECIDED — every node carrying this channel is authored at exactly unit scale in
 ///   this install, so the two readings coincide and no capture can separate them.</item>
 /// </list></para>
+///
+/// <para>⚠ <b>Every speed above is the AUTHORED one; what flies is that scaled by
+/// <see cref="DebrisTune"/>.</b> <c>LaunchScale</c> ships at <b>0.65</b> — a judged look matched at
+/// the controls against the original (`BL-022`, 2026-08-08, `git log --grep=BL-022`), not a decode —
+/// so a piece whose data says it leaves at 10 m/s actually leaves at 6.5. Anything computing an
+/// expected arc from the extracted numbers must apply the scale, or pin the raw arc with
+/// <see cref="DebrisTune.UseAuthored"/> (what the launch suites do) to assert the decode instead.</para>
 /// </summary>
 internal sealed class MotionRuntime : IAnimMotion
 {
@@ -140,7 +147,11 @@ internal sealed class MotionRuntime : IAnimMotion
         float RandSym() => (float)(rt._rng.NextDouble() * 2.0 - 1.0); // [-1, 1] via the seedable RNG
         float Rand(float a, float b) => a + (float)rt._rng.NextDouble() * (b - a);
 
-        float gravity = data.Obj("gravity")?.Num("value") ?? 0f;
+        // BL-022's arc knobs. Both default to 1 and multiply exactly, so an untuned run — and
+        // every golden — is byte-identical to a build without them. See DebrisTune for why the
+        // launch and the gravity are separate sliders rather than one "size" scalar.
+        float gravity = (data.Obj("gravity")?.Num("value") ?? 0f) * DebrisTune.GravityScale;
+        float launchScale = DebrisTune.LaunchScale;
 
         // The plane's momentum (world-space), carried by the launched pieces so they scatter
         // along its travel instead of just popping up in place. Converted into the node's parent
@@ -168,8 +179,12 @@ internal sealed class MotionRuntime : IAnimMotion
             var rnd = tr.Vec3("rnd_xz");
             v0 += new Vector3(RandSym() * rnd.X, RandSym() * rnd.Y, RandSym() * rnd.Z);
             // delta ramps velocity over run_time → a constant acceleration of delta/run_time.
-            rampTotal = tr.Vec3("delta");
-            m._v0 = v0 + InheritedLocal();
+            // Scaled with the launch it ramps, or the tune would bend the arc's shape as well
+            // as its size.
+            rampTotal = tr.Vec3("delta") * launchScale;
+            // InheritedLocal is OUTSIDE the scale: it is the plane's measured momentum, not part
+            // of the authored launch, and BL-122 owns its magnitude.
+            m._v0 = (v0 * launchScale) + InheritedLocal();
             m._accel = new Vector3(0f, gravity, 0f);
             m._hasBallistic = true;
         }
@@ -194,10 +209,11 @@ internal sealed class MotionRuntime : IAnimMotion
             float speed = Pick(range.Obj("initial"));
             float speedRamp = Pick(range.Obj("delta"));
             var dir = RangeLaunchDirection(azimuth, elevation);
-            m._v0 = dir * speed + InheritedLocal();
+            // As in the vector branch: the authored launch scales, the inherited momentum does not.
+            m._v0 = (dir * speed * launchScale) + InheritedLocal();
             // delta ramps the launch speed over run_time, along the same direction — the same
             // shape `translation.delta` has, and 0 on 984 of the 1,217 events.
-            rampTotal = dir * speedRamp;
+            rampTotal = dir * speedRamp * launchScale;
             m._accel = new Vector3(0f, gravity, 0f);
             m._hasBallistic = true;
         }
