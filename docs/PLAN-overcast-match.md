@@ -128,6 +128,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☑ A2 — Kill the lattice and the field edge (horizontal mechanism) — **+ exact footprint containment**
 3. ☑ A3 — Top-anchor the vertical placement
 4. ☐ A4 — Scatter A/B vs CAP-12 + the river twin; close `BL-312`
+5. ☐ A5 — Continue the field past the map edge (user playtest 2026-08-08: the original's field is everywhere)
+6. ☐ A6 — Why does flight mode show puffs below the deck when freecam doesn't? (investigate, then fix or reclassify)
 
 ### Wave B — fog semantics and zones (BL-100 + BL-303 + BL-101)
 
@@ -149,7 +151,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ## Dependency and parallelism notes
 
 Waves run strictly A → B → C (decision 3). Inside Wave A: A1 blocks A2/A3; A2 and A3 both edit
-`FogVolumeClutter.cs` — sequence them, never parallel worktrees. Inside Wave B: B11, B12, B13 are
+`FogVolumeClutter.cs` — sequence them, never parallel worktrees. **A6 (investigation) runs before
+A5 (both may touch `FogVolumeClutter.cs`), and A4 closes the wave only after A5 and A6 land** —
+the 2026-08-08 playtest reopened the wave with both. Inside Wave B: B11, B12, B13 are
 independent research and may interleave (B13 may park on a [USER] capture — proceed with the
 others); B14 needs all three; B15 and B16 follow B14 and both touch the weather/fog path
 (`Weather.cs`/`WeatherRig.cs`/`SceneBuilder.cs`) — sequence them; B17 last. Inside Wave C: C21
@@ -706,7 +710,10 @@ separate system per `docs/architecture.md`.
 **Goal.** The wave's acceptance criteria measured and recorded; `BL-312` deleted from the backlog.
 
 **Evidence (confidence: n/a — this is the instrument).** CAP-12 stills + the pinned river pose;
-PT-42(c)'s "a lot denser" as the density reference.
+PT-42(c)'s "a lot denser" as the density reference. Wave-gate playtest (user, 2026-08-08, in
+engine): lattice/comb at grazing angles **confirmed gone**; puffs below the deck **still seen in
+flight** (→ `A6`); field ends at the base map where the original's is everywhere (→ `A5`) — A4
+closes the wave only after both land.
 
 **Approach.** Matched shots at the CAP-12 grazing poses and both pinned poses; a density comparison
 (sheet-region sprite coverage vs the original's) recorded here; re-pin the goldens
@@ -722,6 +729,70 @@ re-confirmed. Full 8-chapter freecam regression, zero errors.
 **⚠ Traps.** `--tex-census` counts are lower bounds and pair with `--no-fog` (cli.md) — if used for
 density, say so and use the same flags on both sides of any before/after.
 
+## A5 ☐ Continue the field past the map edge
+
+**Goal.** Flying toward and beyond the map boundary shows the cloud field continuing everywhere,
+as the original does — no field edge at the base-map rim.
+
+**Evidence (confidence: direction traced, mechanism open).** User at the controls, 2026-08-08:
+"it is only over the basemap. in the original its everywhere." A1 explicitly left this
+undiscriminated (the two readings differ only within `far_fade_range.y` = 3500 m of the boundary,
+and no footage sampled there) — this playtest is the missing sample. The terrain already
+continues via `MapEdgeExtender.MirrorAxis` (alternating reflection, `BL-105`); the field must
+continue over that extension.
+
+**Approach.** Extend the scatter beyond the base map for the map-spanning slab volumes only
+(C1/C1C/C2B/C4's `fvol1`–`fvol9`, which tile the map exactly — C1C's build-ups and C5's strips
+are local geometry and must NOT be extended). Simplest faithful mechanism: virtually tile the
+slab's cell field outward to the edge-extension radius with the same density, seed-hashed per
+cell so determinism and world-lock hold. Mirroring vs plain continuation is indistinguishable
+for a random field — do not build mirror machinery for it. Respect containment: the extension
+inherits the slab's Y band.
+
+**Model recommendation.** medium — a bounded generalisation of the landed scatter, with the
+determinism constraint.
+
+**Verify.** Probe at the map rim (e.g. x near −12288 and 0) looking outward and along the edge:
+field continues with no seam and no density step; sprite-count log states the new total and the
+extension radius; `--det` md5 stable across runs; C5/C1C counts unchanged.
+
+**⚠ Traps.** `cloudparent` stops at the map edge in the original (BL-118's note) — extending the
+wrong population would invent content. The far fade (3500 m) must keep the working set bounded;
+state the extension's sprite budget.
+
+## A6 ☐ Why does flight mode show puffs below the deck when freecam doesn't?
+
+**Goal.** The user's at-the-controls report ("still showing below the deck") reproduced,
+mechanism named, and either fixed or reclassified with evidence.
+
+**Evidence (confidence: lead-only).** Contradiction on file: A3's freecam tex-override probe
+counts zero sprite pixels below 960 m at the river pose, but the user flying C1 (RunGame,
+2026-08-08) still sees puffs below the deck. Their own hypothesis: the fix may only engage
+above/inside the whiteout. Prime suspects, in order: (a) the deck-follow behaviour — in flight
+the deck tracks the plane and flips above/below at the cloud band (`GameSession`/`WeatherRig.Tick`),
+so the deck sheet's live altitude in flight is not freecam's 960 m; (b) the `cloudparent`
+population — C1 ships 28 stationary clusters, untouched by Wave A, indistinguishable from fvol
+sprites at the controls (the BL-118 vocabulary trap in both directions); (c) a transparency/draw
+order path that lets sprites read through the deck sheet.
+
+**Approach.** Reproduce in FLIGHT mode (not freecam): fly the river area below the deck with
+`--tex-override` isolating cloud1/cloud2 vs the deck texture vs cloudparent's textures (check
+what cloudparent instances actually skin — read the template in the gamez data first). Log the
+deck node's live Y while flying. Classify what is visible below 960 m; fix if it is fvol scatter
+or the deck-follow logic, reclassify to the correct item/backlog entry if it is cloudparent
+(that population is BL-118's business, not this wave's).
+
+**Model recommendation.** high — a contradiction between instruments; the risk is fixing the
+wrong population.
+
+**Verify.** A flight-mode capture sequence at the user's sighting conditions showing the
+classification; after any fix, the same sequence clean; freecam probes from A3 re-run unchanged.
+
+**⚠ Traps.** Do not "fix" cloudparent placement here — if the sighting is cloudparent, the
+verdict lands as evidence on the appropriate item and this item closes as reclassification.
+The whiteout band is a separate system; a sprite seen through whiteout murk is not "below the
+deck".
+
 # Wave B — fog semantics and zones
 
 ## B11 ☐ All-chapter zone-table survey; test H1/H2/H3 on paper
@@ -732,7 +803,14 @@ sunlight, and against it each hypothesis' predictions for (a) the settled zone v
 (d) the two C1 stills. Hypotheses: **H1** `FOG_ALTITUDE` fades the whole fog effect by *camera*
 altitude; **H2** per-fragment fade (current shader); **H3** altitude-triggered zone *switching*
 (user hypothesis, decision 5; candidate switch point = zone1's band top, 1047 in C1 — note C5's
-identical bands make a switch unreachable there, which is consistent with its zone1 verdict).
+identical bands make a switch unreachable there, which is consistent with its zone1 verdict);
+**H4** *positional* zone switching — inside vs outside a fog volume (added 2026-08-08 from the
+user's C5 sighting: flying into a street volume drops visibility to ~10 % of the mission fog,
+clip `OriginalScreenshots/Videos/CAP-11 C5 Flying into fog zone.mp4`; C5 `ZONE3` authors 50–250
+vs `ZONE1` 1500–2250 — 250/2250 ≈ the estimate — and C5's fogvol.zrd is the only one authoring
+interior-fog keys; `BL-315` holds the render feature, B11 owns whether zones and interior fog
+are one mechanism. Note C1's `fvol` nodes carry `zone_id: 2` — check the sign of that
+correlation per chapter).
 
 **Evidence (confidence: lead-only).** The C1 IA1 numbers above; `weather.md`'s zone survey; the
 BL-303 case notes. H1 and H3 are not exclusive.
@@ -951,6 +1029,9 @@ colour cut.
 
 **Evidence (confidence: direction sound).** PT-42(a): ours shows a hard cut; the original blends.
 The 211-vs-214 tops match sampled an unknown mix of the two populations (BL-118's ⚠).
+Re-confirmed post-Wave-A at the controls (user, 2026-08-08, C1C): "the color difference between
+fogvol puffs and the cloud deck texture is jarring. many hard lines" — the scatter fixes did not
+touch it, as expected; it is this item's target.
 
 **Approach.** Per-population boxes via `--tex-override` isolation at the above-deck pose; whichever
 population is off gets the correction (sprite vertex colours are authored 240/240/240 — data first,
