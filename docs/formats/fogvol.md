@@ -149,23 +149,75 @@ degenerate ranges).
 - **`far_fade_range[1]` is what to draw at.** The pair is per detail level (`templates.zrd`
   authors it the same way, e.g. `firtree1` `[[500,1000],[1000,2000]]`); the remake has no
   reduced-detail mode, so it takes the farther band. Both are read and kept.
-- **The vertical spread inside a volume is uniform.** The box is a volume, so the field fills it;
-  `perp_dist_range` is applied on top.
-  ⚠ **Under challenge from footage (2026-08-07, `CAP-12` C4 take — see `BL-118`):** C4's clear
-  air shows the plane in *clear sky at 1135 m*, inside the 1060–1180.5 volume, with puff bases
-  well above the 1050 m deck sheet — a gap uniform fill cannot produce (132.3 m cards would hang
-  to ~956 m). A top-anchored scatter (centres near the volume top + `perp_dist_range`) fits both
-  the C4 gap and C1's measured whiteout onset at 1003 m. Not yet implemented; the correction
-  belongs here, not in a tuning constant.
-  ☑ **DECIDED 2026-08-08 (plan item `A1`), pending render verification `A2`–`A4`: top-anchored —
-  centre Y = volume top + `perp_dist_range`.** C1 then predicts card bottoms 986.3–1037.7 m
-  (measured wisps 982, obscuration from 1003) and C4 1076.3–1127.7 m (measured clear air at
-  1135 m). ⚠ **C4's frame is the only clean discriminator; C1's band is degenerate** and must not
-  be cited alone — `CLOUD_COVER` `TOP 1124 / BOTTOM 970 / THICKNESS 30` predicts full white
-  1000–1094 and the slab predicts a 1090.55 m top, against a measurement of 1003–1085, so both
-  fit. ⚠ Open for `A3`: the rule is only tested on ~one-card-thick slabs. C5's 646 m strips would
-  put every sprite in a sheet at 125–246 m and empty the streets below, and C1C's 300–597 m
-  build-ups would be capped and hollow. If a frame shows either, the anchor is per-volume-shape.
+- **The vertical spread is TOP-ANCHORED for sheet-thin volumes, UNIFORM for tall ones — the anchor
+  IS per-volume-shape, settled `A3` 2026-08-08 and verified at the render.** C4's clear air at
+  1135 m (`CAP-12` C4 take, 2026-08-07 — see `BL-118`) falsified a uniform fill: 132.3 m cards
+  drawn uniformly across the 1060–1180.5 volume would hang to ~956 m, leaving no gap, but the clip
+  shows *clear sky*, puff bases well above the 1050 m deck sheet. `A1` decided the shape (centre
+  Y = volume top + `perp_dist_range`) and `A3` decided WHICH volumes it applies to, since a
+  map-spanning slab and a 597 m build-up tower are not the same kind of shape.
+  ☑ **Rule, as implemented (`FogVolumeClutter.Scatter`):** a volume whose own AABB height is at
+  most `TopAnchorHeightFactor` (1.5×) the chapter's card size draws every cell's Y at the volume's
+  own top (`box.End.Y`) before containment, then adds `perp_dist_range` after — same order as
+  every other placement, so the ordering trap below still applies. A taller volume keeps the
+  original full-height uniform draw untouched. **Marked inference — the factor is a judgement
+  call, not authored data**, chosen from a clean gap in the volumes' own measured thickness
+  (`extracted/{C1,C1C,C2B,C4,C5}/gamez/nodes.json`): C1/C2B/C4's nine slabs and C1C's own
+  map-spanning `fvol1`–`fvol9` are **120.5–120.6 m** thick against a 132.3 m card (ratio 0.91);
+  C1C's twelve build-up frusta start at **299.7 m** (ratio 2.27, the shortest of them) and reach
+  596.8 m; C5's seventeen street strips are **646 m** (ratio 9.23 against their 70 m card). 1.5×
+  card height (198.5 m for the 132.3 m chapters) sits in that gap with margin on both sides —
+  39 % under the tallest slab, 51 % under the shortest build-up — so no shipped volume is a close
+  call.
+  - **Why sampling AT the top (not inventing a band) still respects a sloped or tapered top:**
+    `Contains` already runs the exact face test (`A2`), so for a volume whose top isn't a simple
+    flat plane the (x, box.End.Y, z) point drawn in a cell is rejected exactly when that XZ falls
+    outside the true top footprint at that height. No separate per-column top lookup was needed;
+    the geometry the containment test already reads does the work.
+  - **C1's band is still a degenerate instrument on its own** (`CLOUD_COVER` `TOP 1124 / BOTTOM
+    970 / THICKNESS 30` predicts full white 1000–1094; the slab predicts a 1090.55 m top; the
+    measurement is 1003–1085 m and both fit) — **C4's 1135 m clear-air frame remains the clean
+    discriminator**, and the render now reproduces it (below).
+  - **Verified at the render, `--pos`/`--tex-override` probes in `.scratch/a3/`:**
+    - **C1 river pose** (`x -7325 y 934 z -3829`, matching `Screenshots/C1 IA1 Fog river.png`'s
+      pinned altitude): before, discrete cauliflower lumps hang below the 960 m deck sheet with a
+      hard lower boundary (`before-river-pose.png`); after, the sheet's underside reads clean with
+      the cloud band sitting well above it (`after-river-pose.png`). `--tex-override=cloud1.tif=
+      00ff00 --tex-override=cloud2.tif=00ff00 --no-fog` looking straight up shows **zero** sprite
+      pixels (`after-river-override-up.png`); levelled and tilted up, the coloured field's lower
+      edge sits well clear of a flat gray band (the deck mesh) with visible terrain below and no
+      green intrusion at all (`after-river-override-level.png`).
+    - **C4 clear-air pose** (`x -4974 y 1135 z -3861`, the `csvm-c4-1135m.png` altitude): a
+      level `--tex-override` sweep shows patchy, non-solid coverage at 1135 m — consistent with
+      the predicted card-bottom band topping out at 1127.7 m, 7 m below this altitude — against
+      **fully solid** coverage from the same pose 85 m lower at 1050 m, inside the predicted
+      986–1128 m band (`after-c4-1135m-override-level.png` vs `after-c4-1050m-override-level.png`).
+    - **C1C build-up** (`fvol10`, pos `-5416,1350,-9737` looking at its centroid) and **C5 street
+      pass** (C5's `fvol10` strip, pos `-2868,50,-1792`): both **unchanged pixel-for-pixel in
+      character** before/after — the tower stays a solid tapering mass, the street-level haze
+      between skyscrapers stays put — because both volumes measure far taller than
+      `TopAnchorHeightFactor` × their card and keep the old uniform draw.
+    - **Sky→tops transition depth (the `A2`-amended instrument) does NOT move materially at any
+      of the four poses tested** (pinned above-deck 46/13→46/7, grazing-tops-1208 60/47.5→55/48,
+      above-deck-1527 25/25→25/25, high-above-1698 24/24→24/24 — band/edge px). This is a genuine
+      finding, not a forced non-result: a billboard card is itself 132.3 m across, so even under
+      the old uniform-in-120 m draw there was already a card near the volume's ceiling almost
+      everywhere by sheer density, and the new tight top-anchored band doesn't change that — the
+      instrument reads how ragged the *silhouette* of the nearest cards is at a shallow viewing
+      angle, which top-anchoring does not touch. **The remaining gap to the original's 91–103 px
+      is therefore NOT primarily a vertical-placement problem**; it is left as a finding for a
+      future item (candidates: per-card alpha softness/scale distribution, or a video-compression
+      artifact in the `CAP-12` capture — untraced, not investigated here).
+  - **Counts:** C1/C2B/C4 stay exactly 9,025 (their slabs are axis-aligned boxes, so top-anchoring
+    accepts the same 100 % of cells as uniform did — only the kind/scale/perturb realization
+    shifts, since sampling Y at a fixed height instead of drawing it skips one RNG draw per
+    top-anchored cell and re-aligns every later draw in the shared stream). C5 stays exactly
+    16,170 (its strips are all classified uniform, untouched). **C1C moves 9,569 → 9,572** (+3,
+    0.03 %): its nine slab pieces (including `fvol9`) are now top-anchored, and because that
+    volume-order precedes the twelve build-ups in the shared RNG stream, the build-ups' own
+    (unchanged-logic) containment draws land on different random numbers than before — an
+    expected consequence of one shared seeded stream, not a second correction to the build-up
+    rule itself.
 - ~~**The volume is its axis-aligned bounding box.**~~ — **corrected `A1`/`A2`, 2026-08-08. The
   volume is the authored mesh**, and the two agree only for C1/C2B/C4.
   `FogVolumeSpec.VolumesOf` now carries each volume's face planes beside its bounds, and
@@ -180,9 +232,10 @@ degenerate ranges).
     1864 × 641, 854 × 294), the same twelve shapes cut into `fvol9`'s own top face as coplanar
     polygons; `fvol10` is 854 × 294 m at its 1091.28 m base and ~464 × 160 m at its 1688.05 m top.
     Base footprint = 0.383 of the bounding box, but the taper makes the **volume** fraction 0.235,
-    so C1C goes **11,368 → 9,569** under today's uniform-in-Y draw — not the ~9,922 a
-    footprint-only estimate predicts. The number will move again when the vertical rule changes,
-    and that is the containment test composing with it rather than a second correction.
+    so C1C went **11,368 → 9,569** under the (then still uniform-in-Y) draw at A2 — not the
+    ~9,922 a footprint-only estimate predicts. **It moved again at `A3`, to 9,572**, once the nine
+    slab pieces switched to top-anchored — see the vertical-spread entry above for why (an RNG
+    stream-order effect on the build-ups, not a second correction to this frustum-taper rule).
   - **C5's seventeen strips are polygonal prisms**, three of them with a ramped top; volume
     fractions 0.558–1.000, and only `fvol1`/`fvol3` are boxes. **19,356 → 16,170**, the surplus
     having sat off the streets.
@@ -211,12 +264,18 @@ degenerate ranges).
   ±15 % jitter, and it combed at grazing angles where the original (`CAP-12` t=44/59/97/124,
   t=29.2) shows soft continuous mottling at every angle. The grid is gone; do not re-derive one
   from `distance`.
-- **The sky→tops boundary is a VERTICAL question, not a horizontal one.** Measured with the
-  10–90 % transition-depth instrument (`docs/PLAN-overcast-match.md` § `A2`), randomising the
-  horizontal placement moved our grazing frames by 0–0.5 px — 13 → 13.5 px at the pinned
-  above-deck pose against the original's 91–103 px. The depth is set by how ragged the field's
-  TOP is, which is the vertical rule's business. Do not read a shallow transition as evidence
-  about the horizontal scatter.
+- **The sky→tops transition-depth gap survived BOTH the horizontal fix (`A2`) and the vertical
+  one (`A3`) — it is evidence for neither scatter axis.** `A2` measured 0–0.5 px of movement from
+  randomising the horizontal placement (13 → 13.5 px at the pinned above-deck pose); `A3`'s
+  top-anchoring moved the same four poses by 0–5 px, still nowhere near the original's 91–103 px
+  (see the vertical-spread entry above for the per-pose numbers). A 132.3 m card is nearly as tall
+  as the whole slab is thick, so even the OLD full-height-uniform draw already put a card near the
+  volume's ceiling almost everywhere by sheer density — concentrating the draw into a tighter top
+  band didn't change that. **Do not read this shallow transition as evidence about either the
+  horizontal scatter or the Y-distribution rule** — whatever produces the original's soft band is
+  still unidentified (candidates: per-card alpha falloff/scale distribution, or a capture artifact
+  in the `CAP-12` video) and is a lead for a future item, not something either wave should keep
+  chasing with placement changes.
 - **Volume walls are not sprite clips.** `perturb_dist_range` is applied after containment, so a
   card's centre can sit up to `perturb_dist_range.y` outside its own volume's wall. That is what a
   perturbation means; the volume bounds where the field is placed, not where each sprite may hang.

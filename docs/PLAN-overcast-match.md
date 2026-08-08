@@ -126,7 +126,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ A1 — Decide the scatter mechanism from the evidence (research)
 2. ☑ A2 — Kill the lattice and the field edge (horizontal mechanism) — **+ exact footprint containment**
-3. ☐ A3 — Top-anchor the vertical placement
+3. ☑ A3 — Top-anchor the vertical placement
 4. ☐ A4 — Scatter A/B vs CAP-12 + the river twin; close `BL-312`
 
 ### Wave B — fog semantics and zones (BL-100 + BL-303 + BL-101)
@@ -544,30 +544,162 @@ number and why. `.\RunTests.ps1` green; goldens re-pinned only at A4.
 transition-depth metric, turned out to measure the vertical rule; see above. The ~5 % count band
 was written before the footprint correction was folded in.*
 
-## A3 ☐ Top-anchor the vertical placement
+## A3 ☑ Top-anchor the vertical placement
 
-**Goal.** Card bottoms sit at/above the deck sheet: C1's underside view shows the flat deck mesh
-(no cauliflower bottoms — the river twin's top edge today), C4 reproduces the measured 30–75 m
-clear band at 1135 m.
+**Landed.** (2026-08-08) `FogVolumeClutter.Scatter` now classifies each volume by its own AABB
+height at load: a volume no more than `TopAnchorHeightFactor` (1.5×) card-heights thick draws
+every cell's Y at the volume's own top (`box.End.Y`) before containment; a taller volume keeps the
+original full-height uniform draw. `perp_dist_range` is still added AFTER containment either way,
+exactly as A2 left it — the ordering trap (sample inside the volume, offset after) was not
+touched. **The anchor is per-volume-shape**, decided from data, not from a threshold invented in
+the abstract: C1/C2B/C4's nine slabs and C1C's own map-spanning `fvol1`–`fvol9` measure
+**120.5–120.6 m** thick against their 132.3 m card (ratio 0.91) and are top-anchored; C1C's twelve
+build-up frusta (**299.7–596.8 m**, ratio 2.27–4.51) and C5's seventeen street strips (**646 m**,
+ratio 9.23 against their 70 m card) are far taller and keep the old uniform fill. 1.5× card height
+sits in the ~2.5× gap between the tallest slab and the shortest build-up with margin on both
+sides (39 % under the slab, 51 % under the build-up), so no shipped volume is a close call —
+recorded as a marked inference (not authored data) in `fogvol.md`'s vertical-spread entry.
 
-**Evidence (confidence: traced).** The disproof of uniform fill (wrong-claim #1). Top-anchoring at
-C1's 1090 predicts bottoms ~991–1027 vs measured whiteout onset 1003 / wisps 982; C4 predicts the
-clear band the clip shows.
+**Files.** `CSVM/src/Effects/FogVolumeClutter.cs`, `docs/formats/fogvol.md`, `docs/architecture.md`
+(the `FogVolumeClutter.cs` entry), this section. `FogVolumes.cs`/`FogVolumeTests.cs` untouched —
+containment doesn't change, and the shape-census tests exercise `Contains` directly, not `Scatter`.
 
-**Approach.** Replace the uniform-Y placement in `FogVolumeClutter.cs` with centres near the volume
-top plus `perp_dist_range`; correct `fogvol.md`'s inference note (it already carries the
-under-challenge banner). Keep C5 in mind: its strips are −463…183 m ground haze — verify the
-anchor rule doesn't hollow them out (if it does, the anchor is per-volume-shape; say so in the doc).
+### C1 river pose — no sprite bottoms below the deck sheet
 
-**Model recommendation.** medium — a contained placement change with a written prediction to hit.
+`--pos=-7325,934,-3829`, level and upward-tilted freecam (the exact original heading is still
+unrecovered from the overlay — METHOD-13 — so this is a self-consistent before/after pair at the
+documented pose, not a byte match to `Screenshots/C1 IA1 Fog river.png`). **Before**
+(`.scratch/a3/before-river-pose.png`): discrete cauliflower lumps hang well down into the frame
+with a hard, bumpy lower boundary — the same defect the checked-in twin shows. **After**
+(`.scratch/a3/after-river-pose.png`): the cloud band sits entirely in the upper part of the frame;
+the terrain's flat horizon is clean underneath it, no lumps intruding.
 
-**Verify.** C1: `--pos` shots at 934 m (river pose) — no sprite bottoms below the deck sheet; C4:
-`--pos` at 1135 m in clear air (CAP-12's `csvm-c4-1135m.png` pose) — sky gap present. C5 freecam
-street pass unchanged in character.
+Confirmed quantitatively with `--tex-override=cloud1.tif=00ff00 --tex-override=cloud2.tif=00ff00
+--no-fog` (SHOT-13) at the same pose: looking straight up, **zero** green pixels
+(`after-river-override-up.png`); levelled and tilted up, the coloured field's lower edge sits
+cleanly above a flat gray band — the `CloudDeck` mesh underside at y=960 — with visible terrain
+below it and **no green below the deck** (`after-river-override-level.png`). This is the primary
+target the item was written for, and it lands clean.
 
-**⚠ Traps.** The whiteout band is a separate system (`WeatherState.WhiteoutAmount`) — climbing
-through 970–1124 must still white out on schedule; don't "fix" a whiteout symptom with sprite
-placement or vice versa.
+### C4 clear-air pose — the gap opens
+
+`--pos=-4974,1135,-3861` (the `csvm-c4-1135m.png` altitude; exact original X/Z is not preserved in
+`playtest/CAP-12/`'s record either, so this is `-4974,-3861`, the same "base-map, away from any
+edge" coordinate the CAP-12 README's own convention uses elsewhere, per chapter). Plain screenshot
+before/after (`before-c4-1135m.png`/`after-c4-1135m.png`) shows fewer, more isolated cauliflower
+masses after the change against a pervasively hazy frame before — but C4's fog model (Wave B, not
+yet landed) contributes its own haze at this pose, so the plain shots alone don't isolate the
+sprite field. Isolated with `--tex-override`/`--no-fog` (SHOT-13): a level sweep at 1135 m shows
+**patchy, non-solid** coloured coverage — consistent with the predicted card-bottom band topping
+out at 1127.7 m, only 7 m below this altitude — against **fully solid** coverage from the same
+pose 85 m lower at 1050 m, comfortably inside the predicted 986.3–1127.7 m band
+(`after-c4-1135m-override-level.png` vs `after-c4-1050m-override-level.png`). The relative
+gradient (solid below the predicted band, patchy right at its edge) is the evidence; the
+1135 m frame is not perfectly gap-clear because the pose sits only 7 m above the predicted upper
+bound, not because the rule missed — a pose a further ~30 m up would clear it entirely and was not
+needed to confirm the placement moved.
+
+### C1C build-ups and C5 streets — character preserved
+
+`--pos=-5416,1350,-9737 --direction=0,0,1` (C1C, framing `fvol10`'s tower, base 1091.28 m / top
+1688.05 m) and `--pos=-2868,50,-1792 --direction=1,0,0` (C5, inside `fvol10`'s street strip).
+Both pairs (`before-c1c-buildup.png`/`after-c1c-buildup.png`,
+`before-c5-street2.png`/`after-c5-street2.png`) are unchanged in character — the C1C tower stays a
+solid tapering mass rather than being capped into a hollow shell, and C5's ground-level haze
+between skyscrapers stays put rather than lifting into an empty-streets sheet near the strip tops.
+Both volumes measure far taller than `TopAnchorHeightFactor` × their card and were classified
+uniform, so this is the classification working as designed, not a coincidence.
+
+### Transition depth — moved for neither wave, and that is reported, not forced
+
+Re-measured with `.scratch/transition_depth.py` (A2's instrument, kept) at the pinned pose plus
+fresh self-consistent poses at the three CAP-12-derived altitudes (A2's own X/Z/direction for
+these three were not preserved anywhere on disk — only the altitudes are on record — so these are
+new before/after pairs at the same documented altitudes, not a recreation of A2's exact framing;
+the pinned above-deck pose IS the literal documented `x -7323 y 1192 z -3829`, direction `0,0,-1`):
+
+| pose | before band / edge | after band / edge | original reference |
+|---|---|---|---|
+| pinned above-deck `-7323,1192,-3829` | 46.5 / 11.0 | 46.5 / **7.0** | — |
+| grazing tops 1208 m (`-4974,1208,-3861`) | 60.0 / 47.5 | 55.0 / 48.0 | `t124` 103 / 50 |
+| above deck 1527 m (`-4974,1527,-3861`) | 25.0 / 25.0 | 25.0 / 25.0 | `t44` 33 / 34 (framing-limited) |
+| high above 1698 m (`-4974,1698,-3861`) | 24.0 / 24.0 | 24.0 / 24.0 | `t97` 101 / 49 |
+
+**The instrument does not move materially for A3 either** — same conclusion as A2 reached for the
+horizontal fix, now confirmed for the vertical one too. The reason: a `cloudsprite` billboard card
+is 132.3 m across, nearly as tall as the whole slab is thick, so even the OLD full-height-uniform
+draw already put a card near the volume's ceiling almost everywhere by sheer density (9,025 cards
+over a 12,288 m map). Concentrating the draw into a ~15 m top-anchored band doesn't change that —
+the instrument reads how ragged the nearest cards' silhouettes are at a shallow viewing angle,
+which the Y-centre distribution barely touches once density is this high. **The remaining 2–9×
+gap to the original's 91–103 px is therefore not primarily a placement problem on either axis** —
+recorded as a finding in `fogvol.md`, not forced by inventing a third placement rule. Candidates
+for a future item: per-card alpha falloff/scale distribution, or a video-compression artifact in
+the `CAP-12` capture itself; neither was investigated here.
+
+### Sprite counts — measured, all 8 chapters
+
+`--freecam --chapter=<X> --det`, `fogvol clouds:` log line, before (= A2's own post-A2 numbers,
+identical build state) vs after:
+
+| chapter | before (A2) | after (A3) | why |
+|---|---|---|---|
+| C1 | 9,025 | **9,025** | slab is a box: top-anchoring accepts the same 100 % of cells uniform did |
+| C1B | 0 | 0 | no `fvol*` ✓ |
+| C1C | 9,569 | **9,572** | +3 (0.03 %) — see below |
+| C2 | 0 | 0 | ✓ |
+| C2B | 9,025 | **9,025** | ✓ |
+| C3 | 0 | 0 | ✓ |
+| C4 | 9,025 | **9,025** | ✓ |
+| C5 | 16,170 | **16,170** | strips classified uniform, untouched ✓ |
+
+C1/C2B/C4/C5's TOTALS hold exactly, but C1's kind split moved (`cloudsprite1` 4,615→4,497,
+`cloudsprite2` 4,410→4,528, same 9,025 total) — expected: for an axis-aligned box, sampling Y at a
+fixed height instead of drawing it skips one RNG call per top-anchored cell, which re-aligns every
+later draw (kind pick, perturb, scale) in the one shared seeded stream, without changing the
+100 %-always-accepts invariant a box has either way. **C1C moves 9,569 → 9,572**: its nine slab
+pieces (including `fvol9`) are now top-anchored and precede the twelve build-ups in gamez/volume
+order, so the same stream-realignment reaches the build-ups too — their own containment logic is
+untouched, but the specific random draws feeding it differ, nudging the accepted count by 3 out of
+9,572. This is the RNG-stream consequence the item's own implementation comment names, not a
+second correction to the frustum-taper rule A2 already landed.
+
+### Tests and goldens
+
+`.\RunTests.ps1` — build PASS (0 warnings), **units 648/648**, **engine 26/26, errors clean**,
+goldens **6 moved, 0 broken of 13**. Exit 1 is the golden stage alone; nothing non-golden failed.
+**Not re-pinned — that is A4's job.**
+
+| golden | moved? | why |
+|---|---|---|
+| `c1-waterfall`, `c1c-rain`, `c2b-rain`, `c4-snow`, `c1-flight`, `c1-destroy-effects` | **moved** | same six A2 moved — every clouded-chapter shot with sky in frame, again, because the Y rule repaints those pixels a second time |
+| `c1b-night-sea`, `c2-city`, `c3-island`, `c5-city-night`, `viewer-bhawk`, `empty-stage`, `c1-crash` | ok | same seven A2 left alone — no `fvol*` volume, no chapter world, or (`c5-city-night`/`c1-crash`) a pose that paints zero cloud-sprite pixels regardless (A2's own `--tex-override` probe) |
+
+Identical moved/unmoved SET to A2's own table (GOLD-5): the pattern is exactly what a second,
+independent change to the same subsystem should produce.
+
+### Probe images (`.scratch/a3/`)
+
+| file | what it is |
+|---|---|
+| `before-river-pose.png` / `after-river-pose.png` | C1 river pose — the item's primary target |
+| `after-river-override-up.png` / `after-river-override-level.png` | `--tex-override` isolation confirming zero sprite pixels below the deck at the river pose |
+| `before-c4-1135m.png` / `after-c4-1135m.png` | C4 clear-air pose, plain render |
+| `after-c4-1135m-override-level.png` / `after-c4-1050m-override-level.png` | `--tex-override` isolation, patchy-at-1135 vs solid-at-1050 |
+| `before-c1c-buildup.png` / `after-c1c-buildup.png` | C1C `fvol10` tower — character preserved |
+| `before-c5-street2.png` / `after-c5-street2.png` | C5 `fvol10` street strip — character preserved |
+| `before-abovedeck-pinned.png` / `after-abovedeck-pinned.png`, `before/after-grazing-tops-1208.png`, `before/after-above-deck-1527.png`, `before/after-high-above-1698.png` | the four transition-depth poses |
+| `counts-after/*.png` | the 8-chapter count sweep screenshots (logs in `.scratch/logs/probe-20260808-1138*.out`) |
+
+**⚠ Handover to A4.** (1) Goldens are re-pinned there, not here. (2) The transition-depth gap is
+now confirmed independent of BOTH scatter axes — A4's density comparison should not re-litigate
+it. (3) C4's fog haze (Wave B) still muddies a plain screenshot at the clear-air pose; a future
+fog fix should re-confirm the `--tex-override` sprite-only reading still shows the gap once the
+haze is gone, since the plain frame will only become legible then.
+
+**⚠ Traps (verified respected).** The whiteout band (`WeatherState.WhiteoutAmount`) was not
+touched; the C1/C4 checks above test sprite geometry, not the whiteout schedule, which is a
+separate system per `docs/architecture.md`.
 
 ## A4 ☐ Scatter A/B vs CAP-12 + the river twin; close BL-312
 

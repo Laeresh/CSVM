@@ -1801,14 +1801,25 @@ kind (two per chapter). Each volume is cut into `distance` × `distance` cells a
 origin and every cell gets ONE placement drawn uniformly inside it — `distance` is the field's
 areal DENSITY (mean spacing), not a lattice phase.
 Templates resolve through `ClutterBuilder.FindTemplateRoot` — the trees' own lookup. Per placement:
-kind by weight, `perturb_dist_range` in the plane at a free bearing, uniform Y in the volume plus
-`perp_dist_range`, size = the card's authored extent × `scale_range`. Schema, per-chapter values
-and the decoded/inferred split: docs/formats/fogvol.md. **This file holds no TUNE constant** — it
-replaced `CloudPuffs`, whose entire field (Count 12, Radius 620, SizeMin/Max, BaseAlpha,
-BandBelow/Above, VertFull/Fade) was hand-tuned because this reader had not been found.
+kind by weight, `perturb_dist_range` in the plane at a free bearing, Y = TOP-ANCHORED (drawn at the
+volume's own top) for a volume no more than 1.5 card-heights thick, UNIFORM across the full volume
+height otherwise, then `perp_dist_range` added after containment either way; size = the card's
+authored extent × `scale_range`. Schema, per-chapter values and the decoded/inferred split:
+docs/formats/fogvol.md. **This file holds no TUNE constant, except `TopAnchorHeightFactor`** (A3):
+not authored data, a shape-classification threshold decided from the volumes' own thickness gap —
+see the constant's own remarks and fogvol.md's vertical-spread entry. Otherwise it replaced
+`CloudPuffs`, whose entire field (Count 12, Radius 620, SizeMin/Max, BaseAlpha, BandBelow/Above,
+VertFull/Fade) was hand-tuned because this reader had not been found.
 ⚠ Built ONCE, world-anchored, no per-frame hook and NOT per rig — unlike the dome/deck/whiteout,
   nothing here follows a camera. Splitscreen shares one field; the far fade is evaluated per view
   inside the shader, which is what makes that correct.
+⚠ Sampling Y AT the volume's top (rather than a random band near it) still respects a sloped or
+  tapered top: `Contains` runs the exact face test (`FogVolumes.cs`), so an XZ drawn in a cell is
+  rejected exactly when it falls outside the true top footprint at that height — no separate
+  per-column top lookup needed. Skipping the uniform Y draw for a top-anchored cell also skips one
+  RNG call, which re-aligns every later draw in the shared stream; this moves C1C's count by a few
+  sprites past its own frustum-taper effect (9,569 → 9,572) even though the build-up volumes'
+  own logic is untouched — expected under one shared seeded stream, not a second bug.
 ⚠ Determinism and world-anchoring are the SAME property here: one seeded `Rng.Clouds` stream drawn
   in a fixed volume/cell order, and nothing reads a camera, a pane count or a frame. There is no
   per-view cell, so there is nothing to hash — do not introduce a coordinate hash.

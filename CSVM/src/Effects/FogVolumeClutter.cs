@@ -22,7 +22,9 @@ namespace CSVM.Effects;
 /// texture, billboard mode and its <c>lighting</c>/<c>fog</c> render flags come from the gamez
 /// model. This class holds <b>no TUNE constant</b> — do not re-introduce a hand-tuned cloud field
 /// (count, radius, size, opacity, band margins, vertical fades); every one of those is authored
-/// data read above.</para>
+/// data read above. The one exception is <see cref="TopAnchorHeightFactor"/> (A3): not authored
+/// data, but a shape-classification threshold decided from the authored volumes' own thickness
+/// gap between the sheet-thin slabs and the tall build-ups/strips — see its own remarks.</para>
 ///
 /// <para><b>Model — world-anchored, built once, zero per-frame cost.</b> The field is static
 /// geometry, not a camera-following pool: the volumes are fixed authored shapes and the cells are
@@ -48,6 +50,17 @@ public sealed partial class FogVolumeClutter : Node3D
     // `distance` near zero or a volume far larger than a map, both of which should be seen rather
     // than swallowed.
     private const int MaxPlacements = 80_000;
+
+    // A3's per-volume-shape rule (docs/formats/fogvol.md, docs/PLAN-overcast-match.md A3): a
+    // volume no more than this many card-heights thick reads as a sheet and is TOP-ANCHORED;
+    // anything taller keeps the old full-height UNIFORM draw. The evidence is a clean gap, not a
+    // tuned edge — measured off extracted/{C1,C1C,C2B,C4,C5}/gamez/nodes.json: C1/C2B/C4's slabs
+    // and C1C's own map-spanning fvol1-9 are 120.5-120.6 m thick against a 132.3 m card (ratio
+    // 0.91, comfortably under 1x); C1C's twelve build-up frusta start at 299.7 m (ratio 2.27) and
+    // C5's seventeen street strips are 646 m (ratio 9.23 against their 70 m card). 1.5x sits in
+    // that ~2.5x gap with margin on both sides, so nothing near the boundary is a runtime coin
+    // flip.
+    private const float TopAnchorHeightFactor = 1.5f;
 
     /// <summary>Sprites placed, summed over every kind. Zero means nothing was built and
     /// <see cref="Create"/> returned null.</summary>
@@ -300,6 +313,18 @@ public sealed partial class FogVolumeClutter : Node3D
     // twelve — the authored build-ups over specific places — and renders a flat deck instead.
     // The cells are anchored on the world origin (not on each volume), so a cell shared by two
     // volumes is the same X/Z in both and the stack is vertical, as authored.
+    //
+    // ⚠ Vertical placement is TOP-ANCHORED for sheet-thin volumes, UNIFORM for tall ones (A3,
+    // docs/formats/fogvol.md). A volume no more than TopAnchorHeightFactor card-heights thick —
+    // C1/C2B/C4's slabs and C1C's own fvol1-9 tiling — draws Y at the volume's own top and lets
+    // `perp_dist_range` spread it afterward, matching the measured C1/C4 card bottoms (CAP-12).
+    // Sampling AT the top rather than inventing a band works because `Contains` already runs the
+    // EXACT face test (A2): for a sloped/tapered top the XZ drawn in the cell is simply rejected
+    // when it falls outside the true top footprint at that height, so the accepted shape follows
+    // the volume's own geometry with no separate per-column top lookup. C1C's twelve build-up
+    // frusta and C5's seventeen street strips are far taller than a card and keep the old
+    // full-height uniform draw — top-anchoring them would cap the build-ups into hollow shells and
+    // lift C5's ground-level haze into an empty-streets sheet near the strip tops.
     private void Scatter(FogVolumeSpec spec, IReadOnlyList<FogVolumeBox> volumes, List<Kind> kinds)
     {
         Name = "fog_volume_clutter";
@@ -314,6 +339,15 @@ public sealed partial class FogVolumeClutter : Node3D
             return;
         }
 
+        // The authored card's own extent (docs/formats/fogvol.md's "card size", e.g. 132.3 m for
+        // C1/C1C/C2B/C4, 70 m for C5) — every kind in a chapter shares one, so the largest among
+        // them is that chapter's card height for the TopAnchorHeightFactor test below.
+        float cardHeight = 0f;
+        foreach (var kind in kinds)
+        {
+            cardHeight = Mathf.Max(cardHeight, kind.Radius * 2f);
+        }
+
         // One draw sequence off the master seed's cloud stream, in a fixed volume/cell order, so
         // the whole field is a function of the seed — which is what makes a cloud shot reproducible.
         // Nothing here reads a camera, a pane count or a frame, so world-anchoring and determinism
@@ -324,6 +358,10 @@ public sealed partial class FogVolumeClutter : Node3D
         foreach (var volume in volumes)
         {
             var box = volume.Box;
+            // A3: sheet-thin volumes (a slab's own AABB height, not the field's overall extent)
+            // anchor their draw at the volume's own top; tall ones keep filling uniformly. See the
+            // method's own remarks above and TopAnchorHeightFactor's remarks for the evidence.
+            bool topAnchored = box.End.Y - box.Position.Y <= cardHeight * TopAnchorHeightFactor;
             int gx0 = Mathf.CeilToInt(box.Position.X / period), gx1 = Mathf.FloorToInt(box.End.X / period);
             int gz0 = Mathf.CeilToInt(box.Position.Z / period), gz1 = Mathf.FloorToInt(box.End.Z / period);
             for (int gx = gx0; gx <= gx1 && InstanceCount < MaxPlacements; gx++)
@@ -341,13 +379,20 @@ public sealed partial class FogVolumeClutter : Node3D
 
                     float x = Rand(x0, x1);
                     float z = Rand(z0, z1);
-                    float y = Rand(box.Position.Y, box.End.Y);
+                    // A3: top-anchored volumes draw Y at the volume's own top (box.End.Y) rather
+                    // than across the full height; `perp_dist_range` is still added AFTER
+                    // containment below, exactly as for a uniform draw — sampling at top+perp
+                    // BEFORE the containment test would reject the whole field (A2's ordering
+                    // trap), so the offset stays where it always was.
+                    float y = topAnchored ? box.End.Y : Rand(box.Position.Y, box.End.Y);
 
                     // The volume is its AUTHORED shape, not its bounding box. Exact for
                     // C1/C2B/C4's slabs, so their fields are untouched by this; C1C's rotated
                     // tapering frusta hold 24 % of their bounds and C5's polygonal street prisms
                     // 84 %, and a cell whose draw lands outside places nothing — which is what
-                    // preserves the authored spacing instead of crowding the surplus inward.
+                    // preserves the authored spacing instead of crowding the surplus inward. For a
+                    // top-anchored volume this is also what makes a sloped/tapered top narrow the
+                    // accepted XZ on its own (see the method's remarks above).
                     if (!volume.Contains(new Vector3(x, y, z)))
                     {
                         continue;
