@@ -1446,38 +1446,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   different object from the sprite field — do not read one as evidence for the other. (The +54
   measurement above is the mesh underside; the sprite field sits *inside* the whiteout band.)
 
-- `BL-312` `[Bug]` **Our `fvol` cloud scatter combs on a regular 130 m lattice and reads far denser than
-  the original; the original shows no lattice at all and tiles unboundedly** (`PT-42`(a)(b)(c) at the
-  controls + `CAP-12`, both 2026-08-07; split out of `BL-118`, which keeps the deck **mesh**
-  brightness). Two sides, both now on file:
-  - **Ours combs.** At a grazing angle the 130 m scatter grid shows as a faint comb in the sheet —
-    `perturb_dist_range` 10–20 m on a 130 m `distance` is only ±15 % jitter, which is what the
-    authored numbers produce under the *grid* reading of `distance` (`docs/formats/fogvol.md`,
-    "What is decoded and what is inferred").
-  - **The original does not.** `CAP-12` grazing passes along tops and base (stills t=44/59/97/124,
-    t=29.2) show soft continuous structure only, at any angle — and at the controls the original's
-    deck field reads **world-locked and tiled**: puffs stay put as you fly through them, there are
-    simply always more, in every direction over the base map, with no volume edge anywhere.
-  - **Density:** ours is "a lot denser" (`PT-42`(c)); opacity not callable by eye.
-  ⚠ **This is a decode correction, not a TUNE — `fogvol.md` and `BL-118` both say so outright, and
-  the entry is tagged `[Bug]` to keep it out of the tuning pile.** The argument that settles it:
-  `fogvol.md`'s *entire* corroboration for reading `distance` as a grid period is a **density**
-  argument — "130 m period over a 132.3 m card gives ~1.0 sprite-areas of cover, an overcast
-  exactly one sprite deep." Mean spacing is invariant under randomisation, so that evidence only
-  ever supported the **spacing**; the **regularity** was never evidenced, and it is the regularity
-  the render contradicts.
-  *Fix shape (two candidates, not exclusive):* (1) scatter randomly at the same mean spacing —
-  same density, same one-sprite-deep cover, no lattice, therefore no comb; (2) tile unboundedly
-  around the camera on the `distance` period, as `templates.zrd` ground clutter does (the grammar
-  `fogvol.md:106` says the two files share), rather than placing a bounded set inside finite
-  `fvol*` volumes — which is what gives ours edges and structure the original has none of.
-  ⚠ Trap: **the two cloud populations are different objects** — this entry is the
-  `cloudsprite1`/`cloudsprite2` `fvol` scatter only. The discrete world-placed `cloudparent`
-  clusters are stationary and untiled, stop at the map edge, and are `BL-118`'s business; a claim
-  about one is not evidence about the other (see `BL-118`'s vocabulary note).
-  *Playtest after fix:* re-fly C1 at a grazing angle along the deck, and compare density against
-  `CAP-12`.
-
 - `BL-165` `[Feature]` **The sun renders no lens flare; the original does — layout now decoded from `CAP-13`.** Confirmed absent: `Launcher.cs:569`
   builds only a plain `DirectionalLight3D` (`Sun`) + a `WorldEnvironment` with no glow/bloom
   configured. Grepping `CSVM/src` for `flare`/`glow`/`bloom` turns up only the wingtip nav-lights

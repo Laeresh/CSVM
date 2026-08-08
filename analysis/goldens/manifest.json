@@ -14,7 +14,7 @@
     {
       "name": "c1-waterfall",
       "frame": 120,
-      "hash": "c02de8d74278b2aeee4ea047f6343c62",
+      "hash": "3fdd78ccd5d77962b0d7a9e88148e35d",
       "exercises": "UV scroll on the falls sheet + the mist puffer; frame-sensitive 1.28 % at 120 vs 121.",
       "args": ["--freecam", "--chapter=C1", "--pos=-7720,60,-3380", "--lookat=-7868,40,-3449", "--det", "--mute"]
     },
@@ -28,7 +28,7 @@
     {
       "name": "c1c-rain",
       "frame": 120,
-      "hash": "c724ebe4655a518f991a232d1402a66a",
+      "hash": "77bfc26593c226c45ab6ddca8f261822",
       "exercises": "rain precipitation (seeded field on the sim clock), cloud deck, heavy fog; frame-sensitive 2.50 %.",
       "args": ["--freecam", "--chapter=C1C", "--pos=-3843,700,-1101", "--direction=-0.052,-0.25,-0.999", "--det", "--mute"]
     },
@@ -42,7 +42,7 @@
     {
       "name": "c2b-rain",
       "frame": 120,
-      "hash": "0323f640be19770bd6c737d3e700c883",
+      "hash": "fbee0d0dfa146a3b24c1b28397d24500",
       "exercises": "rain over open water — the surface A3 measured at 4.75 % unpinned; frame-sensitive 3.47 %.",
       "args": ["--freecam", "--chapter=C2B", "--pos=-3843,200,-1101", "--direction=-0.052,-0.1,-0.999", "--det", "--mute"]
     },
@@ -56,7 +56,7 @@
     {
       "name": "c4-snow",
       "frame": 120,
-      "hash": "ecfc1bb1e7c4ad3ab8a9b5fb00b29be9",
+      "hash": "fb631da4df2dfe2d6a2057ae2ae21d6f",
       "exercises": "snow precipitation plus the chapter carrying 6 UV-scroll models; frame-sensitive 3.74 %, the largest of the freecam set.",
       "args": ["--freecam", "--chapter=C4", "--pos=-3330,958,-9181", "--direction=-0.682,-0.2,0.731", "--det", "--mute"]
     },
@@ -84,14 +84,14 @@
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "82c63a3c417c86f0bd8cbd52196cd70b",
+      "hash": "cd80b02805f5eb5cfd824352a09ce351",
       "exercises": "a flying plane: chase camera on the sim clock, prop and control-surface animators, gauges, compass tape, weapon readout, impact reticle; the --hold throttle 0.5→1 jump also crosses ThrottleSlamSmoke's slam threshold, so this is the one golden carrying a live exhaust-trail Puffer; frame-sensitive 34.52 %, the strongest tripwire here.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "7651442dd1f644c887764a8e4e17907e",
+      "hash": "fc5aab189c7686c433d42c071f5954fc",
       "exercises": "the world-effects runtime (ForEffects/D32) built and rendering a puffer: a flight-session kill of the single ap_radiotwr instance CALL_ANIMATIONs great_balls_of_fire onto the world-effects stage; frame-sensitive (distinct hashes at 119/120/121), and moves off its Rng.Effects seed (PLAN-animruntime-role-factories A1).",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },

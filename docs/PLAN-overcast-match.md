@@ -88,8 +88,11 @@ in any worktree here.
   the `fvol` slab sits at 970–1090.5 with 130 m `distance`, cards 132.3 m, scale ≤1.5
   ([`fogvol.md`](formats/fogvol.md) has the full 8-chapter census).
 - **Pinned A/B poses** (from the CSVM twins' freecam overlays, `Z:\CSVM\Screenshots\`): above-deck
-  `x -7323 y 1192 z -3829`; river **`x -7323 y 192 z -3829`**. View direction is NOT in the overlay —
-  re-derive it by matching terrain features before the first A/B and record it here.
+  `x -7323 y 1192 z -3829`; river **`x -7323 y 192 z -3829`**. View direction was NOT in the
+  overlay; re-derived by `A4` by matching terrain features (cliff, river S-curve, ridge treeline)
+  against the checked-in twin: river **`-0.997,-0.1,0.070`**, converged via an 18-shot sweep and a
+  terrain-only pixel-diff metric (`A4`'s own section has the full derivation and probe set).
+  Above-deck has no terrain in either frame to match against, so `A2`/`A3`'s own `0,0,-1` stands.
   ⚠ **The river altitude read `934` here until `A7` re-read the overlay (2026-08-08): the twin says
   `y 192`**, the above-deck twin says `1192` in the same font at the same zoom (so this is not a
   cropped digit), and the original still's own ALT gauge reads ~700–750 ft ≈ 215–230 m. A3/A6/A7
@@ -132,10 +135,10 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ A1 — Decide the scatter mechanism from the evidence (research)
 2. ☑ A2 — Kill the lattice and the field edge (horizontal mechanism) — **+ exact footprint containment**
 3. ☑ A3 — Top-anchor the vertical placement
-4. ☐ A4 — Scatter A/B vs CAP-12 + the river twin; close `BL-312`
+4. ☑ A4 — Scatter A/B vs CAP-12 + the river twin; close `BL-312`
 5. ☑ A5 — Continue the field past the map edge (user playtest 2026-08-08: the original's field is everywhere)
 6. ☑ A6 — Why does flight mode show puffs below the deck when freecam doesn't? (investigate, then fix or reclassify)
-7. ☑ A7 — The deck is engine trickery: regime model + cloud layer gate (user decode, 2026-08-08)
+7. ☑ A7 — The deck is engine trickery: regime model + cloud layer gate (user decode, 2026-08-08) **Wave A complete.**
 
 ### Wave B — fog semantics and zones (BL-100 + BL-303 + BL-101)
 
@@ -713,9 +716,213 @@ haze is gone, since the plain frame will only become legible then.
 touched; the C1/C4 checks above test sprite geometry, not the whiteout schedule, which is a
 separate system per `docs/architecture.md`.
 
-## A4 ☐ Scatter A/B vs CAP-12 + the river twin; close BL-312
+## A4 ☑ Scatter A/B vs CAP-12 + the river twin; close BL-312
+
+**Landed.** (2026-08-08) Matched shots at CAP-12's three grazing altitudes plus both pinned
+reference poses, all on the post-`A7` build (the wave's last landed item). No lattice at any
+grazing angle, no field edge within reach of either pinned pose, density now in eyeball-parity
+with CAP-12 (measured below), and the transition-depth gap A3 found stands **reconfirmed
+independent of A5/A6/A7 too** — not a placement property, carried forward as a lead. The river
+pose's view direction is re-derived by terrain matching and recorded below for reuse. The six
+cloud-field goldens are re-pinned, `.\RunTests.ps1` exits 0, `verification.md` gains three
+instrument rules, and `BL-312` is closed. No engine-code file was touched — this item is pure
+measurement and bookkeeping, as scoped.
+
+**Files.** `docs/PLAN-overcast-match.md` (this section), `docs/verification.md` (SHOT-20, SHOT-21,
+INSTR-12), `backlog.md` (`BL-312` deleted), `analysis/goldens/manifest.json` (6 hashes re-pinned).
+
+### Derived view directions — for every later item to reuse
+
+The plan's own data (`What the data actually ships`) flagged that the pinned poses' altitudes were
+corrected in `A7` but that view direction was never recovered from either freecam overlay. Both
+twins in `Z:\CSVM\Screenshots\` are OUR OWN prior freecam captures at these exact positions (same
+engine, same terrain, unaffected by anything this plan changes), so re-deriving direction is a
+same-engine matching problem, not a cross-renderer one: render candidate directions at the pinned
+position and converge on the one whose terrain silhouette matches the checked-in twin.
+
+- **River pose (`x -7323 y 192 z -3829`) — direction ≈ `-0.997,-0.1,0.070`** (yaw ≈ 94° off due
+  `-Z`, leaning toward `-X` with a slight `+Z` component; pitch ≈ 5.7° down). Found by an 18-shot
+  sweep (`.scratch/a4/river-*.png`) against `Screenshots/C1 IA1 Fog river.png`'s cliff, river
+  S-curve and ridge treeline; converged via a terrain-only pixel-diff metric (rows 330–720, mean
+  abs diff over RGB) minimised at yaw ≈ −94°: −90° 34.5, −93° 30.0, **−94° 29.6**, −95° 31.1, −97°
+  35.3, −100° 41.6, with pitch 0.06/0.14 both worse than 0.10 at fixed yaw. At the converged
+  direction the residual diff is confined to a few pixels of silhouette antialiasing on tree/cliff
+  edges — terrain pixels away from an edge are at or near zero difference
+  (`.scratch/a4/river-T-neg94.png` vs the twin, `.scratch/a4/diff_N.png` for the intermediate
+  −95° check showing the same pattern). See `.scratch/a4/compare_N.png` for the stacked
+  side-by-side.
+- **Above-deck pose (`x -7323 y 1192 z -3829`) — direction kept at `0,0,-1`** (A2/A3's own
+  convention). Terrain matching is **not possible** here: both the twin and the original still
+  show nothing but cloud tops/dome — no landmark on either side of the fog to lock onto. Since
+  both poses share the exact same `x/z` (only `y` differs — the freecam moved straight up between
+  shots), reusing the river pose's derived azimuth was considered, but `0,0,-1` is already the
+  literal, unambiguous value A2/A3 used and re-confirmed (`A3`: "the pinned above-deck pose IS the
+  literal documented ... direction 0,0,-1"), and nothing about this pose's content (dome gradient,
+  star field, whiteout band) is azimuth-sensitive in a way that would prefer one heading over
+  another. Kept as-is rather than replaced with an unverifiable guess.
+
+### Matched shots — no lattice at any grazing angle, on the final build
+
+`--freecam --chapter=C1 --det --mute`, HUD-free rows for the CAP-12-altitude set:
+
+| pose | pos | direction | file |
+|---|---|---|---|
+| grazing tops (t124, 1208 m) | `-4974,1208,-3861` | `-1,0,0` (CAP-12 README's own convention) | `a4-grazing-tops-1208.png` |
+| above deck (t44, 1527 m) | `-4974,1527,-3861` | `-1,0,0` | `a4-above-deck-1527.png` |
+| high above (t97, 1698 m) | `-4974,1698,-3861` | `-1,0,0` | `a4-high-above-1698.png` |
+| base first wisps (t29.2, 997 m) | `-4974,997,-3861` | `-1,0,0` | `a4-base-first-wisps-997.png` |
+| pinned above-deck | `-7323,1192,-3829` | `0,0,-1` | `a4-pinned-abovedeck-1192.png` |
+| pinned river | `-7323,192,-3829` | `-0.997,-0.1,0.070` (derived above) | `a4-pinned-river-192.png` |
+
+All three grazing/above shots (1208/1527/1698 m) read as soft continuous mottling with no
+periodic structure at any angle — the only discrete round shapes are the same two `cloudparent`
+clusters A2 already identified as a different, untouched population, not a scatter artifact.
+**No field edge is reachable from either pinned pose**: A5's map-edge extension only matters
+within `far_fade` (3,500 m) of the rim, and both pinned poses sit ~3,829–3,861 m from the nearest
+edge — past the fade, exactly as A2/A5 predicted, so this criterion is structural, not something
+this item had to re-derive.
+
+**The at-the-controls half of the verdict, quoted alongside the measured numbers above, per
+decision 8's "plus a PT verdict for what numbers can't judge":** the wave-gate playtest (user,
+2026-08-08, in engine) confirmed the lattice/comb **gone** at grazing angles — matching every
+matched shot above showing no periodic structure — and, after `A7` landed, the user's re-fly
+verdict was **"it looks a lot better. approved."** PT-42(c)'s **"a lot denser"** is the qualitative
+density reference the 39.8 %/45.5 % coverage numbers below answer directly.
+
+**The river pose is the headline result.** `a4-pinned-river-192.png` shows a flat gray ceiling
+with **no cauliflower lumps hanging below the deck at all** — A3's original target, now landed by
+a *different* mechanism than A3 built: at `y=192`, well under C1's 1047 m band centre, `A7`'s
+below-band regime culls the entire `fvol` field (plus `cloudparent`) for this camera and carries a
+camera-following ceiling instead, so there is nothing left to hang below the sheet. This matches
+the original still's flat mottled underside far better than a "fixed" scatter placement ever could
+on its own.
+
+### Density vs CAP-12 — same instrument both sides
+
+Sheet-region coverage, adaptive per-image threshold (`.scratch/a4/density.py`, `frac=0.55` of each
+box's own P2–P98 range) rather than an absolute luminance cut — chosen specifically because
+CAP-12 is a compressed, graded video capture and ours is a raw pixel-buffer screenshot, and
+comparing the two on an absolute scale would read the *grading*, not the *cloud* (verification.md
+**SHOT-1**, and the same caveat B13's trap already states for luminance across capture sources).
+Box = rows 320–405, cols 280–1000 (HUD-free, below the compass, above the plane/gauges), the same
+box on both sides for the CAP-12-altitude set:
+
+| pose | CAP-12 original | ours | note |
+|---|---|---|---|
+| t124 / grazing tops 1208 m | **39.8 %** (mean 191.4, sd 12.0) | **45.5 %** (mean 199.4, sd 20.9) | eyeball-parity — see below |
+| t97 / high above 1698 m | **80.2 %** (mean 171.6, sd 6.4) | **100.0 %** (mean 176.0, **sd 0.0**) | ours is a flat plate here, not a density deficit |
+| t44 / above deck 1527 m | 15.3 % (mean 73.9) | 3.4 % (mean 176.8) | **framing-limited, not comparable** — A1 already flagged this pose's tops boundary sits below the fixed row band on both sides; the two boxes sample different features (dome/sky, not the sheet) |
+
+**t124 is the clean read: 39.8 % vs 45.5 % is the same order of magnitude — eyeball parity.**
+This is the direct answer to PT-42(c)'s "a lot denser," measured on the *pre-A2* lattice build:
+after A2/A3, sprite count and mean spacing were never touched (129.3 m against the authored 130),
+so this result is exactly what the wave's own acceptance table always predicted — density was
+never the defect, regularity was.
+
+**t97's 100.0 %/sd 0.0 is not a second density problem — it is the transition-depth finding,
+restated in coverage terms.** Moving the same box deeper into our own established plate (rows
+420–500) at 1208 m drops sd to 1.4 and coverage to 11.9 % against a much narrower dynamic range
+(p2=220.1, p98=226.9) — i.e. once you are past our razor-sharp edge there is almost nothing left
+to threshold. The original never fully flattens this way inside the visible frame at either
+altitude. This is the same 91–104 px transition-depth gap already on file, seen through a
+different instrument, not an independent finding.
+
+### Transition depth — final numbers on the post-A7 build
+
+`.scratch/transition_depth.py` (A2's instrument, unmodified), median band(31)/edge(15) px over
+HUD-free 21-column blocks:
+
+| pose | band / edge (px) | original reference |
+|---|---|---|
+| pinned above-deck `-7323,1192,-3829` | 46.5 / **7.0** | — |
+| grazing tops 1208 m (`t124`) | 43.0 / **7.0** | `t124` **103** |
+| above deck 1527 m (`t44`) | 25.0 / 24.5 | `t44` 33 (framing-limited, A1) |
+| high above 1698 m (`t97`) | 24.0 / **24.0** | `t97` **101** |
+
+The pinned above-deck reading (46.5/7.0) is bit-for-bit the same as `A3`'s own post-number at the
+literal recorded pose — confirming nothing has moved this metric there since `A3` landed, through
+`A5`/`A6`/`A7`. The other three poses use `-1,0,0` (CAP-12's own convention) rather than `A2`'s or
+`A3`'s untraceable directions (`A3`: "A2's own X/Z/direction for these three were not preserved
+anywhere on disk"), so they are a fresh, internally consistent matched set, not a row-for-row diff
+against either predecessor — and they land in the same range A2 itself reported for the same
+altitudes.
+
+**The 91–104 px gap between the original and ours (13–25 px at these poses) is a KNOWN OPEN
+DELTA, reconfirmed here as independent of every Wave A mechanism** — horizontal placement (`A2`),
+vertical placement (`A3`), map-edge extension (`A5`, inert at both pinned poses per its own
+handover note), the deck-altitude fix (`A6`), and the regime/gate model (`A7`) all left this number
+in the same ballpark. **It is NOT a Wave A acceptance failure** — the wave's own criteria never
+asked for a byte-match transition depth, only no lattice, no field edge, and CAP-12-like density,
+all three of which are met above. Per `A3`'s own handover, the gap is carried forward as a lead
+for a future item — per-card alpha falloff/scale distribution, or Wave B's fog participation in
+the sheet's apparent softness — and is judged next whenever that item is minted and picked up, not
+here.
+
+### 8-chapter freecam regression
+
+`--freecam --det --mute --chapter=<X>` for all eight chapters (`.scratch/a4/regress-*.png`,
+logs under `.scratch/logs/`): **zero errors in all eight** (`ERROR` greps clean across every
+`.log`/`.out`). Census lines match `A5`'s own final table exactly, confirming nothing drifted
+since: `fogvol clouds:` C1/C2B/C4 22,201 (9,025 base + 13,176 extension), C1C 22,748 (9,572 +
+13,176), C5 16,170 (16,170 + 0); `cloud clusters:` C1 28, C1B 70, C1C 30, C4 45; `cloud deck:` 144
+tiles at y=960 (C1/C1C/C2B) / y=1050 (C4). C1/C4's vertical criteria from `A3` are reconfirmed by
+the river-pose result above (nothing hangs below the deck) and by this census holding steady
+through the full sweep; a dedicated C4 clear-air re-shoot was not repeated here since `A5`/`A6`/`A7`
+each already reconfirmed it inert to their own changes and nothing in `A4` touches placement.
+
+### Goldens re-pinned
+
+Ran `.\RunTests.ps1` unregenerated first (per `analysis/goldens/README.md`'s own procedure) to
+confirm the moved set before touching anything: **exactly the same six goldens every prior Wave A
+item moved — `c1-waterfall`, `c1c-rain`, `c2b-rain`, `c4-snow`, `c1-flight`, `c1-destroy-effects`
+— 0 broken of 13, 0 unexpected movers.** Build PASS (0 warnings), units 669/669, engine 26/26
+clean. Only then ran `.\RunTests.ps1 -SkipUnits -SkipEngine -RegenGoldens`; `git diff
+analysis/goldens/manifest.json` confirms **only those six `hash` lines changed** — no `args`,
+`exercises`, `frame`, or `gpu` field touched, no golden outside the six moved. Re-ran
+`.\RunTests.ps1` in full afterward: **build PASS, units 669/669, engine 26/26 clean, goldens
+13/13 hash-identical, exit 0.**
+
+### `verification.md` — three instrument rules from the wave
+
+Checked none of the three already existed (grepped the wording, not just an ID) before adding:
+
+- **SHOT-20** — the sky→tops transition-depth metric replaces column-autocorrelation/crest-spacing
+  for cloud-sheet structure (perspective aliases a fixed world period on screen — `A2`'s finding).
+- **SHOT-21** — `--tex-override` cannot separate `cloudsprite` from `cloudparent` — both skin
+  `cloud1.tif`/`cloud2.tif`; separate by altitude or position instead (`A6`'s finding).
+- **INSTR-12** — a straight-up billboard probe reads edge-on and carries no altitude information
+  (`A6`'s correction of `A3`'s own probe, an `INSTR-11` compound-thing narrowness).
+
+### `BL-312` closed
+
+Deleted from `backlog.md` per convention (the record lives in this section and the closing
+commit's message, drafted at `.scratch/commit-msg-a4.txt`). Its three threads: the lattice comb
+(landed `A2`), the "reads far denser" verdict (landed `A2`/`A3`, reconfirmed above — density is now
+eyeball-parity, not "a lot denser"), and unbounded tiling over the base map (landed `A5`). **No
+thread is left dangling**: the one open question this item surfaces — the transition-depth gap —
+was never part of `BL-312`'s own claim (density and lattice, not sheet sharpness); it is `A3`'s
+finding, already carried in this plan, not a new backlog item. `grep`ping `BL-312` across the repo
+after deletion returns only narrative mentions in `backlog.md`'s `BL-118` entry ("Both halves moved
+to `BL-312`") and this plan's own history sections — both are history, not live claims, per the
+`close-backlog-item` convention (compare `BL-273`, referenced the same way after its own closure).
+
+### Probe images (`.scratch/a4/`)
+
+| file | what it is |
+|---|---|
+| `river-*.png` (A–V, yaw000, neg80/90/91/92/93/94/95/96/97/100, 180) | the 18-shot direction-derivation sweep |
+| `river-T-neg94.png` | **the converged river direction** — compare directly to `Screenshots/C1 IA1 Fog river.png` |
+| `compare_N.png`, `diff_N.png`, `J_cliff_zoom.png` | stacked and diffed comparisons used to converge the direction |
+| `a4-grazing-tops-1208.png`, `a4-above-deck-1527.png`, `a4-high-above-1698.png`, `a4-base-first-wisps-997.png` | the CAP-12-altitude matched set |
+| `a4-pinned-abovedeck-1192.png`, `a4-pinned-river-192.png` | the two pinned reference poses on the final build — the river one is the item's headline evidence |
+| `regress-C{1,1B,1C,2,2B,3,4,5}.png` | the 8-chapter regression sweep |
+| `density.py`, `transition_depth.py` | the instruments (density.py new to this item; transition_depth.py is A2's, unmodified) |
+| `runtests-pre-regen.log`, `runtests-regen.log`, `runtests-post-regen.log` | the three `RunTests.ps1` runs bracketing the golden re-pin |
+
+### Original approach (kept for reference)
 
 **Goal.** The wave's acceptance criteria measured and recorded; `BL-312` deleted from the backlog.
+— *met, see Landed above.*
 
 **Evidence (confidence: n/a — this is the instrument).** CAP-12 stills + the pinned river pose;
 PT-42(c)'s "a lot denser" as the density reference. Wave-gate playtest (user, 2026-08-08, in
@@ -724,20 +931,31 @@ flight** (→ `A6`, **landed 2026-08-08** — the deck was pinned 87 m above its
 not a scatter fault; C1/C1C/C2B pixels moved a third time, so re-pin against A6's build);
 field ends at the base map where the original's is everywhere (→ `A5`) — A4
 closes the wave only after `A5` lands.
+— *A5, A6 and A7 all landed before this item; the wave-gate playtest's density half ("a lot
+denser") is answered above with a number, not just a qualitative callback.*
 
 **Approach.** Matched shots at the CAP-12 grazing poses and both pinned poses; a density comparison
 (sheet-region sprite coverage vs the original's) recorded here; re-pin the goldens
 (`analysis/goldens/manifest.json`) since the field changed in every fvol chapter. Close `BL-312`
 per convention (record in the landing commit; traps → `fogvol.md`/`verification.md`).
+— *followed as written; "the CAP-12 grazing poses" resolved to CAP-12's own README convention
+(`-1,0,0` at `-4974,-3861`) rather than A2's/A3's untraceable directions, and the density
+comparison used an adaptive per-image threshold rather than a fixed luminance cut, for the
+video-vs-engine reason SHOT-1 states.*
 
 **Model recommendation.** medium — measurement and bookkeeping against stated criteria.
+— *held; no engine code was touched.*
 
 **Verify.** No lattice at any grazing angle; no field edge over the base map; density within
 eyeball-parity of CAP-12 (state the measured coverage numbers); C1/C4 vertical criteria from A3
 re-confirmed. Full 8-chapter freecam regression, zero errors.
+— *all met, see the sections above.*
 
 **⚠ Traps.** `--tex-census` counts are lower bounds and pair with `--no-fog` (cli.md) — if used for
 density, say so and use the same flags on both sides of any before/after.
+— *not used here — the density comparison used pixel-luminance coverage instead, precisely because
+`--tex-census` has no equivalent on the CAP-12 (video) side, so it could not have been the
+same-instrument-both-sides measure the trap itself asks for.*
 
 ## A5 ☑ Continue the field past the map edge
 

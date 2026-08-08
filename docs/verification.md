@@ -72,6 +72,16 @@ and leave gaps when retiring old ones.
 - **SHOT-16** — **Hide capture windows; never minimize them.**
 - **SHOT-17** — **Sample transitions mid-ramp.**
 - **SHOT-19** — **Use a time series and isolate overlapping emitters.**
+- **SHOT-20** — **Measure cloud-sheet structure by the sky→tops transition depth, not
+  column-autocorrelation or crest-spacing.** Perspective makes a fixed world-space placement
+  period aperiodic in screen space, so a row/column ACF over the sheet found no peak above 0.33
+  on either side of the A/B — including a 0.69 peak in the original's own underside that turned
+  out to be capture noise at sd 0.91–2.58 (`PLAN-overcast-match` A2, METHOD-14).
+- **SHOT-21** — **`--tex-override` cannot separate the `fvol` cloud-sprite field from
+  `cloudparent` clusters — they share their textures.** All 626 of C1's `cloudparent` facades are
+  skinned `cloud1.tif`/`cloud2.tif`, the same two textures the `cloudsprite1`/`cloudsprite2`
+  templates use, so a green override paints both populations at once; separate them by altitude
+  or cluster position instead (`PLAN-overcast-match` A6).
 
 ## GOLD — golden images
 
@@ -226,6 +236,11 @@ and leave gaps when retiring old ones.
   the residual reading after the stop is a different question from the peak, and it is the one that
   found a mesh lit at the impact point for the rest of the session.
 - **INSTR-7** — **"Not decidable from this data" is a fact about the instrument, not the question — when a census comes back uniform, ask what else varies the quantity.** A degenerate reading blocks the *inference*, not the *answer*. Measured: all 88 `destroyable_parts` pairs ship equal, which correctly made (armor, hp) undecidable from `extracted/`, and the reading sat blocked for nine days — the original's armory varies armor independently of health and settled it in one screen.
+- **INSTR-12** — **A straight-up billboard probe reads edge-on and reports nothing about
+  altitude.** A `cloudsprite` card is a `Facade`/`SphericalY` billboard, so a zero-green-pixels
+  result looking straight up is a fact about billboard orientation, not proof the field is absent
+  below that altitude — a compound-thing narrowness in INSTR-11's shape (`PLAN-overcast-match` A6,
+  the A3 probe it corrects).
 
 ## SRC — sources and documents
 
