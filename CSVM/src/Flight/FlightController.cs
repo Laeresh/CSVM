@@ -481,7 +481,9 @@ public partial class FlightController : Node3D
 
     public override void _Ready()
     {
-        var canvas = new CanvasLayer();
+        // Explicit rather than Godot's implicit default of 1: the sun wash draws just above this
+        // (UI.HudLayers.SunWash), so the HUD's own layer is load-bearing, not incidental.
+        var canvas = new CanvasLayer { Layer = UI.HudLayers.Hud };
         _hudCanvas = canvas;
         _hud = new Label { Position = HudMargin };
         _hud.AddThemeFontSizeOverride("font_size", HudFontSize);

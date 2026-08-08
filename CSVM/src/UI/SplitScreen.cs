@@ -105,7 +105,7 @@ public sealed partial class SplitScreen : CanvasLayer
     public static SplitScreen Build(int players, Viewport mainViewport)
     {
         players = Mathf.Clamp(players, 2, MaxPlayers);
-        var split = new SplitScreen { Name = "splitscreen", Layer = 0 };
+        var split = new SplitScreen { Name = "splitscreen", Layer = HudLayers.WorldOverlay };
         split.Init(players, mainViewport);
         return split;
     }

@@ -173,7 +173,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <see cref="Quit"/>, then <see cref="ShowMenu"/>.</summary>
     public static LaunchMenu Build(string zrdrPath)
     {
-        var menu = new LaunchMenu { _zrdrPath = zrdrPath, Layer = 10, Visible = false };
+        var menu = new LaunchMenu { _zrdrPath = zrdrPath, Layer = HudLayers.Board, Visible = false };
 
         var root = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
         root.SetAnchorsPreset(Control.LayoutPreset.FullRect);

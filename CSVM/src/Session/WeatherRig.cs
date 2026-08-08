@@ -220,7 +220,7 @@ public sealed class WeatherRig
             {
                 // A pane-filling overlay so the whiteout swallows everything (terrain, plane,
                 // clouds) uniformly, like the original. Layer 0 keeps it behind the HUD (layer 1).
-                var canvas = new CanvasLayer { Layer = 0, Name = "whiteout" };
+                var canvas = new CanvasLayer { Layer = UI.HudLayers.WorldOverlay, Name = "whiteout" };
                 rig.Whiteout = new ColorRect
                 {
                     Color = new Color(

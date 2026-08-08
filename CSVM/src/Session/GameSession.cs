@@ -1584,7 +1584,7 @@ public partial class GameSession : Node3D
         {
             var board = StuntRaceBoard.Build(race, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
                 exitsToMenu: _menuDriven);
-            var boardLayer = new CanvasLayer { Name = "race_board", Layer = 10 };
+            var boardLayer = new CanvasLayer { Name = "race_board", Layer = UI.HudLayers.Board };
             boardLayer.AddChild(board);
             _worldRoot!.AddChild(boardLayer);
             foreach (var rig in _rigs)
@@ -1634,7 +1634,7 @@ public partial class GameSession : Node3D
             // routed back through this session via RestartMatch.
             var board = VersusBoard.Build(match, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
                 exitsToMenu: _menuDriven);
-            var boardLayer = new CanvasLayer { Name = "dogfight_board", Layer = 10 };
+            var boardLayer = new CanvasLayer { Name = "dogfight_board", Layer = UI.HudLayers.Board };
             boardLayer.AddChild(board);
             _worldRoot!.AddChild(boardLayer);
         }

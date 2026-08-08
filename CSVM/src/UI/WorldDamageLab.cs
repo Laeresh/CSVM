@@ -237,7 +237,7 @@ public sealed partial class WorldDamageLab : Node
 
     private void BuildUi()
     {
-        _layer = new CanvasLayer { Layer = 3 };
+        _layer = new CanvasLayer { Layer = HudLayers.Lab };
         var root = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
         root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
 
