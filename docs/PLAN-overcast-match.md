@@ -149,6 +149,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 15. ☐ B15 — Re-calibrate or delete `fogRangeFactor` 2.0
 16. ☑ B16 — The dome's authored `fog: false` — landed, the primary fix for BL-303
 17. ☐ B17 — Fog A/B at both reference poses + BL-303's three; close `BL-303`/`BL-100`/`BL-101`
+18. ☐ B18 — The dome's cap/skirt seam: how does the original hide it? (minted from B16's finding, user-approved 2026-08-08)
 
 ### Wave C — deck mesh brightness (BL-118 core)
 
@@ -2358,6 +2359,43 @@ commit per convention.
 **⚠ Traps.** C5's black-sky case has an adjacent NOT-fog finding (lit facades ×0.58–0.66,
 WorldLight already at clamp) — fixing the sky must not silently absorb that; it stays in BL-303's
 closing record as still-open if unfixed, minted fresh.
+
+## B18 ☐ The dome's cap/skirt seam: how does the original hide it?
+
+**Goal.** No hard band where the dome meets the horizon in any chapter, with the mechanism
+decoded rather than painted over — the dome stays authored-unfogged (B16 is not reopened).
+
+**Evidence (confidence: finding traced, mechanism lead-only).** B16's sweep: honouring
+`fog: false` exposes the dome's own flat cap/skirt geometry as a hard-edged band in **5 of 8
+chapters** (C1B a black gap — worst; C1C/C2B/C2/C3 milder; C4/C5 clean at the sweep poses;
+worst-case shot `.scratch/b16/finding-crisp-edge-c1b-horizon.png`). The original renders the
+same authored meshes unfogged with no band anywhere in CAP-11/12 footage. Our dome is a
+remodel, not the original's shape: camera-anchored, 2.5×-scaled (`HorizonScaleFor` caps to the
+far-plane fit — C1B lands at ~1.65×), wall ~16–22 km out. Note the coincidence worth chasing:
+**C1B is both the scale-cap outlier and the worst seam.** Candidate mechanisms: (a) at the
+original's scale/anchor the skirt sits below the terrain horizon at flight altitudes; (b) the
+original hard-clips terrain at `CLIP_RANGES.far` (2,050–4,500 m) with fog covering the last
+stretch — our 40 km far plane renders past where its dome geometry was ever meant to be seen
+against; (c) a bottom cap we don't build.
+
+**Approach.** First identify what the band's pixels actually are (dome skirt face? a gap onto
+the clear colour between terrain edge and dome wall?) — a `--tex-override`/flat-colour probe
+per candidate surface settles it in one shot. Then read the dome meshes' authored bounds and
+compute where the skirt's bottom edge lands at authored 1× anchoring vs our scaled anchor, per
+chapter, at typical flight altitude. Test the surviving candidate with a probe before writing
+the fix. The fix must colour or cover the seam from the dome's own authored data (its skirt
+vertex colours) or from geometry the data implies — never an invented gradient, never fog.
+
+**Model recommendation.** high — a geometry decode with an easy-to-fake-and-wrong fix.
+
+**Verify.** The five affected chapters' horizon poses before/after; B16's 8-chapter crisp-edge
+sweep repeated clean; the two pinned C1 poses unchanged above the horizon band;
+`.\RunTests.ps1` (goldens may move again — list, don't re-pin; B17 re-pins once).
+
+**⚠ Traps.** Do not reintroduce fog on the dome in any form — that is B16's landed verdict.
+`HorizonScaleFor`'s cap and the C1B 1.65× special case are documented in weather.md — read
+that section before touching any dome scaling. If the evidenced fix is a real geometry change
+to the dome build, take a golden baseline first.
 
 # Wave C — deck mesh brightness
 
