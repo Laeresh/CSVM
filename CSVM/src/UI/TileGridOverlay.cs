@@ -279,7 +279,7 @@ public sealed partial class TileGridOverlay : Node
     {
         if (_hudLayer == null)
         {
-            _hudLayer = new CanvasLayer { Layer = 2 };
+            _hudLayer = new CanvasLayer { Layer = HudLayers.Debug };
             var root = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
             root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
             _hud = new Label

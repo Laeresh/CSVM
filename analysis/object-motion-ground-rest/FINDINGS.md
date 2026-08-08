@@ -66,6 +66,17 @@ deferred half. The player's own crash wreck is the cheap repro: crash and watch 
 in C5 but lost from sight between buildings. The C1B airframes do not spawn in Instant Action, so
 they are unreachable today.
 
+> ✅ **Answered 2026-08-09 — `PLAN-ground-contact` (`docs/plans/`), which this census scoped.** All
+> 16 pairs are ground-tested now: a swept trajectory segment ends a flagged body on the first
+> collider, `RUN_TIME` demoted to a ceiling, and the `BOUNCE_SEQUENCE` branch picked from the struck
+> surface. They are **not** `BL-245`'s deferred half — that half is the 379 events authoring
+> `do_intersections: false`, and it is blocked on a decision to diverge, not on a ray.
+> ⚠ Two corrections this census could not have seen, both found at the controls: the eleven
+> airframes and `agyrobus` name their node **`MAIN_ROOT_NODE`**, a sentinel the resolver dropped, so
+> 90 of the 166 flagged events had never launched at all; and a piece's *second* motion (the
+> `pNhit` settle hop) is authored `false` yet has to be swept too, or it buries the very piece the
+> first one just landed. Both cockpit checks passed 2026-08-09.
+
 ## The worked example: one def, both behaviours
 
 `pass_plane01` — a plane parked on the C1 airfield, and the case that made the rule legible:
@@ -101,5 +112,9 @@ should sanity-check that the four shapes do **not** all come back `stays=True`.
 ## Related
 
 `analysis/bl-257-nulled-launch/` (the termination-field split these shapes come from) ·
-`analysis/object-motion-range/` (the 2026-08-01 azimuth/elevation/speed decode) · `BL-059` item 1 ·
-`BL-245` · `BL-022` · `docs/formats/destructibles.md` "Debris tumbles"
+`analysis/object-motion-range/` (the 2026-08-01 azimuth/elevation/speed decode) ·
+[`docs/plans/PLAN-ground-contact.md`](../../docs/plans/PLAN-ground-contact.md) (what `BL-059`
+item 1 became, and where this census's strict test set was discharged) ·
+`BL-245` · `BL-319` (`run_time` is not a flight duration — pieces cut mid-arc or flying long past
+landing; found closing `BL-022`, whose arc scale shipped as `DebrisTune.LaunchScale` 0.65,
+`git log --grep=BL-022`) · `docs/formats/destructibles.md` "Debris tumbles"

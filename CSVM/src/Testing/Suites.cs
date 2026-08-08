@@ -5,6 +5,7 @@ using CSVM.Effects;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
+using CSVM.Session;
 using CSVM.UI;
 using CSVM.Utils;
 using Godot;
@@ -114,6 +115,8 @@ public static class Suites
             "an OBJECT_MOTION naming NEITHER RUN_TIME nor BOUNCE_SEQUENCE flies its solved parabola before its own deactivation switches it off (BL-257)", NulledLaunch));
         into.Add(new TestHarness.Suite("destructible-census",
             "per-chapter destructible registry totals", DestructibleCensus));
+        into.Add(new TestHarness.Suite("lens-flare-gates",
+            "the sun's lens flare is gated on chapter data alone, and its two independent gates — the gamez `sun` node and init.gw's LensFlareTexture slots — agree chapter by chapter, in C2 and C3 and nowhere else (BL-165)", LensFlareGates));
         into.Add(new TestHarness.Suite("tex-dropin",
             "the census/override flatten repaints RGB and changes nothing else", TexDropIn));
         into.Add(new TestHarness.Suite("gltf-export",
@@ -1505,6 +1508,60 @@ public static class Suites
                 ctx.Same(anchors, registry.DistinctAnchors, $"{chapter} destructible node groups");
             });
         }
+    }
+
+    /// <summary>The lens flare's gating, chapter by chapter (BL-165).
+    ///
+    /// <para>The flare is deliberately gated on <b>chapter data</b>, never on a chapter name, and it
+    /// reads <b>two</b> independent gates: a gamez node called <c>sun</c> in the horizon subtree, and
+    /// <c>LensFlareTexture</c> slot registrations in <c>support\&lt;ch&gt;\init.gw</c>. Across the
+    /// retail install both are true of C2 and C3 and of nothing else — as is the presence of a
+    /// texture named <c>sun</c>, a third agreement this suite does not need to re-check.</para>
+    ///
+    /// <para>This is the check most likely to rot silently: nothing about C1 looking correct would
+    /// tell you a flare rig had started building there, and nothing about C3 looking correct would
+    /// tell you the C2 gate had stopped resolving. Both directions are asserted.</para>
+    ///
+    /// <para>Data-only on purpose — no world is built. The interp parse is a file read and the sun
+    /// node is a gamez lookup, so this stays a fast suite rather than a third full eight-chapter
+    /// world sweep beside <c>destructible-census</c> and <c>collision-visibility</c>.</para></summary>
+    private static void LensFlareGates(TestContext ctx)
+    {
+        ctx.RequireData(ctx.InterpPath, $"interp.json");
+        int withFlare = 0;
+        foreach (var (chapter, _, _) in Census)
+        {
+            bool expected = chapter is "C2" or "C3";
+
+            var slots = LensFlareRig.FlareTextureNames(ctx.InterpPath, chapter);
+            ctx.Same(expected ? 4 : 0, slots.Count, $"{chapter} LensFlareTexture slots");
+
+            string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+            ctx.RequireData(gamezPath, $"{chapter} gamez");
+            var gamez = GameZ.Load(gamezPath);
+            int sunNodes = 0;
+            foreach (var n in gamez.Nodes)
+            {
+                if (string.Equals(n.Name, "sun", System.StringComparison.OrdinalIgnoreCase))
+                    sunNodes++;
+            }
+
+            ctx.Same(expected ? 1 : 0, sunNodes, $"{chapter} gamez sun node");
+            // The gates must not merely each be right — they must AGREE. A chapter with textures
+            // and no sun (or the reverse) is data telling us something we have not decoded, and
+            // the rig logs a warning for exactly that case.
+            ctx.Check(slots.Count > 0 == sunNodes > 0, $"{chapter} both flare gates agree");
+            if (expected)
+            {
+                withFlare++;
+                ctx.Note($"{chapter} flare slots: {string.Join(",", slots)}");
+            }
+        }
+
+        ctx.Same(2, withFlare, $"chapters authoring a lens flare");
+        // ⚠ C2's flare is PREDICTED, not verified: the data says it has one and there is no
+        // footage of it. Only C3 was captured (CAP-13).
+        ctx.Note($"C2's flare is predicted from data only — no capture of the original exists");
     }
 
     /// <summary>The authored STOP_SEQUENCE stops must actually run — nothing else in the gate
@@ -2946,6 +3003,14 @@ public static class Suites
         const string chapter = "C1";   // the only chapter shipping refuel* (5 defs)
         const string lateBounce = "ObjectMotion(bounce landed after its instance ended)";
 
+        // The bands above are derived from the AUTHORED speed/elevation ranges, because what this
+        // suite asserts is the DECODE — that a bounce-terminated body flies the parabola the data
+        // describes. BL-022's shipped launch tune (0.65) is a judged LOOK layered on top of that,
+        // and folding it in here would make the suite re-assert whatever the tune happens to be
+        // rather than the maths. So pin the raw arc for the duration and restore after: the check
+        // stays about the solve, and a future look change cannot silently break it.
+        using var _ = new AuthoredArcScope();
+
         ctx.WithWorld(chapter, collision: false, world =>
         {
             var runtime = world.Runtime;
@@ -3150,6 +3215,12 @@ public static class Suites
         const float Tick = 1f / 60f;
         const string root = "zep_ng_dstry1_flt";   // the staged copy's node name, '.' sanitised
 
+        // Same reason as bounce-launch: the band is the AUTHORED support, so the raw arc is what
+        // this asserts. This one happens to still pass under the shipped 0.65 — its support is
+        // wide enough to swallow the trim — which is exactly why it is pinned explicitly rather
+        // than left to luck.
+        using var _ = new AuthoredArcScope();
+
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             WithEffectStage(ctx, world, "biggun_flying_parts", new[] { "zep_ng_dstry1.flt" },
@@ -3340,5 +3411,24 @@ public static class Suites
             }
         }
         return null;
+    }
+
+    /// <summary>Pins <see cref="DebrisTune"/> to the raw authored arc for a suite's duration and
+    /// restores whatever was set before. For the launch suites, whose expected bands are computed
+    /// from the authored speed/elevation ranges: they assert the <b>decode</b>, and BL-022's
+    /// shipped launch tune is a judged look sitting on top of it. Without this, tuning the look
+    /// would move a test of the maths.</summary>
+    private sealed class AuthoredArcScope : System.IDisposable
+    {
+        private readonly float _launch = DebrisTune.LaunchScale;
+        private readonly float _gravity = DebrisTune.GravityScale;
+
+        public AuthoredArcScope() => DebrisTune.UseAuthored();
+
+        public void Dispose()
+        {
+            DebrisTune.LaunchScale = _launch;
+            DebrisTune.GravityScale = _gravity;
+        }
     }
 }

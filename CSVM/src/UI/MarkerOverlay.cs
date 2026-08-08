@@ -221,7 +221,7 @@ public sealed partial class MarkerOverlay : Node3D
             _labels.Add((label, labelPos, kind != MarkerRig.MarkerKind.Pylon));
         }
 
-        _hudLayer = new CanvasLayer { Layer = 2 };
+        _hudLayer = new CanvasLayer { Layer = HudLayers.Debug };
         var root = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
         root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _hud = new Label();

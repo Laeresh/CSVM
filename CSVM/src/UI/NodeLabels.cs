@@ -180,7 +180,7 @@ public sealed partial class NodeLabels : Node
         _holder ??= CreateHolder();
         if (_hudLayer != null)
             return;
-        _hudLayer = new CanvasLayer { Layer = 2 };
+        _hudLayer = new CanvasLayer { Layer = HudLayers.Debug };
         var root = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
         root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _hud = new Label { Text = "" };

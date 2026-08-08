@@ -42,8 +42,17 @@ public sealed class WorldEffectsFactory
     // the camera — rather than falling through to one of the world's 217 generic 'healthy' nodes.
     // The effects (relocated templates) attach to these; the plane/wreck geometry is the crash
     // plan's Layer-2 work.
+    // ⚠ The four airframe parts are here because the lab stands in for the PLANE: the damage shims
+    // (EffectCatalogue.PlaneDamageEffectAnims) are authored NAME=`nose`/`tail`/`leftwing`/`rightwing`,
+    // which the real rig resolves on the bound controller's model (all 22 plane models carry them).
+    // Without them the lab's closure resolves `nose` nowhere and --anim-lab fails to start on every
+    // chapter whose world gamez has no node of that name — C1/C1B/C1C/C2/C2B. The other three only
+    // ever "resolved" on C3-C5 by matching a stray scenery node, which is not the plane either.
     private static readonly string[] CrashAnchorNodes =
-        { "healthy", "destroyed", "dontmove", "markers", "piece1", "piece2", "piece3", "piece4", "shadow", "cockpit1" };
+    {
+        "healthy", "destroyed", "dontmove", "markers", "piece1", "piece2", "piece3", "piece4",
+        "shadow", "cockpit1", "nose", "tail", "leftwing", "rightwing",
+    };
 
     private readonly SessionSpec _spec;
     private readonly Node3D _worldRoot;

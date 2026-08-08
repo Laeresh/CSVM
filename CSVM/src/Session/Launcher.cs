@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Mech3.Anim;
 using CSVM.UI;
 using CSVM.Utils;
 using Godot;
@@ -349,6 +350,10 @@ public partial class Launcher : Node3D
         // ClearOverrides just dropped; before the early-quit probes below, so --run-tests and the
         // --dump-* wrappers are covered by the same gain an interactive launch gets.
         ApplyMasterVolume();
+        // Same placement, same reason: after --det's ClearOverrides so the flag survives a
+        // deterministic run while the tuning file does not, and before the early-quit probes so a
+        // --screenshot verifying a matched value actually renders with it.
+        ApplyDebrisTune();
         // Prefer the unpacked sibling folder from ExtractAssets.ps1 -Unzip when it exists (loose
         // JSON/PNG/WAV: no zip decompression at load). Base (chapter-independent) paths resolve now;
         // the chapter-dependent gamez/texture/mission paths resolve per-session in StartSession.
@@ -736,6 +741,43 @@ public partial class Launcher : Node3D
         AudioServer.SetBusVolumeDb(MasterBus, Mathf.LinearToDb(Mathf.Max(volume, MasterVolumeFloor)));
         string note = volume <= 0f ? " — sounds still load, play, count and log" : "";
         Log.Info("sound", $"master volume={volume:0.###} via={source}{note}");
+    }
+
+    /// <summary>Settles the two <c>BL-022</c> debris-arc knobs for the launch: the
+    /// <c>--debris-launch=</c>/<c>--debris-gravity=</c> flags if given, else the
+    /// <c>debris.launchScale</c>/<c>debris.gravityScale</c> config keys, else the authored arc.
+    ///
+    /// <para>The flags exist as well as the keys because <c>--det</c> drops config overrides and
+    /// <c>--screenshot</c> implies <c>--det</c> — a value dialled in at the controls would
+    /// otherwise not apply to the probe rendered to verify it.</para>
+    ///
+    /// <para>The config reads are unconditional even when a flag wins, because the read is what
+    /// registers the key for <c>--dump-config</c> — skipping it would drop both keys from the dump
+    /// on exactly the runs that set them. And a run left at the authored arc logs nothing and
+    /// touches nothing, so it stays byte-identical to a build without this.</para></summary>
+    private void ApplyDebrisTune()
+    {
+        float launch = Config.GetFloat("debris.launchScale", DebrisTune.DefaultLaunchScale);
+        float gravity = Config.GetFloat("debris.gravityScale", DebrisTune.DefaultGravityScale);
+        string source = "config";
+        if (_spec.DebrisLaunchScale is { } askedLaunch)
+        {
+            launch = askedLaunch;
+            source = "--debris-*";
+        }
+        if (_spec.DebrisGravityScale is { } askedGravity)
+        {
+            gravity = askedGravity;
+            source = "--debris-*";
+        }
+        DebrisTune.LaunchScale = launch;
+        DebrisTune.GravityScale = gravity;
+        if (DebrisTune.IsTuned)
+        {
+            // Loud on purpose: this session's debris is neither the shipped look nor anything
+            // anyone signed off, so a screenshot out of it must not be read as either.
+            Log.Info("anim", $"debris tune launch={launch:0.###} gravity={gravity:0.###} via={source} — OFF the shipped look");
+        }
     }
 
     /// <summary>Mutes/unmutes the master bus and gates pad reads, on window focus. Idempotent —

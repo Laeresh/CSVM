@@ -69,30 +69,38 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Damage & destruction
 
-- `BL-022` `[Tuning]` **Debris arcs read slightly LARGER than the original — all that is left of "the trajectory
-    is wrong."** In-flight kills once threw pieces "but not in the correct trajectory". **The largest cause
-    landed 2026-08-01**: `translation_range` was read as a distance travelled when it is an azimuth/elevation
-    launch with `initial` the speed (`analysis/object-motion-range/`), which threw debris hundreds of metres
-    along one bearing — visible as the `c1-destroy-effects` golden's line of fireballs marching up the runway.
-    *Evidence:* `PT-46`, flown 2026-08-08 (retired; verdicts in `git log --grep=PT-46`). At the controls the
-    pieces now fly and the arcs read as believable parabolas — **the only residue is scale: the original's
-    arcs are "a little bit smaller".** An impression, not a measurement, and nothing else in the sitting
-    disagreed with the build.
-    *Fix shape:* nothing to change until the shortfall is quantified — it wants an A/B against the original
-    (a `CAP-nn`, or a side-by-side of one destruction def), since "a little smaller" spans anything from a
-    launch-speed trim to a debris-specific gravity.
-    ⚠ **Traps.** (a) Do not re-open the magnitude as a decode — the speeds are censused and mapped; what is
-    open is a judged magnitude, not a reading. (b) `gravity.value` is absolute m/s² (a literal −9.8 on 173
-    events, −10 on 400), NOT an offset to the aircraft's arcade `nom_gravity` of 20 — considered and
-    disproven by the same census, and `MotionRuntime` applies the authored value alone. (c) A piece that
-    flies *through* the ground is not this item and not a defect — `PT-46` check (d) confirmed the original
-    does the same, and the data agrees: `do_intersections` is false on all 120 bounce-shape events, all 167
-    vanish-shape, and 1,118 of the `run_time` shape. The 166 events that DO author it true — 16 `(def,node)`
-    pairs that survive in the world (`player_crash_dirt` `piece1`–`4`, the eleven airframes'
-    `MAIN_ROOT_NODE`, `agyrobus`) — are ground-tested as of 2026-08-09 and land on real geometry
-    (`PLAN-ground-contact`, landed; `docs/formats/destructibles.md`). So a *flagged* piece sinking is now a
-    regression worth filing; an unflagged one still is not, and the remaining 379 falls are `BL-245`'s
-    judgement call, not a missing ray.
+- `BL-319` `[Research]` **`run_time` on a launched `OBJECT_MOTION` is not a flight duration — pieces are cut
+    mid-arc, or fly for seconds past their landing.** Found while settling `BL-022`'s arc scale
+    (`git log --grep=BL-022`), and it is why that item's 0.65 is a judged look rather than a decode.
+    **Only an event with NO authored `RUN_TIME` gets a solved flight** (`MotionRuntime.FlightToLaunchHeight`,
+    `MotionRuntime.cs:242-255`). Everything else integrates the parabola for exactly the authored time and is
+    then dropped by `MotionSet` (`MotionSet.cs:63-66`), holding its last pose. Both failure directions ship:
+    - **Cut mid-flight.** `m_build03` part1/5/9 author `run_time` 5.0 s against a 6.95 s parabola — the piece
+      stops at **72 % of its arc, still ~49 m up**. part2/6/7/8 stop at 67 %. Six of the nine.
+    - **Run long past landing.** `genx12` (the template `air_gen` calls, and the *vector* `translation`
+      branch, not the spherical one) authors 4.0–6.5 s against 1.1–2.0 s parabolas — every one of its twelve
+      pieces ends up roughly **135 m below** where it launched, i.e. deep under the terrain.
+    *To settle:* (a) does a following sequence event hide the frozen piece, or does it visibly hang in the
+    sky? — `--debug-anim` on a `--destroy=m_build03` run answers it; (b) then decide what `run_time` means
+    for a launch: a clamp on the flight, a hint the original overrode with real contact, or a duration the
+    parabola was meant to fit.
+    ⚠ **Traps.** (a) **Not a decode question about `translation_range`** — the speeds and angles are censused
+    and mapped (`analysis/object-motion-range/`); this is about the *duration* field. (b) **Not ground
+    contact — and half the question is already answered.** `do_intersections` is false on all 120
+    bounce-shape events, all 167 vanish-shape and 1,118 of the `run_time` shape; a piece passing *through*
+    the ground with the flag false is confirmed original behaviour (`PT-46` check (d)) and is not this item.
+    But for the **166 events that author it true**, `PLAN-ground-contact` (landed 2026-08-09) settled the
+    third of this item's three readings outright: **`RUN_TIME` is a ceiling the original overrode with real
+    contact**, and `MotionRuntime.TryContact` now ends those bodies on the first collider whatever their
+    clock says. So this item's remaining question is what `RUN_TIME` means for a launch the original was
+    *not* testing — which is where `m_build03`'s 72 %-of-arc cut lives. ⚠ `genx12`'s twelve pieces ending
+    135 m under the terrain is a **different** fault than it looks: its own two `ACTIVE_STATE`s target the
+    `INPUT_NODE` sentinel, which resolved to nothing until that plan fixed `AnimRuntime.Targets` — re-measure
+    before treating the 135 m as this item's evidence. (c) `gravity.value` is absolute m/s² (a literal −9.8 on 173
+    events, −10 on 400), **not** an offset to the aircraft's arcade `nom_gravity` of 20 — considered and
+    disproven by the same census. (d) ⚠ **`BL-022`'s shipped `DebrisTune.LaunchScale` of 0.65 silently
+    absorbs whatever this turns out to be**, so settling it will likely move that number too — re-judge the
+    look at the controls afterwards rather than assuming 0.65 survives.
 
 - `BL-059` `[Feature]` **Data-driven crash — the remaining variants/follow-ups.** The dirt/ground crash is
   complete and the default (`PLAN-data-driven-crash`, `docs/HISTORY.md`). What is still open:
@@ -119,8 +127,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `healthy`), not the impact point. For the debris arcs: `translation_range` **is** decoded and
   **is** simulated now (2026-08-01 — xz/y an azimuth/elevation in degrees, `initial` the launch
   speed, `delta` a speed ramp, all mapped in `MotionRuntime`), so the old "reasoned reading" caveat
-  is retired; what stays TUNE is only the arc's judged look, the `fly_trailN` anchor being invisible
-  so that only the trail shows; and the DISTANCE interval hides behind an inverted flag
+  is retired; and the arc's judged look is settled too — `DebrisTune.LaunchScale` ships at **0.65**
+  (2026-08-08, matched at the controls against `OriginalScreenshots/Videos/m_build03 destruction.mp4`;
+  `git log --grep=BL-022`), and the crash pieces tightened with it, so a blend here starts from the
+  tuned arc, not the authored one. What stays TUNE is the `fly_trailN` anchor being invisible so that
+  only the trail shows; and the DISTANCE interval hides behind an inverted flag
   (`has_interval_value` false, key off `interval_type`).
 
 - `BL-102` `[Research]` **Patrol boat: which HP governs?** (from `docs/plans/PLAN-M3-weapons.md` C23, 2026-07-22.)
@@ -1412,6 +1423,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   was recorded — check with them before assuming the chase-cam layering holds there. Full
   record: `playtest/CAP-13/README.md`.
 
+- `BL-324` `[Bug]` **Our sun shines from a hardcoded direction; every mission authors one and we
+  read none of it.** `Launcher.SetupLighting` builds the world's only `DirectionalLight3D` at a
+  fixed `RotationDegrees (-45, 150, 0)`, with the comment "shine onto the -Z (nose) side" — i.e.
+  the angle was picked to make the *plane model* read well, not to match any chapter. Meanwhile
+  every mission's `weather.zrd.json` carries a per-zone **`SUNLIGHT_ORIENTATION [pitch, yaw,
+  roll]°`** (`docs/formats/weather.md`, the item-6 decode), and it varies by chapter: C1
+  `[-25, 90]`, C1B/C1C/C2/C2B `[-65, 90]`, C3 `[-25, 135]`, C4 `[-45, 135]`, C5 `[-25, -135]`
+  (census 2026-08-08 over all 54 weather files; effectively constant across a chapter's zones,
+  C2 varying by mission). `Weather.cs` parses `SUNLIGHT_DIFFUSE`/`_AMBIENT` for the `WorldLight`
+  scalar and **never reads `ORIENTATION` at all** — zero hits install-wide.
+  *Why it is visible now:* `BL-165` landed the lens flare anchored to the gamez `sun` node, which
+  in C3 sits at **yaw 45**. The authored sunlight says **yaw 135**, and our light says **yaw 150**.
+  So in C3 the flare, the sun disc and the shadows currently point three different ways; the flare
+  and the disc agree with each other (both come from the node) and the light agrees with neither.
+  ⚠ **Traps.** (a) Do **not** "fix" this by re-anchoring the flare to `SUNLIGHT_ORIENTATION` —
+  that was tried and rejected on evidence: the parameter is the shading direction, not the sun
+  object's position, and the flare would draw 90° from the visible disc (`WORLD-26`,
+  `analysis/bl-165-lens-flare/FINDINGS.md`). The open question is whether the *light* should move,
+  not the flare. (b) The world is rendered fullbright with a per-mission scalar
+  (`WorldLight`/`SunIncidence` 0.46), so this light mostly shades **aircraft**, not terrain —
+  expect the change to show on planes and their shadows, and to be nearly invisible on the ground.
+  (c) Whether the node bearing and the authored orientation *should* agree is itself unsettled: if
+  the original's shadows fall along `SUNLIGHT_ORIENTATION` while its sun billboard sits elsewhere,
+  then the original disagrees with itself too and we should reproduce that, not reconcile it.
+  *Needs an original-game A/B:* a C3 pose showing aircraft shading and shadow direction against the
+  visible sun, which settles (c) before any value is adopted.
+
 - `BL-305` `[Bug]` **C5's city blocks are packed edge to edge where the original shows pavement
   between buildings — within-block clutter density/alignment is wrong.** Found by `CAP-22`
   (2026-08-07) while closing `BL-250` (the doubled-district bug, landed the same day — evidence
@@ -1499,6 +1537,49 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `playtest/CAP-11/t0.5-c2b-spawn-ocean.png`.
 
 ## Effects & animation runtime
+
+- `BL-326` `[Bug]` **C3's skydome draws a magenta rectangle below the camera: its gamez names
+  `cloud1`/`cloud2`, the two textures C3 is the only chapter not to ship.** Seen at the controls
+  by the user 2026-08-09 and confirmed by them to be on **`main`**, then reproduced and traced
+  2026-08-09. Not aircraft-related — the "moves relative to the plane" reading is the giveaway
+  that it is **camera-anchored**, not plane-attached.
+  *The chain, all confirmed:*
+  - Node **`g1155`**, `model_index` 492, `zone_id` 1, parent 3236 — the `zone1` group under the
+    gamez `horizon` node, i.e. the **camera-anchored skydome**. It is the immediate **sibling of
+    the `sun` node** (model 491) that `BL-165` anchors the lens flare to.
+  - Model 492's polygons carry materials **270** and **271** → `texture_index` 266/267 →
+    **`cloud1.tif`** and **`cloud2.tif`**.
+  - Those two names are referenced by C3's `gamez/textures.json` and are **absent from every one
+    of C3's archive folders** (`texture`, `rtexture2/4/6/8/12`). Census across the install: C1,
+    C1B, C1C, C2, C2B, C4 and C5 each ship **12** copies of the pair; **C3 ships 0**.
+  - Unresolved ⇒ `SceneBuilder`'s debug **magenta** (which `TextureArchive.DefaultOverride`,
+    `TextureArchive.cs:51-54`, deliberately shares with `--tex-override`).
+  *Reproduce:* `--freecam --chapter=C3 --no-fog "--pos=0,1500,0" "--direction=0,-1,0.05"` —
+  straight down — gives **2886 magenta px**, a 76×38 rectangle at (602,352), RGB (190,60,196).
+  ⚠ **You must look down.** A level chase-cam flight (`--fly --chapter=C3 --plane=player_bhawk
+  --frames=90`, 2861 ft) renders **zero** magenta pixels. That negative control is why this
+  reads as intermittent at the controls.
+  ⚠ **The fix is a real decision, not a one-liner — do not just add the names to
+  `KnownAbsentFromGameData`.** That set (`TextureArchive.cs:679-683`, currently `pir_spinner` and
+  C5's `barngrill`) means "the retail data genuinely lacks this, render a neutral fallback instead
+  of debug magenta". It would silence the magenta, but the two candidate readings differ in what
+  the player should see and the data does not settle which:
+  - **(a) A genuine per-chapter data gap.** C3's authors dropped the textures; the original
+    engine drew nothing, or something blank, in that slot. Then `KnownAbsent` (or suppressing
+    the node) is right.
+  - **(b) The original resolved them from a shared pool.** Every *other* chapter ships the pair,
+    so a global/cross-chapter texture lookup in the original would have found `cloud1` and drawn
+    a real cloud. Then `KnownAbsent` hides a missing cloud behind a blank card, and the fix is a
+    cross-chapter fallback.
+  Distinguishing them is what settles it: (b) predicts a visible cloud below the camera in C3 in
+  the original, (a) predicts nothing there. **Needs an original-game A/B** — fly C3, look down,
+  and say whether a cloud card is present.
+  ⚠ **Traps.** (a) `--tex-override`/`--tex-census` paint magenta *by design* — rule the flags out
+  before reading the colour as a fault. (b) `gfly02/03/04.tif` are also referenced-but-absent in
+  C3 and are a **red herring**: no material uses them (dead registrations), so they draw nothing.
+  (c) `pock1.tif`, `snow16x16.tif`, `default` and `pir_spinner.tif` are referenced-but-absent in
+  **every** chapter — the baseline, not a C3 fault. (d) This node is the sun's sibling in the dome
+  subtree, so anything that suppresses it must not catch the `sun` node with it (`BL-165`).
 
 - `BL-032` `[Feature]` `[Blocked: user decision]` **Burning-object fires (`fire1`/`fire2` templates + `EFFECTS` flipbooks)** — **POSTPONED
   2026-07-21 by user decision: minor detail, and the trigger is not findable.** Fully decoded,

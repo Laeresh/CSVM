@@ -201,6 +201,13 @@ public sealed record SessionSpec
     public string SkyZone { get; private set; } = "zone2";
     public bool SkyZoneExplicit { get; private set; }
     public bool NoFog { get; private set; }
+
+    /// <summary><c>--no-flare</c>: suppress the sun's lens flare (BL-165). Not a fidelity switch —
+    /// a verification one. The flare's full-screen wash reaches α ≈ 0.66 and survives terrain
+    /// occlusion, so in C2/C3 any capture with the sun near screen centre is contaminated for every
+    /// *other* comparison (terrain colour, fog gradient, deck brightness, clutter density). Same
+    /// role <c>--no-fog</c> plays for the fog wall.</summary>
+    public bool NoFlare { get; private set; }
     /// <summary><c>--mips=authored|generated</c>: whether a texture's levels 1 and 2 come from the
     /// archive's hand-authored <c>_1</c>/<c>_2</c> siblings (the default) or are box-filtered from
     /// the base like every level below them. See <see cref="Mech3.TextureArchive.MipSource"/>.</summary>
@@ -494,6 +501,21 @@ public sealed record SessionSpec
     /// At volume 0 every sound still loads, plays, counts and logs; it is simply inaudible.</para></summary>
     public float? Volume { get; private set; }
 
+    /// <summary>Multiplier on launched debris' authored launch speed (<c>BL-022</c>). Null when
+    /// <c>--debris-launch=</c> was not given, which lets the <c>debris.launchScale</c> config key
+    /// supply it instead — an explicit flag always beats the tuning file.
+    ///
+    /// <para>The flag exists as well as the key because <c>--det</c> drops every config override
+    /// (so a golden cannot bake in whatever someone was tuning), and <c>--screenshot</c> implies
+    /// <c>--det</c>: without a flag, a value matched at the controls would silently not apply to
+    /// any probe rendered to check it.</para></summary>
+    public float? DebrisLaunchScale { get; private set; }
+
+    /// <summary>Multiplier on launched debris' authored <c>gravity.value</c> (<c>BL-022</c>).
+    /// Same flag-beats-config, flag-survives-<c>--det</c> rule as
+    /// <see cref="DebrisLaunchScale"/>.</summary>
+    public float? DebrisGravityScale { get; private set; }
+
     public bool NoVsync { get; private set; }
     public bool Perf { get; private set; }
     public bool NoFocus { get; private set; }
@@ -747,6 +769,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--sounds=")) { s.Sounds = arg["--sounds=".Length..]; }
             else if (arg.StartsWith("--messages=")) { s.Messages = arg["--messages=".Length..]; }
             else if (arg == "--no-fog") { s.NoFog = true; }
+            else if (arg == "--no-flare") { s.NoFlare = true; }
             else if (arg.StartsWith("--mips=")) { s.SetMips(arg["--mips=".Length..]); }
             else if (arg == "--dump-mips") { s.DumpMips = true; }
             else if (arg.StartsWith("--dump-mips=")) { s.DumpMips = true; s.DumpMipsFilter = arg["--dump-mips=".Length..]; }
@@ -775,6 +798,34 @@ public sealed record SessionSpec
                 else
                 {
                     s.Volume = volume;
+                }
+            }
+            else if (arg.StartsWith("--debris-launch=") || arg.StartsWith("--debris-gravity="))
+            {
+                // Same tolerance as --volume: a typo in a tuning knob must not take the launch
+                // down, and the run is still usable at the authored arc. Range is generous because
+                // the point is to bracket an unknown — 0 pins pieces in place, which is a
+                // legitimate thing to look at.
+                bool isLaunch = arg.StartsWith("--debris-launch=");
+                string flag = isLaunch ? "--debris-launch" : "--debris-gravity";
+                string want = arg[(flag.Length + 1)..];
+                if (!float.TryParse(want, NumberStyles.Float, CultureInfo.InvariantCulture, out float scale))
+                {
+                    notes.Add(new Note("core", $"{flag}={want} is not a number — leaving the authored arc alone"));
+                }
+                else if (scale is < 0f or > 100f || !float.IsFinite(scale))
+                {
+                    float clamped = Math.Clamp(scale, 0f, 100f);
+                    notes.Add(new Note("core", $"{flag}={want} is outside 0-100 — using {clamped}"));
+                    if (isLaunch) { s.DebrisLaunchScale = clamped; } else { s.DebrisGravityScale = clamped; }
+                }
+                else if (isLaunch)
+                {
+                    s.DebrisLaunchScale = scale;
+                }
+                else
+                {
+                    s.DebrisGravityScale = scale;
                 }
             }
             else if (arg == "--debug-collision") { s.DebugCollision = true; }

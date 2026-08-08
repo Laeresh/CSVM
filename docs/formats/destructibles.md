@@ -277,6 +277,21 @@ the "Debris tumbles" bullet below for which pieces each covers. A format reader 
   water tower launches **2** visible pieces (`h2twr_middle` arcs from y≈5 to y≈19 in 0.8 s, tumbling,
   `run_time` 5 s), C1 buildings **7** each, passenger planes **2**; deaths that author no
   `OBJECT_MOTION` (the AA guns, `air_gen`) correctly launch **0**.
+  - **⚠ The shipped arc is the authored one scaled by `0.65` (`BL-022`, 2026-08-08).** Every launch
+    speed above is multiplied by `DebrisTune.LaunchScale`, default **0.65**; gravity is unscaled.
+    That is a **judged look, not a decode** — the authored speeds are censused and correct as read,
+    and the scalar is the gap between what the data says and what the original renders, settled at
+    the controls against `OriginalScreenshots/Videos/m_build03 destruction.mp4`. A frame comparison
+    of that kill put our debris' rise at roughly **3×** the original's; the authored data alone
+    would throw `m_build03`'s pieces to a **34–60 m apex** and **63–128 m** downrange. So a reader
+    computing an expected arc from the extracted numbers must apply the scale, or use
+    `DebrisTune.UseAuthored()` (what the `bounce-launch`/`nulled-launch` suites do) to assert the
+    decode instead. The tune is **global**, so `player_crash_dirt`'s pieces tightened with it —
+    `CAP-16` signed off the crash debris' *direction*, never its magnitude (`BL-122`).
+    ⚠ It also silently absorbs the `run_time` behaviour below: six of `m_build03`'s nine pieces are
+    cut at 67–72 % of their arc while still climbing, and `genx12`'s twelve run 3.7–5.2 s past
+    their landing. Until that is settled the scalar will not generalise to defs with different
+    authored run times.
   - **Ground-rest is split, `PLAN-bounce-launch` (2026-08-03).** A census over all 17,568 extracted
     defs found 733 `OBJECT_MOTION` events naming a `bounce_sequence`, 529 of those with no authored
     `RUN_TIME` (217 def files) — the shape that means "fly until you land." Those 529 are two
