@@ -26,17 +26,14 @@ namespace CSVM.Mech3;
 /// on C1, C2, C4 and C5, with no seam gaps. <see cref="RepeatInsteadOfMirror"/> defaults true
 /// for that reason, and alternating reflection is the mode kept only to look at.</para>
 ///
-/// <para>⚠ <b>This reverses what `CAP-17` was read as saying, and the reversal is about the
-/// READING, not the data.</b> That strip analysis measured a translational period of 471 frames
-/// whose consecutive periods matched <i>as-is</i> at +0.899…+0.949 against time-reversed
-/// −0.086…+0.080 — which is exactly what plain repetition predicts and reflection does not. The
-/// mirroring claim rested on a separate reflection scan finding "seams" at half that spacing;
-/// the same entry documents the trap that produces them, since a zigzag coast is locally
-/// symmetric about every headland, and a signal of period P correlates at 2P for free.
-/// What is still unexplained is the SCALE — C2's spacing converts to ~3.2 cells against the 2
-/// measured at the controls, while C4's 2.26 lands on its 2. See `BL-105`; do not re-derive a
-/// block depth from those metre figures until the pipeline has been calibrated against a known
-/// repeat period.</para>
+/// <para>⚠ <b>That reversed the `CAP-17` strip analysis, whose DATA was always consistent with
+/// repetition</b> — its consecutive translational periods matched <i>as-is</i> at +0.899…+0.949
+/// against time-reversed −0.086…+0.080, which is what repetition predicts and reflection does
+/// not. The mirroring claim came from a reflection scan finding "seams" at half that spacing,
+/// which is the zigzag-coast symmetry that analysis itself documented as a trap, and a signal of
+/// period P correlates at 2P for free. ⚠ Its metre figures were wrong too (~3.2 cells for a
+/// C2 edge that measures 2): <b>do not size a map-edge block from a video-derived period</b> —
+/// see `analysis/video-flight-calibration/FINDINGS.md`. Fly it and look.</para>
 ///
 /// <para><b>Deliberately not offered: repetition that shares the map-edge vertex row</b>
 /// (floated in `docs/formats/world-structure.md`), which would repeat without stepping. Mirror
@@ -144,9 +141,9 @@ public sealed partial class MapEdgeExtender : Node3D
     public int BlockCells => _blockCells;
 
     /// <summary>Translate the block rather than alternately reflecting it. <b>True by default —
-    /// this is what the original does</b>, A/B'd at the controls on four chapters (`BL-105`).
-    /// False alternately reflects, which was the shipped behaviour until 2026-08-08 and is now
-    /// kept only to look at.</summary>
+    /// this is what the original does</b>, A/B'd at the controls on every chapter (2026-08-08).
+    /// False alternately reflects, which was the shipped behaviour until then and is now kept
+    /// only to look at.</summary>
     public bool RepeatInsteadOfMirror => _repeat;
 
     /// <summary>The widest block this world can take — a block deeper than the grid has no more
@@ -174,19 +171,16 @@ public sealed partial class MapEdgeExtender : Node3D
 
     // ---------------------------------------------------------------- fold mapping
 
-    /// <summary>How many border cells deep this chapter's repeated block is, measured by A/B
-    /// against the original at the controls (2026-08-08, `BL-105`).
+    /// <summary>How many border cells deep this chapter's repeated block is — all eight measured
+    /// by A/B against the original at the controls (user, 2026-08-08).
     ///
-    /// <para><b>C1, C2 and C4 are 2; everything else is 1.</b> C5 was measured at 1 directly. The
-    /// remaining four — C1B, C1C, C2B, C3 — are <i>assumed</i> 1 rather than observed, on the
-    /// grounds that their borders carry only water tiles, which makes the block depth
-    /// unobservable there: repeating one water cell and repeating two are the same picture. That
-    /// assumption is self-checking, in that the only way it can be wrong is if a border turns out
-    /// not to be water-only, which would be visible immediately.</para>
+    /// <para><b>C1, C2 and C4 are 2; everything else is 1.</b> C5 was read directly. The remaining
+    /// four — C1B, C1C, C2B, C3 — carry <b>only water tiles at their borders</b> (measured), which
+    /// both fixes them at 1 and makes the depth moot there: repeating one water cell and repeating
+    /// two are the same picture.</para>
     ///
-    /// <para>⚠ An unknown chapter falls back to 1, the value that is right or indistinguishable
-    /// everywhere it has been looked at — never to 2, which is only known right where it was
-    /// measured.</para></summary>
+    /// <para>⚠ An unknown chapter falls back to 1 — right or indistinguishable on every chapter
+    /// that exists, where 2 is right only on the three it was measured on.</para></summary>
     public static int DefaultBlockCells(string? chapter) => chapter?.ToUpperInvariant() switch
     {
         "C1" or "C2" or "C4" => 2,

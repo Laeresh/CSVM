@@ -138,7 +138,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/ColliderOverlay.cs` — the collider wireframes (C): every built collision shape drawn, coloured by owner class; needs `--collision` outside flight.
 - `src/UI/ClassOverlay.cs` — the colour-by-class overlay (X): every drawn mesh tinted destructible/facade/clutter/scenery, a findable-targets view.
 - `src/UI/AiNetsOverlay.cs` — the AI patrol-net overlay (F13, `--debug-ainets`): the chapter's nets as coloured graphs with labels + census log.
-- `src/UI/TileGridOverlay.cs` — the map-edge tile-grid overlay (F14, `--debug-tilegrid`): every ground tile tinted 20 % by fold parity, so one colour band is one mirrored block; F15 steps the block depth, F16 swaps mirror/repeat. The `BL-105` prototype.
+- `src/UI/TileGridOverlay.cs` — the map-edge tile-grid overlay (F14, `--debug-tilegrid`): every ground tile tinted 20 % by repetition band, so one colour band is one block; F15 steps the block depth, F16 swaps repeat/mirror. The instrument that settled the map-edge fold.
 - `src/UI/WeaponLab.cs` — the weapon lab panel (B): steppers that arm the held plane's live loadout, click-to-place on a real world surface. Fires nothing itself.
 - `src/UI/PanelFocus.cs` — the one-line rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
@@ -453,14 +453,14 @@ clutter (grown from `ClutterBuilder.ExportedKinds`) continuing the world past th
   which 10+ minutes of flight past the edge says never happens). `FoldAxis(i, n, block, repeat)`
   folds an outside index into the nearest `block`-deep band; at `block`=1 with `repeat`=false it
   reduces exactly to the pre-2026-08-08 clamp, which `MapEdgeFoldTests` pins.
-⚠ **It REPEATS, it does not mirror** — A/B'd against the original at the controls 2026-08-08
-  (`BL-105`), matching exactly on C1/C2/C4/C5 with no seam gaps. This REVERSES the earlier `CAP-17`
-  reading; the reversal is about that reading, not its data (its as-is-vs-time-reversed asymmetry
-  was always what repetition predicts). `--map-edge-mode=mirror` keeps the old behaviour to look at.
+⚠ **It REPEATS, it does not mirror** — A/B'd against the original at the controls 2026-08-08,
+  matching exactly on C1/C2/C4/C5 with no seam gaps. This REVERSED the earlier `CAP-17` strip
+  reading, which got both the fold and the distance wrong (post-mortem in
+  `analysis/video-flight-calibration/FINDINGS.md`). `--map-edge-mode=mirror` keeps the old
+  behaviour to look at. ⚠ Do not size a block from a video-derived period — fly it.
 ⚠ **`BlockCells` is per chapter** — `DefaultBlockCells`: 2 on C1/C2/C4, 1 on C5 and on the four
-  water-bordered chapters (C1B/C1C/C2B/C3), where the depth is unobservable and so assumed. Unknown
-  chapters fall back to 1. ⚠ The metre figures in `BL-105` disagree with the controls on C2 (~3.2
-  cells vs 2) — do not re-derive a depth from them until the strip pipeline is calibrated.
+  water-bordered chapters (C1B/C1C/C2B/C3), whose borders were measured to be water-only, which
+  fixes them at 1 and makes the depth moot. Unknown chapters fall back to 1.
 ⚠ C5 has a void strip through the continuation (`BL-316`) — present in BOTH fold modes, so it is a
   tile-coverage defect, not a repetition artefact.
 ⚠ Extension sprites carry no collider (matching the map); buildings DO — one lazy `clutter_bld_ext`

@@ -59,7 +59,7 @@ found 2026-07-25). One flag, one description.
 **Rendering probes — is this thing drawing at all?**
 `--tex-override` · `--tex-census` · `--no-fog` · `--sky-zone` · `--mips`
 
-**Map-edge continuation — the `BL-105` prototype knobs**
+**Map-edge continuation — the fold past the map boundary**
 `--map-edge-block` · `--map-edge-mode`
 
 **Scripted input — fly a fixed stick input, no hands**
@@ -135,19 +135,19 @@ last reconciled 2026-08-07 merging `--debug-ainets` with `PLAN-vs-mode`'s three 
   goldens are unaffected)
 - `--map-edge-block=N` (how many border cells deep the repeated block past the map edge is.
   **Default is per chapter** — `MapEdgeExtender.DefaultBlockCells`: **2** on C1/C2/C4, **1** on C5
-  and on C1B/C1C/C2B/C3, whose borders carry only water tiles and where the depth is therefore
-  unobservable. Those four are assumed rather than measured; the other four were A/B'd against the
-  original at the controls (2026-08-08, `BL-105`). An unknown chapter falls back to 1. Clamped to
-  the chapter's grid, at which point the continuation repeats the whole map. ⚠ Do not re-derive a
-  depth from the metre figures in `BL-105` — they disagree with the controls on C2, ~3.2 cells
-  against the 2 that matches, and settling that needs the strip pipeline calibrated against a known
-  repeat period first)
+  and on C1B/C1C/C2B/C3, whose borders were measured to carry only water tiles, which fixes them at
+  1 and makes the depth moot there. All eight A/B'd against the original at the controls
+  (2026-08-08). An unknown chapter falls back to 1. Clamped to the chapter's grid, at which point
+  the continuation repeats the whole map. ⚠ **Do not size this from a video-derived period** — the
+  `CAP-17` strip analysis read C2 as ~3.2 cells against the 2 that actually matches; post-mortem in
+  `analysis/video-flight-calibration/FINDINGS.md`)
 - `--map-edge-mode=mirror|repeat` (**default `repeat`: translate the block, which is what the
   original does** — A/B'd at the controls on C1/C2/C4/C5, matching exactly with no seam gaps.
   `mirror` alternately reflects it instead, so every seam is a shared mirror plane; that was the
   shipped behaviour until 2026-08-08 and is now kept only to look at. **F16** toggles it live. ⚠
-  This reverses what `CAP-17` was read as showing — see `BL-105`; the reversal is about the reading
-  rather than the data. Repetition that shares the map-edge vertex row is deliberately not offered:
+  This reversed what the `CAP-17` strip analysis was read as showing; that post-mortem is in
+  `analysis/video-flight-calibration/FINDINGS.md`. Repetition that shares the map-edge vertex row is
+  deliberately not offered:
   it is mesh surgery rather than a per-cell transform, and plain repeat shows no step at the
   measured block depths anyway)
 - `--plane=` (a comma-separated list gives one plane per splitscreen player — `--plane=player_bhawk,player_fury` — and implies that player count unless `--players=` says otherwise)

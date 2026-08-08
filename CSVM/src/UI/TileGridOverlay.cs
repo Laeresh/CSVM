@@ -36,12 +36,12 @@ namespace CSVM.UI;
 /// <c>MaterialOverride</c>/<c>MaterialOverlay</c>, which is a different shader entirely (see
 /// <see cref="SceneBuilder.TintLine"/>).</para>
 ///
-/// <para><b>What it settled.</b> F15/F16 were built to answer `BL-105` and did, on 2026-08-08:
-/// A/B against the original at the controls found that the continuation <b>repeats</b> — it does
-/// not mirror — over a block of 2 cells on C1/C2/C4 and 1 on C5, with no seam gaps. Both are now
-/// the defaults, and F16's `mirror` is the mode kept only to look at. The keys remain because the
-/// four water-bordered chapters are assumed rather than measured, and because a per-edge (rather
-/// than per-chapter) block has never been ruled out.</para>
+/// <para><b>What it settled.</b> F15/F16 answered the map-edge fold on 2026-08-08: A/B against the
+/// original at the controls found that the continuation <b>repeats</b> — it does not mirror — over
+/// a block of 2 cells on C1/C2/C4 and 1 on C5, with no seam gaps. Both are now the defaults, and
+/// F16's `mirror` is the mode kept only to look at. Two sessions of spatio-temporal strip analysis
+/// had concluded the opposite; this took minutes, which is the argument for keeping the keys
+/// around (see `analysis/video-flight-calibration/FINDINGS.md`).</para>
 ///
 /// <para>F14/F15/F16 sit in the F13–F24 range reserved for debug overlays (docs/controls.md);
 /// F13 is the patrol nets.</para>

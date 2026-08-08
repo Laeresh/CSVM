@@ -10,9 +10,9 @@ namespace CSVM.Tests;
 ///
 /// <para><see cref="BlockOfOneMirrorIsTheHistoricalClamp"/> pins the generalization against the
 /// closed form it replaced, rather than against hand-copied expectations. That equivalence is no
-/// longer the shipping path — the original <b>repeats</b> rather than mirrors (`BL-105`, A/B'd at
-/// the controls 2026-08-08) — but it stays as the fold's algebraic anchor: mirror at block 1 is
-/// the one case with an independent reference implementation.</para>
+/// longer the shipping path — the original <b>repeats</b> rather than mirrors, A/B'd at the
+/// controls 2026-08-08 — but it stays as the fold's algebraic anchor: mirror at block 1 is the one
+/// case with an independent reference implementation.</para>
 /// </summary>
 public class MapEdgeFoldTests
 {
@@ -233,7 +233,7 @@ public class MapEdgeFoldTests
         }
     }
 
-    // ---- the per-chapter block depths, A/B'd against the original 2026-08-08 (BL-105) ----
+    // ---- the per-chapter block depths, A/B'd against the original 2026-08-08 ----
 
     [Theory]
     [InlineData("C1", 2)]

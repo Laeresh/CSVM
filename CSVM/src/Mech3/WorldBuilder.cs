@@ -313,7 +313,7 @@ public sealed class WorldBuilder
     /// WorldBuilder was created with collision (it shares this SceneBuilder); extension
     /// clutter is never collidable, like the map's own clutter.
     /// <para><paramref name="blockCells"/>/<paramref name="repeat"/> are the fold shape
-    /// (<c>--map-edge-block=</c>, <c>--map-edge-mode=</c>, `BL-105`). Callers should pass
+    /// (<c>--map-edge-block=</c>, <c>--map-edge-mode=</c>). Callers should pass
     /// <c>MapEdgeExtender.DefaultBlockCells(chapter)</c> unless the CLI overrode it; the
     /// parameter defaults here are the safe-everywhere 1-cell repeat, not a per-chapter value,
     /// because this method does not know the chapter.</para>

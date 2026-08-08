@@ -700,6 +700,36 @@ The decoded needle angle drawn back over the frame lands on the needle, and the 
 
 ## ⚠ Traps this measurement walked into
 
+**⚠ A ground feature's period read off a spatio-temporal strip got BOTH the fold and the
+distance wrong — checked against the ground truth on 2026-08-08, and it is the only case where
+this pipeline has a known-right answer to be scored against.** The `CAP-17` strip analysis read
+the original's map-edge continuation off C2's coastline and concluded (a) that it alternately
+*reflects*, and (b) that its unit is ~3.2 × 1024 m cells. Flying the remake against the original
+with the fold and the block size as live knobs showed it **plainly repeats** over **2 cells**.
+Both halves of the strip reading were wrong; the strip's own *correlation* numbers were not.
+
+- **The fold.** The strongest thing it measured always said repetition: consecutive translational
+  periods matched **as-is at +0.899…+0.949 against time-reversed −0.086…+0.080**. Reflection
+  would invert that. The mirroring verdict came from a separate reflection scan finding "seams"
+  at half the translational period — but a signal of period P correlates at 2P for free, so half
+  the period is where a spurious seam *must* appear, and the analysis had already written down
+  that a zigzag coast is locally reflection-symmetric about every headland. **A reflection scan
+  over a feature that is locally symmetric proves nothing; only the as-is-vs-time-reversed
+  asymmetry does.**
+- **The distance. Exact cause unknown.** 240 frames converted to 3.28–3.36 km against a true
+  2.05 km — out by ~1.6×, and *not* uniformly, since the same pipeline on C4 read 2.26 cells
+  against a true 2. Two candidates, neither confirmed: **altitude drift** (at a fixed screen row
+  a straight feature's screen-x scales as 1/h, and the clip's 218 ft of excursion was checked for
+  correlation but not for its effect on the metre conversion), or the **zigzag reading as a
+  mirror** — if the scan latched onto headland symmetry rather than the tiling seam, the spacing
+  it reported is a coastline property and no scale factor makes it a cell count.
+
+**What to do with this.** Distances derived this way inherit V, k *and* whatever the above is;
+treat a strip-derived period as evidence that something is periodic, not as a length. **Do not
+size a map-edge block, or anything else in metres, from a video-derived period** — fly the remake
+against the original with the quantity as a knob and look. That is what settled it, in minutes,
+after two sessions of strip analysis had settled it wrongly.
+
 **The capture is variable-frame-rate. Use PTS, never `1/fps`.** The clips report ~30.1 fps
 but the real frame intervals are 33.3 ms mostly, with 16.7 ms and 50.0 ms intervals mixed
 in. Cumulative time agrees with the nominal rate, so *durations* survive a uniform time

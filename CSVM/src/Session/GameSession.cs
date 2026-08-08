@@ -807,8 +807,8 @@ public partial class GameSession : Node3D
         if (_spec.Fly || _spec.Freecam || _spec.SkyZoneExplicit)
         {
             long edgeMark = StartupProfile.Mark();
-            // Block depth is per chapter (BL-105, A/B'd against the original); --map-edge-block=
-            // overrides it, which is why the spec keeps it nullable rather than pre-defaulted.
+            // Block depth is per chapter (A/B'd against the original); --map-edge-block= overrides
+            // it, which is why the spec keeps it nullable rather than pre-defaulted.
             int block = _spec.MapEdgeBlock ?? Mech3.MapEdgeExtender.DefaultBlockCells(_spec.Chapter);
             _edgeExtender = builder.CreateEdgeExtender(session.Clutter, block, _spec.MapEdgeRepeat);
             StartupProfile.Record("edge", edgeMark);
@@ -816,7 +816,7 @@ public partial class GameSession : Node3D
             {
                 _plane.AddChild(_edgeExtender);
                 GD.Print($"map edge: rolling tile window active — block {_edgeExtender.BlockCells} cell(s), "
-                    + (_edgeExtender.RepeatInsteadOfMirror ? "repeat" : "mirror (not what the original does; see BL-105)"));
+                    + (_edgeExtender.RepeatInsteadOfMirror ? "repeat" : "mirror (NOT what the original does)"));
             }
         }
         if (_spec.Fly || _spec.Freecam || _spec.SkyZoneExplicit)
@@ -1772,7 +1772,7 @@ public partial class GameSession : Node3D
             Log.Info("world", $"--collision built the world's colliders, but the C overlay is not bound in this mode (C is the mesh lab's cull cycler) — use --freecam to see them");
         }
 
-        // Map-edge tile grid (F14, with F15/F16 stepping the fold — the BL-105 prototype). Gated on
+        // Map-edge tile grid (F14, with F15/F16 stepping the fold). Gated on
         // the extender rather than on a mode list, because "there is a continuation to colour" is
         // exactly the precondition: the extender is built for --fly/--freecam and for a --sky-zone
         // viewer, and those are the sessions where the overlay has anything to say. Its keys are in

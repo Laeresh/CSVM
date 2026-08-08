@@ -435,18 +435,18 @@ public sealed record SessionSpec
     public bool ShowClassOverlay { get; private set; }
     public bool ShowTileGrid { get; private set; }
 
-    // ---- Map-edge continuation (BL-105 prototype knobs) ----------------------------------------
+    // ---- Map-edge continuation: the fold past the map boundary ---------------------------------
 
     /// <summary><c>--map-edge-block=N</c>: how many border cells deep the repeated block is.
     /// <b>Null = not given</b>, which resolves to <c>MapEdgeExtender.DefaultBlockCells</c> for the
-    /// chapter (2 on C1/C2/C4, 1 elsewhere — `BL-105`). Kept nullable rather than defaulted here
+    /// chapter (2 on C1/C2/C4, 1 elsewhere). Kept nullable rather than defaulted here
     /// precisely so "the user asked for 2" stays distinguishable from "this chapter is 2", which a
     /// plain int would erase. <c>MapEdgeExtender</c> clamps it to the chapter's grid, so an
     /// out-of-range value is not an error.</summary>
     public int? MapEdgeBlock { get; private set; }
 
     /// <summary><c>--map-edge-mode=mirror</c> turns this off. <b>True by default: repetition is
-    /// what the original does</b>, A/B'd at the controls on four chapters (`BL-105`). Alternating
+    /// what the original does</b>, A/B'd at the controls (2026-08-08). Alternating
     /// reflection was the shipped behaviour until 2026-08-08 and is now only a thing to look
     /// at.</summary>
     public bool MapEdgeRepeat { get; private set; } = true;
