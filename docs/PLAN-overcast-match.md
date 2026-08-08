@@ -157,6 +157,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ☐ C22 — Implement the underside darkening
 23. ☐ C23 — Re-measure the tops per population; blend the mesh↔sprite cut
 24. ☐ C24 — Final match: both stills within the bar; mint PT + night-moonlit BL; close `BL-118`
+25. ☐ C25 — The below-band ceiling covers to the horizon and fades like the original's (user proposal 2026-08-08)
 
 ## Dependency and parallelism notes
 
@@ -179,8 +180,12 @@ confidence) against our smoothstep. *(Both landed in B15; the "low confidence" w
 Wave C a re-measured target and a warning**: the deck's underside is **213.9 against the
 original's 167.7** on the landed build (`CAP-12`'s own box, re-shot), and removing the range factor
 made the ceiling *look* worse (205.6 → 214.8 at `CAP-12` `t8.0`) because that factor had been
-hiding the deck's brightness — so C21/C22 own the river pose's remaining fog symptom too. Inside Wave C: C21
-blocks C22; C22 before C23 (the cut can only be judged with the underside fixed); C24 last.
+hiding the deck's brightness — so C21/C22 own the river pose's remaining fog symptom too. Inside Wave C — **amended 2026-08-08 (C25 minted from the user's B17-screenshot observation)**:
+C21 blocks everything (its research pass now also owns the ceiling's fade mechanism and a
+re-estimate of A7's `DeckCeilingHeight` 400 m from the fogged river still — B15 flagged it as
+possibly ~3× too large); then C25 (ceiling extent + fade treatment — the river-pose luminance
+can only be judged through it); then C22 (underside brightness); C22 before C23 (the cut can
+only be judged with the underside fixed); C24 last.
 
 ---
 
@@ -3007,6 +3012,43 @@ geometry change at all, so the geometry baseline was not needed — the before/a
 `.scratch/b18/` is the baseline that was taken.*
 
 # Wave C — deck mesh brightness
+
+## C25 ☐ The below-band ceiling covers to the horizon and fades like the original's
+
+**Goal.** From below the band, no skybox is visible between the fog wall and the deck's edge —
+the ceiling reads continuous to the horizon, fading into the haze the way the original's does.
+
+**Evidence (confidence: direction traced — user observation on the B17 screenshots, 2026-08-08;
+mechanism has one strong lead).** The A7 ceiling's rim sits at the sheet's half-span (~6.1 km →
+~3.7° above the horizon at low altitude), and since B16 un-fogged the dome, its sky texture
+shows in that stripe — the user's "skybox below the deckcloud". Pure extension can never close
+the stripe (`atan(400/R)` > 0), so the fix pairs extension with the fade treatment. The lead:
+B15 measured the original's deck texture readable to **~12.6 km** at the river pose while C1's
+fog fully saturates at 4 km — under our semantics a fogged deck cannot do that, so the
+original's ceiling is plausibly **fog-exempt with its own baked fade toward `FOG_COLOR`**, the
+same authored pattern as B18's skirt (the horizon is built from pieces that already wear the
+fog's colour). C21's research pass owns confirming this from the stills before this item builds.
+
+**Approach.** Per C21's verdict: extend the below-band ceiling well past the current rim (A5's
+map-edge-extension precedent — virtual tiles, deterministic, bounded by where the fade ends) and
+land the evidenced fade (deck `fog: false` + a fade toward the zone's `FOG_COLOR` by horizontal
+distance, if that is what the stills show — the fade's reach measured from the original, not
+invented). Above-band (the world-fixed floor) may need the same extension for the from-above
+horizon; verify at the above-deck pose.
+
+**Model recommendation.** high — a render-mechanism change judged against the plan's own
+reference stills.
+
+**Verify.** River pose: no sky stripe below the deck, mottling reach toward the original's
+row-337/19-px-above-horizon reading (SHOT-23 pitch caveat applies); above-deck pose horizon
+unchanged or improved; C4's deck (same regime) spot-checked; 8-chapter freecam; RunTests
+(goldens move — list, C24 re-pins).
+
+**⚠ Traps.** Do not touch the whiteout, the dome, or the fvol field — this is the DECK mesh
+population only. The fade must come from measured original behaviour, not taste; if C21's
+stills-read contradicts the fog-exempt hypothesis, build what the stills show instead. K
+(`DeckCeilingHeight`) may change under C21's re-estimate — re-verify the ceiling look at 192 m
+AND ~900 m so a K change and the extension are not conflated.
 
 ## C21 ☐ Find the original's underside mechanism (research)
 

@@ -1558,6 +1558,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   count, and whether they move with the air or hang world-fixed. Needs a dedicated original
   capture at several altitudes in clear air away from the deck band.
 
+- `BL-321` `[Bug]` **C3's terrain fog murk survives the Wave B fixes** (split out of `BL-303` at its
+  close, PLAN-overcast-match `B17`, 2026-08-08). After the dome un-fog (`B16`), skirt fix (`B18`)
+  and the fogRangeFactor deletion + linear ramp (`B15`), C3's canyon *sky* matches (198–203 vs
+  194.9) but the terrain is still too washed: near slope **106.1 vs 36.5**, mid ridge 143.7 vs
+  19.9, far ridge 182.4 vs 60.3, vegetation detail 22.1 % vs 47.8 %. Untried candidate on record
+  (B15's landing): **our fog mixes in linear space where DX7 blended in framebuffer/gamma space**
+  — ≈21 units washier at half fog; that is the first thing to try, and it is a global change, so
+  A/B every healthy scene from `playtest/CAP-11/README.md` before landing it.
+  ⚠ Traps: `fogRangeFactor` is dead — do not reintroduce a range multiplier to close this; the
+  B17 close-out found the original-side C3 canyon box replay noisy on far-ridge/sky (HUD/chase
+  framing mismatch) — use B15's framing-robust boxes, not fresh naive ones.
+  *Playtest after fix:* the C3 canyon pose (`--pos=-3504,710,-3619
+  --direction=-0.40673,0,-0.91355`) against the CAP-11 original still.
+
+- `BL-322` `[Bug]` **C5's lit facades render ×0.58–0.66 of the original with WorldLight already at
+  clamp 1.0** (split out of `BL-303` at its close, 2026-08-08; measured `CAP-11`: tower faces 10.2
+  vs 15.5, low-rise 21.7 vs 37.6). Explicitly NOT fog — `BL-303`'s own adjunct note, and the Wave
+  B fog work moved none of it. Candidate direction: the lit-signage/self-lit family
+  (`lighting: false` models draw fullbright, weather.md) — check whether these facades author a
+  flag or vertex data we modulate that the original does not.
+  *Playtest after fix:* the C5 night poses in `playtest/CAP-11/README.md`.
+
 - `BL-304` `[Bug]` **Water gets the WorldLight dim; the original renders it unmodulated** (`CAP-11`
   A/B, 2026-08-07; surfaced closing `BL-110`; evidence `playtest/CAP-11/README.md`). C2B ocean
   foreground, same world, matched spawn pose: original 53.9 vs ours 42.0–42.5 — ratio
