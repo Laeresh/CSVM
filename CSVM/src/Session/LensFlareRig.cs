@@ -62,17 +62,36 @@ public sealed class LensFlareRig
     // as it leaves (t=19.75→19.85). So: instant attack, timed release.
     private const float FadeOutSeconds = 0.125f;
 
+    // ── Calibration of the ring intensities ────────────────────────────────────────────────────
+    // Measured against CAP-13's own targets, and two things have to match or the comparison is
+    // worthless:
+    //
+    // (1) THE POSE. CAP-13's ring Δlum were read off frames that already carried the wash, and the
+    //     wash composites toward white — a true difference d reads as d·(1−α). Solved back from
+    //     `measure.py`'s probe coordinates, its two ring poses sit 311 px and 340 px from centre.
+    //     Ours is measured at 328 px, inside that band, rather than corrected by a fudge factor.
+    // (2) THE STATISTIC. `measure.py`'s `sample()` reports the BRIGHTEST pixel in a window on the
+    //     ring, not a median around the annulus. A median is the more robust locator but reads
+    //     systematically lower, so calibrating a median up to a brightest-pixel target overshoots.
+    //     The numbers below are brightest-pixel, matching.
+    //
+    // At 328 px, --no-fog, 1280×720: ring 0.50 → 11.0 (target 10–12), ring 0.90 → 17.3 (14–21),
+    // ring 2.00 → 5.0 (3–9). Only Ring A needed moving (0.30 → 0.38); the other two landed
+    // mid-band untouched and were deliberately NOT nudged, since the bands are the spread across
+    // two poses, not error bars, and fitting to the middle would be fitting to my estimator.
     private static readonly Element[] Elements =
     {
         // Core — at the sun, "saturated-white disc, blue-cyan skirt", ~63 px half-max, blooming to
         // ~86 near centre. Measured Δlum: saturating, hence full intensity.
         new(0f, 63f, 1.00f),
-        // Ring A — frac 0.50, ~100–104 px, soft wide dim ring. Measured Δlum 10–12. TUNE-pending.
-        new(0.50f, 102f, 0.30f),
-        // Ring B — frac 0.90, ~42–48 px, the crispest and brightest. Measured Δlum 14–21.
-        // TUNE-pending.
+        // Ring A — frac 0.50, ~100–104 px, soft wide dim ring. Measured Δlum 10–12; calibrated
+        // 0.30 → 0.38, which reads 11.0 (see the calibration note below).
+        new(0.50f, 102f, 0.38f),
+        // Ring B — frac 0.90, ~42–48 px, the crispest and brightest. Measured Δlum 14–21;
+        // reads 17.3, mid-band, uncalibrated.
         new(0.90f, 45f, 0.45f),
-        // Ring C — frac 1.95–2.0, ~158–170 px, the faintest. Measured Δlum 3–9. TUNE-pending.
+        // Ring C — frac 1.95–2.0, ~158–170 px, the faintest. Measured Δlum 3–9; reads 5.0,
+        // mid-band, uncalibrated.
         new(2.0f, 164f, 0.18f),
     };
 
