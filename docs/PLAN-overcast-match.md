@@ -142,7 +142,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — fog semantics and zones (BL-100 + BL-303 + BL-101)
 
-11. ☐ B11 — All-chapter zone-table survey; test H1/H2/H3 on paper
+11. ☑ B11 — All-chapter zone-table survey; test H1–H4 on paper
 12. ☐ B12 — Dome-identity discriminator at the above-deck pose
 13. ☐ B13 — Footage discriminators: camera-vs-fragment fade, switch point ([USER] capture as needed)
 14. ☐ B14 — Implement the winning fog model
@@ -164,10 +164,16 @@ Waves run strictly A → B → C (decision 3). Inside Wave A: A1 blocks A2/A3; A
 A5 (both may touch `FogVolumeClutter.cs`), and A4 closes the wave only after A5, A6 and A7 land** —
 the 2026-08-08 playtest reopened the wave with A5/A6, and the user's deck-regime decode from the
 A6 re-fly minted A7 (runs after A6, before A5 — A7 touches `FogVolumeClutter.cs` layer
-assignment beside `WeatherRig.cs`/`GameSession.cs`). Inside Wave B: B11, B12, B13 are
-independent research and may interleave (B13 may park on a [USER] capture — proceed with the
-others); B14 needs all three; B15 and B16 follow B14 and both touch the weather/fog path
-(`Weather.cs`/`WeatherRig.cs`/`SceneBuilder.cs`) — sequence them; B17 last. Inside Wave C: C21
+assignment beside `WeatherRig.cs`/`GameSession.cs`). Inside Wave B — **re-ordered by B11's verdict (2026-08-08)**: B11 ☑ → **B12** (rules the
+zone1-vs-zone2 data conflict; runs BEFORE B13's CAP is minted, because it decides whether two of
+B13's three discriminators exist) → **B16 promoted** (the dome's authored `fog: false` is the
+PRIMARY fix for BL-303 — B11's arithmetic: every authored dome tops out +982…+4108 m above the
+camera while the broken scenes' fog bands sit at 9000–11000 m, so the altitude term is 1.0 on
+every dome fragment under H1 AND H2; runs before B14, and **B14 must not be tuned to make
+BL-303's skies come out right**) → B13 (footage + CAP) → B14 → B15 → B17. B15 note from B11:
+`VIEWING_RANGE` `FOG_SCALE`/`CLIP_SCALE` are 1.0 in all eight chapters — `fogRangeFactor` 2.0
+has no data support; and the original's `World` nodes declare `fog_type: "Linear"` (low
+confidence) against our smoothstep. Inside Wave C: C21
 blocks C22; C22 before C23 (the cut can only be judged with the underside fixed); C24 last.
 
 ---
@@ -1557,7 +1563,310 @@ the flip by a test on the authored band; `cloudparent` gained a visual layer and
 
 # Wave B — fog semantics and zones
 
-## B11 ☐ All-chapter zone-table survey; test H1/H2/H3 on paper
+## B11 ☑ All-chapter zone-table survey; test H1–H4 on paper
+
+**Landed.** (2026-08-08) Paper only — no engine code, no `docs/formats/` page and no `backlog.md`
+entry touched. The survey instrument is `analysis/fog-zone-survey/survey_zones.py` (+ its
+`FINDINGS.md`); every number below is reproducible from it and from
+`extracted/*/gamez/nodes.json`.
+
+### VERDICT
+
+**H3 dies. H4-as-a-mission-zone-selector dies. H1 and H2 both survive — and the survey shows they
+are observationally IDENTICAL in seven of the eight chapters, so the wave's real fork is not H1 vs
+H2 at all.**
+
+Three results, in order of how much they change the wave:
+
+1. **BL-303's three scenes are not a fog-semantics bug. They are the dome's authored `fog: false`
+   (item `B16`).** Every authored skydome tops out **+982 m to +4108 m above the camera** (measured
+   from the gamez, table 3); every one of those three scenes flies a zone whose `FOG_ALTITUDE` band
+   is **9000–11000 m**. So the altitude term is 1.0 on *every* dome fragment under H1 **and** under
+   H2, the range term saturates at the dome's 6.4–21.8 km radius, and both hypotheses predict a sky
+   painted flat in the authored fog colour: C3 → 201, C2B `zone2` → 176, C5 → 0. Our renders measure
+   **201.0 / 176.0 / 0.1** (`CAP-11`) — the model reproduces our own bug to the unit. The originals
+   measure **194.9 blue-gradient / 82.7 / 15.3**. No altitude fade can close that gap at the
+   original's own dome size, so the dome must not fog. `ForceFogged` is the single cause of all
+   three, and of the C1 above-deck gray band as well.
+2. **`FOG_ALTITUDE` is inert in seven of the eight flown zones** (INSTR-7 — a degenerate census is
+   a fact about the instrument, not the question). The only reachable band in a *settled* zone in
+   the whole install is **C2 `ZONE1`, 256–1024 m**. That is the one and only place H1 and H2 can
+   differ from each other on evidence, and C2 has no cloud deck to block the view down. **C2 is the
+   H1/H2 discriminator; nothing else is.**
+3. **`fogvol.zrd`'s `fog_zone` is a 0-based index into the weather file's own zone list, naming the
+   zone a volume's INTERIOR uses.** C5's `fog_zone` 1 → `ZONE3`, and C5's `fogvol.zrd` `fog_color`
+   `[16,16,16]` is **byte-identical to `ZONE3`'s `FOG_COLOR`**. H4 survives — not as a competitor to
+   H1/H2, but as an **additive local override** that composes with either, and it is the only
+   mechanism in the matrix that explains the user's C5 sighting at all. Wrong-claim #6 is
+   **unchanged and confirmed**: no chapter contradicts "`fog_zone` is not the mission-zone selector"
+   (see the sign check below) — the decode is not re-opened, only the thing the index points *into*
+   is now named.
+
+⚠ **The survey also turned up a hard conflict about which zone C1/C1C/C2B/C4 fly, and B12 must
+resolve it** — see "The zone-choice conflict" below. It changes B12's brief and it is the one thing
+here that could still move B14.
+
+### Table 1 — every chapter × zone (IA1; `IA1` exists for all eight, nothing substituted)
+
+Colours through the reader (`Weather.ParseColor`, divide by 255 **iff any component > 1**), shown
+`raw → byte`. `WorldLight = clamp(AMBIENT + DIFFUSE·0.46, 0.15, 1)`.
+
+| chapter | zone | `FOG_COLOR` | `FOG_RANGES` | `FOG_ALTITUDE` | `CLIP_RANGES` | DIFFUSE / AMBIENT (WorldLight) |
+|---|---|---|---|---|---|---|
+| C1 | ZONE1 | `0.69³` → **176³** | 1000 – 1750 | **970 – 1047** | 5 – 2050 | 1.2 / 0.25 (0.802) |
+| C1 | ZONE2 | `0.69³` → **176³** | 1000 – 4000 | 4000 – 5000 | 5 – 4500 | 1.2 / 0.25 (0.802) |
+| C1B | ZONE1 | `[.063,.094,.188]` → **(16,24,48)** | 1000 – 4700 | 10000 – 11000 | 5 – 5000 | 0.6 / 0.15 (0.426) |
+| C1B | ZONE2 | `[.063,.094,.188]` → **(16,24,48)** | 1000 – 4500 | **1128 – 1256** | 5 – 5000 | 0.6 / 0.15 (0.426) |
+| C1C | ZONE1 | `0.69³` → **176³** | 1000 – 1750 | **1055 – 1082.5** | 5 – 2050 | 0.4 / 0.6 (0.784) |
+| C1C | ZONE2 | `0.69³` → **176³** | 1000 – 4000 | 4000 – 5000 | 5 – 4300 | 0.4 / 0.6 (0.784) |
+| C2 | ZONE1 | `[.804,.843,1.0]` → **(205,215,255)** | 2100 – 2400 | **256 – 1024** | 5 – 2600 | **1.1 / 0.5 (1.000)** |
+| C2 | ZONE2 | `0.69³` → **176³** | 1000 – 4000 | 9000 – 10000 | 5 – 4500 | **0.4 / 0.6 (0.784)** |
+| C2B | ZONE1 | `0.69³` → **176³** | 1000 – 1700 | **924 – 1024** | 5 – 2050 | 0.4 / 0.6 (0.784) |
+| C2B | ZONE2 | `0.69³` → **176³** | 1000 – 4000 | 9000 – 10000 | 5 – 4300 | 0.4 / 0.6 (0.784) |
+| C3 | ZONE1 | `0.79³` → **201³** | 1000 – 4500 | 9000 – 10000 | 5 – 4800 | 1.5 / 0.3 (0.990) |
+| C3 | ZONE2 | `[.063,.094,.188]` → **(16,24,48)** | 1000 – 4500 | 9000 – 10000 | 5 – 5000 | 1.5 / 0.3 (0.990) |
+| C4 | ZONE1 | `192³` → **192³** | 500 – 4500 | 10000 – 11000 | 5 – 4800 | 1.5 / 0.5 (1.000) |
+| C4 | ZONE2 | `192³` → **192³** | 1000 – 4500 | 10000 – 11000 | 5 – 4800 | 1.5 / 0.5 (1.000) |
+| C5 | ZONE1 | `[0,0,0]` → **0³** | 1500 – 2250 | 9000 – 10000 | 5 – 2500 | 1.5 / 0.5 (1.000) |
+| C5 | ZONE3 | `[16,16,16]` → **16³** | **50 – 250** | 9000 – 10000 | **5 – 300** | 1.5 / 0.5 (1.000) |
+
+`VIEWING_RANGE` is identical in all eight: **HIGH `CLIP_SCALE` 1.0 / `FOG_SCALE` 1.0** (MED 0.85,
+LOW 0.7) — so at HIGH detail the authored ranges are the ranges, and `B15`'s `fogRangeFactor` 2.0
+has no support anywhere in the data. `SUNLIGHT_ORIENTATION` and every other `SUNLIGHT_*` key are
+**identical between a chapter's two zones in seven of eight chapters**; C2 is the sole exception
+(above), which is why brightness can only ever test the zone choice in C2 — and `CAP-11`'s C2 clamp
+point (suburb 1.05–1.15 at WorldLight 1.0) already matches `ZONE1`, not `ZONE2`'s 0.784.
+
+**Cross-mission check** (all 53 files): only **C1** and **C4** vary anything, and both vary
+**`ZONE1`'s `FOG_RANGES` per mission** (C1: IA1 1000–1750, M02/M04 1700–2000, M05 1900–3000, MP
+900–1550; C4: IA1/MP 500–4500, M01–M05 750–3000) while leaving `ZONE2` at a constant 1000–4000 /
+1000–4500. `FOG_ALTITUDE` never varies within a chapter except C2's `ZONE2` (9000–10000 in six
+missions, 4000–5000 in MP2/MP3). **`ZONE1` is the per-mission-tuned zone; `ZONE2` is boilerplate.**
+
+### Table 2 — per chapter: what we fly, what is settled, the bands and the volumes
+
+| chapter | zone flown today | settled verdict | `CLOUD_COVER` (centre) | `fvol` slab band | `fvol` `zone_id` | `fogvol` `fog_zone` | horizon meshes z1 / z2 (z3) |
+|---|---|---|---|---|---|---|---|
+| C1 | `zone2` (default) | **open** (BL-100) | 970 – 1124 (**1047**) | 970 – 1090.55, 9 vols | **2** | **0** | 2 / 4 |
+| C1B | `zone1` (PreferPopulated) | **zone1** | 10000 – 11000 (10500) | *none* | — | *absent* | 4 / **0** |
+| C1C | `zone2` (default) | **open** | 1055 – 1110 (**1082.5**) | 970.73 – 1688.05, 21 vols | **2** | **0** | 1 / 4 |
+| C2 | `zone1` (PreferPopulated) | **zone1** | 19024 – 20124 (19574) | *none* | — | *absent* | 3 / **0** |
+| C2B | `zone2` (default) | **open** | 924 – 1124 (**1024**) | 970 – 1090.55, 9 vols | **−1** | **0** | 1 / 2 |
+| C3 | `zone1` (PreferPopulated) | **zone1** | 10000 – 11000 (10500) | *none* | — | *absent* | 3 / **0** |
+| C4 | `zone2` (default) | **open** | 1000 – 1100 (**1050**) | 1060 – 1180.55, 9 vols | **2** | **0** | 1 / 4 |
+| C5 | `zone1` (ResolveZone fallback) | **zone1** (user A/B) | 9950 – 10150 (10050) | −463 – 183, 17 vols | **1** | **1** | 2 / — (1) |
+
+C5's `fogvol.zrd` additionally authors `fog_fade_dist` **16.0**, `interior_fog_fade_dist` **16.0**,
+`fog_color` **`[16,16,16]`** (and `distance` 80; the four deck chapters carry `distance` 130, the
+three deckless ones a vestigial 206.25 with no `fog_zone` at all).
+
+⚠ **`zone1`'s `FOG_ALTITUDE` equals `[CLOUD_COVER BOTTOM, CLOUD_COVER centre]` in all three
+chapters whose band is reachable** — C1 **970/1047**, C1C **1055/1082.5**, C2B **924/1024** — an
+exact three-for-three identity against `WeatherState.CloudBandCentre`, the same midpoint `A7` made
+load-bearing for the deck regime. C4 breaks the pattern (both its zones sit at 10000–11000 while its
+band is at 1000–1100), and C2's 256–1024 is a low-level inversion layer with no deck to tie to.
+
+### Table 3 — the domes, measured (why BL-303 is not about `FOG_ALTITUDE`)
+
+`horizon/<zone>` subtree meshes, from each gamez's `model_bbox` (local, camera-anchored, before any
+scale). "top" is the highest fragment the sky can put over the camera.
+
+| chapter | zone | dome meshes | radius | local top | contents that identify it |
+|---|---|---|---|---|---|
+| C1 | zone1 | 2 | 8.8 km | **+2793** | `h_zone1scroll` + `o28` — a scrolling day band |
+| C1 | zone2 | 4 | 8.74 km | **+2155** | `moon`, `stars`, `g1155`, `h_zone2scroll` — **night** |
+| C1B | zone1 | 4 | **21.8 km** | **+4108** | `g1163`–`g1166`, incl. a ±5605 m moon sphere |
+| C1B | zone2 | **0** | — | — | bare marker |
+| C1C | zone2 | 4 | 8.74 km | **+2155** | `moon`, `stars`, `g1155`, `h_zone2scroll` — **night** |
+| C1C | zone1 | 1 | 7.6 km | **+2375** | `g1164` (same model as C2B zone1) |
+| C2 | zone1 | 3 | 8.49 km | **+2287** | `g1155`, `h_zone2scroll`, **`sun`** — day |
+| C2 | zone2 | **0** | — | — | bare marker |
+| C2B | zone2 | 2 | 8.74 km | **+1646** | `g1167`, `g1168` — the night shell, no moon/stars |
+| C2B | zone1 | 1 | 7.6 km | **+2375** | `g1166` |
+| C3 | zone1 | 3 | 8.74 km | **+1901** | **`sun`**, `g1155`, `h_zone2scroll` — day |
+| C3 | zone2 | **0** | — | — | bare marker |
+| C4 | zone2 | 4 | 8.74 km | **+2155** | moon sphere + star plane + shell — **night** |
+| C4 | zone1 | 1 | **6.4 km** | **+982** | `h_zone2scroll` |
+| C5 | zone1 | 2 | **12.0 km** | **+3767** | `moon` + `g1171` — night city |
+| C5 | zone3 | 1 | — | — | one mesh on the zone node itself |
+
+**The arithmetic that kills the fog-semantics reading of BL-303.** At the original's own (1×)
+anchor the highest dome fragment anywhere in the install is +4108 m over the camera; at C3's
+canyon pose (710 m) its dome tops out at **2611 m** against a 9000 m band floor — a factor of 3.4
+short. Nothing in H1 or H2 can reach it. At our 2.5× scale the numbers reproduce our three broken
+renders exactly: C3 1901×2.5 = +4753 → 5463 m at the pose, still under 9000 → **whole dome fogged →
+flat 201** (measured 201.0); C2B zone2 1646×2.5 = +4116 → 5346 m at 1230 m, under 9000 → **flat 176**
+(measured 176.0, and identical at 1230/1350/1500 m exactly as `CAP-11` reports); C5 3767×2.5 = +9417
+→ only the apex clips into the 9000–10000 band, the visible near-horizon sky stays fully fogged →
+**≈0** (measured 0.1). And C1's above-deck gray band is the same mechanism one zone over: at 1192 m
+under `zone2`'s 4000–5000 band, 2155×2.5 = +5387 → the apex escapes above 5000 (the dome and stars
+we render) while everything toward the horizon sits under 4000 and paints **flat 176** — *the gray
+band wedged between dome and cloud tops is our fogged lower dome*, which is why the worktree's
+un-fogged-dome probe removes it.
+
+⚠ **So all four sky defects are one defect**, and `WorldBuilder.BuildHorizon`'s own comment names
+the assumption that fails: "high dome fragments stay clear via the `FOG_ALTITUDE` fade" is only true
+when the band sits *below* the dome, and it never does.
+
+### The zone-choice conflict (B12 must resolve this; B11 does not)
+
+Four independent data arguments, and they **disagree** for C1C/C2B/C4:
+
+| argument | says | strength |
+|---|---|---|
+| **Dome content** — C1/C1C/C4's `zone2` carries `moon` + `stars`; all three IA1s are daylit (C1 sun −25°, C1C −65°, C4 −45° + SNOW), and both zones author identical `SUNLIGHT`, so the mission is lit as day either way | C1, C1C, C4 = **zone1** | strong, but a still could hide faint stars |
+| **`ZONE1` is per-mission-tuned, `ZONE2` is boilerplate** (cross-mission check above) | the tuned zone is the flown one = **zone1** | suggestive |
+| **`zone1`'s `FOG_ALTITUDE` == `[CC BOTTOM, CC centre]`**, 3/3, otherwise dead data | **zone1** | suggestive |
+| **`zone_id` world census** — `-1` = always, `1`/`2`/`3` = that zone only, "alternative world variants" (`docs/HISTORY.md`); weather.md already settles C1B/C2/C3 on exactly this evidence | **zone2** for C1C (146 vs 1317 nodes), C2B (149 vs 1414), C4 (802 vs 2157) — and for C1 too, see below | strong for C1C/C2B/C4 |
+
+**The `zone_id` census is new here and it is the sharpest of the four.** Meshed-node counts and what
+they contain:
+
+- **C1**: `zone_id 1` = 1,427 meshed nodes, all between −200 and +600 m — the ground world, its
+  destroyables, lightpoles and guns. `zone_id 2` = 783 meshed nodes including **all 145 nodes at
+  deck altitude (800–1000 m), all 28 `cloudparent` clusters, all 9 `fvol` volumes**, plus the
+  moon/stars dome. **`zone_id 1` contains no node at deck altitude at all.** If `zone_id` gates
+  content the way HISTORY records, a C1 mission flying `zone1` has **no cloud deck, no `fvol` field
+  and no `cloudparent`** — which both C1 IA1 reference stills refute outright.
+- **C1C** 145 meshed in zone1 vs 1,225 in zone2 (1,057 at ground, 145 at deck altitude, 13 above
+  1200 m = the build-ups); **C2B** 146 vs 1,344 (1,198 ground + 145 deck); **C4** 479 vs 1,880
+  (1,583 ground + 170 at 1000–1200 = deck + `fvol`). In C1C and C2B `zone1` is a near-empty variant.
+- The four **settled** chapters agree with the census 4/4 (C1B 2,101 vs 2; C2 766 vs 1; C3 1,647 vs
+  2; C5 1,555 vs 149 — flown zone always holds the world).
+
+**Consequence if `zone2` wins:** C1's `FOG_ALTITUDE` becomes 4000–5000, unreachable under the
+2500 m ceiling — and `weather.md`'s *only* corroboration of the `FOG_ALTITUDE` semantics ("zone1
+970→1047 is exactly cloud-band-bottom → whiteout-centre") belongs to a zone C1 never flies. Then
+**every** flown band in the install except C2's is unreachable and B14's H1-vs-H2 choice is a
+C2-only question. **Consequence if `zone1` wins:** C1's band is reachable, the whiteout handover is
+real, and H1 and H2 diverge at the milestone's own above-deck pose. Either way B16 still owns the
+sky. DIAG-6 applies to the census (correlation is not a mechanism — nothing in `CSVM/src` reads
+`zone_id`, so we have never observed it doing anything); B12 decides it at the render.
+
+### The prediction matrix
+
+Read "✓" as *reproduces the original*, "✗" as *contradicts it — the hypothesis dies here*, "=" as
+*predicts the same picture as every rival, so the scene discriminates nothing*.
+
+| scene | H1 camera fade | H2 fragment fade (current) | H3 altitude zone switch | H4 positional switch (exclusive) | H1+H3 | H1+H4 (additive) | H3+H4 |
+|---|---|---|---|---|---|---|---|
+| **(a) C5 = zone1** (user A/B, sees across the city) | = mult 1 at street level (band 9000) | = same | = switch at 10000 m, unreachable → zone1 | ✓ *outside* the strips → zone1 | = | ✓ | = |
+| **(a) C5 street-volume collapse** (`CAP-11 C5 Flying into fog zone.mp4`) | ✗ no mechanism | ✗ no mechanism | ✗ both C5 zones share `FOG_ALTITUDE` 9000–10000 → **no switch point exists** | ✓ inside → `ZONE3` 50–250, `fog_color` == `ZONE3` colour | ✗ | ✓ | ✓ |
+| **(a) C1B = zone1** | = band 10000–11000 | = | = switch at 11000, unreachable | ✗ **C1B ships no `fvol` at all** — H4 has no "inside" to select with | = | ✓ | ✗ |
+| **(a) C2 = zone1** | = at every measured pose (see (c)) | = | ✗ **switch at `zone1`'s top 1024 m is REACHABLE, and C2's `horizon/zone2` has ZERO meshes** — above 1024 m the sky becomes a hole onto the clear colour | ✗ no `fvol` in C2 | ✗ | ✓ | ✗ |
+| **(a) C3 = zone1** | = band 9000–10000 | = | = switch at 10000, unreachable | ✗ no `fvol` in C3 | = | ✓ | ✗ |
+| **(b) C3 canyon murk** (orig near 36.5 / hills 19.9–60.3 / sky 194.9-blue; ours 130.4 / flat 201 / 201) | terrain: over-fogged by `fogRangeFactor` 2.0 + our smoothstep, **not** by the altitude term (mult = 1 either way) · sky: ✗ **flat 201 unless the dome is exempt** | identical to H1 — dome tops at +1901 m never reach the 9000 m band | ✗ same flat sky, and no reachable switch | ✗ no volumes | ✗ | ✗ (sky) | ✗ |
+| **(b) C2B above-deck gray dome** (orig 82.7; ours flat 176.0 at 1230/1350/1500) | ✗ flat 176 unless the dome is exempt | ✗ same | ✗ **and worse**: above a 1024 m switch H3 hands C2B `ZONE2` (1000–4000, 176 gray, band 9000–10000) → **flat 176 at every altitude — literally our broken render** | ✗ above the 1090.55 m slab → the other zone → still 176 | ✗ | ✗ (sky) | ✗ |
+| **(b) C5 black sky** (orig 15.3; ours 0.1) | ✗ unless exempt | ✗ unless exempt | ✗ | ✗ | ✗ | ✗ (sky) | ✗ |
+| **(c) CAP-11 healthy: C1B spawn 55 m, C2 `dogfight_ace[4]` **160 m**, C2B spawn 200 m, C3 710 m, C4 deck, C5 street** | = **every measured pose sits below its zone's `FOG_ALTITUDE.low`, so the altitude term is exactly 1.0 at all of them** | = identical | = below every switch → the same zone we already fly | = / ✗ per the (a) rows | = | = | ✗ |
+| **(d) C1 above-deck still — clear dark sky** | ✓ **iff C1 = zone1** (camera 1192 > 1047 → fog off entirely) · ✗ if zone2 | ✓ **iff C1 = zone1** (dome fragments all > 1047) · ✗ if zone2 | ✗ **unconditionally**: `ZONE1` and `ZONE2` carry the *same* 176 gray and far ranges 1750/4000, both ≪ the 8.7 km dome radius, so **no zone switch can change the sky's colour** | ✗ same reason | ✗ | ✓ iff zone1 | ✗ |
+| **(d) C1 river still — fogged valley** | = camera 192 < 970 → full | = terrain < 970 → full | = | = | = | = | = |
+
+**Named kills.**
+
+- **H3 dies on C2** — settled `zone1`, switch point 1024 m is routinely flown, and `horizon/zone2`
+  is a bare marker with **0** meshes, so H3 predicts a hole in the sky above 1024 m in a chapter
+  `CAP-11` filmed. This kill is *unconditional*: it needs only that the dome exists, not that it
+  fogs. Corroborated by **BL-303's own C2B case**, where H3's above-the-switch prediction (flat 176
+  from `ZONE2`) is exactly the render the item was filed against. And H3 has no explanatory power
+  where it survives: in C1/C1C/C2B/C4 both zones ship identical `FOG_COLOR`, so switching cannot
+  change the sky at all.
+- **H4-as-exclusive-selector dies on C1B, C2 and C3** — three chapters, two of them settled, ship
+  **zero** `fvol` volumes, so "inside vs outside" has no inside anywhere and cannot select a zone.
+  It also dies on **(d)**: above C1's 1090.55 m slab top it hands the above-deck pose the other
+  zone's identical gray.
+- **H1+H3 and H3+H4 inherit H3's kill.** Dead.
+- **H1 and H2 survive**, and **H1+H4 / H2+H4 (additive) are the two live candidates.**
+
+⚠ **No CAP-11 healthy scene discriminates anything** — verified rather than assumed: C2's
+`dogfight_ace[4]` spawn is `(-6862, **160**, -4335)` (`extracted/C2/IA1/zrdr/ia.zrd.json`), below
+`ZONE1`'s `low` of 256, so H1's camera term is 1.0 there and cannot have been falsified by the
+matching suburb numbers. Do not cite the healthy set against H1.
+
+⚠ **BL-303's three scenes discriminate H1 from H2 not at all** — they discriminate whether the
+*dome* participates in fog. Re-classify them onto `B16`.
+
+### What settles the survivors — the exact discriminators
+
+The universal statement: **under H2 nothing about the fog can change when only the camera's
+altitude changes; under H1 everything does.** So any frame pair of the *same subject at the same
+horizontal distance* from two camera altitudes straddling a reachable band settles it.
+
+- **B13, discriminator 1 (unconditional, and the only one that needs no zone verdict): C2 above
+  1024 m looking down.** Settled `zone1`, band **256–1024**, ranges 2100–2400, colour
+  **(205,215,255)**, and no cloud deck to block the view. H1 → above 1024 m the fog is **off**:
+  ground reads its unfogged luminance out to the 2600 m clip. H2 → ground fragments sit below 256 m
+  → multiplier 1 → everything past ~2400 m horizontal washes to pale blue. The two differ by
+  ~100+ luminance units on distant ground. **Frames needed:** `CAP-11 C2.mp4` (0:59.36) with the
+  altimeter above **≈3360 ft**, holding a forward-and-down city view. If the clip never climbs that
+  high (all eight C2 `dogfight_ace` spawns are 55–277 m, so it may not), **mint a CAP**: climb over
+  the LA basin from 500 ft to 5000 ft holding one ground feature in frame, then level and pan
+  ground↔horizon. That single take settles H1 vs H2 for the whole install.
+- **B13, discriminator 2 (conditional on B12 landing `zone1` for C1): C1 valley through a deck gap
+  from above 1047 m.** H1 → the valley clears; H2 → it stays washed to 176. `CAP-12`'s six deck
+  crossings may already hold it. **If B12 lands `zone2`, this discriminator does not exist** —
+  C1's band moves to 4000–5000 and both hypotheses predict full fog at every flyable altitude.
+- **B13, discriminator 3 (same shape, C2B): the already-captured `t=50` above-deck frame** — is any
+  ocean or terrain visible past the deck's edge, and is it hazed? Conditional on C2B = `zone1`.
+- **B12's brief changes.** Do not judge the gradient alone: C1's `zone2` dome is the only one
+  carrying **`moon` + `stars`** while `zone1` is a single scrolling band, so the render must be
+  read for *the moon and the star field*, which are unmistakable. B12 can settle **C1C and C4 in the
+  same pass** (their `zone2` carries the same moon+stars pair on daylit missions) and it must
+  explicitly rule on the `zone_id` census above, which points the other way for C1C/C2B/C4. **And
+  B12 must neutralise fog on both shots** (`--no-fog`), because with `ForceFogged` on, both domes
+  render as the same flat gray below the band and the comparison is degenerate (METHOD-1).
+- **B16 is promoted from "lever" to the primary fix for BL-303.** The evidence is here and it is
+  arithmetic, not a render: the dome cannot be un-fogged by any altitude rule at its authored size.
+  B14 must **not** be tuned to make BL-303's skies come out right.
+- **B15 gains a second candidate beside `fogRangeFactor`:** the shader computes
+  `smoothstep(near, far, d)` while every chapter's `World` node declares `fog_type: "Linear"` and
+  `FOG_RANGES` is a D3D `FOGSTART`/`FOGEND` pair. (Low confidence — the rest of that struct is
+  zeroed, so "Linear" may be a default — but the S-curve costs ±0.10 of fog fraction at t≈0.21/0.79
+  against a linear ramp, and C3's terrain is the scene where it shows.)
+
+### `fog_zone`: the sign check, and C5's interior numbers
+
+**Wrong-claim #6 holds; the decode is not re-opened.** Per-chapter signs:
+
+| chapter | `fogvol.zrd` `fog_zone` | as a zone *number* | as a 0-based *index* into the file's zone list | mission zone |
+|---|---|---|---|---|
+| C1, C1C, C2B, C4 | **0** | names no zone (files carry ZONE1/ZONE2) ✗ | `ZONE1` | open |
+| C5 | **1** | `zone1` — matches, but only here | **`ZONE3`** | **zone1** (settled) |
+| C1B, C2, C3 | *absent* | — | — | zone1 (settled) |
+
+Neither reading selects the mission zone in every chapter: the *number* reading fails C1 (there is
+no zone 0), and the *index* reading fails C5 (it names `ZONE3` while the mission is settled
+`zone1`). **No chapter's data contradicts the negative.** What is new is that the index reading is
+now *corroborated* and its target *named*: C5's `fogvol.zrd` `fog_color` is `[16,16,16]`,
+**byte-identical to `ZONE3`'s `FOG_COLOR`**, and C5 is the only chapter that authors `fog_color` at
+all — so `fog_zone` indexes **the zone a volume's interior fog uses**, which is precisely why it is
+not the mission selector. Hand that to `BL-315`/`B14`; do not re-derive the sky zone from it.
+
+**The `fvol` node `zone_id` correlation has no consistent sign** (C1 **2**, C1C **2**, C4 **2**,
+C2B **−1** = always, C5 **1**). It does not track `fog_zone` (0,0,0,0,1) and it does not track the
+settled zone. It is the world-variant tag of the zone-choice conflict above, not a fog selector.
+
+**C5's `ZONE3` numbers are consistent with H4's inside-a-volume reading on four counts:**
+
+1. `FOG_RANGES` far **250** against `ZONE1`'s **2250** = **11.1 %** — the user's "roughly a tenth".
+2. `FOG_COLOR` `[16,16,16]` == `fogvol.zrd`'s `fog_color` `[16,16,16]`, exactly.
+3. The 17 volumes sit at **−463 … 183 m** — street level, where the user flew in and hit a building.
+4. C5 is the only chapter with *both* an otherwise-unreachable third zone *and* interior-fog keys.
+
+⚠ **`fog_fade_dist` and `interior_fog_fade_dist` are `16.0`, not 50** (the 50 in B11's own brief is
+`ZONE3`'s `FOG_RANGES` *near*, a different key). At 16 m they are far shorter than the 250 m fog
+range, so they read as the **boundary blend width** — how fast the interior fog takes over as the
+wall is crossed, ~0.16 s at flight speed — not as the fog itself. `CLIP_RANGES` 5–300 is the one
+number that is *not* explicable as an override alone: a 300 m hard clip inside a street volume is a
+render behaviour `BL-315` must decide on, and it is what makes the collapse lethal.
+
+### Files
+
+`analysis/fog-zone-survey/survey_zones.py` (the instrument), `analysis/fog-zone-survey/FINDINGS.md`,
+this section, and the checklist line. No engine code, no `docs/formats/` page, no `backlog.md`,
+no `PROJECT_CONTEXT.md`.
+
+### Original brief (kept for reference)
 
 **Goal.** One table: every chapter × zone's `FOG_RANGES`/`FOG_ALTITUDE`/`FOG_COLOR`/`CLIP_RANGES` +
 sunlight, and against it each hypothesis' predictions for (a) the settled zone verdicts
@@ -1591,6 +1900,22 @@ the reader, not by eye. `VIEWING_RANGE` `FOG_SCALE` (HIGH = 1.0) is data the rem
 it in the survey since it bears on B15's factor.
 
 ## B12 ☐ Dome-identity discriminator at the above-deck pose
+
+**⚠ Amended by B11 (2026-08-08) — this is now a four-way data-conflict ruling, not a gradient
+comparison.** Three arguments point to zone1 for C1/C1C/C4 (their `zone2` carries `moon` +
+`stars` meshes in daylit missions with identical SUNLIGHT both zones; only `ZONE1` is
+per-mission-tuned across all 53 weather files; `zone1`'s `FOG_ALTITUDE` equals
+`[CLOUD_COVER BOTTOM, band centre]` exactly 3/3). One argument — the sharpest, and it agrees
+with every settled verdict 4/4 — points to zone2: the `zone_id` world census puts **all**
+deck-altitude nodes, all `cloudparent` clusters and all `fvol` volumes in `zone_id 2` for C1
+(145/28/9), with `zone_id 1` holding only ground nodes — under HISTORY's zone_id reading, a C1
+mission flying zone1 has no cloud deck at all, refuted by both reference stills. Rule on this
+explicitly. Method constraints from B11: read the render for the **moon and star field**, not
+the gradient; shoot with **fog neutralised on both sides** (with `ForceFogged` on, both domes
+render the same flat gray below the band — the gradient test is degenerate); settle **C1C and
+C4 in the same pass**; and land this before B13's CAP is minted — B12's verdict decides whether
+two of B13's three discriminators exist (if the open four land zone2, H1-vs-H2 collapses to a
+C2-only question).
 
 **Goal.** Which zone's dome the original renders above C1's deck, settled by comparison.
 
@@ -1688,7 +2013,18 @@ original still; C4 valley haze (CAP-12 `t8.0` terrain still) not regressed.
 **⚠ Traps.** Test only after B14 — the factor compensating for wrong semantics is exactly how it
 went stale last time.
 
-## B16 ☐ The dome's authored `fog: false` (lever, evidence-gated)
+## B16 ☐ The dome's authored `fog: false` (PROMOTED by B11: the primary fix for BL-303)
+
+**⚠ Amended by B11 (2026-08-08) — no longer a conditional lever.** The evidence is arithmetic,
+not a render: every authored skydome tops out +982 m (C4 zone1) to +4,108 m (C1B zone1) above
+the camera, while BL-303's three broken scenes fly zones whose `FOG_ALTITUDE` band is
+9,000–11,000 m — the altitude term is 1.0 on every dome fragment under H1 *and* H2, and the
+range term saturates at the 6.4–21.8 km dome radius. Both surviving hypotheses predict exactly
+our broken renders (C3 predicted 201 / measured 201.0; C2B 176 / 176.0; C5 0 / 0.1 — against
+originals 194.9-gradient / 82.7 / 15.3). At C3's canyon pose the original's own dome tops at
+2,611 m against a 9,000 m band floor — no altitude fade of any kind can un-fog it. Runs BEFORE
+B14; B14 must not be tuned to make BL-303's skies come out right. The C1 above-deck gray band
+is the same mechanism one zone over, which is why the worktree's un-fogged-dome probe removed it.
 
 **Goal.** The dome fogs, or doesn't, per evidence — not per the 2026-07 deviation surviving by
 default.
