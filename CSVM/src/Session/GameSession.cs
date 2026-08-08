@@ -141,6 +141,7 @@ public partial class GameSession : Node3D
     // session (same lifetime as _worldEffectsFactory); null before the first weathered build and
     // nulled by ReturnToMenu so _Process's null guard covers the frame before the deferred free.
     private WeatherRig? _weatherRig;
+    private LensFlareRig? _lensFlareRig;
     private Node3D? _plane;
     // The session's simulation clock (see GameClock). Also published as GameClock.Current, which
     // is how the sim consumers scattered through the tree reach it; dropped by ReturnToMenu.
@@ -473,6 +474,9 @@ public partial class GameSession : Node3D
         // player, one per pane in splitscreen (each on that player's own visual layer). See
         // src/Session/WeatherRig.cs's Tick.
         _weatherRig?.Tick(_rigs);
+        // After the weather tick: that is where each rig's dome is re-centred on its camera, and
+        // the flare reads the sun node inside it.
+        _lensFlareRig?.Tick(delta);
 
         // Map-edge continuation: re-center the mirrored-tile window on the cameras. One window
         // serves every pane (the union of the rings around each player), so two players at
@@ -883,6 +887,13 @@ public partial class GameSession : Node3D
             });
             StartupProfile.Record("weather", weatherMark);
         }
+
+        // The sun's lens flare (BL-165). After the weather build, because it needs each rig's
+        // dome copy to exist — the `sun` node it anchors to is a child of the horizon subtree,
+        // and finding it is one of the two gates. Safe to call unconditionally: the chapter data
+        // decides, and six of the eight chapters author nothing here.
+        _lensFlareRig = new LensFlareRig(_spec);
+        _lensFlareRig.Build(_rigs, state.Textures, _interpPath, _spec.Chapter);
         state.MeshInstances = builder.MeshInstanceCount;
         state.Colliders = builder.ColliderCount;
         // Read after the domes, since C1's daytime sky layer is a horizon child.
