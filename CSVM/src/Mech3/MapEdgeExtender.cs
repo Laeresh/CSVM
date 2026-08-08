@@ -117,7 +117,10 @@ public sealed partial class MapEdgeExtender : Node3D
     private int _blockCells = 1;
     private bool _repeat;
     private bool _tinted;
-    private bool _foldChanged;
+    // Starts true so the FIRST window build is timed too: it builds the whole window from nothing,
+    // which is the same work an F15 fold change costs. That makes the hitch a measured number in
+    // every session's log rather than something only discoverable by pressing the key.
+    private bool _foldChanged = true;
 
     private MapEdgeExtender(GameZ gamez, SceneBuilder scene, GameZNode world,
         IReadOnlyList<ClutterBuilder.KindExport>? clutter)
@@ -294,7 +297,7 @@ public sealed partial class MapEdgeExtender : Node3D
             double ms = Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds;
             LastRebuildMs = ms;
             string mode = _repeat ? "repeat" : "mirror";
-            Log.Info("world", $"map edge: rebuilt {built} cells in {ms:F0} ms (block {_blockCells}, {mode})");
+            Log.Info("world", $"map edge: built {built} cells in {ms:F0} ms (block {_blockCells}, {mode})");
         }
     }
 
