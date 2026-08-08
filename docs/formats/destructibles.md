@@ -378,8 +378,10 @@ which pieces that covers. A format reader should know the current wiring:
     non-solid as they fade, leaving the gate flyable. ⚠ **The propane tank belongs to `kkgate`, and
     its chain reaches nothing on the Seaplane Hangar.** `sghangar-opensgdoors` is a *different*,
     HEALTH-0 OnStartup animation on `sgh_door1`/`sgh_door2` — those doors open and stay as solid
-    set-dressing by design, and no propane→`sghangar` chain is authored. A "the SeaHangar doors
-    didn't despawn" report from a propane kill is the Hollywood gate being misnamed.
+    set-dressing by design, and no propane→`sghangar` chain is authored. **A/B'd against the
+    original (Instant Action, 2026-08-08): the SeaHangar doors are not destructible there either**,
+    so the remake matches and there is nothing to author. A "the SeaHangar doors didn't despawn"
+    report from a propane kill is the Hollywood gate being misnamed.
   - **`genx12` is a parameterized exploder template — its `pt1..pt12` are placeholder nodes, not
     world pieces (D31).** The def is a parentless root (`genx12`, C2 gamez 39) whose own `pt*`
     children are meshless; a death calls it with `operand_node=<wreck node>` (kkgate:
