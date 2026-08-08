@@ -500,6 +500,20 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private readonly HashSet<Material> _fadeTwins = new();
 
+    /// <summary>Nodes that have just landed by contact and whose NEXT ballistic launch must
+    /// therefore start from where they came to rest, not from the authored rest pose
+    /// (<see cref="MotionRuntime.Create"/>'s re-home rule). A bounce is a continuation: the
+    /// sequence a landing dispatches re-launches the very piece that landed —
+    /// <c>player_crash_dirt</c>'s <c>pNhit</c> throws <c>pieceN</c> on again with a second, flatter
+    /// motion — and re-basing that to the authored rest teleported the piece back to the crash
+    /// point before it flew. Seen at the controls: the wreck "jumps back to the crash point 4
+    /// times", once per piece.
+    ///
+    /// <para>One-shot per node, consumed by the launch that follows. Deliberately narrow: the
+    /// re-home rule is load-bearing for pooled effect templates, whose repeat explosions drift
+    /// without it.</para></summary>
+    private readonly HashSet<Node3D> _resumeFromLanding = new();
+
     private readonly Dictionary<Shader, Shader?> _fadeShaderCache = new();
 
     // ON_STARTUP defs carrying EXECUTION_BY_RANGE wait here instead of starting at bootstrap:
@@ -1408,6 +1422,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             _rest[node] = rest = node.Transform;
         return rest;
     }
+
+    /// <summary>Whether this node's next ballistic launch continues from where it landed, clearing
+    /// the mark as it answers. See <see cref="_resumeFromLanding"/>.</summary>
+    internal bool ConsumeLandingResume(Node3D target) => _resumeFromLanding.Remove(target);
+
+    /// <summary>Marks a node as having just landed by contact — see
+    /// <see cref="_resumeFromLanding"/>. Called on the dispatch path, and by the
+    /// <c>ground-contact</c> suite, which drives a motion set directly.</summary>
+    internal void MarkLandingResume(Node3D target) => _resumeFromLanding.Add(target);
 
     // OBJECT_OPACITY_STATE applies to the whole subtree, as a per-instance shader parameter
     // rather than a material edit: SceneBuilder's materials are cached and shared, so writing
@@ -3563,6 +3586,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             // still holding the instance open, CallSequence has nothing to dispatch into and
             // returns silently — so the miss is counted here rather than vanishing.
             bool live = InstanceOf(landing.Def, landing.Anchor) != null;
+            // A contact landing is a continuation, not a fresh throw: whatever the dispatched
+            // sequence launches on this node must start from where the piece came to rest.
+            // Marked before the dispatch, since the sequence's own OBJECT_MOTION can fire in the
+            // same instant.
+            if (landing.ByContact)
+                MarkLandingResume(landing.Target);
             if (live)
                 CallSequence(landing.Def, landing.Anchor, landing.Bounce);
             else

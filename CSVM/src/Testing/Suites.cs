@@ -2695,6 +2695,55 @@ public static class Suites
             var wet = Run(CollisionLayers.World, _ => true);
             ctx.Check(wet.Bounce == Wet, $"a water surface picks the water branch bounce={wet.Bounce ?? "(none)"}");
 
+            // 2b — the bounce is a CONTINUATION. The sequence a landing dispatches re-launches the
+            // very node that landed (`pNhit` throws `pieceN` on again), and MotionRuntime.Create
+            // ordinarily re-homes a ballistic launch to the node's AUTHORED rest pose. Left alone,
+            // that teleports the piece back to where the wreck was: seen at the controls as the
+            // crash "jumping back to the crash point" once per piece. The follow-up must start from
+            // the landing.
+            {
+                var node = new Node3D { Name = "ground-contact-resume" };
+                root.AddChild(node);
+                var restPose = new Vector3(0f, surfaceY + DropHeight, 0f);
+                node.GlobalPosition = restPose;
+                runtime.RestOf(node);   // record that pose as the authored rest, as a built node has
+
+                uint maskWas = runtime.ContactMask;
+                runtime.ContactMask = CollisionLayers.World;
+                try
+                {
+                    var first = MotionRuntime.Create(runtime, node, Body(), Authored);
+                    var set = new MotionSet();
+                    set.Add(first!, world.Runtime.Destructibles.All.First().Def, null);
+                    bool landed = false;
+                    for (int i = 0; i < (int)(Authored / Tick) + 2 && !first!.Finished; i++)
+                    {
+                        foreach (var landing in set.Tick(Tick))
+                        {
+                            // What TickMotions does before dispatching the sequence.
+                            landed = true;
+                            if (landing.ByContact)
+                            {
+                                runtime.MarkLandingResume(landing.Target);
+                            }
+                        }
+                    }
+
+                    ctx.Check(landed, $"the first flight landed by contact before the follow-up y={node.GlobalPosition.Y:0.00}");
+                    float restedY = node.GlobalPosition.Y;
+                    var second = MotionRuntime.Create(runtime, node, Body(), Authored);
+                    second?.Seek(0f);
+                    float relaunchY = node.GlobalPosition.Y;
+                    ctx.Check(Mathf.Abs(relaunchY - restedY) < 1f,
+                        $"the follow-up launch starts from the landing, not the authored rest relaunchY={relaunchY:0.00} restedY={restedY:0.00} rest={restPose.Y:0.00}");
+                }
+                finally
+                {
+                    runtime.ContactMask = maskWas;
+                    node.QueueFree();
+                }
+            }
+
             // 3 — THE CONTROL. No mask: no sweep, so the body runs its full clock and ends far
             // below the surface, exactly as it did before this work — which is also the
             // no-collision-world fallback every golden capture takes.

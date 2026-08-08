@@ -11,7 +11,7 @@ namespace CSVM.Mech3.Anim;
 /// <see cref="MotionSet.Tick"/> has already removed the motion before it returns one of these, so a
 /// landing can never name a body that is still in the collection.</summary>
 internal readonly record struct Landing(
-    AnimDefinition Def, Node3D? Anchor, string Bounce, Node3D Target);
+    AnimDefinition Def, Node3D? Anchor, string Bounce, Node3D Target, bool ByContact);
 
 /// <summary>The runtime's live motions and the two rules that govern registering one: an owner
 /// stamp, and one motion per <c>(Target, Channel)</c>. Also answers the pending-bounce question the
@@ -91,7 +91,8 @@ internal sealed class MotionSet
             if (done is MotionRuntime { PendingBounce: { } bounce })
             {
                 landed ??= new List<Landing>();
-                landed.Add(new Landing(done.Owner.Def, done.Owner.Anchor, bounce, done.Target));
+                landed.Add(new Landing(done.Owner.Def, done.Owner.Anchor, bounce, done.Target,
+                    done is MotionRuntime { LandedByContact: true }));
             }
         }
 

@@ -144,11 +144,12 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — confirm at the controls
 
-5. ☐ The two cockpit checks, and the arming epsilon TUNEd from what they show
+5. ◐ The two cockpit checks, and the arming epsilon TUNEd from what they show
+6. ☑ A bounce follow-up continues from the landing, not from the authored rest pose (from B5 round 1)
 
 ### Wave C — record it
 
-6. ☐ Land the decode, close `BL-059` item 1, retag `BL-245`
+7. ☐ Land the decode, close `BL-059` item 1, retag `BL-245`
 
 ## Dependency and parallelism notes
 
@@ -408,9 +409,28 @@ so plainly rather than implying a cockpit confirmation. A piece resting on a roo
 a bug: it is the behaviour the collider query was chosen for over a down-ray. And a piece that still
 sinks is only a defect if its event authors the flag — check before filing.
 
+## B6 ☑ A bounce follow-up continues from the landing, not from the authored rest pose — **landed 2026-08-08**
+
+**Why it exists.** B5 round 1, from the controls: *"if I crash straight down the plane is looping.
+at the rest position it jumps back to the crash point 4 times until staying there."* Four jumps,
+four pieces.
+
+**Landed.** `MotionRuntime.Create` re-homes every non-`TopLevel` ballistic launch to the node's
+authored rest pose (`:334-338`) — a rule that keeps a pooled effect template's repeat explosions
+from drifting. A bounce follow-up is the case where it is wrong: contact dispatches `pNhit`, which
+re-launches `pieceN` with its second authored motion, and the re-home teleported the piece back to
+the crash point before it flew. `Landing` now carries `ByContact`; the dispatch path marks the node
+via `AnimRuntime.MarkLandingResume`, and `Create` consumes that one-shot mark to keep the live pose.
+Narrow on purpose — the re-home rule is load-bearing everywhere else.
+
+**Verified — and shown able to fail.** New check in the `ground-contact` suite: land a body by
+contact, mark it the way the dispatch path does, create the follow-up, and assert it starts within
+1 m of the landing rather than 60 m up at the authored rest. Reverting the fix turns it red. Full
+`.\RunTests.ps1`: 696 units, 27/27 suites, 13/13 goldens identical.
+
 # Wave C — record it
 
-## C6 ☐ Land the decode, close `BL-059` item 1, retag `BL-245`
+## C7 ☐ Land the decode, close `BL-059` item 1, retag `BL-245`
 
 **Goal.** The next session finds the decision recorded where it looks, and no item claims to be
 blocked on something that now exists.

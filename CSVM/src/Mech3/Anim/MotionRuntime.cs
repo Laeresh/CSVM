@@ -331,7 +331,13 @@ internal sealed class MotionRuntime : IAnimMotion
         // recorded rest is wherever the FIRST placement froze it — re-basing to it replayed every
         // crash-after-the-first's dirt burst at the first crash's position. The live pose IS the
         // authoritative site for a root; its children keep the authored-rest re-home above.
-        if (m._hasBallistic && !target.TopLevel)
+        //
+        // ⚠ AND except a piece continuing from a contact landing: the sequence a landing dispatches
+        // re-launches the very node that landed (`pNhit` throws `pieceN` on again with a second,
+        // flatter motion), so re-basing teleports it back to the crash point before it flies —
+        // seen at the controls as the wreck "jumping back to the crash point" once per piece. The
+        // mark is one-shot and consumed here.
+        if (m._hasBallistic && !target.TopLevel && !rt.ConsumeLandingResume(target))
         {
             m._heldOrigin = rest.Origin;
             m._heldRot = rest.Basis.Orthonormalized();
