@@ -71,6 +71,17 @@ namespace CSVM.Mech3.Anim;
 /// </summary>
 internal sealed class MotionRuntime : IAnimMotion
 {
+    /// <summary>⚠ TUNE, not a decode. A launched piece starts inside the wreck it left and a
+    /// falling airframe inside its own hull, so a sweep from the first frame reports a contact at
+    /// t=0 and pops the bounce before anything has flown. The body must clear ONE of these before
+    /// the sweep arms — distance covers the fast launches (10 m/s clears 2 m in 0.2 s), time covers
+    /// the falls, which start at rest and would otherwise sit unarmed inside their own geometry
+    /// (a warhawk drops 5 cm in the first 0.1 s). Arming on APEX instead was considered and
+    /// rejected: the eleven airframes and <c>agyrobus</c> never rise, so they would never arm.</summary>
+    private const float ArmDistance = 2f;
+
+    private const float ArmSeconds = 0.1f;
+
     // Held pose, seeded once from the live transform: an absent channel carries it through.
     private Basis _heldRot;      // orthonormal; scale kept out
 
@@ -94,11 +105,33 @@ internal sealed class MotionRuntime : IAnimMotion
 
     private float _t, _runTime;
 
+    // ---- ground contact: the `do_intersections` sweep -------------------------------------------
+    // Armed only for the 166 events install-wide that author `do_intersections: true` (150 of them
+    // RUN_TIME+bounce), and only in a session that handed the runtime a collision mask. Everything
+    // else keeps its flag-free behaviour byte-for-byte — the 120 bounce-shape launches and the 167
+    // vanish-shape all author `false`, and `PT-46` (d) confirmed the original sinks those through
+    // the terrain too. See `docs/PLAN-ground-contact.md`, Decisions 1-5.
+    private bool _contactTest;
+    private uint _contactMask;
+    private AnimData? _bounce;      // the BOUNCE_SEQUENCE block, chosen from AT CONTACT
+    private bool _landed;
+    private Vector3 _landedOrigin;  // parent frame — the pose the body holds from contact onward
+    private float _landedAt;        // the clock at contact; rotation and scale freeze there too
+
     public Node3D Target { get; private init; } = null!;
 
     public (AnimDefinition Def, Node3D? Anchor) Owner { get; set; }
 
-    public bool Finished => _t >= _runTime;
+    public bool Finished => _landed || _t >= _runTime;
+
+    /// <summary>Whether this body carries the original's own collider test — `do_intersections`,
+    /// with a session that wired a mask for it. False leaves every pre-existing behaviour alone.</summary>
+    public bool TestsContact => _contactTest;
+
+    /// <summary>Whether the flight actually ended on a collider rather than running its clock out.
+    /// The honest half of the contact/fallback tally: a `--fly` session reporting zero of these
+    /// while <see cref="TestsContact"/> bodies launched is the failure mode worth catching.</summary>
+    public bool LandedByContact => _landed;
 
     /// <summary>The flight time this body actually runs for: the authored <c>RUN_TIME</c>, or —
     /// for a launch that carries none, whether it names a <c>BOUNCE_SEQUENCE</c> or
@@ -140,7 +173,18 @@ internal sealed class MotionRuntime : IAnimMotion
         float RandSym() => (float)(rt._rng.NextDouble() * 2.0 - 1.0); // [-1, 1] via the seedable RNG
         float Rand(float a, float b) => a + (float)rt._rng.NextDouble() * (b - a);
 
-        float gravity = data.Obj("gravity")?.Num("value") ?? 0f;
+        var gravityBlock = data.Obj("gravity");
+        float gravity = gravityBlock?.Num("value") ?? 0f;
+
+        // `do_intersections` — the original's OWN collider test, and the one field that says which
+        // bodies it tested. A session that wired no mask (every lab, every headless suite that does
+        // not ask for it, every golden capture — none of which build world colliders) leaves this
+        // false and takes the untouched path: that is the fallback, made structural rather than
+        // remembered. The BOUNCE_SEQUENCE block rides along because a contact-terminated body picks
+        // its branch from the SURFACE IT STRUCK, which is not knowable here.
+        m._contactMask = rt.ContactMask;
+        m._contactTest = (gravityBlock?.Bool("do_intersections") ?? false) && rt.ContactMask != 0;
+        m._bounce = data.Obj("bounce_sequence");
 
         // The plane's momentum (world-space), carried by the launched pieces so they scatter
         // along its travel instead of just popping up in place. Converted into the node's parent
@@ -291,19 +335,33 @@ internal sealed class MotionRuntime : IAnimMotion
         return any ? m : null;
     }
 
-    public void Tick(float dt) => Seek(_t + dt);
+    /// <summary>Advances the body one frame — and, for a <c>do_intersections</c> body, asks the
+    /// world whether the step it is about to take runs into anything.
+    ///
+    /// <para>⚠ The sweep lives HERE and never in <see cref="Seek"/>. <c>Seek</c> is also the
+    /// pose/scrub entry point — <c>RESET_STATE</c> poses through it (<c>AnimRuntime</c>'s
+    /// <c>Seek(0f)</c> calls) and AnimLab's timeline scrubs through it, in both directions — so a
+    /// contact test there would fire on a backwards drag and land a piece that never flew.</para></summary>
+    public void Tick(float dt)
+    {
+        if (dt > 0f && TryContact(dt))
+            return;
+        Seek(_t + dt);
+    }
 
     public void Seek(float t)
     {
         _t = t;
-        float u = _runTime <= 0f ? 1f : Mathf.Clamp(t / _runTime, 0f, 1f);
-        // Clamp the ballistic clock too so a finished body holds its last pose (it is removed
-        // the frame it finishes, but Seek can be called past run_time by an instant land).
+        // A landed body freezes every channel at the contact moment: the piece is lying on the
+        // ground, so it must not keep tumbling or scaling toward its authored end state.
         float tb = _runTime > 0f ? Mathf.Min(t, _runTime) : t;
+        if (_landed)
+            tb = Mathf.Min(tb, _landedAt);
+        float u = _runTime <= 0f ? 1f : Mathf.Clamp(tb / _runTime, 0f, 1f);
 
         var origin = _heldOrigin;
         if (_hasBallistic)
-            origin = _heldOrigin + _v0 * tb + 0.5f * tb * tb * _accel;
+            origin = _landed ? _landedOrigin : _heldOrigin + _v0 * tb + 0.5f * tb * tb * _accel;
 
         var basis = _heldRot;
         if (_tumbleRate != 0f)
@@ -348,4 +406,69 @@ internal sealed class MotionRuntime : IAnimMotion
         float t = 2f * v0y / -ay;
         return float.IsFinite(t) ? t : 0f;
     }
+
+    /// <summary>The <c>do_intersections</c> sweep: cast the step the body is about to take — last
+    /// origin to next origin, in WORLD space — and stop the flight at whatever it meets first.
+    /// Returns whether contact ended the body.
+    ///
+    /// <para>A segment along the trajectory, not a ray straight down: the original tested real
+    /// geometry, and only a segment can rest a piece on a rooftop or stop it against a wall — the
+    /// <c>agyrobus</c> lost between C5 buildings is the case that chose this over a terrain ray
+    /// (<c>docs/PLAN-ground-contact.md</c>, Decision 1). Masked by whatever the session handed over,
+    /// which is the world layer alone: debris is not solid to aircraft, and that follows
+    /// <c>CollisionLayers</c>' own rule that world-only probes stay blind to planes.</para></summary>
+    private bool TryContact(float dt)
+    {
+        if (!_contactTest || _landed || !_hasBallistic)
+            return false;
+        // Not armed yet — see ArmDistance. Judged at the START of the step, so a body arms at
+        // worst one frame late rather than testing a segment whose first half is still inside the
+        // thing it launched from.
+        if (_t < ArmSeconds && (BallisticOrigin(_t) - _heldOrigin).LengthSquared() < ArmDistance * ArmDistance)
+            return false;
+        // No collision world → today's behaviour, untouched (Decision 2). Gated on the live space
+        // state rather than on SessionSpec so this class stays free of the session, and so it
+        // self-corrects if the collision rule ever moves.
+        if (Target.GetWorld3D()?.DirectSpaceState is not { } space)
+            return false;
+
+        // The solve is in the node's PARENT frame; the query is in world space. Convert both ends
+        // through the parent, and convert the hit back the same way — getting this backwards yields
+        // contacts at plausible-looking but entirely wrong places.
+        var parent = (Target.GetParent() as Node3D)?.GlobalTransform ?? Transform3D.Identity;
+        float next = _runTime > 0f ? Mathf.Min(_t + dt, _runTime) : _t + dt;
+        var from = parent * BallisticOrigin(_t);
+        var to = parent * BallisticOrigin(next);
+        if (from.DistanceSquaredTo(to) < 1e-8f)
+            return false;
+
+        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, to, _contactMask));
+        if (hit.Count == 0)
+            return false;
+
+        var point = hit["position"].AsVector3();
+        // Where in the step the contact happened, so the tumble and scale freeze at the moment of
+        // impact rather than snapping to the end of the frame.
+        float span = from.DistanceTo(to);
+        float fraction = span > 0f ? Mathf.Clamp(from.DistanceTo(point) / span, 0f, 1f) : 0f;
+        _landedAt = _t + (next - _t) * fraction;
+        _landedOrigin = parent.AffineInverse() * point;
+        _landed = true;
+        // The landing is the whole meaning of a bounce-terminated flight ending, and for this
+        // family the branch could not be chosen until now — the struck body is what picks it.
+        // MotionSet.Tick turns this into the dispatched Landing, exactly as it already does for
+        // the launches that solve their own flight time; nothing downstream changes.
+        PendingBounce ??= ChooseBounce(hit["collider"].As<GodotObject>());
+        Seek(_landedAt);
+        return true;
+    }
+
+    /// <summary>The ballistic origin at time <paramref name="t"/>, in the node's parent frame —
+    /// the same closed-form solve <see cref="Seek"/> poses with, factored out because the sweep
+    /// needs both ends of the step it is about to take. Never consulted for a landed body.</summary>
+    private Vector3 BallisticOrigin(float t) => _heldOrigin + _v0 * t + 0.5f * t * t * _accel;
+
+    /// <summary>The <c>BOUNCE_SEQUENCE</c> branch a contact selects. <c>default</c> for now; the
+    /// struck body chooses between the branches in the next item.</summary>
+    private string? ChooseBounce(GodotObject? struck) => _bounce?.Str("default");
 }

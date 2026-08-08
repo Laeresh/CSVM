@@ -684,6 +684,12 @@ public partial class GameSession : Node3D
         state.CrashProgram = session.Program;
         state.WorldScene = session.Builder.Scene;
         state.WorldRuntime = session.Runtime;
+        // Ground contact for the world's own `do_intersections` bodies — `agyrobus`' root and
+        // pieces, the C1B airframes. Set here rather than inside WorldSession because the mask is
+        // a flight-layer constant and the runtime is the animation layer; this is where the two
+        // legitimately meet. Left at 0 in a collider-less build, which is the whole fallback.
+        if (BuildsCollision)
+            session.Runtime.ContactMask = CollisionLayers.World;
 
         // F13 / --debug-ainets: the chapter's AI patrol nets (ne0NNNNN + neindex — AI route
         // data the original never renders; docs/formats/ai-nets.md). Chapter-scoped data, so

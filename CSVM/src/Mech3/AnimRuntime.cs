@@ -152,6 +152,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     public Action<AnimDefinition, Node3D?>? OnInstanceFinished;
 
+    /// <summary>The collision mask a <c>do_intersections</c> body sweeps against, or <b>0</b> — the
+    /// default — for "this session does no ground contact", which is every runtime nobody wires:
+    /// the labs, the golden captures, the headless suites that do not ask for it. None of those
+    /// build world colliders, so the flag-free launch-height behaviour is what they keep, and
+    /// keeping it is structural here rather than a rule someone has to remember.
+    ///
+    /// <para>Handed in rather than read from <c>CollisionLayers</c> directly: that constant lives in
+    /// the flight layer, and this one is the animation runtime — the session, which knows both,
+    /// is the right place for the two to meet. Set it to <c>CollisionLayers.World</c>; debris is
+    /// not solid to aircraft.</para></summary>
+    public uint ContactMask;
+
     // ---- live execution ----
     /// <summary>True when something else owns the clock (the animation debugger, which feeds
     /// <see cref="Advance"/> in fixed 1/60 s steps): <see cref="_Process"/> stops advancing.

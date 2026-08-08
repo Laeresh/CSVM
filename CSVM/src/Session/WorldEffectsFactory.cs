@@ -346,6 +346,13 @@ public sealed class WorldEffectsFactory
         // damage-stage effects this same runtime also plays, so no per-crash toggle is needed.
         crashRuntime.LevelPlacedTemplateNames =
             new HashSet<string>(EffectCatalogue.CrashSurfaceLevelAnimNames, StringComparer.OrdinalIgnoreCase);
+        // The wreck pieces are `do_intersections: true` — `player_crash_dirt`'s `piece1`-`4` are 4
+        // of the 16 (def, node) pairs in all 8 chapters that ask for the original's collider test
+        // AND stay in the world. Handing the mask over is what turns their sweep on; a session that
+        // builds no colliders hands nothing and they keep flying their authored clock out, which is
+        // exactly the behaviour every golden capture recorded.
+        if (_spec.BuildsCollision)
+            crashRuntime.ContactMask = CollisionLayers.World;
         // Bind only the named defs' transitive CALL_ANIMATION closures (Subset), never the whole
         // world program: the full 800+ defs include ~150 generic-named world defs that would
         // mis-anchor onto this plane's parts and run their reset states on the aircraft. The set

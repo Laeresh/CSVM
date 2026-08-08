@@ -137,7 +137,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the query
 
-1. ☐ A contact sweep ends a `do_intersections: true` body where the world stops it
+1. ☑ A contact sweep ends a `do_intersections: true` body where the world stops it
 2. ☐ The struck surface picks the `BOUNCE_SEQUENCE` branch
 3. ☐ Make the tallies and the code comments tell the truth about who owns what
 4. ☐ A collider-backed suite pins contact truncation, branch choice and the fallback
@@ -166,7 +166,30 @@ closes outright or keeps a TUNE residue.
 
 # Wave A — the query
 
-## A1 ☐ A contact sweep ends a `do_intersections: true` body where the world stops it
+## A1 ☑ A contact sweep ends a `do_intersections: true` body where the world stops it — **landed 2026-08-08**
+
+**Landed.** `MotionRuntime.TryContact` casts the step the body is about to take — last origin to
+next origin, converted to world through the parent — and on a hit freezes the body at the contact
+point: `_landed`/`_landedOrigin`/`_landedAt`, with `Finished` true from that frame and `Seek`
+holding the landed pose (and the tumble/scale frozen at the contact instant, interpolated by the
+hit's fraction along the step, so nothing snaps to the end of the frame). The sweep sits in `Tick`
+and never in `Seek`, so a backwards scrub cannot land a piece. `AnimRuntime.ContactMask` carries the
+mask in from the session — `GameSession` for the world runtime, `WorldEffectsFactory` for the crash
+rig, both gated on `BuildsCollision` — and a runtime nobody wires keeps the old path, which makes
+Decision 2's fallback structural rather than remembered.
+
+**Verified.** `.\RunTests.ps1` with `CSVM_DATA_ROOT` at the primary tree: 696 units / 0 skipped,
+**26/26 engine suites** (engine errors clean), **13/13 goldens hash-identical**. `bounce-launch`
+passes untouched and every golden is byte-identical — which is the fallback proving itself, since no
+golden build hands over a mask. Build is StyleCop-clean. ⚠ Nothing here proves contact *fires*; no
+suite exercises it until A4, and the counters that would catch a silent zero are A3's.
+
+**Not done here, deliberately.** The branch is always `default` (`ChooseBounce` ignores its `struck`
+argument until A2), and `PROJECT_CONTEXT.md`'s "Current status" was left alone: it names
+`docs/PLAN-overcast-match.md` as the active plan, another session's live work, and this branch stays
+isolated until the whole plan lands. Repoint it at merge time.
+
+### Original approach (kept for reference)
 
 **Goal.** A flagged body stops at the first collider its trajectory meets — terrain, rooftop or wall
 — and rests there, instead of integrating its authored `RUN_TIME` to the end and finishing below the
