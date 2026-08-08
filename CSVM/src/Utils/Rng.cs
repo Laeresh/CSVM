@@ -99,6 +99,23 @@ public static class Rng
     /// shape the effects code already uses.</summary>
     public static Random NewSystemRandom(string subsystem) => new(NewIntSeed(subsystem));
 
+    /// <summary>A per-CELL <see cref="System.Random"/>, keyed by coordinate rather than draw
+    /// order: the seed is a pure function of the subsystem name, the master seed and the two
+    /// coordinates alone, so it does not depend on how many cells exist, what order they are
+    /// built in, or on any other subsystem's draws. Use this instead of
+    /// <see cref="NewSystemRandom(string)"/> when the set of things being drawn is itself a
+    /// runtime computation over a coordinate space rather than a fixed walk over authored data —
+    /// <c>FogVolumeClutter</c>'s map-edge continuation (A5,
+    /// docs/PLAN-overcast-match.md) is the first caller: the extension ring's cell count depends
+    /// on each kind's authored <c>far_fade</c>, so a shared sequential stream would silently
+    /// reroll every surviving cell's placement if that bound, or the enumeration order, ever
+    /// changed.</summary>
+    public static Random NewSystemRandom(string subsystem, int cellX, int cellZ)
+    {
+        ulong h = Mix(SeedFor(subsystem) ^ Fnv1a($"{cellX},{cellZ}"));
+        return new Random((int)(h ^ (h >> 32)));
+    }
+
     // FNV-1a over the name's UTF-16 code units, byte at a time.
     private static ulong Fnv1a(string s)
     {

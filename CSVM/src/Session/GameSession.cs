@@ -830,8 +830,10 @@ public partial class GameSession : Node3D
             if (cloudField != null)
             {
                 _worldRoot!.AddChild(cloudField);
-                GD.Print($"fogvol clouds: {cloudField.InstanceCount} sprites over "
-                         + $"{fogVolumes.Count} volume(s) — {cloudField.Summary}");
+                GD.Print($"fogvol clouds: {cloudField.InstanceCount} sprites "
+                         + $"({cloudField.BaseCount} base + {cloudField.ExtensionCount} "
+                         + $"map-edge extension) over {fogVolumes.Count} volume(s) — "
+                         + $"{cloudField.Summary}");
             }
             // Both ambient cloud populations onto the one shared cloud-field layer (A7): the
             // fvol clutter MultiMeshes above and the world's own placed `cloudparent` clusters.

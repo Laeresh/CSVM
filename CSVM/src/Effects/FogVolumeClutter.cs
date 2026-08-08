@@ -42,13 +42,24 @@ namespace CSVM.Effects;
 /// chapter's gamez. Their ambient sky is the world's own placed <c>cloudparent</c> sprites (C1B
 /// has 70; C2 and C3 have none) — which is the "singles at all heights, but not on every map" the
 /// playtest saw, and it is drawn by the ordinary world build, not here.</para>
+///
+/// <para><b>A5 — the field continues past the map edge, engine-side, matching the terrain's own
+/// continuation.</b> The original's field reads as everywhere, not stopping at the base map
+/// (`cloudparent` stops there — that population is untouched here). For the chapters whose
+/// <c>fvol*</c> volumes tile the whole map as one flat slab (C1/C1C/C2B/C4's map-spanning pieces —
+/// identified from data, never a chapter name), the SAME <c>distance</c>-cell field is tiled
+/// outward past the map rim, at the same density and the same top-anchored Y band, out to a radius
+/// bounded by the largest authored <c>far_fade</c> (past which nothing would render anyway). Still
+/// built once, still world-anchored, still zero per-frame cost — the extension is precomputed
+/// alongside the base field, not a MapEdgeExtender-style rolling window; see
+/// <see cref="ExtendPastMapEdge"/> for the identification rule and the bound's derivation.</para>
 /// </summary>
 public sealed partial class FogVolumeClutter : Node3D
 {
-    // A runaway guard, not a tuning knob: the shipped chapters place 8.9k-19k sprites, so this is
-    // several times the largest real field. It can only bind if a future extraction reports a
-    // `distance` near zero or a volume far larger than a map, both of which should be seen rather
-    // than swallowed.
+    // A runaway guard, not a tuning knob: the shipped chapters place up to ~22k sprites (base
+    // field plus A5's map-edge continuation), so this is several times the largest real field. It
+    // can only bind if a future extraction reports a `distance` near zero or a volume far larger
+    // than a map, both of which should be seen rather than swallowed.
     private const int MaxPlacements = 80_000;
 
     // A3's per-volume-shape rule (docs/formats/fogvol.md, docs/PLAN-overcast-match.md A3): a
@@ -62,9 +73,23 @@ public sealed partial class FogVolumeClutter : Node3D
     // flip.
     private const float TopAnchorHeightFactor = 1.5f;
 
-    /// <summary>Sprites placed, summed over every kind. Zero means nothing was built and
-    /// <see cref="Create"/> returned null.</summary>
+    /// <summary>Sprites placed, summed over every kind — the authored volumes' own placements
+    /// plus A5's map-edge continuation (<see cref="ExtensionCount"/>). Zero means nothing was
+    /// built and <see cref="Create"/> returned null.</summary>
     public int InstanceCount { get; private set; }
+
+    /// <summary>Sprites placed by A5's map-edge continuation alone (docs/PLAN-overcast-match.md
+    /// § A5) — zero in every chapter whose <c>fvol*</c> volumes carry no map-spanning slab (C1B,
+    /// C2, C3 render nothing at all; C5's strips and C1C's build-ups are local geometry and are
+    /// never extended). <see cref="InstanceCount"/> minus this is the count the authored volumes
+    /// alone would have produced.</summary>
+    public int ExtensionCount { get; private set; }
+
+    /// <summary>Sprites placed inside the authored volumes alone — <see cref="InstanceCount"/>
+    /// minus <see cref="ExtensionCount"/>, i.e. what A2/A3's own mechanism produces before A5's
+    /// continuation runs. Should equal A6/A7's own logged counts unchanged, since the extension
+    /// runs after the base draw and never reads the shared RNG stream the base draw uses.</summary>
+    public int BaseCount => InstanceCount - ExtensionCount;
 
     /// <summary>Per-kind counts of the build, e.g. "cloudsprite1 x4471 (cloud1.tif, fade
     /// 3100-3500 m)" — the evidence that the authored weights and fades reached the field.</summary>
@@ -428,6 +453,153 @@ public sealed partial class FogVolumeClutter : Node3D
                             z + (Mathf.Cos(bearing) * perturb))));
                     InstanceCount++;
                 }
+            }
+        }
+
+        // A5 (docs/PLAN-overcast-match.md): continue the map-spanning slab's own cell field past
+        // the base map. Runs after every authored volume above has drawn everything it draws, and
+        // touches no state the loop above reads — it cannot realign the interior placements A2/A3
+        // already pin (unlike A3's own Y-anchoring change, which shifted the shared stream by
+        // skipping a draw per cell, this method never calls `rng` at all).
+        ExtendPastMapEdge(volumes, kinds, period, cardHeight, totalWeight);
+    }
+
+    // Identifies the chapter's map-spanning slab from data (FogVolumeSpec.FindMapSpanningSlab —
+    // pure geometry, testable off-engine, never a chapter name or a hardcoded `fvol1..9`) and, if
+    // one exists, tiles its own `distance`-cell field outward past the map rim. Verified against
+    // the shipped data: C1/C2B/C4's nine slab pieces and C1C's own map-spanning fvol1-9 pass;
+    // C1C's twelve build-up frusta and C5's seventeen street strips fail the TOP-ANCHORED test
+    // (build-ups: shortest is 299.7 m, ratio 2.27 against the 1.5x cut; strips: 646 m, ratio
+    // 9.23); C1B/C2/C3 ship no fvol* at all, so `volumes` is empty and nothing runs.
+    private void ExtendPastMapEdge(IReadOnlyList<FogVolumeBox> volumes, List<Kind> kinds,
+        float period, float cardHeight, float totalWeight)
+    {
+        var (found, skipReason) = FogVolumeSpec.FindMapSpanningSlab(volumes, cardHeight, TopAnchorHeightFactor);
+        if (skipReason != null)
+        {
+            string msg = $"fogvol: map-edge continuation skipped — {skipReason}";
+            Log.Info("world", $"{msg}");
+        }
+        if (found is not { } slab)
+        {
+            return;
+        }
+
+        // Match the terrain's own reach, then bound it: MapEdgeExtender's rolling window covers
+        // Rings=5 tiles past whatever cell the camera occupies (MapEdgeExtender.cs) — 5 x 1024 m
+        // = 5,120 m for these chapters' 12,288 m / 12-tile-per-side map. A full precomputed ring
+        // out to 5,120 m would place roughly 2.3x this field's own base count (fogvol.md has the
+        // arithmetic) — past the plan's own ">2x is unreasonable" line for a structure that is
+        // built once and kept for the process lifetime. The shader in this file already collapses
+        // any sprite past its kind's own `far_fade.y` to a degenerate quad, so instances beyond
+        // the LARGEST authored far fade cost real memory and zero visible pixels from anywhere —
+        // bounding the ring there is lossless, not a cut corner. Both cloudsprite kinds in every
+        // shipped deck chapter carry the same 3,500 m today, so this is one number per chapter,
+        // not per kind, but the code reads it from the data either way.
+        float radius = 0f;
+        foreach (var kind in kinds)
+        {
+            radius = Mathf.Max(radius, kind.Block.FarFade.Y);
+        }
+        if (radius <= 0f)
+        {
+            return;
+        }
+
+        float bx0 = slab.MinX, bx1 = slab.MaxX, bz0 = slab.MinZ, bz1 = slab.MaxZ, topY = slab.TopY;
+        // Eight regions tile the radius-margin ring around [bx0,bx1] x [bz0,bz1] with no gap and
+        // no overlap: four edge strips sharing a full edge with the rectangle, four corner
+        // squares. Every inner edge is exactly bx0/bx1/bz0/bz1 — the SAME coordinate the interior
+        // loop above clips its own outermost cell to — so the join is exact by construction, not
+        // by matching a period phase across the boundary.
+        EmitExtensionRegion(bx0 - radius, bx0, bz0, bz1, period, topY, kinds, totalWeight); // west
+        EmitExtensionRegion(bx1, bx1 + radius, bz0, bz1, period, topY, kinds, totalWeight); // east
+        EmitExtensionRegion(bx0, bx1, bz0 - radius, bz0, period, topY, kinds, totalWeight); // south
+        EmitExtensionRegion(bx0, bx1, bz1, bz1 + radius, period, topY, kinds, totalWeight); // north
+        EmitExtensionRegion(bx0 - radius, bx0, bz0 - radius, bz0, period, topY, kinds, totalWeight); // sw
+        EmitExtensionRegion(bx1, bx1 + radius, bz0 - radius, bz0, period, topY, kinds, totalWeight); // se
+        EmitExtensionRegion(bx0 - radius, bx0, bz1, bz1 + radius, period, topY, kinds, totalWeight); // nw
+        EmitExtensionRegion(bx1, bx1 + radius, bz1, bz1 + radius, period, topY, kinds, totalWeight); // ne
+    }
+
+    // One rectangular slice of the extension ring, tiled with the SAME distance x distance cells
+    // as the interior loop above (outermost cell of each axis takes the remainder, so cells TILE
+    // the region exactly — identical arithmetic, just against this region's own bounds instead of
+    // a volume's). Two differences from the interior draw, both deliberate:
+    //  - every cell is ACCEPTED unconditionally. There is no authored shape out here to test
+    //    against — the whole point is placing where the data stops — so there is no `Contains`
+    //    call and no cell is ever rejected.
+    //  - each cell draws off its OWN hashed generator (Rng.NewSystemRandom(Rng.Clouds, gx, gz)),
+    //    not the interior's one shared sequential stream. That is exactly right here and would be
+    //    wrong there (A2's own note on the interior loop): the set of extension cells is a
+    //    runtime computation bounded by each kind's far_fade, not a fixed walk over authored
+    //    volumes, so a stream position would tie one cell's draw to how many cells the
+    //    enumeration visited before it — building a different bound, in a different order, would
+    //    silently reroll every surviving cell. A per-cell hash makes each cell a pure function of
+    //    the master seed and its own (gx, gz) alone, which is what keeps `--det` stable under any
+    //    future change to how this ring is enumerated.
+    // Y is the slab's own constant top (`topY`, checked equal across every piece above) plus
+    // `perp_dist_range`, exactly as the interior's own top-anchored draw adds it — the extension
+    // inherits A3's vertical rule rather than inventing a second one.
+    private void EmitExtensionRegion(float x0, float x1, float z0, float z1, float period,
+        float topY, List<Kind> kinds, float totalWeight)
+    {
+        if (x1 <= x0 || z1 <= z0)
+        {
+            return;
+        }
+        int gx0 = Mathf.CeilToInt(x0 / period), gx1 = Mathf.FloorToInt(x1 / period);
+        int gz0 = Mathf.CeilToInt(z0 / period), gz1 = Mathf.FloorToInt(z1 / period);
+        // A region thinner than one period (never true of any shipped chapter's far_fade against
+        // its 80-130 m `distance`) still gets exactly one remainder cell rather than none.
+        if (gx1 < gx0)
+        {
+            gx1 = gx0 = Mathf.RoundToInt((x0 + x1) * 0.5f / period);
+        }
+        if (gz1 < gz0)
+        {
+            gz1 = gz0 = Mathf.RoundToInt((z0 + z1) * 0.5f / period);
+        }
+
+        for (int gx = gx0; gx <= gx1 && InstanceCount < MaxPlacements; gx++)
+        {
+            float cx0 = gx == gx0 ? x0 : (gx * period) - (period * 0.5f);
+            float cx1 = gx == gx1 ? x1 : (gx * period) + (period * 0.5f);
+            for (int gz = gz0; gz <= gz1 && InstanceCount < MaxPlacements; gz++)
+            {
+                float cz0 = gz == gz0 ? z0 : (gz * period) - (period * 0.5f);
+                float cz1 = gz == gz1 ? z1 : (gz * period) + (period * 0.5f);
+
+                var rng = Rng.NewSystemRandom(Rng.Clouds, gx, gz);
+                float Rand(float a, float b) => a + ((float)rng.NextDouble() * (b - a));
+
+                float x = Rand(cx0, cx1);
+                float z = Rand(cz0, cz1);
+
+                float pick = Rand(0f, totalWeight);
+                var kind = kinds[kinds.Count - 1];
+                foreach (var candidate in kinds)
+                {
+                    pick -= Mathf.Max(candidate.Weight, 0f);
+                    if (pick <= 0f)
+                    {
+                        kind = candidate;
+                        break;
+                    }
+                }
+
+                var block = kind.Block;
+                float bearing = Rand(0f, Mathf.Tau);
+                float perturb = Lerp(block.PerturbDistRange, (float)rng.NextDouble());
+                float scale = Lerp(block.ScaleRange, (float)rng.NextDouble());
+                kind.Placements.Add(new Transform3D(
+                    Basis.Identity.Scaled(new Vector3(scale, scale, scale)),
+                    new Vector3(
+                        x + (Mathf.Sin(bearing) * perturb),
+                        topY + Lerp(block.PerpDistRange, (float)rng.NextDouble()),
+                        z + (Mathf.Cos(bearing) * perturb))));
+                InstanceCount++;
+                ExtensionCount++;
             }
         }
     }

@@ -133,7 +133,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☑ A2 — Kill the lattice and the field edge (horizontal mechanism) — **+ exact footprint containment**
 3. ☑ A3 — Top-anchor the vertical placement
 4. ☐ A4 — Scatter A/B vs CAP-12 + the river twin; close `BL-312`
-5. ☐ A5 — Continue the field past the map edge (user playtest 2026-08-08: the original's field is everywhere)
+5. ☑ A5 — Continue the field past the map edge (user playtest 2026-08-08: the original's field is everywhere)
 6. ☑ A6 — Why does flight mode show puffs below the deck when freecam doesn't? (investigate, then fix or reclassify)
 7. ☑ A7 — The deck is engine trickery: regime model + cloud layer gate (user decode, 2026-08-08)
 
@@ -739,10 +739,152 @@ re-confirmed. Full 8-chapter freecam regression, zero errors.
 **⚠ Traps.** `--tex-census` counts are lower bounds and pair with `--no-fog` (cli.md) — if used for
 density, say so and use the same flags on both sides of any before/after.
 
-## A5 ☐ Continue the field past the map edge
+## A5 ☑ Continue the field past the map edge
+
+**Landed.** (2026-08-08) `FogVolumeClutter.Scatter` now continues the map-spanning slab's own
+`distance`-cell field past the base map's rim, engine-side, matching the terrain's own
+continuation (`MapEdgeExtender.cs`) — **not authored data**: neither `fogvol.zrd` nor the gamez
+says anything about content past `World.area`, so this is a deliberate engine-side match, marked
+as such in `fogvol.md`, not a decode. Which volumes qualify is decided from data
+(`FogVolumeSpec.FindMapSpanningSlab`, new): a volume extends only if it is an axis-aligned box, is
+top-anchored by A3's own rule, and — together with every other volume passing those two tests —
+the set's footprints exactly tile their own combined bounding rectangle, re-checking A1's "exact
+3×3 partition of `World.area`" finding from the data rather than keying off a chapter name or an
+`fvol1..9` numbering convention. C1/C2B/C4's nine slab pieces and C1C's own map-spanning
+`fvol1`–`fvol9` qualify; C1C's twelve build-up frusta and C5's seventeen street strips both fail
+the top-anchored test (shortest build-up 299.7 m, ratio 2.27 against the 1.5× cut; shallowest
+strip 646 m, ratio 9.23) and are never extended. Each extension cell draws off its own
+coordinate-hashed generator (`Rng.NewSystemRandom(Rng.Clouds, gx, gz)`, new overload) rather than
+the interior's shared sequential stream, so `--det` holds independent of the far-fade bound or the
+cell enumeration, and the interior draw's own realization (base counts) is untouched. Mirroring
+was not built — a random field is indistinguishable from a mirrored one, exactly as the approach
+below anticipated.
+
+**Files.** `CSVM/src/Effects/FogVolumeClutter.cs` (`ExtendPastMapEdge`/`EmitExtensionRegion`),
+`CSVM/src/Mech3/FogVolumes.cs` (`FogVolumeBox.IsAxisAlignedBox`, `FogVolumeSpec.FindMapSpanningSlab`,
+`MapSpanningSlab`), `CSVM/src/Utils/Rng.cs` (`NewSystemRandom(subsystem, cellX, cellZ)`),
+`CSVM/src/Session/GameSession.cs` (the sprite-count log line), `CSVM.Tests/FogVolumeTests.cs` (8
+new tests), `CSVM.Tests/RngTests.cs` (new file, 3 tests), `docs/formats/fogvol.md`,
+`docs/architecture.md` (all three touched modules), this section.
+
+### The extension radius and sprite budget
+
+`MapEdgeExtender`'s rolling terrain window (docs/architecture.md) covers `Rings` (5) tiles of
+1,024 m past whatever cell the camera occupies — **5,120 m**, for these chapters' 12,288 m,
+12-tile-per-side map — cited here as "the terrain's own reach," per the item's own instruction.
+**A full precomputed ring to that radius was NOT built.** It would place an estimated **~21,250**
+extra sprites for C1/C2B/C4 (≈**2.35×** the 9,025-sprite base field, extrapolated from the
+ring-area ratio at the radius actually measured below) — past this plan's own ">2× is
+unreasonable" line for a structure that is built once and kept for the process's whole lifetime.
+Bounded instead to the **largest authored `far_fade.y`** among the chapter's kinds — **3,500 m**,
+identical for both `cloudsprite1`/`cloudsprite2` in every shipped deck chapter: every kind's own
+shader already collapses a sprite past that distance to a degenerate quad (this file's own
+`ShaderCode`), so a wider ring would buy zero visible pixels from anywhere a camera can stand —
+this bound is lossless, not a cut corner, and it is read from the data (each kind's `FarFade.Y`)
+rather than hardcoded.
+
+**Measured, all 8 chapters** (`--freecam --chapter=<X> --det`, `fogvol clouds:` log line):
+
+| chapter | base | extension | total | extension/base |
+|---|---|---|---|---|
+| C1 | 9,025 | 13,176 | 22,201 | 1.46× |
+| C1B | 0 | 0 | 0 | — |
+| C1C | 9,572 | 13,176 | 22,748 | 1.38× |
+| C2 | 0 | 0 | 0 | — |
+| C2B | 9,025 | 13,176 | 22,201 | 1.46× |
+| C3 | 0 | 0 | 0 | — |
+| C4 | 9,025 | 13,176 | 22,201 | 1.46× |
+| C5 | 16,170 | 0 | 16,170 | — |
+
+1.38–1.46× is comfortably under the 2× line, so the far-fade bound alone was enough — **acceptable
+as measured, no further materialisation limit needed** (e.g. only cells within `far_fade` of a
+*live* camera, rebuilt per frame, was the fallback if this had come back unreasonable). The field
+stays a static, built-once, world-anchored structure exactly like the base field — no
+`MapEdgeExtender`-style rolling window was built for this population. C5's strips and C1C's
+build-ups add zero, as the data-driven test requires.
+
+### Verification
+
+- **Map-rim probes, before/after, `--tex-override=cloud1.tif=00ff00 --tex-override=cloud2.tif=00ff00
+  --no-fog`** (isolates the field the way A3/A6/A7 did; SHOT-13). **Before shots taken FIRST**, on
+  the unmodified build: `git diff` of the four engine files was saved to
+  `.scratch/a5/a5-engine-changes.patch`, `git checkout HEAD --` reverted them, the pre-A5 binary
+  was probed, then `git apply` restored the change (no `git stash` used, per the worktree rule) —
+  confirming the current (pre-A5) build DOES show the field ending at the rim before measuring
+  that A5 fixes it.
+  - **West/east rim, flying along the edge** (`x -12288` / `x 0`, `--det`): before —
+    `before-west-along-override.png` / `before-east-along-override.png` show a hard seam, dense
+    green field on the interior side, bare white void beyond the rim. After —
+    `after-west-along-override.png` / `after-east-along-override.png` are green edge to edge, no
+    seam anywhere in frame.
+  - **West/east rim, looking straight outward, 1,000 m inside**:
+    `before/after-west-outward-override.png`, `before/after-east-outward-override.png` — the field
+    reaches the horizon in every "after" frame instead of stopping partway there.
+  - **NW corner** (200 m inside both edges): before — `before-corner-outward-override.png` is
+    almost entirely void, a few isolated cards from the corner-most cells poking into frame; after
+    — `after-corner-outward-override.png` fills solid.
+  - **3,000 m past the west rim, looking back at the map** (inside the 3,500 m fade): before —
+    `before-outside-lookback-override.png` shows only a thin, distant green band at the horizon
+    (the interior field, far away) over a huge foreground void; after —
+    `after-outside-lookback-override.png` shows the extended field reaching all the way to the
+    camera — confirming the extension is materially present at a camera genuinely outside the map,
+    not just painted at the rim itself.
+- **No density step.** Every "after" frame reads as one continuous field at the same density on
+  both sides of the former rim — the eight-region decomposition's inner edges land exactly on the
+  slab's own bounding rectangle (the same coordinate the interior loop's own outermost cell is
+  clipped to), so there is no phase mismatch to produce a visible step.
+- **Sprite-count log states base + extension per chapter** — table above, from the `fogvol
+  clouds:` line `GameSession.cs` now prints in that shape.
+- **`--det` determinism.** Same pose, two separate runs:
+  `pixmd5=f49caae4b1c6c1f62bdde1af8229faa6` both times.
+- **C5/C1C counts unchanged.** C5 stays exactly 16,170 (zero extension — its strips fail the
+  top-anchored test); C1C's BASE stays exactly 9,572, the same number A3/A6/A7 left it at (the
+  extension never reads the interior's RNG stream, so it cannot realign those draws the way A3's
+  own change once did).
+- **`cloudparent` untouched.** The per-chapter cluster census logged unchanged: C1 28, C1B 70,
+  C1C 30, C4 45 — identical to A6/A7's own numbers. `A5` never reads or moves that population.
+- **8-chapter `--freecam` regression** — zero errors in all eight chapters
+  (`.scratch/a5/counts-after/`), decks/sprite/cluster censuses otherwise unchanged from A6/A7.
+- **`.\RunTests.ps1`** — build PASS (0 warnings), **units 669/669** (was 653: +8 slab-identification
+  theory rows, +5 synthetic `FindMapSpanningSlab` fixtures, +3 `Rng` per-cell tests), **engine
+  26/26, errors clean**, goldens **6 moved, 0 broken of 13**. Exit 1 is the golden stage alone.
+
+### Goldens moved — the same six A2/A3/A6/A7 already moved, still not re-pinned
+
+| golden | moved? | why |
+|---|---|---|
+| `c1-waterfall`, `c1c-rain`, `c2b-rain`, `c4-snow`, `c1-flight`, `c1-destroy-effects` | **moved** | every clouded-chapter shot with sky in frame — the field's own pixels move a fourth time (A2 horizontal, A3 vertical, A6 deck altitude, now A5's map-edge extension) |
+| `c1b-night-sea`, `c2-city`, `c3-island`, `c5-city-night`, `viewer-bhawk`, `empty-stage`, `c1-crash` | ok | same seven every prior scatter item left alone — no `fvol*` map-spanning slab, no chapter world, or a pose that paints zero cloud-sprite pixels regardless |
+
+Identical moved/unmoved SET to A2/A3/A6/A7 (GOLD-5) — the fourth independent change to this
+subsystem produces exactly the same footprint, which is what a change correctly scoped to "the
+map-spanning slab's own field" should do. **Not re-pinned here — still A4's job.**
+
+### Probe images (`.scratch/a5/`)
+
+| file | what it is |
+|---|---|
+| `before-west-along-override.png` / `after-west-along-override.png` | **the item's primary evidence** — standing at the west rim flying north, isolated: a hard seam before, none after |
+| `before-corner-outward-override.png` / `after-corner-outward-override.png` | the NW corner, 200 m inside: near-total void before, solid field after |
+| `before-outside-lookback-override.png` / `after-outside-lookback-override.png` | 3,000 m past the west rim looking back: a distant thin band over a huge void before, the extension reaching the camera after |
+| `before/after-west-outward-override.png`, `before/after-east-outward-override.png`, `before/after-east-along-override.png` | the remaining rim probes, same pattern |
+| `before-west-outward.png` / `after-west-outward.png` | natural-colour (fog ON) pair at the same pose — the mission fog at this range washes detail out almost entirely (the known Wave B symptom, not a new one here), which is why the override pair above is the primary evidence |
+| `det-run1.png` / `det-run2.png` | the `--det` determinism pair, identical `pixmd5` |
+| `counts-after/*.png` | the 8-chapter regression sweep |
+| `a5-engine-changes.patch` | the saved diff used to build the pre-A5 baseline for the "before" shots without `git stash` |
+
+**⚠ Handover to A4.** (1) Goldens are re-pinned there, not here — fold this item's movers in with
+A2/A3/A6/A7's (same SET, moved a fourth time). (2) The extension is inert by construction for
+C1B/C2/C3/C5 — A4's density comparison against CAP-12 should read C1's own numbers (9,025 base,
+unchanged) since the pinned A/B poses (above-deck, river) sit 3,829 m from the nearest map edge,
+inside the map and past the 3,500 m fade from the rim, so the extension contributes nothing to
+those specific frames — it only matters once a probe reaches within ~3.5 km of the rim.
+
+### Original approach (kept for reference)
 
 **Goal.** Flying toward and beyond the map boundary shows the cloud field continuing everywhere,
 as the original does — no field edge at the base-map rim.
+— *met: verified at the render above.*
 
 **Evidence (confidence: direction traced, mechanism open).** User at the controls, 2026-08-08:
 "it is only over the basemap. in the original its everywhere." A1 explicitly left this
@@ -750,6 +892,9 @@ undiscriminated (the two readings differ only within `far_fade_range.y` = 3500 m
 and no footage sampled there) — this playtest is the missing sample. The terrain already
 continues via `MapEdgeExtender.MirrorAxis` (alternating reflection, `BL-105`); the field must
 continue over that extension.
+— *the terrain's MirrorAxis reflection was NOT the mechanism copied — a random field cannot be told
+apart from a mirrored one (see below), so the field continues by tiling, not by mirroring
+MapEdgeExtender's own transform.*
 
 **Approach.** Extend the scatter beyond the base map for the map-spanning slab volumes only
 (C1/C1C/C2B/C4's `fvol1`–`fvol9`, which tile the map exactly — C1C's build-ups and C5's strips
@@ -758,6 +903,10 @@ slab's cell field outward to the edge-extension radius with the same density, se
 cell so determinism and world-lock hold. Mirroring vs plain continuation is indistinguishable
 for a random field — do not build mirror machinery for it. Respect containment: the extension
 inherits the slab's Y band.
+— *followed as written, with "the map-spanning slab volumes" made a data-driven test
+(`FindMapSpanningSlab`) rather than the literal `fvol1`-`fvol9` name pattern, and "the
+edge-extension radius" resolved to the far_fade bound (above) once the terrain's own 5,120 m
+reach priced out at ~2.35x base.*
 
 **Model recommendation.** medium — a bounded generalisation of the landed scatter, with the
 determinism constraint.
@@ -765,10 +914,15 @@ determinism constraint.
 **Verify.** Probe at the map rim (e.g. x near −12288 and 0) looking outward and along the edge:
 field continues with no seam and no density step; sprite-count log states the new total and the
 extension radius; `--det` md5 stable across runs; C5/C1C counts unchanged.
+— *all done, see Verification above (a corner and a well-outside-looking-back probe were added
+beyond what was written here).*
 
 **⚠ Traps.** `cloudparent` stops at the map edge in the original (BL-118's note) — extending the
 wrong population would invent content. The far fade (3500 m) must keep the working set bounded;
 state the extension's sprite budget.
+— *both respected: `cloudparent`'s census is bit-identical to A6/A7's own, and the sprite budget is
+stated and measured above (1.38-1.46x base, bounded by far_fade rather than the terrain's own
+5,120 m reach).*
 
 ## A6 ☑ Why does flight mode show puffs below the deck when freecam doesn't?
 
@@ -956,6 +1110,9 @@ deck". — *both respected: `cloudparent` was not touched, and every probe above
 (whiteout off) or measured flattened colours, so no reading is a whiteout artifact.*
 
 ## A7 ☑ The deck is engine trickery: regime model + cloud layer gate
+
+**User verdict at the controls (2026-08-08, post-landing re-fly): "it looks a lot better.
+approved."**
 
 **Landed.** (2026-08-08) **All three of the user's observations reproduce, and the below-band
 half is now provably exact: with the ceiling carried at `camera.y + K`, the sky is

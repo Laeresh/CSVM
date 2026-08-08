@@ -66,7 +66,8 @@ The correlation with half 1 is exact and is the whole decode:
 C1/C1C/C2B/C4's `fvol1`–`fvol9` tile the whole 12,288 m map as a single flat slab ~120 m thick —
 and they are an **exact 3 × 3 partition of the `World` node's own `area`** (x and z each split at
 −10240 and −2048 over [−12288, 0]), so the field's footprint *is* the base map, to the metre, with
-no interior seam and no edge anywhere a player can reach it.
+no interior seam. The authored field DOES end at the base map's outer rim — "The map-edge
+continuation (`A5`)" below continues it past there, engine-side, for these four chapters only.
 **C1C additionally stacks twelve smaller volumes on top of that footprint**, reaching 1,688 m —
 authored build-ups over particular places, and the reason the scatter fills *each* volume rather
 than taking the first one that contains a cell. C5's are not a slab at all: seventeen
@@ -82,6 +83,75 @@ what makes the density authored rather than an artifact of measuring a rotated s
 `weather.json` `BOTTOM`, but C1C (band 1055–1110 vs volume 971–1091), C4 (1000–1100 vs
 1060–1181) and C5 (9950–10150 vs −463–183) all disagree. The volumes are their own authored
 geometry; do not re-derive them from the weather file.
+
+## The map-edge continuation (`A5`) — engine-side, NOT authored data
+
+⚠ **Everything above this section is what `fogvol.zrd` + the gamez author. This section is not
+that.** The original's field reads as everywhere, past the map the way `cloudparent` does NOT
+(BL-118's note: `cloudparent` stops at the map edge; extending it would invent content). Neither
+`fogvol.zrd` nor the gamez says anything about content past `World.area` — there is nothing to
+decode here, only a deliberate engine-side match to the terrain's own continuation
+(`MapEdgeExtender.cs`, docs/architecture.md), landed as `A5` (user playtest, 2026-08-08: "it is
+only over the basemap. in the original its everywhere").
+
+**What extends, decided from data (`FogVolumeSpec.FindMapSpanningSlab`):** only the volumes that
+are (1) axis-aligned boxes, (2) top-anchored by A3's own rule, and (3), as a set, exactly tile
+their own combined bounding rectangle with no gap or overlap — re-checking A1's "exact 3×3
+partition of `World.area`" finding from the data rather than assuming it, so nothing keys off a
+chapter name or an `fvol1..9` numbering convention. C1/C2B/C4's nine slab pieces and C1C's own
+map-spanning `fvol1`–`fvol9` pass; C1C's twelve build-up frusta and C5's seventeen street strips
+both fail test (2) — the shortest build-up is 299.7 m (ratio 2.27 against the 1.5× cut) and the
+shallowest strip is 646 m (ratio 9.23) — so neither is ever extended, verified at the render
+(their counts are bit-identical to A3/A6/A7's own, below).
+
+**How far.** `MapEdgeExtender`'s rolling terrain window covers `Rings` (5) tiles of 1,024 m past
+whatever cell the camera occupies — **5,120 m** — but a full precomputed ring to that radius would
+place an estimated **~21,250** extra sprites for C1/C2B/C4 (≈2.35× the 9,025-sprite base field,
+extrapolated from the ring-area ratio at the measured radius below), past a sane budget for a
+structure that is built once and kept for the process's whole lifetime. Every kind's own shader
+already collapses a sprite past its authored `far_fade.y` to a degenerate quad (`FogVolumeClutter`
+class remarks), so a ring wider than the LARGEST authored `far_fade.y` buys zero visible pixels
+from anywhere a camera can stand — bounding the extension there is lossless, not a cut corner.
+Both `cloudsprite1`/`cloudsprite2` carry the same **3,500 m** in every shipped deck chapter, so
+today this is one radius per chapter, read from the data rather than hardcoded.
+
+**Density, Y band, and determinism.** Identical `distance` × `distance` cell tiling as the interior
+draw (outermost cell of each axis takes the remainder, same as the interior loop), same weighted
+kind draw, same `perturb_dist_range`/`scale_range`. Y is the slab's own constant top (every
+qualifying piece's `box.End.Y`, checked equal by `FindMapSpanningSlab`) plus `perp_dist_range` —
+A3's top-anchor rule inherited, not a second vertical rule invented. Each extension cell draws off
+its OWN generator, `Rng.NewSystemRandom(Rng.Clouds, gx, gz)` (`Utils/Rng.cs`) — a hash of the
+master seed, the subsystem and the cell's own coordinates, not the interior's shared sequential
+stream, so the extension is stable under `--det` regardless of how many cells the far-fade bound
+admits or what order they build in, and the interior draw's own realization is untouched (base
+counts below are bit-identical to A3/A6/A7's own).
+
+**Measured, all 8 chapters** (`--freecam --chapter=<X> --det`, `fogvol clouds:` log line):
+
+| chapter | base (authored) | extension (engine-side) | total | extension/base |
+|---|---|---|---|---|
+| C1 | 9,025 | 13,176 | 22,201 | 1.46× |
+| C1B | 0 | 0 | 0 | — |
+| C1C | 9,572 | 13,176 | 22,748 | 1.38× |
+| C2 | 0 | 0 | 0 | — |
+| C2B | 9,025 | 13,176 | 22,201 | 1.46× |
+| C3 | 0 | 0 | 0 | — |
+| C4 | 9,025 | 13,176 | 22,201 | 1.46× |
+| C5 | 16,170 | 0 | 16,170 | — |
+
+C5's strips and C1C's build-ups are unmoved (their own counts are exactly A3/A6/A7's), and the
+three deckless chapters stay at zero — the extension is inert exactly where the data says it must
+be, and additive only where a map-spanning slab exists.
+
+**Verified at the render.** A straight-down-the-seam pair at the west map rim
+(`.scratch/a5/before-west-along-override.png` / `after-west-along-override.png`,
+`--tex-override=cloud1.tif=00ff00 --tex-override=cloud2.tif=00ff00 --no-fog`): before, a hard
+vertical line where dense green field meets bare white void; after, the same frame is green edge
+to edge — no seam. The same pair at the map's NW corner and from 3,000 m past the west rim looking
+back both show the identical before/after change (`.scratch/a5/*-corner-outward-override.png`,
+`*-outside-lookback-override.png`) — the void the "before" build shows past the rim is filled, not
+just thinned. `--det` twice at an identical pose: `pixmd5=f49caae4b1c6c1f62bdde1af8229faa6` both
+runs.
 
 ## The sprite templates
 
@@ -293,6 +363,10 @@ degenerate ranges).
   density reading this is a far weaker choice than it was under the grid reading (a phase shift
   moves which cell a placement is drawn in, not where the placements line up), but it is still not
   read from data. Same unknown as [clutter.md](clutter.md)'s template alignment.
+- **The map-edge continuation's radius is a TUNE, like `A3`'s `TopAnchorHeightFactor`.** `A5`
+  bounds the extension to the largest authored `far_fade.y` (3,500 m, every shipped deck chapter)
+  rather than to `MapEdgeExtender`'s own reach (5,120 m) — a budget decision matched to the
+  render's own fade shader, not a value `fogvol.zrd` or the gamez names. See the section above.
 
 ## Visible consequences to know about
 
@@ -315,3 +389,8 @@ degenerate ranges).
 - **Volume walls are not sprite clips.** `perturb_dist_range` is applied after containment, so a
   card's centre can sit up to `perturb_dist_range.y` outside its own volume's wall. That is what a
   perturbation means; the volume bounds where the field is placed, not where each sprite may hang.
+- **The field no longer ends at the base map's rim, for the four map-spanning-slab chapters.**
+  `A5`'s engine-side continuation (its own section above) fills the same void this document used to
+  describe as "no edge anywhere a player can reach it" — that phrase described the ABSENCE of
+  interior seams between the nine slab pieces, which still holds; the map's OUTER rim used to be a
+  real edge, and now is not, for C1/C1C/C2B/C4 only.

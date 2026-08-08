@@ -539,6 +539,18 @@ off-engine (`CSVM.Tests/FogVolumeTests.cs` pins all eight chapters).
   negative (five do), but the values do not name a weather zone either; see fogvol.md. `BL-277`'s
   geometry rule stands.
 ⚠ A volume is NOT the `CLOUD_COVER` band: only C1's floor coincides, and C1C/C4/C5 all disagree.
+⚠ `FindMapSpanningSlab` (A5) is the data-driven test for "does this chapter have a map-spanning
+  slab to continue past the map edge" — never a chapter name or a hardcoded `fvol1..9`. A volume
+  qualifies only if it is axis-aligned (`FogVolumeBox.IsAxisAlignedBox`, the same corner test
+  `CSVM.Tests/FogVolumeTests.cs`'s own census uses) AND top-anchored by the SAME rule
+  `FogVolumeClutter.Scatter` classifies volumes with (A3's `TopAnchorHeightFactor`, passed in
+  rather than duplicated) AND, together with every other volume passing those two, the set's
+  footprints exactly tile their own combined bounding rectangle (a re-check of A1's "exact 3x3
+  partition of `World.area`" finding, not an assumption). Pure geometry, no RNG, no render state —
+  testable off-engine like `VolumesOf` beside it (`CSVM.Tests/FogVolumeTests.cs`). Returns
+  `(null, reason)` rather than throwing when a candidate set fails the top-agreement or tiling
+  cross-check, so a future non-conforming extraction is reported rather than silently producing no
+  extension (verification.md DIAG-15) — no shipped chapter hits that branch.
 
 ## src/Mech3/Messages.cs
 The game's localized string table: plain `System.Text.Json` over the extracted `messages.json`
@@ -1860,6 +1872,33 @@ VertFull/Fade) was hand-tuned because this reader had not been found.
   fog them — the opposite of `CloudPuffs`, which applied the cylindrical fog term to its puffs.
 ⚠ `Rng.Clouds` is drawn in a fixed volume/cell order at build, so the field is a pure function of
   the master seed — which is what re-pinned seven goldens deterministically.
+⚠ **A5's map-edge continuation** (`ExtendPastMapEdge`/`EmitExtensionRegion`) tiles the SAME
+  `distance`-cell field past the map rim for the chapter's map-spanning slab, if it has one
+  (`FogVolumeSpec.FindMapSpanningSlab`, `FogVolumes.cs`) — engine-side, matching the terrain's own
+  continuation (`MapEdgeExtender.cs`), NOT authored data (`fogvol.zrd` says nothing about content
+  past the map). Bounded to the largest authored `far_fade.y` among the chapter's kinds (3,500 m
+  for every shipped deck chapter) rather than to `MapEdgeExtender`'s own reach (`Rings` (5) x
+  1,024 m tile = 5,120 m): a full ring to 5,120 m would place ~2.35x this field's own base count
+  (extrapolated from the measured 3,500 m ring), past a sane budget for a structure built once and
+  kept for the process lifetime, and every kind's own shader already collapses a sprite past its
+  `far_fade.y` to a degenerate quad, so the wider ring would buy zero visible pixels. Measured:
+  C1/C2B/C4 add 13,176 (1.46x base), C1C the same 13,176 (1.38x its own larger base), C5 and the
+  three deckless chapters add 0 (their volumes fail the slab test).
+⚠ Each extension cell draws off `Rng.NewSystemRandom(Rng.Clouds, gx, gz)` (`Utils/Rng.cs`) — a
+  hash keyed on the cell's own coordinates, NOT the interior loop's shared sequential stream. The
+  interior draw's own realization is therefore untouched by the extension (base counts are
+  bit-identical to A3/A6/A7's own), and the extension itself is stable under `--det` regardless of
+  how many cells the far_fade bound admits or what order they are visited in — there is no "next
+  draw in sequence" for a runtime-computed cell set to depend on (A2's per-cell-hash trap was moot
+  for the interior loop; it is exactly right here, for the opposite reason).
+⚠ Extension cells are unconditionally accepted (no `FogVolumeBox.Contains` call) — there is no
+  authored shape outside the map to test against — and use the slab's own constant top `Y` (every
+  qualifying piece's `box.End.Y` is checked equal by `FindMapSpanningSlab`) rather than drawing
+  again, exactly as the interior's own top-anchored cells do.
+⚠ The eight-region decomposition (four edge strips + four corner squares around the slab's
+  bounding rectangle) is chosen so every inner edge is EXACTLY `bx0`/`bx1`/`bz0`/`bz1` — the same
+  coordinate the interior loop's own outermost cell is clipped to — so the join has no gap and no
+  overlap by construction, not by matching a period phase across the boundary.
 
 ## src/Effects/Precipitation.cs
 Rain/snow from weather.json's precip block (`WeatherState.PrecipData`): ONE MultiMesh whose
@@ -2734,6 +2773,15 @@ The session's randomness policy: one master seed and ten named subsystem generat
   random liveries. That boundary is the reason nothing here branches on `Pinned`. A scripted flag
   (`--screenshot=`, `--dump-*`, `--damage-test`) implies `--det`, so those runs are pinned to 1.
 ⚠ `Reset` also calls `GD.Seed(master)`: the net for any draw not yet routed through a named stream.
+⚠ `NewSystemRandom(subsystem, cellX, cellZ)` (A5) is a SEPARATE, coordinate-keyed generator, not a
+  per-instance draw off the subsystem's shared stream: the seed is `splitmix64(seedFor(subsystem) ^
+  fnv1a("cellX,cellZ"))`, so it never touches `Streams` and is a pure function of the master, the
+  subsystem and the two coordinates alone — no dependency on call order, count, or any other
+  subsystem's draws. Added for `FogVolumeClutter`'s map-edge continuation, whose cell set is a
+  runtime computation (bounded by each kind's `far_fade`) rather than a fixed walk over authored
+  volumes, so there is no "next draw in sequence" for it to be. Only touches `System.Random`, not
+  `Godot.RandomNumberGenerator`/`GD.Seed` — deliberately, so it (unlike everything else here) is
+  callable off-engine and pinned directly in `CSVM.Tests/RngTests.cs`.
 
 ## src/Testing/Probes.cs
 The assertion cores behind the `--dump-markers` / `--dump-weapons` / `--dump-loadout` /
