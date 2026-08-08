@@ -15,18 +15,18 @@ namespace CSVM.Effects;
 /// <para><b>Everything here comes off disk.</b> Which sprite templates
 /// (<c>cloudsprite1</c>/<c>cloudsprite2</c>, resolved as gamez clutter template roots by
 /// <see cref="ClutterBuilder.FindTemplateRoot"/>, the same lookup the trees use), their relative
-/// weights, the scatter period (<c>distance</c>), the per-placement jitter
+/// weights, the mean spacing (<c>distance</c>), the per-placement jitter
 /// (<c>perturb_dist_range</c> in the plane, <c>perp_dist_range</c> vertically), the size
-/// multiplier (<c>scale_range</c>), the draw distance (<c>far_fade_range</c>) and the altitude
-/// band (the <c>fvol*</c> boxes' own geometry) are all authored. The sprite's size, texture,
-/// billboard mode and its <c>lighting</c>/<c>fog</c> render flags come from the gamez model. This
-/// class holds <b>no TUNE constant</b> — do not re-introduce a hand-tuned cloud field (count,
-/// radius, size, opacity, band margins, vertical fades); every one of those is authored data
-/// read above.</para>
+/// multiplier (<c>scale_range</c>), the draw distance (<c>far_fade_range</c>) and the shape the
+/// field occupies (the <c>fvol*</c> volumes' own geometry) are all authored. The sprite's size,
+/// texture, billboard mode and its <c>lighting</c>/<c>fog</c> render flags come from the gamez
+/// model. This class holds <b>no TUNE constant</b> — do not re-introduce a hand-tuned cloud field
+/// (count, radius, size, opacity, band margins, vertical fades); every one of those is authored
+/// data read above.</para>
 ///
 /// <para><b>Model — world-anchored, built once, zero per-frame cost.</b> The field is static
-/// geometry, not a camera-following pool: the volumes are fixed boxes and the grid is anchored on
-/// the world origin, so every placement is decided at load and nothing recycles. One
+/// geometry, not a camera-following pool: the volumes are fixed authored shapes and the cells are
+/// anchored on the world origin, so every placement is decided at load and nothing recycles. One
 /// <see cref="MultiMeshInstance3D"/> per sprite kind (two draw calls in every shipped chapter); a
 /// spatial shader billboards each quad toward the camera, fades it out over the authored
 /// <c>far_fade_range</c> and collapses it to a degenerate quad past the far end, so a sprite
@@ -59,7 +59,7 @@ public sealed partial class FogVolumeClutter : Node3D
 
     /// <summary>Builds the chapter's ambient cloud field, or null when the data asks for none:
     /// no <c>fogvol.zrd</c>, no <c>fvol*</c> volume, no resolvable template, or a
-    /// <c>distance</c> that is not a usable grid period. Add the result to the world root at
+    /// <c>distance</c> that is not a usable mean spacing. Add the result to the world root at
     /// identity — its instance transforms are absolute world coordinates.</summary>
     public static FogVolumeClutter? Create(GameZ gamez, TextureArchive textures,
         FogVolumeSpec? spec, IReadOnlyList<FogVolumeBox> volumes)
@@ -277,21 +277,29 @@ public sealed partial class FogVolumeClutter : Node3D
             """;
     }
 
-    // The scatter itself: each volume filled on a world-anchored X/Z grid of the authored period,
-    // one placement per cell drawn from the weighted clutter table.
+    // The scatter itself: each volume is cut into `distance` x `distance` cells anchored on the
+    // world origin, and each cell gets ONE placement drawn uniformly inside it from the weighted
+    // clutter table. `distance` is the field's areal DENSITY — its mean spacing — not a lattice
+    // phase, so nothing about the field repeats: C1's 9,025 placements over the 12,288 m map are a
+    // mean spacing of 129.3 m against the authored 130, and that number is invariant under the
+    // randomisation. The authored `perturb_dist_range` still displaces each placement on top.
+    //
+    // ⚠ Cells, not N uniform draws over the whole footprint. One placement per cell is what keeps
+    // the sheet CONTINUOUS: a Poisson field at this density opens holes big enough to see through,
+    // and the thing being reproduced is an overcast.
     //
     // ⚠ ONE pass per VOLUME, not per clutter block. The blocks carry a `weight` and their `nodes`
-    // lists carry weights of their own, which is a two-level weighted table — running the grid
+    // lists carry weights of their own, which is a two-level weighted table — running the cells
     // once per block instead would double the authored density and stack cloudsprite1 on
     // cloudsprite2 in every cell. See docs/formats/fogvol.md for the density this reading produces
-    // (C1: one sprite-area of cover per unit of layer, i.e. an overcast exactly one sprite deep).
+    // (C1: 1.6 sprite-areas of cover per unit of layer, i.e. an overcast one sprite deep).
     //
     // ⚠ Per volume, and overlapping volumes each get their own fill. C1C is why: its fvol1-9 tile
-    // the whole map at 971-1091 m, and fvol10-23 are twelve smaller boxes sitting ON TOP of that
+    // the whole map at 971-1091 m, and fvol10-23 are twelve smaller volumes sitting ON TOP of that
     // footprint, reaching 1391-1688 m. Taking only the first containing volume per cell drops all
     // twelve — the authored build-ups over specific places — and renders a flat deck instead.
-    // The grid is anchored on the world origin (not on each box), so a cell shared by two volumes
-    // is the same X/Z in both and the stack is vertical, as authored.
+    // The cells are anchored on the world origin (not on each volume), so a cell shared by two
+    // volumes is the same X/Z in both and the stack is vertical, as authored.
     private void Scatter(FogVolumeSpec spec, IReadOnlyList<FogVolumeBox> volumes, List<Kind> kinds)
     {
         Name = "fog_volume_clutter";
@@ -308,6 +316,8 @@ public sealed partial class FogVolumeClutter : Node3D
 
         // One draw sequence off the master seed's cloud stream, in a fixed volume/cell order, so
         // the whole field is a function of the seed — which is what makes a cloud shot reproducible.
+        // Nothing here reads a camera, a pane count or a frame, so world-anchoring and determinism
+        // are the same property: there is no per-view cell to hash.
         var rng = Rng.NewSystemRandom(Rng.Clouds);
         float Rand(float a, float b) => a + ((float)rng.NextDouble() * (b - a));
 
@@ -318,9 +328,30 @@ public sealed partial class FogVolumeClutter : Node3D
             int gz0 = Mathf.CeilToInt(box.Position.Z / period), gz1 = Mathf.FloorToInt(box.End.Z / period);
             for (int gx = gx0; gx <= gx1 && InstanceCount < MaxPlacements; gx++)
             {
+                // The cell centred on this multiple of the period, trimmed to the volume's own
+                // bounds — and the outermost cell of each axis takes the remainder, so the cells
+                // TILE the volume exactly. Cell count (hence density) is therefore unchanged by
+                // the randomisation, and no strip along a volume wall is left without placements.
+                float x0 = gx == gx0 ? box.Position.X : (gx * period) - (period * 0.5f);
+                float x1 = gx == gx1 ? box.End.X : (gx * period) + (period * 0.5f);
                 for (int gz = gz0; gz <= gz1 && InstanceCount < MaxPlacements; gz++)
                 {
-                    float x = gx * period, z = gz * period;
+                    float z0 = gz == gz0 ? box.Position.Z : (gz * period) - (period * 0.5f);
+                    float z1 = gz == gz1 ? box.End.Z : (gz * period) + (period * 0.5f);
+
+                    float x = Rand(x0, x1);
+                    float z = Rand(z0, z1);
+                    float y = Rand(box.Position.Y, box.End.Y);
+
+                    // The volume is its AUTHORED shape, not its bounding box. Exact for
+                    // C1/C2B/C4's slabs, so their fields are untouched by this; C1C's rotated
+                    // tapering frusta hold 24 % of their bounds and C5's polygonal street prisms
+                    // 84 %, and a cell whose draw lands outside places nothing — which is what
+                    // preserves the authored spacing instead of crowding the surplus inward.
+                    if (!volume.Contains(new Vector3(x, y, z)))
+                    {
+                        continue;
+                    }
 
                     // Weighted draw over the whole table (block weight x node weight).
                     float pick = Rand(0f, totalWeight);
@@ -335,21 +366,20 @@ public sealed partial class FogVolumeClutter : Node3D
                         }
                     }
 
-                    // In-plane perturbation off the grid point: an authored distance at a free
-                    // bearing. A placement can therefore sit up to perturb_dist_range.y outside
-                    // its own volume's wall, which is what a perturbation means — the volume
-                    // bounds the field, it does not clip each sprite.
+                    // In-plane perturbation off the drawn point: an authored distance at a free
+                    // bearing. It is applied AFTER containment, so a placement can sit up to
+                    // perturb_dist_range.y outside its own volume's wall — which is what a
+                    // perturbation means. The volume bounds where the field is placed; it does not
+                    // clip each sprite.
                     var block = kind.Block;
                     float bearing = Rand(0f, Mathf.Tau);
                     float perturb = Lerp(block.PerturbDistRange, (float)rng.NextDouble());
-                    float y = Rand(box.Position.Y, box.End.Y)
-                              + Lerp(block.PerpDistRange, (float)rng.NextDouble());
                     float scale = Lerp(block.ScaleRange, (float)rng.NextDouble());
                     kind.Placements.Add(new Transform3D(
                         Basis.Identity.Scaled(new Vector3(scale, scale, scale)),
                         new Vector3(
                             x + (Mathf.Sin(bearing) * perturb),
-                            y,
+                            y + Lerp(block.PerpDistRange, (float)rng.NextDouble()),
                             z + (Mathf.Cos(bearing) * perturb))));
                     InstanceCount++;
                 }

@@ -125,7 +125,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — the scatter (BL-312 + the top-anchor correction)
 
 1. ☑ A1 — Decide the scatter mechanism from the evidence (research)
-2. ☐ A2 — Kill the lattice and the field edge (horizontal mechanism)
+2. ☑ A2 — Kill the lattice and the field edge (horizontal mechanism) — **+ exact footprint containment**
 3. ☐ A3 — Top-anchor the vertical placement
 4. ☐ A4 — Scatter A/B vs CAP-12 + the river twin; close `BL-312`
 
@@ -368,29 +368,181 @@ look at the three CAP-12 grazing poses before A2 renders it.
 untiled, stop at the map edge, and are NOT this wave's business. Any above-deck A/B must say which
 side of the map edge both frames are on.
 
-## A2 ☐ Kill the lattice and the field edge
+## A2 ☑ Kill the lattice and the field edge
 
-**Goal.** At any grazing angle the sheet shows soft continuous structure — no 130 m comb — and
-flying over the base map shows no field edge, per A1's mechanism.
+**Landed.** (2026-08-08) `FogVolumeClutter.Scatter` no longer places at a grid point: each volume
+is cut into `distance` × `distance` cells anchored on the world origin, the two outermost cells of
+each axis taking the remainder so the cells **tile** the volume exactly, and every cell draws its
+placement **uniformly inside itself**. `perturb_dist_range` is still applied on top, per the data.
+Cell count — hence density and mean spacing — is unchanged by construction. Folded in per the
+user's post-A1 scope call: `FogVolumeSpec.VolumesOf` now carries each volume's **face planes**
+beside its bounds and `FogVolumeBox.Contains` is a half-space test over them, so a cell whose draw
+lands outside the authored shape places nothing. **Nothing vertical changed** (A3's item), and
+`cloudparent`, the whiteout and the deck mesh were not touched.
 
-**Evidence (confidence: traced).** `FogVolumeClutter.cs` scatters on a world-origin X/Z grid of the
-`distance` period with `perturb_dist_range` 10–20 m jitter — ±15 % on 130 m, which is the comb.
+**Files.** `CSVM/src/Effects/FogVolumeClutter.cs`, `CSVM/src/Mech3/FogVolumes.cs`,
+`CSVM.Tests/FogVolumeTests.cs`, `docs/formats/fogvol.md`, `docs/architecture.md` (both module
+entries), this section.
 
-**Approach.** Implement A1's horizontal mechanism in `FogVolumeClutter.cs`. Keep the authored mean
-spacing (density is the one thing the old reading got right), the per-kind weights,
-`far_fade_range` consumption, and the built-once/world-anchored/splitscreen-shared structure
-(architecture entry). Update `fogvol.md`'s "What is decoded and what is inferred" in the same turn.
+### Containment is EXACT, not a convex approximation
 
-**Model recommendation.** high — placement math with a determinism constraint.
+Verified against `Z:\CSVM\extracted\*\gamez\{nodes,models}.json` before writing any code: **all 65
+`fvol*` volumes of all five clouded chapters are convex** — C1/C2B/C4's nine axis-aligned slabs,
+C1C's twelve rotated tapering frusta, C5's seventeen polygonal street prisms (8–20 vertices, three
+with a ramped top). So a half-space test over the mesh's own faces *is* the authored shape. Faces
+are oriented outward by the vertex centroid (winding is not guaranteed by the gamez) and coplanar
+duplicates merged — C1C's `fvol9` carries the twelve build-up footprints as subfaces cut into its
+own top face, 55 polygons over 5 distinct planes. Because a frustum's faces slope, the test
+narrows with height by itself: **A3 can change the Y distribution without touching containment**,
+which is why it was worth folding in here rather than deferring.
+
+`CSVM.Tests/FogVolumeTests.cs` pins the shape census per chapter (`volumes|volumes that ARE their
+bounding box`: C1 9|9, C1C 21|9, C2B 9|9, C4 9|9, C5 17|2) plus a data-free rotated-prism unit
+test. That census is the tripwire if a future extraction ever ships a non-convex volume, which
+this test would fill to its hull silently.
+
+### Sprite counts — measured, all 8 chapters
+
+`--freecam --chapter=<X>` per chapter, `fogvol clouds:` log line, before vs after on the same
+worktree and binary:
+
+| chapter | before | after | A1 predicted | why |
+|---|---|---|---|---|
+| C1 | 9,025 | **9,025** | 9,025 | slabs are boxes; containment never rejects ✓ |
+| C1B | 0 | 0 | 0 | no `fvol*`, no template ✓ |
+| C1C | 11,368 | **9,569** | ~9,922 | see below |
+| C2 | 0 | 0 | 0 | ✓ |
+| C2B | 9,025 | **9,025** | 9,025 | ✓ |
+| C3 | 0 | 0 | 0 | ✓ |
+| C4 | 9,025 | **9,025** | 9,025 | ✓ |
+| C5 | 19,356 | **16,170** | ~16,375 | ✓ (0.837 measured vs 0.846 predicted) |
+
+**C1C lands 353 below A1's number, and the reason is a correction to A1, not a bug.** A1 computed
+the build-ups' loss from their **base footprint** ratio (hull/AABB 0.383 → 2,343 → ~897). But the
+volumes are frusta, and containment is a test on the 3-D point, so with today's uniform-in-Y draw
+the accepted fraction is the **volume** fraction, 0.235 — Monte-Carlo'd per volume off the
+extracted meshes at 0.231–0.239, predicting 9,568 against the build's 9,569. C5's strips are
+extrusions, so its volume fraction ≈ its footprint fraction and A1's number holds. **This number
+will move again when A3 changes the Y rule**; that is the containment test composing with the
+vertical rule, exactly as intended, not a second correction.
+
+### Transition depth — the amended instrument, and what it says
+
+Instrument (`.scratch/transition_depth.py`, kept): per HUD-free 21-column block, locate the
+dominant bright-ward edge on a coarse-smoothed luminance profile, walk out of it to where the
+slope falls under 10 % of its peak (those rows carry the edge's own sky and tops levels), report
+the rows between the 10 % and 90 % crossings; median over blocks. Two smoothing scales are
+reported — `band` (31 rows: how deep the whole sky→tops band is) and `edge` (15 rows: how sharp
+the sharpest boundary inside it is). **Calibrated against A1's published numbers**: it returns
+**103 px on CAP-12 `t124`** (A1: 103) and **101 px on `t97`** (A1: 91). `t44` reads 33 px only
+because its tops boundary sits below the fixed row band — a framing limit, stated rather than
+tuned around.
+
+Probes: `--freecam --chapter=C1 --det --screenshot`, HUD- and plane-free, identical pose before
+and after, baseline taken first on the unmodified build.
+
+| pose | before band / edge | after band / edge | original reference |
+|---|---|---|---|
+| pinned above-deck `-7323,1192,-3829` | 46 / **13** | 46 / **13.5** | — |
+| grazing tops 1208 m (`t124` altitude) | 43 / **11** | 43 / **11** | `t124` **103** / 50 |
+| above deck 1527 m (`t44` altitude) | 25 / **24.5** | 25 / **24.5** | `t44` 33 / 34 (framing-limited) |
+| high above 1698 m (`t97` altitude) | 24 / **24** | 24 / **24** | `t97` **101** / 49 |
+
+**A1's prediction 1 for A2 is falsified: randomising the horizontal placement does not deepen the
+sky→tops transition at all** (0–0.5 px on four poses). The instrument is able to fail — it
+separates our frames from the originals by 2–9× and it separated `csvm-above-1160m` (10 px) from
+`t124` (103 px) — so this is a real negative, not a dead check. The reason is geometric: at 1208 m
+the camera sits ~18 m above the top of a field whose card tops are all at nearly one altitude, so
+the far sheet compresses into a few rows below the horizon whatever the X/Z arrangement is. **The
+transition depth is a measurement of how ragged the field's TOP is, i.e. of the vertical rule —
+it belongs to A3, and A4 should quote it after A3, not after A2.**
+
+### What DID move: the lattice
+
+The decisive A/B is a straight-down pair, where the ACF's degeneracy (METHOD-14: perspective makes
+a fixed world period aperiodic on screen) does not apply because the sheet sits at near-constant
+range across the frame — and it is read on **C5 at night over the harbour**, where the sprites
+show as dark blobs against lit water instead of white-on-white:
+
+- `.scratch/a2/ab-c5-lattice-over-water.png` — **before: blobs in aligned rows and columns at a
+  fixed pitch. After: irregular scatter, clumps and gaps, at 84 % of the count.** Unmistakable.
+- `.scratch/a2/ab-topdown-lattice.png` (C1 from 2500 m) — same change, much harder to read because
+  a white overcast one sprite deep hides its own structure.
+- `.scratch/a2/ab-grazing-skyline.png` — the grazing skyline's scallops go from near-equal widths
+  to varied ones.
+
+⚠ **Two instruments were tried and are degenerate here; do not re-run them.** (a) 2-D
+autocorrelation on the straight-down frame: monotonic decay to lag 200 px in *both* before and
+after — the blob's own size dominates and the field is dense enough to hide the pitch, so this
+does not even separate the known-lattice frame from the known-random one. (b) Crest-spacing
+coefficient of variation on the skyline: 1.80 before vs 1.73 after at the grazing pose, and 1.52
+on the original `t124` — the skyline extraction is too noisy for the statistic to mean anything.
+The straight-down C5 image is the instrument that works.
+
+### Probe images (`.scratch/a2/`, and the scripts beside them in `.scratch/`)
+
+| file | what it is |
+|---|---|
+| `ab-c5-lattice-over-water.png` | **the item's evidence** — C5 straight down over the harbour, before over after |
+| `ab-topdown-lattice.png` | C1 straight down from 2500 m, before over after |
+| `ab-grazing-skyline.png` | the grazing skyline's scallops, before over after |
+| `before-*.png` / `after-*.png` | the four transition-depth poses, plus the two straight-down poses |
+| `counts-before/`, `counts-after/` | the 8-chapter count sweep, one `.out` per chapter |
+| `golden-c5-city-night-cloudmask.png`, `golden-c1-crash-cloudmask.png` | the `--tex-override` probes that explain the two unmoved goldens |
+| `transition_depth.py`, `skyline_regularity.py`, `lattice_acf.py`, `ab_crop.py` | the instruments, incl. the two degenerate ones, so the next reader does not rebuild them |
+
+### The other criteria
+
+- **No field edge over the base map.** Unchanged and structural: C1/C1C/C2B/C4's `fvol1`–`fvol9`
+  are an exact 3 × 3 partition of the `World` node's own `area`, so the footprint IS the map to
+  the metre. Nearest map edge from either pinned pose is 3,829 m against a 3,500 m far fade.
+- **Determinism.** Same probe run twice on the new build: `pixmd5=8efcbfc0788142c5a9217b46e5da7253`
+  both times, counts identical. One seeded `Rng.Clouds` stream in a fixed volume/cell order; no
+  camera, pane count or frame is read, so there is no per-view cell and no coordinate hash was
+  introduced (A1 called this trap moot; it is).
+- **Preserved:** built once, world-anchored, not per rig; one field shared by every splitscreen
+  pane with the far fade evaluated per view in the shader; `far_fade_range` consumption and the
+  degenerate-quad cull past `far_fade.y`; the two-level per-kind weights; one pass per volume.
+
+### Tests and goldens
+
+`.\RunTests.ps1` — build PASS (0 warnings), **units 648/648**, **engine 26/26, errors clean**,
+goldens **6 moved, 0 broken of 13**. Exit 1 is the golden stage alone; nothing non-golden failed.
+**Not re-pinned — that is A4's job** (GOLD-1). Two new unit tests landed with the item (the
+per-chapter shape census and the rotated-prism containment check).
+
+| golden | moved? | why |
+|---|---|---|
+| `c1-waterfall` | **moved** | C1, freecam with sky in frame |
+| `c1c-rain` | **moved** | C1C, and its count changed too |
+| `c2b-rain` | **moved** | C2B |
+| `c4-snow` | **moved** | C4 |
+| `c1-flight` | **moved** | C1 chase, sky in frame |
+| `c1-destroy-effects` | **moved** | C1, sky in frame |
+| `c1b-night-sea`, `c2-city`, `c3-island` | ok | those chapters ship **no `fvol*` volume** — the change is inert by construction (DIAG-10) |
+| `viewer-bhawk`, `empty-stage` | ok | no chapter world at all |
+| `c5-city-night` | ok | C5's field DID change (19,356 → 16,170), but this pose paints **0 cloud-sprite pixels** — measured with `--tex-override=cloud1.tif=00ff00 --tex-override=cloud2.tif=00ff00` at the manifest's own pose and frame |
+| `c1-crash` | ok | frame 20 looks straight DOWN at terrain; no sky, no field in frame (same override probe — the green pixels it reports are grass, not sprites) |
+
+That is exactly the GOLD-5 pattern this change should produce: every shot that shows a clouded
+chapter's sky moved, and nothing else did.
+
+**⚠ Handover to A3.** (1) The transition-depth targets are A3's to hit, not A2's — do not read
+A2's flat numbers as a failure of the scatter. (2) Containment now rejects a draw outside the
+authored shape *before* `perp_dist_range` is added, so a top-anchored Y **must be sampled inside
+the volume and offset afterwards**; sampling at `top + perp_dist` and then testing would reject
+the entire field, C1's slab included. (3) C1C's count will move again with the Y rule — that is
+the frustum taper, not a regression.
+
+### Original approach (kept for reference)
 
 **Verify.** `--screenshot` grazing passes along tops and base at CAP-12's angles: no periodic
 structure (eyeball + a column-autocorrelation check on the sheet region); sprite count logged per
 chapter stays within ~5 % of the census (9,025 C1) unless A1 decided tiling — then state the new
 number and why. `.\RunTests.ps1` green; goldens re-pinned only at A4.
-
-**⚠ Traps.** `--det` must keep the field stable frame-to-frame and run-to-run — a camera-tiled
-field re-seeded per cell must hash cell coordinates, not accumulate RNG state, or determinism and
-world-lock both break. Do not touch `cloudparent`.
+— *the column-autocorrelation check was withdrawn by A1 (METHOD-14) and its replacement, the
+transition-depth metric, turned out to measure the vertical rule; see above. The ~5 % count band
+was written before the footprint correction was folded in.*
 
 ## A3 ☐ Top-anchor the vertical placement
 

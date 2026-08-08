@@ -37,6 +37,24 @@ public class FogVolumeTests
         { "C5", "17|1|80|keyed|cloudsprite1:present cloudsprite2:present" },
     };
 
+    /// <summary>Per chapter: "volumes|volumes whose authored shape IS their bounding box". The
+    /// second number is the decode the scatter turns on — only C1/C2B/C4's map-spanning slabs are
+    /// boxes, and filling the bounds of anything else puts cloud where the data authors none.
+    /// C1C's nine slab volumes are boxes and its twelve build-ups are rotated tapering frusta;
+    /// C5 has two boxes among seventeen, the rest being polygonal street prisms and three strips
+    /// with a ramped top.</summary>
+    public static TheoryData<string, string> ChapterFogVolumeShapes => new()
+    {
+        { "C1", "9|9" },
+        { "C1B", "0|0" },
+        { "C1C", "21|9" },
+        { "C2", "0|0" },
+        { "C2B", "9|9" },
+        { "C3", "0|0" },
+        { "C4", "9|9" },
+        { "C5", "17|2" },
+    };
+
     [Fact]
     public void TheHeaderKeysAndTheWeightedClutterBlockAreRead()
     {
@@ -134,5 +152,56 @@ public class FogVolumeTests
             $"{volumes.Count}|{spec.FogZone?.ToString(CultureInfo.InvariantCulture) ?? "-"}|"
             + $"{spec.Distance.ToString("0.##", CultureInfo.InvariantCulture)}|"
             + $"{(spec.HasClutterKey ? "keyed" : "bare")}|{string.Join(" ", templates)}");
+    }
+
+    [ExtractedDataTheory]
+    [MemberData(nameof(ChapterFogVolumeShapes))]
+    public void HalfTheInstallsFogVolumesAreNotTheirBoundingBox(string chapter, string expected)
+    {
+        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
+        var volumes = FogVolumeSpec.VolumesOf(gamez);
+
+        int boxes = 0;
+        foreach (var volume in volumes)
+        {
+            // A volume IS its bounding box exactly when every corner of that box is inside the
+            // authored shape — an integer test with no tolerance to argue about.
+            bool box = true;
+            for (int corner = 0; corner < 8 && box; corner++)
+            {
+                box = volume.Contains(volume.Box.GetEndpoint(corner));
+            }
+            if (box)
+            {
+                boxes++;
+            }
+        }
+
+        Assert.Equal(expected, $"{volumes.Count}|{boxes}");
+    }
+
+    [Fact]
+    public void ARotatedVolumeExcludesTheCornersOfItsBoundingBox()
+    {
+        // A square prism turned 45° in the XZ plane: its bounding box is 2x2, its own footprint is
+        // the diamond inscribed in it. Nothing here is chapter data — it is the property the
+        // scatter depends on, stated where it cannot silently stop holding.
+        const float S = 0.70710678f;
+        var faces = new[]
+        {
+            new Plane(new Vector3(S, 0f, S), 1f),
+            new Plane(new Vector3(S, 0f, -S), 1f),
+            new Plane(new Vector3(-S, 0f, S), 1f),
+            new Plane(new Vector3(-S, 0f, -S), 1f),
+            new Plane(Vector3.Up, 1f),
+            new Plane(Vector3.Down, 1f),
+        };
+        var volume = new FogVolumeBox("fvoltest", new Aabb(new Vector3(-1f, -1f, -1f),
+            new Vector3(2f, 2f, 2f)), faces);
+
+        Assert.True(volume.Contains(Vector3.Zero));
+        Assert.True(volume.Contains(new Vector3(0.9f, 0.9f, 0f)));
+        Assert.False(volume.Contains(new Vector3(0.9f, 0f, 0.9f)));   // a bounding-box corner
+        Assert.False(volume.Contains(new Vector3(0f, 1.5f, 0f)));     // above the top face
     }
 }

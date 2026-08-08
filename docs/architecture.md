@@ -506,10 +506,19 @@ tags, and the trailer attach target. First consumer: `UI/AiNetsOverlay.cs`; M4's
 
 ## src/Mech3/FogVolumes.cs
 The chapter's `fogvol.zrd` (`FogVolumeSpec.Load`/`Parse`) plus `VolumesOf`, the gamez census of
-`fvol*` boxes — the two halves of the authored ambient cloud field, rendered by
+`fvol*` volumes — the two halves of the authored ambient cloud field, rendered by
 `Effects/FogVolumeClutter`. Schema, per-chapter values and the decoded/inferred split:
 docs/formats/fogvol.md. Both halves are static over a `GameZ`/reader list, so the pair is testable
 off-engine (`CSVM.Tests/FogVolumeTests.cs` pins all eight chapters).
+⚠ A `FogVolumeBox` carries BOTH its bounds and its authored face planes, and `Contains` is a
+  half-space test over the latter. That is EXACT rather than a convex approximation because every
+  one of the 65 shipped volumes is convex; a future non-convex one would silently be filled to its
+  hull, so the shape census in the tests is the tripwire. Only 38 of the 65 are boxes — C1C's
+  twelve build-ups are rotated tapering frusta, C5's fifteen non-box strips polygonal prisms.
+⚠ Faces are oriented outward by the VERTEX CENTROID, which lies inside any convex body — not by
+  polygon winding, which the gamez does not guarantee. Coplanar duplicates are merged: C1C's
+  `fvol9` carries the twelve build-up footprints as subfaces cut into its own top face, 55
+  polygons over 5 distinct planes.
 ⚠ The census shares `WorldBuilder.IsFogVolumeNode` with the world walk's skip rule, so the set
   excluded from the render and the set filled with clutter cannot drift apart.
 ⚠ **Neither half alone says whether a chapter has clouds.** C1B/C2/C3 ship a reader file naming a
@@ -1787,8 +1796,10 @@ custom data, and the soft-particle depth fade. Reached in a suite by `RecordingE
 
 ## src/Effects/FogVolumeClutter.cs
 The ambient cloud field, ENTIRELY authored (`BL-273`): `fogvol.zrd`'s weighted clutter table
-scattered on a world-origin-anchored X/Z grid of the file's own `distance` period through every
-`fvol*` box the gamez carries, one alpha-blended MultiMesh per sprite kind (two per chapter).
+scattered through every `fvol*` volume the gamez carries, one alpha-blended MultiMesh per sprite
+kind (two per chapter). Each volume is cut into `distance` × `distance` cells anchored on the world
+origin and every cell gets ONE placement drawn uniformly inside it — `distance` is the field's
+areal DENSITY (mean spacing), not a lattice phase.
 Templates resolve through `ClutterBuilder.FindTemplateRoot` — the trees' own lookup. Per placement:
 kind by weight, `perturb_dist_range` in the plane at a free bearing, uniform Y in the volume plus
 `perp_dist_range`, size = the card's authored extent × `scale_range`. Schema, per-chapter values
@@ -1798,12 +1809,22 @@ BandBelow/Above, VertFull/Fade) was hand-tuned because this reader had not been 
 ⚠ Built ONCE, world-anchored, no per-frame hook and NOT per rig — unlike the dome/deck/whiteout,
   nothing here follows a camera. Splitscreen shares one field; the far fade is evaluated per view
   inside the shader, which is what makes that correct.
+⚠ Determinism and world-anchoring are the SAME property here: one seeded `Rng.Clouds` stream drawn
+  in a fixed volume/cell order, and nothing reads a camera, a pane count or a frame. There is no
+  per-view cell, so there is nothing to hash — do not introduce a coordinate hash.
+⚠ Placement is drawn against the volume's AUTHORED shape (`FogVolumeBox.Contains`), not its bounds;
+  a draw outside it places nothing. Resampling until it lands inside instead would crowd the
+  surplus inward and raise the local density above the authored spacing.
+⚠ Containment is tested on the in-volume draw, BEFORE `perturb_dist_range`/`perp_dist_range` are
+  added. A card may therefore hang outside its volume's wall, which is what a perturbation means —
+  and it is what lets a vertical rule move the Y distribution without the containment test
+  rejecting the whole field.
 ⚠ The shader collapses a sprite past `far_fade.y` to a degenerate quad (`cull` scales the
   billboard basis to 0). Without it the whole map's field would rasterize alpha-0 fragments over
   huge quads every frame; with it, a static MultiMesh needs no streaming at all.
 ⚠ Scatter runs once per VOLUME, not once per clutter block. Per block would double the authored
   density (the block `weight` × node weight is one two-level table); first-volume-wins would drop
-  C1C's twelve stacked build-up boxes and render a flat deck.
+  C1C's twelve stacked build-up volumes and render a flat deck.
 ⚠ The cards are authored `fog: false` and carry `far_fade_range` instead, so this shader does NOT
   fog them — the opposite of `CloudPuffs`, which applied the cylindrical fog term to its puffs.
 ⚠ `Rng.Clouds` is drawn in a fixed volume/cell order at build, so the field is a pure function of
