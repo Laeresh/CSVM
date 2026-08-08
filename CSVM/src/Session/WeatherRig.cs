@@ -24,7 +24,13 @@ namespace CSVM.Session;
 /// <c>GameSession</c> (<see cref="CSVM.Effects.FogVolumeClutter"/>).</para></summary>
 public sealed class WeatherRig
 {
-    private static readonly Color WhiteoutColor = new(0.95f, 0.95f, 0.96f);
+    // ⚠ TUNE, and the FALLBACK only — a mission that authors CLOUD_COVER colours overrides it
+    // (WeatherState.WhiteoutColor). It survives because the three reachable-band chapters that
+    // author nothing are measured right at this value: CAP-12 puts C1's in-cloud interior at 248
+    // in the original against our 243 (BL-118). C1C and C2B share C1's colourless CLOUD_COVER
+    // block. Do not "unify" it with the zone FOG_COLOR: C1's fog is 0.69 = 176, which would
+    // darken a passing A/B by 70 units.
+    private static readonly Color WhiteoutFallbackColor = new(0.95f, 0.95f, 0.96f);
 
     private readonly SessionSpec _spec;
     private readonly Node3D _worldRoot;
@@ -81,7 +87,9 @@ public sealed class WeatherRig
             // Cloud-band whiteout: fade the overlay in as the camera altitude enters the band.
             if (rig.Whiteout != null && _weather != null)
             {
-                var c = rig.Whiteout.Color;
+                // The colour is re-read per frame, not set once at build: where the authored pair
+                // differs it lerps across the band with the camera (BL-118).
+                var c = _weather.WhiteoutColor(camPos.Y) ?? WhiteoutFallbackColor;
                 // --no-fog covers the whiteout too: flying into the cloud band would otherwise
                 // still white the pane out, which reads as "fog is not actually off".
                 c.A = _spec.NoFog ? 0f : _weather.WhiteoutAmount(camPos.Y);
@@ -215,7 +223,8 @@ public sealed class WeatherRig
                 var canvas = new CanvasLayer { Layer = 0, Name = "whiteout" };
                 rig.Whiteout = new ColorRect
                 {
-                    Color = new Color(WhiteoutColor, 0f),
+                    Color = new Color(
+                        _weather.WhiteoutColor(_weather.CloudBottom) ?? WhiteoutFallbackColor, 0f),
                     MouseFilter = Control.MouseFilterEnum.Ignore,
                 };
                 rig.Whiteout.SetAnchorsPreset(Control.LayoutPreset.FullRect);

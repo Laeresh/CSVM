@@ -68,10 +68,10 @@ public sealed class WeatherState
 
     public bool HasCloudBand => CloudTop > CloudBottom;
 
-    /// <summary>The cloud deck's face tints from CLOUD_COVER's <c>TOP_COLOR</c>/<c>BOTTOM_COLOR</c>,
+    /// <summary>The cloud band's own colours from CLOUD_COVER's <c>TOP_COLOR</c>/<c>BOTTOM_COLOR</c>,
     /// when the mission carries them (integer-RGB in the data — normalized by
-    /// <see cref="ParseColor"/>). Null when absent (C1/IA1 has neither). Decoded now for the
-    /// night-brightness deck-tint calibration; unused this milestone.</summary>
+    /// <see cref="ParseColor"/>). Null when absent (C1/IA1 has neither). Consumed by
+    /// <see cref="WhiteoutColor"/>, which documents what they are and are not.</summary>
     public Color? CloudTopColor { get; private set; }
 
     public Color? CloudBottomColor { get; private set; }
@@ -254,6 +254,36 @@ public sealed class WeatherState
             return 1f;
         float ramp = (CloudTop - CloudBottom) * 0.5f - coreHalf; // core edge → band edge
         return ramp > 1e-3f ? Mathf.Clamp(1f - (dist - coreHalf) / ramp, 0f, 1f) : 1f;
+    }
+
+    /// <summary>The colour the whiteout paints at a given altitude, or null when the mission
+    /// authors no <c>CLOUD_COVER</c> colour and the caller should keep its own default.
+    /// <see cref="CloudBottomColor"/> at the band's floor lerping to <see cref="CloudTopColor"/>
+    /// at its ceiling.</summary>
+    /// <remarks>
+    /// <para>Authored data, and the target is not a judgement call: the original's C4 veil
+    /// measures a flat 192 and C4 authors <c>TOP_COLOR</c>/<c>BOTTOM_COLOR</c> = 192,192,192
+    /// (BL-118, CAP-12). Ours painted a hardcoded 0.95 white there — measured 242 in-cloud
+    /// against the original's 192, now 192 exactly.</para>
+    /// <para>⚠ The <b>lerp</b> is inferred and this install cannot falsify it. Of the four
+    /// chapters whose band you can reach (C1 970–1124, C1C 1055–1110, C2B 924–1124, C4
+    /// 1000–1100) only C4 authors colours and its pair is EQUAL, so every blend rule renders the
+    /// same picture. The one chapter that would discriminate is C5 (top 220, bottom 64) and its
+    /// band sits at 9950–10150 m — unreachable, so its values may never have been checked by
+    /// their own authors either. C1B/C3 are likewise 10 km up.</para>
+    /// <para>These are NOT deck-mesh face tints, whatever the names suggest: three of the four
+    /// colour-carrying chapters (C1B, C3, C5) have no <c>CloudDeck</c> mesh at all
+    /// (<c>WorldBuilder</c>'s coverage table), so there is nothing there to tint.</para>
+    /// </remarks>
+    public Color? WhiteoutColor(float altitude)
+    {
+        if (CloudTopColor is not { } top)
+            return CloudBottomColor;
+        if (CloudBottomColor is not { } bottom)
+            return top;
+        if (!HasCloudBand)
+            return top;
+        return bottom.Lerp(top, Mathf.Clamp((altitude - CloudBottom) / (CloudTop - CloudBottom), 0f, 1f));
     }
 
     private static float WorldLightFactor(ZrdrDict zone)

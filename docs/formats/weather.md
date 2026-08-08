@@ -272,7 +272,22 @@ The whiteout band (a vertical altitude band the plane vanishes inside), bare-sca
 |---|---|
 | `TOP` / `BOTTOM` | band edges (metres altitude); sight is clear at both |
 | `THICKNESS` | depth of the fully-opaque **core**, centred on the band midpoint — **not** an edge transition. C1/IA1 970–1124 ±30 ⇒ clear at 970/1124, total only in 1032–1062, linear ramps between |
-| `TOP_COLOR` / `BOTTOM_COLOR` | *(optional)* the deck's face tints (integer RGB). Absent in C1/IA1. Decoded into `CloudTopColor`/`CloudBottomColor`; **unused this milestone** — reserved for the item-6 night-brightness calibration |
+| `TOP_COLOR` / `BOTTOM_COLOR` | *(optional)* the **band's** colours (integer RGB) — what the in-cloud whiteout paints. Absent in C1/IA1. Decoded into `CloudTopColor`/`CloudBottomColor` and consumed by `WeatherState.WhiteoutColor` |
+
+⚠ **`TOP_COLOR`/`BOTTOM_COLOR` are not the deck mesh's face tints**, whatever the names
+suggest (this page said so until 2026-08-08). Three of the four chapters that author them —
+C1B, C3, C5 — ship **no `CloudDeck` mesh at all** (`WorldBuilder`'s coverage table), so there
+is nothing there to tint. They track the cloud band, and the render confirms it: C4 authors
+`[192]³` and the original's in-cloud veil measures a flat 192 (`BL-118`, `CAP-12`).
+
+**Inferred, and marked as such:** where a mission authors both keys the whiteout lerps
+`BOTTOM_COLOR` → `TOP_COLOR` across the band by camera altitude. **The shipped data cannot
+falsify this.** Of the four chapters whose band is reachable (C1 970–1124, C1C 1055–1110,
+C2B 924–1124, C4 1000–1100) only C4 authors colours and its pair is *equal*, so every blend
+rule renders the same picture; the one chapter that would discriminate is C5 (top `[220]³`,
+bottom `[64]³`) and its band sits at 9950–10150 m, which no one can fly to. C1B and C3 are
+likewise 10 km up — plausibly left in and parked out of reach rather than curated, so their
+values are not evidence of intent either.
 
 ## Wind (`WIND`)
 
