@@ -1167,7 +1167,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Environment & world
 
-- `BL-037` `[Feature]` **`WorldPartitionSetActive` is decoded and unimplemented — `NodeSetActive`
+- `BL-037` `[Feature]` {CAMPAIGN} **`WorldPartitionSetActive` is decoded and unimplemented — `NodeSetActive`
   selected by area.** **Decoded 2026-08-09** from `crimson.exe` in Ghidra and written up in
   [`docs/formats/interp.md`](docs/formats/interp.md) § "`WorldPartitionSetActive` — `NodeSetActive`,
   selected by area" (dispatch `FUN_005b80a0`, rectangle walk `FUN_004db790`, shared toggle
@@ -1189,7 +1189,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Needs:* a decision. Verifying it means a C3 story-mission A/B against the original, since
   Instant Action cannot show it.
 
-- `BL-038` `[Feature]` **`FogState` is a decoded animation event we do not act on** (found 2026-07-22). Fog **can** be
+- `BL-038` `[Feature]` {CAMPAIGN} **`FogState` is a decoded animation event we do not act on** (found 2026-07-22). Fog **can** be
   changed mid-mission by animation, but the data uses it exactly once install-wide:
   `extracted/C1/M04/mis_anim/camera1-mission_intro_animation.json`, `reset_state/events[4]` —
   `FogState { name: "drop_fog", color 0.69/0.69/0.69, altitude 10000–11000, range 1000–1500 }`.
