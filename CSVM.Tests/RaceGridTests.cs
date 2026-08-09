@@ -150,7 +150,10 @@ public class RaceGridTests
         var anchor = new Vector3(0f, 5000f, 0f);
         var starts = Grid(Heights(new Dictionary<float, float>
         {
-            [-90f] = 0f, [-30f] = 400f, [30f] = 120f, [90f] = 90f,
+            [-90f] = 0f,
+            [-30f] = 400f,
+            [30f] = 120f,
+            [90f] = 90f,
         })).ChooseStarts(Spawns(anchor, 0f), "", 0, 4);
 
         foreach (var s in starts)
@@ -168,7 +171,10 @@ public class RaceGridTests
         // Only the far-left slot is high; the anchor's own column is clear.
         var starts = Grid(Heights(new Dictionary<float, float>
         {
-            [-90f] = 900f, [-30f] = 0f, [30f] = 0f, [90f] = 0f,
+            [-90f] = 900f,
+            [-30f] = 0f,
+            [30f] = 0f,
+            [90f] = 0f,
         })).ChooseStarts(Spawns(anchor, 0f), "", 0, 4);
 
         foreach (var s in starts)
