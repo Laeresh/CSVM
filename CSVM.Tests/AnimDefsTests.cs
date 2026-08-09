@@ -142,8 +142,10 @@ public class AnimDefsTests
         Assert.Equal(6f, puffer.Obj("size_range")!.Num("max"));
         Assert.Equal(4f, puffer.Obj("lifetime_range")!.Num("max"));
         Assert.Equal(new[] { "probe_smoke1", "probe_smoke2" }, TextureNames(puffer));
-        // GROWTH_FACTOR is one scalar in the reader, a {min,max} list compiled.
-        Assert.Equal(0.25f, Growth(puffer));
+        // GROWTH_FACTOR is one scalar in the reader; compiled it is the two-stop SCALE_SEQUENCE
+        // ramp (0,1),(1,G) under `min`/`max` labels that mean (age, scale). The normalizer must
+        // synthesise both stops, or a consumer reading stop #1 gets 1 for every reader puffer.
+        Assert.Equal(new[] { (0f, 1f), (1f, 0.25f) }, GrowthStops(puffer));
     }
 
     [Fact]
@@ -231,12 +233,13 @@ public class AnimDefsTests
         return names.ToArray();
     }
 
-    private static float Growth(AnimData puffer)
+    private static (float Age, float Scale)[] GrowthStops(AnimData puffer)
     {
+        var stops = new List<(float Age, float Scale)>();
         foreach (var g in puffer.Objects("growth_factors"))
         {
-            return g.Num("max") ?? 0f;
+            stops.Add((g.Num("min") ?? 0f, g.Num("max") ?? 0f));
         }
-        return 0f;
+        return stops.ToArray();
     }
 }

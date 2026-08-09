@@ -1177,9 +1177,9 @@ are not visible from the byte format alone, each measured against this install.
   emitter but **meters** for an `interval_type: "Distance"` trail (the crash-debris
   `spurtpuffer`s), and its flag shape is inverted — `has_interval_value` is **false** even when
   `interval_value` holds the real distance, so key off `interval_type`, never the flag;
-  `GROWTH_FACTOR` arrives as a two-entry `growth_factors` array whose
-  **second entry's max** is the reader's scalar (matches 172 of 177 puffers whose name resolves
-  to a single reader definition); and an event whose `textures` array is **empty** is an
+  `GROWTH_FACTOR` arrives as a two-entry `growth_factors` array, which is an **`(age, scale)`
+  ramp and not a min/max pair** — see the next bullet, which corrects what this one used to
+  claim; and an event whose `textures` array is **empty** is an
   adjust/stop stub referencing a puffer another event defines — the readers have the same idiom
   (C1's `truck1dust_puffer` and `black_exhaust_puffer`). A `textures[]` entry's `run_time` is a
   **fraction of the sprite's lifetime**, not a second count — the survey that settles it, and what
@@ -1188,6 +1188,56 @@ are not visible from the byte format alone, each measured against this install.
   NOT the event's `name` (that is the puffer's own name, a separate namespace). `ACTIVE_STATE`
   1 starts a continuous emitter and 0 stops it; definitions re-assert their puffers on every
   loop iteration, so a consumer must treat re-assertion as idempotent.
+- **`growth_factors[i]` is `(age_i, scale_i)`, not `(min, max)`** — corrected 2026-08-09
+  (`PLAN-puffer-engine-deltas.md` item B3, which closed as a disproof). This bullet previously
+  read the entry as a size *range* and cited a "matches 172 of 177 puffers" survey; **both
+  statements are withdrawn** — the reading was wrong and the survey does not reproduce (see the
+  wildcard bullet below for what it was actually seeing).
+  **The data alone proves the reading**, independent of the disassembly: **216 compiled events
+  author a second entry whose "max" is *less* than its "min"** — `(1, 0.25)` ×71, `(1, −0.2)`
+  ×39, `(1, 0.5)` ×26, `(1, 0.45)`/`(1, 0.2)`/`(1, 0.15)`/`(1, 0.0)` ×16 each, `(1, 0.1)`/
+  `(1, 0.6)` ×8. `(1.0, −0.2)` (`fire_at_zepskin3`) is a coherent *stop at age 1, scale −0.2*
+  and an incoherent *range*. **The parser agrees**: `crimson.exe`'s `PUFFER_STATE` reader
+  `FUN_004f7120` accepts a `SCALE_SEQUENCE` key of up to six `(age, scale)` stops
+  (`if (5 < i) break`), and when that key is absent falls through to `GROWTH_FACTOR` and
+  **synthesises exactly the degenerate two-stop ramp `count = 2, (0.0, 1.0), (1.0, G)`**. So the
+  compiled `growth_factors` array is not a growth *parameter* at all — it is `SCALE_SEQUENCE`,
+  always, with `GROWTH_FACTOR` as its two-stop spelling. `FUN_0054e6e0` walks the stops with a
+  per-particle cursor and **lerps** between the bracketing pair, clamping past the last stop.
+  ⚠ **Do not "repair" a descending pair.** Under the old reading `(1, −0.2)` looks like corrupt
+  data; it is a puffer that shrinks to nothing and then inverts, exactly as authored.
+  **Reachability, measured over the whole install:** the literal `SCALE_SEQUENCE` appears in
+  **0** of the 17,569 extracted JSON files — reader *and* compiled — and of the **4,535**
+  compiled events carrying a `growth_factors` key, **2,906 author it and every single one has
+  exactly two stops**, with entry 0 equal to `(0.0, 1.0)` in all 2,906 (29 distinct arrays;
+  commonest `G` 3.0 ×666, 2.0 ×492, 2.5 ×279, 1.5 ×210, 8.5 ×160, 1.0 ×153). **A consumer that
+  lerps `1 → G` over the particle's life is therefore correct for 100% of this install** and
+  needs no ramp walk; the multi-stop machinery is real in the engine and unreachable in the data.
+  Read the array as stops anyway — a single-entry synthesis of the form `[(0, G)]` encodes the
+  *wrong* reading even where it happens to yield the right number.
+- **A reader `PUFFER_STATE` `NAME` may itself carry a `*` wildcard, and it expands at compile
+  time** (found 2026-08-09). The [name-wildcard convention](README.md#shared-conventions-zrdr-readers)
+  is documented for scene-*node* references; the puffer name is a separate namespace (it is not
+  `AT_NODE`), and it takes wildcards too. Three definitions in this install use one:
+  `rc_smokn_stacks*` (`C1/M05/zrdr/redcross_ship.zrd.json`), `stack_puffer*`
+  (`C4/zrdr/bhfchimney_smoke.zrd.json`) and `torch_puffer*` (`C5/zrdr/steam.zrd.json`). They are
+  the whole explanation for the compiled surface's apparent orphans: of the **253** distinct
+  compiled puffer names, exactly **7** have no reader definition — `rc_smokn_stacks1/2`,
+  `stack_puffer0/1/2`, `torch_puffer1/2` — i.e. precisely those three patterns expanded, and
+  nothing else. Conversely **9** reader names are never compiled: those same 3 patterns plus 6
+  genuinely unused defs (`aa_car_puffer`, `fly01_puff`, `fly02_puff`, `fly03_puff`,
+  `train_puffer2`, `zrapid01_puffer`). ⚠ **A reader→compiled name join that does not expand
+  wildcards will report these 7 as unexplained mismatches** — which is what the withdrawn
+  "172 of 177" survey above was doing.
+  **Names genuinely collide across readers, separately from this.** Of the 879 reader
+  `PUFFER_STATE` blocks (255 distinct names; 688 carry parameters, 191 are name+`ACTIVE_STATE`
+  re-assertion stubs), **17 names carry more than one distinct `GROWTH_FACTOR`** —
+  `trailpuffer1/2/3`, `spurtpuffer1/2`, `fire_n_smoke` (G ∈ {1.5, 2.5, 3.5}), `firepuffer`
+  (5 values), `smokerpuff` (4.0 and 85.0), `smokepuffer`, `smokepuffer2`, `lgpuffer`,
+  `blacksmokepuffer`, `whitehotpuffer`, `black_smoke`, `pandust`, `splasher`, `unit_fire`.
+  Each is resolved per *file*, so a global name→definition table silently picks one at random.
+  Compiled↔reader disagreements, once the wildcards are expanded and the per-file resolution
+  respected: **none, on any key.**
 - **Only `nodes` and `objects` carry node indices.** `lights`, `puffers` and `dynamic_sounds`
   hold runtime pointers instead — measured over C1/C2/C4/C5, **every one** of their 2,616 `ptr`
   values is outside the node-array range, while `nodes`/`objects` resolve 46,481/46,481 and

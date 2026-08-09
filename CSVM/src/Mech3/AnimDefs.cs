@@ -409,11 +409,20 @@ public static class AnimDefs
         if (Num(fields, "NUMBER") is { } num) data["number"] = num;
         if (RangeObj(fields, "SIZE_RANGE") is { } sr) data["size_range"] = sr;
         if (RangeObj(fields, "LIFETIME_RANGE") is { } lr) data["lifetime_range"] = lr;
-        // GROWTH_FACTOR is one scalar in the reader; FromAnimEvent reads a one-entry
-        // growth_factors list the same way it reads the compiled shape's rare single-entry case.
+        // GROWTH_FACTOR is one scalar in the reader. Compiled, it is not a growth parameter at
+        // all: `growth_factors` is the SCALE_SEQUENCE age->scale ramp, entry i = (age_i, scale_i)
+        // under the `min`/`max` field labels, and the original's parser (crimson.exe
+        // FUN_004f7120) synthesises exactly the two-stop ramp (0, 1), (1, G) when SCALE_SEQUENCE
+        // is absent — which it is, in every reader in this install. Mirror those two stops, so the
+        // normalized reader shape is byte-for-byte the compiled one; PufferState.FromAnimEvent's
+        // `growth[1].max` then reads G from either source. See
+        // docs/formats/anim-definitions.md ("growth_factors[i] is (age_i, scale_i)").
         if (Num(fields, "GROWTH_FACTOR") is { } gf)
             data["growth_factors"] = new List<object?>
-                { new Dictionary<string, object?>(StringComparer.Ordinal) { ["min"] = 0f, ["max"] = gf } };
+            {
+                new Dictionary<string, object?>(StringComparer.Ordinal) { ["min"] = 0f, ["max"] = 1f },
+                new Dictionary<string, object?>(StringComparer.Ordinal) { ["min"] = 1f, ["max"] = gf },
+            };
 
         if (fields.TryGetValue("TEXTURES", out var texs) && texs != null)
         {

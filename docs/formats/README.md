@@ -72,7 +72,10 @@ JSON file of nested arrays. Conventions that recur across every reader family:
   nearest-first through the chain (`pbloodhawk` → `player_airplane` → `basic_airplane`).
 - **Name wildcards.** Where readers reference scene-node names (animation definitions),
   `*`/`**` match any run of characters, `#` a run of digits, and the `.flt` model suffix
-  is optional (`ap_radiotwr` ↔ node `ap_radiotwr.flt`).
+  is optional (`ap_radiotwr` ↔ node `ap_radiotwr.flt`). **Not only node names** — a
+  `PUFFER_STATE`'s own `NAME`, which is a separate namespace, takes a `*` too and expands at
+  compile time (`torch_puffer*` → `torch_puffer1`/`2`); see
+  [anim-definitions.md](anim-definitions.md).
 - **Units** are meters, seconds, and degrees throughout (`fd_speed 135` m/s ≈ 302 mph =
   the Bloodhawk's published top speed; `RANGE` distances in meters; rotations in degrees).
 
