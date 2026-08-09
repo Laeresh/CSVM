@@ -305,7 +305,11 @@ and `EmitPolygon` answers by writing white corners, so the value lands once. `PL
   forceLit` still only PICKS an existing lit/fogged variant, so this composes with the ordering
   contract rather than working around it. Both overrides join the mesh cache key
   (`(Model, Force, ForceLit)`) because sidedness and the lit choice are baked into the built
-  surfaces, not read per frame.
+  surfaces, not read per frame. That baking is why a RUNTIME lit-ness change has to be a mesh
+  swap: `SharedMesh(meshIndex, forceDoubleSided, forceLit)` takes the same two flags and hits the
+  same cache, so a caller can hold both variants of one model and assign either onto a live
+  `MeshInstance3D` — the deck's regime-conditional dimming (`PLAN-overcast-match` C23,
+  `Session/WeatherRig`) is exactly that and needs no second build of the deck.
 ⚠ UV scroll reads the `csky_time` global, never Godot's `TIME` — it must keep TIME's 3600 s wrap
   because every install rate (0.07/0.4/0.5/0.7/1.0) × 3600 is a whole number of texture repeats.
 ⚠ `BuildSubtree` sets the built root's transform from the node's OWN `Local` — a caller slicing a
@@ -459,6 +463,15 @@ applies `csky_world_light` to the deck regardless of its own authored flag, deck
 change to the `lighting` gate or to `csky_world_light` itself. C4's deck is unaffected by
 construction (its `WorldLight` clamps to 1.0), which is the control that proves the fix is
 deck-local rather than a hidden global change.
+⚠ That dimming is the BELOW-BAND regime only (`PLAN-overcast-match` C23, user's fork verdict
+2026-08-09): the ceiling a camera under the band sees is the overcast's dimmed UNDERSIDE, the
+floor a camera above it sees is the undimmed top, and the original's above-band frames contain no
+pixel below `FOG_COLOR` at all. `RecordDeckUndimmedMesh` therefore asks `SceneBuilder.SharedMesh`
+for each tile's mesh in BOTH `forceLit` variants as it builds — the cache means the dimmed one is
+the very resource the built instance carries — and `CloudDeckUndimmedMeshes` publishes the pairs
+keyed by the dimmed mesh's `Rid`. `Session/WeatherRig.Tick` assigns one variant per rig at the
+band crossing; nothing here decides which. Keyed by RID because a splitscreen session's extra deck
+copies (`GameSession.AssignCloudDecks`) are `Duplicate`s sharing these resources.
 `CloudClusters` censuses the OTHER ambient cloud population after the walk — every `cloudparent`
 subtree the world places (C1 28, C1B 70, C1C 30, C4 45; C2/C2B/C3/C5 none), logged per chapter so
 "none" cannot read like a broken census. `GameSession` puts them on `UI.SplitScreen.CloudFieldLayer`
@@ -1869,9 +1882,18 @@ kind by weight, `perturb_dist_range` in the plane at a free bearing, Y = TOP-ANC
 volume's own top) for a volume no more than 1.5 card-heights thick, UNIFORM across the full volume
 height otherwise, then `perp_dist_range` added after containment either way; size = the card's
 authored extent × `scale_range`. Schema, per-chapter values and the decoded/inferred split:
-docs/formats/fogvol.md. **This file holds no TUNE constant, except `TopAnchorHeightFactor`** (A3):
-not authored data, a shape-classification threshold decided from the volumes' own thickness gap —
-see the constant's own remarks and fogvol.md's vertical-spread entry. Otherwise it replaced
+docs/formats/fogvol.md. **This file holds two TUNE constants and no more**, each with its own
+remarks: `TopAnchorHeightFactor` (A3), a shape-classification threshold decided from the volumes'
+own thickness gap rather than authored data — see fogvol.md's vertical-spread entry; and
+`CardVertexColorTune` (C23, 2026-08-09), which scales the card's authored vertex colour 240 → 225
+in `BuildCardMesh` so the saturated card renders 208.8 instead of 222.7. ⚠ That one has **no
+decoded mechanism** — C23 refuted four candidates on data (no `cloudsprite` opacity state exists
+anywhere in the zrdr; `WorldLight` on C1's cards overshoots to 178.6; `fog: true` is contradicted
+by the same reader's trees and the placed cloud facades; the field does not ride up with the deck)
+— it is a calibrated match to the original's measured plateau (208.88 / 209.16 in two independent
+above-band frames). RGB only, never alpha: alpha is the card's coverage. If the real mechanism is
+ever found it REPLACES this constant. It applies to `fvol` cards alone; the world's placed
+`cloudparent` facades are `SceneBuilder` geometry and keep their own authored rules. Otherwise it replaced
 `CloudPuffs`, whose entire field (Count 12, Radius 620, SizeMin/Max, BaseAlpha, BandBelow/Above,
 VertFull/Fade) was hand-tuned because this reader had not been found.
 ⚠ Built ONCE, world-anchored, no per-frame hook and NOT per rig — unlike the dome/deck/whiteout,
@@ -3373,26 +3395,44 @@ are built from, and it is logged with the meshed counts it was decided on.
   ceiling reads 166–175 in `OriginalScreenshots/C1 IA1 Fog river.png` while ours renders 200–220
   before any fog at all (CAP-12's +54 underside, `BL-118`). Any remaining "our fog eats the
   clouddeck" at that pose is the deck's own brightness seen from below, and it belongs to Wave C.
-⚠ `SetDeckCenter` is called separately from `Build`, whenever a chapter's cloud deck geometry loads
+⚠ `SetDeckCenter` (and `SetDeckUndimmedMeshes` beside it) is called separately from `Build`,
+  whenever a chapter's cloud deck geometry loads
   (`GameSession`'s `cloudDeck != null` branch) — broader than "this rig has weather", so it is
-  guarded with `_weatherRig?.SetDeckCenter(...)` rather than assumed non-null.
+  guarded with `_weatherRig?.SetDeckCenter(...)` rather than assumed non-null. An empty
+  undimmed-mesh map is a valid state (no deck, or a caller that never supplied one): the deck then
+  simply stays as built, which is the below-band look.
 ⚠ **The deck is ENGINE TRICKERY in two regimes, not a placed sheet** (`A7`, 2026-08-08 — decoded
   by the user at the controls of the original). `Tick` splits at the `CLOUD_COVER` band centre
   (`WeatherState.CloudBandCentre`): **below** it the deck is a ceiling carried with the camera in
   ALL THREE axes at `camera.y + DeckCeilingHeight`; **at/above** it a world-fixed floor sitting on
   the band centre, still following in X/Z. The rule is the pure `DeckRegime(cameraY, bandCentre)`,
-  which also answers whether that camera renders the ambient clouds — assert against that, not
+  which also answers whether that camera renders the ambient clouds AND whether the sheet carries
+  the mission's SUNLIGHT dimming — assert against that, not
   against the loop. Below-band consequence, and it is the item's own evidence: the sky is
   BIT-IDENTICAL at 192/300/600/900 m, which is what "the texture looks the same at every altitude"
   means and what a world-fixed sheet cannot do (the pre-A7 build moves 87 % of those pixels).
   Above-band consequence: the pinned above-deck pose renders bit-identical to the pre-`A6` pin,
   because that pin WAS the above-band half of this trick applied in both regimes.
-⚠ **The regime flip is a JUMP of `DeckCeilingHeight`, masked only by the whiteout core.** It is
+⚠ **The regime flip is a JUMP of `DeckCeilingHeight` AND of the deck's brightness, masked only by
+  the whiteout core.** It is
   placed at the band centre precisely because that is the middle of the fully-opaque core
   (C1: total in 1032–1062) — measured: the ladder frames at 1035/1046/1048/1060 m are bit-identical
-  flat white. Moving the flip altitude, or thinning `CLOUD_COVER`'s `THICKNESS`, makes it visible;
+  flat white, before and after the brightness half was added. Moving the flip altitude, or thinning
+  `CLOUD_COVER`'s `THICKNESS`, makes it visible;
   if a pop ever shows, that is a finding about the whiteout band, not a licence to move the flip.
   `DeckRegimeTests` asserts the masking against the AUTHORED band, so the data moving fails a test.
+⚠ **`DeckDimmed`: `C22`'s SUNLIGHT dimming is the BELOW-band regime only** (`PLAN-overcast-match`
+  C23, user's fork verdict 2026-08-09). The two regimes are two different objects — an underside
+  and a top — and the evidence splits the same way: the original's underside reads 167.7 (ours
+  168.9, dimmed) while **no pixel in any original above-band frame falls below `FOG_COLOR` 175**,
+  which a 168.9 surface cannot satisfy at any fog setting (fog only pulls TOWARD the fog colour).
+  `Tick` applies it as a per-INSTANCE mesh swap on that rig's own deck copy, between the two
+  variants `WorldBuilder.CloudDeckUndimmedMeshes` built (lit-ness is baked into the material — a
+  shader variant, see `Mech3/SceneBuilder`), resolved once per deck node and written only on a
+  change. Per instance and never per material for the same reason the gate is a per-camera cull
+  mask: two panes on opposite sides of the band must be able to disagree. Inert where
+  `WorldLight` is 1.0 (C4) by construction. `deck lighting: N of M deck tile(s)…` is printed once
+  per session — `0 of 144` is what a broken RID lookup would look like.
 ⚠ **`DeckCeilingHeight` (135 m) is a TUNE matched to one original still, and it is the only free
   parameter in the model** (`C21`/`C25`, 2026-08-08). Supersedes `A7`'s 400 m, which fit apparent
   mottling scale against the WRONG texture period — the deck's authored UVs make

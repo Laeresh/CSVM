@@ -73,6 +73,26 @@ public sealed partial class FogVolumeClutter : Node3D
     // flip.
     private const float TopAnchorHeightFactor = 1.5f;
 
+    // ⚠ TUNE (C23, user's fork verdict 2026-08-09) — the fvol cards' authored vertex colour 240
+    // scaled to 225, applied in BuildCardMesh. NOT decoded: C23 refuted all four candidate
+    // mechanisms for the gap on data (no `cloudsprite` OBJECT_OPACITY_STATE exists in any
+    // chapter's zrdr; `WorldLight` on C1's cards would put them at 178.6, BELOW the original's own
+    // 204.9-213.3 at the matching rung; `fog: true` is contradicted by the same reader's trees and
+    // by the world's placed cloud facades authoring it explicitly next door; and carrying the
+    // field up with the deck is refuted by CAP-12's altimetry). What IS measured is the target:
+    // the original's saturated cloud plateau reads 208.88 and 209.16 in two independent above-band
+    // frames (near-field patch, fog ~0, t124 1208 m and t59 1219 m) and its whole-frame p99 tops
+    // out at 213-216, while ours rendered 222.7 = the texture's own 236.65 x 240/255.
+    // 236.65 x 225/255 = 208.8 lands on that plateau. A calibrated match to measured originals,
+    // not a decode — if a mechanism is ever found it REPLACES this constant rather than joining
+    // it.
+    //
+    // ⚠ fvol CARDS ONLY. The world's placed `cloudparent` cloud facades are ordinary world
+    // geometry built by SceneBuilder and keep their own authored rules (vcol 255 and the
+    // range-gated 0.6 OBJECT_OPACITY_STATE, A6); C1C holds both populations in one frame and the
+    // data authors them apart on purpose (docs/formats/fogvol.md).
+    private const float CardVertexColorTune = 225f / 240f;
+
     /// <summary>Sprites placed, summed over every kind — the authored volumes' own placements
     /// plus A5's map-edge continuation (<see cref="ExtensionCount"/>). Zero means nothing was
     /// built and <see cref="Create"/> returned null.</summary>
@@ -251,9 +271,16 @@ public sealed partial class FogVolumeClutter : Node3D
                 foreach (int corner in corners)
                 {
                     st.SetNormal(Vector3.Back);
-                    st.SetColor(poly.VertexColors != null && corner < poly.VertexColors.Count
+                    var vcol = poly.VertexColors != null && corner < poly.VertexColors.Count
                         ? poly.VertexColors[corner]
-                        : Colors.White);
+                        : Colors.White;
+                    // RGB only: alpha is the card's own coverage, and scaling it would thin the
+                    // overcast instead of darkening it (CardVertexColorTune).
+                    st.SetColor(new Color(
+                        vcol.R * CardVertexColorTune,
+                        vcol.G * CardVertexColorTune,
+                        vcol.B * CardVertexColorTune,
+                        vcol.A));
                     if (poly.UvCoords != null && corner < poly.UvCoords.Count)
                     {
                         st.SetUV(poly.UvCoords[corner]);

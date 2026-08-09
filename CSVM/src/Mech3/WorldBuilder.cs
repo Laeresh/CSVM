@@ -83,6 +83,9 @@ public sealed class WorldBuilder
     private readonly SceneBuilder _scene;
     // Walk-root indices belonging to the deck; filled by FindCloudDeck before the walk.
     private readonly HashSet<int> _deckNodes = new();
+    // Each built deck tile's UNDIMMED mesh, keyed by the RID of the dimmed one the tile is built
+    // with; filled by Add as the deck is walked. See CloudDeckUndimmedMeshes.
+    private readonly Dictionary<Rid, ArrayMesh> _deckUndimmedMeshes = new();
     // The built `cloudparent` cluster subtrees; filled by CollectCloudClusters after the walk.
     private readonly List<Node3D> _cloudClusters = new();
     // Entities the chapter parks at the world origin awaiting placement (see
@@ -148,6 +151,21 @@ public sealed class WorldBuilder
     /// above/below at the cloud band, as in the original. A child of the world root at its
     /// original altitude; null if the world has no map-covering deck (C1B/C2/C3/C5).</summary>
     public Node3D? CloudDeck { get; private set; }
+
+    /// <summary>Each deck tile's UNDIMMED mesh — the same geometry and the same materials built
+    /// with <c>forceLit: false</c> — keyed by the <see cref="Rid"/> of the DIMMED mesh the tile
+    /// is actually built with. Empty for a world with no deck.
+    ///
+    /// <para>The deck's <c>csky_world_light</c> dimming is regime-conditional
+    /// (<c>PLAN-overcast-match</c> C23, <c>M-a</c>): C22's dimming is the original's below the
+    /// cloud band, where the deck is the overcast's lit-from-nowhere UNDERSIDE, and wrong above
+    /// it, where the original's from-above frames hold no pixel below <c>FOG_COLOR</c> at all.
+    /// The flag is baked into the built material (a shader variant, never a uniform — see
+    /// <see cref="SceneBuilder"/>), so the switch has to be a mesh swap; both variants are built
+    /// here, once, and <c>Session/WeatherRig.Tick</c> assigns one per camera at the band
+    /// crossing. Keyed by RID because the deck copies a splitscreen session makes
+    /// (<c>GameSession.AssignCloudDecks</c>) share these very resources.</para></summary>
+    public IReadOnlyDictionary<Rid, ArrayMesh> CloudDeckUndimmedMeshes => _deckUndimmedMeshes;
 
     /// <summary>The world's placed <c>cloudparent</c> cluster subtrees, in walk order — the
     /// ambient cloud population that is ordinary world geometry rather than <c>fvol</c> clutter
@@ -275,6 +293,7 @@ public sealed class WorldBuilder
             roots.AddRange(world.PartitionNodes);
 
         FindCloudDeck(world, roots);
+        _deckUndimmedMeshes.Clear();
         RankConflicts(roots);
         foreach (var idx in roots)
             Add(root, deck, idx);
@@ -1036,6 +1055,11 @@ public sealed class WorldBuilder
         // exact surface (see `Flight/Weather.cs`). Deck-local, beside the existing
         // forceDoubleSided override; never a change to the `lighting` gate or to
         // `csky_world_light` itself.
+        //
+        // ⚠ C23 (M-a) made it REGIME-conditional: this is how the tile is built and how it stays
+        // below the cloud band, and the undimmed twin recorded below is what a camera above the
+        // band gets instead (CloudDeckUndimmedMeshes). Built here rather than at the flip so the
+        // swap is a resource assignment with nothing to compile or allocate.
         var built = _scene.BuildSubtree(node, SkipWorldNode, NoCollisionNode,
             forceDoubleSided: isDeck, forceLit: isDeck);
         if (built != null)
@@ -1044,7 +1068,26 @@ public sealed class WorldBuilder
             {
                 _parkedAtOrigin.Add((node, built));
             }
+            if (isDeck)
+            {
+                RecordDeckUndimmedMesh(node);
+            }
             (isDeck ? deck : root).AddChild(built);
+        }
+    }
+
+    // The tile's own mesh in both lit variants, from the SceneBuilder cache the built node just
+    // used — so the dimmed side is the very resource the MeshInstance3D carries, and the RID is a
+    // key WeatherRig can look a live instance up by. A deck tile is one flat 4-vertex quad
+    // (FlatTile), so its own MeshIndex is the whole tile; a tile that somehow carried child
+    // geometry would simply not be swappable, which WeatherRig's own census reports rather than
+    // hides (DIAG-15).
+    private void RecordDeckUndimmedMesh(GameZNode node)
+    {
+        if (_scene.SharedMesh(node.MeshIndex, forceDoubleSided: true, forceLit: true) is { } dimmed
+            && _scene.SharedMesh(node.MeshIndex, forceDoubleSided: true, forceLit: false) is { } undimmed)
+        {
+            _deckUndimmedMeshes[dimmed.GetRid()] = undimmed;
         }
     }
 

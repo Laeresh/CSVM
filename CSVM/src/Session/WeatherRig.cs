@@ -78,11 +78,18 @@ public sealed class WeatherRig
 
     private readonly SessionSpec _spec;
     private readonly Node3D _worldRoot;
+    // One rig's deck tiles and which variant they currently carry, keyed by the deck node's
+    // instance id — per rig, because each rig flies its own copy of the deck (AssignCloudDecks)
+    // through its own altitude regime.
+    private readonly Dictionary<ulong, DeckLighting> _deckLighting = new();
 
     private WeatherState? _weather;
     private string _activeZone;
     private Precipitation? _precip;
     private Vector3 _deckCenter;
+    // The deck tiles' undimmed meshes by dimmed-mesh RID (WorldBuilder.CloudDeckUndimmedMeshes).
+    private IReadOnlyDictionary<Rid, ArrayMesh> _deckUndimmedMeshes = new Dictionary<Rid, ArrayMesh>();
+    private bool _loggedDeckLighting;
 
     public WeatherRig(SessionSpec spec, Node3D worldRoot)
     {
@@ -91,23 +98,33 @@ public sealed class WeatherRig
         _activeZone = spec.SkyZone;
     }
 
-    /// <summary>The deck's altitude regime for ONE camera: where its cloud-deck copy sits, and
-    /// whether that camera renders the two ambient cloud populations. Below the band's centre
-    /// the deck is a ceiling carried with the camera and the clouds are hidden; at or above it
-    /// the deck is a world-fixed floor at the centre and the clouds render (A7).
+    /// <summary>The deck's altitude regime for ONE camera: where its cloud-deck copy sits,
+    /// whether that camera renders the two ambient cloud populations, and whether the deck
+    /// carries the mission's SUNLIGHT dimming. Below the band's centre the deck is a ceiling
+    /// carried with the camera, the clouds are hidden and the sheet is the overcast's dimmed
+    /// UNDERSIDE; at or above it the deck is a world-fixed floor at the centre, the clouds
+    /// render and the sheet is the undimmed top (A7 + C23).
     ///
     /// <para>Pure and public because it is the whole rule, and the rule is what has to be
     /// asserted: <see cref="Tick"/> only applies it once per rig. Two cameras on opposite sides
     /// of <paramref name="bandCentre"/> must get opposite answers from it — that is the
     /// splitscreen requirement, and it is a property of this function, not of the loop.</para>
     ///
-    /// <para>⚠ The deck altitude JUMPS by <see cref="DeckCeilingHeight"/> at the crossing. It is
+    /// <para>⚠ <c>DeckDimmed</c> is C23's fork resolved (M-a, user 2026-08-09), and it is a
+    /// REGIME rule rather than face-dependent lighting: the two regimes are two different
+    /// objects, and C22's <c>csky_world_light</c> dimming is verified from below (the original's
+    /// underside 167.7 against our 168.9) and contradicted from above (no pixel in any original
+    /// above-band frame falls below <c>FOG_COLOR</c> 175, and a surface whose own colour is
+    /// 168.9 can never render above it, fog being a pull TOWARD the fog colour).</para>
+    ///
+    /// <para>⚠ Both the deck altitude and the deck's lit-ness JUMP at the crossing. That is
     /// unobservable only because the crossing is the band centre, which is the middle of the
     /// fully-opaque whiteout core (<see cref="WeatherState.WhiteoutAmount"/>).</para></summary>
-    public static (float DeckY, bool CloudsVisible) DeckRegime(float cameraY, float bandCentre)
+    public static (float DeckY, bool CloudsVisible, bool DeckDimmed) DeckRegime(
+        float cameraY, float bandCentre)
     {
         bool below = cameraY < bandCentre;
-        return (below ? cameraY + DeckCeilingHeight : bandCentre, !below);
+        return (below ? cameraY + DeckCeilingHeight : bandCentre, !below, below);
     }
 
     /// <summary>Loads the mission's weather.json and resolves the rendered zone, builds the
@@ -127,6 +144,19 @@ public sealed class WeatherRig
     /// deck is world geometry (<c>GameSession</c>'s <c>cloudDeck</c>), not weather state, and is
     /// built whenever a chapter world loads — not only when this rig itself gets built.</summary>
     public void SetDeckCenter(Vector3 center) => _deckCenter = center;
+
+    /// <summary>The deck tiles' undimmed twin meshes
+    /// (<c>WorldBuilder.CloudDeckUndimmedMeshes</c>), which is what lets <see cref="Tick"/> take
+    /// the deck's SUNLIGHT dimming off above the cloud band (C23's <c>DeckDimmed</c>). Set from
+    /// the same place as <see cref="SetDeckCenter"/>, for the same reason — the deck is world
+    /// geometry built with the chapter, not weather state. An empty map (a chapter with no deck,
+    /// or a world built before this existed) simply leaves the deck as built.</summary>
+    public void SetDeckUndimmedMeshes(IReadOnlyDictionary<Rid, ArrayMesh> undimmed)
+    {
+        _deckUndimmedMeshes = undimmed;
+        _deckLighting.Clear();
+        _loggedDeckLighting = false;
+    }
 
     /// <summary>Everything decided per *camera*, once per rig — one in single player, one per
     /// pane in splitscreen: re-centers the skydome, fades the cloud-band whiteout, places the
@@ -194,11 +224,18 @@ public sealed class WeatherRig
             // C2B 960/970.00, C4 1050/1060.00.)
             if (rig.Deck != null && _weather is { HasCloudBand: true } weather)
             {
-                (float deckY, bool cloudsVisible) = DeckRegime(camPos.Y, weather.CloudBandCentre);
+                (float deckY, bool cloudsVisible, bool deckDimmed) =
+                    DeckRegime(camPos.Y, weather.CloudBandCentre);
                 rig.Deck.Position = new Vector3(
                     camPos.X - _deckCenter.X,
                     deckY - _deckCenter.Y,
                     camPos.Z - _deckCenter.Z);
+                // The same crossing takes the mission's SUNLIGHT dimming off the sheet: what the
+                // ceiling regime shows is the overcast's underside, what the floor regime shows
+                // is its top, and the original renders those at 167.7 and ~210 respectively
+                // (C23). Beside the Y write because it IS the same flip — one rule, applied once
+                // per rig, hidden by the same opaque whiteout core.
+                SetDeckDimmed(rig.Deck, deckDimmed);
                 // ⚠ Per-camera CULL MASK, never node visibility: in splitscreen two players can
                 // sit on opposite sides of the band, and hiding the shared field as a node would
                 // take it out of BOTH panes. Only a chapter with a deck gets gated at all — see
@@ -234,6 +271,80 @@ public sealed class WeatherRig
         foreach (var z in horizonZones)
             counts.Add($"{z.Name} {z.MeshedNodes} meshes");
         return counts;
+    }
+
+    /// <summary>Puts ONE rig's deck copy into its regime's lit variant: the dimmed mesh each
+    /// tile was built with (below the band), or its undimmed twin (above it). A per-INSTANCE
+    /// mesh assignment, never a change to a shared material — the two variants are separate
+    /// cached resources, so two splitscreen panes on opposite sides of the band can hold
+    /// different ones at the same instant. That is the same requirement the cloud gate meets
+    /// with a per-camera cull mask, met the same way: nothing here is global state.
+    ///
+    /// <para>The variants differ ONLY in which shader the surface picked (see
+    /// <c>SceneBuilder.BuildMesh</c>'s <c>lit</c>): same vertices, same AABB, same instance
+    /// uniforms, so the swap cannot move a pixel except through the brightness it exists to
+    /// change. Written only on a change — a flight spends whole minutes in one regime.</para></summary>
+    private void SetDeckDimmed(Node3D deck, bool dimmed)
+    {
+        ulong id = deck.GetInstanceId();
+        if (!_deckLighting.TryGetValue(id, out var lighting))
+        {
+            _deckLighting[id] = lighting = CollectDeckTiles(deck);
+        }
+        if (lighting.Dimmed == dimmed)
+        {
+            return;
+        }
+        lighting.Dimmed = dimmed;
+        foreach (var tile in lighting.Tiles)
+        {
+            tile.Instance.Mesh = dimmed ? tile.Dimmed : tile.Undimmed;
+        }
+    }
+
+    /// <summary>Resolves one deck copy's tiles to swap, once: every <see cref="MeshInstance3D"/>
+    /// under it whose mesh has a recorded undimmed twin. Deferred to the first
+    /// <see cref="Tick"/> rather than done at build because the splitscreen copies are made
+    /// after the world is built, and a copy's instances are its own nodes (they share the
+    /// resources, which is exactly what makes the RID lookup find them).</summary>
+    private DeckLighting CollectDeckTiles(Node3D deck)
+    {
+        // As built: WorldBuilder gives every deck tile `forceLit: true`, which is the ceiling
+        // regime's variant, so a deck that never ticks keeps C22's look.
+        var lighting = new DeckLighting { Dimmed = true };
+        int instances = 0;
+        Collect(deck);
+        if (!_loggedDeckLighting)
+        {
+            _loggedDeckLighting = true;
+            // Said out loud once per session: "0 of 144" is what a broken lookup looks like, and
+            // it would otherwise be indistinguishable from a deck that is simply never above the
+            // band (DIAG-15).
+            GD.Print($"deck lighting: {lighting.Tiles.Count} of {instances} deck tile(s) carry an "
+                     + "undimmed twin — the sheet keeps SUNLIGHT below the cloud band, drops it above");
+        }
+        if (lighting.Tiles.Count != instances)
+        {
+            GD.PushWarning($"deck lighting: {instances - lighting.Tiles.Count} deck tile(s) have no "
+                           + "undimmed twin and will stay dimmed above the cloud band");
+        }
+        return lighting;
+
+        void Collect(Node node)
+        {
+            if (node is MeshInstance3D mi)
+            {
+                instances++;
+                if (mi.Mesh is { } mesh && _deckUndimmedMeshes.TryGetValue(mesh.GetRid(), out var undimmed))
+                {
+                    lighting.Tiles.Add((mi, mesh, undimmed));
+                }
+            }
+            foreach (var child in node.GetChildren())
+            {
+                Collect(child);
+            }
+        }
     }
 
     /// <summary>Resolves <see cref="_activeZone"/>: the zone the fog AND the skydome are both
@@ -366,5 +477,16 @@ public sealed class WeatherRig
         _precip = Precipitation.Create(_weather.Precip, _weather.CloudBottom, _weather.CloudTop);
         if (_precip != null)
             _worldRoot.AddChild(_precip);
+    }
+
+    /// <summary>ONE rig's deck copy, resolved for the lit-variant swap: its tiles with both
+    /// meshes each, and which variant they are carrying now (null until the first
+    /// <see cref="Tick"/> decides). Per deck copy, not per session — see
+    /// <see cref="SetDeckDimmed"/>.</summary>
+    private sealed class DeckLighting
+    {
+        public List<(MeshInstance3D Instance, Mesh Dimmed, Mesh Undimmed)> Tiles { get; } = new();
+
+        public bool? Dimmed { get; set; }
     }
 }

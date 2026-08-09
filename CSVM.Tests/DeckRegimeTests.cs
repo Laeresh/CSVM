@@ -30,11 +30,16 @@ public class DeckRegimeTests
     {
         // The item's whole point: the ceiling's height above the camera — and therefore its
         // apparent texture scale — is the same at every altitude below the band.
-        (float low, bool lowClouds) = WeatherRig.DeckRegime(300f, C1Centre);
-        (float high, bool highClouds) = WeatherRig.DeckRegime(900f, C1Centre);
+        (float low, bool lowClouds, bool lowDimmed) = WeatherRig.DeckRegime(300f, C1Centre);
+        (float high, bool highClouds, bool highDimmed) = WeatherRig.DeckRegime(900f, C1Centre);
         Assert.Equal(600f, high - low, 3);          // exactly the 600 m the camera climbed
         Assert.False(lowClouds);
         Assert.False(highClouds);
+        // ...and it is the overcast's UNDERSIDE all the way up, so it keeps the mission's
+        // SUNLIGHT dimming at every altitude below the band (C22 measured that face at 168.9
+        // against the original's 167.7).
+        Assert.True(lowDimmed);
+        Assert.True(highDimmed);
     }
 
     [Fact]
@@ -44,6 +49,24 @@ public class DeckRegimeTests
         Assert.Equal(C1Centre, WeatherRig.DeckRegime(1192f, C1Centre).DeckY, 3);
         Assert.True(WeatherRig.DeckRegime(C1Centre, C1Centre).CloudsVisible);
         Assert.True(WeatherRig.DeckRegime(1192f, C1Centre).CloudsVisible);
+    }
+
+    [Fact]
+    public void TheDeckKeepsSunlightBelowTheBandAndDropsItAbove()
+    {
+        // C23's fork, resolved M-a: the same crossing that flips ceiling→floor flips the deck's
+        // own SUNLIGHT dimming off, because the two regimes show two different faces of the
+        // overcast. Measured both ways — the original's underside is 167.7 (ours 168.9, dimmed),
+        // and no pixel in any original ABOVE-band frame falls below FOG_COLOR 175, which a
+        // dimmed 168.9 sheet cannot satisfy at any fog setting.
+        Assert.True(WeatherRig.DeckRegime(C1Centre - 0.5f, C1Centre).DeckDimmed);
+        Assert.False(WeatherRig.DeckRegime(C1Centre + 0.5f, C1Centre).DeckDimmed);
+        // It is the SAME predicate as the cloud gate and the floor/ceiling choice — one crossing,
+        // three consequences, so nothing can flip one of them a metre early.
+        var below = WeatherRig.DeckRegime(900f, C1Centre);
+        var above = WeatherRig.DeckRegime(1192f, C1Centre);
+        Assert.Equal(below.DeckDimmed, !below.CloudsVisible);
+        Assert.Equal(above.DeckDimmed, !above.CloudsVisible);
     }
 
     [Fact]
@@ -66,6 +89,11 @@ public class DeckRegimeTests
         Assert.False(p1.CloudsVisible);
         Assert.True(p2.CloudsVisible);
         Assert.NotEqual(p1.DeckY, p2.DeckY);
+        // Including the sheet's brightness: P1 sees the dimmed underside while P2 sees the
+        // undimmed top, at the same instant, of one world's deck — which is why the swap is a
+        // per-instance mesh assignment on each rig's own copy and never a shared material.
+        Assert.True(p1.DeckDimmed);
+        Assert.False(p2.DeckDimmed);
         // P1's ceiling is above P1, P2's floor is below P2 — the same instant, one world.
         Assert.True(p1.DeckY > 900f);
         Assert.True(p2.DeckY < 1192f);

@@ -164,8 +164,13 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
     through card alpha, which the flat mask could not see), our card plateau **222.7** is faithful
     to the data while the original's is **209**, and the cut has two independent causes —
     `A7`'s above-band floor sits *inside* the card band, and `C22`'s dimming put that floor 54
-    units under the cards. ⚠ **Ends at a fork only the user can take — see the section; `C24`
-    must not close `PT-42`(a) through it.**
+    units under the cards. **Fork taken by the user 2026-08-09 and LANDED the same day: `M-a`** —
+    the deck's `WorldLight` dimming became regime-conditional (undimmed above the band, a
+    per-instance mesh swap at `A7`'s own flip) and the `fvol` cards took a `225/240` vertex-colour
+    TUNE onto the original's measured 209 plateau. Card `p90` 222.7 → **209.2**, floor↔card gap
+    **49 → −4**, the sub-`FOG_COLOR` tail gone (outboard `p1` 166.2 → **176.0**); every below-band
+    frame and all 13 goldens bit-identical. ⚠ Two residuals for `C24`: the 1700 m far field
+    (`tops-L`/`tops-R` still +15/+29) and C1C/C2B's three-tone split, which M-a **widens**.
 24. ☐ C24 — Final match: both stills within the bar; mint PT + night-moonlit BL; close `BL-118`
 25. ☑ C25 — The below-band ceiling covers to the horizon and fades like the original's — landed as
     a `K` correction (400 → 135 m); `C21`'s refutation meant no extension and no baked fade were
@@ -3723,6 +3728,10 @@ rather than pick by taste).
 
 ### ⚠ BLOCKED — the fork, and what `C24` must not do
 
+**→ Taken by the user on 2026-08-09: `M-a`, landed the same day. The analysis below is left
+exactly as it was written — it is the record the choice was made on — and the landing, with its
+own verification tables, is the `Fork resolved` block at the end of this section.**
+
 The from-above world reads **~210 and flat** in every original above-band frame; ours reads
 **222.7 cards over a 168.9 floor**. Two mechanisms close that, both consistent with everything
 measured below, and **they differ visibly**:
@@ -3954,6 +3963,204 @@ tables cite. `docs/PLAN-overcast-match.md` (this section, the checklist line, a 
 `PROJECT_CONTEXT.md`, no `backlog.md`** — the sprite render rule did not change, so `fogvol.md`'s
 entries stand exactly as written.
 
+### **Fork resolved (user, 2026-08-09): M-a landed.**
+
+Both halves, exactly as mocked: the above-band deck floor stops carrying `C22`'s `WorldLight`
+dimming, and the `fvol` cards darken to the original's plateau. Nothing else moved — the below-band
+gate, `K`, the whiteout, the dome and `cloudparent` are untouched, and every below-band frame is
+**bit-identical** to the build this landed on.
+
+**The mechanism — `DeckRegime` gains a third column, and the deck gains a second mesh.** `C22`
+baked lit-ness into the deck tile's material at build time (a shader VARIANT, not a uniform — the
+ordering contract in `SceneBuilder`), so "dimmed below, undimmed above" needs a runtime switch.
+`WorldBuilder.Add` now asks `SceneBuilder.SharedMesh` for the deck tile's mesh in **both**
+`forceLit` variants as it builds each tile — the mesh cache already keys on that flag, so the
+dimmed one it hands back IS the resource the built `MeshInstance3D` carries — and publishes the
+pairs as `CloudDeckUndimmedMeshes`, keyed by the dimmed mesh's `Rid`. `WeatherRig.DeckRegime`
+returns `(DeckY, CloudsVisible, DeckDimmed)` — the third column is the new one — from the same
+`cameraY < bandCentre` test, and
+`Tick` writes the chosen variant onto that rig's own deck instances beside the Y it already writes.
+Per **instance**, never per material: a splitscreen pane's deck is its own node copy sharing these
+resources, so two panes on opposite sides of the band hold different variants at the same instant —
+the same requirement `A7` met for the cloud gate with a per-camera cull mask, met the same way. The
+variants differ only in the shader the surface picked (same vertices, same AABB, same instance
+uniforms), the swap is one property write per tile and only on a change, and it is inert in a
+chapter whose `WorldLight` is 1.0 (C4) by construction. Census, printed once per session:
+`deck lighting: 144 of 144 deck tile(s) carry an undimmed twin` (C1 and C4 alike) — `0 of 144` is
+what a broken lookup would say, which is why it is said out loud (`DIAG-15`).
+
+**The `fvol` half is one constant, marked TUNE.** `FogVolumeClutter.BuildCardMesh` scales the
+card's authored vertex colour by **225/240** (RGB only — alpha is the card's coverage, and scaling
+it would thin the overcast instead of darkening it). `236.65 × 225/255 = 208.8` against the
+original's measured plateau of **208.88 / 209.16**. ⚠ **It has NO decoded mechanism** — this
+section refuted all four candidates on data — so it is a *calibrated match to measured originals*,
+not a decode, and it says so in the constant's own comment: if a mechanism is ever found it
+REPLACES this constant rather than joining it. `fvol` cards only; the placed `cloudparent` facades
+keep their own authored rules (vcol 255 + the range-gated 0.6, `A6`).
+
+**Method.** The baseline is not `.scratch/c22`/`.scratch/c23` — `C25` moved `K` 400 → 135 in
+between. Every pair below was shot minutes apart on this machine: the working tree reverted
+(`git checkout -- CSVM CSVM.Tests`) and rebuilt for the `base` set, the patch re-applied and
+rebuilt for the `ma` set, same script, same flags, `--det --mute` throughout (`METHOD-3`,
+`METHOD-17`; `git diff --stat` is identical either side of the round trip). `.scratch/c23fork/`
+holds both sets, `verify.ps1`, `report.py` and `ma.patch`.
+
+#### The fork's own statistics — mock, landed, original
+
+`metrics.py`'s four, at the two poses the fork was mocked at (`.scratch/c23fork/`; card `p90` and
+the floor mask over the lower 45 % of frame, near-field patch x 0.30–0.45 / y 0.90–0.99, outboard
+column x 0.00–0.13 / y 0.65–0.99):
+
+| statistic | before (`C22`+`C25` build) | the M-a **mock** | **landed** | original |
+|---|---|---|---|---|
+| **above-deck 1192 m** — card `p90` | 222.65 | 209.24 | **209.24** | **209** (plateau 208.88 `t124` / 209.16 `t59`) |
+| — deck floor (flat-red mask) | 173.62 | 213.42 | **213.35** | — |
+| — **floor ↔ card gap** | **+49.03** | −4.18 | **−4.11** | — |
+| — near-field mean / sd | 216.15 / 1.68 | 208.24 / 0.02 | **208.24 / 0.02** | 208.88 / 0.54 (`t124`) |
+| — outboard `p1` | 178.00 | 207.41 | **207.41** | 208.0 (`t124`) |
+| **1700 m** — card `p90` | 222.65 | 217.24 | **217.24** | — |
+| — floor ↔ card gap | +45.35 | −1.79 | **−1.79** | — |
+| — near-field mean / **sd** | 211.49 / **14.37** | 208.84 / 1.74 | **208.86 / 1.69** | 201.42 / **2.12** (`t97`) |
+| — outboard `p1` / `p5` / % < 180 | **166.23** / 176.00 / 17.1 | 176.00 / 176.00 / 12.0 | **176.00 / 176.00 / 11.9** | 175.0 / 175.0 / 32.7 (`t97`) |
+| **1160 m** — near-field mean / sd | 222.18 / 0.38 | — | **208.66 / 0.08** | 208.88 / 0.54 (`t124`) |
+
+**Every target the mock set is met to ±0.1**, and the two headline defects are gone rather than
+reduced: the 49-unit floor↔card step is now −4 (the floor reads a hair *brighter* than the cards,
+which is what a single flat tone looks like), and the **sub-`FOG_COLOR` tail is gone** — our
+outboard `p1` was 166.2, i.e. 9 units below a fog colour nothing can render under; it is now
+**exactly 176.0**, the fog colour itself, which is the original's own floor. The near-field `sd`
+at 1700 m falls 14.37 → 1.69 against the original's 2.12. The residual differences from the mock
+(≤ 0.06 on every row) are the mock's own realtime frames against these `--det` ones, not a
+different implementation: the mock was shot without `--det`, so its sky UV scroll and C4's snow
+sit at a different phase.
+
+#### Per-population tops boxes — `C23`'s own table, re-measured
+
+`.scratch/c21/capboxes.py`, same boxes, same poses. ⚠ `tops-L`/`tops-R` at the pinned above-deck
+pose remain **not comparable** to that original still (`SHOT-23`: its pitch puts cloud-tops against
+dark sky in those two boxes); `tops-M` is the comparable one, and the CAP-12 ladder is the
+comparable ladder.
+
+| pose / box | before | **landed** | original | Δ before → **after** |
+|---|---|---|---|---|
+| above-deck `tops-M` | 215.45 | **208.23** | 207.75 | +7.7 → **+0.5** |
+| above-deck `tops-L` / `tops-R` | 210.29 / 207.60 | **209.79 / 207.91** | 169.00 / 169.42 | ⚠ not comparable |
+| 1160 `tops-L` | 219.31 | **209.57** | 213.01 (`t124` 1208 m) | +6.3 → **−3.4** |
+| 1160 `tops-R` | 210.48 | **210.71** | 213.33 | −2.8 → **−2.6** |
+| 1160 `tops-M` | 222.23 | **208.67** | 209.07 | +13.1 → **−0.4** |
+| 1700 `tops-L` | 202.82 | **197.53** | 182.68 (`t97` 1698 m) | +20.1 → **+14.9** |
+| 1700 `tops-R` | 213.78 | **212.33** | 183.37 | +30.4 → **+29.0** |
+| 1700 `tops-M` | 212.79 | **208.42** | 201.16 | +11.6 → **+7.3** |
+
+**The 1160 m rung is inside ±10 on all three boxes and inside ±3.5 on all three against the
+altitude-matched `t124`.** The 1700 m rung improves on every box and **still fails `tops-L`/`tops-R`
+(+14.9 / +29.0)** — that is the *distance* half of the finding this item recorded, unchanged by
+M-a: at 1700 m the frame is mostly far field, where the original ramps from `FOG_COLOR` over
+~240 rows and our `far_fade` rim steps. M-a was never the fix for that, and it is not claimed as
+one; `C24` inherits it as a residual with its own numbers.
+
+#### The invariants — what must NOT move, and did not
+
+| check | result |
+|---|---|
+| below-band `underside-fog` / `underside-nofog` / `river-fog` / `cap12-670` nat + flat-red | **bit-identical** — mean abs diff 0.000, max 0, **0 px changed** on all five |
+| the flip ladder 1035 / 1046 / 1048 / 1060, within the landed build | **bit-identical to each other**, frame sd **0.00** on a mean of 242.34 — a flat whiteout pane |
+| the same four rungs, **base vs landed** | **bit-identical**, plus 1025 — the swap is unobservable from 1025 to 1060 |
+| ladder 1075 (whiteout core ends at 1062), base vs landed | mean abs diff 2.33, 97.9 % px — the change legitimately shows once the core stops hiding it, which is the able-to-fail leg (`METHOD-9`) |
+| **all 13 goldens**, base build vs landed build | **every hash identical**, movers and `ok`s alike — M-a moves no golden at all (below) |
+| 8-chapter `--freecam` regression | **zero errors in all eight**; every census unchanged (decks C1/C1C/C2B 144 @ 960, C4 144 @ 1050; clusters 28 · 70 · 30 · 45; sprites C1/C2B/C4 22,201 · C1C 22,748 · C5 16,170; per-chapter gamez-node and mesh-instance counts identical) |
+| `.\RunTests.ps1` | build PASS (0 warnings), **units 683/683** (682 + this item's new `DeckRegimeTests` case), **engine 26/26, errors clean**, goldens **6 moved, 0 broken of 13**; exit 1 is the golden stage alone |
+
+**The flip is still invisible, and now it hides two jumps instead of one** — the deck's altitude
+AND its lit-ness change at 1047 m, and the four rungs spanning it render the same pixels. `A7`
+asserted the first; the new `DeckRegimeTests` case asserts that both consequences come off the
+same predicate, so nothing can flip one of them a metre early.
+
+**Goldens: 6 moved, and none of them by this item** (`GOLD-8`). The golden stage was run on the
+reverted build too, and all thirteen hashes match the landed run's line for line — including the
+six movers' `actual` values (`c1-waterfall` `c81a000a…`, `c1c-rain` `81e9dccd…`, `c2b-rain`
+`57f097e1…`, `c4-snow` `421ead8f…`, `c1-flight` `9e162b5a…`, `c1-destroy-effects` `0d749511…`).
+The six are the standing un-repinned set — `C22`'s five plus `C25`'s `c4-snow` — and **`C24`
+re-pins**, as before. That every golden camera sits below its band is exactly why: M-a is inert
+below the band by construction, which the bit-identical below-band poses measure directly.
+`viewer-bhawk` reported `ok` without hanging on this run (`BL-320` did not bite).
+
+#### Controls
+
+- **C1B night — byte-identical, and the expected darkening does NOT happen.** `--chapter=C1B
+  --pos=-5406,55,-7200 --direction=-0.391,0,-0.921` (`B15`'s own pose): `mean|d| = 0.000, max 0,
+  0 px changed`; the sky box reads `p90` **158.17** on both builds and the `c1b-night-sea` golden
+  is `ok`. The prediction going in was that C1B's moonlit tops would fall with everything else
+  (`B15`'s 187.5 → ≈176). **They cannot: C1B ships no `fvol` volumes at all** (`FogVolumeTests`
+  `C1B "0|-|206.25|bare|cloudsprite:absent"`, and its freecam census prints no `fogvol clouds`
+  line), so its moonlit cloud population is the **70 placed `cloudparent` facades** — ordinary
+  world geometry, which this TUNE does not touch. The night worry `C23` raised is therefore
+  answered by absence rather than by margin, and `B15`'s 187.5 against the original's 155–182 band
+  stands exactly where `B15` left it.
+- **C1C / C2B — the cards do darken, and the three-tone split gets WORSE.** Both author their
+  `fvol` cards `lighting: true`, so their field renders `222.7 × 0.784 = 174.6` and the TUNE takes
+  it to **163.7**; measured, the card plateau in the outboard column reads **163.24 / 163.83** at
+  C1C and **163.24** at C2B — the prediction to a tenth. Above the band their deck floor un-dims
+  with C1's: C1C **154.8 → 195.8** measured (its own `cloudlayer.tif` mean 197.42, lightly fogged),
+  C2B → **180.0** (mean 186.27). So C1C's one frame now holds `cloudparent` facades **235.25**, an
+  undimmed floor **195.8** and cards **163.7**:
+
+  | C1C above-band | before | **after M-a** |
+  |---|---|---|
+  | cloud-population spread (facades ↔ `fvol` cards) | 60.7 | **71.6 — wider** |
+  | deck floor ↔ cards | −19.8 (floor darker) | **+32.1 (floor brighter)** |
+
+  ⚠ **That is a real worsening at C1C/C2B and it is stated, not tuned around.** It is the *fifth*
+  candidate this section already minted — if the `lighting` flag on a `Facade` cloud card is not a
+  `WorldLight` gate, C1C's field is 222.7 → 208.8 with the TUNE and sits 26 units under its own
+  placed clouds instead of 71. That question moves C1C/C2B/C5 and nothing about C1's two reference
+  stills, so it is **`C24`'s to mint**, not this landing's to guess at. C1C's `tops` boxes move
+  168.62 / 196.04 / 165.79 → **170.90 / 199.50 / 176.57** (the undimmed floor outweighs the darker
+  cards there).
+  ⚠ **Instrument, for whoever reads those floor numbers:** `population.py`'s flat-red mask
+  (`r > 200`) can only see an **undimmed** deck in a 0.784-`WorldLight` chapter — `255 × 0.784 =
+  200.0` is exactly the threshold — so C1C/C2B read `0.0 %` mesh before and `6.8 %` / `0.9 %`
+  after. That is the mask waking up, not deck appearing. C1's `0.802` (204) clears it either way,
+  which is why `C22`'s own note about the mask surviving dimming held there and only there.
+- **C4 above the band — content preserved; M-a deletes nothing.** The two CAP-12 C4 tension poses
+  (`t21.5` 1230 m, `t32.0` 1293 m): card `p90` **222.65 → 208.65** at both, near-field 221.95 →
+  208.30 and 220.93 → 207.73, and the field is still *there* — this is the visible difference from
+  `M-b`, which would have emptied both frames of cards. C4's deck is untouched by the un-dimming
+  half by construction (its `WorldLight` clamps to 1.0), so these two frames isolate the card TUNE
+  alone. A7's green-flattened gate shot at C4 1200 m still fills the frame (**921,600 px**, both
+  builds); at C1 1192 m the same instrument reads 534,412 → 527,448 px of cloud (−1.3 %), which is
+  the *threshold* moving with the cards' own 6.25 % dimming, not coverage lost — the sprite census
+  is identical on both builds (22,201 = 9,025 + 13,176).
+
+#### Probes worth human eyes (`.scratch/c23fork/`)
+
+`AB-abovedeck-ma.png` (original | before | landed — the straight-edged wedges the floor cut into
+the near sheet are gone and the sheet reads as one tone), `AB-1700-ma.png`, `AB-1160-ma.png`,
+`AB-c1c-ma.png` (the three-tone C1C frame, before and after), plus `montage-*.png` from the fork
+itself.
+
+#### Files
+
+`CSVM/src/Session/WeatherRig.cs` (`DeckRegime`'s third column; `SetDeckUndimmedMeshes`;
+`SetDeckDimmed` + `CollectDeckTiles` + the private `DeckLighting` cache of one rig's tiles),
+`CSVM/src/Mech3/WorldBuilder.cs` (`CloudDeckUndimmedMeshes`, `RecordDeckUndimmedMesh`),
+`CSVM/src/Mech3/SceneBuilder.cs` (`SharedMesh` takes the two override flags),
+`CSVM/src/Session/GameSession.cs` (hands the pairs to the weather rig beside `SetDeckCenter`),
+`CSVM/src/Effects/FogVolumeClutter.cs` (`CardVertexColorTune`),
+`CSVM.Tests/DeckRegimeTests.cs` (+1 case, and the existing four now assert the third column),
+`docs/architecture.md` (all four module entries), `docs/formats/fogvol.md` (the card description's
+TUNE note), `docs/PLAN-overcast-match.md` (this block + the checklist line).
+`.scratch/c23fork/` — `verify.ps1` (the base/landed probe set), `regress.ps1`, `report.py`,
+`ma.patch`, `base-*`/`ma-*` PNGs, `AB-*.png`, `runtests-output.txt`.
+⚠ `.scratch/c22/regress-C*.png` were overwritten by this item's 8-chapter sweep (a mis-escaped
+path in the copied script). Only the images; `C22`'s section quotes its censuses in full and none
+of them changed. The frames now living there are the M-a ones, and copies are in `.scratch/c23fork/`.
+
+**Not touched, per the fork's own scope:** the below-band gate, `K`
+(`DeckCeilingHeight` 135), the whiteout band's altitudes/opacity/colour, the dome, `cloudparent`,
+and every `docs/formats/` decode except `fogvol.md`'s one TUNE note. **`PROJECT_CONTEXT.md` and
+`backlog.md` are untouched** — `BL-118` closes with `C24`.
+
 ### Original brief (kept for reference)
 
 **Goal.** The CAP-12 tops caveat resolved (mesh and sprite tops measured separately), and the
@@ -4016,11 +4223,22 @@ PROJECT_CONTEXT "Current status" swapped to the next work with this plan archive
 that's a finding — record it and mint an item; do not re-open a landed wave inside the close-out
 commit.
 
-⚠ **`C23` left a fork and this item must not close through it.** The mesh↔sprite cut (`PT-42`(a))
-is traced and quantified but NOT fixed: two mechanisms fit the data equally (`C23`'s own
-BLOCKED block), both require un-dimming the above-band deck floor, and one of them
-deletes the `fvol` field above the band. Either put the A/B to the user first, or close `BL-118`
-on its **underside half only** and mint a fresh item carrying `PT-42`(a), the above-band deck
-brightness, the 222.7-vs-209 card plateau and the C1C/C2B `lighting: true` cloud-card split.
+⚠ **`C23`'s fork is TAKEN and LANDED (`M-a`, user 2026-08-09)** — see that section's
+`Fork resolved` block. `PT-42`(a) is therefore judgeable at the controls again rather than blocked:
+the above-band deck floor is undimmed per regime and the card plateau is 209, floor↔card gap −4.
+What this item inherits instead is three named residuals, each with its numbers already measured:
+
+1. **The 1700 m far field.** `tops-L`/`tops-R` sit **+14.9 / +29.0** over `t97` (were +20.1/+30.4).
+   Our `far_fade` rim steps where the original ramps over ~240 rows — a distance/fade question, not
+   a brightness one, and M-a neither fixed nor worsened it.
+2. **C1C/C2B's three-tone split, which M-a WIDENS** (cloud-population spread 60.7 → 71.6; the deck
+   floor goes from 19.8 *under* their cards to 32.1 *over* them). The candidate is the fifth one
+   `C23` minted — whether `lighting: true` on a `Facade` cloud card is a `WorldLight` gate at all.
+   It moves C1C/C2B/C5 and nothing about C1's two reference stills. **Mint it; do not guess it.**
+3. **The `225/240` card TUNE has no decoded mechanism** (`C23` refuted four candidates). It is a
+   calibrated match to two measured original frames and is marked TUNE in the constant's own
+   comment; anything that decodes the real mechanism REPLACES it.
+
 Also inherited from `C23`: the goldens list to re-pin is **six**, not five — `C22`'s five plus
-`C25`'s `c4-snow`.
+`C25`'s `c4-snow`. M-a itself moved **none** of the thirteen (verified against a reverted-build
+golden run), so that list is unchanged by the landing.

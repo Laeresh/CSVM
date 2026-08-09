@@ -162,6 +162,24 @@ one child carrying the card. The card is a single 4-vertex, 1-polygon tri-strip 
 `CylindricalY`), skinned `cloud1.tif` / `cloud2.tif`, vertex colours 240/240/240, centred on its
 own quad centre to within 3 mm.
 
+⚠ **We render those cards at vertex colour 225, not the authored 240** — a marked TUNE
+(`FogVolumeClutter.CardVertexColorTune`, `PLAN-overcast-match` C23, user's verdict 2026-08-09),
+applied to RGB only and never to alpha. The authored value is what this page says it is and is
+unchanged as a decode; what the TUNE fixes is a rendered-brightness gap with **no decoded
+mechanism**. `236.65 × 240/255 = 222.7` is what the naive reading gives and it is what we shipped;
+**nothing in five independent original above-band frames renders at 222.7**, and the original's
+saturated plateau measures **208.88** (`t124`, 1208 m) and **209.16** (`t59`, 1219 m) in a
+near-field, fog-free patch, with whole-frame `p99` topping out at 213–216. `236.65 × 225/255 =
+208.8` lands there. C23 refuted the four mechanisms that could have explained it as data: (1) no
+`cloudsprite` `OBJECT_OPACITY_STATE` exists in any chapter's `zrdr` — C1's `clouds.zrd` names only
+`cloudparent`, and no other chapter ships one; (2) `WorldLight` on C1's cards would put them at
+178.6, *below* the original's own 204.9–213.3 at the matching altitude; (3) `fog: true` is
+contradicted three ways (the same reader's tree templates and the world's placed cloud facades
+both author it explicitly, and `B16` verified the flag is honoured); (4) carrying the field up
+with the relocated deck is refuted by CAP-12's own altimetry. **A mechanism, if one is ever
+decoded, replaces this constant — it does not stack with it.** The TUNE is `fvol` cards only: the
+placed `cloudparent` facades keep vertex colour 255 and their range-gated `0.6` opacity.
+
 | Chapter | card size | `lighting` | `fog` |
 |---|---|---|---|
 | C1, C4 | 132.3 × 132.3 m | `false` | `false` |
@@ -182,6 +200,12 @@ degenerate ranges).
 
 **Inferred, and marked as such:**
 
+- **The card's RENDERED brightness — vertex colour 240 scaled to 225 (`CardVertexColorTune`).**
+  The authored 240 is decoded and unchanged; the scale is a TUNE calibrated to the original's
+  measured 209 plateau, with no mechanism behind it and four candidates refuted. Full statement
+  under [The sprite templates](#the-sprite-templates) above. ⚠ The most likely *next* mechanism is
+  not on this list at all: whether `lighting: true` on a `Facade` cloud card is a `WorldLight` gate
+  (it is what puts C1C/C2B's own two cloud populations 60–70 units apart in one frame).
 - **`distance` is the scatter's mean spacing — an areal density, not a lattice period.** Each
   volume is cut into `distance` × `distance` cells anchored on the world origin and each cell gets
   **one placement drawn uniformly inside it**, with `perturb_dist_range` applied on top. The

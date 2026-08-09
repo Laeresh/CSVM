@@ -524,9 +524,18 @@ void fragment() {
     /// building is placed tens of thousands of times, so it is drawn from ONE MultiMesh over
     /// this single mesh rather than a node per copy. Everything the node path adds around the
     /// mesh — the transform, the <c>node_bias</c> instance uniform, the collider — is the
-    /// caller's to supply, which is why this returns the mesh and not a node.</para></summary>
-    internal ArrayMesh? SharedMesh(int meshIndex) =>
-        meshIndex >= 0 && meshIndex < _gamez.Meshes.Count ? GetMesh(meshIndex) : null;
+    /// caller's to supply, which is why this returns the mesh and not a node.</para>
+    ///
+    /// <para>The two override flags are the same ones <see cref="BuildSubtree"/> takes and hit
+    /// the same cache, so asking for a variant a built node already uses hands back that very
+    /// resource. <c>WorldBuilder</c>'s deck path uses that to hold BOTH lit variants of each
+    /// deck tile — one built into the node, its twin swapped in at the cloud-band flip
+    /// (<c>PLAN-overcast-match</c> C23, <c>Session/WeatherRig.DeckRegime</c>) — without building
+    /// the deck twice.</para></summary>
+    internal ArrayMesh? SharedMesh(int meshIndex, bool forceDoubleSided = false, bool forceLit = false) =>
+        meshIndex >= 0 && meshIndex < _gamez.Meshes.Count
+            ? GetMesh(meshIndex, forceDoubleSided, forceLit)
+            : null;
 
     /// <summary>The cross-node draw-order tie-break for one gamez node. Every instance uniform
     /// named <c>node_bias</c> — placed world, clutter decorations, map-edge tiles — comes from

@@ -679,6 +679,9 @@ public partial class GameSession : Node3D
         _plane = session.Root;
         var builder = session.Builder;
         state.CloudDeck = session.CloudDeck;
+        // The deck's other lit variant, built beside it — the weather rig swaps it in above the
+        // cloud band (C23; WorldBuilder.CloudDeckUndimmedMeshes).
+        state.DeckUndimmedMeshes = builder.CloudDeckUndimmedMeshes;
         // Owned by the session so a teardown drops the previous world's lights.
         _worldLights = session.Lights;
         state.CrashProgram = session.Program;
@@ -1232,6 +1235,8 @@ public partial class GameSession : Node3D
         if (state.CloudDeck != null)
         {
             _weatherRig?.SetDeckCenter(OrbitCamera.MergedAabb(state.CloudDeck).GetCenter());
+            if (state.DeckUndimmedMeshes != null)
+                _weatherRig?.SetDeckUndimmedMeshes(state.DeckUndimmedMeshes);
             AssignCloudDecks(state.CloudDeck);
         }
     }
@@ -2064,6 +2069,7 @@ public partial class GameSession : Node3D
         public string What = "";
 
         public Node3D? CloudDeck;
+        public IReadOnlyDictionary<Rid, ArrayMesh>? DeckUndimmedMeshes;
         public AnimProgram? CrashProgram;
         public SceneBuilder? WorldScene;
         public AnimRuntime? WorldRuntime;
