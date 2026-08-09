@@ -17,7 +17,9 @@ namespace CSVM.Mech3;
 /// none.</para>
 ///
 /// <para>Named <c>…Box</c> because <c>Godot.FogVolume</c> is a real engine type (volumetric fog),
-/// which this is not: it is authored data, and nothing in the remake renders fog from it.</para>
+/// which this is not: it is authored data. What the remake does render from it is a camera-space
+/// screen overlay, not volumetric fog — <see cref="FogVolumeWhiteout"/> (C21) plus the <c>ZONE3</c>
+/// fog globals the camera state flips to inside a volume (C22).</para>
 /// </summary>
 /// <param name="Name">The gamez node's own name, e.g. <c>fvol10</c>.</param>
 /// <param name="Box">World-space axis-aligned bounds of the node's mesh.</param>

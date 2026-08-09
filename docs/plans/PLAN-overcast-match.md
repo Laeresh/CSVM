@@ -1898,7 +1898,9 @@ no zone 0), and the *index* reading fails C5 (it names `ZONE3` while the mission
 now *corroborated* and its target *named*: C5's `fogvol.zrd` `fog_color` is `[16,16,16]`,
 **byte-identical to `ZONE3`'s `FOG_COLOR`**, and C5 is the only chapter that authors `fog_color` at
 all — so `fog_zone` indexes **the zone a volume's interior fog uses**, which is precisely why it is
-not the mission selector. Hand that to `BL-315`/`B14`; do not re-derive the sky zone from it.
+not the mission selector. Hand that to `B14`; do not re-derive the sky zone from it.
+(Landed since: `fog_zone` is a bool arming the in-volume whiteout and camera state 3 —
+`PLAN-weather-decompile-match` `A2`/`C21`/`C22`, docs/formats/fogvol.md.)
 
 **The `fvol` node `zone_id` correlation has no consistent sign** (C1 **2**, C1C **2**, C4 **2**,
 C2B **−1** = always, C5 **1**). It does not track `fog_zone` (0,0,0,0,1) and it does not track the
@@ -1916,7 +1918,8 @@ settled zone. It is the world-variant tag of the zone-choice conflict above, not
 range, so they read as the **boundary blend width** — how fast the interior fog takes over as the
 wall is crossed, ~0.16 s at flight speed — not as the fog itself. `CLIP_RANGES` 5–300 is the one
 number that is *not* explicable as an override alone: a 300 m hard clip inside a street volume is a
-render behaviour `BL-315` must decide on, and it is what makes the collapse lethal.
+render behaviour, and it is what makes the collapse lethal. **Decided since** (`PLAN-weather-decompile-match`
+`C22`): the remake does not clip, it fogs — B11's own kept divergence, carried here deliberately.
 
 ### Files
 
@@ -1937,8 +1940,9 @@ identical bands make a switch unreachable there, which is consistent with its zo
 user's C5 sighting: flying into a street volume drops visibility to ~10 % of the mission fog,
 clip `OriginalScreenshots/Videos/CAP-11 C5 Flying into fog zone.mp4`; C5 `ZONE3` authors 50–250
 vs `ZONE1` 1500–2250 — 250/2250 ≈ the estimate — and C5's fogvol.zrd is the only one authoring
-interior-fog keys; `BL-315` holds the render feature, B11 owns whether zones and interior fog
-are one mechanism. Note C1's `fvol` nodes carry `zone_id: 2` — check the sign of that
+interior-fog keys; the render feature was held separately, B11 owns whether zones and interior fog
+are one mechanism. **Both landed** — they ARE one mechanism: `fog_zone` arms camera state 3, the
+volume curtain is `C21` and `ZONE3`'s fog is `C22` (`PLAN-weather-decompile-match`). Note C1's `fvol` nodes carry `zone_id: 2` — check the sign of that
 correlation per chapter).
 
 **Evidence (confidence: lead-only).** The C1 IA1 numbers above; `weather.md`'s zone survey; the

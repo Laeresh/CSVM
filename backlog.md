@@ -1281,24 +1281,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   capture swallows them entirely, while ours are plainly visible in the same scene
   (`playtest/CAP-11/csvm-c2b-low.png`). Streak width is the first constant to revisit.
 
-- `BL-315` `[Feature]` **C5's fog volumes author their own interior fog and we don't render it**
-  (user at the controls of the original, 2026-08-08; clip
-  `OriginalScreenshots/Videos/CAP-11 C5 Flying into fog zone.mp4`). Flying into a C5 street
-  volume drops visibility to roughly a tenth of the mission fog — low enough that the user
-  crashed into a building. The data is already decoded and documented as read-but-unconsumed
-  ([`fogvol.md`](docs/formats/fogvol.md)): C5 is the only chapter authoring `fog_color`,
-  `fog_fade_dist` and `interior_fog_fade_dist` on its `fogvol.zrd`, and C5's weather `ZONE3`
-  authors `FOG_RANGES` 50–250 vs `ZONE1`'s 1500–2250 — 250/2250 matches the user's ~10 %
-  estimate, so the volume-interior fog and the otherwise-unreachable `ZONE3` are plausibly the
-  same mechanism. ⚠ That hypothesis (zone selection is *positional* — inside vs outside a fog
-  volume) is Wave B's `B11` matrix in `docs/plans/PLAN-overcast-match.md`; implementing the interior
-  fog itself stays here, gated on B11's verdict about which system owns it.
-  Secondary observation from the same sitting, re-judge after this lands: C5's puffs read
-  *denser* in the original than ours — in-volume fog may be what reads as density there, so do
-  not tune C5 sprite counts on that report alone.
-  *Playtest after fix:* re-fly the clip's approach into the same street volume and compare
-  visibility collapse distance.
-
 - `BL-317` `[Research]` **The original renders ambient wisp puffs around the plane at all times —
   a third cloud population we don't have** (user at the controls of the original, 2026-08-08).
   Identified while re-reading CAP-12's climb: the "first wisps at ~982 m" are these plane-local
