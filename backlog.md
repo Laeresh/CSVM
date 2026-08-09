@@ -1488,6 +1488,21 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   geometry, nor clutter, nor an authored puffer; whatever draws them travels with the aircraft or
   the camera, and no candidate for that has been found yet. The capture above is now the *first*
   step, not the fallback.
+  ⚠ **A census of the known executable-side sprite systems found no ambient aircraft/camera
+  spawner** (2026-08-10; `analysis/bl-317-plane-wisps/FINDINGS.md`). The one missed aircraft-local
+  path is hard-coded **engine exhaust**: `FUN_00476250` creates a `FUN_00550100` puffer at every
+  `exhaust%d` locator (`exhaust1`, `exhaust2`, …); `FUN_004afbc0` enables it only from a
+  positive commanded-vs-current
+  throttle gap; `FUN_0054ee10` / `FUN_0054f8b0` leave world-space `smoke101`–`103` particles
+  behind the moving plane (0.4 m distance interval, 0.2–0.3 m initial size, 0.5–1.5 s life,
+  near-black→transparent). That explains why those puffs pass the aircraft but contradicts “pale
+  and present at steady throttle,” so it is **ruled out**, not the answer. All direct puffer
+  allocations and world-card insertions are now enumerated, but indirect/static-pool or non-sprite
+  paths are not; **BL-317 remains open, with all three actual-wisp links (allocation, per-frame
+  placement/recycling, final draw) still missing.** Do not invent a third renderer from this
+  observation. The remaining task is a controlled original capture: steady throttle for ≥5 s,
+  then one large increase, with a fixed landmark/altitude to distinguish exhaust from the
+  world-fixed `cloudsprite`/`cloudparent` populations.
 
 - `BL-322` `[Bug]` **C5's lit facades render ×0.58–0.66 of the original with WorldLight already at
   clamp 1.0** (split out of `BL-303` at its close, 2026-08-08; measured `CAP-11`: tower faces 10.2
