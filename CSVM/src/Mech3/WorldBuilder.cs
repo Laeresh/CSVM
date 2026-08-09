@@ -7,8 +7,12 @@ namespace CSVM.Mech3;
 /// <summary>One <c>zone*</c> child of the gamez <c>horizon</c> node, and how many meshed nodes its
 /// subtree carries — the dome <see cref="WorldBuilder.BuildHorizon"/> would build for it.
 /// <see cref="MeshedNodes"/> 0 means the zone is a bare marker (<c>model_index: -1</c> with no
-/// children), which is exactly what C1B, C2 and C3 ship for <c>zone2</c>.</summary>
-public readonly record struct HorizonZone(string Name, int MeshedNodes)
+/// children), which is exactly what C1B, C2 and C3 ship for <c>zone2</c>.
+///
+/// <para><see cref="ZoneId"/> is the zone node's own gamez <c>zone_id</c>, which every chapter
+/// authors to match its name (<c>zone1</c>→1, <c>zone2</c>→2, C5's <c>zone3</c>→3 — surveyed, all
+/// eight). It is what <see cref="ZoneGate"/> tests the built dome against, per rig.</para></summary>
+public readonly record struct HorizonZone(string Name, int MeshedNodes, int ZoneId = -1)
 {
     /// <summary>The zone has a dome to build.</summary>
     public bool BuildsGeometry => MeshedNodes > 0;
@@ -176,6 +180,19 @@ public sealed class WorldBuilder
     /// (<c>GameSession.AssignCloudDecks</c>) share these very resources.</para></summary>
     public IReadOnlyDictionary<Rid, ArrayMesh> CloudDeckUndimmedMeshes => _deckUndimmedMeshes;
 
+    /// <summary>The gamez <c>zone_id</c> the deck tiles author, or <b>−1</b> when this world has
+    /// no deck or its tiles disagree (never observed: all four deck chapters ship 144/144 on
+    /// <c>zone_id 2</c>). The deck is the one world subtree <see cref="ZoneGate"/> does NOT stamp
+    /// with a zone layer — it is a per-rig camera-anchored copy — so this is what
+    /// <c>Session.WeatherRig.Tick</c> tests instead, per rig, against that rig's own camera
+    /// weather state.</summary>
+    public int CloudDeckZoneId { get; private set; } = -1;
+
+    /// <summary>Mesh instances this world put on each zone-gate layer, by <c>zone_id</c> —
+    /// <see cref="SceneBuilder.ZoneGatedMeshes"/> for the world walk. The before-census a state
+    /// flip's delta is asserted against.</summary>
+    public IReadOnlyList<int> ZoneGatedMeshes => _scene.ZoneGatedMeshes;
+
     /// <summary>The world's placed <c>cloudparent</c> cluster subtrees, in walk order — the
     /// ambient cloud population that is ordinary world geometry rather than <c>fvol</c> clutter
     /// (C1 ships 28, C1B 70, C4 45; C2/C3 none). Censused so the caller can put them on the
@@ -271,9 +288,34 @@ public sealed class WorldBuilder
             var child = gamez.Nodes[childIndex];
             if (!child.Name.StartsWith("zone", StringComparison.OrdinalIgnoreCase))
                 continue;
-            zones.Add(new HorizonZone(child.Name, MeshedNodesIn(gamez, child)));
+            zones.Add(new HorizonZone(child.Name, MeshedNodesIn(gamez, child), child.ZoneId));
         }
         return zones;
+    }
+
+    /// <summary>The gamez <c>zone_id</c> every <c>fvol*</c> volume node in this world authors, or
+    /// <b>−1</b> when the chapter ships none or they disagree. The <c>fvol</c> sprite FIELD
+    /// (<see cref="CSVM.Effects.FogVolumeClutter"/>) is scattered through those volumes and is
+    /// gated with them, so this is the zone its MultiMeshes go on.
+    ///
+    /// <para>⚠ It is read from the data per chapter and never assumed: <b>C2B ships its nine
+    /// <c>fvol</c> volumes at <c>zone_id −1</c></b> — always visible, never camera-state culled —
+    /// while C1/C1C/C4 ship <c>2</c> and C5 ships <c>1</c> (the A1 deck census,
+    /// docs/formats/weather.md). A gate that assumed "every deck chapter's fvol population is
+    /// zone 2" would hide C2B's ambient cloud field below its deck, which the original does
+    /// not.</para></summary>
+    public static int FogVolumeZoneIdOf(GameZ gamez)
+    {
+        int? common = null;
+        foreach (var n in gamez.Nodes)
+        {
+            if (!IsFogVolumeNode(n))
+                continue;
+            if (common is { } got && got != n.ZoneId)
+                return -1; // mixed — ungated is the only reading that cannot hide authored content
+            common = n.ZoneId;
+        }
+        return common ?? -1;
     }
 
     /// <inheritdoc cref="HorizonZonesOf"/>
@@ -306,6 +348,15 @@ public sealed class WorldBuilder
         RankConflicts(roots);
         foreach (var idx in roots)
             Add(root, deck, idx);
+
+        // The zone census, said out loud once per world build. "0 / 0 / 0" is what a gate that
+        // stopped stamping looks like, and it is otherwise indistinguishable from a chapter that
+        // authors no zoned content (docs/verification.md's "an unchanged number is not evidence",
+        // inverted) — C1B/C2/C3 really do author almost nothing in zone 2, and C2B's fog volumes
+        // really are zone_id −1.
+        var gated = _scene.ZoneGatedMeshes;
+        GD.Print($"zone gate: {gated[1]} / {gated[2]} / {gated[3]} mesh instance(s) on zone 1 / 2 / 3 "
+                 + $"(deck zone_id {CloudDeckZoneId}, fvol zone_id {FogVolumeZoneIdOf(_gamez)})");
 
         if (deck.GetChildCount() > 0)
         {
@@ -1038,6 +1089,7 @@ public sealed class WorldBuilder
     private void FindCloudDeck(GameZNode world, List<int> roots)
     {
         _deckNodes.Clear();
+        CloudDeckZoneId = -1;
         if (!world.HasArea)
             return;
         float mapW = Mathf.Abs(world.AreaRight - world.AreaLeft);
@@ -1081,6 +1133,22 @@ public sealed class WorldBuilder
                 _deckAltitude = alt;
                 _deckCoverage = slot.Area / (mapW * mapH);
             }
+
+        // The tiles' own zone_id, for the per-rig gate. Mixed tiles (never observed — 144/144 on
+        // zone_id 2 in all four deck chapters) read as −1, i.e. ungated, which is the only reading
+        // that cannot hide authored content it does not understand.
+        int? deckZone = null;
+        foreach (var idx in _deckNodes)
+        {
+            int zone = _gamez.Nodes[idx].ZoneId;
+            if (deckZone is { } got && got != zone)
+            {
+                deckZone = -1;
+                break;
+            }
+            deckZone = zone;
+        }
+        CloudDeckZoneId = deckZone ?? -1;
     }
 
     // True if any of the node's own-mesh polygons is skinned with a texture matching the predicate.
@@ -1119,8 +1187,14 @@ public sealed class WorldBuilder
         // below the cloud band, and the undimmed twin recorded below is what a camera above the
         // band gets instead (CloudDeckUndimmedMeshes). Built here rather than at the flip so the
         // swap is a resource assignment with nothing to compile or allocate.
+        // zoneGate: every world node but the DECK carries its own gamez zone_id onto a shared
+        // visual layer, so each camera's weather state culls it as FUN_0056c430 does (B12,
+        // Mech3/ZoneGate.cs). The deck is excluded because it is a per-rig camera-anchored copy —
+        // it takes the same rule through Node3D.Visible in WeatherRig.Tick, keyed on
+        // CloudDeckZoneId, since a per-player visual layer and a zone layer cannot share one
+        // instance.
         var built = _scene.BuildSubtree(node, SkipWorldNode, NoCollisionNode,
-            forceDoubleSided: isDeck, forceLit: isDeck);
+            forceDoubleSided: isDeck, forceLit: isDeck, zoneGate: !isDeck);
         if (built != null)
         {
             if (IsParkedAtOrigin(node, built))

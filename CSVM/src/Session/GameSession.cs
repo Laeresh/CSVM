@@ -884,23 +884,31 @@ public partial class GameSession : Node3D
                          + $"map-edge extension) over {fogVolumes.Count} volume(s) — "
                          + $"{cloudField.Summary}");
             }
-            // Both ambient cloud populations onto the one shared cloud-field layer (A7): the
-            // fvol clutter MultiMeshes above and the world's own placed `cloudparent` clusters.
-            // They are one population to a camera looking up from under the deck — the original
-            // shows the bare sheet and no cloud groups at all from there — so they are gated
-            // together, per camera, in WeatherRig.Tick. Done HERE rather than where each is
-            // built because the layer band is a rendering-rig allocation (UI.SplitScreen) and
-            // neither WorldBuilder nor FogVolumeClutter knows about panes or cameras.
-            if (cloudField != null)
+            // The fvol sprite field onto the zone layer its own VOLUMES author (B12): the field is
+            // scattered through them, so it is gated with them. Done HERE rather than in
+            // FogVolumeClutter because the field is one MultiMesh per sprite kind spanning every
+            // volume, so it cannot carry a per-volume layer — one uniform zone per chapter is the
+            // only thing this shape can express, and WorldBuilder.FogVolumeZoneIdOf refuses to
+            // guess when the volumes disagree.
+            //
+            // ⚠ Read from the data, never assumed: C1/C1C/C4 author 2 and C5 authors 1, but
+            // **C2B authors −1** — LayerFor returns 0 there, the field stays on the default layer,
+            // and it renders below C2B's deck where the A7 altitude rule this replaced hid it.
+            // That divergence is the A1 census's finding, not a bug (docs/formats/weather.md).
+            //
+            // The world's own placed `cloudparent` clusters need nothing here at all any more:
+            // they are ordinary world nodes and SceneBuilder already stamped them with their own
+            // zone_id during the walk.
+            int fvolZone = Mech3.WorldBuilder.FogVolumeZoneIdOf(state.Gamez);
+            if (cloudField != null && Mech3.ZoneGate.LayerFor(fvolZone) is var fvolLayer and not 0)
             {
-                UI.SplitScreen.SetVisualLayer(cloudField, UI.SplitScreen.CloudFieldLayer);
-            }
-            foreach (var cluster in builder.CloudClusters)
-            {
-                UI.SplitScreen.SetVisualLayer(cluster, UI.SplitScreen.CloudFieldLayer);
+                UI.SplitScreen.SetVisualLayer(cloudField, fvolLayer);
             }
 
             _weatherRig = new WeatherRig(_spec, _worldRoot!);
+            // B12: the deck's own zone_id, the one gated population that cannot ride a visual
+            // layer (it is a per-rig camera-anchored copy — see WeatherRig.SetDeckZoneId).
+            _weatherRig.SetDeckZoneId(builder.CloudDeckZoneId);
             // A2's plumbing: hand the rig the chapter's own fog-volume census + whether its
             // fogvol.zrd arms fog_zone, so Tick can resolve each camera's weather state (1/2/3).
             // Ships dark — nothing reads WeatherRig/PlayerRig.CameraWeatherState yet.
@@ -1954,12 +1962,14 @@ public partial class GameSession : Node3D
         {
             _camera.Current = true;
             // ⚠ The main camera is the LAUNCHER's and outlives the session, so it can arrive
-            // carrying the last flight's cloud gate. Put the layer back before this session's
-            // first frame: WeatherRig.Tick only ever CLEARS the bit, and it does not run at all
-            // in a chapter with no deck — so a session that ended below C1's band would
-            // otherwise hide C5's street haze for the whole of the next flight (A7).
-            // The splitscreen cameras below are built fresh each session and need no reset.
-            _camera.CullMask |= SplitScreen.CloudFieldLayer;
+            // carrying the last flight's zone gate — two of the three zone bits cleared. Put the
+            // whole band back before this session's first frame: WeatherRig.Tick only ever
+            // NARROWS the band, and it does not run at all in a mode with no weather rig, so a
+            // session that ended above C1's deck would otherwise cull every zone-1 node of the
+            // next flight's world for its whole duration (A7's version of this hazard hid C5's
+            // street haze). The splitscreen cameras below are built fresh each session and need
+            // no reset.
+            _camera.CullMask = Mech3.ZoneGate.OpenCullMask(_camera.CullMask);
             _rigs.Add(new PlayerRig { Index = 0, Camera = _camera, HudParent = _worldRoot!, VisualLayer = 0 });
             return;
         }

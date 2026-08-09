@@ -202,6 +202,15 @@ public sealed record SessionSpec
     public bool SkyZoneExplicit { get; private set; }
     public bool NoFog { get; private set; }
 
+    /// <summary><c>--no-zone-cull</c>: switch off the gamez <c>zone_id</c> visibility gate
+    /// (<see cref="Mech3.ZoneGate"/>, <c>PLAN-weather-decompile-match</c> B12, Decision 4) — every
+    /// zone draws at every camera state, as builds before that item did. The one switch the plan
+    /// asked for so a regression anywhere in the world's content can be isolated at the controls:
+    /// the gate hides a lot on purpose (in C1 the whole ground world above the deck, the deck and
+    /// the cloud populations below it), so "did the gate eat it?" has to be answerable in one
+    /// flag. Not a fidelity switch — the default IS the original's behaviour.</summary>
+    public bool NoZoneCull { get; private set; }
+
     /// <summary><c>--no-flare</c>: suppress the sun's lens flare (BL-165). Not a fidelity switch —
     /// a verification one. The flare's full-screen wash reaches α ≈ 0.66 and survives terrain
     /// occlusion, so in C2/C3 any capture with the sun near screen centre is contaminated for every
@@ -769,6 +778,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--sounds=")) { s.Sounds = arg["--sounds=".Length..]; }
             else if (arg.StartsWith("--messages=")) { s.Messages = arg["--messages=".Length..]; }
             else if (arg == "--no-fog") { s.NoFog = true; }
+            else if (arg == "--no-zone-cull") { s.NoZoneCull = true; }
             else if (arg == "--no-flare") { s.NoFlare = true; }
             else if (arg.StartsWith("--mips=")) { s.SetMips(arg["--mips=".Length..]); }
             else if (arg == "--dump-mips") { s.DumpMips = true; }

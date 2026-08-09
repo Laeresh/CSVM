@@ -25,30 +25,22 @@ namespace CSVM.UI;
 /// (<see cref="PlayerCullMask"/>). Everything the world builds stays on the default layer 1 and
 /// is therefore visible in every pane — including the other players' aircraft.</para>
 ///
-/// <para><b>The cloud-field layer</b> (<see cref="CloudFieldLayer"/>, layer 16) is the other
-/// named allocation out of the same 20. It is not per player: it is one SHARED layer carrying
-/// both ambient cloud populations (the <c>fvol</c> clutter MultiMeshes and the world's placed
-/// <c>cloudparent</c> clusters), so that <c>WeatherRig.Tick</c> can hide or show them per
-/// CAMERA — by that camera's own altitude against the cloud band — through the camera's cull
-/// mask. Every cull mask built here includes it, so a chapter or a mode that never runs the
-/// gate renders the clouds exactly as before.</para>
+/// <para><b>The zone-gate band</b> (<c>Mech3.ZoneGate.LayerBand</c>, layers 14–16) is the other
+/// named allocation out of the same 20, and it is not per player either: three SHARED layers, one
+/// per gamez <c>zone_id</c> 1/2/3, carrying every mesh built for a node of that zone — the placed
+/// <c>cloudparent</c> clusters, the <c>fvol</c> clutter field, the zone-1 mission targets and
+/// ground world. <c>SceneBuilder</c> stamps them at build time and <c>WeatherRig.Tick</c> keeps
+/// exactly one of the three bits in each camera's cull mask — that camera's own weather state —
+/// which is the original's <c>FUN_0056c430</c> gate per CAMERA
+/// (<c>PLAN-weather-decompile-match</c> B12). It replaced a single shared cloud-field layer gated
+/// on camera altitude (A7), which was this gate's special case. Every cull mask built here
+/// includes all three bits, so a chapter, a mode or a <c>--no-zone-cull</c> run that never applies
+/// the gate renders every zone exactly as an ungated build does.</para>
 /// </summary>
 public sealed partial class SplitScreen : CanvasLayer
 {
     /// <summary>Panes the rig supports — the reserved visual-layer band is this wide.</summary>
     public const int MaxPlayers = 4;
-
-    /// <summary>The one visual layer BOTH ambient cloud populations live on — the <c>fvol</c>
-    /// clutter MultiMeshes and the world's placed <c>cloudparent</c> clusters. Shared by every
-    /// pane (nothing about either population is per player); what is per pane is whether that
-    /// pane's camera has this bit in its cull mask, which <c>WeatherRig.Tick</c> decides from
-    /// that camera's own altitude (A7).
-    ///
-    /// <para>⚠ Instances are MOVED here, not added: the populations leave the default layer 1
-    /// entirely, or a camera that drops this bit would still see them. That is also why every
-    /// cull mask this class builds keeps the bit — a chapter with no deck, or a mode with no
-    /// weather rig, must render both populations exactly as it did before the gate existed.</para></summary>
-    public const uint CloudFieldLayer = 1u << CloudLayerBit;
 
     // First visual layer of the reserved per-player band. Godot has 20 layers (bits 0–19); the
     // world builds everything on layer 1 (bit 0), so taking the top four leaves the whole middle
@@ -57,11 +49,12 @@ public sealed partial class SplitScreen : CanvasLayer
     private const uint AllLayers = 0xFFFFF;              // Godot's 20 visual layers
     private const uint PlayerBand = 0xFu << PlayerLayerBit0;
 
-    // The shared cloud-field layer (bit 15 = layer 16), taken immediately below the per-player
-    // band. Outside PlayerBand on purpose: every camera's cull mask starts with it INCLUDED, so
-    // the gate is something WeatherRig switches OFF, never something a new camera has to
-    // remember to switch on.
-    private const int CloudLayerBit = 15;
+    // The shared zone-gate band is Mech3.ZoneGate.LayerBand (bits 13–15 = layers 14–16, zone_id
+    // 1/2/3), taken immediately below the per-player band. Outside PlayerBand on purpose: every
+    // cull mask below starts with all three INCLUDED, so the gate is something WeatherRig switches
+    // OFF, never something a new camera has to remember to switch on. (Bit 15 alone was the single
+    // cloud-field layer that band replaced — see the class remarks.) It is allocated in Mech3
+    // rather than here because SceneBuilder stamps it at build time, node by node.
 
     private const int Gutter = 2;   // px between panes (TUNE)
 

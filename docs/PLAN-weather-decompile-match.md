@@ -157,7 +157,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — Deck chapters: zones, deck, sky
 
 11. ☑ Per-state fog + clip + sunlight switching (ZONE1 below / ZONE2 above)
-12. ☐ `zone_id` visibility gate switched with the camera state
+12. ☑ `zone_id` visibility gate switched with the camera state
 13. ☐ Above-deck floor at the authored tile altitude
 14. ☐ Below-deck ceiling = the zone-1 dome (`h_zone1scroll`), scrolling, camera-anchored
 15. ☐ Horizon anchor vertical-scale audit
@@ -449,7 +449,113 @@ is identical; a brightness residual here is D31's to measure, not B11's to absor
 must be state-edge-triggered, not recomputed-per-frame-from-scratch, or the C26 rim-annulus fog
 saturation (which reads the fog globals) will flicker at the boundary.
 
-## B12 ☐ `zone_id` visibility gate switched with the camera state
+## B12 ☑ `zone_id` visibility gate switched with the camera state
+
+**Landed (2026-08-09).** `GameZNode.ZoneId` reads the field; `Mech3/ZoneGate.cs` holds the rule
+(`Draws(zoneId, state)` — `−1`/`0` always, otherwise `zoneId == state`) and its three shared visual
+layers (bits 13–15, immediately below `SplitScreen`'s per-player band, which every cull mask the
+engine builds starts with fully open). `SceneBuilder.BuildSubtree(…, zoneGate: true)` stamps each
+built mesh with **its own node's** `zone_id` layer — never inherited down the subtree, because the
+data disagrees with that reading (C1/C2/C3/C4 each ship `flaglite1`/`flaglite2` as `zone_id −1`
+children of a `zone_id 1` parent, and `FUN_0056c430` is called per node as the walk descends);
+`WeatherRig.Tick` then narrows each rig camera's mask to that camera's own state.
+
+**Visibility now has exactly one owner, and it is a CULL MASK, not `Node3D.Visible`.** That is a
+requirement, not a style: splitscreen panes sit in different states at the same instant, and the
+`Visible` flag on this very content is already read and written by `AnimRuntime`'s `NodeActive`
+condition and its uncovered-`destroyed` sweep, by `WorldBuilder.HideUnplacedEntities`/
+`RestorePlacedEntities`, and by `DamageVisuals` — a visibility-based gate would have answered all
+of their questions with "the camera is above the deck". Nothing in the objective/AI path reads
+render visibility, so the trap the item warned about is closed by construction rather than by
+audit. The two exceptions are the per-rig camera-anchored copies (deck, dome), which take
+`Draws` against `Node3D.Visible` on the rig's OWN copy because a per-player visual layer and a
+zone layer cannot share one instance (a cull mask ORs its bits). `WeatherRig.DeckRegime` lost its
+`CloudsVisible` member outright — A7's altitude gate over the two ambient cloud populations was
+this gate's `zone_id 2` special case — and kept its placement/lit-variant halves untouched for
+B13/B14.
+
+**Per-chapter, from the data, never from a chapter name.** `WorldBuilder.FogVolumeZoneIdOf` gives
+the `fvol` sprite field the zone its own volumes author, and refuses to guess (`−1`) if they ever
+disagree: C1/C1C/C4 `2`, C5 `1`, **C2B `−1`**. `WorldBuilder.CloudDeckZoneId` does the same for the
+deck tiles (144/144 on `zone_id 2` in all four deck chapters). `HorizonZone` gained `ZoneId`.
+
+**Build census** (`zone gate: … mesh instance(s) on zone 1 / 2 / 3`, printed per world build so
+that "the gate stopped stamping" cannot read like "this chapter authors no zoned content"):
+C1 **1343 / 626 / 0** (deck `2`, fvol `2`), C5 **958 / 0 / 134** (deck `−1`, fvol `1`).
+
+**⚠ One scoped deferral, and it is deliberate: the DOME is not gated yet.** The deck IS
+(`zone_id 2` → culled below the deck), which is what the item asked for and what the probes below
+measure. But `BuildHorizon` still builds only the flown zone's dome, so gating it would leave a
+below-deck camera with *no sky at all* — measured: the first cut of this item rendered the C1 river
+pose against Godot's clear-colour gradient. The original always has a dome for the state it is in
+(below the deck it draws `horizon/zone1`, which B14 will build). So `WeatherRig` gates the dome
+only once the world holds more than one (`_builtDomeZones <= 1`); the `_domeZoneId` field, the
+census that feeds it and the `Draws` call are all live, and **B14 turns the swap on by building the
+second dome, with no new rule to write**.
+
+**Verify — probes** (`.scratch/b12/`, all `--freecam --det --mute --no-fog`, markers
+`--tex-override=cloud1.tif=00ff00 --tex-override=cloud2.tif=00ff00
+--tex-override=cloudlayer.tif=ff0000`; `--no-zone-cull` is the baseline side of every pair, which
+is exact rather than approximate — it restores the pre-item picture pixel-for-pixel).
+
+⚠ The first run also overrode `Sky1.tif` and had to be thrown away: `Sky1.tif` is C4's DECK texture
+*and* C1/C1C/C2B's zone2 SKYDOME wall, so it counted the (ungated) dome as deck and reported
+121,157 "deck" px in a frame with no deck in it (SHOT-13 — one texture, one question).
+
+| # | pose | gate ON | `--no-zone-cull` |
+|---|---|---|---|
+| a | C1 below deck `-7325,192,-3829` | **green 0, red 0** | green 0, **red 363,480** (39.4 % of frame) |
+| b | C1 above deck `-7323,1192,-3829` dir `0,0,-1` | green 414,691, red 10,593 | green 414,691, red 10,593 — **0 px differ** |
+| c | C2B below deck `-7325,192,-3829` | **green 123,989** (13.5 %), red 0 | **green 0**, red 366,458 |
+| d | (d is the right-hand column of every row) | — | — |
+
+- **(a)** is the item's own prediction met: below the deck the tiles, the 626 `cloudparent`
+  facades and the 22k `fvol` sprites are all `zone_id 2` and all gone. Green reads 0 on the
+  ungated side too, and that is a fact about the POSE, not a dead check — the opaque deck ceiling
+  at cam+135 m occludes the sprite field from underneath (it is the same sheet seen from the other
+  side). Red is the number that moves, and it moves to zero.
+- **(b)** is the invariant (METHOD-12): above the deck the state is 2, zone 2 draws, and the gate
+  is pixel-exact against the ungated build. The zone-1 ground world IS culled there — it is simply
+  behind the deck at this pose, which is precisely why the original can afford to cull it.
+- **(c) is the C2B exception rendered.** Its nine `fvol` volumes are `zone_id −1`, so the field is
+  never culled; the gate makes it *more* visible, because the zone-2 deck that was occluding it is
+  gone. An implementation that assumed "deck chapter ⇒ fvol zone 2" would have reported 0 here and
+  passed every other check.
+- **Mission content**, at the `c1-destroy-effects` golden's own pose (`-6350,250,-4144` dir
+  `1,-0.1,0`, which frames `ap_radiotwr` — `zone_id 1`): `--sky-zone=zone1` (state 1) shows the
+  airfield, its runways, hangars and the radio tower; `--sky-zone=zone2` (state 2, same fog, same
+  dome, gate the only difference) removes **529,642 px / 57.5 %** of the frame — the entire ground
+  world, since C1 authors its terrain `zone_id 1` too. That is the original's own above-deck cull,
+  and it is invisible in play only because the overcast is opaque.
+- **C5's `zone_id 3` city** (134 mesh instances) is culled at state 1, as the armed set `{0, 1}`
+  requires. Unfogged A/B: **28.3 %** of frame at `-2000,120,-2000`, 1.90 % from `-5120,900,-5120`,
+  0.23 % at the `c5-city-night` golden's pose — where C5 `zone1`'s own 1500–2250 m fog then takes
+  it to **7 px**, which is why that golden did not move (DIAG-17: reached but invisible, not never
+  reached).
+
+**Verify — tests.** `.\RunTests.ps1`: **774 units** (0 skipped, `CSVM_DATA_ROOT` set), **29/29**
+engine suites, engine errors clean. New `CSVM.Tests/ZoneGateTests.cs` (12 cases): the rule at every
+(zone, state) pair; one layer per zone and none for `−1`/`0`/out-of-range; the cull mask narrowing
+the band while leaving every other bit — including the per-player band — untouched, idempotently
+and reversibly; `OpenCullMask` undoing any narrowing; `--sky-zone` name → forced state, with junk
+names leaving the state machine's answer standing; the per-chapter `fvol` + horizon `zone_id`
+census from the real extraction (the `SkyZoneTests` precedent); C2B's `−1` pinned on its own with
+C1's `2` beside it as the able-to-fail half; and the two `flaglite` nodes pinned as the data's own
+counter-example to a subtree-inherited gate. `DeckRegimeTests` lost its four `CloudsVisible`
+assertions to that file and kept the rest.
+
+**Verify — goldens. 7 moved, 6 did not, and all 7 are B12's own** (GOLD-8 — the committed manifest
+still holds pre-B11 hashes, so each mover was re-attributed by A/B against a `--no-zone-cull`
+render of its own args at its own `--frames`): `c1-flight` **50.00 %** of pixels, `c4-snow`
+**27.91 %**, `c1-crash` **0.26 %** (2,398 px — the crash camera looks steeply down, so only a
+sliver of the below-deck ceiling is in shot, which is why B11's fog change left this shot inert and
+a geometry change does not), plus `c1-waterfall`, `c1c-rain`, `c2b-rain`, `c1-destroy-effects`.
+**Every mover is a deck chapter below its band and every non-deck chapter is byte-identical** —
+`c1b-night-sea`, `c2-city`, `c3-island`, `c5-city-night`, `viewer-bhawk`, `empty-stage` (GOLD-5).
+The mechanism in each is the same: the deck's `zone_id 2` ceiling is gone below the deck until B14
+puts `horizon/zone1`'s cap there. *Not re-blessed — the orchestrator re-blesses once per wave.*
+
+**Original approach (kept for reference).**
 
 **Goal.** Nodes carrying a gamez `zone_id` draw only when that id is in {0, current state} (or
 −1), matching `FUN_0056c430` — deck tiles, `cloudparent`, the fvol sprite field and the dome

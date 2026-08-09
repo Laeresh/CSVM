@@ -69,4 +69,29 @@ Part of the [format documentation](README.md) (see also [world-structure.md](wor
   `zone_id 2` (a chapter's cloud deck, its `cloudparent` facades, its `fvol*` volumes) both live
   in the same gamez tree and both draw, gated only by which state the camera is in right now —
   see `weather.md`'s CLOUD_COVER section for the install-wide `zone_id` census this settles.
+  - **The gate is per NODE, and the tree is not uniform.** The field is present on every node, and
+    a subtree can change zone at any edge: parent→child transitions number 8–91 per chapter, and
+    C1/C2/C3/C4 each ship two nodes (`flaglite1`, `flaglite2`) that are `zone_id −1` under a
+    `zone_id 1` parent. `FUN_0056c430` is called with each node's own id as the walk descends, so a
+    reader must not inherit the value down a subtree. Engine-side: `GameZNode.ZoneId`, applied at
+    build time by `SceneBuilder.BuildSubtree(…, zoneGate: true)` and per camera by
+    `Mech3.ZoneGate` (`PLAN-weather-decompile-match` B12).
+  - **Meshed-node census, all eight chapters** (nodes carrying a model, by `zone_id`):
+
+    | chapter | −1 | 1 | 2 | 3 |
+    |---|---|---|---|---|
+    | C1 | 1756 | 1427 | 783 | — |
+    | C1B | 1641 | 1844 | 0 | — |
+    | C1C | 1984 | 145 | 1225 | — |
+    | C2 | 2026 | 532 | 0 | — |
+    | C2B | 1549 | 146 | 1344 | — |
+    | C3 | 1719 | 1149 | 0 | — |
+    | C4 | 2570 | 479 | 1880 | — |
+    | C5 | 4872 | 996 | — | 135 |
+
+    In C1 `zone_id 1` is the whole GROUND world (terrain, airfield, targets), which is why the
+    original culls all of it above the deck — nothing there can be seen through an opaque overcast.
+    The four chapters with no reachable cloud band (C1B/C2/C3/C5) never leave state 1, so their
+    zone-1 majority always draws; C5's 135 `zone_id 3` nodes are the only content those four ever
+    hide, and only while the camera is inside a `fog_zone` volume.
 - **Models (meshes.json/models.json entries) carry their own `model_type`/`facade_mode`/`texture_scroll` fields (unified shape only; discovered 2026-07-21) — this IS the original's billboard-sprite classification, not something to infer from texture names.** `model_type` is `"Default"` (22,323 of 30,202 models in this install) or `"Facade"` (7,879). A Facade model's `facade_mode` names its billboard axis: `SphericalY` (6,819 — full camera-facing rotation: the cloud1/cloud2 sprite cards, and every lamp/beacon/muzzle-flash/ammo-tip glow sprite), `CylindricalY` (1,020 — spins about world-Y only, staying upright: individually-placed trees/lampposts/cables, and fire/flame sprites like the refinery's `fire101.tif` flame), `CylindricalX` (40 — spins about local-X, the muzzle-flash family only). **`model_type` is the real discriminator, `facade_mode` alone is not**: a model can carry a leftover/stale `facade_mode` value while `model_type=="Default"` — verified on C1's 11 six-polygon `flare_green` "flare string" models (`CylindricalY` facade_mode, `Default` model_type), which must render as ordinary static geometry (billboarding them as one sprite would swing all 6 polys around a shared centroid) and do, once gated on `model_type` first. `texture_scroll` (`{u, v}`, units/second) animates the model's UVs. It is nonzero on only 5 models across the whole install, all in C1/C1B: the **daytime skydome's scrolling sky layer** (`h_zone1scroll`, `sky2.tif`, 0.07 u/s — a child of `horizon/zone1`, so it is only built under `--sky-zone=zone1`), an oil-dock conveyor (`con_scroll`, −1.0 u/s) and three boat wake fronts (`wakefront1.tif` at 1.0 / 0.7 / 0.7 u/s). **The field is not the only source, and a `{0,0}` here does not mean the surface is still**: the interp boot scripts set scroll rates at load time with `Object3DSetScroll`, which is why C1's and C4's waterfalls scroll at −0.4 v/s while their `falls.tif`/`falls_edge.tif` models carry `{0,0}` — see [interp.md](interp.md). Rendered since 2026-07-22 (`SceneBuilder`, one path for both sources).

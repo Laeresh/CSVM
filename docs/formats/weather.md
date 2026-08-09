@@ -404,6 +404,14 @@ not a reading error (re-run, same result). Neither breaks the visibility-gate me
 node), but a `zone_id`-gate implementation (`B12`) must not assume every deck chapter's `fvol*`
 population is gated.
 
+**`B12` landed the gate on exactly this reading (2026-08-09).** The remake now reads the zone off
+each chapter's own volumes (`WorldBuilder.FogVolumeZoneIdOf`) instead of assuming one, and C2B is
+the chapter that proves it: at `(-7325, 192, -3829)` its ambient cloud field measures **123,989
+sprite px with the gate on against 0 with `--no-zone-cull`** — the gate makes it *more* visible,
+because the `zone_id 2` deck that was occluding it from below is culled and the `zone_id −1` field
+is not. C1 at the identical pose reads 0 both ways, its field being `zone_id 2`. Engine-side:
+`docs/architecture.md`'s `src/Mech3/ZoneGate.cs` entry.
+
 `horizon/zone1` and `horizon/zone2` subtrees, all eight chapters (`—` = zone absent/empty):
 
 | chapter | `zone1` meshed children | `zone1` Y-levels (model, `bbox_mid.y`) | `zone2` meshed children |

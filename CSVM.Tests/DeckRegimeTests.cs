@@ -5,17 +5,23 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The cloud deck's two altitude regimes and the ambient-cloud gate that rides on them
-/// (<see cref="WeatherRig.DeckRegime"/>, A7).
+/// The cloud deck's two altitude regimes (<see cref="WeatherRig.DeckRegime"/>, A7).
 ///
 /// <para>The original's deck is engine trickery: below the <c>CLOUD_COVER</c> band's centre it
 /// is a ceiling carried with the camera (which is why its texture looks identical at every
-/// altitude on the way up) and both ambient cloud populations are hidden; at or above the centre
-/// it is a world-fixed floor at that centre and the clouds render. Two things have to hold for
-/// that to be invisible rather than a hard pop, and both are asserted here: the flip is
-/// PER CAMERA (splitscreen panes on opposite sides of the band must disagree), and it happens
-/// inside the fully-opaque whiteout core, which is <see cref="WeatherState.WhiteoutAmount"/>'s
-/// business, not this rule's.</para>
+/// altitude on the way up) and the sheet is the overcast's dimmed underside; at or above the
+/// centre it is a world-fixed floor at that centre and the sheet is its undimmed top. Two things
+/// have to hold for that to be invisible rather than a hard pop, and both are asserted here: the
+/// flip is PER CAMERA (splitscreen panes on opposite sides of the band must disagree), and it
+/// happens inside the fully-opaque whiteout core, which is
+/// <see cref="WeatherState.WhiteoutAmount"/>'s business, not this rule's.</para>
+///
+/// <para>⚠ The rule's third member — whether the two ambient cloud populations RENDER — is gone
+/// as of B12 (<c>PLAN-weather-decompile-match</c>): it was A7's altitude-keyed special case of the
+/// original's own <c>zone_id</c> gate, which now owns it per camera and reads the zone per chapter
+/// from the data. Those assertions moved to <c>ZoneGateTests</c>, which is also where the case
+/// that killed the altitude rule lives (C2B's <c>zone_id −1</c> fog volumes, which must keep
+/// rendering below its deck).</para>
 /// </summary>
 public class DeckRegimeTests
 {
@@ -30,11 +36,9 @@ public class DeckRegimeTests
     {
         // The item's whole point: the ceiling's height above the camera — and therefore its
         // apparent texture scale — is the same at every altitude below the band.
-        (float low, bool lowClouds, bool lowDimmed) = WeatherRig.DeckRegime(300f, C1Centre);
-        (float high, bool highClouds, bool highDimmed) = WeatherRig.DeckRegime(900f, C1Centre);
+        (float low, bool lowDimmed) = WeatherRig.DeckRegime(300f, C1Centre);
+        (float high, bool highDimmed) = WeatherRig.DeckRegime(900f, C1Centre);
         Assert.Equal(600f, high - low, 3);          // exactly the 600 m the camera climbed
-        Assert.False(lowClouds);
-        Assert.False(highClouds);
         // ...and it is the overcast's UNDERSIDE all the way up, so it keeps the mission's
         // SUNLIGHT dimming at every altitude below the band (C22 measured that face at 168.9
         // against the original's 167.7).
@@ -47,8 +51,6 @@ public class DeckRegimeTests
     {
         Assert.Equal(C1Centre, WeatherRig.DeckRegime(C1Centre, C1Centre).DeckY, 3);
         Assert.Equal(C1Centre, WeatherRig.DeckRegime(1192f, C1Centre).DeckY, 3);
-        Assert.True(WeatherRig.DeckRegime(C1Centre, C1Centre).CloudsVisible);
-        Assert.True(WeatherRig.DeckRegime(1192f, C1Centre).CloudsVisible);
     }
 
     [Fact]
@@ -61,33 +63,24 @@ public class DeckRegimeTests
         // dimmed 168.9 sheet cannot satisfy at any fog setting.
         Assert.True(WeatherRig.DeckRegime(C1Centre - 0.5f, C1Centre).DeckDimmed);
         Assert.False(WeatherRig.DeckRegime(C1Centre + 0.5f, C1Centre).DeckDimmed);
-        // It is the SAME predicate as the cloud gate and the floor/ceiling choice — one crossing,
-        // three consequences, so nothing can flip one of them a metre early.
+        // It is the SAME predicate as the floor/ceiling choice — one crossing, two consequences,
+        // so nothing can flip one of them a metre early.
         var below = WeatherRig.DeckRegime(900f, C1Centre);
         var above = WeatherRig.DeckRegime(1192f, C1Centre);
-        Assert.Equal(below.DeckDimmed, !below.CloudsVisible);
-        Assert.Equal(above.DeckDimmed, !above.CloudsVisible);
-    }
-
-    [Fact]
-    public void TheCloudsAreHiddenBelowTheCentreAndShownAbove()
-    {
-        // "Not even the cloud groups" from underneath — the gate covers both populations, and
-        // it is this predicate that decides it for every camera in the session.
-        Assert.False(WeatherRig.DeckRegime(C1Centre - 0.5f, C1Centre).CloudsVisible);
-        Assert.True(WeatherRig.DeckRegime(C1Centre + 0.5f, C1Centre).CloudsVisible);
+        Assert.True(below.DeckDimmed);
+        Assert.True(below.DeckY > 900f);            // a ceiling
+        Assert.False(above.DeckDimmed);
+        Assert.True(above.DeckY < 1192f);           // a floor
     }
 
     [Fact]
     public void TwoCamerasOnOppositeSidesOfTheBandGetOppositeRegimes()
     {
-        // The splitscreen requirement, asserted on the rule itself: a shared field hidden as a
-        // NODE would vanish from both panes, so the answer must be a function of one camera's
-        // own altitude and nothing else. P1 below, P2 above.
+        // The splitscreen requirement, asserted on the rule itself: the answer must be a function
+        // of one camera's own altitude and nothing else, because each pane holds its own deck
+        // copy. P1 below, P2 above.
         var p1 = WeatherRig.DeckRegime(900f, C1Centre);
         var p2 = WeatherRig.DeckRegime(1192f, C1Centre);
-        Assert.False(p1.CloudsVisible);
-        Assert.True(p2.CloudsVisible);
         Assert.NotEqual(p1.DeckY, p2.DeckY);
         // Including the sheet's brightness: P1 sees the dimmed underside while P2 sees the
         // undimmed top, at the same instant, of one world's deck — which is why the swap is a

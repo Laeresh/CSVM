@@ -346,6 +346,17 @@ void fragment() {
     public int MeshInstanceCount { get; private set; }
     public int ColliderCount { get; private set; }
 
+    /// <summary>Mesh instances this builder moved onto a <see cref="ZoneGate"/> layer, indexed by
+    /// gamez <c>zone_id</c> (slots 1…<see cref="ZoneGate.MaxZoneId"/>; slot 0 is always 0 —
+    /// <c>zone_id</c> 0 and −1 are ungated). Zero everywhere for a build that passed
+    /// <c>zoneGate: false</c>, which is the aircraft, the deck and the dome.
+    ///
+    /// <para>The census exists because "an unchanged number is not evidence"
+    /// (docs/verification.md): a gate that silently stopped stamping and a chapter that authors no
+    /// zoned content render identically, and only this count tells them apart. Logged per world
+    /// build and asserted in <c>ZoneGateTests</c>.</para></summary>
+    public int[] ZoneGatedMeshes { get; } = new int[ZoneGate.MaxZoneId + 1];
+
     /// <summary>Models built from an authored <c>lighting: false</c> / <c>fog: false</c> flag —
     /// the one-line evidence that a chapter's self-lit and unfogged geometry was actually read
     /// (a night chapter reporting zero means the flags are not reaching the materials).</summary>
@@ -478,9 +489,19 @@ void fragment() {
     /// `lighting: false` currently gates off (see <see cref="WorldBuilder"/>). Inherited by all
     /// descendants; never changes <c>csky_world_light</c> itself or the gate for any other
     /// model.</param>
+    /// <param name="zoneGate">Stamp each built mesh with its node's own gamez <c>zone_id</c>
+    /// visual layer (<see cref="ZoneGate"/>), so the camera's weather state can cull it as the
+    /// original does. <b>Per node, never inherited</b> — the data puts parents and children on
+    /// different zones. Off by default, and deliberately so for the two subtrees that are
+    /// camera-anchored PER RIG (the cloud deck and the skydome): a per-player copy already carries
+    /// its player's own visual layer, which a zone layer cannot share, so those two take the same
+    /// rule through <c>Node3D.Visible</c> on the rig's own copy instead
+    /// (<c>Session.WeatherRig.Tick</c>).</param>
     public Node3D? BuildSubtree(GameZNode node, Predicate<GameZNode>? skip = null,
-        Predicate<GameZNode>? collisionSkip = null, bool forceDoubleSided = false, bool forceLit = false) =>
-        BuildSubtree(node, skip, collisionSkip, _generateCollision, forceDoubleSided, forceLit);
+        Predicate<GameZNode>? collisionSkip = null, bool forceDoubleSided = false,
+        bool forceLit = false, bool zoneGate = false) =>
+        BuildSubtree(node, skip, collisionSkip, _generateCollision, forceDoubleSided, forceLit,
+            zoneGate);
 
     /// <summary>Re-resolves every textured material through the current substitution hook and
     /// writes the result back into the live material. Used by the viewer's livery lab: the
@@ -756,7 +777,8 @@ void fragment() {
     }
 
     private Node3D? BuildSubtree(GameZNode node, Predicate<GameZNode>? skip,
-        Predicate<GameZNode>? collisionSkip, bool collidable, bool forceDoubleSided, bool forceLit)
+        Predicate<GameZNode>? collisionSkip, bool collidable, bool forceDoubleSided, bool forceLit,
+        bool zoneGate)
     {
         if (skip != null && skip(node))
             return null;
@@ -778,6 +800,10 @@ void fragment() {
         if (node.Local is { } local)
             n3d.Transform = local;
 
+        // The node's own zone_id layer, resolved once for both mesh instances below. 0 =
+        // ungated (zone_id −1/0, or the gate switched off for this build) — leave the instance on
+        // the default layer, which every cull mask always keeps.
+        uint zoneLayer = zoneGate ? ZoneGate.LayerFor(node.ZoneId) : 0u;
         if (node.MeshIndex >= 0 && node.MeshIndex < _gamez.Meshes.Count
             && !_gamez.IsMarkerGizmo(node.MeshIndex))
         {
@@ -785,6 +811,14 @@ void fragment() {
             if (mesh != null)
             {
                 var mi = new MeshInstance3D { Mesh = mesh, Name = "mesh" };
+                if (zoneLayer != 0)
+                {
+                    // MOVED onto the zone layer, never added to it: a cull mask ORs its bits, so
+                    // an instance left on the default layer 1 as well would keep drawing in a
+                    // camera that dropped the zone bit.
+                    mi.Layers = zoneLayer;
+                    ZoneGatedMeshes[node.ZoneId]++;
+                }
                 mi.SetInstanceShaderParameter("node_bias", NodeBiasOf(node.Index));
                 // Billboard meshes were recentered on their quad center; put the instance
                 // there so the material's billboard pivots at the center, not the node origin.
@@ -799,12 +833,18 @@ void fragment() {
             // original engine as small glowing dots. Never collidable, never shadowed.
             if (_gamez.Meshes[node.MeshIndex].Lights.Count > 0)
             {
-                n3d.AddChild(new MeshInstance3D
+                var lights = new MeshInstance3D
                 {
                     Mesh = GetLightPoints(node.MeshIndex),
                     Name = "lights",
                     CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-                });
+                };
+                if (zoneLayer != 0)
+                {
+                    lights.Layers = zoneLayer;
+                    ZoneGatedMeshes[node.ZoneId]++;
+                }
+                n3d.AddChild(lights);
                 MeshInstanceCount++;
             }
         }
@@ -814,7 +854,7 @@ void fragment() {
             if (childIndex < 0 || childIndex >= _gamez.Nodes.Count)
                 continue;
             var child = BuildSubtree(_gamez.Nodes[childIndex], skip, collisionSkip, collidable,
-                forceDoubleSided, forceLit);
+                forceDoubleSided, forceLit, zoneGate);
             if (child != null)
                 n3d.AddChild(child);
         }

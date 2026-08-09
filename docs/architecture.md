@@ -27,6 +27,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/GameZ.cs` — GameZ extraction loader (zip or dir): nodes/models/materials/textures JSON → C# objects, either extraction shape.
 - `src/Mech3/TextureArchive.cs` — texture lookup (zip or dir): resolves the name quirks, classifies each texture's alpha (soft vs hard).
 - `src/Mech3/SceneBuilder.cs` — shared GameZ-subtree → MeshInstance3D builder: triangulation, LOD, depth bias, billboards, fog, UV scroll.
+- `src/Mech3/ZoneGate.cs` — the original's per-node `zone_id` visibility gate: the rule, its visual-layer allocation, and the per-camera cull mask.
 - `src/Mech3/ConflictRank.cs` — the world's cross-node draw-order tie-break: ranks nodes by their conflict graph, one slot per coplanar layer.
 - `src/Mech3/WorldCollision.cs` — derives every world collider's `Disabled` flag from its owner's tree visibility (+ the fade channel), so hiding anything drops its collision.
 - `src/Mech3/PlaneBuilder.cs` — builds one aircraft from its GameZ subtree (shaded, backface-culled); `Repaint` re-liveries it in place.
@@ -231,6 +232,9 @@ Carries the node's `flags.intersect_surface` as `IntersectSurface` (default true
 absent) — the original's collision-participation flag, honoured by WorldBuilder.NoCollisionNode.
 Carries `flags.active` as `Active` (same default) — the build script's own `NodeSetActive` record,
 honoured by `WorldBuilder.Add`, which skips building an inactive world-build root outright.
+Carries the node's `zone_id` as `ZoneId` (default −1 when the field is absent, i.e. ungated) — the
+original's per-node visibility zone, honoured per node by `SceneBuilder` and per camera by
+`Mech3/ZoneGate.cs`.
 `IsMarkerGizmo(meshIndex)` classifies a mesh as an authoring mark rather than scenery (one flat-
 coloured untextured triangle — see docs/formats/world-structure.md); SceneBuilder draws none.
 ⚠ GameZNode.Index is the flat list position, NEVER the unified JSON `index` (1-based, duplicated);
@@ -283,7 +287,12 @@ caches, nearest-LOD only, skip predicate. Replicates the original's draw order a
 priority, then subface, then overlay pass, then within-mesh surface rank, with the cross-node
 tie-break coming from `NodeBiasOf` — the world's `ConflictRank` map where the caller set one, the
 flat node index otherwise (aircraft, `--node=`). Every `node_bias` in the project goes through
-that one method. `CollidersForMesh`
+that one method. `BuildSubtree`'s `zoneGate` flag (off by default; on for the world walk and the
+map-edge extension) moves each built mesh instance onto its OWN node's `zone_id` visual layer
+(`Mech3/ZoneGate.cs`), counted into `ZoneGatedMeshes` — per node, never inherited down the subtree,
+because the data puts parents and children on different zones. It stays OFF for the cloud deck and
+the skydome, which are per-rig camera-anchored copies gated by `Node3D.Visible` instead.
+`CollidersForMesh`
 splits a mesh's colliding geometry into one trimesh per surface class actually present
 (water/buildings/untagged, each polygon's own texture deciding) rather than forcing the
 whole mesh under one dominant-class vote — a coastal tile is mostly beach by area, so the
@@ -326,6 +335,31 @@ and `EmitPolygon` answers by writing white corners, so the value lands once. `PL
   out-of-range material index gets, so it shares the ordinary bias-shader fog/lighting pipeline
   (`fogged: true`, `lit: false`) rather than a hand-rolled second one. `materialIndex = -1` is a
   deliberate reuse of an existing fallback path, not a new one.
+
+## src/Mech3/ZoneGate.cs
+The original's per-node visibility gate (`FUN_0056c430`, `PLAN-weather-decompile-match` B12,
+2026-08-09). `FUN_004d62d0` arms the camera each frame with the zone set `{0, camera weather
+state}`; the walk draws a node iff its gamez `zone_id` is `-1`, or is in that set. Four members:
+`Draws(zoneId, state)` (the rule), `LayerFor(zoneId)` (the visual layer a gated zone's meshes are
+MOVED onto — 0 for `-1`/`0`, i.e. leave on the default layer), `CullMask(mask, state)` (narrows the
+band to one zone, every other bit untouched) and `OpenCullMask(mask)` (the whole band back —
+`--no-zone-cull` and the launcher camera's per-session reset).
+⚠ **Per NODE, never inherited down a subtree.** The data puts parents and children on different
+  zones — C1's `flaglite1`/`flaglite2` are `zone_id -1` under a zone-1 parent — and the binary
+  calls the gate per node during the walk. `SceneBuilder.BuildSubtree(…, zoneGate: true)` stamps
+  each node's own mesh instances accordingly, which is also why the gate can never be node
+  visibility: a hidden parent takes its children with it in Godot, and a cull mask does not.
+⚠ **A cull mask, not `Node3D.Visible`, for shared world content.** Splitscreen panes sit in
+  different states at the same instant, and `AnimRuntime`'s `NodeActive` condition + uncovered-
+  `destroyed` sweep, `WorldBuilder.HideUnplacedEntities`/`RestorePlacedEntities` and
+  `DamageVisuals` all read or write `Visible` on that very content. A visibility gate would answer
+  their questions with "the camera is above the deck". The two per-rig camera-anchored copies (deck,
+  dome) are the exception and DO use `Visible`, because a per-player visual layer and a zone layer
+  cannot share one instance — a cull mask ORs its bits, so it cannot express "this pane AND this
+  zone". `Session/WeatherRig.Tick` owns both surfaces.
+⚠ **Bits 13–15** (layers 14–16), immediately below `UI.SplitScreen`'s per-player band at 16–19.
+  Every cull mask the engine builds starts with all three set, so the gate only ever NARROWS —
+  a mode, chapter or camera that never applies it renders every zone.
 
 ## src/Mech3/ConflictRank.cs
 The world's cross-node draw-order tie-break. Buckets every built triangle by its world plane,
@@ -450,10 +484,23 @@ Y=0 up plus an untextured **skirt** cone from Y=0 down, and that skirt is author
 colour was being applied twice (see `SceneBuilder.cs`); nothing about the geometry or the scaling
 was wrong, and `ForceFogged` was never needed to hide it.
 `HorizonZonesOf`/`HorizonZones` census the `horizon` node's `zone*` children with the meshed-node
-count each subtree carries — read BEFORE the build, because the zone the dome and the fog share is
-picked from it (`Flight.WeatherState.PreferPopulatedHorizonZone`; three chapters ship a `zone2`
-that is a bare marker). Static over a `GameZ` so it needs no built scene and is testable
-off-engine.
+count each subtree carries **and that child's own gamez `zone_id`** — read BEFORE the build,
+because the zone the dome and the fog share is picked from it
+(`Flight.WeatherState.PreferPopulatedHorizonZone`; three chapters ship a `zone2` that is a bare
+marker). Static over a `GameZ` so it needs no built scene and is testable off-engine.
+
+**Zone groups (`PLAN-weather-decompile-match` B12).** Every world node the walk builds is stamped
+with its own `zone_id` visual layer by `SceneBuilder` (`zoneGate: true` — see `Mech3/ZoneGate.cs`),
+so the camera's weather state culls it as `FUN_0056c430` does. Two populations are excluded from
+that stamp because they are per-rig camera-anchored COPIES, whose per-player visual layer a zone
+layer cannot share: the **deck** (`Add` passes `zoneGate: !isDeck`; its tiles' own zone is
+`CloudDeckZoneId`, uniform-or-−1) and the **dome** (`BuildHorizon` never stamps). Both take the
+same rule through `Node3D.Visible` in `Session/WeatherRig.Tick`. `FogVolumeZoneIdOf` reports the
+zone every `fvol*` node authors — the zone the `FogVolumeClutter` sprite field is gated on, read
+per chapter and never assumed: **C2B ships −1** where C1/C1C/C4 ship 2 and C5 ships 1.
+`ZoneGatedMeshes` is the per-zone build census, printed as the `zone gate:` line (C1: 1343 / 626 /
+0 on zones 1/2/3) so "the gate stopped stamping" cannot read the same as "this chapter authors no
+zoned content".
 ⚠ `BuildHorizon` builds exactly the zone it is handed, INCLUDING an empty one — the selection is
   the caller's, and an explicit `--sky-zone=` is meant to be able to show a bare marker's nothing.
   Its own name-absent fallback (first zone child) stays a no-op in the normal path.
@@ -498,9 +545,10 @@ dome renders at 8.74 km × 2.5 = 21.85 km, and this flat sheet must stay well in
 touch the dome) or its outer edge would sit past the dome wall it renders in front of.
 `CloudClusters` censuses the OTHER ambient cloud population after the walk — every `cloudparent`
 subtree the world places (C1 28, C1B 70, C1C 30, C4 45; C2/C2B/C3/C5 none), logged per chapter so
-"none" cannot read like a broken census. `GameSession` puts them on `UI.SplitScreen.CloudFieldLayer`
-beside the `fvol` clutter, because a camera's altitude gate treats the two as one population
-(`Session/WeatherRig`, `A7`).
+"none" cannot read like a broken census. They need no layer handling of their own since `B12`: they
+are ordinary world nodes, so `SceneBuilder` already stamped each with its own `zone_id` layer
+during the walk (C1/C1C/C4 author them `zone_id 2`, C1B `zone_id 1`) — the census survives as the
+evidence line, not as a hook.
 ⚠ `CloudClusters` matches on the node's ORIGINAL gamez name (`AnimRuntime.NameMeta`), never
   `Node.Name`: all 28 of C1's are literally named `cloudparent`, so Godot's duplicate-sibling
   renaming is free to have touched the built name (WORLD-8). They are nested too deep for a walk
@@ -1958,12 +2006,15 @@ VertFull/Fade) was hand-tuned because this reader had not been found.
 ⚠ Built ONCE, world-anchored, no per-frame hook and NOT per rig — unlike the dome/deck/whiteout,
   nothing here follows a camera. Splitscreen shares one field; the far fade is evaluated per view
   inside the shader, which is what makes that correct.
-⚠ Its GEOMETRY is shared but its VISIBILITY is per view (`A7`): `GameSession` moves these
-  MultiMeshes off the default layer onto `UI.SplitScreen.CloudFieldLayer` (with the world's placed
-  `cloudparent` clusters — one population to an altitude gate) and `Session/WeatherRig.Tick` adds
-  or drops that bit in each camera's cull mask by that camera's own altitude against the
-  `CLOUD_COVER` centre. Same principle as the far fade: one shared field, decided per view. Never
-  hide it by node visibility — that would take it out of every pane at once.
+⚠ Its GEOMETRY is shared but its VISIBILITY is per view (`B12`, which replaced `A7`'s altitude
+  rule): `GameSession` moves these MultiMeshes off the default layer onto the zone layer **its own
+  `fvol*` volumes author** (`WorldBuilder.FogVolumeZoneIdOf` — C1/C1C/C4 `2`, C5 `1`, and **C2B
+  `−1`**, which stays on the default layer and is therefore never culled at all), and
+  `Session/WeatherRig.Tick` keeps one zone bit in each camera's cull mask by that camera's own
+  weather state. Same principle as the far fade: one shared field, decided per view. Never hide it
+  by node visibility — that would take it out of every pane at once. The field is one MultiMesh
+  per sprite kind spanning every volume, so it can carry only ONE zone; `FogVolumeZoneIdOf`
+  returns −1 (ungated) rather than guessing if a chapter's volumes ever disagree.
 ⚠ Sampling Y AT the volume's top (rather than a random band near it) still respects a sloped or
   tapered top: `Contains` runs the exact face test (`FogVolumes.cs`), so an XZ drawn in a cell is
   rejected exactly when it falls outside the true top footprint at that height — no separate
@@ -2432,12 +2483,15 @@ gutter backdrop, one `SubViewport` pane per player sharing the main `World3D`, p
   across; `RenderTargetUpdateMode` must be `Always`.
 ⚠ `PlayerVisualLayer` reserves layers 17–20 (`PlayerLayerBit0` = 16); the world stays on layer 1;
   `PlayerCullMask(i)` adds only that player's bit — a pane sees only its own sky/deck/puffs.
-⚠ `CloudFieldLayer` (bit 15, layer 16) is the other named allocation and is NOT per player: one
-  shared layer carrying BOTH ambient cloud populations (`fvol` clutter + placed `cloudparent`), so
-  `Session/WeatherRig.Tick` can gate them per CAMERA by cull mask (`A7`). It sits just below the
-  player band on purpose — every mask this file builds includes it, so the gate is something that
-  switches OFF and a mode or chapter that never runs the gate renders the clouds as before.
-  Instances are MOVED onto it, off layer 1, or dropping the bit would change nothing.
+⚠ The zone-gate band (`Mech3.ZoneGate.LayerBand`, bits 13–15 = layers 14–16) is the other named
+  allocation and is NOT per player: three shared layers, one per gamez `zone_id` 1/2/3, so
+  `Session/WeatherRig.Tick` can gate world content per CAMERA by cull mask (`B12`). It sits just
+  below the player band on purpose — every mask this file builds includes all three, so the gate is
+  something that NARROWS and a mode, chapter or `--no-zone-cull` run that never applies it renders
+  every zone as before. Instances are MOVED onto a zone layer, off layer 1, or dropping the bit
+  would change nothing. It is allocated in `Mech3` rather than here because `SceneBuilder` stamps it
+  at build time, node by node. (Bit 15 alone was `CloudFieldLayer`, the A7 altitude gate over the
+  two ambient cloud populations, which this band replaced.)
 
 ## src/Flight/PlayerRig.cs
 One rendered view's state bag: index, camera, optional `SubViewport`, `HudParent`, `VisualLayer`,
@@ -2446,8 +2500,9 @@ those re-anchor to the view's camera every frame, so N players need N of each.
 ⚠ The ambient cloud field is deliberately NOT one of them (`BL-273`): the authored fogvol clutter
   is world-anchored static geometry every pane shares, and the `Puffs` slot went with `CloudPuffs`.
   It still gets a per-pane ANSWER, just not a per-pane copy — `WeatherRig.Tick` gates it (and the
-  world's `cloudparent` clusters) through `Camera.CullMask` on `SplitScreen.CloudFieldLayer`, so
-  the per-view decision lives on the rig's camera rather than in a duplicated subtree (`A7`).
+  world's `cloudparent` clusters, and every other zoned world node) through `Camera.CullMask` over
+  `Mech3.ZoneGate`'s zone-layer band, so the per-view decision lives on the rig's camera rather
+  than in a duplicated subtree (`B12`, which replaced `A7`'s single cloud-field layer).
 ⚠ Single player holds exactly one rig wrapping the main-viewport camera with `VisualLayer` 0, so
   every loop over the rigs degenerates to the old single-camera code.
 ⚠ In splitscreen the camera's parent is a `SubViewport`, not a Node3D — local `Position` IS the
@@ -3552,20 +3607,40 @@ are built from, and it is logged with the meshed counts it was decided on.
   the 144 tiles, never more textured tiles (the deck census stays 144) — out to a 20,480 m
   half-span, dropping the rim to ~4 px, where that same gradient has lost only ~2 units. `K` itself
   is untouched; only how far the ceiling that hides the wall's base reaches.
-⚠ **The cloud gate is a per-camera CULL MASK over `UI.SplitScreen.CloudFieldLayer`, never node
-  visibility.** Both ambient populations — the `fvol` clutter MultiMeshes and the world's placed
-  `cloudparent` clusters — are moved onto that one shared layer by `GameSession`; hiding them as
-  nodes would take them out of every splitscreen pane at once, and two players routinely sit on
-  opposite sides of the band. `Tick` writes each rig camera's own mask.
-⚠ **A chapter with NO deck mesh never arms the gate at all** — the whole block is inside
-  `rig.Deck != null && _weather is { HasCloudBand: true }`. C5 is why: it has 16,170 clutter
-  sprites, no deck, and a band at 9950–10150 m no one can reach, so an unguarded gate would hide
-  its street haze at street level for ever (measured: 161,541 cloud px at street level; C1B, no
-  deck and 70 `cloudparent`, 473,915). **The other half of that guard is
-  `GameSession.BuildRigs`**, which re-adds the layer to the main camera's mask at session start:
-  that camera is the Launcher's and outlives the session, `Tick` only ever CLEARS the bit, and a
-  chapter that never arms the gate never sets it back — so without the reset, quitting a C1 flight
-  from under the deck would hide the NEXT flight's clouds.
+⚠ **`Tick` is the ONE owner of render visibility, and the rule is the original's `zone_id` gate**
+  (`PLAN-weather-decompile-match` B12, 2026-08-09, `FUN_0056c430` — see `Mech3/ZoneGate.cs`). Per
+  rig, per frame, it narrows that camera's cull mask to the single zone layer its own weather state
+  arms, and sets `Node3D.Visible` on the rig's private deck and dome copies by the same rule
+  (`ZoneGate.Draws`). A cull mask, not visibility, for the shared world: splitscreen panes sit in
+  different states at the same instant, and `AnimRuntime`'s `NodeActive` condition,
+  `WorldBuilder`'s unplaced-entity hide/restore pair and `DamageVisuals` all read or write
+  `Visible` on that very content — a visibility gate would answer their questions with "the camera
+  is above the deck".
+  - It **subsumed the A7 cloud gate** (a single `CloudFieldLayer` bit switched on camera altitude,
+    covering the `fvol` clutter and the `cloudparent` clusters). That rule was this gate's
+    `zone_id 2` special case, and reading the zone from the DATA instead of from an altitude is
+    what fixes **C2B**, whose nine `fvol` volumes are `zone_id −1` and must keep rendering below
+    its deck (measured at `(-7325, 192, -3829)`: 123,989 sprite px gated vs 0 ungated — the
+    ungated frame's zone-2 deck occludes them). `DeckRegime` no longer answers the question at all.
+  - The gate runs in **every chapter and every rig**, unlike the guarded A7 rule: a chapter with no
+    reachable band never leaves state 1, and state 1 is exactly what its zone-1 content wants. C5's
+    street haze is `zone_id 1` and its state is 1 at street level, so it survives by the rule
+    rather than by a guard.
+  - **`GameSession.BuildRigs` still resets the band** on the main camera (`ZoneGate.OpenCullMask`),
+    for the same reason as before and a bigger one: that camera is the Launcher's and outlives the
+    session, `Tick` only ever NARROWS the band, and quitting a C1 flight from ABOVE the deck would
+    otherwise cull every zone-1 node of the next flight's world — in C1 that is the whole ground
+    world.
+  - `--no-zone-cull` (`SessionSpec.NoZoneCull`) restores the pre-B12 picture exactly: the band goes
+    back open and neither deck nor dome is hidden. It is the isolation switch Decision 4 asked for
+    and the able-to-fail control every B12 probe is measured against.
+  - ⚠ **The DECK is gated, the DOME is not — yet.** The deck's tiles are `zone_id 2`, so below the
+    deck they are culled and the below-deck ceiling is GONE until `B14` builds `horizon/zone1`'s
+    own cap in its place (measured: 363,480 deck px at the C1 river pose ungated → 0 gated). The
+    single built dome is deliberately left up at every state (`_builtDomeZones <= 1`), because the
+    original always has a dome for the state it is in and gating the only one we build would leave
+    a below-deck camera with no sky at all. `B14` builds both zone subtrees and the same
+    `_domeZoneId` field starts doing the swap with no new rule.
 ⚠ The deck and the `fvol` field are the SAME sheet seen from two sides, so they are read together:
   the deck mesh is what an underside view shows and the sprite field is what a view from above
   shows. Any change to either one's altitude has to be checked against the other's

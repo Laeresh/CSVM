@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using CSVM.Effects;
 using CSVM.Flight;
 using CSVM.Mech3;
-using CSVM.UI;
 using CSVM.Utils;
 using Godot;
 
@@ -30,8 +29,18 @@ namespace CSVM.Session;
 /// this mission's <see cref="WeatherState"/> plus <see cref="SetFogVolumes"/>'s chapter data — and
 /// re-applies the FOG globals for that state's zone whenever it changes (B11, see
 /// <see cref="FogStateTrigger"/>): below the deck a deck chapter wears <c>ZONE1</c>'s ranges,
-/// altitude, colour and <c>SUNLIGHT</c>, above it <c>ZONE2</c>'s. The DOME stays on the zone
-/// <see cref="Build"/> resolved — B14's business, not this one's.</para></summary>
+/// altitude, colour and <c>SUNLIGHT</c>, above it <c>ZONE2</c>'s. Which zone's DOME is BUILT stays
+/// the one <see cref="Build"/> resolved — B14's business, not this one's.</para>
+///
+/// <para><b>This class owns render visibility for the whole world</b> as of B12
+/// (<c>PLAN-weather-decompile-match</c>): <see cref="Tick"/> narrows each camera's cull mask to
+/// that camera's own weather state (<see cref="CSVM.Mech3.ZoneGate"/>), which is the original's
+/// <c>FUN_0056c430</c> gate, and switches the rig's private deck and dome copies with
+/// <c>Node3D.Visible</c> under the same rule. It SUBSUMED the hand-rolled altitude gate over the
+/// two ambient cloud populations that <see cref="DeckRegime"/> used to drive (A7) — that rule was
+/// this gate's <c>zone_id 2</c> special case, and there is now exactly one owner of "does this
+/// draw". <see cref="DeckRegime"/> keeps only the deck's PLACEMENT and its lit variant; B13/B14
+/// own the placement half.</para></summary>
 public sealed class WeatherRig
 {
     // ⚠ TUNE (C21/C25, 2026-08-08) — how far above the camera the deck hangs while the camera
@@ -112,6 +121,16 @@ public sealed class WeatherRig
     // Rebuilt by LoadWeather (a new mission is a new zone table); disarmed outright by an explicit
     // --sky-zone, per Decision 5.
     private FogStateTrigger _fogState = new(stateDriven: false, buildZone: string.Empty);
+    // B12's gate, for the two subtrees SceneBuilder does NOT stamp with a zone layer because they
+    // are per-rig camera-anchored copies: the deck tiles' own gamez zone_id
+    // (WorldBuilder.CloudDeckZoneId) and the BUILT dome's (the _activeZone entry of the horizon
+    // census). -1 = ungated, which is what a chapter with no deck and a legacy extraction both
+    // give, and it simply keeps the node visible at every state.
+    private int _deckZoneId = -1;
+    private int _domeZoneId = -1;
+    // How many DISTINCT horizon zones this build actually put in the world. The dome's half of the
+    // gate is armed only when that is more than one — see _domeZoneId's use in Tick.
+    private int _builtDomeZones;
 
     public WeatherRig(SessionSpec spec, Node3D worldRoot)
     {
@@ -120,12 +139,19 @@ public sealed class WeatherRig
         _activeZone = spec.SkyZone;
     }
 
-    /// <summary>The deck's altitude regime for ONE camera: where its cloud-deck copy sits,
-    /// whether that camera renders the two ambient cloud populations, and whether the deck
-    /// carries the mission's SUNLIGHT dimming. Below the band's centre the deck is a ceiling
-    /// carried with the camera, the clouds are hidden and the sheet is the overcast's dimmed
-    /// UNDERSIDE; at or above it the deck is a world-fixed floor at the centre, the clouds
-    /// render and the sheet is the undimmed top (A7 + C23).
+    /// <summary>The deck's altitude regime for ONE camera: where its cloud-deck copy sits, and
+    /// whether the deck carries the mission's SUNLIGHT dimming. Below the band's centre the deck
+    /// is a ceiling carried with the camera and the sheet is the overcast's dimmed UNDERSIDE; at
+    /// or above it the deck is a world-fixed floor at the centre and the sheet is the undimmed
+    /// top (A7 + C23).
+    ///
+    /// <para>⚠ It no longer answers whether the two ambient cloud populations RENDER. That third
+    /// member was A7's hand-rolled altitude gate, and B12 replaced it with the original's own
+    /// <c>zone_id</c> gate (<see cref="CSVM.Mech3.ZoneGate"/>), of which it was the
+    /// <c>zone_id 2</c> special case — read per chapter from the data rather than from an
+    /// altitude, which is what lets C2B's <c>zone_id −1</c> fog volumes keep rendering below its
+    /// deck where the altitude rule hid them. Do not re-add it here: two owners of one visibility
+    /// question is the failure this item removed.</para>
     ///
     /// <para>Pure and public because it is the whole rule, and the rule is what has to be
     /// asserted: <see cref="Tick"/> only applies it once per rig. Two cameras on opposite sides
@@ -142,11 +168,24 @@ public sealed class WeatherRig
     /// <para>⚠ Both the deck altitude and the deck's lit-ness JUMP at the crossing. That is
     /// unobservable only because the crossing is the band centre, which is the middle of the
     /// fully-opaque whiteout core (<see cref="WeatherState.WhiteoutAmount"/>).</para></summary>
-    public static (float DeckY, bool CloudsVisible, bool DeckDimmed) DeckRegime(
-        float cameraY, float bandCentre)
+    public static (float DeckY, bool DeckDimmed) DeckRegime(float cameraY, float bandCentre)
     {
         bool below = cameraY < bandCentre;
-        return (below ? cameraY + DeckCeilingHeight : bandCentre, !below, below);
+        return (below ? cameraY + DeckCeilingHeight : bandCentre, below);
+    }
+
+    /// <summary>The trailing zone number of a <c>zone1</c>/<c>zone2</c>/<c>zone3</c> name, or null
+    /// for anything else — the <c>--sky-zone</c> STATE OVERRIDE (Decision 5). An explicit
+    /// <c>--sky-zone=zoneN</c> forces the <see cref="CSVM.Mech3.ZoneGate"/> to state N as well as
+    /// pinning the fog: the flag exists so an inspection pose reproduces, and a pose whose fog
+    /// said <c>zone2</c> while its CONTENT was culled for state 1 would not be that. Public and
+    /// static because it is the rule, not a helper.</summary>
+    public static int? ZoneNumberOf(string zoneName)
+    {
+        if (zoneName.Length == 0)
+            return null;
+        int n = zoneName[^1] - '0';
+        return n >= 1 && n <= ZoneGate.MaxZoneId ? n : null;
     }
 
     /// <summary>Loads the mission's weather.json and resolves the rendered zone, builds the
@@ -193,12 +232,20 @@ public sealed class WeatherRig
         _fogZoneArmed = fogZoneArmed;
     }
 
+    /// <summary>The cloud deck's own gamez <c>zone_id</c> (<c>WorldBuilder.CloudDeckZoneId</c>) —
+    /// the one piece of B12's gate that cannot ride a visual layer, because the deck is a per-rig
+    /// camera-anchored copy. Set from the same place as <see cref="SetDeckCenter"/>, for the same
+    /// reason: the deck is world geometry built with the chapter, not mission weather. Never
+    /// called leaves the deck at −1, i.e. drawn at every state — the pre-B12 behaviour.</summary>
+    public void SetDeckZoneId(int zoneId) => _deckZoneId = zoneId;
+
     /// <summary>Everything decided per *camera*, once per rig — one in single player, one per
     /// pane in splitscreen: re-centers the skydome, fades the cloud-band whiteout, places the
-    /// cloud deck in its altitude regime, and gates the two ambient cloud populations by that
-    /// camera's own altitude. The first three are per-rig NODES (each on that player's own
-    /// visual layer); the last is a per-camera CULL MASK over one shared layer, because the
-    /// cloud populations are world geometry no pane owns.
+    /// cloud deck in its altitude regime, and applies the <see cref="CSVM.Mech3.ZoneGate"/> for
+    /// that camera's own weather state. The first three are per-rig NODES (each on that player's
+    /// own visual layer); the gate is a per-camera CULL MASK over three shared zone layers,
+    /// because the content it hides is world geometry no pane owns — plus <c>Node3D.Visible</c> on
+    /// this rig's own deck and dome copies, which are the two things that ARE per pane.
     ///
     /// <para>Every camera in the session comes through here, including the freecam/probe
     /// camera — <c>GameSession.BuildRigs</c> gives a single-player or spectator session one rig
@@ -261,8 +308,10 @@ public sealed class WeatherRig
             // thinning that core, makes a hard pop visible; if one ever shows, that is a finding
             // about the whiteout band, not a licence to move the flip.
             //
-            // The two cloud POPULATIONS are gated on the same crossing, per camera, below —
-            // from underneath, the original shows the bare sheet and no cloud groups at all.
+            // ⚠ Whether the deck DRAWS is no longer decided here at all — that is the zone gate
+            // below (the tiles are zone_id 2). This block only decides WHERE it sits and which lit
+            // variant it wears, and it keeps running while the deck is hidden so B13/B14 inherit
+            // an unchanged placement rule.
             //
             // (History: until A6 this pinned Y to the band centre in BOTH regimes — the
             // above-band half of this trick applied everywhere — which buried the deck inside
@@ -273,8 +322,7 @@ public sealed class WeatherRig
             // C2B 960/970.00, C4 1050/1060.00.)
             if (rig.Deck != null && _weather is { HasCloudBand: true } weather)
             {
-                (float deckY, bool cloudsVisible, bool deckDimmed) =
-                    DeckRegime(camPos.Y, weather.CloudBandCentre);
+                (float deckY, bool deckDimmed) = DeckRegime(camPos.Y, weather.CloudBandCentre);
                 rig.Deck.Position = new Vector3(
                     camPos.X - _deckCenter.X,
                     deckY - _deckCenter.Y,
@@ -285,14 +333,35 @@ public sealed class WeatherRig
                 // (C23). Beside the Y write because it IS the same flip — one rule, applied once
                 // per rig, hidden by the same opaque whiteout core.
                 SetDeckDimmed(rig.Deck, deckDimmed);
-                // ⚠ Per-camera CULL MASK, never node visibility: in splitscreen two players can
-                // sit on opposite sides of the band, and hiding the shared field as a node would
-                // take it out of BOTH panes. Only a chapter with a deck gets gated at all — see
-                // the guard in the `if` above: C5 has the clutter and a band at 9950–10150 m but
-                // no deck, so an ungated rule would hide its street haze at street level for
-                // ever.
-                SetCloudFieldVisible(rig.Camera, cloudsVisible);
             }
+
+            // B12 — the original's zone_id visibility gate (FUN_0056c430), applied per CAMERA
+            // because splitscreen panes can sit in different states at the same instant. Two
+            // surfaces, one rule:
+            //   * the shared world — every mesh SceneBuilder stamped with a zone layer — through
+            //     this camera's cull mask, so nothing touches Node3D.Visible on content whose
+            //     visibility the animation runtime, the unplaced-entity watch and DamageVisuals
+            //     all read and write themselves;
+            //   * this rig's OWN deck and dome copies through Node3D.Visible, because a per-player
+            //     copy already carries its player's visual layer and a cull mask cannot express
+            //     "this pane AND this zone".
+            // Runs for every rig in every chapter, unlike the A7 rule it replaced: a chapter with
+            // no deck simply never leaves state 1, and its zone-1 content is exactly what state 1
+            // draws.
+            int gate = _spec.SkyZoneExplicit
+                ? ZoneNumberOf(_spec.SkyZone) ?? rig.CameraWeatherState
+                : rig.CameraWeatherState;
+            rig.Camera.CullMask = _spec.NoZoneCull
+                ? ZoneGate.OpenCullMask(rig.Camera.CullMask)
+                : ZoneGate.CullMask(rig.Camera.CullMask, gate);
+            if (rig.Deck != null)
+                rig.Deck.Visible = _spec.NoZoneCull || ZoneGate.Draws(_deckZoneId, gate);
+            // The dome is gated only once the world holds more than one of them (B14) — a chapter
+            // with a single built dome keeps it at every state, because "no sky at all" is not a
+            // frame the original can render. See LoadWeather.
+            if (rig.Horizon != null)
+                rig.Horizon.Visible = _spec.NoZoneCull || _builtDomeZones <= 1
+                    || ZoneGate.Draws(_domeZoneId, gate);
         }
 
         // B11: the zone the camera's own state wears, re-applied only at the state EDGE
@@ -325,23 +394,6 @@ public sealed class WeatherRig
                          + $"fog {fog.FogNear:0}-{fog.FogFar:0} m, altitude {fog.FogLow:0}-{fog.FogHigh:0} m, "
                          + $"world light {fog.WorldLight:0.00} (sky dome stays '{_activeZone}')");
             }
-        }
-    }
-
-    /// <summary>Adds or drops <see cref="SplitScreen.CloudFieldLayer"/> in one camera's cull
-    /// mask — the ambient cloud field and the placed <c>cloudparent</c> clusters both live
-    /// there, and this is the only thing that decides whether a given view renders them.</summary>
-    private static void SetCloudFieldVisible(Camera3D camera, bool visible)
-    {
-        uint mask = camera.CullMask;
-        uint want = visible
-            ? mask | SplitScreen.CloudFieldLayer
-            : mask & ~SplitScreen.CloudFieldLayer;
-        // Written only on a change: CullMask is a property setter into the RenderingServer, and
-        // this runs per camera per frame.
-        if (want != mask)
-        {
-            camera.CullMask = want;
         }
     }
 
@@ -455,6 +507,22 @@ public sealed class WeatherRig
             ? byFile
             : _weather?.ResolveZone(_spec.SkyZone, horizonZones)
               ?? WeatherState.PreferPopulatedHorizonZone(byFile, horizonZones);
+        // B12: the BUILT dome's own zone_id, for the per-rig half of the gate. Read off the
+        // horizon census (every chapter authors zone<N> -> zone_id N), never derived from the
+        // name here — the census is the data and the name is a request.
+        //
+        // ⚠ Build puts exactly ONE zone's dome in the world per rig, so _builtDomeZones is 1 and
+        // Tick leaves this dome up at every camera state. That is deliberate and it is B14's to
+        // retire: the original always has a dome for the state it is in (below the deck it draws
+        // horizon/zone1, which BuildHorizon does not build yet), so gating the only dome we DO
+        // build would leave a below-deck camera with no sky at all — a picture the original never
+        // shows, and not the gate's fault to produce. The moment B14 builds both zone subtrees the
+        // count goes past one and this same field starts doing the swap, with no new rule.
+        _domeZoneId = -1;
+        foreach (var z in horizonZones)
+            if (z.Name.Equals(_activeZone, StringComparison.OrdinalIgnoreCase))
+                _domeZoneId = z.ZoneId;
+        _builtDomeZones = 1;
         if (!_activeZone.Equals(byFile, StringComparison.OrdinalIgnoreCase))
             // The horizon correction. Printed with the counts it was decided on, because this is
             // the one line that says which sky and which fog the flight actually got.
