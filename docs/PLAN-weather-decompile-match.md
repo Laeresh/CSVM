@@ -67,7 +67,9 @@ Confidence roll-up:
 | **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, B11, B12, B13, C21, C22 | Confirm the trace (function addresses in "What the data actually ships"), then implement. |
 | **Direction sound, magnitude a judgement call** | B14, B15, D32 | The *what* is settled (dome ceiling, flicker exists); blend order, scale plumbing and curve constants are TUNE — record them in `backlog.md`'s TUNE list. **B14 landed and killed the "unscaled vertical anchor" half of this row: the 396.4 m cap it rested on is a bbox midpoint, and a camera-centred unfogged dome makes uniform scale unobservable anyway. B15 then audited what remained and found NO contradicting
 observable: the scale is only observable against the far plane and against world geometry, and four
-of the five zone-1 domes are a single flat colour with no rim to measure at all.** |
+of the five zone-1 domes are a single flat colour with no rim to measure at all.** **D32 landed
+2026-08-09: the curve shapes and blend/drift mechanism are traced exactly to `FUN_0042ee40`; the
+rate constant and ramp length are recorded TUNE (`backlog.md` `BL-329`).** |
 | **Leads only — no mechanism yet** | D31 | Budget for investigation; may end in a disproof. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
@@ -1319,7 +1321,27 @@ the whole item.
 **⚠ Traps.** INSTR-7: C2 is still the only chapter that exercises the altitude term — do not
 promote a C2-only residual to a global fix.
 
-## D32 ☐ In-band turbulence flicker (optional TUNE)
+## D32 ☑ In-band turbulence flicker (optional TUNE)
+
+**Landed.** `Session/WeatherRig.BandFlicker` — the decompiled `FUN_0042ee40` remap (two curves,
+`LogCurve`/`AtanCurve`, blended by a per-rig drift parameter that ping-pongs in [0,1], re-randomized
+off `Rng.NewSystemRandom(Rng.Clouds)` at each bound), applied to `WeatherState.WhiteoutAmount`
+strictly inside `(0,1)` in `WeatherRig.Tick`, before the C21 volume-curtain union so both paths see
+it. Frame-0 identity (the trap below) is an amplitude ramp from 0 over `RampFrames` calls, not
+`t = 0` — neither curve equals identity at an interior opacity. Rate (`DefaultRate = 5.5f`) and
+ramp length (`RampFrames = 30`) are declared TUNE, recorded in `backlog.md`'s `BL-329`. Unit tests:
+`CSVM.Tests/BandFlickerTests.cs` (frame-0 identity, the two curve shapes at op=0.5 against the
+decompiled formulas, bounded-and-edge-exact remap, determinism, and the ramp itself). Verified: all
+13 `analysis/goldens` shots stayed hash-identical (`RunTests.ps1`), `FlatColorTests`/
+`DeckRegimeTests` unchanged (837/837 units green). A `.scratch/d32/` probe swept two C1 poses:
+`y=1040` sits inside the fully-opaque core (1032–1062 m, `WhiteoutAmount` exactly 1) where the
+flicker's own guard skips it, so `--frames=120`/`240` there hash-identical (`ed944332…`) as
+expected — a control confirming the guard, not a miss. `y=1000` sits in the bottom ramp (strictly
+inside `(0,1)`): `--frames=0` reads `23312e5b…` on two independent `--det` runs (frame-0
+identity + determinism), and `--frames=120`/`240` read two DIFFERENT hashes (`e14bc5a4…`/
+`37efca76…`) each matching across both runs at the same frame index — the flicker is live and
+`--det`-stable.
+
 
 **Goal.** The whiteout opacity inside the band shimmers as the original's does.
 

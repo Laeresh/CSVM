@@ -77,6 +77,11 @@ public sealed class WeatherRig
     // darken a passing A/B by 70 units.
     private static readonly Color WhiteoutFallbackColor = new(0.95f, 0.95f, 0.96f);
 
+    // D32: one flicker per rig, keyed like `_lastLoggedVolumeWhiteout` — the original's
+    // `_DAT_0064efcc`/`_DAT_0062154c` pair is a single global, but that assumes one camera, and
+    // splitscreen panes on opposite sides of the band must not share a drift phase.
+    private readonly Dictionary<int, BandFlicker> _bandFlicker = new();
+
     private readonly SessionSpec _spec;
     private readonly Node3D _worldRoot;
     // One rig's deck tiles and which variant they currently carry, keyed by the deck node's
@@ -276,6 +281,10 @@ public sealed class WeatherRig
     /// player does.</para></summary>
     public void Tick(IReadOnlyList<PlayerRig> rigs)
     {
+        // D32's rate input: null only outside a running session (GameClock.Current unset), which
+        // freezes the flicker rather than pacing it off a wall clock (DET-1) — nothing calls Tick
+        // there anyway.
+        float frameDt = GameClock.Current?.FrameDt ?? 0f;
         foreach (var rig in rigs)
         {
             var camPos = rig.Camera.Position;
@@ -316,6 +325,13 @@ public sealed class WeatherRig
                 // still white the pane out, which reads as "fog is not actually off". It covers
                 // the volume curtain for the same reason.
                 float band = _spec.NoFog ? 0f : _weather.WhiteoutAmount(camPos.Y);
+                // D32: the decompiled in-cloud flicker — only while the band opacity sits strictly
+                // inside (0,1), exactly the binary's `*pfVar5 != 0.0 && *pfVar5 != 1.0` guard. The
+                // volume curtain (C21) is untouched: it never shares this surface with the band in
+                // shipped data (Decision 6), and the binary's remap block only ever touches the
+                // band's own opacity.
+                if (band > 0f && band < 1f)
+                    band = ApplyBandFlicker(rig.Index, band, frameDt);
                 float volume = _spec.NoFog ? 0f : _fogWhiteout.Density(camPos);
                 if (volume > 0f)
                 {
@@ -496,6 +512,25 @@ public sealed class WeatherRig
         }
         _lastLoggedVolumeWhiteout[rigIndex] = density;
         Log.Debug("world", $"fvol whiteout: player {rigIndex} density {density:0.000}");
+    }
+
+    /// <summary>D32: this rig's flicker off the band's raw <c>WhiteoutAmount</c>, seeded from the
+    /// same <see cref="Rng.Clouds"/> stream every <c>--det</c> run re-derives identically —
+    /// created lazily so the first call for a rig is that rig's own frame 0 (the identity
+    /// guarantee lives in <see cref="BandFlicker.Apply"/>, not here).</summary>
+    private float ApplyBandFlicker(int rigIndex, float op, float frameDt)
+    {
+        if (!_bandFlicker.TryGetValue(rigIndex, out var flicker))
+        {
+            // A per-instance System.Random off Rng.Clouds (the shape the effects code already
+            // uses, e.g. Puffer's per-instance fields) rather than the shared Godot
+            // RandomNumberGenerator stream directly: BandFlicker re-draws repeatedly over its own
+            // lifetime as the drift re-randomizes at each bound, and keeping that off a native
+            // Godot object is what lets BandFlickerTests exercise it outside the engine (RngTests'
+            // own reason for the same choice).
+            _bandFlicker[rigIndex] = flicker = new BandFlicker(Rng.NewSystemRandom(Rng.Clouds));
+        }
+        return flicker.Apply(op, frameDt);
     }
 
     /// <summary>Puts ONE rig's deck copy into its regime's lit variant: the dimmed mesh each
@@ -824,6 +859,105 @@ public sealed class WeatherRig
             }
             return new FogZoneChange(state, zone, applied, fellBack && _fallbacksReported.Add(state));
         }
+    }
+
+    /// <summary>D32: the decompiled in-cloud flicker (<c>FUN_0042ee40</c>) — remaps the band's raw
+    /// opacity through two curves (<see cref="LogCurve"/>/<see cref="AtanCurve"/>) blended by a
+    /// parameter that drifts in [0,1] and re-randomizes its speed at each bound, sign-flipped at
+    /// the 1 bound (matching the decompile: the low-bound reset keeps a freshly-drawn POSITIVE
+    /// speed, the high-bound clamp negates it, which is what turns the drift into a ping-pong
+    /// rather than a one-shot ramp).
+    ///
+    /// <para>⚠ <b>Frame-0 identity is not "start at t=0".</b> Neither curve equals the identity
+    /// function at an interior opacity — <c>AtanCurve(0.5) = 0.267</c>, not 0.5 — so a fresh
+    /// instance ramps the blended remap's AMPLITUDE in from 0 over <see cref="RampFrames"/> calls
+    /// to <see cref="Apply"/> instead: the first call for any instance returns <c>op</c> completely
+    /// unchanged (ramp exactly 0, so <c>op + 0f * anything == op</c> bit-for-bit), which is what
+    /// keeps a static probe or golden shot at a rig's first tick reading the unremapped
+    /// <see cref="WeatherState.WhiteoutAmount"/> the <c>FlatColorTests</c>/<c>DeckRegimeTests</c>
+    /// pins were measured against (D32's trap).</para></summary>
+    public sealed class BandFlicker
+    {
+        // ⚠ TUNE (D32) — the decompile's rate multiplier is read from a per-mission weather-struct
+        // field (≈ +0x934) that no reader decodes and no capture pins a value for. Picked so the
+        // MIDPOINT of the re-randomized drift speed (0.2..1.0, mean 0.6) traverses the full [0,1]
+        // range in a few seconds: 5.5 * 0.6 * 0.1 = 0.33/s -> ~3 s at the mean, 1.8-9.2 s across the
+        // randomized range. Record kept here (the field's one implementation) and in
+        // backlog.md `BL-329`'s `[Tuning]` entry (the discoverable index).
+        public const float DefaultRate = 5.5f;
+
+        // ⚠ TUNE (D32) — how many `Apply` calls (sim frames) the amplitude ramps in over: 30 = 0.5 s
+        // at the fixed 60 Hz `--det` step. Long enough that the ramp itself is not the shimmer;
+        // short enough that a flight spends effectively none of its time in it.
+        public const int RampFrames = 30;
+
+        private readonly Random _rng;
+        private float _t;
+        private float _driftSpeed;
+        private long _framesSeen;
+
+        public BandFlicker(Random rng)
+        {
+            _rng = rng;
+            _driftSpeed = RandomDriftSpeed(rng);
+        }
+
+        /// <summary>The blend parameter's current value — exposed for the determinism test, not
+        /// consumed by <see cref="WeatherRig"/>.</summary>
+        public float T => _t;
+
+        /// <summary>The log-shaped curve: <c>ln(op*5+1)/ln(6)</c> — <c>FUN_0042ee40</c>'s
+        /// <c>fVar1/fVar2</c>, both computed as <c>log2</c> in the binary but the base cancels in
+        /// the ratio, so natural log reproduces it exactly.</summary>
+        public static float LogCurve(float op) => MathF.Log((op * 5f) + 1f) / MathF.Log(6f);
+
+        /// <summary>The atan-shaped curve: <c>(atan((op-0.5)*10)+0.5)/(atan(5)+0.5)</c> —
+        /// <c>FUN_0042ee40</c>'s <c>param_1</c>.</summary>
+        public static float AtanCurve(float op) =>
+            (MathF.Atan((op - 0.5f) * 10f) + 0.5f) / (MathF.Atan(5f) + 0.5f);
+
+        /// <summary>The two curves blended by <paramref name="t"/> and clamped to [0,1] — the
+        /// binary's <c>fVar3 = (logCurve - atanCurve) * t + atanCurve</c> followed by its own
+        /// clamp. Both curves agree at <c>op=1</c> (both equal 1) and the clamp forces <c>op=0</c>
+        /// to 0 regardless of <paramref name="t"/> (<c>AtanCurve(0)</c> is negative), which is why
+        /// the remap never moves the band's hard edges — only its interior.</summary>
+        public static float Remap(float op, float t) =>
+            Mathf.Clamp(AtanCurve(op) + (t * (LogCurve(op) - AtanCurve(op))), 0f, 1f);
+
+        /// <summary>Advances the drift by one frame and returns the flickered opacity — identity on
+        /// the very first call (see the class summary), and identity again whenever
+        /// <paramref name="op"/> sits exactly at 0 or 1 (the binary's guard: the whole remap block,
+        /// including the drift update, is skipped there, so a band pinned at a hard edge never
+        /// drifts).</summary>
+        public float Apply(float op, float frameDt, float rate = DefaultRate)
+        {
+            if (op <= 0f || op >= 1f)
+                return op;
+
+            float ramp = Mathf.Clamp(_framesSeen / (float)RampFrames, 0f, 1f);
+            _framesSeen++;
+
+            _t += rate * frameDt * _driftSpeed * 0.1f;
+            if (_t > 1f || _t < 0f)
+            {
+                float mag = RandomDriftSpeed(_rng);
+                if (_t <= 1f)
+                {
+                    _t = 0f;
+                    _driftSpeed = mag;
+                }
+                else
+                {
+                    _t = 1f;
+                    _driftSpeed = -mag;
+                }
+            }
+
+            float remapped = Remap(op, _t);
+            return op + (ramp * (remapped - op));
+        }
+
+        private static float RandomDriftSpeed(Random rng) => 0.2f + ((float)rng.NextDouble() * 0.8f);
     }
 
     /// <summary>ONE rig's deck copy, resolved for the lit-variant swap: its tiles with both

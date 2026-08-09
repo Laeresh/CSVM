@@ -1548,6 +1548,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `docs/architecture.md`'s `WorldBuilder.cs` entry, `PLAN-weather-decompile-match`
   `D31`/`B13`/`B14`.
 
+- `BL-329` `[Tuning]` `[Owed-playtest]` **The D32 in-cloud flicker's rate and ramp are declared
+  TUNE, not decoded** (`PLAN-weather-decompile-match` D32, 2026-08-09;
+  `Session/WeatherRig.BandFlicker`). `FUN_0042ee40`'s drift rate multiplies a per-mission
+  weather-struct field ≈ `+0x934` that no reader decodes and no capture pins a value for, so
+  `BandFlicker.DefaultRate = 5.5f` is picked, not measured: at the re-randomized drift speed's
+  midpoint (0.2..1.0, mean 0.6) it traverses the blend parameter's full [0,1] range in `5.5 * 0.6 *
+  0.1 = 0.33`/s, i.e. ~3 s at the mean and 1.8–9.2 s across the randomized range — "a full traverse
+  in a few seconds", not a decoded figure. `BandFlicker.RampFrames = 30` (0.5 s at the fixed 60 Hz
+  step) is the amplitude ramp that keeps a session's frame 0 (and any static probe/golden capture
+  at a rig's first tick) reading the unremapped `WeatherState.WhiteoutAmount` exactly — its length
+  is also a guess, chosen only to be short next to a flight and long next to one frame.
+  *Evidence:* `docs/PLAN-weather-decompile-match.md`'s D32 entry; the curve shapes themselves
+  (`BandFlicker.LogCurve`/`AtanCurve`/`Remap`) ARE decoded from `FUN_0042ee40` and are not part of
+  this TUNE — only the rate and ramp length are a judgement call.
+  *Fix shape:* none pending — needs in-cloud footage of the original with visible timing (a static
+  screenshot cannot show a drift rate) before either constant can move off a guess.
+  *Playtest after fix:* fly into C1's cloud band and hold in the RAMP, not the opaque core — the
+  core (1032–1062 m) is fully whited out and the flicker's own guard skips it there by design
+  (`--freecam --chapter=C1 --pos=-2000,1000,-1792 --direction=0,0,-1` sits in the bottom ramp) —
+  and compare the shimmer's pace against any original in-cloud footage (`CAP-12`'s C4 take has
+  in-cloud frames) once such footage is reviewed for timing rather than just colour.
+  *Cross-refs:* `docs/architecture.md`'s `Session/WeatherRig.cs` entry (D32 bullet).
+
 - `BL-304` `[Bug]` **Water gets the WorldLight dim; the original renders it unmodulated** (`CAP-11`
   A/B, 2026-08-07; surfaced closing `BL-110`; evidence `playtest/CAP-11/README.md`). C2B ocean
   foreground, same world, matched spawn pose: original 53.9 vs ours 42.0–42.5 — ratio

@@ -179,12 +179,19 @@ an upper bound, and the correction to the 137.9 mph equilibrium are on `BL-115` 
     angle, no visible field edge over the base map, and the sheet's mottling reading as
     multi-scale rather than smooth broad bands (ours is measurably blurrier than the original's —
     high-pass RMS ≈ 0.2 against ≈ 0.9 — so say whether that is visible in motion).
+  - (f) **the in-band flicker** (`BL-329`, `PLAN-weather-decompile-match` D32) — hold still a few
+    seconds in the whiteout RAMP, not the opaque core (~970–1032 m or ~1062–1124 m; the fully
+    white core in between is a flat colour by design and never flickers): the pane should shimmer
+    subtly rather than sit dead flat, on a pace of roughly a couple to several seconds per swing.
+    The rate is a declared TUNE (`BandFlicker.DefaultRate`), not a decoded figure, so judge
+    whether it reads as "clouds breathing" at all — too fast reads as a strobe, too slow reads as
+    nothing happening.
 
   *Blocks:* this is the plan's own exit verdict — a pass confirms it. A fail on (a), (b), (c) or
   (e) is fresh evidence on the closed item's successor, not a reopening: name which check failed
   and mint against the mechanism it belongs to (`A7`/`C25`/`C26` for (a), `CLOUD_COVER` for (b),
   `C23`'s fork for (c), `BL-312`'s scatter or `BL-327`'s far-field half for (e)). (d) has its
-  item already: it feeds `BL-327`.
+  item already: it feeds `BL-327`. (f) feeds `BL-329`.
   *Variations:* `--chapter=C4` for the one deck chapter whose `WorldLight` clamps to 1.0 — its
   deck must look exactly as it did, and its cards must still be *there* above the band.
 

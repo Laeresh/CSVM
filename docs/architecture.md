@@ -3824,6 +3824,47 @@ are built from, and it is logged with the meshed counts it was decided on.
   The authored 960/1050 is what the scatter is read against either way (fogvol.md's
   mesh-10 m-under-the-slab invariant, pinned per chapter in `DeckRegimeTests`) — a fact about the
   DATA, unaffected by which regime is currently rendering the mesh.
+⚠ **The band whiteout flickers inside the interior — `BandFlicker` (nested class), the decompiled
+  `FUN_0042ee40` remap** (`PLAN-weather-decompile-match` D32, 2026-08-09). Only the `CLOUD_COVER`
+  band's own opacity (`WeatherState.WhiteoutAmount`) is remapped, and only while it sits strictly
+  inside `(0,1)` — the binary's exact `*pfVar5 != 0.0 && *pfVar5 != 1.0` guard, applied in `Tick`
+  right after `band` is read and before the volume-curtain union, so both paths (C21's union and
+  the pre-C21 straight assignment) see the flickered value. The volume curtain
+  (`FogVolumeWhiteout.Density`) is untouched — the binary's remap block only ever touches the
+  band's own opacity, never the `fvol` density.
+  - **Two curves, blended by a drifting parameter.** `BandFlicker.LogCurve(op) = ln(op·5+1)/ln(6)`
+    and `AtanCurve(op) = (atan((op−0.5)·10)+0.5)/(atan(5)+0.5)` are `FUN_0042ee40`'s `fVar1/fVar2`
+    (computed as `log2` in the binary; the base cancels in the ratio, so natural log reproduces it
+    exactly) and its `param_1`. `Remap(op, t) = clamp(AtanCurve(op) + t·(LogCurve(op) −
+    AtanCurve(op)), 0, 1)` is the binary's `fVar3` line plus its own clamp.
+  - **The drift is a per-instance ping-pong, not a one-shot ramp.** `t` advances by
+    `rate · frameDt · driftSpeed · 0.1` each `Apply` call (`GameClock.Current.FrameDt`, never a
+    wall clock — DET-1); on overshoot past either bound a fresh `driftSpeed` is drawn in
+    `[0.2, 1.0)`, the low bound resets `t` to 0 keeping that speed POSITIVE, and the high bound
+    clamps `t` to 1 and NEGATES it — exactly the binary's `_DAT_0064efcc`/`_DAT_0062154c` pair,
+    which is what turns a monotonic drift into oscillation between the two curves.
+  - **One `BandFlicker` per rig** (`WeatherRig._bandFlicker`, keyed by `rig.Index`), unlike the
+    binary's single global pair: splitscreen panes on opposite sides of the band must not share a
+    drift phase, the same reasoning as the per-rig whiteout `ColorRect` itself. Each is seeded
+    lazily on its rig's first flickering frame from `Rng.NewSystemRandom(Rng.Clouds)` — a
+    per-instance `System.Random`, not the shared `Rng.Stream` `RandomNumberGenerator`, deliberately:
+    a native Godot RNG object cannot be constructed off-engine, and `BandFlickerTests` exercises the
+    class without the engine running (the same reason `RngTests` avoids it for
+    `Rng.NewSystemRandom(string, int, int)`).
+  - ⚠ **Frame-0 identity is an amplitude ramp, not `t = 0`** — the trap this item names directly:
+    `FlatColorTests`/`DeckRegimeTests` pin static poses and all 13 `analysis/goldens` shots are
+    frame-0 captures, and neither curve equals the identity function at an interior opacity
+    (`AtanCurve(0.5) = 0.267`, not 0.5), so starting `t` at 0 alone would still move a static
+    reading. `BandFlicker.Apply` instead ramps the remap's blended AMPLITUDE in linearly from 0
+    over `RampFrames` (30, i.e. 0.5 s at the fixed 60 Hz `--det` step) calls: a fresh instance's
+    first call returns `op` completely unchanged (`op + 0f · anything == op` bit-for-bit), which is
+    what kept all 13 goldens hash-identical across this item.
+  - **`BandFlicker.DefaultRate = 5.5f`** is a declared TUNE (`backlog.md` `BL-329`) — the
+    decompile's rate multiplier reads a per-mission weather-struct field (≈ `+0x934`) no reader
+    decodes and no capture pins a value for. Picked so the drift speed's midpoint (mean 0.6 of its
+    `[0.2, 1.0)` range) traverses the full blend range in `5.5 · 0.6 · 0.1 = 0.33`/s — "a few
+    seconds", not a decoded figure. `RampFrames` is likewise a guess (short next to a flight, long
+    next to one frame), not a measurement.
 
 ## src/Session/LensFlareRig.cs
 The sun's lens flare: four screen-space sprites strung along the sun→screen-centre vector at
