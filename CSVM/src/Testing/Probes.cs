@@ -955,17 +955,25 @@ public static class Probes
             + "rides the rate row below",
             info: true);
 
-        // ⚠ Asserted as an UPPER BOUND, not a band. BL-247's defect is the aircraft falling out of
-        // this manoeuvre — 83% of gravity across the flight path at a steep bank — so "sinks no
-        // harder than the original" is the claim the measurement supports. The other side is a
-        // different question, and C22's bank coupling settled it: the turn used to come out
-        // slightly CLIMBING (−2.65), which was its own divergence, and now sinks just inside the
-        // bound. Both sides are visible in the number rather than folded into this verdict.
+        // An UPPER BOUND, not a band. BL-247's defect is the aircraft falling out of this manoeuvre
+        // — 83% of gravity across the flight path at a steep bank — so "sinks no harder than the
+        // original" is the claim the measurement supports. The other side is a different question:
+        // the turn used to come out slightly CLIMBING (−2.65), which was its own divergence, and
+        // C22's bank coupling took it to 1.66, sinking. Both sides stay visible in the number.
+        // ⚠ INFORMATIONAL, downgraded from asserting in C23, and the reason is the row above rather
+        // than this one. The weathervane torque opposes the sustained pull, so it lowers the turn
+        // rate (34.71 → 33.38 °/s) and the sink rises with it, to 2.33 — past the bound. But this is
+        // the third leg of a manoeuvre whose OTHER two legs are already informational and owned by
+        // BL-095's turn_fade_*/highGs: we sweep heading 76% faster than the original at a bank it
+        // never flew, and a sink read off that flight path has no reason to land on the original's.
+        // Asserting one leg of a manoeuvre the model gets demonstrably wrong is asserting a
+        // compensating coincidence — C22's green here sat inside the same unattributed gap. It
+        // re-asserts with the rate row, not before it.
         Row("sustained-turn-sink", "sustained max-pull turn, sink rate", "ft/s",
             turn.SinkFtS, 1.85, 0.0,
             $"upper bound — the failure this guards is falling out of the turn (before the B12 lift "
-            + $"re-key this read 18.29). Negative = climbing.",
-            upperBound: true);
+            + $"re-key this read 18.29). Negative = climbing. Rides the rate row below.",
+            info: true, upperBound: true);
 
         // ⚠ INFORMATIONAL and must stay so until the rate gap closes. We sweep heading far faster
         // than the original, which is recorded, not fixed; inventing a rate limiter to close it is

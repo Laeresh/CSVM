@@ -1879,6 +1879,14 @@ yaw (signed) and `0.165·|starboard·up|` into pitch (always nose-up), plus `0.2
 PITCH once inverted — the same 0.205 constant, not a third number. Both vanish at wings-level
 upright, so nothing that flies level can see them; they make the banked turn FASTER, so they are
 not the missing explanation of the original's 1.6×-slower banked pull (`BL-095` owns that).
+`return_rate` is the WEATHERVANE torque, not damping: `WeathervaneTorque()` adds
+`return_rate·(α/2)·unit(nose × VelocityDir)` (body frame, × RecInertia) into the same command, and
+`damp` is `ang_momentum_damp` alone — a spring-damper, second order, where folding `return_rate`
+into the damping coefficient was a first-order lag. Its axis is ⊥ the nose, so it can never reach
+ROLL, and it vanishes identically at α = 0, which is why every stick-centred, wings-level scenario
+is untouched — but a SUSTAINED FULL-STICK manoeuvre holds α ≈ 18° and it opposes the stick there,
+which is what `PitchTune` 0.89 / `YawTune` 1.57 re-pin (C23; it does not close `BL-147`, it closes
+about a sixth of it).
 `Alpha` (deg) is angle(nose, VelocityDir) — an emergent LAG, not modelled
 incidence, and now instrument-only: no force reads it — and the
 stall is TWO DIFFERENT mechanisms, not one margin split two ways (B15). `isStalled()` is the
@@ -1899,7 +1907,9 @@ unmoved) as the plan predicted.
   that looks right at small inputs and diverges at the limits. The authored `highGs`/`lowGs`
   control limiters are a WIDER, inert pair (`BL-095`) and must not be folded into it.
 ⚠ The three *Tune rates are pinned to the original off cockpit-gauge video
-  (`analysis/video-flight-calibration/`) and are not free TUNEs. The 2003 m altitude clamp
+  (`analysis/video-flight-calibration/`) and are not free TUNEs. They re-pin only when a decoded
+  mechanism moves the steady rate they hold (C21's yaw curve, C23's weathervane) — never to chase a
+  transient or a feel report (`BL-147`). The 2003 m altitude clamp
   (`BL-094`/`CAP-03`, traced to C1B IA1 only) is a numerical backstop, not a modelled limit.
   Accepted artifacts, not bugs: loop energy pump, steep-climb equilibrium, stall hang.
 ⚠ The drag polar's variable is MACH, never `C_L` — the original passes `C_L` to its drag routine
@@ -1909,9 +1919,9 @@ unmoved) as the plan predicted.
   not an open scale question: the force→acceleration chain is byte-verified conversion-free
   (`docs/org/flightModel.md`, "The force scale — settled"), and no constant can close the set —
   a rescale that fixed the decel breaks the accel row the same footage pins. Never refit the
-  polar/thrust coefficients against it; `accel-150-290`, `decel-290-150`, `terminal-dive` (D32)
-  and `sustained-turn-speed` (C22) sit informational in `FlightEnvelopeTests` with their owners
-  named in the rows.
+  polar/thrust coefficients against it; `accel-150-290`, `decel-290-150`, `terminal-dive` (D32),
+  `sustained-turn-speed` and `sustained-turn-sink` (both riding the unattributed turn-rate gap,
+  `BL-095`) sit informational in `FlightEnvelopeTests` with their owners named in the rows.
 ⚠ Lift is BANK-INDEPENDENT: the body X/Y projection still carries full weight at 90° of bank, so
   the knife-edge departure is gone (35 s of neutral-stick knife-edge now costs 129 m instead of
   flying the Bloodhawk into the ground). That contradicts the measured sag and is open. `wingVert`

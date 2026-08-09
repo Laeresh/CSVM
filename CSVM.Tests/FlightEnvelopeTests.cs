@@ -16,13 +16,14 @@ namespace CSVM.Tests;
 /// attitude-thrust terms) and sustained-turn-speed (rides the unattributed turn-rate gap, which
 /// C22's bank coupling was expected to close and demonstrably does not) — each with
 /// the attribution in its own comment in <c>Probes.FlightEnvelope</c> and the record in
-/// <c>docs/org/flightModel.md</c>.</para>
+/// <c>docs/org/flightModel.md</c>. C23 moved a fourth, sustained-turn-sink, into the same
+/// category: it is the third leg of that same turn, and it re-asserts with the rate row.</para>
 /// </summary>
 public class FlightEnvelopeTests
 {
     /// <summary>How many flight scenarios carry a measured target to assert. Pinned so that
     /// silently demoting one to informational cannot read as a green run.</summary>
-    private const int FlightScenarios = 7;
+    private const int FlightScenarios = 6;
 
     private static string ZrdrPath =>
         SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));

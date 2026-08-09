@@ -466,6 +466,82 @@ linearly at ≈1.08 °/s to −41.8° with no equilibrium (−1993 m), which is 
 produced at all. Recorded for `D31`, not acted on — the drift is now ≈1.2–1.6× too fast, which is
 a magnitude question where it used to be a mechanism question.
 
+## Weathervane centring — resolved, and the summary line above was wrong
+
+`return_rate` is the last contribution `FUN_00490f70` makes to the angular accumulator, at
+`0x4916fe`–`0x4917f0`, immediately after the bank coupling. It is guarded twice:
+
+```
+cmp esi, [0x71c298]        ; 0x4916fe — the PLAYER object. AI skips the whole block.
+fld [ebp-0x10]; fcomp 0    ; 0x49170a — speed ([obj+0x934], the true |v|) must be > 0
+```
+
+Then, in full:
+
+```
+n   = −m[2]                                  ; 0x49171e — the three floats at +0x198, sign bit
+                                             ;   XORed. m[2] is −nose (thrust uses −m[2] too,
+                                             ;   0x48fe91), so n IS THE NOSE.
+v̂   = velocity · (1/speed)                   ; 0x491754 — 1/|v| times the vtable's velocity getter
+q   = shortestArc(n, v̂)                      ; 0x53fd40 — half-vector quaternion:
+                                             ;   ĥ = normalize(n + v̂); q.w = n·ĥ; q.v = n×ĥ
+                                             ;   (degenerate n ≈ −v̂ → q.w = 0, q.v = normalize(n))
+r   = (atan2(|q.v|, q.w) / |q.v|) · q.v      ; 0x53fca0 — quaternion log: (θ/2)·unit(n × v̂)
+ω  += return_rate · dt · r                   ; 0x49179f — [obj+0x654] = ReturnRate, × dt (0x71c56c)
+```
+
+so, with α the angle between the nose and the flight path:
+
+```
+ω += return_rate · (α/2) · unit(nose × v̂)
+```
+
+⚠ **Three corrections to what this document said before.**
+
+1. **The axis is `cross(nose, v̂)`, not `cross(−nose, v̂)`.** The old one-liner transcribed the
+   code's `−m[2]` as "−nose", but `m[2]` is itself −nose — the same negation the thrust term
+   applies to point along the nose. The sign matters completely: `cross(−nose, v̂)` drives the
+   nose *away* from the flight path and is divergent.
+2. **The angle is HALVED.** `0x53fca0` is a quaternion→rotation-vector helper and `atan2(|q.v|,
+   q.w)` is the half angle; nothing doubles it back. So the effective spring rate is
+   `return_rate/2`, not `return_rate`.
+3. **It is proportional to the misalignment, and it enters the same accumulator as everything
+   else** — so it carries `rec_moments_inertia` downstream and is damped by `ang_momentum_damp`.
+   Torque ∝ displacement plus damping ∝ rate is a **spring-damper**: second order, where folding
+   `return_rate` into the damping coefficient (what the remake did) is first order.
+
+The axis is perpendicular to the nose by construction, so the term has **no roll component at any
+attitude** — a weathervane cannot bank an aeroplane.
+
+**C23 landing note — what implementing it settled, and what it did not.**
+
+- **`BL-147` does not close.** The square-wave pitch-cadence sweep run through our own build (same
+  input, same estimator, so no transfer function is assumed on either side) falls **19.6×** between
+  the 1300 ms and 570 ms cadences before the change and **23.3×** after, against the original's
+  **42×**. Right direction, about a sixth of the gap. A second-order response is part of the answer
+  and demonstrably not the whole of it.
+- ⚠ **And the sweep corrects `BL-147`'s own arithmetic.** Its "42× is 3.5× steeper than any single
+  first-order lag permits" reasoning assumed the chain is *double integration + one lag*. The
+  remake's is not, and never was: the flight path chases the nose through a **second** first-order
+  lag (`lift_accel_rate`, τ = 1.33 s), so the pre-C23 build already rolled off 19.6× — 1.65× past
+  that "ceiling" — with `return_rate` still folded into the damping. The 3.5× figure is therefore
+  not a measurement of *our* build's deficit, and the amplitude-for-amplitude comparison above
+  replaces it.
+- **It reaches two of the three pinned steady rates, and that is not a sign error.** A sustained
+  full-stick manoeuvre holds a real misalignment — α ≈ 18° in a full pull, β ≈ 8° on full rudder —
+  so the restoring torque opposes the stick there. Un-refit, `pitch-rate` fell 33.47 → 28.35 °/s
+  and `yaw-360` rose 28.65 → 34.43 s. `PitchTune` 0.75 → **0.89** and `YawTune` 1.33 → **1.57**
+  re-pin them (33.54 °/s, 28.55 s). `RollTune` is untouched: the torque provably cannot reach roll,
+  and `roll-360` is 1.98 s before and after on all eleven airframes.
+- **It accounts for a little over half of `PitchTune`'s existence.** The un-tuned formula
+  `pitch_torque · rec_inertia / ang_momentum_damp` gives the Bloodhawk 44.6 °/s against a measured
+  33; `PitchTune` 0.75 was the whole of that gap, and 0.89 is the part the weathervane does not
+  explain. It is a smaller fudge than it was, not a retired one.
+- **It steepens the knife-edge sag rather than opposing it.** In a sagging knife-edge the flight
+  path is *below* the nose, so the weathervane pulls the nose down onto it: the 35 s neutral-stick
+  90° hold goes −41.80° → **−44.61°** (−1991 → −2124 m), i.e. ≈1.17 °/s against `BL-247`'s measured
+  0.69–0.89. Recorded for `D31`; no knife constant was touched.
+
 ## The three arcade terms
 
 None of these has an aerodynamic justification, and all three distort any model fitted from
@@ -479,8 +555,10 @@ observed video.
    `0x6289f8` and `0x6289fc`) convert bank directly into yaw and pitch rate. This is the
    coordinated-turn cheat that makes banking turn the aircraft. Fully recovered under
    "Bank coupling — resolved" above, including the inverted case.
-3. **Weathervane centring.** `return_rate` applies a torque along `cross(−nose, v̂)`, pulling the
-   nose onto the velocity vector. **Player aircraft only** — AI does not get it.
+3. **Weathervane centring.** `return_rate` applies a torque along `cross(nose, v̂)` — HALF the
+   misalignment angle — pulling the nose onto the velocity vector. **Player aircraft only** — AI
+   does not get it. Fully recovered under "Weathervane centring — resolved" above, where the
+   `−nose` this line used to read is corrected.
 
 There is also a **boost state**: it **replaces** the throttle multiplier with a flat **1.8** (not a
 multiply — `mov [ebp+8], 1.8f` on the boost branch at `0x48fcb6`, where the normal branch loads the
@@ -781,7 +859,9 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
 6. **Pitch authority reaching zero at 600 mph**, roll never fading.
 7. **Stall speed is per-airframe** — `sqrt(2W / (0.75 ρ S))` — not a fixed fraction of `fd_speed`.
 8. **`return_rate` is a weathervane torque** toward the velocity vector, not extra axis damping on
-   a released stick.
+   a released stick. Landed in `C23`; see "Weathervane centring — resolved". ⚠ It reaches every
+   sustained full-stick manoeuvre, because those hold a real nose/path misalignment — it is not a
+   released-stick-only term in any sense.
 9. **The G/AOA limiters gating only opposing input** — a subtle asymmetry that changes departure
    and recovery behaviour, not steady turns.
 10. **Thrust scales with `ref_area`, not `1/veh_weight`.** The remake divides engine power by
@@ -800,8 +880,10 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
   assembly), the linear throttle multiply and its 0.5/s slew, the thrust `pow` operands
   (`MSVCRT!_CIpow`, base `1.33·atm->k`, exponent `1.41·M`), the drag polar's variable being
   **Mach** — the last read off the raw bytes rather than out of a decompiler, which is what
-  corrected it — the conversion-free weight chain ("The force scale — settled"), and the player
-  path's altitude-zeroing that pins the dense band.
+  corrected it — the conversion-free weight chain ("The force scale — settled"), the player
+  path's altitude-zeroing that pins the dense band, and the weathervane's axis, its half-angle and
+  its player-only gate ("Weathervane centring — resolved", which corrects a sign this document
+  previously carried).
 - **Inferred, and marked ⚠ in place:** the thin band on the AI call path (static reading of an
   unwritten threshold, not runtime-verified).
 - **Recorded conflict, not an open decode question:** the absolute force scale below cruise —

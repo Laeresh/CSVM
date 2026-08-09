@@ -270,3 +270,138 @@ HUD and gauges intact).
 twice with an empty diff. `RunTests.ps1` green: units **702/702** (697 + `BankCouplingTests`'s 5,
 `FlightEnvelopeTests`' 7-row assert count unchanged), engine 29/29, goldens 13/13 after the re-pin.
 Full 8-chapter `--freecam` regression clean, zero engine errors, all eight screenshots saved.
+
+## C23 — `return_rate` as the original's weathervane torque
+
+`FlightModel.WeathervaneTorque()` adds `return_rate · (α/2) · unit(nose × v̂)` to the same
+`BodyRates` command the stick and the bank coupling feed (× that axis' `RecInertia`), and
+`return_rate` leaves the `damp` vector — damping is `ang_momentum_damp` alone, stick held or not.
+Byte-level derivation, including the **sign correction** (`cross(nose, v̂)`, not `cross(−nose, v̂)`)
+and the **half angle**, is in [`docs/org/flightModel.md`](../../docs/org/flightModel.md),
+"Weathervane centring — resolved". Raw outputs:
+[`raw/post-c23-dump-bhawk.txt`](raw/post-c23-dump-bhawk.txt),
+[`raw/post-c23-dump-balmoral.txt`](raw/post-c23-dump-balmoral.txt),
+[`raw/post-c23-all-airframes.txt`](raw/post-c23-all-airframes.txt),
+[`raw/post-c23-cadence-sweep.txt`](raw/post-c23-cadence-sweep.txt) and its
+[pre-C23 pair](raw/pre-c23-cadence-sweep.txt).
+
+**A/B method.** Before = the same build with the weathervane commented out, `return_rate` restored
+to the `damp` vector and the two tunes back at 0.75/1.33. That control reproduces the committed
+`C22` build's `--dump-flight` and cadence-sweep output **byte-identically** (checked by rebuilding
+from `git show HEAD:` and diffing), so every movement below is this item's alone (METHOD-6/9/15).
+`git diff` proves the temporary edit restored (METHOD-17).
+
+**The BL-147 instrument, and it is new.** The square-wave pitch-cadence sweep existed only as
+footage of the original; `CSVM.Tests/ZzCadenceSweep.cs` is now the same experiment run through our
+own model — alternating full pitch-up/pitch-down at the original's six recorded cadences, 3 periods
+settled and 12 fitted, amplitude taken by fitting **cubic + sin + cos simultaneously** (never
+detrending first, `BL-147`'s own trap). Both time readings are swept, since the cadences are the
+original's *wall* milliseconds and sim time runs at k = 1.390 (DET-11); the roll-off is invariant
+to the choice, only the operating point is not.
+
+| cadence (wall) | original ft | pre-C23 ft | post-C23 ft | (wall reading) pre → post |
+|---|---:|---:|---:|---:|
+| 1300 ms | 26.31 | 2.4488 | **3.3538** | 9.1007 → **11.3474** |
+| 930 ms | 7.07 | 0.7084 | **0.8507** | 2.3668 → **3.2721** |
+| 700 ms | 3.09 | 0.2640 | **0.3076** | 0.7921 → **0.9732** |
+| 570 ms | 0.63 | 0.1249 | **0.1439** | 0.4400 → **0.5075** |
+| 370 ms | ≤ 0.065 | 0.0259 | **0.0303** | 0.1777 → **0.1969** |
+| 230 ms | ≤ 0.037 | 0.0039 | **0.0050** | 0.0245 → **0.0298** |
+| **roll-off 1300 → 570** | **42×** | 19.6× | **23.3×** | 20.7× → **22.4×** |
+
+**`BL-147` does not close.** The weathervane moves the roll-off the right way and closes about a
+sixth of the gap. ⚠ **It also corrects `BL-147`'s own arithmetic:** the "42× is 3.5× steeper than
+any single first-order lag permits" reading assumes the chain is double integration + one lag, and
+the remake's is not — the flight path chases the nose through a *second* first-order lag
+(`lift_accel_rate`, τ = 1.33 s), so the pre-C23 build already rolled off 19.6×, 1.65× past that
+"ceiling", with `return_rate` still folded into the damping. The amplitude-for-amplitude column
+above replaces the 3.5× figure as the statement of our deficit.
+
+**Bloodhawk (`.\RunProbe.ps1 --dump-flight --headless`):**
+
+| scenario | unit | POST-C22 | POST-C23 | original | disposition |
+|---|---|---:|---:|---:|---|
+| level-top-speed | mph | 300.46 | **300.46** | 300.40 | green (asserted), **unmoved** |
+| accel-150-290 | s | 3.22 | **3.22** | 3.76 ± 0.40 | conflict recorded, **unmoved** |
+| terminal-dive | mph | 336.36 | **336.36** | 355.2 ± 6 | owned by D32, **unmoved** |
+| roll-360 | s | 1.98 | **1.98** | 2.05 | green (asserted), **unmoved** — the torque cannot reach roll |
+| pitch-rate | °/s | 33.47 | **33.54** | 33.0 | green (asserted), re-pinned by `PitchTune` 0.75 → 0.89 |
+| yaw-360 | s | 28.65 | **28.55** | 28.6 | green (asserted), re-pinned by `YawTune` 1.33 → 1.57 |
+| altitude-cap | ft | 6571.95 | **6571.82** | 6571.6 | green (asserted) |
+| level-speed-near-cap | mph | 300.46 | **300.46** | 300.40 | green (asserted), **unmoved** |
+| sustained-turn-speed | mph | 255.64 | **258.85** | 222.94 ± 5 | informational; +14.7% → +16.1% |
+| sustained-turn-sink | ft/s | 1.66 | **2.33** | ≤ 1.85 | ⚠ **downgraded to informational** — see below |
+| sustained-turn-rate | °/s | 34.71 | **33.38** | 18.95 | informational; +83% → +76%, still not the mechanism |
+| eighth-throttle-speed | mph | 134.52 | **134.52** | 137.9 ± 6 | green (informational), **unmoved** |
+| decel-290-150 | s | 3.48 | **3.48** | 7.04 | conflict recorded, **unmoved** |
+| zoom-climb | ft | 1321.52 | **1335.71** | 936 | informational |
+| zoom-climb-min-speed | mph | 235.50 | **236.48** | 127.9 | informational |
+
+The unmoved rows are unmoved because they hold **α = 0**: the torque vanishes identically when the
+nose is on the flight path, which is the item's able-to-fail invariant (METHOD-12) and it held.
+
+**⚠ `sustained-turn-sink` is downgraded from asserting, and `FlightEnvelopeTests` now asserts 6.**
+The weathervane opposes the sustained pull, so the turn rate falls and the sink rises past the
+1.85 ft/s bound. It is the third leg of a manoeuvre whose other two legs are already informational
+and owned by `BL-095`'s `turn_fade_*`/`highGs`: the model sweeps heading 76 % faster than the
+original at a bank the original never flew, and a sink read off that flight path has no reason to
+land on the original's — C22's green there sat inside the same unattributed gap. Recorded with the
+attribution in its own probe comment (B14's pattern); it re-asserts with the rate row, not before.
+
+**⚠ Two `*Tune` constants moved, and the plan's "steady rates unchanged by construction" premise is
+where this came from.** The weathervane vanishes at zero misalignment — but a *sustained full-stick*
+manoeuvre holds a real misalignment (α ≈ 18° pulling, β ≈ 8° on full rudder), so the restoring
+torque opposes the stick there. Un-refit: `pitch-rate` 33.47 → **28.35** °/s and `yaw-360`
+28.65 → **34.43** s, both outside their bands. `PitchTune` 0.75 → 0.89 and `YawTune` 1.33 → 1.57
+re-pin them against the same measurements they were always pinned to (Decision 4's carve-out,
+spent). This is the opposite of what `BL-147` forbids: `*Tune` sets the steady rate, and a
+mechanism moved the steady rate. `RollTune` is untouched. Context worth keeping: the un-tuned
+formula `pitch_torque · rec_inertia / ang_momentum_damp` gives 44.6 °/s against a measured 33, so
+the weathervane explains a little over half of `PitchTune`'s existence.
+
+**All eleven airframes (`ZzBaselineDump`), POST-C22 → POST-C23.** `roll-360` is unmoved to the last
+printed digit on **every** airframe (1.98 / 2.92 / 2.08 / 4.97 / 4.97 / 2.55 / 4.97 / 3.93 / 4.90 /
+4.40 / 2.03), and the full-aileron steady roll rate is 200.42 °/s before and after — the roll-axis
+invariant on a measurement as well as in a test. `pitch-rate` rises on all eleven (the global
+`PitchTune` refit is Bloodhawk-pinned, as it always was, while the weathervane's opposition is
+per-airframe): warhawk 15.60 → 17.24, autogyro 34.48 → 37.95, balmoral 9.63 → 10.64, peacemaker
+31.20 → 31.67. `yaw-360` falls on all eleven: warhawk 30.88 → 28.53, autogyro 13.12 → 11.37,
+balmoral 30.32 → 29.13. `sustained-turn-sink` mostly **improves** off the Bloodhawk — warhawk
+13.13 → 6.44, firebrand 9.79 → 0.53, kestrel 7.64 → 0.61, balmoral 18.09 → 15.97 — which is the
+Bloodhawk's own worsening read the other way round. The autogyro's turn rate 13.04 → 16.10 is the
+C22 instrument anomaly moving; still not a number to build on.
+
+**Balmoral:** `level-top-speed` 125.87 and `terminal-dive` 149.49 unmoved; `eighth-throttle-speed`
+58.27 → **65.34** mph, which the Bloodhawk's cannot do — the Balmoral cannot hold level at 1/8
+lever and settles at a −9.4° path, so it is the one part-throttle case with a live misalignment.
+
+**D31's number, measured and recorded, not acted on.** The weathervane **steepens** the knife-edge
+rather than opposing it: in a sagging knife-edge the flight path is *below* the nose, so the torque
+pulls the nose down onto it. (Neutral stick, full throttle, throwaway `FlightModel` probe.)
+
+| hold | t | POST-C22: nose / alt | POST-C23: nose / alt |
+|---|---:|---|---|
+| bhawk 90° bank, 300 mph | 1 s | −4.98° / −2.0 m | −4.91° / −2.0 m |
+| | 3 s | −7.88° / −20.0 m | −7.93° / −19.8 m |
+| | 10 s | −17.67° / −200.2 m | −18.74° / −206.4 m |
+| | 35 s | −41.80° / −1991.4 m | **−44.61° / −2123.6 m** |
+| balmoral 90° bank, 143 mph | 35 s | −40.14° / −784.5 m | **−47.16° / −918.9 m** |
+| bhawk inverted 180°, 300 mph | 10 s | −16.90° / −169.6 m | **−20.90° / −214.6 m** |
+| bhawk level 0°, 300 mph | 10 s | −0.00° / 0.0 m | −0.00° / 0.0 m |
+
+The drift is now ≈**1.17 °/s** against `BL-247`'s measured 0.69–0.89 °/s — ≈1.3–1.7× too fast,
+where C22 left it 1.2–1.6×. `KnifeNoseSag`/`KnifeNoseRate`/`KnifeAlignFloor` are untouched.
+
+**Goldens: one moved, `c1-flight`, and which one is the evidence (GOLD-5).** It is the only golden
+whose `--hold` carries a **pitch** input (`0.2,0.1,0,1`) and therefore the only one that ever holds
+a nose/path misalignment; `empty-stage` (`0,0,0,0.6`), `c1-destroy-effects` and `c1-crash` fly
+stick-centred and are hash-identical. Manifest re-pinned in the same change, shot eyeballed (banked
+Bloodhawk over C1, HUD, gauges and exhaust trail intact).
+
+**Determinism.** `--dump-flight` (Bloodhawk, Balmoral), `ZzBaselineDump` (all eleven) and the
+cadence sweep each run twice with an empty diff. `RunTests.ps1` green: units **710/710** (702 +
+`WeathervaneTests`' 7 + the sweep; `FlightEnvelopeTests` at its new 6-row assert count), engine
+29/29, goldens 13/13 after the re-pin. The tests' able-to-fail control is a deliberate perturbation
+(METHOD-9): reading the full misalignment angle instead of half fails 1 of the 7, a sign flip
+fails 2. Full 8-chapter `--freecam` regression clean, zero engine errors, all eight screenshots
+saved.

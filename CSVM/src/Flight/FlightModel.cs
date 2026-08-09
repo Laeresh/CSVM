@@ -37,7 +37,9 @@ public struct FlightInput
 /// table (see <see cref="YawAuthorityAt"/>) — YAW ONLY; pitch and roll carry
 /// their own, different authority curves. Bank additionally couples straight into
 /// yaw and pitch rate (see <see cref="BankYawCoupling"/>), the original's
-/// coordinated-turn cheat. The torque/
+/// coordinated-turn cheat, and <c>return_rate</c> is a restoring torque onto the
+/// flight path rather than extra damping (see <see cref="WeathervaneHalfAngle"/>),
+/// which makes the rotational response a spring-damper instead of a lag. The torque/
 /// damping/inertia/speed numbers come straight from vehicle.json 'dynamics';
 /// the scale constants marked TUNE are ours, adjusted against playtests — except
 /// the three *Tune rates, which are pinned to measurements of the original
@@ -225,14 +227,23 @@ public sealed class FlightModel
     // inside the video's clock uncertainty. The video also settles what was an open question: the
     // original's pitch rate does NOT fall off with speed (37.9 / 33.7 / 30.7 / 36.5 °/s binned
     // over 120–280 mph round a loop, flat within the noise), so speed-independent pitch is right.
-    // ⚠ The STEADY rates above are pinned; the TRANSIENT shape is a known divergence. A square-wave
-    // pitch-cadence sweep of the original rolls off 3.5× steeper than
-    // the τ → ∞ ceiling of the single first-order lag this integrator implements, so `1/damp` is the
-    // wrong shape for the original's pitch transient even though it gives the right steady rate.
-    // Open as BL-147; do not "fix" it by moving these Tune constants, which set the steady rate.
-    private const float PitchTune = 0.75f;        // TUNE: pinned to the measurements above
-    private const float YawTune = 1.33f;          // TUNE: pinned against the authored yaw curve below
-    private const float RollTune = 2.12f;         // TUNE: pinned
+    // ⚠ The STEADY rates above are pinned; the TRANSIENT shape is a known divergence, narrowed but
+    // still open as BL-147. A square-wave pitch-cadence sweep of the original falls 42× between the
+    // 1300 ms and 570 ms cadences; the same sweep driven into this model falls 23×. The weathervane
+    // below took that from 20× to 23× — the right direction, about a sixth of the gap — so a
+    // second-order response is part of the answer and not the whole of it. ⚠ Do NOT "fix" the
+    // remainder by moving these constants: they set the STEADY rate, which matches, and a transient
+    // chased through them breaks the thing that does.
+    // ⚠ PitchTune and YawTune are refit here (0.75 → 0.89, 1.33 → 1.57) for exactly the opposite
+    // reason — because the weathervane changed the steady rates and these are what re-pin them. A
+    // sustained full-stick manoeuvre holds a real misalignment (α ≈ 18° pulling, β ≈ 8° on full
+    // rudder), so the restoring torque opposes it and the un-refit rates came out 15% and 20% low.
+    // The refit is Bloodhawk-pinned, as it always was; the other ten airframes have no measured
+    // target and move with it.
+    private const float PitchTune = 0.89f;        // TUNE: pinned to the measurements above
+    private const float YawTune = 1.57f;          // TUNE: pinned against the authored yaw curve below
+    private const float RollTune = 2.12f;         // TUNE: pinned — untouched, the weathervane cannot
+                                                  // reach the roll axis (its torque is ⊥ the nose)
 
     // Bank coupling — the original's coordinated-turn cheat, and the only part of its rotation that
     // no airframe authors. Two float constants compiled into the executable and writable only from
@@ -257,6 +268,30 @@ public sealed class FlightModel
     // measured sink bound — so the literal read is also the one the measurements prefer.
     private const float BankYawCoupling = 0.205f;
     private const float BankPitchCoupling = 0.165f;
+
+    // The weathervane: the authored `return_rate` is a RESTORING TORQUE toward the velocity vector,
+    // not extra damping on a released axis. It enters the same accumulator the stick and the bank
+    // coupling feed, so it carries that axis' RecInertia and is damped by ang_momentum_damp — but
+    // because it is a torque proportional to displacement rather than to rate, the pair is a
+    // SPRING-DAMPER (second order), where folding return_rate into the damping coefficient gave a
+    // first-order lag.
+    //
+    //   ω += ReturnRate · WeathervaneHalfAngle · angle(nose, v̂) · unit(nose × v̂)
+    //
+    // ⚠ The angle is HALVED, and the halving is the binary's rather than a simplification of it:
+    // the original builds the shortest-arc quaternion from the nose onto the unit velocity and then
+    // converts it to a rotation vector through a quaternion-log helper, which returns
+    // atan2(|q.v|, q.w) · unit(q.v) — the HALF angle, never doubled back. Reading it as the full
+    // misalignment doubles the spring rate.
+    // ⚠ The axis is perpendicular to the nose by construction, so the ROLL component is identically
+    // zero at every attitude: a weathervane cannot touch bank, and it cannot reach any roll
+    // measurement.
+    // ⚠ It vanishes identically when the nose is on the velocity vector, which is what keeps level
+    // cruise untouched — by construction, not by scale.
+    // ⚠ The original applies this to the PLAYER aircraft only (AI is skipped outright). Nothing here
+    // gates on that because this class only ever flies a player aircraft; an AI flight path added
+    // later must not reuse it without the gate.
+    private const float WeathervaneHalfAngle = 0.5f;
 
     public FlightModel(PlaneStats stats)
     {
@@ -333,6 +368,26 @@ public sealed class FlightModel
         return s.YawHighSpeed;
     }
 
+    /// <summary>The weathervane's restoring torque for the current attitude and flight path, in
+    /// BODY axes and in the same units as the stick command (rad/s², before RecInertia and before
+    /// the damping) — <c>return_rate · (α/2)</c> about the axis that swings the nose onto the
+    /// velocity vector. Zero when the two are aligned, and its roll component is zero always.
+    /// Exposed so an instrument or a test can read the torque without re-deriving it; Step calls the
+    /// same method. See <see cref="WeathervaneHalfAngle"/> for the decode and its traps.</summary>
+    public Vector3 WeathervaneTorque()
+    {
+        var nose = -Attitude.Z;
+        var axis = nose.Cross(VelocityDir);
+        float sin = axis.Length();
+        if (sin < 1e-6f)
+            return Vector3.Zero;
+        // atan2 of the cross/dot pair, so the angle stays exact out to a fully reversed flight path
+        // where an Acos of the dot alone loses precision and a small-angle read is simply wrong.
+        float angle = Mathf.Atan2(sin, nose.Dot(VelocityDir));
+        var world = axis * (Stats.ReturnRate * WeathervaneHalfAngle * angle / sin);
+        return Attitude.Transposed() * world;
+    }
+
     public void Reset(Vector3 position, Basis attitude, float speed, float throttle)
     {
         Position = position;
@@ -369,9 +424,8 @@ public sealed class FlightModel
         float altitudeCapM = Config.GetFloat("flightModel.altitudeCapM", AltitudeCapM);
         float altitudeCapOvershootM = Config.GetFloat("flightModel.altitudeCapOvershootM", AltitudeCapOvershootM);
 
-        // --- rotation: torque·recInertia vs momentum damping (all from the dynamics block).
-        // Control surfaces bite proportionally to airspeed; return_rate adds extra
-        // centering on an axis while its stick is released.
+        // --- rotation: torque·recInertia vs momentum damping (all from the dynamics block), plus
+        // two decoded torques into the same accumulator — the bank coupling and the weathervane.
         // Yaw authority follows the original's authored speed table (see YawAuthorityAt) — a
         // declining function of speed, same as the interim curve it replaces, but the original's
         // own shape rather than a fitted stand-in. Pitch and roll carry no such fade here (roll
@@ -393,11 +447,15 @@ public sealed class FlightModel
                   + (bodyUpComponent < 0f ? -BankYawCoupling * bodyUpComponent : 0f))
                  * s.RecInertia.X;
 
-        var damp = new Vector3(
-            s.AngMomentumDamp + s.ReturnRate * (1f - Mathf.Min(1f, Mathf.Abs(input.Pitch))),
-            s.AngMomentumDamp + s.ReturnRate * (1f - Mathf.Min(1f, Mathf.Abs(input.Yaw))),
-            s.AngMomentumDamp + s.ReturnRate * (1f - Mathf.Min(1f, Mathf.Abs(input.Roll))));
-        BodyRates += (cmd - BodyRates * damp) * dt;
+        // Weathervane (see WeathervaneHalfAngle): a restoring torque that swings the nose onto the
+        // velocity vector, half the misalignment angle about the axis that closes it. Read off the
+        // attitude and the velocity direction this frame ENTERED with, alongside the stick command
+        // and the bank coupling, which is the original's own ordering.
+        cmd += WeathervaneTorque() * s.RecInertia;
+
+        // Damping is the authored ang_momentum_damp alone. return_rate is NOT a damping term — it is
+        // the weathervane torque above, applied whether or not a stick is deflected.
+        BodyRates += (cmd - BodyRates * s.AngMomentumDamp) * dt;
 
         // stall: below stall speed the nose is pulled toward WORLD-down (a great-circle
         // rotation about the nose×down axis — no twist about the nose, works at any

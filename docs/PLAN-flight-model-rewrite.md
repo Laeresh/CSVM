@@ -153,7 +153,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ Yaw authority: the original's speed table
 22. ☑ Bank→yaw and bank→pitch coupling
-23. ☐ `return_rate` as a weathervane torque
+23. ☑ `return_rate` as a weathervane torque
 24. ☐ Pitch high-speed fade and exponential angular damping
 
 ### Wave D — The open conflicts
@@ -817,7 +817,80 @@ informational precisely because of this gap, and the item that should promote it
 and conclude they are absent from the game. Decision 4: no `*Tune` refit until this lands, or the
 refit is wasted.
 
-## C23 ☐ `return_rate` as a weathervane torque
+## C23 ☑ `return_rate` as a weathervane torque
+
+**Outcome (landed 2026-08-09).** Implemented as decoded, and the decode had to be re-derived from
+the bytes because the write-up was one line and **wrong in sign**. `FUN_00490f70`'s last
+contribution (`0x4916fe`–`0x4917f0`, guarded by `cmp esi, [0x71c298]` — the player object — and by
+`speed > 0`) builds the shortest-arc quaternion from the nose onto the unit velocity (`0x53fd40`:
+half-vector construction, `w = n·ĥ`, `v = n×ĥ`), converts it through a quaternion-log helper
+(`0x53fca0`: `atan2(|q.v|, q.w) · unit(q.v)`) and adds `return_rate · dt ·` that to the same
+accumulator the stick and the bank coupling feed. So `ω += return_rate · (α/2) · unit(nose × v̂)`.
+⚠ **Three corrections, all recorded in [`docs/org/flightModel.md`](org/flightModel.md)'s new
+"Weathervane centring — resolved":** the axis is `cross(nose, v̂)`, **not** `cross(−nose, v̂)` (the
+code's `−m[2]` *is* the nose — the same negation the thrust term applies — and the opposite sign is
+divergent); the angle is **halved**, so the spring rate is `return_rate/2`; and the roll component
+is identically zero at every attitude, because the axis is ⊥ the nose. `return_rate` leaves the
+`damp` vector entirely — damping is `ang_momentum_damp` alone, held stick or not.
+**`BL-147` does not close, and the discriminating instrument had to be built** — the sweep existed
+only as footage of the original, never as a probe of our build (`CSVM.Tests/ZzCadenceSweep.cs` now
+is one: the same alternating square wave, the same simultaneous cubic+sin+cos estimator, run at
+both the sim and wall readings of the cadences per DET-11). Amplitude-for-amplitude, so no transfer
+function is assumed on either side: the 1300 → 570 ms roll-off is **19.6× before → 23.3× after**,
+against the original's **42×**. Right direction, ≈ a sixth of the gap. A second-order response is
+part of the answer and demonstrably not the whole of it.
+⚠ **And the sweep corrects `BL-147`'s own arithmetic, which is the item's second finding.** Its
+"42× is 3.5× steeper than any single first-order lag permits" rests on the chain being *double
+integration + one lag*. Ours never was: the flight path chases the nose through a **second**
+first-order lag (`lift_accel_rate`, τ = 1.33 s), so the pre-C23 build already rolled off 19.6× —
+1.65× past that ceiling — with `return_rate` still in the damping coefficient. The 3.5× figure
+is not a measurement of our build's deficit, and `backlog.md` now carries the same-input
+comparison in its place.
+⚠ **The plan's "the steady rates must be unchanged, by construction" trap rests on a false
+premise, and this is where a `*Tune` moved.** The weathervane vanishes at zero misalignment — every
+wings-level, α = 0 scenario is unmoved to the last printed digit (`level-top-speed`,
+`level-speed-near-cap`, `terminal-dive`, `accel-150-290`, `decel-290-150`, `eighth-throttle-speed`)
+— but a *sustained full-stick* manoeuvre holds a real misalignment by construction (α ≈ 18° in a
+full pull, β ≈ 8° on full rudder), so the restoring torque opposes the stick there. Un-refit,
+`pitch-rate` fell 33.47 → 28.35 °/s and `yaw-360` rose 28.65 → 34.43 s, both outside their bands.
+**`PitchTune` 0.75 → 0.89 and `YawTune` 1.33 → 1.57 re-pin them: 33.54 °/s (33.0 ± 3) and 28.55 s
+(28.6 ± 3).** That is Decision 4's carve-out, spent, and it is the *opposite* of what `BL-147`
+forbids — `*Tune` sets the steady rate, and this re-pins a steady rate a new mechanism moved rather
+than chasing a transient through it. `RollTune` is untouched and `roll-360` is 1.98 s before and
+after **on all eleven airframes**, which is the roll-axis invariant proved on a measurement as well
+as in a test. Bonus: the un-tuned formula gives the Bloodhawk 44.6 °/s against a measured 33, so
+the weathervane accounts for a little over half of `PitchTune`'s existence — a smaller fudge, not a
+retired one.
+⚠ **One asserted row is downgraded, not tuned away.** `sustained-turn-sink` 1.66 → **2.33 ft/s**
+against its ≤ 1.85 bound. It is the third leg of a manoeuvre whose other two legs are already
+informational and owned by `BL-095`'s `turn_fade_*`/`highGs`: we sweep heading 76 % faster than the
+original at a bank it never flew, and a sink read off that flight path has no reason to land on the
+original's — C22's green there sat inside the same unattributed gap. Downgraded to informational
+with the attribution in its probe comment (B14's pattern), re-asserting with the rate row;
+`FlightEnvelopeTests` now asserts **6**. `sustained-turn-rate` 34.71 → **33.38 °/s** (still 18.95
+away) and `sustained-turn-speed` 255.64 → **258.85 mph**.
+**D31's number, measured and recorded, not acted on:** the weathervane *steepens* the knife-edge
+rather than opposing it — in a sagging knife-edge the path is below the nose, so the torque pulls
+the nose down onto it. The 35 s neutral-stick 90° hold goes −41.80° / −1991 m → **−44.61° /
+−2124 m**, i.e. ≈**1.17 °/s** against `BL-247`'s measured 0.69–0.89 (≈1.3–1.7× too fast, was
+1.2–1.6×); the Balmoral's 35 s hold −40.14° → −47.16°, and inverted level −16.90° → −20.90° at
+10 s. `KnifeNoseSag`/`KnifeNoseRate`/`KnifeAlignFloor` are byte-for-byte untouched. The ten
+unmeasured airframes' `sustained-turn-sink` mostly *improves* (warhawk 13.13 → 6.44, firebrand
+9.79 → 0.53, kestrel 7.64 → 0.61) while the Bloodhawk's worsens.
+Verified per [`docs/verification.md`](verification.md): `RunTests.ps1` green — units **710/710**
+(702 + `WeathervaneTests`' 7 + the sweep), engine 29/29, goldens 13/13 after one re-pin.
+**One golden moved, `c1-flight`, and which one is the evidence (GOLD-5/GOLD-1):** it is the only
+golden whose `--hold` carries a pitch input (`0.2,0.1,0,1`), so it is the only one that ever holds
+a nose/path misalignment — `empty-stage` (`0,0,0,0.6`), `c1-destroy-effects` and `c1-crash` fly
+stick-centred and are hash-identical. Manifest re-pinned here, shot eyeballed. Before/after was
+taken as a same-build A/B (the weathervane commented out, `return_rate` back in `damp`, the two
+tunes restored) which reproduces the committed `C22` build's output **byte-identically** on both
+instruments (METHOD-6/9/10/15); the temporary edit is reverted and `git diff` proves it (METHOD-17).
+The able-to-fail control for the tests is a deliberate perturbation (METHOD-9): the full-angle read
+fails 1 of the 7, a sign flip fails 2. Every cited instrument run twice, byte-identical:
+`--dump-flight` for the Bloodhawk and the Balmoral, `ZzBaselineDump` for all eleven, and the
+cadence sweep. Full 8-chapter `--freecam` regression clean, zero engine errors, all eight
+screenshots saved.
 
 **Goal.** `return_rate` restores the nose toward the velocity vector, as the original does, instead
 of acting as extra axis damping when a stick is centred.

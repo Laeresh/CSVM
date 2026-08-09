@@ -65,7 +65,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   scales the yaw `eff`, so a change in one moves others; the `flight-envelope` suite asserts six
   measured scenarios and will fail if a change breaks one. `ThrustConst` and
   `PitchTune`/`YawTune`/`RollTune` are pinned measurements, not knobs — a fix that needs one of
-  them to move needs a new measurement first.
+  them to move needs a new measurement first. ⚠ **They re-pin when a decoded mechanism changes the
+  steady rate they hold, and only then**: `YawTune` 1.32 → 1.33 with the authored yaw curve (C21),
+  `PitchTune` 0.75 → 0.89 and `YawTune` 1.33 → 1.57 with the weathervane torque (C23), each against
+  the same stopwatch/video figures as before. Chasing a *transient* or a feel report through them is
+  the forbidden move, not re-pinning a steady rate something else moved.
 
 ## Damage & destruction
 
@@ -945,9 +949,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 - `BL-120` `[Tuning]` `[Owed-playtest]` **Collision feel** — behaviour against building corners.
 
-- `BL-147` `[Research]` **Pitch's spin-up: the premise was wrong, and the original's response is NOT a single
-  first-order lag — which is exactly what we implement. Measured 2026-08-03 from `CAP-04`; the
-  capture is discharged and retired, the item stays open pending an A/B against our own build.**
+- `BL-147` `[Research]` **Pitch's transient shape. NARROWED to a ≈1.8× residual, and the named
+  mechanism is now landed and measured rather than pending. Measured 2026-08-03 from `CAP-04`; the
+  capture is discharged and retired. The A/B against our own build is DONE (`C23`): the original's
+  1300 → 570 ms cadence roll-off is 42× against our 23.3× (was 19.6× before the weathervane), and
+  the "3.5× steeper than one first-order lag permits" framing this entry was written on is
+  superseded — see the landed-mechanism paragraph.**
   The item was written asking for a *moderate-deflection* pitch trace, on the assumption that a
   sub-full-deflection input exists to spin up. **It does not — the user flies the original's pitch on
   the keyboard, so every pitch command is full deflection gated on/off by the key** (confirmed by the
@@ -983,20 +990,40 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   **What remains open:** τ itself — but there is now a **named candidate mechanism**, which there was
   not before.
 
-  **A mechanism for the non-first-order shape — from `crimson.exe` (Ghidra, 2026-08-09), write-up in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md), scheduled as
-  [`docs/PLAN-flight-model-rewrite.md`](docs/PLAN-flight-model-rewrite.md) `C23`.** The original
-  applies `return_rate` as a **weathervane torque** along `cross(−nose, velocity)` — a restoring
-  torque proportional to the nose/path misalignment, applied *continuously*. Our model instead folds
-  `return_rate` into the per-axis damping coefficient and only on a released stick (the reading this
-  entry records above). A restoring torque plus damping is a **second-order** system, which rolls off
-  twice as steeply as the single first-order lag we implement — and "rolls off far steeper than a
-  first-order lag can" is exactly what the cadence sweep measured. ⚠ **A lead, not a finding:** the
-  mechanism is traced to the executable, but nothing yet shows it reproduces the measured ripple. The
-  sweep described below is still the instrument that settles it, and `C23` is written to run against
-  it. `PitchTune` stays out of scope either way — the steady rate already matches, and moving it to
-  chase transient shape is the error this entry warns against.
-  **How to get it — a fixed-cadence key macro. 30 fps is a floor, not a target; record at whatever
+  **The weathervane mechanism is LANDED and it does not close this item — the gap is narrowed to
+  ≈1.8×, and the entry's own arithmetic is corrected (`C23`, 2026-08-09).** The original applies
+  `return_rate` as a **weathervane torque** along `cross(nose, velocity)` (the `−nose` this entry
+  used to carry was a transcription error — the code's `−m[2]` *is* the nose) at **half** the
+  misalignment angle, continuously, into the same accumulator as the stick. That is a spring-damper
+  where the remake folded `return_rate` into the damping coefficient, and it is now implemented
+  (`FlightModel.WeathervaneTorque`, decode in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md) "Weathervane centring — resolved").
+  **The sweep now exists for our build too** — `CSVM.Tests/ZzCadenceSweep.cs` drives the identical
+  square wave into the model and fits the ripple with the identical simultaneous cubic+sin+cos
+  estimator, at both the sim and wall readings of the cadences (DET-11). Amplitude-for-amplitude, so
+  the operating-point objection below does not apply and no transfer function is assumed on either
+  side. **1300 → 570 ms roll-off: 19.6× before the change, 23.3× after, against the original's 42×**
+  (wall reading: 20.7× → 22.4×). Right direction, about a sixth of the gap closed. Full table and
+  per-cadence amplitudes: `analysis/flight-model-baseline/POST-B14.md`, "C23".
+  ⚠ **The "3.5× steeper than any single first-order lag permits" figure above does NOT describe our
+  build's deficit, and must stop being quoted as if it does.** That ceiling assumes the chain is
+  double integration + one lag. Ours is not and never was: the flight path chases the nose through a
+  **second** first-order lag (`lift_accel_rate`, τ = 1.33 s), so the pre-C23 build already rolled off
+  19.6× — 1.65× past that ceiling — while `return_rate` was still pure damping. The amplitude
+  comparison above is the statement of record.
+  **What remains open:** the residual ≈1.8× of roll-off, with no named mechanism. Candidates not yet
+  examined: the original's 0.5/s throttle slew (decoded, unimplemented — it contaminates the first
+  seconds of any manoeuvre), the `liftAOAs` airflow blend's behaviour under a rapidly reversing
+  demand, and the possibility that the original's 570 ms point (a 4.9× drop from 700 ms over a 1.23
+  frequency ratio) is a resonance rather than a point on a smooth roll-off, which no monotone
+  transfer function can produce and which the corpus cannot presently distinguish from noise at
+  0.63 ± 0.13 ft.
+  ⚠ `PitchTune` **did** move here, 0.75 → 0.89, and so did `YawTune`, 1.33 → 1.57 — *not* to chase
+  this transient. A sustained full-stick manoeuvre holds a real misalignment (α ≈ 18° pulling), so
+  the weathervane opposes the stick and dropped the **steady** rate to 28.35 °/s; the refit re-pins
+  it to the same measured 33. Re-pinning a steady rate a new mechanism moved is what `*Tune` is for;
+  chasing the roll-off through it remains forbidden and is still not the knob.
+  **How the original's own footage was got — a fixed-cadence key macro. 30 fps is a floor, not a target; record at whatever
   rate the recorder gives and keep the bitrate high.** A single step
   edge is ~4 frames and unresolvable, but a *periodic* input is not: drive the pitch keys as a square
   wave and τ shows up as the **ripple amplitude** at a known frequency, which averages down over
@@ -1051,10 +1078,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   → 7.07 ft as the span changed. The correct estimator fits **polynomial + sin + cos simultaneously**
   inside a window of ≥8 periods, where a cubic can absorb almost none of the fundamental; that is
   stable to 3% on the strong clips. Never detrend and then fit.
-  **Next, and it needs no new footage from the original:** run the identical cadences through our
-  build via `--hold`, decode altitude the same way, and compare amplitude-for-amplitude. Same input,
-  same measurement, same nonlinearity and same operating points — so the operating-point objection
-  above disappears and no transfer function has to be assumed. Plot: `playtest/CAP-04/cadence_response.png`.
+  **DONE (C23, 2026-08-09) — the identical cadences now run through our build**, as
+  `CSVM.Tests/ZzCadenceSweep.cs` driving the model directly rather than `--hold` driving a session
+  (engine-free, so it is deterministic by construction and needs no clip decode). Same input, same
+  estimator, same operating points, no transfer function assumed — results in the landed-mechanism
+  paragraph above. Plot of the original's side: `playtest/CAP-04/cadence_response.png`.
 
   The driver is `analysis/video-flight-calibration/pitch_cadence.ahk` (AutoHotkey v2) — its header
   carries the rig rationale, the re-flight rules (non-integer periods, the busy-spin timing) and
@@ -1063,10 +1091,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   2560×1440 and raises on anything else — declare a new geometry *before* recording. The rig's
   beeps are in none of the clips (Game Bar records game audio only); find the cadence window by
   matched filter on altitude, which is what the analysis does.
-  ⚠ **Traps.** (a) `PitchTune` **0.75 is a pinned measurement** (see the flight-constants standing note at the top of this file) —
-  and the cadence sweep leaves it untouched: it sets the **steady** rate, which still matches, while
-  what the sweep refutes is the *transient shape*. It cannot move to fix a feel report — and it is
-  emphatically not the knob for the roll-off mismatch. (b) **Do not quote a τ from `CAP-04`, from the
+  ⚠ **Traps.** (a) `PitchTune` **is a pinned measurement** (0.89 since `C23`; see the
+  flight-constants standing note at the top of this file) — and the cadence sweep leaves it
+  untouched: it sets the **steady** rate, which still matches, while what the sweep is about is the
+  *transient shape*. It cannot move to fix a feel report — and it is emphatically not the knob for
+  the roll-off mismatch. (Its `C23` move was in the other direction entirely: a decoded torque
+  changed the steady rate, and the constant re-pinned it to the same measurement.) (b) **Do not quote a τ from `CAP-04`, from the
   loop clip, or from the cadence sweep.** The loop clip's fitted τ is smoothing-limited and falls
   monotonically as the window tightens (`FINDINGS.md`'s "a peak found by differentiating a smoothed
   signal is a smoothing artifact", in its exact form); the sweep's points are not at one operating
