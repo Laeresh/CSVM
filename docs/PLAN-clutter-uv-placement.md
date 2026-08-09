@@ -182,7 +182,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Ground truth (measure before changing anything)
 
-1. ☐ Measure C1's `terpat02` UV repeat in world metres against the 512 m grid constant
+1. ☑ Measure C1's `terpat02` UV repeat in world metres against the 512 m grid constant
 2. ☐ Verify the template ground quad's UV parameterisation and the UV→world orientation
 3. ☐ Census the world's clutter-eligible polygons: layers, UV coverage, coplanar overlaps
 
@@ -219,7 +219,49 @@ C21 → C22 is a chain; C23 is analysis only and can run any time after C21.
 
 # Wave A — Ground truth
 
-## A1 ☐ Measure C1's `terpat02` UV repeat in world metres against the 512 m grid constant
+## A1 ☑ Measure C1's `terpat02` UV repeat in world metres against the 512 m grid constant
+
+**Landed** (`analysis/bl-305-clutter-uv/uv_repeat.py` + `FINDINGS-A1.md`). C1's `terpat02` measures
+min 184.7 m, area-weighted median **259.6 m**, max 461.6 m per UV repeat. **100 % of that terrain's
+world area falls below the remake's 512 m constant and 0 % above** — so the original plants between
+1.2× and 7.7× as many trees as we do, typically **3.9×**. The user's report that C1's trees are thin
+is confirmed with a mechanism and a number.
+
+**Verified.** Two self-checks run on every invocation and were both shown able to fail (METHOD-9): a
+synthetic 1:1-UV triangle over a 256 m span reports exactly 256.0000 m, and the same triangle with
+its UV span halved reports 512.0000 m. Plus a per-texture area-reconstruction identity
+(`sum uvArea × rate²` = `sum worldArea`), passing on every row within float tolerance. Exit code
+carries the verdict (LOG-12). 1,617 of 4,596 `terpat02` candidate triangles were dropped for zero
+**world** area — repeated-vertex slivers at LOD stitches, traced to node `g16333`'s fan
+triangulation, reported rather than skipped (DIAG-15). Zero triangles anywhere were dropped for a
+missing or malformed UV array.
+
+**Three findings the item did not ask for.**
+
+1. **The `256..1280 m` claim in `Clutter.cs:23-25` is dead.** Measured across every terrain texture
+   in C1/C1B/C2/C3/C4 the floor is 61.8 m (below the claimed 256) and the ceiling 461.6 m (against a
+   claimed 1280 — off by more than 2.7×). The comment's *shape* — real non-uniformity over a
+   several-hundred-metre range — holds; its bracket does not. Re-derived, not inherited (DIAG-8).
+   This goes into B14's comment rewrite.
+2. **C5's `cblock1/2/3/7` measure 256.0 m against a 256 m quad period — a ~1 % match.** The spacing
+   the remake already uses for C5 is *correct*. `BL-305`'s packing defect therefore cannot be a
+   density error, and must live in the alignment A2 is measuring. This is a disproof of the reading
+   this plan was expected to confirm for C5, and it makes A2 load-bearing rather than merely
+   gating.
+3. **The quad-period-vs-world-repeat ratios cluster at 1.00, 1.41 and 2.00.** C2's and C4's terrain
+   templates and all of C5's city blocks are correct; **every C1 template is off by exactly 2**
+   (`terpat02` 512/259.6, `river1` 256/128.2, `river2` 256/128.0, and C1B's `rockclut` 256/126.6) —
+   a clean 4× density loss, which is why C1 is the chapter the user noticed. Three unrelated
+   templates in two chapters sit at √2 (`filmblock1`, `parklot1`, `cliff1_sandtrans`), which is what
+   a **45°-rotated UV mapping** produces. One outlier: C2's `parkpat` at 3.20 (512/159.9), a 10.2×
+   loss. The √2 and exact-2 readings are inferences from a scalar and were handed to A2 as leads,
+   not conclusions.
+
+**⚠ For Wave B.** The remake's error is **not uniform across the game** and cannot be corrected by
+changing one constant — C2, C4 and C5 are already right and must not move. Any Wave B change that
+shifts C5's instance count is a regression, not progress.
+
+### Original approach (kept for reference)
 
 **Goal.** A number, with a distribution: across C1's `terpat02`-textured world polygons, how many
 world metres does one full UV repeat span, and how does that compare to the 512 m the remake
