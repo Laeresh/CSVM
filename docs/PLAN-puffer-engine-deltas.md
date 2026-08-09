@@ -120,8 +120,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the two factor-of-two conventions
 
-1. ☐ `SIZE_RANGE` is a radius — the quad side is `2 × size`
-2. ☐ `DEVIATION_DISTANCE` scatters ±0.5·d, not ±d
+1. ☑ `SIZE_RANGE` is a radius — the quad side is `2 × size`
+2. ☑ `DEVIATION_DISTANCE` scatters ±0.5·d, not ±d
 
 ### Wave B — the missing per-particle mechanisms
 
@@ -164,7 +164,34 @@ D10 needs every item above.
 
 # Wave A — the two factor-of-two conventions
 
-## A1 ☐ `SIZE_RANGE` is a radius — the quad side is `2 × size`
+## A1 ☑ `SIZE_RANGE` is a radius — the quad side is `2 × size`
+
+**Landed.** `Puffer.SizeScaleDefault` (`CSVM/src/Effects/Puffer.cs:281`) is now `2f`, with its doc
+comment rewritten to cite `FUN_0057c5c0`/`FUN_0054e6e0` as the decoded radius→diameter conversion
+rather than a judged stand-in. The three `puffer.*SizeScale` config keys are untouched and now
+default to the decode. The cull margin in `Init` (`Puffer.cs:751-755`) derives from
+`Mathf.Max(_burstSizeScale, _trailSizeScale, _sustainSizeScale)`, which itself defaults from
+`SizeScaleDefault` — confirmed to follow the constant with no separate edit needed.
+`fireRiseScale`/`fireLifetimeScale` are untouched, left for D10.
+
+**Verified.** Landed together with A2 (see A2's Verified paragraph for the shared regression). The
+CAP-16 re-measurement (`RecordingEmitterRenderer` over `fierypuffer` verbatim, `Puffer.Burst`/
+`_Process` at dt = 1/60 to t = 0.14) read, on the unchanged build (`SizeScaleDefault` 1,
+pre-A2 `±d` scatter): mean sprite **4.10 m**, particle-cloud span (centres) **12.52 m**, whole
+burst span (cloud + mean sprite) **16.62 m**. After A1+A2: mean sprite **8.20 m** (exactly ×2,
+confirming the constant took effect — METHOD-15), cloud span **12.53 m** (A2 does not move this
+particular puffer — `fierypuffer` authors no meaningful `DEVIATION_DISTANCE`; its spread is almost
+entirely the ±65 m/s random velocity), whole burst span **20.73 m**. ⚠ **This is the trap the plan
+warned about, realised**: the corrected sim reads *larger* against the footage's 9.7 m than the old
+×1 baseline already did (16.6 m), not smaller. The decode lands anyway, per the ground rule — this
+is recorded as a finding in `backlog.md`'s `BL-122`/CAP-16 entry (2026-08-09 update), not resolved
+by picking a different constant. Whoever next tunes `puffer.burstSizeScale` or re-judges the fire
+TUNE pair (D10) inherits an open question: either the fire sprite's visible alpha core is
+substantially smaller than its quad, or the fire-keyed pixel measurement in the original CAP-16
+analysis undercounts the additive glow's true extent. The full 8-chapter `--freecam --chapter=<X>`
+regression and the targeted goldens are reported under A2.
+
+### Original approach (kept for reference)
 
 **Goal.** A puffer sprite covers the same world footprint as the original's, from the authored
 `SIZE_RANGE` alone. `Puffer.SizeScaleDefault` stops being "a judged stand-in for a missing engine
@@ -210,7 +237,46 @@ c5-fog goldens, which will move — take the baseline first.
   measurements of the same quality. If the corrected sim still reads too big at the controls, that
   is a *finding* about sprite alpha or particle count, and it gets its own backlog entry.
 
-## A2 ☐ `DEVIATION_DISTANCE` scatters ±0.5·d, not ±d
+## A2 ☑ `DEVIATION_DISTANCE` scatters ±0.5·d, not ±d
+
+**Landed.** All three spawn paths (`SpawnSustained` `Puffer.cs:776`, `SpawnTrailPuff` `:806`,
+`SpawnBatch` `:842`) now draw `Rand(-0.5f*d, 0.5f*d)` in place of `Rand(-d, d)`, one `Rand()` call
+per axis, same draw order (pos → vel → size → life) as before.
+
+**Verified.** Full 8-chapter `--freecam --chapter=<X> --det --frames=90 --screenshot=…` regression
+(C1, C1B, C1C, C2, C2B, C3, C4, C5): **0 `ERROR` lines in any chapter's engine log**; every run
+produced its screenshot, proving each reached its frame count rather than hanging or crashing. No
+node/mesh-count instrumentation was read this pass (A1/A2 touch only `Puffer`'s spawn-time
+particle transforms, never node or mesh counts, so none was expected to move) — noted as
+unverified below.
+
+Golden regression (`RunTests.ps1 -SkipUnits -SkipEngine`, then `-RegenGoldens`): **7 of 13 shots
+moved**, all and only the puffer-bearing ones — `c1-waterfall`, `c3-island`, `c4-snow`,
+`c5-city-night`, `c1-flight`, `c1-destroy-effects`, `c1-crash`. The other 6 (`c1b-night-sea`,
+`c1c-rain`, `c2-city`, `c2b-rain`, `viewer-bhawk`, `empty-stage`) are byte-identical, confirming the
+change is localised to `Puffer` (GOLD-5). `c4-snow` moving was not predicted by
+`docs/architecture.md`'s five-shot list — by-eye inspection of `.scratch/goldens/c4-snow.png` shows
+a distinct dark puff cloud on the mountainside not visible before, i.e. it does carry a live
+puffer at that pose and the list in `architecture.md` was incomplete; corrected there. Eye-verified
+by-image, not just by hash, for the five shots a "before" capture was taken for:
+`c1-waterfall`'s mist puffer goes from faint/thin specks to a solid rounded cloud (the exact "thin
+scatter of specks" symptom the plan's header table names, now fixed for the right reason);
+`c1-crash`'s fireball grows from a cross-shaped cluster that still shows the aircraft silhouette
+through it to a solid blob that fully occludes the plane — the direction A1's evidence section
+warned about; `c3-island` and `c5-city-night` show small, localised brightening on a single distant
+sprite, consistent with a small/far emitter; `c1-destroy-effects`'s moved pixels are not in frame
+at this pose (the def's puffer sits off-camera), so nothing to confirm by eye there beyond the hash
+diff. `c1-flight` and `c4-snow` were not captured before A1/A2 (discovered as movers only after the
+fact), so their moves are confirmed by hash + `architecture.md`'s/the image's own account of what
+they carry, not by a locally-held pixel diff — recorded as unverified-by-eye below.
+
+**Unverified in this pass:** node/mesh instance counts across the 8-chapter sweep (only the error
+census was read); `c1-flight` and `c4-snow`'s moved goldens by eye against a locally-saved "before"
+image (both accepted on the hash move plus route-of-cause reasoning, not a side-by-side visual
+diff); the CAP-16 finding's implication for `puffer.burstSizeScale`/the fire TUNE pair is explicitly
+left open for D10, not resolved here.
+
+### Original approach (kept for reference)
 
 **Goal.** A puffer's spawn scatter covers the authored volume, not eight times it.
 

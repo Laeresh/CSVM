@@ -293,6 +293,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
       be *density* (18 sprites) or sprite alpha rather than size, in which case the fix is more/
       denser particles at authored size, not bigger ones. The knob is per-path, so this bears only
       on **`puffer.burstSizeScale`**, not on the trail/sustain scales that were judged alongside it.
+    - **2026-08-09 update, superseding the ×4/×1 analysis above:** `PLAN-puffer-engine-deltas` traced
+      `SizeScaleDefault` to an exact decoded constant — `FUN_0057c5c0` hands `SIZE_RANGE` to the
+      sprite draw as a screen-space HALF-extent, so the quad side is `2 × SIZE_RANGE`, not `1 ×` —
+      and separately found `DEVIATION_DISTANCE` was scattering `±d` where the engine draws `±0.5·d`
+      (A2). Re-running this same measurement (`RecordingEmitterRenderer`, `fierypuffer` verbatim,
+      `Puffer.Burst`/`_Process` at dt = 1/60 to t = 0.14) on the unchanged build read **mean sprite
+      4.10 m, cloud span (centres) 12.52 m, whole burst span 16.62 m** — already past the footage's
+      9.7 m at the old ×1 default, not under it as the analysis above concluded (that analysis used
+      an analytic estimate, not this instrumented one; the two are not directly comparable). At the
+      landed A1+A2 constants (`SizeScaleDefault` 2, deviation halved) the same measurement reads
+      **mean sprite 8.20 m, cloud span 12.53 m, whole burst span 20.73 m** — cloud span is
+      unchanged (`fierypuffer` authors no meaningful `DEVIATION_DISTANCE`; its spread is almost
+      entirely the ±65 m/s random velocity, so A2 does not move this particular puffer), and mean
+      sprite doubled exactly with the constant, confirming the intervention took effect. **The
+      decode makes the crash burst read larger against the footage, not smaller — the opposite of
+      what the ×1 analysis above expected.** Per `PLAN-puffer-engine-deltas`'s explicit instruction,
+      the decode lands anyway and this is recorded as a finding, not split against the footage: the
+      corrected sim's sprite may still be reading too big against `CAP-16` for a reason A1/A2 do not
+      touch (sprite alpha falloff inside the quad, or the fire-keyed pixel measurement in the
+      original bullet finding less than the full additive quad) — that is now a live open question
+      for whoever next tunes `puffer.burstSizeScale` or the fire family's TUNE pair (D10), not
+      something A1/A2 should absorb by picking a different constant than the one the disassembly
+      settles.
     - Limit: the ruler only exists near ignition (the airframe is gone within ~0.5 s and no known
       length survives in frame), so this is an *early-frame* comparison. Our burst is dead by ~1.0 s
       while the original is still at full intensity 9 sim-s later — that gap is the hold time above,

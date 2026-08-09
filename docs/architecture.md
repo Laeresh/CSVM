@@ -1997,20 +1997,31 @@ one-golden move is exactly this, its `--hold` throttle jump crossing `ThrottleSl
 threshold on the capture's first frame).
 `PufferState.FromAnimEvent` parses the compiled anim payloads.
 Three config knobs scale `BaseSize` per spawn path — `puffer.burstSizeScale` /
-`puffer.trailSizeScale` / `puffer.sustainSizeScale` (`SizeScaleDefault` **1**, the authored
-SIZE_RANGE verbatim; the knobs remain for deliberate per-path tuning — the cull margin scales with
-the largest). Two more scale the `fire_n_smoke` family ONLY — `puffer.fireRiseScale` /
-`puffer.fireLifetimeScale` (defaults 2.5/1.5, invented against original footage rather than
-decoded, signed off at the controls 2026-08-06): vertical spawn velocity + puff
-lifetime of the crash/destruction/tank fires, identity for every other emitter. All read at
+`puffer.trailSizeScale` / `puffer.sustainSizeScale` (`SizeScaleDefault` **2**, decoded from
+`FUN_0057c5c0`/`FUN_0054e6e0`: `SIZE_RANGE` is a screen-space HALF-extent, so the world quad's
+side is `2 × SIZE_RANGE` — not a judgement call, `PLAN-puffer-engine-deltas` A1. The knobs remain
+for deliberate per-path tuning — the cull margin scales with the largest). Two more scale the
+`fire_n_smoke` family ONLY — `puffer.fireRiseScale` / `puffer.fireLifetimeScale` (defaults 2.5/1.5,
+invented against original footage rather than decoded, signed off at the controls 2026-08-06):
+vertical spawn velocity + puff lifetime of the crash/destruction/tank fires, identity for every
+other emitter — left untouched by A1/A2; D10 re-judges them against the corrected sim. All read at
 `Init`; registered in `Config.WarmTuningRegistry` for `--dump-config`. Moving
-`SizeScaleDefault` re-pins every puffer-bearing golden and only those (measured on the 4->1 revert:
-`c1-waterfall`, `c3-island`, `c5-city-night`, `c1-destroy-effects`, `c1-crash`; the other 8 carry no
-live emitter).
+`SizeScaleDefault` re-pins every puffer-bearing golden and only those. Measured on the 4->1 revert:
+`c1-waterfall`, `c3-island`, `c5-city-night`, `c1-destroy-effects`, `c1-crash`. Re-measured on the
+1->2 A1/A2 landing, which found two more carrying a live puffer that revert had missed:
+`c1-flight` (`ThrottleSlamSmoke`'s exhaust trail — see the `⚠` two paragraphs up) and `c4-snow` (an
+ambient puffer visible on the mountainside in that shot's pose) — **seven** puffer-bearing goldens
+total, the other 6 carry no live emitter.
 ⚠ TEXTURE_SEQUENCE times are FRACTIONS of a particle's lifetime, not seconds (effects.md).
 ⚠ `SpawnSustained`'s draw order (pos → vel → size → life) is shared determinism: reordering the
   `Rand` calls re-scatters EVERY sustained emitter — measured as five goldens moving with the
   fire tune inert in all of them.
+⚠ `DEVIATION_DISTANCE` scatters **±0.5·d**, not ±d (`PLAN-puffer-engine-deltas` A2):
+  `FUN_0054f8b0` spawns at `prev + delta*frac + (rand01 - 0.5) * d` per axis, so the offset is a
+  HALF-width around the origin — `Rand(-d, d)` was drawing twice the authored width per axis
+  (eight times the authored volume). All three spawn paths (`SpawnSustained`, `SpawnTrailPuff`,
+  `SpawnBatch`) now draw `Rand(-0.5f*d, 0.5f*d)`, one `Rand()` call per axis exactly as before —
+  changing the draw *count* would re-scatter every emitter for an unrelated reason.
 ⚠ The blend is derived, never authored: a COLORS ramp or a near-black dying sprite (measured off
   the atlas, `SmokeLuminance`) ⇒ blend_mix + no depth fade, else blend_add (effects.md).
   `Create`'s `blend`/`softParticles` force the verdict for a caller that knows better.
@@ -2018,8 +2029,8 @@ live emitter).
   the master seed: measured, the C1 waterfall mist moved 0.47% of a `--det` frame before and 0.00%
   after. Its seed depends on how many puffers were built before it — deterministic under `--det`,
   and pinned to WHERE `new Puffer()` sits in `Create`. Moving it, or constructing one anywhere on a
-  capture path, re-pins all five puffer-bearing goldens (the `SizeScaleDefault` list above — an
-  earlier "four" here was a stale count); `CreateWith` is a test entry point only.
+  capture path, re-pins all seven puffer-bearing goldens (the `SizeScaleDefault` list above — an
+  earlier "four", then "five", here was a stale count); `CreateWith` is a test entry point only.
 
 ## src/Effects/EmitterRenderer.cs
 `Puffer`'s lower seam: `IEmitterRenderer` takes live particles (`Attach` sizes the pool, `Write`

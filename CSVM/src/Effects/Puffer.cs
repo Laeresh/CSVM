@@ -274,11 +274,16 @@ public sealed class PufferState
 public sealed partial class Puffer : Node3D
 {
     /// <summary>Default for the three per-spawn-path size multipliers (config.json <c>puffer</c>
-    /// block). 1 = the authored SIZE_RANGE verbatim, applied with no compensation. The three
-    /// <c>puffer.*SizeScale</c> config keys remain as knobs for deliberate per-path tuning.
-    /// Referenced by <see cref="Utils.Config.WarmTuningRegistry"/> so <c>--dump-config</c>
-    /// documents the keys.</summary>
-    public const float SizeScaleDefault = 1f;
+    /// block). Not a judgement call: <c>FUN_0054e6e0</c> hands <c>SIZE_RANGE</c> straight to
+    /// <c>FUN_0057c5c0</c> as a screen-space HALF-extent (<c>*param_1 - param_2</c> …
+    /// <c>param_2 + *param_1</c> in both axes, confirmed by the <c>0.5 / param_2</c> UV-clip
+    /// term in the same function), so the authored value is a radius and the sprite spans
+    /// <c>2 × SIZE_RANGE</c> — the decoded radius→diameter conversion
+    /// (`docs/PLAN-puffer-engine-deltas.md` A1). The three <c>puffer.*SizeScale</c> config keys
+    /// remain as knobs for deliberate per-path tuning, now defaulting to the decode rather than
+    /// a guess. Referenced by <see cref="Utils.Config.WarmTuningRegistry"/> so
+    /// <c>--dump-config</c> documents the keys.</summary>
+    public const float SizeScaleDefault = 2f;
 
     /// <summary>TUNE defaults (config.json <c>puffer.fireRiseScale</c> /
     /// <c>puffer.fireLifetimeScale</c>): multiply the fire puffer's world-vertical spawn velocity
@@ -773,7 +778,10 @@ public sealed partial class Puffer : Node3D
             // Draw order (pos → vel → size → life) is deliberately the historical one: every
             // sustained emitter shares it, and reordering the draws re-scatters ALL of them —
             // measured as the c1-waterfall golden moving with the fire tune inert there.
-            var pos = origin + new Vector3(Rand(-d, d), Rand(-d, d), Rand(-d, d));
+            // ±0.5·d, not ±d: FUN_0054f8b0 spawns at prev + delta*frac + (rand01 - 0.5)*d, i.e.
+            // rand01 in [0,1) recentred on 0 gives a HALF-width offset (A2). Keep one Rand() draw
+            // per axis — changing the draw count re-scatters every sustained emitter too.
+            var pos = origin + new Vector3(Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d));
             var vel = baseVel + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z));
             // The fire tune: scale the world-vertical rise (and the puff's lifetime below)
             // of the fire family only — 1 for every other emitter, so this is the identity there.
@@ -801,7 +809,8 @@ public sealed partial class Puffer : Node3D
         float d = _state.DeviationDistance;
         _particles[_liveCount++] = new Particle
         {
-            Pos = worldPos + new Vector3(Rand(-d, d), Rand(-d, d), Rand(-d, d)),
+            // ±0.5·d, not ±d (A2) — see SpawnSustained's comment.
+            Pos = worldPos + new Vector3(Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d)),
             Vel = _state.WorldVelocity + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z)),
             BaseSize = Rand(_state.SizeMin, _state.SizeMax) * _trailSizeScale,
             Life = Rand(_state.LifetimeMin, _state.LifetimeMax),
@@ -837,7 +846,8 @@ public sealed partial class Puffer : Node3D
         {
             _particles[_liveCount++] = new Particle
             {
-                Pos = new Vector3(Rand(-d, d), Rand(-d, d), Rand(-d, d)),
+                // ±0.5·d, not ±d (A2) — see SpawnSustained's comment.
+                Pos = new Vector3(Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d)),
                 Vel = baseVel + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z)),
                 BaseSize = Rand(_state.SizeMin, _state.SizeMax) * _burstSizeScale,
                 Life = Rand(_state.LifetimeMin, _state.LifetimeMax),
