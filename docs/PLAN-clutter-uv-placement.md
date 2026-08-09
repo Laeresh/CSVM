@@ -934,7 +934,70 @@ independently. Do those before touching `BuriedClutterDistricts` again.
 **Instrument note for whoever picks this up: a nadir shot cannot distinguish painted rooftops from
 buildings. Every C5 clutter claim needs an oblique beside it.** This one cost a recommendation that
 was wrong and would have been landed on a whole-frame md5 and an interpenetration check, both of
-which the gate-only and coupled configurations passed.
+which the gate-only and coupled configurations passed. Landed as `SHOT-28` in
+[`docs/verification.md`](verification.md).
+
+### The Ghidra re-read (2026-08-10): no second entry point, and `0x800` is probably not subface
+
+Prompted by the question "is there another entry point into this?". Three results, in descending
+confidence.
+
+**1. There is exactly one entry point, and clutter is built once. Certain.** Every caller edge was
+enumerated:
+
+```
+FUN_00463f40 (startup, after templates.zrd)
+  └─ FUN_004df1d0        srand(0x8EA91836) … srand(time)
+       └─ FUN_004de4d0   the terrain partition grid + world children
+            └─ FUN_004de460            (node gate; type 5 / 6 dispatch)
+                 ├─ FUN_004de370  ──┐  each passes node+0x3c, the node's own mesh
+                 └─ FUN_004de310  ──┤  and recurses through FUN_004de460
+                        └─ FUN_004de2c0   per polygon: skip 0x800, require UVs
+                             └─ FUN_004de190   per texture layer, template by name
+                                  └─ FUN_004dd6e0   the stamper
+```
+
+`FUN_004de4d0` has one caller, `FUN_004df1d0` has one caller, `FUN_004dd6e0` has one caller. **There
+is no second walk, no per-mission rebuild and no runtime re-stamp.** Anything the original's clutter
+does, it does through this chain.
+
+**2. `GameGenSetSubfacePriorityOffset` is not a polygon test — it is a load-time draw-priority
+accumulator. Certain.** Its script handler stores the operand in `DAT_0062b86c`
+(`FUN_004c1210`), and the only readers are two arms of a **jump-table dispatch** inside
+`FUN_004c2610` — `D:\zipper\gamez\zgamegen\gg_load.c` — which do
+`DAT_0071e828 += offset` / `-= offset` around a record. So "subface" in the engine is a
+**record/group** concept that bumps draw order while loading. It says nothing about polygon bit
+`0x800`, and it is *not* evidence that subface polygons are skipped by anything.
+
+**3. The original ships an explicit per-face `no_clutter` attribute. Certain that it exists;
+hypothesis that it is `0x800`.** `FUN_004c5580` (`gg_load.c`) takes a string, `strstr`s it for
+`no_clutter`, tokenises, and sets `DAT_0071e814 = 1`. That global is then pushed as an argument
+into the polygon-construction calls in `FUN_004c5ba0` (`004c5e6f`) and `FUN_004c6250` (`004c64d4`),
+both of which land in `D:\zipper\gamez\zmodel\gmod_cons.c`'s polygon builder
+(`FUN_00565510` → `FUN_005652b0`). A bare `noclutter` string at `0x0062c068` is referenced once more
+from `FUN_004c2610`.
+
+**So the artists could mark a face "put no clutter here" — which is a far better fit for the bit
+`FUN_004de2c0` tests than "subface" is.** It explains what the subface reading could not: the
+original's streets are clear because the street faces are flagged, while the buildings still stamp
+from the same polygons we stamp from. It also explains why skipping our `Subface` set deleted the
+skyline — `subface ≠ no_clutter`, and mech3ax's `unk3` name for bit `0x800` is a guess nobody has
+tied to engine behaviour.
+
+**Not closed:** the exact bit. The `no_clutter` flag travels as a *parameter* into `gmod_cons.c`,
+and neither `FUN_00565060` nor `FUN_005652b0` contains a literal `0x800`, so the packing happens
+deeper in that chain. **This is the one thing left to nail**, and it decides everything:
+
+- If `0x800` is `no_clutter`, then `BuriedClutterDistricts` stays, `PlaceOnMesh` gains a
+  `no_clutter` skip instead of a subface skip, and `BL-305` plausibly closes without touching
+  `BL-250` at all.
+- If `0x800` really is subface, the contradiction in §"Gate-only is disqualified" stands and
+  something else is wrong.
+
+**Cheap next step, in this order:** (a) follow `param_15`/the trailing arguments of `FUN_00565510`
+down `FUN_005652b0` to the flags word and read the bit; (b) independently, check whether mech3ax
+carries a *separate* no-clutter flag we are discarding — if the extraction only exposes `unk3`, the
+remake may be unable to see this attribute at all, which is itself the finding.
 
 ### Part 2 — `MinSlopeCos` is deleted, and it never culled anything
 
