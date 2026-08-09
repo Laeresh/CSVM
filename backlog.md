@@ -1200,8 +1200,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   changes how 139,388 C5 sprites look with no reference shot to check against — so it needs an
   original-game A/B.
 
-- `BL-075` `[Feature]` **Sky UV scroll** (`h_zone*scroll`) — scroll rate unknown, not implemented.
-
 - `BL-076` `[Feature]` **Star twinkle + undecoded light fields** (flags 523/…, the 0.17 float) — stars/beacons
   render as fixed-size soft sprites, no twinkle.
 
