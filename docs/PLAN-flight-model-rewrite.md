@@ -132,7 +132,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Authored parameters and baseline
 
-1. ☐ Plumb the authored flight globals into `PlaneStats`
+1. ☑ Plumb the authored flight globals into `PlaneStats`
 2. ☐ Freeze a pre-change baseline across every pinned scenario
 3. ☐ Settle what supplies `ThrustFactor`
 
@@ -183,7 +183,7 @@ item.
 
 # Wave A — Authored parameters and baseline
 
-## A1 ☐ Plumb the authored flight globals into `PlaneStats`
+## A1 ☑ Plumb the authored flight globals into `PlaneStats`
 
 **Goal.** Every constant the decoded model needs is read from the original's data at load time and
 exposed on `PlaneStats`, so no downstream item has to hardcode a value the game authors.

@@ -1474,7 +1474,10 @@ maths.
 ## src/Flight/PlaneStats.cs
 Typed per-plane stats: vehicle.json `dynamics` (resolved through the `kind_of` def chain) +
 engines.json stock engine power + player.json globals (the flight constants and the near-miss cue's
-`warning_shot_*` block), the `engine_sound` def name with its
+`warning_shot_*` block, plus the decoded model's lift/AoA/G, turn/yaw-curve, pitch-fade and
+drag-fade-speed globals — docs/org/flightModel.md; converted
+exactly as the original does: MPH×0.44704, AoA/liftAOAs cosined, highGs/lowGs raw G — and as yet
+unread by FlightModel.cs), the `engine_sound` def name with its
 volume/pitch `SoundCurve`s (clamped two-point ramps), `destroyable_parts` → `DestroyablePart`
 records (name, max HP, max armor, `critical`/`engine` flags, `got_hit_anim`, per-part
 `injure_anims`), and the def-level `VehicleInjureAnims`. Schema: docs/formats/vehicle.md.
