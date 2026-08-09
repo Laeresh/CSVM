@@ -139,7 +139,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — The aero core
 
 11. ☑ Lift as the clamped demanded-G
-12. ☐ Drag as the original's polar
+12. ☑ Drag as the original's polar
 13. ☐ Thrust: linear throttle and the Mach/altitude curve
 14. ☐ Joint refit and re-measurement of the aero group
 15. ☐ Stall speed per airframe
@@ -350,7 +350,58 @@ warning against describing it as modelled incidence stays true. The Balmoral kni
 inside the old lift ramp — whatever replaces that ramp must be checked against the Balmoral
 specifically, not the Bloodhawk.
 
-## B12 ☐ Drag as the original's polar
+## B12 ☑ Drag as the original's polar
+
+**Outcome (landed 2026-08-09).** Implemented as decoded: `C_D = 0.73·(0.12 + 0.8·C_L + 0.5·C_L²)`,
+`Drag = q·RefArea·DragFactor·C_D` opposing velocity, with `C_L` read back out of B11's *delivered*
+lift as `loadFactor·VehWeight / (q·RefArea)` (imperial q from the dense band, `veh_weight` and
+`ref_area` in the data's own weight/area units; force → acceleration is `×9.82/Weight`, the same
+conversion lift uses). `DragExpLow`, `DragExpHigh`, `InducedDragCoef` and `MaxAoaDeg` are gone with
+their four config keys, and `Alpha` is now instrument-only — no force term reads it. **The double
+count B11 left is retired**: a pull now costs speed through the `C_L` it produced and through the
+lift vector's own tilt in the force sum — both of them mechanisms the original has — with no third,
+fitted term stacked on top.
+⚠ **The item's own primary check fails, and the failure is in the mechanism, not in a fit.**
+`CAP-05`'s four zero-thrust points want 0.36/1.11/2.82/3.74 m/s²; the polar gives
+**6.27/6.99/7.60/7.97** (+1641%/+530%/+169%/+113%). The reason is structural: at a fixed load factor
+the polar's linear term is `q·S·0.8·C_L = 0.8·n·Weight`, i.e. **speed-independent**, so the polar has
+a drag *floor* (≈4.3 m/s² on the Bloodhawk at the `n = 20/9.82 = 2.04` of level flight) where the old
+power law went to zero with speed. No constant in this item can move that; it is the decoded curve.
+Recorded as a decode-vs-footage conflict for B14, not refitted.
+The rest of the envelope moved with the drag scale, and **that movement is B13's**: at the
+Bloodhawk's fd_speed the polar asks 16.8 m/s² where the stale `ThrustConst = 107` still supplies
+34.92, a factor 2.08, so every full-throttle speed settles high — `level-top-speed` 301.99 → **475.78**
+(+58.4%), `level-speed-near-cap` the same, `terminal-dive` 355.26 → **528.48** (now *pinned to the
+`MaxDiveSpeedFrac` backstop*, which binds for the first time), `accel-150-290` 3.75 → 2.68 s,
+`eighth-throttle-speed` 137.87 → 148.46. The two rows B11 left red both moved back toward their pins
+and overshot with the envelope: `sustained-turn-speed` 88.45 → **252.68** mph (target 222.94, +13.3%)
+and `yaw-360` 23.82 → **47.22** s (target 28.6, and its mean speed is 453 mph — collateral again).
+`sustained-turn-rate` is unmoved (32.33 → 32.34), still C22's. `roll-360`, `pitch-rate`,
+`altitude-cap` and `sustained-turn-sink` are unmoved/ok.
+**Diagnostic that separates the two terms** (temporary edit to `ThrustConst`, reverted; `--det`
+clears `config.json`, so a config override cannot do this): at a thrust scale that lands
+`level-top-speed` near 302 mph (≈52), `yaw-360` lands at ≈25 s — inside its ±3 — while
+`sustained-turn-speed` falls to ≈125 mph, `terminal-dive` stays ≈510 mph and `accel-150-290` blows out
+to ≈11 s. **No constant thrust scale satisfies the envelope with this polar**, and the direction of
+the residuals is exactly what a propeller constant-power thrust curve (`T ∝ 1/V`, B13) fixes: more
+thrust at 150 mph, much less at dive speed. That is this item's strongest signal that B13 is the
+missing half, and the ten un-measured airframes agree — the Balmoral (`drag_factor` 1.7,
+`ref_area` 1100) cannot fly at all on 1/weight-scaled thrust (level top speed 44 mph), and A3's
+`EnginePower·RefArea` scaling is what would give it back.
+**`BL-148` disposition: dissolved, and there was nothing left to delete.** The slope step at
+`fd_speed` was an artefact of a curve *normalized* at `fd_speed`; the polar has no seam, no
+normalization and no dependence on `fd_speed` at all, so the step needs no explanation. `backlog.md`
+carries no live `BL-148` entry (the ID was retired 2026-08-04 by `CAP-06`); it survived only as the
+code comment this item deleted.
+**Re-playtest debt, transferred and still owed:** the old curve was 4–21× weaker below cruise than the
+blend it replaced, against a user report of a throttled-back plane barely decelerating. The polar is
+*much* stronger down there (the floor above), so the complaint's direction has reversed — `decel-290-150`
+6.48 → 5.73 s against the original's 7.04. **This is owed to a human playtest, not to an instrument**,
+and stays owed past B14.
+Tests: engine 29/29 clean, goldens 4 moved (`empty-stage`, `c1-flight`, `c1-destroy-effects`,
+`c1-crash` — exactly the four that fly a plane; manifest updated here, `c1-flight` eyeballed), units
+696/697 with `FlightEnvelopeTests` red on `level-top-speed` as above. `cap05-drag-points.ps1` now
+evaluates the polar and is the CAP-05 row's re-run command.
 
 **Goal.** Drag is the original's parabolic polar in the delivered lift coefficient, so induced drag
 falls out of the model instead of being a separately fitted term.

@@ -1865,20 +1865,28 @@ the nose over the authored `liftAOAs` cosine window, `lift_accel_rate·(wind −
 on world-up, projected onto the body X/Y plane, delivered as `clamp(|·|/9.82, −5, +9)` G and capped
 at `(0.75 − 0.15·Mach)·q·RefArea/Weight` (imperial q, dense band ρ = 2.2688e-3 slug/ft³) — so level
 flight at zero incidence cancels weight IDENTICALLY, and the nose-chase runs at that same authored
-rate. Drag is a speed power law normalized so drag(fd_speed) = max thrust, plus an induced `sin²α`
-term. `Alpha` (deg) is angle(nose, VelocityDir) — an emergent LAG, not modelled incidence — and the
+rate. Drag is the original's parabolic polar in the DELIVERED lift coefficient,
+`C_D = 0.73·(0.12 + 0.8·C_L + 0.5·C_L²)` applied as `q·RefArea·DragFactor·C_D` opposing velocity,
+with `C_L = loadFactor·Weight/(q·RefArea)` — so induced drag falls out of the pull and there is NO
+separate α-keyed term. `Alpha` (deg) is angle(nose, VelocityDir) — an emergent LAG, not modelled
+incidence, and now instrument-only: no force reads it — and the
 stall is TWO measured thresholds over one margin (`StallFraction` = speed/fd_speed): `isStalled()`
 the nose-drop at 0.25 fd, `IsStallWarned()` the lamp at 0.30, which leads the break by 2.64 sim s
 (`BL-148`/`CAP-06`); never drive both off one number, and never recompute the margin beside them.
 ⚠ The ±5/9 clamp is a LOAD FACTOR in G, never an angle — re-deriving it as degrees gives a model
   that looks right at small inputs and diverges at the limits. The authored `highGs`/`lowGs`
   control limiters are a WIDER, inert pair (`BL-095`) and must not be folded into it.
-⚠ ThrustConst, DragExp*/ThrottleExp and the three *Tune rates are NOT free TUNEs — pinned to the
-  original off cockpit-gauge video (`analysis/video-flight-calibration/`) and only JOINTLY.
-  `InducedDragCoef` is the one genuinely fitted constant and now double-counts the lift vector's
-  own tilt. MaxDiveSpeedFrac and the 2003 m altitude clamp (`BL-094`/`CAP-03`, traced to C1B IA1
-  only) are numerical backstops, not modelled limits. Accepted artifacts, not bugs: loop energy
-  pump, steep-climb equilibrium, stall hang.
+⚠ The three *Tune rates are pinned to the original off cockpit-gauge video
+  (`analysis/video-flight-calibration/`) and are not free TUNEs. ThrustConst/ThrottleExp are a STALE
+  fit — solved jointly with the speed power law the polar replaced, and ~2.1× too strong against it
+  at fd_speed, so every full-throttle speed currently settles high and MaxDiveSpeedFrac binds in the
+  terminal dive. The 2003 m altitude clamp (`BL-094`/`CAP-03`, traced to C1B IA1 only) is a
+  numerical backstop, not a modelled limit. Accepted artifacts, not bugs: loop energy pump,
+  steep-climb equilibrium, stall hang.
+⚠ The polar has a SPEED-INDEPENDENT drag floor (`q·S·0.8·C_L = 0.8·n·Weight`, ≈4.3 m/s² on the
+  Bloodhawk in level flight), which `CAP-05`'s four zero-thrust points contradict by 2–17×. That is
+  a decode-vs-footage conflict owned by the plan's joint refit — the polar's coefficients are read
+  out of the original's executable and must not be refitted to close it.
 ⚠ Lift is BANK-INDEPENDENT: the body X/Y projection still carries full weight at 90° of bank, so
   the knife-edge departure is gone (35 s of neutral-stick knife-edge now costs 129 m instead of
   flying the Bloodhawk into the ground). That contradicts the measured sag and is open. `wingVert`

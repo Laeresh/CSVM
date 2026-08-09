@@ -122,6 +122,14 @@ All four land within 4%, matching `FlightModel.cs`'s own `DragExpLow` comment. *
 this row:** `DragExpLow` or `ThrustConst` (both retired by B12/B13) — a change to either must be
 re-checked against these four numbers before it can claim to preserve CAP-05.
 
+⚠ **The script no longer reproduces the table above** (the numbers stay valid as the A2 "before", and
+`raw/cap05-drag-points.txt` still holds their raw output). B12 replaced the power law with the
+original's drag polar, and rewrote `cap05-drag-points.ps1` to evaluate *that* — the four points are
+now an independent check of an authored curve rather than a re-reading of the fit they produced.
+Under the polar they read **6.2674 / 6.9904 / 7.5973 / 7.9664 m/s²** (+1641% / +530% / +169% /
++113%): the polar's linear term is speed-independent at fixed load factor, so it has a drag floor
+where the power law went to zero. Recorded in B12's Outcome as a decode-vs-footage conflict for B14.
+
 ## Knife-edge alpha — the Balmoral's 0.1-degree-inside-the-ramp margin
 
 **No committed, re-runnable instrument produces this number.** `FlightModel.cs`'s own comments

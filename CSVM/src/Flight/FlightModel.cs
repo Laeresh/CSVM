@@ -27,15 +27,18 @@ public struct FlightInput
 /// below the horizon, so the plane noses down as it sinks rather than descending
 /// wings-level-nosed — ⚠ the original's sag is NOT bounded (a known divergence —
 /// see <see cref="KnifeNoseSag"/>). Below stall speed the nose is additionally pulled toward
-/// world-down and cannot be raised over the horizon. Thrust (sublinear in the
-/// throttle lever) vs drag (a power law in V/fd_speed, with a measured slope
-/// change at fd) gives the level-speed equilibrium at fd_speed. The torque/
+/// world-down and cannot be raised over the horizon. Drag is the original's
+/// parabolic polar in the DELIVERED lift coefficient (see
+/// <see cref="DragPolarScale"/>), so induced drag falls out of the pull instead of
+/// being a fitted term, and the level-speed equilibrium is wherever thrust meets
+/// that curve rather than at fd_speed by normalization. The torque/
 /// damping/inertia/speed numbers come straight from vehicle.json 'dynamics';
 /// the scale constants marked TUNE are ours, adjusted against playtests — except
 /// the three *Tune rates, which are pinned to measurements of the original
 /// decoded from cockpit-gauge video and must not be retuned by feel, and the
-/// ThrustConst/DragExp*/ThrottleExp group, which is pinned the same way but only
-/// <i>jointly</i> — see <see cref="ThrustConst"/> before moving any of them.
+/// ThrustConst/ThrottleExp pair, which is a fit against the OLD drag shape and is
+/// owed a refit now that the polar has replaced it — see
+/// <see cref="ThrustConst"/> before moving either.
 /// </summary>
 public sealed class FlightModel
 {
@@ -47,31 +50,27 @@ public sealed class FlightModel
     public float Throttle;
     // deg: angle(nose, VelocityDir) at frame start, i.e. before this step's forces move
     // VelocityDir — see Step()'s "α" comment. An emergent LAG from the nose-chase, not a modelled
-    // aerodynamic incidence; the induced-drag term reads it as the pull's stand-in.
+    // aerodynamic incidence. Reported for instruments only — no force term reads it.
     public float Alpha;
 
-    // m/s² per engine-power unit per tonne. NOT a free TUNE, but NOT independently measurable
-    // either — it is only ever pinned *jointly with the drag shape below*, and that is the trap the
-    // old value fell into. 184 was solved from the level acceleration (150 → 290 mph in 3.76 sim s)
-    // and cross-checked against the terminal dive, both of which it fits — but only while drag was
-    // the lerp(x², x, 0.35) blend. `CAP-05`'s zero-thrust clip then measured the low-speed drag
-    // directly (0.36/1.11/2.82/3.74 m/s² at x = 0.25/0.35/0.46/0.50, with NO thrust term assumed),
-    // and at A = 60 no drag curve satisfies that AND the acceleration: weak low-speed drag
-    // accelerates the plane in ~2.0 s against the measured 3.76.
-    // Refitting the three together — CAP-05's four points, the acceleration, and the dive —
-    // converges at A = 34.9 m/s² on the Bloodhawk, i.e. 34.9·1.9/0.62. All four drag points then
-    // land within 4% and the acceleration within 0.01 s.
+    // m/s² per engine-power unit per tonne. A FIT, and now a stale one: 107 was solved jointly with
+    // the speed power law drag that the polar has replaced, normalized so drag(fd_speed) = A, which
+    // is what put the full-throttle level equilibrium at fd_speed. The polar carries no such
+    // normalization and is ~2.1× weaker than this at the Bloodhawk's fd_speed, so every
+    // full-throttle speed this drives now settles high; the thrust side is not this term's shape at
+    // all (thrust scales with ref_area and an engine power factor, not with 1/weight), and the
+    // replacement is owed.
     // ⚠ Solve it from the plane's OWN stock engine power, not the level-1 row: the Bloodhawk's
     // 'engine' is 11 (Lvl-2, 0.62), and using 0.47 back-derives a constant 32% too big.
-    // ⚠ Do not retune this alone. Moving it without refitting DragExpLow/DragExpHigh silently
-    // breaks whichever of the three measurements you were not looking at.
+    // ⚠ Do not retune this alone against a speed measurement — thrust and drag are pinned jointly,
+    // and moving this to close a speed row silently breaks whichever measurement you were not
+    // looking at.
     private const float ThrustConst = 107f;
-    // Thrust is SUBLINEAR in throttle: thrust = A · throttle^ThrottleExp. Determined, not guessed —
-    // with the drag curve pinned by CAP-05 (which contains no thrust term at all), the original's
-    // measured 1/8-throttle level equilibrium of 137.9 mph fixes this exponent as the only free
-    // quantity left. Full throttle is 1^k = 1 for any k, so every full-throttle scenario the suite
-    // asserts is untouched by construction; this term is observable only at part throttle.
-    // (The old model was linear, which is why 1/8 throttle settled at 86 mph against 137.9.)
+    // Thrust is SUBLINEAR in throttle: thrust = A · throttle^ThrottleExp. Solved from the original's
+    // measured 1/8-throttle level equilibrium of 137.9 mph as the only free quantity left GIVEN THE
+    // OLD DRAG SHAPE — and that shape is gone, so the solve is stale: the original itself multiplies
+    // available thrust by the lever linearly. Full throttle is 1^k = 1 for any k, so this term is
+    // observable only at part throttle, and only a part-throttle scenario can retire it.
     private const float ThrottleExp = 1.236f;
     private const float MinControlEff = 0.25f;    // TUNE: control authority floor at low speed
     private const float MaxControlEff = 1.15f;    // TUNE: authority ceiling in a dive
@@ -118,20 +117,19 @@ public sealed class FlightModel
     // construction.
     private const float StallSpeedFrac = 0.25f;   // nose-drop begins below this fraction of fd_speed
     private const float StallWarnFrac = 0.30f;    // STALL lamp lights below this fraction of fd_speed
-    private const float MaxDiveSpeedFrac = 1.75f; // numerical backstop, NOT a terminal speed. The
-                                                  // terminal dive is emergent from the drag curve
-                                                  // and lands within 0.3% of the original, so a cap
-                                                  // that binds would replace a measured value with a
-                                                  // guess. Set above every airframe's own emergent
-                                                  // terminal — the worst is the Balmoral, a bomber
-                                                  // at A = 7.6 m/s², which reaches 1.590 in a 71°
-                                                  // dive (--dump-flight=player_balmoral) — so it
-                                                  // only ever catches the loop energy pump or a dt
-                                                  // spike. (Was 1.678 at A = 13 under the old
-                                                  // lerp(x², x, 0.35) blend; the refitted DragExpHigh
-                                                  // is steeper above fd, so every airframe's
-                                                  // terminal moved DOWN and this cap sits further
-                                                  // clear than it did.)
+    private const float MaxDiveSpeedFrac = 1.75f; // numerical backstop, NOT a terminal speed — it is
+                                                  // meant to catch only the loop energy pump or a dt
+                                                  // spike, because a cap that binds replaces a
+                                                  // measured terminal with a guess.
+                                                  // ⚠ It DOES bind right now: the Bloodhawk's
+                                                  // full-throttle 71° dive pins against it exactly
+                                                  // (1.750 × fd_speed), because thrust is still
+                                                  // scaled against the retired drag curve and is
+                                                  // ~2.1× too strong for the polar. The dive is not
+                                                  // an emergent measurement while this holds — the
+                                                  // number to watch is that ratio, not this cap, and
+                                                  // raising it would only trade a wrong terminal for
+                                                  // a wronger one.
                                                   // Measured resting altitude cap — C1B IA1 footage, Bloodhawk only. NOT an energy
                                                   // limit: level full-throttle equilibrium is flat to ±0.3 mph right up to 15 m under this line,
                                                   // and holding a 22° nose-up pull against it gains no altitude at all (sub-foot over the clip's
@@ -174,60 +172,36 @@ public sealed class FlightModel
                                                   // full elevator, and it measurably rewrote the stall recovery
                                                   // (nose +62°→+28°, wv 0.47→0.88). Clamped to the remaining
                                                   // angle so it approaches the sag and stops, never overshoots.
-                                                  // Drag is a power law in x = V/fd_speed, normalized so D(fd) = A — which is what makes the
-                                                  // full-throttle level equilibrium exactly fd_speed for ANY exponent, and therefore what makes
-                                                  // that scenario useless for validating the shape (the low-throttle end is the only place the
-                                                  // shape is observable). The exponent DIFFERS either side of fd, and both halves are measured:
-                                                  //
-                                                  //   below fd — `CAP-05 Stall 0% Thrust no input` is a zero-thrust deceleration, so dV/dt is
-                                                  //   drag plus gravity and nothing else: the cleanest drag probe in the set. Measured D is
-                                                  //   0.36 / 1.11 / 2.82 / 3.74 m/s² at x = 0.25 / 0.35 / 0.46 / 0.50. Fitted jointly with
-                                                  //   ThrustConst and the acceleration, that gives 3.278 and lands all four within 4%.
-                                                  //
-                                                  //   above fd — the terminal dive: 70.7° at full throttle settles at 355.2 mph = 1.176 × fd.
-                                                  //
-                                                  // ⚠ These two CANNOT be one exponent. Forcing the low-speed value everywhere puts the terminal
-                                                  // dive at 344.5 mph against a measured 355.2 ± 6 — outside by 1.8× the tolerance. The seam sits
-                                                  // at x = 1 precisely because that is the normalization point, where D = A from either side, so
-                                                  // the curve is continuous across it; only its slope steps. What the step MEANS is unexplained —
-                                                  // the original's own acceleration fall-off near fd is likewise steeper than a single power law
-                                                  // fits, and a soft governor near fd_speed is the standing hypothesis (BL-148). Recorded as a
-                                                  // measurement, not as a mechanism.
-                                                  //
-                                                  // ⚠ This curve is far weaker below cruise than the lerp(x², x, 0.35) blend it replaced (4–21×
-                                                  // at the measured points). That blend existed to answer a user report that a throttled-back
-                                                  // plane barely decelerated — so this is the direction of that complaint, and it is owed a
-                                                  // re-playtest against it specifically. The defence is that the ORIGINAL decelerates slowly too:
-                                                  // 290 → 150 mph at 1/8 throttle takes it 7.04 sim s where the old model took 2.47.
-    private const float DragExpLow = 3.278f;      // below fd_speed — CAP-05's thrust-free probe
-    private const float DragExpHigh = 2.663f;     // at/above fd_speed — the terminal dive
 
-    // Induced drag: the cost of the pull, added to the speed power law as A · C_i · sin²α and
-    // clamped at MaxAoaDeg. Without it a hard pull cost us nothing — the original bleeds from a
-    // 298.96 mph cruise to a 222.94 mph plateau and holds it (CAP-01), where we used to hold 299.
-    // Vanishes exactly at α = 0, so cruise, the acceleration and the terminal dive are untouched by
-    // construction rather than by luck.
-    // ⚠ TUNE, and the only genuinely fitted constant in this group: it was swept against the real
-    // integrator until `sustained-turn-speed` landed on the measured plateau (223.03 mph against
-    // 222.94), because the couplings (drag → speed → bank → wingVert → align → α → drag) have no
-    // closed form. The thrust-vectoring loss is already in that loop — thrust acts along the nose
-    // and drag along the path, so the 1 − cos α deficit falls out of the vector sum — so this
-    // supplies the REMAINDER. Never hand-compute the whole deficit and add it here; that counts the
-    // vectoring twice. At the settled α of 13.8° it contributes 0.61 A, against a base drag of
-    // 0.37 A: BL-092's "+0.380 A" was quoted against the old lerp(x², x, 0.35) blend and understates
-    // the deficit under the refitted curve by more than half, so do not re-derive C_i from it.
-    // ⚠ NOT TRANSFERABLE, and it is not a property of the original. It absorbs our turn-rate error:
-    // we sweep heading at ~32 °/s where the original sweeps 18.95, so our α in this manoeuvre is
-    // larger than the original's and a SMALLER C_i reaches the same settled speed. Close the rate
-    // gap and this must be refitted (`sustained-turn-rate`, informational for exactly that reason).
-    // ⚠ The EXPONENT is a choice, not a measurement. Both CAP-01 segments sit at essentially the
-    // same load factor (V·ω 32.96 against 34.02), so terms in n, n² or ω² fit the clip equally
-    // well; sin²α is picked on physical grounds — textbook shape, doesn't saturate where the lift
-    // ramp does, and vanishes at α = 0 — not because the data prefers it.
-    private const float InducedDragCoef = 10.75f;
-    // deg. player.json's authored `maxAOA 46.0`, units unverified (`BL-095`) — a ceiling on how far
-    // this term can grow, not a limit on α itself, which is still free to exceed it.
-    private const float MaxAoaDeg = 46f;
+    // Drag is a parabolic POLAR in the delivered lift coefficient, not a curve in speed:
+    //
+    //   C_D  = DragPolarScale · (DragPolarParasite + DragPolarLinear · C_L + DragPolarQuad · C_L²)
+    //   Drag = q · RefArea · DragFactor · C_D          opposing the velocity, in weight units
+    //
+    // All three coefficients and the 0.73 scale are the same for every aircraft — airframes differ
+    // only through the authored `drag_factor` and `ref_area`. C_L is the lift the wings ACTUALLY
+    // delivered this frame over q·RefArea, so induced drag is not a separate term: the cost of a
+    // pull is paid through the C_L the pull produced. Nothing else may add a pull-cost term on top
+    // (the lift vector's own backward tilt already supplies the vectoring loss through the force
+    // sum); an extra sin²α term on top of both counts the same deficit twice.
+    //
+    // ⚠ This is NOT a power law in speed, and the two shapes disagree most where the old one was
+    // measured. At a fixed load factor the linear term is q·S·0.8·C_L = 0.8·n·Weight — completely
+    // speed-independent — so the polar has a drag FLOOR (≈4.3 m/s² on the Bloodhawk at the n ≈ 2.04
+    // of level flight) where the power law went to zero with speed. `CAP-05`'s four zero-thrust
+    // points (0.36/1.11/2.82/3.74 m/s² at x = 0.25/0.35/0.46/0.50) sit far below that floor, and
+    // the polar cannot reproduce them: it gives 6.3/7.0/7.6/8.0. That is an open conflict between
+    // the decoded mechanism and the footage, not a licence to refit these constants — they are read
+    // out of the original's executable, and B14 owns the residual.
+    //
+    // ⚠ The seam this replaces was a slope step at x = 1 modelled as two exponents; the polar has no
+    // seam and no normalization at fd_speed, so the step needs no explanation any more. Nothing here
+    // ties the level-flight equilibrium to fd_speed — that speed is a normalising reference in the
+    // original too, and the equilibrium is now wherever thrust meets this curve.
+    private const float DragPolarScale = 0.73f;
+    private const float DragPolarParasite = 0.12f;
+    private const float DragPolarLinear = 0.8f;
+    private const float DragPolarQuad = 0.5f;
 
     // Per-axis control-rate calibration. Steady rate = torque · recInertia · Tune /
     // ang_momentum_damp (× eff on yaw), and a full 360° takes ≈ 1/damp spin-up + 2π/rate.
@@ -296,13 +270,9 @@ public sealed class FlightModel
         float knifeAlignFloor = Config.GetFloat("flightModel.knifeAlignFloor", KnifeAlignFloor);
         float knifeNoseSag = Config.GetFloat("flightModel.knifeNoseSag", KnifeNoseSag);
         float knifeNoseRate = Config.GetFloat("flightModel.knifeNoseRate", KnifeNoseRate);
-        float dragExpLow = Config.GetFloat("flightModel.dragExpLow", DragExpLow);
-        float dragExpHigh = Config.GetFloat("flightModel.dragExpHigh", DragExpHigh);
         float throttleExp = Config.GetFloat("flightModel.throttleExp", ThrottleExp);
         float liftGMin = Config.GetFloat("flightModel.liftGMin", LiftGMin);
         float liftGMax = Config.GetFloat("flightModel.liftGMax", LiftGMax);
-        float inducedDragCoef = Config.GetFloat("flightModel.inducedDragCoef", InducedDragCoef);
-        float maxAoaDeg = Config.GetFloat("flightModel.maxAoaDeg", MaxAoaDeg);
         float altitudeCapM = Config.GetFloat("flightModel.altitudeCapM", AltitudeCapM);
         float altitudeCapOvershootM = Config.GetFloat("flightModel.altitudeCapOvershootM", AltitudeCapOvershootM);
 
@@ -469,7 +439,10 @@ public sealed class FlightModel
         float dynPressure = 0.5f * AirDensitySlugPerFt3 * speedFps * speedFps;
         float mach = Speed / (SpeedOfSoundFps * MetresPerFoot);
         float clMax = Mathf.Max(0f, ClMaxStatic - ClMaxMach * mach);
-        float loadCap = s.VehWeight > 1e-3f ? clMax * dynPressure * s.RefArea / s.VehWeight : 0f;
+        // q·RefArea, in weight units (lb/ft² × ft²) — the scale a coefficient converts to a force,
+        // and the divisor the delivered C_L (drag, below) comes back out through.
+        float qRefArea = dynPressure * s.RefArea;
+        float loadCap = s.VehWeight > 1e-3f ? clMax * qRefArea / s.VehWeight : 0f;
         loadFactor = Mathf.Clamp(loadFactor, -loadCap, loadCap);
         var liftAccel = liftDir.LengthSquared() > 1e-12f
             ? liftDir.Normalized() * (loadFactor * StandardG)
@@ -483,20 +456,26 @@ public sealed class FlightModel
 
         // thrust pulls along the nose (its along-path share falls out of the vector sum —
         // a stalled plane falling nose-high needs no special case), and is sublinear in the
-        // throttle lever. Drag opposes the motion: a power law in x = V/fd_speed, normalized so
-        // drag(fd_speed) = max thrust, with a measured slope change at fd (see the constants).
-        // At v ≈ 0 drag → 0 with speed, so the stale direction there is harmless.
+        // throttle lever. Drag opposes the motion: the parabolic polar in the delivered C_L (see
+        // the constants). At v ≈ 0 both q and C_L → 0, so drag → 0 and the stale direction there is
+        // harmless.
         // Gravity acts in FULL here — the lift demand above already carries weight, and subtracting
         // it twice is the trap the old cross-path fraction was one half of. It is still split about
         // the path only so the along-path share can be scaled: a climb bleeds less speed than plain
         // energy exchange (the original holds speed better), full when diving.
-        float xSpd = Speed / s.FdSpeed;
-        // Drag is the speed power law PLUS the pull's own cost: a hard pull bleeds speed, which is
-        // what makes a sustained max-pull turn settle far below cruise instead of at it.
-        float sinAoa = Mathf.Sin(Mathf.DegToRad(Mathf.Min(Alpha, maxAoaDeg)));
-        float dragAccel = _maxThrustAccel
-                          * (Mathf.Pow(xSpd, xSpd < 1f ? dragExpLow : dragExpHigh)
-                             + (inducedDragCoef * sinAoa * sinAoa));
+        //
+        // C_L is read back out of the force the wings just delivered, so it is already inside both
+        // the ±5/9 load clamp and the compressibility ceiling — a pull that the wings could not
+        // supply pays no drag for the part they refused. A hard pull bleeds speed through this term
+        // and through the lift vector's own backward tilt in the sum below; there is deliberately no
+        // third, α-keyed term.
+        float cl = qRefArea > 1e-6f ? loadFactor * s.VehWeight / qRefArea : 0f;
+        float cd = DragPolarScale
+                   * (DragPolarParasite + DragPolarLinear * cl + DragPolarQuad * cl * cl);
+        // Force (weight units) → acceleration is × StandardG / Weight, the same conversion lift uses.
+        float dragAccel = s.VehWeight > 1e-3f
+            ? qRefArea * s.DragFactor * cd * StandardG / s.VehWeight
+            : 0f;
         var gravity = Vector3.Down * s.Gravity;
         var gAlong = VelocityDir * gravity.Dot(VelocityDir);
         var gAcross = gravity - gAlong;
