@@ -21,7 +21,7 @@ returns "no fog" then.
 
 | Block | Read as | Notes |
 |---|---|---|
-| `VIEWING_RANGE` | dict | not used by the remake |
+| `VIEWING_RANGE` | dict | not used by the remake (the original scales `FOG_RANGES`/far clip by its per-detail `FOG_SCALE`/`CLIP_SCALE`; HIGH is 1.0 everywhere, so inert at full detail — see the decompile section) |
 | `WIND` | **bare-scalar block** | `STATIC_VELOCITY [x,y,z]`, `RANDOM_MAX_SPEED s`, `RANDOM_ACCEL a` |
 | `CLOUD_COVER` | **bare-scalar block** | `TOP`, `BOTTOM`, `THICKNESS` (metres) + optional `TOP_COLOR`/`BOTTOM_COLOR` |
 | `ZONE<n>` | dict (+ `SW_*` twin) | per-zone fog; the `SW_*` software-renderer twin is ignored. **The names are per chapter — see below** |
@@ -109,6 +109,52 @@ scripts, and none of them selects anything:
 remaining `BL-100` A/B. The two C1 strings are not two zone selections: one names a node C1 does
 not have, the other scrolls a texture. Nothing in `interp.json` bears on which zone a mission
 flies.
+
+#### The engine's rule, decompiled: zones are camera STATES, switched in flight (crimson.exe via Ghidra, 2026-08-09)
+
+The binary answers the selection question, and the answer is that **nothing selects one zone per
+mission — the engine switches between them at runtime, per camera position**. The per-frame
+atmosphere update (`FUN_0042ee40`, called from `FUN_0042f480`) computes a state 1/2/3, and on any
+change `FUN_00472ea0` applies the matching `ZONE<n>` block wholesale:
+
+- **State 1 → `ZONE1`**: the default — camera below the cloud band (or no band at all).
+- **State 2 → `ZONE2`**: camera altitude ≥ the whiteout core's bottom edge (band centre −
+  `THICKNESS`/2, precomputed at world init `FUN_004735b0` into `0071c2d0`). The check sits
+  *inside* the `CLOUD_COVER`-exists gate, so **a mission without `CLOUD_COVER` can never enter
+  zone 2**.
+- **State 3 → `ZONE3`**: camera inside a gamez `fvol*` volume — armed only when `fogvol.zrd`'s
+  `fog_zone` flag is set (see [fogvol.md](fogvol.md), which this decode also settles).
+
+Applying a zone means: world fog near/far = `FOG_RANGES` × the active detail level's `FOG_SCALE`;
+world fog altitude pair and `FOG_COLOR` (written into the world node's fog block at world+0x38);
+camera near/far clip = `CLIP_RANGES` with far × `CLIP_SCALE` (a second camera's far is clamped
+≥ 6.0); and the whole `SUNLIGHT_*` block pushed onto the gamez `sunlight` light node. The
+hardware renderer indexes `ZONE1–3`, the software renderer `SW_ZONE1–3` — confirming the
+"software twin" assumption above (the loader `FUN_004bc680` even initializes `SW_*` as a memcpy
+of `ZONE1–3` before parsing its overrides, so an absent twin inherits the hardware zone). So
+`VIEWING_RANGE` *is* consumed by the original — as those per-detail `FOG_SCALE`/`CLIP_SCALE`
+multipliers — but with HIGH authoring 1.0 everywhere it is inert at full detail, and the
+remake ignoring it stays correct.
+
+**Every settled per-chapter verdict above is consistent with this rule** — the renders that
+settled C1/C1C/C2B/C4 on `zone2` were all shot *above the deck* (state 2), the below-deck
+reference is literally named `Zone1 environment`, C1B/C2/C3 author their `CLOUD_COVER` band out
+of reach (C1B/C3 10000–11000, C2 19024–20124 — checked in the extracted files 2026-08-09), so
+state 2 never fires and they fly zone 1 always — which is also why C2's empty `zone2` dome is
+never a hole, and why the controls saw `ZONE1` haze persist above its 1024 m `FOG_ALTITUDE` top
+(B13: the fade is per fragment *within* a zone; the *switch* is `CLOUD_COVER`, a different key) —
+and
+C5, the one chapter with a `ZONE3` and `fog_zone 1`, is exactly the fog-volume-interior case.
+What changes is the model: a deck chapter flies **both** zones, switched at the core's bottom
+edge — a different altitude from the deck-regime flip at the band *centre* (`A7`), but both sit
+inside the fully-opaque core (C1: switch 1032, flip 1047, core 1032–1062), which is what makes
+either invisible. The remake's one-static-zone `--sky-zone` model is therefore an approximation
+that is exact above the band and wrong below it (a below-deck C1 should wear `ZONE1`'s fog);
+whether that gap is visible enough to chase is a backlog question, not settled here.
+
+Decompiled sources are reproducible from `crimson.exe` in Ghidra at the addresses named
+(loader `FUN_004bc680` = `weather.cpp`, zone parser `FUN_004bc3e0`, per-frame `FUN_0042ee40`,
+zone applier `FUN_00472ea0`, world init `FUN_004735b0`).
 
 So the remake selects it via `--sky-zone` (default `zone2` = night). **Every chapter is now
 settled**, in three passes and by three different instruments:
@@ -447,14 +493,19 @@ fully opaque core, so **moving the band or thinning `THICKNESS` exposes a hard p
 flip at 1047, core 1032–1062. See `WeatherRig.DeckRegime` and `docs/architecture.md`'s
 `WeatherRig.cs` entry for the mechanism and the ceiling distance's derivation.
 
-**Inferred, and marked as such:** where a mission authors both keys the whiteout lerps
-`BOTTOM_COLOR` → `TOP_COLOR` across the band by camera altitude. **The shipped data cannot
-falsify this.** Of the four chapters whose band is reachable (C1 970–1124, C1C 1055–1110,
-C2B 924–1124, C4 1000–1100) only C4 authors colours and its pair is *equal*, so every blend
-rule renders the same picture; the one chapter that would discriminate is C5 (top `[220]³`,
-bottom `[64]³`) and its band sits at 9950–10150 m, which no one can fly to. C1B and C3 are
-likewise 10 km up — plausibly left in and parked out of reach rather than curated, so their
-values are not evidence of intent either.
+**Decoded 2026-08-09 (was inferred): the whiteout lerps `BOTTOM_COLOR` → `TOP_COLOR` across the
+band by camera altitude — that is exactly what the binary computes.** `FUN_0042ee40` (the
+per-frame atmosphere update, see the zone-state section above): for camera altitude between
+`BOTTOM` and `TOP`, colour = `TOP_COLOR·f + BOTTOM_COLOR·(1−f)` with `f = (alt − BOTTOM) /
+(TOP − BOTTOM)`; opacity ramps linearly 0→1 from `BOTTOM` to the core's bottom (centre −
+`THICKNESS`/2), holds 1.0 through the core, and ramps back down to `TOP` — byte-for-byte the
+`THICKNESS`-core rule this page already carried. Two engine details on top of the data: the
+loader defaults an absent `TOP`/`BOTTOM` to 280/240 and colours to white, and the final opacity
+is remapped through a log2/atan curve pair blended by a `rand()`-driven drifting parameter — an
+animated in-cloud turbulence flicker with no data behind it (a TUNE-shaped fact about the
+original; the remake does not reproduce it). The shipped data alone could never falsify the lerp
+(of the reachable bands only C4 authors colours, and equal ones), which is why this stayed
+marked inferred until the decompile.
 
 ## Wind (`WIND`)
 

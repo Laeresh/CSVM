@@ -16,11 +16,11 @@ One chapter-scope reader file, root = an [alternating key/list dict](README.md#s
 
 | Key | Value | Meaning |
 |---|---|---|
-| `fog_zone` | `[int]` | Which fog zone the volumes belong to. **Read, not consumed** — see the open question below |
-| `distance` | `[float]` | The scatter's mean spacing, metres — an areal density, not a lattice phase |
-| `fog_fade_dist` | `[float]` | *(C5 only)* the volume's own fog fade distance |
-| `interior_fog_fade_dist` | `[float]` | *(C5 only)* the same, from inside |
-| `fog_color` | `[r,g,b]` | *(C5 only)* the volume's interior fog colour, integer 0–255 |
+| `fog_zone` | `[int]` | **A bool, decoded 2026-08-09**: non-zero arms the engine's in-volume whiteout + `ZONE3` camera state — see [the decompile section](#what-the-engine-does-with-the-volumes-crimsonexe-decompile-2026-08-09). Read by the remake, not yet consumed |
+| `distance` | `[float]` | The scatter's mean spacing, metres — an areal density, not a lattice phase. Engine default **206.25** |
+| `fog_fade_dist` | `[float]` | *(C5 only)* whiteout approach ramp, metres before the volume wall. Engine default **400** |
+| `interior_fog_fade_dist` | `[float]` | *(C5 only)* whiteout decay depth inside the volume. Engine default **20** |
+| `fog_color` | `[r,g,b]` | *(C5 only)* the whiteout's colour, integer 0–255. Engine default: the mission's `CLOUD_COVER` `TOP_COLOR` |
 | `clutter` | `[block, …]` | The scatter table — one or more blocks, each an alternating dict |
 
 A `clutter` block:
@@ -83,6 +83,34 @@ what makes the density authored rather than an artifact of measuring a rotated s
 `weather.json` `BOTTOM`, but C1C (band 1055–1110 vs volume 971–1091), C4 (1000–1100 vs
 1060–1181) and C5 (9950–10150 vs −463–183) all disagree. The volumes are their own authored
 geometry; do not re-derive them from the weather file.
+
+## What the engine does with the volumes (crimson.exe decompile, 2026-08-09)
+
+Decompiled from `crimson.exe` (Ghidra; loader `FUN_0044e010`, volume evaluator `FUN_0044e6f0`,
+per-frame consumer `FUN_0042ee40` — the same frame update that runs the `CLOUD_COVER` whiteout,
+[weather.md](weather.md)). What the reader's keys actually drive:
+
+- **The loader hides every world node whose name starts with `fvol`** (a 4-char prefix match)
+  and wraps each in a volume record (transform + bounds) — the same split this page decodes as
+  "the mesh is the volume, invisible".
+- **`fog_zone` is a bool arm-switch, not an index.** The loader stores `value != 0`; when set,
+  every frame evaluates the camera against all volumes: approaching a wall, whiteout opacity
+  ramps up linearly over the last `fog_fade_dist` metres; inside, it decays from full at the
+  wall over `interior_fog_fade_dist` (the volume is a *transition* whiteout — ~20 m in it hands
+  off); multiple volumes union as `a + b − a·b`. Being inside any volume flips the camera to
+  **state 3 = `ZONE3`**, whose fog then carries the interior look. The install agrees to the
+  letter: C5 is the only chapter authoring `fog_zone 1` — and the only one authoring a `ZONE3`
+  (50–250 m fog) and its own `fog_color`/fade dists; C1's `fog_zone 0` leaves its nine deck
+  volumes as scatter containers only, with no interior state, and C1 authors no `ZONE3`.
+- **The whole load runs under a FIXED seed:** `srand(0x9b3a9ce2)` at entry, restored to
+  `srand(time())` at exit — so every `rand()` the original's scatter draws is the same sequence
+  every launch. The original's field is deterministic by construction (the remake's own seeded
+  `Rng` reproduces the *property*, not the sequence — matching the original's exact placements
+  would additionally need its scatter loop decoded, which this pass did not do).
+- **The engine's defaults equal the "vestigial" C1B/C2/C3 values.** Absent keys default to
+  `distance` 206.25, `far_fade_range` [2500,3500]×2, `perturb_dist_range` [82.5, 82.5],
+  `perp_dist_range` [151.25, 151.25], `scale_range` [0.85, 1.15] — the degenerate copies simply
+  restate the hardcoded defaults, a third sign those files are boilerplate rather than authored.
 
 ## The map-edge continuation (`A5`) — engine-side, NOT authored data
 
@@ -376,14 +404,16 @@ degenerate ranges).
 **Undecoded / not implemented:**
 
 - **`fog_zone`, and C5's `fog_color` / `fog_fade_dist` / `interior_fog_fade_dist`** are read and
-  reported and nothing consumes them. Rendering a volume's *interior fog* is a separate feature
-  from its clutter.
-- ⚠ **`fog_zone` is not the sky/fog zone selector.** `docs/HISTORY.md` (2026-08-05) records the
-  negative "no chapter's copy has a `fog_zone` key" — **that is wrong**: five chapters do. But
-  the values do not select a weather zone either: C1's is 0 while its `fvol` nodes carry
-  `zone_id: 2` and its weather file names `ZONE1`/`ZONE2`, and C5's is 1 against `zone_id` on its
-  own volumes. `BL-277`'s geometry rule stands as landed; treat `fog_zone` as an index into
-  something still unidentified, and do not re-open the zone decode on it.
+  reported and nothing in the remake consumes them yet. Their *meaning* is now decoded (the
+  in-volume whiteout + `ZONE3` switch, section above); rendering it remains a separate feature
+  from the clutter, unimplemented.
+- ⚠ **`fog_zone` is not the sky/fog zone selector** — and as of 2026-08-09 it is no longer
+  unidentified: the decompile (section above) shows it is a **bool** arming the in-volume
+  whiteout and the `ZONE3` camera state. The old record stands as history: `docs/HISTORY.md`
+  (2026-08-05) claimed "no chapter's copy has a `fog_zone` key" — wrong, five do — and the
+  `zone_id` mismatches that blocked the "selector" reading (C1's 0 against `zone_id: 2`) were
+  never a contradiction, because the value was never an index. `BL-277`'s geometry rule stands
+  as landed.
 - **The engine's exact cell phase** — the remake anchors the cells on the world origin. Under the
   density reading this is a far weaker choice than it was under the grid reading (a phase shift
   moves which cell a placement is drawn in, not where the placements line up), but it is still not
