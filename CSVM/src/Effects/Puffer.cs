@@ -20,7 +20,7 @@ public enum PufferBlend { Auto, Additive, Mix }
 /// lifetime, cycling a flipbook of textures over its age.
 ///
 /// Only the fields we currently render are parsed; the reader carries more (the FADE_RANGE
-/// camera-distance fade, NEAR_FADE, START_AGE, WIND_FACTOR, PRIORITY) — added here as they're
+/// camera-distance fade, NEAR_FADE, WIND_FACTOR, PRIORITY) — added here as they're
 /// needed. Distances/velocities are meters and seconds, matching the world; TEXTURE_SEQUENCE
 /// times are the exception, being fractions of a particle's lifetime.
 /// </summary>
@@ -37,6 +37,17 @@ public sealed class PufferState
     public float GrowthFactor = 1f;
     public float DeviationDistance;
     public int Number = 1;
+
+    /// <summary>Random birth age (seconds): a particle is born at
+    /// <c>Rand(StartAgeMin, StartAgeMax)</c> rather than at age 0. Both default to 0, so an
+    /// unauthored puffer draws nothing extra and seeds <c>Particle.Age = 0f</c> exactly as before.
+    /// Only 4 puffers in the install author this key, one of them (<c>fire_at_zepskin3</c>) with a
+    /// negative minimum (−1.0) — ~91% of its particles are therefore born already aged. The
+    /// engine's own spawn also skips creation outright when the drawn age is ≥ the drawn lifetime
+    /// (`FUN_0054f8b0`), but with the shipped data (max authored start age 0.1 s, min authored
+    /// lifetime 1.0 s across all four puffers) that skip can never fire — implementing it would be
+    /// dead code, so it is deliberately not reproduced here.</summary>
+    public float StartAgeMin, StartAgeMax;
 
     /// <summary>AT_NODE's optional trailing offset (AT_NODE is [nodeName, dx?, dy?, dz?]),
     /// in the host node's own frame — the same convention as <see cref="LocalVelocity"/>.
@@ -64,6 +75,11 @@ public sealed class PufferState
     /// ascending; rgb are 0–255 in the reader (normalized here), alpha 0–1. The
     /// dense_firetrail smoke is born orange (255,164,90) and turns near-black.</summary>
     public IReadOnlyList<(float Frac, Color Color)> Colors = Array.Empty<(float, Color)>();
+
+    /// <summary>Whether this state authors <c>START_AGE_RANGE</c> at all — gates the extra
+    /// <c>Rand()</c> draw at spawn so the ~2,900 puffers that don't author it consume no extra
+    /// draw and stay bit-identical.</summary>
+    public bool HasStartAgeRange => StartAgeMin != 0f || StartAgeMax != 0f;
 
     /// <summary>Loads a reader file (e.g. "flame_ball.json") from a zrdr zip/dir and returns
     /// the fully-defined <c>PUFFER_STATE</c> named <paramref name="pufferName"/>, or null.</summary>
@@ -127,10 +143,17 @@ public sealed class PufferState
     ///   puffer the flag shape is INVERTED — `has_interval_type` is true but
     ///   `has_interval_value` is **false**, yet `interval_value` still holds the real
     ///   distance — so key off `interval_type`, never off `has_interval_value`;
-    /// - `GROWTH_FACTOR` arrives as a two-entry `growth_factors` array whose **second entry's
-    ///   max** is the reader's scalar (matches on 172 of 177 puffers whose name resolves to a
-    ///   single reader definition; the five outliers are names defined differently in
-    ///   different readers, not a mapping failure).
+    /// - `growth_factors` is the **`SCALE_SEQUENCE` age→scale ramp**, not a growth range: entry
+    ///   `i` is `(age_i, scale_i)` carried under the `min`/`max` field labels. `GROWTH_FACTOR` is
+    ///   simply its two-stop spelling — `FUN_004f7120` synthesises `(0,1), (1,G)` when
+    ///   `SCALE_SEQUENCE` is absent, which it is in every reader in this install — so reading
+    ///   `growth[1].max` yields G. ⚠ It is **not** a `(min,max)` pair: 216 events author a second
+    ///   entry whose "max" is below its "min" (down to `(1.0, −0.2)`), coherent as a stop and
+    ///   incoherent as a range — never "repair" one by swapping. No puffer in the install ships
+    ///   more than two stops, so the `1 → G` lerp below is correct for all of them. The former
+    ///   "matches 172 of 177 puffers, five name collisions" note here was **withdrawn** — that
+    ///   survey does not reproduce (zero real mismatches; the unexplained names were wildcard
+    ///   reader names expanding at compile time). See `docs/formats/anim-definitions.md`.
     /// </summary>
     public static PufferState FromAnimEvent(AnimData d)
     {
@@ -159,6 +182,8 @@ public sealed class PufferState
             SizeMax = Range("size_range", "max", 1f),
             LifetimeMin = Range("lifetime_range", "min", 1f),
             LifetimeMax = Range("lifetime_range", "max", 1f),
+            StartAgeMin = Range("start_age_range", "min", 0f),
+            StartAgeMax = Range("start_age_range", "max", 0f),
             DeviationDistance = d.Num("deviation_distance") ?? 0f,
             Number = Mathf.Max(1, (int)(d.Num("number") ?? 1f)),
             AtNodeOffset = Vec("translate"),
@@ -220,6 +245,8 @@ public sealed class PufferState
             SizeMax = d.Float("SIZE_RANGE", 1f, 1),
             LifetimeMin = d.Float("LIFETIME_RANGE", 1f, 0),
             LifetimeMax = d.Float("LIFETIME_RANGE", 1f, 1),
+            StartAgeMin = d.Float("START_AGE_RANGE", 0f, 0),
+            StartAgeMax = d.Float("START_AGE_RANGE", 0f, 1),
             GrowthFactor = d.Float("GROWTH_FACTOR", 1f),
             DeviationDistance = d.Float("DEVIATION_DISTANCE"),
             Number = (int)d.Float("NUMBER", 1f),
@@ -534,7 +561,12 @@ public sealed partial class Puffer : Node3D
             p.Vel = p.Vel * damp + _state.WorldAcceleration * dt;
             p.Pos += p.Vel * dt;
 
-            float lifeFrac = p.Age / p.Life;
+            // A negative-age particle (START_AGE_RANGE authoring a negative minimum, e.g.
+            // fire_at_zepskin3's -1.0) is still drawn on the frame it's born — FUN_0054e6e0 clamps
+            // the ramp parameter (`if (0.0 < age) t = age/life; else t = 0.0f`) rather than
+            // skipping the draw, so it is pinned to stop 0 of every ramp/envelope while p.Age
+            // itself keeps integrating and reaping normally above.
+            float lifeFrac = p.Age > 0f ? p.Age / p.Life : 0f;
             float size = p.BaseSize * Mathf.Lerp(1f, _state.GrowthFactor, lifeFrac);
             // The COLORS ramp owns the fade when present (its alpha ends at 0);
             // otherwise the render-nicety envelope eases the additive glow in/out.
@@ -792,7 +824,14 @@ public sealed partial class Puffer : Node3D
                 Vel = vel,
                 BaseSize = Rand(_state.SizeMin, _state.SizeMax) * _sustainSizeScale,
                 Life = Rand(_state.LifetimeMin, _state.LifetimeMax) * _fireLifeScale,
-                Age = 0f,
+                // START_AGE_RANGE (B4): FUN_0054f8b0 draws lifetime, then start age, both before
+                // its position draws. Ours draws pos/vel first (A2's order, load-bearing for every
+                // other puffer), so the closest match is start age immediately after life, right
+                // where it already sat as the literal 0f this replaces. Gated on HasStartAgeRange
+                // so the ~2,900 puffers that don't author the key draw nothing extra here and stay
+                // bit-identical; only the 4 that do (their own particles re-scatter from here on,
+                // which is expected).
+                Age = _state.HasStartAgeRange ? Rand(_state.StartAgeMin, _state.StartAgeMax) : 0f,
                 Frame = _state.TextureSequence.Count > 0 ? 0f
                     : Mathf.Min(_state.Textures.Count - 1,
                         Mathf.FloorToInt((float)_rng.NextDouble() * _state.Textures.Count)),
@@ -814,7 +853,8 @@ public sealed partial class Puffer : Node3D
             Vel = _state.WorldVelocity + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z)),
             BaseSize = Rand(_state.SizeMin, _state.SizeMax) * _trailSizeScale,
             Life = Rand(_state.LifetimeMin, _state.LifetimeMax),
-            Age = 0f,
+            // START_AGE_RANGE (B4): see SpawnSustained's comment — gated draw, right after Life.
+            Age = _state.HasStartAgeRange ? Rand(_state.StartAgeMin, _state.StartAgeMax) : 0f,
             Frame = _state.TextureSequence.Count > 0 ? 0f
                 : Mathf.Min(_state.Textures.Count - 1, Mathf.FloorToInt((float)_rng.NextDouble() * _state.Textures.Count)),
         };
@@ -851,7 +891,8 @@ public sealed partial class Puffer : Node3D
                 Vel = baseVel + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z)),
                 BaseSize = Rand(_state.SizeMin, _state.SizeMax) * _burstSizeScale,
                 Life = Rand(_state.LifetimeMin, _state.LifetimeMax),
-                Age = 0f,
+                // START_AGE_RANGE (B4): see SpawnSustained's comment — gated draw, right after Life.
+                Age = _state.HasStartAgeRange ? Rand(_state.StartAgeMin, _state.StartAgeMax) : 0f,
             };
         }
         _burstsSpawned++;

@@ -50,7 +50,8 @@ A state is a **fully-defined emitter iff it has `NUMBER` (burst) or `DISTANCE_IN
 | `COLORS` | [[lifeFrac, r, g, b, a]…] | colour-over-age ramp; rgb dual-encoded (the [weather.md](weather.md) rule: any component > 1 ⇒ ÷255), alpha 0–1. `dense_firetrail`'s smoke is born orange (255,164,90) → near-black |
 | `FADE_RANGE` | [near, far] m | camera-distance fade (`fire_n_smoke`: 1500–1700). Parsed by mech3ax, **not implemented** — set on 400 of C1's 721 events |
 | `NEAR_FADE` | [a, b] | near-camera fade (70/20 almost everywhere). The compiled payload calls it `unk_range`. Parsed, **not implemented** |
-| `START_AGE` / `WIND_FACTOR` / `PRIORITY` | — | carried by 11 / 6 / 11 C1 events, **not implemented** |
+| `START_AGE_RANGE` | [min, max] s | random birth age — a particle is born at `Rand(min, max)` instead of age 0, negative values included (`fire_at_zepskin3`: −1.0 to 0.1). **Implemented** (`PufferState.StartAgeMin`/`StartAgeMax`); authored by only 4 puffers in the install, 80 compiled events total (`PLAN-puffer-engine-deltas` B4) |
+| `WIND_FACTOR` / `PRIORITY` | — | carried by 6 / 11 C1 events, **not implemented** |
 
 **`TEXTURE_SEQUENCE` times are lifetime fractions, not seconds.** Across all 1,750 flipbook
 `PufferState` events in this install the largest key is **0.8** and none exceeds 1.0 — while

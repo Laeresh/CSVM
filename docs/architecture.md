@@ -2016,6 +2016,15 @@ total, the other 6 carry no live emitter.
 ⚠ `SpawnSustained`'s draw order (pos → vel → size → life) is shared determinism: reordering the
   `Rand` calls re-scatters EVERY sustained emitter — measured as five goldens moving with the
   fire tune inert in all of them.
+`START_AGE_RANGE` (`PufferState.StartAgeMin`/`StartAgeMax`, `PLAN-puffer-engine-deltas` B4): a
+particle is born at `Rand(StartAgeMin, StartAgeMax)` instead of age 0, gated on
+`HasStartAgeRange` so the extra `Rand()` draw is skipped entirely for the ~2,900 puffers that
+don't author the key (only 4 in the install do). `FUN_0054e6e0`'s born-dead skip
+(`age0 >= life` ⇒ never created) is a **disproof, not implemented**: the shipped data's max
+authored start age (0.1 s) never reaches its min authored lifetime (1.0 s), so the skip is dead
+code. A negative age (`fire_at_zepskin3`'s min is −1.0) is drawn on the frame it's born, pinned to
+stop 0 of every ramp/envelope (`p.Age > 0f ? p.Age / p.Life : 0f` in `_Process`), and outlives its
+authored `LIFETIME_RANGE` by `|age0|` since reap is `age >= life` with no sign test.
 ⚠ `DEVIATION_DISTANCE` scatters **±0.5·d**, not ±d (`PLAN-puffer-engine-deltas` A2):
   `FUN_0054f8b0` spawns at `prev + delta*frac + (rand01 - 0.5) * d` per axis, so the offset is a
   HALF-width around the origin — `Rand(-d, d)` was drawing twice the authored width per axis

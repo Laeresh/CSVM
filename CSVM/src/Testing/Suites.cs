@@ -270,6 +270,7 @@ public static class Suites
             PufferStillSputter(ctx, trailState);
             PufferStaticBurn(ctx, trailState);
             PufferStopRevive(ctx, trailState);
+            PufferStartAgeBehavior(ctx);
         }
         finally
         {
@@ -480,6 +481,73 @@ public static class Suites
                 $"a stopped trail revived at a far site re-homes there, no puff line across the jump");
             ctx.Check(gpu.LastFrame.Any(p => p.Position.DistanceTo(b) < 3f),
                 $"the revive restarted emission fresh at the new site");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    /// <summary>`START_AGE_RANGE` (`PLAN-puffer-engine-deltas` B4): a synthetic state authoring a
+    /// negative minimum, mirroring <c>fire_at_zepskin3</c>'s (−1.0, 0.1) — the census's only
+    /// negative case, ~91% of whose particles are born already aged. Checks four things
+    /// `FUN_0054ee10`/`FUN_0054e6e0` settle: every particle is drawn (the engine's own born-dead
+    /// skip never fires with this install's data, so it is not reproduced — a disproof, not a
+    /// bug); a negative-age particle is pinned to stop 0 of both the colour ramp and the growth
+    /// ramp rather than being skipped or extrapolated past/below it; and it outlives its authored
+    /// LIFETIME_RANGE by up to |StartAgeMin| instead of reaping on the old schedule.</summary>
+    private static void PufferStartAgeBehavior(TestContext ctx)
+    {
+        var state = new PufferState
+        {
+            Name = "test_start_age",
+            Number = 40,
+            TimeInterval = 1000f, // never re-fires on its own — one Burst, one batch
+            SizeMin = 2f,
+            SizeMax = 2f,
+            GrowthFactor = 5f, // an unclamped negative t would shrink (or negate) size below BaseSize
+            LifetimeMin = 1f,
+            LifetimeMax = 1f,
+            StartAgeMin = -1f,
+            StartAgeMax = 0.1f,
+            Colors = new[] { (0f, Colors.Red), (0.5f, Colors.Green) },
+        };
+        ctx.Check(state.HasStartAgeRange, $"the synthetic state authors START_AGE_RANGE");
+
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu, activeDuration: 0.01f);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            puffer.Burst(new Vector3(0f, 1100f, 0f));
+            puffer._Process(1f / 60f);
+
+            ctx.Same(40, gpu.Shown,
+                $"every particle draws — the engine's born-dead skip can't fire with this install's data (max start age 0.1 < min lifetime 1) shown={gpu.Shown}");
+
+            int redCount = gpu.LastFrame.Count(p => p.Color == Colors.Red);
+            ctx.Check(redCount > gpu.LastFrame.Count / 2,
+                $"most particles (born with age <= 0) show the colour ramp's stop 0, not skipped or interpolated past it red={redCount}/{gpu.LastFrame.Count}");
+
+            var bySize = gpu.LastFrame.GroupBy(p => p.Size).OrderByDescending(g => g.Count()).First();
+            ctx.Check(bySize.Count() > gpu.LastFrame.Count / 2,
+                $"most particles collapse onto one identical size — the growth ramp clamps age<=0 to stop 0 rather than each drawing its own extrapolated value count={bySize.Count()}/{gpu.LastFrame.Count}");
+            float commonSize = bySize.Key;
+            ctx.Check(gpu.LastFrame.All(p => p.Size >= commonSize - 1e-3f),
+                $"no particle sits below the clamped stop-0 size — an unclamped negative age would shrink (or negate) it");
+
+            // Past the unmodified 1 s LIFETIME_RANGE, particles born with a negative start age
+            // must still be alive: they need up to Life - StartAgeMin = 2 s of Age to reap.
+            for (int i = 0; i < 63; i++) // 1.05 s
+                puffer._Process(1f / 60f);
+            // ~85% of the authored range is expected to still be alive here (age0 in [-1,0.1)
+            // uniformly, elapsed ~1.07 s ⇒ P(dead) ≈ 0.15); a generous >=20/40 margin below that.
+            ctx.Check(gpu.Shown >= 20,
+                $"negative-age particles outlive their authored LIFETIME_RANGE by |age0| instead of reaping on the old schedule shown={gpu.Shown}");
+
+            for (int i = 0; i < 60; i++) // + 1 s more = past every particle's 2 s worst case
+                puffer._Process(1f / 60f);
+            ctx.Same(0, gpu.Shown, $"every particle eventually reaps once its real (shifted) age reaches its lifetime");
         }
         finally
         {

@@ -227,8 +227,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — the missing per-particle mechanisms
 
-3. ☐ `SCALE_SEQUENCE`: the age→scale ramp, of which `GROWTH_FACTOR` is the two-stop case
-4. ☐ `START_AGE_RANGE`: random birth age, sub-frame age offset, and the born-dead skip
+3. ❌ `SCALE_SEQUENCE`: the age→scale ramp — **disproven, unreachable**; landed as a doc correction
+4. ☑ `START_AGE_RANGE`: random birth age (the born-dead skip is a documented disproof)
 5. ☐ Sub-frame emission — spread a frame's puffs along the emitter's motion segment
 6. ☐ Friction damps toward the wind, not toward zero
 
@@ -409,7 +409,43 @@ read on scatter width — capture it before and after.
 
 # Wave B — the missing per-particle mechanisms
 
-## B3 ☐ `SCALE_SEQUENCE`: the age→scale ramp, of which `GROWTH_FACTOR` is the two-stop case
+## B3 ❌ `SCALE_SEQUENCE`: the age→scale ramp — disproven, closed as a doc correction
+
+**Closed as a disproof — no simulation code was written, and none was needed.** The census gate the
+item set for itself came back empty and the item stopped there, as the ground rules require.
+Independently re-derived over 17,569 extracted JSON files: `SCALE_SEQUENCE` appears **zero times**
+anywhere in this install (0 of 1,293 reader files, 879 `PUFFER_STATE` blocks; 0 in the compiled
+surface), and of the 2,906 events authoring `growth_factors`, **every single one has exactly two
+stops** with entry 0 = `(0.0, 1.0)`. So `Mathf.Lerp(1f, GrowthFactor, lifeFrac)` is not "right for
+two-stop puffers and silently wrong for others" — it is right for **100%** of this install, and it
+stays untouched.
+
+**What the item established instead, and what was corrected.**
+1. `growth_factors[i]` is `(age_i, scale_i)`, **proven from the data alone**: 216 events author a
+   second entry whose "max" is below its "min", down to `(1.0, −0.2)` — coherent as a stop,
+   incoherent as a range.
+2. The `anim-definitions.md:1180` "matches 172 of 177 puffers / five name collisions" claim
+   **does not reproduce** — re-running its own denominator gives *zero* mismatches; the 31 apparent
+   ones differ by 1.9e-07, float32↔float64 print noise. Withdrawn.
+3. The real cause is an **undocumented reader idiom**: a `PUFFER_STATE`'s own `NAME` (a namespace
+   separate from `AT_NODE`) can carry a `*` wildcard and expands at compile time. Exactly three do,
+   and they expand into exactly the 7 compiled names with no reader definition — and nothing else.
+4. Genuine collisions are a different thing and do exist: 17 reader names carry more than one
+   distinct `GROWTH_FACTOR` (`smokerpuff` spans 4.0 to 85.0), each resolved per file. None is a
+   multi-stop ramp. Compiled↔reader disagreements, once wildcards expand: none, on any key.
+
+**A wrong data shape found and removed.** `AnimDefs.AddPufferState` synthesised a *single*-entry
+`growth_factors = [{min: 0, max: G}]`, which under the corrected reading literally encodes
+*"at age 0, scale G"*. It yielded the right number only via a compensating `Count == 1` fallback in
+`FromAnimEvent`. It now emits the engine's two stops, `(0,1)` and `(1,G)`, so the normalised reader
+shape is identical to the compiled one. Value-preserving.
+
+**Verified.** Full `RunTests.ps1` green — 871 units, 29 engine suites, 13/13 goldens
+hash-identical. No behaviour change, so no golden or chapter movement was expected or seen.
+
+### Original approach (kept for reference)
+
+## B3 (original) `SCALE_SEQUENCE`: the age→scale ramp, of which `GROWTH_FACTOR` is the two-stop case
 
 **Goal.** A puffer whose authored size ramp has more than two stops animates through all of them,
 instead of being flattened to a straight line to the wrong endpoint.
@@ -459,7 +495,47 @@ regression.
 - `docs/formats/anim-definitions.md:1180-1182` states the old `(min,max)` reading as fact. It must
   be corrected in the same turn, not left to D10.
 
-## B4 ☐ `START_AGE_RANGE`: random birth age, sub-frame age offset, and the born-dead skip
+## B4 ☑ `START_AGE_RANGE`: random birth age (the born-dead skip is a documented disproof)
+
+**Landed.** `PufferState` gains `StartAgeMin`/`StartAgeMax`, populated in **both** parsers
+(`start_age_range` compiled, `START_AGE_RANGE` reader), and all three spawn paths seed
+`Particle.Age` from `Rand(StartAgeMin, StartAgeMax)` instead of the literal `0f`, positioned
+immediately after the lifetime draw to match the engine's own lifetime-then-start-age order as
+closely as our load-bearing pos → vel → size → life order allows.
+
+**The extra draw is gated** on a `HasStartAgeRange` predicate, so the ~2,900 puffers that do not
+author the key consume no additional `_rng` draw and stay bit-identical. This was the item's main
+risk — an unconditional draw would have re-scattered every emitter in the game.
+
+**Negative ages work as the engine works them.** `lifeFrac` is now
+`p.Age > 0f ? p.Age / p.Life : 0f`, mirroring `FUN_0054e6e0`'s `if (0.0 < age)` clamp. A
+negative-age particle is **drawn on the frame it is born**, pinned to stop 0 of every ramp and
+envelope, while `p.Age` keeps integrating and reaping normally — so it outlives its authored
+lifetime by `|age0|`. Stagger-and-hold, not a spawn delay.
+
+**The born-dead skip is a documented disproof, not code.** The engine's `if (age0 >= life)` guard
+needs a start age at or above a lifetime; across all four authoring puffers the maximum authored
+start age is **0.1 s** and the minimum authored lifetime is **1.0 s**, so it can never fire. It is
+deliberately not reproduced, and a code comment at the field says why, so a later reader does not
+"fix" the omission.
+
+**Verified.** Full `RunTests.ps1` green — **871 units** (4 new `START_AGE_RANGE` assertions),
+**29/29 engine suites**, **13/13 goldens hash-identical**. 8-chapter `--freecam --det --frames=90`
+sweep: all eight completed and produced their screenshots, zero real errors (the single `ERROR`
+substring in C1's log is `godot_variant_call_error` inside a stack trace attached to the expected
+headless "no audio session" sound warning, not a failure). Unchanged goldens are the *expected*
+result here, since none of the four authoring puffers (`fire_at_zepskin2/3`, `depotfirepuff`,
+`fire_at_hydrotank`) appears in a golden pose.
+
+**⚠ Unverified.** The gate's no-extra-draw property is argued from the code and corroborated by 13
+unchanged goldens, but no deliberate able-to-fail control was run against it (`docs/verification.md`
+would want one before treating "nothing moved" as proof). Visual confirmation of the four affected
+puffers — the zeppelin-skin fires, the C1 fuel-truck and the C3 hydrogen tank — is owed at the
+controls and has not been done.
+
+### Original approach (kept for reference)
+
+## B4 (original) `START_AGE_RANGE`: random birth age, sub-frame age offset, and the born-dead skip
 
 **Goal.** A puffer's particles are born spread across their life phase, the way the original's are,
 instead of all starting at age zero.

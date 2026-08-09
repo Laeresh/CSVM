@@ -193,8 +193,9 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt flying, or the 2–4-player splitscreen Dogfight deathmatch, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, world destructibles that take damage, die, lose collision, throw debris and reset — and planes shoot planes down (M4 A1, front-loaded). The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
 **Active plan:** [`docs/PLAN-puffer-engine-deltas.md`](docs/PLAN-puffer-engine-deltas.md) — Wave A
-(A1/A2, the two factor-of-two conventions) landed; Wave B (B3–B6, the missing per-particle
-mechanisms) is next. Two other plans completed on 2026-08-09, both archived in
+(A1/A2, the two factor-of-two conventions) landed; in Wave B, B3 is closed as a disproof
+(`SCALE_SEQUENCE` is authored nowhere in this install) and B4 (`START_AGE_RANGE`) has landed —
+B5 (sub-frame emission) and B6 (wind-coupled friction) are next, then Wave C. Two other plans completed on 2026-08-09, both archived in
 [`docs/plans/`](docs/plans/plans.md):
 [`PLAN-weather-decompile-match.md`](docs/plans/PLAN-weather-decompile-match.md) and
 [`PLAN-flight-model-rewrite.md`](docs/plans/PLAN-flight-model-rewrite.md).
