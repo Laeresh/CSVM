@@ -2019,12 +2019,28 @@ total, the other 6 carry no live emitter.
 `START_AGE_RANGE` (`PufferState.StartAgeMin`/`StartAgeMax`, `PLAN-puffer-engine-deltas` B4): a
 particle is born at `Rand(StartAgeMin, StartAgeMax)` instead of age 0, gated on
 `HasStartAgeRange` so the extra `Rand()` draw is skipped entirely for the ~2,900 puffers that
-don't author the key (only 4 in the install do). `FUN_0054e6e0`'s born-dead skip
-(`age0 >= life` ⇒ never created) is a **disproof, not implemented**: the shipped data's max
-authored start age (0.1 s) never reaches its min authored lifetime (1.0 s), so the skip is dead
-code. A negative age (`fire_at_zepskin3`'s min is −1.0) is drawn on the frame it's born, pinned to
+don't author the key (only 4 in the install do).
+A negative age (`fire_at_zepskin3`'s min is −1.0) is drawn on the frame it's born, pinned to
 stop 0 of every ramp/envelope (`p.Age > 0f ? p.Age / p.Life : 0f` in `_Process`), and outlives its
 authored `LIFETIME_RANGE` by `|age0|` since reap is `age >= life` with no sign test.
+**Sub-frame emission** (`PLAN-puffer-engine-deltas` B5): `SustainAt` keeps the previous frame's
+emitter origin and spreads a frame's batches along the motion segment instead of stacking them on
+today's pose — batch `b` of `batches` spawns at `prevOrigin.Lerp(origin, frac)` with
+`frac = (b+1)·interval / accumulator`, and carries the engine's matching `(1 - frac)·dt` added to
+its start age (`FUN_0054f8b0`). The first frame after a `Stop()`/revive re-homes `_sustainPrevOrigin`
+to the current pose rather than trailing from the stale one — the same ghost-trail rule
+`TrailAdvance` follows (commit 450131a).
+**The born-dead skip IS implemented** (`if (age0 >= life)` ⇒ not created, no pool slot consumed, all
+three spawn paths). B4 closed it as an unreachable disproof by comparing the authored
+`START_AGE_RANGE` alone (max 0.1 s vs. min lifetime 1.0 s) — right about the key, **wrong about the
+guard**: `age0` is that draw *plus* B5's `(1 - frac)·dt`, so a long frame makes the skip reachable
+for ANY puffer that authors no `START_AGE_RANGE` at all. A 5 s hitch gives the earliest catch-up
+batch ~4.8 s of start age, past every lifetime in the install; those batches really are that old, so
+a hitch produces mostly-empty catch-up and the pool fills on the *following* frame instead, as the
+leftover accumulator drains at a normal `dt`. Do not "fix" this by clamping the age-offset `dt` —
+that clamp was tried, it keeps dead batches alive, and it is an invented divergence the skip exists
+to make unnecessary. Every draw is made before the skip decides, so a skipped particle consumes the
+same `_rng` stream a created one would.
 ⚠ `DEVIATION_DISTANCE` scatters **±0.5·d**, not ±d (`PLAN-puffer-engine-deltas` A2):
   `FUN_0054f8b0` spawns at `prev + delta*frac + (rand01 - 0.5) * d` per axis, so the offset is a
   HALF-width around the origin — `Rand(-d, d)` was drawing twice the authored width per axis

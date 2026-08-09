@@ -50,7 +50,7 @@ A state is a **fully-defined emitter iff it has `NUMBER` (burst) or `DISTANCE_IN
 | `COLORS` | [[lifeFrac, r, g, b, a]…] | colour-over-age ramp; rgb dual-encoded (the [weather.md](weather.md) rule: any component > 1 ⇒ ÷255), alpha 0–1. `dense_firetrail`'s smoke is born orange (255,164,90) → near-black |
 | `FADE_RANGE` | [near, far] m | camera-distance fade (`fire_n_smoke`: 1500–1700). Parsed by mech3ax, **not implemented** — set on 400 of C1's 721 events |
 | `NEAR_FADE` | [a, b] | near-camera fade (70/20 almost everywhere). The compiled payload calls it `unk_range`. Parsed, **not implemented** |
-| `START_AGE_RANGE` | [min, max] s | random birth age — a particle is born at `Rand(min, max)` instead of age 0, negative values included (`fire_at_zepskin3`: −1.0 to 0.1). **Implemented** (`PufferState.StartAgeMin`/`StartAgeMax`); authored by only 4 puffers in the install, 80 compiled events total (`PLAN-puffer-engine-deltas` B4) |
+| `START_AGE_RANGE` | [min, max] s | random birth age — a particle is born at `Rand(min, max)` instead of age 0, negative values included (`fire_at_zepskin3`: −1.0 to 0.1). **Implemented** (`PufferState.StartAgeMin`/`StartAgeMax`); authored by only 4 puffers in the install, 80 compiled events total (`PLAN-puffer-engine-deltas` B4). ⚠ The key is not the whole birth age: the engine's `age0` is this draw **plus** `(1 - frac)·dt`, the sub-frame term of the time-cadence spawn (B5), and it discards the particle outright when `age0 >= life` — so that skip fires on a long frame for **any** puffer, authored key or not |
 | `WIND_FACTOR` / `PRIORITY` | — | carried by 6 / 11 C1 events, **not implemented** |
 
 **`TEXTURE_SEQUENCE` times are lifetime fractions, not seconds.** Across all 1,750 flipbook

@@ -194,8 +194,8 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Active plan:** [`docs/PLAN-puffer-engine-deltas.md`](docs/PLAN-puffer-engine-deltas.md) — Wave A
 (A1/A2, the two factor-of-two conventions) landed; in Wave B, B3 is closed as a disproof
-(`SCALE_SEQUENCE` is authored nowhere in this install) and B4 (`START_AGE_RANGE`) has landed —
-B5 (sub-frame emission) and B6 (wind-coupled friction) are next, then Wave C. Two other plans completed on 2026-08-09, both archived in
+(`SCALE_SEQUENCE` is authored nowhere in this install) and B4 (`START_AGE_RANGE`) and B5
+(sub-frame emission) have landed — B6 (wind-coupled friction) is next, then Wave C. Two other plans completed on 2026-08-09, both archived in
 [`docs/plans/`](docs/plans/plans.md):
 [`PLAN-weather-decompile-match.md`](docs/plans/PLAN-weather-decompile-match.md) and
 [`PLAN-flight-model-rewrite.md`](docs/plans/PLAN-flight-model-rewrite.md).

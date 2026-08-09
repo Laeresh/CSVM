@@ -42,11 +42,18 @@ public sealed class PufferState
     /// <c>Rand(StartAgeMin, StartAgeMax)</c> rather than at age 0. Both default to 0, so an
     /// unauthored puffer draws nothing extra and seeds <c>Particle.Age = 0f</c> exactly as before.
     /// Only 4 puffers in the install author this key, one of them (<c>fire_at_zepskin3</c>) with a
-    /// negative minimum (−1.0) — ~91% of its particles are therefore born already aged. The
-    /// engine's own spawn also skips creation outright when the drawn age is ≥ the drawn lifetime
-    /// (`FUN_0054f8b0`), but with the shipped data (max authored start age 0.1 s, min authored
-    /// lifetime 1.0 s across all four puffers) that skip can never fire — implementing it would be
-    /// dead code, so it is deliberately not reproduced here.</summary>
+    /// negative minimum (−1.0) — ~91% of its particles are therefore born already aged.
+    ///
+    /// <para>⚠ This field is NOT the whole of the engine's birth age, and B4 originally mis-scoped
+    /// the born-dead skip on that mistake. <c>FUN_0054f8b0</c>'s <c>age0</c> is
+    /// <c>START_AGE_RANGE draw + (1 - frac)·dt</c> — the sub-frame term B5 added in
+    /// <see cref="SustainAt"/> — and the engine skips creating the particle outright when
+    /// <c>age0 >= life</c>. B4 closed that skip as unreachable by comparing the authored key alone
+    /// (max start age 0.1 s vs. min lifetime 1.0 s across the four authoring puffers). That
+    /// comparison is right about the key and wrong about the guard: the sub-frame term makes the
+    /// skip reachable on any long frame, for ANY puffer, with no <c>START_AGE_RANGE</c> authored at
+    /// all — a 5 s hitch hands the earliest catch-up batch an offset of ~4.8 s, which is past every
+    /// lifetime in the install. The skip is implemented in all three spawn paths.</para></summary>
     public float StartAgeMin, StartAgeMax;
 
     /// <summary>AT_NODE's optional trailing offset (AT_NODE is [nodeName, dx?, dy?, dz?]),
@@ -382,6 +389,7 @@ public sealed partial class Puffer : Node3D
 
     private bool _sustaining;      // continuous TIME_INTERVAL mode (AnimRuntime's PUFFER_STATE)
     private float _sustainCarry;   // seconds carried into the next emission interval
+    private Vector3 _sustainPrevOrigin; // last frame's emitter origin, for sub-frame interpolation (B5)
 
     /// <summary>Live particle count — diagnostics only (the <c>--debug-anim</c> puffer census, which
     /// is how a headless run confirms a crash's emitters are actually spawning).</summary>
@@ -719,14 +727,19 @@ public sealed partial class Puffer : Node3D
     /// Continuous emission at a moving world point — the third emission mode, alongside the
     /// one-shot <see cref="Burst"/> and the distance-driven <see cref="TrailAdvance"/>. This
     /// is what an animation's <c>PUFFER_STATE … ACTIVE_STATE 1</c> asks for: emit
-    /// <c>NUMBER</c> sprites every <c>TIME_INTERVAL</c>, indefinitely, wherever the emitter
-    /// node currently is (the C1 train's smokestack moves along the whole track loop).
-    /// Particles live in world space, so they are left behind rather than dragged along.
-    /// Call every frame while the puffer is on; <see cref="SustainEnd"/> stops emission and
-    /// lets the live particles decay.
+    /// <c>NUMBER</c> sprites every <c>TIME_INTERVAL</c>, indefinitely, spread along the
+    /// emitter's own motion since the previous call rather than stacked on today's pose — a
+    /// fast host (the C1 train's smokestack) lays a continuous line instead of a clump per
+    /// frame (<c>FUN_0054f8b0</c>: batch <c>k</c> of <c>count</c> spawns at
+    /// <c>frac = (k+1)·interval / accumulator</c> along <c>prevOrigin → origin</c>, with the
+    /// matching <c>(1 - frac)·dt</c> added to the drawn start age — B4's plumbing). Particles
+    /// live in world space, so they are left behind rather than dragged along. Call every frame
+    /// while the puffer is on; <see cref="SustainEnd"/> stops emission and lets the live
+    /// particles decay.
     /// </summary>
     private void SustainAt(Vector3 worldPos, Basis worldBasis, float dt)
     {
+        var origin = worldPos + worldBasis * _state.AtNodeOffset;
         if (!_sustaining)
         {
             TopLevel = true;                 // world-space particles, like the trail mode
@@ -735,13 +748,31 @@ public sealed partial class Puffer : Node3D
             _active = true;
             Visible = true;
             _sustainCarry = _state.TimeInterval; // emit on the very first frame
+            // No prior pose to interpolate from — re-home here rather than trailing from a
+            // stale point, exactly as TrailAdvance's own homing rule (the rocket-explosion
+            // ghost-trail fix, commit 450131a): without this a revive after Stop() would draw
+            // a line of puffs from wherever the emitter last was.
+            _sustainPrevOrigin = origin;
         }
         _sustainCarry += dt;
         float interval = Mathf.Max(_state.TimeInterval, 1e-3f);
-        int batches = Mathf.Min((int)(_sustainCarry / interval), MaxSustainBatchesPerFrame);
+        float accumulator = _sustainCarry;
+        int batches = Mathf.Min((int)(accumulator / interval), MaxSustainBatchesPerFrame);
+        // The age offset rides the RAW dt, exactly as FUN_0054f8b0 does — deliberately unclamped.
+        // On a long frame the early batches are handed an offset of seconds, which is physically
+        // what they are: a batch whose virtual emission moment was 4.8 s ago really is 4.8 s old,
+        // and a puffer with a 1 s LIFETIME_RANGE really did emit and bury it inside the hitch.
+        // That is precisely why the engine carries the born-dead skip in its spawn (see
+        // SpawnSustained), and clamping the term here to hold such batches alive would be an
+        // invented divergence dressed as a bound.
         for (int b = 0; b < batches; b++)
-            SpawnSustained(worldPos, worldBasis);
+        {
+            float frac = (b + 1) * interval / accumulator;
+            var spawnOrigin = _sustainPrevOrigin.Lerp(origin, frac);
+            SpawnSustained(spawnOrigin, worldBasis, (1f - frac) * dt);
+        }
         _sustainCarry -= batches * interval;
+        _sustainPrevOrigin = origin;
     }
 
     /// <summary>Stops sustained emission; live particles finish their lifetimes.</summary>
@@ -793,17 +824,20 @@ public sealed partial class Puffer : Node3D
         Visible = false;
     }
 
-    private void SpawnSustained(Vector3 worldPos, Basis worldBasis)
+    /// <summary><paramref name="origin"/> is already the emitter's world point for this batch —
+    /// the AT_NODE offset applied and, since B5, interpolated along the emitter's motion since
+    /// the previous frame — <see cref="SustainAt"/> owns both. <paramref name="ageOffset"/> is
+    /// B5's <c>(1 - frac) · dt</c> sub-frame correction: added to the drawn start age regardless
+    /// of whether this state authors <c>START_AGE_RANGE</c>, since the term is independent of
+    /// that key (a puffer with no start-age range still gets it, seeding <c>Particle.Age</c>
+    /// with the offset alone instead of the literal 0f B4 replaced).</summary>
+    private void SpawnSustained(Vector3 origin, Basis worldBasis, float ageOffset)
     {
         var min = _state.MinRandomVelocity;
         var max = _state.MaxRandomVelocity;
         // LOCAL_VELOCITY is in the emitter node's frame (the smokestack's "up"); WORLD_VELOCITY
         // is not. Rotating the local part is what keeps a banking/turning emitter correct.
         var baseVel = worldBasis * _state.LocalVelocity + _state.WorldVelocity;
-        // AT_NODE's offset is likewise in the host's own frame — this is what spreads C1's
-        // three waterfall splash puffers (±11 m sideways) instead of stacking them on the
-        // shared anchor node's exact origin.
-        var origin = worldPos + worldBasis * _state.AtNodeOffset;
         float d = _state.DeviationDistance;
         for (int k = 0; k < _state.Number && _liveCount < _particles.Length; k++)
         {
@@ -818,23 +852,36 @@ public sealed partial class Puffer : Node3D
             // The fire tune: scale the world-vertical rise (and the puff's lifetime below)
             // of the fire family only — 1 for every other emitter, so this is the identity there.
             vel.Y *= _fireRiseScale;
+            float size = Rand(_state.SizeMin, _state.SizeMax) * _sustainSizeScale;
+            float life = Rand(_state.LifetimeMin, _state.LifetimeMax) * _fireLifeScale;
+            // START_AGE_RANGE (B4): FUN_0054f8b0 draws lifetime, then start age, both before
+            // its position draws. Ours draws pos/vel first (A2's order, load-bearing for every
+            // other puffer), so the closest match is start age immediately after life, right
+            // where it already sat as the literal 0f this replaces. Gated on HasStartAgeRange
+            // so the ~2,900 puffers that don't author the key draw nothing extra here and stay
+            // bit-identical; only the 4 that do (their own particles re-scatter from here on,
+            // which is expected). B5 adds ageOffset on top, unconditionally — it is computed,
+            // not drawn, so it costs no extra _rng call and applies even to the ~2,900 puffers
+            // with no START_AGE_RANGE at all.
+            float age = (_state.HasStartAgeRange ? Rand(_state.StartAgeMin, _state.StartAgeMax) : 0f) + ageOffset;
+            float frame = _state.TextureSequence.Count > 0 ? 0f
+                : Mathf.Min(_state.Textures.Count - 1,
+                    Mathf.FloorToInt((float)_rng.NextDouble() * _state.Textures.Count));
+            // The engine's born-dead skip (FUN_0054f8b0: `if (age0 >= life)` → no particle is
+            // created at all). Every draw above has already been made, so a skipped particle
+            // consumes the same _rng stream a created one would — the skip changes what is
+            // stored, never the scatter of its neighbours. It consumes no pool slot either:
+            // _liveCount is not advanced, and the k-loop goes on to try the rest of NUMBER.
+            if (age >= life)
+                continue;
             _particles[_liveCount++] = new Particle
             {
                 Pos = pos,
                 Vel = vel,
-                BaseSize = Rand(_state.SizeMin, _state.SizeMax) * _sustainSizeScale,
-                Life = Rand(_state.LifetimeMin, _state.LifetimeMax) * _fireLifeScale,
-                // START_AGE_RANGE (B4): FUN_0054f8b0 draws lifetime, then start age, both before
-                // its position draws. Ours draws pos/vel first (A2's order, load-bearing for every
-                // other puffer), so the closest match is start age immediately after life, right
-                // where it already sat as the literal 0f this replaces. Gated on HasStartAgeRange
-                // so the ~2,900 puffers that don't author the key draw nothing extra here and stay
-                // bit-identical; only the 4 that do (their own particles re-scatter from here on,
-                // which is expected).
-                Age = _state.HasStartAgeRange ? Rand(_state.StartAgeMin, _state.StartAgeMax) : 0f,
-                Frame = _state.TextureSequence.Count > 0 ? 0f
-                    : Mathf.Min(_state.Textures.Count - 1,
-                        Mathf.FloorToInt((float)_rng.NextDouble() * _state.Textures.Count)),
+                BaseSize = size,
+                Life = life,
+                Age = age,
+                Frame = frame,
             };
         }
     }
@@ -846,17 +893,29 @@ public sealed partial class Puffer : Node3D
         var min = _state.MinRandomVelocity;
         var max = _state.MaxRandomVelocity;
         float d = _state.DeviationDistance;
+        // ±0.5·d, not ±d (A2) — see SpawnSustained's comment.
+        var pos = worldPos + new Vector3(Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d));
+        var vel = _state.WorldVelocity + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z));
+        float size = Rand(_state.SizeMin, _state.SizeMax) * _trailSizeScale;
+        float life = Rand(_state.LifetimeMin, _state.LifetimeMax);
+        // START_AGE_RANGE (B4): see SpawnSustained's comment — gated draw, right after Life.
+        float age = _state.HasStartAgeRange ? Rand(_state.StartAgeMin, _state.StartAgeMax) : 0f;
+        float frame = _state.TextureSequence.Count > 0 ? 0f
+            : Mathf.Min(_state.Textures.Count - 1, Mathf.FloorToInt((float)_rng.NextDouble() * _state.Textures.Count));
+        // The engine's born-dead skip — see SpawnSustained. There is no sub-frame term on this
+        // path (the trail walks distance, not virtual time), so here it can only fire on an
+        // authored START_AGE_RANGE reaching a drawn lifetime. Reproduced anyway: the guard is
+        // the engine's, not a property of today's data.
+        if (age >= life)
+            return;
         _particles[_liveCount++] = new Particle
         {
-            // ±0.5·d, not ±d (A2) — see SpawnSustained's comment.
-            Pos = worldPos + new Vector3(Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d)),
-            Vel = _state.WorldVelocity + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z)),
-            BaseSize = Rand(_state.SizeMin, _state.SizeMax) * _trailSizeScale,
-            Life = Rand(_state.LifetimeMin, _state.LifetimeMax),
-            // START_AGE_RANGE (B4): see SpawnSustained's comment — gated draw, right after Life.
-            Age = _state.HasStartAgeRange ? Rand(_state.StartAgeMin, _state.StartAgeMax) : 0f,
-            Frame = _state.TextureSequence.Count > 0 ? 0f
-                : Mathf.Min(_state.Textures.Count - 1, Mathf.FloorToInt((float)_rng.NextDouble() * _state.Textures.Count)),
+            Pos = pos,
+            Vel = vel,
+            BaseSize = size,
+            Life = life,
+            Age = age,
+            Frame = frame,
         };
     }
 
@@ -884,15 +943,25 @@ public sealed partial class Puffer : Node3D
         float d = _state.DeviationDistance;
         for (int k = 0; k < _state.Number && _liveCount < _particles.Length; k++)
         {
+            // ±0.5·d, not ±d (A2) — see SpawnSustained's comment.
+            var pos = new Vector3(Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d));
+            var vel = baseVel + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z));
+            float size = Rand(_state.SizeMin, _state.SizeMax) * _burstSizeScale;
+            float life = Rand(_state.LifetimeMin, _state.LifetimeMax);
+            // START_AGE_RANGE (B4): see SpawnSustained's comment — gated draw, right after Life.
+            float age = _state.HasStartAgeRange ? Rand(_state.StartAgeMin, _state.StartAgeMax) : 0f;
+            // The engine's born-dead skip — see SpawnSustained. The burst path has no sub-frame
+            // term either (its batches are keyed off _sinceStart, not a carried accumulator), so
+            // as on the trail path only an authored START_AGE_RANGE can fire it.
+            if (age >= life)
+                continue;
             _particles[_liveCount++] = new Particle
             {
-                // ±0.5·d, not ±d (A2) — see SpawnSustained's comment.
-                Pos = new Vector3(Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d)),
-                Vel = baseVel + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z)),
-                BaseSize = Rand(_state.SizeMin, _state.SizeMax) * _burstSizeScale,
-                Life = Rand(_state.LifetimeMin, _state.LifetimeMax),
-                // START_AGE_RANGE (B4): see SpawnSustained's comment — gated draw, right after Life.
-                Age = _state.HasStartAgeRange ? Rand(_state.StartAgeMin, _state.StartAgeMax) : 0f,
+                Pos = pos,
+                Vel = vel,
+                BaseSize = size,
+                Life = life,
+                Age = age,
             };
         }
         _burstsSpawned++;

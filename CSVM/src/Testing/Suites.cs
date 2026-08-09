@@ -266,6 +266,7 @@ public static class Suites
         {
             PufferBurstMode(ctx, burstState);
             PufferSustainMode(ctx, burstState);
+            PufferSustainSubFrameEmission(ctx);
             PufferTrailMode(ctx, trailState);
             PufferStillSputter(ctx, trailState);
             PufferStaticBurn(ctx, trailState);
@@ -317,8 +318,10 @@ public static class Suites
 
     /// <summary>A TIME_INTERVAL state through <c>Emit</c>: the authored state, not the caller,
     /// picks the sustain path; the pool is sized to the steady-state population, emission starts
-    /// on the very first frame, a long frame cannot overrun the pool, and <c>Stop</c> ends
-    /// emission without cutting the live particles short.</summary>
+    /// on the very first frame, a long frame's catch-up batches are born already dead (B5's
+    /// sub-frame age offset + the engine's born-dead skip) while the frame that drains the
+    /// leftover accumulator still cannot overrun the pool, and <c>Stop</c> ends emission without
+    /// cutting the live particles short.</summary>
     private static void PufferSustainMode(TestContext ctx, PufferState state)
     {
         var gpu = new RecordingEmitterRenderer();
@@ -336,14 +339,37 @@ public static class Suites
             ctx.Check(gpu.LastFrame.All(p => p.Position.DistanceTo(origin) < 3f),
                 $"sustained particles spawn at the world point they are driven at, not at the node");
 
-            // A 5 s hitch asks for 25 batches; the catch-up cap and the pool between them must keep
-            // that inside 108. Integrated at a normal dt so the spawns are observable before they age
-            // out — the cap is a spawn-path rule, and this is where it is read.
+            // A 5 s hitch asks for 25 batches, capped at MaxSustainBatchesPerFrame = 8. Those 8 are
+            // CATCH-UP batches: B5 gives batch b the engine's sub-frame start-age offset
+            // (1 - frac)·dt with frac = (b+1)·interval/accumulator, so over an accumulator of
+            // 5.017 s they are born at 4.80, 4.60, … 3.41 s old — every one of them past this
+            // state's ≤ 1 s LIFETIME_RANGE. That is not a bug to be clamped away: a batch whose
+            // virtual emission moment was 4.8 s ago really is 4.8 s old, and it is exactly why
+            // FUN_0054f8b0 carries the born-dead skip. So the hitch's own batches are never
+            // created at all, and — this is the load-bearing half — they consume no pool slot:
+            // LiveCount is still the 18 from the first frame. Read before _Process, so it is the
+            // SPAWN path being asserted and not the reaper tidying up after it. (Able to fail:
+            // without the skip these 144 spawns fill the pool to 108 and this reads 108.)
             puffer.Emit(origin, Basis.Identity, 5f);
+            ctx.Same(18, puffer.LiveCount,
+                $"a 5 s hitch's catch-up batches are born older than their own lifetime and are skipped, consuming no pool slot live={puffer.LiveCount}");
             puffer._Process(1f / 60f);
-            ctx.Same(108, gpu.Shown, $"a 5 s hitch fills the pool and stops there");
+            ctx.Same(18, gpu.Shown, $"nothing from the hitch reaches the draw either shown={gpu.Shown}");
+
+            // The pool-overrun guard, kept and made able to fail. The cap left 3.417 s of
+            // accumulator carried, so the very next frame emits its 8 batches again — but now
+            // against dt = 1/60, whose offsets are ≤ 0.016 s, so they all live. 8 × 18 = 144
+            // spawns against 90 free slots: the spawn loop must clamp at the pool, not write past
+            // it. (That 90 spawns land at all is also the proof that the hitch's batches were
+            // genuinely ATTEMPTED and discarded rather than never generated — a bare dt = 1/60
+            // with no carry would emit no batch at all.)
+            puffer.Emit(origin, Basis.Identity, 1f / 60f);
+            ctx.Same(gpu.Capacity, puffer.LiveCount,
+                $"the drained accumulator fills the pool exactly and stops there live={puffer.LiveCount} pool={gpu.Capacity}");
+            puffer._Process(1f / 60f);
+            ctx.Same(108, gpu.Shown, $"a full pool draws every slot shown={gpu.Shown}");
             ctx.Check(gpu.MaxIndex == gpu.Capacity - 1,
-                $"the hitch reached the pool's last slot and no further max={gpu.MaxIndex} pool={gpu.Capacity}");
+                $"the catch-up reached the pool's last slot and no further max={gpu.MaxIndex} pool={gpu.Capacity}");
 
             puffer.Stop();
             puffer._Process(0.05f);
@@ -351,6 +377,99 @@ public static class Suites
             for (int i = 0; i < 30; i++)  // 1.5 s, past LIFETIME_RANGE's 1 s
                 puffer._Process(0.05f);
             ctx.Same(0, gpu.Shown, $"the live particles finish their own lifetimes and the emitter goes quiet");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    /// <summary><c>PLAN-puffer-engine-deltas</c> B5: a fast-moving TIME_INTERVAL emitter spreads a
+    /// frame's batches along its motion since the previous call instead of stacking them all on
+    /// today's pose (<c>FUN_0054f8b0</c>'s <c>prevOrigin + (origin - prevOrigin)*frac</c>, paired
+    /// with the matching <c>(1 - frac)*dt</c> start-age offset), and the first frame after a
+    /// <c>Stop()</c>/restart re-homes instead of interpolating from the stale pre-stop pose (the
+    /// rocket-explosion ghost-trail rule, commit 450131a).
+    ///
+    /// <para>A synthetic zero-velocity, zero-deviation, zero-COLORS state removes every other
+    /// source of scatter so the eight spawned positions are exactly the interpolated points, not a
+    /// distribution to eyeball: with TIME_INTERVAL 0.1 s and a single 0.8 s accumulator (homed with
+    /// 0 leftover carry), <c>accumulator/interval = 8</c> exactly, so
+    /// <c>frac_k = (k+1)/8</c> for <c>k = 0..7</c> lands at X = 12.5, 25, …, 100 — evenly spaced
+    /// 12.5 m apart, the last one exactly at the current pose, none at the origin. LIFETIME_RANGE
+    /// is pinned to 10 s for two reasons: the batches' age offsets (0.7 s down to 0 s, on the raw
+    /// unclamped dt the engine uses) stay well clear of the born-dead skip, so this test reads the
+    /// interpolation and nothing else; and they stay inside the life-fade envelope's linear ramp
+    /// (<c>FadeFor</c>'s first 0.12 of life), which turns the rendered alpha into a direct, exact
+    /// readout of the age-offset term: <c>alpha = ageOffset / (10 * 0.12)</c>. The skip's own
+    /// reachability is asserted in <c>PufferSustainMode</c>'s 5 s hitch.</para></summary>
+    private static void PufferSustainSubFrameEmission(TestContext ctx)
+    {
+        var state = new PufferState
+        {
+            Name = "test_subframe_sustain",
+            Number = 1,
+            TimeInterval = 0.1f,
+            SizeMin = 1f,
+            SizeMax = 1f,
+            LifetimeMin = 10f,
+            LifetimeMax = 10f,
+        };
+
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu, sustained: true);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            var a = new Vector3(0f, 1200f, 0f);
+            puffer.Emit(a, Basis.Identity, 0f); // homes at A, carry = TimeInterval exactly ⇒ 0 leftover
+            puffer._Process(0f);
+            ctx.Same(1, gpu.Shown, $"the homing frame sputters its own single batch at A");
+
+            var b = a + new Vector3(100f, 0f, 0f); // 100 m in one (hitched) frame
+            puffer.Emit(b, Basis.Identity, 0.8f);  // accumulator = 0 + 0.8 = 8 × interval exactly
+            puffer._Process(0f);
+            ctx.Same(9, gpu.Shown, $"8 more batches join the homing one shown={gpu.Shown}");
+
+            var moved = gpu.LastFrame.Where(p => p.Position.X > 1f).OrderBy(p => p.Position.X).ToList();
+            ctx.Same(8, moved.Count, $"the jump's own 8 batches, excluding the homing puff at A");
+
+            bool evenlySpaced = true, endsAtB = false, noneAtOrigin = true;
+            for (int k = 0; k < moved.Count; k++)
+            {
+                float expectedX = 12.5f * (k + 1);
+                if (!Mathf.IsEqualApprox(moved[k].Position.X, expectedX, 0.05f))
+                    evenlySpaced = false;
+                // ageOffset_k = (1 - (k+1)/8) * dt with the raw dt = 0.8 s, i.e. 0.7, 0.6, … 0.0;
+                // alpha = ageOffset / (10 * FadeIn=0.12).
+                float expectedAlpha = (0.8f - 0.1f * (k + 1)) / 1.2f;
+                if (!Mathf.IsEqualApprox(moved[k].Alpha, expectedAlpha, 0.001f))
+                    ctx.Check(false,
+                        $"batch {k} alpha reads its age offset directly: want {expectedAlpha:F4} got {moved[k].Alpha:F4}");
+            }
+            endsAtB = Mathf.IsEqualApprox(moved[^1].Position.X, 100f, 0.05f);
+            noneAtOrigin = moved.All(p => p.Position.X > 5f);
+            ctx.Check(evenlySpaced,
+                $"eight spawn positions evenly spaced 12.5 m apart along the segment, not stacked at one point");
+            ctx.Check(endsAtB, $"the last (frac=1) batch sits exactly at the current pose");
+            ctx.Check(noneAtOrigin, $"none of the eight sit back at the segment's start");
+
+            // Restart case: Stop() then Emit() at a new, far site — the first frame's puffs must
+            // appear only at the new site, never strung back from B (the ghost-trail trap). The
+            // restart frame is ALSO given a multi-batch accumulator (0.8 s, capped at 8 batches):
+            // a batch count of exactly 1 would land at frac=1 regardless of prevOrigin, which
+            // would pass even with the re-home fix missing — this is the able-to-fail control
+            // (a stale prevOrigin=B would string 8 puffs from ~211 to ~989, well inside the
+            // "stray" window below).
+            puffer.Stop();
+            var c = b + new Vector3(1000f, 0f, 0f);
+            puffer.Emit(c, Basis.Identity, 0.8f);
+            puffer._Process(0f);
+            int strays = gpu.LastFrame.Count(p => p.Position.X > b.X + 10f && p.Position.X < c.X - 10f);
+            ctx.Same(0, strays,
+                $"a restart re-homes at the new site — no puffs interpolated across the 1000 m jump");
+            ctx.Check(gpu.LastFrame.Any(p => p.Position.DistanceTo(c) < 3f),
+                $"the restart's first batch lands at the new site");
         }
         finally
         {
@@ -491,9 +610,10 @@ public static class Suites
     /// <summary>`START_AGE_RANGE` (`PLAN-puffer-engine-deltas` B4): a synthetic state authoring a
     /// negative minimum, mirroring <c>fire_at_zepskin3</c>'s (−1.0, 0.1) — the census's only
     /// negative case, ~91% of whose particles are born already aged. Checks four things
-    /// `FUN_0054ee10`/`FUN_0054e6e0` settle: every particle is drawn (the engine's own born-dead
-    /// skip never fires with this install's data, so it is not reproduced — a disproof, not a
-    /// bug); a negative-age particle is pinned to stop 0 of both the colour ramp and the growth
+    /// `FUN_0054ee10`/`FUN_0054e6e0` settle: every particle is drawn (this state's drawn age never
+    /// reaches its drawn lifetime, so the born-dead skip — which IS implemented, and which B5's
+    /// sub-frame term makes reachable on any long frame — correctly stays silent here); a
+    /// negative-age particle is pinned to stop 0 of both the colour ramp and the growth
     /// ramp rather than being skipped or extrapolated past/below it; and it outlives its authored
     /// LIFETIME_RANGE by up to |StartAgeMin| instead of reaping on the old schedule.</summary>
     private static void PufferStartAgeBehavior(TestContext ctx)
@@ -523,7 +643,7 @@ public static class Suites
             puffer._Process(1f / 60f);
 
             ctx.Same(40, gpu.Shown,
-                $"every particle draws — the engine's born-dead skip can't fire with this install's data (max start age 0.1 < min lifetime 1) shown={gpu.Shown}");
+                $"every particle draws — this state's start age (max 0.1) never reaches its lifetime (1), so the born-dead skip stays silent shown={gpu.Shown}");
 
             int redCount = gpu.LastFrame.Count(p => p.Color == Colors.Red);
             ctx.Check(redCount > gpu.LastFrame.Count / 2,

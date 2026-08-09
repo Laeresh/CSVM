@@ -40,6 +40,8 @@ disagreement is recorded — not averaged away.
 | 3 | The five puffers whose `growth_factors` don't map to a reader `GROWTH_FACTOR` scalar are name collisions across readers (`docs/formats/anim-definitions.md:1180`) | The census (below) reproduces that survey's own denominator and finds **zero** mismatches — the apparent ones differ by 1.9e-07, float print noise. The real cause is wildcard reader names expanding at compile time. Separately: an entry is `(age, scale)`, not `(min, max)`, proven by 216 events whose "max" is less than its "min". |
 | 4 | The CAP-16 footage measurement (≈9.7 m fireball) is a check on the decode | **Video measurements are not trusted evidence in this repo — they have failed repeatedly** (author's standing instruction, 2026-08-09). A1 landed against a *decode*, and the footage number disagreed with the sim at both the old constant (16.6 m) and the new one (20.7 m) — i.e. no value of `SizeScaleDefault` was ever going to reconcile it, so it was never evidence about this constant. Do not re-open a landed decode on a footage estimate. |
 
+| 5 | The engine's born-dead skip (`if (age0 >= life)`) is unreachable with the shipped data — B4's own conclusion | Died at **B5**. `age0` is the `START_AGE_RANGE` draw **plus** `(1 − frac)·dt`, the sub-frame term. B4 compared only the authored key (max 0.1 s) against the minimum lifetime (1.0 s) and so was right about the key and wrong about the guard: any long frame reaches it, for **any** puffer, with no `START_AGE_RANGE` authored at all. A 5 s hitch hands the earliest catch-up batch a start age of ~4.8 s. |
+
 **⚠ Standing rule on video evidence.** Frame-measured distances from the original footage
 (`OriginalScreenshots/`, the `CAP-nn` clips) are **weak evidence** here and have misled this project
 more than once. They are usable for *qualitative* reads — is there a plume, does it rise, roughly
@@ -228,8 +230,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — the missing per-particle mechanisms
 
 3. ❌ `SCALE_SEQUENCE`: the age→scale ramp — **disproven, unreachable**; landed as a doc correction
-4. ☑ `START_AGE_RANGE`: random birth age (the born-dead skip is a documented disproof)
-5. ☐ Sub-frame emission — spread a frame's puffs along the emitter's motion segment
+4. ☑ `START_AGE_RANGE`: random birth age (⚠ its born-dead disproof was **wrong** — corrected by B5)
+5. ☑ Sub-frame emission — spread a frame's puffs along the emitter's motion segment
 6. ☐ Friction damps toward the wind, not toward zero
 
 ### Wave C — the render-side rules
@@ -513,11 +515,21 @@ negative-age particle is **drawn on the frame it is born**, pinned to stop 0 of 
 envelope, while `p.Age` keeps integrating and reaping normally — so it outlives its authored
 lifetime by `|age0|`. Stagger-and-hold, not a spawn delay.
 
-**The born-dead skip is a documented disproof, not code.** The engine's `if (age0 >= life)` guard
-needs a start age at or above a lifetime; across all four authoring puffers the maximum authored
-start age is **0.1 s** and the minimum authored lifetime is **1.0 s**, so it can never fire. It is
-deliberately not reproduced, and a code comment at the field says why, so a later reader does not
-"fix" the omission.
+**⚠ CORRECTED BY B5 — the born-dead skip was NOT a disproof.** B4 closed the engine's
+`if (age0 >= life)` guard as unreachable dead code, reasoning that across the four authoring
+puffers the maximum authored start age is 0.1 s and the minimum authored lifetime is 1.0 s. That is
+right about the key and **wrong about the guard**. The engine's `age0` is not the `START_AGE_RANGE`
+draw — it is that draw **plus `(1 − frac)·dt`**, the sub-frame term of the time-cadence spawn.
+B4's own Evidence section states the full formula; the disproof then tested only half of it. The
+sub-frame term makes the skip reachable on **any long frame, for any puffer, with no
+`START_AGE_RANGE` authored anywhere in the install**: measured on the `puffer-modes` state
+(`TIME_INTERVAL` 0.2, `LIFETIME_RANGE` 0.8–1.0), a 5 s hitch's eight capped catch-up batches are
+born at 4.80, 4.60, 4.40, 4.20, 4.00, 3.80, 3.60 and 3.41 s — all 144 particles born past their own
+lifetime. The skip is implemented in all three spawn paths and lands with B5, which is what made it
+reachable. This is not a defect in the engine's data: a batch whose virtual emission moment was
+4.8 s ago really *is* 4.8 s old. The skip is the engine's answer to its own sub-frame term, and the
+two mechanisms only make sense together — which is why B4, holding one without the other, could not
+see it.
 
 **Verified.** Full `RunTests.ps1` green — **871 units** (4 new `START_AGE_RANGE` assertions),
 **29/29 engine suites**, **13/13 goldens hash-identical**. 8-chapter `--freecam --det --frames=90`
@@ -570,7 +582,69 @@ puffers — that is the expected direction, confirm it is not zero).
   in the binary — the parser reads one `START_AGE_RANGE` list; the two other strings are its
   per-element diagnostics.
 
-## B5 ☐ Sub-frame emission — spread a frame's puffs along the emitter's motion segment
+## B5 ☑ Sub-frame emission — spread a frame's puffs along the emitter's motion segment
+
+**Landed.** `SustainAt` keeps the previous world origin and spawns batch `b` at
+`prevOrigin.Lerp(origin, frac)` with `frac = (b+1)·interval / accumulator`, carrying the engine's
+matching `(1 − frac)·dt` onto the drawn start age (`FUN_0054f8b0`). The first frame after a
+`Stop()`/revive re-homes the previous origin to the current pose rather than trailing from a stale
+one — `TrailAdvance`'s existing ghost-trail rule (commit `450131a`), and the rocket-explosion bug if
+it is missed. The age offset is computed, not drawn, so it adds no `_rng` call.
+
+**⚠ An invented clamp was found and removed.** The first attempt at this item shipped
+`ageDt = Mathf.Min(dt, interval)`, with a comment stating plainly that it existed because the
+unclamped term made `puffer-modes`' 5 s hitch case regress from 108 to 18. The engine has no such
+clamp. It was invented compensation keeping physically-dead particles alive — the exact failure
+mode this plan's ground rules name — and it is precisely what the engine's born-dead skip exists to
+make unnecessary. Removed; the offset rides the raw `dt`.
+
+**The born-dead skip landed here**, in all three spawn paths, because this item is what made it
+reachable (see B4's corrected section). Two properties were engineered deliberately: it **consumes
+no pool slot** (`_liveCount` does not advance; the `k`-loop goes on to try the rest of `NUMBER`),
+and it **does not perturb the RNG stream** — every draw (pos, vel, size, life, start age, frame) is
+made into locals *before* the skip decides, so a skipped particle burns the same draws a created one
+would and cannot re-scatter its neighbours.
+
+**The `puffer-modes` hitch expectation was rewritten**, not relaxed. It had encoded a model the
+engine contradicts — that every catch-up batch is born at age 0. It now asserts two things across
+two frames: (1) after the 5 s hitch, `LiveCount` is still 18, read **before** `_Process` so it is
+the spawn path under test and not the reaper tidying up; and (2) the pool-overrun guard, kept and
+made *more* discriminating — the 8-batch cap leaves 3.4167 s of accumulator carried, so the next
+frame emits its 8 batches at `dt = 1/60` whose offsets are milliseconds and which therefore all
+live: 144 spawns against 90 free slots, asserted to clamp at exactly 108 and reach `MaxIndex` 107.
+That second frame landing 90 spawns is itself the proof the hitch's batches were genuinely
+*attempted and discarded*, since a bare `dt = 1/60` with no carry emits no batch at all.
+
+**Verified.** Able-to-fail control on a real build: with the skip neutered, the hitch's `LiveCount`
+reads **108** (the born-dead batches fill the pool) instead of 18 — both directions observed. Full
+`RunTests.ps1` green: **871 units, 29/29 engine suites, 13/13 goldens**, confirmed on an independent
+re-run by the orchestrator. 8-chapter `--freecam --det --frames=90` sweep: all eight exit 0, **zero**
+`ERROR` lines, every screenshot produced.
+
+**⚠ The goldens manifest had been silently re-baselined** by an earlier attempt's orphaned
+background process, so three consecutive full runs reported a false "13/13 hash-identical" for a
+change that had moved six shots; `git diff` on the manifest is what caught it. Now recorded as
+`GOLD-9` in `docs/verification.md`. Before-images were recovered by neutralising *only* the age
+offset, a build which reproduced HEAD's six committed hashes digit for digit — which also proves the
+entire golden delta is the sub-frame age term and nothing else. A second control forcing `frac = 0`
+changed nothing at all, so **every sustained emitter in every golden pose is stationary** and the
+position interpolation is an exact no-op there. The six moves (`c1-waterfall`, `c3-island`,
+`c4-snow`, `c5-city-night`, `c1-destroy-effects`, `c1-crash`) are birth-age shifts only: max channel
+delta 1 (3 on `c1-crash`), **zero** pixels differing by more than 8/255 in any shot, every change
+bounding box landing on an emitter and nowhere else. Eye-checked before/after: indistinguishable in
+all six.
+
+**⚠ Unverified.** **No golden and no capture carries a *moving* sustained emitter** — the `frac = 0`
+control proves it — so B5's headline case, the C1 train's smokestack laying a line instead of a
+clump, is proven only by headless assertions and **is owed at the controls**. The trail and burst
+paths' skips are unreachable with today's data (neither has a sub-frame term, and no puffer authors
+a `START_AGE_RANGE` reaching a lifetime); they are reproduced for fidelity, not because anything
+reaches them — as dead today as B4 claimed the sustained one was. No node/mesh instance counts were
+read across the sweep, only the error census.
+
+### Original approach (kept for reference)
+
+## B5 (original) Sub-frame emission — spread a frame's puffs along the emitter's motion segment
 
 **Goal.** A fast-moving emitter (the train's smokestack, a trailing plane) lays a continuous line of
 puffs instead of a clump per frame.

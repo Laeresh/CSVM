@@ -152,6 +152,16 @@ and leave gaps when retiring old ones.
   temporarily reverted build.** Measured (`PLAN-overcast-match` B18): the run reported the same 9
   movers the previous item had, yet only 8 moved for this one — `c5-city-night` was byte-identical
   across it, and the census predicting exactly that would have been credited to the wrong change.
+- **GOLD-9** — **"13/13 hash-identical" proves nothing until you have checked `manifest.json` is
+  unmodified in the working tree.** The stage compares against the file on disk, not against HEAD,
+  so a `-RegenGoldens` left behind by an earlier agent (or an earlier attempt at the same item)
+  silently re-baselines the tripwire onto the very build under test — the run then reports a clean
+  PASS for a change that moved six shots. Measured (`PLAN-puffer-engine-deltas` B5): a prior
+  session's regeneration was already in the tree, three separate full runs reported 13/13 identical,
+  and `git diff -- analysis/goldens/manifest.json` showed six hashes had in fact moved. **Run that
+  `git diff` before believing a golden PASS**, and when you need genuine before-images, reproduce
+  HEAD's own hashes from a temporarily neutralised build and check they match the committed ones
+  digit for digit — a before-image that does not reproduce HEAD's hash is not a before-image.
 - **GOLD-7** — **A golden shot that exits nonzero with no PNG is retried once, with evidence kept
   either way.** `RunTests.ps1`'s `goldens` stage reuses `.scratch\goldens\` every run, so a silent
   exit-1 (`BL-039`: a `c1-flight` shot once built its world, rendered a frame, then died with no
