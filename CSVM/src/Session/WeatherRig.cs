@@ -39,8 +39,10 @@ namespace CSVM.Session;
 /// <c>Node3D.Visible</c> under the same rule. It SUBSUMED the hand-rolled altitude gate over the
 /// two ambient cloud populations that <see cref="DeckRegime"/> used to drive (A7) — that rule was
 /// this gate's <c>zone_id 2</c> special case, and there is now exactly one owner of "does this
-/// draw". <see cref="DeckRegime"/> keeps only the deck's PLACEMENT and its lit variant; B13/B14
-/// own the placement half.</para></summary>
+/// draw". <see cref="DeckRegime"/> keeps only the deck's PLACEMENT and its lit variant: above the
+/// band it is the tiles' own authored altitude (B13, <see cref="SetDeckAltitude"/>); below it
+/// stays the A7/B12 <c>cam+DeckCeilingHeight</c> reconstruction, B14's to replace with the zone-1
+/// dome.</para></summary>
 public sealed class WeatherRig
 {
     // ⚠ TUNE (C21/C25, 2026-08-08) — how far above the camera the deck hangs while the camera
@@ -101,11 +103,18 @@ public sealed class WeatherRig
     // instance id — per rig, because each rig flies its own copy of the deck (AssignCloudDecks)
     // through its own altitude regime.
     private readonly Dictionary<ulong, DeckLighting> _deckLighting = new();
+    // B13 verification: the deck Y last applied to each rig's OWN deck copy (keyed by instance
+    // id, same key SetDeckDimmed uses), so Tick can log a change rather than every frame — the
+    // probe evidence for "authored altitude, not the band centre" this item's Verify asks for.
+    private readonly Dictionary<ulong, float> _lastLoggedDeckY = new();
 
     private WeatherState? _weather;
     private string _activeZone;
     private Precipitation? _precip;
     private Vector3 _deckCenter;
+    // The deck tiles' own authored altitude (WorldBuilder.CloudDeckAltitude, B13) — where the
+    // above-band regime now places the deck floor, world-fixed, instead of the band centre.
+    private float _deckAltitude;
     // The deck tiles' undimmed meshes by dimmed-mesh RID (WorldBuilder.CloudDeckUndimmedMeshes).
     private IReadOnlyDictionary<Rid, ArrayMesh> _deckUndimmedMeshes = new Dictionary<Rid, ArrayMesh>();
     private bool _loggedDeckLighting;
@@ -142,8 +151,11 @@ public sealed class WeatherRig
     /// <summary>The deck's altitude regime for ONE camera: where its cloud-deck copy sits, and
     /// whether the deck carries the mission's SUNLIGHT dimming. Below the band's centre the deck
     /// is a ceiling carried with the camera and the sheet is the overcast's dimmed UNDERSIDE; at
-    /// or above it the deck is a world-fixed floor at the centre and the sheet is the undimmed
-    /// top (A7 + C23).
+    /// or above it the deck is a world-fixed floor at <paramref name="authoredY"/> — the tiles'
+    /// OWN authored altitude (<c>WorldBuilder.CloudDeckAltitude</c>: C1/C1C/C2B 960, C4 1050) —
+    /// and the sheet is the undimmed top (A7 + C23; the above-band altitude is B13, superseding
+    /// A7's band-centre pin, which was C4's own coincidence — its authored altitude equals its
+    /// centre, 1050).
     ///
     /// <para>⚠ It no longer answers whether the two ambient cloud populations RENDER. That third
     /// member was A7's hand-rolled altitude gate, and B12 replaced it with the original's own
@@ -168,10 +180,10 @@ public sealed class WeatherRig
     /// <para>⚠ Both the deck altitude and the deck's lit-ness JUMP at the crossing. That is
     /// unobservable only because the crossing is the band centre, which is the middle of the
     /// fully-opaque whiteout core (<see cref="WeatherState.WhiteoutAmount"/>).</para></summary>
-    public static (float DeckY, bool DeckDimmed) DeckRegime(float cameraY, float bandCentre)
+    public static (float DeckY, bool DeckDimmed) DeckRegime(float cameraY, float bandCentre, float authoredY)
     {
         bool below = cameraY < bandCentre;
-        return (below ? cameraY + DeckCeilingHeight : bandCentre, below);
+        return (below ? cameraY + DeckCeilingHeight : authoredY, below);
     }
 
     /// <summary>The trailing zone number of a <c>zone1</c>/<c>zone2</c>/<c>zone3</c> name, or null
@@ -239,6 +251,20 @@ public sealed class WeatherRig
     /// called leaves the deck at −1, i.e. drawn at every state — the pre-B12 behaviour.</summary>
     public void SetDeckZoneId(int zoneId) => _deckZoneId = zoneId;
 
+    /// <summary>The deck tiles' own AUTHORED altitude (<c>WorldBuilder.CloudDeckAltitude</c> —
+    /// C1/C1C/C2B 960, C4 1050), read off the built data. Set from the same place as
+    /// <see cref="SetDeckCenter"/>, for the same reason: the deck is world geometry built with
+    /// the chapter, not mission weather.
+    ///
+    /// <para><c>PLAN-weather-decompile-match</c> B13: above the cloud band <see cref="Tick"/>
+    /// places the deck HERE, world-fixed, instead of re-pinning it to
+    /// <see cref="WeatherState.CloudBandCentre"/> (A7's pin, which was C4's own coincidence — its
+    /// authored altitude equals its band centre, 1050, so C4 renders unchanged by this item; C1's
+    /// 960 vs its former 1047 pin is an 87 m drop). Never called leaves the deck at 0, which only
+    /// matters for a chapter with no deck — <c>rig.Deck</c> is null there and this value is
+    /// unread.</para></summary>
+    public void SetDeckAltitude(float altitude) => _deckAltitude = altitude;
+
     /// <summary>Everything decided per *camera*, once per rig — one in single player, one per
     /// pane in splitscreen: re-centers the skydome, fades the cloud-band whiteout, places the
     /// cloud deck in its altitude regime, and applies the <see cref="CSVM.Mech3.ZoneGate"/> for
@@ -298,11 +324,17 @@ public sealed class WeatherRig
             //     DeckCeilingHeight above it. Climbing, the sheet's texture then looks exactly
             //     the same at every altitude, which is what the original does and what a
             //     world-fixed sheet cannot do: that would grow and parallax as you close on it.
-            //   camera AT/ABOVE the centre — a world-fixed FLOOR at the band centre, still
-            //     following in X/Z so the sheet has no reachable edge. After a climb through the
-            //     whiteout the original's sheet lies below at a fixed height ~ the band centre.
+            //     Still the A7/B12 reconstruction (`cam+400`, tuned to 135 by C25) — B14's to
+            //     replace with the zone-1 dome (`horizon/zone1`'s own camera-anchored ceiling).
+            //   camera AT/ABOVE the centre — a world-fixed FLOOR at `_deckAltitude`, the tiles'
+            //     OWN authored altitude (`WorldBuilder.CloudDeckAltitude`: C1/C1C/C2B 960, C4
+            //     1050), still following in X/Z so the sheet has no reachable edge (B13,
+            //     2026-08-09 — supersedes A7's band-centre pin here, which was C4's own
+            //     coincidence: its authored altitude equals its centre, 1050, so C4 is unmoved by
+            //     this change; C1's 960 vs the former 1047 pin is an 87 m drop).
             //
-            // ⚠ The flip is a JUMP of DeckCeilingHeight, and it is unobservable only because it
+            // ⚠ The flip is a JUMP (DeckCeilingHeight below vs `_deckAltitude` above — not the
+            // same magnitude any more, but still one jump), and it is unobservable only because it
             // happens exactly at the band centre — the middle of the fully-opaque whiteout core
             // (C1: total in 1032–1062, WeatherState.WhiteoutAmount). Moving this altitude, or
             // thinning that core, makes a hard pop visible; if one ever shows, that is a finding
@@ -310,23 +342,37 @@ public sealed class WeatherRig
             //
             // ⚠ Whether the deck DRAWS is no longer decided here at all — that is the zone gate
             // below (the tiles are zone_id 2). This block only decides WHERE it sits and which lit
-            // variant it wears, and it keeps running while the deck is hidden so B13/B14 inherit
-            // an unchanged placement rule.
+            // variant it wears, and it keeps running while the deck is hidden so B14 inherits an
+            // unchanged below-band placement rule.
             //
             // (History: until A6 this pinned Y to the band centre in BOTH regimes — the
             // above-band half of this trick applied everywhere — which buried the deck inside
-            // the `fvol` slab and hung every sprite below it. A6 removed the pin; A7 restores it
-            // for the regime it actually belongs to and gives the other regime its own rule.
-            // The authored altitudes it is NOT using: the four deck chapters ship the deck ~10 m
-            // below their `fvol1`–`fvol9` slab floor — C1 960/970.00, C1C 960/970.73,
-            // C2B 960/970.00, C4 1050/1060.00.)
+            // the `fvol` slab and hung every sprite below it. A6 removed the pin; A7 restored it
+            // for the regime it actually belongs to; B13 replaces THAT pin with the tiles' own
+            // authored altitude, read off the built data (`_deckAltitude`, set by
+            // `SetDeckAltitude`) rather than hardcoded — the four deck chapters ship the deck
+            // ~10 m below their `fvol1`–`fvol9` slab floor: C1 960/970.00, C1C 960/970.73,
+            // C2B 960/970.00, C4 1050/1060.00 — that mesh/slab relationship is unaffected by
+            // this item, since only the WORLD placement changed, not the mesh's own authored Y.)
             if (rig.Deck != null && _weather is { HasCloudBand: true } weather)
             {
-                (float deckY, bool deckDimmed) = DeckRegime(camPos.Y, weather.CloudBandCentre);
+                (float deckY, bool deckDimmed) = DeckRegime(camPos.Y, weather.CloudBandCentre, _deckAltitude);
                 rig.Deck.Position = new Vector3(
                     camPos.X - _deckCenter.X,
                     deckY - _deckCenter.Y,
                     camPos.Z - _deckCenter.Z);
+                // B13 verification evidence: logged only on a change (a flight spends whole
+                // minutes in one regime), so the probe's log names the exact Y this rig's deck
+                // copy renders at — 960/1050 above the band (authored, this item), cam+135 below
+                // (still the A7/B12 ceiling reconstruction, unchanged, B14's to replace).
+                ulong deckId = rig.Deck.GetInstanceId();
+                if (!_lastLoggedDeckY.TryGetValue(deckId, out float lastY) || !Mathf.IsEqualApprox(lastY, deckY))
+                {
+                    _lastLoggedDeckY[deckId] = deckY;
+                    string regime = deckDimmed ? "below band, ceiling" : "at/above band, authored floor";
+                    Log.Debug("world",
+                        $"deck: player {rig.Index} camera y={camPos.Y:0.0} -> deck y={deckY:0.0} ({regime})");
+                }
                 // The same crossing takes the mission's SUNLIGHT dimming off the sheet: what the
                 // ceiling regime shows is the overcast's underside, what the floor regime shows
                 // is its top, and the original renders those at 167.7 and ~210 respectively

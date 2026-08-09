@@ -158,7 +158,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ Per-state fog + clip + sunlight switching (ZONE1 below / ZONE2 above)
 12. ☑ `zone_id` visibility gate switched with the camera state
-13. ☐ Above-deck floor at the authored tile altitude
+13. ☑ Above-deck floor at the authored tile altitude
 14. ☐ Below-deck ceiling = the zone-1 dome (`h_zone1scroll`), scrolling, camera-anchored
 15. ☐ Horizon anchor vertical-scale audit
 
@@ -587,7 +587,56 @@ Danger: `zone_id 1` holds *mission* content — verify objectives/AI logic in th
 depended on those nodes being visible (visibility, not existence, is what the gate touches).
 Do not gate nodes with `zone_id −1`/absent.
 
-## B13 ☐ Above-deck floor at the authored tile altitude
+## B13 ☑ Above-deck floor at the authored tile altitude
+
+**Landed (2026-08-09).** `WeatherRig.DeckRegime(cameraY, bandCentre, authoredY)` gained a third
+parameter: the above-band branch now returns `authoredY` instead of `bandCentre`. `authoredY` is
+`_deckAltitude`, set by the new `WeatherRig.SetDeckAltitude(float)` — called from `GameSession`
+beside the existing `SetDeckZoneId(builder.CloudDeckZoneId)` call — from the new
+`WorldBuilder.CloudDeckAltitude` property, which exposes `_deckAltitude`: the SAME coverage-
+winning altitude bucket `FindCloudDeck` already computes to classify the 144 tiles (C1/C1C/C2B
+960, C4 1050), read off the built data rather than hardcoded, per the item's own trap. The
+below-band branch (`camera.y + DeckCeilingHeight`) is untouched — still the A7/B12 reconstruction,
+B14's to replace with the zone-1 dome.
+
+The C26 rim annulus needed no code change to stay attached: `AddDeckAnnulus` already builds it as
+a CHILD of the `deck` node in the tiles' own local coordinates, so it follows whatever world
+position `Tick` gives `deck.Position` — the same mechanism that already kept it centred through
+`GameSession.AssignCloudDeckIfBuilt`'s AABB re-measurement.
+
+A second static entry point, `WorldBuilder.CloudDeckAltitudeOf(gamez, worldName)`, computes the
+identical altitude as a pure function of the raw `GameZ` data — no scene build, no
+`TextureArchive` — so `DeckRegimeTests` can pin a chapter's authored altitude against the
+extraction without paying for a full world build. Both entry points share one tile test,
+`FlatTileOf` (extracted from the former instance-only `FlatTile`, which now delegates to it).
+
+**Verify — tests.** `.\RunTests.ps1`: **779 units** (0 skipped, `CSVM_DATA_ROOT` set), 29/29
+engine suites, engine errors clean. `DeckRegimeTests` updated: the above-band fact now asserts
+`C1AuthoredDeckY` (960), not `C1Centre` (1047); a new fact pins C4's coincidence (authored 1050 =
+its own centre, so C4 is unmoved by this item by construction); a new `[ExtractedDataTheory]`
+(`TheDeckMeshStaysAboutTenMetresBelowTheFvolSlabFloor`, 4 cases) reads each deck chapter's real
+`gamez` data and asserts `WorldBuilder.CloudDeckAltitudeOf` against the fvol slab floor it sits
+under (C1 960/970.00, C1C 960/970.73, C2B 960/970.00, C4 1050/1060.00 — A6's table, restated from
+the extraction rather than hand-typed) — the A6 trap's "mesh 10 m under the slab floor"
+relationship, unaffected by this item since only the WORLD placement changed, not the mesh's own
+authored Y.
+
+**Verify — goldens.** 7 moved, all pre-existing B11/B12 movers, **zero further movement from
+B13**: an A/B against the pre-B13 build (source files temporarily reverted, rebuilt, goldens
+stage re-run) produced BYTE-IDENTICAL hashes to the B13 build on all 13 shots, including
+`c4-snow` (`4312fd169f12525d23b20b7bb9b8caa2` both times) and every other mover. No golden in
+`analysis/goldens/manifest.json` holds an above-deck pose (all seven movers' `y` sits below each
+chapter's own `CloudCoreBottom`), so the whole set was expected to be untouched by an
+above-band-only change — confirmed by A/B, not merely asserted. *Not re-blessed — the
+orchestrator re-blesses once per wave.*
+
+**Verify — probe.** `.scratch/b13/c1-above-deck.{log,png}` (`--freecam --chapter=C1
+--pos=-7323,1192,-3829 --direction=0,0,-1 --det --mute --log=world:debug --frames=3`): a new
+debug-only log line (`WeatherRig.Tick`, `deck: player 0 camera y=1192.0 -> deck y=960.0 (at/above
+band, authored floor)`) confirms the applied deck Y is 960 at this pose, against the pre-B13
+1047 (the band centre) — the 87 m drop the plan predicted.
+
+**Original approach (kept for reference).**
 
 **Goal.** Above the deck, the deck floor renders at the tiles' authored altitude (960 / 1050) —
 world-fixed, never re-pinned to the band centre.

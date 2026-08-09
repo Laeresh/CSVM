@@ -188,6 +188,18 @@ public sealed class WorldBuilder
     /// weather state.</summary>
     public int CloudDeckZoneId { get; private set; } = -1;
 
+    /// <summary>The deck tiles' own AUTHORED altitude (C1/C1C/C2B 960, C4 1050) — the Y every one
+    /// of the 144 tiles was placed at in the gamez data, read off the coverage-winning altitude
+    /// bucket <see cref="FindCloudDeck"/> already computes to classify them. 0 for a world with no
+    /// deck (never read then — <see cref="CloudDeck"/> is null).
+    ///
+    /// <para><c>PLAN-weather-decompile-match</c> B13: above the cloud band the deck floor renders
+    /// HERE, world-fixed, never re-pinned to <c>CLOUD_COVER</c>'s band centre — that pin was C4's
+    /// own coincidence (its authored altitude equals its centre, 1050). Below the band this value
+    /// is unused; the ceiling regime is still <c>WeatherRig.DeckCeilingHeight</c> above the
+    /// camera (B14's to replace with the zone-1 dome).</para></summary>
+    public float CloudDeckAltitude => _deckAltitude;
+
     /// <summary>Mesh instances this world put on each zone-gate layer, by <c>zone_id</c> —
     /// <see cref="SceneBuilder.ZoneGatedMeshes"/> for the world walk. The before-census a state
     /// flip's delta is asserted against.</summary>
@@ -316,6 +328,68 @@ public sealed class WorldBuilder
             common = n.ZoneId;
         }
         return common ?? -1;
+    }
+
+    /// <summary>The same coverage-winning altitude bucket <see cref="CloudDeckAltitude"/> exposes
+    /// off a BUILT world, computed instead as a pure function of the raw <see cref="GameZ"/> data —
+    /// no scene build, no <c>TextureArchive</c>, so a test can pin a chapter's authored deck
+    /// altitude against the extraction without paying for one (<c>PLAN-weather-decompile-match</c>
+    /// B13's "read it from the data/mesh, never hardcode 960/1050" trap). Null when the chapter has
+    /// no map-covering deck at all (C1B/C2/C3/C5) or no <paramref name="worldName"/> world node.
+    /// Mirrors <see cref="Build"/>'s own world lookup and <see cref="FindCloudDeck"/>'s bucket
+    /// selection exactly — kept in step because both call the same tile test
+    /// (<see cref="FlatTileOf"/>).</summary>
+    public static float? CloudDeckAltitudeOf(GameZ gamez, string worldName = "world1")
+    {
+        GameZNode? world = null;
+        foreach (var n in gamez.Nodes)
+            if (n.Kind == "World" && string.Equals(n.Name, worldName, StringComparison.OrdinalIgnoreCase))
+            {
+                world = n;
+                break;
+            }
+        if (world == null || !world.HasArea)
+            return null;
+        float mapW = Mathf.Abs(world.AreaRight - world.AreaLeft);
+        float mapH = Mathf.Abs(world.AreaBottom - world.AreaTop);
+        if (mapW <= 0f || mapH <= 0f)
+            return null;
+        float mapLeft = Mathf.Min(world.AreaLeft, world.AreaRight);
+        float mapRight = Mathf.Max(world.AreaLeft, world.AreaRight);
+        float mapTop = Mathf.Min(world.AreaTop, world.AreaBottom);
+        float mapBottom = Mathf.Max(world.AreaTop, world.AreaBottom);
+
+        var roots = new List<int>(world.Children);
+        if (world.PartitionNodes != null)
+            roots.AddRange(world.PartitionNodes);
+
+        var buckets = new Dictionary<int, float>();
+        var seen = new HashSet<int>();
+        foreach (var idx in roots)
+        {
+            if (idx < 0 || idx >= gamez.Nodes.Count || !seen.Add(idx))
+                continue;
+            var n = gamez.Nodes[idx];
+            if (SkipWorldNode(n) || !FlatTileOf(gamez, n, out float y, out float x0, out float z0,
+                    out float x1, out float z1))
+                continue;
+            float w = Mathf.Min(x1, mapRight) - Mathf.Max(x0, mapLeft);
+            float h = Mathf.Min(z1, mapBottom) - Mathf.Max(z0, mapTop);
+            if (w <= 0f || h <= 0f)
+                continue; // wholly outside the map rect
+            int key = Mathf.RoundToInt(y);
+            buckets[key] = buckets.TryGetValue(key, out float area) ? area + w * h : w * h;
+        }
+
+        float best = DeckCoverageFraction * mapW * mapH;
+        float? altitude = null;
+        foreach (var (alt, area) in buckets)
+            if (area > best)
+            {
+                best = area;
+                altitude = alt;
+            }
+        return altitude;
     }
 
     /// <inheritdoc cref="HorizonZonesOf"/>
@@ -601,6 +675,43 @@ public sealed class WorldBuilder
         n.Name.Equals("horizon", StringComparison.OrdinalIgnoreCase)
         || n.Name.Equals("dzpaths", StringComparison.OrdinalIgnoreCase)
         || IsFogVolumeNode(n);
+
+    // The deck-tile test itself (one flat, untilted 4-vertex quad — a wall or ramp fails it):
+    // static and gamez-only so CloudDeckAltitudeOf can run it with no built scene, and the
+    // instance FindCloudDeck walk (FlatTile, below) shares the exact same test rather than a
+    // parallel copy. Deck tiles carry no transform ("Initial"), but a null Local is treated as
+    // identity anyway, so a placed tile would still be measured where it sits. Internal (not
+    // private) alongside SkipWorldNode for the same reason: CloudDeckAltitudeOf, its only other
+    // caller, is a public static member of this same class, not an outside one — the accessibility
+    // just has to be at least as wide as callers need, and this repo's StyleCop ordering rule
+    // (SA1202/SA1204: internal-before-private, static-before-instance, within each grouping) is
+    // what actually pins it here rather than beside FlatTile below.
+    internal static bool FlatTileOf(GameZ gamez, GameZNode n, out float altitude, out float x0,
+        out float z0, out float x1, out float z1)
+    {
+        altitude = x0 = z0 = x1 = z1 = 0f;
+        if (n.MeshIndex < 0 || n.MeshIndex >= gamez.Meshes.Count)
+            return false;
+        var mesh = gamez.Meshes[n.MeshIndex];
+        if (mesh.Polygons.Count != 1 || mesh.Vertices.Count != 4)
+            return false;
+        var xf = n.Local ?? Transform3D.Identity;
+        var first = xf * mesh.Vertices[0];
+        x0 = x1 = first.X;
+        z0 = z1 = first.Z;
+        for (int i = 1; i < 4; i++)
+        {
+            var v = xf * mesh.Vertices[i];
+            if (Mathf.Abs(v.Y - first.Y) > 0.001f)
+                return false; // tilted — a wall or a ramp, not a deck tile
+            x0 = Mathf.Min(x0, v.X);
+            x1 = Mathf.Max(x1, v.X);
+            z0 = Mathf.Min(z0, v.Z);
+            z1 = Mathf.Max(z1, v.Z);
+        }
+        altitude = first.Y;
+        return true;
+    }
 
     /// <summary>A placed ambient cloud cluster — the gamez node the original names
     /// <c>cloudparent</c>, whose children are the individual cloud facades. This is the OTHER
@@ -1034,34 +1145,9 @@ public sealed class WorldBuilder
     }
 
     // True when the node's model is one flat horizontal quad, reporting its altitude and its
-    // world-space x/z footprint. Deck tiles carry no transform ("Initial"), but a null Local is
-    // treated as identity anyway, so a placed tile would still be measured where it sits.
+    // world-space x/z footprint — the instance-side wrapper FindCloudDeck (below) walks with.
     private bool FlatTile(GameZNode n, out float altitude, out float x0, out float z0,
-        out float x1, out float z1)
-    {
-        altitude = x0 = z0 = x1 = z1 = 0f;
-        if (n.MeshIndex < 0 || n.MeshIndex >= _gamez.Meshes.Count)
-            return false;
-        var mesh = _gamez.Meshes[n.MeshIndex];
-        if (mesh.Polygons.Count != 1 || mesh.Vertices.Count != 4)
-            return false;
-        var xf = n.Local ?? Transform3D.Identity;
-        var first = xf * mesh.Vertices[0];
-        x0 = x1 = first.X;
-        z0 = z1 = first.Z;
-        for (int i = 1; i < 4; i++)
-        {
-            var v = xf * mesh.Vertices[i];
-            if (Mathf.Abs(v.Y - first.Y) > 0.001f)
-                return false; // tilted — a wall or a ramp, not a deck tile
-            x0 = Mathf.Min(x0, v.X);
-            x1 = Mathf.Max(x1, v.X);
-            z0 = Mathf.Min(z0, v.Z);
-            z1 = Mathf.Max(z1, v.Z);
-        }
-        altitude = first.Y;
-        return true;
-    }
+        out float x1, out float z1) => FlatTileOf(_gamez, n, out altitude, out x0, out z0, out x1, out z1);
 
     // Walks the built world for cloudparent subtrees. Stops descending at each hit: the whole
     // subtree is the cluster, and cloud clusters do not nest. Matched on the name the DATA

@@ -909,6 +909,10 @@ public partial class GameSession : Node3D
             // B12: the deck's own zone_id, the one gated population that cannot ride a visual
             // layer (it is a per-rig camera-anchored copy — see WeatherRig.SetDeckZoneId).
             _weatherRig.SetDeckZoneId(builder.CloudDeckZoneId);
+            // B13: the deck tiles' own authored altitude (C1/C1C/C2B 960, C4 1050), read off the
+            // built data rather than hardcoded — above the cloud band Tick now leaves the deck
+            // here instead of re-pinning it to the CLOUD_COVER band centre.
+            _weatherRig.SetDeckAltitude(builder.CloudDeckAltitude);
             // A2's plumbing: hand the rig the chapter's own fog-volume census + whether its
             // fogvol.zrd arms fog_zone, so Tick can resolve each camera's weather state (1/2/3).
             // Ships dark — nothing reads WeatherRig/PlayerRig.CameraWeatherState yet.

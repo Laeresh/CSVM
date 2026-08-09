@@ -543,6 +543,22 @@ Tagged `WorldBuilder.DeckExtensionMeta` node metadata so it counts toward neithe
 144/144. ⚠ 20,480 m is close to a ceiling, not just a tidy round number: C1/C1C/C2B/C4's zone2
 dome renders at 8.74 km × 2.5 = 21.85 km, and this flat sheet must stay well inside that (never
 touch the dome) or its outer edge would sit past the dome wall it renders in front of.
+⚠ The annulus stays attached to the floor at whatever altitude `Session/WeatherRig.Tick` places the
+  deck at (`B13`) with NO code of its own to do it: it is a child of `deck`, built in the SAME local
+  coordinates as the 144 tiles (`MergedLocalAabb(deck)`'s own `Y`), so it moves only because its
+  parent's `Position` does — the same mechanism that already kept it centred through
+  `AssignCloudDeckIfBuilt`'s re-measurement.
+`CloudDeckAltitude` (`PLAN-weather-decompile-match` B13, 2026-08-09) exposes `_deckAltitude` — the
+same coverage-winning altitude bucket `FindCloudDeck` classifies the 144 tiles by (C1/C1C/C2B 960,
+C4 1050) — as the tiles' AUTHORED Y, read off the built data rather than hardcoded.
+`Session/WeatherRig.SetDeckAltitude` takes it (`GameSession`, beside `SetDeckZoneId`) so the
+above-band regime can place the floor there instead of the `CLOUD_COVER` band centre (`A7`'s pin,
+which the decompile showed was C4's own coincidence). `CloudDeckAltitudeOf(gamez, worldName)` is
+the SAME computation as a public static function of the raw `GameZ` data alone — no scene build,
+no `TextureArchive` — so `CSVM.Tests/DeckRegimeTests.cs` can pin a chapter's authored altitude
+against the extraction without paying for a full world build; both share one tile test,
+`FlatTileOf` (moved beside `SkipWorldNode` — StyleCop's internal-before-private, static-before-
+instance ordering rules pin it there, not beside the instance `FlatTile` wrapper it backs).
 `CloudClusters` censuses the OTHER ambient cloud population after the walk — every `cloudparent`
 subtree the world places (C1 28, C1B 70, C1C 30, C4 45; C2/C2B/C3/C5 none), logged per chapter so
 "none" cannot read like a broken census. They need no layer handling of their own since `B12`: they
@@ -3552,15 +3568,35 @@ are built from, and it is logged with the meshed counts it was decided on.
 ⚠ **The deck is ENGINE TRICKERY in two regimes, not a placed sheet** (`A7`, 2026-08-08 — decoded
   by the user at the controls of the original). `Tick` splits at the `CLOUD_COVER` band centre
   (`WeatherState.CloudBandCentre`): **below** it the deck is a ceiling carried with the camera in
-  ALL THREE axes at `camera.y + DeckCeilingHeight`; **at/above** it a world-fixed floor sitting on
-  the band centre, still following in X/Z. The rule is the pure `DeckRegime(cameraY, bandCentre)`,
-  which also answers whether that camera renders the ambient clouds AND whether the sheet carries
-  the mission's SUNLIGHT dimming — assert against that, not
-  against the loop. Below-band consequence, and it is the item's own evidence: the sky is
-  BIT-IDENTICAL at 192/300/600/900 m, which is what "the texture looks the same at every altitude"
-  means and what a world-fixed sheet cannot do (the pre-A7 build moves 87 % of those pixels).
-  Above-band consequence: the pinned above-deck pose renders bit-identical to the pre-`A6` pin,
-  because that pin WAS the above-band half of this trick applied in both regimes.
+  ALL THREE axes at `camera.y + DeckCeilingHeight`; **at/above** it a world-fixed floor, still
+  following in X/Z. The rule is the pure `DeckRegime(cameraY, bandCentre, authoredY)`, which also
+  answers whether that camera renders the ambient clouds AND whether the sheet carries the
+  mission's SUNLIGHT dimming — assert against that, not against the loop. Below-band consequence,
+  and it is the item's own evidence: the sky is BIT-IDENTICAL at 192/300/600/900 m, which is what
+  "the texture looks the same at every altitude" means and what a world-fixed sheet cannot do (the
+  pre-A7 build moves 87 % of those pixels).
+  - ⚠ **The above-band floor sits at the tiles' OWN AUTHORED altitude, not the band centre**
+    (`PLAN-weather-decompile-match` B13, 2026-08-09 — supersedes `A7`'s band-centre pin here,
+    which the disproof-4 decompile finding showed was C4's own coincidence: C4's authored altitude
+    equals its own centre, 1050, so the pin only ever looked right there). `authoredY` is
+    `_deckAltitude`, set by `WeatherRig.SetDeckAltitude` from `WorldBuilder.CloudDeckAltitude` —
+    the coverage-winning altitude bucket `FindCloudDeck` already classifies the 144 tiles by,
+    never a hardcoded 960/1050. `WorldBuilder.CloudDeckAltitudeOf(gamez)` is the same computation
+    as a pure static function of the raw `GameZ` data (no scene build), so a test can pin a
+    chapter's authored altitude against the extraction cheaply — see `CSVM.Tests/DeckRegimeTests.cs`.
+    C1's above-band floor drops 87 m (1047 → 960) from the pre-B13 pin; C4's does not move at all
+    (1050 → 1050, the coincidence above). No golden in `analysis/goldens` holds an above-deck pose,
+    so the whole set is byte-identical across this item — confirmed by an A/B against the
+    pre-B13 build, not merely asserted.
+  - The BELOW-band ceiling reconstruction (`camera.y + DeckCeilingHeight`) is unchanged by B13 —
+    `B14`'s to replace with the zone-1 dome (`horizon/zone1`'s own camera-anchored cap). The
+    crossing itself is still pinned at `bandCentre` (Decision 1: unified with neither the zone
+    state's own `CloudCoreBottom` threshold nor moved to chase the new target), so the JUMP at that
+    crossing grew from `DeckCeilingHeight` (135 m, the pre-B13 `bandCentre+135 → bandCentre` step)
+    to `bandCentre+135 → authoredY` (222 m in C1) — still fully inside the fully-opaque whiteout
+    core (`WhiteoutAmount` reads 1.0 throughout it, `DeckRegimeTests`), so a bigger jump is still an
+    invisible one; if it ever shows, that remains a finding about the whiteout band, never a licence
+    to move the flip.
 ⚠ **The regime flip is a JUMP of `DeckCeilingHeight` AND of the deck's brightness, masked only by
   the whiteout core.** It is
   placed at the band centre precisely because that is the middle of the fully-opaque core
@@ -3644,9 +3680,13 @@ are built from, and it is logged with the meshed counts it was decided on.
 ⚠ The deck and the `fvol` field are the SAME sheet seen from two sides, so they are read together:
   the deck mesh is what an underside view shows and the sprite field is what a view from above
   shows. Any change to either one's altitude has to be checked against the other's
-  (`Effects/FogVolumeClutter`, `docs/formats/fogvol.md`). ⚠ But the deck's RENDERED altitude is now
-  neither chapter's authored one — the authored 960/1050 is what the scatter is read against
-  (fogvol.md's mesh-10 m-under-the-slab invariant), not where the mesh is drawn.
+  (`Effects/FogVolumeClutter`, `docs/formats/fogvol.md`). ⚠ The `fvol` sprite FIELD never moves
+  with this item — it is anchored to the volumes, not to the deck mesh — and as of `B13` the deck
+  MESH's rendered altitude equals its authored one only ABOVE the band (`_deckAltitude`); below it,
+  the mesh is still the `cam+DeckCeilingHeight` reconstruction, at neither chapter's authored
+  altitude. The authored 960/1050 is what the scatter is read against either way (fogvol.md's
+  mesh-10 m-under-the-slab invariant, pinned per chapter in `DeckRegimeTests`) — a fact about the
+  DATA, unaffected by which regime is currently rendering the mesh.
 
 ## src/Session/LensFlareRig.cs
 The sun's lens flare: four screen-space sprites strung along the sun→screen-centre vector at
