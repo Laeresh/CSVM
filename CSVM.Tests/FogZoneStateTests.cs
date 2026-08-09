@@ -60,6 +60,89 @@ public class FogZoneStateTests
         Assert.Equal("zone3", weather.ZoneForState(3));
     }
 
+    // C22's Verify: "ZONE3 present in all 8 C5 missions — assert from the files, not one." IA1
+    // above only pins the mission every golden flies; this walks the other 7 so a mission whose
+    // author dropped ZONE3 (or renamed it) cannot hide behind IA1 passing.
+    [ExtractedDataTheory]
+    [InlineData("IA1")]
+    [InlineData("M01")]
+    [InlineData("M02")]
+    [InlineData("M03")]
+    [InlineData("M04")]
+    [InlineData("MP1")]
+    [InlineData("MP2")]
+    [InlineData("MP3")]
+    public void EveryC5MissionAuthorsZone1AndZone3(string mission)
+    {
+        var weather = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C5", mission));
+        Assert.NotNull(weather);
+        Assert.Contains("zone1", weather!.ZoneNames);
+        Assert.Contains("zone3", weather.ZoneNames);
+        Assert.Equal("zone3", weather.ZoneForState(3));
+    }
+
+    // C22's core claim: state 3 wears ZONE3's fog (50-250 m, FOG_COLOR [16,16,16]) unchanged from
+    // B11's per-state machinery — no clip-range plumbing (the ⚠ trap: ZONE3's CLIP_RANGES far of
+    // 300 is NOT applied, per B11's kept divergence that the remake fogs instead of clipping), no
+    // extra smoothing (C21's whiteout curtain hides the hard switch). Leaving the volume restores
+    // ZONE1 exactly, proving the trigger is symmetric rather than a one-way latch.
+    [ExtractedDataFact]
+    public void StateThreeFlipAppliesZone3FogAndExitRestoresZone1()
+    {
+        var weather = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C5", "IA1"));
+        Assert.NotNull(weather);
+        // C5's own default resolution (ResolveZone falling back off "zone2") already lands on
+        // zone1 — mirroring what WeatherRig.Build hands the trigger as its starting buildZone.
+        var trigger = new WeatherRig.FogStateTrigger(stateDriven: true, buildZone: "zone1");
+
+        var into = trigger.Next(3, weather!);
+        Assert.NotNull(into);
+        Assert.True(into!.Value.Applied);
+        Assert.False(into.Value.FellBack);
+        Assert.Equal("zone3", into.Value.Zone);
+        var zone3Fog = weather!.Fog(into.Value.Zone);
+        Assert.Equal(50f, zone3Fog.FogNear, 1);
+        Assert.Equal(250f, zone3Fog.FogFar, 1);
+        Assert.Equal(16f / 255f, zone3Fog.FogColor.R, 3);
+        Assert.Equal(16f / 255f, zone3Fog.FogColor.G, 3);
+        Assert.Equal(16f / 255f, zone3Fog.FogColor.B, 3);
+        // ZONE3's own SUNLIGHT block (diffuse 1.5 / ambient 0.5) rode along with the fog — the
+        // same ApplyFogGlobals call writes csky_world_light from this same ZoneFog record.
+        Assert.Equal(1f, zone3Fog.WorldLight, 3);
+
+        var outOf = trigger.Next(1, weather!);
+        Assert.NotNull(outOf);
+        Assert.True(outOf!.Value.Applied);
+        Assert.Equal("zone1", outOf.Value.Zone);
+        var zone1Fog = weather!.Fog(outOf.Value.Zone);
+        Assert.Equal(1500f, zone1Fog.FogNear, 1);
+        Assert.Equal(2250f, zone1Fog.FogFar, 1);
+        Assert.Equal(2, trigger.Applications);
+    }
+
+    // The ⚠ trap restated as a layering pin: A2's state machine already keeps state 3 from
+    // arming outside an armed fog_zone chapter (CameraWeatherState only tests volumes when
+    // fogZoneArmed), so no shipped non-C5 mission can ever hand the trigger a literal 3. This
+    // test bypasses that gate on purpose — feeding the trigger state 3 directly against a
+    // fog_zone-0 chapter's weather (C1, no ZONE3 at all) — to show the SECOND layer holds too:
+    // ZoneForState's file fallback lands state 3 back on the chapter's first zone, never on a
+    // zone3 that does not exist, so even a hypothetical bypass could not paint ZONE3's fog here.
+    [ExtractedDataFact]
+    public void AFogZoneZeroChapterNeverAppliesZone3EvenIfStateThreeWereRequested()
+    {
+        var weather = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "IA1"));
+        Assert.NotNull(weather);
+        Assert.DoesNotContain("zone3", weather!.ZoneNames);
+        var trigger = new WeatherRig.FogStateTrigger(stateDriven: true, buildZone: "zone1");
+
+        var change = trigger.Next(3, weather);
+        Assert.NotNull(change);
+        Assert.Equal("zone1", change!.Value.Zone);   // falls back, never "zone3"
+        Assert.True(change.Value.FellBack);
+        Assert.False(change.Value.Applied);           // already live on zone1 — nothing written
+        Assert.Equal(0, trigger.Applications);
+    }
+
     [Fact]
     public void TheTriggerAppliesOnTheEdgeAndNeverAgainWhileTheStateHolds()
     {

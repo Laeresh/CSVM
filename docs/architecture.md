@@ -3642,6 +3642,20 @@ are built from, and it is logged with the meshed counts it was decided on.
   - The original's per-zone `CLIP_RANGES` far is still NOT applied — a **kept divergence** (fog
     hides distance in the remake; see `docs/formats/weather.md`'s `CLIP_RANGES` note). `ZONE3`'s
     300 m far inherits that rule at `C22`.
+⚠ **State 3 = ZONE3, and it is a pure consumer of the machinery above** (`C22`, landed 2026-08-09,
+  no code change). `FogStateTrigger`/`ZoneForState` are already generic over the state number, so
+  state 3 (armed only where `fog_zone` is set — C5 alone) walks the identical edge-triggered path
+  as state 2: entering a C5 street volume flips `csky_fog_range`/`_alt`/`_color`/`csky_world_light`
+  to `ZONE3`'s 50–250 m / `[16,16,16]` / its own `SUNLIGHT_*` block; leaving restores `ZONE1`.
+  **The switch is hard, deliberately** — no extra smoothing is authored, matching the original,
+  because C21's in-volume whiteout curtain already saturates the frame at the boundary (measured:
+  1 m inside reads sd ≈ 0.07, essentially flat `[16,16,16]`), so a discontinuity in the fog globals
+  underneath it is never seen. Verified live (`.scratch/c22/`, `--freecam --chapter=C5
+  --pos=-2000,182,-1792 --no-zone-cull --det`): the log reads `camera state 3 -> fog zone 'zone3'
+  — fog 50-250 m … world light 1.00`; the same pose under `--sky-zone=zone1` never emits that line
+  (the trigger is disarmed, Decision 5) and renders a different frame (pixmd5 differs, 21.8% of
+  pixels). All 8 C5 missions author both `ZONE1` and `ZONE3` (`CSVM.Tests/FogZoneStateTests.cs`'s
+  `EveryC5MissionAuthorsZone1AndZone3`, one row per mission, not just `IA1`).
 ⚠ An explicit `--sky-zone=` skips the geometry correction and is honoured literally, empty dome and
   all (`SkyZoneExplicit`) — it is the flag for looking at a named zone, and `analysis/`'s recorded
   repro poses depend on it. The weather-file fallback still applies to it, as before. Per Decision 5

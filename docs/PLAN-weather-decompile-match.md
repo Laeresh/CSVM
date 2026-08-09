@@ -168,7 +168,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — C5 fog volumes
 
 21. ☑ In-volume whiteout (approach/interior ramps, union, `fog_color`)
-22. ☐ ZONE3 fog while inside a volume
+22. ☑ ZONE3 fog while inside a volume **Wave C complete.**
 
 ### Wave D — Residuals & polish
 
@@ -1060,7 +1060,41 @@ backwards until you hold it next to C22: the volume is a transition curtain; ZON
 fog is what carries the interior look. Implementing C21 without C22 will look wrong and must not
 be "fixed" by inverting the ramp.
 
-## C22 ☐ ZONE3 fog while inside a volume
+## C22 ☑ ZONE3 fog while inside a volume
+
+**Landed (2026-08-09).** Verification-only — no production code changed. A2's `CameraWeatherState`
+and B11's `FogStateTrigger`/`ZoneForState` were already generic over the state number: state 3
+(armed only where `fog_zone` is set — C5 alone) walks the identical edge-triggered path as state 2,
+so entering a C5 street volume already flipped `csky_fog_range`/`_alt`/`_color`/`csky_world_light`
+to `ZONE3`'s 50–250 m / `[16,16,16]` / its own `SUNLIGHT_*` block, and leaving already restored
+`ZONE1` — with no gap to close. New `CSVM.Tests/FogZoneStateTests.cs` methods pin it explicitly
+rather than leaving it as an untested consequence: `EveryC5MissionAuthorsZone1AndZone3` (an
+`ExtractedDataTheory` over all 8 C5 missions — IA1/M01–M04/MP1–MP3 — not just the one every golden
+flies), `StateThreeFlipAppliesZone3FogAndExitRestoresZone1` (the trigger applied twice: into ZONE3
+then back to ZONE1, asserting the fog/colour/world-light numbers each time), and
+`AFogZoneZeroChapterNeverAppliesZone3EvenIfStateThreeWereRequested` (the ⚠ trap as a layering pin:
+even a hypothetical state-3 request against a `fog_zone`-0 chapter's weather, bypassing A2's own
+gate, falls back to the chapter's first zone rather than painting a `ZONE3` that does not exist).
+
+Verified live (`.scratch/c22/`, `--freecam --chapter=C5 --pos=-2000,182,-1792 --no-zone-cull
+--det`, C21's own pose): the log reads `camera state 3 -> fog zone 'zone3' — fog 50-250 m …
+world light 1.00`. The same pose under `--sky-zone=zone1` (Decision 5's static override, trigger
+disarmed) never emits that line and renders a different frame — pixmd5 `f1d56c5e…` vs the
+state-driven `a91682b2…`, 21.8% of pixels differing (both already near-saturated by C21's curtain
+at 1 m inside, mean ≈16, so the difference is ZONE3's own `SUNLIGHT_*`/colour rather than bulk
+brightness). A pose 27 m above the volume (`y=210`, C21's "past the ramp" pose) never leaves state
+1 and renders pixmd5 `5c3db8a8…` — byte-identical to the same pose under `--sky-zone=zone1`,
+confirming the outside case is unchanged by the machinery being armed. `.\RunTests.ps1`: 826 unit
+tests (0 skipped), 29/29 engine suites, all 13 goldens hash-identical to the committed manifest
+(including `c5-city-night`, 1797.7 m from the nearest volume per `C21` — no movement expected or
+observed).
+
+**No extra smoothing is authored, and that is deliberate, not an oversight**: the switch is hard,
+matching the original, because C21's in-volume whiteout curtain already saturates the frame at the
+boundary (measured sd ≈ 0.07 at 1 m inside — essentially flat `[16,16,16]`), so a discontinuity in
+the fog globals underneath it is never seen.
+
+**Original approach (kept for reference).**
 
 **Goal.** While the camera is inside a C5 volume (state 3), the scene wears ZONE3's fog
 (50–250 m, `[16,16,16]`) and sunlight; leaving restores state 1's ZONE1.
