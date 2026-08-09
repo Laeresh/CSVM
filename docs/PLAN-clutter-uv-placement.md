@@ -994,10 +994,49 @@ deeper in that chain. **This is the one thing left to nail**, and it decides eve
 - If `0x800` really is subface, the contradiction in §"Gate-only is disqualified" stands and
   something else is wrong.
 
-**Cheap next step, in this order:** (a) follow `param_15`/the trailing arguments of `FUN_00565510`
-down `FUN_005652b0` to the flags word and read the bit; (b) independently, check whether mech3ax
-carries a *separate* no-clutter flag we are discarding — if the extraction only exposes `unk3`, the
-remake may be unable to see this attribute at all, which is itself the finding.
+### ✅ CLOSED (2026-08-10): polygon bit `0x800` is `no_clutter`, not subface
+
+Chased down `gmod_cons.c`. **Measured, single-writer, with the argument mapping cross-checked.**
+
+1. `FUN_004c5580` (`gg_load.c`) does `strstr(name, "no_clutter")` → `DAT_0071e814 = 1`.
+2. `FUN_004c5ba0` pushes `[0x0071e814]` at `004c5e7b`. Counting pushes backwards from the
+   `CALL 0x00565510` at `004c5ead`, that is **argument 13**.
+3. `FUN_00565510` forwards arguments 3–15 unchanged to `FUN_005652b0`.
+4. `FUN_005652b0` ends with
+   `*puVar1 = (in_stack_00000034 & 1) << 0xb | *puVar1 & 0xfffff7ff;`
+   — `in_stack_00000034` is argument 13 (`0x34/4 = 13`), `<< 0xb` is bit 11 = **`0x800`**, and
+   `puVar1` is the freshly built polygon at `model+0x34 + count*0x28`: the same word
+   `FUN_004de2c0` tests, whose low 10 bits are the vertex count.
+5. **`AND EAX, 0xfffff7ff` at `005654f6` is the only instruction in the entire binary that writes
+   this bit.** Program-wide search; the other three hits are unrelated structures.
+
+Mapping cross-check: `in_stack_00000024` = argument 9 = the literal `0x1` pushed at `004c5e88`, and
+the body assigns it to `puVar1[4]`, the polygon's material/texture-layer count. A one-material
+polygon, exactly as `FUN_004de190` reads it. The offset→argument mapping holds.
+
+**Consequences.**
+
+- **`docs/formats/gamez.md` is wrong and `GameZ.cs`'s `poly.Subface` is misnamed.** mech3ax's `unk3`
+  at bit `0x800` is a **no-clutter** flag. The extraction *does* carry the attribute — the remake has
+  simply been reading it under the wrong name and using it for the wrong purpose.
+- **Where subface actually lives is now a hypothesis worth testing:**
+  `GameGenSetSubfacePriorityOffset` is a load-time draw-priority accumulator, so subface is probably
+  baked into the polygon's **priority** field (mech3ax `unk04`/`priority`) and is not a flag bit at
+  all. If so, `unk3` and `priority` are two different things this project has been conflating.
+- **`SceneBuilder.SubfaceBias` is keyed off `unk3`**, i.e. off no-clutter. Whether it is wrong *in
+  effect* is a separate question — the two sets may overlap heavily in practice — but its
+  justification is void and it needs re-deriving.
+- **`analysis/item9-depth-bias/CBLOCK-LOD.md` measured C5's "subface covers base at 97–100 %" using
+  this flag.** The coplanar coverage it measured is real geometry and stands; the *label* on it does
+  not. `BL-250` rests on that reading.
+
+**What this does and does not resolve for `BL-305`.** It explains the naming, and it means our
+"subface skip" experiment was really a *no-clutter* skip — which is what the original does. But that
+experiment deleted C5's skyline, so the contradiction has moved rather than gone: the polygons
+carrying C5's downtown clutter appear to be flagged `no_clutter` in the shipped data, which should
+mean the original does not stamp them either. Either C5's downtown buildings come from somewhere
+this plan has not looked, or the flag's population is not what the extraction says. The census now
+running against the data is what settles that.
 
 ### Part 2 — `MinSlopeCos` is deleted, and it never culled anything
 
