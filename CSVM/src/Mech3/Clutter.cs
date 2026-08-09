@@ -82,10 +82,6 @@ public sealed class ClutterBuilder
         + "    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);\n"
         + "    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);\n";
 
-    // Steeper than ~75° (XZ footprint under a quarter of the true area) grows no trees —
-    // an upright billboard on a near-cliff face floats off it.
-    private const float MinSlopeCos = 0.25f;
-
     // The largest integer UV lattice one triangle may span before it is refused and counted.
     // 64 × 64 repeats of the ground texture across a single triangle; A1's widest measured span
     // is a handful, so this is a tripwire for a corrupt UV array, not a tuning knob.
@@ -495,14 +491,23 @@ public sealed class ClutterBuilder
             return;
         }
 
-        // Both remake-only rules, untouched — B13 owns them, and moving either here would make
-        // this item's A/B unreadable. Signed XZ area ×2 is what the slope cull is expressed in.
+        // A sub-half-square-metre XZ footprint carries no lattice cell worth walking. This is the
+        // one remaining remake-only geometry rule here and it does fire — 14 triangles in C5,
+        // 0 in every other chapter (B13's census).
+        //
+        // What used to sit beside it was `xzArea < trueArea * MinSlopeCos` with MinSlopeCos =
+        // 0.25 — "steeper than ~75° grows no trees". B13 deleted it as an invention that never
+        // fired. The original's slope cull is authored per kind (min_slope/max_slope → cosines
+        // at kind+0x58/+0x5c, FUN_004deab0) and DEFAULTS TO ±1.0, i.e. no cull; no shipped
+        // templates.zrd authors either key. And the constant was inert anyway: xzArea/trueArea
+        // is exactly |Ny| of the plane normal, and the steepest clutter-eligible triangle in the
+        // whole install is C1's at 0.4598 (~62.6°), against a 0.25 (~75.5°) threshold. Zero
+        // triangles culled in every chapter; same instrument at 0.50 culls 3 in C1, so the zero
+        // is a measurement. Do not reintroduce it — a cull belongs in templates.zrd's min_slope,
+        // which no chapter authors.
         float area2 = (b.X - a.X) * (c.Z - a.Z) - (c.X - a.X) * (b.Z - a.Z);
         float xzArea = 0.5f * Mathf.Abs(area2);
         if (xzArea < 0.5f)
-            return;
-        float trueArea = 0.5f * (b - a).Cross(c - a).Length();
-        if (xzArea < trueArea * MinSlopeCos)
             return;
 
         // LOG-5: a hugely stretched triangle would make the lattice loop enormous. The original
@@ -538,6 +543,30 @@ public sealed class ClutterBuilder
                         // same number the old barycentric height produced (A2 checked the two
                         // routes agree to 1.8e-12 m), so nothing is lost by dropping the second
                         // computation.
+                        // ⚠ The quarter-metre dedup, kept DELIBERATELY, and it is remake-only —
+                        // the original has no such set. B13 measured what happens without it and
+                        // the answer is that it is doing two different jobs, neither optional
+                        // today:
+                        //
+                        // (1) It stands in for the subface gate this file does not have.
+                        // FUN_004de2c0 skips a polygon flagged 0x800 (GameZPolygon.Subface);
+                        // PlaceOnMesh never reads it, so the walk reaches BOTH members of a
+                        // coplanar base/subface pair — 452 template-textured subface polygons in
+                        // C5, 75 in C4, 67 in C2. Adding the real gate is measured and is the
+                        // leading BL-305 candidate, but it cannot land on its own: it empties
+                        // C5's downtown, because BuriedClutterDistricts already removed the
+                        // BASE-layer templates (cblock4/5/6) it would leave behind. See B13 in
+                        // docs/PLAN-clutter-uv-placement.md — the two are one coupled change and
+                        // the coupling is a user decision about BL-250.
+                        //
+                        // (2) Even with that gate added, it still removes real duplicates:
+                        // Contains() is INCLUSIVE on the edge, so a lattice candidate landing
+                        // exactly on the diagonal two triangles share is claimed by both. C1
+                        // gains 38 such duplicates without the set, C4 139, C5 1,082 — mostly
+                        // solid buildings, whose authored UVs sit on tidy fractions. The
+                        // original's step-6 test is strict, so it claims such a point in
+                        // NEITHER triangle; matching that is a change to B12's containment rule,
+                        // not to this set.
                         var key = (kind.MeshIndex, Mathf.RoundToInt(p.X * 4f), Mathf.RoundToInt(p.Z * 4f));
                         if (!seen.Add(key))
                             continue;

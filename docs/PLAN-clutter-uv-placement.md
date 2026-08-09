@@ -57,12 +57,12 @@ wrong. Assume the neighbouring ones are suspect too until checked.
 | 1 | "The exact original alignment is undecoded" (`Clutter.cs:23`) | `FUN_004dd230` stores each decoration as a wrapped texture UV; `FUN_004dd6e0` stamps it per integer UV cell of each world triangle. Decoded, in full, 2026-08-09. |
 | 2 | "UV-space placement would stretch the clutter with it" — offered as the reason to reject UV placement (`Clutter.cs:23-25`) | Factually true and *irrelevant as an objection*: stretching with the UV is what the original does. The remake's "keeps the authored density everywhere" is therefore a deviation, not a fidelity choice. |
 | 3 | The ground quad's size "is the tiling period" (`Clutter.cs:17-18`, `GroundInfo` at `:581`) | The quad is the **domain the decoration positions are normalised against**, not a metric spacing. The original never uses it as a distance. A "-128" template variant is an authoring convenience, not a 128 m period. |
-| 4 | `MinSlopeCos = 0.25f` — "steeper than ~75° grows no trees" (`Clutter.cs:78`) | An invention. The original's slope cull is authored per kind (`min_slope`/`max_slope` → cosines at kind+0x58/+0x5c, tested against the triangle normal's Y in `FUN_004dd6e0`) and **defaults to ±1.0, i.e. no cull at all**. No chapter's `templates.zrd` authors either key. This constant is silently deleting hillside trees today. |
+| 4 | `MinSlopeCos = 0.25f` — "steeper than ~75° grows no trees" (`Clutter.cs:78`) | An invention. The original's slope cull is authored per kind (`min_slope`/`max_slope` → cosines at kind+0x58/+0x5c, tested against the triangle normal's Y in `FUN_004dd6e0`) and **defaults to ±1.0, i.e. no cull at all**. No chapter's `templates.zrd` authors either key. ⚠ **The "silently deleting hillside trees today" half of this row is itself wrong** — B13 censused every chapter and the constant culls **zero** triangles: the steepest clutter-eligible face in the install is C1's at slope cos 0.4598 against a 0.25 threshold. Deleted as an inert invention, not as a density fix. |
 | 5 | `BL-305`'s "prime suspect: `ClutterBuilder` tiles each template on a fixed world-space X/Z grid" | No longer a suspect — confirmed as the mechanism. The entry's own wording predates the decode. |
 | 6 | (Mine, earlier this session) "C3 has the suburbs" | C3 registers exactly one template, `cliff1_sandtrans`. **C2** carries the suburbs (`resblock1-6`, `filmblock1-5`, `parklot1/2`, `parkpat`). Corrected against `extracted/interp.json`; the full census is below. |
 | 7 | (Mine, from A1's ratios) "√2 in the quad-vs-world ratios means a 45°-rotated UV mapping", and "the exact-2 cases are quads spanning two texture repeats" | A2 read the UV coordinates themselves: **no 45° mapping exists anywhere in the install** (every bearing on those templates is 0° or 90°) and **every quad spans exactly 0..1**. The √2 was an artifact of A1's own statistic — a max-extent `Period` compared against a geometric mean, on a 2:1 quad. Passed to A2 as a flagged lead, not a finding, and killed there. |
 | 8 | "B11 can land as a provably inert, behaviour-preserving step" (this plan's own B11, as written) | True for 28 of the 32 templates, false for four: the current scalar `Period` genuinely misplaces `filmblock1`, `cliff1_sandtrans`, `parklot1` and `parklot2` by up to 0.74 UV. B11 is amended to predict exactly which four move. |
-| 9 | "Zero coplanar pairs → delete the `seen` dedup set" (this plan's own B13, as written) | A3 measured zero, but the zero is the *original's*: flag `0x800` **is** the subface mark, so the original never considers a subface polygon. The remake's `PlaceOnMesh` reads no such flag, so `seen` is the only thing suppressing a real double-stamp — 449 subface polygons in C5. B13 is amended: add the subface skip first, *then* delete the dedup. |
+| 9 | "Zero coplanar pairs → delete the `seen` dedup set" (this plan's own B13, as written) | A3 measured zero, but the zero is the *original's*: flag `0x800` **is** the subface mark, so the original never considers a subface polygon. The remake's `PlaceOnMesh` reads no such flag, so `seen` is the only thing suppressing a real double-stamp — 449 subface polygons in C5. B13 is amended: add the subface skip first, *then* delete the dedup. ⚠ **B13 ran that order and both of its predictions failed** — the gate removes 25 % of C5's clutter (not 0), deleting the dedup after it still adds duplicates (C1 +38, C5 +1,072 solids, from an inclusive edge test), and the gate alone **empties C5's downtown** because `BL-250`'s exemption already removed the base layer it would leave behind. Neither landed; see B13. |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
@@ -193,7 +193,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ Store decoration positions as template-quad UVs, not metres
 12. ☑ Replace the world-space grid stamp with the per-triangle UV-lattice walk
-13. ☐ Settle the two remake-only rules: `MinSlopeCos` and the `seen` dedup
+13. ☑ Settle the two remake-only rules: `MinSlopeCos` and the `seen` dedup
 14. ☐ Chapter A/Bs + the 8-chapter regression, and rewrite the class comment
 
 ### Wave C — The authored per-kind data
@@ -697,6 +697,10 @@ strength:
    skips one, and A3 measured **+288 extra eligible polygons in C5** because of it. That is
    `B13`'s work, which is therefore no longer a cleanup item — **it is the leading `BL-305`
    candidate** and should be verified against this nadir pose, not just against instance counts.
+   **⚠ B13 measured it: the gate DOES move the pose** (`8820B741…` → `A504DC7C…`), the first
+   change in this plan that does — but alone it empties C5's downtown, and the state that looks
+   like CAP-22 is the gate **coupled with retiring `BL-250`'s `cblock4/5/6` exemption**
+   (`1050CEEE…`). Not landed: that coupling is a user decision. Read B13 before touching this.
 2. **`far_fade_range` (C23, currently deferred by Decision 3).** `cb00a` fades at 200–300 → 300–350 m.
    At 230 m altitude the frame edges sit 400 m+ in slant range and would be **gone in the original**
    while present in ours, which would make some of "pavement between buildings" a fade artifact
@@ -761,7 +765,155 @@ neighbour. (d) `ExtraCullMargin`, `node_bias` and the shared collision shapes al
 `kind.Instances` and keep working unchanged; if any of them breaks, you have touched the rendering
 half and should back it out.
 
-## B13 ☐ Settle the two remake-only rules: `MinSlopeCos` and the `seen` dedup
+## B13 ☑ Settle the two remake-only rules: `MinSlopeCos` and the `seen` dedup
+
+**Landed** (`CSVM/src/Mech3/Clutter.cs`). One of the two rules is deleted and one is kept with the
+measurement that justifies it. **`MinSlopeCos` is gone.** The `seen` dedup **stays**, because B13
+measured that it is doing two jobs and neither is optional today. And the item's headline: **the
+subface gate moves `BL-305`'s pose — the first change in this plan that does — but it cannot land
+on its own, and the coupling that makes it right is a user decision about `BL-250`.**
+
+### The `BL-305` pose, after each step
+
+B12 established `--freecam --chapter=C5 --pos=-9490,230,-3300 --direction=0,-1,0.001 --no-fog`
+as the instrument; on B11 and B12 it renders md5 `8820B741E6CFB29A5E82CFED048711E0`.
+
+| state | C5 sprites | C5 solids | `BL-305` pose md5 | moved? |
+|---|---|---|---|---|
+| baseline (`4a33ea4`) | 127,744 | 75,148 | `8820B741E6CFB29A5E82CFED048711E0` | — |
+| + subface gate | 95,356 | 59,861 | **`A504DC7C3F950BAED11316213E5CB678`** | **YES** |
+| + gate, − `seen` dedup | 95,366 | 60,933 | *(not shot — see below)* | — |
+| + gate, `cblock4/5/6` restored | 110,692 | 68,908 | **`1050CEEE6CF51EE6F50ECADD1B8A0FB7`** | **YES** |
+| **landed** (`MinSlopeCos` deleted only) | 127,744 | 75,148 | `8820B741E6CFB29A5E82CFED048711E0` | no |
+
+The baseline was re-measured on a restored `HEAD` tree after all the experiments and came back at
+the same md5 with the same 154.6 ms clutter phase (METHOD-3, and the proof the file round-trip and
+the rebuilds were clean). Clutter build phase per state: 154.7 → 123.3 → 131.6 → 152.5 ms, so every
+screenshot above is provably a different binary from its neighbour.
+
+### Part 1 — the subface gate: the prediction failed, twice, and that is the finding
+
+**Predicted first** (METHOD-12): the gate skips 288 C5 / 75 C4 / 70 C2 polygons (A3's
+`remake l0` − `layer-0` deltas) and **no chapter's instance count moves**, because the `seen` set
+was already hiding those; then deleting `seen` moves nothing either, because the gate now is.
+
+**Measured:**
+
+| chapter | baseline sprites | + gate | + gate, − dedup | `skipped_subface` (A3 predicted) |
+|---|---|---|---|---|
+| C1 | 37,510 | 37,510 | **37,548** | 0 (0) |
+| C1B | 339 | 339 | 339 | 0 (0) |
+| C2 | 37,254 / 10,346 solid | **36,406** / 10,346 | 36,406 / 10,346 | **67** (70) |
+| C3 | 707 | 707 | 707 | 0 (0) |
+| C4 | 88,705 | **87,239** | **87,378** | **75** (75) |
+| C5 | 127,744 / 75,148 solid | **95,356 / 59,861** | **95,366 / 60,933** | **452** (288) |
+
+Both halves of the prediction are wrong, in different ways, and both differences are real:
+
+1. **The gate and the dedup are not covering the same set — not remotely.** The gate removes
+   25 % of C5's clutter; the dedup was hiding a tiny fraction of that. The dedup is keyed to a
+   quarter metre, so it only ever merged instances that *coincided*; the gate removes a whole
+   polygon's stamp, including every instance on it that coincided with nothing. A3's "most produce
+   no extra instance today" does not hold — most of them produce a distinct instance a quarter of
+   a metre or more away from its coplanar twin.
+2. **`skipped_subface` = 452 in C5, against A3's 288.** A3's delta was measured with a static port
+   of the walk; the live counter counts template-textured subface polygons as the engine's own
+   `PlaceOnWorld` reaches them. The two walks disagree by 164 polygons in C5 and by 3 in C2 (67 vs
+   70) while agreeing exactly in C4 (75). **Not chased down** — it does not change any decision
+   here, but it means one of the two walks visits a set of nodes the other does not, and B14
+   should not treat A3's census as interchangeable with the live build's.
+3. **Deleting `seen` after the gate still moves counts**: C1 +38, C4 +139, C5 +10 sprites and
+   **+1,072 solids**. These are not subface duplicates — C1 has no subfaces at all. `UvTriangle`'s
+   containment test is **inclusive** on the edge, so a lattice candidate landing exactly on the
+   diagonal two triangles share is claimed by both. Solid buildings dominate because their authored
+   quad UVs sit on tidy fractions and hit the diagonal exactly. **The original's step-6 test is
+   strict** (three edge cross-products all negative), so it claims such a point in *neither*
+   triangle. Matching that is a change to B12's containment rule, not to this set — flagged for
+   B14, not done here.
+
+### ⚠ Why the gate did not land: it empties C5's downtown, and `BL-250` is why
+
+With the subface gate alone, the `BL-305` nadir loses almost every tower
+(`.scratch/b13/bl305-step1.png`). The mechanism is in this file's own comment: in C5 the *visible*
+ground layer **is** the subface layer — `cblock1/2/3`'s subface polygons cover `cblock4/5/6`'s base
+polygons at 97.0/99.9/100.0 %. `ClutterBuilder.BuriedClutterDistricts` (`BL-250`, closed 2026-08-07
+on CAP-22 evidence) removes `cblock4/5/6` because stamping both layers doubled the city. Add the
+real gate and the base layer is all that is left eligible — and it has been exempted. The district
+ends up with nothing.
+
+**That exemption is a curated stand-in for exactly this missing gate**, and the code says so: "the
+base polygon carries no flag of its own (Subface marks the OVERLAY), so a live rule would need
+CBLOCK-LOD.md's coplanar-overlap computation at every load." The decoded gate *is* the live rule.
+
+**So the two were measured coupled** — subface gate on, `cblock4/5/6` restored — and that state is
+the closest this plan has come to CAP-22: an open crossroads with towers around it, no
+interpenetration in a low oblique, and `cblock1/2/3`'s own towers still present (`cb00a` ×3,121,
+`cb01a` ×2,350 …) on their non-subface polygons, with `cblock4/5/6`'s `cb15a`–`cb24a` added on the
+bases. The gate makes the two sets disjoint **by construction**, which is the doubling `BL-250`
+rejected, removed by mechanism rather than by a curated list.
+
+**Not landed, deliberately.** This plan's scope says `BL-250` is not reopened, and its exemption was
+a user decision taken on capture evidence. The change is three strings plus the gate; the images are
+in `.scratch/b13/` (swept by `CleanScratch.ps1` — copy them if they are wanted):
+
+| file | what it is |
+|---|---|
+| `bl305-base.png` | today's build at `BL-305`'s pose — packed edge to edge |
+| `bl305-step1.png` | subface gate alone — downtown empty, a clear over-correction |
+| `bl305-expt-bl250.png` | gate + `cblock4/5/6` restored — the candidate |
+| `c5-oblique-base.png` / `c5-oblique-expt-bl250.png` | a 140 m oblique over the same crossroads, for the interpenetration check `BL-250` used |
+
+Compare against `Z:\CSVM\playtest\CAP-22\orig-c-t4-nadir-crossroads.png`.
+
+### Part 2 — `MinSlopeCos` is deleted, and it never culled anything
+
+`MinSlopeCos = 0.25f` is gone. It is an invention — `FUN_004deab0` initialises the kind block's
+slope bounds to ±1.0 (no cull) and no shipped `templates.zrd` authors `min_slope` or `max_slope` —
+**and it was inert**. The cull is `xzArea < trueArea * MinSlopeCos`, and `xzArea / trueArea` is
+exactly `|Ny|` of the unit plane normal, so it drops triangles steeper than ~75.5°. Censused over
+every chapter's registered template textures, walked the way `PlaceOnWorld` walks:
+
+| chapter | eligible tris | shallowest slope cos | culled by 0.25 | culled at 0.50 (control) |
+|---|---|---|---|---|
+| C1 | 3,828 | **0.4598** (~62.6°) | **0** | 3 |
+| C1B | 20 | 0.8747 | 0 | 0 |
+| C2 | 3,091 | 0.6737 | 0 | 0 |
+| C3 | 319 | 0.7997 | 0 | 0 |
+| C4 | 4,646 | 0.5446 | 0 | 0 |
+| C5 | 3,971 | 0.9988 | 0 | 0 |
+
+**There is no terrain in this install steep enough to trip it.** The steepest clutter-eligible
+triangle anywhere is a single C1 face at 0.4598, nearly twice the threshold. So the deletion is a
+provable no-op on retail data: every chapter's instance count is byte-identical to the baseline, all
+13 goldens are hash-identical, and a shot of that steepest hillside
+(`--pos=-10176,300,-3060 --lookat=-10176,140,-3445`) renders the same md5
+`14466614F73D388FAA1808FFA7418763` before and after. **No new trees appear, so none can float** —
+the concern the constant was invented for is real but has nothing in this install to act on. Nothing
+was replaced with another constant; a cull belongs in `templates.zrd`'s `min_slope`, which no
+chapter authors.
+
+The instrument was shown able to fail twice (METHOD-9): its first run reported "0 triangles tested"
+because it read `resolve_templates`'s keys instead of its textures — caught and fixed rather than
+banked — and the same script at a 0.50 threshold culls 3 triangles in C1.
+
+**One neighbour left alone.** `xzArea < 0.5f`, the sliver rule beside it, is also remake-only and
+**does** fire — 14 triangles in C5, 0 elsewhere. B13 does not own it; it is noted here so nobody
+reads "the slope rules were settled" as covering it.
+
+**Verified.** Baseline taken on the unchanged tree immediately before the changed runs and
+re-measured after (METHOD-3), both times `8820B741…` at 154.6/154.7 ms. `.\RunTests.ps1`: build
+PASS, **843 units PASS**, 29 in-engine suites PASS with engine errors clean, **13 goldens
+hash-identical — none moved.** METHOD-12 honoured and its prediction is recorded above as failed,
+not rewritten. The `.cs`/`.dll` timestamps were checked after the file round-trip, because a
+`Copy-Item` restore preserves `LastWriteTime` and MSBuild will silently skip the rebuild.
+
+**What B13 could not verify.** (a) Whether the coupled gate + `BL-250` state matches the original —
+that needs the user's eye on the three images and, if adopted, B14's proper A/B. (b) The 452-vs-288
+walk discrepancy above. (c) Whether making `UvTriangle.Contains` strict, per the original's step 6,
+is right — it would delete the shared-diagonal candidates rather than duplicate them, and no capture
+distinguishes the two.
+
+### Original approach (kept for reference)
 
 **Goal.** Each of the two invented rules in `Clutter.cs` is either justified against the original's
 behaviour and documented as a deliberate deviation, or deleted.

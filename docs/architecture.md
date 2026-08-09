@@ -682,6 +682,20 @@ plus a UV-clamp variant from `SceneBuilder.UvsWithinUnitSquare` over the kind's 
   (`Effects/FogVolumeClutter`, driven by a different reader) resolves `cloudsprite*` by the same
   parentless-Object3d rule. A null return is retail-data-normal — C2B registers three templates
   its gamez lacks, and C1B/C2/C3's `fogvol.zrd` names a `cloudsprite` no chapter carries.
+⚠ **No slope cull.** `MinSlopeCos = 0.25f` was deleted in B13 as an inert invention: the original's
+  cull is authored per kind (`min_slope`/`max_slope` → cosines, `FUN_004deab0`) and defaults to
+  ±1.0, no chapter authors either key, **and the constant never fired** — `xzArea/trueArea` is
+  `|Ny|`, and the steepest clutter-eligible triangle in the install is C1's at 0.4598 against a
+  0.25 (~75.5°) threshold. Zero culled in every chapter; the same census at 0.50 culls 3, so the
+  zero is a measurement. Do not reintroduce it; a cull belongs in `templates.zrd`'s `min_slope`.
+  The `xzArea < 0.5f` sliver rule beside it is a different, still-live rule (14 triangles in C5).
+⚠ **The quarter-metre `seen` dedup is KEPT deliberately, and it is remake-only.** B13 measured what
+  removing it costs and it is doing two jobs. (1) It stands in for the subface gate below. (2) Even
+  with that gate added it still removes real duplicates, because `UvTriangle.Contains` is INCLUSIVE
+  on the edge and a lattice candidate landing exactly on two triangles' shared diagonal is claimed
+  by both — C1 +38, C4 +139, C5 +1,082 without it, mostly solid buildings whose authored quad UVs
+  sit on tidy fractions. The original's step-6 test is STRICT and claims such a point in neither
+  triangle; matching that is a change to `UvTriangle`, not a change to this set.
 ⚠ **`PlaceOnMesh` matches a template to a polygon by TEXTURE NAME ONLY — it never reads
   `GameZPolygon.Subface`.** In C5, `cblock1/2/3`'s subface polygons sit directly on top of
   `cblock4/5/6`'s base polygons (88.5–100% footprint overlap, `analysis/item9-depth-bias/CBLOCK-LOD.md`),
@@ -690,6 +704,13 @@ plus a UV-clamp variant from `SceneBuilder.UvsWithinUnitSquare` over the kind's 
   the `cblock1/2/3` city; closing commit: `git log --grep=BL-250`). The subface depth-bias fix
   (`SceneBuilder.SubfaceBias`) only resolves which ground TEXTURE wins the z-fight; it has no effect
   on this file, which walks the same gamez tree independently.
+  **⚠ B13 measured the real gate (`FUN_004de2c0` skips flag `0x800`) and it is the leading `BL-305`
+  candidate — but it is COUPLED to that exemption and cannot land alone.** With the gate and the
+  exemption both in force C5's downtown empties, because the visible ground there IS the subface
+  layer and the base layer underneath is the exempted one. Gate + `cblock4/5/6` restored is the
+  state that resembles CAP-22, and it removes the doubling by mechanism instead of by a curated
+  list. Deliberately unlanded — reopening `BL-250` is a user decision. Numbers, md5s and the three
+  screenshots: `docs/PLAN-clutter-uv-placement.md` item B13.
 
 ## src/Mech3/Zrdr.cs
 Zrdr extraction reader (zip or unpacked dir): `LoadFile`, content-sniffing `LoadMatchingFiles`,
