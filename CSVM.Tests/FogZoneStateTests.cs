@@ -40,12 +40,12 @@ public class FogZoneStateTests
         Assert.NotNull(weather);
         Assert.Equal("zone1", weather!.ZoneForState(1));
         Assert.Equal("zone2", weather.ZoneForState(2));
-        Assert.Equal(1750f, weather.Fog(weather.ZoneForState(1)).FogFar, 1);
-        Assert.Equal(4000f, weather.Fog(weather.ZoneForState(2)).FogFar, 1);
+        Assert.Equal(1750f, weather.Zone(weather.ZoneForState(1)).FogFar, 1);
+        Assert.Equal(4000f, weather.Zone(weather.ZoneForState(2)).FogFar, 1);
         // ...and the state-2 fog is what the flight rendered EVERYWHERE before this item, which is
         // what makes the below-deck half a change and the above-deck half an invariant.
-        Assert.Equal(970f, weather.Fog(weather.ZoneForState(1)).FogLow, 1);
-        Assert.Equal(4000f, weather.Fog(weather.ZoneForState(2)).FogLow, 1);
+        Assert.Equal(970f, weather.Zone(weather.ZoneForState(1)).FogLow, 1);
+        Assert.Equal(4000f, weather.Zone(weather.ZoneForState(2)).FogLow, 1);
     }
 
     [ExtractedDataFact]
@@ -100,21 +100,21 @@ public class FogZoneStateTests
         Assert.True(into!.Value.Applied);
         Assert.False(into.Value.FellBack);
         Assert.Equal("zone3", into.Value.Zone);
-        var zone3Fog = weather!.Fog(into.Value.Zone);
+        var zone3Fog = weather!.Zone(into.Value.Zone);
         Assert.Equal(50f, zone3Fog.FogNear, 1);
         Assert.Equal(250f, zone3Fog.FogFar, 1);
         Assert.Equal(16f / 255f, zone3Fog.FogColor.R, 3);
         Assert.Equal(16f / 255f, zone3Fog.FogColor.G, 3);
         Assert.Equal(16f / 255f, zone3Fog.FogColor.B, 3);
         // ZONE3's own SUNLIGHT block (diffuse 1.5 / ambient 0.5) rode along with the fog — the
-        // same ApplyFogGlobals call writes csky_world_light from this same ZoneFog record.
+        // same ApplyZone call writes csky_world_light from this same ZoneWeather record.
         Assert.Equal(1f, zone3Fog.WorldLight, 3);
 
         var outOf = trigger.Next(1, weather!);
         Assert.NotNull(outOf);
         Assert.True(outOf!.Value.Applied);
         Assert.Equal("zone1", outOf.Value.Zone);
-        var zone1Fog = weather!.Fog(outOf.Value.Zone);
+        var zone1Fog = weather!.Zone(outOf.Value.Zone);
         Assert.Equal(1500f, zone1Fog.FogNear, 1);
         Assert.Equal(2250f, zone1Fog.FogFar, 1);
         Assert.Equal(2, trigger.Applications);
@@ -213,8 +213,8 @@ public class FogZoneStateTests
         var ia1 = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "IA1"));
         Assert.NotNull(ia1);
         Assert.Equal(
-            ia1!.Fog(ia1.ZoneForState(1)).WorldLight,
-            ia1.Fog(ia1.ZoneForState(2)).WorldLight,
+            ia1!.Zone(ia1.ZoneForState(1)).WorldLight,
+            ia1.Zone(ia1.ZoneForState(2)).WorldLight,
             3);
 
         var m02 = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "M02"));
@@ -222,8 +222,8 @@ public class FogZoneStateTests
         // ZONE1 ambient 0.20 / diffuse 1.5 vs ZONE2 0.25 / 1.2 — a real per-state brightness the
         // static resolution could never render.
         Assert.NotEqual(
-            m02!.Fog(m02.ZoneForState(1)).WorldLight,
-            m02.Fog(m02.ZoneForState(2)).WorldLight,
+            m02!.Zone(m02.ZoneForState(1)).WorldLight,
+            m02.Zone(m02.ZoneForState(2)).WorldLight,
             3);
     }
 

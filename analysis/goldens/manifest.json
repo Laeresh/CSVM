@@ -70,36 +70,36 @@
     {
       "name": "viewer-bhawk",
       "frame": 30,
-      "hash": "71d5c3bfbfd36a477df5f9f1e0ca69bb",
-      "exercises": "one aircraft built and painted: PlaneBuilder, the pinned livery seed, decals, the orbit camera's framing; static by construction, 0 px at 30 vs 360.",
+      "hash": "d952186fbb529953ce2eb38d72dd7488",
+      "exercises": "one aircraft built and painted: PlaneBuilder, the pinned livery seed, decals, the orbit camera's framing; static by construction, 0 px at 30 vs 360. BL-324 moved it: shadow mapping is off, so the wing no longer self-shadows the fuselage. The BEARING is unchanged here — --viewer loads no weather, so the light keeps the launcher default.",
       "args": ["--viewer", "--plane=player_bhawk", "--det", "--mute"]
     },
     {
       "name": "empty-stage",
       "frame": 120,
-      "hash": "a5f53de7ab630f9c8300382055d5fb2a",
-      "exercises": "the synthetic stage with no gamez at all — code-drawn grid, default sky and sun, flight model, HUD; frame-sensitive 12.21 %, and the one shot that still renders with extracted/ absent.",
+      "hash": "6edc1b0b92c6003e84dcac15ac96559e",
+      "exercises": "the synthetic stage with no gamez at all — code-drawn grid, default sky and sun, flight model, HUD; frame-sensitive 12.21 %, and the one shot that still renders with extracted/ absent. BL-324 moved it: shadow mapping is off, so the plane no longer drops a shadow on the grid sheet. Bearing unchanged (no weather on the empty stage).",
       "args": ["--stage=empty", "--plane=player_bhawk", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "1bbe7dfca09fedf6e60048ed05d01023",
-      "exercises": "a flying plane: chase camera on the sim clock, prop and control-surface animators, gauges, compass tape, weapon readout, impact reticle; the --hold throttle 0.5→1 jump also crosses ThrottleSlamSmoke's slam threshold, so this is the one golden carrying a live exhaust-trail Puffer; frame-sensitive 34.52 %, the strongest tripwire here.",
+      "hash": "38adfec058f756b1ab494e7c9a69a36d",
+      "exercises": "a flying plane: chase camera on the sim clock, prop and control-surface animators, gauges, compass tape, weapon readout, impact reticle; the --hold throttle 0.5→1 jump also crosses ThrottleSlamSmoke's slam threshold, so this is the one golden carrying a live exhaust-trail Puffer; frame-sensitive 34.52 %, the strongest tripwire here. BL-324 moved it: the sun now wears C1's authored SUNLIGHT_ORIENTATION [-25, 90] instead of the hardcoded (-45, 150), so the airframe is lit by a low eastern sun and reads darker and flatter from the chase camera. Aircraft are the only shaded surfaces in a flight, which is why the eight --freecam goldens did NOT move.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "240981a4fe9bb3ce8d7189de2d2dc3de",
-      "exercises": "the world-effects runtime (ForEffects/D32) built and rendering a puffer: a flight-session kill of the single ap_radiotwr instance CALL_ANIMATIONs great_balls_of_fire onto the world-effects stage; frame-sensitive (distinct hashes at 119/120/121), and moves off its Rng.Effects seed (PLAN-animruntime-role-factories A1).",
+      "hash": "fa27f0cda9097b906fe1769b1f92e79f",
+      "exercises": "the world-effects runtime (ForEffects/D32) built and rendering a puffer: a flight-session kill of the single ap_radiotwr instance CALL_ANIMATIONs great_balls_of_fire onto the world-effects stage; frame-sensitive (distinct hashes at 119/120/121), and moves off its Rng.Effects seed (PLAN-animruntime-role-factories A1). Also moved by BL-324's bearing change, same as c1-flight — the plane is the shaded surface in frame.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "fee6e39a9ede57514416c16c15a80cd8",
-      "exercises": "the per-player crash rig (ForCrashRig/D32) constructing and playing player_crash_dirt: --crash=5 forces FlightController.Crash() at a fixed sim frame, the only headless trigger for this path (PLAN-animruntime-role-factories A2); moves off its Rng.Crash draw. The set's biggest puffer surface, so the TEXTURE_SEQUENCE lifetime-fraction fix moved 26.55 % of its pixels: the fireball holds its mid flipbook frames instead of the blown-out last one. Also exercises EffectCatalogue.CrashSurfaceLevelAnimNames (BL-292): flydirt_plane, the dirt burst's ground-scorch dust plane, levels to world axes instead of the plane's spawn-trim attitude at --crash=5's frame, moving a 2.16% halo ring around the fireball (>20/255 threshold) — the fireball/smoke/debris family is deliberately excluded from that set and is pixel-unchanged.",
+      "hash": "2e44dc12f8af685c94c92d488fd5f1d6",
+      "exercises": "the per-player crash rig (ForCrashRig/D32) constructing and playing player_crash_dirt: --crash=5 forces FlightController.Crash() at a fixed sim frame, the only headless trigger for this path (PLAN-animruntime-role-factories A2); moves off its Rng.Crash draw. The set's biggest puffer surface, so the TEXTURE_SEQUENCE lifetime-fraction fix moved 26.55 % of its pixels: the fireball holds its mid flipbook frames instead of the blown-out last one. Also exercises EffectCatalogue.CrashSurfaceLevelAnimNames (BL-292): flydirt_plane, the dirt burst's ground-scorch dust plane, levels to world axes instead of the plane's spawn-trim attitude at --crash=5's frame, moving a 2.16% halo ring around the fireball (>20/255 threshold) — the fireball/smoke/debris family is deliberately excluded from that set and is pixel-unchanged. Also moved by BL-324's bearing change, same as c1-flight — the airframe is a shaded surface; the puffers are unshaded and take nothing from it.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     }
   ]

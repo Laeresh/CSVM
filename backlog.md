@@ -1396,6 +1396,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   in C3 sits at **yaw 45**. The authored sunlight says **yaw 135**, and our light says **yaw 150**.
   So in C3 the flare, the sun disc and the shadows currently point three different ways; the flare
   and the disc agree with each other (both come from the node) and the light agrees with neither.
+  *Decoded from `crimson.exe` 2026-08-09 (Ghidra), which settles the mechanism end to end:*
+  `FUN_004bc3e0` (`D:\zipper\Crimson\weather.cpp`) parses each zone into a 0x58-byte struct on the
+  weather singleton at `0x71dcd0` — orientation at +0x28/+0x2c/+0x30, **each multiplied by
+  0.017453292** (degrees→radians, confirming the unit) and defaulting to pitch −π/2 when absent.
+  ZONE1–3 land at +0x54, SW_ZONE1–3 at +0x15c — **two tables, hardware vs software renderer**; we
+  are the hardware path. Zone selection (`FUN_004bc320`, index at +0x29c) fires the zone-apply
+  `FUN_00472ea0`, which picks the right table and calls, on one light object,
+  `FUN_004dbcc0(ACTIVE)` / **`FUN_004dc610(pitch, yaw, roll)`** / `FUN_004dbdb0(DIFFUSE)` /
+  `FUN_004dbce0(AMBIENT)` / colour + `STATIC` + `BICOLORED`. `FUN_004dc610` is
+  `zclass\Light.c`'s rotation setter: the three radians are written as a **gamez node rotation
+  triple (x,y,z)**, so our existing gamez→Godot rotation conversion applies unchanged — no new
+  axis guesswork. The light is a **named gamez node**: `FUN_004735b0` resolves it as
+  `FUN_004d0280(0xa, "sunlight")`, and `extracted/<ch>/gamez/nodes.json` carries a parentless,
+  model-less `sunlight` node with `active: false` in **all eight chapters** — a light the weather
+  file drives, entirely separate from the `sun` billboard the flare is anchored to. Nothing in the
+  binary links the two.
   ⚠ **Traps.** (a) Do **not** "fix" this by re-anchoring the flare to `SUNLIGHT_ORIENTATION` —
   that was tried and rejected on evidence: the parameter is the shading direction, not the sun
   object's position, and the flare would draw 90° from the visible disc (`WORLD-26`,
@@ -1403,11 +1419,76 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   not the flare. (b) The world is rendered fullbright with a per-mission scalar
   (`WorldLight`/`SunIncidence` 0.46), so this light mostly shades **aircraft**, not terrain —
   expect the change to show on planes and their shadows, and to be nearly invisible on the ground.
-  (c) Whether the node bearing and the authored orientation *should* agree is itself unsettled: if
-  the original's shadows fall along `SUNLIGHT_ORIENTATION` while its sun billboard sits elsewhere,
-  then the original disagrees with itself too and we should reproduce that, not reconcile it.
-  *Needs an original-game A/B:* a C3 pose showing aircraft shading and shadow direction against the
-  visible sun, which settles (c) before any value is adopted.
+  (c) ⛔ **Settled 2026-08-09 — the original does disagree with itself, and we reproduce that.**
+  The `sunlight` light node and the `sun` billboard node are two unrelated objects with no code
+  path between them, so C3's yaw 135 shading beside a yaw 45 disc is authored, not a bug to
+  reconcile. This entry's earlier "needs an original-game A/B to settle (c)" is retracted.
+  (d) ⚠ **Shadows do not follow the sun, and this item does not touch them — see `BL-331`.**
+  The original's shadow renderer `FUN_0049d0a0` reads the `sunlight` node's direction vector
+  (class data +0x84…+0x8c) **only as a fallback**; a top-level `SHADOW_ANGLES` key wins, converted
+  by `FUN_0053c610` as `(-cos p·sin y, sin p, -cos p·cos y)`. **All 53 shipped
+  `weather.zrd.json` files author `SHADOW_ANGLES [-90, 0, 0]` → `(0, -1, 0)`, straight down**, and
+  the parser's second key `SHADE_ANGLES` appears in **zero** files — so the sun-direction path is
+  dead code on this install and the original's aircraft shadows are vertical drop shadows in every
+  chapter. ⛔ An earlier draft of this trap said our planes "trail raked shadows the original never
+  casts" — **wrong, and struck**: the world is built `fullbright: true` (unshaded), and an unshaded
+  Godot material receives no light and no shadow, so nothing our aircraft cast can land on the
+  ground. Aircraft are the only shaded things in the scene; the shadow map only ever reached other
+  aircraft. So the shadow is a **missing feature** (`BL-331`), not a wrong angle.
+  (e) ⚠ **The neighbouring `SUNLIGHT_*` keys are not open questions.** `SUNLIGHT_ACTIVE` censuses
+  **1 in every hardware zone and 0 in every software zone**, all 212 blocks install-wide, and
+  `Weather.cs` already excludes the `SW_ZONE*` twins — so the light is unconditionally on and needs
+  no toggle. `SUNLIGHT_DIFFUSE`/`_AMBIENT` *are* set on this same node in the same call and we
+  ignore them on the shaded path, but that is a units calibration needing its own A/B: `BL-332`.
+  *Scope:* localized, and the gamez→Godot mapping is the **identity** — `GameZ.ParseTransform`
+  consumes node eulers as `Basis.FromEuler(v, EulerOrder.Yxz)` verbatim in radians, Godot's
+  `Node3D` default order is YXZ and a `DirectionalLight3D` shines along local −Z, which reproduces
+  `FUN_0053c610` exactly at (0,0), (−90,0) and (0,90). So: parse `Orientation` per zone in
+  `Weather.cs` (renaming the now-misnamed `ZoneFog` record to `ZoneWeather`), write
+  `_sun.Rotation = new Vector3(pitch, yaw, roll)` radians from `WeatherRig`'s single zone-apply
+  (`ApplyFogGlobals` → `ApplyZone`, already edge-triggered on zone change at `WeatherRig.cs:476`,
+  mirroring `FUN_00472ea0` which sets fog and light in one call), and set `ShadowEnabled = false`.
+  Adopt the authored bearing unconditionally — no TUNE, no clamp: some chapters will read worse
+  than the hand-picked angle, and that is the original's look, not a regression to fix here.
+
+- `BL-331` `[Feature]` **Aircraft cast no ground shadow; the original draws one, straight down**
+  (split out of `BL-324`, 2026-08-09). The original projects a shadow under each aircraft in
+  `FUN_0049d0a0`: it takes a direction (the `sunlight` node's vector, or — on every shipped
+  mission — the top-level `SHADOW_ANGLES [-90, 0, 0]`, i.e. **straight down**), raycasts the
+  terrain below the aircraft for a ground height, and draws a fading quad there. We draw nothing:
+  the world is built `fullbright: true` (unshaded) and an unshaded Godot material receives no
+  shadow, so Godot shadow mapping **cannot** be the mechanism — `BL-324` turned
+  `_sun.ShadowEnabled` off precisely because the only thing it reached was other aircraft, which
+  the original never shadows either. Note that removal here so it is not rediscovered as a
+  regression.
+  ⚠ **Check the authored mesh first.** The original's plane models carry a node literally named
+  `shadow`, which `PlaneBuilder.cs:26` excludes from what we build (`WorldEffectsFactory.cs:54`
+  lists it among the plane's own nodes). That may *be* the shadow — an authored flat card the
+  engine drops to ground level — in which case this is a placement problem, not a renderer to
+  write. Settle that before designing a procedural blob.
+  *Not decoded:* `FUN_0049d0a0`'s size law, its distance fade (two squared-range terms), the
+  altitude ramp against the raycast hit, and the `0.8`/`3.0 − 2·a` alpha terms. Deliberately left
+  open rather than guessed at.
+  *Needs:* an original-game A/B — a low pass over flat ground showing the shadow's size and
+  softness against the aircraft's altitude.
+
+- `BL-332` `[Bug]` **The aircraft light's intensity is hardcoded; the mission authors it**
+  (split out of `BL-324`, 2026-08-09). `Launcher.cs` sets `LightEnergy 1.6` and
+  `AmbientLightEnergy 0.9` (ambient source `Sky`) once at launcher level, for every mission.
+  The original sets `SUNLIGHT_DIFFUSE` and `SUNLIGHT_AMBIENT` **on the same `sunlight` node in the
+  same zone-apply call** as the orientation (`FUN_004dbdb0`/`FUN_004dbce0`, beside
+  `FUN_004dc610` — see `BL-324`), and they swing hard: `DIFFUSE` 0.4–2.0, `AMBIENT` 0.15–0.6, with
+  C1B night at `0.6 / 0.15` against C1C day at `2.0 / 0.6`. `Weather.cs` already parses both, but
+  only collapses them into the `WorldLight` scalar for the **fullbright world**
+  (`AMBIENT + DIFFUSE·SunIncidence`); the shaded path — aircraft, the only lit things in the scene
+  — never sees them. So a plane in C1B's night mission is lit exactly as brightly as one in C1C's
+  daylight, and since `BL-324` its bearing is now per-chapter while its brightness is not.
+  ⚠ Not a straight port: `DIFFUSE` is a DX7-era intensity, not Godot's `LightEnergy` units, so
+  mapping 0.4–2.0 onto the light is a **new calibration**, not a substitution — which is why it is
+  not part of `BL-324`. Keep it to those two constants; whether Godot's ambient should stop being
+  `Sky`-sourced is a separate rendering-design question, not this.
+  *Needs an original-game A/B:* a matched night/day pose showing aircraft brightness, in the spirit
+  of `CAP-11`'s `WorldLight` calibration (which pinned the world half of the same pair).
 
 - `BL-305` `[Bug]` **C5's city blocks are packed edge to edge where the original shows pavement
   between buildings — within-block clutter density/alignment is wrong.** Found by `CAP-22`
