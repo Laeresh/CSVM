@@ -316,6 +316,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
       for whoever next tunes `puffer.burstSizeScale` or the fire family's TUNE pair (D10), not
       something A1/A2 should absorb by picking a different constant than the one the disassembly
       settles.
+    - **2026-08-09, weighting this correctly:** the 9.7 m figure is a *video frame measurement*, and
+      those are weak evidence in this project — they have misled it repeatedly (standing author
+      instruction). Note that the sim disagreed with it at the old `×1` default too (16.6 m vs
+      9.7 m), so **no value of `SizeScaleDefault` ever reconciled the two** — the footage was never
+      evidence about this constant. Treat the gap as a note about sprite alpha or particle density,
+      not as an open question hanging over the decode, and do **not** re-open A1 on the strength of
+      it. Qualitative reads from the clip (is there a fireball, does it persist) remain useful; a
+      measured span from it does not.
     - Limit: the ruler only exists near ignition (the airframe is gone within ~0.5 s and no known
       length survives in frame), so this is an *early-frame* comparison. Our burst is dead by ~1.0 s
       while the original is still at full intensity 9 sim-s later — that gap is the hold time above,

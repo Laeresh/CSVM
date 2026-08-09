@@ -37,7 +37,14 @@ disagreement is recorded — not averaged away.
 |---|---|---|
 | 1 | `Puffer.SizeScaleDefault` needs a judged stand-in for "a missing engine constant" | The constant is not missing. `FUN_0057c5c0` draws the sprite at `screenX ± r`, `screenY ± r` — `SIZE_RANGE` is a **radius**. The stand-in was standing in for a factor of exactly 2. |
 | 2 | ×4 (settled at the controls 2026-08-01) is the sprite-size answer | ×4 was chosen because at ×1 the emitters "read as a thin scatter of specks". Two separate factor-2 errors produce exactly that symptom: sprites half the size they should be (A1) and scatter twice as wide as it should be (A2). ×4 over-corrected one of them and never touched the other. |
-| 3 | The five puffers whose `growth_factors` don't map to a reader `GROWTH_FACTOR` scalar are name collisions across readers (`docs/formats/anim-definitions.md:1180`) | `GROWTH_FACTOR` is compiled into the *degenerate two-stop case* of `SCALE_SEQUENCE` (`FUN_004f7120` writes `count=2, (0,1), (1,G)`). An entry is `(age, scale)`, not `(min, max)`. The outliers are most likely genuine multi-stop ramps — B3 settles it by census. |
+| 3 | The five puffers whose `growth_factors` don't map to a reader `GROWTH_FACTOR` scalar are name collisions across readers (`docs/formats/anim-definitions.md:1180`) | The census (below) reproduces that survey's own denominator and finds **zero** mismatches — the apparent ones differ by 1.9e-07, float print noise. The real cause is wildcard reader names expanding at compile time. Separately: an entry is `(age, scale)`, not `(min, max)`, proven by 216 events whose "max" is less than its "min". |
+| 4 | The CAP-16 footage measurement (≈9.7 m fireball) is a check on the decode | **Video measurements are not trusted evidence in this repo — they have failed repeatedly** (author's standing instruction, 2026-08-09). A1 landed against a *decode*, and the footage number disagreed with the sim at both the old constant (16.6 m) and the new one (20.7 m) — i.e. no value of `SizeScaleDefault` was ever going to reconcile it, so it was never evidence about this constant. Do not re-open a landed decode on a footage estimate. |
+
+**⚠ Standing rule on video evidence.** Frame-measured distances from the original footage
+(`OriginalScreenshots/`, the `CAP-nn` clips) are **weak evidence** here and have misled this project
+more than once. They are usable for *qualitative* reads — is there a plume, does it rise, roughly
+how long does it last — and not for deriving or contesting a constant. Where a decode and a footage
+measurement disagree, **the decode wins and the disagreement is a note, not an open question.**
 
 | Confidence | Items | What that means for you |
 |---|---|---|
@@ -74,10 +81,27 @@ The puffer implementation in `crimson.exe`, by function:
 | `+0x5c`/`+0x60` | `START_AGE_RANGE` min/max | `+0xd0`…`+0xe4` | `NEAR_FADE`, `FAR_FADE` (+ reciprocals) |
 | `+0x30`/`+0x34` | scale-sequence vector | `+0x10`…`+0x18` | colour-ramp vector |
 
-**The particle** is 0x78 bytes: `[0..2]` pos, `[3..5]` vel, `[6..8]` accel, `[9]` **base size**,
-`[10]` age, `[11]` lifetime, `[12]` 1/lifetime, `[0xd..0x12]` fade bounds and reciprocals,
-`[0x13]` friction, `[0x14]` wind factor, `[0x15]` priority, `[0x16]`/`[0x18..0x1a]` scale-ramp
-cursor and the particle's own copy of the ramp, `[0x1b]` colour cursor, `[0x1d]` shared state.
+**The particle** is 0x78 bytes (indices `0..0x1d`): `[0..2]` pos, `[3..5]` vel, `[6..8]` accel,
+`[9]` **base size**, `[10]` age, `[11]` lifetime, `[12]` 1/lifetime, `[0x13]` friction,
+`[0x14]` wind factor, `[0x15]` priority, `[0x17]` a *byte* flag (not a float), `[0x1d]` the shared,
+refcounted ramp container.
+
+The fade bounds and the two ramp cursors were **read wrong in this plan's first draft** and are
+corrected here (traced 2026-08-09, second pass):
+
+| Index | What it actually is |
+|---|---|
+| `[0xd]`/`[0xe]` | `NEAR_FADE[0]` / `NEAR_FADE[1]` |
+| `[0xf]`/`[0x10]` | `FAR_FADE[0]` / `FAR_FADE[1]` |
+| `[0x11]`/`[0x12]` | near reciprocal / far reciprocal |
+| `[0x16]` | **`TEXTURE_SEQUENCE` cursor** — *not* the scale-ramp cursor. Stride 8 `(time, textureHandle)`, **stepped, never interpolated** |
+| `[0x18..0x1a]` | the per-particle **texture-sequence vector** (begin/end/capacity, heap-allocated per particle in `FUN_0054f8b0`, freed in `FUN_00550970`) — *not* a copy of the scale ramp |
+| `[0x1b]` | colour cursor into `[0x1d]`+4/+8, stride `0x14` = `(r,g,b,a,time)`, time key at `+0x10` |
+| `[0x1c]` | **the scale-ramp cursor**, into `[0x1d]`+0x14/+0x18, stride 8 `(time, scale)`, lerped |
+
+⚠ **The fade copy from object to particle is not a contiguous six-float memcpy.** `FUN_0054f8b0`
+writes the four bounds first and *then* the two reciprocals, so an implementer who mirrors the
+object's `+0xd0`…`+0xe4` order onto the particle lands the wrong value in `[0xf]` and `[0x11]`.
 
 **The keys the parser accepts that we do not read at all:** `SCALE_SEQUENCE`, `START_AGE_RANGE`,
 `NEAR_FADE`, `FADE_RANGE`/`FAR_FADE`, `WIND_FACTOR`, `PRIORITY`.
@@ -93,6 +117,84 @@ the world↔screen ratio cancels: the sprite is equivalent to a camera-facing wo
 **side `2 × baseSize × scaleSeq(ageFrac)`**. `K` is `0.01` on the software path and `0.02` on the
 hardware path (`FUN_0054d9c0`). The two script-exposed globals, `PufferSetGlobalAgeFactor` and
 `PufferSetGlobalFadeFactor`, both default to `1.0` (`00637a90`, `00637a94`).
+
+## The census (2026-08-09) — what the install actually authors
+
+Read-only sweep of **17,567 JSON files** under `Z:\CSVM\extracted`: the reader surface (all 1,293
+`*.zrd.json`, yielding **879 `PUFFER_STATE` blocks**, of which 594 are full definitions and 285 are
+name+`ACTIVE_STATE` stubs) and the compiled surface (**4,535 `PufferState` events**, 2,906 fully
+authored). Coverage caveat: the plan's header cites 4,387 compiled events from `Puffer.cs:126`;
+the file surface has 4,535 (4,427 excluding `#1`-suffixed duplicate-named anim files). The
+discrepancy is unreconciled and changes no conclusion below — the histogram has no tail on any
+denominator.
+
+| Key | Reader blocks | Compiled events | Distinct puffers | Verdict |
+|---|---|---|---|---|
+| `SCALE_SEQUENCE` | **0** | — | — | **B3 unreachable — disproof** |
+| `growth_factors` length ≠ 2 | — | **0 of 2,906** | — | **B3 unreachable — disproof** |
+| `START_AGE_RANGE` | 4 | 80 | 4 | B4 implement (narrow) |
+| `NEAR_FADE` | 33 | 432 | 25 | C7 implement |
+| `FADE_RANGE`/`FAR_FADE` | 574 / 1 | **2,508** | **238** | **C7 implement — the widest unimplemented key in the plan** |
+| `PRIORITY` | 58 | 192 | 47 | C8 implement — *not* "none" |
+| `WIND_FACTOR` | 27 | 112 | 27 | B6 half-1 reachable |
+| `DEVIATION_DISTANCE` ≠ 0 | — | **2,882 (99.2%)** | — | A2 landed; touched nearly everything |
+
+**`growth_factors[i]` is `(age_i, scale_i)` — now proven from the data alone**, independent of the
+disassembly: **216 events author a second entry whose "max" is less than its "min"**, including
+`(1.0, −0.2)`. That is a coherent `(age 1, scale −0.2)` stop and an incoherent range. All 2,906
+arrays are exactly `[(0,1), (1,G)]`; entry 0 is `(0,1)` in every single one.
+
+**The "five name collisions" of `anim-definitions.md:1180` do not reproduce.** Re-running that
+survey's own denominator (177 single-definition reader names, 168 with compiled counterparts) gives
+**zero** mismatches — the 31 apparent ones differ by at most 1.9e-07, float32↔float64 print noise.
+The likely original cause is an undocumented reader idiom: three **wildcard names**
+(`rc_smokn_stacks*`, `stack_puffer*`, `torch_puffer*`) expand at compile time into exactly the 7
+compiled names that have no reader definition. Separately there are **17 genuine** name collisions
+where one name has several differing reader definitions (`fire_n_smoke` has 35; `smokerpuff` spans
+G = 4.0 to 85.0), each resolved per-file. None is a multi-stop ramp.
+
+**Compiled ↔ reader disagreements: none**, on any key, anywhere.
+
+## The second disassembly pass (2026-08-09) — two ambiguities the census could not settle
+
+**Negative start age.** `fire_at_zepskin3` authors `START_AGE_RANGE = (−1.0, 0.1)`, so ~91% of its
+particles are born with a negative age. The engine neither delays nor extrapolates: `FUN_0054ee10`
+integrates and reaps with **no sign test at all** (reap is `age >= lifetime` only, so the particle
+simply lives ~1 s longer than its authored lifetime), and `FUN_0054e6e0` **clamps the ramp
+parameter** — `if (0.0 < age) t = age/life; else t = 0.0f`, confirmed in raw x87 at `0054e777`.
+There is no `< 0` guard that skips the draw. The particle is drawn on the frame it is born, pinned
+to stop 0 of the scale ramp, the colour ramp *and* the life-envelope alpha alike, while still moving
+under velocity, friction and wind. **It is a stagger-and-hold, not a spawn delay.**
+
+**Fade field order** (settled at six independent points — parser, applier, setter, ctor defaults,
+spawn copy, and the raw x87 comparisons):
+
+- **Far band:** `FAR_FADE[0]` = ramp start (last full-alpha distance), `FAR_FADE[1]` = **hard
+  discard cutoff**. `alpha = (FAR_FADE[1] − d′) / (FAR_FADE[1] − FAR_FADE[0])`. Always authored
+  ascending.
+- **Near band:** `NEAR_FADE[0]` = **hard discard cutoff** (invisible at or below it),
+  `NEAR_FADE[1]` = the distance at which alpha reaches 1. The code assumes `[0] < [1]`.
+- The reciprocal is `1 / (second − first)`, left as the raw difference (`0.0`) when they are equal.
+- The ctor defaults settle which block is which — near = `(0, 0)`, far = `(FLT_MAX, FLT_MAX)` — and
+  are coherent only this way round.
+
+⚠ **A genuine cross-wire in the original.** The near ramp's origin is `particle[0xf]` =
+**`FAR_FADE[0]`**, not `NEAR_FADE[0]` — verified in raw assembly (`0054e7b5 FSUB [ESI + 0x3c]`
+against the *near* reciprocal at `ESI + 0x44`), not a decompiler artefact. It is consistent with
+`FADE_RANGE` being the original field (low flag bit `0x1000`) and `NEAR_FADE` bolted on later (high
+bit `0x80000`) by copy-pasting the far-band line. **Reproduce it faithfully and document it**; do
+not "fix" it. It is dead code for every puffer but one, and fixing it would make `volcanosmoke`
+fade in over 1→75 m where the original pops it in at 75 m — a silent divergence.
+
+⚠ **With the shipped data the near band never produces a partial alpha.** All five descending pairs
+(`70,30`, `70,20`, `70,50`, `40,5`, `30,10`) make the ramp branch unreachable, degenerating to a
+**hard near-cull** at `NEAR_FADE[0]`: invisible within 70 units, full alpha beyond. The one
+ascending pair, `volcanosmoke`'s `(1,75)`, reaches the ramp branch but the cross-wire drives alpha
+negative, so it culls too. The near band is a **cull**, not a fade, on every puffer in the install.
+
+**`PufferSetGlobalFadeFactor` (`00637a94`, default 1.0) scales the far band only.** `d′ = d ×
+factor` feeds the far discard, the near/far band selector and the far ramp numerator; both near
+comparisons use plain, unscaled `d`. Below 1.0 it pushes the far fade outward.
 
 ## Ground rules
 
@@ -483,10 +585,33 @@ We read none of these keys.
 
 **Approach.** Add `NearFadeStart/End` and `FarFadeStart/End` to `PufferState` (both parsers) and
 multiply the per-particle alpha in `_Process` by the distance factor, discarding past the bounds.
-The camera distance has to reach `Puffer._Process`; that is new plumbing — prefer passing the active
-camera's global position in rather than reaching for a singleton. The 1-pixel cull is a
-resolution-dependent optimisation, not a look: **implement the fade, skip the cull**, and say so in
-the commit.
+Use the field order settled in "The second disassembly pass" above — **do not infer it from the
+authored values**, which are descending in five of six near cases. The camera distance has to reach
+`Puffer._Process`; that is new plumbing — prefer passing the active camera's global position in
+rather than reaching for a singleton. The 1-pixel cull is a resolution-dependent optimisation, not a
+look: **implement the fade, skip the cull**, and say so in the commit.
+
+**⚠ Addition (author's instruction, 2026-08-09): this must be switchable off.** The original's
+distance handling carries a 1998 particle budget we no longer need. Implement it as config keys in
+`Config.WarmTuningRegistry` alongside the existing `puffer.*SizeScale` block, **granular rather than
+one boolean**, because the key conflates three mechanisms with different natures:
+
+| Mechanism | Nature | Key | Default |
+|---|---|---|---|
+| Far alpha ramp across the band | **Authored look** — 238 puffers, bands hand-picked from 400→600 up to 3600 m | `puffer.distanceFade` | `true` |
+| Hard discard past `FAR_FADE[1]` | **Performance** — this is the one to be able to disable | `puffer.farCull` | `true` |
+| Hard cull inside `NEAR_FADE[0]` | **Artifact guard** — stops a screen-filling billboard when the camera flies through it | `puffer.nearCull` | `true` |
+
+**Every key defaults to the original's behaviour.** A flag that ships off would be a silent
+divergence wearing a config key, which is exactly what this plan exists to remove. Disabling the far
+cull while keeping the ramp is the interesting setting — distant puffers stay drawn at their
+authored alpha instead of vanishing at the budget line. Note that honouring
+`PufferSetGlobalFadeFactor` (far band only, below 1.0 pushes the fade outward) gives a fourth,
+*authored* knob for free; prefer wiring that to inventing a distance multiplier of our own.
+
+⚠ Do not let the near cull default off on the argument that it is "also just performance" — it is
+not, and the census shows it fires on `flame_ball`, `zepskinfire`, `partial_damage` and
+`bhf_hangarboom`, all of which the camera can plausibly fly through.
 
 **Model recommendation.** high — it introduces a new dependency (camera position) into a node that
 currently has none, and where that seam goes is a design call.
