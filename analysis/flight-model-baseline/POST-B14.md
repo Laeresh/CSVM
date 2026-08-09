@@ -684,3 +684,77 @@ control is demonstrated, not argued (METHOD-9): inverting the attitude argument'
 plausible. `RunTests.ps1` green: units **721/721** (717 + `AttitudeThrustTests`' 4), engine 29/29,
 goldens 13/13 after the re-pin, `FlightEnvelopeTests` asserting **7**. Full 8-chapter `--freecam`
 regression clean, zero engine errors, all eight screenshots saved.
+
+## D33 — the G and AOA limiters: disproven, on all eleven airframes
+
+**Nothing in this table moved, and that is the result.** D33 is an analysis item: no force term, no
+`*Tune`, no TUNE constant and no scenario disposition changed, so the whole envelope above stands
+as D32 left it. The tripwire is stated rather than assumed — `--dump-flight` (Bloodhawk, Balmoral)
+and `ZzBaselineDump` (all eleven airframes) reproduce
+[`raw/post-d32-dump-bhawk.txt`](raw/post-d32-dump-bhawk.txt),
+[`raw/post-d32-dump-balmoral.txt`](raw/post-d32-dump-balmoral.txt) and
+[`raw/post-d32-all-airframes.txt`](raw/post-d32-all-airframes.txt) **byte-identically**, so no
+post-D33 copy of them is committed, and goldens are **13/13 hash-identical with no re-pin** — the
+only item in Waves B–D to move no golden at all.
+
+**The one code change is an instrument.** `FlightModel.LoadFactorDemand` is the lift demand's body
+X/Y projection over 9.82, assigned beside the existing clamp and read by no force term (the same
+shape as `Alpha`). It reports the demand **before** the ±5/9 G clamp and before the aerodynamic
+ceiling, deliberately: that is the most generous available reading of "the G this aircraft is
+pulling", and it is strictly higher than what the wings deliver.
+
+**The measurement.** `CSVM.Tests/ControlLimiterTests.cs` flies five max-performance manoeuvres per
+airframe at full throttle — the pull at `fd_speed`, the pull entered at 1.5 × `fd_speed`, the same
+pull banked, a full forward push at 1.5 × `fd_speed`, and full rudder — 600 steps of 1/60 s each
+(more than a full loop), and takes the peak of `LoadFactorDemand` and of `Alpha`. Re-run command:
+`CSVM_LIMITER_OUT=<path> dotnet test --filter FullyQualifiedName~ControlLimiterTests` (the same
+env-var pattern `ZzBaselineDump` uses). Raw:
+[`raw/post-d33-limiter-margins.txt`](raw/post-d33-limiter-margins.txt).
+
+| Airframe | peak demanded G | `highGs[0]` | margin | peak α | `maxAOA` | margin | worst manoeuvre (G / α) |
+|---|---:|---:|---:|---:|---:|---:|---|
+| bhawk | **5.01** | 9.0 | 3.99 | **25.6°** | 46.0° | 20.4° | push @ 1.5 fd / pull @ 1.5 fd |
+| devastator | 3.83 | 9.0 | 5.17 | 18.7° | 46.0° | 27.3° | push @ 1.5 fd / pull @ 1.5 fd |
+| fury | 4.43 | 9.0 | 4.57 | 22.1° | 46.0° | 23.9° | push @ 1.5 fd / pull @ 1.5 fd |
+| warhawk | 2.56 | 9.0 | 6.44 | 10.6° | 46.0° | 35.4° | pull @ 1.5 fd / pull @ 1.5 fd |
+| autogyro | 3.17 | 9.0 | 5.83 | 12.4° | 46.0° | 33.6° | pull @ fd / pull @ 1.5 fd |
+| avenger | 4.07 | 9.0 | 4.93 | 20.3° | 46.0° | 25.7° | push @ 1.5 fd / pull @ 1.5 fd |
+| balmoral | 2.13 | 9.0 | 6.87 | 8.9° | 46.0° | 37.1° | pull @ 1.5 fd / pull @ fd |
+| brigand | 3.45 | 9.0 | 5.55 | 15.6° | 46.0° | 30.4° | push @ 1.5 fd / pull @ 1.5 fd |
+| firebrand | 2.57 | 9.0 | 6.43 | 10.5° | 46.0° | 35.5° | pull @ 1.5 fd / pull @ 1.5 fd |
+| kestrel | 2.91 | 9.0 | 6.09 | 12.4° | 46.0° | 33.6° | pull @ 1.5 fd / pull @ 1.5 fd |
+| peacemaker | 4.73 | 9.0 | 4.27 | 24.1° | 46.0° | 21.9° | push @ 1.5 fd / pull @ 1.5 fd |
+
+`highGs`, `lowGs` and `maxAOA` are `player.json` **globals**, so all eleven share the thresholds and
+only the peaks differ — the per-airframe spread is the whole content of the table. The suite's own
+rows corroborate the α column from the other side: the sustained pitch-rate row reports
+α = 20.2/20.5/20.6° at 120/200/280 mph, `zoom-climb` 23.3° at its own minimum speed, the sustained
+turn 23.0°, and D31's knife-edge probe 0.71–4.29° per airframe. **The negative side is unreachable
+twice over:** `lowGs [−6, −9]` sits past the −5 G clamp, and the demand is the LENGTH of a projected
+vector, so it never goes negative in this model at all.
+
+⚠ **The Bloodhawk's peak sits 0.2 % PAST the executable's fallback `highGs[0] = 5`.** Under the
+compiled fallbacks the limiter would engage — by a hundredth of a G into a 4 G-wide ramp, i.e. a
+fraction of a percent of authority. The disproof therefore rests entirely on what this install
+**authors** (9 G), which is the trap the whole plan is written around, and it is why the item was
+worth measuring on eleven airframes rather than arguing from two constants.
+
+**Nothing was implemented** (C24's precedent). If either threshold ever comes into reach, the
+asymmetry is the thing to get right: the original gates **only input that opposes the current
+rotation**, so the limiter damps recovery from a departure rather than entry into one. The
+atmosphere band-select flag was not touched.
+
+⚠ **One consequence outside this item.** C22/C23/D31 each parked the ≈1.6–1.7× fast banked rotation
+on "`turn_fade_in`/`turn_fade_out`/`highGs` are the only authored fields shaped like it". `highGs`
+is out: a limiter that never fires cannot slow a turn. The authored candidates are now
+`turn_fade_in`/`turn_fade_out` alone.
+
+**Determinism and controls.** The per-airframe limiter table, `--dump-flight` (Bloodhawk, Balmoral)
+and `ZzBaselineDump` (all eleven) each run twice, byte-identical (SHELL-10/DET-6, DET-7/DET-9); the
+two dump sets additionally match D32's committed raws byte-for-byte, which is this item's
+inert-by-construction control (DIAG-10) rather than an assumption. The able-to-fail control is
+demonstrated, not argued (METHOD-9): halving both authored thresholds — the stand-in for a data
+edit or a per-plane override — fails both disproofs, so each measures a margin instead of asserting
+an unreachable constant. `RunTests.ps1` green: units **726/726** (721 + `ControlLimiterTests`' 5),
+engine 29/29, goldens **13/13 unmoved**, `FlightEnvelopeTests` asserting **7**. Full 8-chapter
+`--freecam` regression clean, zero engine errors, all eight screenshots saved.

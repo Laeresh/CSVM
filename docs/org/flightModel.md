@@ -1009,6 +1009,53 @@ mistake the fade for a missing feature.
 `highGs` begins at 9 G and `lowGs` at −6 G. Neither limiter can engage before lift is already
 capped, so no authored configuration in this install reaches them.
 
+**D33 landing note — measured on all eleven airframes, and nothing was implemented.** The
+structural argument above is real but it is not what settles this: the delivered load factor is
+clamped at +9/−5 G, which is *exactly* where `highGs`'s ramp starts, so the argument only ever
+proves the reduction is zero at the boundary. What settles it is the measurement. The remake's
+`FlightModel.LoadFactorDemand` reports the lift demand's body X/Y projection **before** both
+clamps — the most generous available reading of "the G this aircraft is pulling" — and
+`CSVM.Tests/ControlLimiterTests.cs` flies five max-performance manoeuvres per airframe (the pull at
+`fd_speed` and entered at 1.5 × `fd_speed`, the same pull banked, a full forward push, full rudder;
+600 steps at 1/60 s each, more than a full loop) and takes the peak of each:
+
+| Airframe | peak demanded G | `highGs[0]` | margin | peak α | `maxAOA` | margin |
+|---|---:|---:|---:|---:|---:|---:|
+| bhawk (Bloodhawk) | **5.01** | 9.0 | 3.99 | **25.6°** | 46.0° | 20.4° |
+| devastator (`pfighter`) | 3.83 | 9.0 | 5.17 | 18.7° | 46.0° | 27.3° |
+| fury | 4.43 | 9.0 | 4.57 | 22.1° | 46.0° | 23.9° |
+| warhawk | 2.56 | 9.0 | 6.44 | 10.6° | 46.0° | 35.4° |
+| autogyro | 3.17 | 9.0 | 5.83 | 12.4° | 46.0° | 33.6° |
+| avenger | 4.07 | 9.0 | 4.93 | 20.3° | 46.0° | 25.7° |
+| balmoral | 2.13 | 9.0 | 6.87 | 8.9° | 46.0° | 37.1° |
+| brigand | 3.45 | 9.0 | 5.55 | 15.6° | 46.0° | 30.4° |
+| firebrand (`fbrand`) | 2.57 | 9.0 | 6.43 | 10.5° | 46.0° | 35.5° |
+| kestrel | 2.91 | 9.0 | 6.09 | 12.4° | 46.0° | 33.6° |
+| peacemaker | 4.73 | 9.0 | 4.27 | 24.1° | 46.0° | 21.9° |
+
+The G peak is a full-forward **push** at 1.5 × `fd_speed` on the six fastest airframes and a pull on
+the rest; the α peak is the pull at 1.5 × `fd_speed` on ten of eleven. The suite's own instruments
+agree from the other side: the sustained pitch-rate row reports α = 20.2/20.5/20.6° at
+120/200/280 mph, `zoom-climb` 23.3° at its minimum speed, the sustained turn 23.0°, and D31's
+knife-edge probe peaks at 0.71–4.29°. **The negative side is unreachable twice over:** `lowGs [−6,
+−9]` sits past the −5 G clamp, *and* the demand is the LENGTH of a projected vector, so it is never
+negative in this model at all.
+
+⚠ **The margin against the executable's own fallbacks is one hundredth of a G.** The Bloodhawk's
+5.01 G peak is 0.2 % **past** the compiled fallback `highGs[0] = 5` — under the fallbacks the
+limiter would engage, but a fraction of a percent into a 4 G-wide ramp. What puts the mechanism out
+of reach is the **authored 9**, not the model's inability to pull hard. This is the cleanest example
+in the whole decode of why a fallback is evidence of intent and not of behaviour.
+
+⚠ **If either threshold ever comes into reach, the asymmetry is the thing to get right.** The
+original gates **only input that opposes the current rotation** (the sign test is on the command
+versus the existing angular momentum about that axis), so the limiter damps *recovery* from a
+departure, not entry into one. A limiter that scales all input instead is backwards and will read
+as sluggish controls. `ControlLimiterTests` asserts each airframe's peaks against **its own loaded**
+`highGs`/`lowGs`/`maxAOA`, so a data edit or a per-plane override that brings either into reach
+fails the suite rather than passing silently — which is the condition under which the code above is
+owed.
+
 **Two of the parsed globals are dead in the executable.** The global `drag_factor` (→ `0x71c44c`,
 fallback 3.0) and `drag_fade_speed` (→ `0x71c450`, parsed × 0.44704, fallback 40 mph) are written
 by the `player.json` parser at `0x4744c0`/`0x4744f0` and **read by nothing anywhere in the image**
@@ -1045,7 +1092,9 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
    sustained full-stick manoeuvre, because those hold a real nose/path misalignment — it is not a
    released-stick-only term in any sense.
 9. **The G/AOA limiters gating only opposing input** — a subtle asymmetry that changes departure
-   and recovery behaviour, not steady turns.
+   and recovery behaviour, not steady turns. ⚠ **Authored inert and deliberately NOT implemented**
+   (`D33`): peak demand 2.13–5.01 G against `highGs[0] = 9`, peak α 8.9–25.6° against
+   `maxAOA = 46°`, on all eleven airframes — see the D33 landing note above.
 10. **Thrust scales with `ref_area`, not `1/veh_weight`.** The remake divides engine power by
     weight; the original multiplies it by reference area, which is what makes `RefArea` cancel
     against drag. See `ThrustFactor` above.

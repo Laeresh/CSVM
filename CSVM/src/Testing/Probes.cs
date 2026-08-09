@@ -962,7 +962,7 @@ public static class Probes
         // than this one. The weathervane torque opposes the sustained pull, so it lowers the turn
         // rate (34.71 → 33.38 °/s) and the sink rises with it, to 2.33 — past the bound. But this is
         // the third leg of a manoeuvre whose OTHER two legs are already informational and owned by
-        // BL-095's turn_fade_*/highGs: we sweep heading 76% faster than the original at a bank it
+        // BL-095's turn_fade_*: we sweep heading 76% faster than the original at a bank it
         // never flew, and a sink read off that flight path has no reason to land on the original's.
         // Asserting one leg of a manoeuvre the model gets demonstrably wrong is asserting a
         // compensating coincidence — C22's green here sat inside the same unattributed gap. It
@@ -986,8 +986,10 @@ public static class Probes
         // (18.95 °/sim-s here against 30.16 round the `pitch` clip's 360° loop, same stick, same
         // throttle), while we pull the same rate in both — so this is a bank/load-factor effect,
         // not a pitch-authority error, and `zoom-climb` above is the row that shows our pitch is
-        // nearly right. player.json's unconsumed turn_fade_in/turn_fade_out/highGs are the only
-        // authored fields of that shape (BL-095). A lead; none of it is decoded.
+        // nearly right. player.json's unconsumed turn_fade_in/turn_fade_out are the only authored
+        // fields of that shape (BL-095). A lead; neither is decoded. highGs was the third candidate
+        // until the G limiter was measured inert on all eleven airframes (peak demand 2.13-5.01 G
+        // against a threshold of 9) — a limiter that never fires cannot slow a turn.
         // ⚠ It is NOT the bank coupling, and that is now settled rather than suspected. The
         // original's own 0.205/0.165 terms are implemented, and they move this row AWAY from the
         // target (32.35 -> 34.71 here, up on ten of eleven airframes) because both add heading rate

@@ -726,8 +726,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `BL-307`.
 
   **Units: PARTLY DECODED — settled 2026-08-09 from `crimson.exe` (Ghidra), write-up in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md); scheduled as
-  [`docs/PLAN-flight-model-rewrite.md`](docs/PLAN-flight-model-rewrite.md).** The parser reads each
+  [`docs/org/flightModel.md`](docs/org/flightModel.md); consumed by
+  [`docs/plans/PLAN-flight-model-rewrite.md`](docs/plans/PLAN-flight-model-rewrite.md), complete
+  2026-08-09.** The parser reads each
   key by name, so the units are read off the conversion it applies, not inferred:
   **speeds are MPH** (`× 0.44704` on load — so `turn_fade_in 10`, `yaw_max 50`, `yaw_fade_out 400`
   and `drag_fade_speed 40` are all mph); **`liftAOAs` and `maxAOA` are degrees** (the parser takes
@@ -748,8 +749,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   1000 mph threshold. Table in
   [`docs/org/flightModel.md`](docs/org/flightModel.md#control-authority-vs-speed) and
   [`POST-B14.md`](analysis/flight-model-baseline/POST-B14.md)'s C24 section. Nothing was
-  implemented — that is the correct outcome. `highGs`/`lowGs` await `D33`'s eleven-airframe
-  confirmation the same way.
+  implemented — that is the correct outcome.
+  **`highGs`/`lowGs`: CLOSED 2026-08-09 by plan `D33`, the same way and with the same outcome.**
+  Measured through the real model on all eleven airframes (five max-performance manoeuvres each;
+  the demanded load factor read BEFORE both lift clamps, so it over-reads what the wings deliver):
+  peak **2.13–5.01 G** against `highGs[0]` **9**, margins 3.99–6.87 G; and peak α **8.9–25.6°**
+  against `maxAOA` **46°**, margins 20.4–37.1°. `lowGs [−6,−9]` is unreachable twice over — past the
+  −5 G clamp, and the demand is a vector LENGTH that never goes negative. Tables in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md) and
+  [`POST-B14.md`](analysis/flight-model-baseline/POST-B14.md)'s D33 section; pinned by
+  `CSVM.Tests/ControlLimiterTests.cs`, which asserts each airframe against its OWN loaded
+  thresholds, so a per-plane override or a data edit that brings either into reach fails the suite.
+  ⚠ The Bloodhawk's 5.01 G peak is 0.2 % **past** the executable's fallback `highGs[0] = 5` — under
+  the fallbacks the limiter would fire, barely. The disproof rests on the authored 9.
   `groundblow_*`, `ai_groundblow` and `crash.bounce_factor` are **not** covered by the decode and
   keep this entry open alongside the ground-blow work below.
 
@@ -804,33 +816,38 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   Implementing ground blow itself is unowned follow-on work — mint a `[Feature]` item when it is
   scheduled.
 
-  **`turn_fade_in 10` / `turn_fade_out 50` / `highGs [9,15]` now have a measurement waiting for
-  them (2026-08-07).** The original pulls **1.6× slower when banked**: 30.16 °/sim-s round a
+  **`turn_fade_in 10` / `turn_fade_out 50` now have a measurement waiting for
+  them (2026-08-07; `highGs [9,15]` was the third of this trio until `D33` took it out — see
+  below).** The original pulls **1.6× slower when banked**: 30.16 °/sim-s round a
   wings-level 360° loop against 18.95 °/sim-s in `CAP-01`'s 100°-banked turn, same aircraft, same
   full back stick, same full throttle — and not a speed effect, since the loop passes through the
   turn's 222.94 mph on its way round (`analysis/video-flight-calibration/FINDINGS.md`). Our model
   has no such asymmetry and is 71% fast in the banked case while being right to ~11% in the loop.
-  These three fields are the only authored ones shaped like a bank/load-factor rate fade, so
+  These fields are the only authored ones shaped like a bank/load-factor rate fade, so
   decoding them is now the concrete next step rather than a wish. ⚠ **A lead, not a decode** — the
   names have not been mapped to units and `maxAOA`/`liftAOAs` were consumed as a hypothesis under
   test, not as a decode (`docs/PLAN-flight-drag-lift.md` B12). Do not implement a rate limiter from
   the names alone — a naive speed/bank coupling that quietly costs pitch authority is exactly the
   wrong-mechanism fix `BL-124`'s history warns about.
-  ⚠ **These three now carry the WHOLE of that asymmetry, because the obvious other candidate is
-  dead (`PLAN-flight-model-rewrite` C22, 2026-08-09).** The original's own hardcoded bank coupling
-  — 0.205 into yaw, 0.165 into pitch, plus the inverted term — is decoded and implemented, and it
-  moves the banked rate **away** from the original (32.35 → 34.71 °/s, up on ten of eleven
-  airframes): both terms add heading rate in the direction of bank by construction, so no sign or
-  scale of them can subtract one. Do not re-open the coupling looking for the missing slowdown.
+  ⚠ **These two now carry the WHOLE of that asymmetry, because both other candidates are dead.**
+  (a) The original's own hardcoded bank coupling — 0.205 into yaw, 0.165 into pitch, plus the
+  inverted term — is decoded and implemented (`PLAN-flight-model-rewrite` C22, 2026-08-09) and moves
+  the banked rate **away** from the original (32.35 → 34.71 °/s, up on ten of eleven airframes):
+  both terms add heading rate in the direction of bank by construction, so no sign or scale of them
+  can subtract one. Do not re-open the coupling looking for the missing slowdown. (b) **`highGs` is
+  out too (`D33`, 2026-08-09):** the G limiter is inert on every airframe (peak demand 2.13–5.01 G
+  against a threshold of 9), and a limiter that never fires cannot slow a turn.
 
   Still to decode/implement in the block: `turn_*` (the roll/pitch base ramp — above; exponent on
   `BL-307`), `groundblow_*`/`ai_groundblow`, and `bounce_factor`'s units (`BL-172`). The `yaw_*` set
-  is decoded and implemented (`PLAN-flight-model-rewrite` C21); `high_speed_pitch_fade` and
-  `drag_fade_speed` are decoded as authored-unreachable/dead respectively (`C24`'s pitch fade,
-  B14's dead-key finding for `drag_fade_speed`).
-  One GDD lead for the AoA/G set: the design's "Elements not Simulated" list explicitly excludes
-  red-outs, so `highGs [9,15]` / `lowGs [-6,-9]` are read as the lift model's load-factor envelope,
-  not pilot-physiology thresholds.
+  is decoded and implemented (`PLAN-flight-model-rewrite` C21); `high_speed_pitch_fade`,
+  `highGs`/`lowGs`/`maxAOA` and `drag_fade_speed` are decoded as
+  authored-unreachable/authored-unreachable/dead respectively (`C24`'s pitch fade, `D33`'s G and AOA
+  limiters, B14's dead-key finding for `drag_fade_speed`).
+  One GDD lead for the AoA/G set, and `D33` bears it out: the design's "Elements not Simulated" list
+  explicitly excludes red-outs, so `highGs [9,15]` / `lowGs [-6,-9]` are the lift model's
+  load-factor envelope rather than pilot-physiology thresholds — and as an envelope they sit outside
+  everything the aircraft can actually reach.
   ⚠ **Traps.** (a) `yaw_max 50` and `yaw_fade_out 400` are not in the same units as our `eff`
   — do not map names onto our terms without deriving the units, because our yaw 360° currently
   matches the original to 4% and a mis-scaled substitution would break a passing suite check.
@@ -928,7 +945,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     `liftAOAs[0] = 5°`. ⚠ **What is left is not this constant**: the whole banked rotation runs
     ≈1.6× fast (knife-edge drift 1.09 °/s against 0.69–0.89, heading 1.68 against 0.68–1.13, the same
     ratio as `sustained-turn-rate`'s 32.80 against 18.95) and `BL-095`'s unconsumed
-    `turn_fade_in`/`turn_fade_out`/`highGs` are the only authored fields shaped like it. Retuning
+    `turn_fade_in`/`turn_fade_out` are the only authored fields shaped like it (`highGs` was the
+    third until `D33` measured the G limiter inert on all eleven airframes). Retuning
     `KnifeAlignFloor` would hide a rotation error inside a chase constant.
     The original's knife-edge trajectory (`CAP-05`, both takes, 143/300 mph,
     agreeing to ~13%, so driven by time-since-roll-in, not airspeed):

@@ -1,12 +1,12 @@
 # Flight model — rewrite onto the decoded original
 
-**ACTIVE PLAN** (written 2026-08-09). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans/plans.md), when every item lands.
+**COMPLETE** (2026-08-09). Written 2026-08-09; every wave landed the same day. Kept for its
+evidence and its recorded dead ends — read it as history, not as live work; the open threads it
+leaves are listed under "What this plan leaves open" at the end.
 
 This plan ports `src/Flight/FlightModel.cs` from a video-calibrated approximation onto the
 original's actual flight model, decoded from `crimson.exe` and written up in
-[`docs/org/flightModel.md`](org/flightModel.md). The decode supersedes video calibration wherever
+[`docs/org/flightModel.md`](../org/flightModel.md). The decode supersedes video calibration wherever
 the two disagree: it gives the lift law, the drag polar, the atmosphere, the control-authority
 curves, the torque coupling and the stall condition as formulas with authored constants, in place
 of roughly a dozen constants fitted against footage. The work is substitution plus refit — the
@@ -65,7 +65,7 @@ aircraft aerodynamically.
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code, with the data that proves it** | A1, B11, B12, B13, B15, C21, C22, C24 | Confirm the trace against [`docs/org/flightModel.md`](org/flightModel.md), then implement. |
+| **Traced to an exact mechanism in code, with the data that proves it** | A1, B11, B12, B13, B15, C21, C22, C24 | Confirm the trace against [`docs/org/flightModel.md`](../org/flightModel.md), then implement. |
 | **Direction sound, magnitude a judgement call** | A2, B14, C23 | The *what* is settled; the *how much* is TUNE — add it to `backlog.md`'s TUNE list, don't invent it as fact. |
 | **Leads only — no mechanism yet** | A3, D31, D32, D33 | Budget for investigation; **these may end in a disproof, and that is a success.** |
 
@@ -74,7 +74,7 @@ worktree session here; use a local commit or a file copy.
 
 ## What the data actually ships
 
-The full decode is [`docs/org/flightModel.md`](org/flightModel.md) — read it before any item. It
+The full decode is [`docs/org/flightModel.md`](../org/flightModel.md) — read it before any item. It
 carries the function-address table so every claim below is re-checkable at source. The facts this
 plan leans on most:
 
@@ -105,7 +105,7 @@ read from the live install. A1 exists partly to establish that path.
 
 ⚠ **The decode quotes the executable's compiled fallbacks; this install authors different numbers,
 and in four places they change the conclusion.** `backlog.md` `BL-095` holds the authored set, and
-[`docs/org/flightModel.md`](org/flightModel.md)'s corrections table reconciles the two. The
+[`docs/org/flightModel.md`](../org/flightModel.md)'s corrections table reconciles the two. The
 differences that matter: the yaw curve **declines** across the envelope rather than going flat
 (C21); the pitch high-speed fade is authored **unreachable** (C24); the G and AOA limiters are
 authored **inert** (D33); and `lift_accel_rate` is **0.75**, not the fallback 1.2 (B11). **Build
@@ -160,7 +160,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 31. ☑ Bank-independent lift vs the measured knife-edge sag
 32. ☑ Attitude-dependent thrust vs `ClimbGravityScale`
-33. ☐ The G and AOA limiters — live or inert in this install?
+33. ☑ The G and AOA limiters — live or inert in this install? — **Wave D complete; plan complete**
 
 ## Dependency and parallelism notes
 
@@ -196,7 +196,7 @@ exposed on `PlaneStats`, so no downstream item has to hardcode a value the game 
 **Evidence (confidence: traced).** The `player.json` parser in the executable reads each key by
 name with a fallback baked in, so both the key list and every default are known — see "What the
 data actually ships" above and the parser table in
-[`docs/org/flightModel.md`](org/flightModel.md). `PlaneStats.cs` currently reads none of:
+[`docs/org/flightModel.md`](../org/flightModel.md). `PlaneStats.cs` currently reads none of:
 `lift_accel_rate`, `liftAOAs`, `maxAOA`, `highGs`, `lowGs`, the `turn_*`/`yaw_*` curve keys,
 `high_speed_pitch_fade`, `drag_fade_speed`. `FlightModel.cs` instead carries `LiftAoaLo`/`Hi`,
 `MaxAoaDeg` and `LiftLoadMax` as in-code constants sourced from those same keys by hand.
@@ -259,7 +259,7 @@ necessary.
 
 **Outcome (landed 2026-08-09).** The hypothesis is confirmed, at source: `ThrustFactor` is the
 `power` column of `engines.json` for the row the def's `engine` property selects. Full chain in
-[`docs/org/flightModel.md`](org/flightModel.md#thrustfactor-is-the-engines-power-factor--resolved)
+[`docs/org/flightModel.md`](../org/flightModel.md#thrustfactor-is-the-engines-power-factor--resolved)
 — parser writes it to def `+0x128`, copied to runtime `+0x66c`, read by the force accumulator as
 `Thrust = ThrustFactor · RefArea · thrustAvailable(Mach) · throttle`. No data file authors a
 thrust key (all 24 `dynamics` blocks author the same ten), and the eleven-airframe rank test
@@ -273,7 +273,7 @@ authored data rather than from a fitted constant.
 
 **Evidence (confidence: lead-only).** The shipped Dynamics tuner's parameter list contains
 `ThrustFactor` alongside the twelve other `dynamics` values — but `ThrustFactor` is **not** among
-the `dynamics` keys documented in [`docs/formats/vehicle.md`](formats/vehicle.md). The remake
+the `dynamics` keys documented in [`docs/formats/vehicle.md`](../formats/vehicle.md). The remake
 instead scales thrust by `EnginePower` (from `engines.json`) times the fitted `ThrustConst = 107`.
 The working hypothesis is that engine power *is* the thrust factor, which would explain why the
 current arrangement works at all. Unproven either way.
@@ -326,7 +326,7 @@ the manifest is updated in this commit. `CAP-05`'s four drag points are untouche
 an aerodynamic ceiling — instead of as a fraction of gravity's cross-path component.
 
 **Evidence (confidence: traced).** The full chain, with the airflow blend, the demand assembly and
-the clamp, is in [`docs/org/flightModel.md`](org/flightModel.md) under "Lift — the wings deliver
+the clamp, is in [`docs/org/flightModel.md`](../org/flightModel.md) under "Lift — the wings deliver
 the demanded G". The strongest corroboration is algebraic: gravity is applied as
 `(nom_gravity / 9.82) × Weight` and level flight at zero incidence demands exactly `nom_gravity`,
 so lift cancels weight **identically** rather than by tuning. The remake's `AlignRate` (TUNE, 4/s)
@@ -442,7 +442,7 @@ up a second, larger error in the decode. `FUN_0041acf0` is
 `thrustAvail(Mach, atm)` with Mach floored at 0.1, and the lost FPU helper call is
 `MSVCRT!_CIpow` via the thunk at `0x5f7016`: **base `1.33 · atm->k`, exponent `1.41 · Mach`**
 (`0x6034a4` / `0x6034a0`). Full formula, constants and addresses are in
-[`docs/org/flightModel.md`](org/flightModel.md#thrust-available--resolved-pow-operands-recovered).
+[`docs/org/flightModel.md`](../org/flightModel.md#thrust-available--resolved-pow-operands-recovered).
 ⚠ **The curve RISES with speed** (+35 % from 150 to 500 mph) — the `/M` is real but `q_ref` is
 taken at a reference speed that *tracks* the current speed, so the net is linear in Mach. B12's
 "the residuals want a `T ∝ 1/V` curve" prediction is disproved, and the thing that actually falls
@@ -536,7 +536,7 @@ deficit (the throttle has no idle floor and slews at 0.5/s, `0x48e652` — newly
 unimplemented). Byte-level bonus: the player force call **zeroes altitude** (`0x491250`–`0x491284`)
 before computing forces, which proves the dense band from the bytes (and exposes that the AI call
 site `0x48c883` does not zero it — thin-band AI aero, recorded for M4).
-Full-table dispositions ([`analysis/flight-model-baseline/POST-B14.md`](../analysis/flight-model-baseline/POST-B14.md)):
+Full-table dispositions ([`analysis/flight-model-baseline/POST-B14.md`](../../analysis/flight-model-baseline/POST-B14.md)):
 **green, asserted** — `level-top-speed` 300.46, `level-speed-near-cap` 300.46, `roll-360` 1.98,
 `pitch-rate` 33.47, `yaw-360` 28.68, `altitude-cap` 6571.95, `sustained-turn-sink` −2.65 (bound
 ≤ 1.85); **green, informational by design** — `eighth-throttle-speed` 134.52 (137.9 ± 6);
@@ -694,7 +694,7 @@ regression clean, zero engine errors, all eight screenshots saved.
 50 mph to 0.17 at 400 mph — rather than the interim linear `eff`.
 
 **Evidence (confidence: traced).** With this install's **authored** values (`BL-095`, and the
-corrections table in [`docs/org/flightModel.md`](org/flightModel.md)): 0.0625 up to `yaw_fade_in`
+corrections table in [`docs/org/flightModel.md`](../org/flightModel.md)): 0.0625 up to `yaw_fade_in`
 (10 mph), ramping to 1.0 at `yaw_max` (**50**), then falling linearly to `yaw_high_speed` (**0.17**)
 at `yaw_fade_out` (**400**), flat beyond. At the Bloodhawk's 302 mph cruise that is ≈ 0.40. The
 current `eff = 1.4 − clamp(Speed/fd, 0.25, 1.15)` is **also** a declining function of speed, so its
@@ -721,7 +721,7 @@ chase transient shape by moving it.
 ## C22 ☑ Bank→yaw and bank→pitch coupling
 
 **Outcome (landed 2026-08-09).** Implemented as decoded, and the inverted case — which
-[`docs/org/flightModel.md`](org/flightModel.md) carried only as "an extra contribution when
+[`docs/org/flightModel.md`](../org/flightModel.md) carried only as "an extra contribution when
 inverted" — is **re-derived from the bytes and now recorded exactly**. Both terms are added to the
 same angular accumulator the stick commands feed (`FUN_00490f70`, `0x491621` / `0x49167b`), keyed
 off the orientation matrix at `+0x180`:
@@ -779,7 +779,7 @@ A turn rate at fixed bank and speed cannot fall by 61% for a physical reason, an
 heading integral (`swept` 532° → 208°) — so this reads as the unfolding instrument meeting a
 near-vertical flight path on the airframe most able to reach one, not as a model result. It is the
 one number in the C22 table that should not be built on.
-Verified per [`docs/verification.md`](verification.md): `RunTests.ps1` green — units **702/702**
+Verified per [`docs/verification.md`](../verification.md): `RunTests.ps1` green — units **702/702**
 (697 + the 5 new coupling tests), engine 29/29, goldens 13/13. **One golden moved, `c1-flight`, and
 which one is the evidence (GOLD-5/GOLD-1):** it is the only golden whose `--hold` carries a roll
 input (`0.2,0.1,0,1`), so it is the only one that banks — `empty-stage`, `c1-destroy-effects` and
@@ -826,7 +826,7 @@ contribution (`0x4916fe`–`0x4917f0`, guarded by `cmp esi, [0x71c298]` — the 
 half-vector construction, `w = n·ĥ`, `v = n×ĥ`), converts it through a quaternion-log helper
 (`0x53fca0`: `atan2(|q.v|, q.w) · unit(q.v)`) and adds `return_rate · dt ·` that to the same
 accumulator the stick and the bank coupling feed. So `ω += return_rate · (α/2) · unit(nose × v̂)`.
-⚠ **Three corrections, all recorded in [`docs/org/flightModel.md`](org/flightModel.md)'s new
+⚠ **Three corrections, all recorded in [`docs/org/flightModel.md`](../org/flightModel.md)'s new
 "Weathervane centring — resolved":** the axis is `cross(nose, v̂)`, **not** `cross(−nose, v̂)` (the
 code's `−m[2]` *is* the nose — the same negation the thrust term applies — and the opposite sign is
 divergent); the angle is **halved**, so the spring rate is `return_rate/2`; and the roll component
@@ -877,7 +877,7 @@ the nose down onto it. The 35 s neutral-stick 90° hold goes −41.80° / −199
 10 s. `KnifeNoseSag`/`KnifeNoseRate`/`KnifeAlignFloor` are byte-for-byte untouched. The ten
 unmeasured airframes' `sustained-turn-sink` mostly *improves* (warhawk 13.13 → 6.44, firebrand
 9.79 → 0.53, kestrel 7.64 → 0.61) while the Bloodhawk's worsens.
-Verified per [`docs/verification.md`](verification.md): `RunTests.ps1` green — units **710/710**
+Verified per [`docs/verification.md`](../verification.md): `RunTests.ps1` green — units **710/710**
 (702 + `WeathervaneTests`' 7 + the sweep), engine 29/29, goldens 13/13 after one re-pin.
 **One golden moved, `c1-flight`, and which one is the evidence (GOLD-5/GOLD-1):** it is the only
 golden whose `--hold` carries a pitch input (`0.2,0.1,0,1`), so it is the only one that ever holds
@@ -954,8 +954,8 @@ ceiling on `Speed` — the most generous "could this ever reach it" test availab
 than any airframe's aerodynamically-settled terminal dive. The highest of the eleven (the
 Bloodhawk, 528.5 mph) sits at little over half of `high_speed_pitch_fade[0]`'s authored 1000 mph;
 the other ten are lower still (309–509 mph). Full table in
-[`docs/org/flightModel.md`](org/flightModel.md#the-integrator) and
-[`POST-B14.md`](../analysis/flight-model-baseline/POST-B14.md)'s C24 section. No code was written
+[`docs/org/flightModel.md`](../org/flightModel.md#the-integrator) and
+[`POST-B14.md`](../../analysis/flight-model-baseline/POST-B14.md)'s C24 section. No code was written
 for the fade — untestable code on a threshold no capture could ever exercise is the invented
 content this project's ground rules forbid — and `backlog.md`'s `BL-095` now records the finding as
 closed rather than open.
@@ -1065,7 +1065,7 @@ runs ≈1.6× fast: knife-edge nose drift 1.09 °/s against 0.69–0.89, knife-e
 against 0.68–1.13, and `sustained-turn-rate` 32.80 against 18.95. Two manoeuvres, two different
 body axes, one ratio — and `BL-095`'s unconsumed `turn_fade_in`/`turn_fade_out`/`highGs` remain the
 only authored fields shaped like it. Nothing was tuned to close it here.
-Verified per [`docs/verification.md`](verification.md): `RunTests.ps1` green — units **717/717**
+Verified per [`docs/verification.md`](../verification.md): `RunTests.ps1` green — units **717/717**
 (713 + `KnifeEdgeTests`' 4), engine 29/29, goldens 13/13 after one re-pin, `FlightEnvelopeTests`
 still asserting **6** (no scenario demoted). **One golden moved, `c1-flight`, same pattern as
 C22/C23/C24 (GOLD-5/GOLD-1):** the only golden whose `--hold` carries pitch and roll
@@ -1078,7 +1078,7 @@ the pre-change build fails the wings-level-pull test, and the bank-independent c
 nose-below-path test. Every cited instrument run twice, byte-identical: `--dump-flight` for the
 Bloodhawk and the Balmoral, `ZzBaselineDump` for all eleven. Full 8-chapter `--freecam` regression
 clean, zero engine errors, all eight screenshots saved. Full tables:
-[`analysis/flight-model-baseline/POST-B14.md`](../analysis/flight-model-baseline/POST-B14.md)'s D31
+[`analysis/flight-model-baseline/POST-B14.md`](../../analysis/flight-model-baseline/POST-B14.md)'s D31
 section.
 
 **Goal.** Resolve whether the original's lift is genuinely bank-independent, and decide the fate of
@@ -1169,7 +1169,7 @@ leading candidate is the probe's **α**: it holds α = 0 (attitude on the path) 
 capture cannot settle it — which is exactly what `CAP-20` was filed for. Nothing was tuned.
 **No `*Tune` and no TUNE constant moved** (Decision 4's default holds); `ClimbGravityScale` leaves
 `BL-115`'s TUNE list, which is now `StallNoseRate` and `KnifeAlignFloor`.
-Verified per [`docs/verification.md`](verification.md): `RunTests.ps1` green — units **721/721**
+Verified per [`docs/verification.md`](../verification.md): `RunTests.ps1` green — units **721/721**
 (717 + `AttitudeThrustTests`' 4), engine 29/29, goldens 13/13 after two re-pins,
 `FlightEnvelopeTests` asserting **7**. **Two goldens moved, `c1-flight` and `c1-destroy-effects`
 (GOLD-5/GOLD-1), and the pattern IS the evidence:** they are the only two whose aircraft is not
@@ -1181,7 +1181,7 @@ reproduces the committed POST-D31 numbers to the last digit (METHOD-8), with `gi
 every temporary edit restored (METHOD-17). Every cited instrument run twice, byte-identical:
 `--dump-flight` (Bloodhawk, Balmoral) and `ZzBaselineDump` (all eleven). Full 8-chapter `--freecam`
 regression clean. Full tables:
-[`analysis/flight-model-baseline/POST-B14.md`](../analysis/flight-model-baseline/POST-B14.md)'s D32
+[`analysis/flight-model-baseline/POST-B14.md`](../../analysis/flight-model-baseline/POST-B14.md)'s D32
 section.
 
 **Goal.** Establish which mechanism the original actually uses for climb behaviour, and land one of
@@ -1213,7 +1213,66 @@ easy and self-consistent-looking: the decoded terms key off the world-up compone
 axis, and the nose points along **−Z**, so a dropped sign inverts climb and dive and will still
 produce plausible-looking flight.
 
-## D33 ☐ The G and AOA limiters — live or inert in this install?
+## D33 ☑ The G and AOA limiters — live or inert in this install?
+
+**Outcome (landed 2026-08-09, Wave D complete, plan complete).** **Disproven on all eleven
+airframes, and no limiter was written.** The G limiter's ramp begins at the authored
+`highGs[0] = 9 G`; the hardest manoeuvres this model can fly demand **2.13–5.01 G**, so the
+reduction it would apply is identically zero everywhere, on every airframe, with margins of
+**3.99–6.87 G**. The AOA limiter reaches zero at the authored `maxAOA = 46°`; the same manoeuvres
+peak at **8.9–25.6° α**, margins of **20.4–37.1°**. Both figures are measured through the real
+model rather than argued: `FlightModel.LoadFactorDemand` is the lift demand's body X/Y projection
+read **before** both lift clamps — the most generous reading of "the G this aircraft is pulling",
+and higher than anything the wings actually deliver — and α is the same emergent alignment lag the
+instruments already report. The suite's own rows agree from the other side: the sustained
+pitch-rate row 20.2/20.5/20.6°, `zoom-climb` 23.3° at its minimum speed, the sustained turn 23.0°,
+D31's knife-edge peaks 0.71–4.29°. The negative side is unreachable twice over: `lowGs [−6, −9]`
+sits past the −5 G lift clamp, **and** the demand is the LENGTH of a projected vector, so it is
+never negative in this model at all.
+⚠ **The G margin is thinner than the authored numbers make it look, and that is the item's own
+finding.** The Bloodhawk's peak demand is **5.01 G** — within **0.2 %** of the executable's
+compiled fallback `highGs[0] = 5`. Under the fallbacks the limiter would engage, but only barely:
+a hundredth of a G into a 4 G-wide ramp, i.e. a fraction of a percent of authority. So the plan's
+"the fallbacks, where the limiter clearly would bite" is true only in the sense that it would
+*start* to; what puts the mechanism firmly out of reach is the **authored 9**, and the difference
+between "0.2 % past a threshold" and "44 % short of one" is exactly why this had to be measured on
+all eleven airframes rather than asserted from two constants.
+⚠ **One consequence lands outside this item: `highGs` is out of the banked-turn gap.** C22, C23 and
+D31 each parked the ≈1.6–1.7× fast banked rotation on "`BL-095`'s `turn_fade_in`/`turn_fade_out`/
+`highGs` are the only authored fields shaped like it". `highGs` cannot be it — it is inert on every
+airframe by the arithmetic above, and a limiter that never fires cannot slow a turn. **The gap's
+authored candidates are now `turn_fade_in` / `turn_fade_out` alone**, and `backlog.md`'s `BL-095`
+says so.
+**Nothing was implemented, following C24's precedent.** The asymmetry the trap warns about — the
+original gates only input that *opposes* the current rotation, so the limiter damps recovery from a
+departure rather than entry into one — is recorded in
+[`docs/org/flightModel.md`](../org/flightModel.md) with both tables, so a future session reading the
+decode sees a mechanism deliberately left unbuilt rather than a missing feature. The atmosphere
+band-select flag was **not** touched (its runtime value is still unknown and the dense band is
+still established by arithmetic), no `*Tune` and no TUNE constant moved, and Decision 4's default
+holds.
+**The one line of code is instrumentation, not mechanism.** `FlightModel.LoadFactorDemand` is a
+public field assigned beside the existing clamp and read by no force term — the same shape as
+`Alpha`. Everything else is tests and docs, and the tripwire says so: `--dump-flight` (Bloodhawk
+and Balmoral) and `ZzBaselineDump` (all eleven airframes) reproduce D32's committed raw files
+**byte-identically**, and goldens are **13/13 hash-identical** with no re-pin — the first item in
+Waves B–D to move no golden at all.
+**The disproof is pinned as a test, not as prose:** `CSVM.Tests/ControlLimiterTests.cs` (5 tests)
+flies five max-performance manoeuvres per airframe — the pull at cruise and entered at 1.5 ×
+`fd_speed`, the same pull banked, a full forward push, full rudder — and asserts the measured peaks
+against **each airframe's own loaded** `HighGStart` / `LowGStart` / `MaxAoaCos`, so a data edit or a
+per-plane override that brings either threshold into reach fails the suite instead of passing
+silently. The able-to-fail control is demonstrated rather than argued (METHOD-9): halving both
+authored thresholds — the stand-in for exactly such an edit — fails both checks, so each is
+measuring a margin and not asserting an unreachable constant.
+Verified per [`docs/verification.md`](../verification.md): `RunTests.ps1` green — units **726/726**
+(721 + `ControlLimiterTests`' 5), engine 29/29, goldens **13/13 unmoved**, `FlightEnvelopeTests`
+still asserting **7** (an analysis item moves none). Every cited instrument run twice,
+byte-identical: `--dump-flight` for the Bloodhawk and the Balmoral, `ZzBaselineDump` for all
+eleven, and the per-airframe limiter table itself. Full 8-chapter `--freecam` regression clean,
+zero engine errors, all eight screenshots saved. Full tables:
+[`analysis/flight-model-baseline/POST-B14.md`](../../analysis/flight-model-baseline/POST-B14.md)'s D33
+section.
 
 **Goal.** Determine whether the original's G and AOA control limiters ever engage with this
 install's authored values, and implement them only if they do.
@@ -1245,3 +1304,44 @@ will feel like sluggish controls. Related, and **not** to be resolved by guessin
 band-select threshold has only a read reference and a static zero in the binary, so its runtime
 value is unknown; the dense band is established by arithmetic, not by reading the flag. Do not
 "fix" that flag on the strength of this item.
+
+---
+
+# What this plan leaves open
+
+Every item landed; these are the threads it deliberately did **not** close, each already carried by
+a live `backlog.md` entry or a filed capture. Nothing here is a regression — it is the honest
+residue of measuring a decode against footage.
+
+- **The zero-thrust drag deficit (`CAP-05`, `decel-290-150`, `accel-150-290`).** The force path is
+  byte-verified against the executable (B14) and the footage still disagrees by a near-constant
+  ΔC_D ≈ 0.112 that no decoded mechanism produces; no constant closes the set. All three rows are
+  informational with the record named in the probe comment. B12's re-playtest debt — the polar is
+  much stronger below cruise than what it replaced — is owed to a **human at the controls**, not to
+  an instrument.
+- **The banked-turn rate: ≈1.6–1.7× fast, one number across two manoeuvres.**
+  `sustained-turn-rate` 32.83 against 18.95 °/s, and the knife-edge nose drift and heading rate
+  carry the same ratio (D31). C22 disproved the bank coupling as its cause, and D33 removes
+  `highGs`; **`turn_fade_in` / `turn_fade_out` are what is left**. `sustained-turn-speed` and
+  `sustained-turn-sink` are the same manoeuvre's other two legs and re-assert with the rate row.
+- **The sustained climb is +25 % (204.04 against 163.05 mph) and the wrong shape** — the original
+  undershoots its plateau and climbs back out of it, the model decays monotonically to it. The
+  leading candidate is the probe's α against a 90° pull whose nose angle the clip's saturated ADI
+  cannot read; `CAP-20` was filed to answer exactly that (D32).
+- **Stall speed against the footage (B15).** The decoded 1 G formula gives the Bloodhawk 56.5 mph
+  against the clip's ≈76 mph nose-drop; the `nom_gravity`-scaled convention lands closer but breaks
+  the decode's own two-figure anchor. Recorded as a conflict rather than resolved by picking the
+  convention that flatters one clip.
+- **Decoded but unimplemented, on purpose.** The throttle lever's 0.5/s slew with no idle floor
+  (B14) — a feel/transient gap; boost (lever 1.8, drag ×0.8), which the remake does not have at all
+  (B13); the AI flight path's thin-band aero and zero-incidence flight, which belongs to M4 (B14).
+- **Present-but-unreachable, built nowhere and pinned by a test.** The high-speed pitch fade (C24)
+  and the G/AOA limiters (D33). Both are real code in the original on thresholds this install
+  authors out of reach; both are documented in `docs/org/flightModel.md` so they are not
+  re-discovered as missing features.
+- **`TUNE` survivors in `FlightModel.cs`: `StallNoseRate` and `KnifeAlignFloor`** — the whole list
+  after `ClimbGravityScale` retired (D32) and `KnifeNoseSag`/`KnifeNoseRate` retired (D31).
+  `KnifeAlignFloor` is kept on a measurement the decode is silent about, not on a fit.
+- **Owed at the controls:** `PT-28`, `PT-41`, `PT-43`, `PT-45` ([`playtest.md`](../../playtest.md)) —
+  the flight model has been rebuilt on decoded mechanisms and has not yet been flown by a human
+  across a whole session.

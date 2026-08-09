@@ -75,8 +75,13 @@ public sealed class PlaneStats
 
     // player.json flight globals, plumbed here so the flight-model rewrite reads authored data
     // instead of hardcoding it. Consumed by FlightModel as each item lands: LiftAccelRate/
-    // LiftAoaCosLo/Hi by B11's lift demand, Yaw* by C21's rudder-authority curve. Still unread:
-    // MaxAoaCos, HighG/LowG*, TurnFadeIn/Out, HighSpeedPitchFadeLo/Hi, DragFadeSpeed.
+    // LiftAoaCosLo/Hi by B11's lift demand, Yaw* by C21's rudder-authority curve.
+    // Unread ON PURPOSE, not pending: MaxAoaCos and HighG/LowG* are the control limiters' authored
+    // thresholds and this install puts them out of reach (peak demand 2.13-5.01 G against 9, peak
+    // alpha 8.9-25.6 deg against 46, all eleven airframes — ControlLimiterTests pins it), and
+    // HighSpeedPitchFadeLo/Hi is the same story at 1000 mph. DragFadeSpeed's key is dead in the
+    // executable. Still genuinely undecoded: TurnFadeIn/Out. Do not implement any of them from the
+    // field names — see docs/org/flightModel.md's corrections table.
     // Mirrors docs/org/flightModel.md's load-time conversions exactly: speeds × 0.44704 (MPH → m/s),
     // angles cosined at load where the original cosines them (liftAOAs, maxAOA), raw where it does
     // not (highGs/lowGs are plain G, yaw_low_speed/yaw_high_speed are dimensionless authority).

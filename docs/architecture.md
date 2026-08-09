@@ -1916,8 +1916,13 @@ closed by switching G-conventions to fit one clip. The autogyro moves most of th
 unmoved) as the plan predicted.
 ⚠ The ±5/9 clamp is a LOAD FACTOR in G, never an angle — re-deriving it as degrees gives a model
   that looks right at small inputs and diverges at the limits. The authored `highGs`/`lowGs`
-  control limiters are a WIDER, inert pair (`BL-095`) and must not be folded into it. A third
-  authored-inert feature, the same family: `high_speed_pitch_fade` [1000,1001] mph is beyond even
+  control limiters are a WIDER, inert pair (`BL-095`) and must not be folded into it: measured peak
+  demand is 2.13–5.01 G against `highGs[0]` = 9 and peak α 8.9–25.6° against `maxAOA` = 46° on all
+  eleven airframes, so neither limiter can fire and neither is implemented (D33 —
+  `ControlLimiterTests` asserts each airframe against its OWN loaded thresholds, and
+  `LoadFactorDemand` is the pre-clamp instrument it reads; if it ever fails, the limiter gates only
+  input OPPOSING the current rotation). A third authored-inert feature, the same family:
+  `high_speed_pitch_fade` [1000,1001] mph is beyond even
   the model's own hard dive ceiling (1.75×fd_speed, 528.5 mph at its highest, the Bloodhawk) on all
   eleven airframes (C24) — deliberately NOT implemented; do not add it "for completeness".
 ⚠ The three *Tune rates are pinned to the original off cockpit-gauge video

@@ -58,6 +58,12 @@ public sealed class FlightModel
     // VelocityDir — see Step()'s "α" comment. An emergent LAG from the nose-chase, not a modelled
     // aerodynamic incidence. Reported for instruments only — no force term reads it.
     public float Alpha;
+    // The demanded load factor in G at this step — the length of the lift demand's body X/Y
+    // projection over StandardG — reported BEFORE the ±5/9 clamp and the aerodynamic ceiling below
+    // it. Instruments only; no force term reads it. Pre-clamp is deliberate: it is the most
+    // generous reading of "the G this aircraft is pulling", which makes it the right quantity to
+    // measure the authored highGs/lowGs control limiters against (ControlLimiterTests).
+    public float LoadFactorDemand;
 
     // Thrust available, per unit of engine power and reference area. There is NO fitted constant
     // here: every number is read out of the original's own thrust-available routine.
@@ -598,7 +604,8 @@ public sealed class FlightModel
         demand.Y += s.Gravity;
         var noseAxis = Attitude.Z;
         var liftDir = demand - noseAxis * demand.Dot(noseAxis);
-        float loadFactor = Mathf.Clamp(liftDir.Length() / StandardG, liftGMin, liftGMax);
+        LoadFactorDemand = liftDir.Length() / StandardG;
+        float loadFactor = Mathf.Clamp(LoadFactorDemand, liftGMin, liftGMax);
 
         // Step 3 — cap the delivered force at the aerodynamic ceiling, C_L·q·RefArea in weight
         // units, which is the same as capping the load factor at C_L·q·RefArea / Weight. This is
