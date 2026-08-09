@@ -363,8 +363,12 @@ decoration down the quad normal (+Y) and reading the interpolated UV gives
 Both are already in [0, 1), so `FUN_004dd230`'s `fmod` wrap leaves them alone. The script's
 plane-projection code, which does not know about the shortcut, returns the same numbers.
 
-**The world triangle.** C1 node **2911 `g777`, model 953, polygon 3, triangle 5** (fan
-triangulation), texture layer 0, texture `terpat02.tif`:
+**The world triangle.** C1 node **2911 `g777`, model 953, polygon 3, triangle 5**
+(**⚠ corrected by B12: this polygon is a `tri_strip`, not a fan** — its corner triple is a strip
+triple. The vertices, UVs, affine map and result below are all correct; only the original label was
+wrong. B12 pinned the distinction in a unit test, because corners 3 and 4 of this polygon share
+vertex 5 with *different* UVs, which is what makes corner-indexing rather than vertex-indexing
+load-bearing), texture layer 0, texture `terpat02.tif`:
 
 | corner | world position | uv |
 |---|---|---|
