@@ -151,7 +151,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Decode landing & plumbing
 
-1. ◐ Land the decompile decode in the format docs; retire the dead caveats
+1. ☑ Land the decompile decode in the format docs; retire the dead caveats
 2. ☐ Camera weather-state plumbing (state 1/2/3 in `WeatherState`, no visual change)
 
 ### Wave B — Deck chapters: zones, deck, sky
@@ -188,7 +188,39 @@ pixels in `analysis/goldens` scenes — expect to re-bless goldens once per wave
 
 # Wave A — Decode landing & plumbing
 
-## A1 ◐ Land the decompile decode in the format docs; retire the dead caveats
+## A1 ☑ Land the decompile decode in the format docs; retire the dead caveats
+
+**Landed (2026-08-09).** `weather.md`: the "`zone_id` census is not admissible" ⚠ is struck and
+replaced with a dated correction citing `FUN_0056c430`/`FUN_0042ee40`/`FUN_004d62d0` — the gate
+is per-frame camera state, not a static per-mission partition, so the old "leaves mission content
+unbuilt" objection dissolves. The CLOUD_COVER "band's MIDPOINT is load-bearing twice over"
+paragraph gets a dated correction: above the deck is the authored world-fixed tiles at their own
+altitude (C1/C1C/C2B 960, C4 1050; C4's "exactly on the centre" was its own coincidence), below
+the deck is `horizon/zone1`'s camera-anchored, UV-scrolled dome (C1's cap centre 396.4 = A7's
+measured "~400 m"). The "C1 zone1 970/1047 identity belongs to a zone C1 never flies" ⚠ is
+un-retired as a flown-zone fact — `zone1` *is* flown, below the deck. `gamez.md` gets a short
+`zone_id` runtime-semantics entry next to the existing `zone_id == -1` note.
+`PROJECT_CONTEXT.md`'s "Current status" now names this plan, Wave A, A1 landed/A2 next.
+
+**Survey results (new — only C1 was measured before this pass):** deck tiles / `cloudparent` /
+`fvol*` / mission-content `zone_id` census across C1/C1C/C2B/C4, and the `horizon/zone1`+`zone2`
+subtree census across all eight chapters, tabulated in `weather.md`'s new "The deck census"
+section. C1's `2`/`2`/`2`/`1` tile/facade/volume/mission-content pattern holds in C1C and C4.
+**Two findings that contradict the C1 pattern, recorded rather than smoothed over:**
+- **C2B ships zero `cloudparent` nodes and its `fvol*` volumes are `zone_id −1`** (always
+  visible), not `2` like the other three deck chapters — its fog volumes are never camera-state
+  culled at all. A `B12` gate implementation must not assume every deck chapter's `fvol*`
+  population is gated.
+- **The "~396 m authored cap centre" is C1-specific and does not transfer.** C1's `h_zone1scroll`
+  is a two-piece dome (upward cap + separate `o28` skirt); C1C's and C2B's zone-1 subtrees are
+  each a **single** combined mesh (C1C: exactly one node, `g1164` — not the `g1163`–`g1166` range
+  this plan's B14 section names; C2B: `g1166`, sharing C1C's identical vertex data) with no
+  `h_zone1scroll` node at all and a strongly negative whole-mesh `bbox_mid.y` (skirt-dominated, no
+  separate cap pulling it up). C4's sole zone-1 node is even named `h_zone2scroll` — a
+  leftover/reused name. B14 will need a per-chapter ceiling-distance measurement, not C1's
+  constant.
+
+**Original approach (kept for reference).**
 
 **Goal.** The format docs state the decompiled truth — runtime zone states, the `zone_id` gate,
 the two-object deck, `fog_zone` — and every caveat the decompile killed is rewritten as a dated
