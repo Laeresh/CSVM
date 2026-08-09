@@ -41,9 +41,14 @@ pixels of frame centre (`--freecam --chapter=C3 --no-fog "--pos=0,1200,0"
 "--direction=0.586,0.559,-0.586"`). Measured disc: **34 px visible, 22 px saturated core** at
 1280×720 / FOV 62, against ~45 px of quad — `sun.png`'s disc fills ~75 % of its quad.
 
-Separately: our `DirectionalLight3D` is still hardcoded to `(-45, 150, 0)` in
-`Launcher.SetupLighting` and reads no authored orientation at all. That is a real gap, but it is
-*not* this item — the flare no longer depends on it.
+Separately: our `DirectionalLight3D` used to be hardcoded to `(-45, 150, 0)` in
+`Launcher.SetupLighting` and read no authored orientation at all. **Closed 2026-08-09** (`BL-324`,
+`git log --grep=BL-324`): the light now takes the flown zone's `SUNLIGHT_ORIENTATION`, so in C3 it
+sits at yaw 135 while the flare and disc stay on the node's yaw 45. The 90° above is therefore
+*live in the shipping build* and is correct — the original's `sunlight` Light node and its `sun`
+billboard are unrelated objects with no code path between them, so it disagrees with itself in
+exactly this way. Do not "fix" the gap by re-anchoring the flare; that is what this item measured
+and rejected.
 
 ## Slot → element
 
