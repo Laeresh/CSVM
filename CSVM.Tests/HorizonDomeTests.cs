@@ -189,6 +189,60 @@ public class HorizonDomeTests
         }
     }
 
+    [ExtractedDataFact]
+    public void OnlyC1sZoneOneCeilingHasARimAnythingCanSee()
+    {
+        // B15's audit result, pinned from the extraction. The domes are camera-centred, unfogged
+        // and uniformly scaled, so the ONLY thing a frame can show is the elevation a feature
+        // subtends — and a feature needs two materials to be a feature at all. C1's zone-1 dome
+        // is the one that has them: a `sky2.tif` vault under a flat FOG_COLOR cap, so its cap RIM
+        // is a visible boundary (B14 measured it at 48–52° against the authored 46.95°). Every
+        // other zone-1/zone-3 dome is a SINGLE Colored material with `lighting: false`, i.e. one
+        // flat authored colour in every direction: no rim, no observable, and therefore no scale
+        // — uniform or split — that a render of those chapters could tell apart.
+        foreach (var (chapter, zone, materials, flat) in new[]
+                 {
+                     ("C1", "zone1", 2, 176f), ("C1C", "zone1", 1, 176f), ("C2B", "zone1", 1, 176f),
+                     ("C4", "zone1", 1, 192f), ("C5", "zone3", 1, 16f),
+                 })
+        {
+            var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
+            var horizon = gamez.FindByName("horizon");
+            Assert.NotNull(horizon);
+            var used = new SortedSet<int>();
+            foreach (int childIndex in horizon!.Children)
+            {
+                if (!gamez.Nodes[childIndex].Name.Equals(zone, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                foreach (var mesh in MeshesUnder(gamez, childIndex))
+                    foreach (var poly in mesh.Polygons)
+                        if (poly.MaterialIndex >= 0)
+                            used.Add(poly.MaterialIndex);
+            }
+
+            Assert.Equal(materials, used.Count);
+            int textured = 0, colored = 0;
+            foreach (int index in used)
+            {
+                var mat = gamez.Materials[index];
+                if (mat.TextureName != null)
+                {
+                    textured++;
+                    Assert.Equal("sky2.tif", mat.TextureName);
+                }
+                else
+                {
+                    colored++;
+                    Assert.Equal(flat, Mathf.Round(mat.Color.R * 255f));
+                }
+            }
+
+            // Exactly one flat colour everywhere; the texture is C1's alone.
+            Assert.Equal(1, colored);
+            Assert.Equal(chapter == "C1" ? 1 : 0, textured);
+        }
+    }
+
     private static IReadOnlyList<GameZMesh> MeshesUnder(GameZ gamez, int nodeIndex)
     {
         var meshes = new List<GameZMesh>();

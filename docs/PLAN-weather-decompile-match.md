@@ -65,7 +65,9 @@ Confidence roll-up:
 | Confidence | Items | What that means for you |
 |---|---|---|
 | **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, B11, B12, B13, C21, C22 | Confirm the trace (function addresses in "What the data actually ships"), then implement. |
-| **Direction sound, magnitude a judgement call** | B14, B15, D32 | The *what* is settled (dome ceiling, flicker exists); blend order, scale plumbing and curve constants are TUNE — record them in `backlog.md`'s TUNE list. **B14 landed and killed the "unscaled vertical anchor" half of this row: the 396.4 m cap it rested on is a bbox midpoint, and a camera-centred unfogged dome makes uniform scale unobservable anyway.** |
+| **Direction sound, magnitude a judgement call** | B14, B15, D32 | The *what* is settled (dome ceiling, flicker exists); blend order, scale plumbing and curve constants are TUNE — record them in `backlog.md`'s TUNE list. **B14 landed and killed the "unscaled vertical anchor" half of this row: the 396.4 m cap it rested on is a bbox midpoint, and a camera-centred unfogged dome makes uniform scale unobservable anyway. B15 then audited what remained and found NO contradicting
+observable: the scale is only observable against the far plane and against world geometry, and four
+of the five zone-1 domes are a single flat colour with no rim to measure at all.** |
 | **Leads only — no mechanism yet** | D31 | Budget for investigation; may end in a disproof. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
@@ -161,7 +163,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☑ `zone_id` visibility gate switched with the camera state
 13. ☑ Above-deck floor at the authored tile altitude
 14. ☑ Below-deck ceiling = the zone-1 dome (`h_zone1scroll`), scrolling, camera-anchored
-15. ☐ Horizon anchor vertical-scale audit
+15. ☑ Horizon anchor vertical-scale audit **Wave B complete.**
 
 ### Wave C — C5 fog volumes
 
@@ -819,7 +821,83 @@ depth/draw-order against the original's below-deck horizon before shipping. C1C'
 are `g1163`–`g1166` (no `h_zone1scroll`) — per-chapter geometry, no shared assumptions; C1C has
 no scroll statement, so no scroll there.
 
-## B15 ☐ Horizon anchor vertical-scale audit
+## B15 ☑ Horizon anchor vertical-scale audit
+
+**Landed (2026-08-09) — verification only; no engine code changed.** The rule is now written in
+`architecture.md` (`GameSession.HorizonScaleFor`): *each dome is anchored at its own rig's camera
+and scaled UNIFORMLY by `HorizonScaleFor(that dome)`*, justified in three steps — camera-CENTRED
+(zero parallax) plus `fog: false` (no distance cue) leaves the ELEVATION each feature subtends as
+the only quantity a frame can carry; a uniform scale about the camera maps every dome-local
+direction to itself and preserves those elevations exactly; per-dome fitting keeps each dome inside
+`Camera3D.Far` without one dome's size deciding another's.
+
+**The scale is observable in exactly two places, and neither is an authored angle.** (1) The far
+plane — C1B's clamp (~1.65×), the regression canary. (2) Intersection with WORLD geometry: terrain
+(the reason 2.5× exists) and the deck annulus, whose 20,480 m half-span brackets C1 **from below**
+at 20480/8813 = **2.32×** (`zone1`) and 20480/8744 = **2.34×** (`zone2`) — the constraint
+`architecture.md`'s `AddDeckAnnulus` entry already carried qualitatively, now with numbers. So the
+2.5× is bracketed on both sides rather than free, and the two brackets coexist only because the one
+clamped chapter (C1B) authors no deck at all.
+
+**(a) The climb ordering — the observable that could have killed camera-anchoring, and the footage
+record answers it.** A camera-anchored ceiling rises with the camera and can never be reached by
+climbing; if the record said the original's below-deck ceiling was penetrated at a measured
+altitude, the zone-1 dome would not be the whole ceiling story. It says the opposite, twice:
+
+- The user at the controls of the original (`PLAN-overcast-match` A7, 2026-08-08, observation 1):
+  *"climbing below the deck, the texture's look is **exactly the same** at every altitude — a
+  world-fixed sheet would grow and parallax, so the below-band ceiling follows the camera
+  vertically."* A7 then reproduced it as a pixel identity (bit-identical sky at 192/300/600/900 m).
+- `playtest/CAP-12/README.md`, six instrumented deck crossings: *"First wisps on the way up at
+  **~3222 ft (982 m)**; fully clear above by **~3700 ft (1128 m)**"*, full obscuration
+  **1003–1085 m**, top edge 3560 ± 6 ft across five crossings. The whiteout takes over and hands the
+  camera to state 2 — **no ceiling is reached at any altitude in the record**.
+
+So the ordering the item asked about holds by construction and matches the record: `CLOUD_COVER`
+BOTTOM (C1 970) is entered long before anything else, and C1's cap sits at +2792.8 dome-local ×2.5 =
+~6982 m ABOVE the camera for ever. **No contradiction; ☑ rather than ❌.**
+
+**(b) Rim elevation per deck chapter — and the finding that only ONE chapter has a rim.** The
+expected rim elevation is `atan(capY / capRadius)`, scale-invariant by the rule above: C1 **46.95°**,
+C1C/C2B **58.62°**, C4 **8.72°**, C5 `zone3` **5.53°**. B14 measured C1's at **48–52°** (the spread
+is the 12-gon's inradius/circumradius plus off-centre columns) — the dome renders at authored
+proportions. For the other four the render can show *nothing*: C1's zone-1 dome is the only one
+built from two materials (`sky2.tif` vault, material 439, under a flat `Colored` 176 cap, material
+440), so its rim is a visible texture/colour boundary; C1C and C2B (`Colored` 176), C4 (192) and
+C5's `zone3` (16) are each **one** flat Colored material with `lighting: false`, so cap, vault and
+skirt render the same value and no rim exists to measure. That is the audit's real result for those
+chapters: *no scale of any kind — uniform or split — is observable there.*
+
+Spot-checked by render rather than asserted (`.scratch/b15/`, `--freecam --det --mute --frames=3`,
+below-deck pose `--pos=-7325,192,-3829` looking up 45° `--direction=0,0.7071,-0.7071`):
+
+| chapter | centre 200×200 mean / sd | authored | log |
+|---|---|---|---|
+| C1C | **175.94** / sd 0.80 (its rain) | `FOG_COLOR` 176 | `2 dome(s) per rig — dome_zone2 (zone_id 2), dome_zone1 (zone_id 1)`; `camera state 1 -> fog zone 'zone1'` |
+| C4 | **191.84** / sd 1.51 (its snow) | 192 | same two-dome line, `fog 500-4500 m` |
+| C1C `--sky-zone=zone2` (able-to-fail control) | 156.8 / 157.0 / 158.4, sd 4.6–5.6, per-row sd to 9.6 | — | zone2's night dome, not flat |
+
+Neither run printed a scale-clamp line, so both chapters keep 2.5× exactly (METHOD-15).
+
+**(c) The C1B clamp canary is unchanged** — not re-run, cited: B14 probe (d), C1B default freecam,
+**0 px differ** with the log still reading `dome radius 21816 m x 2,5 would reach past the 40000 m
+far plane — scaled 1,65x instead` and `1 dome(s) per rig`. Nothing in this item touches
+`HorizonScaleFor`.
+
+**Left open, deliberately, and it is not this item's to close:** C1's rim elevation is verified
+against the AUTHORED geometry, not against original footage — no capture on record measures the
+original's below-deck cap rim, and `CAP-12`'s frames are shot through the deck, not up at it. If a
+future capture ever reads that rim, it is the one measurement that could still move the scale story.
+
+**Tests.** `.\RunTests.ps1 -SkipEngine -SkipGoldens`: **798 units** (0 failed, 0 skipped,
+`CSVM_DATA_ROOT` set), up one. The new case is
+`HorizonDomeTests.OnlyC1sZoneOneCeilingHasARimAnythingCanSee`: the distinct material set on each
+chapter's zone-1/zone-3 dome, read off the extraction — exactly one flat Colored material everywhere
+(176/176/176/192/16) and a `sky2.tif` texture in C1 alone. It pins the reason (b) is unmeasurable in
+four of the five chapters, so a later session cannot read "no rim moved" as "the scale is verified".
+No golden can move: no engine file changed.
+
+**Original approach (kept for reference).**
 
 **Goal.** A written, verified statement of how the remake's `HorizonScale`/`HorizonScaleFor`
 interacts with metric dome features (the 396 m cap, the skirt depth), and a fix if the zone-1

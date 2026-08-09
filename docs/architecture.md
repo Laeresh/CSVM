@@ -2907,6 +2907,35 @@ scripting an actual shot.
     does not contain (see `docs/formats/weather.md`'s zone-1 ceiling table: 396.4 is `bbox_mid.y`,
     a bbox midpoint; the cap polygon is at +2792.8). So the domes keep one uniform fitted scale and
     `B15` inherits the question of whether the fitted 2.5× itself is right, not of splitting it.
+  - **The rule, audited and stated (`B15`, 2026-08-09).** *Each dome is anchored at its own rig's
+    camera and scaled UNIFORMLY by `HorizonScaleFor(that dome)`.* Justification, in three steps:
+    the dome is camera-CENTRED (zero parallax) and `fog: false` (no distance cue), so the only
+    quantity a frame can carry is the ELEVATION each feature subtends; a uniform scale about the
+    camera maps every dome-local direction to itself, so it preserves every such elevation exactly;
+    fitting it PER DOME is what keeps each one inside `Camera3D.Far` without any dome's size
+    deciding another's. **The scale is therefore observable in exactly two places, neither of them
+    an authored angle:** (1) whether the dome's far wall survives the far plane — C1B's clamp
+    (~1.65×) exists for that and is the regression canary; (2) where the dome INTERSECTS world
+    geometry — terrain (why 2.5× exists at all) and the deck annulus, whose 20,480 m half-span
+    brackets C1 from below at **20480 / 8813 = 2.32×** (`zone1`) and **20480 / 8744 = 2.34×**
+    (`zone2`). So 2.5× is bracketed on both sides, not free, and the two brackets coexist only
+    because the clamped chapter (C1B) authors no deck.
+  - **What could contradict it, and what the record says.** (a) *The climb ordering.* A
+    camera-anchored ceiling can never be reached by climbing, and that is exactly the original's
+    behaviour on record: the user at the controls of the original (`PLAN-overcast-match` A7,
+    2026-08-08) reported that "climbing below the deck, the texture's look is *exactly the same* at
+    every altitude — a world-fixed sheet would grow and parallax", and `CAP-12`'s six deck crossings
+    record the whiteout taking over instead (first wisps ~982 m, full obscuration 1003–1085 m,
+    clear above ~1128 m) with **no ceiling reached at any altitude**. Nothing in the footage record
+    describes penetrating the below-deck ceiling. (b) *The cap rim's elevation.* Only C1 can show
+    one: its zone-1 dome is the only one built from two materials (a `sky2.tif` vault under a flat
+    `FOG_COLOR` 176 cap), so the rim is a visible boundary — B14 measured **48–52°** against the
+    authored **46.95°**. C1C/C2B (`Colored` 176), C4 (192) and C5's `zone3` (16) are each ONE flat
+    Colored material with `lighting: false`, so their caps have no rim any render can find and no
+    scale of any kind is observable there; measured at a below-deck pose looking up 45°
+    (`--pos=-7325,192,-3829 --direction=0,0.7071,-0.7071`): C1C **175.94** and C4 **191.84**, flat
+    to their authored colours, against `--sky-zone=zone2`'s 156.8/157.0/158.4 as the able-to-fail
+    control. Pinned in `CSVM.Tests/HorizonDomeTests.cs`.
 ⚠ **`--pos`/`--direction` are routed by mode in ONE place** (`ResolvePlacement`): flight gets
   `_spawnAt`/`_spawnDir`, everything else `_camPos`/`_camDir`. **Never fold `_camDir` into
   `_lookAt`** — `--lookat` is a POINT, `--direction` a vector; only flight converts one to the other.
