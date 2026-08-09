@@ -95,3 +95,5 @@ playtest-notes.md
 
 # Capture-rig run logs - one per recording, they belong with the footage
 analysis/capture-rigs/*-log.txt
+
+.mcp.json
