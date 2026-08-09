@@ -746,8 +746,13 @@ atmosphere band-select flag was not touched.
 
 ⚠ **One consequence outside this item.** C22/C23/D31 each parked the ≈1.6–1.7× fast banked rotation
 on "`turn_fade_in`/`turn_fade_out`/`highGs` are the only authored fields shaped like it". `highGs`
-is out: a limiter that never fires cannot slow a turn. The authored candidates are now
-`turn_fade_in`/`turn_fade_out` alone.
+is out: a limiter that never fires cannot slow a turn.
+⚠ **And so is the rest of it, checked the same day (2026-08-09).** `turn_fade_*` is `FUN_00490e10`'s
+base ramp on **airspeed alone** — 0 at 10 mph, 1 at 50, flat above — scaling roll and pitch
+authority with no bank term in it, so it is identically 1 across the 222–260 mph the banked turn
+settles at. **The gap has no authored candidate at all**; the ramp is a genuine unimplemented
+low-speed behaviour instead (`BL-330`), and what discriminates the turn is `CAP-33`, not more
+decoding. See `docs/org/flightModel.md`'s correction note.
 
 **Determinism and controls.** The per-airframe limiter table, `--dump-flight` (Bloodhawk, Balmoral)
 and `ZzBaselineDump` (all eleven) each run twice, byte-identical (SHELL-10/DET-6, DET-7/DET-9); the

@@ -480,8 +480,10 @@ possible confirmation of the "vanishes at zero bank" property.
 34.71 °/s against the original's 18.95, and up on ten of eleven airframes. Both terms *add*
 heading rate in the direction of bank, so the plan's expectation that this item would explain the
 original's 1.6×-slower banked turn is disproved at the mechanism. Whatever makes the original
-turn slowly when banked is still missing, and `turn_fade_in`/`turn_fade_out`/`highGs` (`BL-095`)
-remain the only authored fields shaped like it.
+turn slowly when banked is still missing — and as of 2026-08-09 **no authored field is a candidate
+for it**: `highGs` is measured inert (D33), and `turn_fade_*` is this document's own base ramp,
+keyed on airspeed alone and saturated at 1 above 50 mph (see "Control authority vs speed" and the
+correction note at the end of this section).
 The one place it clearly improves fidelity is the **knife-edge**: a neutral-stick 90° bank held
 for 35 s used to pin the nose at the bounded −4.01° sag and settle (−316 m); it now drifts
 linearly at ≈1.08 °/s to −41.8° with no equilibrium (−1993 m), which is the *shape*
@@ -611,9 +613,24 @@ starts engaging in a knife-edge. Left at 0.35; `KnifeEdgeTests` pins the α marg
 **What is still open, and it is one number, not four.** The whole banked rotation runs ≈1.6× fast:
 nose drift 1.09 °/s against a measured 0.69–0.89, heading 1.7 °/s against 0.68–1.13 — the same
 ≈1.6× by which `sustained-turn-rate` exceeds the original's banked pull (32.8 against 18.95). Two
-independent manoeuvres, two different body axes, one ratio. `BL-095`'s unconsumed
-`turn_fade_in`/`turn_fade_out`/`highGs` remain the only authored fields shaped like it; nothing is
-decoded, and nothing was tuned to close it here.
+independent manoeuvres, two different body axes, one ratio. Nothing was tuned to close it here.
+
+⚠ **CORRECTION (2026-08-09): the authored candidates are exhausted, and this document said
+otherwise for four items running.** C22, C23, D31 and D33 each parked this gap on "`BL-095`'s
+unconsumed `turn_fade_in`/`turn_fade_out`/`highGs` are the only authored fields shaped like it".
+Both halves are now false. `highGs` is measured inert on every airframe (D33). And `turn_fade_*` is
+**already decoded in this very document** — "Control authority vs speed" above: `FUN_00490e10`'s
+base ramp is a function of **airspeed alone**, 0 at `turn_fade_in` (10) rising to 1 at
+`turn_fade_out` (50 authored), **held at 1 above that**, scaling roll and pitch authority with no
+bank or load-factor term anywhere in it. The banked turn settles at 222–260 mph and the knife-edge
+takes are at 143 and 300, so the ramp is saturated across the whole regime where the 1.6× appears
+and cannot be its cause. The ramp is a real unimplemented low-speed behaviour (`BL-330`) — it is
+simply not this. **What remains is not a decode question**: the original's own turn is not
+internally consistent with a coordinated level turn (18.95 °/sim-s at 222.94 mph is `V·ω` =
+32.96 m/s² lateral, implying 58.7° of bank against the ~100° its ADI shows), so `CAP-33` — a
+sustained turn at a clearly different bank — is what discriminates. Recorded rather than quietly
+re-pointed: a gap that has been attributed to the same three fields four times is exactly the kind
+of inherited claim that stops being re-checked.
 
 ## The three arcade terms
 

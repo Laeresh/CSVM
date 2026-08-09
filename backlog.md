@@ -823,20 +823,34 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   full back stick, same full throttle — and not a speed effect, since the loop passes through the
   turn's 222.94 mph on its way round (`analysis/video-flight-calibration/FINDINGS.md`). Our model
   has no such asymmetry and is 71% fast in the banked case while being right to ~11% in the loop.
-  These fields are the only authored ones shaped like a bank/load-factor rate fade, so
-  decoding them is now the concrete next step rather than a wish. ⚠ **A lead, not a decode** — the
-  names have not been mapped to units and `maxAOA`/`liftAOAs` were consumed as a hypothesis under
-  test, not as a decode (`docs/PLAN-flight-drag-lift.md` B12). Do not implement a rate limiter from
-  the names alone — a naive speed/bank coupling that quietly costs pitch authority is exactly the
-  wrong-mechanism fix `BL-124`'s history warns about.
-  ⚠ **These two now carry the WHOLE of that asymmetry, because both other candidates are dead.**
-  (a) The original's own hardcoded bank coupling — 0.205 into yaw, 0.165 into pitch, plus the
-  inverted term — is decoded and implemented (`PLAN-flight-model-rewrite` C22, 2026-08-09) and moves
-  the banked rate **away** from the original (32.35 → 34.71 °/s, up on ten of eleven airframes):
-  both terms add heading rate in the direction of bank by construction, so no sign or scale of them
-  can subtract one. Do not re-open the coupling looking for the missing slowdown. (b) **`highGs` is
-  out too (`D33`, 2026-08-09):** the G limiter is inert on every airframe (peak demand 2.13–5.01 G
-  against a threshold of 9), and a limiter that never fires cannot slow a turn.
+  ⚠ **CORRECTED 2026-08-09 — `turn_fade_*` is decoded, it is NOT a bank or load-factor fade, and
+  with it out the trio is empty: the banked asymmetry has no authored candidate left.** The decode of
+  record already carried the answer (`docs/org/flightModel.md`, "Control authority vs speed"):
+  `FUN_00490e10` derives one **base ramp from AIRSPEED ALONE** — 0 below `turn_fade_in` (10), rising
+  linearly to 1 at `turn_fade_out` (**50** as authored here), **held at 1 above it** — scaling roll
+  and pitch authority. Bank never enters it, and above 50 mph it is identically 1. The banked turn
+  settles at 222–260 mph and the knife-edge takes are at 143 and 300 mph, so the ramp is saturated
+  everywhere the 1.6× appears and **cannot produce it**. What it does describe is a real
+  unimplemented behaviour at the bottom of the envelope — minted as `BL-330`.
+  All three candidates are now dead. (a) The original's own hardcoded bank coupling — 0.205 into
+  yaw, 0.165 into pitch, plus the inverted term — is decoded and implemented
+  (`PLAN-flight-model-rewrite` C22, 2026-08-09) and moves the banked rate **away** from the original
+  (32.35 → 34.71 °/s, up on ten of eleven airframes): both terms add heading rate in the direction of
+  bank by construction, so no sign or scale of them can subtract one. Do not re-open the coupling
+  looking for the missing slowdown. (b) **`highGs` (`D33`, 2026-08-09):** the G limiter is inert on
+  every airframe (peak demand 2.13–5.01 G against a threshold of 9), and a limiter that never fires
+  cannot slow a turn. (c) `turn_fade_*`, above.
+  ⚠ **Do not fill the hole by inventing a rate limiter from field names** — a naive speed/bank
+  coupling that quietly costs pitch authority is exactly the wrong-mechanism fix `BL-124`'s history
+  warns about, and `maxAOA`/`liftAOAs` were consumed as a hypothesis under test rather than as a
+  decode (`docs/plans/PLAN-flight-drag-lift.md` B12).
+  **Where to look now that the authored data is exhausted: the measurement's own interpretation.**
+  `Probes.FlightEnvelope` already records that the original's turn is not internally consistent with
+  a coordinated level turn — 18.95 °/sim-s at 222.94 mph is `V·ω` = 32.96 m/s² lateral, implying
+  **58.7° of bank**, not the ~100° its ADI shows. A model reproducing the measured *rate* would then
+  disagree with the measured *bank*. `CAP-33` (a sustained turn held at a clearly different bank,
+  ~60–70°) is the capture that discriminates: two banks and two rates say whether the original's turn
+  is rate-limited, bank-limited, or being mis-read off the ADI. A capture question, not a decode one.
 
   Still to decode/implement in the block: `turn_*` (the roll/pitch base ramp — above; exponent on
   `BL-307`), `groundblow_*`/`ai_groundblow`, and `bounce_factor`'s units (`BL-172`). The `yaw_*` set
@@ -853,6 +867,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   matches the original to 4% and a mis-scaled substitution would break a passing suite check.
   (b) `drag_factor 1.5` here **collides with** `vehicle.json`'s per-plane `drag_factor` (0.37 on the
   Bloodhawk), so at least one of the two is not what its name suggests; our drag uses neither.
+
+- `BL-330` `[Feature]` **The low-speed control-authority ramp — decoded, corroborated at the
+  controls, and not implemented.** `FUN_00490e10` scales **roll and pitch** authority by a base ramp
+  taken from airspeed alone: 0 below `turn_fade_in` (**10 mph**), rising linearly to 1 at
+  `turn_fade_out` (**50 mph** as authored here), flat at 1 above. So the slower the aircraft gets,
+  the mushier it gets — and at 10 mph roll and pitch are gone entirely. Our `FlightModel` applies no
+  such fade on either axis; the only thing that makes our aircraft feel unflyable when slow is the
+  stall block taking the nose, which is a different mechanism. Write-up in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Control authority vs speed".
+  **Two-source support, which is why this is a `[Feature]` and not a `[Research]`:** the trace above,
+  plus a player report from the controls (2026-08-09) that the original hampers the controls at stall
+  speed — offered unprompted while flying the post-`D33` build, i.e. describing the original from
+  memory rather than reading it off ours.
+  ⚠ **Where 50 mph falls decides how visible this is, and it differs by airframe** (stall speeds from
+  `PLAN-flight-model-rewrite` B15): nine of the eleven stall at 52–57 mph, i.e. *above* the ramp's
+  top, so for them the fade only bites once already stalling and falling. The **Balmoral** (45.5)
+  reaches its own stall at ≈89% authority. The **autogyro** (18.5) flies a long way inside the ramp
+  and reaches stall at roughly **21%** of roll and pitch authority — near-inert controls while still
+  flying, which for that airframe reads as deliberate rather than as a bug.
+  ⚠ **Traps.** (a) This is *airspeed*-keyed, not stall-keyed — do not gate it on `isStalled()`, or
+  the two mechanisms compound and the fade vanishes on the airframes whose stall sits above 50 mph.
+  (b) It is roll and pitch **only**: yaw has its own, different curve, already landed (`C21`), and
+  extending this ramp to the rudder would double-fade it. (c) `FlightModel.cs`'s rotation comment
+  currently asserts "roll never fades in the original" — true of *high* speed, false of low, and the
+  same misreading of this function that had `turn_fade_*` filed as a bank fade until 2026-08-09 (see
+  `BL-095`). (d) It reaches into stall recovery and the ground handling the race grid sits on, so it
+  wants a flown check, not only a probe row.
 
 - `BL-096` `[Feature]` **Angle of attack is now fittable and is not modelled.** The ADI shows hysteresis against
   vertical speed round the loop — expected, since the ball shows attitude while `dh/dt` follows the
@@ -876,6 +917,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   **`PitchTune` / `YawTune` / `RollTune` / `ThrustConst` are not on this list**: all four are
   measured against the original frame by frame and asserted by the `flight-envelope` suite, so they
   are not TUNE knobs and a feel A/B cannot overrule them.
+  ✅ **Flown 2026-08-09, straight off the completed `PLAN-flight-model-rewrite` (`3c8f5ae`): "feels
+  a lot better overall, every manoeuvre."** The whole rewrite — the lift demand and its clamp, the
+  Mach polar, the thrust curve, per-airframe stall, the authored yaw table, bank coupling, the
+  weathervane, exponential damping, the retired knife-edge sag and the attitude-thrust climb — reads
+  as an improvement at the controls, not only on the instruments. A **pass on the direction**, and
+  the reason the two constants still listed above are not being tuned toward anything: nothing in the
+  flown report points at them. It is **not** a pass on the three recorded conflicts (the zero-thrust
+  drag deficit, the banked-turn rate, the climb plateau), none of which a feel report can settle. The
+  same sortie produced the observation behind `BL-330`.
   **`CAP-05` decoded 2026-08-04** (four clips, all gating rigid) — three of the four are answered and
   one is not:
   - **`StallNoseRate` 1.0 rad/s is ~17× too fast.** In `CAP-05 Stall 0% Thrust no input` the nose

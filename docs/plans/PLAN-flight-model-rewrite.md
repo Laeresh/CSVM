@@ -1240,9 +1240,18 @@ all eleven airframes rather than asserted from two constants.
 ⚠ **One consequence lands outside this item: `highGs` is out of the banked-turn gap.** C22, C23 and
 D31 each parked the ≈1.6–1.7× fast banked rotation on "`BL-095`'s `turn_fade_in`/`turn_fade_out`/
 `highGs` are the only authored fields shaped like it". `highGs` cannot be it — it is inert on every
-airframe by the arithmetic above, and a limiter that never fires cannot slow a turn. **The gap's
-authored candidates are now `turn_fade_in` / `turn_fade_out` alone**, and `backlog.md`'s `BL-095`
-says so.
+airframe by the arithmetic above, and a limiter that never fires cannot slow a turn.
+⚠ **Post-plan correction (2026-08-09, same day): `turn_fade_*` is out too, so the gap has NO
+authored candidate.** Checked in response to a question about whether decoding could still answer
+it, and the answer was already in this project's own decode: `FUN_00490e10`'s base ramp keys off
+**airspeed alone** (0 at `turn_fade_in` 10, 1 at `turn_fade_out` 50, flat above) and scales roll and
+pitch authority with no bank or load-factor term. It is identically 1 across the 222–260 mph the
+banked turn settles at, so it cannot be the 1.6×. C22, C23, D31 and D33 all repeated "the only
+authored fields shaped like it" without re-reading the function they were pointing at — an inherited
+claim four items deep. Corrected in [`docs/org/flightModel.md`](../org/flightModel.md),
+`backlog.md`'s `BL-095` and `Probes.cs`; the ramp itself is a real unimplemented low-speed behaviour
+and is minted as `BL-330`. The gap is now a **capture** question (`CAP-33`), since the measurement
+is not internally consistent with a coordinated level turn.
 **Nothing was implemented, following C24's precedent.** The asymmetry the trap warns about — the
 original gates only input that *opposes* the current rotation, so the limiter damps recovery from a
 departure rather than entry into one — is recorded in

@@ -463,8 +463,13 @@ public sealed class FlightModel
         // two decoded torques into the same accumulator — the bank coupling and the weathervane.
         // Yaw authority follows the original's authored speed table (see YawAuthorityAt) — a
         // declining function of speed, same as the interim curve it replaces, but the original's
-        // own shape rather than a fitted stand-in. Pitch and roll carry no such fade here (roll
-        // never fades in the original; the pitch fade is authored unreachable).
+        // own shape rather than a fitted stand-in. Pitch and roll carry no HIGH-speed fade here:
+        // the original fades neither with speed (its pitch fade is authored unreachable).
+        // ⚠ They do fade at LOW speed in the original and do not here — FUN_00490e10 ramps roll and
+        // pitch authority from 0 at turn_fade_in (10 mph) to 1 at turn_fade_out (50), flat above.
+        // Unimplemented, traced, and corroborated from the controls: BL-330. Do not read the line
+        // above as "roll never fades" — that misreading is what had turn_fade_* filed as a bank
+        // effect through four items.
         float yawEff = YawAuthorityAt(Speed);
         var cmd = new Vector3(
             Mathf.Clamp(input.Pitch, -1f, 1f) * s.PitchTorque * s.RecInertia.X * pitchTune,
