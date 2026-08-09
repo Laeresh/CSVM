@@ -1167,6 +1167,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Environment & world
 
+- `BL-323` `[Bug]` **A sharp terrain-mesh spike in C4 near (-4974, -, -3861)** (surfaced during
+  PLAN-overcast-match C25, 2026-08-08). Visible from `"--pos=-4974,900,-3861"
+  "--direction=-1,0,0"`: a thin vertical terrain spike, pre-existing and unrelated to the
+  weather work (bit-identical across two unrelated builds A/B'd at that pose). Looks like a
+  terrain LOD/seam defect — a stray vertex or a partition boundary artefact; diagnose from the
+  gamez terrain data before touching mesh code. Shot on record:
+  `.claude/worktrees/overcast-match/.scratch/c25/` renders at that pose (worktree scratch is
+  swept — re-shoot from the pose above if gone).
+
 - `BL-036` `[Research]` `[Blocked: zone selection unknown]` **We ignore `zone_id` entirely** (found 2026-07-22). Every gamez node carries a `zone_id`:
   `-1` = always rendered, `1`/`2`/`3` = only when that zone is active. Both zones span the **whole
   map** spatially, so they are alternative world variants, not regions. Per-chapter node counts
@@ -1237,144 +1246,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-076` `[Feature]` **Star twinkle + undecoded light fields** (flags 523/…, the 0.17 float) — stars/beacons
   render as fixed-size soft sprites, no twinkle.
 
-- `BL-100` `[Research]` **Which weather/sky zone do C1, C1C, C2B and C4 actually use?** **C5 is
-  answered — `zone1`** (user A/B 2026-07-22; landed as polish-3 item 2). **C1B, C2 and C3 are
-  answered — `zone1`**, settled from the data rather than by A/B (2026-08-06, `BL-277`): their
-  gamez `horizon/zone2` is a bare marker with no dome at all, so the geometry decides it and
-  `WeatherState.PreferPopulatedHorizonZone` now selects it (`docs/formats/weather.md`).
-  **What stays open is the four chapters where BOTH zones build a dome** — C1, C1C, C2B, C4 — and
-  there the choice really is a fidelity call the geometry cannot make. ⚠ **The "C1 first, its own
-  scripts disagree" ranking is withdrawn** (2026-08-06, `interp.json` re-read in full): its two
-  strings are not two zone selections — `load.gw`'s `CameraSetHorizonXZ zone2_cloud_floor` names a
-  node **C1's gamez does not contain**, and `tex_fx.gw`'s `FindNode h_zone1scroll` is a UV scroll,
-  not a pick. All four zone-bearing strings in the 98 scripts are accounted for in
-  `docs/formats/weather.md`; none bears on zone choice. So this is a plain four-chapter sweep, with
-  no data reason to order it. C1 is still the most *visible* case (its two zones are genuinely
-  different skies — zone2 moon/stars night, zone1 day haze). Method: fly each candidate in the
-  original and compare against `--sky-zone=zone1` / `=zone2`, which still render a named zone
-  literally.
-
-- `BL-101` `[Tuning]` `[Owed-playtest]` **Fine-tune fog and environment** — method: record video from a spawn point flying straight for a
-  fixed number of seconds, in both engines, and compare.
-
-- `BL-118` `[Tuning]` **Cloud deck mesh brightness** — the `CloudDeck` **mesh** brightness reads ~40 units
-  lighter than the original (measured 2026-08-07: **+54, and only from below** — see the `CAP-12`
-  block). **Second symptom, same defect (`PT-42`(a), 2026-08-07): from above, the deck mesh and the
-  `cloudsprite` field meet in a hard colour cut** — the two populations do not agree in ours, where
-  the original blends. ⚠ That puts a caveat on the `CAP-12` tops-from-above match (ours 211 vs
-  original 214): both populations cannot match at 211 if ours has a visible cut between them, so
-  that box sampled one of the two — re-measure per population before reading it as a pass.
-  ⚠ **Scope narrowed 2026-08-07:** the sprite field's *density* and the scatter's grid structure
-  left this entry for `BL-312`. What stays here is the mesh's own brightness, which is a lighting
-  defect, not a scatter one.
-  ⚠ **RE-SCOPED 2026-08-06, `BL-273` landed.** Everything this item used to say about the sprite
-  field went with `CloudPuffs.cs`: the field is now `fogvol.zrd`'s authored clutter scattered
-  through the gamez `fvol*` volumes, and it carries no TUNE constant at all
-  (`docs/formats/fogvol.md`). Both 2026-07-30 symptoms are answered — "puffs at all height levels"
-  was the deleted `BandBelow`/`BandAbove` (120/280 m) + `VertFull`/`VertFade` (200/560 m) margins,
-  which seeded visible puffs across [290 m, 1964 m] of a 2003 m envelope; "not on every map" is
-  authored (C1B/C2/C3 ship no fog volumes and no `cloudsprite*` template). What is left here is
-  the deck mesh's brightness, which `fogvol` never explained; the field's density and grid
-  structure are `BL-312`.
-  **`CAP-12` delivered and analysed 2026-08-07** (evidence in `playtest/CAP-12/`, decode via the
-  chase pipeline — gate dx=dy=0 peak 0.758, altimeter NCC 0.9900). What the footage settles:
-  - **The deck band is the authored `fogvol` slab.** Full whiteout spans **3290–3560 ft
-    (1003–1085 m)** across six crossings, top edge 3560 ± 6 ft over five of them; first wisps at
-    ~3222 ft (982 m), clear above by ~3700 ft. Authored slab: 970–1090 m — congruent to within
-    metres, so deck placement is data, not a constant to tune.
-  - **(a) is confirmed, signed, and localized to the underside.** Matched-box A/B against our
-    build at the same altitudes (`--pos` shots, same 480×110 game-coord box): deck from below
-    original **167** vs ours **221** (+54, ours too bright); inside 248/243; tops from above
-    211/214; from 5570 ft 196/202. The interior and tops already match within a few units —
-    only the base lighting is wrong. Original base: flat dark-gray sheet, soft mottling; ours:
-    white, top-lit, hard-edged crenellation.
-  - **The original shows no comb** — grazing passes along tops and base (stills t=44/59/97/124,
-    t=29.2) show soft continuous structure only, no 130 m lattice at any angle. **Our side is now
-    answered too: ours combs** (`PT-42`(b) at the controls, 2026-08-07). Both halves moved to
-    `BL-312`.
-  - **Night puffs are directionally moonlit in the original (`CAP-11` C1B, 2026-08-07):** cloud
-    cores near the moon reach p90 **218** (t=16) while the away-from-moon cloud sits at p90 **70**
-    (t=5); our uniform `WorldLight` 0.426 renders p90 **102** — matching the away side and ~2×
-    dark against the lit side (`playtest/CAP-11/`). Any night-cloud brightness judgement must say
-    which side of the moon the measured puff faces.
-  - ~~Discrete puff balls above the tops in ours, none in the original~~ — **explained, not a
-    defect (user, 2026-08-07): the world-placed `cloudparent` clusters exist only over the base
-    map**, and the clip had left it (a straight run at ~300 mph covers the 12,288 m map in under a
-    minute), while our `csvm-above-1160m.png` sits at (-4974,-3861) — on it. The edge extension
-    carries no `cloudparent` in the original; same phenomenon on C2's. Any future above-deck A/B
-    must say which side of the map edge both frames are on.
-    ⚠ **Vocabulary — two populations, never one phrase for both** (they were conflated here until
-    2026-08-07, which is what made this bullet look like it contradicted `BL-312`):
-    **`cloudsprite1`/`cloudsprite2`** are the `fvol*` clutter scatter — the *deck field*,
-    world-locked and tiled (`PT-42`(b) at the controls); **`cloudparent`** are discrete
-    world-placed clusters (C1B's 70, C4's 45 parked at the world origin) — *stationary, not
-    tiled*, and the population this bullet is about. "Placed/scattered puffs" spans both and is
-    banned in this entry.
-  **C4 take analysed 2026-08-07** (`CAP-11 C4 and CAP-12 Clouddeck.mp4`, gate dx=dy=0 peak
-  0.848, d2 sd 0.99 ft; evidence in `playtest/CAP-12/c4/`) — the clear-air chapter separates
-  what C1's murk hid, and it bears on the **uniform-vertical-fill inference** in
-  [`docs/formats/fogvol.md`](docs/formats/fogvol.md):
-  - **C4's authored numbers put the puffers above the deck, uniquely among chapters.** Deck mesh
-    y=1050 (`Sky1.tif` tiles), `CLOUD_COVER` 1000–1100 (colors authored 192-gray), `fvol` slab
-    **1060–1180.5** — the slab tops out **80 m above** the cover band (C1's 970–1090.5 nests
-    inside its 970–1124). Puffs riding visibly above the deck are data, not a bug.
-  - **The user-reported gap is real in the footage, and uniform fill cannot produce it.** At
-    1135 m (t=19.5) the original flies in *clear air* — gray sheet below, puff bases above; the
-    whole climb 1003→1230 m never fully obscures (lum ≤ 195). Under uniform fill the 132.3 m
-    cards (scale ≤1.5) hang to ~956–990 m, piercing the deck — no gap is expressible. Our build
-    at the same spot (`csvm-c4-1135m.png`) sits in murk, and at 1050 m
-    (`csvm-c4-1050m-deck.png`) renders a **243 whiteout where the original's obscuration is a
-    GRAY-out** (user, 2026-08-07): C4 authors `CLOUD_COVER` `TOP_COLOR`/`BOTTOM_COLOR` =
-    192,192,192, and the original's veil measures exactly that flat 192 — so C4 carries a
-    *second*, in-cloud brightness delta (243 vs 192, +51) on top of the C1 underside one, and
-    the target value is authored data, not a judgement call. A **top-anchored** scatter
-    (centres near the volume top, perp jitter) puts card bottoms at ~1076–1127 m — a 30–75 m
-    clear band over the sheet, which is what the clip shows. C1 cross-checks: top-anchoring at
-    1090 predicts bottoms ~991–1027, matching the measured whiteout onset 1003 m / wisps 982 m.
-  - ⚠ Confound to keep separate: C4 also ships **45 `cloudparent` clusters parked at the world
-    origin** in gamez (runtime-placed by mission setup, altitude not in `nodes.json`); the big
-    cumulus towers at 1200–1600 m in the same clip are likely those, not `fvol` scatter.
-  *Fix shape:* revisit fogvol.md's vertical-spread inference (anchor at/near the volume top
-  rather than filling it), per this entry's own rule — an inference correction, not a TUNE.
-  *Playtest after fix:* re-shoot the C1 underside and the from-above deck/field boundary against
-  `CAP-12`'s stills. (`PT-42` was flown 2026-08-07 and retired — its verdicts are here and on
-  `BL-312`.)
-  ⚠ **Trap.** The "~40 units lighter" brightness reading is about the `CloudDeck` **mesh**, a
-  different object from the sprite field — do not read one as evidence for the other. (The +54
-  measurement above is the mesh underside; the sprite field sits *inside* the whiteout band.)
-
-- `BL-312` `[Bug]` **Our `fvol` cloud scatter combs on a regular 130 m lattice and reads far denser than
-  the original; the original shows no lattice at all and tiles unboundedly** (`PT-42`(a)(b)(c) at the
-  controls + `CAP-12`, both 2026-08-07; split out of `BL-118`, which keeps the deck **mesh**
-  brightness). Two sides, both now on file:
-  - **Ours combs.** At a grazing angle the 130 m scatter grid shows as a faint comb in the sheet —
-    `perturb_dist_range` 10–20 m on a 130 m `distance` is only ±15 % jitter, which is what the
-    authored numbers produce under the *grid* reading of `distance` (`docs/formats/fogvol.md`,
-    "What is decoded and what is inferred").
-  - **The original does not.** `CAP-12` grazing passes along tops and base (stills t=44/59/97/124,
-    t=29.2) show soft continuous structure only, at any angle — and at the controls the original's
-    deck field reads **world-locked and tiled**: puffs stay put as you fly through them, there are
-    simply always more, in every direction over the base map, with no volume edge anywhere.
-  - **Density:** ours is "a lot denser" (`PT-42`(c)); opacity not callable by eye.
-  ⚠ **This is a decode correction, not a TUNE — `fogvol.md` and `BL-118` both say so outright, and
-  the entry is tagged `[Bug]` to keep it out of the tuning pile.** The argument that settles it:
-  `fogvol.md`'s *entire* corroboration for reading `distance` as a grid period is a **density**
-  argument — "130 m period over a 132.3 m card gives ~1.0 sprite-areas of cover, an overcast
-  exactly one sprite deep." Mean spacing is invariant under randomisation, so that evidence only
-  ever supported the **spacing**; the **regularity** was never evidenced, and it is the regularity
-  the render contradicts.
-  *Fix shape (two candidates, not exclusive):* (1) scatter randomly at the same mean spacing —
-  same density, same one-sprite-deep cover, no lattice, therefore no comb; (2) tile unboundedly
-  around the camera on the `distance` period, as `templates.zrd` ground clutter does (the grammar
-  `fogvol.md:106` says the two files share), rather than placing a bounded set inside finite
-  `fvol*` volumes — which is what gives ours edges and structure the original has none of.
-  ⚠ Trap: **the two cloud populations are different objects** — this entry is the
-  `cloudsprite1`/`cloudsprite2` `fvol` scatter only. The discrete world-placed `cloudparent`
-  clusters are stationary and untiled, stop at the map edge, and are `BL-118`'s business; a claim
-  about one is not evidence about the other (see `BL-118`'s vocabulary note).
-  *Playtest after fix:* re-fly C1 at a grazing angle along the deck, and compare density against
-  `CAP-12`.
-
 - `BL-324` `[Bug]` **Our sun shines from a hardcoded direction; every mission authors one and we
   read none of it.** `Launcher.SetupLighting` builds the world's only `DirectionalLight3D` at a
   fixed `RotationDegrees (-45, 150, 0)`, with the comment "shine onto the -Z (nose) side" — i.e.
@@ -1401,6 +1272,63 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   then the original disagrees with itself too and we should reproduce that, not reconcile it.
   *Needs an original-game A/B:* a C3 pose showing aircraft shading and shadow direction against the
   visible sun, which settles (c) before any value is adopted.
+
+- `BL-105` `[Research]` **Map-edge continuation — the mirror half is ANSWERED 2026-08-04 from `CAP-17`; the unit
+  size is not.** **The original mirrors.** Our alternating reflection in `MapEdgeExtender.MirrorAxis`
+  is correct and must NOT be swapped to plain repetition — the long-standing user belief that it
+  plain-repeats (NOTES.md) is withdrawn, and the class doc's "user believes the original does NOT
+  mirror" caveat with it.
+  **How it was measured** (`playtest/CAP-17/`, method and traps in its README). One take,
+  `CAP-17 C2 south.mp4`, 67.6 s of straight nose-view flight south over the C2 coast. For a fixed
+  screen row, that row from all 2027 frames is stacked into a **spatio-temporal strip**, so the
+  land/water boundary (keyed `R − B > 15`) draws the coastline along the whole flight path. Read at
+  five rows (900–1300):
+  - **Translational period 471 ± 5 frames**, NCC **+0.90…+0.95**; consecutive periods are identical
+    copies (as-is +0.899…+0.949 vs time-reversed −0.086…+0.080).
+  - **Reflection seams every 240 ± 2 frames** at NCC **0.89–0.94** — row 1200 at 896/1138/1378/1619
+    (spacings 242, 240, 241), row 1300 at 916/1157/1398/1637 (241, 241, 239). Translational period =
+    2 × seam spacing, which is exactly what alternating reflection produces and plain repetition
+    cannot.
+  - The seam crosses **later on nearer screen rows** (row 900 → 1300: frame 1250 → 1398, monotone) —
+    the signature of a real ground feature, which no camera artefact can fake.
+  Heading, speed and altitude were ruled out first: compass tape moves **4 px total** over the clip
+  (corr with the coast trace −0.067), airspeed is flat at **295–302** units/sim-s (sd 2.7, matching
+  the 299.0–300.4 level max), altitude excursion is **218 ft** total and flat after frame 800 (corr
+  +0.19). That matters because a straight coast's screen-x scales as 1/h.
+  **What is still open: the size of the mirrored unit — it is NOT one 1024 m cell, and (measured
+  2026-08-07, second map) it is NOT one universal cell count either.** The C2 seam
+  spacing is 240 frames = 8.006 wall s = 11.13 sim s at k = 1.390, i.e. **3.28–3.36 km ≈ 3.2 cells**
+  at the measured speed. A one-cell unit is excluded by ~3×, and directly: translation NCC decays
+  smoothly through the lag a 1024 m cell would occupy (lag 74 = +0.353, lag 111 = −0.038) with no
+  peak there. Two independent supports that our per-axis *border-cell* clamp is wrong: C2's own south
+  border row is nearly all water (coast between cols 8 and 9 of the 12×12 × 1024 m grid), so
+  repeating it southward would give a coastline **invariant in z** — a straight line, not the
+  observed 471-frame swing.
+  **C4 north measured 2026-08-07** (`playtest/CAP-12/c4-mapedge/`, reusing the CAP-12 file
+  `CAP-11 C4 and CAP-12 Clouddeck.mp4`, t 72–114 s: due-north flight over C4's river, compass
+  scroll 0.0 px, airspeed flat 298.5–299.6, gate dx=dy=0 peak 0.848). The river's
+  water-fraction/x-centroid traces repeat at a **translational period of 333.5 ± 6 frames**
+  (NCC +0.555; −0.30 at the half-lag), reflection seams at half that, and consecutive episodes
+  match better **time-reversed** (0.648/0.678 vs 0.563/0.587) while episodes two apart match
+  better as-is — alternating reflection again, on a second map and axis. Unit:
+  **2310 ± 60 m ≈ 2.26 cells** — not C2's ~3.2 cells, so the mirrored block is per-map (or
+  per-edge), and any fixed `Rings`-style constant is the wrong shape. Noted, unproven: both
+  measurements sit on **n + ¼ cells** (2304 m and 3328 m); a single k·V systematic cannot make
+  both integers (+12.5 % vs +7 % needed), so if the pattern is real it is about where the
+  mirrored block is anchored, not a scale error.
+  ⚠ **The cell count is the soft number, the mirroring is the hard one.** The metre conversion
+  inherits both V and k, and k = 1.390 is a machine/session property measured on *other* clips, so
+  read each unit as soft ("about three cells" on C2, "about two and a quarter" on C4 — definitely
+  not one, definitely not equal) rather than exact integers. Settling it needs either a level
+  constant-altitude pass with a known start position, or an A/B against our own
+  build once `Rings`/the clamp granularity is changed.
+  **Extent:** the clip covers ~28 km ≈ **2.3 × the 12,288 m map** and the mirrored tiling continues
+  undegraded to the last frame — no limit, no change, no fade found within that range.
+  ⚠ **A symmetric border feature cannot discriminate mirror from repeat, and a zigzag coast is
+  locally symmetric about every headland.** The 2026-07-22 open-ocean check was inconclusive for the
+  first reason; a reflection scan with too small a half-width fails for the second (half-widths
+  30/37/55 return spurious seam spacings of 31/31/90 against the true 240). Use a half-width of a
+  full half-period.
 
 - `BL-305` `[Bug]` **C5's city blocks are packed edge to edge where the original shows pavement
   between buildings — within-block clutter density/alignment is wrong.** Found by `CAP-22`
@@ -1456,26 +1384,140 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   capture swallows them entirely, while ours are plainly visible in the same scene
   (`playtest/CAP-11/csvm-c2b-low.png`). Streak width is the first constant to revisit.
 
-- `BL-303` `[Bug]` **Three scenes render permanent murk or a black sky the original doesn't have —
-  and all three sit against zones authoring a 9000–10000 m fog band** (`CAP-11` A/B, 2026-08-07;
-  evidence `playtest/CAP-11/README.md`; surfaced closing `BL-110`). The cases:
-  - **C3**, matched canyon pose (`--pos=-3504,710,-3619 --direction=-0.40673,0,-0.91355`,
-    identical 2329 ft both sides): original near slope 36.5, far hills 19.9–60.3, blue-gradient
-    sky 194.9; ours near slope 130.4 (×3.6), far hills flat **201.0 = full `c9c9c9` fog**, sky =
-    fog. The authored near 1000 / far 4500 cannot full-fog a hill 1–2 km out, and C3's
-    CLOUD_COVER sits at 10000–11000 m — this is not the whiteout band.
-  - **C2B above the deck**: original dark blue-gray dome 82.7 (t=50); ours flat b0b0b0 fog
-    **176.0** at 1230, 1350 and 1500 m — identical at every altitude, so not an altitude miss.
-  - **C5**: our sky pure black 0.1 vs the original's dark-blue night dome 15.3 (C5 authors fog
-    000000; the `Weather.cs` NoFog-fallback note is adjacent).
-  Every *healthy* scene's active zone authors either a reachable deck band (C1C/C2B zone1 ~1000,
-  C2 zone1 256–1024) or 10000–11000 (C1/C1B zone1) — how the fog-altitude fade treats a band
-  wholly above the flight envelope is the common suspect; start where `ZoneFog`'s
-  fog_low/fog_high are consumed. Adjacent from the same capture, probably NOT fog: C5's lit
-  facades read ×0.58–0.66 of the original (tower faces 10.2 vs 15.5, low-rise 21.7 vs 37.6)
-  with WorldLight already at clamp 1.
-  *Playtest after fix:* re-shoot the three poses named in `playtest/CAP-11/README.md` against
-  the same original stills.
+- `BL-315` `[Feature]` **C5's fog volumes author their own interior fog and we don't render it**
+  (user at the controls of the original, 2026-08-08; clip
+  `OriginalScreenshots/Videos/CAP-11 C5 Flying into fog zone.mp4`). Flying into a C5 street
+  volume drops visibility to roughly a tenth of the mission fog — low enough that the user
+  crashed into a building. The data is already decoded and documented as read-but-unconsumed
+  ([`fogvol.md`](docs/formats/fogvol.md)): C5 is the only chapter authoring `fog_color`,
+  `fog_fade_dist` and `interior_fog_fade_dist` on its `fogvol.zrd`, and C5's weather `ZONE3`
+  authors `FOG_RANGES` 50–250 vs `ZONE1`'s 1500–2250 — 250/2250 matches the user's ~10 %
+  estimate, so the volume-interior fog and the otherwise-unreachable `ZONE3` are plausibly the
+  same mechanism. ⚠ That hypothesis (zone selection is *positional* — inside vs outside a fog
+  volume) is Wave B's `B11` matrix in `docs/plans/PLAN-overcast-match.md`; implementing the interior
+  fog itself stays here, gated on B11's verdict about which system owns it.
+  Secondary observation from the same sitting, re-judge after this lands: C5's puffs read
+  *denser* in the original than ours — in-volume fog may be what reads as density there, so do
+  not tune C5 sprite counts on that report alone.
+  *Playtest after fix:* re-fly the clip's approach into the same street volume and compare
+  visibility collapse distance.
+
+- `BL-317` `[Research]` **The original renders ambient wisp puffs around the plane at all times —
+  a third cloud population we don't have** (user at the controls of the original, 2026-08-08).
+  Identified while re-reading CAP-12's climb: the "first wisps at ~982 m" are these plane-local
+  puffs, not the `fvol` field appearing and not the whiteout ramp — "another disjunct feature."
+  ⚠ Vocabulary: this is a THIRD population beside the `fvol` `cloudsprite` field and the
+  world-placed `cloudparent` clusters (`BL-325` carries the full vocabulary note) — a claim about
+  one is not evidence about the others. Note the deleted hand-tuned `CloudPuffs.cs` (removed by `BL-273`,
+  2026-08-06) accidentally imitated exactly this; its constants survive in git history as a
+  starting point, but the decode should come from footage: when they are visible, their size,
+  count, and whether they move with the air or hang world-fixed. Needs a dedicated original
+  capture at several altitudes in clear air away from the deck band.
+
+- `BL-321` `[Bug]` **C3's terrain fog murk survives the Wave B fixes** (split out of `BL-303` at its
+  close, PLAN-overcast-match `B17`, 2026-08-08). After the dome un-fog (`B16`), skirt fix (`B18`)
+  and the fogRangeFactor deletion + linear ramp (`B15`), C3's canyon *sky* matches (198–203 vs
+  194.9) but the terrain is still too washed: near slope **106.1 vs 36.5**, mid ridge 143.7 vs
+  19.9, far ridge 182.4 vs 60.3, vegetation detail 22.1 % vs 47.8 %. Untried candidate on record
+  (B15's landing): **our fog mixes in linear space where DX7 blended in framebuffer/gamma space**
+  — ≈21 units washier at half fog; that is the first thing to try, and it is a global change, so
+  A/B every healthy scene from `playtest/CAP-11/README.md` before landing it.
+  ⚠ Traps: `fogRangeFactor` is dead — do not reintroduce a range multiplier to close this; the
+  B17 close-out found the original-side C3 canyon box replay noisy on far-ridge/sky (HUD/chase
+  framing mismatch) — use B15's framing-robust boxes, not fresh naive ones.
+  *Playtest after fix:* the C3 canyon pose (`--pos=-3504,710,-3619
+  --direction=-0.40673,0,-0.91355`) against the CAP-11 original still.
+
+- `BL-322` `[Bug]` **C5's lit facades render ×0.58–0.66 of the original with WorldLight already at
+  clamp 1.0** (split out of `BL-303` at its close, 2026-08-08; measured `CAP-11`: tower faces 10.2
+  vs 15.5, low-rise 21.7 vs 37.6). Explicitly NOT fog — `BL-303`'s own adjunct note, and the Wave
+  B fog work moved none of it. Candidate direction: the lit-signage/self-lit family
+  (`lighting: false` models draw fullbright, weather.md) — check whether these facades author a
+  flag or vertex data we modulate that the original does not.
+  *Playtest after fix:* the C5 night poses in `playtest/CAP-11/README.md`.
+
+- `BL-325` `[Feature]` **Night cloud sprites are directionally moonlit in the original; ours are
+  uniformly lit** (split out of `BL-118` at its close, PLAN-overcast-match `C24`, 2026-08-09 —
+  decision 2 of that plan kept it out of a two-daytime-stills milestone). The original lights a
+  night cloud by which side of it faces the moon; we apply one flat `WorldLight` to the whole
+  population, so a moonlit frame is right on the away side and roughly half as bright on the lit
+  side.
+  *Evidence:* `CAP-11` C1B (2026-08-07, `playtest/CAP-11/`): cloud cores near the moon reach
+  **p90 218** (t=16) while the away-from-moon cloud sits at **p90 70** (t=5); our uniform
+  `WorldLight` 0.426 rendered **p90 102** — matching the away side and ~2× dark against the lit
+  side. Re-measured on the Wave-B build (`B15`, plan `B17` Table 4): our C1B moonlit cloud tops
+  read **p90 187.5** against the original's **155.4 (t5) / 181.9 (t16)** at the spawn pose
+  (`--chapter=C1B --pos=-5406,55,-7200 --direction=-0.391,0,-0.921`), i.e. the *band* is now
+  plausible and the *direction* is still absent.
+  ⚠ **Which population.** C1B ships **no `fvol` volumes at all** (`FogVolumeTests`
+  `C1B "0|-|206.25|bare|cloudsprite:absent"`; its freecam census prints no `fogvol clouds`
+  line), so every cloud in that footage is one of the **70 placed `cloudparent` facades** —
+  ordinary world geometry. Verified by `C23`'s fork landing, which changed the `fvol` card colour
+  and left C1B byte-identical (`mean|d| 0.000, 0 px changed`, `c1b-night-sea` golden `ok`).
+  ⚠ **Vocabulary — three populations, never one phrase for two** (`BL-118`'s note, kept alive
+  here): **`cloudsprite1`/`cloudsprite2`** are the `fvol*` clutter scatter (the deck field,
+  world-locked and tiled); **`cloudparent`** are discrete world-placed clusters (C1B's 70, C1's
+  28, C4's 45); and `BL-317`'s **plane-local ambient wisps** are a third. A claim about one is not
+  evidence about the others, and the first two **share their textures** — `--tex-override` on
+  `cloud1.tif`/`cloud2.tif` paints both (`SHOT-21`), so separate them by altitude or cluster
+  position, never by texture.
+  ⚠ Traps: `csky_world_light` is CAP-11-calibrated on terrain — a directional cloud term must be
+  cloud-local, the way `C22`'s deck fix was deck-local. And C1's own daytime cards were measured
+  faithful at `lighting: false` (`C21`/`C23`), so this must not become a second global cloud
+  brightness knob beside `FogVolumeClutter`'s `CardVertexColorTune`.
+  *Playtest after fix:* the C1B night spawn above, against `playtest/CAP-11/`'s t5 and t16
+  frames, saying for every measured puff which side of the moon it faces.
+  *Cross-refs:* `BL-317` (the third population), `BL-327` (whether `lighting` gates `WorldLight`
+  on a cloud card at all — if it does not, this item's arithmetic changes), `CAP-11`.
+
+- `BL-327` `[Research]` **Is `lighting: true` on a `Facade` cloud card a `WorldLight` gate at all —
+  and what else does the original apply to cloud sprites?** (minted at `BL-118`'s close,
+  PLAN-overcast-match `C24`, 2026-08-09; the fifth candidate `C23` raised and deliberately did not
+  guess at.) One item, because all three open questions below are the same question — *what does
+  the original apply to a cloud sprite* — and any answer to one constrains the others.
+  *Evidence (the flag):* C1/C4 `fvol` cards author `lighting: false`; **C1C/C2B author
+  `lighting: true`** (`docs/formats/fogvol.md`) and we honour both, so their field renders
+  `222.7 × 0.784 = 174.6` where C1's renders 222.7. The `C23` fork's `M-a` landing (2026-08-09)
+  darkened every card by `225/240` and un-dimmed the above-band deck floor, and at C1C/C2B that
+  made the frame **worse**, exactly as predicted and stated rather than tuned around: C1C's
+  above-band frame now holds placed `cloudparent` facades **235.25**, an un-dimmed deck floor
+  **195.8** and `fvol` cards **163.7** (measured 163.24 / 163.83; C2B 163.24) — cloud-population
+  spread **60.7 → 71.6**, deck-floor↔card **−19.8 → +32.1**. If the flag is *not* a `WorldLight`
+  gate, C1C's field is 208.8 with the same TUNE and sits ~26 units under its own placed clouds —
+  the relationship C1 already has (236.65 vs 208.8). Moves C1C/C2B/C5 and nothing about C1's two
+  reference stills.
+  *Evidence (the far field):* at the CAP-12 1700 m rung `tops-L`/`tops-R` sit **+14.9 / +29.0**
+  over the altitude-matched `t97` original (were +20.1 / +30.4 before `M-a`, which neither fixed
+  nor worsened it), and at the pinned above-deck pose the original frame carries **74 dead-flat
+  rows at `FOG_COLOR` 175 (10.4 % of frame, rows 517–590)** between dome and near sheet while ours
+  carries **zero** — our `far_fade` rim steps where the original ramps over ~240 rows. A
+  distance/fade question about the card population, on the same surface as the flag question.
+  *Evidence (the plateau):* the `225/240` `CardVertexColorTune` in `FogVolumeClutter.BuildCardMesh`
+  has **no decoded mechanism** — it is a calibrated match to the original's measured plateau
+  (208.88 `t124` / 209.16 `t59`), marked TUNE in the constant's own comment, and anything that
+  decodes the real mechanism **replaces** it rather than joining it.
+  ⚠ **Traps — four candidates `C23` already refuted on data; do not re-chase them.** (1) *A
+  `cloudsprite` opacity like `cloudparent`'s 0.6:* `extracted/C1/zrdr/clouds.zrd.json` read in
+  full is one `ANIMATION_DEFINITION` naming `cloudparent` only, C1 is the only chapter shipping a
+  `clouds.zrd`, and a sweep of every `zrdr/*.json` in all eight chapters names `cloudsprite` only
+  in the eight `fogvol.zrd` files. (2) *`WorldLight` on C1's cards:* 0.802 puts them at 178.6,
+  *below* the original's own 204.9–213.3 at the 1160 m rung. (3) *Fogging the cards:* the same
+  clutter reader's tree templates all author `fog: true`, the world's placed cloud facades author
+  `fog: true`, and `B16` verified the flag is honoured — `fog: false` on the card is a deliberate
+  authored distinction. (4) *Carrying the field up with the relocated deck:* puts card tops at
+  1177–1277 m against CAP-12's measured "clear above by ~1128 m".
+  ⚠ **Instrument:** `population.py`'s flat-red deck mask (`r > 200`) can only see an **un-dimmed**
+  deck in a 0.784-`WorldLight` chapter — `255 × 0.784 = 200.0` is exactly the threshold — so
+  C1C/C2B read `0.0 %` mesh before `M-a` and `6.8 %` / `0.9 %` after. That is the mask waking up,
+  not deck appearing. C1's 0.802 (204) clears it either way. Under fog the same mask goes blind
+  further out: at the river pose it stops classifying the deck below ~55 px of elevation, where
+  the fog mix has pulled the flat red under 200.
+  ⚠ **`SHOT-21`:** `--tex-override` cannot separate the `fvol` field from `cloudparent` — they
+  share `cloud1.tif`/`cloud2.tif`. Separate by altitude or cluster position.
+  *Playtest after fix:* C1C and C2B above their band (`--chapter=C1C --pos=-7323,1192,-3829
+  --direction=0,0,-1`, and C2B's `-3843,1500,-1101 / -0.391,0,-0.921`), plus a C1 re-check that
+  the two reference stills did not move; and the CAP-12 1700 m rung for the far-field half.
+  *Cross-refs:* `PT-47` (d) judges the C1C split at the controls, `BL-325`, `docs/formats/fogvol.md`.
 
 - `BL-304` `[Bug]` **Water gets the WorldLight dim; the original renders it unmodulated** (`CAP-11`
   A/B, 2026-08-07; surfaced closing `BL-110`; evidence `playtest/CAP-11/README.md`). C2B ocean
@@ -2543,6 +2585,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ Do not retune or delete `DzRadius` as dead code — it is reserved, and the 15 m is the user's.
 
 ## Tooling, platform & docs
+
+- `BL-320` `[Bug]` **`RunTests.ps1` has no per-shot timeout, and the `viewer-bhawk` golden can hang
+  the suite forever** (found during PLAN-overcast-match B15, 2026-08-08, reproduced on two
+  consecutive runs, unrelated to that change — `--viewer` builds no chapter world). The shot
+  renders, prints its unchanged hash, then the process never exits; the golden stage blocks
+  until someone kills it by hand. Two halves: (a) diagnose why the `viewer-bhawk` launch fails
+  to quit after `--screenshot` completes; (b) give the golden loop a per-shot timeout that
+  fails the shot loudly instead of hanging the suite — a hung instrument that must be
+  hand-killed silently corrupts unattended runs.
+  *Workaround on record:* kill the lingering Godot process for that shot; the hash it printed
+  is still valid.
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
   RunGame.ps1/RunDev.ps1) once tools/godot ships a Godot bundling **SDL ≥ 3.4.4**: the bundled

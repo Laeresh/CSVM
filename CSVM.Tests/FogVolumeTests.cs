@@ -37,6 +37,43 @@ public class FogVolumeTests
         { "C5", "17|1|80|keyed|cloudsprite1:present cloudsprite2:present" },
     };
 
+    /// <summary>Per chapter: "volumes|volumes whose authored shape IS their bounding box". The
+    /// second number is the decode the scatter turns on — only C1/C2B/C4's map-spanning slabs are
+    /// boxes, and filling the bounds of anything else puts cloud where the data authors none.
+    /// C1C's nine slab volumes are boxes and its twelve build-ups are rotated tapering frusta;
+    /// C5 has two boxes among seventeen, the rest being polygonal street prisms and three strips
+    /// with a ramped top.</summary>
+    public static TheoryData<string, string> ChapterFogVolumeShapes => new()
+    {
+        { "C1", "9|9" },
+        { "C1B", "0|0" },
+        { "C1C", "21|9" },
+        { "C2", "0|0" },
+        { "C2B", "9|9" },
+        { "C3", "0|0" },
+        { "C4", "9|9" },
+        { "C5", "17|2" },
+    };
+
+    /// <summary>Per chapter: the map-spanning slab A5's map-edge continuation would extend, or
+    /// "none". <c>cardHeight</c> is the authored card size docs/formats/fogvol.md documents
+    /// (132.3 m for the four deck chapters, 70 m for C5) and 1.5 is A3's own
+    /// <c>TopAnchorHeightFactor</c> — real per-chapter numbers, not a synthetic fixture. Bounds and
+    /// top are the exact <c>fvol1</c> <c>model_bbox</c> values read from each chapter's own
+    /// <c>extracted/&lt;ch&gt;/gamez/nodes.json</c> (C1/C2B's slabs and C4's share the world's own
+    /// [-12288, 0] area to the metre — A1's "exact 3x3 partition" finding).</summary>
+    public static TheoryData<string, float, string> ChapterMapSpanningSlab => new()
+    {
+        { "C1", 132.3f, "found|-12288|0|-12288|0|1090.55" },
+        { "C1B", 206.25f, "none" },
+        { "C1C", 132.3f, "found|-12288|0|-12288|0|1091.28" },
+        { "C2", 206.25f, "none" },
+        { "C2B", 132.3f, "found|-12288|0|-12288|0|1090.55" },
+        { "C3", 206.25f, "none" },
+        { "C4", 132.3f, "found|-12288|0|-12288|0|1180.55" },
+        { "C5", 70.0f, "none" },
+    };
+
     [Fact]
     public void TheHeaderKeysAndTheWeightedClutterBlockAreRead()
     {
@@ -135,4 +172,167 @@ public class FogVolumeTests
             + $"{spec.Distance.ToString("0.##", CultureInfo.InvariantCulture)}|"
             + $"{(spec.HasClutterKey ? "keyed" : "bare")}|{string.Join(" ", templates)}");
     }
+
+    [ExtractedDataTheory]
+    [MemberData(nameof(ChapterFogVolumeShapes))]
+    public void HalfTheInstallsFogVolumesAreNotTheirBoundingBox(string chapter, string expected)
+    {
+        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
+        var volumes = FogVolumeSpec.VolumesOf(gamez);
+
+        int boxes = 0;
+        foreach (var volume in volumes)
+        {
+            // A volume IS its bounding box exactly when every corner of that box is inside the
+            // authored shape — an integer test with no tolerance to argue about. Same predicate
+            // A5's map-edge continuation uses to pick slab candidates (FindMapSpanningSlab).
+            if (volume.IsAxisAlignedBox())
+            {
+                boxes++;
+            }
+        }
+
+        Assert.Equal(expected, $"{volumes.Count}|{boxes}");
+    }
+
+    [ExtractedDataTheory]
+    [MemberData(nameof(ChapterMapSpanningSlab))]
+    public void TheMapSpanningSlabIsFoundOnlyForTheFourFlatDeckChapters(
+        string chapter, float cardHeight, string expected)
+    {
+        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
+        var volumes = FogVolumeSpec.VolumesOf(gamez);
+
+        var (slab, skipReason) = FogVolumeSpec.FindMapSpanningSlab(volumes, cardHeight, 1.5f);
+
+        string actual = slab is { } s
+            ? $"found|{s.MinX.ToString("0.##", CultureInfo.InvariantCulture)}|"
+              + $"{s.MaxX.ToString("0.##", CultureInfo.InvariantCulture)}|"
+              + $"{s.MinZ.ToString("0.##", CultureInfo.InvariantCulture)}|"
+              + $"{s.MaxZ.ToString("0.##", CultureInfo.InvariantCulture)}|"
+              + $"{s.TopY.ToString("0.##", CultureInfo.InvariantCulture)}"
+            : "none";
+        Assert.Equal(expected, actual);
+        // No shipped chapter's slab candidates disagree on their top or fail to tile exactly —
+        // both failure branches are exercised only by the synthetic fixtures below.
+        Assert.Null(skipReason);
+    }
+
+    [Fact]
+    public void TwoAxisAlignedTopAnchoredPiecesThatTileExactlyAreFoundAsOneSlab()
+    {
+        // Two 1000x1000 boxes side by side in X, sharing the seam at x=0, both 50 m thick (a
+        // "sheet" against a 132.3 m card) at the same top altitude — C1's nine slab pieces,
+        // shrunk to two for a hand-checkable fixture.
+        var west = BoxVolume("west", new Vector3(-1000, 900, -500), new Vector3(0, 950, 500));
+        var east = BoxVolume("east", new Vector3(0, 900, -500), new Vector3(1000, 950, 500));
+
+        var (slab, reason) = FogVolumeSpec.FindMapSpanningSlab(
+            new[] { west, east }, cardHeight: 132.3f, topAnchorHeightFactor: 1.5f);
+
+        Assert.Null(reason);
+        Assert.True(slab.HasValue);
+        var s = slab!.Value;
+        Assert.Equal(-1000f, s.MinX);
+        Assert.Equal(1000f, s.MaxX);
+        Assert.Equal(-500f, s.MinZ);
+        Assert.Equal(500f, s.MaxZ);
+        Assert.Equal(950f, s.TopY);
+    }
+
+    [Fact]
+    public void APieceThatLeavesAGapFailsTheTilingCheckAndReportsWhy()
+    {
+        var west = BoxVolume("west", new Vector3(-1000, 900, -500), new Vector3(0, 950, 500));
+        // A 10 m gap at the seam instead of sharing it: the combined bounding rectangle is still
+        // 2000x1000, but the pieces now cover only 1990x1000 of it.
+        var east = BoxVolume("east", new Vector3(10, 900, -500), new Vector3(1000, 950, 500));
+
+        var (slab, reason) = FogVolumeSpec.FindMapSpanningSlab(new[] { west, east }, 132.3f, 1.5f);
+
+        Assert.Null(slab);
+        Assert.NotNull(reason);
+        Assert.Contains("do not exactly tile", reason);
+    }
+
+    [Fact]
+    public void APieceWithADifferentTopIsReportedRatherThanAveraged()
+    {
+        var west = BoxVolume("west", new Vector3(-1000, 900, -500), new Vector3(0, 950, 500));
+        var east = BoxVolume("east", new Vector3(0, 900, -500), new Vector3(1000, 955, 500)); // 5 m off
+
+        var (slab, reason) = FogVolumeSpec.FindMapSpanningSlab(new[] { west, east }, 132.3f, 1.5f);
+
+        Assert.Null(slab);
+        Assert.NotNull(reason);
+        Assert.Contains("disagrees", reason);
+    }
+
+    [Fact]
+    public void ATallBoxIsExcludedByTheTopAnchoredTestEvenThoughItIsAnAxisAlignedBox()
+    {
+        // A 1000x1000 sheet plus a much taller box off to the side (a C1C build-up stand-in,
+        // except axis-aligned): the tall one fails TOP-ANCHORED and must not join the slab, even
+        // though it passes IsAxisAlignedBox on its own — the classification composes.
+        var sheet = BoxVolume("sheet", new Vector3(-1000, 900, -500), new Vector3(1000, 950, 500));
+        var tower = BoxVolume("tower", new Vector3(2000, 900, -500), new Vector3(2500, 1500, 500));
+
+        var (slab, reason) = FogVolumeSpec.FindMapSpanningSlab(new[] { sheet, tower }, 132.3f, 1.5f);
+
+        Assert.Null(reason);
+        Assert.True(slab.HasValue);
+        var s = slab!.Value;
+        Assert.Equal(-1000f, s.MinX);
+        Assert.Equal(1000f, s.MaxX); // the tower's footprint is not part of the slab
+    }
+
+    [Fact]
+    public void NoTopAnchoredBoxVolumesMeansNoSlabAndNoSkipReason()
+    {
+        var (slab, reason) = FogVolumeSpec.FindMapSpanningSlab(Array.Empty<FogVolumeBox>(), 132.3f, 1.5f);
+
+        Assert.Null(slab);
+        Assert.Null(reason);
+    }
+
+    [Fact]
+    public void ARotatedVolumeExcludesTheCornersOfItsBoundingBox()
+    {
+        // A square prism turned 45° in the XZ plane: its bounding box is 2x2, its own footprint is
+        // the diamond inscribed in it. Nothing here is chapter data — it is the property the
+        // scatter depends on, stated where it cannot silently stop holding.
+        const float S = 0.70710678f;
+        var faces = new[]
+        {
+            new Plane(new Vector3(S, 0f, S), 1f),
+            new Plane(new Vector3(S, 0f, -S), 1f),
+            new Plane(new Vector3(-S, 0f, S), 1f),
+            new Plane(new Vector3(-S, 0f, -S), 1f),
+            new Plane(Vector3.Up, 1f),
+            new Plane(Vector3.Down, 1f),
+        };
+        var volume = new FogVolumeBox("fvoltest", new Aabb(new Vector3(-1f, -1f, -1f),
+            new Vector3(2f, 2f, 2f)), faces);
+
+        Assert.True(volume.Contains(Vector3.Zero));
+        Assert.True(volume.Contains(new Vector3(0.9f, 0.9f, 0f)));
+        Assert.False(volume.Contains(new Vector3(0.9f, 0f, 0.9f)));   // a bounding-box corner
+        Assert.False(volume.Contains(new Vector3(0f, 1.5f, 0f)));     // above the top face
+    }
+
+    // A hand-built axis-aligned FogVolumeBox: the 6 outward-facing unit-normal planes of [min,
+    // max], so IsAxisAlignedBox() is trivially true and Contains() is an exact box test — the
+    // fixture shape FindMapSpanningSlab's synthetic tests above compose.
+    private static FogVolumeBox BoxVolume(string name, Vector3 min, Vector3 max) => new(
+        name,
+        new Aabb(min, max - min),
+        new[]
+        {
+            new Plane(new Vector3(1, 0, 0), max.X),
+            new Plane(new Vector3(-1, 0, 0), -min.X),
+            new Plane(new Vector3(0, 1, 0), max.Y),
+            new Plane(new Vector3(0, -1, 0), -min.Y),
+            new Plane(new Vector3(0, 0, 1), max.Z),
+            new Plane(new Vector3(0, 0, -1), -min.Z),
+        });
 }

@@ -245,11 +245,14 @@ void fragment() {
     private readonly Dictionary<int, Shader> _biasShaderCache = new(); // keyed by feature bits
     private readonly Dictionary<int, Shader> _billboardShaderCache = new(); // cloud sprites, keyed by blend/scissor bits
     private readonly Dictionary<int, Shader> _cylindricalShaderCache = new(); // Y/X-axis facades, keyed by axis/blend/scissor/glow bits
-    // Keyed by (model index, force-double-sided): sidedness is baked into the built surfaces, so
-    // a deck tile's forced build must not be handed back for the same model referenced normally.
-    // No model in this install is referenced both ways (the deck's 144 tiles have exclusive model
-    // indices in every chapter that has a deck), so this is defence, not a live case.
-    private readonly Dictionary<(int Model, bool Force), ArrayMesh?> _meshCache = new();
+    // Keyed by (model index, force-double-sided, force-lit): both overrides are baked into the
+    // built surfaces (sidedness into the geometry groups, `lit` into which material/shader a
+    // surface gets), so a deck tile's forced build must not be handed back for the same model
+    // referenced normally. No model in this install is referenced both ways (the deck's 144
+    // tiles have exclusive model indices in every chapter that has a deck), so this is defence,
+    // not a live case. `ForceLit` is `PLAN-overcast-match` C22's deck-underside fix — see
+    // `WorldBuilder.Add`.
+    private readonly Dictionary<(int Model, bool Force, bool ForceLit), ArrayMesh?> _meshCache = new();
     private readonly Dictionary<int, Vector3> _meshPivotCache = new(); // billboard meshes only: local quad center
     private readonly Dictionary<int, ArrayMesh> _lightMeshCache = new();
     private readonly Dictionary<int, List<(string? Surface, ConcavePolygonShape3D Shape)>> _colliderCache = new();
@@ -342,16 +345,6 @@ void fragment() {
 
     public int MeshInstanceCount { get; private set; }
     public int ColliderCount { get; private set; }
-
-    /// <summary>Build models as though every one were authored <c>fog: true</c>, ignoring the
-    /// model's own <c>fog</c> flag. Set only for the skydome: every horizon model in every
-    /// chapter is authored <c>fog: false</c>, but our dome is not the original's — it is
-    /// camera-anchored, 2.5x scaled and sitting ~22 km out — and it was a deliberate decision
-    /// (with the cylindrical-fog remodel) that it fogs, so the horizon band greys toward the
-    /// same wall as the terrain instead of meeting it as a crisp edge. See
-    /// <c>WorldBuilder.BuildHorizon</c>; the <c>lighting</c> flag is honoured there as
-    /// everywhere else.</summary>
-    public bool ForceFogged { get; set; }
 
     /// <summary>Models built from an authored <c>lighting: false</c> / <c>fog: false</c> flag —
     /// the one-line evidence that a chapter's self-lit and unfogged geometry was actually read
@@ -478,9 +471,16 @@ void fragment() {
     /// <param name="forceDoubleSided">Render this subtree's polygons from both sides whatever
     /// their SHOW_BACKFACE flag says — the cloud deck's exception to <c>cullBackfaces</c>, see
     /// <see cref="WorldBuilder"/>. Inherited by all descendants.</param>
+    /// <param name="forceLit">Apply <c>csky_world_light</c> to this subtree regardless of its
+    /// own authored <c>lighting</c> flag — the deck mesh's exception, beside
+    /// <paramref name="forceDoubleSided"/>: `PLAN-overcast-match` C21 traced the original's dark
+    /// mottled underside to the mission's own SUNLIGHT dimming, which the deck tiles' authored
+    /// `lighting: false` currently gates off (see <see cref="WorldBuilder"/>). Inherited by all
+    /// descendants; never changes <c>csky_world_light</c> itself or the gate for any other
+    /// model.</param>
     public Node3D? BuildSubtree(GameZNode node, Predicate<GameZNode>? skip = null,
-        Predicate<GameZNode>? collisionSkip = null, bool forceDoubleSided = false) =>
-        BuildSubtree(node, skip, collisionSkip, _generateCollision, forceDoubleSided);
+        Predicate<GameZNode>? collisionSkip = null, bool forceDoubleSided = false, bool forceLit = false) =>
+        BuildSubtree(node, skip, collisionSkip, _generateCollision, forceDoubleSided, forceLit);
 
     /// <summary>Re-resolves every textured material through the current substitution hook and
     /// writes the result back into the live material. Used by the viewer's livery lab: the
@@ -549,9 +549,60 @@ void fragment() {
     /// building is placed tens of thousands of times, so it is drawn from ONE MultiMesh over
     /// this single mesh rather than a node per copy. Everything the node path adds around the
     /// mesh — the transform, the <c>node_bias</c> instance uniform, the collider — is the
-    /// caller's to supply, which is why this returns the mesh and not a node.</para></summary>
-    internal ArrayMesh? SharedMesh(int meshIndex) =>
-        meshIndex >= 0 && meshIndex < _gamez.Meshes.Count ? GetMesh(meshIndex) : null;
+    /// caller's to supply, which is why this returns the mesh and not a node.</para>
+    ///
+    /// <para>The two override flags are the same ones <see cref="BuildSubtree"/> takes and hit
+    /// the same cache, so asking for a variant a built node already uses hands back that very
+    /// resource. <c>WorldBuilder</c>'s deck path uses that to hold BOTH lit variants of each
+    /// deck tile — one built into the node, its twin swapped in at the cloud-band flip
+    /// (<c>PLAN-overcast-match</c> C23, <c>Session/WeatherRig.DeckRegime</c>) — without building
+    /// the deck twice.</para></summary>
+    internal ArrayMesh? SharedMesh(int meshIndex, bool forceDoubleSided = false, bool forceLit = false) =>
+        meshIndex >= 0 && meshIndex < _gamez.Meshes.Count
+            ? GetMesh(meshIndex, forceDoubleSided, forceLit)
+            : null;
+
+    /// <summary>An untextured quad-frame mesh, one surface, carrying the SAME fog-pipelined
+    /// material a <c>Colored</c> gamez polygon with no material entry gets (<see
+    /// cref="BuildMaterial"/>'s no-texture branch, reached here with an out-of-range material
+    /// index) — so its <c>ALBEDO = mix(ALBEDO, csky_fog_color, fog_amt)</c> line is byte-for-byte
+    /// the deck tiles' own. Exists for <see cref="WorldBuilder"/>'s below-band-ceiling extension
+    /// (<c>PLAN-overcast-match</c> C26): that geometry is nowhere in the gamez mesh table — the
+    /// residual the item chases is the dome wall's OWN authored vertex gradient showing past the
+    /// tile sheet's rim (<c>docs/formats/weather.md</c>, "the wall's LOWEST ring"), not a missing
+    /// tile — so it cannot go through <see cref="BuildSubtree"/> or <see cref="SharedMesh"/> like
+    /// every other built surface; this is the smallest hook that still shares their shader
+    /// construction rather than hand-rolling a second one.
+    ///
+    /// <para>Always double-sided (a ceiling from below, a floor from above — the tile sheet's own
+    /// reason, see <c>WorldBuilder.Add</c>) and built <c>lit: false</c>: every quad this is used
+    /// for sits well beyond every deck chapter's own authored <c>FOG_RANGES</c> far (C26's own
+    /// derivation — the existing 144-tile sheet's own rim already exceeds all four), so
+    /// <c>fog_amt</c> is 1.0 at every point of it and the mix result is <c>csky_fog_color</c>
+    /// regardless of <c>ALBEDO</c> — the per-regime SUNLIGHT-dimming swap <c>C23</c> built for the
+    /// tiles has nothing to change here, which is why this returns ONE static mesh rather than a
+    /// dimmed/undimmed pair (verified, not assumed, in C26's own landing record).</para></summary>
+    internal ArrayMesh BuildFlatQuadMesh(IReadOnlyList<(Vector3 A, Vector3 B, Vector3 C, Vector3 D)> quads)
+    {
+        var st = new SurfaceTool();
+        st.Begin(Mesh.PrimitiveType.Triangles);
+        void Vert(Vector3 p)
+        {
+            st.SetNormal(Vector3.Up);
+            st.SetColor(Colors.White);
+            st.AddVertex(p);
+        }
+        foreach (var (a, b, c, d) in quads)
+        {
+            Vert(a); Vert(b); Vert(c);
+            Vert(a); Vert(c); Vert(d);
+        }
+        st.SetMaterial(GetMaterial(-1, priority: 0, rank: 0, subface: false, doubleSided: true,
+            lit: false, fogged: true));
+        var mesh = new ArrayMesh();
+        st.Commit(mesh);
+        return mesh;
+    }
 
     /// <summary>The cross-node draw-order tie-break for one gamez node. Every instance uniform
     /// named <c>node_bias</c> — placed world, clutter decorations, map-edge tiles — comes from
@@ -581,8 +632,12 @@ void fragment() {
                 ? poly.OverlayPasses[pass - 1].UvCoords
                 : null;
 
+    /// <param name="flatColorRestated">The polygon's vertex colours only restate its untextured
+    /// material's own colour (<see cref="GameZ.VertexColorsRestateMaterialColor"/>) — emit white
+    /// instead, so the shader's <c>vertex × albedo_color</c> applies that one authored value once
+    /// rather than squaring it.</param>
     private static void EmitPolygon(SurfaceTool st, GameZMesh mesh, GameZPolygon poly, Vector3 offset,
-        List<Vector2>? uvs)
+        List<Vector2>? uvs, bool flatColorRestated = false)
     {
         int n = poly.VertexIndices.Count;
         if (n < 3)
@@ -593,20 +648,20 @@ void fragment() {
             {
                 // alternate winding so all triangles of the strip face the same way
                 if ((i & 1) == 0)
-                    EmitTriangle(st, mesh, poly, i, i + 1, i + 2, offset, uvs);
+                    EmitTriangle(st, mesh, poly, i, i + 1, i + 2, offset, uvs, flatColorRestated);
                 else
-                    EmitTriangle(st, mesh, poly, i, i + 2, i + 1, offset, uvs);
+                    EmitTriangle(st, mesh, poly, i, i + 2, i + 1, offset, uvs, flatColorRestated);
             }
         }
         else
         {
             for (int i = 1; i + 1 < n; i++)
-                EmitTriangle(st, mesh, poly, 0, i, i + 1, offset, uvs);
+                EmitTriangle(st, mesh, poly, 0, i, i + 1, offset, uvs, flatColorRestated);
         }
     }
 
     private static void EmitTriangle(SurfaceTool st, GameZMesh mesh, GameZPolygon poly, int a, int b, int c,
-        Vector3 offset, List<Vector2>? uvs)
+        Vector3 offset, List<Vector2>? uvs, bool flatColorRestated = false)
     {
         Vector3 Pos(int corner) => mesh.Vertices[poly.VertexIndices[corner]] - offset;
         // flat normal fallback for polygons without normal data
@@ -623,7 +678,7 @@ void fragment() {
                     normal = mesh.Normals[ni].Normalized();
             }
             st.SetNormal(normal);
-            st.SetColor(poly.VertexColors != null && corner < poly.VertexColors.Count
+            st.SetColor(!flatColorRestated && poly.VertexColors != null && corner < poly.VertexColors.Count
                 ? poly.VertexColors[corner]
                 : Colors.White);
             if (uvs != null && corner < uvs.Count)
@@ -701,7 +756,7 @@ void fragment() {
     }
 
     private Node3D? BuildSubtree(GameZNode node, Predicate<GameZNode>? skip,
-        Predicate<GameZNode>? collisionSkip, bool collidable, bool forceDoubleSided)
+        Predicate<GameZNode>? collisionSkip, bool collidable, bool forceDoubleSided, bool forceLit)
     {
         if (skip != null && skip(node))
             return null;
@@ -726,7 +781,7 @@ void fragment() {
         if (node.MeshIndex >= 0 && node.MeshIndex < _gamez.Meshes.Count
             && !_gamez.IsMarkerGizmo(node.MeshIndex))
         {
-            var mesh = GetMesh(node.MeshIndex, forceDoubleSided);
+            var mesh = GetMesh(node.MeshIndex, forceDoubleSided, forceLit);
             if (mesh != null)
             {
                 var mi = new MeshInstance3D { Mesh = mesh, Name = "mesh" };
@@ -759,7 +814,7 @@ void fragment() {
             if (childIndex < 0 || childIndex >= _gamez.Nodes.Count)
                 continue;
             var child = BuildSubtree(_gamez.Nodes[childIndex], skip, collisionSkip, collidable,
-                forceDoubleSided);
+                forceDoubleSided, forceLit);
             if (child != null)
                 n3d.AddChild(child);
         }
@@ -899,16 +954,16 @@ void fragment() {
         return mesh;
     }
 
-    private ArrayMesh? GetMesh(int meshIndex, bool forceDoubleSided = false)
+    private ArrayMesh? GetMesh(int meshIndex, bool forceDoubleSided = false, bool forceLit = false)
     {
-        if (_meshCache.TryGetValue((meshIndex, forceDoubleSided), out var cached))
+        if (_meshCache.TryGetValue((meshIndex, forceDoubleSided, forceLit), out var cached))
             return cached;
-        var mesh = BuildMesh(_gamez.Meshes[meshIndex], meshIndex, forceDoubleSided);
-        _meshCache[(meshIndex, forceDoubleSided)] = mesh;
+        var mesh = BuildMesh(_gamez.Meshes[meshIndex], meshIndex, forceDoubleSided, forceLit);
+        _meshCache[(meshIndex, forceDoubleSided, forceLit)] = mesh;
         return mesh;
     }
 
-    private ArrayMesh? BuildMesh(GameZMesh mesh, int meshIndex, bool forceDoubleSided)
+    private ArrayMesh? BuildMesh(GameZMesh mesh, int meshIndex, bool forceDoubleSided, bool forceLit)
     {
         if (mesh.Polygons.Count == 0)
             return null;
@@ -1011,8 +1066,17 @@ void fragment() {
         // brightness rather than dimmed by the mission SUNLIGHT — and `fog: false` exempts it
         // from distance fog. Both flow into the material/shader keys, so one texture can skin a
         // lit world surface and a self-lit effect model without either borrowing the other's look.
-        bool lit = mesh.Lighting;
-        bool fogged = mesh.Fog || ForceFogged;
+        //
+        // `forceLit` is `PLAN-overcast-match` C22's regression fix, deck-local (see
+        // `WorldBuilder.Add`): the deck tiles author `lighting: false` like the dome and the
+        // `cloudsprite` field, but C21 traced the original's underside to the ONE surface the
+        // original actually dims by the mission's own SUNLIGHT — `SunIncidence` 0.46 was
+        // calibrated on this exact deck texture (`Flight/Weather.cs`), so the deck left that
+        // match when `lighting`/`fog` became shader variants. This never touches the gate for
+        // any other model, and it selects an existing lit+fogged shader VARIANT rather than
+        // adding a uniform, so it cannot perturb geometry that doesn't ask for it.
+        bool lit = mesh.Lighting || forceLit;
+        bool fogged = mesh.Fog;
         if (!lit)
             UnlitModelCount++;
         if (!fogged)
@@ -1025,7 +1089,8 @@ void fragment() {
             var st = new SurfaceTool();
             st.Begin(Mesh.PrimitiveType.Triangles);
             foreach (var poly in polys)
-                EmitPolygon(st, mesh, poly, offset, PassUvs(poly, pass));
+                EmitPolygon(st, mesh, poly, offset, PassUvs(poly, pass),
+                    _gamez.VertexColorsRestateMaterialColor(poly, materialIndex));
             // A surface whose UVs never leave the unit square never needs the sampler to wrap,
             // and wrapping it is what produces the hairline seams (see UvsWithinUnitSquare).
             // A scrolling surface is excluded: its UVs deliberately run past 1 and rely on
@@ -1329,9 +1394,12 @@ void fragment() {
         sb.AppendLine("uniform float depth_bias = 0.0;");
         // The shared ordered instance-uniform block. This shader always carries instance
         // uniforms (node_bias, csky_fog_on), so it always takes the full preamble — see the
-        // contract in the .gdshaderinc itself. The camera-anchored skydome opts out of fog per
-        // instance (csky_fog_on = 0): its below-horizon skirt sits at low altitude ~22 km out
-        // and would otherwise fog solid gray.
+        // contract in the .gdshaderinc itself. `csky_fog_on` is a per-instance runtime opt-out
+        // for a model whose shader variant already carries the fog-mix code (`fogged` below);
+        // nothing sets it to 0 today. (`B16`: the skydome's below-horizon skirt was once
+        // described as using it, but no code ever did — the skirt is authored `fog: false` like
+        // the rest of the dome, so it takes the UNFOGGED variant and never emits the mix line
+        // this uniform would have gated.)
         sb.AppendLine(InstanceUniformsInclude);
         // Distance fog + the per-mission SUNLIGHT dimming.
         sb.AppendLine(AtmosphereInclude);

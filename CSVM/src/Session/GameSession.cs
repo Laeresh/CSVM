@@ -683,6 +683,9 @@ public partial class GameSession : Node3D
         _plane = session.Root;
         var builder = session.Builder;
         state.CloudDeck = session.CloudDeck;
+        // The deck's other lit variant, built beside it — the weather rig swaps it in above the
+        // cloud band (C23; WorldBuilder.CloudDeckUndimmedMeshes).
+        state.DeckUndimmedMeshes = builder.CloudDeckUndimmedMeshes;
         // Owned by the session so a teardown drops the previous world's lights.
         _worldLights = session.Lights;
         state.CrashProgram = session.Program;
@@ -875,8 +878,25 @@ public partial class GameSession : Node3D
             if (cloudField != null)
             {
                 _worldRoot!.AddChild(cloudField);
-                GD.Print($"fogvol clouds: {cloudField.InstanceCount} sprites over "
-                         + $"{fogVolumes.Count} volume(s) — {cloudField.Summary}");
+                GD.Print($"fogvol clouds: {cloudField.InstanceCount} sprites "
+                         + $"({cloudField.BaseCount} base + {cloudField.ExtensionCount} "
+                         + $"map-edge extension) over {fogVolumes.Count} volume(s) — "
+                         + $"{cloudField.Summary}");
+            }
+            // Both ambient cloud populations onto the one shared cloud-field layer (A7): the
+            // fvol clutter MultiMeshes above and the world's own placed `cloudparent` clusters.
+            // They are one population to a camera looking up from under the deck — the original
+            // shows the bare sheet and no cloud groups at all from there — so they are gated
+            // together, per camera, in WeatherRig.Tick. Done HERE rather than where each is
+            // built because the layer band is a rendering-rig allocation (UI.SplitScreen) and
+            // neither WorldBuilder nor FogVolumeClutter knows about panes or cameras.
+            if (cloudField != null)
+            {
+                UI.SplitScreen.SetVisualLayer(cloudField, UI.SplitScreen.CloudFieldLayer);
+            }
+            foreach (var cluster in builder.CloudClusters)
+            {
+                UI.SplitScreen.SetVisualLayer(cluster, UI.SplitScreen.CloudFieldLayer);
             }
 
             _weatherRig = new WeatherRig(_spec, _worldRoot!);
@@ -1267,6 +1287,8 @@ public partial class GameSession : Node3D
         if (state.CloudDeck != null)
         {
             _weatherRig?.SetDeckCenter(OrbitCamera.MergedAabb(state.CloudDeck).GetCenter());
+            if (state.DeckUndimmedMeshes != null)
+                _weatherRig?.SetDeckUndimmedMeshes(state.DeckUndimmedMeshes);
             AssignCloudDecks(state.CloudDeck);
         }
     }
@@ -1926,6 +1948,13 @@ public partial class GameSession : Node3D
         if (count <= 1)
         {
             _camera.Current = true;
+            // ⚠ The main camera is the LAUNCHER's and outlives the session, so it can arrive
+            // carrying the last flight's cloud gate. Put the layer back before this session's
+            // first frame: WeatherRig.Tick only ever CLEARS the bit, and it does not run at all
+            // in a chapter with no deck — so a session that ended below C1's band would
+            // otherwise hide C5's street haze for the whole of the next flight (A7).
+            // The splitscreen cameras below are built fresh each session and need no reset.
+            _camera.CullMask |= SplitScreen.CloudFieldLayer;
             _rigs.Add(new PlayerRig { Index = 0, Camera = _camera, HudParent = _worldRoot!, VisualLayer = 0 });
             return;
         }
@@ -2111,6 +2140,7 @@ public partial class GameSession : Node3D
         public string What = "";
 
         public Node3D? CloudDeck;
+        public IReadOnlyDictionary<Rid, ArrayMesh>? DeckUndimmedMeshes;
         public AnimProgram? CrashProgram;
         public SceneBuilder? WorldScene;
         public AnimRuntime? WorldRuntime;

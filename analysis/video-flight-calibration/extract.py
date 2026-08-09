@@ -143,7 +143,7 @@ CLIPS = {
     # cliff face gives the altimeter no normal component to read.
     "c1crash1": ("C1 IA1 Crash.mp4", "chase"),
     "c1crash2": ("C1 IA1 Crash 2.mp4", "chase"),
-    # 2026-08-07 CAP-12: the cloud-deck pass-through (BL-118). Chase view; the
+    # 2026-08-07 CAP-12: the cloud-deck pass-through. Chase view; the
     # altimeter correlates the visual deck state (below / inside / above) with
     # altitude, so the deck's base and top come off the same frames as the look.
     "cap12": ("CAP-12 Clouddeck and Cloud puffers.mp4", "chase"),

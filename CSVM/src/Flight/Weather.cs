@@ -48,7 +48,7 @@ public sealed class WeatherState
     // (This is the data-driven half; the gamma-space modulate is the other half.)
     // Confirmed against original footage at 0.426/0.784/clamp-1.0 (CAP-11 matched-pose A/B,
     // 2026-08-07; git log --grep=BL-110). Known exemptions in the original, not yet ours:
-    // water is unmodulated (BL-304); night cloud sprites are moonlit directionally (BL-118).
+    // water is unmodulated (BL-304); night cloud sprites are moonlit directionally (BL-325).
     private static readonly ZoneFog NoFog = new(new Color(0.69f, 0.69f, 0.69f), 1e8f, 1e9f, 1e8f, 1e9f, 1e9f, 1f);
 
     private readonly Dictionary<string, ZoneFog> _zones = new(StringComparer.OrdinalIgnoreCase);
@@ -67,6 +67,13 @@ public sealed class WeatherState
     public float CloudThickness { get; private set; }
 
     public bool HasCloudBand => CloudTop > CloudBottom;
+
+    /// <summary>The cloud band's midpoint: the altitude the fully-opaque core is centred on
+    /// (<see cref="WhiteoutAmount"/>) and the altitude the deck's ceiling/floor regime flips at
+    /// (<c>WeatherRig.Tick</c>, A7). One spelling for both, because the flip is unobservable
+    /// only for as long as it stays inside that core. Meaningless without
+    /// <see cref="HasCloudBand"/>.</summary>
+    public float CloudBandCentre => (CloudTop + CloudBottom) * 0.5f;
 
     /// <summary>The cloud band's own colours from CLOUD_COVER's <c>TOP_COLOR</c>/<c>BOTTOM_COLOR</c>,
     /// when the mission carries them (integer-RGB in the data — normalized by
@@ -247,7 +254,7 @@ public sealed class WeatherState
     {
         if (!HasCloudBand || altitude <= CloudBottom || altitude >= CloudTop)
             return 0f;
-        float mid = (CloudTop + CloudBottom) * 0.5f;
+        float mid = CloudBandCentre;
         float coreHalf = CloudThickness * 0.5f;       // half-depth of the opaque core, centred on mid
         float dist = MathF.Abs(altitude - mid);
         if (dist <= coreHalf)
@@ -263,7 +270,7 @@ public sealed class WeatherState
     /// <remarks>
     /// <para>Authored data, and the target is not a judgement call: the original's C4 veil
     /// measures a flat 192 and C4 authors <c>TOP_COLOR</c>/<c>BOTTOM_COLOR</c> = 192,192,192
-    /// (BL-118, CAP-12). Ours painted a hardcoded 0.95 white there — measured 242 in-cloud
+    /// (CAP-12's C4 take). Ours painted a hardcoded 0.95 white there — measured 242 in-cloud
     /// against the original's 192, now 192 exactly.</para>
     /// <para>⚠ The <b>lerp</b> is inferred and this install cannot falsify it. Of the four
     /// chapters whose band you can reach (C1 970–1124, C1C 1055–1110, C2B 924–1124, C4
@@ -411,10 +418,15 @@ public sealed class WeatherState
     /// the original's fog volume is a vertical cylinder around the camera, not a sphere
     /// (user-diagnosed) — scaled by an altitude fade from <c>FOG_ALTITUDE</c>: full
     /// fog below <see cref="FogLow"/>, none above <see cref="FogHigh"/>, so the cloud deck /
-    /// sky overhead stays clear. C1/IA1 corroborates: zone1's 970→1047 is exactly cloud-band
-    /// bottom → whiteout-band centre (fog hands over to the whiteout while climbing into the
-    /// overcast); zone2's 4000→5000 sits above the 2500 m flight ceiling (night fog at every
-    /// flyable altitude). <see cref="ClipFar"/> is the original's hard far clip (informational —
+    /// sky overhead stays clear. The fade is by FRAGMENT altitude, settled at the controls of the
+    /// original in C2 — the only chapter whose flown band (256–1024 m) is inside the flight
+    /// envelope (<c>PLAN-overcast-match</c> B13, docs/formats/weather.md).
+    /// ⚠ The old corroboration "zone1's 970→1047 is exactly cloud-band bottom → whiteout centre"
+    /// is RETIRED: C1 flies zone2, whose band is 4000→5000 m — above the 2,500 m flight ceiling,
+    /// i.e. night fog at every flyable altitude — so that identity lives in a zone C1 never flies
+    /// (B12). It is real and unexplained, not evidence.
+    /// The ramp between near and far is LINEAR, per the gamez world node's own
+    /// <c>fog_state == 1</c> (B15). <see cref="ClipFar"/> is the original's hard far clip (informational —
     /// our far plane is much larger; the fog is what hides distant terrain, matching the
     /// original's short view distance).</summary>
     public readonly record struct ZoneFog(Color FogColor, float FogNear, float FogFar, float FogLow, float FogHigh, float ClipFar, float WorldLight);

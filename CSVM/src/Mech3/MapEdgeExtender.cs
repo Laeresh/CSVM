@@ -77,9 +77,12 @@ public sealed partial class MapEdgeExtender : Node3D
     /// information.</summary>
     internal const float TintStrength = 0.2f;
 
-    // Window radius in cells around the focus. Sized to cover the *raw* weather fog-far
+    // Window radius in cells around the focus. Sized to cover the weather fog-far
     // (C1 zone2: 4000 m ≈ 4 × 1024 m tiles) plus one margin ring, so the fog border never
-    // creeps onto the void even mid-cell and regardless of the fogRangeFactor TUNE. TUNE.
+    // creeps onto the void even mid-cell. TUNE. ⚠ It used to say "regardless of the
+    // fogRangeFactor TUNE" — that factor halved the range and is deleted (B15, 2026-08-08), so
+    // this ring now sits against the FULL authored far, which is what it was already sized for.
+    // The chapter with the longest authored far is C1B at 4,700 m, still inside 5 × 1024 m.
     private const int Rings = 5;
 
     // The ground-tile span gate, as fractions of a cell: the floor admits the split half-tiles,

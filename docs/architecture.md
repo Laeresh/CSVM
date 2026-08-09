@@ -246,6 +246,11 @@ as extra surfaces — 619 polygons install-wide, none in planes.zbd (docs/format
 Parses the per-polygon `zone_set` list into `GameZPolygon.ZoneSet` (`int?`, unified-only; at most
 one value per polygon install-wide — docs/formats/world-structure.md's census); nothing reads it
 yet, parse+census only (`BL-057`).
+`VertexColorsRestateMaterialColor(poly, materialIndex)` spots the redundantly-duplicated flat
+colour: an untextured (`Colored`) material whose colour every one of the polygon's vertex colours
+repeats. That is ONE authored value in two slots, so SceneBuilder applies it once instead of
+multiplying (which squares it — 176 → 120). 87 polygons install-wide, 85 of them the skydome
+skirts, censused per chapter by `CSVM.Tests/FlatColorTests.cs`.
 
 ## src/Mech3/TextureArchive.cs
 Texture lookup over an unzbd texture zip or unpacked PNG dir; absorbs the stored-name quirks
@@ -286,11 +291,26 @@ area-quorum vote it replaced gave real water polygons on it to `default` outrigh
 (`analysis/surface-classification/`). Each collider-bearing node is registered with
 `WorldCollision`, which owns its `Disabled` flag from then on. A `GameZ.IsMarkerGizmo` mesh draws nothing, but its Node3D is
 still built with its transform — animations attach puffers and sounds to those nodes by name.
+A surface's colour is `vertex colour × material` (the original's baked-lighting modulate) — except
+where the two are the same authored value, which `GameZ.VertexColorsRestateMaterialColor` detects
+and `EmitPolygon` answers by writing white corners, so the value lands once. `PLAN-overcast-match`
+`B18`: every skydome's below-horizon skirt is an untextured polygon authored in its zone's own
+`FOG_COLOR`, and squaring that is what made the horizon join a hard band in seven of eight chapters.
 ⚠ Instance-uniform block is an ORDERING CONTRACT — every shader on one instance declares the same
   block (csky_instance_uniforms); a shader with NO instance uniform must not take the preamble
   (16-vec4 per-instance buffer cost). The model's `lighting`/`fog` flags therefore select shader
   VARIANTS (and join the material cache keys) rather than adding a uniform: a lit, fogged surface
   keeps byte-identical shader text, so honouring the flags cannot perturb the rest of the world.
+  `BuildSubtree`/`GetMesh`/`BuildMesh` all carry a `forceLit` override beside `forceDoubleSided`
+  (`PLAN-overcast-match` C22, `WorldBuilder.Add`'s deck path): `bool lit = mesh.Lighting ||
+  forceLit` still only PICKS an existing lit/fogged variant, so this composes with the ordering
+  contract rather than working around it. Both overrides join the mesh cache key
+  (`(Model, Force, ForceLit)`) because sidedness and the lit choice are baked into the built
+  surfaces, not read per frame. That baking is why a RUNTIME lit-ness change has to be a mesh
+  swap: `SharedMesh(meshIndex, forceDoubleSided, forceLit)` takes the same two flags and hits the
+  same cache, so a caller can hold both variants of one model and assign either onto a live
+  `MeshInstance3D` — the deck's regime-conditional dimming (`PLAN-overcast-match` C23,
+  `Session/WeatherRig`) is exactly that and needs no second build of the deck.
 ⚠ UV scroll reads the `csky_time` global, never Godot's `TIME` — it must keep TIME's 3600 s wrap
   because every install rate (0.07/0.4/0.5/0.7/1.0) × 3600 is a whole number of texture repeats.
 ⚠ `BuildSubtree` sets the built root's transform from the node's OWN `Local` — a caller slicing a
@@ -300,6 +320,12 @@ still built with its transform — animations attach puffers and sounds to those
   the rank cap, where an appended group would share its base's rank and z-fight it. Declined on
   sprite/facade meshes (no biasable material); `OverlayPassDeclinedCount` is the tripwire and is 0
   across the install.
+⚠ `BuildFlatQuadMesh` (`PLAN-overcast-match` C26, `WorldBuilder.AddDeckAnnulus`) is the one caller
+  that builds geometry with NO gamez node behind it at all — raw world-space quad corners into a
+  `SurfaceTool`, given the SAME `GetMaterial(-1, …)` no-texture branch a `Colored` polygon with an
+  out-of-range material index gets, so it shares the ordinary bias-shader fog/lighting pipeline
+  (`fogged: true`, `lit: false`) rather than a hand-rolled second one. `materialIndex = -1` is a
+  deliberate reuse of an existing fallback path, not a new one.
 
 ## src/Mech3/ConflictRank.cs
 The world's cross-node draw-order tie-break. Buckets every built triangle by its world plane,
@@ -405,11 +431,24 @@ as authored, no billboard); WingLightBlinker flashes them and emits a matching O
 
 ## src/Mech3/WorldBuilder.cs
 Builds a chapter world (fullbright): World children + partition-referenced subtrees; skips `horizon`
-(`BuildHorizon` makes the camera-anchored skydome, and is the ONE caller that sets
-`SceneBuilder.ForceFogged` — every horizon model in every chapter is authored `fog: false`, and
-honouring that on a dome that is 2.5x scaled ~22 km out would delete the horizon band; its
-`lighting: false` is honoured), `fvol*` (`IsFogVolumeNode`, shared with `FogVolumeSpec.VolumesOf`
-so the skipped set and the cloud-scatter set are one list), `dzpaths`.
+(`BuildHorizon` makes the camera-anchored skydome; every horizon model in every chapter is authored
+`fog: false` and, since `PLAN-overcast-match` `B16` (2026-08-08), that flag is honoured like
+everywhere else — dome materials build unfogged; its `lighting: false` is honoured too, as before),
+`fvol*` (`IsFogVolumeNode`, shared with `FogVolumeSpec.VolumesOf` so the skipped set and the
+cloud-scatter set are one list), `dzpaths`.
+
+`B16` reverts the 2026-07 `SceneBuilder.ForceFogged` deviation, which force-fogged the whole dome
+on the premise that high fragments would stay clear via the `FOG_ALTITUDE` fade; `B16`'s arithmetic
+showed that fade never actually happens at the dome's own authored size (every dome tops out
++982…+4108 m over the camera, well under every reachable `FOG_ALTITUDE` band), so the "high
+fragments clear, horizon band greys" deal never delivered and the dome only ever painted flat fog
+colour (`BL-303`'s C3/C2B/C5 skies, and the C1 above-deck gray band one zone over). `ForceFogged`
+itself is deleted — `BuildHorizon` was its only setter.
+`B18` then closed the seam honouring `fog: false` exposed: the dome is a textured wall from local
+Y=0 up plus an untextured **skirt** cone from Y=0 down, and that skirt is authored in the zone's own
+`FOG_COLOR` so it merges into the terrain's fog wall. It read as a hard band only because its flat
+colour was being applied twice (see `SceneBuilder.cs`); nothing about the geometry or the scaling
+was wrong, and `ForceFogged` was never needed to hide it.
 `HorizonZonesOf`/`HorizonZones` census the `horizon` node's `zone*` children with the meshed-node
 count each subtree carries — read BEFORE the build, because the zone the dome and the fog share is
 picked from it (`Flight.WeatherState.PreferPopulatedHorizonZone`; three chapters ship a `zone2`
@@ -423,6 +462,50 @@ debug-only custom renderer: material-matched gate polygons green/red at 50% alph
 white line strip (never a filled or closed polygon).
 Splits the overcast deck into
 `CloudDeck` (GameSession moves it with the player); hides origin-parked unplaced vehicles.
+`Add` builds every deck tile with `forceLit: isDeck` beside its existing `forceDoubleSided:
+isDeck` (`PLAN-overcast-match` C22): the deck tiles author `lighting: false` like the dome and
+the `cloudsprite` field, but the deck alone was actually SUNLIGHT-dimmed in the original —
+`SunIncidence` was calibrated on this exact texture (`Flight/Weather.cs`) — so `forceLit`
+applies `csky_world_light` to the deck regardless of its own authored flag, deck-local, never a
+change to the `lighting` gate or to `csky_world_light` itself. C4's deck is unaffected by
+construction (its `WorldLight` clamps to 1.0), which is the control that proves the fix is
+deck-local rather than a hidden global change.
+⚠ That dimming is the BELOW-BAND regime only (`PLAN-overcast-match` C23, user's fork verdict
+2026-08-09): the ceiling a camera under the band sees is the overcast's dimmed UNDERSIDE, the
+floor a camera above it sees is the undimmed top, and the original's above-band frames contain no
+pixel below `FOG_COLOR` at all. `RecordDeckUndimmedMesh` therefore asks `SceneBuilder.SharedMesh`
+for each tile's mesh in BOTH `forceLit` variants as it builds — the cache means the dimmed one is
+the very resource the built instance carries — and `CloudDeckUndimmedMeshes` publishes the pairs
+keyed by the dimmed mesh's `Rid`. `Session/WeatherRig.Tick` assigns one variant per rig at the
+band crossing; nothing here decides which. Keyed by RID because a splitscreen session's extra deck
+copies (`GameSession.AssignCloudDecks`) are `Duplicate`s sharing these resources.
+`AddDeckAnnulus` (`PLAN-overcast-match` C26, 2026-08-09) adds ONE more child under the same `deck`
+node once the 144 tiles are built: a flat, untextured four-quad picture frame around
+`MergedLocalAabb(deck)` (the tiles' own measured AABB — never a hardcoded origin, so the annulus
+stays exactly centred on the tile grid and the eventual `GameSession.AssignCloudDeckIfBuilt`
+re-measurement via `OrbitCamera.MergedAabb` lands on the same centre, unperturbed), reaching a
+20,480 m half-span (rim ≈ 3.95 px, `f·K/halfSpan` — see the `Session/WeatherRig` entry). Its
+material is `SceneBuilder.BuildFlatQuadMesh`'s `GetMaterial(-1, …)` call — the SAME no-texture
+`BuildMaterial` branch a `Colored` gamez polygon with no material entry gets, `fogged: true`, so
+its `ALBEDO = mix(ALBEDO, csky_fog_color, fog_amt)` line is byte-for-byte the deck tiles' own; every
+point it is built for sits beyond every deck chapter's own authored `FOG_RANGES` far, so `fog_amt`
+is 1.0 there and one static mesh (`lit: false`) serves both regimes with no dimmed/undimmed pair.
+Tagged `WorldBuilder.DeckExtensionMeta` node metadata so it counts toward neither this file's own
+"144 tiles" print (which reads `_deckNodes.Count`, not `deck.GetChildCount()`) nor
+`WeatherRig.CollectDeckTiles`'s "N of M deck tile(s) carry an undimmed twin" census — both stay
+144/144. ⚠ 20,480 m is close to a ceiling, not just a tidy round number: C1/C1C/C2B/C4's zone2
+dome renders at 8.74 km × 2.5 = 21.85 km, and this flat sheet must stay well inside that (never
+touch the dome) or its outer edge would sit past the dome wall it renders in front of.
+`CloudClusters` censuses the OTHER ambient cloud population after the walk — every `cloudparent`
+subtree the world places (C1 28, C1B 70, C1C 30, C4 45; C2/C2B/C3/C5 none), logged per chapter so
+"none" cannot read like a broken census. `GameSession` puts them on `UI.SplitScreen.CloudFieldLayer`
+beside the `fvol` clutter, because a camera's altitude gate treats the two as one population
+(`Session/WeatherRig`, `A7`).
+⚠ `CloudClusters` matches on the node's ORIGINAL gamez name (`AnimRuntime.NameMeta`), never
+  `Node.Name`: all 28 of C1's are literally named `cloudparent`, so Godot's duplicate-sibling
+  renaming is free to have touched the built name (WORLD-8). They are nested too deep for a walk
+  root to recognise (`world1 → g0|g27816 → l2586` Lod `→ cloudparent`), which is why this is a
+  post-walk pass over the built tree rather than a `FindCloudDeck`-style pre-pass.
 `NoCollisionNode` exempts three rendered-but-not-solid classes, subtree-inherited: sky/cloud
 textures, billboards, and any node with gamez `intersect_surface` false — the original's own
 collision flag, false on props/debris/effects/glows and the C3 spiderweb (docs/formats/gamez.md);
@@ -525,10 +608,19 @@ tags, and the trailer attach target. First consumer: `UI/AiNetsOverlay.cs`; M4's
 
 ## src/Mech3/FogVolumes.cs
 The chapter's `fogvol.zrd` (`FogVolumeSpec.Load`/`Parse`) plus `VolumesOf`, the gamez census of
-`fvol*` boxes — the two halves of the authored ambient cloud field, rendered by
+`fvol*` volumes — the two halves of the authored ambient cloud field, rendered by
 `Effects/FogVolumeClutter`. Schema, per-chapter values and the decoded/inferred split:
 docs/formats/fogvol.md. Both halves are static over a `GameZ`/reader list, so the pair is testable
 off-engine (`CSVM.Tests/FogVolumeTests.cs` pins all eight chapters).
+⚠ A `FogVolumeBox` carries BOTH its bounds and its authored face planes, and `Contains` is a
+  half-space test over the latter. That is EXACT rather than a convex approximation because every
+  one of the 65 shipped volumes is convex; a future non-convex one would silently be filled to its
+  hull, so the shape census in the tests is the tripwire. Only 38 of the 65 are boxes — C1C's
+  twelve build-ups are rotated tapering frusta, C5's fifteen non-box strips polygonal prisms.
+⚠ Faces are oriented outward by the VERTEX CENTROID, which lies inside any convex body — not by
+  polygon winding, which the gamez does not guarantee. Coplanar duplicates are merged: C1C's
+  `fvol9` carries the twelve build-up footprints as subfaces cut into its own top face, 55
+  polygons over 5 distinct planes.
 ⚠ The census shares `WorldBuilder.IsFogVolumeNode` with the world walk's skip rule, so the set
   excluded from the render and the set filled with clutter cannot drift apart.
 ⚠ **Neither half alone says whether a chapter has clouds.** C1B/C2/C3 ship a reader file naming a
@@ -539,6 +631,18 @@ off-engine (`CSVM.Tests/FogVolumeTests.cs` pins all eight chapters).
   negative (five do), but the values do not name a weather zone either; see fogvol.md. `BL-277`'s
   geometry rule stands.
 ⚠ A volume is NOT the `CLOUD_COVER` band: only C1's floor coincides, and C1C/C4/C5 all disagree.
+⚠ `FindMapSpanningSlab` (A5) is the data-driven test for "does this chapter have a map-spanning
+  slab to continue past the map edge" — never a chapter name or a hardcoded `fvol1..9`. A volume
+  qualifies only if it is axis-aligned (`FogVolumeBox.IsAxisAlignedBox`, the same corner test
+  `CSVM.Tests/FogVolumeTests.cs`'s own census uses) AND top-anchored by the SAME rule
+  `FogVolumeClutter.Scatter` classifies volumes with (A3's `TopAnchorHeightFactor`, passed in
+  rather than duplicated) AND, together with every other volume passing those two, the set's
+  footprints exactly tile their own combined bounding rectangle (a re-check of A1's "exact 3x3
+  partition of `World.area`" finding, not an assumption). Pure geometry, no RNG, no render state —
+  testable off-engine like `VolumesOf` beside it (`CSVM.Tests/FogVolumeTests.cs`). Returns
+  `(null, reason)` rather than throwing when a candidate set fails the top-agreement or tiling
+  cross-check, so a future non-conforming extraction is reported rather than silently producing no
+  extension (verification.md DIAG-15) — no shipped chapter hits that branch.
 
 ## src/Mech3/Messages.cs
 The game's localized string table: plain `System.Text.Json` over the extracted `messages.json`
@@ -1683,6 +1787,10 @@ every rig respawns), owned only while the board is visible via `FlightController
 trapezoid), `WIND`, and precipitation → `PrecipData`. Schema + colours + zone names: weather.md.
 ⚠ `CLOUD_COVER`/`WIND`/precip keys pair with BARE scalars — `ZrdrDict.FromAlternating` cannot
   read them; walked raw (`StringAfter`/`ScalarAfter`/…). Per-zone blocks are list-valued (dict).
+⚠ `CloudBandCentre` is the band midpoint and is deliberately ONE spelling for two consumers: the
+  opaque whiteout core is centred on it (`WhiteoutAmount`) and the cloud deck's ceiling→floor
+  regime flips on it (`Session/WeatherRig.DeckRegime`, `A7`). That coincidence is exactly what
+  hides the flip — do not give either consumer its own midpoint.
 ⚠ `ZoneKeys` collects `ZONE<digits>` keys from the raw list in FILE ORDER (a Dictionary loses
   order; `ResolveZone`'s fallback is the file's FIRST zone); `SW_ZONE*` twins are excluded.
 ⚠ The default stays `zone2` (user decision) — which zone a mission flies is in no file
@@ -1698,7 +1806,8 @@ sky and fog are always the same zone. Census + per-chapter table: weather.md; th
   fog. A request the horizon does not name at all is left to `ResolveZone`'s weather-file fallback,
   which is what already lands C5 on `zone1`.
 ⚠ It fires on a UNIQUE populated sibling only. Two buildable zones (C1, C1C, C2B, C4) means the
-  geometry cannot decide and the request stands — that is `BL-100`, still open, not a gap here.
+  geometry cannot decide — resolved by render evidence instead (`PLAN-overcast-match` `B12`, all
+  four = `zone2`), which is what the default already ships; not a gap here.
 
 ## src/Flight/FlightAudio.cs
 Own-plane non-positional loops (engine with throttle-driven pitch, overspeed whine, rattle,
@@ -1806,27 +1915,92 @@ custom data, and the soft-particle depth fade. Reached in a suite by `RecordingE
 
 ## src/Effects/FogVolumeClutter.cs
 The ambient cloud field, ENTIRELY authored (`BL-273`): `fogvol.zrd`'s weighted clutter table
-scattered on a world-origin-anchored X/Z grid of the file's own `distance` period through every
-`fvol*` box the gamez carries, one alpha-blended MultiMesh per sprite kind (two per chapter).
+scattered through every `fvol*` volume the gamez carries, one alpha-blended MultiMesh per sprite
+kind (two per chapter). Each volume is cut into `distance` × `distance` cells anchored on the world
+origin and every cell gets ONE placement drawn uniformly inside it — `distance` is the field's
+areal DENSITY (mean spacing), not a lattice phase.
 Templates resolve through `ClutterBuilder.FindTemplateRoot` — the trees' own lookup. Per placement:
-kind by weight, `perturb_dist_range` in the plane at a free bearing, uniform Y in the volume plus
-`perp_dist_range`, size = the card's authored extent × `scale_range`. Schema, per-chapter values
-and the decoded/inferred split: docs/formats/fogvol.md. **This file holds no TUNE constant** — it
-replaced `CloudPuffs`, whose entire field (Count 12, Radius 620, SizeMin/Max, BaseAlpha,
-BandBelow/Above, VertFull/Fade) was hand-tuned because this reader had not been found.
+kind by weight, `perturb_dist_range` in the plane at a free bearing, Y = TOP-ANCHORED (drawn at the
+volume's own top) for a volume no more than 1.5 card-heights thick, UNIFORM across the full volume
+height otherwise, then `perp_dist_range` added after containment either way; size = the card's
+authored extent × `scale_range`. Schema, per-chapter values and the decoded/inferred split:
+docs/formats/fogvol.md. **This file holds two TUNE constants and no more**, each with its own
+remarks: `TopAnchorHeightFactor` (A3), a shape-classification threshold decided from the volumes'
+own thickness gap rather than authored data — see fogvol.md's vertical-spread entry; and
+`CardVertexColorTune` (C23, 2026-08-09), which scales the card's authored vertex colour 240 → 225
+in `BuildCardMesh` so the saturated card renders 208.8 instead of 222.7. ⚠ That one has **no
+decoded mechanism** — C23 refuted four candidates on data (no `cloudsprite` opacity state exists
+anywhere in the zrdr; `WorldLight` on C1's cards overshoots to 178.6; `fog: true` is contradicted
+by the same reader's trees and the placed cloud facades; the field does not ride up with the deck)
+— it is a calibrated match to the original's measured plateau (208.88 / 209.16 in two independent
+above-band frames). RGB only, never alpha: alpha is the card's coverage. If the real mechanism is
+ever found it REPLACES this constant. It applies to `fvol` cards alone; the world's placed
+`cloudparent` facades are `SceneBuilder` geometry and keep their own authored rules. Otherwise it replaced
+`CloudPuffs`, whose entire field (Count 12, Radius 620, SizeMin/Max, BaseAlpha, BandBelow/Above,
+VertFull/Fade) was hand-tuned because this reader had not been found.
 ⚠ Built ONCE, world-anchored, no per-frame hook and NOT per rig — unlike the dome/deck/whiteout,
   nothing here follows a camera. Splitscreen shares one field; the far fade is evaluated per view
   inside the shader, which is what makes that correct.
+⚠ Its GEOMETRY is shared but its VISIBILITY is per view (`A7`): `GameSession` moves these
+  MultiMeshes off the default layer onto `UI.SplitScreen.CloudFieldLayer` (with the world's placed
+  `cloudparent` clusters — one population to an altitude gate) and `Session/WeatherRig.Tick` adds
+  or drops that bit in each camera's cull mask by that camera's own altitude against the
+  `CLOUD_COVER` centre. Same principle as the far fade: one shared field, decided per view. Never
+  hide it by node visibility — that would take it out of every pane at once.
+⚠ Sampling Y AT the volume's top (rather than a random band near it) still respects a sloped or
+  tapered top: `Contains` runs the exact face test (`FogVolumes.cs`), so an XZ drawn in a cell is
+  rejected exactly when it falls outside the true top footprint at that height — no separate
+  per-column top lookup needed. Skipping the uniform Y draw for a top-anchored cell also skips one
+  RNG call, which re-aligns every later draw in the shared stream; this moves C1C's count by a few
+  sprites past its own frustum-taper effect (9,569 → 9,572) even though the build-up volumes'
+  own logic is untouched — expected under one shared seeded stream, not a second bug.
+⚠ Determinism and world-anchoring are the SAME property here: one seeded `Rng.Clouds` stream drawn
+  in a fixed volume/cell order, and nothing reads a camera, a pane count or a frame. There is no
+  per-view cell, so there is nothing to hash — do not introduce a coordinate hash.
+⚠ Placement is drawn against the volume's AUTHORED shape (`FogVolumeBox.Contains`), not its bounds;
+  a draw outside it places nothing. Resampling until it lands inside instead would crowd the
+  surplus inward and raise the local density above the authored spacing.
+⚠ Containment is tested on the in-volume draw, BEFORE `perturb_dist_range`/`perp_dist_range` are
+  added. A card may therefore hang outside its volume's wall, which is what a perturbation means —
+  and it is what lets a vertical rule move the Y distribution without the containment test
+  rejecting the whole field.
 ⚠ The shader collapses a sprite past `far_fade.y` to a degenerate quad (`cull` scales the
   billboard basis to 0). Without it the whole map's field would rasterize alpha-0 fragments over
   huge quads every frame; with it, a static MultiMesh needs no streaming at all.
 ⚠ Scatter runs once per VOLUME, not once per clutter block. Per block would double the authored
   density (the block `weight` × node weight is one two-level table); first-volume-wins would drop
-  C1C's twelve stacked build-up boxes and render a flat deck.
+  C1C's twelve stacked build-up volumes and render a flat deck.
 ⚠ The cards are authored `fog: false` and carry `far_fade_range` instead, so this shader does NOT
   fog them — the opposite of `CloudPuffs`, which applied the cylindrical fog term to its puffs.
 ⚠ `Rng.Clouds` is drawn in a fixed volume/cell order at build, so the field is a pure function of
   the master seed — which is what re-pinned seven goldens deterministically.
+⚠ **A5's map-edge continuation** (`ExtendPastMapEdge`/`EmitExtensionRegion`) tiles the SAME
+  `distance`-cell field past the map rim for the chapter's map-spanning slab, if it has one
+  (`FogVolumeSpec.FindMapSpanningSlab`, `FogVolumes.cs`) — engine-side, matching the terrain's own
+  continuation (`MapEdgeExtender.cs`), NOT authored data (`fogvol.zrd` says nothing about content
+  past the map). Bounded to the largest authored `far_fade.y` among the chapter's kinds (3,500 m
+  for every shipped deck chapter) rather than to `MapEdgeExtender`'s own reach (`Rings` (5) x
+  1,024 m tile = 5,120 m): a full ring to 5,120 m would place ~2.35x this field's own base count
+  (extrapolated from the measured 3,500 m ring), past a sane budget for a structure built once and
+  kept for the process lifetime, and every kind's own shader already collapses a sprite past its
+  `far_fade.y` to a degenerate quad, so the wider ring would buy zero visible pixels. Measured:
+  C1/C2B/C4 add 13,176 (1.46x base), C1C the same 13,176 (1.38x its own larger base), C5 and the
+  three deckless chapters add 0 (their volumes fail the slab test).
+⚠ Each extension cell draws off `Rng.NewSystemRandom(Rng.Clouds, gx, gz)` (`Utils/Rng.cs`) — a
+  hash keyed on the cell's own coordinates, NOT the interior loop's shared sequential stream. The
+  interior draw's own realization is therefore untouched by the extension (base counts are
+  bit-identical to A3/A6/A7's own), and the extension itself is stable under `--det` regardless of
+  how many cells the far_fade bound admits or what order they are visited in — there is no "next
+  draw in sequence" for a runtime-computed cell set to depend on (A2's per-cell-hash trap was moot
+  for the interior loop; it is exactly right here, for the opposite reason).
+⚠ Extension cells are unconditionally accepted (no `FogVolumeBox.Contains` call) — there is no
+  authored shape outside the map to test against — and use the slab's own constant top `Y` (every
+  qualifying piece's `box.End.Y` is checked equal by `FindMapSpanningSlab`) rather than drawing
+  again, exactly as the interior's own top-anchored cells do.
+⚠ The eight-region decomposition (four edge strips + four corner squares around the slab's
+  bounding rectangle) is chosen so every inner edge is EXACTLY `bx0`/`bx1`/`bz0`/`bz1` — the same
+  coordinate the interior loop's own outermost cell is clipped to — so the join has no gap and no
+  overlap by construction, not by matching a period phase across the boundary.
 
 ## src/Effects/Precipitation.cs
 Rain/snow from weather.json's precip block (`WeatherState.PrecipData`): ONE MultiMesh whose
@@ -2241,6 +2415,12 @@ gutter backdrop, one `SubViewport` pane per player sharing the main `World3D`, p
   across; `RenderTargetUpdateMode` must be `Always`.
 ⚠ `PlayerVisualLayer` reserves layers 17–20 (`PlayerLayerBit0` = 16); the world stays on layer 1;
   `PlayerCullMask(i)` adds only that player's bit — a pane sees only its own sky/deck/puffs.
+⚠ `CloudFieldLayer` (bit 15, layer 16) is the other named allocation and is NOT per player: one
+  shared layer carrying BOTH ambient cloud populations (`fvol` clutter + placed `cloudparent`), so
+  `Session/WeatherRig.Tick` can gate them per CAMERA by cull mask (`A7`). It sits just below the
+  player band on purpose — every mask this file builds includes it, so the gate is something that
+  switches OFF and a mode or chapter that never runs the gate renders the clouds as before.
+  Instances are MOVED onto it, off layer 1, or dropping the bit would change nothing.
 
 ## src/Flight/PlayerRig.cs
 One rendered view's state bag: index, camera, optional `SubViewport`, `HudParent`, `VisualLayer`,
@@ -2248,6 +2428,9 @@ the player's FlightController, and private camera-anchored copies (`Horizon`/`De
 those re-anchor to the view's camera every frame, so N players need N of each.
 ⚠ The ambient cloud field is deliberately NOT one of them (`BL-273`): the authored fogvol clutter
   is world-anchored static geometry every pane shares, and the `Puffs` slot went with `CloudPuffs`.
+  It still gets a per-pane ANSWER, just not a per-pane copy — `WeatherRig.Tick` gates it (and the
+  world's `cloudparent` clusters) through `Camera.CullMask` on `SplitScreen.CloudFieldLayer`, so
+  the per-view decision lives on the rig's camera rather than in a duplicated subtree (`A7`).
 ⚠ Single player holds exactly one rig wrapping the main-viewport camera with `VisualLayer` 0, so
   every loop over the rigs degenerates to the old single-camera code.
 ⚠ In splitscreen the camera's parent is a `SubViewport`, not a Node3D — local `Position` IS the
@@ -2694,6 +2877,15 @@ The session's randomness policy: one master seed and ten named subsystem generat
   random liveries. That boundary is the reason nothing here branches on `Pinned`. A scripted flag
   (`--screenshot=`, `--dump-*`, `--damage-test`) implies `--det`, so those runs are pinned to 1.
 ⚠ `Reset` also calls `GD.Seed(master)`: the net for any draw not yet routed through a named stream.
+⚠ `NewSystemRandom(subsystem, cellX, cellZ)` (A5) is a SEPARATE, coordinate-keyed generator, not a
+  per-instance draw off the subsystem's shared stream: the seed is `splitmix64(seedFor(subsystem) ^
+  fnv1a("cellX,cellZ"))`, so it never touches `Streams` and is a pure function of the master, the
+  subsystem and the two coordinates alone — no dependency on call order, count, or any other
+  subsystem's draws. Added for `FogVolumeClutter`'s map-edge continuation, whose cell set is a
+  runtime computation (bounded by each kind's `far_fade`) rather than a fixed walk over authored
+  volumes, so there is no "next draw in sequence" for it to be. Only touches `System.Random`, not
+  `Godot.RandomNumberGenerator`/`GD.Seed` — deliberately, so it (unlike everything else here) is
+  callable off-engine and pinned directly in `CSVM.Tests/RngTests.cs`.
 
 ## src/Testing/Probes.cs
 The assertion cores behind the `--dump-markers` / `--dump-weapons` / `--dump-loadout` /
@@ -3220,7 +3412,9 @@ null guard covers the frame before that deferred free lands (it can never be nul
   plus the gamez `fvol*` boxes — not mission weather, it is world-anchored rather than per rig, and
   it needs no `Tick`; `GameSession` builds it beside the world under the same fly/freecam/sky-zone
   gate. Until then a hand-tuned per-rig `CloudPuffs` lived here, keyed off `CLOUD_COVER`, and
-  `PlayerRig.Puffs` is gone with it. See `Effects/FogVolumeClutter`.
+  `PlayerRig.Puffs` is gone with it. See `Effects/FogVolumeClutter`. **`Tick` does own whether each
+  camera SEES it** (`A7`, below) — that is a per-view cull-mask decision about shared geometry, not
+  ownership of the geometry, and it must not become a reason to rebuild the field per rig.
 `Build` also takes the chapter's `WorldBuilder.HorizonZones()` census, because `LoadWeather`
 resolves the rendered zone from BOTH the mission's zone names and the horizon's geometry
 (`BL-277` — see `Flight/Weather.cs`). `_activeZone` is the single answer both the fog and the dome
@@ -3231,9 +3425,100 @@ are built from, and it is logged with the meshed counts it was decided on.
 ⚠ **`GlobalShaderParameterSet`, never `Add`.** `GlobalShaderParameterAdd` runs once per process in
   `Launcher._Ready`; `Build`'s fog/whiteout writes must stay `Set`-only, or every in-process menu
   relaunch that flies a second foggy mission crashes on the duplicate `Add`.
-⚠ `SetDeckCenter` is called separately from `Build`, whenever a chapter's cloud deck geometry loads
+⚠ **`csky_fog_range` carries the AUTHORED `FOG_RANGES` unscaled** (`B15`, 2026-08-08). The
+  `fogRangeFactor = 2.0` that used to halve them is deleted: `VIEWING_RANGE` ships HIGH
+  `FOG_SCALE` 1.0 in all eight chapters and every multiplier in that block is ≤ 1, so no shipped
+  datum shortens a range. Do not re-introduce a scale here — a chapter that looks over-fogged is a
+  question about the fog COLOUR, the surface's own brightness or the mix space, not about a
+  factor. `SetupWeather` logs the applied range beside the authored one, which is how an A/B on
+  this proves which range it rendered with. The fade between `near` and `far` is a **linear** ramp
+  in `shaders/csky_atmosphere.gdshaderinc` (the gamez `world1` node's `fog_state == 1` = LINEAR,
+  asserted by the reader in every chapter), not the `smoothstep` it shipped with; the ALTITUDE
+  term keeps its smoothstep on purpose — see that file's own comment and `docs/formats/weather.md`.
+⚠ `SetDeckCenter` (and `SetDeckUndimmedMeshes` beside it) is called separately from `Build`,
+  whenever a chapter's cloud deck geometry loads
   (`GameSession`'s `cloudDeck != null` branch) — broader than "this rig has weather", so it is
-  guarded with `_weatherRig?.SetDeckCenter(...)` rather than assumed non-null.
+  guarded with `_weatherRig?.SetDeckCenter(...)` rather than assumed non-null. An empty
+  undimmed-mesh map is a valid state (no deck, or a caller that never supplied one): the deck then
+  simply stays as built, which is the below-band look.
+⚠ **The deck is ENGINE TRICKERY in two regimes, not a placed sheet** (`A7`, 2026-08-08 — decoded
+  by the user at the controls of the original). `Tick` splits at the `CLOUD_COVER` band centre
+  (`WeatherState.CloudBandCentre`): **below** it the deck is a ceiling carried with the camera in
+  ALL THREE axes at `camera.y + DeckCeilingHeight`; **at/above** it a world-fixed floor sitting on
+  the band centre, still following in X/Z. The rule is the pure `DeckRegime(cameraY, bandCentre)`,
+  which also answers whether that camera renders the ambient clouds AND whether the sheet carries
+  the mission's SUNLIGHT dimming — assert against that, not
+  against the loop. Below-band consequence, and it is the item's own evidence: the sky is
+  BIT-IDENTICAL at 192/300/600/900 m, which is what "the texture looks the same at every altitude"
+  means and what a world-fixed sheet cannot do (the pre-A7 build moves 87 % of those pixels).
+  Above-band consequence: the pinned above-deck pose renders bit-identical to the pre-`A6` pin,
+  because that pin WAS the above-band half of this trick applied in both regimes.
+⚠ **The regime flip is a JUMP of `DeckCeilingHeight` AND of the deck's brightness, masked only by
+  the whiteout core.** It is
+  placed at the band centre precisely because that is the middle of the fully-opaque core
+  (C1: total in 1032–1062) — measured: the ladder frames at 1035/1046/1048/1060 m are bit-identical
+  flat white, before and after the brightness half was added. Moving the flip altitude, or thinning
+  `CLOUD_COVER`'s `THICKNESS`, makes it visible;
+  if a pop ever shows, that is a finding about the whiteout band, not a licence to move the flip.
+  `DeckRegimeTests` asserts the masking against the AUTHORED band, so the data moving fails a test.
+⚠ **`DeckDimmed`: `C22`'s SUNLIGHT dimming is the BELOW-band regime only** (`PLAN-overcast-match`
+  C23, user's fork verdict 2026-08-09). The two regimes are two different objects — an underside
+  and a top — and the evidence splits the same way: the original's underside reads 167.7 (ours
+  168.9, dimmed) while **no pixel in any original above-band frame falls below `FOG_COLOR` 175**,
+  which a 168.9 surface cannot satisfy at any fog setting (fog only pulls TOWARD the fog colour).
+  `Tick` applies it as a per-INSTANCE mesh swap on that rig's own deck copy, between the two
+  variants `WorldBuilder.CloudDeckUndimmedMeshes` built (lit-ness is baked into the material — a
+  shader variant, see `Mech3/SceneBuilder`), resolved once per deck node and written only on a
+  change. Per instance and never per material for the same reason the gate is a per-camera cull
+  mask: two panes on opposite sides of the band must be able to disagree. Inert where
+  `WorldLight` is 1.0 (C4) by construction. `deck lighting: N of M deck tile(s)…` is printed once
+  per session — `0 of 144` is what a broken RID lookup would look like.
+⚠ **`DeckCeilingHeight` (135 m) is a TUNE matched to one original still, and it is the only free
+  parameter in the model** (`C21`/`C25`, 2026-08-08). Supersedes `A7`'s 400 m, which fit apparent
+  mottling scale against the WRONG texture period — the deck's authored UVs make
+  `cloudlayer.tif` repeat every 2048 m, not the 1024 m tile `A7` assumed — and against a render
+  that is heavily mip-blurred at grazing angles where the original is not, both of which biased
+  that estimator's K upward. `C21` re-derived it by fitting the SAME still's ceiling to the
+  zone's own **authored fog ramp** instead of to texture appearance (the deck tiles author
+  `fog: true`, so this is the ceiling's actual fade mechanism, not a proxy for one): bracket
+  110–155 m. That fit also explains B16's "sky stripe below the deck" as a pure `K` artifact —
+  the sheet's rim sits at `f·K/6144`, and at 400 m it landed exactly where the original still
+  shows deck, exposing the un-fogged dome behind it; at 135 m the rim sits inside both the
+  fog-saturated band and this pose's own terrain onset, so it can never be seen. The user picked
+  135 from that bracket at the controls, side by side against 400 and the original still
+  (`.scratch/c25/k-decision-montage.png`, 2026-08-08) — changing K revisits `A7`'s approved look,
+  which is a call the fit alone cannot make. One value for every deck chapter: C1's river still
+  is the only original frame that can measure one; the constant's own comment carries the full
+  derivation.
+⚠ **`f·K/halfSpan` has a second free knob besides `K`, and `C26` (2026-08-09) fixed it: the
+  144-tile sheet's own radius.** `C25` left the sheet's textured half-span at 6144 m (12×1024 m
+  tiles ÷ 2), which puts the rim at 13 px — inside which the dome WALL's own authored base-ring
+  gradient (`docs/formats/weather.md`, "the wall's LOWEST ring") is still visibly darkening, the
+  residual the item traced (not a fog or `K` defect; the wall renders correctly). `WorldBuilder.
+  AddDeckAnnulus` extends the CEILING alone — an untextured, already-fog-saturated annulus around
+  the 144 tiles, never more textured tiles (the deck census stays 144) — out to a 20,480 m
+  half-span, dropping the rim to ~4 px, where that same gradient has lost only ~2 units. `K` itself
+  is untouched; only how far the ceiling that hides the wall's base reaches.
+⚠ **The cloud gate is a per-camera CULL MASK over `UI.SplitScreen.CloudFieldLayer`, never node
+  visibility.** Both ambient populations — the `fvol` clutter MultiMeshes and the world's placed
+  `cloudparent` clusters — are moved onto that one shared layer by `GameSession`; hiding them as
+  nodes would take them out of every splitscreen pane at once, and two players routinely sit on
+  opposite sides of the band. `Tick` writes each rig camera's own mask.
+⚠ **A chapter with NO deck mesh never arms the gate at all** — the whole block is inside
+  `rig.Deck != null && _weather is { HasCloudBand: true }`. C5 is why: it has 16,170 clutter
+  sprites, no deck, and a band at 9950–10150 m no one can reach, so an unguarded gate would hide
+  its street haze at street level for ever (measured: 161,541 cloud px at street level; C1B, no
+  deck and 70 `cloudparent`, 473,915). **The other half of that guard is
+  `GameSession.BuildRigs`**, which re-adds the layer to the main camera's mask at session start:
+  that camera is the Launcher's and outlives the session, `Tick` only ever CLEARS the bit, and a
+  chapter that never arms the gate never sets it back — so without the reset, quitting a C1 flight
+  from under the deck would hide the NEXT flight's clouds.
+⚠ The deck and the `fvol` field are the SAME sheet seen from two sides, so they are read together:
+  the deck mesh is what an underside view shows and the sprite field is what a view from above
+  shows. Any change to either one's altitude has to be checked against the other's
+  (`Effects/FogVolumeClutter`, `docs/formats/fogvol.md`). ⚠ But the deck's RENDERED altitude is now
+  neither chapter's authored one — the authored 960/1050 is what the scatter is read against
+  (fogvol.md's mesh-10 m-under-the-slab invariant), not where the mesh is drawn.
 
 ## src/Session/LensFlareRig.cs
 The sun's lens flare: four screen-space sprites strung along the sun→screen-centre vector at
