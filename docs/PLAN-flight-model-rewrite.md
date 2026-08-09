@@ -133,7 +133,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Authored parameters and baseline
 
 1. ☑ Plumb the authored flight globals into `PlaneStats`
-2. ☐ Freeze a pre-change baseline across every pinned scenario
+2. ☑ Freeze a pre-change baseline across every pinned scenario
 3. ☐ Settle what supplies `ThrustFactor`
 
 ### Wave B — The aero core
@@ -218,7 +218,7 @@ puts the knee 2.2× too high and will look almost plausible. `liftAOAs` and `max
 (now confirmed — see the disproven table); `highGs`/`lowGs` are **not** converted. Do not "tidy"
 `FlightModel.cs`'s existing constants while here; B11 and D33 decide their fate.
 
-## A2 ☐ Freeze a pre-change baseline across every pinned scenario
+## A2 ☑ Freeze a pre-change baseline across every pinned scenario
 
 **Goal.** A committed, re-runnable table of the current model's numbers on every scenario this plan
 will move, so later items are measured against a record rather than a memory.
