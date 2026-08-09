@@ -85,6 +85,29 @@ figures in `dynamics.txt` are 100 Hz results.
 velocity component along the nose axis is clamped to at least **4.4704 m/s (10 mph)** after
 integration. The player is exempt.
 
+**C24 landing note — the exponential form, implemented, and where it sits.** `FlightModel.Step`
+now matches steps 2–3 exactly: `BodyRates += cmd · dt` (the stick, the bank coupling and the
+weathervane, all three already summed into `cmd` before this line — C21/C22/C23), **then**
+`BodyRates *= exp(−dt · ang_momentum_damp)` on the whole result, THIS TICK'S torque included — not
+the explicit-Euler `(cmd − BodyRates·damp)·dt`, which only ever damped the rate carried over from
+the previous frame and left each tick's own torque undamped until the next one. The two forms are
+the same discretization to first order in `dt` per step (`exp(−x) = 1 − x + O(x²)`), but their
+STEADY-STATE fixed points differ by more than that: explicit Euler's fixed point is `cmd/damp`
+exactly, independent of `dt`; the exponential-form fixed point is `cmd·dt·k/(1−k)` with
+`k = exp(−dt·damp)`, which is `cmd/damp · x/(eˣ−1)` for `x = dt·damp` — smaller by `≈ x/2` at
+small `x`. At the remake's own physics tick (`dt = 1/60 s`) and the Bloodhawk's `ang_momentum_damp
+= 5`, `x ≈ 0.083` and the predicted shortfall is `≈4.1 %`, which is what the steady-rate table
+below shows landing at: `roll-360` 1.98 → 2.07 s (+4.5%), `pitch-rate` 33.54 → 32.41 °/s (−3.4%),
+`yaw-360` 28.55 → 29.73 s (+4.1%) — all three inside their asserted tolerance bands, so **no `*Tune`
+was refit**. This is the decoded mechanism's own bias at this `dt`, not a sign the form or the
+ordering is wrong; a build at the original's own internal tick rate (unknown — see the measurement
+harness's 100 Hz, which is not necessarily gameplay's own rate) would show a smaller shortfall
+still, by the same formula. A large-`dt` case (`dt·damp = 5` on a released axis) shows the
+qualitative point the item is about: the exponential form stays in `(0, 1)`, strictly decaying,
+where the explicit-Euler factor `(1 − dt·damp) = −4` would flip the rate's sign and grow it every
+tick — `CSVM.Tests/AngularDampingTests.cs` pins both the ordering (this tick's own torque is
+damped, not exempted) and this divergence.
+
 ## Atmosphere
 
 `FUN_0041aca0` is a **two-band step function — there is no altitude gradient at all**:
@@ -822,6 +845,35 @@ speed) `eff` gave 0.29 against the new curve's 0.32.
 **Corrected — the pitch high-speed fade never fires.** Authored at 1000/1001 mph against a maximum
 attainable dive speed of ~528 mph, it cannot engage. It is real code on a threshold this game never
 reaches.
+
+**C24 landing note — confirmed unreachable for all eleven player airframes, and nothing was
+implemented.** `MaxDiveSpeedFrac` (1.75 × `fd_speed`) is the model's own hard numerical ceiling on
+`Speed` — never redirected, never faded, a plain clamp applied every tick — so it is the most
+generous "could this airframe ever reach the fade" test available, more generous than any
+aerodynamically-settled terminal dive (itself well below it on every airframe measured, per
+`POST-B14.md`). `1.75 × fd_speed` for all eleven, against `high_speed_pitch_fade`'s authored
+[1000, 1001] mph window:
+
+| Airframe | fd_speed (mph) | 1.75 × fd_speed (mph) | measured terminal dive (mph) | reaches 1000 mph? |
+|---|---:|---:|---:|---|
+| bhawk (Bloodhawk) | 302.0 | 528.5 | 336.36 | no |
+| devastator | 252.8 | 442.4 | 280.68 | no |
+| fury | 281.9 | 493.3 | 314.65 | no |
+| warhawk | 201.3 | 352.3 | 217.95 | no |
+| autogyro | 228.2 | 399.4 | 221.02 | no |
+| avenger | 264.0 | 462.0 | 293.55 | no |
+| balmoral | 176.7 | 309.2 | 149.49 | no |
+| brigand | 241.6 | 422.8 | 268.85 | no |
+| firebrand | 208.0 | 364.0 | 222.39 | no |
+| kestrel | 217.0 | 379.8 | 236.27 | no |
+| peacemaker | 290.8 | 508.9 | 324.77 | no |
+
+The Bloodhawk's own hard ceiling (528.5 mph) is the highest of the eleven and sits at little over
+**half** of `high_speed_pitch_fade[0]` (1000 mph) — every other airframe's ceiling is lower still.
+**Nothing was implemented.** Untestable code on a threshold no capture of the original could ever
+exercise is exactly the invented content this project's ground rules forbid; `backlog.md`'s `BL-095`
+and this document now both carry the closed finding so a future session reading the decode does not
+mistake the fade for a missing feature.
 
 **Corrected — both the G and AOA limiters are inert.** The lift clamp is a hard ±5/9 G, while
 `highGs` begins at 9 G and `lowGs` at −6 G. Neither limiter can engage before lift is already

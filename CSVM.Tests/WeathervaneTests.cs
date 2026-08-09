@@ -106,9 +106,11 @@ public class WeathervaneTests
     [Fact]
     public void EntersTheSameAccumulatorAsTheStickAndCarriesRecInertia()
     {
-        // One step from rest with the stick centred: BodyRates = cmd·dt exactly, so the step must
-        // deliver the torque scaled by that axis' RecInertia — the only scaling the original
-        // applies downstream — and nothing else.
+        // One step from rest with the stick centred: BodyRates = cmd·dt·exp(-dt·damp) — the torque
+        // scaled by that axis' RecInertia (the only scaling the original applies downstream), THEN
+        // this tick's own exponential decay (C24 — the original damps the accumulated total, not
+        // just whatever rate was already there, and on the first tick from rest that total IS this
+        // tick's torque).
         var stats = Stats();
         var m = Model();
         m.Reset(Vector3.Zero, Pitched(20f), 120f, 1f);
@@ -116,9 +118,11 @@ public class WeathervaneTests
         var torque = m.WeathervaneTorque();
         m.Step(default, Dt);
 
-        Assert.True(Mathf.IsEqualApprox(m.BodyRates.X, torque.X * stats.RecInertia.X * Dt, 1e-6f),
-            $"pitch rate {m.BodyRates.X:0.000000} vs torque·recInertia.x·dt "
-            + $"{torque.X * stats.RecInertia.X * Dt:0.000000}");
+        float decay = Mathf.Exp(-Dt * stats.AngMomentumDamp);
+        float expected = torque.X * stats.RecInertia.X * Dt * decay;
+        Assert.True(Mathf.IsEqualApprox(m.BodyRates.X, expected, 1e-6f),
+            $"pitch rate {m.BodyRates.X:0.000000} vs torque·recInertia.x·dt·exp(-dt·damp) "
+            + $"{expected:0.000000} (undamped would give {torque.X * stats.RecInertia.X * Dt:0.000000})");
     }
 
     [Fact]
@@ -134,11 +138,14 @@ public class WeathervaneTests
         m.Step(default, Dt);
 
         // Roll is the axis the weathervane provably cannot reach, so the decay there is the damping
-        // term alone and the check is not contaminated by the torque under test.
-        float expected = 1f - (stats.AngMomentumDamp * Dt);
+        // term alone and the check is not contaminated by the torque under test. EXPONENTIAL decay
+        // (C24) — the linear (1 - damp·dt) form this replaces would give a visibly different number
+        // at this damp·dt, printed alongside for contrast.
+        float expected = Mathf.Exp(-stats.AngMomentumDamp * Dt);
         Assert.True(Mathf.IsEqualApprox(m.BodyRates.Z, expected, 1e-6f),
-            $"roll decayed to {m.BodyRates.Z:0.000000}, expected ang_momentum_damp alone {expected:0.000000} "
-            + $"(damp + return_rate would give {1f - ((stats.AngMomentumDamp + stats.ReturnRate) * Dt):0.000000})");
+            $"roll decayed to {m.BodyRates.Z:0.000000}, expected exp(-ang_momentum_damp·dt) "
+            + $"{expected:0.000000} (the linear form would give {1f - (stats.AngMomentumDamp * Dt):0.000000}, "
+            + $"damp + return_rate folded in would give {1f - ((stats.AngMomentumDamp + stats.ReturnRate) * Dt):0.000000})");
     }
 
     /// <summary>The Bloodhawk's real dynamics — the torque is scaled by <c>rec_moments_inertia</c>,

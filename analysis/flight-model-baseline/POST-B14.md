@@ -405,3 +405,79 @@ cadence sweep each run twice with an empty diff. `RunTests.ps1` green: units **7
 (METHOD-9): reading the full misalignment angle instead of half fails 1 of the 7, a sign flip
 fails 2. Full 8-chapter `--freecam` regression clean, zero engine errors, all eight screenshots
 saved.
+
+## C24 — exponential angular damping (and the inert pitch fade, recorded not built)
+
+`FlightModel.Step`'s integrator line is now `BodyRates += cmd · dt; BodyRates *= Mathf.Exp(-dt *
+s.AngMomentumDamp);` — `FUN_00491820`'s own order: accumulate this tick's torque (stick + C22's
+bank coupling + C23's weathervane) onto `BodyRates`, THEN decay the whole result — this tick's own
+contribution included — by `exp(−dt·ang_momentum_damp)`, not the explicit-Euler
+`(cmd − BodyRates·damp)·dt` it replaces. Full derivation of the steady-state gap between the two
+forms is in [`docs/org/flightModel.md`](../../docs/org/flightModel.md), "The integrator"'s C24
+landing note.
+
+**Bloodhawk steady rates, POST-C23 → POST-C24 (no `*Tune` refit):**
+
+| scenario | unit | POST-C23 | POST-C24 | original | disposition |
+|---|---|---:|---:|---:|---|
+| roll-360 | s | 1.98 | **2.07** | 2.05 | green (asserted), +4.5% — the discretization's own bias at dt = 1/60 s |
+| pitch-rate | °/s | 33.54 | **32.41** | 33.00 | green (asserted), −3.4% |
+| yaw-360 | s | 28.55 | **29.73** | 28.60 | green (asserted), +4.1% |
+| level-top-speed | mph | 300.46 | **300.46** | 300.40 | green (asserted), **unmoved** — translation path untouched |
+| level-speed-near-cap | mph | 300.46 | **300.46** | 300.40 | green (asserted), **unmoved** |
+| altitude-cap | ft | 6571.82 | **6571.55** | 6571.60 | green (asserted), unmoved to noise |
+
+All three moved rates land almost exactly at the predicted `≈x/2 ≈ 4.1%` shortfall
+(`x = dt·ang_momentum_damp = 5/60 ≈ 0.083`) between the exponential form's steady-state fixed point
+and explicit Euler's `cmd/damp` — a property of the decoded discretization at this engine's own
+tick rate, not a sign the form or the ordering is wrong. All three stay inside
+`FlightEnvelopeTests`' asserted tolerance, so Decision 4's carve-out was not spent again.
+
+**Large-timestep divergence (`AngularDampingTests.cs`, `dt·damp = 5`):** the exponential factor
+`exp(−5) ≈ 0.0067` stays positive and strictly decaying; the retired linear factor
+`(1 − dt·damp) = −4` would have flipped the released axis's sign and quadrupled its magnitude in
+one tick. This is the case the item exists to get right, not a corner case — 1/60 s steady flight
+cannot distinguish the two forms, only a large `dt` can.
+
+**Cadence sweep (`ZzCadenceSweep`, player_bhawk), reported and NOT claimed for `BL-147`:**
+
+| reading | POST-C23 roll-off (1300→570 ms) | POST-C24 roll-off | original |
+|---|---:|---:|---:|
+| sim | 23.3× | **22.6×** | 42× |
+| wall | 22.4× | **22.4×** (unmoved to the printed digit) | 42× |
+
+The sim-time reading moved slightly AWAY from the target; the exponential form does not produce a
+steeper rolloff, exactly as the item's own evidence predicted. `BL-147` does not move here.
+
+**Pitch fade — confirmed unreachable for all eleven player airframes, nothing implemented.**
+`MaxDiveSpeedFrac` (1.75 × `fd_speed`) is the model's own hard, unconditional ceiling on `Speed` —
+more generous than any airframe's aerodynamically-settled terminal dive, so it is the strongest
+"could this ever reach it" test available:
+
+| Airframe | fd_speed (mph) | 1.75 × fd_speed (mph) | measured terminal dive (mph) | reaches 1000 mph? |
+|---|---:|---:|---:|---|
+| bhawk | 302.0 | 528.5 | 336.36 | no |
+| devastator | 252.8 | 442.4 | 280.68 | no |
+| fury | 281.9 | 493.3 | 314.65 | no |
+| warhawk | 201.3 | 352.3 | 217.95 | no |
+| autogyro | 228.2 | 399.4 | 221.02 | no |
+| avenger | 264.0 | 462.0 | 293.55 | no |
+| balmoral | 176.7 | 309.2 | 149.49 | no |
+| brigand | 241.6 | 422.8 | 268.85 | no |
+| firebrand | 208.0 | 364.0 | 222.39 | no |
+| kestrel | 217.0 | 379.8 | 236.27 | no |
+| peacemaker | 290.8 | 508.9 | 324.77 | no |
+
+The Bloodhawk's own hard ceiling — the highest of the eleven — sits at little over half of
+`high_speed_pitch_fade[0]`'s authored 1000 mph. No code was written for the fade.
+
+**Goldens: one moved, `c1-flight`, same pattern as C22/C23 (GOLD-5).** It is the only golden whose
+`--hold` carries a pitch+roll input (`0.2,0.1,0,1`), so it is the only one that ever holds a body
+rate long enough to feel the ~4% steady-rate shift; `empty-stage`, `c1-destroy-effects` and
+`c1-crash` are hash-identical. Manifest updated in the same change, shot eyeballed (banked
+Bloodhawk over C1, HUD/gauges/exhaust trail intact).
+
+**Determinism.** `--dump-flight` (Bloodhawk, Balmoral), `ZzBaselineDump` (all eleven) and the
+cadence sweep each run twice with an empty diff. `RunTests.ps1` green: units **713/713** (710 + 3
+new `AngularDampingTests`), engine 29/29, goldens 13/13 after the re-pin. Full 8-chapter `--freecam`
+regression clean, zero engine errors, all eight screenshots saved. **Wave C is complete.**

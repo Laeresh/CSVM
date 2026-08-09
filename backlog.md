@@ -741,7 +741,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ **Three keys here are authored so the feature they gate never fires**, which is a finding, not a
   gap to fill: `high_speed_pitch_fade [1000,1001]` is beyond any attainable dive speed, and
   `highGs [9,15]` / `lowGs [-6,-9]` sit past the executable's hard ±5/9 G lift clamp. Do not
-  implement them as missing features — plan `C24`/`D33` record the disproofs.
+  implement them as missing features. **`high_speed_pitch_fade`: CLOSED 2026-08-09 by plan `C24`** —
+  confirmed unreachable for all eleven player airframes against `MaxDiveSpeedFrac` (1.75 × `fd_speed`,
+  the model's own hard dive ceiling, more generous than any airframe's settled terminal dive): the
+  Bloodhawk's own ceiling, the highest of the eleven, is 528.5 mph, little over half the authored
+  1000 mph threshold. Table in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md#control-authority-vs-speed) and
+  [`POST-B14.md`](analysis/flight-model-baseline/POST-B14.md)'s C24 section. Nothing was
+  implemented — that is the correct outcome. `highGs`/`lowGs` await `D33`'s eleven-airframe
+  confirmation the same way.
   `groundblow_*`, `ai_groundblow` and `crash.bounce_factor` are **not** covered by the decode and
   keep this entry open alongside the ground-blow work below.
 

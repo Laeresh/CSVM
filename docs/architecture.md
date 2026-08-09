@@ -1859,7 +1859,11 @@ a public `Camera` accessor — all inert in plain `--freecam`. Rates TUNE.
 
 ## src/Flight/FlightModel.cs
 Velocity-vector arcade flight model: body rates = control torque × reciprocal inertia vs
-ang_momentum_damp, per axis (PitchTune/YawTune/RollTune); yaw torque is additionally scaled by
+ang_momentum_damp, decayed EXPONENTIALLY (`BodyRates *= exp(-dt·damp)`, applied to the whole rate
+AFTER this tick's torque is added — C24, not the explicit-Euler linear subtraction it replaced;
+the two forms agree to first order per step but not at steady state, and the steady rates moved a
+few % at this engine's dt = 1/60 s, all still inside tolerance, no `*Tune` refit), per axis
+(PitchTune/YawTune/RollTune); yaw torque is additionally scaled by
 `YawAuthorityAt` — the original's authored piecewise speed table (a low-speed floor, ramping to
 full authority at `yaw_max`, then DECLINING to a high-speed floor at `yaw_fade_out`), YAW ONLY,
 replacing the interim `eff`. Thrust, drag, gravity and lift integrate
@@ -1905,7 +1909,10 @@ closed by switching G-conventions to fit one clip. The autogyro moves most of th
 unmoved) as the plan predicted.
 ⚠ The ±5/9 clamp is a LOAD FACTOR in G, never an angle — re-deriving it as degrees gives a model
   that looks right at small inputs and diverges at the limits. The authored `highGs`/`lowGs`
-  control limiters are a WIDER, inert pair (`BL-095`) and must not be folded into it.
+  control limiters are a WIDER, inert pair (`BL-095`) and must not be folded into it. A third
+  authored-inert feature, the same family: `high_speed_pitch_fade` [1000,1001] mph is beyond even
+  the model's own hard dive ceiling (1.75×fd_speed, 528.5 mph at its highest, the Bloodhawk) on all
+  eleven airframes (C24) — deliberately NOT implemented; do not add it "for completeness".
 ⚠ The three *Tune rates are pinned to the original off cockpit-gauge video
   (`analysis/video-flight-calibration/`) and are not free TUNEs. They re-pin only when a decoded
   mechanism moves the steady rate they hold (C21's yaw curve, C23's weathervane) — never to chase a

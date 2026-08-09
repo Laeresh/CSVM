@@ -455,7 +455,16 @@ public sealed class FlightModel
 
         // Damping is the authored ang_momentum_damp alone. return_rate is NOT a damping term — it is
         // the weathervane torque above, applied whether or not a stick is deflected.
-        BodyRates += (cmd - BodyRates * s.AngMomentumDamp) * dt;
+        // The original's own order (FUN_00491820): accumulate this tick's torque onto BodyRates
+        // FIRST, THEN decay the WHOLE result — the freshly-added torque included — by
+        // exp(−dt·ang_momentum_damp). That is an EXPONENTIAL decay, not the explicit-Euler linear
+        // subtraction this replaces (see C24). The two forms are the same to first order in dt per
+        // step (exp(−x) = 1 − x + O(x²), matching the linear factor (1 − x) exactly at O(x)), but the
+        // linear form is unstable at a large step: once dt·damp > 2 its factor (1 − dt·damp) goes
+        // below −1 and BodyRates flips sign and grows every tick, where exp(−dt·damp) stays in
+        // (0, 1) for any dt ≥ 0 and only ever decays.
+        BodyRates += cmd * dt;
+        BodyRates *= Mathf.Exp(-dt * s.AngMomentumDamp);
 
         // stall: below stall speed the nose is pulled toward WORLD-down (a great-circle
         // rotation about the nose×down axis — no twist about the nose, works at any

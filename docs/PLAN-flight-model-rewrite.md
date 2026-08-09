@@ -154,7 +154,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☑ Yaw authority: the original's speed table
 22. ☑ Bank→yaw and bank→pitch coupling
 23. ☑ `return_rate` as a weathervane torque
-24. ☐ Pitch high-speed fade and exponential angular damping
+24. ☑ Pitch high-speed fade and exponential angular damping — Wave C complete
 
 ### Wave D — The open conflicts
 
@@ -919,7 +919,60 @@ weathervane should vanish at zero misalignment, so cruise must be untouched *by 
 by tuning. `BL-147` explicitly warns against "fixing" the transient by moving the `*Tune`
 constants; that warning stands, and this item is the alternative it was waiting for.
 
-## C24 ☐ Exponential angular damping (and the inert pitch fade, recorded not built)
+## C24 ☑ Exponential angular damping (and the inert pitch fade, recorded not built)
+
+**Outcome (landed 2026-08-09, Wave C complete).** `FlightModel.Step`'s integrator line is now
+`BodyRates += cmd · dt; BodyRates *= Mathf.Exp(-dt * s.AngMomentumDamp);` — the decode's own order
+(`FUN_00491820` steps 2–3): accumulate this tick's torque (stick + C22's bank coupling + C23's
+weathervane, all three already summed into `cmd`) onto `BodyRates` FIRST, then decay the WHOLE
+result, this tick's own contribution included, by `exp(−dt·ang_momentum_damp)` — not the
+explicit-Euler `(cmd − BodyRates·damp)·dt` it replaces, which only ever damped the rate carried
+over from the previous frame. `docs/org/flightModel.md`'s "The integrator" already had the order
+right; no re-derivation from the binary was needed, only confirmation.
+**The two forms agree to first order per step but not at steady state, and the gap is real, not
+noise:** explicit Euler's fixed point is `cmd/damp` exactly (dt-independent); the exponential
+form's is `cmd/damp · x/(eˣ−1)` for `x = dt·damp`, smaller by `≈x/2` at small `x`. At this engine's
+own `dt = 1/60 s` and the Bloodhawk's `ang_momentum_damp = 5` (`x ≈ 0.083`), the predicted
+shortfall is `≈4.1 %`, and the measured steady rates land almost exactly there: `roll-360`
+1.98 → **2.07 s** (+4.5%, target 2.05 ± tolerance), `pitch-rate` 33.54 → **32.41 °/s** (−3.4%,
+target 33.0), `yaw-360` 28.55 → **29.73 s** (+4.1%, target 28.6 ± 3) — all three still inside
+`FlightEnvelopeTests`' asserted tolerance, so **Decision 4's carve-out was not spent again; no
+`*Tune` was refit.** This is the decoded discretization's own bias at this engine's tick rate, not
+a sign the form or the ordering is wrong — a mechanical consequence of the recovered mechanism,
+not a free parameter. `level-top-speed`/`level-speed-near-cap`/`altitude-cap` (the translation
+path) are unmoved, confirming the change is contained to rotation.
+**The large-timestep divergence, measured:** at `dt·damp = 5` (a released axis, `dt = 1 s`) the
+exponential factor stays at `exp(−5) ≈ 0.0067` — positive, bounded, strictly decaying — where the
+retired linear factor `(1 − dt·damp) = −4` would have flipped the rate's sign and quadrupled its
+magnitude every tick. `CSVM.Tests/AngularDampingTests.cs` (3 new tests) pins both this and the
+ordering: one test asserts this tick's own torque is itself subject to the tick's decay (not
+exempted, the mistake a decay-then-add reading would make), which a build reading the two lines in
+the wrong order fails.
+**The pitch fade: confirmed unreachable for all eleven player airframes, and nothing was
+implemented.** `MaxDiveSpeedFrac` (1.75 × `fd_speed`) is the model's own hard, unconditional
+ceiling on `Speed` — the most generous "could this ever reach it" test available, more generous
+than any airframe's aerodynamically-settled terminal dive. The highest of the eleven (the
+Bloodhawk, 528.5 mph) sits at little over half of `high_speed_pitch_fade[0]`'s authored 1000 mph;
+the other ten are lower still (309–509 mph). Full table in
+[`docs/org/flightModel.md`](org/flightModel.md#the-integrator) and
+[`POST-B14.md`](../analysis/flight-model-baseline/POST-B14.md)'s C24 section. No code was written
+for the fade — untestable code on a threshold no capture could ever exercise is the invented
+content this project's ground rules forbid — and `backlog.md`'s `BL-095` now records the finding as
+closed rather than open.
+**The cadence sweep, reported honestly and NOT claimed for `BL-147`:** the roll-off (1300→570 ms)
+moved from 23.3× to **22.6×** (sim reading) and 22.4× to **22.4×** (wall reading, unmoved to the
+printed digit) — against the original's 42×. The sim reading moved slightly AWAY from the target,
+not toward it; the exponential form does not produce a steeper rolloff (as the item's own evidence
+predicted), and this item claims none of `BL-147`'s gap.
+**Verified per `docs/verification.md`:** `RunTests.ps1` green — units **713/713** (710 + 3 new
+`AngularDampingTests`), engine 29/29, goldens 13/13 after one re-pin. **One golden moved,
+`c1-flight`, same pattern as C22/C23 (GOLD-5):** it is the only golden whose `--hold` carries a
+pitch+roll input (`0.2,0.1,0,1`), so it is the only one that ever holds a body rate long enough to
+feel the ~4% steady-rate shift; `empty-stage`, `c1-destroy-effects` and `c1-crash` are
+hash-identical. Manifest updated here, shot eyeballed (banked Bloodhawk over C1, HUD/gauges/exhaust
+trail intact). Every cited instrument run twice, byte-identical: `--dump-flight` (Bloodhawk and
+Balmoral), `ZzBaselineDump` (all eleven airframes) and `ZzCadenceSweep`. Full 8-chapter `--freecam`
+regression clean, zero engine errors, all eight screenshots saved. **Wave C is complete.**
 
 **Goal.** Angular damping decays exponentially rather than linearly; the original's high-speed pitch
 fade is documented as unreachable in this install and deliberately **not** implemented.
