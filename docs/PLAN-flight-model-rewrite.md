@@ -147,7 +147,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☑ Drag as the original's polar
 13. ☑ Thrust: linear throttle and the Mach/altitude curve
 14. ☑ Joint refit and re-measurement of the aero group
-15. ☐ Stall speed per airframe
+15. ☑ Stall speed per airframe
 
 ### Wave C — Rotation and control authority
 
@@ -588,7 +588,50 @@ trap the current model fell into, and the reason `ThrottleExp` exists. If a row 
 moving a constant the decode says is authored, **stop and record the conflict** rather than
 overriding authored data with a fit.
 
-## B15 ☐ Stall speed per airframe
+## B15 ☑ Stall speed per airframe
+
+**Outcome (landed 2026-08-09).** `isStalled()` now compares `Speed` against `FlightModel.StallSpeed`
+— the closed-form solution of `clMax(V)·q(V)·RefArea = VehWeight` (5 fixed-point passes over the
+Mach-dependent ceiling, computed once per instance) — in place of `StallSpeedFrac = 0.25 × fd_speed`,
+which is retired along with its config key. `StallWarnFrac`/`IsStallWarned`/`StallFraction` are
+byte-for-byte untouched — the lamp still fires at a fixed 0.30 fd.
+**The G-convention question the plan flagged had a traced answer, not a judgement call.** A load
+factor of 1 G (bare `VehWeight`, not `nom_gravity/StandardG ≈ 2.037`) is what the decode's own
+worked example requires: its fallback-aircraft sanity check (75.5 mph dense / 309 mph thin) only
+reproduces under the bare-Weight read — the nom_gravity-scaled read gives 109/447 mph, numbers the
+decode never quotes. 1 G is coded, not a simplification of it — see `docs/org/flightModel.md`'s
+"B15 landing note".
+**Eleven-airframe table** (`analysis/flight-model-baseline/POST-B14.md`'s B15 section has the
+full table with commentary): bhawk 75.50→**56.51** mph (−25.1%), devastator 63.19→**55.40**
+(−12.3%), fury 70.46→**54.50** (−22.7%), warhawk 50.33→**55.50** (+10.3%), autogyro
+57.04→**18.53** (**−67.5%**), avenger 65.99→**56.78** (−14.0%), balmoral 44.18→**45.54** (+3.1%),
+brigand 60.40→**56.96** (−5.7%), firebrand 52.01→**52.46** (+0.9%), kestrel 54.25→**57.34**
+(+5.7%), peacemaker 72.70→**54.37** (−25.2%).
+**Surprise: the autogyro moves most, not the Balmoral.** The plan's own evidence named the Balmoral
+as most likely to move; it in fact moves least (+3.1%, "already sits at every margin" turned out to
+mean the fixed fraction happened to be close, not that it was far). The autogyro's huge `ref_area`
+(800) against a tiny `veh_weight` (500) — the lightest wing loading of the eleven — drops its stall
+speed by two-thirds, exactly the aerodynamically sensible result a fraction of `fd_speed` (blind to
+`ref_area` entirely) could never produce.
+**A real decode-vs-footage conflict, recorded rather than papered over.** Evaluated against the
+Bloodhawk's OWN data (not the decode's fallback numbers), the 1 G formula gives 56.5 mph against the
+"Stall 0% Thrust no input" clip's measured ~76 mph nose-drop. The retired `0.25 × fd_speed` matched
+that clip only because 0.25 × the Bloodhawk's fd_speed (302 mph) coincidentally sits near the
+FALLBACK aircraft's own stall speed (75.5–76.3 mph) — the wing-loading coincidence this item's own
+evidence section warned about, which does not extend to the Bloodhawk's real numbers. The
+nom_gravity-scaled convention would land closer to the clip (80.9 mph, −1.43×) but breaks the
+decode's own two-figure anchor; recorded as an open conflict (candidate for Wave D), not resolved by
+picking whichever convention flatters one clip.
+**Tests.** `StallWarningTests` rebuilt to fly the Bloodhawk's real dynamics (1900/330/135) instead
+of the placeholder `PlaneStats()` defaults — those defaults compute a stall speed that sits almost
+exactly AT the fixed 0.30 fd warn threshold (see `FlightModel.StallSpeed`'s doc), which would invert
+rather than exercise the split. The rebuilt test asserts the ordering and the two-threshold mechanism
+dynamically off `model.StallSpeed`, not the clip's absolute 2.64 s / 14.9 mph lead (which the new
+formula no longer reproduces for the Bloodhawk — see above). `FlightEnvelopeTests` (7 asserted rows)
+and the full `RunTests.ps1` are unmoved: units 697/697, engine 29/29, goldens 13/13 hash-identical —
+no scenario in the pinned envelope or the golden captures exercises sub-stall flight. Every
+instrument (the rebuilt `StallWarningTests`, `FlightEnvelopeTests`, and a throwaway per-airframe dump
+through the real `PlaneStats.Load` path) was run twice, byte-identical both times.
 
 **Goal.** Stall speed is derived from the aircraft's own weight and reference area, not from a
 fixed fraction of `fd_speed`.

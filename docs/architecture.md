@@ -1873,9 +1873,20 @@ pull costs speed only through the lift vector's own tilt. Thrust is
 speed; the thrust MARGIN is what falls. Nothing in the force path is fitted.
 `Alpha` (deg) is angle(nose, VelocityDir) — an emergent LAG, not modelled
 incidence, and now instrument-only: no force reads it — and the
-stall is TWO measured thresholds over one margin (`StallFraction` = speed/fd_speed): `isStalled()`
-the nose-drop at 0.25 fd, `IsStallWarned()` the lamp at 0.30, which leads the break by 2.64 sim s
-(`BL-148`/`CAP-06`); never drive both off one number, and never recompute the margin beside them.
+stall is TWO DIFFERENT mechanisms, not one margin split two ways (B15). `isStalled()` is the
+airframe's own `StallSpeed` — the speed at which the SAME aerodynamic ceiling lift uses,
+`clMax(V)·q·RefArea`, can no longer equal `VehWeight` (a load factor of exactly 1, not
+`nom_gravity/StandardG` ≈ 2.04 — the decode's own worked example, reproducing 75.5/309 mph for the
+fallback aircraft under the dense/thin bands, only matches the bare-Weight read). `IsStallWarned()`
+is unchanged: the lamp at a fixed 0.30 fd (`StallFraction` = speed/fd_speed), which led the
+Bloodhawk's break by 2.64 sim s in the clip that measured it (`BL-148`/`CAP-06`) — never drive both
+cues off one number. ⚠ The Bloodhawk's own computed `StallSpeed` (56.5 mph) no longer reproduces
+that clip's ~76 mph nose-drop — the fixed `0.25 fd` this replaced only matched the footage because
+0.25 × the Bloodhawk's fd_speed happens to sit near the FALLBACK aircraft's stall speed, not the
+Bloodhawk's own (a coincidence of wing loading). Recorded as a decode-vs-footage conflict, not
+closed by switching G-conventions to fit one clip. The autogyro moves most of the eleven airframes
+(57.0 → 18.5 mph, its huge ref_area relative to weight), not the Balmoral (44.2 → 45.5 mph, nearly
+unmoved) as the plan predicted.
 ⚠ The ±5/9 clamp is a LOAD FACTOR in G, never an angle — re-deriving it as degrees gives a model
   that looks right at small inputs and diverges at the limits. The authored `highGs`/`lowGs`
   control limiters are a WIDER, inert pair (`BL-095`) and must not be folded into it.

@@ -97,3 +97,54 @@ two non-fighters, as recorded in the decode doc's solve table.
 Every instrument above was run twice and diffed byte-for-byte — all empty diffs: `--dump-flight`
 (both airframes, via `RunProbe.ps1`), `ZzBaselineDump` (two `CSVM_DUMP_OUT` paths),
 `cap05-drag-points.ps1`, and `FlightEnvelopeTests` (two passes, same 7-scenario assert count).
+
+## B15 — stall speed per airframe
+
+`isStalled()`'s nose-drop threshold is now `FlightModel.StallSpeed`, solved from the SAME
+aerodynamic ceiling lift caps with, `clMax(V)·q(V)·RefArea = VehWeight` (a load factor of exactly
+1 G — see the G-convention note below), in place of the fixed `0.25 × fd_speed` fraction. Computed
+through the real `PlaneStats.Load` path for all eleven player airframes (`ClMaxStatic = 0.75`,
+`ClMaxMach = 0.15`, dense-band ρ = 2.2688e-3 slug/ft³):
+
+| Airframe | Weight | RefArea | fd_speed (mph) | new StallSpeed (mph) | old 0.25·fd (mph) | Δ |
+|---|---:|---:|---:|---:|---:|---:|
+| bhawk (Bloodhawk) | 1900 | 330 | 301.99 | **56.51** | 75.50 | −25.1% |
+| devastator | 2850 | 515 | 252.77 | **55.40** | 63.19 | −12.3% |
+| fury | 1500 | 280 | 281.85 | **54.50** | 70.46 | −22.7% |
+| warhawk | 3000 | 540 | 201.32 | **55.50** | 50.33 | +10.3% |
+| autogyro | 500 | 800 | 228.17 | **18.53** | 57.04 | **−67.5%** |
+| avenger | 2325 | 400 | 263.96 | **56.78** | 65.99 | −14.0% |
+| balmoral | 4125 | 1100 | 176.72 | **45.54** | 44.18 | +3.1% |
+| brigand | 3100 | 530 | 241.59 | **56.96** | 60.40 | −5.7% |
+| firebrand | 3850 | 775 | 208.04 | **52.46** | 52.01 | +0.9% |
+| kestrel | 4000 | 675 | 216.98 | **57.34** | 54.25 | +5.7% |
+| peacemaker | 1600 | 300 | 290.80 | **54.37** | 72.70 | −25.2% |
+
+**Surprise: the autogyro moves most, not the Balmoral.** The plan's own evidence flagged the
+Balmoral (a bomber, "the airframe that already sits at every margin") as most likely to move: it
+in fact moves the LEAST of any non-firebrand airframe (+3.1%). The autogyro's enormous `ref_area`
+(800) against a tiny `veh_weight` (500) — the lightest wing loading of the eleven by a wide
+margin — drops its stall speed by two-thirds, which is exactly the aerodynamically-sensible
+outcome the fixed fraction could never express (it is blind to `ref_area` entirely).
+
+**The G-convention choice.** `clMax(V)·q(V)·RefArea = VehWeight` is a load factor of 1 — not
+`nom_gravity / StandardG ≈ 2.037` (what level flight itself demands to cancel this install's
+arcade gravity, per B11's identity). The two conventions differ by
+`√(nom_gravity/StandardG) ≈ 1.43×`. The decode's own worked example settles which one is coded:
+its "fallback aircraft" (`veh_weight` 3500, `ref_area` 335) sanity-checks to 75.5 mph under the
+dense band and 309 mph under the thin one (`docs/org/flightModel.md`, "Stall") — both figures
+reproduce ONLY under the bare-Weight (1 G) convention (109/447 mph under the nom_gravity-scaled
+read, which the decode never quotes). 1 G is therefore what the binary computes, not a
+documentation shortcut for something else.
+
+**Recorded, not swept under: a real decode-vs-footage conflict.** Evaluated against the
+Bloodhawk's OWN data (1900/330) rather than the fallback aircraft's, the 1 G formula gives 56.5 mph
+— but the "Stall 0% Thrust no input" clip measures the Bloodhawk's actual nose-drop at ~76 mph
+(`FlightModel.cs`'s stall-threshold comment). The fixed `0.25 × fd_speed` this item retires only
+matched that clip because 0.25 × the BLOODHAWK's fd_speed (302 mph) happens to sit close to the
+FALLBACK aircraft's own stall speed (75.5–76.3 mph) — a coincidence of wing loading the plan itself
+warned not to read as validation, not a coincidence that extends to the Bloodhawk's real numbers.
+Using `nom_gravity/StandardG` instead would land at 80.9 mph (6.5% over the clip) rather than 1 G's
+56.5 mph (34% under) — closer, but it breaks the decode's own 75.5/309 mph anchor pair for the
+fallback aircraft, which only reproduces under 1 G. Recorded here rather than resolved by picking
+whichever convention flatters one clip; a candidate for Wave D if the gap needs closing later.

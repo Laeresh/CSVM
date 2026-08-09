@@ -123,13 +123,13 @@ public sealed class FlightModel
     // it as nom_gravity, which is why level flight at zero incidence cancels weight identically.
     private const float StandardG = 9.82f;
 
-    // The two stall thresholds are DIFFERENT numbers and both are measured, not TUNEs. The nose does
-    // not break until 0.25 fd (the original's "Stall 0% Thrust no input" clip: the nose holds +4.2°
-    // all the way down to 76 mph, then falls), while the STALL lamp lights at 0.30 fd
-    // (0.2989–0.2996 across four clips). Confirmed inside a single clip — the warning leads the break
-    // by 2.64 sim s / 14.9 mph — so any model driving both cues off one number is wrong by
-    // construction.
-    private const float StallSpeedFrac = 0.25f;   // nose-drop begins below this fraction of fd_speed
+    // The two stall thresholds are DIFFERENT numbers and neither is a TUNE. The nose-drop threshold
+    // (isStalled(), below) is now the aircraft's OWN computed stall speed — see StallSpeed — in place
+    // of the fixed fraction this replaces (B15). The STALL lamp still lights at a fixed 0.30 fd
+    // (0.2989–0.2996 across four clips) — that split is unrelated to the nose-drop mechanism, so it
+    // stays a fraction: the original's "Stall 0% Thrust no input" clip measured the warning leading
+    // the Bloodhawk's break by 2.64 sim s / 14.9 mph, and nothing here touches that lamp or its
+    // threshold.
     private const float StallWarnFrac = 0.30f;    // STALL lamp lights below this fraction of fd_speed
     private const float MaxDiveSpeedFrac = 1.75f; // numerical backstop, NOT a terminal speed — it is
                                                   // meant to catch only the loop energy pump or a dt
@@ -232,7 +232,11 @@ public sealed class FlightModel
     private const float YawTune = 1.32f;          // TUNE: pinned (at cruise eff)
     private const float RollTune = 2.12f;         // TUNE: pinned
 
-    public FlightModel(PlaneStats stats) => Stats = stats;
+    public FlightModel(PlaneStats stats)
+    {
+        Stats = stats;
+        StallSpeed = ComputeStallSpeed(stats);
+    }
 
     public PlaneStats Stats { get; }
 
@@ -240,6 +244,26 @@ public sealed class FlightModel
     /// thresholds are measured on, and the one the STALL lamp's blink rate ramps over. Every stall
     /// cue derives from this; nothing recomputes its own margin.</summary>
     public float StallFraction => Stats.FdSpeed > 0f ? Speed / Stats.FdSpeed : 0f;
+
+    /// <summary>The speed (m/s) below which the wings' maximum available lift — the SAME aerodynamic
+    /// ceiling <see cref="Step"/> caps lift with, <c>ClMaxStatic − ClMaxMach·Mach</c> — can no longer
+    /// equal the aircraft's own weight: the solution of <c>clMax(V)·q(V)·RefArea = VehWeight</c>, a
+    /// LOAD FACTOR OF EXACTLY 1 (not <c>nom_gravity / StandardG</c> ≈ 2.04, what level flight itself
+    /// demands to cancel this install's arcade gravity — the two conventions differ by
+    /// √(nom_gravity/StandardG) ≈ 1.43×). The decode's own worked example settles which one the
+    /// binary actually compares against: it reproduces 75.5 mph for the fallback aircraft
+    /// (veh_weight 3500, ref_area 335) and 309 mph for the same aircraft under the wrong atmosphere
+    /// band — BOTH numbers match only the bare-Weight (1 G) read; the nom_gravity-scaled read gives
+    /// 109/447 mph instead, which the decode never quotes. So 1 G is what is coded, not a
+    /// simplification of it.
+    /// ⚠ Evaluated against a REAL airframe rather than the fallback numbers, this surfaces a residual
+    /// the coincidence was hiding: the Bloodhawk's own data (1900/330) computes a 56.5 mph stall
+    /// against the video-measured ~76 mph nose-drop ("Stall 0% Thrust no input" clip) — the fixed
+    /// 0.25·fd_speed this replaces only matched that footage because 0.25 × the BLOODHAWK's fd_speed
+    /// happens to sit close to the FALLBACK aircraft's own stall speed, not the Bloodhawk's (see the
+    /// B15 landing note in docs/org/flightModel.md). Recorded as a decode-vs-footage conflict, not
+    /// papered over by switching the G convention to fit one clip.</summary>
+    public float StallSpeed { get; }
 
     /// <summary>Thrust acceleration along the nose, m/s², at an airspeed and lever position — the
     /// original's thrust-available curve times the lever, LINEARLY. Exposed so an instrument can
@@ -281,7 +305,6 @@ public sealed class FlightModel
         float pitchTune = Config.GetFloat("flightModel.pitchTune", PitchTune);
         float yawTune = Config.GetFloat("flightModel.yawTune", YawTune);
         float rollTune = Config.GetFloat("flightModel.rollTune", RollTune);
-        float stallSpeedFrac = Config.GetFloat("flightModel.stallSpeedFrac", StallSpeedFrac);
         // Read here as well as at its own site (IsStallWarned, which Step never calls) purely so the
         // key registers on a launch that never flies — --dump-config's template and the orphan check.
         _ = Config.GetFloat("flightModel.stallWarnFrac", StallWarnFrac);
@@ -316,12 +339,11 @@ public sealed class FlightModel
         // attitude including inverted). Deep-stall rate exceeds full-elevator authority
         // (~0.58 rad/s steady after the item-12 calibration), so the drop is decisive
         // until airspeed recovers.
-        float stallSpeed = stallSpeedFrac * s.FdSpeed;
         bool stalled = isStalled();
         float noseYBefore = (-Attitude.Z).Y;  // the nose's world elevation entering this frame
         if (stalled)
         {
-            float depth = 1f - Speed / stallSpeed;
+            float depth = 1f - Speed / StallSpeed;
             var noseNow = -Attitude.Z;
             var axis = noseNow.Cross(Vector3.Down);
             if (axis.LengthSquared() > 1e-8f)
@@ -552,13 +574,32 @@ public sealed class FlightModel
         Position.Y = Mathf.Min(Position.Y, altitudeCapM + altitudeCapOvershootM);
     }
 
-    /// <summary>Below the nose-drop threshold (0.25 fd) — the aerodynamic stall the flight model
-    /// flies. NOT the cue the STALL lamp shows: that one lights earlier, see IsStallWarned.</summary>
-    public bool isStalled() =>
-        StallFraction < Config.GetFloat("flightModel.stallSpeedFrac", StallSpeedFrac);
+    /// <summary>Below the airframe's own computed <see cref="StallSpeed"/> — the aerodynamic stall
+    /// the flight model flies. NOT the cue the STALL lamp shows: that one lights earlier (a fixed
+    /// fraction of fd_speed), see IsStallWarned.</summary>
+    public bool isStalled() => Speed < StallSpeed;
 
     /// <summary>Below the warning threshold (0.30 fd) — the STALL lamp, which leads the break by a
     /// measured 2.64 sim s / 14.9 mph.</summary>
     public bool IsStallWarned() =>
         StallFraction < Config.GetFloat("flightModel.stallWarnFrac", StallWarnFrac);
+
+    // Solves clMax(V)·q(V)·RefArea = VehWeight for V at a load factor of 1 (see StallSpeed's doc for
+    // why 1, not nom_gravity/StandardG). clMax's Mach term makes this implicit; a handful of
+    // fixed-point passes converge to float precision because stall speeds sit well below the speed
+    // of sound, so the correction off the Mach-free start is only a percent or two. Computed once per
+    // instance — VehWeight/RefArea never change after construction.
+    private static float ComputeStallSpeed(PlaneStats stats)
+    {
+        if (stats.VehWeight <= 1e-3f || stats.RefArea <= 1e-3f)
+            return 0f;
+        float vFps = Mathf.Sqrt(2f * stats.VehWeight / (ClMaxStatic * AirDensitySlugPerFt3 * stats.RefArea));
+        for (int i = 0; i < 5; i++)
+        {
+            float mach = vFps / SpeedOfSoundFps;
+            float clMax = Mathf.Max(0.05f, ClMaxStatic - ClMaxMach * mach);
+            vFps = Mathf.Sqrt(2f * stats.VehWeight / (clMax * AirDensitySlugPerFt3 * stats.RefArea));
+        }
+        return vFps * MetresPerFoot;
+    }
 }

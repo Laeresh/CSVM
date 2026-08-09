@@ -1116,8 +1116,9 @@ public partial class FlightController : Node3D
             Gauges.AltitudeFt = ft;
             // A held plane sits at 0 m/s, which is below every stall speed — but it is pinned, not
             // stalling, so the gauge (and the HUD line below) stay quiet in the lab.
-            // The lamp is the WARNING (0.30 fd), which leads the nose-drop the model flies at 0.25;
-            // the fraction beside it is what ramps its blink rate.
+            // The lamp is the WARNING (fixed 0.30 fd), which leads the nose-drop the model now flies
+            // at the airframe's own computed StallSpeed (see FlightModel.isStalled); the fraction
+            // beside it is what ramps the lamp's blink rate.
             Gauges.StallWarning = !_crashed && !halted && !_held && _model.IsStallWarned();
             Gauges.StallFrac = _model.StallFraction;
         }

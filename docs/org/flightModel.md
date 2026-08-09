@@ -329,6 +329,25 @@ band, which is what settles that question.
 `stall_mag` (fallback **0.45**) is a separate quantity, the magnitude of the stall departure; it
 is not part of the lift calculation.
 
+**B15 landing note — the G convention, and a real footage conflict.** `Weight` above is the BARE
+authored `veh_weight` — a load factor of exactly 1 G — not `nom_gravity / StandardG ≈ 2.037`, the
+load factor level flight itself needs to cancel this install's arcade gravity (B11's identity: a
+demand of exactly `nom_gravity` cancels weight at zero incidence, and `nom_gravity` here is
+20 m/s² against `StandardG` 9.82). The two conventions differ by
+`√(nom_gravity/StandardG) ≈ 1.43×`. This page's own sanity check settles which one is coded: 75.5
+and 309 mph (dense/thin bands) both reproduce ONLY under the bare-Weight read; the
+nom_gravity-scaled read gives 109/447 mph instead, numbers this page never quotes. So 1 G is what
+`FUN_00490f70` actually compares against, not a simplification of it.
+Evaluated against a REAL airframe rather than the fallback numbers, this surfaces a residual the
+fallback coincidence hides: the Bloodhawk's own data (`veh_weight` 1900, `ref_area` 330) computes a
+56.5 mph stall, against the "Stall 0% Thrust no input" clip's measured ~76 mph nose-drop
+(`src/Flight/FlightModel.cs`'s stall-threshold comment). The remake's retired `StallSpeedFrac = 0.25`
+matched that clip only because 0.25 × the BLOODHAWK's fd_speed (302 mph) happens to sit close to
+the FALLBACK aircraft's own stall speed (75.5–76.3 mph) — the wing-loading coincidence this plan
+warned not to read as validation, and it does not extend to the Bloodhawk's real numbers. Recorded
+as an open decode-vs-footage conflict (`analysis/flight-model-baseline/POST-B14.md`'s B15 section
+has the full eleven-airframe table), not resolved by switching G-conventions to fit one clip.
+
 ## Control authority vs speed
 
 `FUN_00490e10` derives three independent scalars from airspeed alone. Fallback values shown as

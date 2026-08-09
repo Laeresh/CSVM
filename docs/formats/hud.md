@@ -101,11 +101,13 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
     ~43 mph. ⚠ These are **sim** ms; the wall figures are 1/1.390 of them.
     The original also toggles on integer 33.37 ms game frames — its frame rate showing
     through the law, not part of it, so the remake runs the law continuously.
-  - **The lamp's threshold is not the stall's.** It lights at **0.30 fd**
-    (0.2989–0.2996 across four clips) while the nose-drop is at **0.25 fd**; inside a
-    single clip the lamp leads the break by 2.64 sim s / 14.9 mph. The remake carries
-    both (`FlightModel.StallWarnFrac` / `StallSpeedFrac`) over one margin,
-    `FlightModel.StallFraction`.
+  - **The lamp's threshold is not the stall's.** It lights at a fixed **0.30 fd**
+    (0.2989–0.2996 across four clips); inside the clip that measured it the lamp led
+    the Bloodhawk's break by 2.64 sim s / 14.9 mph. The remake carries the lamp as
+    `FlightModel.StallWarnFrac` over `FlightModel.StallFraction`; the nose-drop itself
+    is no longer a fixed fraction (B15) — it is the airframe's own computed
+    `FlightModel.StallSpeed`, the speed at which the aerodynamic lift ceiling can no
+    longer carry that airframe's weight.
   The LOW ALT cue beside it is a plain fixed 400 ms blink — it has never been
   measured against the original, and nothing here applies to it.
 - **Damage display**: the dial's face is a single untextured 12-gon (the dark backing
