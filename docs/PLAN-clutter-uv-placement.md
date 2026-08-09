@@ -865,6 +865,77 @@ in `.scratch/b13/` (swept by `CleanScratch.ps1` — copy them if they are wanted
 
 Compare against `Z:\CSVM\playtest\CAP-22\orig-c-t4-nadir-crossroads.png`.
 
+### ⚠ The user looked, and the candidate is disqualified as it stands (2026-08-10)
+
+The orchestrator recommended adopting the coupled change. **The user rejected it on sight, and was
+right:** in `bl305-expt-bl250.png` **buildings sit across the avenues** — visible at the crossroads
+once cropped, and absent from both the original and the gate-only shot. That is a defect the
+instrument used (whole-frame md5 moved / interpenetration check clean) could not express, and it is
+the second time in this project that the user's eyes have caught what the numbers reported as
+progress.
+
+The user's question — whether the edge-inclusive containment bug causes it — is answered **no**:
+that bug produces exact *duplicates* at one point (both triangles sharing a diagonal claim the same
+candidate), and cannot displace anything onto a street.
+
+The standing explanation, which is a **hypothesis and not yet measured**: `cblock4/5/6`'s
+decorations are authored against their own 64² low-res art, whose painted street layout is
+*correlated* with `cblock1/2/3`'s 256² art but not identical — `CBLOCK-LOD.md` §1a measured the
+pairing at r ≈ 0.70, not 1.0. Placing buildings by the buried layer's UV therefore lands them in
+approximately the right blocks and, wherever the two paintings disagree, in the street.
+
+**What that implies is uncomfortable and must not be skipped:** if the original really did stamp
+from the base layer, it would show the same defect, and it does not. So at least one of these is
+wrong — (a) that `0x800` is the subface mark, (b) that C5's *visible* ground is the subface layer,
+or (c) that the original's downtown buildings come from the `cblock4/5/6` templates at all. A3
+cross-checked (a) against `docs/formats/gamez.md` but nothing has re-derived it, and it is now
+load-bearing for a district decision.
+
+**Neither candidate configuration is correct.** Coupled puts buildings in the streets. And
+gate-only is worse than "almost no buildings" — see below.
+
+### ⚠ Gate-only is disqualified too: it deletes C5's skyline entirely (2026-08-10)
+
+The user asked the question the nadir pose cannot answer — *"are there even buildings in 3, or is it
+only the ground texture?"* — because at nadir a painted rooftop and an extruded building are
+indistinguishable. Re-shot as a **180 m low oblique** over the same crossroads
+(`--pos=-9700,180,-3500 --direction=0.7,-0.22,0.68 --no-fog`), where a real building has visible
+sides:
+
+| build | oblique md5 | what it shows |
+|---|---|---|
+| today (`0f6330b`) | `4891EEAAB4432B697490618BC90C3CC5` | a real skyline — extruded towers, lit sides |
+| + subface gate | `35984FFADB311E42D44E737CFCCB87BE` | **completely flat**: painted ground, zero 3D buildings |
+
+The gate-only nadir reproduced B13's `A504DC7C3F950BAED11316213E5CB678` exactly, so this is the same
+experiment, re-run from a temporary patch that was reverted and the tree proved clean.
+
+**So the "clear streets" of the gate-only shot were clear because the entire downtown was gone.**
+The original unambiguously has a downtown skyline — CAP-22's own clips include a rooftop-height
+chase pass — so a gate that deletes it cannot be what the original does.
+
+**That falsifies the reading this branch of the investigation was built on.** At least one of these
+is wrong, and the next step is to find out which rather than to try a third configuration:
+
+1. **`0x800` is the polygon gate `FUN_004de2c0` skips on.** Re-read the decompilation. The bit may
+   be tested with the opposite sense, or the gate may sit somewhere other than the per-polygon loop.
+2. **`0x800` means SUBFACE in the extraction.** `GameZ.cs:427-431` maps it to mech3ax's `unk3` and
+   `docs/formats/gamez.md` documents it as the OpenFlight SUBFACE bit. A3 cross-checked this but
+   nothing re-derived it, and it is now load-bearing.
+3. **C5's visible ground is the subface layer.** `CBLOCK-LOD.md` says `cblock1/2/3`'s subfaces cover
+   `cblock4/5/6`'s bases at 97–100 %. If that pairing is the right way round, the original — which
+   skips subfaces — would be stamping its downtown from the *buried* layer, which is exactly the
+   configuration that puts buildings in the streets.
+
+Options 1 and 2 are cheap: one is a re-read of `FUN_004de2c0` and `FUN_004de460` in Ghidra, the
+other a check of the flag's meaning in the extraction against a polygon whose layer is known
+independently. Do those before touching `BuriedClutterDistricts` again.
+
+**Instrument note for whoever picks this up: a nadir shot cannot distinguish painted rooftops from
+buildings. Every C5 clutter claim needs an oblique beside it.** This one cost a recommendation that
+was wrong and would have been landed on a whole-frame md5 and an interpenetration check, both of
+which the gate-only and coupled configurations passed.
+
 ### Part 2 — `MinSlopeCos` is deleted, and it never culled anything
 
 `MinSlopeCos = 0.25f` is gone. It is an invention — `FUN_004deab0` initialises the kind block's
