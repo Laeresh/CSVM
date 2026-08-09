@@ -664,6 +664,17 @@ public sealed class WorldBuilder
     /// invisible. Nothing here paints that; it only has to not be doubled
     /// (<see cref="GameZ.VertexColorsRestateMaterialColor"/>).</para>
     ///
+    /// <para><b>There is no colour-grading stage, and adding one would be a deviation.</b> The
+    /// dome's colour is wholly authored — the wall's per-vertex gradient off a base ring painted
+    /// in the zone's <c>FOG_COLOR</c>, the skirt's flat <c>FOG_COLOR</c>, and the wall texture on
+    /// top (docs/formats/weather.md, <c>PLAN-overcast-match</c> <c>B18</c>/<c>C26</c>). No tint,
+    /// grade or tonemap is applied here or downstream: the models are authored
+    /// <c>lighting: false</c> so not even <c>csky_world_light</c> reaches them, and the
+    /// <c>Environment</c> is Linear with no exposure or adjustment. So graded it matches — C1
+    /// (66.1, 74.6, 105.0) against the original's (64.9, 73.6, 103.1), and C2B likewise inside
+    /// ±10 per channel. <c>CLOUD_COVER</c>'s <c>TOP_COLOR</c>/<c>BOTTOM_COLOR</c> are the in-cloud
+    /// whiteout's colours, not a sky grade (<see cref="Flight.Weather.WhiteoutColor"/>).</para>
+    ///
     /// <para><b>The zone names are per chapter.</b> C1–C4's horizon has
     /// <c>zone1</c>/<c>zone2</c> children, but C5's has <c>zone3</c>/<c>zone1</c> — so a bare
     /// <c>zone2</c> request there matched no child, the skip predicate below skipped both, and

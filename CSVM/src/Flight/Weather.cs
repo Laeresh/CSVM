@@ -312,7 +312,10 @@ public sealed class WeatherState
     /// their own authors either. C1B/C3 are likewise 10 km up.</para>
     /// <para>These are NOT deck-mesh face tints, whatever the names suggest: three of the four
     /// colour-carrying chapters (C1B, C3, C5) have no <c>CloudDeck</c> mesh at all
-    /// (<c>WorldBuilder</c>'s coverage table), so there is nothing there to tint.</para>
+    /// (<c>WorldBuilder</c>'s coverage table), so there is nothing there to tint. Nor are they a
+    /// skydome grade: the dome's colour is authored per vertex and anchored on the zone's
+    /// <c>FOG_COLOR</c> (<see cref="Mech3.WorldBuilder.BuildHorizon"/>), and it reproduces the
+    /// original's without any tint stage.</para>
     /// </remarks>
     public Color? WhiteoutColor(float altitude)
     {

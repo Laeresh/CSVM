@@ -1200,13 +1200,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   changes how 139,388 C5 sprites look with no reference shot to check against — so it needs an
   original-game A/B.
 
-- `BL-071` `[Feature]` **Skybox colour grading.** No tint, grade or tonemap is applied to the skydome anywhere —
-  `WorldBuilder.BuildHorizon` only disables shadows, billboards the moon and disables light
-  range-fade, and the `WorldEnvironment` sets background/ambient only. The dome does get the shared
-  per-mission scalar dim `csky_world_light`, which is brightness, not grading. The decoded
-  per-mission cloud tints are parsed and deliberately parked (`Weather.cs`, "unused this
-  milestone") — they are the obvious input if this is picked up.
-
 - `BL-075` `[Feature]` **Sky UV scroll** (`h_zone*scroll`) — scroll rate unknown, not implemented.
 
 - `BL-076` `[Feature]` **Star twinkle + undecoded light fields** (flags 523/…, the 0.17 float) — stars/beacons

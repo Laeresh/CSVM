@@ -295,6 +295,14 @@ was to stop applying that one authored colour twice (`docs/architecture.md`, `Sc
 ⚠ **A skirt colour that does not match its zone's `FOG_COLOR` means the wrong zone is being flown**,
 not that the dome needs painting — the pair is the check.
 
+**The dome's colour is authored end to end, so there is no grading stage to reproduce.** Wall
+vertex gradient + `FOG_COLOR` base ring + skirt + wall texture is the whole of it: `BuildHorizon`
+applies no tint, grade or tonemap, the horizon models are authored `lighting: false` so not even
+`csky_world_light` reaches them, and the `Environment` is Linear with no exposure or adjustment.
+Rendered that way the sky lands inside ±10 per channel of the original's at the pinned above-deck
+poses (C1, C2B — the zone-verdict table below). `CLOUD_COVER`'s `TOP_COLOR`/`BOTTOM_COLOR` are the
+in-cloud whiteout's colours, not a sky grade.
+
 #### The wall's LOWEST ring is painted `FOG_COLOR` too, then grades to sky (2026-08-09, `C26`)
 
 The wall shares more than a ring with the skirt: its bottom row of vertices carries the same
