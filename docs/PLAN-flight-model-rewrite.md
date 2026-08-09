@@ -59,7 +59,8 @@ aircraft aerodynamically.
 | 1 | "Angle of attack in degrees *is* the load factor — 9° AOA = 9 G." | Traced the coefficient function's third argument back through its caller: the quantity passed is **already a demanded load factor in G**, derived from the airflow/velocity difference. The final formula (lift = clamped G × Weight) survives; the mechanism does not. Anyone re-reading the coefficient function in isolation will re-derive this — the argument name invites it. |
 | 2 | "`liftAOAs [5, 9]` are the edges of a load-factor ramp" (the standing reading in `FlightModel.cs`). | The original takes their **cosine** and uses them as the window over which the *relative wind is blended toward the nose*. Same two numbers, entirely different mechanism. Also settles `BL-095`'s units question for these keys. |
 | 3 | "The atmosphere's thin band is the operative one." | Arithmetic: the thin band puts the fallback airframe's stall at 309 mph. The dense band puts it at 75.5 mph, which is correct. The band-select threshold has only a read reference in the binary — see D33's trap. |
-| 4 | "Thrust is sublinear in the throttle lever — the original's own behaviour." | **Pending, not yet dead** — the original multiplies available thrust by throttle *linearly*. `ThrottleExp = 1.236` is predicted to be an artefact of the current drag shape. B13 either kills this claim or promotes the exponent to a real divergence; do not assume the outcome. |
+| 4 | "Thrust is sublinear in the throttle lever — the original's own behaviour." | **Dead (B13).** The original multiplies available thrust by throttle linearly, and with the drag polar read correctly (row 6) a linear lever reproduces the measured 1/8-throttle equilibrium unaided — 134.5 mph against 137.9 ± 6. `ThrottleExp` was an artefact of the drag shape, exactly as predicted, and is retired rather than promoted. |
+| 6 | "The drag polar is parabolic in the delivered lift coefficient — `C_D = 0.73·(0.12 + 0.8·C_L + 0.5·C_L²)`." | **Dead (B13), and it was this plan's own reading for two items.** The polynomial's variable is **Mach**: `FUN_0041ada0`'s two operand reads are both `[esp+4]`, and the caller pushes Mach last. `C_L` is passed and never read, so the original has **no induced drag at all**. The decompiler emits `Drag(Mach, C_L)` and the polar reading is what anyone would infer from the signature plus the coefficients — only the raw bytes settle it. Any tuning done against the `C_L` version was tuning a term the original does not have. |
 | 5 | "Rudder authority is flat 0.1 across the flight envelope, the pitch fade bites at 500 mph, and the G limiter engages at 5 G." | All three read the **executable's compiled fallbacks** as if they were the game's values. `BL-095` records what this install actually authors: the yaw curve *declines* 1.0 → 0.17 between 50 and 400 mph, the pitch fade is authored at 1000/1001 mph and is unreachable, and `highGs [9, 15]` puts the limiter past the ±5/9 lift clamp so it never engages. **This is the trap of the whole plan**: a fallback is evidence of intent, not of behaviour. |
 
 | Confidence | Items | What that means for you |
@@ -85,7 +86,11 @@ plan leans on most:
 - **Lift** = `clamp(demanded G, −5, +9) × Weight`, capped by `(0.75 − 0.15·Mach) × q × RefArea`,
   where the demand is `lift_accel_rate · (relativeWind − velocity)` with `nom_gravity` added on
   world-up, projected onto the body X/Y plane and divided by 9.82.
-- **Drag** = `q · RefArea · DragFactor · 0.73 · (0.12 + 0.8·C_L + 0.5·C_L²)`.
+- **Drag** = `q · RefArea · DragFactor · 0.73 · (0.12 + 0.8·M + 0.5·M²)` — a polar in **Mach**, with
+  no induced-drag term anywhere (corrected in B13; see the disproven table's row 6).
+- **Thrust** = `EnginePower · RefArea · T_avail(M) · throttle`, where
+  `T_avail = q_ref · 0.73·(0.12 − M/60) / (M · pow(1.33·k, 1.41·M))` and
+  `q_ref = ½ρ((0.84M + 0.112)·a)²`. It **rises** with speed.
 - **Gravity** resolves to exactly `nom_gravity` (20 m/s² in this install).
 - **Control authority** is three separate speed curves: roll flat, pitch flat (its fade is authored
   unreachable — see below), yaw ramping to 1.0 at 50 mph then **declining to 0.17 at 400 mph**.
@@ -140,7 +145,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ Lift as the clamped demanded-G
 12. ☑ Drag as the original's polar
-13. ☐ Thrust: linear throttle and the Mach/altitude curve
+13. ☑ Thrust: linear throttle and the Mach/altitude curve
 14. ☐ Joint refit and re-measurement of the aero group
 15. ☐ Stall speed per airframe
 
@@ -430,7 +435,61 @@ power law in speed at all, so check whether the seam still needs explaining befo
 `BL-148` forward. The old curve was 4–21× weaker below cruise than what it replaced and is owed a
 re-playtest against the original deceleration complaint — that debt transfers to this item.
 
-## B13 ☐ Thrust: linear throttle and the Mach/altitude curve
+## B13 ☑ Thrust: linear throttle and the Mach/altitude curve
+
+**Outcome (landed 2026-08-09).** **The `pow` operands were recovered**, and recovering them turned
+up a second, larger error in the decode. `FUN_0041acf0` is
+`thrustAvail(Mach, atm)` with Mach floored at 0.1, and the lost FPU helper call is
+`MSVCRT!_CIpow` via the thunk at `0x5f7016`: **base `1.33 · atm->k`, exponent `1.41 · Mach`**
+(`0x6034a4` / `0x6034a0`). Full formula, constants and addresses are in
+[`docs/org/flightModel.md`](org/flightModel.md#thrust-available--resolved-pow-operands-recovered).
+⚠ **The curve RISES with speed** (+35 % from 150 to 500 mph) — the `/M` is real but `q_ref` is
+taken at a reference speed that *tracks* the current speed, so the net is linear in Mach. B12's
+"the residuals want a `T ∝ 1/V` curve" prediction is disproved, and the thing that actually falls
+with speed is the thrust *margin*.
+**The second finding, and the item's real result: the drag polar's variable is MACH, not `C_L`.**
+`FUN_0041ada0` is 33 branch-free bytes with one call site; both operand reads are `disp8 = 0x04`,
+i.e. `[esp+4]`, and the pushes at `0x48fd74`/`0x48fd75` put **Mach** there — `C_L` is the dead
+`[esp+8]`. So `C_D = 0.73·(0.12 + 0.8·M + 0.5·M²)`, and **the original has no induced drag at
+all** (every use of the `C_L` slot in `FUN_0048fc40` was enumerated). B12's polar was the same
+three coefficients read against the wrong variable, which is the natural decompiler mistake here.
+Corrected in this item because B13 is unmeasurable without it: the decoded thrust curve on the
+`C_L` polar pins every speed against `MaxDiveSpeedFrac`.
+**Taken together the aero core now closes from authored data with ZERO fitted constants.**
+`ThrustConst = 107` and `ThrottleExp = 1.236` are both gone, with their config keys; thrust is
+`EnginePower · RefArea · T_avail(M) · throttle`, force → accel `× 9.82 / Weight`. The
+level-equilibrium solve `EnginePower·T_avail(M) = q·DragFactor·C_D(M)` is independent of ρ and `a`
+and reproduces **nine of eleven** airframes' authored `fd_speed` inside 1 % (autogyro 0.94×,
+Balmoral 0.71× are the outliers) — which also largely retires A3's "`fd_speed` is probably not the
+equilibrium" caveat, and is a second, data-side proof that the **dense** band is the operative one
+(the thin band misses by ~4×).
+**The discriminating test passes: `eighth-throttle-speed` 148.46 → 134.52 mph against the measured
+137.9 ± 6.** Linear throttle plus the corrected polar reproduces the part-throttle equilibrium
+unaided, so **`ThrottleExp` is retired, not promoted to a divergence** — the plan's row-4 claim is
+now dead.
+Envelope, Bloodhawk: `level-top-speed` 475.78 → **300.46** (target 300.4) ✓, `level-speed-near-cap`
+the same ✓, `yaw-360` 47.22 → **28.68** s (target 28.6) ✓ — red since B11 and closed here as
+collateral of the speed, `terminal-dive` 528.48 → **336.36** mph (target 355.2 ± 6, −5.3 %) and
+**`MaxDiveSpeedFrac` stops binding** (1.114 × fd), `accel-150-290` 2.68 → **3.22** s (target 3.76 ±
+0.40, −14.5 %, the only asserted row still red), `sustained-turn-speed` 252.68 → **261.01** mph
+(target 222.94, +17.1 %). `sustained-turn-rate` unmoved at 32.35 — still C22's. `altitude-cap`
+settles at 298.7 mph instead of 469.6 (original 173.7). The Balmoral flies again: level top speed
+44 → 125.9 mph. `CAP-05` is untouched by construction (zero thrust) but its numbers move with the
+drag correction: 1.31/3.03/6.16/7.68 m/s² against 0.36/1.11/2.82/3.74 — the *shape* is right now
+(5.9× rise over the span against the measured 10.4×, where the `C_L` polar gave 1.27×) but
+everything is ≈2–3.6× too strong.
+**One residual, and it is one number, not three.** `decel-290-150` 5.73 → 3.48 s (original 7.04),
+`accel-150-290` fast, `CAP-05` strong — all three say the force scale is uniformly too large by
+about a factor of two. The equilibrium solve is a *ratio* and is blind to exactly that factor. The
+leading suspicion, **untested and recorded rather than acted on**, is the force→acceleration
+divisor: `veh_weight` is authored 1900 for the Bloodhawk while every aerodynamic intermediate is
+imperial, and 2.2046 is the right size. It would divide thrust and drag together and leave the
+equilibrium untouched — but it also moves the lift ceiling, so it is B14's call, not this item's.
+Tests: engine 29/29 clean, goldens 4 moved (`empty-stage`, `c1-flight`, `c1-destroy-effects`,
+`c1-crash` — exactly the four that fly a plane; manifest updated here, `c1-flight` eyeballed),
+units 696/697 with `FlightEnvelopeTests` red on `accel-150-290` alone and **left red** — nothing in
+Wave B is verified until B14. Boost: the remake has none, so there was nothing to fix; the decode's
+"boost replaces the lever with 1.8 and multiplies drag by 0.8" is recorded for whoever adds it.
 
 **Goal.** Thrust responds to the lever as the original's does — linearly — with the Mach/altitude
 curve behind it, so part-throttle behaviour is right for a reason rather than by exponent.
@@ -558,9 +617,11 @@ inverted), both scaled by the bank component and applied per tick as angular rat
 **no** bank-to-turn coupling at all. This is the leading candidate for the known turn-rate error —
 the remake sweeps heading at ~32 °/s where the original sweeps 18.95.
 
-**Approach.** Add both terms to the `BodyRates` accumulation. Then refit `InducedDragCoef` (or its
-B12 successor) — the existing comment explicitly predicts this: the current value absorbs the
-turn-rate error and "close the rate gap and this must be refitted".
+**Approach.** Add both terms to the `BodyRates` accumulation. ⚠ **The refit this item was written to
+expect no longer has a subject:** `InducedDragCoef` is gone (B12) and it has no successor — B13
+showed the original's drag has **no induced term at all**, so nothing in the force path absorbs the
+turn-rate error any more. Whatever moves the turn plateau after this lands must be attributed
+somewhere else; do not go looking for a pull-cost constant to retune.
 
 **Model recommendation.** high — small in code, but it changes the mechanism by which the aircraft
 turns, and it invalidates a constant fitted on top of the old behaviour.
@@ -571,8 +632,7 @@ informational precisely because of this gap, and the item that should promote it
 
 **⚠ Traps.** These constants are in **no data file** — do not go looking for them in `player.json`
 and conclude they are absent from the game. Decision 4: no `*Tune` refit until this lands, or the
-refit is wasted. Landing this without refitting the induced-drag term will move the turn plateau,
-and it will look like B12 broke.
+refit is wasted.
 
 ## C23 ☐ `return_rate` as a weathervane torque
 

@@ -177,23 +177,81 @@ Consequences for a reimplementation:
   i.e. where the aircraft stalls. Lift below the ceiling is independent of both.
 - The `±1.8` clamp on `C_L` binds only when `q · RefArea` is small relative to weight, where the
   compressibility ceiling is already lower. In practice `0.75 − 0.15·Mach` is the operative limit.
-- The delivered `C_L` is what feeds the drag polar, so a hard pull pays induced drag ∝ `C_L²`
-  automatically. Induced drag is not a separate term in this model — it falls out.
+- The delivered `C_L` is passed to the drag routine and **never read there** (see Drag). This model
+  has no induced drag at all: a pull costs speed only through the lift vector's own tilt.
 
-## Drag
+## Drag — the polar is in MACH, not `C_L`
 
-`FUN_0041ada0` is a parabolic polar in the already-capped `C_L`:
+`FUN_0041ada0` is 33 bytes, no branches, and has exactly **one** call site in the whole `.text`
+(`0x48fd76`):
 
 ```
-C_D  = 0.73 · (0.12 + 0.8·C_L + 0.5·C_L²)
-     = 0.0876 + 0.584·C_L + 0.365·C_L²
-
-Drag = q · RefArea · DragFactor · C_D        (opposing the velocity vector)
+0041ada0  fld   dword [esp+4]      ; x  <-- arg1
+0041ada4  fmul  dword [0x6032e0]   ; * 0.5
+0041adaa  fadd  dword [0x6034b0]   ; + 0.8
+0041adb0  fmul  dword [esp+4]      ; * x  <-- arg1 AGAIN (disp8 = 04, not 08)
+0041adb4  fadd  dword [0x603490]   ; + 0.12
+0041adba  fmul  dword [0x603474]   ; * 0.73
+0041adc0  ret
 ```
 
-`DragFactor` is the per-aircraft tuning multiplier from the `dynamics` block. Note the parasite
-term `0.0876` is fixed for every aircraft — airframes differ only through `DragFactor` and
-`RefArea`.
+```
+C_D  = 0.73 · (0.12 + 0.8·M + 0.5·M²)        M = Mach
+     = 0.0876 + 0.584·M + 0.365·M²
+
+Drag = q · RefArea · DragFactor · C_D · k    (opposing the velocity vector; k = 0.8 when boosting)
+```
+
+⚠ **This corrects an earlier reading of this page that had the same three coefficients as a polar
+in `C_L`.** The caller computes `C_L` at `0x48fd3f`, pushes it at `0x48fd74`, and cleans 8 bytes —
+so a decompiler emits `Drag(Mach, C_L)` and the polar reading is the natural mistake. But the
+pushes are `push eax` (`C_L`) then `push ecx` (Mach), and the **last** push is the lowest address,
+so **Mach is `[esp+4]`** and `C_L` is the dead `[esp+8]`. Both `fld`/`fmul` in the function use
+`disp8 = 0x04`. The `C_L` argument is a stale prototype, nothing more.
+
+The difference is not cosmetic: under the `C_L` reading drag rises with commanded G and has a
+speed-independent floor at fixed load factor; under the correct one drag is **independent of G**
+and rises with speed only. Anything calibrated against the `C_L` version was calibrated against a
+term the original does not have.
+
+**No induced-drag term exists anywhere in `FUN_0048fc40`.** Every use of the `C_L` slot was
+enumerated: the lift-force product, an optional load-factor out-param, and the dead push. There is
+no `C_L²`, AOA-keyed or load-factor-keyed contribution to drag.
+
+`DragFactor` is the per-aircraft tuning multiplier from the `dynamics` block. The parasite term
+`0.0876` is fixed for every aircraft — airframes differ only through `DragFactor` and `RefArea`.
+
+**Cross-check that settles it independently of the bytes.** With this polar, the thrust curve above
+and `ThrustFactor = EnginePower` scaled by `RefArea`, the full-throttle level equilibrium
+`EnginePower · T_avail(M) = q · DragFactor · C_D(M)` reproduces each airframe's **authored
+`fd_speed`** with nothing fitted:
+
+| Airframe | `fd_speed` | solved | ratio |
+|---|---:|---:|---:|
+| `pbloodhawk` | 302.0 mph | 300.5 | 0.995 |
+| `ppeacemaker` | 290.8 | 290.0 | 0.997 |
+| `pfury` | 281.9 | 281.0 | 0.997 |
+| `pavenger` | 264.0 | 261.4 | 0.990 |
+| `pdevastator` | 252.8 | 251.2 | 0.994 |
+| `pbrigand` | 241.6 | 240.0 | 0.993 |
+| `pautogyro` | 228.2 | 214.9 | 0.942 |
+| `pkestrel` | 217.0 | 215.3 | 0.992 |
+| `pfirebrand` | 208.0 | 206.7 | 0.994 |
+| `pwarhawk` | 201.3 | 200.9 | 0.998 |
+| `pbalmoral` | 176.7 | 125.9 | **0.712** |
+
+Nine of eleven land inside 1 %. The autogyro and the Balmoral are the outliers, and they are the
+two airframes that are not conventional fighters. Under the `C_L` reading the same solve is not
+even close.
+
+⚠ **What still does not close: the absolute scale.** `CAP-05`'s four zero-thrust decelerations
+(0.36/1.11/2.82/3.74 m/s² at `V/fd_speed` = 0.25/0.35/0.46/0.50) come out **≈2–3.6× too strong**
+against this curve, roughly a constant factor rather than a shape error. Since the equilibrium
+above is a *ratio* it is blind to exactly that factor, so the two results are consistent. The
+leading suspicion is the force→acceleration divisor — `veh_weight` is authored 1900 for the
+Bloodhawk and the aerodynamic intermediates are imperial, so a kg/lb mix-up of 2.2046 is the right
+size and would divide thrust and drag together, leaving the equilibrium untouched. **Untested** —
+it also moves the lift ceiling, so it is not a one-line change.
 
 ## Stall
 
@@ -291,22 +349,79 @@ multiply — `mov [ebp+8], 1.8f` on the boost branch at `0x48fcb6`, where the no
 throttle) and multiplies the drag coefficient by **0.8**. So boost is "throttle pinned to 180 %",
 and boosting at part throttle is identical to boosting at full throttle.
 
-## Thrust available — partially resolved
+## Thrust available — resolved, `pow` operands recovered
 
-`FUN_0041acf0`, with Mach floored at 0.1:
+`FUN_0041acf0` is `__cdecl float thrustAvail(float mach, Atmos *atm)` — two stack args, result in
+`st(0)`, caller cleans (`add esp, 8` at `0x48fcf0`). Mach is floored at **0.1** and the clamp is
+written back into the argument slot (`0x41ad02`), so every use below is of the floored value:
 
 ```
-T ∝ [ (0.12 − Mach/60) · 0.73 · q_ref ] / ( Mach · pow(…) )
+V_ref = (0.84·M + 0.112) · a                       ; a = atm->a, ft/s
+q_ref = 0.5 · ρ · V_ref²                           ; FUN_0041ac80(atm, V_ref)
+T     = q_ref · 0.73 · (0.12 − M/60) / ( M · pow(1.33 · atm->k, 1.41 · M) )
 ```
 
-evaluated at a reference speed of `(0.84 · Mach + 0.112) · a`. The leading bracket is the
-parasite-drag term `0.12 · 0.73` carrying a linear Mach correction, and the division by Mach is
-the propeller constant-power form (`T = P / V`).
+**The `pow` operands are now recovered from the raw bytes** — the decompiler had lost them behind
+`call 0x5f7016`, a one-instruction thunk `jmp dword ptr [0xa20358]` that the import table resolves
+to `MSVCRT!_CIpow` (base in `st(1)`, exponent in `st(0)`, pushed in that order at `0x41ad0f` /
+`0x41ad18`):
 
-⚠ **The `pow` operands were not recovered** — the decompiler lost them behind an FPU helper call.
-Closing this needs a read of the raw instructions at that call site. Until then the *shape* of
-the thrust curve is known but its exponent is not, so absolute top speeds cannot be predicted
-from first principles. The measured `TopSpeed` in `dynamics.txt` is the way around this.
+- **base** = `atm->k · 1.33` — a constant per atmosphere state, **1.3146** on the dense band
+- **exponent** = `Mach · 1.41`
+
+Every float immediate, all `.rdata`:
+
+| Address | Value | Role |
+|---|---|---|
+| `0x6034a8` | 0.1 | Mach floor |
+| `0x6034a4` | 1.33 | × `atm->k` → `pow` base |
+| `0x6034a0` | 1.41 | × Mach → `pow` exponent |
+| `0x60349c` | 0.84 | `V_ref` slope |
+| `0x603498` | 0.112 | `V_ref` intercept, in Mach |
+| `0x603494` | 1/60 | Mach trim on the parasite term |
+| `0x603490` | 0.12 | parasite coefficient |
+| `0x603474` | 0.73 | the same drag scale the polar uses |
+
+⚠ **The curve RISES with speed — it is not `T = P/V`.** The `/M` is real, but the numerator is `q`
+at a reference speed that **tracks the current speed** (`V_ref = (0.84M + 0.112)·a`) rather than
+sitting at a fixed design point, so `q_ref ∝ M²` and the net is roughly *linear* in Mach: +35 %
+between 150 and 500 mph on the dense band. Read it as "the parasite drag force the airframe would
+feel at `V_ref`, divided by Mach". What falls with speed in this model is the thrust **margin**,
+because drag grows as `M²` where thrust grows as `M`. Anyone re-deriving this from the `/M` alone
+will predict a falling curve and be wrong.
+
+The atmosphere initialiser `FUN_0041aca0(alt_ft, atm)` — called at `0x48fc70` with
+`alt_ft = position.y · 3.28084` — is what supplies `atm->k`:
+
+```
+if (alt_ft <= *(float*)0x71bb3c) { r = 0.9544815;  k = 0.98842078; }   ; dense
+else                             { r = 0.05704810; k = 0.73480000; }   ; thin
+atm->a   = (k + 1.0) · 558.0        ; 1109.54 ft/s dense, 968.02 thin
+atm->rho = r · 0.002377             ; 2.2688e-3 dense, 1.35603e-4 thin
+```
+
+⚠ **This does not reopen the band question.** `0x71bb3c` is BSS with a single read reference (the
+`fcomp` itself) and no writer anywhere in `.text`, exactly as recorded under the G/AOA limiters —
+so a byte-level reading says "threshold 0, thin band always". The **dense band is established by
+arithmetic, not by that flag** (the thin band puts the fallback airframe's stall at 309 mph), and
+it is corroborated here: with the dense band's `k`, the decoded thrust curve and the decoded drag
+polar put the Bloodhawk's full-throttle level equilibrium at **300.5 mph** against its authored
+`fd_speed` of 302.0 and its measured 300.4, with no fitted constant anywhere. The thin band would
+miss by a factor of ~4. Do not "fix" the band on the strength of the unwritten flag.
+
+**This also settles the `fd_speed` caveat below, in `fd_speed`'s favour** for the Bloodhawk: with
+`ThrustFactor = EnginePower` and thrust scaled by `RefArea`, the level equilibrium lands on
+`fd_speed` to 0.2 %. The equilibrium is independent of ρ and `a` entirely — both cancel — and
+reduces to `EnginePower/DragFactor`:
+
+```
+EnginePower · (0.84M + 0.112)² · (0.12 − M/60) / (M³ · pow(1.33k, 1.41M))
+    = DragFactor · (0.12 + 0.8M + 0.5M²)
+```
+
+The Balmoral still misses (it solves at ≈ 0.71 × its own `fd_speed`), so the caveat stands for the
+rest of the set — but the "`fd_speed` is a pure normalising reference" reading is now the weaker
+one.
 
 ## `ThrustFactor` is the engine's power factor — resolved
 
@@ -402,7 +517,13 @@ belongs. The Balmoral is the second discriminator at the other end.
 Note that **every player airframe's stock engine is its Lvl-2 row**, not Lvl-1: ids 11, 14, 17, 20,
 23, 26, 29, 32, 35, 38, 41. Solving any constant from a Lvl-1 row inflates it by ~30 %.
 
-⚠ **A caveat this item turned up, owed to B12/B13.** The table above is a *rank* test, and it is
+⚠ **A caveat, now largely retired — read the Drag section's solve table first.** With the drag
+polar corrected to Mach and the thrust `pow` recovered, the absolute test below *does* close: nine
+of eleven airframes solve to within 1 % of their own `fd_speed`. What follows is the state of the
+question before those two corrections, kept because the Balmoral (0.71×) and the autogyro (0.94×)
+still miss and the residual is unexplained.
+
+The table above is a *rank* test, and it is
 clean. The absolute test is not: assuming `fd_speed` is the full-throttle level equilibrium and
 solving `power · T_avail(Mach) = q · DragFactor · C_D` at each airframe's own `fd_speed` should
 give eleven samples of one smooth curve, and it does not — a log-log fit leaves ±18 % residuals
@@ -504,15 +625,20 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
 10. **Thrust scales with `ref_area`, not `1/veh_weight`.** The remake divides engine power by
     weight; the original multiplies it by reference area, which is what makes `RefArea` cancel
     against drag. See `ThrustFactor` above.
+11. **Drag is a polar in Mach with no induced term.** Any model that makes drag rise with the pull
+    is adding a mechanism the original does not have. See Drag above.
 
 ## Confidence
 
 - **Read directly from the executable:** all constants and formulas above, except as marked. This
   now includes the `ThrustFactor` chain (parser → def `+0x128` → runtime `+0x66c` → force
-  assembly) and the linear throttle multiply.
-- **Inferred, and marked ⚠ in place:** the atmosphere band threshold; the thrust `pow` exponent;
-  whether `fd_speed` is a level-flight equilibrium at all (the evidence now says probably not).
+  assembly), the linear throttle multiply, the thrust `pow` operands (`MSVCRT!_CIpow`, base
+  `1.33·atm->k`, exponent `1.41·M`), and the drag polar's variable being **Mach** — the last read
+  off the raw bytes rather than out of a decompiler, which is what corrected it.
+- **Inferred, and marked ⚠ in place:** the atmosphere band threshold; the absolute force scale
+  (`CAP-05` says everything is ≈2–3.6× too strong at a near-constant factor).
 - **Verified by arithmetic:** the dense atmosphere band, via the stall-speed check against the
-  parser's fallback aircraft; `ThrustFactor` = engine power, via a perfect rank correlation with
-  `fd_speed` across all eleven player airframes.
+  parser's fallback aircraft **and** via the level-equilibrium solve (the thin band misses by ~4×);
+  `ThrustFactor` = engine power, via a perfect rank correlation with `fd_speed` across all eleven
+  player airframes and now an absolute solve landing nine of eleven inside 1 %.
 - **Untested:** whether the shipped Dynamics tuner is reachable in a retail build.

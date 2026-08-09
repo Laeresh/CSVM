@@ -809,10 +809,9 @@ public static class Probes
 
         bool bhawk = planeNodeName.Equals("player_bhawk", StringComparison.OrdinalIgnoreCase);
         float fd = stats.FdSpeed;
-        // ⚠ The fallback here must track FlightModel.ThrustConst — it is a second copy of the same
-        // default, and a stale one silently mis-reports the header while the model itself is fine.
-        float thrustAccel = stats.EnginePower * Config.GetFloat("flightModel.thrustConst", 107f)
-                            / (stats.VehWeight / 1000f);
+        // Thrust is a curve in Mach, not a constant, so the header samples the model's own method at
+        // fd_speed rather than keeping a second copy of the formula that could go stale.
+        float thrustAccel = new FlightModel(stats).ThrustAccelAt(fd, 1f);
 
         void Row(string name, string what, string unit, double model, double? measured,
                  double tol, string detail = "", bool info = false, bool upperBound = false)
@@ -1047,7 +1046,7 @@ public static class Probes
         sb.AppendLine($"# flight envelope — {planeNodeName} ({stats.DefName})");
         sb.AppendLine($"# fd_speed {fd:0.#} m/s ({fd / Mph:0.0} mph)  weight {stats.VehWeight:0} kg  "
                       + $"engine power {stats.EnginePower:0.###}  gravity {stats.Gravity:0.#} m/s²");
-        sb.AppendLine($"# max thrust accel {thrustAccel:0.00} m/s²  stepped at {EnvDt * 1000f:0.0} ms");
+        sb.AppendLine($"# thrust accel at fd_speed {thrustAccel:0.00} m/s²  stepped at {EnvDt * 1000f:0.0} ms");
         sb.AppendLine(bhawk
             ? "# 'original' = decoded from cockpit-gauge video, analysis/video-flight-calibration/"
             : $"# no measured original for {planeNodeName} — the Bloodhawk is the only airframe on video");
