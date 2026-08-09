@@ -1,6 +1,6 @@
 # All-chapter fog/sky zone survey — `survey_zones.py`
 
-Read-only survey of every chapter's authored fog zones, written for `docs/PLAN-overcast-match.md`
+Read-only survey of every chapter's authored fog zones, written for `docs/plans/PLAN-overcast-match.md`
 item **B11** (2026-08-08). The instrument is `survey_zones.py`; run it with no arguments to
 reproduce every number quoted here and in the plan's B11 section:
 
@@ -31,7 +31,7 @@ byte triples are what the renderer receives, not what the JSON looks like.
 ## Findings
 
 The full argument, the complete table and the H1–H4 prediction matrix live in
-`docs/PLAN-overcast-match.md` § `B11`. In brief:
+`docs/plans/PLAN-overcast-match.md` § `B11`. In brief:
 
 - **`FOG_ALTITUDE` is inert in the zone every chapter is currently flown in, except C2.** The
   bands are 4000–5000 / 9000–10000 / 10000–11000 in seven of the eight flown zones — above the

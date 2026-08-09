@@ -509,7 +509,7 @@ public sealed class WorldBuilder
         // (`lighting: false` always was). The 2026-07 cylindrical-fog remodel force-fogged the
         // dome instead (`SceneBuilder.ForceFogged`, set only from here), reasoning that high
         // dome fragments would stay clear via the FOG_ALTITUDE fade while the horizon band
-        // greyed toward the terrain fog wall. `B16` (`docs/PLAN-overcast-match.md`) found that
+        // greyed toward the terrain fog wall. `B16` (`docs/plans/PLAN-overcast-match.md`) found that
         // premise false at the dome's own authored size: every chapter's dome tops out
         // +982…+4108 m over the camera, while every broken scene's FOG_ALTITUDE band sits at
         // 9000-11000 m — the altitude term is 1.0 on every dome fragment under either fog

@@ -134,6 +134,59 @@ an upper bound, and the correction to the 137.9 mph equilibrium are on `BL-115` 
 
 ## 1 · Actionable now (`PT-nn`)
 
+### C1 · Bloodhawk — the overcast sky, ground to above the deck
+
+```powershell
+./RunGame.ps1 --plane=player_bhawk --chapter=C1
+```
+
+- `PT-47` `[A/B: both C1 IA1 Fog stills + CAP-12]` **The overcast-match plan's exit verdict**
+  (`OriginalScreenshots/C1 IA1 Fog river.png`, `.../C1 IA1 Fog above clouddeck.png`,
+  `playtest/CAP-12/`; the plan is `docs/plans/PLAN-overcast-match.md`,
+  completed 2026-08-09; it closed `BL-118`, `BL-312`, `BL-303`, `BL-100`, `BL-101`, whose records
+  are in that plan and in `git log --grep=<ID>`). Three waves rebuilt this sky — the sprite
+  scatter, the fog model and the deck's brightness — and every number in the plan's final tables
+  is a still. This is the one sortie that judges it **in motion**, which is the half no box can
+  reach: climb from the river up through the whiteout and out above the deck, then do it again
+  looking back down.
+
+  Both reference stills are freecam-reproducible if you want the exact frames beside you:
+  `--pos=-7323,192,-3829 --direction=-0.997,-0.1,0.070` (river) and
+  `--pos=-7323,1192,-3829 --direction=0,0,-1` (above deck). ⚠ Both originals are chase frames at
+  a slightly different pitch from ours, so judge *character* against them, not the horizon's
+  height in frame (the plan's `SHOT-23` and its C24 tables have the numbers).
+  *Look for:*
+  - (a) **below the deck, and while climbing** — the ceiling is one mottled sheet that reaches the
+    horizon and dies into the fog wall with no sky stripe and no visible rim. The 13-px bright
+    strip at the deck's edge that used to appear on a climb should be gone (it is now ~4 px, hidden
+    inside the dome wall's own gradient). Climb slowly from 200 m to 900 m watching the horizon:
+    nothing should slide, step or brighten as you go;
+  - (b) **the whiteout crossing** — entering the band at ~970 m the world should ramp to a total
+    whiteout in the core (1032–1062 m) and clear again by ~1124 m, with no snap and no hard edge
+    at either end, and no cloud card visibly punching through the pane;
+  - (c) **above the deck, the tops and the floor are ONE tone** — the straight-edged wedges the
+    deck floor used to cut through the near cards are gone (measured: floor↔card gap +49 → −4).
+    Look down and forward: no hard colour cut anywhere along the mesh↔sprite boundary, and nothing
+    darker than the fog colour showing between cards;
+  - (d) **C1C above its band** (`--chapter=C1C`, climb past 1082 m) — this one is **expected to
+    look WORSE than C1**, and judging how much worse is the point. Its `fvol` cards author
+    `lighting: true` where C1's do not, so its frame holds three cloud tones at once: placed cloud
+    facades 235, deck floor 196, `fvol` cards 164. `BL-327` asks whether that flag is a
+    `WorldLight` gate at all; your verdict on how bad it reads is what prioritises it;
+  - (e) **density and character against the original** — cloud spacing and size versus `CAP-12`'s
+    own climb, at grazing angles along the tops and along the base: no lattice or comb at any
+    angle, no visible field edge over the base map, and the sheet's mottling reading as
+    multi-scale rather than smooth broad bands (ours is measurably blurrier than the original's —
+    high-pass RMS ≈ 0.2 against ≈ 0.9 — so say whether that is visible in motion).
+
+  *Blocks:* this is the plan's own exit verdict — a pass confirms it. A fail on (a), (b), (c) or
+  (e) is fresh evidence on the closed item's successor, not a reopening: name which check failed
+  and mint against the mechanism it belongs to (`A7`/`C25`/`C26` for (a), `CLOUD_COVER` for (b),
+  `C23`'s fork for (c), `BL-312`'s scatter or `BL-327`'s far-field half for (e)). (d) has its
+  item already: it feeds `BL-327`.
+  *Variations:* `--chapter=C4` for the one deck chapter whose `WorldLight` clamps to 1.0 — its
+  deck must look exactly as it did, and its cards must still be *there* above the band.
+
 ### C1 · two pilots — Dogfight (splitscreen VS)
 
 ```powershell

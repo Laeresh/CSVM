@@ -62,7 +62,7 @@ public sealed partial class FogVolumeClutter : Node3D
     // than a map, both of which should be seen rather than swallowed.
     private const int MaxPlacements = 80_000;
 
-    // A3's per-volume-shape rule (docs/formats/fogvol.md, docs/PLAN-overcast-match.md A3): a
+    // A3's per-volume-shape rule (docs/formats/fogvol.md, docs/plans/PLAN-overcast-match.md A3): a
     // volume no more than this many card-heights thick reads as a sheet and is TOP-ANCHORED;
     // anything taller keeps the old full-height UNIFORM draw. The evidence is a clean gap, not a
     // tuned edge — measured off extracted/{C1,C1C,C2B,C4,C5}/gamez/nodes.json: C1/C2B/C4's slabs
@@ -98,7 +98,7 @@ public sealed partial class FogVolumeClutter : Node3D
     /// built and <see cref="Create"/> returned null.</summary>
     public int InstanceCount { get; private set; }
 
-    /// <summary>Sprites placed by A5's map-edge continuation alone (docs/PLAN-overcast-match.md
+    /// <summary>Sprites placed by A5's map-edge continuation alone (docs/plans/PLAN-overcast-match.md
     /// § A5) — zero in every chapter whose <c>fvol*</c> volumes carry no map-spanning slab (C1B,
     /// C2, C3 render nothing at all; C5's strips and C1C's build-ups are local geometry and are
     /// never extended). <see cref="InstanceCount"/> minus this is the count the authored volumes
@@ -483,7 +483,7 @@ public sealed partial class FogVolumeClutter : Node3D
             }
         }
 
-        // A5 (docs/PLAN-overcast-match.md): continue the map-spanning slab's own cell field past
+        // A5 (docs/plans/PLAN-overcast-match.md): continue the map-spanning slab's own cell field past
         // the base map. Runs after every authored volume above has drawn everything it draws, and
         // touches no state the loop above reads — it cannot realign the interior placements A2/A3
         // already pin (unlike A3's own Y-anchoring change, which shifted the shared stream by

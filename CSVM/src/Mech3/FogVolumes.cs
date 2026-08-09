@@ -276,7 +276,7 @@ public sealed class FogVolumeSpec
     }
 
     /// <summary>The chapter's map-spanning cloud slab, if it has one — the data-driven test A5
-    /// (docs/PLAN-overcast-match.md) uses to decide which volumes may continue past the map edge,
+    /// (docs/plans/PLAN-overcast-match.md) uses to decide which volumes may continue past the map edge,
     /// kept here (pure geometry, no RNG, no render state) so it is testable off-engine like
     /// <see cref="VolumesOf"/> beside it. A volume qualifies only if ALL THREE hold:
     /// <list type="number">

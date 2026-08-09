@@ -400,7 +400,7 @@ clamp 1.0. **Confirmed against original footage 2026-08-07** (`CAP-11`, matched-
 0.426 / 0.784 / clamp 1.0 — C1B terrain −12%, C2B deck tops −9%, C2 suburb +5–15%;
 `git log --grep=BL-110`, evidence `playtest/CAP-11/README.md`). Two exemptions the original
 applies that we don't yet: water renders unmodulated (`BL-304`), and night cloud sprites are
-directionally moonlit rather than uniformly dimmed (`BL-118`). `Weather.WorldLightFactor` computes it (`ZoneFog.WorldLight`); `WeatherRig` sets
+directionally moonlit rather than uniformly dimmed (`BL-325`). `Weather.WorldLightFactor` computes it (`ZoneFog.WorldLight`); `WeatherRig` sets
 the global shader scalar `csky_world_light` — **linearised** first, so the shader's
 linear-space `ALBEDO ×` lands the dimming in gamma space (matching the DX7 chain
 texel×vertex×light, all sRGB-space; a raw linear ×0.80 only reaches 210→190, gamma-space
@@ -434,7 +434,7 @@ The whiteout band (a vertical altitude band the plane vanishes inside), bare-sca
 suggest (this page said so until 2026-08-08). Three of the four chapters that author them —
 C1B, C3, C5 — ship **no `CloudDeck` mesh at all** (`WorldBuilder`'s coverage table), so there
 is nothing there to tint. They track the cloud band, and the render confirms it: C4 authors
-`[192]³` and the original's in-cloud veil measures a flat 192 (`BL-118`, `CAP-12`).
+`[192]³` and the original's in-cloud veil measures a flat 192 (`CAP-12`'s C4 take, 2026-08-07).
 
 **The band's MIDPOINT is load-bearing twice over** (`WeatherState.CloudBandCentre`, one spelling
 for both; `A7`, 2026-08-08). It centres the opaque core above, and it is also the altitude at

@@ -5,7 +5,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// <see cref="Rng"/>'s per-CELL generator (<see cref="Rng.NewSystemRandom(string, int, int)"/>),
-/// added for A5's map-edge continuation (docs/PLAN-overcast-match.md): a field extended past its
+/// added for A5's map-edge continuation (docs/plans/PLAN-overcast-match.md): a field extended past its
 /// authored bounds needs a seed keyed by coordinate rather than by draw order, since the set of
 /// cells it covers is itself a runtime computation (bounded by each kind's <c>far_fade</c>), not a
 /// fixed walk over authored volumes. These pin the two properties that guarantee matters here —

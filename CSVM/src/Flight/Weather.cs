@@ -48,7 +48,7 @@ public sealed class WeatherState
     // (This is the data-driven half; the gamma-space modulate is the other half.)
     // Confirmed against original footage at 0.426/0.784/clamp-1.0 (CAP-11 matched-pose A/B,
     // 2026-08-07; git log --grep=BL-110). Known exemptions in the original, not yet ours:
-    // water is unmodulated (BL-304); night cloud sprites are moonlit directionally (BL-118).
+    // water is unmodulated (BL-304); night cloud sprites are moonlit directionally (BL-325).
     private static readonly ZoneFog NoFog = new(new Color(0.69f, 0.69f, 0.69f), 1e8f, 1e9f, 1e8f, 1e9f, 1e9f, 1f);
 
     private readonly Dictionary<string, ZoneFog> _zones = new(StringComparer.OrdinalIgnoreCase);
@@ -270,7 +270,7 @@ public sealed class WeatherState
     /// <remarks>
     /// <para>Authored data, and the target is not a judgement call: the original's C4 veil
     /// measures a flat 192 and C4 authors <c>TOP_COLOR</c>/<c>BOTTOM_COLOR</c> = 192,192,192
-    /// (BL-118, CAP-12). Ours painted a hardcoded 0.95 white there — measured 242 in-cloud
+    /// (CAP-12's C4 take). Ours painted a hardcoded 0.95 white there — measured 242 in-cloud
     /// against the original's 192, now 192 exactly.</para>
     /// <para>⚠ The <b>lerp</b> is inferred and this install cannot falsify it. Of the four
     /// chapters whose band you can reach (C1 970–1124, C1C 1055–1110, C2B 924–1124, C4

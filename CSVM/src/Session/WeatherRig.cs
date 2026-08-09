@@ -71,7 +71,7 @@ public sealed class WeatherRig
     // ⚠ TUNE, and the FALLBACK only — a mission that authors CLOUD_COVER colours overrides it
     // (WeatherState.WhiteoutColor). It survives because the three reachable-band chapters that
     // author nothing are measured right at this value: CAP-12 puts C1's in-cloud interior at 248
-    // in the original against our 243 (BL-118). C1C and C2B share C1's colourless CLOUD_COVER
+    // in the original against our 243. C1C and C2B share C1's colourless CLOUD_COVER
     // block. Do not "unify" it with the zone FOG_COLOR: C1's fog is 0.69 = 176, which would
     // darken a passing A/B by 70 units.
     private static readonly Color WhiteoutFallbackColor = new(0.95f, 0.95f, 0.96f);
@@ -187,7 +187,7 @@ public sealed class WeatherRig
             if (rig.Whiteout != null && _weather != null)
             {
                 // The colour is re-read per frame, not set once at build: where the authored pair
-                // differs it lerps across the band with the camera (BL-118).
+                // differs it lerps across the band with the camera (CLOUD_COVER, weather.md).
                 var c = _weather.WhiteoutColor(camPos.Y) ?? WhiteoutFallbackColor;
                 // --no-fog covers the whiteout too: flying into the cloud band would otherwise
                 // still white the pane out, which reads as "fog is not actually off".
@@ -416,13 +416,14 @@ public sealed class WeatherRig
         // it: `VIEWING_RANGE` ships `FOG_SCALE 1.0` at HIGH detail in all eight chapters, and
         // every other multiplier in that block is <= 1 (MED 0.85, LOW 0.7), so nothing in the file
         // shortens a range at all. Measured: at the C1 river pose the halved range saturated the
-        // overcast ceiling into flat fog at ~1.8 km against the original's ~12.6 km, and the
-        // authored range takes that to ~3.7 km; C3's over-fogged canyon slope moves 178 -> 106
-        // against the original's 36.5.
-        // ⚠ The residual at both poses is NOT this factor. The original's whole overcast ceiling
-        // reads 166-175 in its own river still while ours renders 200-220 BEFORE any fog, so what
-        // is left of "our fog eats the clouddeck" is the deck's own +54 underside brightness
-        // (`BL-118`, CAP-12) seen from below — a Wave C question, not a fog one.
+        // overcast ceiling into flat fog far too close in, and the authored range pushes the
+        // saturation out; C3's over-fogged canyon slope moves 178 -> 106 against the original's
+        // 36.5 (still open, BL-321).
+        // ⚠ The residual at the river pose was never this factor: the original's overcast ceiling
+        // reads 166-175 in its own still while ours rendered 200-220 BEFORE any fog. That was the
+        // deck's own underside brightness seen from below, and it is fixed — the deck now carries
+        // the mission's SUNLIGHT below the band (WorldBuilder's forceLit) and measures 168-170
+        // unfogged against the original's 167.7. Do not re-diagnose that pose as fog.
         // --no-fog pushes the range out of reach instead of touching `csky_fog_on`. That uniform
         // would work — every shader still honours it — but it is an INSTANCE uniform declared at
         // index 1 in SceneBuilder's shader and index 0 in Clutter's, and Godot merges that mapping

@@ -88,7 +88,8 @@ geometry; do not re-derive them from the weather file.
 
 ⚠ **Everything above this section is what `fogvol.zrd` + the gamez author. This section is not
 that.** The original's field reads as everywhere, past the map the way `cloudparent` does NOT
-(BL-118's note: `cloudparent` stops at the map edge; extending it would invent content). Neither
+(`CAP-12`'s own caveat: `cloudparent` stops at the map edge; extending it would invent content —
+the two populations' vocabulary is `BL-325`'s note). Neither
 `fogvol.zrd` nor the gamez says anything about content past `World.area` — there is nothing to
 decode here, only a deliberate engine-side match to the terrain's own continuation
 (`MapEdgeExtender.cs`, docs/architecture.md), landed as `A5` (user playtest, 2026-08-08: "it is
@@ -236,7 +237,7 @@ degenerate ranges).
   evidence against the bounded reading — the nine slab volumes ARE the map (see half 2), so the
   two readings can only differ within `far_fade_range.y` (3500 m) of the map boundary and the
   footage never samples that. Full reasoning and the per-still evidence:
-  `docs/PLAN-overcast-match.md` § `A1`/`A2`.
+  `docs/plans/PLAN-overcast-match.md` § `A1`/`A2`.
 - **`perp_dist_range` is vertical.** "Perpendicular" to the volume's horizontal plane. The
   asymmetry supports it: `cloudsprite1` gets `[-5, 5]` and `cloudsprite2` `[-5, 10]`, so one kind
   floats slightly higher — which is a reading a horizontal offset makes no sense of.
@@ -245,7 +246,7 @@ degenerate ranges).
   reduced-detail mode, so it takes the farther band. Both are read and kept.
 - **The vertical spread is TOP-ANCHORED for sheet-thin volumes, UNIFORM for tall ones — the anchor
   IS per-volume-shape, settled `A3` 2026-08-08 and verified at the render.** C4's clear air at
-  1135 m (`CAP-12` C4 take, 2026-08-07 — see `BL-118`) falsified a uniform fill: 132.3 m cards
+  1135 m (`CAP-12` C4 take, 2026-08-07) falsified a uniform fill: 132.3 m cards
   drawn uniformly across the 1060–1180.5 volume would hang to ~956 m, leaving no gap, but the clip
   shows *clear sky*, puff bases well above the 1050 m deck sheet. `A1` decided the shape (centre
   Y = volume top + `perp_dist_range`) and `A3` decided WHICH volumes it applies to, since a

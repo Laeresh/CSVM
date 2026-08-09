@@ -3414,10 +3414,6 @@ are built from, and it is logged with the meshed counts it was decided on.
   in `shaders/csky_atmosphere.gdshaderinc` (the gamez `world1` node's `fog_state == 1` = LINEAR,
   asserted by the reader in every chapter), not the `smoothstep` it shipped with; the ALTITUDE
   term keeps its smoothstep on purpose — see that file's own comment and `docs/formats/weather.md`.
-⚠ **A residual known at landing, so it is not re-diagnosed as fog:** the original's overcast
-  ceiling reads 166–175 in `OriginalScreenshots/C1 IA1 Fog river.png` while ours renders 200–220
-  before any fog at all (CAP-12's +54 underside, `BL-118`). Any remaining "our fog eats the
-  clouddeck" at that pose is the deck's own brightness seen from below, and it belongs to Wave C.
 ⚠ `SetDeckCenter` (and `SetDeckUndimmedMeshes` beside it) is called separately from `Build`,
   whenever a chapter's cloud deck geometry loads
   (`GameSession`'s `cloudDeck != null` branch) — broader than "this rig has weather", so it is

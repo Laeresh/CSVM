@@ -1,8 +1,10 @@
 # Overcast match — the C1 IA1 sky as one picture
 
-**ACTIVE PLAN** (written 2026-08-08). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans/plans.md), when every item lands.
+✅ **COMPLETE 2026-08-09** (written 2026-08-08). All 21 items landed; archived in `docs/plans/`
+and indexed in [`plans.md`](plans.md). **`PT-47` is owed at the controls** — the plan's own exit
+verdict, flying what these tables could only photograph ([`playtest.md`](../../playtest.md)).
+Closed with it: `BL-118`, `BL-312`, `BL-303`, `BL-100`, `BL-101`. Minted on the way and still open:
+`BL-320`, `BL-321`, `BL-322`, `BL-323`, `BL-325`, `BL-327`.
 
 The goal is one picture, twice: our matched-pose renders of
 `OriginalScreenshots\C1 IA1 Fog river.png` and `OriginalScreenshots\C1 IA1 Fog above clouddeck.png`
@@ -86,7 +88,7 @@ in any worktree here.
   altitude 4000→5000. `CLOUD_COVER` 970–1124, thickness 30, no colours.
 - **The deck**: 144 `cloudlayer.tif` tiles at y=960 covering the map (`WorldBuilder.FindCloudDeck`);
   the `fvol` slab sits at 970–1090.5 with 130 m `distance`, cards 132.3 m, scale ≤1.5
-  ([`fogvol.md`](formats/fogvol.md) has the full 8-chapter census).
+  ([`fogvol.md`](../formats/fogvol.md) has the full 8-chapter census).
 - **Pinned A/B poses** (from the CSVM twins' freecam overlays, `Z:\CSVM\Screenshots\`): above-deck
   `x -7323 y 1192 z -3829`; river **`x -7323 y 192 z -3829`**. View direction was NOT in the
   overlay; re-derived by `A4` by matching terrain features (cliff, river S-curve, ridge treeline)
@@ -171,7 +173,17 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
     **49 → −4**, the sub-`FOG_COLOR` tail gone (outboard `p1` 166.2 → **176.0**); every below-band
     frame and all 13 goldens bit-identical. ⚠ Two residuals for `C24`: the 1700 m far field
     (`tops-L`/`tops-R` still +15/+29) and C1C/C2B's three-tone split, which M-a **widens**.
-24. ☐ C24 — Final match: both stills within the bar; mint PT + night-moonlit BL; close `BL-118`
+24. ☑ C24 — Final match: both stills within the bar; mint PT + night-moonlit BL; close `BL-118` —
+    **every comparable region inside ±10 on both reference stills**, per population: the river
+    ceiling +6.5/+5.6/+0.5 and its terrain −3.3/−3.1, with the fog saturating at elevation **20 px
+    against the original's 16** (`B17` read 64 before Wave C); the above-deck dome +3.4…+5.4, near
+    sheet +0.5/−3.4, card plateau **209.24 against 209**, floor↔card **−4.11**, sub-`FOG_COLOR`
+    tail **gone** (0.000 % below 176). Three rows are ⚠ *not comparable* — the original's terrain
+    silhouette sits 50 px lower and its above-deck pitch differs (`SHOT-23`), with the sd evidence
+    in the tables — and **one row fails with its item**: the original's above-deck far field
+    carries 74 dead-flat `FOG_COLOR` rows and ours carries 0 (`BL-327`). Six goldens re-pinned,
+    `.\RunTests.ps1` **exit 0**; `BL-118` deleted, `BL-325`/`BL-327`/`PT-47` minted.
+    **Wave C complete; plan complete.**
 25. ☑ C25 — The below-band ceiling covers to the horizon and fades like the original's — landed as
     a `K` correction (400 → 135 m); `C21`'s refutation meant no extension and no baked fade were
     needed at all
@@ -250,7 +262,7 @@ change: one seeded stream, built once, world-anchored.
    `extracted/C1/zrdr/templates.zrd.json` carries only `node`, `substitute`, `scale_range`,
    `far_fade_range` — **no `distance` key and no `perturb_dist_range` key**. Ground clutter's
    tiling period is the template's *ground-quad size in the gamez* (512 m for C1's `terpat02`,
-   [`clutter.md`](formats/clutter.md)) and its decoration offsets are **authored explicitly, one
+   [`clutter.md`](../formats/clutter.md)) and its decoration offsets are **authored explicitly, one
    transform per decoration**: that system contains no randomness at all. The genuinely shared keys
    are `scale_range` + `far_fade_range` + weighted substitution, and `fogvol` already uses all three
    the same way. `distance`, `perturb_dist_range` and `perp_dist_range` are fogvol-only and have no
@@ -4338,7 +4350,214 @@ rows.*
 — *respected; and the trap bit once already, in `C21`/`C22`'s "0.0 % mesh" reading, which is
 corrected above rather than repeated.*
 
-## C24 ☐ Final match: both stills within the bar; mint PT + night-moonlit BL; close BL-118
+## C24 ☑ Final match: both stills within the bar; mint PT + night-moonlit BL; close BL-118
+
+**Landed.** (2026-08-09) Measurement and bookkeeping only — **no engine code, no shader**; every
+`.cs` line in this commit is a comment, repointed off the deleted `BL-118` or off the plan's old
+`docs/` path (`dotnet format --verify-no-changes` clean, all 13 goldens `ok`). Both reference views
+were re-shot at the pinned poses on the close-out build (Waves A + B, `C21`–`C23` including the
+`M-a` fork landing, `C25`, `C26`) and measured per decision 8: region luminance boxes, per region
+and per population, HUD/plane-free on the original side. **Every comparable region is inside the
+±10 bar.** Three rows are reported as ⚠ *not comparable* rather than as failures — the two frames
+hold different objects there, with the sd/high-pass evidence for that in the tables — and **one
+row fails with an attributing item**: the original's above-deck far field carries a dead-flat
+`FOG_COLOR` band and ours carries none (`BL-327`). `.\RunTests.ps1` exits **0** with the six
+standing goldens re-pinned.
+
+### The instruments, and what each pose's populations are
+
+`.scratch/c24/shoot.ps1` — nine shots, every one with its `weather` log line kept (`METHOD-15`).
+Per pose: natural; `--tex-override=cloudlayer.tif=ff0000` (the deck-**mesh** mask — legitimate
+where `SHOT-21` bans an override, because `cloudlayer.tif` skins the mesh alone);
+`--tex-override=cloud1.tif=00ff00 --tex-override=cloud2.tif=00ff00` (**both** sprite populations at
+once — `SHOT-21` again, so it is read only as "any cloud card here or not"); plus the above-deck
+`--no-fog` black/white deck pair for `C23`'s bleed instrument. Measured by `.scratch/c21`'s
+`capboxes.py`/`measure.py`/`population.py`, `.scratch/b15`'s `boxes.py`, `.scratch/c23fork`'s
+`metrics.py`, `.scratch/c23`'s `bleed.py`, and four instruments this item adds (`elev.py`,
+`popelev.py`, `sheet.py`, `fogrun.py`).
+
+| pose | cloud cards in frame | what the boxes measure |
+|---|---|---|
+| **river** `-7323,192,-3829` | **0.0 %** | the `CloudDeck` **mesh** from below, `C26`'s annulus, the dome wall, bare terrain |
+| **above-deck** `-7323,1192,-3829` | **29.4 %** of frame | `fvol` cards over the world-fixed deck floor, dome above |
+
+The river zero is the population note `A3`/`B17` asserted, now measured on the final build, and the
+above-deck 29.4 % is its able-to-fail control (`METHOD-9`) — the same override on the same build.
+
+### Table 1 — river pose vs `OriginalScreenshots/C1 IA1 Fog river.png`
+
+`-7323,192,-3829` / `-0.997,-0.1,0.070`. **(a) `B15`/`B17`'s own fractional boxes**, so the Wave-B
+column is the same instrument, not a re-derivation:
+
+| region | population | `B17` (Wave B) | **ours now** | original | Δ | verdict |
+|---|---|---|---|---|---|---|
+| sky (mid-sky gradient) | deck mesh | 180.6 | **172.9** | 169.4 | **+3.5** | ✓ (was +11.2) |
+| near valley (river + grass) | terrain | 58.8 | **58.8** | 62.2 | **−3.3** | ✓ |
+| mid terrain | ours terrain / orig fog wall | 71.5 | **71.5** | 175.0 | −103.4 | ⚠ not comparable — below |
+
+**(b) The same frames read by ELEVATION above the true horizon** (`SHOT-23`(b): the original is
+level at 1250×713, horizon row 356; ours pitches 5.71° down at 1280×720, horizon row 300 =
+`360 − 599.1·tan 5.713°`, the same `f` the `C21`/`C25`/`C26` rim formula uses). Elevation is a
+property of the world and the camera *position*, so it survives the pitch difference that a
+fractional box does not. Columns are `B15`'s two HUD-free bands:
+
+| band | population | ours | original | Δ | verdict |
+|---|---|---|---|---|---|
+| **+300…+200 px** | deck mesh 100 % | 175.85 | 169.31 | **+6.5** | ✓ |
+| **+200…+100 px** | deck mesh 100 % | 175.10 | 169.52 | **+5.6** | ✓ |
+| **+100…+40 px** | deck mesh 87 % + annulus | 169.68 | 169.22 | **+0.5** | ✓ |
+| +30…−15 px | ours terrain (sd 28.80) / orig fog wall (sd 1.44) | 160.63 | 174.55 | −13.9 | ⚠ not comparable |
+| −40…−100 px | ours terrain (sd 19.14) / orig fog+terrain edge (sd 51.75) | 72.12 | 118.68 | −46.6 | ⚠ not comparable |
+| **−100…−250 px** | terrain both | 69.13 | 72.19 | **−3.1** | ✓ |
+
+**(c) The fog/`K` reading — this is the row `C21`/`C25` were built for:**
+
+| reading | before Wave C | **ours now** | original | verdict |
+|---|---|---|---|---|
+| elevation at which the ceiling goes dead flat at `FOG_COLOR` | 64 px (`B17`, `K` = 400) | **+20 px** (176.00, sd 0.06, hp 0.062) | **+16 px** (175.00, sd 0.00, hp 0.000) | ✓ 4 px |
+| depth of that flat run (`fogrun.py`, ±4 with per-row sd ≤ 3) | — | **41 rows** (5.7 % of frame, rows 245–295) | **85 rows** (11.9 %, rows 293–398) | the deficit is entirely at the BOTTOM — see the framing note |
+| deck rim visible? | 39 px step (`C21`) | **no** — `C26` puts it at ≈3.95 px | none | ✓ |
+
+`C21` predicted "at `K` = 135 ours becomes onset 80, completion **20 px**" against the original's
+17.5. Measured: **20 against 16.** The whole `K` chain — `C21`'s fog-ramp fit, `C25`'s 400 → 135,
+`C26`'s annulus — lands on the original's own saturation elevation to within 4 px.
+
+**⚠ The framing residual, measured and NOT minted.** The three ⚠ rows above are one fact:
+**the original's terrain silhouette tops out 38 px BELOW the true horizon; ours reaches +12 px** —
+a 50 px (4.8°) gap, so a band that holds the original's fog wall holds our hillside. It is not a
+luminance miss and it is not new: `B15` recorded it as "the original … with its terrain 41 px
+*below* the true horizon, our matched render … with terrain rising 17 px *above* it", which is
+`SHOT-23`(b)'s own measured case, and the pre-plan CSVM twin
+(`Z:\CSVM\Screenshots\C1 IA1 Fog river.png`, 2026-08-08) frames the terrain exactly as we do today
+— so nothing in this plan moved it. A spot check at the original's own **ALT-gauge** altitude
+(230 m, against the twin overlay's 192 — the discrepancy `A7` recorded) moves the onset +12 → ≈+5
+and lengthens the flat run 41 → 51 rows: **~7 px of the 50 is altitude, the rest is which terrain
+the derived yaw puts in frame.** Recorded rather than minted, per decision 10 and this item's own
+trap: it is a pose question, not one of this plan's three mechanisms, and chasing it would reopen
+`A4` inside the close-out commit.
+
+**⚠ Instrument note (`DIAG-15`), for anyone re-reading the mesh percentages.** The flat-red mask
+(`r > 200`) goes blind in fog: at elevation +60…+40 the override's own red reads **197–199** in
+this frame (the fog mix pulling flat red toward 176), so the mask reports 0 % mesh below ≈55 px
+where the deck is plainly still there. Same threshold trap as `C23`'s C1C/C2B note, from the other
+direction. The `+100…+40` row's "87 %" is a floor, not a coverage.
+
+### Table 2 — above-deck pose vs `OriginalScreenshots/C1 IA1 Fog above clouddeck.png`
+
+`-7323,1192,-3829` / `0,0,-1`. Per population throughout (decision 8):
+
+| region | population | before `M-a` | **ours now** | original | Δ | verdict |
+|---|---|---|---|---|---|---|
+| zenith (`B15` box) | dome | 72.8 | **72.8** | 69.4 | **+3.4** | ✓ |
+| apex, rows 0–150 full width (`B12`'s box) | dome | 75.5 | **75.47** | 70.53 | **+4.9** | ✓ |
+| dome band x 0.20–0.80, y 0.15–0.30 (HUD-clean) | dome | — | **77.05** | 71.61 | **+5.4** | ✓ |
+| `tops-M` (near sheet, bottom centre) | 91 % card / 9 % deck | 215.45 | **208.23** | 207.75 | **+0.5** | ✓ |
+| near sheet, y 0.90–0.975, clean columns | card + floor | — | **207.50** | 210.93 | **−3.4** | ✓ |
+| card plateau `p90`, lower 45 % | `fvol` cards | 222.65 | **209.24** | **209** (208.88 `t124` / 209.16 `t59`) | **+0.2** | ✓ |
+| near-field patch mean / sd | `fvol` cards | 216.15 / 1.68 | **208.24 / 0.02** | 208.88 / 0.54 (`t124`) | **−0.6** | ✓ |
+| deck floor (flat-red mask) ↔ cards | mesh vs cards | **+49.03** | **−4.11** | one flat tone, no step | — | ✓ |
+| sub-`FOG_COLOR` tail in the sheet (rows 396–720) | mesh + cards | outboard `p1` 178.00 | **min 206.05, 0.000 % below 176** | never below `FOG_COLOR` 175 | — | ✓ |
+| **far field: dead-flat `FOG_COLOR` rows between dome and near sheet** | `fvol` cards | 0 | **0 (0.0 % of frame)** | **74 rows (10.4 %, rows 517–590)** | — | ✗ → **`BL-327`** |
+| `deck tops` (`B15` box, y 0.62–0.90) | mixed | 221.2 | 208.7 | 157.2 (sd 42.03) | +51.5 | ⚠ not comparable |
+| `tops-L` / `tops-R` | mixed | 210.29 / 207.60 | 209.79 / 207.91 | 169.00 / 169.42 | — | ⚠ not comparable |
+
+**The two ⚠ rows are `C23`'s own `SHOT-23` finding, unchanged:** the original still's pitch puts
+its cloud-top line at y 0.70–0.80 where ours sits at y ≈0.50, so those boxes sample
+cloud-tops-against-dark-sky on the original side and solid sheet on ours (original sd 22.6–42.0
+against our 1.0–1.7). `tops-M` and the y ≥ 0.90 rows are the ones that sample the same object on
+both sides, and they are the rows above.
+
+**The one real miss, and its item.** `fogrun.py` asks a question that needs no pose match at all —
+*does this frame contain a dead-flat run at `FOG_COLOR` between the dome and the near sheet?* The
+original's does: **74 rows, mean 175.0, per-row sd ≤ 3**, rows 517–590. Ours contains **none**: our
+sheet steps from the dome straight to the card plateau 208.65 and never fogs, because `fvol` cards
+author `fog: false` (`C23` candidate 3, refuted as a thing to change — it is deliberate authored
+data) and our `far_fade` rim ends the field rather than fading it. This is residual 1 of the three
+`M-a` handed forward — the 1700 m far field (`tops-L`/`tops-R` +14.9/+29.0 over `t97`) — seen at
+the reference pose, and it is **`BL-327`'s** far-field half. It is a distance/fade question about
+the card population, not a brightness one: every brightness row above passes.
+
+**Per-population weight (`C23`'s bleed instrument, re-measured on this build).**
+`bleed.py`'s `WORLD_LIGHT = 0.802` divisor is now wrong above the band — `M-a` un-dims the floor
+there — so its raw 21.0 / 22.9 / 10.7 / 11.7 % correct to **16.8 / 18.4 / 8.6 / 9.4 %** for
+`tops-L` / `tops-R` / `tops-M` / whole lower 45 % (`C23` measured 13.6 / 14.4 / 6.2 / 7.3 with a
+dimmed floor). `BL-118`'s tops caveat therefore closes as **"81–91 % sprite, 9–19 % deck"**, the
+same shape `C23` found and not "100 % sprite".
+
+### `C26` at this pose — 83 pixels, and they are the right 83
+
+The above-deck frame is **not** bit-identical to `C23`'s `M-a` landing, and the difference is
+exactly what `C26` should be: `83 px (0.01 %), mean|d| 0.0000, max 1, rows 364–370` — a seven-row
+band at the horizon (row 360), the annulus seen edge-on from above the band. Every statistic in
+Table 2 that `C23fork` also measured reproduces its landed value **to the decimal** (card `p90`
+209.24, floor 213.35, gap −4.11, near-field 208.24 / 0.02, outboard `p1` 207.41), which is the
+`METHOD-3` check that this item measured the build `C26` left behind.
+
+### Goldens — the standing six, re-pinned, and nothing else moved
+
+`GOLD-8` first: the run before re-pinning reported **6 moved, 0 broken of 13**, and the six are the
+standing un-repinned set exactly — `C22`'s five (`c1-waterfall`, `c1-flight`, `c1-destroy-effects`,
+`c1c-rain`, `c2b-rain`) plus `C25`'s `c4-snow`. No unexpected mover; `viewer-bhawk` reported `ok`
+without hanging (`BL-320` did not bite). The `actual` hashes also confirm `C26`'s own claim: only
+`c1-waterfall` still carries `C23fork`'s recorded hash (`c81a000a…`), and the other five moved
+past it — which is `C26`'s "five of the six move further, `c1-waterfall`'s pose misses the strip",
+verified here rather than assumed.
+
+Re-pinned with `-RegenGoldens`; the diff is **six `hash` fields and nothing else** (`GOLD-1`: no
+re-pin prose in `exercises`). A clean full run then exits **0** — build PASS 0 warnings, units
+**683/683**, engine **26/26 errors clean**, goldens **13 hash-identical**.
+
+### `BL-118` closed — deleted from `backlog.md`
+
+Every half of it is landed or has a named successor:
+
+| half | outcome |
+|---|---|
+| the `CloudDeck` **mesh** underside, +54 too bright | **landed `C22`** — the deck was the one world surface the original dims by the mission SUNLIGHT and we did not (`lighting: false` gated it off); `170.6` against the original's `168.1`, and `C21`'s free-parameter fog fit recovers the same number from the original still's own fog ramp |
+| the mesh↔sprite **cut** from above | **landed via the `C23` fork's `M-a`** — regime-conditional dimming + the card `225/240` TUNE: card `p90` 222.7 → **209.24** against the original's 209, floor↔card gap **+49 → −4.11** |
+| the tops-from-above **caveat** ("re-measure per population") | **answered** — the boxes are 81–91 % sprite, 9–19 % deck (`C23`'s bleed instrument, re-measured above); they were never the 100 % sprite `C21`/`C22`'s flat mask read |
+| the whiteout's hardcoded white | **landed pre-plan**, commit `9b69568` — the authored `CLOUD_COVER` colour |
+| deck placement / the band / the regime | **landed** `A6`/`A7`/`C25`/`C26` |
+| **night-moonlit** puffs (`CAP-11` C1B) | split to **`BL-325`** per decision 2, with the evidence pointers and the three-population vocabulary carried over |
+| the `225/240` card plateau's undecoded mechanism | split to **`BL-327`**, together with the far-field residual above and the `lighting: true` gate question |
+| `PT-42` | already retired 2026-08-07; its successor at the controls is **`PT-47`** |
+
+References repointed rather than left dangling: `docs/architecture.md` (the stale "belongs to Wave
+C" ⚠ deleted — it is landed), `docs/formats/weather.md` (→ `BL-325`; the C4 veil datum → `CAP-12`),
+`docs/formats/fogvol.md` (→ `CAP-12` / `BL-325`), `backlog.md`'s `BL-317` vocabulary pointer
+(→ `BL-325`), plus three comments in `WeatherRig.cs`, two in `Weather.cs` and one in
+`analysis/video-flight-calibration/extract.py`. `docs/verification.md` never cited it.
+`docs/HISTORY.md` and the archived plans keep their references — both are frozen history.
+
+### Files
+
+`.scratch/c24/` — `shoot.ps1` (nine shots + weather logs), `elev.py` (elevation-referenced bands
+and profiles), `popelev.py` (population by elevation band), `sheet.py` (the above-deck sheet by
+frame depth, through columns clean on BOTH sides), `fogrun.py` (the pose-independent
+fog-plateau test), `grid.py` (used to LOCATE the original's furniture before trusting a box — it
+found a dark instrument bar across the bottom ~2 % of the above-deck still that was not on
+record), `diff.py`, `sxs.py`, `delete_bl118.py`, `repoint_plan.py`, every PNG the tables cite, the
+two side-by-sides, and four `runtests-*.txt`. `analysis/goldens/manifest.json` (six hashes),
+`backlog.md` (`BL-118` deleted; `BL-325` + `BL-327` minted; `BL-317` repointed), `playtest.md`
+(`PT-47` + its new C1 flight-profile section), `PROJECT_CONTEXT.md` ("Current status"),
+`docs/architecture.md`, `docs/formats/weather.md`, `docs/formats/fogvol.md`,
+`docs/plans/plans.md` (this plan's row), and this file — `git mv`'d into `docs/plans/`, with its
+two `docs/formats/` links re-relativised. Comment-only, no behaviour: `CSVM/src/Session/WeatherRig.cs`,
+`CSVM/src/Flight/Weather.cs`, `CSVM/src/Effects/FogVolumeClutter.cs`, `CSVM/src/Mech3/FogVolumes.cs`,
+`CSVM/src/Mech3/WorldBuilder.cs`, `CSVM/src/Utils/Rng.cs`, `CSVM.Tests/RngTests.cs`,
+`analysis/video-flight-calibration/extract.py`, `analysis/fog-zone-survey/FINDINGS.md` — the last
+seven only because the plan's path changed under them.
+
+### The two side-by-sides, for the user
+
+- `.scratch/c24/final-river-sxs.png` — original | ours, labelled, both scaled to a common height,
+  nothing cropped.
+- `.scratch/c24/final-abovedeck-sxs.png` — the same for the above-deck pose.
+
+⚠ They are for the eye, not for a verdict (`SHOT-5`): every number above comes from the decoded
+pixels, never from the composite.
+
+### Original brief (kept for reference)
 
 **Goal.** The plan's exit: both reference views reproduced at the pinned poses and measured within
 the match bar; the follow-ups minted; `BL-118` closed and the plan archived.
@@ -4359,6 +4578,8 @@ PROJECT_CONTEXT "Current status" swapped to the next work with this plan archive
 **⚠ Traps.** If any region can't reach the bar without touching another wave's landed mechanism,
 that's a finding — record it and mint an item; do not re-open a landed wave inside the close-out
 commit.
+— *it bit once, at the river pose's terrain silhouette: closing that band needs the derived view
+direction moved, i.e. `A4` reopened. Recorded above with its numbers, not chased.*
 
 ⚠ **`C23`'s fork is TAKEN and LANDED (`M-a`, user 2026-08-09)** — see that section's
 `Fork resolved` block. `PT-42`(a) is therefore judgeable at the controls again rather than blocked:
@@ -4368,14 +4589,19 @@ What this item inherits instead is three named residuals, each with its numbers 
 1. **The 1700 m far field.** `tops-L`/`tops-R` sit **+14.9 / +29.0** over `t97` (were +20.1/+30.4).
    Our `far_fade` rim steps where the original ramps over ~240 rows — a distance/fade question, not
    a brightness one, and M-a neither fixed nor worsened it.
+   — *measured again at the pinned above-deck pose, framing-independently: the original carries 74
+   dead-flat `FOG_COLOR` rows there and ours carries 0. `BL-327`.*
 2. **C1C/C2B's three-tone split, which M-a WIDENS** (cloud-population spread 60.7 → 71.6; the deck
    floor goes from 19.8 *under* their cards to 32.1 *over* them). The candidate is the fifth one
    `C23` minted — whether `lighting: true` on a `Facade` cloud card is a `WorldLight` gate at all.
    It moves C1C/C2B/C5 and nothing about C1's two reference stills. **Mint it; do not guess it.**
+   — *minted as `BL-327`, with `PT-47`(d) as its at-the-controls half.*
 3. **The `225/240` card TUNE has no decoded mechanism** (`C23` refuted four candidates). It is a
    calibrated match to two measured original frames and is marked TUNE in the constant's own
    comment; anything that decodes the real mechanism REPLACES it.
+   — *carried into `BL-327` as the third question, with all four refutations as its traps.*
 
 Also inherited from `C23`: the goldens list to re-pin is **six**, not five — `C22`'s five plus
 `C25`'s `c4-snow`. M-a itself moved **none** of the thirteen (verified against a reverted-build
 golden run), so that list is unchanged by the landing.
+— *confirmed: six moved, 0 broken of 13, no unexpected mover.*

@@ -106,7 +106,7 @@ public static class Rng
     /// <see cref="NewSystemRandom(string)"/> when the set of things being drawn is itself a
     /// runtime computation over a coordinate space rather than a fixed walk over authored data —
     /// <c>FogVolumeClutter</c>'s map-edge continuation (A5,
-    /// docs/PLAN-overcast-match.md) is the first caller: the extension ring's cell count depends
+    /// docs/plans/PLAN-overcast-match.md) is the first caller: the extension ring's cell count depends
     /// on each kind's authored <c>far_fade</c>, so a shared sequential stream would silently
     /// reroll every surviving cell's placement if that bound, or the enumeration order, ever
     /// changed.</summary>
