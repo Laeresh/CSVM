@@ -125,17 +125,35 @@ rather than sparsity, matches the measured data chapter for chapter. The remake'
 uniform across the game and cannot be fixed by changing one constant.
 
 **Second, the ratios are suspiciously exact.** They are not scattered: they sit at 1.00, 1.41, 2.00
-and one 3.20. 1.41 is sqrt(2) to three digits, on three unrelated templates in two chapters
-(`filmblock1` 128/90.5, `parklot1` 32/22.6, `cliff1_sandtrans` 128/90.5). A sqrt(2) between a quad's
-axis-aligned XZ extent and its measured UV rate is what a **45-degree-rotated UV mapping** produces —
-the extent is measured along X/Z while the texture runs along the diagonal. That is a direct lead for
-A2's orientation question, and it says the answer there is unlikely to be "always axis-aligned".
-The exact-2 cases are the other candidate shape: a quad authored at twice the texture's repeat, i.e.
-the ground quad spans two texture tiles rather than one — which, if true, also changes what
-`FUN_004dd230`'s `fmod` wrap into `[0,1)` means for those templates, since two decoration groups
-would fold onto each other. **Both readings are inferences from a scalar rate and neither is
-established here** — A2 has the UV axes themselves and can settle which it is, or whether it is
-neither.
+and one 3.20. That is a structural mismatch, not measurement noise, and the shape of it is a lead for
+A2's orientation question.
+
+> ### ⚠ Corrected by A2 — both readings offered here were wrong
+>
+> This section originally proposed two explanations for the clustering: that 1.41 = sqrt(2) meant a
+> **45-degree-rotated UV mapping**, and that the exact-2 cases were **quads authored across two
+> texture repeats**. A2 measured the UV coordinates themselves and disproved both
+> ([`FINDINGS-A2.md`](FINDINGS-A2.md), "A1's two candidate readings, both settled here"). Neither
+> guess is a fact and neither should be carried forward.
+>
+> - **There is no 45-degree mapping anywhere in the install.** Every bearing on the sqrt(2)
+>   templates is 0 or 90 degrees. Those three templates are three of the **four non-square quads**,
+>   and their world tiling matches the quad *per axis, exactly*: `cliff1_sandtrans` 128x64 quad ->
+>   world 128.00/64.00; `filmblock1` 64x128 -> 63.99/128.00; `parklot1` 16x32 -> 16.00/32.00. The
+>   sqrt(2) is an artifact **of this table's own method**: `Period` is `max(extX, extZ)` while the
+>   measured rate is effectively a geometric mean `sqrt(extX*extZ)`, and on a 2:1 quad their ratio is
+>   exactly sqrt(2). It measured the statistic, not the data.
+> - **`parklot2` (32x16 quad -> world 32.00/16.00) is the fourth instance and is missing from the
+>   table above.** Its 1.16 ratio is this same artifact seen through a partly-degenerate world
+>   sample, not a distinct case.
+> - **The exact-2 cases are not double-span quads.** C1's `terpat02` spans exactly 0..1 (A2 checked
+>   all 32 templates; not one spans anything else), so `FUN_004dd230`'s `fmod` wrap folds nothing.
+>   The factor 2 is a genuine **world-vs-template scale mismatch** — the terrain is painted with the
+>   same texture at half the scale the template quad uses.
+>
+> **What survives, and it is the part that matters:** the factor-2 templates are C1's, the density
+> loss they imply is real, and C1 is exactly where the forest is reported too sparse. The headline
+> result of this item is unaffected. What died is only the mechanism this section guessed at.
 
 ## What this does NOT determine (per A1's own scope, and to head off overreading)
 

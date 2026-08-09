@@ -60,6 +60,8 @@ wrong. Assume the neighbouring ones are suspect too until checked.
 | 4 | `MinSlopeCos = 0.25f` — "steeper than ~75° grows no trees" (`Clutter.cs:78`) | An invention. The original's slope cull is authored per kind (`min_slope`/`max_slope` → cosines at kind+0x58/+0x5c, tested against the triangle normal's Y in `FUN_004dd6e0`) and **defaults to ±1.0, i.e. no cull at all**. No chapter's `templates.zrd` authors either key. This constant is silently deleting hillside trees today. |
 | 5 | `BL-305`'s "prime suspect: `ClutterBuilder` tiles each template on a fixed world-space X/Z grid" | No longer a suspect — confirmed as the mechanism. The entry's own wording predates the decode. |
 | 6 | (Mine, earlier this session) "C3 has the suburbs" | C3 registers exactly one template, `cliff1_sandtrans`. **C2** carries the suburbs (`resblock1-6`, `filmblock1-5`, `parklot1/2`, `parkpat`). Corrected against `extracted/interp.json`; the full census is below. |
+| 7 | (Mine, from A1's ratios) "√2 in the quad-vs-world ratios means a 45°-rotated UV mapping", and "the exact-2 cases are quads spanning two texture repeats" | A2 read the UV coordinates themselves: **no 45° mapping exists anywhere in the install** (every bearing on those templates is 0° or 90°) and **every quad spans exactly 0..1**. The √2 was an artifact of A1's own statistic — a max-extent `Period` compared against a geometric mean, on a 2:1 quad. Passed to A2 as a flagged lead, not a finding, and killed there. |
+| 8 | "B11 can land as a provably inert, behaviour-preserving step" (this plan's own B11, as written) | True for 28 of the 32 templates, false for four: the current scalar `Period` genuinely misplaces `filmblock1`, `cliff1_sandtrans`, `parklot1` and `parklot2` by up to 0.74 UV. B11 is amended to predict exactly which four move. |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
@@ -183,7 +185,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Ground truth (measure before changing anything)
 
 1. ☑ Measure C1's `terpat02` UV repeat in world metres against the 512 m grid constant
-2. ☐ Verify the template ground quad's UV parameterisation and the UV→world orientation
+2. ☑ Verify the template ground quad's UV parameterisation and the UV→world orientation
 3. ☐ Census the world's clutter-eligible polygons: layers, UV coverage, coplanar overlaps
 
 ### Wave B — The placement rewrite
@@ -252,10 +254,14 @@ missing or malformed UV array.
    templates and all of C5's city blocks are correct; **every C1 template is off by exactly 2**
    (`terpat02` 512/259.6, `river1` 256/128.2, `river2` 256/128.0, and C1B's `rockclut` 256/126.6) —
    a clean 4× density loss, which is why C1 is the chapter the user noticed. Three unrelated
-   templates in two chapters sit at √2 (`filmblock1`, `parklot1`, `cliff1_sandtrans`), which is what
-   a **45°-rotated UV mapping** produces. One outlier: C2's `parkpat` at 3.20 (512/159.9), a 10.2×
-   loss. The √2 and exact-2 readings are inferences from a scalar and were handed to A2 as leads,
-   not conclusions.
+   templates in two chapters sit at √2 (`filmblock1`, `parklot1`, `cliff1_sandtrans`); one outlier,
+   C2's `parkpat`, at 3.20 (512/159.9) — a 10.2× loss.
+   **⚠ Corrected by A2.** This item read the √2 as a 45°-rotated UV mapping and the exact 2 as a quad
+   spanning two texture repeats. Both were handed to A2 as leads and **both are disproven**: there is
+   no 45° mapping anywhere in the install, and every quad spans exactly 0..1. The √2 was an artifact
+   of this item's own statistic (`Period` = max extent, compared against a geometric mean, on a 2:1
+   quad). What survives is the C1 factor-2 density loss, which is real and is a world-vs-template
+   scale mismatch.
 
 **⚠ For Wave B.** The remake's error is **not uniform across the game** and cannot be corrected by
 changing one constant — C2, C4 and C5 are already right and must not move. Any Wave B change that
@@ -302,7 +308,65 @@ be near zero on degenerate polygons — clamp and report the count you dropped r
 silently (DIAG-15). (d) This number is not by itself the density ratio: the remake's `seen` dedup and
 `MinSlopeCos` also remove instances. Report the UV figure alone and let A3/B13 account for the rest.
 
-## A2 ☐ Verify the template ground quad's UV parameterisation and the UV→world orientation
+## A2 ☑ Verify the template ground quad's UV parameterisation and the UV→world orientation
+
+**Landed** (`analysis/bl-305-clutter-uv/uv_orient.py` + `FINDINGS-A2.md`). **Wave B is not blocked.**
+
+**(i) Every template ground quad spans exactly 0..1 in both UV axes — all 32 that resolve,
+install-wide.** So `FUN_004dd230`'s `fmod` wrap folds nothing and does mean "fractional position
+across the quad". Trap (b) of this item is closed: it does not bite. Every quad is flat, one polygon,
+four corners, normal +Y — but the corner *winding* differs between templates, so anything keying off
+"corner 0" rather than off the UVs reads two quads inconsistently.
+
+**(ii) A world polygon's UV axes are axis-aligned (~95 %) but NOT consistently oriented, and it does
+not matter.** C1's `terpat02` uses eight frames, dominated by +U → world **+Z**, +V → world **−X** at
+69.6 % — a 90° rotation from the template quad — with handedness split 1,441 mirrored / 1,538 not.
+C5's `cblock1` is 97.7 % identity and 100 % one handedness. **No rule predicts the frame, and none is
+needed:** `FUN_004dd6e0` steps 4–7 never reference a world axis. The clutter rotates, mirrors and
+stretches *with the ground texture*, which is the whole intent — a building sits in its painted block
+wherever that block lands.
+
+That is also why `match_footprints.py` could not have succeeded: it compared decoration positions to
+the painted texture in **world** metres, and the world frame is not the frame the positions live in.
+The mapping was never missing; it is per triangle, and there are 2,979 of them for `terpat02` alone.
+
+**Verified.** METHOD-9 on the instrument itself: a synthetic quad is fed three ways — plain, U/V
+swapped, V-flipped — and the three must report different answers, so a script blind to the UVs would
+fail its own check. METHOD-11 honoured: the flat/gentle/sloped split changes the answer (a flat-only
+sample of `terpat02` reads 73.6 % for the dominant frame; the sloped population reads 53.6 % with
+12.5 % off-axis), so concluding "consistent" from either alone would have been wrong. METHOD-1 worked
+example below, hand-computed and matched.
+
+**The worked example, for B12's test case.** C1 node 5909 `firtree1.flt` at local
+(106.862, 0, 66.780) → quad UV (0.708715, 0.630430), wrap a no-op. Stamped on C1 node 2911 `g777`,
+model 953, poly 3, tri 5: affine **A = (0, 0, 256)** per +1 U, **B = (−256, 0, 0)** per +1 V; lattice
+uInt ∈ {0,1}, vInt ∈ {0,1} → 4 candidates, 1 inside → world **(−9377.390, 128.000, −3402.569)**. Hand
+arithmetic and script agree; the affine route and an independent barycentric route agree to 1.8e-12 m.
+
+**⚠ Two findings that change Wave B — both folded into B11 and B12 below.**
+
+1. **`GroundInfo`'s scalar `Period` is wrong on 4 of the 32 templates**, so **B11 is not a pure
+   refactor**. On 28 templates `(origin − min corner) / Period` is an exact relabelling of the quad UV
+   (float noise, 1.1e-16). On `filmblock1` (64×128), `cliff1_sandtrans` (128×64), `parklot1` (16×32)
+   and `parklot2` (32×16) it is not — `Period` = max extent applies the long side's scale to both
+   axes, and `parklot1/2` are additionally **UV-mirrored**. Worst error 0.74 UV. `Period` must be
+   replaced by the quad's own two-axis **signed** UV→local map, not a scalar.
+2. **A zero-area *world* triangle can carry a nonzero *UV* area** — fan artifacts of n-gons with
+   repeated or collinear corners. Their affine map is finite but meaningless (both axes collapse onto
+   a line); leaving them in inflated C1's metres-per-U maximum from 561 m to 32,768 m. A UV-area guard
+   alone does not catch them.
+
+**Also settled:** not one decoration in the whole install fails to project onto its quad, so
+`FUN_004dd230`'s "does not project to polygon" error path is never exercised by retail data — still
+implement it as skip-and-log, but no chapter tests it. And **there is no global "the clutter grid
+starts here" origin** in the original; `Clutter.cs:339-348`'s `gx * period` world grid is a fiction
+with no counterpart.
+
+**Not determined.** That mech3ax's `uv_coords` are byte-identical to the array `FUN_004de2c0` reads
+is inherited from `docs/formats/gamez.md:9`, strongly corroborated but not re-derived. Whether the
+four mis-parameterised templates visibly misplace anything today needs a build — B11's A/B shows it.
+
+### Original approach (kept for reference)
 
 **Goal.** Establish, for at least one `terpat` template and one `cblock` template, (i) what UV range
 the ground quad's own vertices span, and (ii) whether a world polygon's UV axes correspond to its
@@ -390,20 +454,31 @@ the negative branch, which maps to `1 − frac`). The remake's equivalent is `Pa
 `Clutter.cs:498-502`, which subtracts the quad's min corner in metres, and `GroundInfo` at `:569-583`,
 which produces the scalar `Period` that becomes meaningless here.
 
-**Approach.** Rewrite `GroundInfo` to return the quad's UV-to-local affine map instead of
-`(Period, Min)`; rewrite the `cell` construction in `ParseTemplate` to project and wrap. Keep
-`Template.Period` alive only if A2 finds a use for it — otherwise delete it and the comment at
-`:928` with it. Land this as a **behaviour-preserving** step by having `PlaceOnTriangle` convert the
-UV back to metres via the old rule, so the build output is byte-identical and the diff is provably
-inert before B12 changes what it means.
+**Approach.** Rewrite `GroundInfo` to return the quad's **two-axis signed UV→local affine map**
+instead of `(Period, Min)` — A2 established that a scalar cannot describe four of the 32 templates —
+and rewrite the `cell` construction in `ParseTemplate` to project and wrap. **Delete
+`Template.Period` and the comment at `:928`**: A2 found no remaining use for it.
+
+**⚠ Amended after A2 — this item is NOT behaviour-preserving.** The plan originally called for
+landing it as a provably inert step with byte-identical output. That is achievable on 28 of the 32
+templates and *impossible* on the other four, because the current scalar rule genuinely misplaces
+them: `filmblock1` (64×128 quad), `cliff1_sandtrans` (128×64), `parklot1` (16×32, UV-mirrored) and
+`parklot2` (32×16, UV-mirrored), worst error 0.74 UV. So the shape of the step becomes: **the
+28 square, unmirrored templates must be byte-identical, and exactly four templates — C2's parked
+Studebakers and film-lot buildings, C3's palms — must move.** Anything else moving is a bug. State
+that split before running the A/B, not after (METHOD-12).
 
 **Model recommendation.** high. Small diff, high blast radius: this is the coordinate-system change,
-and a sign or transpose error here surfaces as a plausible-looking city three items later.
+and a sign or transpose error here surfaces as a plausible-looking city three items later. The
+mirrored quads make the sign load-bearing.
 
 **Verify.** METHOD-10 applies with force — a check that passes a no-op does not verify the change.
-So: (i) the per-kind `Summary` counts and a golden screenshot must be **identical** to `main` for
-C1 and C5, proving the conversion is lossless; and (ii) deliberately perturb one decoration's stored
-UV by 0.25 and show the golden *does* move, proving the check could have failed (METHOD-9).
+So: (i) per-kind `Summary` counts and goldens **identical** to `main` for C1, C4 and C5, whose
+templates are all in the unaffected 28; (ii) C2 and C3 change, and the changed instances must be
+exactly the four templates named above and no others; and (iii) deliberately perturb one
+decoration's stored UV by 0.25 and show a golden *does* move, proving the check could have failed
+(METHOD-9). A2's worked example (C1 node 5909 on node 2911 `g777` poly 3 tri 5 → world
+(−9377.390, 128.000, −3402.569)) is the unit test.
 
 **⚠ Traps.** (a) The `fmod` negative branch matters: `FUN_004dd230` maps a negative coordinate to
 `1 − frac`, and additionally collapses the exact-1.0 result to 0.0. Reproduce both, including that
@@ -442,7 +517,12 @@ containment test that is subtly wrong produces trees in the sea.
 
 **⚠ Traps.** (a) A triangle whose UV span is huge (a stretched hillside) makes the integer lattice
 loop enormous; the original has the same exposure, but bound it and **log** what you bounded rather
-than truncating silently (LOG-5). (b) A zero-area UV triangle must be skipped, not divided by. (c)
+than truncating silently (LOG-5). (b) A zero-area UV triangle must be skipped, not divided by —
+**and, per A2, that guard is not sufficient on its own: a zero-area WORLD triangle can carry a
+nonzero UV area** (fan artifacts of n-gons with repeated or collinear corners; 1,655 of them on C1's
+`terpat02` alone). Its affine map is finite but meaningless — both axes collapse onto a line, which
+is what inflated A2's first metres-per-U maximum from 561 m to 32,768 m. **Test both areas, and
+count what you skip.** (c)
 The affine UV→world map is only valid within the triangle — do not reuse one triangle's map for a
 neighbour. (d) `ExtraCullMargin`, `node_bias` and the shared collision shapes all read from
 `kind.Instances` and keep working unchanged; if any of them breaks, you have touched the rendering
