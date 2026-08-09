@@ -913,10 +913,11 @@ public partial class GameSession : Node3D
             // built data rather than hardcoded — above the cloud band Tick now leaves the deck
             // here instead of re-pinning it to the CLOUD_COVER band centre.
             _weatherRig.SetDeckAltitude(builder.CloudDeckAltitude);
-            // A2's plumbing: hand the rig the chapter's own fog-volume census + whether its
-            // fogvol.zrd arms fog_zone, so Tick can resolve each camera's weather state (1/2/3).
-            // Ships dark — nothing reads WeatherRig/PlayerRig.CameraWeatherState yet.
-            _weatherRig.SetFogVolumes(fogVolumes, fogVolumeSpec?.FogZoneArmed ?? false);
+            // A2/C21: hand the rig the chapter's own fog-volume census and its parsed fogvol.zrd —
+            // the same pair the cloud field above was built from, handed to a second consumer
+            // rather than re-loaded. Tick resolves each camera's weather state (1/2/3) from it and,
+            // where fog_zone is armed (C5 alone), its in-volume whiteout too.
+            _weatherRig.SetFogVolumes(fogVolumes, fogVolumeSpec);
             // The horizon's zone children go in with the mission's weather: the zone the fog and
             // the dome share is picked from both (three chapters ship an empty zone2).
             _weatherRig.Build(state.MissionZrdrPath, _rigs, builder.HorizonZones(),

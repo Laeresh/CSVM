@@ -167,7 +167,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — C5 fog volumes
 
-21. ☐ In-volume whiteout (approach/interior ramps, union, `fog_color`)
+21. ☑ In-volume whiteout (approach/interior ramps, union, `fog_color`)
 22. ☐ ZONE3 fog while inside a volume
 
 ### Wave D — Residuals & polish
@@ -934,7 +934,105 @@ reinstate a Y-only scale without a measurement that beats B14's angular argument
 
 # Wave C — C5 fog volumes
 
-## C21 ☐ In-volume whiteout (approach/interior ramps, union, `fog_color`)
+## C21 ☑ In-volume whiteout (approach/interior ramps, union, `fog_color`)
+
+**Landed (2026-08-09).** `Mech3.FogVolumeWhiteout` is the rule — pure, off-engine, unit-tested —
+and `WeatherRig.Tick` its only consumer. Per rig per frame, when the chapter arms `fog_zone` (C5
+alone), every volume's density comes off ONE signed distance through the two decompiled ramps and
+the volumes union as `a + b − a·b`; the result is blended onto the same full-screen overlay the
+`CLOUD_COVER` band whiteout uses (Decision 6). `SetFogVolumes(volumes, spec)` now hands the rig the
+whole parsed `fogvol.zrd` instead of one bool — same call site, same load, a second consumer.
+
+**⚠ C5's authored values are NOT the engine defaults the plan quoted, and the difference is the
+whole character of the effect.** `extracted/C5/zrdr/fogvol.zrd.json`: `fog_fade_dist` **16**,
+`interior_fog_fade_dist` **16**, `fog_color` **[16,16,16]** — against the loader's 400/20 and a
+default of `CLOUD_COVER TOP_COLOR`. So the approach ramp is 16 m (roughly one frame at flight
+speed, a hard curtain by authoring rather than by our implementation), and the "whiteout" is very
+nearly a **BLACKOUT** — the same 16 C5's `ZONE3` `FOG_COLOR` carries, which makes the hand-off to
+`C22` colour-continuous. The defaults are stated in `FogVolumeWhiteout` for a chapter that arms
+without authoring; no shipped chapter is in that state.
+
+**The exterior-distance helper, and why the face planes were not enough.**
+`FogVolumeBox.SignedDistance` is the max over the outward face planes — the binary's own
+outside-positive/inside-negative number. Inside it is EXACT and it is the distance to the boundary
+(for a convex polytope the nearest wall is the least-negative plane), so the interior ramp needs no
+geometry beyond it. Outside it is only a LOWER BOUND: it is exact where the closest point sits in a
+face's own Voronoi region and understates the distance near an edge or a corner — measured on the
+test cube, **29 % low on an edge and 42 % low at a corner**, which would have made the curtain fire
+a third too strongly on every street corner in C5.
+
+`FogVolumeBox.ExteriorDistance` is therefore a real projection: **Dykstra's alternating projection**
+onto the face half-spaces — cyclic projection *with* the per-set correction term, which converges to
+the projection onto the intersection where plain POCS (no correction) reaches only *some* point of
+it. **Exactness is iterative and bounded rather than assumed**: the loop stops when a whole cycle
+moves the point under 1e-4 m (four orders under the 16 m ramp it feeds), capped at 64 cycles; a set
+of mutually orthogonal half-spaces — an axis-aligned box — is exact after one cycle. It is pinned
+against closed-form answers in the tests (box face/edge/corner, and a 45°-rotated prism where the
+side planes are not orthogonal and one pass is provably not the answer). Allocation-free: the
+corrections are a 32-entry `stackalloc`, against the widest shipped volume's 5 distinct planes, and
+`Tick` only pays for the projection at all when the cheap bound is already inside the ramp.
+
+**Blend order (the item's one TUNE, and it is unmeasurable in shipped data).** Band and volume
+whiteout union with the same `a + b − a·b`, volume composited OVER band (it is the nearer air):
+union alpha, each layer's colour weighted by its share of it. They never coexist in the install —
+C5's band is at 9950–10150 m, ~9.8 km above its highest street strip — so this is a union rather
+than a pick only so a future chapter authoring both cannot silently lose one. A zero volume density
+takes the pre-C21 path verbatim, which is what makes the seven disarmed chapters byte-identical by
+construction.
+
+**Verify — tests.** `.\RunTests.ps1`: **816 units** (0 failed, 0 skipped, `CSVM_DATA_ROOT` set, up
+18), **29/29** engine suites, engine errors clean, and **all 13 goldens hash-identical to the
+committed manifest**. New `CSVM.Tests/FogVolumeWhiteoutTests.cs` (11 methods, 18 cases — exactly
+the +18): the approach ramp at
+the wall / quarter / half / exactly at fade / far beyond; the interior decay at the wall / half
+depth / at the decay depth / deep inside, **plus an explicit order assertion that an inverted ramp
+would fail** (the ⚠ trap, METHOD-9); penetration measured to the NEAREST wall rather than the
+farthest (a 40 m slab — the reading that would render nothing anywhere); zero-length ramps neither
+dividing by zero nor painting the world; the two-volume union at 0.5+0.5 → **0.75**, a case that
+separates union from "take the nearer" (0.5) and from "add" (1.0) at once; a disarmed chapter
+reading 0 while standing inside a volume; the colour normalised 0–255 and a null one deferring to
+the mission; `ExteriorDistance` against closed-form box and rotated-prism distances with
+`SignedDistance` beside it as the able-to-fail half; and the per-chapter arm census from the
+extraction (seven disarmed, C5 `armed|17|16|16|101010`).
+
+**Verify — the golden prediction, made before the run and pinned in a test.** The only golden in a
+`fog_zone` chapter is `c5-city-night` (`--pos=-9256,178,-3155`). Its camera stands **1,797.7 m**
+from the nearest C5 volume — **112× the 16 m ramp** — so the predicted movement was zero, and the
+outcome is zero: hash-identical, as are the other twelve. The test
+`TheC5CityNightGoldenSitsFarOutsideEveryVolumeSoC21CannotMoveIt` keeps that measurement, so a data
+change fails loudly there instead of moving a golden nobody re-attributes.
+
+**Verify — probes** (`.scratch/c21/`, `--freecam --chapter=C5 --det --mute --no-zone-cull
+--frames=3`; "before" = the same build with the volume term forced to 0, rebuilt, then restored and
+rebuilt — `git diff` clean, METHOD-16/17). A **vertical** approach at `(-2000, y, -1792)` onto a
+street strip whose authored top is 183 m, rather than a horizontal one: C5's strips tile most of
+the city, so a horizontal "outside" pose is really inside a *neighbouring* strip, and only from
+above is the camera genuinely clear of every volume. `--no-zone-cull` is the isolation switch —
+crossing into a volume also flips the camera to state 3, whose `zone_id` gate (B12, already
+shipped) would otherwise swap the whole scene's content underneath the measurement.
+
+| pose | logged density | frame mean before → after | predicted (sRGB) | frame sd | px differ |
+|---|---|---|---|---|---|
+| `y 210` — 27 m above, past the ramp | 0.000 | 17.76 → 17.76, **byte-identical** | 17.76 | 18.38 → 18.38 | **0** |
+| `y 191` — 8 m above = half the ramp | **0.500** | 18.53 → **17.29** | **17.26** | 18.84 → **9.54** | 72.51 % |
+| `y 182` — 1 m inside the wall | **0.937** | 17.85 → **16.06** | **16.12** | 5.08 → **0.33** | 51.32 % |
+| C1 river `-7325,192,-3829` (`fog_zone` 0) | — | 110.65 → 110.65, **byte-identical** | — | 57.98 → 57.98 | **0** |
+
+Three things fall out of that table beyond "it works". (a) The logged 0.937 is `(16−1)/16` to three
+places, so the interior ramp is the decompiled constant and not a fit. (b) The interior frame's
+standard deviation of **0.33** is the "near-full whiteout in `fog_color`" claim measured: at 1 m in
+the frame is flat 16. (c) The predictions are the **sRGB-byte** composite `(1−a)·frame + a·16`; a
+LINEAR-space composite predicts 18.22 at the half pose against the measured 17.29, so the overlay
+demonstrably blends in the framebuffer's own space — which is what a `ColorRect` on a `CanvasLayer`
+does, and is why this colour is deliberately NOT linearised the way `ApplyFogGlobals`' are
+(METHOD-1: the case separates the two spaces by 30× the residual).
+
+**Verify — at the controls: owed, not skipped.** No capture on record flies C5 at street level at
+all, so `CAP-36` is minted in `playtest.md` (low pass in, dwell, exit). ⚠ Nothing here is tuned
+against it and nothing may be: the ramps and the colour are decompiled constants, so the capture
+confirms or refutes them rather than calibrating them.
+
+**Original approach (kept for reference).**
 
 **Goal.** Flying at C5's street haze produces the original's whiteout: opacity ramps up over the
 last `fog_fade_dist` metres of approach, peaks at the wall, decays over `interior_fog_fade_dist`

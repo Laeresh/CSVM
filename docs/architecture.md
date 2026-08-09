@@ -699,11 +699,31 @@ off-engine (`CSVM.Tests/FogVolumeTests.cs` pins all eight chapters).
 ⚠ **Neither half alone says whether a chapter has clouds.** C1B/C2/C3 ship a reader file naming a
   `cloudsprite` template no gamez carries, AND no `fvol*` node, AND no `clutter` key. The parser
   deliberately reads their keyless block anyway so the empty result is a proven lookup failure.
-⚠ `fog_zone` (and C5's `fog_color`/`*_fade_dist`) are read and reported. It is NOT the sky/fog zone
-  selector — `docs/HISTORY.md`'s "no chapter has a `fog_zone` key" is a wrong negative (five do),
-  but the values do not name a weather zone either; see fogvol.md. `BL-277`'s geometry rule
-  stands. `FogZoneArmed` (`FogZone != 0`, `PLAN-weather-decompile-match` A2, `FUN_0044e010`) is
-  its first consumer — `WeatherState.CameraWeatherState`'s state-3 gate, true only for C5.
+⚠ `fog_zone` is NOT the sky/fog zone selector — `docs/HISTORY.md`'s "no chapter has a `fog_zone`
+  key" is a wrong negative (five do), but the values do not name a weather zone either; see
+  fogvol.md. `BL-277`'s geometry rule stands. It is a BOOL: `FogZoneArmed` (`FogZone != 0`,
+  `FUN_0044e010`) drives `WeatherState.CameraWeatherState`'s state-3 gate (A2) and
+  `FogVolumeWhiteout` (C21), and is true only for C5.
+⚠ **`FogVolumeWhiteout` is the in-volume whiteout RULE** (`PLAN-weather-decompile-match` C21,
+  `FUN_0044e6f0`): the chapter's `fog_fade_dist`/`interior_fog_fade_dist`/`fog_color` plus its
+  volumes, answering one 0..1 density for a camera position. Pure, off-engine, unit-tested
+  (`CSVM.Tests/FogVolumeWhiteoutTests.cs`); `Session/WeatherRig.Tick` is the only consumer.
+  Approach ramp OUTSIDE (0 at `fog_fade_dist` → 1 at the wall), decay INSIDE (1 at the wall → 0 at
+  `interior_fog_fade_dist` deep), union `a + b − a·b`. ⚠ The interior half reads backwards alone —
+  the volume is a transition curtain and `ZONE3`'s fog (`C22`) carries the interior look; do not
+  invert it. `Disarmed` is the seven other chapters, and it short-circuits before touching geometry.
+⚠ **Two distances, and they are not interchangeable.** `FogVolumeBox.SignedDistance` is the max
+  over the face planes — EXACT inside (for a convex polytope the nearest wall is the least-negative
+  plane, so `−SignedDistance` is the penetration depth) but only a LOWER BOUND outside.
+  `FogVolumeBox.ExteriorDistance` is the true Euclidean distance to the hull, by **Dykstra's
+  alternating projection** over the face half-spaces — cyclic projection *with* the per-set
+  correction term, which converges to the projection onto the intersection where plain POCS reaches
+  only some point of it. Exactness is iterative (a whole cycle moving under 1e-4 m, capped at 64
+  cycles; an axis-aligned box is exact in one), and the tests pin it against closed-form distances
+  where the face planes alone are 29 % low on a box edge and 42 % low at a corner. Allocation-free:
+  the corrections are a `stackalloc` of 32 entries, far above the widest shipped volume's 5 planes.
+  `Tick` only pays for it when the cheap bound already lands inside the ramp — at C5's 16 m, almost
+  never.
 ⚠ A volume is NOT the `CLOUD_COVER` band: only C1's floor coincides, and C1C/C4/C5 all disagree.
 ⚠ `FindMapSpanningSlab` (A5) is the data-driven test for "does this chapter have a map-spanning
   slab to continue past the map edge" — never a chapter name or a hardcoded `fvol1..9`. A volume
@@ -3564,12 +3584,41 @@ null guard covers the frame before that deferred free lands (it can never be nul
 resolves the rendered zone from BOTH the mission's zone names and the horizon's geometry
 (`BL-277` — see `Flight/Weather.cs`). `_activeZone` is the single answer both the fog and the dome
 are built from, and it is logged with the meshed counts it was decided on.
-⚠ `SetFogVolumes(volumes, fogZoneArmed)` (`PLAN-weather-decompile-match` A2) is called separately
+⚠ `SetFogVolumes(volumes, spec)` (`PLAN-weather-decompile-match` A2/C21) is called separately
   from `Build`, same reason as `SetDeckCenter`: the fog-volume census is chapter/world data
   (`GameSession`'s own `FogVolumeSpec.VolumesOf`/`Load`), not mission weather. `Tick` feeds both
   it and the resolved `WeatherState` into `WeatherState.CameraWeatherState` once per rig, per
   frame, publishing the result onto `PlayerRig.CameraWeatherState` (logged only on a change, at
-  debug verbosity). Never calling `SetFogVolumes` at all just keeps every camera at state 1/2.
+  debug verbosity). Never calling `SetFogVolumes` at all just keeps every camera at state 1/2 and
+  every frame's volume whiteout at 0.
+⚠ **The whiteout overlay is ONE surface with TWO sources** (`C21`, 2026-08-09, Decision 6): the
+  `CLOUD_COVER` band's altitude whiteout, and — where the chapter arms `fog_zone` — the `fvol`
+  volumes' own curtain (`Mech3.FogVolumeWhiteout.Density`, evaluated per rig per frame from that
+  camera's position). Screen-space, because that is the original's own mechanism: `FUN_0042ee40`
+  computes ONE camera-space density per frame and blends the frame with it; it never builds
+  per-volume fog meshes, and re-deriving one would be a different renderer, not a fidelity fix.
+  - **They union** (`a + b − a·b`, the binary's own between-volume combiner) with the volume
+    curtain composited OVER the band — union alpha, each layer's colour weighted by its share.
+    ⚠ **Unmeasurable in shipped data and deliberately so**: C5 is the only chapter arming
+    `fog_zone` and its band sits at 9950–10150 m, ~9.8 km over its highest street strip. A union
+    rather than a pick, so a future chapter authoring both cannot silently lose one.
+  - **A zero volume density takes the pre-C21 path verbatim**, which is what makes the seven
+    disarmed chapters byte-identical by construction rather than by measurement.
+  - **The colour is `fogvol.zrd`'s `fog_color`**, defaulting to the mission's `CLOUD_COVER`
+    `TOP_COLOR` (`FUN_0044e010`) and then to `WhiteoutFallbackColor`. ⚠ It is a framebuffer (sRGB)
+    value and is NOT linearised: this paints a `ColorRect`, not a shader input, unlike everything
+    `ApplyFogGlobals` writes. Measured rather than assumed — at C5's half-ramp pose the sRGB-space
+    composite predicts 17.26 against a measured 17.29, the linear-space one 18.22.
+  - ⚠ C5's `fog_color` is `[16,16,16]`, so this "whiteout" is nearly a **blackout**, matched to its
+    own `ZONE3` `FOG_COLOR` of 16 — and its ramps are 16 m each, not the engine's 400/20. Do not
+    read a dark C5 street transition as a bug.
+  - The overlay is now built for `HasCloudBand` **or** an armed `fog_zone`, so a chapter that armed
+    one without authoring the other would still have a surface to paint on. No shipped chapter is
+    in that state; the condition exists so the two cannot drift.
+  - `fvol whiteout: armed — N volume(s), approach … interior decay … colour …` prints once per
+    session (C5 only), and `Tick` logs the density at debug on each 0 ↔ non-0 crossing and each
+    0.05 move — the evidence a probe reads, since a curtain that never fires and one that fires at
+    0.02 are the same picture in a night frame.
 ⚠ **The FOG follows that state; the DOME does not** (`PLAN-weather-decompile-match` B11,
   2026-08-09, `FUN_00472ea0`). After the per-rig loop, `Tick` hands rig 0's state to
   `FogStateTrigger.Next`, which resolves `WeatherState.ZoneForState(state)` (state *n* →

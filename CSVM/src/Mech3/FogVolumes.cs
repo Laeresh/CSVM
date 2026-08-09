@@ -30,6 +30,18 @@ public readonly record struct FogVolumeBox(string Name, Aabb Box, IReadOnlyList<
     // scale (coordinates to 16 km) is four orders of magnitude below this.
     private const float Slack = 0.05f;
 
+    // ExteriorDistance's projection loop. The tolerance is a whole cycle's movement, in metres:
+    // 1e-4 is four orders below the tightest authored ramp this feeds (C5's 16 m fog_fade_dist),
+    // so the ramp cannot see it. 64 cycles is a guard against a pathological shape, not the usual
+    // exit — an axis-aligned box converges in one and every shipped volume in a handful.
+    private const float ProjectionTolerance = 1e-4f;
+    private const int MaxProjectionCycles = 64;
+
+    // How many face planes ExteriorDistance keeps its corrections on the stack for. The widest
+    // shipped volume is far under this (C1C's fvol9 is the busiest at 5 distinct planes over 55
+    // polygons), so no shipped chapter ever takes the heap fallback.
+    private const int MaxStackFaces = 32;
+
     /// <summary>Is this world point inside the authored volume?
     ///
     /// <para>A half-space test over the mesh's own faces, which is EXACT here rather than an
@@ -47,6 +59,113 @@ public readonly record struct FogVolumeBox(string Name, Aabb Box, IReadOnlyList<
             }
         }
         return true;
+    }
+
+    /// <summary>The binary's own outside-positive / inside-negative distance to this volume
+    /// (<c>FUN_0044e6f0</c>): the largest signed distance to any face plane.
+    ///
+    /// <para><b>Inside it is EXACT and it is the distance to the boundary</b> — for a convex
+    /// polytope the nearest wall is the least-negative face plane, so <c>-SignedDistance</c> is the
+    /// penetration depth <see cref="FogVolumeWhiteout"/>'s interior ramp decays over. <b>Outside it
+    /// is only a LOWER BOUND</b> on the Euclidean distance (the body lies inside every one of its
+    /// half-spaces, so the distance to the body is at least the distance to any of them), which is
+    /// exact only when the closest point lies in that face's own Voronoi region and understates it
+    /// near an edge or a corner — that is what <see cref="ExteriorDistance"/> is for, and why the
+    /// two are separate methods rather than one signed number.</para>
+    ///
+    /// <para>A volume with no face planes at all (a degenerate flat shape — <c>OutwardFaces</c>
+    /// returns nothing when the vertex centroid lies on every polygon) answers
+    /// <see cref="float.MaxValue"/>: it has no wall to ramp from, so it whiteouts nothing. No
+    /// shipped volume is in that state; <see cref="Contains"/> would call such a shape "inside
+    /// everywhere", so the two deliberately differ rather than propagating it.</para></summary>
+    public float SignedDistance(Vector3 point)
+    {
+        if (Faces.Count == 0)
+        {
+            return float.MaxValue;
+        }
+        float worst = float.MinValue;
+        foreach (var face in Faces)
+        {
+            float d = face.DistanceTo(point);
+            if (d > worst)
+            {
+                worst = d;
+            }
+        }
+        return worst;
+    }
+
+    /// <summary>The Euclidean distance from an OUTSIDE point to this volume's authored shape —
+    /// 0 for a point inside it. The quantity <c>FUN_0044e6f0</c>'s approach ramp runs over.
+    ///
+    /// <para><b>Method: Dykstra's alternating projection onto the face half-spaces.</b> The volume
+    /// is the intersection of its outward face half-spaces (exact, because every one of the 65
+    /// shipped <c>fvol*</c> volumes is convex — the same property <see cref="Contains"/> rests on),
+    /// and Dykstra's algorithm — cyclic projection with a per-set correction term — converges to
+    /// the projection onto an intersection of closed convex sets, unlike plain cyclic projection
+    /// (POCS), which only reaches *some* point of it. So this is the true closest point on the
+    /// convex hull, not a face-plane approximation: the half-space distances alone
+    /// (<see cref="SignedDistance"/>) understate it wherever the nearest point is on an edge or a
+    /// vertex.</para>
+    ///
+    /// <para><b>Exactness is iterative, and bounded rather than assumed.</b> For a set of mutually
+    /// orthogonal half-spaces (an axis-aligned box — C1/C2B/C4's slabs and two of C5's strips) one
+    /// cycle is already exact, and the loop stops on the next. Otherwise it runs until a whole
+    /// cycle moves the point less than <see cref="ProjectionTolerance"/> (1e-4 m) or
+    /// <see cref="MaxProjectionCycles"/> cycles have run; convergence for a polyhedron is linear,
+    /// so the cap is a guard, not the usual exit. `CSVM.Tests/FogVolumeWhiteoutTests.cs` pins the
+    /// result against closed-form distances for a box (face, edge and corner regions) and for a
+    /// 45°-rotated prism, which is where a face-plane-only answer would be wrong by up to 41 %.</para>
+    ///
+    /// <para><b>Allocation-free</b> for every shipped volume: the per-half-space corrections live in
+    /// a <c>stackalloc</c> buffer of <see cref="MaxStackFaces"/> entries (the widest shipped volume
+    /// has far fewer), and only a hypothetical wider one falls back to the heap.</para></summary>
+    public float ExteriorDistance(Vector3 point)
+    {
+        int n = Faces.Count;
+        if (n == 0)
+        {
+            return 0f;
+        }
+        float bound = SignedDistance(point);
+        if (bound <= 0f)
+        {
+            return 0f;   // inside: the ramp's interior half owns this point
+        }
+        if (n == 1)
+        {
+            return bound;   // one half-space: the plane distance IS the projection
+        }
+
+        Span<Vector3> corrections = stackalloc Vector3[MaxStackFaces];
+        if (n > MaxStackFaces)
+        {
+            corrections = new Vector3[n];
+        }
+        corrections = corrections[..n];
+        corrections.Clear();
+
+        var x = point;
+        for (int cycle = 0; cycle < MaxProjectionCycles; cycle++)
+        {
+            float moved = 0f;
+            for (int i = 0; i < n; i++)
+            {
+                var face = Faces[i];
+                var y = x + corrections[i];
+                float over = face.DistanceTo(y);
+                var projected = over > 0f ? y - (face.Normal * over) : y;
+                corrections[i] = y - projected;
+                moved += projected.DistanceSquaredTo(x);
+                x = projected;
+            }
+            if (moved <= ProjectionTolerance * ProjectionTolerance)
+            {
+                break;
+            }
+        }
+        return point.DistanceTo(x);
     }
 
     /// <summary>True when this volume's authored shape IS its own axis-aligned bounds — every
@@ -81,6 +200,165 @@ public readonly record struct MapSpanningSlab(float MinX, float MaxX, float MinZ
 /// <summary>One weighted template reference of a clutter block's <c>nodes</c> list: the gamez
 /// template node to scatter, and its relative weight among the block's alternatives.</summary>
 public readonly record struct FogClutterNode(float Weight, string Node);
+
+/// <summary>The chapter's in-volume whiteout: the camera-space density <c>FUN_0044e6f0</c>
+/// computes every frame from the <c>fvol*</c> volumes when <c>fogvol.zrd</c>'s <c>fog_zone</c> is
+/// set, and the colour it paints (<c>PLAN-weather-decompile-match</c> C21, docs/formats/fogvol.md).
+/// <b>C5 is the only chapter in the install that arms it.</b>
+///
+/// <para><b>Two linear ramps over one signed distance</b> (<see cref="FogVolumeBox.SignedDistance"/>,
+/// outside-positive/inside-negative):</para>
+/// <list type="bullet">
+/// <item><b>Approach</b> — outside, density rises linearly from 0 at <see cref="FadeDist"/> metres
+/// out to 1 AT the wall, over the true Euclidean distance to the authored hull
+/// (<see cref="FogVolumeBox.ExteriorDistance"/>).</item>
+/// <item><b>Interior</b> — inside, density DECAYS from 1 at the wall to 0 at
+/// <see cref="InteriorFadeDist"/> metres of penetration. ⚠ That reads backwards on its own and must
+/// not be "fixed" by inverting it: the volume is a transition CURTAIN, and what carries the look
+/// once the camera is properly inside is <c>ZONE3</c>'s own fog (state 3, <c>C22</c>).</item>
+/// </list>
+///
+/// <para>Volumes union as <c>a + b − a·b</c>, the binary's own combiner, so a camera near a corner
+/// where two strips meet is whited out by both rather than by the nearer one.</para>
+///
+/// <para>Pure and off-engine (no nodes, no shader state), so the whole rule is unit-testable —
+/// <c>CSVM.Tests/FogVolumeWhiteoutTests.cs</c>. <c>Session/WeatherRig.Tick</c> is the one consumer:
+/// it blends <see cref="Density"/> onto the same screen overlay the <c>CLOUD_COVER</c> band
+/// whiteout uses (Decision 6 of the plan — one camera-space density blended into the frame, never
+/// per-volume fog meshes).</para></summary>
+public sealed class FogVolumeWhiteout
+{
+    /// <summary>The loader's defaults for a chapter that arms <c>fog_zone</c> but authors no
+    /// distances (<c>FUN_0044e010</c>). No shipped chapter is in that state — C5 authors 16/16 —
+    /// but the defaults are decoded, so they are stated rather than invented at the call site.</summary>
+    public const float DefaultFadeDist = 400f;
+
+    /// <inheritdoc cref="DefaultFadeDist"/>
+    public const float DefaultInteriorFadeDist = 20f;
+
+    /// <summary>The seven chapters that do not arm <c>fog_zone</c>, and every world built before
+    /// one is loaded: <see cref="Density"/> is 0 at every position, with no geometry walked.</summary>
+    public static readonly FogVolumeWhiteout Disarmed =
+        new(false, DefaultFadeDist, DefaultInteriorFadeDist, null, Array.Empty<FogVolumeBox>());
+
+    private readonly IReadOnlyList<FogVolumeBox> _volumes;
+
+    private FogVolumeWhiteout(
+        bool armed, float fadeDist, float interiorFadeDist, Color? color, IReadOnlyList<FogVolumeBox> volumes)
+    {
+        Armed = armed;
+        FadeDist = fadeDist;
+        InteriorFadeDist = interiorFadeDist;
+        Color = color;
+        _volumes = volumes;
+    }
+
+    /// <summary>Whether this chapter's <c>fogvol.zrd</c> arms the whiteout at all
+    /// (<see cref="FogVolumeSpec.FogZoneArmed"/>). False short-circuits <see cref="Density"/> to 0
+    /// before any geometry is touched — C1's nine volumes must never whiteout.</summary>
+    public bool Armed { get; }
+
+    /// <summary><c>fog_fade_dist</c> — the approach ramp's length in metres (C5: 16).</summary>
+    public float FadeDist { get; }
+
+    /// <summary><c>interior_fog_fade_dist</c> — the interior decay's depth in metres (C5: 16).</summary>
+    public float InteriorFadeDist { get; }
+
+    /// <summary>The authored <c>fog_color</c>, normalized 0..1, or null when the file omits it —
+    /// in which case the engine's default is the mission's <c>CLOUD_COVER</c> <c>TOP_COLOR</c>,
+    /// which is mission data this chapter-scope object deliberately does not reach for (the caller
+    /// resolves it — <c>WeatherRig.Tick</c>).
+    ///
+    /// <para>Normalized by <see cref="FogVolumeSpec"/>'s own integer-vs-float rule, the same one
+    /// <c>WeatherState.ParseColor</c> applies to every weather colour: any component above 1 means
+    /// the triple is 0–255. C5's <c>[16,16,16]</c> is therefore 0.063 — this "whiteout" is very
+    /// nearly a BLACKOUT, matching C5's <c>ZONE3</c> <c>FOG_COLOR</c> of the same 16 that takes
+    /// over inside. It is a DX7 framebuffer (sRGB) value and stays in that space: the overlay it
+    /// paints is a <c>ColorRect</c>, not a shader input, so unlike the fog globals
+    /// (<c>WeatherRig.ApplyFogGlobals</c>) it is never linearised — same as the band whiteout's own
+    /// <c>WeatherState.WhiteoutColor</c> beside it.</para></summary>
+    public Color? Color { get; }
+
+    /// <summary>Builds a chapter's whiteout from its parsed <c>fogvol.zrd</c> and its gamez volume
+    /// census. A null or disarmed spec gives <see cref="Disarmed"/>, so "this chapter has no
+    /// in-volume whiteout" is one object rather than a flag every caller re-tests.</summary>
+    public static FogVolumeWhiteout From(FogVolumeSpec? spec, IReadOnlyList<FogVolumeBox> volumes)
+    {
+        if (spec is not { FogZoneArmed: true })
+        {
+            return Disarmed;
+        }
+        Color? color = null;
+        if (spec.FogColor is { } c)
+        {
+            // The same integer-vs-float rule WeatherState.ParseColor uses; C5's [16,16,16] is a
+            // 0-255 triple.
+            float scale = c.X > 1f || c.Y > 1f || c.Z > 1f ? 1f / 255f : 1f;
+            color = new Color(c.X * scale, c.Y * scale, c.Z * scale);
+        }
+        return new FogVolumeWhiteout(
+            true,
+            spec.FogFadeDist ?? DefaultFadeDist,
+            spec.InteriorFogFadeDist ?? DefaultInteriorFadeDist,
+            color,
+            volumes);
+    }
+
+    /// <summary>One volume's own whiteout density at a point, 0..1 — the two decompiled ramps over
+    /// <see cref="FogVolumeBox.SignedDistance"/>. Public and static because it is the RULE, and the
+    /// rule is what the tests assert; <see cref="Density"/> only unions it.
+    ///
+    /// <para>The exterior branch takes <see cref="FogVolumeBox.SignedDistance"/> as a cheap lower
+    /// bound first and only pays for <see cref="FogVolumeBox.ExteriorDistance"/>'s projection when
+    /// that bound is inside the ramp — which, at C5's 16 m, is almost never.</para></summary>
+    public static float VolumeDensity(
+        in FogVolumeBox volume, Vector3 point, float fadeDist, float interiorFadeDist)
+    {
+        float signed = volume.SignedDistance(point);
+        if (signed <= 0f)
+        {
+            // Inside. Penetration depth = -signed, exact for a convex polytope; the ramp decays
+            // from full AT the wall to nothing at interiorFadeDist deep.
+            if (interiorFadeDist <= 0f)
+            {
+                return signed < 0f ? 0f : 1f;   // a zero-depth curtain: only the wall itself
+            }
+            return Mathf.Clamp((interiorFadeDist + signed) / interiorFadeDist, 0f, 1f);
+        }
+        if (fadeDist <= 0f || signed >= fadeDist)
+        {
+            return 0f;   // beyond the ramp — signed under-estimates the true distance, so this is safe
+        }
+        float distance = volume.ExteriorDistance(point);
+        return distance >= fadeDist ? 0f : (fadeDist - distance) / fadeDist;
+    }
+
+    /// <summary>The whiteout density at a camera position, 0..1: every volume's own ramp unioned as
+    /// <c>a + b − a·b</c>. 0 when the chapter does not arm <c>fog_zone</c>, without walking any
+    /// geometry.</summary>
+    public float Density(Vector3 camera)
+    {
+        if (!Armed)
+        {
+            return 0f;
+        }
+        float acc = 0f;
+        foreach (var volume in _volumes)
+        {
+            float d = VolumeDensity(volume, camera, FadeDist, InteriorFadeDist);
+            if (d <= 0f)
+            {
+                continue;
+            }
+            acc += d - (acc * d);
+            if (acc >= 1f)
+            {
+                return 1f;   // saturated; no later volume can change it
+            }
+        }
+        return acc;
+    }
+}
 
 /// <summary>
 /// One <c>clutter</c> block of <c>fogvol.zrd</c> — a weighted alternative in the chapter's
@@ -129,8 +407,9 @@ public sealed class FogClutter
 public sealed class FogVolumeSpec
 {
     /// <summary><c>fog_zone</c> — present in the five chapters that ship fog volumes (0, except
-    /// C5's 1). Read and reported; nothing consumes it. It is NOT the sky/fog zone selector
-    /// (<c>BL-100</c>) — see the open question in docs/formats/fogvol.md.</summary>
+    /// C5's 1). A BOOL arming the in-volume whiteout and camera state 3 (<c>FUN_0044e010</c>
+    /// stores <c>value != 0</c>), consumed through <see cref="FogZoneArmed"/>. It is NOT the
+    /// sky/fog zone selector (<c>BL-100</c>) — see docs/formats/fogvol.md.</summary>
     public int? FogZone { get; init; }
 
     /// <summary>Whether this chapter's fogvol arms the in-volume whiteout + camera state 3
@@ -146,9 +425,11 @@ public sealed class FogVolumeSpec
     /// 206.25). An areal density, not a lattice phase — docs/formats/fogvol.md.</summary>
     public float Distance { get; init; }
 
-    /// <summary><c>fog_fade_dist</c> / <c>interior_fog_fade_dist</c> / <c>fog_color</c> — C5 only,
-    /// the volume's own interior fog. Read and reported; rendering interior fog is not part of the
-    /// clutter this class feeds (docs/formats/fogvol.md).</summary>
+    /// <summary><c>fog_fade_dist</c> / <c>interior_fog_fade_dist</c> / <c>fog_color</c> — C5 only
+    /// (16 / 16 / [16,16,16]), the in-volume whiteout's approach ramp, interior decay depth and
+    /// colour. Consumed by <see cref="FogVolumeWhiteout"/> (C21), which also holds the loader's
+    /// defaults for a chapter that arms <c>fog_zone</c> without authoring them
+    /// (docs/formats/fogvol.md).</summary>
     public float? FogFadeDist { get; init; }
 
     /// <inheritdoc cref="FogFadeDist"/>

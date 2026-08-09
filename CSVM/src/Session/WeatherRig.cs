@@ -87,6 +87,10 @@ public sealed class WeatherRig
     // id, same key SetDeckDimmed uses), so Tick can log a change rather than every frame — the
     // probe evidence for "authored altitude, not the band centre" this item's Verify asks for.
     private readonly Dictionary<ulong, float> _lastLoggedDeckY = new();
+    // C21 verification: per rig, the last in-volume whiteout density logged — so a probe's log says
+    // the curtain engaged and how hard (METHOD-15), without a line every frame. Only the crossings
+    // of the 0/non-0 boundary and moves of 0.05 or more are said out loud.
+    private readonly Dictionary<int, float> _lastLoggedVolumeWhiteout = new();
 
     private WeatherState? _weather;
     private string _activeZone;
@@ -105,7 +109,10 @@ public sealed class WeatherRig
     // which simply never resolves to state 3 (most chapters, and every chapter before this is
     // wired up).
     private IReadOnlyList<FogVolumeBox> _fogVolumes = Array.Empty<FogVolumeBox>();
-    private bool _fogZoneArmed;
+    // C21: the same chapter data read as the in-volume WHITEOUT — the two decompiled ramps, the
+    // union and the authored fog_color (FogVolumeWhiteout). Disarmed everywhere but C5, where it
+    // costs nothing: Density short-circuits on the flag before touching a volume.
+    private FogVolumeWhiteout _fogWhiteout = FogVolumeWhiteout.Disarmed;
     // B11's edge trigger: which zone's fog globals are live, and the state they were applied for.
     // Rebuilt by LoadWeather (a new mission is a new zone table); disarmed outright by an explicit
     // --sky-zone, per Decision 5.
@@ -219,17 +226,19 @@ public sealed class WeatherRig
         _loggedDeckLighting = false;
     }
 
-    /// <summary>The chapter's fog-volume census (<c>FogVolumeSpec.VolumesOf</c>) and whether its
-    /// <c>fogvol.zrd</c> arms <c>fog_zone</c> (<see cref="FogVolumeSpec.FogZoneArmed"/>) — set
-    /// separately from <see cref="Build"/> for the same reason as <see cref="SetDeckCenter"/>:
-    /// this is chapter/world data (<c>GameSession</c>'s own fog-volume load), not mission weather.
-    /// Feeds <see cref="Tick"/>'s per-camera <see cref="WeatherState.CameraWeatherState"/> call
-    /// (<c>PLAN-weather-decompile-match</c> A2). Never called (or called with an empty/disarmed
-    /// pair) simply keeps every camera at state 1/2 — it never resolves to state 3.</summary>
-    public void SetFogVolumes(IReadOnlyList<FogVolumeBox> volumes, bool fogZoneArmed)
+    /// <summary>The chapter's fog-volume census (<c>FogVolumeSpec.VolumesOf</c>) plus its parsed
+    /// <c>fogvol.zrd</c> — set separately from <see cref="Build"/> for the same reason as
+    /// <see cref="SetDeckCenter"/>: this is chapter/world data (<c>GameSession</c>'s own fog-volume
+    /// load), not mission weather. Two consumers, both keyed on the file's <c>fog_zone</c> arm bit
+    /// (<see cref="FogVolumeSpec.FogZoneArmed"/>, C5 alone in the install):
+    /// <see cref="Tick"/>'s per-camera <see cref="WeatherState.CameraWeatherState"/> call (A2) and
+    /// its in-volume whiteout (<see cref="FogVolumeWhiteout"/>, C21). Never called — or called with
+    /// a null/disarmed spec — keeps every camera at state 1/2 and every frame's volume whiteout at
+    /// 0.</summary>
+    public void SetFogVolumes(IReadOnlyList<FogVolumeBox> volumes, FogVolumeSpec? spec)
     {
         _fogVolumes = volumes;
-        _fogZoneArmed = fogZoneArmed;
+        _fogWhiteout = FogVolumeWhiteout.From(spec, volumes);
     }
 
     /// <summary>The cloud deck's own gamez <c>zone_id</c> (<c>WorldBuilder.CloudDeckZoneId</c>) —
@@ -276,7 +285,7 @@ public sealed class WeatherRig
             // change, at debug verbosity, since a flight spends whole minutes in one state.
             if (_weather != null)
             {
-                int state = _weather.CameraWeatherState(camPos, _fogZoneArmed, _fogVolumes);
+                int state = _weather.CameraWeatherState(camPos, _fogWhiteout.Armed, _fogVolumes);
                 if (state != rig.CameraWeatherState)
                 {
                     Log.Debug("world",
@@ -293,15 +302,47 @@ public sealed class WeatherRig
             if (rig.Horizon != null)
                 rig.Horizon.Position = camPos;
 
-            // Cloud-band whiteout: fade the overlay in as the camera altitude enters the band.
+            // The whiteout overlay, and it carries TWO sources on one surface (C21, Decision 6):
+            // the CLOUD_COVER band's altitude whiteout, and — where the chapter arms fog_zone —
+            // the fvol volumes' own approach/interior curtain. The original computes ONE
+            // camera-space density per frame and blends the frame with it; it never builds
+            // per-volume fog meshes, which is why both live here rather than in the world.
             if (rig.Whiteout != null && _weather != null)
             {
                 // The colour is re-read per frame, not set once at build: where the authored pair
                 // differs it lerps across the band with the camera (CLOUD_COVER, weather.md).
                 var c = _weather.WhiteoutColor(camPos.Y) ?? WhiteoutFallbackColor;
                 // --no-fog covers the whiteout too: flying into the cloud band would otherwise
-                // still white the pane out, which reads as "fog is not actually off".
-                c.A = _spec.NoFog ? 0f : _weather.WhiteoutAmount(camPos.Y);
+                // still white the pane out, which reads as "fog is not actually off". It covers
+                // the volume curtain for the same reason.
+                float band = _spec.NoFog ? 0f : _weather.WhiteoutAmount(camPos.Y);
+                float volume = _spec.NoFog ? 0f : _fogWhiteout.Density(camPos);
+                if (volume > 0f)
+                {
+                    // ⚠ The two NEVER coexist in shipped data — C5 is the only chapter arming
+                    // fog_zone and its CLOUD_COVER band sits at 9950-10150 m, ~9.8 km above its
+                    // highest street strip — so nothing here is measurable today. It is a union
+                    // rather than a pick because that is the combiner the binary already uses
+                    // between volumes (a + b - a·b), and picking one would silently delete the
+                    // other if a future chapter ever authored both.
+                    //
+                    // Colour: the curtain composited OVER the band (it is the nearer air), which
+                    // is the standard over-blend — union alpha, and each layer's own colour
+                    // weighted by the share of that alpha it contributes. Degenerate at both ends:
+                    // band-only gives the band's colour, volume-only the volume's.
+                    var volumeColor = _fogWhiteout.Color ?? _weather.CloudTopColor ?? WhiteoutFallbackColor;
+                    float bandShare = band * (1f - volume);
+                    float union = volume + bandShare;
+                    c = volumeColor.Lerp(c, bandShare / union);
+                    c.A = union;
+                }
+                else
+                {
+                    // Byte-identical to the pre-C21 path by construction, which is what keeps the
+                    // seven disarmed chapters (and C5 away from its strips) off this item's books.
+                    c.A = band;
+                }
+                LogVolumeWhiteout(rig.Index, volume);
                 rig.Whiteout.Color = c;
             }
 
@@ -431,6 +472,30 @@ public sealed class WeatherRig
         foreach (var z in horizonZones)
             counts.Add($"{z.Name} {z.MeshedNodes} meshes");
         return counts;
+    }
+
+    /// <summary>Says out loud that one rig's in-volume whiteout engaged, and how hard — the
+    /// evidence a C21 probe reads (METHOD-15), since a curtain that never fires and one that fires
+    /// at 0.02 look the same in a night frame. Only the 0 ↔ non-0 crossings and moves of 0.05 or
+    /// more are logged, so a pass through a street strip costs a handful of lines rather than one
+    /// per frame. Silent for every disarmed chapter, which never reaches a non-zero density.</summary>
+    private void LogVolumeWhiteout(int rigIndex, float density)
+    {
+        if (!_fogWhiteout.Armed)
+        {
+            return;
+        }
+        bool known = _lastLoggedVolumeWhiteout.TryGetValue(rigIndex, out float last);
+        if (known && (density > 0f) == (last > 0f) && Mathf.Abs(density - last) < 0.05f)
+        {
+            return;
+        }
+        if (!known && density <= 0f)
+        {
+            return;   // the resting state; the census line at build already says the rig is armed
+        }
+        _lastLoggedVolumeWhiteout[rigIndex] = density;
+        Log.Debug("world", $"fvol whiteout: player {rigIndex} density {density:0.000}");
     }
 
     /// <summary>Puts ONE rig's deck copy into its regime's lit variant: the dimmed mesh each
@@ -577,6 +642,15 @@ public sealed class WeatherRig
                  $"(authored {fog.FogNear:0}–{fog.FogFar:0}), " +
                  $"altitude {fog.FogLow:0}–{fog.FogHigh:0} m; world light {fog.WorldLight:0.00}; " +
                  $"cloud band {_weather.CloudBottom:0}–{_weather.CloudTop:0} m (±{_weather.CloudThickness:0})");
+        if (_fogWhiteout.Armed)
+        {
+            // Said out loud once per session, because "the curtain never fired" and "the chapter
+            // never armed it" are the same picture otherwise (DIAG-15/DIAG-17). Only C5 prints it.
+            var wc = _fogWhiteout.Color ?? _weather.CloudTopColor ?? WhiteoutFallbackColor;
+            GD.Print($"fvol whiteout: armed — {_fogVolumes.Count} volume(s), approach {_fogWhiteout.FadeDist:0.#} m, "
+                     + $"interior decay {_fogWhiteout.InteriorFadeDist:0.#} m, colour {wc.ToHtml(false)}"
+                     + $"{(_fogWhiteout.Color == null ? " (CLOUD_COVER TOP_COLOR default)" : " (authored)")}");
+        }
         SetupWhiteoutAndPrecip(rigs);
     }
 
@@ -646,7 +720,12 @@ public sealed class WeatherRig
     {
         if (_weather == null)
             return;
-        if (_weather.HasCloudBand)
+        // ⚠ The overlay is built for a reachable CLOUD_COVER band OR an armed fog_zone (C21) — the
+        // volume curtain paints on this same surface, and a chapter that armed it without
+        // authoring a band would otherwise have nothing to paint on. No shipped chapter is in that
+        // state (C5 arms fog_zone and authors a band at 9950-10150 m), so this changes no built
+        // node in the install; it exists so the two conditions cannot drift apart.
+        if (_weather.HasCloudBand || _fogWhiteout.Armed)
         {
             // The whiteout overlay follows *a* camera, so each rig gets its own: in splitscreen
             // it must dim only the pane whose player is inside the cloud. (The ambient cloud

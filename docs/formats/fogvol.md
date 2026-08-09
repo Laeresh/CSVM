@@ -2,8 +2,10 @@
 
 Part of the [format documentation](README.md). Covers the chapter-scope reader that fills the
 world's invisible fog volumes with cloud sprites — the original's ambient cloud field.
-Consumed by `CSVM/src/Mech3/FogVolumes.cs` (reader + volume census) and
-`CSVM/src/Effects/FogVolumeClutter.cs` (the scatter and the render).
+Consumed by `CSVM/src/Mech3/FogVolumes.cs` (reader + volume census + the in-volume whiteout rule,
+`FogVolumeWhiteout`), `CSVM/src/Effects/FogVolumeClutter.cs` (the scatter and the render) and
+`CSVM/src/Session/WeatherRig.cs` (the whiteout overlay). Which key reaches which consumer:
+[Consumed by the remake](#consumed-by-the-remake).
 
 **The format is two halves that only mean something together.** The reader says *what* to
 scatter and *how densely*; the gamez says *where*. Neither alone tells you a chapter has clouds:
@@ -16,11 +18,11 @@ One chapter-scope reader file, root = an [alternating key/list dict](README.md#s
 
 | Key | Value | Meaning |
 |---|---|---|
-| `fog_zone` | `[int]` | **A bool, decoded 2026-08-09**: non-zero arms the engine's in-volume whiteout + `ZONE3` camera state — see [the decompile section](#what-the-engine-does-with-the-volumes-crimsonexe-decompile-2026-08-09). Read by the remake, not yet consumed |
+| `fog_zone` | `[int]` | **A bool, decoded 2026-08-09**: non-zero arms the engine's in-volume whiteout + `ZONE3` camera state — see [the decompile section](#what-the-engine-does-with-the-volumes-crimsonexe-decompile-2026-08-09). Consumed (`A2`, `C21`) |
 | `distance` | `[float]` | The scatter's mean spacing, metres — an areal density, not a lattice phase. Engine default **206.25** |
-| `fog_fade_dist` | `[float]` | *(C5 only)* whiteout approach ramp, metres before the volume wall. Engine default **400** |
-| `interior_fog_fade_dist` | `[float]` | *(C5 only)* whiteout decay depth inside the volume. Engine default **20** |
-| `fog_color` | `[r,g,b]` | *(C5 only)* the whiteout's colour, integer 0–255. Engine default: the mission's `CLOUD_COVER` `TOP_COLOR` |
+| `fog_fade_dist` | `[float]` | *(C5 only, **16**)* whiteout approach ramp, metres before the volume wall. Engine default **400**. Consumed (`C21`) |
+| `interior_fog_fade_dist` | `[float]` | *(C5 only, **16**)* whiteout decay depth inside the volume. Engine default **20**. Consumed (`C21`) |
+| `fog_color` | `[r,g,b]` | *(C5 only, **[16,16,16]** — near black)* the whiteout's colour, integer 0–255. Engine default: the mission's `CLOUD_COVER` `TOP_COLOR`. Consumed (`C21`) |
 | `clutter` | `[block, …]` | The scatter table — one or more blocks, each an alternating dict |
 
 A `clutter` block:
@@ -403,10 +405,9 @@ degenerate ranges).
 
 **Undecoded / not implemented:**
 
-- **`fog_zone`, and C5's `fog_color` / `fog_fade_dist` / `interior_fog_fade_dist`** are read and
-  reported and nothing in the remake consumes them yet. Their *meaning* is now decoded (the
-  in-volume whiteout + `ZONE3` switch, section above); rendering it remains a separate feature
-  from the clutter, unimplemented.
+- ~~**`fog_zone`, and C5's `fog_color` / `fog_fade_dist` / `interior_fog_fade_dist`** are read and
+  reported and nothing in the remake consumes them yet.~~ **Struck 2026-08-09 (`C21`): all four keys
+  are now CONSUMED — see [Consumed by the remake](#consumed-by-the-remake) below.**
 - ⚠ **`fog_zone` is not the sky/fog zone selector** — and as of 2026-08-09 it is no longer
   unidentified: the decompile (section above) shows it is a **bool** arming the in-volume
   whiteout and the `ZONE3` camera state. The old record stands as history: `docs/HISTORY.md`
@@ -422,6 +423,60 @@ degenerate ranges).
   bounds the extension to the largest authored `far_fade.y` (3,500 m, every shipped deck chapter)
   rather than to `MapEdgeExtender`'s own reach (5,120 m) — a budget decision matched to the
   render's own fade shader, not a value `fogvol.zrd` or the gamez names. See the section above.
+
+## Consumed by the remake
+
+| key | who reads it | since |
+|---|---|---|
+| `distance`, `clutter` (all sub-keys) | `Effects/FogVolumeClutter` — the scatter | `A1`–`A5` |
+| the gamez `fvol*` shapes | `FogVolumeSpec.VolumesOf` → the scatter, `MapEdgeExtender`, the camera-state test | `A1`/`A2` |
+| **`fog_zone`** | `FogVolumeSpec.FogZoneArmed` → `WeatherState.CameraWeatherState`'s state-3 gate | `PLAN-weather-decompile-match` `A2` |
+| **`fog_fade_dist`, `interior_fog_fade_dist`, `fog_color`** | `Mech3.FogVolumeWhiteout` → `Session/WeatherRig.Tick`'s whiteout overlay | `PLAN-weather-decompile-match` `C21` |
+
+**`C21` (2026-08-09) landed the in-volume whiteout exactly as the section above decodes it.** Per
+frame, per rig, when the chapter arms `fog_zone` (C5 alone), every volume's own density is taken
+from one signed distance (`FogVolumeBox.SignedDistance` — outside-positive, inside-negative) through
+the two decompiled ramps, and the volumes union as `a + b − a·b`:
+
+- **outside**, the density rises linearly from 0 at `fog_fade_dist` metres to 1 AT the wall, over
+  the true Euclidean distance to the authored convex hull (`FogVolumeBox.ExteriorDistance` — the
+  face planes alone understate it by up to 42 % near a corner);
+- **inside**, it DECAYS from 1 at the wall to 0 at `interior_fog_fade_dist` metres deep. ⚠ Read
+  that next to `C22`, not on its own: the volume is a transition CURTAIN and `ZONE3`'s own 50–250 m
+  fog is what carries the interior look. Inverting it would be wrong.
+
+The result is blended onto the same full-screen overlay the `CLOUD_COVER` band whiteout uses (one
+camera-space density per frame, never per-volume fog meshes — the original's own mechanism). The
+two sources union with the same `a + b − a·b`, with the volume curtain composited OVER the band;
+**they never coexist in shipped data** — C5 is the only chapter arming `fog_zone` and its band sits
+at 9950–10150 m, ~9.8 km above its highest street strip.
+
+⚠ **C5's "whiteout" is very nearly a BLACKOUT.** Its authored `fog_color` is `[16,16,16]` — the
+same 16 its `ZONE3` `FOG_COLOR` carries, so the hand-off to `C22` is colour-continuous — and its
+two fade distances are **16 m each**, not the engine defaults (400/20). At flight speed that
+approach ramp is roughly one frame; the curtain is a hard edge by authoring, not by our
+implementation.
+
+Measured at the render (`.scratch/c21/`, `--freecam --chapter=C5 --det --no-zone-cull`, a vertical
+approach at `(-2000, y, -1792)` onto a street strip whose top is 183 m; "before" = the same build
+with the volume term forced to 0, restored and rebuilt after):
+
+| pose | density | frame mean before → after | predicted | frame sd |
+|---|---|---|---|---|
+| `y 210` (27 m above, past the ramp) | 0.000 | 17.76 → 17.76, **byte-identical** | 17.76 | 18.38 → 18.38 |
+| `y 191` (8 m above = half the ramp) | 0.500 | 18.53 → **17.29** | 17.26 | 18.84 → **9.54** |
+| `y 182` (1 m inside the wall) | 0.937 | 17.85 → **16.06** | 16.12 | 5.08 → **0.33** |
+
+The predictions are the sRGB-byte composite `(1−a)·frame + a·16`; a LINEAR-space composite predicts
+18.22 at the half pose against the measured 17.29, so the overlay demonstrably blends in the
+framebuffer's own space — which is what a `ColorRect` on a `CanvasLayer` does, and why this colour
+is NOT linearised the way the fog globals are. The interior frame's sd of **0.33** is the
+"near-full whiteout in `fog_color`" claim measured: at 1 m in, the frame is flat 16.
+
+A C1 river pose (`fog_zone` 0) is **byte-identical** across the same A/B, and all 13 goldens are
+hash-identical — including `c5-city-night`, whose camera stands **1,797.7 m** from the nearest C5
+volume, 112× the 16 m ramp (predicted before the run, pinned in
+`CSVM.Tests/FogVolumeWhiteoutTests.cs`).
 
 ## Visible consequences to know about
 
