@@ -138,7 +138,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — The aero core
 
-11. ☐ Lift as the clamped demanded-G
+11. ☑ Lift as the clamped demanded-G
 12. ☐ Drag as the original's polar
 13. ☐ Thrust: linear throttle and the Mach/altitude curve
 14. ☐ Joint refit and re-measurement of the aero group
@@ -293,7 +293,29 @@ has already been made once here. Do not solve any thrust constant from the level
 
 # Wave B — The aero core
 
-## B11 ☐ Lift as the clamped demanded-G
+## B11 ☑ Lift as the clamped demanded-G
+
+**Outcome (landed 2026-08-09).** Implemented as decoded: the airflow is blended toward the nose
+across the `liftAOAs` cosine window, `lift_accel_rate·(wind − v)` plus `nom_gravity` on world-up is
+projected onto the body X/Y plane, and the wings deliver `clamp(|·|/9.82, −5, +9)` G capped at
+`(0.75 − 0.15·Mach)·q·RefArea / Weight` (dense band, imperial q). Gravity is now applied in full and
+the level-flight identity holds exactly — `level-top-speed`, `level-speed-near-cap`, `accel-150-290`
+and `eighth-throttle-speed` are unmoved to the last printed digit, and `terminal-dive` tightened
+355.26 → 355.20 mph (α 0.6 → 0.0°) because the old cross-path fraction was leaking a little sink
+into a dive. `AlignRate` (TUNE 4/s) is retired for the authored 0.75/s, which raises the alignment
+lag in a full pull from α ≈ 8.9° to ≈ 18.4°. **Two asserted rows now fail and are left failing:**
+`yaw-360` 29.17 → 23.82 s (target 28.6 ± 3) and `sustained-turn-speed` 223.03 → 88.45 mph (target
+222.94 ± 5). Both are the same cause and both are B12's to resolve — the lift vector is tilted back
+by α and therefore now supplies real induced drag, on top of `InducedDragCoef`, which was fitted to
+absorb the whole of it; the yaw row is collateral (mean speed 298.8 → 270.6 mph raises `eff`).
+`sustained-turn-rate` is unmoved across all eleven airframes (32.33 → 32.40 on the Bloodhawk), which
+confirms it is C22's and not this item's. Sink improved everywhere (Bloodhawk −2.40 → −0.80 ft/s,
+Balmoral 39.41 → 21.31): lift is genuinely available in bank now. ⚠ **And that is D31's conflict,
+live:** a neutral-stick 90°-bank hold that used to fly the Bloodhawk into the ground (−2304 m in
+35 s) now settles into a 3.6 m/s descent at the nose-sag angle, α = 0°, losing 129 m — the
+knife-edge departure is gone on both airframes checked, Balmoral included. Four goldens moved
+(`empty-stage`, `c1-flight`, `c1-destroy-effects`, `c1-crash` — exactly the four that fly a plane);
+the manifest is updated in this commit. `CAP-05`'s four drag points are untouched by construction.
 
 **Goal.** Lift is computed as the original computes it — a demand vector, clamped to ±5/9 G and to
 an aerodynamic ceiling — instead of as a fraction of gravity's cross-path component.

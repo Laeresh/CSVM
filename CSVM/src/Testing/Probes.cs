@@ -865,9 +865,10 @@ public static class Probes
         // --- pitch. Steady rate after the 1/damp spin-up, at three speeds: ours is
         // speed-independent by construction, and the video says the original's is too, so the point
         // of the three is to catch anything else (stall, lift, eff) leaking into pitch at the ends.
-        // Also the cleanest B11 check of the plan's central inference: wings-level, full elevator,
-        // no bank — the exact scenario "α_ss = ω_pitch / align" was derived for. With AlignRate = 4
-        // and the 33 °/s this row itself asserts, that predicts α_ss ≈ 8.25°.
+        // Also the cleanest read of the alignment lag: wings-level, full elevator, no bank, so the
+        // settled α is where the nose-chase (the authored lift_accel_rate, plus the lift demand's
+        // own swing once the airflow blend engages past liftAOAs[0]) balances the commanded body
+        // rate. Both terms scale with the SAME authored rate, so this row moves with it.
         var pitchRates = new List<double>();
         var pitchAlphas = new List<double>();
         foreach (float mph in new[] { 120f, 200f, 280f })
@@ -881,7 +882,7 @@ public static class Probes
             pitchRates[1], 33.0, 3.0,
             $"at 120/200/280 mph = {pitchRates[0]:0.0}/{pitchRates[1]:0.0}/{pitchRates[2]:0.0} °/s, "
             + $"α = {pitchAlphas[0]:0.0}/{pitchAlphas[1]:0.0}/{pitchAlphas[2]:0.0}° "
-            + "(liftAOAs [5,9] predicts α_ss ≈ 8.25° here)");
+            + "(the alignment lag at this body rate — see the note above)");
 
         // --- yaw. The one axis 'eff' scales, so it is the axis a thrust change moves: faster
         // acceleration holds the plane nearer fd_speed, where eff is at its floor.
@@ -1009,9 +1010,9 @@ public static class Probes
         // The C21 induced-drag term closed most of the speed gap (min speed 269 -> 205 mph against
         // 128) and overshot the altitude in the other direction (1282 ft against 936), so the energy
         // is now wrong the other way round and this stays the row to watch. Also a second,
-        // longer-duration B11 check of the wings-level-full-pull inference alongside pitch-rate
-        // above — a held pull becomes a sustained loop, so α should sit near the same ≈8°
-        // equilibrium at the point of minimum speed.
+        // longer-duration read of the alignment lag alongside pitch-rate above — a held pull
+        // becomes a sustained loop, so α should sit near the same equilibrium at the point of
+        // minimum speed.
         m = Fresh(stats, Level(), 300f * Mph, 1f);
         float apex = 0f, minSpeed = float.MaxValue, alphaAtMinSpeed = 0f;
         double tApex = RunUntil(m, 1f, 30f,
@@ -1038,8 +1039,8 @@ public static class Probes
         // manoeuvre's energy balance. Asserting it would fail on that known-open gap, not a new one.
         Row("zoom-climb-min-speed", "same loop, speed at its own minimum", "mph",
             minSpeed / Mph, 127.9, 6.0,
-            $"α {alphaAtMinSpeed:0.0}° here (liftAOAs [5,9] predicts α_ss ≈ 8.25° at wings-level "
-            + "equilibrium; this loop has carried well past that regime by its own minimum)",
+            $"α {alphaAtMinSpeed:0.0}° here (the wings-level pull settles lower — this loop has "
+            + "carried well past that regime by its own minimum)",
             info: true);
 
         var sb = new StringBuilder();

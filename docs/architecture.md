@@ -1859,33 +1859,30 @@ a public `Camera` accessor — all inert in plain `--freecam`. Rates TUNE.
 
 ## src/Flight/FlightModel.cs
 Velocity-vector arcade flight model: body rates = control torque × reciprocal inertia vs
-ang_momentum_damp, scaled per axis (PitchTune/YawTune/RollTune). Thrust/drag/gravity integrate on
-the velocity vector (speed passes through zero); lift cancels gravity's cross-path share; drag is a
-speed power law normalized so drag(fd_speed) = max thrust, PLUS an induced term in α (below).
-`Alpha` (deg) is angle(nose, VelocityDir), read once per
-step right after the nose vector — an emergent LAG from the nose-chase, not a modelled aerodynamic
-state, and reported in every `--dump-flight` row's detail. Lift consumes it as the pull's stand-in:
-`liftFrac = min(1, speedLift × |up·Y| × n(α))`, `n` ramping 1 g → `LiftLoadMax` over the authored
-`liftAOAs [5,9]` read as degrees (a hypothesis, not a decode — `BL-095`). `|up·Y|` stays the carrier
-and must NOT be flattened: it is what makes knife-edge depart, and the α ramp is what lets a hard
-pull hold altitude through a steep bank without a bank term. The stall is TWO measured thresholds
-over one margin
-(`StallFraction` = speed/fd_speed): `isStalled()` is the nose-drop at 0.25 fd, `IsStallWarned()` the
-STALL lamp at 0.30 — the lamp leads the break by 2.64 sim s (`BL-148`/`CAP-06`); never drive both
-off one number, and never recompute the margin beside them.
-⚠ ThrustConst and the three *Tune rates are NOT free TUNEs — they are pinned to the original,
-  measured off cockpit-gauge video, and `--run-tests`' flight-envelope suite fails if they move.
-  Retune by feel and you are overwriting a measurement (`analysis/video-flight-calibration/`).
-⚠ MaxDiveSpeedFrac is a numerical backstop, not a terminal speed: terminal dive is EMERGENT from
-  the drag curve and lands within 0.3% of the original, so a value that binds replaces a measured
-  number with a guess. Keep it above every airframe's emergent terminal — worst is the Balmoral,
-  1.678 in a 71° dive (`--dump-flight=player_balmoral`) and ~1.71 vertical.
-⚠ Accepted artifacts, not bugs: loop energy pump, steep-climb equilibrium, stall hang. Induced
-  drag is `A · C_i · sin²α` — `InducedDragCoef` is the one genuinely FITTED constant here and is
-  NOT transferable: it absorbs our 1.71× turn-rate error, so closing that gap means refitting it.
-  A hard altitude clamp (2003 m,
-  `BL-094`/`CAP-03`) deletes climbing velocity at/above the cap rather than fading thrust/lift/drag
-  toward it — traced to one mission (C1B IA1) only, not assumed global/per-chapter/per-aircraft.
+ang_momentum_damp, per axis (PitchTune/YawTune/RollTune); thrust, drag, gravity and lift integrate
+on the velocity vector (speed passes through zero). Lift is a DEMAND — the airflow blended toward
+the nose over the authored `liftAOAs` cosine window, `lift_accel_rate·(wind − v)` plus `nom_gravity`
+on world-up, projected onto the body X/Y plane, delivered as `clamp(|·|/9.82, −5, +9)` G and capped
+at `(0.75 − 0.15·Mach)·q·RefArea/Weight` (imperial q, dense band ρ = 2.2688e-3 slug/ft³) — so level
+flight at zero incidence cancels weight IDENTICALLY, and the nose-chase runs at that same authored
+rate. Drag is a speed power law normalized so drag(fd_speed) = max thrust, plus an induced `sin²α`
+term. `Alpha` (deg) is angle(nose, VelocityDir) — an emergent LAG, not modelled incidence — and the
+stall is TWO measured thresholds over one margin (`StallFraction` = speed/fd_speed): `isStalled()`
+the nose-drop at 0.25 fd, `IsStallWarned()` the lamp at 0.30, which leads the break by 2.64 sim s
+(`BL-148`/`CAP-06`); never drive both off one number, and never recompute the margin beside them.
+⚠ The ±5/9 clamp is a LOAD FACTOR in G, never an angle — re-deriving it as degrees gives a model
+  that looks right at small inputs and diverges at the limits. The authored `highGs`/`lowGs`
+  control limiters are a WIDER, inert pair (`BL-095`) and must not be folded into it.
+⚠ ThrustConst, DragExp*/ThrottleExp and the three *Tune rates are NOT free TUNEs — pinned to the
+  original off cockpit-gauge video (`analysis/video-flight-calibration/`) and only JOINTLY.
+  `InducedDragCoef` is the one genuinely fitted constant and now double-counts the lift vector's
+  own tilt. MaxDiveSpeedFrac and the 2003 m altitude clamp (`BL-094`/`CAP-03`, traced to C1B IA1
+  only) are numerical backstops, not modelled limits. Accepted artifacts, not bugs: loop energy
+  pump, steep-climb equilibrium, stall hang.
+⚠ Lift is BANK-INDEPENDENT: the body X/Y projection still carries full weight at 90° of bank, so
+  the knife-edge departure is gone (35 s of neutral-stick knife-edge now costs 129 m instead of
+  flying the Bloodhawk into the ground). That contradicts the measured sag and is open. `wingVert`
+  survives only in the nose-chase and the nose-sag term — do not flatten it further.
 
 ## src/Flight/PropAnimator.cs
 Spins the flying aircraft's prop/rotor blur discs: Build collects every node PropParts classifies
