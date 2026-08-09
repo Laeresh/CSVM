@@ -232,8 +232,13 @@ order — which is **not** zone-number order):
 | C4 | zone2 **4**, zone1 **1** | **zone2** (both build — settled by render, below) |
 | C5 | zone3 **1**, zone1 **2** | zone1 (no `zone2` at all — the fallback above) |
 
-`BL-036`'s node counts agree: C1B and C3 author their worlds under zone 1 (2,101 and 1,647 nodes,
-against 2 in zone 2), C2 likewise (766 against 1).
+The gamez node counts agree ([world-structure.md](world-structure.md)'s `zone_id` census): C1B and
+C3 author their worlds under zone 1 (2,101 and 1,647 nodes, against 2 in zone 2), C2 likewise (766
+against 1). ⚠ That agreement holds only for these three *single-zone* chapters. For the chapters
+that populate both, the census is **not** evidence about which zone is flown — `zone_id` is a
+per-frame camera-state filter, so a chapter legitimately ships content in both and switches between
+them (`PLAN-overcast-match` B12 retired the census as zone evidence; C1/C1C/C2B/C4 = `zone2` was
+settled by render instead).
 
 So `WeatherState.PreferPopulatedHorizonZone` swaps the request for the one zone that has geometry,
 and only then — the rule is deliberately narrow, and every other shape keeps the request:

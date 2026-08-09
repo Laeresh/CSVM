@@ -7,7 +7,8 @@ Part of the [format documentation](README.md) (see also [gamez.md](gamez.md), [c
 - Terrain = ~1 km tiles (`terpat*`/`water1` textures), no transform (verts already in world space), under `Lod` nodes (range 0–2000 = nearest). Cloud deck sits at y≈1160–1350 (`cloudparent` groups, cloud1.tif); terrain y≈100–160; `litehouse` at (-6932, 128, -3042), town/airbase cluster around (-5000..-6600, 128, -5900..-6700).
 - **The terrain is a complete grid of one-cell ground meshes.** C1 (and C4/C5): a 12×12 grid of 1024 m tiles — one terrain/water mesh per `area` partition cell, **identity transform with vertices already in world space**, exactly tiling `area` x,z ∈ [-12288, 0]. Every cell is filled (C1: land in the north rows, `water1.tif` sea in the south; the SE corner is harbour sea). A second one-cell mesh per cell is the `cloudlayer` deck at y≈960 (distinguish by texture, not size). The only irregular ground is the **map-centre airfield** — a few offset/oversized `aN` tiles, split half-tiles (e.g. 1024×768/512 farm fields), and genuine holes where structures sit — all ≥3 cells from any edge. This regularity is what makes **map-edge continuation** possible. The original continues the world indefinitely past `area` (user video `C1 IA1 Tile Loading.mp4`, 10+ min of flight): it reloads a tile grid around the plane (~one reload per tile crossing — the fog wall visibly creeps in then jumps back out), and what it fills the outside with is the **local border tile repeated forever** — the same one-tile view recurs every crossing, the map interior (the airport) never reappears, and the content stays type-matched to the local edge (sea edge → sea forever, forest → forest). The continued terrain also carries the clutter trees. The remake replicates this as a camera-following window of border-cell repeats — see `MapEdgeExtender.cs`. **The original REPEATS, and the block is per chapter — settled 2026-08-08 by A/B against the original at the controls**: plain repetition of a **2-cell** border block matches exactly on C1, C2 and C4, and a **1-cell** block on C5, with no seam gaps in any of them. The remaining four chapters (C1B, C1C, C2B, C3) were measured to carry **only water tiles at their borders**, which fixes them at 1 and makes the depth moot there. Landed as `MapEdgeExtender.DefaultBlockCells`. ⚠ **This reversed the 2026-08-04 `CAP-17` reading that the original mirrors** — that strip analysis got both the fold and the distance wrong, though its correlation numbers were sound; the post-mortem is in `analysis/video-flight-calibration/FINDINGS.md` under "Traps this measurement walked into". ⚠ **Do not size a map-edge block from a video-derived period** — fly it against the original with the quantity as a knob.
 - `horizon` subtree = original skydome (~8.8 km radius, verts centered on the **origin** while the world area is x,z ∈ [-12288, 0] — the engine must translate it with the viewer; it's a camera-anchored backdrop, not scenery). Two day/night zone variants as child nodes: `zone1` (day) = `h_zone1scroll` (sky2.tif tiling haze dome, u tiles ~22× around, sunset-orange vertex tints near the horizon; its top is a **flat untextured gray 12-gon lid** at y 2793 — visibly unfinished when climbing) + `o28` (flat-colored gray sea-haze skirt, y −2000..271); `zone2` (night) = `moon` (moon1.tif quad; background painted (66,73,99) ≈ the night-sky tint, engine color-keys and billboards it) + `g1155` (gray below-horizon skirt + **Sky1.tif-textured cap** tinted night-blue 64,72,100) + `h_zone2scroll` (Sky1.tif walls with a dusk gradient: warm 249,213,189 at the horizon → dark blue at top) + `stars` (**no polygons — its 64 stars live in the mesh's `lights` array** as point-sprite lights: gray-white 219, all at y 1301 spread over ±5.9 km, params 0.17/30/4000/6000 undecoded). Which zone a mission uses isn't in the zrdr readers (likely engine-side). **User observation (2026-07-14): the original always loads the C1 airfield at night — so zone2 is the sky the game actually shows there, and zone1 (with its unfinished gray cap) was likely test-only/never player-visible.** The `*scroll` names imply the original scrolls the sky UVs — rate unknown, not implemented.
-- **`zone_id` — every gamez node carries one (decoded 2026-07-22, unimplemented).** An `i32` on
+- **`zone_id` — every gamez node carries one (decoded 2026-07-22; runtime meaning decompiled and
+  implemented 2026-08-09).** An `i32` on
   the node record (unified extraction shape: a top-level `zone_id` field), matching the `horizon`
   subtree's zone names. Counts per chapter:
 
@@ -27,10 +28,15 @@ Part of the [format documentation](README.md) (see also [gamez.md](gamez.md), [c
   1–2 nodes in their second zone and are effectively single-zone; C1C, C2B and C4 are
   zone2-dominant; C1 and C5 zone1-dominant. The zone numbering is the same one
   [weather.md](weather.md#the-zone-names-are-per-chapter-not-a-fixed-zone1zone2-pair-2026-07-22)
-  documents — hence C5's `3`. **Nothing in `CSVM/src` reads `zone_id`**, so the remake renders
-  every zone's geometry simultaneously; which zone is active is not in any data file (see
-  weather.md), which is why this stays unimplemented rather than guessed. Note `zone_id` does
-  *not* explain the C5 coarse/fine ground pair — those are all `zone_id=1`.
+  documents — hence C5's `3`. **What activates a zone was the open question, and it is answered:**
+  `FUN_0056c430` is a per-frame, per-node *camera-state* filter — a node draws iff its `zone_id` is
+  `−1`, or is in the set `{0, camera weather state}` armed each frame (1 below the cloud deck /
+  2 above it / 3 inside a `fog_zone` volume). It is not a static per-mission partition, which is
+  why no data file ever named the active zone. Full decode in
+  [gamez.md](gamez.md) (`zone_id`'s runtime meaning, with the meshed-node census);
+  engine-side `GameZNode.ZoneId` → `SceneBuilder.BuildSubtree(…, zoneGate: true)` →
+  `Mech3.ZoneGate` per camera. Note `zone_id` does *not* explain the C5 coarse/fine ground pair —
+  those are all `zone_id=1`.
 - **`zone_set` — every polygon carries one (decoded 2026-08-04, `BL-057`, parse+census only, no
   rendering change).** A per-**polygon** list field (unified extraction shape `zone_set`; upstream's
   current Polygon struct spelling, absent on a legacy v0.6.1 tree) — finer-grained than `zone_id`,
@@ -63,10 +69,11 @@ Part of the [format documentation](README.md) (see also [gamez.md](gamez.md), [c
   its polygons.
 
   **Not a ground selector — checked and ruled out** (the original backlog evidence): this is *not*
-  what picks between coarse/fine ground variants or any other content swap. **Which zone is active
-  is not in any data file** (the same unresolved question as `zone_id`, see weather.md) — nothing in
-  `CSVM/src` reads `ZoneSet`, and per the plan's ground rules a wrong guess here would delete visible
-  content, so no rendering consequence is drawn from it in this item.
+  what picks between coarse/fine ground variants or any other content swap. Which zone is active is
+  now known for the per-**node** field (the camera's weather state, above), but **no decompiled
+  gate reads the per-polygon `zone_set`** — nothing in `CSVM/src` reads `ZoneSet` either, and per
+  the plan's ground rules a wrong guess here would delete visible content, so no rendering
+  consequence is drawn from it in this item.
 - **Authoring gizmos: a lone untextured triangle is a marker, never scenery (decoded 2026-08-01).**
   Mission and AI anchors are mesh-less empty nodes, but many carry one **single-polygon,
   three-vertex mesh whose only material is `Colored`** — the level editor's visual mark for the

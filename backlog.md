@@ -1167,31 +1167,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Environment & world
 
-- `BL-036` `[Research]` `[Blocked: zone selection unknown]` **We ignore `zone_id` entirely** (found 2026-07-22). Every gamez node carries a `zone_id`:
-  `-1` = always rendered, `1`/`2`/`3` = only when that zone is active. Both zones span the **whole
-  map** spatially, so they are alternative world variants, not regions. Per-chapter node counts
-  (`-1` / zone1 / zone2 / zone3): C1 3529/2666/869/—, C1B 3500/2101/2/—, C1C 4181/146/1317/—,
-  C2 4189/766/1/—, C2B 3338/149/1414/—, C3 3759/1647/2/—, C4 5330/802/2157/—, C5 9734/1555/—/149.
-  So C1B, C2 and C3 are effectively single-zone (1–2 nodes in the second); C1C, C2B and C4 are
-  zone2-dominant; C1 and C5 zone1-dominant. **Nothing in `CSVM/src` reads the field** — we render
-  every zone's geometry at once. Plausible source of artifacts; not yet shown to cause a specific
-  one (checked and ruled out for the C5 ground z-fight, where both surfaces are `zone_id=1`).
-  **Also checked and ruled out for `BL-250`'s C5 doubled clutter (2026-08-04):** the repro node
-  (`g4664`, `analysis/item9-depth-bias/CBLOCK-LOD.md`'s clean case) carries `zone_id=1` for the
-  *whole* node while hosting both the `cblock1` subface polygon and the `cblock4` base polygon —
-  one node-level value cannot separate two polygons on the same node. Broader: C5's `cblock1/2/3`
-  nodes span `zone_id` −1/1/3, `cblock4/5/6` nodes are only −1/1 (never 3) — no clean split between
-  the two districts either way, so `zone_id` is not the missing filter there.
-  **Documented 2026-07-22** (polish-3 item 2) in `docs/formats/world-structure.md`, counts
-  re-verified against `nodes.json`. **Blocked on the same unknown as the fog zone:** which zone a
-  mission activates is in no file in the install (exhaustive negative result now written up in
-  `docs/formats/weather.md`), so implementing this means *guessing what to hide* — and a wrong
-  guess deletes visible world content, which is strictly worse than drawing both. The user's
-  zone A/B has since answered **C5 = zone1** (2026-07-22), which would mean hiding C5's 149
-  `zone3` nodes — but that is exactly the guess-what-to-hide risk, and the *fog* answer does
-  not license a *geometry* change. C1–C4 are still unanswered. Do not act on this until the
-  remaining chapters are settled and there is a visible artifact it demonstrably fixes.
-
 - `BL-037` `[Research]` **`WorldPartitionSetActive` is unimplemented and undescribed — a C3-only mechanism.**
   Measured: **all 25 uses are `support\c3\*.gw` — C3 only** — and it takes rectangle coordinates,
   not node names. It never appears in any C5 script, so it is NOT the C5 ground-LOD mechanism —
