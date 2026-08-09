@@ -1881,10 +1881,20 @@ every rig respawns), owned only while the board is visible via `FlightController
   damping would shrink a full-window overlay for no reason.
 
 ## src/Flight/Weather.cs
-`WeatherState`: per-mission atmosphere from the flown mission's own weather.json — per-zone fog
-(`FOG_COLOR`/`FOG_RANGES`/`FOG_ALTITUDE`), `SUNLIGHT_*` → `ZoneFog.WorldLight` (`SunIncidence`
-0.46 / `MinWorldLight` 0.15, TUNE), the `CLOUD_COVER` whiteout band (`WhiteoutAmount`
-trapezoid), `WIND`, and precipitation → `PrecipData`. Schema + colours + zone names: weather.md.
+`WeatherState`: per-mission atmosphere from the flown mission's own weather.json — per-zone
+`ZoneWeather` records holding fog (`FOG_COLOR`/`FOG_RANGES`/`FOG_ALTITUDE`), `SUNLIGHT_*` →
+`WorldLight` (`SunIncidence` 0.46 / `MinWorldLight` 0.15, TUNE) and `SUNLIGHT_ORIENTATION` →
+`SunOrientation`, plus the `CLOUD_COVER` whiteout band (`WhiteoutAmount` trapezoid), `WIND`, and
+precipitation → `PrecipData`. Schema + colours + zone names: weather.md.
+⚠ The record is named for the whole zone, not for the fog, because `WeatherRig.ApplyZone` writes
+  all three in ONE call on the zone edge — the binary's own shape (`FUN_00472ea0` sets the fog
+  parameters and then the `sunlight` node's orientation). A zone change that moved the fog and left
+  the light behind is the bug that single record makes unrepresentable (`BL-324`).
+⚠ `SunOrientation` is Godot euler RADIANS, assignable straight to `DirectionalLight3D.Rotation`:
+  the gamez→Godot mapping is the **identity** (gamez node eulers are already read as
+  `Basis.FromEuler(v, Yxz)`, Godot's default order is YXZ, a directional light shines along local
+  −Z). It shades AIRCRAFT only — the world is fullbright. Pinned against the original's own
+  euler→direction helper in `CSVM.Tests/SunOrientationTests.cs`.
 ⚠ `CLOUD_COVER`/`WIND`/precip keys pair with BARE scalars — `ZrdrDict.FromAlternating` cannot
   read them; walked raw (`StringAfter`/`ScalarAfter`/…). Per-zone blocks are list-valued (dict).
 ⚠ `CloudBandCentre` is the band midpoint and is deliberately ONE spelling for two consumers: the
@@ -3878,7 +3888,10 @@ whiteout could live there only because it is a bare `ColorRect`.
   orientation is the *shading* direction: C3 authors yaw 135 while the `sun` node sits at yaw 45, so
   a flare keyed off the parameter draws 90° from the visible disc. Anchoring to the node also makes
   the flare immune to any gamez→Godot axis error, since disc and flare share the conversion
-  (`WORLD-26`). That our own `DirectionalLight3D` agrees with neither is `BL-324`.
+  (`WORLD-26`). Our `DirectionalLight3D` now wears `SUNLIGHT_ORIENTATION` (`BL-324`), so it agrees
+  with the *shading* and still not with the disc — which is the original's own arrangement: its
+  `sunlight` light node and its `sun` billboard are unrelated objects with no code path between
+  them. Reproduced, not reconciled.
 ⚠ **Two gates, from two files, that must agree**: a `sun` node in the horizon subtree, and
   `LensFlareTexture` slots in `support\<ch>\init.gw`. Both are true of **C2 and C3 only** — as is the
   `sun` texture, a third agreement. Nothing is keyed to a chapter name; a disagreement is logged, not

@@ -84,6 +84,11 @@ public sealed class WeatherRig
 
     private readonly SessionSpec _spec;
     private readonly Node3D _worldRoot;
+    // BL-324: the world's one DirectionalLight3D, whose bearing is the zone's authored
+    // SUNLIGHT_ORIENTATION. A constructor argument rather than a SetX() like SetDeckZoneId /
+    // SetFogVolumes, because ApplyZone cannot do its job without it — the others are optional
+    // refinements to a rig that already works, this is not.
+    private readonly DirectionalLight3D _sun;
     // One rig's deck tiles and which variant they currently carry, keyed by the deck node's
     // instance id — per rig, because each rig flies its own copy of the deck (AssignCloudDecks)
     // through its own altitude regime.
@@ -130,10 +135,11 @@ public sealed class WeatherRig
     // (PlayerRig.HorizonDomes, B14) — there is one per built horizon zone, not one per rig.
     private int _deckZoneId = -1;
 
-    public WeatherRig(SessionSpec spec, Node3D worldRoot)
+    public WeatherRig(SessionSpec spec, Node3D worldRoot, DirectionalLight3D sun)
     {
         _spec = spec;
         _worldRoot = worldRoot;
+        _sun = sun;
         _activeZone = spec.SkyZone;
     }
 
@@ -472,11 +478,12 @@ public sealed class WeatherRig
                          + $"{change.State} keeps fog zone '{change.Zone}'");
             if (change.Applied)
             {
-                var fog = _weather.Fog(change.Zone);
-                ApplyFogGlobals(fog);
+                var fog = _weather.Zone(change.Zone);
+                ApplyZone(fog);
                 GD.Print($"weather: camera state {change.State} -> fog zone '{change.Zone}' — "
                          + $"fog {fog.FogNear:0}-{fog.FogFar:0} m, altitude {fog.FogLow:0}-{fog.FogHigh:0} m, "
-                         + $"world light {fog.WorldLight:0.00} (dome built for '{_activeZone}')");
+                         + $"world light {fog.WorldLight:0.00}, sun {Mathf.RadToDeg(fog.SunOrientation.X):0.#}°/"
+                         + $"{Mathf.RadToDeg(fog.SunOrientation.Y):0.#}° (dome built for '{_activeZone}')");
             }
         }
     }
@@ -670,12 +677,13 @@ public sealed class WeatherRig
     {
         if (_weather == null)
             return;
-        var fog = _weather.Fog(_activeZone);
-        var fogRange = ApplyFogGlobals(fog);
+        var fog = _weather.Zone(_activeZone);
+        var fogRange = ApplyZone(fog);
         GD.Print($"weather [{_activeZone}]{(_spec.NoFog ? " --no-fog: fog + whiteout OFF, world light unchanged;" : ":")} " +
                  $"fog {fog.FogColor.R:0.00} gray {fogRange.X:0}–{fogRange.Y:0} m " +
                  $"(authored {fog.FogNear:0}–{fog.FogFar:0}), " +
                  $"altitude {fog.FogLow:0}–{fog.FogHigh:0} m; world light {fog.WorldLight:0.00}; " +
+                 $"sun {Mathf.RadToDeg(fog.SunOrientation.X):0.#}° pitch / {Mathf.RadToDeg(fog.SunOrientation.Y):0.#}° yaw; " +
                  $"cloud band {_weather.CloudBottom:0}–{_weather.CloudTop:0} m (±{_weather.CloudThickness:0})");
         if (_fogWhiteout.Armed)
         {
@@ -689,14 +697,19 @@ public sealed class WeatherRig
         SetupWhiteoutAndPrecip(rigs);
     }
 
-    /// <summary>Writes ONE zone's fog into the global shader parameters — colour, range, altitude
-    /// band and the <c>SUNLIGHT</c>-derived world light — and returns the range actually written
-    /// (<c>--no-fog</c>'s out-of-reach pair, or the authored one). Called twice: once by
-    /// <see cref="SetupWeather"/> for the zone the flight builds with, and again from
+    /// <summary>Applies ONE zone — the fog globals (colour, range, altitude band), the
+    /// <c>SUNLIGHT</c>-derived world light, and the sun's bearing — and returns the fog range
+    /// actually written (<c>--no-fog</c>'s out-of-reach pair, or the authored one). Called twice:
+    /// once by <see cref="SetupWeather"/> for the zone the flight builds with, and again from
     /// <see cref="Tick"/> each time the camera's weather state changes zone (B11). Every write
     /// here is idempotent and order-free, which is what lets the second caller be an edge trigger
-    /// rather than a per-frame recompute.</summary>
-    private Vector2 ApplyFogGlobals(WeatherState.ZoneFog fog)
+    /// rather than a per-frame recompute.
+    ///
+    /// <para>Fog and light in ONE method is the binary's own shape: <c>FUN_00472ea0</c> is a single
+    /// zone-apply that sets the fog parameters and then calls <c>FUN_004dc610</c> on the
+    /// <c>sunlight</c> node, fired by the same zone change (<c>BL-324</c>). Splitting them would
+    /// let a future zone change move the fog and leave the light behind.</para></summary>
+    private Vector2 ApplyZone(WeatherState.ZoneWeather fog)
     {
         // FOG_COLOR is a DX7-era framebuffer (sRGB) value: the original's fully-fogged pixels
         // are exactly 0.69·255 = 176 gray (measured in OriginalScreenshots/"C1 IA1 Cloudcoverage
@@ -744,12 +757,23 @@ public sealed class WeatherRig
         // (Applied in linear space, 0.80 only reaches 210→190; gamma-space lands the deck 210→169.)
         float worldLightLinear = new Color(fog.WorldLight, fog.WorldLight, fog.WorldLight).SrgbToLinear().R;
         RenderingServer.GlobalShaderParameterSet("csky_world_light", worldLightLinear);
+        // BL-324: the zone's authored SUNLIGHT_ORIENTATION, assigned with no conversion — see
+        // WeatherState.ZoneWeather.SunOrientation for why the gamez→Godot mapping is the identity.
+        // Adopted unconditionally: no TUNE, no clamp, no blend toward the launcher's hand-picked
+        // angle. It shades AIRCRAFT and nothing else — the world is built fullbright, so an
+        // unshaded surface neither lights nor shadows from this (BL-331/BL-332 own the two
+        // consequences of that: the missing ground shadow, and the still-hardcoded intensity).
+        //
+        // ⚠ Like the fog globals above, this is ONE light for the whole session, so in splitscreen
+        // both panes wear rig 0's zone. Same pre-existing property, and the same in the original:
+        // its `sunlight` is a single named gamez node, not one per view.
+        _sun.Rotation = fog.SunOrientation;
         return fogRange;
     }
 
     /// <summary>The per-rig whiteout overlays and the mission's precipitation field — the half of
     /// <see cref="SetupWeather"/> that builds NODES rather than writing global shader parameters,
-    /// split out so the fog half (<see cref="ApplyFogGlobals"/>) can be re-run on a camera-state
+    /// split out so the zone-apply half (<see cref="ApplyZone"/>) can be re-run on a camera-state
     /// change without rebuilding either.</summary>
     private void SetupWhiteoutAndPrecip(IReadOnlyList<PlayerRig> rigs)
     {
