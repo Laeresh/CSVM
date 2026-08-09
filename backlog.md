@@ -1519,6 +1519,58 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the two reference stills did not move; and the CAP-12 1700 m rung for the far-field half.
   *Cross-refs:* `PT-47` (d) judges the C1C split at the controls, `BL-325`, `docs/formats/fogvol.md`.
 
+- `BL-328` `[Tuning]` **The deck floor's 20,480 m annulus half-span was sized against a mechanism
+  that no longer exists — re-derive it, or decide it does not need one** (minted at
+  `PLAN-weather-decompile-match` `D31`, 2026-08-09; `WorldBuilder.AddDeckAnnulus`). `C26`
+  (PLAN-overcast-match) picked 20,480 m from the rim formula `f·K/halfSpan` with `K` =
+  `DeckCeilingHeight` = 135 m, i.e. against a ceiling **anchored to the camera**, which made the
+  floor's far edge sit at a constant **3.95 px** below the horizon at every altitude. `B13` then
+  made the floor world-fixed at the tiles' authored altitude and `B14` deleted `K` outright, so the
+  edge's elevation is now `f·(cameraY − 960)/20480` and **grows with altitude**: measured at C1
+  looking level west, **6 px** below the horizon at y = 1192 (predicted 6.79) and **33 px** at
+  y = 2000 (predicted 30.4), where the 144-tile sheet's own 6,144 m edge would put them at 22.6 and
+  101 px. At y = 1192 the edge reads as a soft ~19-unit ramp over ~10 rows from the `zone2` dome
+  (mean 193.9) onto the floor (212.6). Nothing is broken today — the extension is still doing more
+  work than the bare sheet at every above-deck altitude, and `D31` closed the below-deck strip it
+  was built for by a different mechanism entirely (the zone-1 dome; the ladder's dip fell from
+  `C26`'s 2.07/+1.11 to **0.15/0.14** at every rung) — but the NUMBER now rests on a dead
+  derivation.
+  ⚠ Traps: **below the deck the annulus is unreachable** — the tiles are `zone_id 2` and `B12`
+  culls the whole sheet at camera state 1, so any below-deck measurement of it is measuring a
+  forced `--sky-zone=zone2`, not play. The ceiling constraint is the flown dome, not the map:
+  C1's `zone2` dome renders at 8,744 m × 2.5 = **21.86 km** unclamped, so 20.48 km already sits
+  only 1.38 km inside it and a larger annulus needs `HorizonScaleFor` checked first (`B14` fits the
+  scale per dome now). Do not reinstate `DeckCeilingHeight` or any camera-anchored floor to make
+  the old formula apply again — `B14` deleted it on decompiled evidence.
+  *Playtest after fix:* climb C1 from 1,100 m to the ceiling looking level at a clean horizon
+  (`--pos=-7323,<y>,-3829 --direction=-1,0,0`) and say whether the floor's far edge is ever
+  visible as an edge.
+  *Cross-refs:* `docs/architecture.md`'s `WorldBuilder.cs` entry, `PLAN-weather-decompile-match`
+  `D31`/`B13`/`B14`.
+
+- `BL-329` `[Tuning]` `[Owed-playtest]` **The D32 in-cloud flicker's rate and ramp are declared
+  TUNE, not decoded** (`PLAN-weather-decompile-match` D32, 2026-08-09;
+  `Session/WeatherRig.BandFlicker`). `FUN_0042ee40`'s drift rate multiplies a per-mission
+  weather-struct field ≈ `+0x934` that no reader decodes and no capture pins a value for, so
+  `BandFlicker.DefaultRate = 5.5f` is picked, not measured: at the re-randomized drift speed's
+  midpoint (0.2..1.0, mean 0.6) it traverses the blend parameter's full [0,1] range in `5.5 * 0.6 *
+  0.1 = 0.33`/s, i.e. ~3 s at the mean and 1.8–9.2 s across the randomized range — "a full traverse
+  in a few seconds", not a decoded figure. `BandFlicker.RampFrames = 30` (0.5 s at the fixed 60 Hz
+  step) is the amplitude ramp that keeps a session's frame 0 (and any static probe/golden capture
+  at a rig's first tick) reading the unremapped `WeatherState.WhiteoutAmount` exactly — its length
+  is also a guess, chosen only to be short next to a flight and long next to one frame.
+  *Evidence:* `docs/PLAN-weather-decompile-match.md`'s D32 entry; the curve shapes themselves
+  (`BandFlicker.LogCurve`/`AtanCurve`/`Remap`) ARE decoded from `FUN_0042ee40` and are not part of
+  this TUNE — only the rate and ramp length are a judgement call.
+  *Fix shape:* none pending — needs in-cloud footage of the original with visible timing (a static
+  screenshot cannot show a drift rate) before either constant can move off a guess.
+  *Playtest after fix:* fly into C1's cloud band and hold in the RAMP, not the opaque core — the
+  core (1032–1062 m) is fully whited out and the flicker's own guard skips it there by design
+  (`--freecam --chapter=C1 --pos=-2000,1000,-1792 --direction=0,0,-1` sits in the bottom ramp) —
+  and compare the shimmer's pace against any original in-cloud footage (`CAP-12`'s C4 take has
+  in-cloud frames) once such footage is reviewed for timing rather than just colour.
+  *Cross-refs:* `docs/architecture.md`'s `Session/WeatherRig.cs` entry (D32 bullet).
+
 - `BL-304` `[Bug]` **Water gets the WorldLight dim; the original renders it unmodulated** (`CAP-11`
   A/B, 2026-08-07; surfaced closing `BL-110`; evidence `playtest/CAP-11/README.md`). C2B ocean
   foreground, same world, matched spawn pose: original 53.9 vs ours 42.0–42.5 — ratio

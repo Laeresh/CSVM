@@ -574,7 +574,12 @@ public sealed partial class MapEdgeExtender : Node3D
             var ground = new Node3D { Name = "ground", Transform = mirror };
             foreach (var (node, parentXf) in tiles)
             {
-                var leaf = _scene.BuildSubtree(node, skip: n => !ReferenceEquals(n, node));
+                // zoneGate: the mirrored tile is a copy of a real world tile, so it inherits that
+                // tile's own zone_id and is culled with it (B12). Without this, the base map's
+                // ground would vanish above the deck while its mirrored continuation kept
+                // drawing — a seam the gate would have created on its own.
+                var leaf = _scene.BuildSubtree(node, skip: n => !ReferenceEquals(n, node),
+                    zoneGate: true);
                 if (leaf == null)
                     continue;
                 if (parentXf != Transform3D.Identity)

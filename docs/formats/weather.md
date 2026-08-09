@@ -21,7 +21,7 @@ returns "no fog" then.
 
 | Block | Read as | Notes |
 |---|---|---|
-| `VIEWING_RANGE` | dict | not used by the remake |
+| `VIEWING_RANGE` | dict | not used by the remake (the original scales `FOG_RANGES`/far clip by its per-detail `FOG_SCALE`/`CLIP_SCALE`; HIGH is 1.0 everywhere, so inert at full detail — see the decompile section) |
 | `WIND` | **bare-scalar block** | `STATIC_VELOCITY [x,y,z]`, `RANDOM_MAX_SPEED s`, `RANDOM_ACCEL a` |
 | `CLOUD_COVER` | **bare-scalar block** | `TOP`, `BOTTOM`, `THICKNESS` (metres) + optional `TOP_COLOR`/`BOTTOM_COLOR` |
 | `ZONE<n>` | dict (+ `SW_*` twin) | per-zone fog; the `SW_*` software-renderer twin is ignored. **The names are per chapter — see below** |
@@ -109,6 +109,65 @@ scripts, and none of them selects anything:
 remaining `BL-100` A/B. The two C1 strings are not two zone selections: one names a node C1 does
 not have, the other scrolls a texture. Nothing in `interp.json` bears on which zone a mission
 flies.
+
+#### The engine's rule, decompiled: zones are camera STATES, switched in flight (crimson.exe via Ghidra, 2026-08-09)
+
+The binary answers the selection question, and the answer is that **nothing selects one zone per
+mission — the engine switches between them at runtime, per camera position**. The per-frame
+atmosphere update (`FUN_0042ee40`, called from `FUN_0042f480`) computes a state 1/2/3, and on any
+change `FUN_00472ea0` applies the matching `ZONE<n>` block wholesale:
+
+- **State 1 → `ZONE1`**: the default — camera below the cloud band (or no band at all).
+- **State 2 → `ZONE2`**: camera altitude ≥ the whiteout core's bottom edge (band centre −
+  `THICKNESS`/2, precomputed at world init `FUN_004735b0` into `0071c2d0`). The check sits
+  *inside* the `CLOUD_COVER`-exists gate, so **a mission without `CLOUD_COVER` can never enter
+  zone 2**.
+- **State 3 → `ZONE3`**: camera inside a gamez `fvol*` volume — armed only when `fogvol.zrd`'s
+  `fog_zone` flag is set (see [fogvol.md](fogvol.md), which this decode also settles).
+
+Applying a zone means: world fog near/far = `FOG_RANGES` × the active detail level's `FOG_SCALE`;
+world fog altitude pair and `FOG_COLOR` (written into the world node's fog block at world+0x38);
+camera near/far clip = `CLIP_RANGES` with far × `CLIP_SCALE` (a second camera's far is clamped
+≥ 6.0); and the whole `SUNLIGHT_*` block pushed onto the gamez `sunlight` light node. The
+hardware renderer indexes `ZONE1–3`, the software renderer `SW_ZONE1–3` — confirming the
+"software twin" assumption above (the loader `FUN_004bc680` even initializes `SW_*` as a memcpy
+of `ZONE1–3` before parsing its overrides, so an absent twin inherits the hardware zone). So
+`VIEWING_RANGE` *is* consumed by the original — as those per-detail `FOG_SCALE`/`CLIP_SCALE`
+multipliers — but with HIGH authoring 1.0 everywhere it is inert at full detail, and the
+remake ignoring it stays correct.
+
+**Every settled per-chapter verdict above is consistent with this rule** — the renders that
+settled C1/C1C/C2B/C4 on `zone2` were all shot *above the deck* (state 2), the below-deck
+reference is literally named `Zone1 environment`, C1B/C2/C3 author their `CLOUD_COVER` band out
+of reach (C1B/C3 10000–11000, C2 19024–20124 — checked in the extracted files 2026-08-09), so
+state 2 never fires and they fly zone 1 always — which is also why C2's empty `zone2` dome is
+never a hole, and why the controls saw `ZONE1` haze persist above its 1024 m `FOG_ALTITUDE` top
+(B13: the fade is per fragment *within* a zone; the *switch* is `CLOUD_COVER`, a different key) —
+and
+C5, the one chapter with a `ZONE3` and `fog_zone 1`, is exactly the fog-volume-interior case.
+What changes is the model: a deck chapter flies **both** zones, switched at the core's bottom
+edge — a different altitude from the deck-regime flip at the band *centre* (`A7`), but both sit
+inside the fully-opaque core (C1: switch 1032, flip 1047, core 1032–1062), which is what makes
+either invisible. The remake's one-static-zone `--sky-zone` model is therefore an approximation
+that is exact above the band and wrong below it (a below-deck C1 should wear `ZONE1`'s fog);
+whether that gap is visible enough to chase is a backlog question, not settled here.
+
+> **Landed 2026-08-09 (`PLAN-weather-decompile-match` B11).** The remake now switches the FOG
+> block (`FOG_RANGES`, `FOG_ALTITUDE`, `FOG_COLOR` and the `SUNLIGHT`-derived world light) per
+> camera state, on the state edge, exactly as `FUN_00472ea0` does — a below-deck C1 river pose
+> measures a fog wall at **1752 m** against `ZONE1`'s authored 1750, where the static model drew
+> it at 4000. The SKY DOME still comes from one zone per flight (`WeatherRig._activeZone`,
+> `B14`'s business), and the per-zone `CLIP_RANGES` far is still not applied — a kept divergence,
+> per the `CLIP_RANGES` note below. `--sky-zone` becomes a state override (Decision 5): explicit
+> ⇒ static, default ⇒ state-driven. **The `SUNLIGHT_*` pair is NOT uniformly identical across the
+> deck chapters** — 6 of the 24 C1/C1C/C2B/C4 missions author a different `SUNLIGHT_AMBIENT`/
+> `_DIFFUSE`/`_COLOR_*` per zone (C1 M02/M05, C1C M01/MP1/MP3, C2B M04), so the world light rides
+> the state too; C1/IA1 — the mission every golden and every recorded A/B pose flies — is one of
+> the 18 identical ones, which is why the change reads as fog-only in every instrument on file.
+
+Decompiled sources are reproducible from `crimson.exe` in Ghidra at the addresses named
+(loader `FUN_004bc680` = `weather.cpp`, zone parser `FUN_004bc3e0`, per-frame `FUN_0042ee40`,
+zone applier `FUN_00472ea0`, world init `FUN_004735b0`).
 
 So the remake selects it via `--sky-zone` (default `zone2` = night). **Every chapter is now
 settled**, in three passes and by three different instruments:
@@ -287,14 +346,33 @@ the 53 weather files; `zone1`'s `FOG_ALTITUDE` equals `[CLOUD_COVER BOTTOM, band
 ⚠ **Shoot the comparison with fog neutralised on BOTH sides** (`--no-fog`). With the dome fogged,
 either zone renders the same flat grey below the band and the test is degenerate (`METHOD-1`).
 
-⚠ **The gamez `zone_id` node census is not admissible evidence about which zone a mission flies**,
-even though it happened to agree. Nothing in `CSVM/src` reads `zone_id`; its agreement with the
-four already-settled chapters is degenerate (three of them have no zone-2 world to disagree with,
-and C5 — the one that could speak — disagrees); and in C1 the visibility reading contradicts
-itself, since `zone_id 1` holds the mission's own `ap_transmitter` and `dz1`–`dz5` targets while
-`zone_id 2` holds the entire cloud deck, all 9 `fvol` volumes and the dome, so a draw-only-the-flown-zone
-gate leaves mission content unbuilt whichever zone is chosen. It is a partition tag of one world
-whose runtime meaning is unknown. Do not re-cite it.
+~~⚠ **The gamez `zone_id` node census is not admissible evidence about which zone a mission
+flies**, even though it happened to agree. Nothing in `CSVM/src` reads `zone_id`; its agreement
+with the four already-settled chapters is degenerate (three of them have no zone-2 world to
+disagree with, and C5 — the one that could speak — disagrees); and in C1 the visibility reading
+contradicts itself, since `zone_id 1` holds the mission's own `ap_transmitter` and `dz1`–`dz5`
+targets while `zone_id 2` holds the entire cloud deck, all 9 `fvol` volumes and the dome, so a
+draw-only-the-flown-zone gate leaves mission content unbuilt whichever zone is chosen. It is a
+partition tag of one world whose runtime meaning is unknown. Do not re-cite it.~~
+
+**Correction (2026-08-09, decompile).** `zone_id` is not a per-mission zone selector and was
+never claimed to be one by anything that reads it at runtime — it is the **per-frame visibility
+gate** [decoded above](#the-engines-rule-decompiled-zones-are-camera-states-switched-in-flight-crimsonexe-via-ghidra-2026-08-09):
+`FUN_0056c430(node_zone_id)` draws a node iff `zone_id` is −1, or `zone_id` is in the camera's
+armed zone set. That set is armed every frame by `FUN_0042ee40` via `FUN_004d62d0` with
+`{count=2, 0, state}` — `state` being the camera's *current* 1/2/3, not a fixed per-mission
+choice. The "mission content unbuilt whichever zone is chosen" objection dissolves under this
+reading: nothing is ever built-once-and-picked. A node with `zone_id 1` (C1's `ap_transmitter`,
+`dz1`–`dz5`) draws whenever the camera is in state 1 (below the deck) and is culled in state 2
+(above); `zone_id 2` (the deck tiles, `cloudparent` facades, the `fvol*` volumes, the zone-2
+dome) is the mirror. Both draw across a single flight that crosses the deck, which is exactly
+what a mission with below- and above-deck objectives needs. The full install-wide census
+(C1/C1C/C2B/C4 decks, C1B/C2/C3/C5 horizon zones) is tabulated in
+[the deck census below](#the-deck-census-zone_id-across-all-eight-chapters-2026-08-09) — it
+confirms the tiles/`cloudparent`/`fvol*` = `zone_id 2`, mission content = `zone_id 1` pattern in
+three of the four deck chapters and records where it does not (C2B's `fvol*` are `zone_id −1`,
+and C2B ships no `cloudparent` nodes at all — a real per-chapter divergence, not a re-derivation
+of this disproof).
 
 **The skirt/`FOG_COLOR` pair agrees — but it cannot discriminate here.** Each dome's untextured
 skirt is authored in its zone's own `FOG_COLOR` (above), and every render of these four is
@@ -302,6 +380,147 @@ consistent with that: C1/C1C/C2B show a 176 skirt against 176 fog, C4 a 192 skir
 is a *consistency* check only in these four chapters, because both of their zones ship the **same**
 `FOG_COLOR` (C1/C1C/C2B `0.69³`, C4 `192³`) — so the pair would look right under either verdict.
 Where the two zones' colours differ it is a real check, which is the form the ⚠ above states it in.
+
+#### The deck census: `zone_id` across all eight chapters (2026-08-09)
+
+Read from `extracted/<CH>/gamez/nodes.json` + `models.json` (only C1 had been measured before
+this pass; C1C, C2B, C4 and the four non-deck chapters' horizon subtrees are new). Deck-tile
+population found by material texture prefix (`cloudlayer*` for C1/C1C/C2B, `sky1*` for C4, per
+`WorldBuilder`'s own classifier comment):
+
+| chapter | deck tiles (count / altitude / `zone_id`) | `cloudparent` `zone_id` | `fvol*` `zone_id` | mission content `zone_id` |
+|---|---|---|---|---|
+| C1 | 144 / 960 m / **2** | 28 nodes / **2** | 9 / **2** | `ap_transmitter`, `dz1`–`dz5` = **1** |
+| C1C | 144 / 960 m / **2** | 30 nodes / **2** | 21 / **2** | no `ap_transmitter`/`dz*` by name; 146 generic `zone_id 1` nodes (`gNNNNN`) — the pattern (mission-placed geometry gated to 1) holds, the target names are chapter-specific |
+| C2B | 144 / 960 m / **2** | **none** | 9 / **−1** | same generic `zone_id 1` population (149 nodes) as C1C |
+| C4 | 144 / 1050 m / **2** | 45 nodes / **2** | 9 / **2** | `dz1`–`dz5` = **1** |
+
+⚠ **C2B contradicts the C1 pattern on two counts, and it is recorded, not smoothed over.**
+C2B ships **zero** `cloudparent` nodes (C1/C1C/C4 have 28–45), and its `fvol*` volumes are
+`zone_id −1` (always visible) rather than `2` — so C2B's fog volumes are never culled by camera
+state at all, unlike the other three deck chapters'. Both are real per-chapter authoring facts,
+not a reading error (re-run, same result). Neither breaks the visibility-gate mechanism itself
+(`zone_id −1` just means "always drawn," which `FUN_0056c430` handles the same as any other −1
+node), but a `zone_id`-gate implementation (`B12`) must not assume every deck chapter's `fvol*`
+population is gated.
+
+**`B12` landed the gate on exactly this reading (2026-08-09).** The remake now reads the zone off
+each chapter's own volumes (`WorldBuilder.FogVolumeZoneIdOf`) instead of assuming one, and C2B is
+the chapter that proves it: at `(-7325, 192, -3829)` its ambient cloud field measures **123,989
+sprite px with the gate on against 0 with `--no-zone-cull`** — the gate makes it *more* visible,
+because the `zone_id 2` deck that was occluding it from below is culled and the `zone_id −1` field
+is not. C1 at the identical pose reads 0 both ways, its field being `zone_id 2`. Engine-side:
+`docs/architecture.md`'s `src/Mech3/ZoneGate.cs` entry.
+
+#### The deck tiles author `fog: true` — the cards' `fog: false` does not extend to them (2026-08-09, `D31`)
+
+Read from `extracted/<CH>/gamez/models.json` for every tile the deck classifier picks (one flat,
+untilted 4-vertex quad at the coverage-winning altitude):
+
+| chapter | tiles | texture | `fog` | `lighting` | `clouds` |
+|---|---|---|---|---|---|
+| C1 / C1C / C2B | 144 each @ y 960 | `cloudlayer.tif` | **`true` 144/144** | `false` | `false` |
+| C4 | 144 @ y 1050 | `Sky1.tif` | **`true` 144/144** | `false` | `false` |
+
+The `fog: false` recorded in [`fogvol.md`](fogvol.md) belongs to the `fvol` cloud **cards**, and
+to nothing else in the overcast: the deck tiles fog, and so do all 626 / 1056 / 1453
+`cloudparent` facades in C1 / C1C / C4. What *does* author `fog: false` is **every horizon model
+in every chapter** (C1 6/6, C1C 5/5, C2B 3/3, C4 5/5) — which is why the below-deck ceiling never
+fogs out. ⚠ **So "the original's ceiling texture survives to ~12.6 km" is a fact about the DOME
+with no tile-flag component at all** (`PLAN-overcast-match` `B15`'s observation, `B14`'s
+mechanism, `D31`'s flag check); the tiles' `fog: true` is instead what makes the ABOVE-deck floor
+— the 144 tiles and `C26`'s annulus alike, both through the same fogged material path — fade to
+`FOG_COLOR` at the horizon.
+
+#### The below-deck ceiling's measured profile matches the original (2026-08-09, `D31`)
+
+At the C1 river pose (`-7323,192,-3829` / `-0.997,-0.1,0.070`) against
+`OriginalScreenshots/C1 IA1 Fog river.png`, both frames anchored on their own terrain silhouette
+(the two are not framing-matched — ours rises 115 px above its true horizon, the original's sits
+48 px below its own) and measured in a HUD-free column band:
+
+| | ceiling texture survives to | dead-flat band above the silhouette |
+|---|---|---|
+| original | the silhouette (0 px) | **20 px at 175.000** |
+| ours (`ZONE1` 1000–1750 + the zone-1 dome) | the silhouette (0 px) | **21 px at 176.000** |
+| ours under static `ZONE2` 1000–4000 (the pre-`B11` fog) | dies 110 px above it | 66 px |
+
+⚠ **The "the original is dead-flat for 36 px above its horizon" residual (`PLAN-overcast-match`
+`C26`, restated by `B14`) does not exist** — it was a full-width sd (the still's HUD gauges and
+crosshair sit in those rows) anchored on a horizon row of 370 derived as "terrain onset 411 − 41";
+the still is a level 713-row frame, so its true horizon is its centre row **356**, and its terrain
+onset in a clean band is **404**, which reproduces `C21`'s own "41 px below the horizon" exactly.
+Our band reads 176.000 against the original's 175.000 — C1's authored `FOG_COLOR` against a
+one-unit-lower render, a DX7 quantisation-sized offset, recorded and not chased.
+
+`horizon/zone1` and `horizon/zone2` subtrees, all eight chapters (`—` = zone absent/empty):
+
+| chapter | `zone1` meshed children | `zone1` Y-levels (model, `bbox_mid.y`) | `zone2` meshed children |
+|---|---|---|---|
+| C1 | `h_zone1scroll` + `o28` (skirt) | 768: −2000/270.7/789/1835/2519.4/**2792.8**, mid **396.4** (cap); 769 (`o28`): −2000/270.7, mid −864.7 (skirt) | `moon`, `g1155`, `stars`, `h_zone2scroll` |
+| C1C | **`g1164` only** — one combined mesh, no separate skirt, no `h_zone1scroll` | 156: −5568.8/326.7/2374.7, mid **−1597.1** | `moon`, `g1155`, `stars`, `h_zone2scroll` (asset parity with C1) |
+| C2B | **`g1166` only** — same shared geometry as C1C's `g1164` (identical vertex Y-set/`bbox_mid`) | 154: −5568.8/326.7/2374.7, mid **−1597.1** | `g1167`, `g1168` (scroll+skirt equivalents; **no moon/stars**) |
+| C4 | **one node, confusingly named `h_zone2scroll`** — no separate skirt | 349: −3274.5/982.0, mid **−1146.3** | `g1165`…`g1168` (moon/skirt/stars/scroll equivalents — full parity with C1) |
+| C1B | `g1163`–`g1166` (4 nodes, full dome+skirt+sun-adjacent set) | — | — (empty marker) |
+| C2 | `sun`, `h_zone2scroll`, `g1155` (3 nodes) | — | — (empty marker) |
+| C3 | `sun`, `h_zone2scroll`, `g1155` (3 nodes) | — | — (empty marker) |
+| C5 | `moon`, `g1171` (2 nodes) | — | `zone3` (1 node, `zone_id 3`) |
+
+⚠ **The "~396 m authored cap centre" is a C1-only number, and B14 will need one per chapter, not
+a shared constant.** C1's `h_zone1scroll` is a two-piece dome (upward cap + separate downward
+`o28` skirt); C1C and C2B's zone-1 geometry is a **single** mesh with no node named
+`h_zone1scroll` at all (matching the plan's own B14 trap note that C1C has no scroll statement —
+confirmed, and corrected: the zone-1 subtree there is exactly one node, `g1164`, not a
+`g1163`–`g1166` range); C4's sole zone-1 node is even named `h_zone2scroll`, a leftover/reused
+name, not `h_zone1scroll`. None of the three reproduce C1's dome-mid-at-+396 shape — their
+whole-mesh `bbox_mid.y` values are strongly negative (skirt-dominated), because there is no
+separate cap piece pulling the average up. Whatever each chapter's below-deck ceiling distance
+actually reads as at the controls, it must be measured per chapter; C1's 396.4 does not transfer.
+
+#### ⚠ The "+396.4 m cap centre" is DISPROVEN — it is a bbox midpoint, not geometry (2026-08-09, `B14`)
+
+**`396.4` is `bbox_mid.y` of C1's `h_zone1scroll` model, i.e. `(−2000 + 2792.8) / 2`.** There is no
+polygon within 2 km of it. `B14` read the model's own vertices and polygons to place the ceiling and
+found the mesh's flat ceiling CAP — a 12-gon closing the vault — at **+2792.8 m dome-local**. The
+coincidence that made the wrong number persuasive is that A7's *measured* below-deck ceiling was
+"~400 m"; A7 was measuring the relocated deck sheet, and `C21`/`C25` later re-fit that same
+measurement to 110–155 m, so the agreement was never evidence in the first place. Everything the
+`A1` census says about the SHAPE of these meshes stands; only the reading of `bbox_mid.y` as a "cap
+centre" is retired. Do not re-cite 396.4.
+
+Each deck chapter's zone-1 dome, read from `models.json` (vertices + polygon materials), with the
+rim elevation the cap subtends from the camera — the only quantity a render can measure, since the
+dome is camera-centred and uniformly scaled about the camera:
+
+| chapter | zone-1 dome | flat ceiling cap (dome-local Y / radius / rim elevation) | texture | UV scroll |
+|---|---|---|---|---|
+| C1 | `h_zone1scroll` (vault) + `o28` (skirt) | **+2792.8** / 2470–2609 / **46.9–48.5°** | `sky2.tif` on the vault, elevations **1.76°…48.5°**; cap, skirt and floor disc are flat `FOG_COLOR` 176 | **0.07 u/s** (`texture_scroll` in the model, = `tex_fx.gw`'s `Object3DSetScroll on 0.07 0.0`) |
+| C1C | `g1164` — one mesh | **+2374.7** / 1448.2 / **58.6°** | **none** — every polygon is `Colored` 176 | none |
+| C2B | `g1166` — one mesh, identical vertex data to C1C's | **+2374.7** / 1448.2 / **58.6°** | **none** — `Colored` 176 | none |
+| C4 | `h_zone2scroll` (reused name; one mesh) | **+982.0** / 6400.0 / **8.7°** | **none** — `Colored` 192 | none |
+| C5 `zone3` | the zone node itself carries the model | **+982.0** / 10137.1 / **5.5°** | **none** — `Colored` 16 | none |
+
+**Two findings in that table, both authored rather than incidental.**
+
+1. **C1 is the only chapter whose below-deck sky carries a TEXTURE at all**, and the only one that
+   scrolls it. The other three deck chapters' zone-1 geometry is a single untextured shell painted
+   their own zone's `FOG_COLOR` — which is not a stub: an unfogged surface painted `FOG_COLOR` is
+   exactly what infinitely distant fogged geometry looks like, so below the deck those chapters
+   render a seamless flat overcast in every direction, by construction.
+2. **The `B18`/`C26` `FOG_COLOR` rule extends to the zone-1 domes unchanged** — verified against
+   each chapter's own `ZONE1` block, not `ZONE2`'s: C1/C1C/C2B `ZONE1 FOG_COLOR` 0.69 = **176** =
+   the `Colored` value on C1's `o28` skirt/cap/disc and on the whole of C1C's and C2B's shells;
+   C4 `ZONE1` **192**; C5 `ZONE3` **16** = its `zone3` shell. Nothing was repainted (`C26`'s ⚠
+   stands) — the data already agrees.
+
+⚠ **The cap altitudes are dome-local metres and are NOT an altitude the player can measure.** The
+dome is centred on the camera and scaled uniformly about it, and it is unfogged, so the metres are
+unobservable and the rim ELEVATION is the whole of what a frame shows. Measured on our own render
+(C1 river pose, camera pitched +30°, `f` = 599.1 px): the flat cap's edge appears at **48–52°**
+elevation against the authored 46.9–48.5° at the centre column — the spread being the 12-gon's own
+inradius/circumradius and the off-centre columns' geometry. See `docs/architecture.md`'s
+`GameSession.HorizonScaleFor` entry for why `B14` therefore keeps one uniform scale rather than
+pinning Y to metric.
 
 ### Zone keys
 
@@ -363,6 +582,16 @@ C1 970/1047, C1C 1055/1082.5, C2B 924/1024, each exactly `[CLOUD_COVER BOTTOM,
 WeatherState.CloudBandCentre]` — but it is an identity in the **unflown** zone in all three, so it
 cannot be evidence for what `FOG_ALTITUDE` does at runtime. It is recorded here as a real and
 unexplained property of the authoring, not deleted (`PLAN-overcast-match` B11/B12).
+
+**Un-retired (2026-08-09, decompile): `zone1` is not unflown in the deck chapters.** The
+"belongs to a zone C1 never flies" reading assumed one static zone per mission; the decompile
+[settles that a deck chapter flies both zones, switched by camera altitude at runtime](#the-engines-rule-decompiled-zones-are-camera-states-switched-in-flight-crimsonexe-via-ghidra-2026-08-09) —
+below the deck the camera is in state 1 and wears `ZONE1`'s fog, `zone1`'s dome geometry is what
+renders as the ceiling (see the correction on the deck's two-object mechanism, above), and
+`zone1`'s `FOG_ALTITUDE` pair is therefore live, flown data during below-deck flight in C1, C1C
+and C2B — not an inert property of geometry the camera never reaches. The 3/3 identity (band
+BOTTOM = `WeatherState.CloudBandCentre`) stands as originally measured; only its "unflown, so
+inadmissible" qualifier is retracted.
 
 ⚠ **Exactly one flown band in the whole install is inside the flight envelope, so exactly one
 chapter exercises the altitude term.** Every other chapter's flown zone authors 4000–5000 m
@@ -447,14 +676,66 @@ fully opaque core, so **moving the band or thinning `THICKNESS` exposes a hard p
 flip at 1047, core 1032–1062. See `WeatherRig.DeckRegime` and `docs/architecture.md`'s
 `WeatherRig.cs` entry for the mechanism and the ceiling distance's derivation.
 
-**Inferred, and marked as such:** where a mission authors both keys the whiteout lerps
-`BOTTOM_COLOR` → `TOP_COLOR` across the band by camera altitude. **The shipped data cannot
-falsify this.** Of the four chapters whose band is reachable (C1 970–1124, C1C 1055–1110,
-C2B 924–1124, C4 1000–1100) only C4 authors colours and its pair is *equal*, so every blend
-rule renders the same picture; the one chapter that would discriminate is C5 (top `[220]³`,
-bottom `[64]³`) and its band sits at 9950–10150 m, which no one can fly to. C1B and C3 are
-likewise 10 km up — plausibly left in and parked out of reach rather than curated, so their
-values are not evidence of intent either.
+**Correction (2026-08-09, decompile): the behaviour was measured right, but "one mesh relocated
+by the engine" is not the mechanism — it is two different objects, swapped by the `zone_id`
+gate** ([decoded above](#the-engines-rule-decompiled-zones-are-camera-states-switched-in-flight-crimsonexe-via-ghidra-2026-08-09),
+`PLAN-weather-decompile-match` A7/B13/B14). Above the deck, what renders is the **authored
+world-fixed tiles at their own authored altitude** — C1/C1C/C2B 960 m, C4 1050 m — not a
+mesh re-pinned to the band centre; A7's "exactly on the centre" reading was **C4's own
+coincidence**, because C4 happens to author `CLOUD_COVER` centre = 1050 = its tile altitude. C1's
+centre is 1047, its tiles 960 — an 87 m gap the centre-pin model was silently absorbing. Below
+the deck, the ceiling the player sees is **not the deck mesh at all** — it is
+`horizon/zone1`'s own geometry, camera-anchored and UV-scrolled (`tex_fx.gw`, `Object3DSetScroll
+on 0.07 0.0`, [the horizon's own geometry](#the-horizons-own-geometry-settles-three-chapters-2026-08-06)
+section above). ~~In C1 that geometry (`h_zone1scroll`, model 768) has an authored cap centre of
+**396.4 m dome-local** (`bbox_mid.y` of the model, spanning Y −2000…2792.8), which is A7's
+measured "~400 m above the camera" to instrument precision.~~ **Corrected 2026-08-09 (`B14`): 396.4
+is that bbox's MIDPOINT and no polygon sits near it — the mesh's flat ceiling cap is at
++2792.8 m dome-local, and the agreement with A7's "~400 m" was a coincidence twice over (A7 was
+measuring the deck sheet, and `C25` later re-fit that same reading to 110–155 m).** See
+[the zone-1 ceiling table](#-the-3964-m-cap-centre-is-disproven--it-is-a-bbox-midpoint-not-geometry-2026-08-09-b14).
+The two objects are swapped by the
+gate, not carried/relocated by `WeatherRig.Tick` — the deck tiles are `zone_id 2` (culled below
+the deck), the zone-1 dome is `zone_id 1` (culled above it), and each renders only when the
+camera state makes it visible. The install-wide survey — [the deck census
+below](#the-deck-census-zone_id-across-all-eight-chapters-2026-08-09) — found C1's `h_zone1scroll`
++ `o28` skirt pairing is **not** reproduced identically in C1C/C2B/C4: those three each carry a
+**single** zone-1 mesh (not the two-piece dome+skirt), so the ceiling geometry is per chapter, not a
+shared constant — `B14` measured all five (the four deck chapters plus C5's `zone3`) into
+[the zone-1 ceiling table](#-the-3964-m-cap-centre-is-disproven--it-is-a-bbox-midpoint-not-geometry-2026-08-09-b14).
+
+> **Landed 2026-08-09 (`PLAN-weather-decompile-match` B14).** The remake builds a dome per gateable
+> horizon zone (`WorldBuilder.DomeZonesToBuild`) and shows the one matching each camera's own
+> weather state, so below the deck a deck chapter now renders `horizon/zone1` and above it
+> `horizon/zone2`. The scroll needed no code: `h_zone1scroll`'s model carries `texture_scroll`
+> 0.07 in the shipped gamez (the `tex_fx.gw` statement is already baked in), and the build path
+> already honours that field. The deck's own below-band relocation — A7's `cam+K` ceiling
+> reconstruction and the `DeckCeilingHeight` TUNE with it — is deleted: the tiles are world-fixed at
+> their authored altitude at every camera altitude, and the original culls them below the deck
+> anyway. Measured at the C1 river pose (`-7325,192,-3829`, `--det`): looking straight up the frame
+> goes from the `zone2` night sky (64,72,100) to flat `FOG_COLOR` **176** — the zone-1 cap — across
+> **100 %** of pixels; a 1 s pair at +30° pitch differs on **47 %** of the frame (2 s: 55 %) as the
+> `sky2.tif` vault scrolls, while C2B's unscrolled zone-1 shell moves only its rain (3.5 %,
+> uniformly distributed). The pinned above-deck C1 pose, C1B and C5 are **byte-identical**.
+
+This also **un-retires** the "C1 `zone1` 970/1047 `FOG_ALTITUDE` identity" note below as a
+flown-zone fact: `zone1` is flown below the deck in every deck chapter, so its `FOG_ALTITUDE`
+pair is live data during below-deck flight, not an artifact of an unflown zone. See the ⚠
+un-retirement at that paragraph.
+
+**Decoded 2026-08-09 (was inferred): the whiteout lerps `BOTTOM_COLOR` → `TOP_COLOR` across the
+band by camera altitude — that is exactly what the binary computes.** `FUN_0042ee40` (the
+per-frame atmosphere update, see the zone-state section above): for camera altitude between
+`BOTTOM` and `TOP`, colour = `TOP_COLOR·f + BOTTOM_COLOR·(1−f)` with `f = (alt − BOTTOM) /
+(TOP − BOTTOM)`; opacity ramps linearly 0→1 from `BOTTOM` to the core's bottom (centre −
+`THICKNESS`/2), holds 1.0 through the core, and ramps back down to `TOP` — byte-for-byte the
+`THICKNESS`-core rule this page already carried. Two engine details on top of the data: the
+loader defaults an absent `TOP`/`BOTTOM` to 280/240 and colours to white, and the final opacity
+is remapped through a log2/atan curve pair blended by a `rand()`-driven drifting parameter — an
+animated in-cloud turbulence flicker with no data behind it (a TUNE-shaped fact about the
+original; the remake does not reproduce it). The shipped data alone could never falsify the lerp
+(of the reachable bands only C4 authors colours, and equal ones), which is why this stayed
+marked inferred until the decompile.
 
 ## Wind (`WIND`)
 

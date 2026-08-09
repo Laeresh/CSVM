@@ -2,8 +2,10 @@
 
 Part of the [format documentation](README.md). Covers the chapter-scope reader that fills the
 world's invisible fog volumes with cloud sprites — the original's ambient cloud field.
-Consumed by `CSVM/src/Mech3/FogVolumes.cs` (reader + volume census) and
-`CSVM/src/Effects/FogVolumeClutter.cs` (the scatter and the render).
+Consumed by `CSVM/src/Mech3/FogVolumes.cs` (reader + volume census + the in-volume whiteout rule,
+`FogVolumeWhiteout`), `CSVM/src/Effects/FogVolumeClutter.cs` (the scatter and the render) and
+`CSVM/src/Session/WeatherRig.cs` (the whiteout overlay). Which key reaches which consumer:
+[Consumed by the remake](#consumed-by-the-remake).
 
 **The format is two halves that only mean something together.** The reader says *what* to
 scatter and *how densely*; the gamez says *where*. Neither alone tells you a chapter has clouds:
@@ -16,11 +18,11 @@ One chapter-scope reader file, root = an [alternating key/list dict](README.md#s
 
 | Key | Value | Meaning |
 |---|---|---|
-| `fog_zone` | `[int]` | Which fog zone the volumes belong to. **Read, not consumed** — see the open question below |
-| `distance` | `[float]` | The scatter's mean spacing, metres — an areal density, not a lattice phase |
-| `fog_fade_dist` | `[float]` | *(C5 only)* the volume's own fog fade distance |
-| `interior_fog_fade_dist` | `[float]` | *(C5 only)* the same, from inside |
-| `fog_color` | `[r,g,b]` | *(C5 only)* the volume's interior fog colour, integer 0–255 |
+| `fog_zone` | `[int]` | **A bool, decoded 2026-08-09**: non-zero arms the engine's in-volume whiteout + `ZONE3` camera state — see [the decompile section](#what-the-engine-does-with-the-volumes-crimsonexe-decompile-2026-08-09). Consumed (`A2`, `C21`) |
+| `distance` | `[float]` | The scatter's mean spacing, metres — an areal density, not a lattice phase. Engine default **206.25** |
+| `fog_fade_dist` | `[float]` | *(C5 only, **16**)* whiteout approach ramp, metres before the volume wall. Engine default **400**. Consumed (`C21`) |
+| `interior_fog_fade_dist` | `[float]` | *(C5 only, **16**)* whiteout decay depth inside the volume. Engine default **20**. Consumed (`C21`) |
+| `fog_color` | `[r,g,b]` | *(C5 only, **[16,16,16]** — near black)* the whiteout's colour, integer 0–255. Engine default: the mission's `CLOUD_COVER` `TOP_COLOR`. Consumed (`C21`) |
 | `clutter` | `[block, …]` | The scatter table — one or more blocks, each an alternating dict |
 
 A `clutter` block:
@@ -83,6 +85,34 @@ what makes the density authored rather than an artifact of measuring a rotated s
 `weather.json` `BOTTOM`, but C1C (band 1055–1110 vs volume 971–1091), C4 (1000–1100 vs
 1060–1181) and C5 (9950–10150 vs −463–183) all disagree. The volumes are their own authored
 geometry; do not re-derive them from the weather file.
+
+## What the engine does with the volumes (crimson.exe decompile, 2026-08-09)
+
+Decompiled from `crimson.exe` (Ghidra; loader `FUN_0044e010`, volume evaluator `FUN_0044e6f0`,
+per-frame consumer `FUN_0042ee40` — the same frame update that runs the `CLOUD_COVER` whiteout,
+[weather.md](weather.md)). What the reader's keys actually drive:
+
+- **The loader hides every world node whose name starts with `fvol`** (a 4-char prefix match)
+  and wraps each in a volume record (transform + bounds) — the same split this page decodes as
+  "the mesh is the volume, invisible".
+- **`fog_zone` is a bool arm-switch, not an index.** The loader stores `value != 0`; when set,
+  every frame evaluates the camera against all volumes: approaching a wall, whiteout opacity
+  ramps up linearly over the last `fog_fade_dist` metres; inside, it decays from full at the
+  wall over `interior_fog_fade_dist` (the volume is a *transition* whiteout — ~20 m in it hands
+  off); multiple volumes union as `a + b − a·b`. Being inside any volume flips the camera to
+  **state 3 = `ZONE3`**, whose fog then carries the interior look. The install agrees to the
+  letter: C5 is the only chapter authoring `fog_zone 1` — and the only one authoring a `ZONE3`
+  (50–250 m fog) and its own `fog_color`/fade dists; C1's `fog_zone 0` leaves its nine deck
+  volumes as scatter containers only, with no interior state, and C1 authors no `ZONE3`.
+- **The whole load runs under a FIXED seed:** `srand(0x9b3a9ce2)` at entry, restored to
+  `srand(time())` at exit — so every `rand()` the original's scatter draws is the same sequence
+  every launch. The original's field is deterministic by construction (the remake's own seeded
+  `Rng` reproduces the *property*, not the sequence — matching the original's exact placements
+  would additionally need its scatter loop decoded, which this pass did not do).
+- **The engine's defaults equal the "vestigial" C1B/C2/C3 values.** Absent keys default to
+  `distance` 206.25, `far_fade_range` [2500,3500]×2, `perturb_dist_range` [82.5, 82.5],
+  `perp_dist_range` [151.25, 151.25], `scale_range` [0.85, 1.15] — the degenerate copies simply
+  restate the hardcoded defaults, a third sign those files are boilerplate rather than authored.
 
 ## The map-edge continuation (`A5`) — engine-side, NOT authored data
 
@@ -190,6 +220,14 @@ placed `cloudparent` facades keep vertex colour 255 and their range-gated `0.6` 
 ⚠ Every card is authored `fog: false` — the sprites are exempt from the mission distance fog and
 carry `far_fade_range` instead. That is a deliberate reversal of what `CloudPuffs` did (it fogged
 its puffs); the fade band replaces the fog wall.
+
+⚠ **The exemption is the CARDS' alone — do not extend it to the rest of the overcast**
+(`PLAN-weather-decompile-match` `D31`, 2026-08-09). The 144 cloud-deck tiles author `fog: true` in
+all four deck chapters (144/144, C1/C1C/C2B `cloudlayer.tif` @ 960, C4 `Sky1.tif` @ 1050), and so
+do all 626/1056/1453 `cloudparent` facades in C1/C1C/C4. The surface that genuinely never fogs
+below the deck is the horizon **dome** — every horizon model in every chapter is `fog: false` —
+which is what actually explains the original's ceiling texture surviving to the horizon line
+(census and consequences in [`weather.md`](weather.md)'s deck-census section).
 
 ## What is decoded and what is inferred
 
@@ -375,15 +413,16 @@ degenerate ranges).
 
 **Undecoded / not implemented:**
 
-- **`fog_zone`, and C5's `fog_color` / `fog_fade_dist` / `interior_fog_fade_dist`** are read and
-  reported and nothing consumes them. Rendering a volume's *interior fog* is a separate feature
-  from its clutter.
-- ⚠ **`fog_zone` is not the sky/fog zone selector.** `docs/HISTORY.md` (2026-08-05) records the
-  negative "no chapter's copy has a `fog_zone` key" — **that is wrong**: five chapters do. But
-  the values do not select a weather zone either: C1's is 0 while its `fvol` nodes carry
-  `zone_id: 2` and its weather file names `ZONE1`/`ZONE2`, and C5's is 1 against `zone_id` on its
-  own volumes. `BL-277`'s geometry rule stands as landed; treat `fog_zone` as an index into
-  something still unidentified, and do not re-open the zone decode on it.
+- ~~**`fog_zone`, and C5's `fog_color` / `fog_fade_dist` / `interior_fog_fade_dist`** are read and
+  reported and nothing in the remake consumes them yet.~~ **Struck 2026-08-09 (`C21`): all four keys
+  are now CONSUMED — see [Consumed by the remake](#consumed-by-the-remake) below.**
+- ⚠ **`fog_zone` is not the sky/fog zone selector** — and as of 2026-08-09 it is no longer
+  unidentified: the decompile (section above) shows it is a **bool** arming the in-volume
+  whiteout and the `ZONE3` camera state. The old record stands as history: `docs/HISTORY.md`
+  (2026-08-05) claimed "no chapter's copy has a `fog_zone` key" — wrong, five do — and the
+  `zone_id` mismatches that blocked the "selector" reading (C1's 0 against `zone_id: 2`) were
+  never a contradiction, because the value was never an index. `BL-277`'s geometry rule stands
+  as landed.
 - **The engine's exact cell phase** — the remake anchors the cells on the world origin. Under the
   density reading this is a far weaker choice than it was under the grid reading (a phase shift
   moves which cell a placement is drawn in, not where the placements line up), but it is still not
@@ -392,6 +431,60 @@ degenerate ranges).
   bounds the extension to the largest authored `far_fade.y` (3,500 m, every shipped deck chapter)
   rather than to `MapEdgeExtender`'s own reach (5,120 m) — a budget decision matched to the
   render's own fade shader, not a value `fogvol.zrd` or the gamez names. See the section above.
+
+## Consumed by the remake
+
+| key | who reads it | since |
+|---|---|---|
+| `distance`, `clutter` (all sub-keys) | `Effects/FogVolumeClutter` — the scatter | `A1`–`A5` |
+| the gamez `fvol*` shapes | `FogVolumeSpec.VolumesOf` → the scatter, `MapEdgeExtender`, the camera-state test | `A1`/`A2` |
+| **`fog_zone`** | `FogVolumeSpec.FogZoneArmed` → `WeatherState.CameraWeatherState`'s state-3 gate | `PLAN-weather-decompile-match` `A2` |
+| **`fog_fade_dist`, `interior_fog_fade_dist`, `fog_color`** | `Mech3.FogVolumeWhiteout` → `Session/WeatherRig.Tick`'s whiteout overlay | `PLAN-weather-decompile-match` `C21` |
+
+**`C21` (2026-08-09) landed the in-volume whiteout exactly as the section above decodes it.** Per
+frame, per rig, when the chapter arms `fog_zone` (C5 alone), every volume's own density is taken
+from one signed distance (`FogVolumeBox.SignedDistance` — outside-positive, inside-negative) through
+the two decompiled ramps, and the volumes union as `a + b − a·b`:
+
+- **outside**, the density rises linearly from 0 at `fog_fade_dist` metres to 1 AT the wall, over
+  the true Euclidean distance to the authored convex hull (`FogVolumeBox.ExteriorDistance` — the
+  face planes alone understate it by up to 42 % near a corner);
+- **inside**, it DECAYS from 1 at the wall to 0 at `interior_fog_fade_dist` metres deep. ⚠ Read
+  that next to `C22`, not on its own: the volume is a transition CURTAIN and `ZONE3`'s own 50–250 m
+  fog is what carries the interior look. Inverting it would be wrong.
+
+The result is blended onto the same full-screen overlay the `CLOUD_COVER` band whiteout uses (one
+camera-space density per frame, never per-volume fog meshes — the original's own mechanism). The
+two sources union with the same `a + b − a·b`, with the volume curtain composited OVER the band;
+**they never coexist in shipped data** — C5 is the only chapter arming `fog_zone` and its band sits
+at 9950–10150 m, ~9.8 km above its highest street strip.
+
+⚠ **C5's "whiteout" is very nearly a BLACKOUT.** Its authored `fog_color` is `[16,16,16]` — the
+same 16 its `ZONE3` `FOG_COLOR` carries, so the hand-off to `C22` is colour-continuous — and its
+two fade distances are **16 m each**, not the engine defaults (400/20). At flight speed that
+approach ramp is roughly one frame; the curtain is a hard edge by authoring, not by our
+implementation.
+
+Measured at the render (`.scratch/c21/`, `--freecam --chapter=C5 --det --no-zone-cull`, a vertical
+approach at `(-2000, y, -1792)` onto a street strip whose top is 183 m; "before" = the same build
+with the volume term forced to 0, restored and rebuilt after):
+
+| pose | density | frame mean before → after | predicted | frame sd |
+|---|---|---|---|---|
+| `y 210` (27 m above, past the ramp) | 0.000 | 17.76 → 17.76, **byte-identical** | 17.76 | 18.38 → 18.38 |
+| `y 191` (8 m above = half the ramp) | 0.500 | 18.53 → **17.29** | 17.26 | 18.84 → **9.54** |
+| `y 182` (1 m inside the wall) | 0.937 | 17.85 → **16.06** | 16.12 | 5.08 → **0.33** |
+
+The predictions are the sRGB-byte composite `(1−a)·frame + a·16`; a LINEAR-space composite predicts
+18.22 at the half pose against the measured 17.29, so the overlay demonstrably blends in the
+framebuffer's own space — which is what a `ColorRect` on a `CanvasLayer` does, and why this colour
+is NOT linearised the way the fog globals are. The interior frame's sd of **0.33** is the
+"near-full whiteout in `fog_color`" claim measured: at 1 m in, the frame is flat 16.
+
+A C1 river pose (`fog_zone` 0) is **byte-identical** across the same A/B, and all 13 goldens are
+hash-identical — including `c5-city-night`, whose camera stands **1,797.7 m** from the nearest C5
+volume, 112× the 16 m ramp (predicted before the run, pinned in
+`CSVM.Tests/FogVolumeWhiteoutTests.cs`).
 
 ## Visible consequences to know about
 

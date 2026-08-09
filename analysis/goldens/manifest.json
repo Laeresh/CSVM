@@ -14,7 +14,7 @@
     {
       "name": "c1-waterfall",
       "frame": 120,
-      "hash": "c81a000a0b39ddf6cb7efa92a8ff7c72",
+      "hash": "ef4a1f52dace2989a8d1311b11a16bfb",
       "exercises": "UV scroll on the falls sheet + the mist puffer; frame-sensitive 1.28 % at 120 vs 121.",
       "args": ["--freecam", "--chapter=C1", "--pos=-7720,60,-3380", "--lookat=-7868,40,-3449", "--det", "--mute"]
     },
@@ -28,7 +28,7 @@
     {
       "name": "c1c-rain",
       "frame": 120,
-      "hash": "ab24ff1615815683fa848ae20d470e9d",
+      "hash": "7adedc7062834e7ff5acb3feaffccad5",
       "exercises": "rain precipitation (seeded field on the sim clock), cloud deck, heavy fog; frame-sensitive 2.50 %.",
       "args": ["--freecam", "--chapter=C1C", "--pos=-3843,700,-1101", "--direction=-0.052,-0.25,-0.999", "--det", "--mute"]
     },
@@ -42,7 +42,7 @@
     {
       "name": "c2b-rain",
       "frame": 120,
-      "hash": "a092c1cace4681603b41c575e9bd3767",
+      "hash": "0d6bbf3cbcdddfc32cfc6f89c64fae69",
       "exercises": "rain over open water — the surface A3 measured at 4.75 % unpinned; frame-sensitive 3.47 %.",
       "args": ["--freecam", "--chapter=C2B", "--pos=-3843,200,-1101", "--direction=-0.052,-0.1,-0.999", "--det", "--mute"]
     },
@@ -56,7 +56,7 @@
     {
       "name": "c4-snow",
       "frame": 120,
-      "hash": "00e3ffb482d7e6ed66287c351fdea97a",
+      "hash": "4cb8ff657e4dd0c4110b8cced179c911",
       "exercises": "snow precipitation plus the chapter carrying 6 UV-scroll models; frame-sensitive 3.74 %, the largest of the freecam set.",
       "args": ["--freecam", "--chapter=C4", "--pos=-3330,958,-9181", "--direction=-0.682,-0.2,0.731", "--det", "--mute"]
     },
@@ -84,21 +84,21 @@
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "9a5369f6febd59369c9218f8cae50066",
+      "hash": "f8c85e312056d6fc2e51d2ba0fe9a295",
       "exercises": "a flying plane: chase camera on the sim clock, prop and control-surface animators, gauges, compass tape, weapon readout, impact reticle; the --hold throttle 0.5→1 jump also crosses ThrottleSlamSmoke's slam threshold, so this is the one golden carrying a live exhaust-trail Puffer; frame-sensitive 34.52 %, the strongest tripwire here.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "dfcad9ed412ffec851e7968a1e6d638b",
+      "hash": "53ad1f62ea34c246eca63ce4d8342916",
       "exercises": "the world-effects runtime (ForEffects/D32) built and rendering a puffer: a flight-session kill of the single ap_radiotwr instance CALL_ANIMATIONs great_balls_of_fire onto the world-effects stage; frame-sensitive (distinct hashes at 119/120/121), and moves off its Rng.Effects seed (PLAN-animruntime-role-factories A1).",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "baa5fa4ea3e74bbeae9bc1e3de081d03",
+      "hash": "f858f76b1c537161b8dd8786de5438ce",
       "exercises": "the per-player crash rig (ForCrashRig/D32) constructing and playing player_crash_dirt: --crash=5 forces FlightController.Crash() at a fixed sim frame, the only headless trigger for this path (PLAN-animruntime-role-factories A2); moves off its Rng.Crash draw. The set's biggest puffer surface, so the TEXTURE_SEQUENCE lifetime-fraction fix moved 26.55 % of its pixels: the fireball holds its mid flipbook frames instead of the blown-out last one. Also exercises EffectCatalogue.CrashSurfaceLevelAnimNames (BL-292): flydirt_plane, the dirt burst's ground-scorch dust plane, levels to world axes instead of the plane's spawn-trim attitude at --crash=5's frame, moving a 2.16% halo ring around the fireball (>20/255 threshold) — the fireball/smoke/debris family is deliberately excluded from that set and is pixel-unchanged.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     }

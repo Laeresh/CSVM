@@ -107,6 +107,19 @@ and leave gaps when retiring old ones.
   55-luminance flat-band edge reads as ordinary scene contrast (`PLAN-overcast-match` B18).
   *(Branch-minted as SHOT-22; renumbered at the merge.)*
 
+- **SHOT-27** — **The true horizon is a CALIBRATED row, not the sky/terrain boundary — shoot the
+  same position LEVEL and check the shift is `f·tan(pitch)`.** `SHOT-23`(b) says to convert a row
+  into an elevation above the true horizon; this is how that row is obtained without guessing.
+  Measured (`PLAN-weather-decompile-match` D31): the C1 river pose pitches 5.712° down at
+  `f` = 599.1 px (fov_y 62° over 720 rows), so its horizon is row **419.9** — and the same
+  position shot level puts every feature exactly **60 px** higher, against the predicted 59.9.
+  `PLAN-overcast-match` B15 instead read the `--no-fog` control's sky/terrain boundary (row 299)
+  as "17 px above the horizon" and worked from ~316, ~104 px off, which silently scaled every
+  elevation and every `f·h` distance derived from one. The boundary is the terrain SILHOUETTE, and
+  a silhouette can sit either side of the horizon: ours rises 115 px above it at that pose while
+  the original still's ridge sits 48 px below its own. When two frames' skies do not overlap in
+  elevation, anchor the statistic on the silhouette both frames actually have.
+
 ## GOLD — golden images
 
 - **GOLD-1** — **Update moved hashes with the visual change, and explain each moved shot in the

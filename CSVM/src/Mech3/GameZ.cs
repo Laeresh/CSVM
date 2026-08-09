@@ -318,6 +318,12 @@ public sealed class GameZ
                 if (fl.TryGetProperty("active", out var ac))
                     node.Active = ac.ValueKind == JsonValueKind.True;
             }
+            // The original's per-node visibility zone (FUN_0056c430): a node draws iff its
+            // zone_id is -1 ("always"), or is in the camera's armed zone set {0, camera state}.
+            // Absent (a legacy extraction that does not carry the field) -> -1, i.e. ungated,
+            // which is what every reader of this field must treat as "no opinion".
+            if (header.TryGetProperty("zone_id", out var zn) && zn.ValueKind == JsonValueKind.Number)
+                node.ZoneId = zn.GetInt32();
             // Both spellings are flat list positions, NOT the node's own "index" field
             // (which the unified shape also exposes, 1-based and with duplicates — the
             // legacy "node_index" by another name). Verified on C1: reading them as flat
@@ -618,6 +624,12 @@ public sealed class GameZNode
     // never builds visible. Absent flags (legacy extraction) default to active, matching every
     // other flags.* field here.
     public bool Active = true;
+    /// <summary>The original's per-node visibility zone (<c>zone_id</c>): <b>-1</b> = always drawn;
+    /// otherwise the node draws only while that id is in the camera's armed zone set, which
+    /// <c>FUN_004d62d0</c> arms as <c>{0, camera weather state}</c> — so <b>0</b> is also always,
+    /// and 1/2/3 are the per-state buckets (docs/formats/gamez.md, docs/formats/weather.md's deck
+    /// census). Absent in a legacy extraction, which defaults to -1 = ungated.</summary>
+    public int ZoneId = -1;
     // Flat position in nodes.json. The file is a depth-first serialization of the tree,
     // so this is the original engine's draw order — the cross-node tie-break for
     // coplanar surfaces of equal polygon priority (later node draws on top).
