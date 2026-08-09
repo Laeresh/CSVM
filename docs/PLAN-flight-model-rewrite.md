@@ -60,6 +60,7 @@ aircraft aerodynamically.
 | 2 | "`liftAOAs [5, 9]` are the edges of a load-factor ramp" (the standing reading in `FlightModel.cs`). | The original takes their **cosine** and uses them as the window over which the *relative wind is blended toward the nose*. Same two numbers, entirely different mechanism. Also settles `BL-095`'s units question for these keys. |
 | 3 | "The atmosphere's thin band is the operative one." | Arithmetic: the thin band puts the fallback airframe's stall at 309 mph. The dense band puts it at 75.5 mph, which is correct. The band-select threshold has only a read reference in the binary — see D33's trap. |
 | 4 | "Thrust is sublinear in the throttle lever — the original's own behaviour." | **Pending, not yet dead** — the original multiplies available thrust by throttle *linearly*. `ThrottleExp = 1.236` is predicted to be an artefact of the current drag shape. B13 either kills this claim or promotes the exponent to a real divergence; do not assume the outcome. |
+| 5 | "Rudder authority is flat 0.1 across the flight envelope, the pitch fade bites at 500 mph, and the G limiter engages at 5 G." | All three read the **executable's compiled fallbacks** as if they were the game's values. `BL-095` records what this install actually authors: the yaw curve *declines* 1.0 → 0.17 between 50 and 400 mph, the pitch fade is authored at 1000/1001 mph and is unreachable, and `highGs [9, 15]` puts the limiter past the ±5/9 lift clamp so it never engages. **This is the trap of the whole plan**: a fallback is evidence of intent, not of behaviour. |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
@@ -86,8 +87,8 @@ plan leans on most:
   world-up, projected onto the body X/Y plane and divided by 9.82.
 - **Drag** = `q · RefArea · DragFactor · 0.73 · (0.12 + 0.8·C_L + 0.5·C_L²)`.
 - **Gravity** resolves to exactly `nom_gravity` (20 m/s² in this install).
-- **Control authority** is three separate speed curves: roll flat, pitch flat then fading 500 →
-  600 mph, yaw a non-monotone table that is **flat 0.1 above 45 mph**.
+- **Control authority** is three separate speed curves: roll flat, pitch flat (its fade is authored
+  unreachable — see below), yaw ramping to 1.0 at 50 mph then **declining to 0.17 at 400 mph**.
 - **Two hardcoded coupling constants**, 0.205 (bank → yaw) and 0.165 (bank → pitch), present in no
   data file.
 - **Authored keys not currently read by `PlaneStats`:** `lift_accel_rate`, `liftAOAs`, `maxAOA`,
@@ -96,6 +97,14 @@ plan leans on most:
 
 ⚠ **The extracted set under `extracted/` does not contain `player.json`** — these globals must be
 read from the live install. A1 exists partly to establish that path.
+
+⚠ **The decode quotes the executable's compiled fallbacks; this install authors different numbers,
+and in four places they change the conclusion.** `backlog.md` `BL-095` holds the authored set, and
+[`docs/org/flightModel.md`](org/flightModel.md)'s corrections table reconciles the two. The
+differences that matter: the yaw curve **declines** across the envelope rather than going flat
+(C21); the pitch high-speed fade is authored **unreachable** (C24); the G and AOA limiters are
+authored **inert** (D33); and `lift_accel_rate` is **0.75**, not the fallback 1.2 (B11). **Build
+every item from the authored values, never from the fallbacks quoted in the decode's body text.**
 
 ## Ground rules
 
@@ -283,7 +292,8 @@ the clamp, is in [`docs/org/flightModel.md`](org/flightModel.md) under "Lift —
 the demanded G". The strongest corroboration is algebraic: gravity is applied as
 `(nom_gravity / 9.82) × Weight` and level flight at zero incidence demands exactly `nom_gravity`,
 so lift cancels weight **identically** rather than by tuning. The remake's `AlignRate` (TUNE, 4/s)
-is the same quantity as the authored `lift_accel_rate` (fallback 1.2/s).
+is the same quantity as the authored `lift_accel_rate`, which this install sets to **0.75/s**
+(`BL-095`) — a factor of ~5 apart, so expect this to move the nose-chase visibly.
 
 **Approach.** Replace `liftFrac` and its inputs with the demand construction: blend the relative
 wind toward the nose across the `liftAOAs` window, form
@@ -424,15 +434,16 @@ airframe is a coincidence of that aircraft's wing loading and must not be read a
 
 ## C21 ☐ Yaw authority: the original's speed table
 
-**Goal.** Rudder authority follows the original's speed curve — effectively flat across the whole
-flight envelope — rather than sweeping with airspeed.
+**Goal.** Rudder authority follows the original's authored speed curve — a decline from 1.0 at
+50 mph to 0.17 at 400 mph — rather than the interim linear `eff`.
 
-**Evidence (confidence: traced).** The original's yaw curve is `yaw_low_speed` (0.05) up to
-`yaw_fade_in` (10 mph), ramping to 1.0 at `yaw_max` (22.5), falling to `yaw_high_speed` (0.1) at
-`yaw_fade_out` (45), and **flat 0.1 above that**. With `fd_speed` at 302 mph, the 45 mph knee sits
-at 0.149 fd, so all of normal flight is on the flat. The current `eff = 1.4 − clamp(Speed/fd, 0.25,
-1.15)` instead sweeps 0.25 → 1.15 across the envelope; its own comment already says "Still not same
-as original".
+**Evidence (confidence: traced).** With this install's **authored** values (`BL-095`, and the
+corrections table in [`docs/org/flightModel.md`](org/flightModel.md)): 0.0625 up to `yaw_fade_in`
+(10 mph), ramping to 1.0 at `yaw_max` (**50**), then falling linearly to `yaw_high_speed` (**0.17**)
+at `yaw_fade_out` (**400**), flat beyond. At the Bloodhawk's 302 mph cruise that is ≈ 0.40. The
+current `eff = 1.4 − clamp(Speed/fd, 0.25, 1.15)` is **also** a declining function of speed, so its
+shape is broadly right and only the curve is wrong — a smaller change than it first appeared, and
+`BL-095` already names this fade set as the thing `eff` stands in for.
 
 **Approach.** Implement the piecewise table from A1's authored values and apply it to yaw only —
 the original applies a *different* curve to each axis, and pitch/roll are handled by C24 and left
@@ -442,11 +453,14 @@ alone respectively. `YawTune` must be refit to preserve the measured full-rudder
 measurement.
 
 **Verify.** Full-rudder 360° at 28.6 s (the pinned measurement), plus rudder response sampled at
-low speed and at cruise to confirm the curve is flat where the decode says it is.
+low speed, at cruise and near maximum dive speed — the curve declines across that whole span, so a
+single-speed check cannot distinguish it from the interim `eff`.
 
-**⚠ Traps.** `eff` is currently applied to yaw *only* — do not "fix" that by extending it to the
-other axes; the decode confirms the axes genuinely differ. The steady rate is what `YawTune` pins;
-per `BL-147`'s warning, do not chase transient shape by moving it.
+**⚠ Traps.** ⚠ **Do not build this from the executable's fallbacks** (which give a knee at 45 mph
+and a flat 0.1 — that reading was wrong, and the corrections table records why). `eff` is currently
+applied to yaw *only* — do not "fix" that by extending it to the other axes; the decode confirms
+the axes genuinely differ. The steady rate is what `YawTune` pins; per `BL-147`'s warning, do not
+chase transient shape by moving it.
 
 ## C22 ☐ Bank→yaw and bank→pitch coupling
 
@@ -504,32 +518,33 @@ weathervane should vanish at zero misalignment, so cruise must be untouched *by 
 by tuning. `BL-147` explicitly warns against "fixing" the transient by moving the `*Tune`
 constants; that warning stands, and this item is the alternative it was waiting for.
 
-## C24 ☐ Pitch high-speed fade and exponential angular damping
+## C24 ☐ Exponential angular damping (and the inert pitch fade, recorded not built)
 
-**Goal.** Two small mechanical corrections: pitch authority fades at high speed as the original's
-does, and angular damping decays exponentially rather than linearly.
+**Goal.** Angular damping decays exponentially rather than linearly; the original's high-speed pitch
+fade is documented as unreachable in this install and deliberately **not** implemented.
 
-**Evidence (confidence: traced).** Pitch authority is flat until `high_speed_pitch_fade[0]`
-(500 mph) and falls linearly to zero at `[1]` (600 mph) — reachable, since `MaxDiveSpeedFrac`
-1.75 × 302 = 528 mph. Damping in the original applies the torque and then decays the rate by
-`exp(−dt · damp)`; the remake's `(cmd − rates·damp)·dt` is the explicit-Euler approximation of the
-same thing, agreeing to first order.
+**Evidence (confidence: traced).** Damping in the original applies the torque and then decays the
+rate by `exp(−dt · damp)`; the remake's `(cmd − rates·damp)·dt` is the explicit-Euler approximation
+of the same thing, agreeing to first order. Separately, pitch authority fades between
+`high_speed_pitch_fade[0]` and `[1]` — but this install **authors [1000, 1001] mph** (`BL-095`)
+against a maximum attainable dive of ~528 mph, so the fade **cannot engage**. The executable's
+[500, 600] fallbacks, on which this item was originally written, are not what the game ships.
 
-**Approach.** Add the pitch fade from A1's authored values. Switch damping to the exponential form.
-Keep the two changes in one item because both are contained and neither is independently
-observable at normal speeds.
+**Approach.** Switch damping to the exponential form. For the pitch fade: implement nothing, and
+record the finding in `docs/org/flightModel.md` and the module's `docs/architecture.md` entry — a
+future session reading the decode will otherwise see a missing feature and "fix" it.
 
-**Model recommendation.** medium, low effort — both are small, well-specified, and low-risk.
+**Model recommendation.** medium, low effort — one small, well-specified change plus a note.
 
-**Verify.** Pitch response sampled in a terminal dive above 500 mph (the only place the fade is
-observable) against normal-speed pitch response, which must not move. For the damping change,
-confirm the steady rates are unchanged and check behaviour at a deliberately large timestep, where
-the two forms diverge.
+**Verify.** Confirm the steady rates are unchanged and check behaviour at a deliberately large
+timestep, where the two forms diverge. Show the pitch fade is unreachable for **all eleven**
+airframes (each has its own `fd_speed`, so the maximum dive speed differs), not just the Bloodhawk.
 
 **⚠ Traps.** The damping change is **not** the answer to `BL-147` — the two forms agree to first
 order and the exponential does not produce a steeper rolloff. C23 owns that question; do not let
-this item claim it. The pitch fade is invisible in every normal-flight scenario, so an unchanged
-suite proves nothing here — construct a case that can actually fail.
+this item claim it. ⚠ **Do not implement the pitch fade "for completeness"** — untestable code on
+an unreachable threshold is exactly the kind of invented content this project's ground rules warn
+against, and there is no capture that could ever verify it.
 
 # Wave D — The open conflicts
 
@@ -601,20 +616,22 @@ produce plausible-looking flight.
 **Goal.** Determine whether the original's G and AOA control limiters ever engage with this
 install's authored values, and implement them only if they do.
 
-**Evidence (confidence: lead-only).** The original reduces pitch and yaw authority above
-`highGs[0]`, reaching zero at `highGs[1]`, and separately reduces it toward zero at `maxAOA` — both
-gating **only input that opposes the current rotation**. But the lift clamp is a hard ±5/9 G, and
-this install is reported as authoring `highGs [9, 15]`, so the limiter may begin exactly where lift
-is already capped and never bite. The executable's own fallbacks are `[5, 9]`, where it clearly
-would.
+**Evidence (confidence: direction-sound — the disproof is essentially already made, and this item
+exists to confirm and record it).** The original reduces pitch and yaw authority above `highGs[0]`,
+reaching zero at `highGs[1]`, and separately reduces it toward zero at `maxAOA` — both gating **only
+input that opposes the current rotation**. But the lift clamp is a hard ±5/9 G, and this install
+authors `highGs [9, 15]` and `lowGs [−6, −9]` (`BL-095`): **both limiters begin at or past the point
+where lift is already capped, so neither can engage.** The executable's `[5, 9]` / `[−5, −9]`
+fallbacks, where the limiter clearly would bite, are not what the game ships. `maxAOA` is authored
+at 46°, well beyond any α the suite's scenarios reach.
 
-**Approach.** Read the authored values via A1 and compute whether the limiter's threshold is
-reachable given the lift clamp. If it is unreachable, **record the disproof and implement nothing**
-— that is the successful outcome. If it is reachable, implement both limiters with the
-opposing-input gate.
+**Approach.** Confirm the arithmetic against A1's loaded values for all eleven airframes, then
+**record the disproof and implement nothing** — that is the expected and successful outcome. Write
+it into `docs/org/flightModel.md` so the mechanism is documented as present-but-unreachable rather
+than missing. Only if some airframe's numbers reach the threshold does any code follow.
 
-**Model recommendation.** high — mostly analysis, and the valuable answer is likely a negative one
-that has to be argued from the interaction of two clamps.
+**Model recommendation.** high — mostly analysis, and the valuable answer is a negative one that has
+to be argued from the interaction of two clamps rather than observed.
 
 **Verify.** If implemented: a maximum-G pull and a high-AOA departure, checking that authority
 falls only against the rotation and not with it. If disproven: show the threshold is unreachable

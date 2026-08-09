@@ -721,6 +721,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`docs/plans/PLAN-flight-drag-lift.md` B12) — with the induced-drag exponent question owned by
   `BL-307`.
 
+  **Units: PARTLY DECODED — settled 2026-08-09 from `crimson.exe` (Ghidra), write-up in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md); scheduled as
+  [`docs/PLAN-flight-model-rewrite.md`](docs/PLAN-flight-model-rewrite.md).** The parser reads each
+  key by name, so the units are read off the conversion it applies, not inferred:
+  **speeds are MPH** (`× 0.44704` on load — so `turn_fade_in 10`, `yaw_max 50`, `yaw_fade_out 400`
+  and `drag_fade_speed 40` are all mph); **`liftAOAs` and `maxAOA` are degrees** (the parser takes
+  their cosine); **`highGs`/`lowGs` are stored raw and are plain G**. That closes the units half of
+  this entry for the flight block. What each key *does* is in the write-up — and two of the readings
+  standing here are now wrong: **`liftAOAs` is not a load-factor ramp**, it is the window over which
+  the relative wind is blended toward the nose; and the `yaw_*` set is not a simple fade but a
+  ramp to 1.0 at 50 mph then a decline to 0.17 at 400 mph, which the plan's `C21` implements in place
+  of `BL-108`'s interim `eff`.
+
+  ⚠ **Three keys here are authored so the feature they gate never fires**, which is a finding, not a
+  gap to fill: `high_speed_pitch_fade [1000,1001]` is beyond any attainable dive speed, and
+  `highGs [9,15]` / `lowGs [-6,-9]` sit past the executable's hard ±5/9 G lift clamp. Do not
+  implement them as missing features — plan `C24`/`D33` record the disproofs.
+  `groundblow_*`, `ai_groundblow` and `crash.bounce_factor` are **not** covered by the decode and
+  keep this entry open alongside the ground-blow work below.
+
   **Ground blow: DECODED — settled 2026-08-07 by the design document plus `CAP-02` (five batches),
   and `CAP-02` is closed.** It is a *designed* feature, not a shipped-only one: the GDD has a
   section on exactly this — §4.1.7 "Ground Blow", under Motion Model/Flight Dynamics → Simulated
@@ -952,7 +972,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   1.5× to 8× slower, and *not reproducible between takes*, which is the signature of a human hand
   rather than a flight model. Before touching any constant, check whether our key-to-input path
   ramps/filters where the original's is a bare on/off.
-  **What remains open:** τ itself.
+  **What remains open:** τ itself — but there is now a **named candidate mechanism**, which there was
+  not before.
+
+  **A mechanism for the non-first-order shape — from `crimson.exe` (Ghidra, 2026-08-09), write-up in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md), scheduled as
+  [`docs/PLAN-flight-model-rewrite.md`](docs/PLAN-flight-model-rewrite.md) `C23`.** The original
+  applies `return_rate` as a **weathervane torque** along `cross(−nose, velocity)` — a restoring
+  torque proportional to the nose/path misalignment, applied *continuously*. Our model instead folds
+  `return_rate` into the per-axis damping coefficient and only on a released stick (the reading this
+  entry records above). A restoring torque plus damping is a **second-order** system, which rolls off
+  twice as steeply as the single first-order lag we implement — and "rolls off far steeper than a
+  first-order lag can" is exactly what the cadence sweep measured. ⚠ **A lead, not a finding:** the
+  mechanism is traced to the executable, but nothing yet shows it reproduces the measured ripple. The
+  sweep described below is still the instrument that settles it, and `C23` is written to run against
+  it. `PitchTune` stays out of scope either way — the steady rate already matches, and moving it to
+  chase transient shape is the error this entry warns against.
   **How to get it — a fixed-cadence key macro. 30 fps is a floor, not a target; record at whatever
   rate the recorder gives and keep the bitrate high.** A single step
   edge is ~4 frames and unresolvable, but a *periodic* input is not: drive the pitch keys as a square

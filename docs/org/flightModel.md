@@ -324,6 +324,41 @@ measured figures per aircraft as ground truth — which would validate a reimple
 pass rather than by flying it. Whether it is reachable in a retail build is untested; the entry
 point is gated on several flags.
 
+## ⚠ Authored values vs the executable's fallbacks
+
+**Everything above quotes the fallbacks compiled into `crimson.exe`. This install authors different
+numbers, and in four places the difference changes the conclusion.** The authored set is recorded in
+`backlog.md` `BL-095`; read it as the operative one, and treat the fallbacks as evidence of intent
+only.
+
+| Key | Fallback | **Authored** | Why it matters |
+|---|---|---|---|
+| `yaw_fade_out` | 45 mph | **400 mph** | The yaw curve is **not** flat across the envelope — see below |
+| `yaw_max` | 22.5 mph | **50 mph** | |
+| `yaw_low_speed` / `yaw_high_speed` | 0.05 / 0.1 | **0.0625 / 0.17** | |
+| `high_speed_pitch_fade` | [500, 600] mph | **[1000, 1001] mph** | The pitch fade is **unreachable** — inert |
+| `highGs` / `lowGs` | [5, 9] / [−5, −9] | **[9, 15] / [−6, −9]** | Both limiters sit at or past the lift clamp — inert |
+| `lift_accel_rate` | 1.2 | **0.75** | |
+| `turn_fade_in` / `_out` | 10 / 40 mph | **10 / 50 mph** | |
+| `maxAOA` | 31.8° | **46.0°** | |
+| `drag_factor` (global) | 3.0 | **1.5** | |
+| `stall_mag` | 0.45 | **1.25** | |
+
+**Corrected — the yaw curve declines, it does not go flat.** With the authored numbers, rudder
+authority is 0.0625 up to 10 mph, ramps to **1.0 at 50 mph**, then falls linearly to **0.17 at
+400 mph** and holds. At the Bloodhawk's 302 mph cruise that is ≈ **0.40**, and it varies across the
+whole flight envelope. The earlier "flat 0.1 above 45 mph" reading was an artefact of the fallbacks.
+This substantially rehabilitates the remake's `eff = 1.4 − clamp(v/fd, 0.25, 1.15)`, which is also a
+declining function of speed — the *shape* was right, only the curve is wrong.
+
+**Corrected — the pitch high-speed fade never fires.** Authored at 1000/1001 mph against a maximum
+attainable dive speed of ~528 mph, it cannot engage. It is real code on a threshold this game never
+reaches.
+
+**Corrected — both the G and AOA limiters are inert.** The lift clamp is a hard ±5/9 G, while
+`highGs` begins at 9 G and `lowGs` at −6 G. Neither limiter can engage before lift is already
+capped, so no authored configuration in this install reaches them.
+
 ## What this changes for the remake
 
 Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.cs) and
