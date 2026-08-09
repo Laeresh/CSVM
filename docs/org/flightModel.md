@@ -49,7 +49,9 @@ never appear in the data files.
   as it is parsed. Angle tokens are authored in **degrees** (`× 0.01745329251994`).
 - Aerodynamic intermediates are computed in **imperial** units: altitude in feet
   (`× 3.28084`), velocity in ft/s, density in slug/ft³, dynamic pressure in lb/ft².
-- Forces are carried in weight units. Acceleration is `force × 9.82 / Weight`.
+- Forces are carried in weight units. Acceleration is `force × 9.82 / Weight` (`0x491290`), with
+  `Weight` the **raw authored `veh_weight`** — no unit conversion anywhere in the weight chain; see
+  "The force scale — settled" below.
 - Body axes: local **X = pitch axis**, **Y = yaw axis**, **Z = roll axis**; the nose points
   along **−Z**. (Consistent with the `collision` probe points in
   [vehicle.md](../formats/vehicle.md), which put the nose at −Z.)
@@ -99,16 +101,21 @@ q     = 0.5 · ρ · V_ft/s²          (dynamic pressure, lb/ft²)
 Mach  = V_m/s / (a_ft/s · 0.3048)
 ```
 
-**The dense band is the operative one.** See the stall arithmetic below: the dense band produces
-a correct stall speed (~76 mph) from the code's own fallback aircraft, the thin band produces a
-nonsensical 309 mph. The `flight_ceiling` of 2500 m (~8 200 ft) sits far below any plausible
-switch altitude.
+**The dense band is the operative one for the player, and that is now proven from the bytes, not
+just the arithmetic.** The player force path **zeroes the altitude before computing forces**: at
+`0x491250`–`0x491284` the caller saves `[obj+0x208]`, stores `0`, calls the force accumulator and
+restores it. With the band threshold statically `0.0` and the comparison `alt ≤ threshold →
+dense` (`0x41aca4`–`0x41acc4`), an altitude pinned to 0 selects the dense band **always** — the
+threshold's unwritten value is irrelevant to player flight because the altitude never reaches the
+comparison. The stall arithmetic below independently agrees (the dense band produces a correct
+~76 mph stall from the code's own fallback aircraft, the thin band a nonsensical 309 mph).
 
-⚠ **Unresolved:** the altitude threshold that selects the band has **only a read reference and a
-static initialiser of `0.0`** in the binary. Taken literally that would select the thin band
-everywhere above sea level, which the arithmetic rules out. Either it is written at runtime by a
-path static analysis does not attribute, or the comparison sense differs from the obvious reading.
-Treat the dense band as universal and this as the one open question in the atmosphere.
+⚠ **The thin band is reachable on the OTHER call path.** The force accumulator's second call site
+(`0x48c883`, inside the AI-side flight function that also reads `fd_speed·throttle` as the AI
+target speed) does **not** zero `[obj+0x208]` first — so with the threshold read literally as 0.0,
+AI aerodynamics above sea level run on the thin band (ρ 16.7× lower, i.e. near-zero aero forces on
+top of AI's nose-aligned wind and 10 mph speed floor). Static reading, not runtime-verified;
+recorded for M4's AI flight work, and no longer an open question for the player model.
 
 ## Lift — the wings deliver the demanded G
 
@@ -244,14 +251,56 @@ Nine of eleven land inside 1 %. The autogyro and the Balmoral are the outliers, 
 two airframes that are not conventional fighters. Under the `C_L` reading the same solve is not
 even close.
 
-⚠ **What still does not close: the absolute scale.** `CAP-05`'s four zero-thrust decelerations
+⚠ **The absolute scale against `CAP-05` does not close, and the force path is now verified
+byte-complete — see "The force scale — settled" below.** The four zero-thrust decelerations
 (0.36/1.11/2.82/3.74 m/s² at `V/fd_speed` = 0.25/0.35/0.46/0.50) come out **≈2–3.6× too strong**
-against this curve, roughly a constant factor rather than a shape error. Since the equilibrium
-above is a *ratio* it is blind to exactly that factor, so the two results are consistent. The
-leading suspicion is the force→acceleration divisor — `veh_weight` is authored 1900 for the
-Bloodhawk and the aerodynamic intermediates are imperial, so a kg/lb mix-up of 2.2046 is the right
-size and would divide thrust and drag together, leaving the equilibrium untouched. **Untested** —
-it also moves the lift ceiling, so it is not a one-line change.
+against this curve. The earlier suspicion — a kg/lb mix-up of 2.2046 in the force→acceleration
+divisor — is **disproven at source**: `veh_weight` runs raw end to end. The residual stands as a
+recorded decode-vs-footage conflict, not as a missing term.
+
+## The force scale — settled (no conversion exists; the conflict is real)
+
+The B13 residual read "everything ≈2× too strong, invisible to the level-equilibrium ratio", and
+the suspect was the force→acceleration divisor. **Re-read from the raw bytes, the whole weight
+chain is conversion-free**, so there is no missing factor to implement:
+
+| Address | What it shows |
+|---|---|
+| `0x47ae2d` | parser stores the `veh_weight` token (`0x628008`) to def `+0x130` with a plain `mov` — no FPU op, no 0.44704-style conversion (contrast `drag_fade_speed`, converted two instructions earlier) |
+| `0x475c6a` | def `+0x130` → runtime `+0x674`, plain `mov` |
+| `0x48ff8e` | gravity force = `nom_gravity / 9.82 × [obj+0x674]` — weight raw |
+| `0x41ac13` | lift: `C_L = n · [obj+0x674] / (q·S)` — weight raw |
+| `0x48fd63` | the optional delivered-load out-param divides by `[obj+0x674]` raw |
+| `0x491290` | force → acceleration: `× 9.82 / [obj+0x674]` — weight raw (`9.82` at `0x6080d4`) |
+
+The only other writers of `+0x674` are the Dynamics tuner dialog's write-backs (`0x443992`,
+`0x443a5a`, `0x445146`) — debug paths, not conversions. `[obj+0x934]`, the speed every aerodynamic
+term keys on, is `sqrt(vel·vel)` stored by the integrator (`0x491b1b`), i.e. the true airspeed.
+So the executable computes **exactly** what `FlightModel.cs` computes, constant for constant, and
+the remake's force path needs no change.
+
+**That promotes the CAP-05 residual from "suspected units bug" to a real decode-vs-footage
+conflict**, and the conflict is overdetermined — no constant can close it:
+
+- The deficit has clean structure: measured C_D at the four points is the polar **minus a constant
+  ≈ 0.112** (deficit ∝ q; −0.1085/−0.1118/−0.1122/−0.1122 across x = 0.25…0.50). Nothing decoded
+  produces a constant-C_D forward force: thrust available is flat-ish in Mach there (so residual
+  lever or idle thrust is ruled out — the implied lever would have to fall 8.6% → 2% *within one
+  clip*), and gravity-payback from a descent would be a constant force, not ∝ V².
+- Scaling thrust+drag together (the only scale the level equilibrium tolerates) moves
+  `accel-150-290` the wrong way: a ×0.5 that fixes `decel-290-150` (3.48 s → ≈7 s) blows the accel
+  row out to ≈6.4 s against the same footage's 3.76 ± 0.40. The footage itself rejects every
+  uniform force scale.
+- The CAP-05 points are **fit outputs, not raw readings**: `FINDINGS.md` records the (g, C)
+  degeneracy of the extraction and the +7° AoA of its descent leg. The one model-free anchor
+  (6.24 m/s² lost at 152.6 mph in a +5° climb, engine off) still leaves the polar ≈1.5–1.8× strong
+  once full `nom_gravity` is charged to the climb — smaller than the fit table's 2.05×, but real.
+
+**Disposition (2026-08-09):** recorded, not fitted. The polar's coefficients are the binary's; the
+zero-thrust footage disagrees below cruise by about half; whichever of the two is wrong, it is not
+a constant in this model. The most likely reconciliations — the clip's γ accounting inside the
+degenerate fit, or a mechanism outside the per-tick force path — are for a future re-decode of the
+clip, not for the flight model.
 
 ## Stall
 
@@ -538,9 +587,16 @@ this.**
 
 **Bonus, and load-bearing for B13:** `[obj+0x124]` and `[obj+0x128]` are the **commanded** and
 **current throttle** — `FUN_0048e585` rate-limits the current toward the commanded and burns fuel
-at `[obj+0x134] -= dt · throttle · k`, and `FUN_00491820` snaps them together. The current throttle
+at `[obj+0x134] -= dt · throttle · 5`, and `FUN_00491820` snaps them together. The current throttle
 enters thrust as a **plain multiply** at `0x48fce7`. That is the linear-throttle claim, confirmed
 at source in this item rather than inferred.
+
+**The throttle slews at 0.5/s, with no idle floor** (`0x48e652`/`0x48e698`: current ±= `0.5 · dt`
+toward commanded, snapping exactly onto it when the step crosses). Cutting from full to zero takes
+2 s of tapering thrust; slamming open takes the same. The remake applies the lever instantly —
+**decoded, unimplemented**, and the one mechanism that could contaminate the first seconds of any
+throttle-step measurement taken from footage (it is far too fast to explain the CAP-05 deficit,
+whose implied residual lever would have to persist for ~28 s).
 
 ## The measurement harness — a validation route
 
@@ -596,6 +652,14 @@ reaches.
 `highGs` begins at 9 G and `lowGs` at −6 G. Neither limiter can engage before lift is already
 capped, so no authored configuration in this install reaches them.
 
+**Two of the parsed globals are dead in the executable.** The global `drag_factor` (→ `0x71c44c`,
+fallback 3.0) and `drag_fade_speed` (→ `0x71c450`, parsed × 0.44704, fallback 40 mph) are written
+by the `player.json` parser at `0x4744c0`/`0x4744f0` and **read by nothing anywhere in the image**
+— a full dword-reference scan finds only the parser's own two writes for each. There is no global
+drag multiplier and no low-speed drag fade; the per-plane `drag_factor` is the only drag scale.
+Checked while hunting the CAP-05 deficit (a fade below ~300 mph would have produced exactly its
+shape); the hunt is what proved the keys dead.
+
 ## What this changes for the remake
 
 Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.cs) and
@@ -627,18 +691,28 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
     against drag. See `ThrustFactor` above.
 11. **Drag is a polar in Mach with no induced term.** Any model that makes drag rise with the pull
     is adding a mechanism the original does not have. See Drag above.
+12. **The throttle lever slews at 0.5/s with no idle floor** (2 s full-to-idle); the remake applies
+    it instantly. Decoded, unimplemented — a feel/transient gap, not a steady-state one, and the
+    one mechanism that could contaminate the first seconds of any throttle-step footage.
 
 ## Confidence
 
 - **Read directly from the executable:** all constants and formulas above, except as marked. This
   now includes the `ThrustFactor` chain (parser → def `+0x128` → runtime `+0x66c` → force
-  assembly), the linear throttle multiply, the thrust `pow` operands (`MSVCRT!_CIpow`, base
-  `1.33·atm->k`, exponent `1.41·M`), and the drag polar's variable being **Mach** — the last read
-  off the raw bytes rather than out of a decompiler, which is what corrected it.
-- **Inferred, and marked ⚠ in place:** the atmosphere band threshold; the absolute force scale
-  (`CAP-05` says everything is ≈2–3.6× too strong at a near-constant factor).
+  assembly), the linear throttle multiply and its 0.5/s slew, the thrust `pow` operands
+  (`MSVCRT!_CIpow`, base `1.33·atm->k`, exponent `1.41·M`), the drag polar's variable being
+  **Mach** — the last read off the raw bytes rather than out of a decompiler, which is what
+  corrected it — the conversion-free weight chain ("The force scale — settled"), and the player
+  path's altitude-zeroing that pins the dense band.
+- **Inferred, and marked ⚠ in place:** the thin band on the AI call path (static reading of an
+  unwritten threshold, not runtime-verified).
+- **Recorded conflict, not an open decode question:** the absolute force scale below cruise —
+  `CAP-05`'s zero-thrust points read the polar ≈2–3.6× too strong (a constant-ΔC_D deficit), the
+  weight chain is byte-verified conversion-free, and the footage's own accel row rejects any
+  uniform rescale. See "The force scale — settled".
 - **Verified by arithmetic:** the dense atmosphere band, via the stall-speed check against the
-  parser's fallback aircraft **and** via the level-equilibrium solve (the thin band misses by ~4×);
-  `ThrustFactor` = engine power, via a perfect rank correlation with `fd_speed` across all eleven
-  player airframes and now an absolute solve landing nine of eleven inside 1 %.
+  parser's fallback aircraft **and** via the level-equilibrium solve (the thin band misses by ~4×)
+  — now also proven from the bytes for the player path; `ThrustFactor` = engine power, via a
+  perfect rank correlation with `fd_speed` across all eleven player airframes and an absolute
+  solve landing nine of eleven inside 1 %.
 - **Untested:** whether the shipped Dynamics tuner is reachable in a retail build.

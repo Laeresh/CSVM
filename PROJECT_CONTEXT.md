@@ -192,7 +192,7 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt flying, or the 2–4-player splitscreen Dogfight deathmatch, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, world destructibles that take damage, die, lose collision, throw debris and reset — and planes shoot planes down (M4 A1, front-loaded). The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
-**Active plan: [`docs/PLAN-flight-model-rewrite.md`](docs/PLAN-flight-model-rewrite.md)** — Wave A done, `B14` next; runs in the `flight-model-decode` worktree, on [`docs/org/flightModel.md`](docs/org/flightModel.md)'s `crimson.exe` decode.
+**Active plan: [`docs/PLAN-flight-model-rewrite.md`](docs/PLAN-flight-model-rewrite.md)** — Wave A + B11–B14 done, `B15` next; runs in the `flight-model-decode` worktree, on [`docs/org/flightModel.md`](docs/org/flightModel.md)'s `crimson.exe` decode.
 Owed at the controls: `PT-28`, `PT-41`, `PT-43` and `PT-45`
 ([`playtest.md`](playtest.md)). Verify any change with
 **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read

@@ -146,7 +146,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ Lift as the clamped demanded-G
 12. ☑ Drag as the original's polar
 13. ☑ Thrust: linear throttle and the Mach/altitude curve
-14. ☐ Joint refit and re-measurement of the aero group
+14. ☑ Joint refit and re-measurement of the aero group
 15. ☐ Stall speed per airframe
 
 ### Wave C — Rotation and control authority
@@ -521,7 +521,47 @@ fudge. The missing `pow` operands mean absolute top speeds cannot be predicted f
 principles; if the curve cannot be closed, scale to the measured `TopSpeed` and say so in the code
 comment. Do not solve any thrust constant from the level-1 engine row (see A3).
 
-## B14 ☐ Joint refit and re-measurement of the aero group
+## B14 ☑ Joint refit and re-measurement of the aero group
+
+**Outcome (landed 2026-08-09).** **The refit is empty, and that is the finding: the binary settled
+the force-scale question against any refit.** B13's leading suspect — a kg/lb factor of 2.2046 in
+the force→acceleration divisor — is disproven at source: the whole weight chain in `crimson.exe`
+is conversion-free (`veh_weight` stored `0x47ae2d`, copied `0x475c6a`, used raw by gravity
+`0x48ff8e`, lift `0x41ac13` and the `×9.82/W` conversion `0x491290`; the aero speed `[obj+0x934]`
+is the true `|v|`, `0x491b1b`), so the executable computes exactly what `FlightModel.cs` computes,
+constant for constant. **Zero force-path code changed, zero TUNEs added.** Two more suspects died
+the same way: `drag_fade_speed` and the global `drag_factor` are parsed and **read by nowhere** in
+the image (dead keys — no low-speed drag fade exists), and residual/idle thrust cannot produce the
+deficit (the throttle has no idle floor and slews at 0.5/s, `0x48e652` — newly decoded, recorded
+unimplemented). Byte-level bonus: the player force call **zeroes altitude** (`0x491250`–`0x491284`)
+before computing forces, which proves the dense band from the bytes (and exposes that the AI call
+site `0x48c883` does not zero it — thin-band AI aero, recorded for M4).
+Full-table dispositions ([`analysis/flight-model-baseline/POST-B14.md`](../analysis/flight-model-baseline/POST-B14.md)):
+**green, asserted** — `level-top-speed` 300.46, `level-speed-near-cap` 300.46, `roll-360` 1.98,
+`pitch-rate` 33.47, `yaw-360` 28.68, `altitude-cap` 6571.95, `sustained-turn-sink` −2.65 (bound
+≤ 1.85); **green, informational by design** — `eighth-throttle-speed` 134.52 (137.9 ± 6);
+**conflict recorded, downgraded to informational with the record named in the row** —
+`accel-150-290` 3.22 (3.76 ± 0.40) and `decel-290-150` 3.48 (7.04) and `CAP-05`'s four points
+(≈2–3.6× strong): the force path is byte-verified, the deficit against the zero-thrust footage is
+a near-constant ΔC_D ≈ 0.112 that no decoded mechanism produces, and **no constant can close the
+set** — a ×0.5 scale that fixes the decel blows the accel to ≈6.4 s against the same footage, so a
+green here could only ever be compensating errors (the CAP-05 points are themselves outputs of
+FINDINGS.md's (g, C)-degenerate fit; the clip's one model-free anchor leaves the polar 1.5–1.8×
+strong); **owned by a named later item, informational with the owner in the row** —
+`terminal-dive` 336.36 (355.2 ± 6, the decoded ×≈1.38 dive attitude-thrust waits on D32) and
+`sustained-turn-speed` 261.01 (222.94 ± 5, waits on C22) and `sustained-turn-rate` 32.35 (18.95,
+C22 — moved ≤ 0.09 °/s on every airframe across the whole of Wave B, the cleanest proof the gap is
+not in the force path); **re-recorded as the new model's numbers** — `zoom-climb` 1341.20 ft (936)
+and `zoom-climb-min-speed` 236.06 (127.9), plus the Balmoral/all-airframes snapshots (level top
+speed within 1% of `fd_speed` for the nine conventional fighters, autogyro 0.94×, Balmoral 0.71×).
+`FlightEnvelopeTests` asserts **7** scenarios (was 10) and is green; the three downgrades each
+carry the attribution in their probe comment. The decode doc gained "The force scale — settled",
+the corrected atmosphere/band story, the throttle slew and the dead keys;
+`analysis/flight-model-baseline/POST-B14.md` is the table Wave C/D measure against (A2's originals
+kept). Verified: engine suites 29/29, goldens 13/13 **unmoved** (no behaviour change — the
+tripwire that the item's code footprint really was tests-and-docs only), units green with the new
+7-row assert count, all instruments run twice byte-identical, full 8-chapter `--freecam`
+regression clean.
 
 **Goal.** The B11–B13 group is validated *together* against every pinned measurement, and any
 surviving fitted constant is named, justified and added to the TUNE list.

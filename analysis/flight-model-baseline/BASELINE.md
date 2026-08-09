@@ -10,12 +10,16 @@ model's own committed constants by hand.
 Raw outputs live in [`raw/`](raw/); the drag-point script is
 [`cap05-drag-points.ps1`](cap05-drag-points.ps1).
 
+**B14 re-ran this whole table against the decoded aero core and dispositioned every row —
+[`POST-B14.md`](POST-B14.md) is the record Wave C/D measure against.** This file stays as the
+pre-rewrite snapshot.
+
 ## Instruments used, and which verification.md rule bites
 
 | Instrument | Command | What it's good for | verification.md rule |
 |---|---|---|---|
 | `--dump-flight[=plane]` | `.\RunProbe.ps1 --dump-flight --headless` (Bloodhawk) / `.\RunProbe.ps1 --dump-flight=player_balmoral --headless` | The six measured-and-asserted rows plus the informational ones, for one airframe, printed beside the video-decoded original | **SHELL-10** (launch through `RunProbe.ps1`, never the exe directly); the run is scripted so **DET-6** applies (`--det` implied) — confirmed bit-identical over two runs |
-| `CSVM.Tests.FlightEnvelopeTests` | `dotnet test CSVM.Tests --filter FullyQualifiedName~FlightEnvelopeTests` | Asserts the 10 scenarios that carry a measured target still pass, and that the count itself (`FlightScenarios = 10`) hasn't silently shrunk | **DET-7/DET-9** — engine-free, no clock, no Godot; a pure function of committed data |
+| `CSVM.Tests.FlightEnvelopeTests` | `dotnet test CSVM.Tests --filter FullyQualifiedName~FlightEnvelopeTests` | Asserts the scenarios that carry a measured target still pass, and that the count itself (`FlightScenarios`, 10 at A2 — B14 downgraded three recorded conflicts to informational, live count 7, see [`POST-B14.md`](POST-B14.md)) hasn't silently shrunk | **DET-7/DET-9** — engine-free, no clock, no Godot; a pure function of committed data |
 | `CSVM.Tests.ZzBaselineDump.DumpEveryAirframe` | `$env:CSVM_DUMP_OUT=<path>; dotnet test CSVM.Tests --filter FullyQualifiedName~ZzBaselineDump` | Same report as `--dump-flight`, for **all 11 player airframes** in one pass — this is the per-airframe capture the item asks for beyond the Bloodhawk/Balmoral pair | Same as above. This test is a **leftover THROWAWAY from the already-landed `PLAN-flight-drag-lift`** (its own doc comment says "delete before the plan lands" — it wasn't). A2 did not delete it: it is exactly the instrument this item needs, and deleting a working, in-tree instrument to satisfy someone else's cleanup note would be the wrong trade here. Flagged for whoever eventually does that cleanup. |
 | CAP-05 drag-point formula | `.\analysis\flight-model-baseline\cap05-drag-points.ps1` | The one scenario with **no runnable probe row** — evaluates `dragAccel(x) = maxThrustAccel * x^DragExpLow` directly from the constants in `FlightModel.cs`, since CAP-05's four points are the raw video measurements those constants were fitted against, not a scenario the suite steps | **DET-9** — pure arithmetic on committed constants, no clock/path/machine-state dependency; re-run twice, byte-identical |
 
@@ -138,9 +142,10 @@ coefficient to the drag routine and never reads it), which is what the script ev
 
 The *shape* is now the measured one — a 5.9× rise across the span against the measured 10.4×, where
 B12's `C_L` polar rose only 1.27× and had a speed-independent floor — but everything is ≈2–3.6×
-too strong. Since the level-flight equilibrium is a thrust/drag *ratio* and lands within 1% of nine
-airframes' authored `fd_speed`, it is blind to exactly this factor; the residual is a question about
-the absolute force scale (the force→acceleration divisor is the suspect), owned by B14.
+too strong. B14 settled the suspect: the force→acceleration divisor carries **no** unit conversion
+in the binary (`docs/org/flightModel.md`, "The force scale — settled"), so this is a recorded
+decode-vs-footage conflict, dispositioned in [`POST-B14.md`](POST-B14.md), not an open scale
+question.
 
 ## Knife-edge alpha — the Balmoral's 0.1-degree-inside-the-ramp margin
 

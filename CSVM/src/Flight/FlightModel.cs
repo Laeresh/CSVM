@@ -197,12 +197,15 @@ public sealed class FlightModel
     // like one) and it gives a drag FLOOR that is speed-independent at fixed load factor, which no
     // measurement of the original supports.
     //
-    // ⚠ The parasite term still does not go to zero fast enough for `CAP-05`'s four zero-thrust
-    // points (0.36/1.11/2.82/3.74 m/s² at x = V/fd_speed = 0.25/0.35/0.46/0.50): in Mach the curve
-    // gives 1.3/3.0/6.2/7.7 — the right *shape* now (a 5.9× rise over the span against the measured
-    // 10.4×) but ≈2–3.6× too strong throughout. A near-constant factor like that is a units
-    // question about the force→acceleration divisor, not a reason to refit these coefficients —
-    // they are read out of the original's executable, and the residual is the joint refit's.
+    // ⚠ The curve conflicts with `CAP-05`'s four zero-thrust points (0.36/1.11/2.82/3.74 m/s² at
+    // x = V/fd_speed = 0.25/0.35/0.46/0.50): in Mach it gives 1.3/3.0/6.2/7.7 — the right *shape*
+    // (a 5.9× rise over the span against the measured 10.4×) but ≈2–3.6× too strong. That is NOT a
+    // units error: the force→acceleration conversion was re-read from the executable and is exactly
+    // this file's — veh_weight parsed, copied and divided raw, no lb/kg factor anywhere — so there
+    // is no missing constant to implement and none to tune (a scale that fixed the decel would
+    // break the accel row the same footage pins). The deficit is a near-constant ΔC_D ≈ 0.11, and
+    // it stands RECORDED as a decode-vs-footage conflict (docs/org/flightModel.md, "The force
+    // scale — settled"); the coefficients are the binary's and are not refitted to close it.
     //
     // Because thrust grows as M and this grows as M², the two cross sharply, and that crossing —
     // not a normalization — is what puts the level equilibrium where it is. It lands within 1 % of

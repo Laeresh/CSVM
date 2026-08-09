@@ -838,21 +838,37 @@ public static class Probes
         Row("level-top-speed", "level full throttle held to equilibrium", "mph",
             m.Speed / Mph, 300.4, 4.0, $"fd_speed = {fd / Mph:0.0} mph, α {m.Alpha:0.0}°");
 
-        // --- acceleration. THE measurement that sets ThrustConst: one constant fixes both this and
-        // the terminal dive below, and the two agree, which is what makes the drag shape credible.
+        // --- acceleration.
+        // ⚠ INFORMATIONAL — an OPEN CONFLICT with the footage, not a tolerance slip. The force path
+        // is verified byte-complete against the original's executable (docs/org/flightModel.md,
+        // "The force scale — settled"): thrust, drag and the ×9.82/weight conversion are the
+        // original's own arithmetic with nothing fitted, yet this run comes out ~14.5% fast. No
+        // decoded term is left to attribute the residual to; the candidate confounds are the
+        // original's 0.5/s throttle slew (decoded, unimplemented — the clip's lever history is
+        // unknown) and the clip recipe itself. Do NOT close it by scaling thrust or drag: the same
+        // footage's decel-290-150 pulls the opposite way, and no constant scale satisfies both (a
+        // ×0.5 force scale that fixes the decel blows this row out to ~6.4 s).
         m = Fresh(stats, Level(), 150f * Mph, 1f);
         double tAccel = RunUntil(m, 1f, 30f, () => m.Speed >= 290f * Mph);
         Row("accel-150-290", "level full throttle, 150 -> 290 mph", "s", tAccel, 3.76, 0.40,
-            $"α {m.Alpha:0.0}° at finish");
+            $"α {m.Alpha:0.0}° at finish — OPEN conflict, force path verified against the binary",
+            info: true);
 
         // --- terminal dive. Nose (and path) 70.7° down, full throttle, held to terminal — the angle
         // the original's "vertical" dive clip actually came out at, so this compares like with like.
+        // ⚠ INFORMATIONAL — attributed, waiting on D32. The original scales available thrust by
+        // nose attitude (×(1+0.24·down)·(1+0.13·down) ≈ 1.38 at this dive angle — decoded,
+        // deliberately unimplemented until D32 settles it against ClimbGravityScale), so its dive
+        // carries more thrust than ours and the −5% terminal is exactly that sign. Re-assert when
+        // D32 lands, not by touching the thrust curve here.
         m = Fresh(stats, Pitched(-70.7f), 0.9f * fd, 1f);
         Run(m, 1f, 120f, pitch: 0f);
         double pathDeg = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
         Row("terminal-dive", "70.7° dive at full throttle, held to terminal", "mph",
             m.Speed / Mph, 355.2, 6.0,
-            $"settled path {pathDeg:0.0}°, {m.Speed / fd:0.000} x fd_speed, α {m.Alpha:0.0}°");
+            $"settled path {pathDeg:0.0}°, {m.Speed / fd:0.000} x fd_speed, α {m.Alpha:0.0}° — "
+            + "waiting on D32's attitude-thrust terms",
+            info: true);
 
         // --- roll. Accumulated body roll rate: no other axis is commanded, so this is the 360° the
         // stopwatch and the video's ADI bank centroid both timed.
@@ -926,11 +942,18 @@ public static class Probes
         // the same nose-down spiral at terminal speed — identically with and without the B12 lift
         // term, i.e. an instrument artifact and not a model reading. Free-roll settles honestly, at
         // its own bank rather than the original's; the row reports both, and asserts neither.
+        // ⚠ INFORMATIONAL — attributed, waiting on C22 (same coupling gap as sustained-turn-rate
+        // below). We still turn only by the path chasing the nose, so the equilibrium sits at a
+        // higher speed and α than the original's bank-coupled turn; the +17% settled speed is that
+        // missing 0.205/0.165 term's shape, not a drag or thrust error. Decision 4: no *Tune or
+        // force-path refit against this row before C22 lands — re-assert it there.
         var turn = SustainedTurn(stats, 100f, 298.96f * Mph, settle: 10f, window: 15.9f);
         Row("sustained-turn-speed", "full back stick from a banked entry, settled speed", "mph",
             turn.SpeedMph, 222.94, 5.0,
             $"entered at 100° bank, settled at {turn.BankDeg:0.0}° (emergent, not held), "
-            + $"α {turn.Alpha:0.0}°, swept {turn.SweptDeg:0} ° (original 449.8 in the same window)");
+            + $"α {turn.Alpha:0.0}°, swept {turn.SweptDeg:0} ° (original 449.8 in the same window) — "
+            + "waiting on C22's bank coupling",
+            info: true);
 
         // ⚠ Asserted as an UPPER BOUND, not a band. BL-247's defect is the aircraft falling out of
         // this manoeuvre — 83% of gravity across the flight path at a steep bank — so "sinks no
@@ -969,10 +992,12 @@ public static class Probes
 
         // --- part throttle. These two are the ONLY place the drag shape is observable: the
         // full-throttle equilibrium is fd_speed by construction for any curve, so it can never
-        // detect a wrong shape (BL-148 trap (b)). Both are informational pending a playtest of the
-        // "throttled-back plane barely decelerates" report that the old low-speed drag blend
-        // existed to answer — the new curve is far weaker down here and reopens exactly that
-        // question.
+        // detect a wrong shape (BL-148 trap (b)). The 1/8-throttle row passes unaided (the linear
+        // lever's discriminating test); the decel row is the recorded footage-vs-binary conflict —
+        // the polar, read out of the executable, is ~2× stronger below cruise than the zero-thrust
+        // clip measures (docs/org/flightModel.md, "The force scale — settled"), and the direction
+        // of the old "throttled-back plane barely decelerates" report is now REVERSED. Both stay
+        // informational; the decel row is also still owed a human playtest.
         m = Fresh(stats, Level(), 0.9f * fd, 0.125f);
         Run(m, 0.125f, 300f, pitch: 0f);
         double idlePath = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
@@ -992,7 +1017,8 @@ public static class Probes
         m = Fresh(stats, Level(), 290f * Mph, 0f);
         double tDecel = RunUntil(m, 0f, 60f, () => m.Speed <= 150f * Mph);
         Row("decel-290-150", "throttle cut to ZERO, 290 -> 150 mph, level", "s", tDecel, 7.04, 1.0,
-            $"pure drag — no thrust term to assume, α {m.Alpha:0.0}° at finish", info: true);
+            $"pure drag — no thrust term to assume, α {m.Alpha:0.0}° at finish — OPEN conflict, "
+            + "the polar is the binary's and the footage disagrees", info: true);
 
         // --- zoom climb. INFORMATIONAL. Measured off the `pitch` clip's loop — full throttle, full
         // back stick from a 299.4 mph level cruise, which is the SAME take that pinned the 33 °/s

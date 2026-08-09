@@ -1886,9 +1886,13 @@ the nose-drop at 0.25 fd, `IsStallWarned()` the lamp at 0.30, which leads the br
 ⚠ The drag polar's variable is MACH, never `C_L` — the original passes `C_L` to its drag routine
   and never reads it. The same three coefficients read as a `C_L` polar give a drag floor and an
   induced-drag term the original does not have; only the raw bytes settle it (`docs/org/flightModel.md`).
-  The whole force path is ≈2–3.6× too strong against `CAP-05`'s zero-thrust points at a near-constant
-  factor, which the level equilibrium (a ratio) is blind to — an open scale question, not a licence
-  to refit coefficients read out of the executable.
+  The ≈2–3.6× gap against `CAP-05`'s zero-thrust points is a RECORDED decode-vs-footage CONFLICT,
+  not an open scale question: the force→acceleration chain is byte-verified conversion-free
+  (`docs/org/flightModel.md`, "The force scale — settled"), and no constant can close the set —
+  a rescale that fixed the decel breaks the accel row the same footage pins. Never refit the
+  polar/thrust coefficients against it; `accel-150-290`, `decel-290-150`, `terminal-dive` (D32)
+  and `sustained-turn-speed` (C22) sit informational in `FlightEnvelopeTests` with their owners
+  named in the rows.
 ⚠ Lift is BANK-INDEPENDENT: the body X/Y projection still carries full weight at 90° of bank, so
   the knife-edge departure is gone (35 s of neutral-stick knife-edge now costs 129 m instead of
   flying the Bloodhawk into the ground). That contradicts the measured sag and is open. `wingVert`
