@@ -1678,7 +1678,10 @@ maths.
 ## src/Flight/PlaneStats.cs
 Typed per-plane stats: vehicle.json `dynamics` (resolved through the `kind_of` def chain) +
 engines.json stock engine power + player.json globals (the flight constants and the near-miss cue's
-`warning_shot_*` block), the `engine_sound` def name with its
+`warning_shot_*` block, plus the decoded model's lift/AoA/G, turn/yaw-curve, pitch-fade and
+drag-fade-speed globals — docs/org/flightModel.md; converted
+exactly as the original does: MPH×0.44704, AoA/liftAOAs cosined, highGs/lowGs raw G — and as yet
+unread by FlightModel.cs), the `engine_sound` def name with its
 volume/pitch `SoundCurve`s (clamped two-point ramps), `destroyable_parts` → `DestroyablePart`
 records (name, max HP, max armor, `critical`/`engine` flags, `got_hit_anim`, per-part
 `injure_anims`), and the def-level `VehicleInjureAnims`. Schema: docs/formats/vehicle.md.
@@ -2159,33 +2162,103 @@ a public `Camera` accessor — all inert in plain `--freecam`. Rates TUNE.
 
 ## src/Flight/FlightModel.cs
 Velocity-vector arcade flight model: body rates = control torque × reciprocal inertia vs
-ang_momentum_damp, scaled per axis (PitchTune/YawTune/RollTune). Thrust/drag/gravity integrate on
-the velocity vector (speed passes through zero); lift cancels gravity's cross-path share; drag is a
-speed power law normalized so drag(fd_speed) = max thrust, PLUS an induced term in α (below).
-`Alpha` (deg) is angle(nose, VelocityDir), read once per
-step right after the nose vector — an emergent LAG from the nose-chase, not a modelled aerodynamic
-state, and reported in every `--dump-flight` row's detail. Lift consumes it as the pull's stand-in:
-`liftFrac = min(1, speedLift × |up·Y| × n(α))`, `n` ramping 1 g → `LiftLoadMax` over the authored
-`liftAOAs [5,9]` read as degrees (a hypothesis, not a decode — `BL-095`). `|up·Y|` stays the carrier
-and must NOT be flattened: it is what makes knife-edge depart, and the α ramp is what lets a hard
-pull hold altitude through a steep bank without a bank term. The stall is TWO measured thresholds
-over one margin
-(`StallFraction` = speed/fd_speed): `isStalled()` is the nose-drop at 0.25 fd, `IsStallWarned()` the
-STALL lamp at 0.30 — the lamp leads the break by 2.64 sim s (`BL-148`/`CAP-06`); never drive both
-off one number, and never recompute the margin beside them.
-⚠ ThrustConst and the three *Tune rates are NOT free TUNEs — they are pinned to the original,
-  measured off cockpit-gauge video, and `--run-tests`' flight-envelope suite fails if they move.
-  Retune by feel and you are overwriting a measurement (`analysis/video-flight-calibration/`).
-⚠ MaxDiveSpeedFrac is a numerical backstop, not a terminal speed: terminal dive is EMERGENT from
-  the drag curve and lands within 0.3% of the original, so a value that binds replaces a measured
-  number with a guess. Keep it above every airframe's emergent terminal — worst is the Balmoral,
-  1.678 in a 71° dive (`--dump-flight=player_balmoral`) and ~1.71 vertical.
-⚠ Accepted artifacts, not bugs: loop energy pump, steep-climb equilibrium, stall hang. Induced
-  drag is `A · C_i · sin²α` — `InducedDragCoef` is the one genuinely FITTED constant here and is
-  NOT transferable: it absorbs our 1.71× turn-rate error, so closing that gap means refitting it.
-  A hard altitude clamp (2003 m,
-  `BL-094`/`CAP-03`) deletes climbing velocity at/above the cap rather than fading thrust/lift/drag
-  toward it — traced to one mission (C1B IA1) only, not assumed global/per-chapter/per-aircraft.
+ang_momentum_damp, decayed EXPONENTIALLY (`BodyRates *= exp(-dt·damp)`, applied to the whole rate
+AFTER this tick's torque is added — C24, not the explicit-Euler linear subtraction it replaced;
+the two forms agree to first order per step but not at steady state, and the steady rates moved a
+few % at this engine's dt = 1/60 s, all still inside tolerance, no `*Tune` refit), per axis
+(PitchTune/YawTune/RollTune); yaw torque is additionally scaled by
+`YawAuthorityAt` — the original's authored piecewise speed table (a low-speed floor, ramping to
+full authority at `yaw_max`, then DECLINING to a high-speed floor at `yaw_fade_out`), YAW ONLY,
+replacing the interim `eff`. Thrust, drag, gravity and lift integrate
+on the velocity vector (speed passes through zero). Lift is a DEMAND — the airflow blended toward
+the nose over the authored `liftAOAs` cosine window, `lift_accel_rate·(wind − v)` plus `nom_gravity`
+on world-up, projected onto the body X/Y plane, delivered as `clamp(|·|/9.82, −5, +9)` G and capped
+at `(0.75 − 0.15·Mach)·q·RefArea/Weight` (imperial q, dense band ρ = 2.2688e-3 slug/ft³) — so level
+flight at zero incidence cancels weight IDENTICALLY, and the nose-chase runs at that same authored
+rate. Drag is the original's parabolic polar in MACH, `C_D = 0.73·(0.12 + 0.8·M + 0.5·M²)` applied
+as `q·RefArea·DragFactor·C_D` opposing velocity — there is NO induced-drag term of any kind, so a
+pull costs speed only through the lift vector's own tilt. Thrust is
+`EnginePower·RefArea·T_avail(M)·throttle` (LINEAR lever), `T_avail = q_ref·0.73·(0.12−M/60) /
+(M·pow(1.3146, 1.41·M))` at `q_ref = ½ρ((0.84M+0.112)·a)²`, Mach floored at 0.1 — it RISES with
+speed; the thrust MARGIN is what falls. Available thrust is then scaled by NOSE ATTITUDE
+(`AttitudeThrustScale`, D32): `(1+0.24a)·(a ≤ 0 ? 1+0.13a : 1)` on `a = Attitude.Z.Y = −nose.Y`, so
+a vertical climb keeps 0.6612 and a vertical dive gets 1.24 — a climb is PENALISED. That argument is
+NEGATIVE in a climb, and a dropped sign swaps climb for dive while still flying plausibly, so
+`AttitudeThrustTests` reads the term back out of the integrator and fails under the flip. Gravity acts at
+full strength in EVERY attitude; the fitted `ClimbGravityScale = 0.6` is retired with its config key
+(it made the sustained climb worse on the post-B14 shapes, 276.7 mph against a measured 163.1, and
+was absorbing the old drag/thrust error). Nothing in the force path is fitted.
+Bank couples straight into rate, the original's coordinated-turn cheat: `0.205·(starboard·up)` into
+yaw (signed) and `0.165·|starboard·up|` into pitch (always nose-up), plus `0.205·|bodyUp·up|` into
+PITCH once inverted — the same 0.205 constant, not a third number. Both vanish at wings-level
+upright, so nothing that flies level can see them; they make the banked turn FASTER, so they are
+not the missing explanation of the original's 1.6×-slower banked pull (`BL-095` owns that).
+`return_rate` is the WEATHERVANE torque, not damping: `WeathervaneTorque()` adds
+`return_rate·(α/2)·unit(nose × VelocityDir)` (body frame, × RecInertia) into the same command, and
+`damp` is `ang_momentum_damp` alone — a spring-damper, second order, where folding `return_rate`
+into the damping coefficient was a first-order lag. Its axis is ⊥ the nose, so it can never reach
+ROLL, and it vanishes identically at α = 0, which is why every stick-centred, wings-level scenario
+is untouched — but a SUSTAINED FULL-STICK manoeuvre holds α ≈ 18° and it opposes the stick there,
+which is what `PitchTune` 0.89 / `YawTune` 1.57 re-pin (C23; it does not close `BL-147`, it closes
+about a sixth of it).
+`Alpha` (deg) is angle(nose, VelocityDir) — an emergent LAG, not modelled
+incidence, and now instrument-only: no force reads it — and the
+stall is TWO DIFFERENT mechanisms, not one margin split two ways (B15). `isStalled()` is the
+airframe's own `StallSpeed` — the speed at which the SAME aerodynamic ceiling lift uses,
+`clMax(V)·q·RefArea`, can no longer equal `VehWeight` (a load factor of exactly 1, not
+`nom_gravity/StandardG` ≈ 2.04 — the decode's own worked example, reproducing 75.5/309 mph for the
+fallback aircraft under the dense/thin bands, only matches the bare-Weight read). `IsStallWarned()`
+is unchanged: the lamp at a fixed 0.30 fd (`StallFraction` = speed/fd_speed), which led the
+Bloodhawk's break by 2.64 sim s in the clip that measured it (`BL-148`/`CAP-06`) — never drive both
+cues off one number. ⚠ The Bloodhawk's own computed `StallSpeed` (56.5 mph) no longer reproduces
+that clip's ~76 mph nose-drop — the fixed `0.25 fd` this replaced only matched the footage because
+0.25 × the Bloodhawk's fd_speed happens to sit near the FALLBACK aircraft's stall speed, not the
+Bloodhawk's own (a coincidence of wing loading). Recorded as a decode-vs-footage conflict, not
+closed by switching G-conventions to fit one clip. The autogyro moves most of the eleven airframes
+(57.0 → 18.5 mph, its huge ref_area relative to weight), not the Balmoral (44.2 → 45.5 mph, nearly
+unmoved) as the plan predicted.
+⚠ The ±5/9 clamp is a LOAD FACTOR in G, never an angle — re-deriving it as degrees gives a model
+  that looks right at small inputs and diverges at the limits. The authored `highGs`/`lowGs`
+  control limiters are a WIDER, inert pair (`BL-095`) and must not be folded into it: measured peak
+  demand is 2.13–5.01 G against `highGs[0]` = 9 and peak α 8.9–25.6° against `maxAOA` = 46° on all
+  eleven airframes, so neither limiter can fire and neither is implemented (D33 —
+  `ControlLimiterTests` asserts each airframe against its OWN loaded thresholds, and
+  `LoadFactorDemand` is the pre-clamp instrument it reads; if it ever fails, the limiter gates only
+  input OPPOSING the current rotation). A third authored-inert feature, the same family:
+  `high_speed_pitch_fade` [1000,1001] mph is beyond even
+  the model's own hard dive ceiling (1.75×fd_speed, 528.5 mph at its highest, the Bloodhawk) on all
+  eleven airframes (C24) — deliberately NOT implemented; do not add it "for completeness".
+⚠ The three *Tune rates are pinned to the original off cockpit-gauge video
+  (`analysis/video-flight-calibration/`) and are not free TUNEs. They re-pin only when a decoded
+  mechanism moves the steady rate they hold (C21's yaw curve, C23's weathervane) — never to chase a
+  transient or a feel report (`BL-147`). The 2003 m altitude clamp
+  (`BL-094`/`CAP-03`, traced to C1B IA1 only) is a numerical backstop, not a modelled limit.
+  Accepted artifacts, not bugs: loop energy pump, steep-climb equilibrium, stall hang.
+⚠ The drag polar's variable is MACH, never `C_L` — the original passes `C_L` to its drag routine
+  and never reads it. The same three coefficients read as a `C_L` polar give a drag floor and an
+  induced-drag term the original does not have; only the raw bytes settle it (`docs/org/flightModel.md`).
+  The ≈2–3.6× gap against `CAP-05`'s zero-thrust points is a RECORDED decode-vs-footage CONFLICT,
+  not an open scale question: the force→acceleration chain is byte-verified conversion-free
+  (`docs/org/flightModel.md`, "The force scale — settled"), and no constant can close the set —
+  a rescale that fixed the decel breaks the accel row the same footage pins. Never refit the
+  polar/thrust coefficients against it; `accel-150-290`, `decel-290-150`, `sustained-turn-speed` and
+  `sustained-turn-sink` (both riding the unattributed turn-rate gap, `BL-095`) sit informational in
+  `FlightEnvelopeTests` with their owners named in the rows. `terminal-dive` came BACK to asserting
+  when the attitude scale landed (−5.3% → +0.2%; the suite asserts 7 again).
+  The sustained climb joins that same recorded-conflict list from the other side: it settles ≈25%
+  FAST (204.0 mph against a measured 163.1) and is not tuned; the leading candidate is that the
+  original held a large α there (its clip is a 90° pull) where the probe holds α = 0, and at a 90°
+  nose with the measured 56° path the same force path balances to −3.3%. `CAP-20` would settle it.
+⚠ Lift is BANK-INDEPENDENT and the knife-edge sag has NO term of its own (D31, settled). At 90° of
+  bank the body yaw axis is horizontal, so C22's `0.205` bank→yaw IS the sag and C23's weathervane
+  deepens it — the footage's shape, from the original's own constants. The bounded
+  `KnifeNoseSag`/`KnifeNoseRate` pair is retired: it double-counted the onset (−7.3° at +3 s against
+  a measured −4.9°, −4.9° without it) and, keyed on `1 − |bodyUp·up|`, fought every wings-level pull
+  at up to 11.5 °/s. Do not add one back. `wingVert` survives ONLY in the nose-chase floor
+  (`KnifeAlignFloor`), kept on measurement not decode — the original holds its nose 4.8° → 8.3°
+  below its path and removing `wingVert` collapses that to 1.9° → 0.5° while the 36 s loss rises
+  1087 → 1334 m against a measured 540. Still open, and now one number: the whole banked rotation
+  runs ≈1.6× fast, the same ratio as `sustained-turn-rate` (`BL-095`).
 
 ## src/Flight/PropAnimator.cs
 Spins the flying aircraft's prop/rotor blur discs: Build collects every node PropParts classifies

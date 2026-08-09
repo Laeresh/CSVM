@@ -73,6 +73,42 @@ public sealed class PlaneStats
     public float Gravity = PhysicsConstants.NomGravity; // nom_gravity — the game's arcade gravity, m/s²
     public float StallMag = 1.25f;
 
+    // player.json flight globals, plumbed here so the flight-model rewrite reads authored data
+    // instead of hardcoding it. Consumed by FlightModel as each item lands: LiftAccelRate/
+    // LiftAoaCosLo/Hi by B11's lift demand, Yaw* by C21's rudder-authority curve.
+    // Unread ON PURPOSE, not pending: MaxAoaCos and HighG/LowG* are the control limiters' authored
+    // thresholds and this install puts them out of reach (peak demand 2.13-5.01 G against 9, peak
+    // alpha 8.9-25.6 deg against 46, all eleven airframes — ControlLimiterTests pins it), and
+    // HighSpeedPitchFadeLo/Hi is the same story at 1000 mph. DragFadeSpeed's key is dead in the
+    // executable. Still genuinely undecoded: TurnFadeIn/Out. Do not implement any of them from the
+    // field names — see docs/org/flightModel.md's corrections table.
+    // Mirrors docs/org/flightModel.md's load-time conversions exactly: speeds × 0.44704 (MPH → m/s),
+    // angles cosined at load where the original cosines them (liftAOAs, maxAOA), raw where it does
+    // not (highGs/lowGs are plain G, yaw_low_speed/yaw_high_speed are dimensionless authority).
+    // Fallbacks below are the executable's own compiled defaults (docs/org/flightModel.md); this
+    // install's authored values differ in several places — see BL-095 / the corrections table.
+    public float LiftAccelRate = 1.2f;      // lift_accel_rate, 1/s — NOT converted (a rate, not a speed)
+    public float LiftAoaCosLo = 0.98f;      // cos(liftAOAs[0]) — liftAOAs is degrees, cosined at load
+    public float LiftAoaCosHi = 0.96f;      // cos(liftAOAs[1])
+    public float MaxAoaCos = 0.85f;         // cos(maxAOA) — maxAOA is degrees, cosined at load
+    public float HighGStart = 5f;           // highGs[0], plain G — NOT converted
+    public float HighGMax = 9f;             // highGs[1], plain G
+    public float LowGStart = -5f;           // lowGs[0], plain G
+    public float LowGMax = -9f;             // lowGs[1], plain G
+    public float TurnFadeIn = 10f * PhysicsConstants.MphToMs;   // turn_fade_in, m/s
+    public float TurnFadeOut = 40f * PhysicsConstants.MphToMs;  // turn_fade_out, m/s
+    public float YawLowSpeed = 0.05f;       // yaw_low_speed, dimensionless authority — NOT converted
+    public float YawHighSpeed = 0.1f;       // yaw_high_speed, dimensionless authority
+    public float YawFadeIn = 10f * PhysicsConstants.MphToMs;    // yaw_fade_in, m/s
+    public float YawMax = 22.5f * PhysicsConstants.MphToMs;     // yaw_max, m/s
+    public float YawFadeOut = 45f * PhysicsConstants.MphToMs;   // yaw_fade_out, m/s
+    public float HighSpeedPitchFadeLo = 500f * PhysicsConstants.MphToMs;  // high_speed_pitch_fade[0], m/s
+    public float HighSpeedPitchFadeHi = 600f * PhysicsConstants.MphToMs; // high_speed_pitch_fade[1], m/s
+    // drag_fade_speed's own compiled fallback is undocumented in docs/org/flightModel.md (the decode
+    // covers control authority's turn_*/yaw_* fades but not this key's mechanism); 40 mph mirrors the
+    // unchanged turn_fade_out/yaw_fade_in pattern (BL-095), not a read fallback — flag if this proves wrong.
+    public float DragFadeSpeed = 40f * PhysicsConstants.MphToMs; // drag_fade_speed, m/s
+
     // The near-miss cue's shipped accumulator (warning_shot_*) — see WarningShotCue for the units
     // question. The sound is a SOUND_GROUPS name (bullet_warning_sg → snd_bulletpass1-3), not a
     // sounds.json def, so it resolves through the group table like every other one.
@@ -303,6 +339,31 @@ public sealed class PlaneStats
             stats.WarningShotDissipation = player.Float("warning_shot_dissipation", stats.WarningShotDissipation);
             stats.WarningShotInterval = player.Float("warning_shot_interval", stats.WarningShotInterval);
             stats.WarningShotSound = player.Str("warning_shot_sound") ?? stats.WarningShotSound;
+
+            // Flight globals for the decoded model — see the field comments above for units and
+            // fallback provenance. Not yet read by FlightModel.cs.
+            const float mph = PhysicsConstants.MphToMs;
+            stats.LiftAccelRate = player.Float("lift_accel_rate", stats.LiftAccelRate);
+            stats.LiftAoaCosLo = player.TryFloat("liftAOAs", out var liftAoaLoDeg, 0)
+                ? Mathf.Cos(Mathf.DegToRad(liftAoaLoDeg)) : stats.LiftAoaCosLo;
+            stats.LiftAoaCosHi = player.TryFloat("liftAOAs", out var liftAoaHiDeg, 1)
+                ? Mathf.Cos(Mathf.DegToRad(liftAoaHiDeg)) : stats.LiftAoaCosHi;
+            stats.MaxAoaCos = player.TryFloat("maxAOA", out var maxAoaDeg, 0)
+                ? Mathf.Cos(Mathf.DegToRad(maxAoaDeg)) : stats.MaxAoaCos;
+            stats.HighGStart = player.Float("highGs", stats.HighGStart, 0);
+            stats.HighGMax = player.Float("highGs", stats.HighGMax, 1);
+            stats.LowGStart = player.Float("lowGs", stats.LowGStart, 0);
+            stats.LowGMax = player.Float("lowGs", stats.LowGMax, 1);
+            stats.TurnFadeIn = player.Float("turn_fade_in", stats.TurnFadeIn / mph) * mph;
+            stats.TurnFadeOut = player.Float("turn_fade_out", stats.TurnFadeOut / mph) * mph;
+            stats.YawLowSpeed = player.Float("yaw_low_speed", stats.YawLowSpeed);
+            stats.YawHighSpeed = player.Float("yaw_high_speed", stats.YawHighSpeed);
+            stats.YawFadeIn = player.Float("yaw_fade_in", stats.YawFadeIn / mph) * mph;
+            stats.YawMax = player.Float("yaw_max", stats.YawMax / mph) * mph;
+            stats.YawFadeOut = player.Float("yaw_fade_out", stats.YawFadeOut / mph) * mph;
+            stats.HighSpeedPitchFadeLo = player.Float("high_speed_pitch_fade", stats.HighSpeedPitchFadeLo / mph, 0) * mph;
+            stats.HighSpeedPitchFadeHi = player.Float("high_speed_pitch_fade", stats.HighSpeedPitchFadeHi / mph, 1) * mph;
+            stats.DragFadeSpeed = player.Float("drag_fade_speed", stats.DragFadeSpeed / mph) * mph;
 
             // curve blocks hold (x, y) pairs: min_* = ramp start, max_* = ramp end
             static SoundCurve Curve(ZrdrDict d, string minKey, string maxKey, SoundCurve fb) =>

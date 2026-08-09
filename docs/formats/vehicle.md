@@ -22,7 +22,7 @@ Keys the remake consumes (see `src/Flight/PlaneStats.cs`):
 | `engine` | engines.json row id → power factor |
 | `engine_sound` / `cockpit_engine_sound` | sound-def names (SETS in sounds.json) — only `cockpit_engine_sound` unconsumed (needs a cockpit view) |
 | `damaged_engine_sound` | `[[soundName, f0, f1]]` — one shared `basic_airplane` entry (`snd_damagedengine`, 0.0, 1.0) covers every plane; `f0`/`f1` are undecoded and read as a fade window over accumulated damage fraction (below) |
-| `dynamics` | nested dict: `pitch_torque`, `roll_torque`, `rudder_torque`, `return_rate`, `ang_momentum_damp`, `rec_moments_inertia` (xyz), `fd_speed` (m/s), `drag_factor`, `veh_weight`, `ref_area` |
+| `dynamics` | nested dict: `pitch_torque`, `roll_torque`, `rudder_torque`, `return_rate`, `ang_momentum_damp`, `rec_moments_inertia` (xyz), `fd_speed` (m/s), `drag_factor`, `veh_weight`, `ref_area`. The parser also accepts `level_off_rate`, which **no shipped def authors** — see below |
 | `spin_props_anim` / `stop_props_anim` | prop-disc anim names (plane_props.json) |
 | `start_anims` | anims run at spawn (`wing_lights_blink`, `reset_bulletholes`) |
 | `injure_anims` | def-level damage thresholds (below) |
@@ -40,12 +40,33 @@ top speed; `flight_ceiling` 2500 m. `player.json` holds player-global values —
 The `dynamics` block: `rec_moments_inertia` is the *reciprocal* inertia per axis
 (x = pitch, y = yaw, z = roll); steady-state rotation rate = torque · recInertia /
 `ang_momentum_damp` (Bloodhawk roll ≈ 1.65 rad/s). `return_rate` is extra centering
-applied when the stick is released. `fd_speed` is the full-throttle level-speed
-equilibrium (drag balances thrust there).
+applied when the stick is released.
+
+⚠ `fd_speed` was documented here as "the full-throttle level-speed equilibrium". **Treat that as
+unconfirmed.** The original's own name for the field is `FakeDynSpeed`, its tuner *measures*
+`TopSpeed` separately from it, and at runtime it is read as a normalising reference speed
+(`speed/fd_speed` fractions, an AI target speed, a clamp) rather than solved for. Working the
+decoded drag polar backwards from each airframe's `fd_speed` also fails to close — the Balmoral
+misses by 60 %. See [org/flightModel.md](../org/flightModel.md#thrustfactor-is-the-engines-power-factor--resolved);
+the flight-model plan's B12/B13 own the question.
+
+**The 13th `dynamics` field: `ThrustFactor` is not authored — it is engine power.** The shipped
+Dynamics tuner names thirteen per-plane values where only twelve are authored keys. The extra one,
+`ThrustFactor`, has **no parser token at all** (the literal appears exactly once in `crimson.exe`,
+inside the tuner's CSV header) and **no shipped def authors a thrust-like key**: all 24 `dynamics`
+blocks in this install author the same ten keys. The slot is filled at load from `engines.json`
+via the def's `engine` property, and the hangar's engine-swap writes it directly. Confirmed both
+in the binary and by data: ranking the eleven player airframes by
+`power / (drag_factor · C_D)` reproduces their `fd_speed` order exactly (Spearman +1.000), which a
+uniform thrust factor does not. `level_off_rate` is the mirror case — a token the parser accepts
+that no def uses.
 
 `engines.json` is a flat list of rows `[id, name, power]`; a plane def's `engine`
-property picks its stock engine by id (Bloodhawk: 11 = Lvl-2, power 0.62). Engine power
-scales thrust/acceleration; `fd_speed` stays the level-speed cap.
+property picks its stock engine by id. ⚠ **Every player airframe's stock engine is its Lvl-2 row**
+(ids 11, 14, 17, 20, 23, 26, 29, 32, 35, 38, 41 — Bloodhawk: 11 = Lvl-2, power 0.62), never Lvl-1;
+solving a constant from a Lvl-1 row inflates it by ~30 %. `power` is the plane's `ThrustFactor`,
+and the original applies it as `Thrust = power · ref_area · thrustAvailable(Mach) · throttle` —
+scaled by **reference area**, not divided by weight.
 
 ## `player.json` — the player-global blocks
 

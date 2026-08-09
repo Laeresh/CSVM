@@ -4,9 +4,11 @@
 and indexed in [`plans.md`](plans.md). **`PT-47` is owed at the controls** — the plan's own exit
 verdict, flying what these tables could only photograph ([`playtest.md`](../../playtest.md)).
 Closed with it: `BL-118`, `BL-312`, `BL-303`, `BL-100`, `BL-101`. Minted on the way and still open:
-`BL-320`, `BL-321`, `BL-322`, `BL-325`, `BL-327`. Also minted and since closed: `BL-323` — the C4
+`BL-320`, `BL-322`, `BL-325`, `BL-327`. Also minted and since closed: `BL-323` — the C4
 "terrain-mesh spike" at `-4974,-3861` was never a defect; the pose sits *under* the ground and the
-spike is a mountain (`git log --grep=BL-323`).
+spike is a mountain (`git log --grep=BL-323`) — and `BL-321`, `B17`'s C3 terrain-fog murk, closed
+at the controls on 2026-08-09 against `B17`'s own box metrics, which the flown scene contradicts
+(`git log --grep=BL-321`).
 
 The goal is one picture, twice: our matched-pose renders of
 `OriginalScreenshots\C1 IA1 Fog river.png` and `OriginalScreenshots\C1 IA1 Fog above clouddeck.png`

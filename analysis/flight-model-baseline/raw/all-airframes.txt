@@ -1,0 +1,418 @@
+# flight envelope — player_bhawk (pbloodhawk)
+# fd_speed 135 m/s (302.0 mph)  weight 1900 kg  engine power 0.62  gravity 20 m/s²
+# max thrust accel 34.92 m/s²  stepped at 16.7 ms
+# 'original' = decoded from cockpit-gauge video, analysis/video-flight-calibration/
+
+scenario               unit       model   original      err  verdict
+level-top-speed        mph       301.99     300.40    +0.5%  ok
+                       level full throttle held to equilibrium — fd_speed = 302.0 mph, α 0.0°
+accel-150-290          s           3.75       3.76    -0.3%  ok
+                       level full throttle, 150 -> 290 mph — α 0.0° at finish
+terminal-dive          mph       355.26     355.20    +0.0%  ok
+                       70.7° dive at full throttle, held to terminal — settled path -71.3°, 1.176 x fd_speed, α 0.6°
+roll-360               s           1.98       2.05    -3.3%  ok
+                       full aileron from level cruise, 360° — α 0.5° at finish
+pitch-rate             °/s        33.47      33.00    +1.4%  ok
+                       sustained full-elevator body pitch rate — at 120/200/280 mph = 33.5/33.5/33.5 °/s, α = 8.7/8.9/9.0° (liftAOAs [5,9] predicts α_ss ≈ 8.25° here)
+yaw-360                s          29.17      28.60    +2.0%  ok
+                       full rudder from 290 mph, 360° — mean speed 298.8 mph, α 3.0° at finish
+altitude-cap           ft       6572.06    6571.60    +0.0%  ok
+                       22° nose-up hold at full throttle, altitude settled against the clamp — 300.4 mph at settle (original 173.7 mph — the existing stall model owns whatever bleed shape follows the clamp, not asserted here), α 2.2°
+level-speed-near-cap   mph       301.99     300.40    +0.5%  ok
+                       level full throttle at 1988 m, held to equilibrium — altitude clamp must not leak below the cap, α 0.0°
+sustained-turn-speed   mph       223.03     222.94    +0.0%  ok
+                       full back stick from a banked entry, settled speed — entered at 100° bank, settled at 75.5° (emergent, not held), α 13.8°, swept 515 ° (original 449.8 in the same window)
+sustained-turn-sink    ft/s       -2.40    <= 1.85        -  ok
+                       sustained max-pull turn, sink rate — upper bound — the failure this guards is falling out of the turn (before the B12 lift re-key this read 18.29). Negative = climbing.
+sustained-turn-rate    °/s        32.33      18.95   +70.6%  (not asserted)
+                       sustained max-pull turn, heading rate — 1.71x the original — OPEN. The original pulls 1.6x slower BANKED than wings-level (18.95 vs 30.16 °/sim-s round its own loop) and we pull the same rate in both, so the gap is bank/load-factor, not pitch authority. Its 18.95 °/sim-s at 222.94 mph also implies a 58.7° coordinated-turn bank, not the +100° its ADI reads
+eighth-throttle-speed  mph       137.87     137.90   -+0.0%  (not asserted)
+                       1/8 throttle held to equilibrium — 0.457 x fd_speed (original 0.459), settled path 0.0°, α 0.0°
+decel-290-150          s           6.48       7.04    -7.9%  (not asserted)
+                       throttle cut to ZERO, 290 -> 150 mph, level — pure drag — no thrust term to assume, α 0.0° at finish
+zoom-climb             ft       1282.25     936.00   +37.0%  (not asserted)
+                       full pull from 300 mph level, altitude gained — min speed 205.3 mph (original 127.9), apex at 6.1 s (original 6.5), α 11.6° at min speed
+zoom-climb-min-speed   mph       205.26     127.90   +60.5%  (not asserted)
+                       same loop, speed at its own minimum — α 11.6° here (liftAOAs [5,9] predicts α_ss ≈ 8.25° at wings-level equilibrium; this loop has carried well past that regime by its own minimum)
+
+
+# flight envelope — player_pfighter (pdevastator)
+# fd_speed 113 m/s (252.8 mph)  weight 2850 kg  engine power 0.65  gravity 20 m/s²
+# max thrust accel 24.40 m/s²  stepped at 16.7 ms
+# no measured original for player_pfighter — the Bloodhawk is the only airframe on video
+
+scenario               unit       model   original      err  verdict
+level-top-speed        mph       252.77          -        -  (not asserted)
+                       level full throttle held to equilibrium — fd_speed = 252.8 mph, α 0.0°
+accel-150-290          s          30.00          -        -  (not asserted)
+                       level full throttle, 150 -> 290 mph — α 0.0° at finish
+terminal-dive          mph       313.56          -        -  (not asserted)
+                       70.7° dive at full throttle, held to terminal — settled path -71.4°, 1.240 x fd_speed, α 0.7°
+roll-360               s           2.92          -        -  (not asserted)
+                       full aileron from level cruise, 360° — α 0.6° at finish
+pitch-rate             °/s        24.11          -        -  (not asserted)
+                       sustained full-elevator body pitch rate — at 120/200/280 mph = 24.1/24.1/24.1 °/s, α = 5.9/6.0/6.1° (liftAOAs [5,9] predicts α_ss ≈ 8.25° here)
+yaw-360                s          29.88          -        -  (not asserted)
+                       full rudder from 290 mph, 360° — mean speed 252.5 mph, α 3.0° at finish
+altitude-cap           ft       6571.65          -        -  (not asserted)
+                       22° nose-up hold at full throttle, altitude settled against the clamp — 251.5 mph at settle (original 173.7 mph — the existing stall model owns whatever bleed shape follows the clamp, not asserted here), α 2.2°
+level-speed-near-cap   mph       252.77          -        -  (not asserted)
+                       level full throttle at 1988 m, held to equilibrium — altitude clamp must not leak below the cap, α 0.0°
+sustained-turn-speed   mph       226.46          -        -  (not asserted)
+                       full back stick from a banked entry, settled speed — entered at 100° bank, settled at 71.7° (emergent, not held), α 9.5°, swept 365 ° (original 449.8 in the same window)
+sustained-turn-sink    ft/s        3.49          -        -  (not asserted)
+                       sustained max-pull turn, sink rate — upper bound — the failure this guards is falling out of the turn (before the B12 lift re-key this read 18.29). Negative = climbing.
+sustained-turn-rate    °/s        22.94          -        -  (not asserted)
+                       sustained max-pull turn, heading rate — 1.21x the original — OPEN. The original pulls 1.6x slower BANKED than wings-level (18.95 vs 30.16 °/sim-s round its own loop) and we pull the same rate in both, so the gap is bank/load-factor, not pitch authority. Its 18.95 °/sim-s at 222.94 mph also implies a 58.7° coordinated-turn bank, not the +100° its ADI reads
+eighth-throttle-speed  mph       115.40          -        -  (not asserted)
+                       1/8 throttle held to equilibrium — 0.457 x fd_speed (original 0.459), settled path 0.0°, α 0.0°
+decel-290-150          s           5.20          -        -  (not asserted)
+                       throttle cut to ZERO, 290 -> 150 mph, level — pure drag — no thrust term to assume, α 0.0° at finish
+zoom-climb             ft       1619.76          -        -  (not asserted)
+                       full pull from 300 mph level, altitude gained — min speed 180.7 mph (original 127.9), apex at 8.6 s (original 6.5), α 9.1° at min speed
+zoom-climb-min-speed   mph       180.68          -        -  (not asserted)
+                       same loop, speed at its own minimum — α 9.1° here (liftAOAs [5,9] predicts α_ss ≈ 8.25° at wings-level equilibrium; this loop has carried well past that regime by its own minimum)
+
+
+# flight envelope — player_fury (pfury)
+# fd_speed 126 m/s (281.9 mph)  weight 1500 kg  engine power 0.59  gravity 20 m/s²
+# max thrust accel 42.09 m/s²  stepped at 16.7 ms
+# no measured original for player_fury — the Bloodhawk is the only airframe on video
+
+scenario               unit       model   original      err  verdict
+level-top-speed        mph       281.85          -        -  (not asserted)
+                       level full throttle held to equilibrium — fd_speed = 281.9 mph, α 0.0°
+accel-150-290          s          30.00          -        -  (not asserted)
+                       level full throttle, 150 -> 290 mph — α 0.0° at finish
+terminal-dive          mph       323.96          -        -  (not asserted)
+                       70.7° dive at full throttle, held to terminal — settled path -71.4°, 1.149 x fd_speed, α 0.7°
+roll-360               s           2.08          -        -  (not asserted)
+                       full aileron from level cruise, 360° — α 0.5° at finish
+pitch-rate             °/s        28.36          -        -  (not asserted)
+                       sustained full-elevator body pitch rate — at 120/200/280 mph = 28.4/28.4/28.4 °/s, α = 7.0/7.0/7.1° (liftAOAs [5,9] predicts α_ss ≈ 8.25° here)
+yaw-360                s          29.38          -        -  (not asserted)
+                       full rudder from 290 mph, 360° — mean speed 279.7 mph, α 3.0° at finish
+altitude-cap           ft       6571.98          -        -  (not asserted)
+                       22° nose-up hold at full throttle, altitude settled against the clamp — 280.4 mph at settle (original 173.7 mph — the existing stall model owns whatever bleed shape follows the clamp, not asserted here), α 2.2°
+level-speed-near-cap   mph       281.85          -        -  (not asserted)
+                       level full throttle at 1988 m, held to equilibrium — altitude clamp must not leak below the cap, α 0.0°
+sustained-turn-speed   mph       241.49          -        -  (not asserted)
+                       full back stick from a banked entry, settled speed — entered at 100° bank, settled at 72.8° (emergent, not held), α 10.8°, swept 432 ° (original 449.8 in the same window)
+sustained-turn-sink    ft/s        2.10          -        -  (not asserted)
+                       sustained max-pull turn, sink rate — upper bound — the failure this guards is falling out of the turn (before the B12 lift re-key this read 18.29). Negative = climbing.
+sustained-turn-rate    °/s        27.12          -        -  (not asserted)
+                       sustained max-pull turn, heading rate — 1.43x the original — OPEN. The original pulls 1.6x slower BANKED than wings-level (18.95 vs 30.16 °/sim-s round its own loop) and we pull the same rate in both, so the gap is bank/load-factor, not pitch authority. Its 18.95 °/sim-s at 222.94 mph also implies a 58.7° coordinated-turn bank, not the +100° its ADI reads
+eighth-throttle-speed  mph       128.68          -        -  (not asserted)
+                       1/8 throttle held to equilibrium — 0.457 x fd_speed (original 0.459), settled path 0.0°, α 0.0°
+decel-290-150          s           4.28          -        -  (not asserted)
+                       throttle cut to ZERO, 290 -> 150 mph, level — pure drag — no thrust term to assume, α 0.0° at finish
+zoom-climb             ft       1502.13          -        -  (not asserted)
+                       full pull from 300 mph level, altitude gained — min speed 207.2 mph (original 127.9), apex at 7.2 s (original 6.5), α 10.8° at min speed
+zoom-climb-min-speed   mph       207.24          -        -  (not asserted)
+                       same loop, speed at its own minimum — α 10.8° here (liftAOAs [5,9] predicts α_ss ≈ 8.25° at wings-level equilibrium; this loop has carried well past that regime by its own minimum)
+
+
+# flight envelope — player_warhawk (pwarhawk)
+# fd_speed 90 m/s (201.3 mph)  weight 3000 kg  engine power 1  gravity 20 m/s²
+# max thrust accel 35.67 m/s²  stepped at 16.7 ms
+# no measured original for player_warhawk — the Bloodhawk is the only airframe on video
+
+scenario               unit       model   original      err  verdict
+level-top-speed        mph       201.32          -        -  (not asserted)
+                       level full throttle held to equilibrium — fd_speed = 201.3 mph, α 0.0°
+accel-150-290          s          30.00          -        -  (not asserted)
+                       level full throttle, 150 -> 290 mph — α 0.0° at finish
+terminal-dive          mph       236.15          -        -  (not asserted)
+                       70.7° dive at full throttle, held to terminal — settled path -71.6°, 1.173 x fd_speed, α 0.9°
+roll-360               s           4.97          -        -  (not asserted)
+                       full aileron from level cruise, 360° — α 0.3° at finish
+pitch-rate             °/s        15.60          -        -  (not asserted)
+                       sustained full-elevator body pitch rate — at 120/200/280 mph = 15.6/15.6/15.6 °/s, α = 3.8/3.9/3.9° (liftAOAs [5,9] predicts α_ss ≈ 8.25° here)
+yaw-360                s          50.03          -        -  (not asserted)
+                       full rudder from 290 mph, 360° — mean speed 202.1 mph, α 1.7° at finish
+altitude-cap           ft       6571.64          -        -  (not asserted)
+                       22° nose-up hold at full throttle, altitude settled against the clamp — 200.3 mph at settle (original 173.7 mph — the existing stall model owns whatever bleed shape follows the clamp, not asserted here), α 2.2°
+level-speed-near-cap   mph       201.32          -        -  (not asserted)
+                       level full throttle at 1988 m, held to equilibrium — altitude clamp must not leak below the cap, α 0.0°
+sustained-turn-speed   mph       195.30          -        -  (not asserted)
+                       full back stick from a banked entry, settled speed — entered at 100° bank, settled at 73.4° (emergent, not held), α 6.1°, swept 239 ° (original 449.8 in the same window)
+sustained-turn-sink    ft/s       18.05          -        -  (not asserted)
+                       sustained max-pull turn, sink rate — upper bound — the failure this guards is falling out of the turn (before the B12 lift re-key this read 18.29). Negative = climbing.
+sustained-turn-rate    °/s        15.04          -        -  (not asserted)
+                       sustained max-pull turn, heading rate — 0.79x the original — OPEN. The original pulls 1.6x slower BANKED than wings-level (18.95 vs 30.16 °/sim-s round its own loop) and we pull the same rate in both, so the gap is bank/load-factor, not pitch authority. Its 18.95 °/sim-s at 222.94 mph also implies a 58.7° coordinated-turn bank, not the +100° its ADI reads
+eighth-throttle-speed  mph        91.91          -        -  (not asserted)
+                       1/8 throttle held to equilibrium — 0.457 x fd_speed (original 0.459), settled path 0.0°, α 0.0°
+decel-290-150          s           1.73          -        -  (not asserted)
+                       throttle cut to ZERO, 290 -> 150 mph, level — pure drag — no thrust term to assume, α 0.0° at finish
+zoom-climb             ft       2427.57          -        -  (not asserted)
+                       full pull from 300 mph level, altitude gained — min speed 162.8 mph (original 127.9), apex at 14.4 s (original 6.5), α 7.6° at min speed
+zoom-climb-min-speed   mph       162.77          -        -  (not asserted)
+                       same loop, speed at its own minimum — α 7.6° here (liftAOAs [5,9] predicts α_ss ≈ 8.25° at wings-level equilibrium; this loop has carried well past that regime by its own minimum)
+
+
+# flight envelope — player_autogyro (pautogyro)
+# fd_speed 102 m/s (228.2 mph)  weight 500 kg  engine power 0.35  gravity 20 m/s²
+# max thrust accel 74.90 m/s²  stepped at 16.7 ms
+# no measured original for player_autogyro — the Bloodhawk is the only airframe on video
+
+scenario               unit       model   original      err  verdict
+level-top-speed        mph       228.17          -        -  (not asserted)
+                       level full throttle held to equilibrium — fd_speed = 228.2 mph, α 0.0°
+accel-150-290          s          30.00          -        -  (not asserted)
+                       level full throttle, 150 -> 290 mph — α 0.0° at finish
+terminal-dive          mph       248.20          -        -  (not asserted)
+                       70.7° dive at full throttle, held to terminal — settled path -71.4°, 1.088 x fd_speed, α 0.7°
+roll-360               s           4.97          -        -  (not asserted)
+                       full aileron from level cruise, 360° — α 0.2° at finish
+pitch-rate             °/s        34.48          -        -  (not asserted)
+                       sustained full-elevator body pitch rate — at 120/200/280 mph = 34.5/34.5/34.5 °/s, α = 8.1/8.1/8.1° (liftAOAs [5,9] predicts α_ss ≈ 8.25° here)
+yaw-360                s          19.47          -        -  (not asserted)
+                       full rudder from 290 mph, 360° — mean speed 225.7 mph, α 4.2° at finish
+altitude-cap           ft       6571.72          -        -  (not asserted)
+                       22° nose-up hold at full throttle, altitude settled against the clamp — 227.0 mph at settle (original 173.7 mph — the existing stall model owns whatever bleed shape follows the clamp, not asserted here), α 2.2°
+level-speed-near-cap   mph       228.17          -        -  (not asserted)
+                       level full throttle at 1988 m, held to equilibrium — altitude clamp must not leak below the cap, α 0.0°
+sustained-turn-speed   mph       188.73          -        -  (not asserted)
+                       full back stick from a banked entry, settled speed — entered at 100° bank, settled at 75.9° (emergent, not held), α 11.7°, swept 532 ° (original 449.8 in the same window)
+sustained-turn-sink    ft/s       -1.05          -        -  (not asserted)
+                       sustained max-pull turn, sink rate — upper bound — the failure this guards is falling out of the turn (before the B12 lift re-key this read 18.29). Negative = climbing.
+sustained-turn-rate    °/s        33.42          -        -  (not asserted)
+                       sustained max-pull turn, heading rate — 1.76x the original — OPEN. The original pulls 1.6x slower BANKED than wings-level (18.95 vs 30.16 °/sim-s round its own loop) and we pull the same rate in both, so the gap is bank/load-factor, not pitch authority. Its 18.95 °/sim-s at 222.94 mph also implies a 58.7° coordinated-turn bank, not the +100° its ADI reads
+eighth-throttle-speed  mph       104.17          -        -  (not asserted)
+                       1/8 throttle held to equilibrium — 0.457 x fd_speed (original 0.459), settled path 0.0°, α 0.0°
+decel-290-150          s           1.22          -        -  (not asserted)
+                       throttle cut to ZERO, 290 -> 150 mph, level — pure drag — no thrust term to assume, α 0.0° at finish
+zoom-climb             ft        981.52          -        -  (not asserted)
+                       full pull from 300 mph level, altitude gained — min speed 167.1 mph (original 127.9), apex at 5.9 s (original 6.5), α 12.1° at min speed
+zoom-climb-min-speed   mph       167.08          -        -  (not asserted)
+                       same loop, speed at its own minimum — α 12.1° here (liftAOAs [5,9] predicts α_ss ≈ 8.25° at wings-level equilibrium; this loop has carried well past that regime by its own minimum)
+
+
+# flight envelope — player_avenger (pavenger)
+# fd_speed 118 m/s (264.0 mph)  weight 2325 kg  engine power 0.64  gravity 20 m/s²
+# max thrust accel 29.45 m/s²  stepped at 16.7 ms
+# no measured original for player_avenger — the Bloodhawk is the only airframe on video
+
+scenario               unit       model   original      err  verdict
+level-top-speed        mph       263.96          -        -  (not asserted)
+                       level full throttle held to equilibrium — fd_speed = 264.0 mph, α 0.0°
+accel-150-290          s          30.00          -        -  (not asserted)
+                       level full throttle, 150 -> 290 mph — α 0.0° at finish
+terminal-dive          mph       317.98          -        -  (not asserted)
+                       70.7° dive at full throttle, held to terminal — settled path -71.4°, 1.205 x fd_speed, α 0.7°
+roll-360               s           2.55          -        -  (not asserted)
+                       full aileron from level cruise, 360° — α 0.6° at finish
+pitch-rate             °/s        25.81          -        -  (not asserted)
+                       sustained full-elevator body pitch rate — at 120/200/280 mph = 25.8/25.8/25.8 °/s, α = 6.3/6.4/6.5° (liftAOAs [5,9] predicts α_ss ≈ 8.25° here)
+yaw-360                s          29.63          -        -  (not asserted)
+                       full rudder from 290 mph, 360° — mean speed 262.8 mph, α 3.0° at finish
+altitude-cap           ft       6571.60          -        -  (not asserted)
+                       22° nose-up hold at full throttle, altitude settled against the clamp — 262.6 mph at settle (original 173.7 mph — the existing stall model owns whatever bleed shape follows the clamp, not asserted here), α 2.2°
+level-speed-near-cap   mph       263.96          -        -  (not asserted)
+                       level full throttle at 1988 m, held to equilibrium — altitude clamp must not leak below the cap, α 0.0°
+sustained-turn-speed   mph       231.86          -        -  (not asserted)
+                       full back stick from a banked entry, settled speed — entered at 100° bank, settled at 72.1° (emergent, not held), α 10.1°, swept 392 ° (original 449.8 in the same window)
+sustained-turn-sink    ft/s        4.11          -        -  (not asserted)
+                       sustained max-pull turn, sink rate — upper bound — the failure this guards is falling out of the turn (before the B12 lift re-key this read 18.29). Negative = climbing.
+sustained-turn-rate    °/s        24.63          -        -  (not asserted)
+                       sustained max-pull turn, heading rate — 1.30x the original — OPEN. The original pulls 1.6x slower BANKED than wings-level (18.95 vs 30.16 °/sim-s round its own loop) and we pull the same rate in both, so the gap is bank/load-factor, not pitch authority. Its 18.95 °/sim-s at 222.94 mph also implies a 58.7° coordinated-turn bank, not the +100° its ADI reads
+eighth-throttle-speed  mph       120.51          -        -  (not asserted)
+                       1/8 throttle held to equilibrium — 0.457 x fd_speed (original 0.459), settled path 0.0°, α 0.0°
+decel-290-150          s           4.95          -        -  (not asserted)
+                       throttle cut to ZERO, 290 -> 150 mph, level — pure drag — no thrust term to assume, α 0.0° at finish
+zoom-climb             ft       1562.21          -        -  (not asserted)
+                       full pull from 300 mph level, altitude gained — min speed 191.1 mph (original 127.9), apex at 8.0 s (original 6.5), α 9.8° at min speed
+zoom-climb-min-speed   mph       191.14          -        -  (not asserted)
+                       same loop, speed at its own minimum — α 9.8° here (liftAOAs [5,9] predicts α_ss ≈ 8.25° at wings-level equilibrium; this loop has carried well past that regime by its own minimum)
+
+
+# flight envelope — player_balmoral (pbalmoral)
+# fd_speed 79 m/s (176.7 mph)  weight 4125 kg  engine power 0.3  gravity 20 m/s²
+# max thrust accel 7.78 m/s²  stepped at 16.7 ms
+# no measured original for player_balmoral — the Bloodhawk is the only airframe on video
+
+scenario               unit       model   original      err  verdict
+level-top-speed        mph       176.72          -        -  (not asserted)
+                       level full throttle held to equilibrium — fd_speed = 176.7 mph, α 0.0°
+accel-150-290          s          30.00          -        -  (not asserted)
+                       level full throttle, 150 -> 290 mph — α 0.0° at finish
+terminal-dive          mph       280.90          -        -  (not asserted)
+                       70.7° dive at full throttle, held to terminal — settled path -71.5°, 1.590 x fd_speed, α 0.8°
+roll-360               s           4.97          -        -  (not asserted)
+                       full aileron from level cruise, 360° — α 0.5° at finish
+pitch-rate             °/s         9.63          -        -  (not asserted)
+                       sustained full-elevator body pitch rate — at 120/200/280 mph = 9.6/9.6/9.6 °/s, α = 2.5/2.5/2.5° (liftAOAs [5,9] predicts α_ss ≈ 8.25° here)
+yaw-360                s          60.00          -        -  (not asserted)
+                       full rudder from 290 mph, 360° — mean speed 182.0 mph, α 1.5° at finish
+altitude-cap           ft       5559.18          -        -  (not asserted)
+                       22° nose-up hold at full throttle, altitude settled against the clamp — 173.5 mph at settle (original 173.7 mph — the existing stall model owns whatever bleed shape follows the clamp, not asserted here), α 0.0°
+level-speed-near-cap   mph       176.72          -        -  (not asserted)
+                       level full throttle at 1988 m, held to equilibrium — altitude clamp must not leak below the cap, α 0.0°
+sustained-turn-speed   mph       194.44          -        -  (not asserted)
+                       full back stick from a banked entry, settled speed — entered at 100° bank, settled at 79.0° (emergent, not held), α 6.0°, swept 152 ° (original 449.8 in the same window)
+sustained-turn-sink    ft/s       39.41          -        -  (not asserted)
+                       sustained max-pull turn, sink rate — upper bound — the failure this guards is falling out of the turn (before the B12 lift re-key this read 18.29). Negative = climbing.
+sustained-turn-rate    °/s         9.57          -        -  (not asserted)
+                       sustained max-pull turn, heading rate — 0.51x the original — OPEN. The original pulls 1.6x slower BANKED than wings-level (18.95 vs 30.16 °/sim-s round its own loop) and we pull the same rate in both, so the gap is bank/load-factor, not pitch authority. Its 18.95 °/sim-s at 222.94 mph also implies a 58.7° coordinated-turn bank, not the +100° its ADI reads
+eighth-throttle-speed  mph        80.68          -        -  (not asserted)
+                       1/8 throttle held to equilibrium — 0.457 x fd_speed (original 0.459), settled path 0.0°, α 0.0°
+decel-290-150          s           5.43          -        -  (not asserted)
+                       throttle cut to ZERO, 290 -> 150 mph, level — pure drag — no thrust term to assume, α 0.0° at finish
+zoom-climb             ft       2482.54          -        -  (not asserted)
+                       full pull from 300 mph level, altitude gained — min speed 20.9 mph (original 127.9), apex at 30.0 s (original 6.5), α 8.7° at min speed
+zoom-climb-min-speed   mph        20.94          -        -  (not asserted)
+                       same loop, speed at its own minimum — α 8.7° here (liftAOAs [5,9] predicts α_ss ≈ 8.25° at wings-level equilibrium; this loop has carried well past that regime by its own minimum)
+
+
+# flight envelope — player_brigand (pbrigand)
+# fd_speed 108 m/s (241.6 mph)  weight 3100 kg  engine power 0.68  gravity 20 m/s²
+# max thrust accel 23.47 m/s²  stepped at 16.7 ms
+# no measured original for player_brigand — the Bloodhawk is the only airframe on video
+
+scenario               unit       model   original      err  verdict
+level-top-speed        mph       241.59          -        -  (not asserted)
+                       level full throttle held to equilibrium — fd_speed = 241.6 mph, α 0.0°
+accel-150-290          s          30.00          -        -  (not asserted)
+                       level full throttle, 150 -> 290 mph — α 0.0° at finish
+terminal-dive          mph       301.63          -        -  (not asserted)
+                       70.7° dive at full throttle, held to terminal — settled path -71.4°, 1.249 x fd_speed, α 0.7°
+roll-360               s           3.93          -        -  (not asserted)
+                       full aileron from level cruise, 360° — α 0.5° at finish
+pitch-rate             °/s        19.57          -        -  (not asserted)
+                       sustained full-elevator body pitch rate — at 120/200/280 mph = 19.6/19.6/19.6 °/s, α = 5.0/5.0/5.0° (liftAOAs [5,9] predicts α_ss ≈ 8.25° here)
+yaw-360                s          30.05          -        -  (not asserted)
+                       full rudder from 290 mph, 360° — mean speed 242.0 mph, α 3.0° at finish
+altitude-cap           ft       6571.59          -        -  (not asserted)
+                       22° nose-up hold at full throttle, altitude settled against the clamp — 240.3 mph at settle (original 173.7 mph — the existing stall model owns whatever bleed shape follows the clamp, not asserted here), α 2.2°
+level-speed-near-cap   mph       241.59          -        -  (not asserted)
+                       level full throttle at 1988 m, held to equilibrium — altitude clamp must not leak below the cap, α 0.0°
+sustained-turn-speed   mph       227.83          -        -  (not asserted)
+                       full back stick from a banked entry, settled speed — entered at 100° bank, settled at 70.6° (emergent, not held), α 7.6°, swept 296 ° (original 449.8 in the same window)
+sustained-turn-sink    ft/s       13.07          -        -  (not asserted)
+                       sustained max-pull turn, sink rate — upper bound — the failure this guards is falling out of the turn (before the B12 lift re-key this read 18.29). Negative = climbing.
+sustained-turn-rate    °/s        18.57          -        -  (not asserted)
+                       sustained max-pull turn, heading rate — 0.98x the original — OPEN. The original pulls 1.6x slower BANKED than wings-level (18.95 vs 30.16 °/sim-s round its own loop) and we pull the same rate in both, so the gap is bank/load-factor, not pitch authority. Its 18.95 °/sim-s at 222.94 mph also implies a 58.7° coordinated-turn bank, not the +100° its ADI reads
+eighth-throttle-speed  mph       110.30          -        -  (not asserted)
+                       1/8 throttle held to equilibrium — 0.457 x fd_speed (original 0.459), settled path 0.0°, α 0.0°
+decel-290-150          s           4.68          -        -  (not asserted)
+                       throttle cut to ZERO, 290 -> 150 mph, level — pure drag — no thrust term to assume, α 0.0° at finish
+zoom-climb             ft       1999.23          -        -  (not asserted)
+                       full pull from 300 mph level, altitude gained — min speed 175.1 mph (original 127.9), apex at 10.8 s (original 6.5), α 8.2° at min speed
+zoom-climb-min-speed   mph       175.05          -        -  (not asserted)
+                       same loop, speed at its own minimum — α 8.2° here (liftAOAs [5,9] predicts α_ss ≈ 8.25° at wings-level equilibrium; this loop has carried well past that regime by its own minimum)
+
+
+# flight envelope — player_fbrand (pfirebrand)
+# fd_speed 93 m/s (208.0 mph)  weight 3850 kg  engine power 1  gravity 20 m/s²
+# max thrust accel 27.79 m/s²  stepped at 16.7 ms
+# no measured original for player_fbrand — the Bloodhawk is the only airframe on video
+
+scenario               unit       model   original      err  verdict
+level-top-speed        mph       208.03          -        -  (not asserted)
+                       level full throttle held to equilibrium — fd_speed = 208.0 mph, α 0.0°
+accel-150-290          s          30.00          -        -  (not asserted)
+                       level full throttle, 150 -> 290 mph — α 0.0° at finish
+terminal-dive          mph       252.79          -        -  (not asserted)
+                       70.7° dive at full throttle, held to terminal — settled path -71.5°, 1.215 x fd_speed, α 0.8°
+roll-360               s           4.90          -        -  (not asserted)
+                       full aileron from level cruise, 360° — α 0.3° at finish
+pitch-rate             °/s        16.17          -        -  (not asserted)
+                       sustained full-elevator body pitch rate — at 120/200/280 mph = 16.2/16.2/16.2 °/s, α = 4.1/4.1/4.1° (liftAOAs [5,9] predicts α_ss ≈ 8.25° here)
+yaw-360                s          30.12          -        -  (not asserted)
+                       full rudder from 290 mph, 360° — mean speed 209.1 mph, α 3.0° at finish
+altitude-cap           ft       6571.57          -        -  (not asserted)
+                       22° nose-up hold at full throttle, altitude settled against the clamp — 207.0 mph at settle (original 173.7 mph — the existing stall model owns whatever bleed shape follows the clamp, not asserted here), α 2.2°
+level-speed-near-cap   mph       208.03          -        -  (not asserted)
+                       level full throttle at 1988 m, held to equilibrium — altitude clamp must not leak below the cap, α 0.0°
+sustained-turn-speed   mph       200.72          -        -  (not asserted)
+                       full back stick from a banked entry, settled speed — entered at 100° bank, settled at 73.0° (emergent, not held), α 6.5°, swept 248 ° (original 449.8 in the same window)
+sustained-turn-sink    ft/s       14.97          -        -  (not asserted)
+                       sustained max-pull turn, sink rate — upper bound — the failure this guards is falling out of the turn (before the B12 lift re-key this read 18.29). Negative = climbing.
+sustained-turn-rate    °/s        15.56          -        -  (not asserted)
+                       sustained max-pull turn, heading rate — 0.82x the original — OPEN. The original pulls 1.6x slower BANKED than wings-level (18.95 vs 30.16 °/sim-s round its own loop) and we pull the same rate in both, so the gap is bank/load-factor, not pitch authority. Its 18.95 °/sim-s at 222.94 mph also implies a 58.7° coordinated-turn bank, not the +100° its ADI reads
+eighth-throttle-speed  mph        94.98          -        -  (not asserted)
+                       1/8 throttle held to equilibrium — 0.457 x fd_speed (original 0.459), settled path 0.0°, α 0.0°
+decel-290-150          s           2.47          -        -  (not asserted)
+                       throttle cut to ZERO, 290 -> 150 mph, level — pure drag — no thrust term to assume, α 0.0° at finish
+zoom-climb             ft       2295.35          -        -  (not asserted)
+                       full pull from 300 mph level, altitude gained — min speed 159.1 mph (original 127.9), apex at 13.7 s (original 6.5), α 7.7° at min speed
+zoom-climb-min-speed   mph       159.08          -        -  (not asserted)
+                       same loop, speed at its own minimum — α 7.7° here (liftAOAs [5,9] predicts α_ss ≈ 8.25° at wings-level equilibrium; this loop has carried well past that regime by its own minimum)
+
+
+# flight envelope — player_kestrel (pkestrel)
+# fd_speed 97 m/s (217.0 mph)  weight 4000 kg  engine power 0.9  gravity 20 m/s²
+# max thrust accel 24.08 m/s²  stepped at 16.7 ms
+# no measured original for player_kestrel — the Bloodhawk is the only airframe on video
+
+scenario               unit       model   original      err  verdict
+level-top-speed        mph       216.98          -        -  (not asserted)
+                       level full throttle held to equilibrium — fd_speed = 217.0 mph, α 0.0°
+accel-150-290          s          30.00          -        -  (not asserted)
+                       level full throttle, 150 -> 290 mph — α 0.0° at finish
+terminal-dive          mph       269.76          -        -  (not asserted)
+                       70.7° dive at full throttle, held to terminal — settled path -71.5°, 1.243 x fd_speed, α 0.8°
+roll-360               s           4.40          -        -  (not asserted)
+                       full aileron from level cruise, 360° — α 0.4° at finish
+pitch-rate             °/s        17.02          -        -  (not asserted)
+                       sustained full-elevator body pitch rate — at 120/200/280 mph = 17.0/17.0/17.0 °/s, α = 4.4/4.4/4.4° (liftAOAs [5,9] predicts α_ss ≈ 8.25° here)
+yaw-360                s          30.20          -        -  (not asserted)
+                       full rudder from 290 mph, 360° — mean speed 218.3 mph, α 3.0° at finish
+altitude-cap           ft       6571.54          -        -  (not asserted)
+                       22° nose-up hold at full throttle, altitude settled against the clamp — 215.9 mph at settle (original 173.7 mph — the existing stall model owns whatever bleed shape follows the clamp, not asserted here), α 2.2°
+level-speed-near-cap   mph       216.98          -        -  (not asserted)
+                       level full throttle at 1988 m, held to equilibrium — altitude clamp must not leak below the cap, α 0.0°
+sustained-turn-speed   mph       208.29          -        -  (not asserted)
+                       full back stick from a banked entry, settled speed — entered at 100° bank, settled at 72.3° (emergent, not held), α 6.8°, swept 260 ° (original 449.8 in the same window)
+sustained-turn-sink    ft/s       15.12          -        -  (not asserted)
+                       sustained max-pull turn, sink rate — upper bound — the failure this guards is falling out of the turn (before the B12 lift re-key this read 18.29). Negative = climbing.
+sustained-turn-rate    °/s        16.32          -        -  (not asserted)
+                       sustained max-pull turn, heading rate — 0.86x the original — OPEN. The original pulls 1.6x slower BANKED than wings-level (18.95 vs 30.16 °/sim-s round its own loop) and we pull the same rate in both, so the gap is bank/load-factor, not pitch authority. Its 18.95 °/sim-s at 222.94 mph also implies a 58.7° coordinated-turn bank, not the +100° its ADI reads
+eighth-throttle-speed  mph        99.06          -        -  (not asserted)
+                       1/8 throttle held to equilibrium — 0.457 x fd_speed (original 0.459), settled path 0.0°, α 0.0°
+decel-290-150          s           3.25          -        -  (not asserted)
+                       throttle cut to ZERO, 290 -> 150 mph, level — pure drag — no thrust term to assume, α 0.0° at finish
+zoom-climb             ft       2174.02          -        -  (not asserted)
+                       full pull from 300 mph level, altitude gained — min speed 159.1 mph (original 127.9), apex at 12.8 s (original 6.5), α 7.8° at min speed
+zoom-climb-min-speed   mph       159.09          -        -  (not asserted)
+                       same loop, speed at its own minimum — α 7.8° here (liftAOAs [5,9] predicts α_ss ≈ 8.25° at wings-level equilibrium; this loop has carried well past that regime by its own minimum)
+
+
+# flight envelope — player_peacemaker (ppeacemaker)
+# fd_speed 130 m/s (290.8 mph)  weight 1600 kg  engine power 0.58  gravity 20 m/s²
+# max thrust accel 38.79 m/s²  stepped at 16.7 ms
+# no measured original for player_peacemaker — the Bloodhawk is the only airframe on video
+
+scenario               unit       model   original      err  verdict
+level-top-speed        mph       290.80          -        -  (not asserted)
+                       level full throttle held to equilibrium — fd_speed = 290.8 mph, α 0.0°
+accel-150-290          s           5.93          -        -  (not asserted)
+                       level full throttle, 150 -> 290 mph — α 0.0° at finish
+terminal-dive          mph       337.53          -        -  (not asserted)
+                       70.7° dive at full throttle, held to terminal — settled path -71.3°, 1.161 x fd_speed, α 0.6°
+roll-360               s           2.03          -        -  (not asserted)
+                       full aileron from level cruise, 360° — α 0.5° at finish
+pitch-rate             °/s        31.20          -        -  (not asserted)
+                       sustained full-elevator body pitch rate — at 120/200/280 mph = 31.2/31.2/31.2 °/s, α = 7.9/8.0/8.1° (liftAOAs [5,9] predicts α_ss ≈ 8.25° here)
+yaw-360                s          29.28          -        -  (not asserted)
+                       full rudder from 290 mph, 360° — mean speed 288.2 mph, α 3.0° at finish
+altitude-cap           ft       6571.88          -        -  (not asserted)
+                       22° nose-up hold at full throttle, altitude settled against the clamp — 289.3 mph at settle (original 173.7 mph — the existing stall model owns whatever bleed shape follows the clamp, not asserted here), α 2.2°
+level-speed-near-cap   mph       290.80          -        -  (not asserted)
+                       level full throttle at 1988 m, held to equilibrium — altitude clamp must not leak below the cap, α 0.0°
+sustained-turn-speed   mph       233.46          -        -  (not asserted)
+                       full back stick from a banked entry, settled speed — entered at 100° bank, settled at 74.2° (emergent, not held), α 12.4°, swept 477 ° (original 449.8 in the same window)
+sustained-turn-sink    ft/s       -2.40          -        -  (not asserted)
+                       sustained max-pull turn, sink rate — upper bound — the failure this guards is falling out of the turn (before the B12 lift re-key this read 18.29). Negative = climbing.
+sustained-turn-rate    °/s        29.96          -        -  (not asserted)
+                       sustained max-pull turn, heading rate — 1.58x the original — OPEN. The original pulls 1.6x slower BANKED than wings-level (18.95 vs 30.16 °/sim-s round its own loop) and we pull the same rate in both, so the gap is bank/load-factor, not pitch authority. Its 18.95 °/sim-s at 222.94 mph also implies a 58.7° coordinated-turn bank, not the +100° its ADI reads
+eighth-throttle-speed  mph       132.77          -        -  (not asserted)
+                       1/8 throttle held to equilibrium — 0.457 x fd_speed (original 0.459), settled path 0.0°, α 0.0°
+decel-290-150          s           5.15          -        -  (not asserted)
+                       throttle cut to ZERO, 290 -> 150 mph, level — pure drag — no thrust term to assume, α 0.0° at finish
+zoom-climb             ft       1361.78          -        -  (not asserted)
+                       full pull from 300 mph level, altitude gained — min speed 204.9 mph (original 127.9), apex at 6.6 s (original 6.5), α 11.4° at min speed
+zoom-climb-min-speed   mph       204.88          -        -  (not asserted)
+                       same loop, speed at its own minimum — α 11.4° here (liftAOAs [5,9] predicts α_ss ≈ 8.25° at wings-level equilibrium; this loop has carried well past that regime by its own minimum)
+
+

@@ -1201,6 +1201,12 @@ slope 106.1 vs 36.5, mid ridge 143.7 vs 19.9, far ridge 182.4 vs 60.3, vegetatio
 ours **17.69 %** both sides, original **51.21 %**, `--no-fog` control **75.13 %** — the same
 direction and the same gap, with the control proving the instrument can move.
 
+⚠ **Later the same day `BL-321` was closed at the controls**: the user flew C3 and judged the murk
+absent — against these numbers, and with no code change in between. Nothing above is withdrawn; it
+is exactly what it says, a proof that the decode moved C3 by 0 px. What the flown scene disputes is
+the *residual those boxes were measuring*, so do not re-mint a C3 fog bug from this paragraph alone
+(`git log --grep=BL-321`).
+
 **C1 river (`-7323,192,-3829` / `-0.997,-0.1,0.070`) — the ceiling-survival residual is CLOSED.**
 Texture reach measured as `SHOT-23`(a) requires (a plateau-relative horizontal high-pass, cut at
 25 % of each image's own plateau), reported against the terrain silhouette:

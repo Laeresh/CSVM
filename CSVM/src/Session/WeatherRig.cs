@@ -725,8 +725,11 @@ public sealed class WeatherRig
         // every other multiplier in that block is <= 1 (MED 0.85, LOW 0.7), so nothing in the file
         // shortens a range at all. Measured: at the C1 river pose the halved range saturated the
         // overcast ceiling into flat fog far too close in, and the authored range pushes the
-        // saturation out; C3's over-fogged canyon slope moves 178 -> 106 against the original's
-        // 36.5 (still open, BL-321).
+        // saturation out; C3's over-fogged canyon slope moved 178 -> 106 against the original's
+        // 36.5 at that measurement. ⚠ Do not re-open that gap from these numbers: the C3 murk was
+        // closed at the controls on 2026-08-09 (BL-321), and the instrument that produced the
+        // 106-vs-36.5 residual disagrees with the user's own eyes on the flown scene — the boxes,
+        // not the fog, are what is unreliable there. `git log --grep=BL-321`.
         // ⚠ The residual at the river pose was never this factor: the original's overcast ceiling
         // reads 166-175 in its own still while ours rendered 200-220 BEFORE any fog. That was the
         // deck's own underside brightness seen from below, and it is fixed — the deck now carries

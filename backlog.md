@@ -65,7 +65,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   scales the yaw `eff`, so a change in one moves others; the `flight-envelope` suite asserts six
   measured scenarios and will fail if a change breaks one. `ThrustConst` and
   `PitchTune`/`YawTune`/`RollTune` are pinned measurements, not knobs — a fix that needs one of
-  them to move needs a new measurement first.
+  them to move needs a new measurement first. ⚠ **They re-pin when a decoded mechanism changes the
+  steady rate they hold, and only then**: `YawTune` 1.32 → 1.33 with the authored yaw curve (C21),
+  `PitchTune` 0.75 → 0.89 and `YawTune` 1.33 → 1.57 with the weathervane torque (C23), each against
+  the same stopwatch/video figures as before. Chasing a *transient* or a feel report through them is
+  the forbidden move, not re-pinning a steady rate something else moved.
 
 ## Damage & destruction
 
@@ -714,12 +718,52 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `yaw_high_speed 0.17`, `yaw_fade_in 10`, `yaw_max 50`, `yaw_fade_out 400`, `groundblow_elev 400`,
   `groundblow_mag 10`, `ai_groundblow 0.5`, and the `crash` block's `bounce_factor 0.6`. Units are
   unverified; decoding it deserves its own pass, and it is the upstream of other entries here:
-  the `yaw_*` fade set is the original's own speed-dependent yaw authority behind `BL-108`'s
-  interim `eff` (`1.4 − clamp(v/fd)`, whose comment already admits it is "still not same as
-  original"), and the AoA/G block (`maxAOA`, `liftAOAs`, `highGs`/`lowGs`, `lift_accel_rate`) is
+  the `yaw_*` fade set is the original's own speed-dependent yaw authority, decoded and implemented
+  by `PLAN-flight-model-rewrite` C21 in place of the interim `eff` (`1.4 − clamp(v/fd)`, retired
+  2026-08-09), and the AoA/G block (`maxAOA`, `liftAOAs`, `highGs`/`lowGs`, `lift_accel_rate`) is
   now partially consumed by the landed lift re-key — as a hypothesis under test, not a decode
   (`docs/plans/PLAN-flight-drag-lift.md` B12) — with the induced-drag exponent question owned by
   `BL-307`.
+
+  **Units: PARTLY DECODED — settled 2026-08-09 from `crimson.exe` (Ghidra), write-up in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md); consumed by
+  [`docs/plans/PLAN-flight-model-rewrite.md`](docs/plans/PLAN-flight-model-rewrite.md), complete
+  2026-08-09.** The parser reads each
+  key by name, so the units are read off the conversion it applies, not inferred:
+  **speeds are MPH** (`× 0.44704` on load — so `turn_fade_in 10`, `yaw_max 50`, `yaw_fade_out 400`
+  and `drag_fade_speed 40` are all mph); **`liftAOAs` and `maxAOA` are degrees** (the parser takes
+  their cosine); **`highGs`/`lowGs` are stored raw and are plain G**. That closes the units half of
+  this entry for the flight block. What each key *does* is in the write-up — and two of the readings
+  standing here are now wrong: **`liftAOAs` is not a load-factor ramp**, it is the window over which
+  the relative wind is blended toward the nose; and the `yaw_*` set is not a simple fade but a
+  ramp to 1.0 at 50 mph then a decline to 0.17 at 400 mph — implemented by the plan's `C21`
+  (landed 2026-08-09), which retired `BL-108`'s interim `eff`.
+
+  ⚠ **Three keys here are authored so the feature they gate never fires**, which is a finding, not a
+  gap to fill: `high_speed_pitch_fade [1000,1001]` is beyond any attainable dive speed, and
+  `highGs [9,15]` / `lowGs [-6,-9]` sit past the executable's hard ±5/9 G lift clamp. Do not
+  implement them as missing features. **`high_speed_pitch_fade`: CLOSED 2026-08-09 by plan `C24`** —
+  confirmed unreachable for all eleven player airframes against `MaxDiveSpeedFrac` (1.75 × `fd_speed`,
+  the model's own hard dive ceiling, more generous than any airframe's settled terminal dive): the
+  Bloodhawk's own ceiling, the highest of the eleven, is 528.5 mph, little over half the authored
+  1000 mph threshold. Table in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md#control-authority-vs-speed) and
+  [`POST-B14.md`](analysis/flight-model-baseline/POST-B14.md)'s C24 section. Nothing was
+  implemented — that is the correct outcome.
+  **`highGs`/`lowGs`: CLOSED 2026-08-09 by plan `D33`, the same way and with the same outcome.**
+  Measured through the real model on all eleven airframes (five max-performance manoeuvres each;
+  the demanded load factor read BEFORE both lift clamps, so it over-reads what the wings deliver):
+  peak **2.13–5.01 G** against `highGs[0]` **9**, margins 3.99–6.87 G; and peak α **8.9–25.6°**
+  against `maxAOA` **46°**, margins 20.4–37.1°. `lowGs [−6,−9]` is unreachable twice over — past the
+  −5 G clamp, and the demand is a vector LENGTH that never goes negative. Tables in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md) and
+  [`POST-B14.md`](analysis/flight-model-baseline/POST-B14.md)'s D33 section; pinned by
+  `CSVM.Tests/ControlLimiterTests.cs`, which asserts each airframe against its OWN loaded
+  thresholds, so a per-plane override or a data edit that brings either into reach fails the suite.
+  ⚠ The Bloodhawk's 5.01 G peak is 0.2 % **past** the executable's fallback `highGs[0] = 5` — under
+  the fallbacks the limiter would fire, barely. The disproof rests on the authored 9.
+  `groundblow_*`, `ai_groundblow` and `crash.bounce_factor` are **not** covered by the decode and
+  keep this entry open alongside the ground-blow work below.
 
   **Ground blow: DECODED — settled 2026-08-07 by the design document plus `CAP-02` (five batches),
   and `CAP-02` is closed.** It is a *designed* feature, not a shipped-only one: the GDD has a
@@ -772,31 +816,84 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   Implementing ground blow itself is unowned follow-on work — mint a `[Feature]` item when it is
   scheduled.
 
-  **`turn_fade_in 10` / `turn_fade_out 50` / `highGs [9,15]` now have a measurement waiting for
-  them (2026-08-07).** The original pulls **1.6× slower when banked**: 30.16 °/sim-s round a
+  **`turn_fade_in 10` / `turn_fade_out 50` now have a measurement waiting for
+  them (2026-08-07; `highGs [9,15]` was the third of this trio until `D33` took it out — see
+  below).** The original pulls **1.6× slower when banked**: 30.16 °/sim-s round a
   wings-level 360° loop against 18.95 °/sim-s in `CAP-01`'s 100°-banked turn, same aircraft, same
   full back stick, same full throttle — and not a speed effect, since the loop passes through the
   turn's 222.94 mph on its way round (`analysis/video-flight-calibration/FINDINGS.md`). Our model
   has no such asymmetry and is 71% fast in the banked case while being right to ~11% in the loop.
-  These three fields are the only authored ones shaped like a bank/load-factor rate fade, so
-  decoding them is now the concrete next step rather than a wish. ⚠ **A lead, not a decode** — the
-  names have not been mapped to units and `maxAOA`/`liftAOAs` were consumed as a hypothesis under
-  test, not as a decode (`docs/PLAN-flight-drag-lift.md` B12). Do not implement a rate limiter from
-  the names alone — a naive speed/bank coupling that quietly costs pitch authority is exactly the
-  wrong-mechanism fix `BL-124`'s history warns about, and induced drag already supplies the
-  sustained-turn energy cost (`PLAN-flight-drag-lift` C21) without touching the rate.
+  ⚠ **CORRECTED 2026-08-09 — `turn_fade_*` is decoded, it is NOT a bank or load-factor fade, and
+  with it out the trio is empty: the banked asymmetry has no authored candidate left.** The decode of
+  record already carried the answer (`docs/org/flightModel.md`, "Control authority vs speed"):
+  `FUN_00490e10` derives one **base ramp from AIRSPEED ALONE** — 0 below `turn_fade_in` (10), rising
+  linearly to 1 at `turn_fade_out` (**50** as authored here), **held at 1 above it** — scaling roll
+  and pitch authority. Bank never enters it, and above 50 mph it is identically 1. The banked turn
+  settles at 222–260 mph and the knife-edge takes are at 143 and 300 mph, so the ramp is saturated
+  everywhere the 1.6× appears and **cannot produce it**. What it does describe is a real
+  unimplemented behaviour at the bottom of the envelope — minted as `BL-330`.
+  All three candidates are now dead. (a) The original's own hardcoded bank coupling — 0.205 into
+  yaw, 0.165 into pitch, plus the inverted term — is decoded and implemented
+  (`PLAN-flight-model-rewrite` C22, 2026-08-09) and moves the banked rate **away** from the original
+  (32.35 → 34.71 °/s, up on ten of eleven airframes): both terms add heading rate in the direction of
+  bank by construction, so no sign or scale of them can subtract one. Do not re-open the coupling
+  looking for the missing slowdown. (b) **`highGs` (`D33`, 2026-08-09):** the G limiter is inert on
+  every airframe (peak demand 2.13–5.01 G against a threshold of 9), and a limiter that never fires
+  cannot slow a turn. (c) `turn_fade_*`, above.
+  ⚠ **Do not fill the hole by inventing a rate limiter from field names** — a naive speed/bank
+  coupling that quietly costs pitch authority is exactly the wrong-mechanism fix `BL-124`'s history
+  warns about, and `maxAOA`/`liftAOAs` were consumed as a hypothesis under test rather than as a
+  decode (`docs/plans/PLAN-flight-drag-lift.md` B12).
+  **Where to look now that the authored data is exhausted: the measurement's own interpretation.**
+  `Probes.FlightEnvelope` already records that the original's turn is not internally consistent with
+  a coordinated level turn — 18.95 °/sim-s at 222.94 mph is `V·ω` = 32.96 m/s² lateral, implying
+  **58.7° of bank**, not the ~100° its ADI shows. A model reproducing the measured *rate* would then
+  disagree with the measured *bank*. `CAP-33` (a sustained turn held at a clearly different bank,
+  ~60–70°) is the capture that discriminates: two banks and two rates say whether the original's turn
+  is rate-limited, bank-limited, or being mis-read off the ADI. A capture question, not a decode one.
 
-  Still to decode in the block: the `yaw_*` set (`BL-108`), the AoA/G and `turn_*` fade sets
-  (above; exponent on `BL-307`), `high_speed_pitch_fade`, `drag_fade_speed`, and `bounce_factor`'s
-  units (`BL-172`).
-  One GDD lead for the AoA/G set: the design's "Elements not Simulated" list explicitly excludes
-  red-outs, so `highGs [9,15]` / `lowGs [-6,-9]` are read as the lift model's load-factor envelope,
-  not pilot-physiology thresholds.
+  Still to decode/implement in the block: `turn_*` (the roll/pitch base ramp — above; exponent on
+  `BL-307`), `groundblow_*`/`ai_groundblow`, and `bounce_factor`'s units (`BL-172`). The `yaw_*` set
+  is decoded and implemented (`PLAN-flight-model-rewrite` C21); `high_speed_pitch_fade`,
+  `highGs`/`lowGs`/`maxAOA` and `drag_fade_speed` are decoded as
+  authored-unreachable/authored-unreachable/dead respectively (`C24`'s pitch fade, `D33`'s G and AOA
+  limiters, B14's dead-key finding for `drag_fade_speed`).
+  One GDD lead for the AoA/G set, and `D33` bears it out: the design's "Elements not Simulated" list
+  explicitly excludes red-outs, so `highGs [9,15]` / `lowGs [-6,-9]` are the lift model's
+  load-factor envelope rather than pilot-physiology thresholds — and as an envelope they sit outside
+  everything the aircraft can actually reach.
   ⚠ **Traps.** (a) `yaw_max 50` and `yaw_fade_out 400` are not in the same units as our `eff`
   — do not map names onto our terms without deriving the units, because our yaw 360° currently
   matches the original to 4% and a mis-scaled substitution would break a passing suite check.
   (b) `drag_factor 1.5` here **collides with** `vehicle.json`'s per-plane `drag_factor` (0.37 on the
   Bloodhawk), so at least one of the two is not what its name suggests; our drag uses neither.
+
+- `BL-330` `[Feature]` **The low-speed control-authority ramp — decoded, corroborated at the
+  controls, and not implemented.** `FUN_00490e10` scales **roll and pitch** authority by a base ramp
+  taken from airspeed alone: 0 below `turn_fade_in` (**10 mph**), rising linearly to 1 at
+  `turn_fade_out` (**50 mph** as authored here), flat at 1 above. So the slower the aircraft gets,
+  the mushier it gets — and at 10 mph roll and pitch are gone entirely. Our `FlightModel` applies no
+  such fade on either axis; the only thing that makes our aircraft feel unflyable when slow is the
+  stall block taking the nose, which is a different mechanism. Write-up in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md)'s "Control authority vs speed".
+  **Two-source support, which is why this is a `[Feature]` and not a `[Research]`:** the trace above,
+  plus a player report from the controls (2026-08-09) that the original hampers the controls at stall
+  speed — offered unprompted while flying the post-`D33` build, i.e. describing the original from
+  memory rather than reading it off ours.
+  ⚠ **Where 50 mph falls decides how visible this is, and it differs by airframe** (stall speeds from
+  `PLAN-flight-model-rewrite` B15): nine of the eleven stall at 52–57 mph, i.e. *above* the ramp's
+  top, so for them the fade only bites once already stalling and falling. The **Balmoral** (45.5)
+  reaches its own stall at ≈89% authority. The **autogyro** (18.5) flies a long way inside the ramp
+  and reaches stall at roughly **21%** of roll and pitch authority — near-inert controls while still
+  flying, which for that airframe reads as deliberate rather than as a bug.
+  ⚠ **Traps.** (a) This is *airspeed*-keyed, not stall-keyed — do not gate it on `isStalled()`, or
+  the two mechanisms compound and the fade vanishes on the airframes whose stall sits above 50 mph.
+  (b) It is roll and pitch **only**: yaw has its own, different curve, already landed (`C21`), and
+  extending this ramp to the rudder would double-fade it. (c) `FlightModel.cs`'s rotation comment
+  currently asserts "roll never fades in the original" — true of *high* speed, false of low, and the
+  same misreading of this function that had `turn_fade_*` filed as a bank fade until 2026-08-09 (see
+  `BL-095`). (d) It reaches into stall recovery and the ground handling the race grid sits on, so it
+  wants a flown check, not only a probe row.
 
 - `BL-096` `[Feature]` **Angle of attack is now fittable and is not modelled.** The ADI shows hysteresis against
   vertical speed round the loop — expected, since the ball shows attitude while `dh/dt` follows the
@@ -813,18 +910,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *held* key from steady flight — and at 30 fps that edge is unresolvable, exactly as it was for
   pitch. Any roll-transient capture needs ≥60 fps constant frame rate.
 
-- `BL-108` `[Research]` **The yaw `eff` speed shape** (`1.4 − clamp(v/fd)`) is an unvalidated interim model away from
-  cruise: the 360° rudder turn matches the original to 4%, but that is one speed. The original's
-  own version of this ships as `player.json`'s `yaw_*` fade set — see `BL-095`, which owns the
-  `player.json` decode; the two closed halves of this entry are answered: the
-  original's pitch rate is measured **flat** with speed, and it bleeds speed in a hard pull because
-  of induced drag (modelled in `PLAN-flight-drag-lift` C21) rather than a falling pitch rate.
-
-- `BL-115` `[Tuning]` `[Owed-playtest]` **Flight model** — `StallNoseRate`, `ClimbGravityScale`, `KnifeAlignFloor`
-  (`LowSpeedDragBlend` closed 2026-08-07 by `PLAN-flight-drag-lift` A1).
+- `BL-115` `[Tuning]` `[Owed-playtest]` **Flight model** — `StallNoseRate`, `KnifeAlignFloor`
+  (`LowSpeedDragBlend` closed 2026-08-07 by `PLAN-flight-drag-lift` A1; `ClimbGravityScale`
+  **retired** 2026-08-09 by `PLAN-flight-model-rewrite` D32 — see its bullet below, which stays
+  because the climb residual it uncovered is still open).
   **`PitchTune` / `YawTune` / `RollTune` / `ThrustConst` are not on this list**: all four are
   measured against the original frame by frame and asserted by the `flight-envelope` suite, so they
   are not TUNE knobs and a feel A/B cannot overrule them.
+  ✅ **Flown 2026-08-09, straight off the completed `PLAN-flight-model-rewrite` (`3c8f5ae`): "feels
+  a lot better overall, every manoeuvre."** The whole rewrite — the lift demand and its clamp, the
+  Mach polar, the thrust curve, per-airframe stall, the authored yaw table, bank coupling, the
+  weathervane, exponential damping, the retired knife-edge sag and the attitude-thrust climb — reads
+  as an improvement at the controls, not only on the instruments. A **pass on the direction**, and
+  the reason the two constants still listed above are not being tuned toward anything: nothing in the
+  flown report points at them. It is **not** a pass on the three recorded conflicts (the zero-thrust
+  drag deficit, the banked-turn rate, the climb plateau), none of which a feel report can settle. The
+  same sortie produced the observation behind `BL-330`.
   **`CAP-05` decoded 2026-08-04** (four clips, all gating rigid) — three of the four are answered and
   one is not:
   - **`StallNoseRate` 1.0 rad/s is ~17× too fast.** In `CAP-05 Stall 0% Thrust no input` the nose
@@ -876,11 +977,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     here (`FINDINGS.md`, `CAP-31`).
     ⚠ `CAP-31` says **nothing** about the three constants still open below — it is a level
     deceleration, so it carries no stall, no climb and no knife-edge.
-  - **`KnifeAlignFloor` 0.35, plus `KnifeNoseSag` 0.07 rad / `KnifeNoseRate` 0.2 rad/s (all
-    `FlightModel.cs`) — still open.** `PLAN-flight-drag-lift` B12 re-keyed `liftFrac` by
-    *multiplying* `wingVert` rather than displacing it, so these three constants still run on exactly
-    the quantity they were measured against — confirmed bit-identical on 10 of 11 airframes. The
-    original's knife-edge trajectory they have to reproduce (`CAP-05`, both takes, 143/300 mph,
+  - **`KnifeAlignFloor` 0.35 — the last of the three, and the other two are gone.**
+    ✅ **`KnifeNoseSag` / `KnifeNoseRate` retired 2026-08-09** (`PLAN-flight-model-rewrite` D31): the
+    decoded bank→yaw coupling and the weathervane produce the sag, and produce its onset BETTER than
+    the fitted step did — nose at +3 s **−4.94°** against the measured −4.9°, where the bounded step
+    on top read −7.28°, and sink 12.7 → **5.7** ft/s against a measured 0.5. Playtest note (2) below
+    is confirmed and fixed: the term keyed on `1 − |bodyUp·up|`, so it fought every wings-level pull
+    at up to 11.5 °/s — `zoom-climb` moved toward its measured 936 ft on all eleven airframes and the
+    Balmoral can now reach the altitude cap (4471 → 6572 ft). `KnifeEdgeTests` pins both the shape
+    and the absence of the zero-bank leak; `Probes.KnifeEdge` is the re-runnable instrument.
+    **`KnifeAlignFloor` stays at 0.35, on evidence rather than for want of a measurement** (D31): it
+    is the ONE surviving use of `wingVert`, and the decode is silent about it (the nose-chase is the
+    remake's own arcade term). Retiring it — chase floor 1.0, the bank-independent reading — collapses
+    the nose–path gap 2.9° → 1.9° at +3 s against a measured 4.8° that GROWS, and raises the 36 s
+    altitude loss 1087 → 1334 m against a measured 540. Lowering it to 0.10 moves every row toward
+    the footage and still cannot reach it, while walking the knife-edge α to 5.36°, past
+    `liftAOAs[0] = 5°`. ⚠ **What is left is not this constant**: the whole banked rotation runs
+    ≈1.6× fast (knife-edge drift 1.09 °/s against 0.69–0.89, heading 1.68 against 0.68–1.13, the same
+    ratio as `sustained-turn-rate`'s 32.80 against 18.95) and `BL-095`'s unconsumed
+    `turn_fade_in`/`turn_fade_out` are the only authored fields shaped like it (`highGs` was the
+    third until `D33` measured the G limiter inert on all eleven airframes). Retuning
+    `KnifeAlignFloor` would hide a rotation error inside a chase constant.
+    The original's knife-edge trajectory (`CAP-05`, both takes, 143/300 mph,
     agreeing to ~13%, so driven by time-since-roll-in, not airspeed):
 
     | time since roll-in | nose | path | sink |
@@ -890,36 +1008,45 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     | +24 s | −20.0° | −12.8° | 60 ft/sim-s |
     | +36 s | −27.0° | −18.7° | 93 ft/sim-s, still steepening |
 
-    So the sag is an immediate ≈4° step (`KnifeNoseSag` 0.07 rad is the right magnitude) followed by
-    an **unbounded linear drift of 0.69–0.89 °/sim-s that a bounded sag cannot produce**. ⚠ **Do not
-    retune `KnifeNoseSag`/`KnifeNoseRate` to fit this — the shape is what is wrong**, not the
-    magnitude: raising the bound to 27° would destroy the first three seconds, which the original
-    gets flat and we currently get worst. For `KnifeAlignFloor`: the observable is the path lagging
-    the nose by 4.8° at +3 s / 7.2° at +24 s / 8.3° at +36 s, but `CAP-05` cannot separate that from
-    gravity pulling the path down over the same interval — do not back an align rate out of it.
+    The sag reads as an immediate ≈4° step followed by an **unbounded drift of 0.69–0.89 °/sim-s
+    that a bounded sag cannot produce** — which is why the bounded pair is now retired rather than
+    retuned. ⚠ For `KnifeAlignFloor` the observable is the path lagging the nose by 4.8° at +3 s /
+    7.2° at +24 s / 8.3° at +36 s, and `CAP-05` cannot separate that from gravity pulling the path
+    down over the same interval — **do not back an absolute align rate out of it.** The D31 argument
+    above uses only the *direction* the number moves under an A/B on the same build, which the
+    confound cannot reverse (gravity pulling the path down can only shrink the gap, so the inferred
+    chase is an upper bound either way).
     *Playtest after fix:* (1) does the knife-edge sink feel like the original's; (2) does the
-    full-pull zoom still feel nose-heavy (the `knife`-at-zero-bank leak — pure pitch at zero bank
-    still fires this term); (3) stall-into-knife-edge recovery should not feel "doubled".
-  - **`ClimbGravityScale` 0.6 is NOT settled and `CAP-05` cannot settle it.** ⚠ The fit is
-    degenerate: holding `g` and refitting leaves rms flat (0.218–0.280 m/s²) over `g` = 17…25 m/s²,
-    with `C` = 1.18 / **0.59** / 0.00 at `g` = 17 / 20 / 25. That `nom_gravity` 20.0 lands on
-    `C` ≈ 0.6 is a consistency, not a measurement — precisely the "confirms whatever you feed it"
-    trap `FINDINGS.md` warns about. The 50%-throttle climb clip cannot help: its ADI **saturates**
-    (sky fraction pinned at 0.730), so the nose angle is unreadable above ~+30° and the along-path
-    thrust cannot be formed. *What would settle it:* an independent `g`, or a capture with a
-    **readable** nose angle in a sustained climb — i.e. a shallow, held climb at fixed throttle
-    rather than a zoom.
-    **The mechanism itself is designed (GDD §4.1.1, read 2026-08-07):** gravity is pitch-angle-
-    scaled by design — minor effect near level, stronger when climbing or diving, and *reduced on
-    upward pitch relative to downward* so climbs stay flyable while dives still build speed.
-    Existence, sign and shape of the asymmetry are design intent; only the constant's value is
-    still unmeasured.
+    stall-into-knife-edge recovery behave now that the sag term no longer compounds with the stall
+    nose-drop (the two used to be gated apart from each other by an explicit `!stalled` check that
+    no longer exists, because there is nothing left to gate).
+  - **`ClimbGravityScale` is RETIRED — closed 2026-08-09 by `PLAN-flight-model-rewrite` D32, and it
+    leaves this entry's TUNE list.** The degenerate `CAP-05` fit that this bullet warned about
+    (`C` = 1.18 / 0.59 / 0.00 at `g` = 17 / 20 / 25, rms flat across the valley, so `C` ≈ 0.6 was a
+    consistency and never a measurement) turned out to be flattering a constant that is not merely
+    unmeasured but **wrong in sign**. Measured against the original's own sustained full-throttle
+    climb (`Climp 90° 100% Thrust.mp4`, now clip key `climb90`; plateau 163.05 mph at a 56.3° path),
+    the constant alone gives 276.66 mph and **removing it alone** gives 257.74 — it makes the climb
+    faster than the original's, not slower. The original's climb penalty lives in THRUST, scaled by
+    nose attitude, decoded and landed in the same item. ⚠ **The GDD §4.1.1 reading recorded here was
+    design intent, not behaviour:** the shipped executable's gravity block
+    (`0x48ff85`–`0x48ff9d`) reads no attitude at all, and the term that IS attitude-scaled runs the
+    other way. Do not reintroduce a pitch-scaled gravity on the strength of the design document.
+    *Still open, and it is the climb's magnitude rather than its mechanism:* the model settles 25%
+    fast (204.04 against 163.05) and does not reproduce the footage's undershoot-and-recover. The
+    leading candidate is the α the original held there — its clip is a 90° pull, and at a 90° nose
+    with the measured 56° path the same decoded force path balances to −3.3%. `CAP-20` (a shallow,
+    held climb with a **readable** ADI, which this bullet already asked for) is what would settle it;
+    the 90° clip's ADI saturates above ≈+30° and cannot.
 
 - `BL-120` `[Tuning]` `[Owed-playtest]` **Collision feel** — behaviour against building corners.
 
-- `BL-147` `[Research]` **Pitch's spin-up: the premise was wrong, and the original's response is NOT a single
-  first-order lag — which is exactly what we implement. Measured 2026-08-03 from `CAP-04`; the
-  capture is discharged and retired, the item stays open pending an A/B against our own build.**
+- `BL-147` `[Research]` **Pitch's transient shape. NARROWED to a ≈1.8× residual, and the named
+  mechanism is now landed and measured rather than pending. Measured 2026-08-03 from `CAP-04`; the
+  capture is discharged and retired. The A/B against our own build is DONE (`C23`): the original's
+  1300 → 570 ms cadence roll-off is 42× against our 23.3× (was 19.6× before the weathervane), and
+  the "3.5× steeper than one first-order lag permits" framing this entry was written on is
+  superseded — see the landed-mechanism paragraph.**
   The item was written asking for a *moderate-deflection* pitch trace, on the assumption that a
   sub-full-deflection input exists to spin up. **It does not — the user flies the original's pitch on
   the keyboard, so every pitch command is full deflection gated on/off by the key** (confirmed by the
@@ -952,8 +1079,43 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   1.5× to 8× slower, and *not reproducible between takes*, which is the signature of a human hand
   rather than a flight model. Before touching any constant, check whether our key-to-input path
   ramps/filters where the original's is a bare on/off.
-  **What remains open:** τ itself.
-  **How to get it — a fixed-cadence key macro. 30 fps is a floor, not a target; record at whatever
+  **What remains open:** τ itself — but there is now a **named candidate mechanism**, which there was
+  not before.
+
+  **The weathervane mechanism is LANDED and it does not close this item — the gap is narrowed to
+  ≈1.8×, and the entry's own arithmetic is corrected (`C23`, 2026-08-09).** The original applies
+  `return_rate` as a **weathervane torque** along `cross(nose, velocity)` (the `−nose` this entry
+  used to carry was a transcription error — the code's `−m[2]` *is* the nose) at **half** the
+  misalignment angle, continuously, into the same accumulator as the stick. That is a spring-damper
+  where the remake folded `return_rate` into the damping coefficient, and it is now implemented
+  (`FlightModel.WeathervaneTorque`, decode in
+  [`docs/org/flightModel.md`](docs/org/flightModel.md) "Weathervane centring — resolved").
+  **The sweep now exists for our build too** — `CSVM.Tests/ZzCadenceSweep.cs` drives the identical
+  square wave into the model and fits the ripple with the identical simultaneous cubic+sin+cos
+  estimator, at both the sim and wall readings of the cadences (DET-11). Amplitude-for-amplitude, so
+  the operating-point objection below does not apply and no transfer function is assumed on either
+  side. **1300 → 570 ms roll-off: 19.6× before the change, 23.3× after, against the original's 42×**
+  (wall reading: 20.7× → 22.4×). Right direction, about a sixth of the gap closed. Full table and
+  per-cadence amplitudes: `analysis/flight-model-baseline/POST-B14.md`, "C23".
+  ⚠ **The "3.5× steeper than any single first-order lag permits" figure above does NOT describe our
+  build's deficit, and must stop being quoted as if it does.** That ceiling assumes the chain is
+  double integration + one lag. Ours is not and never was: the flight path chases the nose through a
+  **second** first-order lag (`lift_accel_rate`, τ = 1.33 s), so the pre-C23 build already rolled off
+  19.6× — 1.65× past that ceiling — while `return_rate` was still pure damping. The amplitude
+  comparison above is the statement of record.
+  **What remains open:** the residual ≈1.8× of roll-off, with no named mechanism. Candidates not yet
+  examined: the original's 0.5/s throttle slew (decoded, unimplemented — it contaminates the first
+  seconds of any manoeuvre), the `liftAOAs` airflow blend's behaviour under a rapidly reversing
+  demand, and the possibility that the original's 570 ms point (a 4.9× drop from 700 ms over a 1.23
+  frequency ratio) is a resonance rather than a point on a smooth roll-off, which no monotone
+  transfer function can produce and which the corpus cannot presently distinguish from noise at
+  0.63 ± 0.13 ft.
+  ⚠ `PitchTune` **did** move here, 0.75 → 0.89, and so did `YawTune`, 1.33 → 1.57 — *not* to chase
+  this transient. A sustained full-stick manoeuvre holds a real misalignment (α ≈ 18° pulling), so
+  the weathervane opposes the stick and dropped the **steady** rate to 28.35 °/s; the refit re-pins
+  it to the same measured 33. Re-pinning a steady rate a new mechanism moved is what `*Tune` is for;
+  chasing the roll-off through it remains forbidden and is still not the knob.
+  **How the original's own footage was got — a fixed-cadence key macro. 30 fps is a floor, not a target; record at whatever
   rate the recorder gives and keep the bitrate high.** A single step
   edge is ~4 frames and unresolvable, but a *periodic* input is not: drive the pitch keys as a square
   wave and τ shows up as the **ripple amplitude** at a known frequency, which averages down over
@@ -1008,10 +1170,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   → 7.07 ft as the span changed. The correct estimator fits **polynomial + sin + cos simultaneously**
   inside a window of ≥8 periods, where a cubic can absorb almost none of the fundamental; that is
   stable to 3% on the strong clips. Never detrend and then fit.
-  **Next, and it needs no new footage from the original:** run the identical cadences through our
-  build via `--hold`, decode altitude the same way, and compare amplitude-for-amplitude. Same input,
-  same measurement, same nonlinearity and same operating points — so the operating-point objection
-  above disappears and no transfer function has to be assumed. Plot: `playtest/CAP-04/cadence_response.png`.
+  **DONE (C23, 2026-08-09) — the identical cadences now run through our build**, as
+  `CSVM.Tests/ZzCadenceSweep.cs` driving the model directly rather than `--hold` driving a session
+  (engine-free, so it is deterministic by construction and needs no clip decode). Same input, same
+  estimator, same operating points, no transfer function assumed — results in the landed-mechanism
+  paragraph above. Plot of the original's side: `playtest/CAP-04/cadence_response.png`.
 
   The driver is `analysis/video-flight-calibration/pitch_cadence.ahk` (AutoHotkey v2) — its header
   carries the rig rationale, the re-flight rules (non-integer periods, the busy-spin timing) and
@@ -1020,10 +1183,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   2560×1440 and raises on anything else — declare a new geometry *before* recording. The rig's
   beeps are in none of the clips (Game Bar records game audio only); find the cadence window by
   matched filter on altitude, which is what the analysis does.
-  ⚠ **Traps.** (a) `PitchTune` **0.75 is a pinned measurement** (see the flight-constants standing note at the top of this file) —
-  and the cadence sweep leaves it untouched: it sets the **steady** rate, which still matches, while
-  what the sweep refutes is the *transient shape*. It cannot move to fix a feel report — and it is
-  emphatically not the knob for the roll-off mismatch. (b) **Do not quote a τ from `CAP-04`, from the
+  ⚠ **Traps.** (a) `PitchTune` **is a pinned measurement** (0.89 since `C23`; see the
+  flight-constants standing note at the top of this file) — and the cadence sweep leaves it
+  untouched: it sets the **steady** rate, which still matches, while what the sweep is about is the
+  *transient shape*. It cannot move to fix a feel report — and it is emphatically not the knob for
+  the roll-off mismatch. (Its `C23` move was in the other direction entirely: a decoded torque
+  changed the steady rate, and the constant re-pinned it to the same measurement.) (b) **Do not quote a τ from `CAP-04`, from the
   loop clip, or from the cadence sweep.** The loop clip's fitted τ is smoothing-limited and falls
   monotonically as the window tightens (`FINDINGS.md`'s "a peak found by differentiating a smoothed
   signal is a smoothing artifact", in its exact form); the sweep's points are not at one operating
@@ -1373,20 +1538,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   starting point, but the decode should come from footage: when they are visible, their size,
   count, and whether they move with the air or hang world-fixed. Needs a dedicated original
   capture at several altitudes in clear air away from the deck band.
-
-- `BL-321` `[Bug]` **C3's terrain fog murk survives the Wave B fixes** (split out of `BL-303` at its
-  close, PLAN-overcast-match `B17`, 2026-08-08). After the dome un-fog (`B16`), skirt fix (`B18`)
-  and the fogRangeFactor deletion + linear ramp (`B15`), C3's canyon *sky* matches (198–203 vs
-  194.9) but the terrain is still too washed: near slope **106.1 vs 36.5**, mid ridge 143.7 vs
-  19.9, far ridge 182.4 vs 60.3, vegetation detail 22.1 % vs 47.8 %. Untried candidate on record
-  (B15's landing): **our fog mixes in linear space where DX7 blended in framebuffer/gamma space**
-  — ≈21 units washier at half fog; that is the first thing to try, and it is a global change, so
-  A/B every healthy scene from `playtest/CAP-11/README.md` before landing it.
-  ⚠ Traps: `fogRangeFactor` is dead — do not reintroduce a range multiplier to close this; the
-  B17 close-out found the original-side C3 canyon box replay noisy on far-ridge/sky (HUD/chase
-  framing mismatch) — use B15's framing-robust boxes, not fresh naive ones.
-  *Playtest after fix:* the C3 canyon pose (`--pos=-3504,710,-3619
-  --direction=-0.40673,0,-0.91355`) against the CAP-11 original still.
 
 - `BL-322` `[Bug]` **C5's lit facades render ×0.58–0.66 of the original with WorldLight already at
   clamp 1.0** (split out of `BL-303` at its close, 2026-08-08; measured `CAP-11`: tower faces 10.2
