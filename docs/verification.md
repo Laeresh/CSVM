@@ -119,6 +119,15 @@ and leave gaps when retiring old ones.
   a silhouette can sit either side of the horizon: ours rises 115 px above it at that pose while
   the original still's ridge sits 48 px below its own. When two frames' skies do not overlap in
   elevation, anchor the statistic on the silhouette both frames actually have.
+- **SHOT-28** — **A nadir shot cannot tell a painted rooftop from an extruded building — pair every
+  straight-down clutter claim with a low oblique.** Directly overhead, a ground texture depicting
+  city blocks and the 3D blocks standing on it are the same pixels, so "the streets are clear" reads
+  identically whether the placement improved or the buildings vanished. Measured (`BL-305`,
+  `PLAN-clutter-uv-placement` B13): adding the original's subface polygon gate made C5's crossroads
+  look markedly closer to `CAP-22`'s original at nadir, moved the pinned frame hash, and passed the
+  interpenetration check — and a 180 m oblique over the same crossroads showed it had deleted the
+  entire downtown skyline, leaving flat painted ground. The nadir pose was the founding evidence of
+  the bug, which is exactly why it was trusted alone.
 
 ## GOLD — golden images
 
