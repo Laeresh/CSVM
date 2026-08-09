@@ -239,6 +239,13 @@ CLIPS = {
     # scale. Cockpit, 2560x728 - the same eight-extra-row geometry as the C5 building
     # pair above, here on the cockpit HUD for the first time.
     "cap31": "CAP-31.mp4",
+    # The sustained full-throttle vertical climb, held until the aircraft can no
+    # longer hold the attitude. Cockpit at 2560x1440, so the ADI carries the nose
+    # angle beside the speedometer - which is what makes it a measurement of how
+    # thrust behaves with ATTITUDE rather than of a climb rate: speed against time
+    # at a KNOWN nose angle. The one clip that separates a climb-retention term
+    # from an attitude-thrust term, because the two predict opposite signs here.
+    "climb90": "Climp 90° 100% Thrust.mp4",
 }
 
 

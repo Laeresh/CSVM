@@ -49,7 +49,7 @@ aircraft aerodynamically.
 | 2 | Drop `wingVert` on the decode's word (lift is bank-independent)? | **No — keep it until D31 settles.** The decode and the measured knife-edge sag cannot both be right, and `wingVert` is load-bearing for a departure the suite asserts. |
 | 3 | Land the aero core as separate items or one behavioural change? | **Separate items, one joint validation (B14).** Lift/drag/thrust are pinned *jointly*; each may be committed alone, but none is "verified" until B14 refits and re-measures the group. |
 | 4 | Refit the pinned `*Tune` rates before or after the bank coupling? | **After C22.** Adding bank→yaw/pitch moves the turn rate the tunes were pinned against; refitting first would just be undone. |
-| 5 | Remove `ClimbGravityScale` when the attitude-thrust terms land? | **No — D32 decides.** The two run in opposite directions; deleting one while adding the other changes two things at once and makes the result unattributable. |
+| 5 | Remove `ClimbGravityScale` when the attitude-thrust terms land? | **Settled in D32: yes, it is retired.** Moved one at a time and measured between, as this decision required: removing the constant ALONE improves the sustained climb (276.66 → 257.74 mph against a measured 163.05), so it was absorbing the pre-B12/B13 shapes' error rather than modelling climb retention. |
 | 6 | Where does the decode live, and is it a `docs/formats/` page? | **`docs/org/flightModel.md`** — it documents the original's *executable*, not a data format, so it sits in a new `docs/org/` area rather than `docs/formats/`. |
 
 ## ⚠ Read this before implementing anything
@@ -159,7 +159,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — The open conflicts
 
 31. ☑ Bank-independent lift vs the measured knife-edge sag
-32. ☐ Attitude-dependent thrust vs `ClimbGravityScale`
+32. ☑ Attitude-dependent thrust vs `ClimbGravityScale`
 33. ☐ The G and AOA limiters — live or inert in this install?
 
 ## Dependency and parallelism notes
@@ -1111,7 +1111,78 @@ the bound destroys the first 3 s, where the original holds altitude and the rema
 Balmoral knife-edges 0.1° inside the old lift ramp: any change here must be checked against it.
 Removing `wingVert` on the decode's word alone is exactly what Decision 2 forbids.
 
-## D32 ☐ Attitude-dependent thrust vs `ClimbGravityScale`
+## D32 ☑ Attitude-dependent thrust vs `ClimbGravityScale`
+
+**Outcome (landed 2026-08-09).** **The decode wins outright, and the fitted constant was not merely
+redundant — it was making the very manoeuvre it was invented for WORSE.** The discriminating
+instrument existed all along and had never been decoded: `Climp 90° 100% Thrust.mp4`, a
+full-throttle climb the original holds for forty seconds. Registered as clip key `climb90` and
+decoded, it gives entry **298.9 mph**, a flight path settling at **56.3 ± 3.2°**, speed falling to
+**152.4 mph at +6.5 s** and then **recovering** — 163.05 mph over 12–18 s, creeping to a flat
+**167.0 ± 0.5** by +36 s — climbing ≈12,000 fpm, and leaving that state only at ≈6,600 ft, which is
+`CAP-03`'s ceiling and not the climb. `Probes.SustainedClimb` is that manoeuvre as code, riding
+`--dump-flight` and `ZzBaselineDump` so it cannot be lost.
+**One mechanism at a time, same build (Decision 5), plateau against the footage's own 163.05:**
+`ClimbGravityScale` alone (the pre-change model) **276.66**; neither **257.74**; both **232.20**;
+**attitude terms alone 204.04**. Removing the constant on its own moves 276.66 → 257.74 with no
+attitude term in sight — so on the post-B14 drag and thrust shapes it is not climb retention at all,
+and the plan's leading hypothesis (it was absorbing B12/B13's predecessors' error) is confirmed by
+its own ablation. `ClimbGravityScale` is **retired** with its config key, and gravity is now full
+strength in every attitude — which the binary corroborates: the whole gravity block
+(`0x48ff85`–`0x48ff9d`) is `nom_gravity/9.82 × Weight` with no attitude read anywhere near it. ⚠ The
+game's own GDD §4.1.1 describes gravity as pitch-scaled and *reduced* on upward pitch; the shipped
+executable does the opposite, in a different term. Design intent and behaviour disagree in sign
+here, and that is now recorded rather than reconciled.
+**The sign is proved from the bytes, not from a coefficient name.** The terms scale available thrust
+by `(1 + 0.24a)·(a ≤ 0 ? 1 + 0.13a : 1)` where `a = [obj+0x19c]` is the **Y of orientation row 2**,
+and row 2 is **−nose** — established at the point of use, where the thrust magnitude is `fchs`'d
+before being multiplied by that same row (`0x48fe91`–`0x48feb8`), so the force lands along `+nose`.
+So `a < 0` climbing, both branches bite there, and a vertical climb keeps 0.6612 against a vertical
+dive's 1.24. `AttitudeThrustTests` reads the term back out of the integrator (full throttle minus
+zero throttle at an identical state, which isolates thrust exactly) and **fails under the flip** —
+demonstrated, not argued.
+**`terminal-dive` is PROMOTED back to asserting**: 336.36 → **356.00** mph against 355.2 ± 6
+(−5.3 % → +0.2 %), and it is entirely the attitude terms — the dive is the side of the scale that
+ADDS thrust and the one attitude the retired constant never touched. `FlightEnvelopeTests` asserts
+**7** again (7 → 6 at B14, 6 → 7 here); nothing was demoted to make room.
+`zoom-climb` **1338.33 → 1060.33 ft** against 936 (+43.0 % → +13.3 %) and moves toward it on **ten of
+eleven** airframes; the autogyro **crosses** (968.93 → 845.26, +3.5 % → −9.7 %), the same outlier
+B15 flagged, reported rather than smoothed. `zoom-climb-min-speed` 237.03 → 165.96 (127.9).
+Every α = 0 wings-level row — `level-top-speed`, `level-speed-near-cap`, `accel-150-290`,
+`decel-290-150`, `eighth-throttle-speed`, `yaw-360`, `roll-360` — is unmoved to the last printed
+digit (DIAG-10): the scale is exactly 1 with the nose on the horizon. `pitch-rate` 31.87 → 31.59
+(green), `sustained-turn-speed` 258.41 → 255.61 and `sustained-turn-rate` 32.80 → 32.83 (both
+informational, still `BL-095`'s).
+⚠ **One row worsens and is left worsened, attributed.** `sustained-turn-sink` 8.86 → **10.31** ft/s
+(bound ≤ 1.85): the max-pull turn settles nose-high at ≈89° of bank, so the attitude scale takes
+thrust off it. It is the third leg of the same manoeuvre whose other two legs are informational and
+owned by `BL-095` — we sweep heading 73 % faster than the original at a bank it never flew — and it
+re-asserts with the rate row, as C23 and D31 both recorded.
+⚠ **The decode turns out INCOMPLETE for the climb, and that is recorded rather than patched.** The
+plateau is still **+25 %** (204.04 against 163.05) and the shape differs: the original undershoots
+its own plateau by 9 % and climbs back out of it, where the model decays monotonically. The
+along-path balance at the footage's plateau needs a thrust factor of **0.5632** and the decoded
+formula's floor is 0.6612, so the 0.24/0.13 terms cannot be the missing 21 % at any attitude. The
+leading candidate is the probe's **α**: it holds α = 0 (attitude on the path) while the clip is a
+**90° pull**, and at a 90° nose with the measured 56° path the same decoded force path balances to
+**−3.3 %**. The clip's ADI saturates above ≈+30°, so its nose angle is **not readable** and this
+capture cannot settle it — which is exactly what `CAP-20` was filed for. Nothing was tuned.
+**No `*Tune` and no TUNE constant moved** (Decision 4's default holds); `ClimbGravityScale` leaves
+`BL-115`'s TUNE list, which is now `StallNoseRate` and `KnifeAlignFloor`.
+Verified per [`docs/verification.md`](verification.md): `RunTests.ps1` green — units **721/721**
+(717 + `AttitudeThrustTests`' 4), engine 29/29, goldens 13/13 after two re-pins,
+`FlightEnvelopeTests` asserting **7**. **Two goldens moved, `c1-flight` and `c1-destroy-effects`
+(GOLD-5/GOLD-1), and the pattern IS the evidence:** they are the only two whose aircraft is not
+nose-level — one holds pitch, the other spawns nose-down 5.7° — while `empty-stage` and `c1-crash`
+fly level-attitude holds and are hash-identical, which is the DIAG-10 argument again in pixels.
+Manifest re-pinned here, both shots eyeballed, and the `c1-destroy-effects` re-render reproduces its
+new hash exactly. Before/after is a same-build A/B (METHOD-6/15) whose pre-change configuration
+reproduces the committed POST-D31 numbers to the last digit (METHOD-8), with `git diff` proving
+every temporary edit restored (METHOD-17). Every cited instrument run twice, byte-identical:
+`--dump-flight` (Bloodhawk, Balmoral) and `ZzBaselineDump` (all eleven). Full 8-chapter `--freecam`
+regression clean. Full tables:
+[`analysis/flight-model-baseline/POST-B14.md`](../analysis/flight-model-baseline/POST-B14.md)'s D32
+section.
 
 **Goal.** Establish which mechanism the original actually uses for climb behaviour, and land one of
 them rather than both.

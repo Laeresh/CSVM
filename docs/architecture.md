@@ -1877,7 +1877,14 @@ as `q·RefArea·DragFactor·C_D` opposing velocity — there is NO induced-drag 
 pull costs speed only through the lift vector's own tilt. Thrust is
 `EnginePower·RefArea·T_avail(M)·throttle` (LINEAR lever), `T_avail = q_ref·0.73·(0.12−M/60) /
 (M·pow(1.3146, 1.41·M))` at `q_ref = ½ρ((0.84M+0.112)·a)²`, Mach floored at 0.1 — it RISES with
-speed; the thrust MARGIN is what falls. Nothing in the force path is fitted.
+speed; the thrust MARGIN is what falls. Available thrust is then scaled by NOSE ATTITUDE
+(`AttitudeThrustScale`, D32): `(1+0.24a)·(a ≤ 0 ? 1+0.13a : 1)` on `a = Attitude.Z.Y = −nose.Y`, so
+a vertical climb keeps 0.6612 and a vertical dive gets 1.24 — a climb is PENALISED. That argument is
+NEGATIVE in a climb, and a dropped sign swaps climb for dive while still flying plausibly, so
+`AttitudeThrustTests` reads the term back out of the integrator and fails under the flip. Gravity acts at
+full strength in EVERY attitude; the fitted `ClimbGravityScale = 0.6` is retired with its config key
+(it made the sustained climb worse on the post-B14 shapes, 276.7 mph against a measured 163.1, and
+was absorbing the old drag/thrust error). Nothing in the force path is fitted.
 Bank couples straight into rate, the original's coordinated-turn cheat: `0.205·(starboard·up)` into
 yaw (signed) and `0.165·|starboard·up|` into pitch (always nose-up), plus `0.205·|bodyUp·up|` into
 PITCH once inverted — the same 0.205 constant, not a third number. Both vanish at wings-level
@@ -1926,9 +1933,14 @@ unmoved) as the plan predicted.
   not an open scale question: the force→acceleration chain is byte-verified conversion-free
   (`docs/org/flightModel.md`, "The force scale — settled"), and no constant can close the set —
   a rescale that fixed the decel breaks the accel row the same footage pins. Never refit the
-  polar/thrust coefficients against it; `accel-150-290`, `decel-290-150`, `terminal-dive` (D32),
-  `sustained-turn-speed` and `sustained-turn-sink` (both riding the unattributed turn-rate gap,
-  `BL-095`) sit informational in `FlightEnvelopeTests` with their owners named in the rows.
+  polar/thrust coefficients against it; `accel-150-290`, `decel-290-150`, `sustained-turn-speed` and
+  `sustained-turn-sink` (both riding the unattributed turn-rate gap, `BL-095`) sit informational in
+  `FlightEnvelopeTests` with their owners named in the rows. `terminal-dive` came BACK to asserting
+  when the attitude scale landed (−5.3% → +0.2%; the suite asserts 7 again).
+  The sustained climb joins that same recorded-conflict list from the other side: it settles ≈25%
+  FAST (204.0 mph against a measured 163.1) and is not tuned; the leading candidate is that the
+  original held a large α there (its clip is a 90° pull) where the probe holds α = 0, and at a 90°
+  nose with the measured 56° path the same force path balances to −3.3%. `CAP-20` would settle it.
 ⚠ Lift is BANK-INDEPENDENT and the knife-edge sag has NO term of its own (D31, settled). At 90° of
   bank the body yaw axis is horizontal, so C22's `0.205` bank→yaw IS the sag and C23's weathervane
   deepens it — the footage's shape, from the original's own constants. The bounded

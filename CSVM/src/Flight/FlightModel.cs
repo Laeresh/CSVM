@@ -29,7 +29,9 @@ public struct FlightInput
 /// world-down and cannot be raised over the horizon. Drag is the original's
 /// parabolic polar in MACH (see <see cref="DragPolarScale"/>) — there is no
 /// induced-drag term at all — and thrust is its Mach curve times a LINEAR throttle
-/// lever (see <see cref="ThrustAccelAt"/>). Neither carries a fitted constant, and
+/// lever (see <see cref="ThrustAccelAt"/>), scaled by the nose's attitude so a climb
+/// is penalised and a dive rewarded (see <see cref="AttitudeThrustScale"/>).
+/// Gravity acts at full strength in every attitude. Neither carries a fitted constant, and
 /// the level-speed equilibrium is simply where the two cross: that lands within 1%
 /// of the authored fd_speed for nine of the eleven airframes without anything being
 /// tuned to make it. Rudder authority follows the original's own authored speed
@@ -91,6 +93,20 @@ public sealed class FlightModel
     // Base of the Mach-dependent divisor: 1.33 × the atmosphere's own scale factor, which for the
     // dense band (the operative one — see the atmosphere constants) is 0.98842078.
     private const float ThrustPowBase = 1.33f * 0.98842078f;
+
+    // Available thrust is then scaled by the NOSE'S ATTITUDE, before the engine-power and
+    // reference-area scaling. An arcade term with no aerodynamic justification, and one no video fit
+    // could ever have recovered — it would have been absorbed into gravity or drag and then failed in
+    // the opposite manoeuvre.
+    //
+    //   a     = the world-up component of the body Z axis, i.e. −nose.Y  (see AttitudeThrustScale)
+    //   scale = (1 + AttitudeThrustBoth·a) · (a ≤ 0 ? 1 + AttitudeThrustUp·a : 1)
+    //
+    // So a climb LOSES thrust (0.6612× pointing straight up) and a dive GAINS it (1.24× straight
+    // down): two coefficients, the second one-sided. Both are branchless immediates in the
+    // original's force accumulator, applied to the curve above and to the throttle lever together.
+    private const float AttitudeThrustBoth = 0.24f;
+    private const float AttitudeThrustUp = 0.13f;
 
     // The hard lift clamp, in G — a LOAD FACTOR, never an angle. The wings will not deliver more
     // than this however hard the demand asks, and the clamp is on the demanded acceleration, so
@@ -155,8 +171,6 @@ public sealed class FlightModel
     // 6712 ft apex; it exists to bound a runaway frame, not to shape the overshoot.
     private const float AltitudeCapOvershootM = 42.8f;
     private const float StallNoseRate = 1.0f;     // TUNE: rad/s toward world-down at full stall depth (× stall_mag)
-    private const float ClimbGravityScale = 0.6f; // TUNE: climb retention — a climb bleeds less speed than
-                                                  // plain energy exchange (the original holds speed better)
     private const float KnifeAlignFloor = 0.35f;  // TUNE: fraction of the nose-chase that survives at 90°
                                                   // bank — the chase is the lift force turning the velocity,
                                                   // so it weakens with wing verticality (deeper knife-edge sag).
@@ -325,9 +339,28 @@ public sealed class FlightModel
     /// papered over by switching the G convention to fit one clip.</summary>
     public float StallSpeed { get; }
 
+    /// <summary>How much of the available thrust the nose's attitude leaves: 1 wings-level and nose
+    /// on the horizon, 0.6612 pointing straight up, 1.24 pointing straight down. A climb is
+    /// PENALISED and a dive rewarded — the opposite of a climb-retention term, and the reason the two
+    /// could not both stand.
+    ///
+    /// <para>⚠ The argument is the world-up component of the BODY Z AXIS, and the nose points along
+    /// <b>−Z</b>: pass <c>Attitude.Z.Y</c>, which is <c>−nose.Y</c> and therefore NEGATIVE in a
+    /// climb. This is the one place in the force path where a dropped sign produces flight that still
+    /// looks entirely plausible — it merely swaps climb for dive — so it is asserted by a test that
+    /// fails under the flip rather than left to review.</para></summary>
+    public static float AttitudeThrustScale(float bodyZUp)
+    {
+        float a = Mathf.Clamp(bodyZUp, -1f, 1f);
+        float scale = 1f + AttitudeThrustBoth * a;
+        return a <= 0f ? scale * (1f + AttitudeThrustUp * a) : scale;
+    }
+
     /// <summary>Thrust acceleration along the nose, m/s², at an airspeed and lever position — the
-    /// original's thrust-available curve times the lever, LINEARLY. Exposed so an instrument can
-    /// report the curve without re-deriving it; the step below calls the same method.</summary>
+    /// original's thrust-available curve times the lever, LINEARLY. ⚠ The attitude scale is NOT
+    /// included: <see cref="AttitudeThrustScale"/> is applied by the caller, so this stays the bare
+    /// curve an instrument can sample. Exposed so an instrument can report the curve without
+    /// re-deriving it; the step below calls the same method.</summary>
     public float ThrustAccelAt(float speed, float throttle)
     {
         float mach = Mathf.Max(ThrustMachFloor, speed / (SpeedOfSoundFps * MetresPerFoot));
@@ -414,7 +447,6 @@ public sealed class FlightModel
         // key registers on a launch that never flies — --dump-config's template and the orphan check.
         _ = Config.GetFloat("flightModel.stallWarnFrac", StallWarnFrac);
         float stallNoseRate = Config.GetFloat("flightModel.stallNoseRate", StallNoseRate);
-        float climbGravityScale = Config.GetFloat("flightModel.climbGravityScale", ClimbGravityScale);
         float knifeAlignFloor = Config.GetFloat("flightModel.knifeAlignFloor", KnifeAlignFloor);
         float liftGMin = Config.GetFloat("flightModel.liftGMin", LiftGMin);
         float liftGMax = Config.GetFloat("flightModel.liftGMax", LiftGMax);
@@ -592,13 +624,15 @@ public sealed class FlightModel
         float wingVert = Mathf.Abs(Attitude.Y.Dot(Vector3.Up));
 
         // thrust pulls along the nose (its along-path share falls out of the vector sum —
-        // a stalled plane falling nose-high needs no special case), and is LINEAR in the throttle
-        // lever. Drag opposes the motion: the parabolic polar in Mach (see the constants). At
-        // v ≈ 0 drag → 0 and the stale direction there is harmless.
-        // Gravity acts in FULL here — the lift demand above already carries weight, and subtracting
-        // it twice is the trap the old cross-path fraction was one half of. It is still split about
-        // the path only so the along-path share can be scaled: a climb bleeds less speed than plain
-        // energy exchange (the original holds speed better), full when diving.
+        // a stalled plane falling nose-high needs no special case), is LINEAR in the throttle
+        // lever, and is scaled by the nose's attitude: less climbing, more diving (see
+        // AttitudeThrustScale). Drag opposes the motion: the parabolic polar in Mach (see the
+        // constants). At v ≈ 0 drag → 0 and the stale direction there is harmless.
+        // Gravity acts in FULL, and at full strength in every attitude — the lift demand above
+        // already carries weight, and subtracting it twice is the trap the old cross-path fraction
+        // was one half of. There is no climb-retention scale on it: the original's own gravity term
+        // is a plain nom_gravity/9.82 × Weight with nothing attitude-dependent anywhere near it, and
+        // what the original DOES scale by attitude is the thrust above — in the opposite direction.
         //
         // The polar's variable is MACH. A pull therefore costs speed only through the lift vector's
         // own backward tilt in the force sum below — there is no induced-drag term here at all, and
@@ -609,13 +643,9 @@ public sealed class FlightModel
         float dragAccel = s.VehWeight > 1e-3f
             ? qRefArea * s.DragFactor * cd * StandardG / s.VehWeight
             : 0f;
-        var gravity = Vector3.Down * s.Gravity;
-        var gAlong = VelocityDir * gravity.Dot(VelocityDir);
-        var gAcross = gravity - gAlong;
-        var accel = nose * ThrustAccelAt(Speed, Throttle)
+        var accel = nose * (ThrustAccelAt(Speed, Throttle) * AttitudeThrustScale(Attitude.Z.Y))
                     - VelocityDir * dragAccel
-                    + gAlong * (VelocityDir.Y > 0f ? climbGravityScale : 1f)
-                    + gAcross
+                    + Vector3.Down * s.Gravity
                     + liftAccel;
         var vel = VelocityDir * Speed + accel * dt;
         Speed = Mathf.Min(vel.Length(), MaxDiveSpeedFrac * s.FdSpeed);

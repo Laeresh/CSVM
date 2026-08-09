@@ -852,8 +852,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *held* key from steady flight — and at 30 fps that edge is unresolvable, exactly as it was for
   pitch. Any roll-transient capture needs ≥60 fps constant frame rate.
 
-- `BL-115` `[Tuning]` `[Owed-playtest]` **Flight model** — `StallNoseRate`, `ClimbGravityScale`, `KnifeAlignFloor`
-  (`LowSpeedDragBlend` closed 2026-08-07 by `PLAN-flight-drag-lift` A1).
+- `BL-115` `[Tuning]` `[Owed-playtest]` **Flight model** — `StallNoseRate`, `KnifeAlignFloor`
+  (`LowSpeedDragBlend` closed 2026-08-07 by `PLAN-flight-drag-lift` A1; `ClimbGravityScale`
+  **retired** 2026-08-09 by `PLAN-flight-model-rewrite` D32 — see its bullet below, which stays
+  because the climb residual it uncovered is still open).
   **`PitchTune` / `YawTune` / `RollTune` / `ThrustConst` are not on this list**: all four are
   measured against the original frame by frame and asserted by the `flight-envelope` suite, so they
   are not TUNE knobs and a feel A/B cannot overrule them.
@@ -950,20 +952,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     stall-into-knife-edge recovery behave now that the sag term no longer compounds with the stall
     nose-drop (the two used to be gated apart from each other by an explicit `!stalled` check that
     no longer exists, because there is nothing left to gate).
-  - **`ClimbGravityScale` 0.6 is NOT settled and `CAP-05` cannot settle it.** ⚠ The fit is
-    degenerate: holding `g` and refitting leaves rms flat (0.218–0.280 m/s²) over `g` = 17…25 m/s²,
-    with `C` = 1.18 / **0.59** / 0.00 at `g` = 17 / 20 / 25. That `nom_gravity` 20.0 lands on
-    `C` ≈ 0.6 is a consistency, not a measurement — precisely the "confirms whatever you feed it"
-    trap `FINDINGS.md` warns about. The 50%-throttle climb clip cannot help: its ADI **saturates**
-    (sky fraction pinned at 0.730), so the nose angle is unreadable above ~+30° and the along-path
-    thrust cannot be formed. *What would settle it:* an independent `g`, or a capture with a
-    **readable** nose angle in a sustained climb — i.e. a shallow, held climb at fixed throttle
-    rather than a zoom.
-    **The mechanism itself is designed (GDD §4.1.1, read 2026-08-07):** gravity is pitch-angle-
-    scaled by design — minor effect near level, stronger when climbing or diving, and *reduced on
-    upward pitch relative to downward* so climbs stay flyable while dives still build speed.
-    Existence, sign and shape of the asymmetry are design intent; only the constant's value is
-    still unmeasured.
+  - **`ClimbGravityScale` is RETIRED — closed 2026-08-09 by `PLAN-flight-model-rewrite` D32, and it
+    leaves this entry's TUNE list.** The degenerate `CAP-05` fit that this bullet warned about
+    (`C` = 1.18 / 0.59 / 0.00 at `g` = 17 / 20 / 25, rms flat across the valley, so `C` ≈ 0.6 was a
+    consistency and never a measurement) turned out to be flattering a constant that is not merely
+    unmeasured but **wrong in sign**. Measured against the original's own sustained full-throttle
+    climb (`Climp 90° 100% Thrust.mp4`, now clip key `climb90`; plateau 163.05 mph at a 56.3° path),
+    the constant alone gives 276.66 mph and **removing it alone** gives 257.74 — it makes the climb
+    faster than the original's, not slower. The original's climb penalty lives in THRUST, scaled by
+    nose attitude, decoded and landed in the same item. ⚠ **The GDD §4.1.1 reading recorded here was
+    design intent, not behaviour:** the shipped executable's gravity block
+    (`0x48ff85`–`0x48ff9d`) reads no attitude at all, and the term that IS attitude-scaled runs the
+    other way. Do not reintroduce a pitch-scaled gravity on the strength of the design document.
+    *Still open, and it is the climb's magnitude rather than its mechanism:* the model settles 25%
+    fast (204.04 against 163.05) and does not reproduce the footage's undershoot-and-recover. The
+    leading candidate is the α the original held there — its clip is a 90° pull, and at a 90° nose
+    with the measured 56° path the same decoded force path balances to −3.3%. `CAP-20` (a shallow,
+    held climb with a **readable** ADI, which this bullet already asked for) is what would settle it;
+    the 90° clip's ADI saturates above ≈+30° and cannot.
 
 - `BL-120` `[Tuning]` `[Owed-playtest]` **Collision feel** — behaviour against building corners.
 

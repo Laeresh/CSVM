@@ -856,19 +856,17 @@ public static class Probes
 
         // --- terminal dive. Nose (and path) 70.7° down, full throttle, held to terminal — the angle
         // the original's "vertical" dive clip actually came out at, so this compares like with like.
-        // ⚠ INFORMATIONAL — attributed, waiting on D32. The original scales available thrust by
-        // nose attitude (×(1+0.24·down)·(1+0.13·down) ≈ 1.38 at this dive angle — decoded,
-        // deliberately unimplemented until D32 settles it against ClimbGravityScale), so its dive
-        // carries more thrust than ours and the −5% terminal is exactly that sign. Re-assert when
-        // D32 lands, not by touching the thrust curve here.
+        // Asserted again since the attitude-thrust terms landed: the dive is the side of that scale
+        // where it ADDS thrust (×1.226 at this angle), and it is what carries the row from −5.3% to
+        // +0.2% with nothing fitted. The dive is also the one attitude the retired climb-gravity
+        // constant never touched, so this row is a clean read of the attitude terms alone.
         m = Fresh(stats, Pitched(-70.7f), 0.9f * fd, 1f);
         Run(m, 1f, 120f, pitch: 0f);
         double pathDeg = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
         Row("terminal-dive", "70.7° dive at full throttle, held to terminal", "mph",
             m.Speed / Mph, 355.2, 6.0,
-            $"settled path {pathDeg:0.0}°, {m.Speed / fd:0.000} x fd_speed, α {m.Alpha:0.0}° — "
-            + "waiting on D32's attitude-thrust terms",
-            info: true);
+            $"settled path {pathDeg:0.0}°, {m.Speed / fd:0.000} x fd_speed, α {m.Alpha:0.0}°, "
+            + $"thrust ×{FlightModel.AttitudeThrustScale(m.Attitude.Z.Y):0.000}");
 
         // --- roll. Accumulated body roll rate: no other axis is commanded, so this is the 360° the
         // stopwatch and the video's ADI bank centroid both timed.
@@ -1117,6 +1115,10 @@ public static class Probes
         // every instrument that dumps the envelope should carry it, or the recipe gets lost again.
         sb.AppendLine();
         sb.Append(KnifeEdge(zrdrPath, planeNodeName).Text);
+        // Same reasoning as the knife-edge above: a speed-against-time SHAPE rather than one number
+        // with a tolerance, and the recipe belongs in code where it cannot be lost.
+        sb.AppendLine();
+        sb.Append(SustainedClimb(zrdrPath, planeNodeName).Text);
 
         r.Text = sb.ToString();
         r.Summary = r.Failed == 0
@@ -1197,6 +1199,146 @@ public static class Probes
         r.Text = sb.ToString();
         r.Summary = $"knife-edge: {r.Runs.Count} hold(s), drift "
                     + string.Join(" / ", r.Runs.Select(x => $"{x.DriftDegS:0.00}")) + " °/s";
+        return r;
+    }
+
+    // ---- sustained climb -----------------------------------------------------------------------
+
+    /// <summary>The sustained full-throttle climb, speed against time — the manoeuvre the original
+    /// was filmed holding for forty seconds ("Climp 90° 100% Thrust"), and the one instrument that
+    /// separates a climb-retention term from an attitude-thrust one, because the two predict
+    /// opposite signs here.
+    ///
+    /// <para><b>The recipe.</b> Entry at the footage's own 300 mph and full throttle, attitude set
+    /// once to the path angle the original settled at (<see cref="Banked"/>'s pitched twin), stick
+    /// neutral thereafter — the same fixed-attitude shape <c>altitude-cap</c> uses, not a continuous
+    /// full-elevator pull, which loops instead of climbing. Held 18 sim s, which is long enough for
+    /// the plateau and short enough that the altitude clamp cannot bind from a sea-level entry —
+    /// <see cref="ClimbResult.ClampedAt"/> says so rather than leaving it to be assumed.</para>
+    ///
+    /// <para><b>What the original did</b> (Bloodhawk, decoded from the clip's speedometer and
+    /// altimeter): entry 298.9 mph, pulled into a climb whose flight path settles at
+    /// <b>56.3 ± 3.2°</b>, speed falls to a minimum of <b>152.4 mph at +6.5 s</b> and then RECOVERS
+    /// — <b>163.05 mph</b> across this probe's own 12–18 s window, still creeping onto a flat
+    /// <b>167.0 ± 0.5 mph</b> by +36 s, climbing ≈12,000 fpm from 900 to 6,300 ft. It leaves that
+    /// state only at ≈6,600 ft, which is the altitude ceiling and not the climb. ⚠ The UNDERSHOOT is
+    /// half the measurement: the original dips 9% below its own plateau and climbs back out of it,
+    /// which no monotone decay reproduces.</para></summary>
+    public static ClimbResult SustainedClimb(string zrdrPath, string planeNodeName)
+    {
+        System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
+        var r = new ClimbResult { Plane = planeNodeName };
+        PlaneStats stats;
+        try
+        {
+            stats = PlaneStats.Load(zrdrPath, planeNodeName);
+        }
+        catch (Exception e)
+        {
+            r.Error = $"could not load plane stats for '{planeNodeName}' ({zrdrPath}): {e.Message}";
+            r.Summary = $"sustained climb: {r.Error}";
+            return r;
+        }
+
+        const float EntryMph = 300f;
+        const float EntryPathDeg = 56.3f;
+        r.EntryMph = EntryMph;
+        r.EntryPathDeg = EntryPathDeg;
+
+        var m = Fresh(stats, Pitched(EntryPathDeg), EntryMph * Mph, 1f);
+        double Nose() => Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp((-m.Attitude.Z).Y, -1f, 1f)));
+        double Path() => Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
+
+        // ⚠ 18 s, not longer, and read from a sea-level entry: the fastest climbers in the set reach
+        // the altitude clamp at ≈21 s from here, and a sample taken against the clamp reports the
+        // clamp's speed rather than the climb's. The footage is inside 2% of its own plateau by
+        // +12 s, so the window loses nothing.
+        var want = new[] { 0f, 1f, 2f, 3f, 4f, 6f, 8f, 12f, 15f, 18f };
+        int next = 0;
+        float elapsed = 0f;
+        float prevAlt = m.Position.Y;
+        r.MinSpeedMph = m.Speed / Mph;
+        double speedSum = 0, pathSum = 0;
+        int plateau = 0;
+        while (next < want.Length)
+        {
+            if (elapsed >= want[next] - EnvDt * 0.5f)
+            {
+                r.Samples.Add(new ClimbSample
+                {
+                    T = want[next],
+                    SpeedMph = m.Speed / Mph,
+                    PathDeg = Path(),
+                    NoseDeg = Nose(),
+                    ClimbFpm = (m.Position.Y - prevAlt) / Ft / EnvDt * 60.0,
+                    AltFt = m.Position.Y / Ft,
+                    Alpha = m.Alpha,
+                    ThrustScale = FlightModel.AttitudeThrustScale(m.Attitude.Z.Y),
+                });
+                next++;
+                continue;
+            }
+
+            prevAlt = m.Position.Y;
+            m.Step(new FlightInput { Throttle = 1f }, EnvDt);
+            elapsed += EnvDt;
+            if (m.Speed / Mph < r.MinSpeedMph)
+            {
+                r.MinSpeedMph = m.Speed / Mph;
+                r.MinSpeedT = elapsed;
+            }
+
+            if (r.ClampedAt < 0 && m.Position.Y >= Config.GetFloat("flightModel.altitudeCapM", 2003f) - 1f)
+            {
+                r.ClampedAt = elapsed;
+            }
+
+            // The plateau is read over the same last-third window the footage's own is quoted over,
+            // so the two numbers are the same statistic and not one average against one endpoint.
+            if (elapsed >= 12f)
+            {
+                speedSum += m.Speed / Mph;
+                pathSum += Path();
+                plateau++;
+            }
+        }
+
+        r.PlateauMph = plateau > 0 ? speedSum / plateau : 0;
+        r.PlateauPathDeg = plateau > 0 ? pathSum / plateau : 0;
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"# sustained climb — {planeNodeName} ({stats.DefName})");
+        sb.AppendLine($"# {EntryMph:0} mph entry, path {EntryPathDeg:0.0}° set at entry then FREE, "
+                      + "full throttle, stick neutral, 24 sim s");
+        sb.AppendLine("# original (Bloodhawk, \"Climp 90° 100% Thrust\"): entry 298.9 mph, path settles");
+        sb.AppendLine("# 56.3 ± 3.2°, min 152.4 mph at +6.5 s, then RECOVERS — 163.1 mph over this");
+        sb.AppendLine("# probe's own 12–18 s window, still creeping to a flat 167.0 ± 0.5 by +36 s,");
+        sb.AppendLine("# climbing ≈12,000 fpm from 900 to 6,300 ft");
+        sb.AppendLine($"plateau (12–18 s) {r.PlateauMph:0.00} mph at path {r.PlateauPathDeg:0.0}° "
+                      + $"— original 163.05 mph at 55.5°; minimum {r.MinSpeedMph:0.00} mph at "
+                      + $"+{r.MinSpeedT:0.0} s — original 152.40 at +6.5 s"
+                      + (r.ClampedAt >= 0
+                         ? $"  ⚠ ALTITUDE CLAMP bound at +{r.ClampedAt:0.0} s — every sample after "
+                           + "that reads the clamp, not the climb"
+                         : ""));
+        sb.AppendLine($"  {"t",4} {"speed",8} {"orig",8} {"path",8} {"nose",8} {"climb",10} "
+                      + $"{"alt",9} {"α",7} {"thr×",6}");
+        // ⚠ The original column is the BLOODHAWK's, the only airframe the game was filmed flying.
+        // Another plane's run reports its own numbers against a dash, which is honest rather than a
+        // gap to fill by scaling these.
+        bool bhawk = planeNodeName.Equals("player_bhawk", StringComparison.OrdinalIgnoreCase);
+        double[] orig = { 298.92, 257.73, 215.77, 185.00, 164.13, 153.42, 154.81, 160.48, 163.08, 164.91 };
+        for (int i = 0; i < r.Samples.Count; i++)
+        {
+            var x = r.Samples[i];
+            sb.AppendLine($"  {x.T,4:0} {x.SpeedMph,8:0.00} {(bhawk ? orig[i].ToString("0.00") : "-"),8} {x.PathDeg,8:0.00} "
+                          + $"{x.NoseDeg,8:0.00} {x.ClimbFpm,10:0} {x.AltFt,9:0} {x.Alpha,7:0.00} "
+                          + $"{x.ThrustScale,6:0.000}");
+        }
+
+        r.Text = sb.ToString();
+        r.Summary = $"sustained climb: plateau {r.PlateauMph:0.0} mph (original 163.1), "
+                    + $"minimum {r.MinSpeedMph:0.0} mph (original 152.4)";
         return r;
     }
 
@@ -1821,6 +1963,42 @@ public static class Probes
     public sealed class KnifeEdgeResult
     {
         public readonly List<KnifeEdgeRun> Runs = new();
+        public string Text = "";
+        public string Summary = "";
+        public string? Error;
+    }
+
+    /// <summary>One sample of the sustained climb, at one of the footage's own elapsed times.</summary>
+    public sealed class ClimbSample
+    {
+        public double T;
+        public double SpeedMph;
+        public double PathDeg;
+        public double NoseDeg;
+        public double ClimbFpm;
+        public double AltFt;
+        public double Alpha;
+        public double ThrustScale;
+    }
+
+    /// <summary>One sustained full-throttle climb: the samples plus the plateau it settled on.</summary>
+    public sealed class ClimbResult
+    {
+        public readonly List<ClimbSample> Samples = new();
+        public string Plane = "";
+        public double EntryMph;
+        public double EntryPathDeg;
+        public double MinSpeedMph;
+        public double MinSpeedT;
+        public double PlateauMph;
+        public double PlateauPathDeg;
+
+        /// <summary>Sim seconds at which the altitude clamp first bound, or −1 if it never did.
+        /// ⚠ A run that reaches the clamp stops being a climb measurement at that instant — the
+        /// clamp deletes climbing velocity outright — so a finite value here invalidates every
+        /// sample after it rather than merely qualifying them.</summary>
+        public double ClampedAt = -1;
+
         public string Text = "";
         public string Summary = "";
         public string? Error;

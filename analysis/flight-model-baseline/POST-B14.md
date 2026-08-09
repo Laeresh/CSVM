@@ -579,3 +579,108 @@ Able-to-fail controls, both demonstrated rather than argued (METHOD-9): the pre-
 (713 + `KnifeEdgeTests`' 4), engine 29/29, goldens 13/13 after the re-pin, `FlightEnvelopeTests`
 still asserting **6**. Full 8-chapter `--freecam` regression clean, zero engine errors, all eight
 screenshots saved.
+
+## D32 — attitude-dependent thrust vs `ClimbGravityScale`
+
+The conflict had a discriminating instrument all along and nobody had decoded the clip. It is
+`OriginalScreenshots/Videos/Climp 90° 100% Thrust.mp4`, now registered as clip key `climb90` and
+decoded to a sidecar: **entry 298.9 mph, flight path settling at 56.3 ± 3.2°, speed falling to
+152.4 mph at +6.5 s and then RECOVERING** — 163.05 mph over 12–18 s, still creeping to a flat
+167.0 ± 0.5 by +36 s — climbing ≈12,000 fpm from 900 to 6,300 ft, and leaving that state only at
+≈6,600 ft, which is `CAP-03`'s altitude ceiling and not the climb. `Probes.SustainedClimb` is that
+manoeuvre as code (300 mph entry, path set once at 56.3°, stick neutral, full throttle, 18 sim s,
+sampled at the footage's own elapsed times), riding `--dump-flight` and `ZzBaselineDump`. ⚠ The
+18 s is not arbitrary: the fastest climbers reach the altitude clamp at ≈21 s from a sea-level
+entry, and a sample taken against the clamp reports the clamp's speed rather than the climb's —
+`ClimbResult.ClampedAt` says so in the output instead of leaving it to be assumed. Raw:
+[`raw/post-d32-dump-bhawk.txt`](raw/post-d32-dump-bhawk.txt),
+[`raw/post-d32-dump-balmoral.txt`](raw/post-d32-dump-balmoral.txt),
+[`raw/post-d32-all-airframes.txt`](raw/post-d32-all-airframes.txt), and the three ablations
+[`raw/post-d32-ablation-pre-change.txt`](raw/post-d32-ablation-pre-change.txt),
+[`raw/post-d32-ablation-both.txt`](raw/post-d32-ablation-both.txt),
+[`raw/post-d32-ablation-neither.txt`](raw/post-d32-ablation-neither.txt).
+
+**One mechanism at a time, same build, four arrangements** (Decision 5). Plateau over 12–18 s
+against the footage's own 163.05 mph statistic over the same window:
+
+| arrangement | climb plateau | vs footage | terminal-dive | zoom-climb |
+|---|---:|---:|---:|---:|
+| A `ClimbGravityScale` only — the pre-change model | 276.66 | +69.7 % | 336.36 | 1338.33 |
+| C neither mechanism | 257.74 | +58.1 % | 336.36 | 1258.60 |
+| B both mechanisms | 232.20 | +42.4 % | 356.00 | 1154.37 |
+| **D attitude terms only — landed** | **204.04** | **+25.1 %** | **356.00** | **1060.33** |
+
+Both moves help and they are separable. **Removing the constant alone** moves the climb
+276.66 → 257.74 with no attitude term anywhere near it, and moves `zoom-climb` 1338 → 1259 — so the
+constant is not modelling climb retention on the post-B14 force shapes, it is making the climb
+*faster* than the original's. **Adding the attitude terms alone** (C → D) moves 257.74 → 204.04 and
+1259 → 1060, and is the whole of `terminal-dive`'s 336.36 → 356.00: the dive is the side of the
+scale that ADDS thrust (×1.226 at 70.7°) and is the one attitude the retired constant never touched,
+which makes that row a clean read of the attitude terms by themselves. Config A reproduces the
+committed POST-D31 numbers to the last digit on this build (METHOD-6/8).
+
+**`terminal-dive` is PROMOTED back to asserting**: 336.36 → **356.00** mph against 355.2 ± 6
+(−5.3 % → **+0.2 %**), with nothing fitted. `FlightEnvelopeTests` asserts **7** again (7 → 6 at B14,
+6 → 7 here).
+
+**Bloodhawk envelope, POST-D31 → POST-D32** (only the rows that moved; every α = 0 wings-level row —
+`level-top-speed`, `level-speed-near-cap`, `accel-150-290`, `decel-290-150`, `eighth-throttle-speed`,
+`yaw-360`, `roll-360` — is unmoved to the last printed digit, DIAG-10, because the attitude scale is
+exactly 1 with the nose on the horizon and the retired constant only ever engaged climbing):
+
+| scenario | unit | POST-D31 | POST-D32 | original | disposition |
+|---|---|---:|---:|---:|---|
+| terminal-dive | mph | 336.36 | **356.00** | 355.2 ± 6 | **green, PROMOTED to asserted**, +0.2 % |
+| zoom-climb | ft | 1338.33 | **1060.33** | 936 | informational; +43.0 % → +13.3 % |
+| zoom-climb-min-speed | mph | 237.03 | **165.96** | 127.9 | informational; +85.3 % → +29.8 % |
+| pitch-rate | °/s | 31.87 | **31.59** | 33.0 ± 3 | green (asserted), −3.4 % → −4.3 % |
+| altitude-cap | ft | 6572.67 | **6572.55** | 6571.6 ± 100 | green (asserted) |
+| sustained-turn-speed | mph | 258.41 | **255.61** | 222.94 | informational; +15.9 % → +14.7 % |
+| sustained-turn-rate | °/s | 32.80 | **32.83** | 18.95 | informational; unmoved, still `BL-095`'s |
+| sustained-turn-sink | ft/s | 8.86 | **10.31** | ≤ 1.85 | informational (C23) — worsens, see below |
+
+⚠ **`sustained-turn-sink` worsens again and is again not tuned back.** The max-pull turn settles
+nose-high at ≈89° of bank, so the attitude scale takes thrust off it and the turn sinks harder. It
+is the third leg of a manoeuvre whose other two legs are informational and owned by `BL-095`'s
+`turn_fade_*`/`highGs` — we sweep heading 73 % faster than the original at a bank it never flew —
+and it re-asserts with the rate row, exactly as C23 and D31 recorded.
+
+**All eleven airframes.** `zoom-climb` moves toward its measured 936 ft on **ten of eleven**
+(bhawk 1338 → 1060, devastator 1549 → 1209, fury 1474 → 1158, warhawk 1905 → 1551, avenger
+1502 → 1170, balmoral 1791 → 1192, brigand 1797 → 1389, firebrand 1903 → 1568, kestrel 1867 → 1492,
+peacemaker 1386 → 1094); the **autogyro crosses it** — 968.93 → 845.26, from +3.5 % to −9.7 % — which
+is the airframe B15 already flagged as the outlier of the set (the lightest wing loading of the
+eleven), and it is reported rather than smoothed. The climb plateau falls on all eleven
+(devastator 231.96 → 173.59, fury 258.72 → 191.25, warhawk 190.63 → 153.00, autogyro
+211.57 → 181.35, avenger 240.23 → 176.90, balmoral 109.80 → 72.41, brigand 221.19 → 164.83,
+firebrand 197.35 → 160.34, kestrel 202.29 → 158.80, peacemaker 266.97 → 197.00).
+
+⚠ **What did NOT close, stated as open.** The climb is still **+25 %** (204.04 against 163.05) and
+the *shape* differs: the original undershoots its own plateau by 9 % and climbs back out of it,
+where the model decays monotonically to it. The along-path balance at the footage's plateau needs a
+thrust factor of **0.5632**, and the decoded formula's floor is 0.6612 — so no attitude in it
+reaches that, and the terms are not the missing 21 %. The leading candidate is the probe's α: it
+holds α = 0 (attitude set to the path) while the clip is a **90° pull**, and at a 90° nose with the
+measured 56° path the same decoded force path balances to **−3.3 %** (the scale bottoms out *and*
+the nose-to-path cosine takes another 18 %). The clip's ADI saturates above ≈+30°, so its nose angle
+is **not readable** and this capture cannot settle it — which is precisely what `CAP-20` was filed
+to answer. Nothing was tuned to close it.
+
+**Goldens: two moved, `c1-flight` and `c1-destroy-effects` (GOLD-5/GOLD-1), and the pattern is the
+evidence.** They are exactly the two goldens whose aircraft is not nose-level: `c1-flight` holds
+pitch (`--hold=0.2,0.1,0,1`) and `c1-destroy-effects` spawns nose-down 5.7° (`--direction=1,-0.1,0`,
+so its thrust runs ×1.014 from frame 0). `empty-stage` and `c1-crash` both fly level-attitude holds
+and are hash-identical — which is the same DIAG-10 argument the envelope's unmoved rows make, in
+pixels. Manifest re-pinned in this change; both shots eyeballed (banked Bloodhawk over C1 with HUD,
+gauges and exhaust trail intact; the airfield pass with its HUD and world intact), and the
+`c1-destroy-effects` re-render reproduces its new hash exactly.
+
+**Determinism and controls.** `--dump-flight` (Bloodhawk, Balmoral) and `ZzBaselineDump` (all
+eleven) each run twice, byte-identical (SHELL-10/DET-6, DET-7/DET-9). Before/after is a same-build
+A/B (METHOD-6/15) and `git diff` proves every temporary edit restored (METHOD-17). The able-to-fail
+control is demonstrated, not argued (METHOD-9): inverting the attitude argument's sign fails
+`TheScaleIsReadOffTheNoseAndNotItsMirror` and
+`TheSustainedClimbSettlesFarBelowEitherFittedArrangement`, where the flown result still looks
+plausible. `RunTests.ps1` green: units **721/721** (717 + `AttitudeThrustTests`' 4), engine 29/29,
+goldens 13/13 after the re-pin, `FlightEnvelopeTests` asserting **7**. Full 8-chapter `--freecam`
+regression clean, zero engine errors, all eight screenshots saved.

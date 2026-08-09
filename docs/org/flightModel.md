@@ -621,9 +621,11 @@ None of these has an aerodynamic justification, and all three distort any model 
 observed video.
 
 1. **Thrust varies with nose attitude.** Available thrust is scaled by
-   `(1 + 0.24 · noseUpComponent)`, and *additionally* by `(1 + 0.13 · noseUpComponent)` when the
-   nose is up. Climbing loses thrust and diving gains it — **on top of** the real gravity term,
-   not instead of it. Two separate coefficients, one of them one-sided.
+   `(1 + 0.24 · a)`, and *additionally* by `(1 + 0.13 · a)` when `a ≤ 0`, where `a` is the
+   **world-up component of the body Z axis** — and the nose is **−Z**, so `a` is negative in a
+   climb. Climbing loses thrust (0.6612× straight up) and diving gains it (1.24× straight down),
+   **on top of** the real gravity term, not instead of it. Two separate coefficients, one of them
+   one-sided. Fully recovered under "Attitude thrust — resolved, and the climb it settles" below.
 2. **Bank coupling — hardcoded, not data-driven.** Constants **0.205** and **0.165** (at
    `0x6289f8` and `0x6289fc`) convert bank directly into yaw and pitch rate. This is the
    coordinated-turn cheat that makes banking turn the aircraft. Fully recovered under
@@ -637,6 +639,84 @@ There is also a **boost state**: it **replaces** the throttle multiplier with a 
 multiply — `mov [ebp+8], 1.8f` on the boost branch at `0x48fcb6`, where the normal branch loads the
 throttle) and multiplies the drag coefficient by **0.8**. So boost is "throttle pinned to 180 %",
 and boosting at part throttle is identical to boosting at full throttle.
+
+## Attitude thrust — resolved, and the climb it settles
+
+The two coefficients sit between the throttle multiply and the `ThrustFactor · RefArea` scaling, in
+the force accumulator `FUN_0048fc40`. The whole block is eight instructions:
+
+```
+0048fce2  call 0x41acf0            ; thrustAvail(mach, atm)
+0048fce7  fmul [ebp+8]             ; * throttle (or the boost 1.8)
+0048fcea  fld  [esi+0x19c]         ; a = orientation row 2 . Y
+0048fcf3  fcomp [0x6032c8]         ; compare a with 0.0, popping it
+0048fcfe  je   0x48fd14            ; ZF set = neither C0 nor C3 = a > 0  -> SKIP
+0048fd00  fld  [0x6080d8]          ; 0.13
+0048fd06  fmul [esi+0x19c]
+0048fd0c  fadd [0x6032dc]          ; 1 + 0.13*a
+0048fd12  fmulp st(1)              ; avail *= that                       (only when a <= 0)
+0048fd14  fld  [0x6080dc]          ; 0.24
+0048fd1d  fmul [esi+0x19c]
+0048fd30  fadd [0x6032dc]          ; 1 + 0.24*a
+0048fd38  fmul st(1)               ; avail * that -> [ebp-8]
+```
+
+**The sign is settled from the bytes, not from the coefficient names.** `[esi+0x19c]` is the Y
+component of **row 2** of the orientation matrix at `+0x180`, and row 2 is **−nose** — proved at the
+point of use rather than assumed: at `0x48fe91` the thrust magnitude is `fchs`'d and *then*
+multiplied by that same row (`0x198`/`0x19c`/`0x1a0`) before being added to the force vector, so
+`force = −magnitude · row2 = +magnitude · nose`. Therefore `a = −nose.Y`: **negative climbing**, and
+both branches reduce thrust there. A vertical climb keeps `(1 − 0.24)(1 − 0.13) = 0.6612`; a
+vertical dive gets `1 + 0.24 = 1.24`, the one-sided term not applying. Nothing clamps `a`; it is a
+unit-vector component already.
+
+**Gravity is NOT attitude-scaled anywhere.** `0x48ff85`–`0x48ff9d` is the whole of it —
+`[obj+0xc4] / 9.82 × [obj+0x674]` subtracted from `force.Y`, with no attitude read in the block.
+This matters because the game's own design document describes gravity as pitch-scaled and *reduced
+on upward pitch* so climbs stay flyable. The shipped executable does the opposite thing in a
+different term: it penalises the climb through thrust. **The GDD is design intent; the binary is
+behaviour, and they disagree in sign here.**
+
+### The sustained climb — what this cost, and what it did not close
+
+The remake carried a fitted `ClimbGravityScale = 0.6` that spared a climbing aircraft, on the
+reading that the original held speed in a climb better than plain energy exchange predicts. It runs
+opposite to the decoded terms, so only a measurement could separate them.
+
+The measurement is the original's own sustained full-throttle climb
+(`OriginalScreenshots/Videos/Climp 90° 100% Thrust.mp4`, decoded to
+`videodata/.../Climp 90° 100% Thrust.mp4.csv`, clip key `climb90`): entry **298.9 mph**, the flight
+path settles at **56.3 ± 3.2°**, speed falls to a minimum of **152.4 mph at +6.5 s** and then
+**recovers** onto a plateau — 163.05 mph across 12–18 s, still creeping to a flat **167.0 ± 0.5 mph**
+by +36 s — climbing ≈12,000 fpm from 900 to 6,300 ft. It leaves that state at ≈6,600 ft, which is
+the altitude ceiling (`CAP-03`) and not the climb.
+
+All four arrangements, same build, same probe (`Probes.SustainedClimb`), plateau over 12–18 s
+against the footage's **163.05**:
+
+| arrangement | plateau | vs footage |
+|---|---:|---:|
+| `ClimbGravityScale` only (the pre-change model) | 276.66 | +69.7 % |
+| neither mechanism | 257.74 | +58.1 % |
+| both mechanisms | 232.20 | +42.4 % |
+| attitude terms only (landed) | **204.04** | **+25.1 %** |
+
+**The fitted constant makes the climb worse, and it makes it worse on its own** — removing it alone
+moves 276.66 → 257.74 with no attitude term anywhere near it. That is what "it was absorbing the old
+drag and thrust shapes' error" looks like from outside: B12/B13 replaced those shapes, and what the
+constant was compensating went with them.
+
+⚠ **The residual is real and is recorded, not tuned.** 204 against 163 is +25 %, and the *shape*
+differs too: the original undershoots its own plateau by 9 % and climbs back out of it, where the
+model decays monotonically. The along-path balance at the footage's own plateau needs a thrust
+factor of **0.563**, and no attitude in the decoded formula reaches that — 0.6612 is its floor. But
+the probe holds α = 0 (attitude set to the path), and the clip is a **90° pull**: at a 90° nose with
+the measured 56° path the same decoded force path balances to **−3.3 %**, because the attitude scale
+bottoms out *and* the nose-to-path cosine takes another 18 %. The clip's ADI saturates above ≈+30°,
+so its nose angle is **not readable** and this cannot be settled from this capture — it is exactly
+what `CAP-20` (a shallow, held climb with a readable ADI) was filed to answer. Do not close the gap
+by moving 0.24/0.13; they are the binary's, and the dive side of the same scale lands
+`terminal-dive` at 356.0 mph against a measured 355.2 ± 6 with nothing fitted.
 
 ## Thrust available — resolved, `pow` operands recovered
 
