@@ -1032,11 +1032,59 @@ polygon, exactly as `FUN_004de190` reads it. The offset→argument mapping holds
 
 **What this does and does not resolve for `BL-305`.** It explains the naming, and it means our
 "subface skip" experiment was really a *no-clutter* skip — which is what the original does. But that
-experiment deleted C5's skyline, so the contradiction has moved rather than gone: the polygons
-carrying C5's downtown clutter appear to be flagged `no_clutter` in the shipped data, which should
-mean the original does not stamp them either. Either C5's downtown buildings come from somewhere
-this plan has not looked, or the flag's population is not what the extraction says. The census now
-running against the data is what settles that.
+experiment emptied C5's downtown viewpoint, so the contradiction has moved rather than gone.
+
+### The census confirms the decode from the data side, and corrects me (2026-08-10)
+
+Full write-up: [`analysis/bl-305-clutter-uv/FINDINGS-noclutter.md`](../analysis/bl-305-clutter-uv/FINDINGS-noclutter.md).
+Headlines, all measured:
+
+- **`no_clutter` reaches the shipped data as a bit, never as text.** A byte-level scan of the whole
+  install finds the string only in `crimson.exe` — and the same scanner finds `clutter` inside five
+  `.zbd` files, so the negative is real.
+- **mech3ax discards no bit.** The `pm` reader's flag word is exactly
+  `VERTEX_COUNT 0x3FF | SHOW_BACKFACE 0x400 | UNK3 0x800 | NORMALS 0x1000 | TRI_STRIP 0x2000 |
+  IN_OUT 0x4000`, and its `bitflags` check *errors* on any bit outside that set — so extraction
+  succeeding across all eight chapters proves no CS polygon sets anything higher. **The remake
+  already parses the attribute**, as `GameZPolygon.Subface`. Nothing needs re-extracting; the field
+  needs renaming and a consumer.
+- **`unk3 == SUBFACE` was never measured, and mech3ax never claimed it** — the word "subface" does
+  not appear anywhere in the mech3ax tree. The name is this repo's 2026-07-23 inference from a
+  z-fight fix that worked.
+- **The flagged population is "nothing grows here", not "overlay".** C5's 658: water 21.6 %,
+  `cblock1/2/3` pavement 49.3 %, untextured 15.5 %, `cblock7` 11.9 %, pier decking 1.5 % — 86 %
+  horizontal, sitting on the ground plane.
+- **The `fvol` result kills SUBFACE outright.** Every invisible fog-volume box carries the flag on
+  its floor and all four walls and **not** on its lid, every time. A box floating in the sky has no
+  face beneath it and its own faces are not coplanar with each other, so "subface" is nonsense
+  there; "don't scatter on these faces, only on the lid" is exactly what `FogVolumeClutter` does.
+- `CBLOCK-LOD.md`'s coplanar geometry stands; its *label* does not. Its own falsification table
+  already recorded 251 of the flagged C5 polygons with **no coplanar partner at all** and explained
+  them away as source-file leftovers. That bimodality was always evidence against SUBFACE.
+
+**⚠ And it caught an overstatement of mine.** The census argued the gate *cannot* empty C5, since the
+flag covers only 18.7 / 53.3 / 63.0 / 5.1 % of `cblock1/2/3/7` area. I re-ran it capturing per-kind
+counts, and **both are true**:
+
+| kind | base | gate | | kind | base | gate |
+|---|---|---|---|---|---|---|
+| `cb00a` | 3,933 | 3,121 | | `cb12a` | 13,595 | 13,009 |
+| `cb02a` | 2,976 | 2,351 | | `cb14a` | 14,932 | 14,289 |
+
+**Nothing goes to zero — 79–96 % of every downtown kind survives — and the near-field skyline is
+still completely gone**, confirmed on a 3.2×-brightened foreground crop of the same md5
+(`35984FFA…`, reproduced by two independently written patches). The flagged quads are *concentrated
+at this viewpoint*; the surviving instances are elsewhere on the map. So a placement change
+**relocates** a population as well as thinning it, and a global count is blind to that. `SHOT-28` is
+rewritten to say so — three instruments, two reassuring, one right.
+
+**Where that leaves `BL-305`: a sharper open question, not an answer.** The gate is what the original
+does, and applying it empties the very viewpoint the original fills with towers. So either the
+unflagged `cblock1/2/3` quads that should carry this downtown are somewhere our walk is not
+reaching, or the buildings here come from a template/layer this plan has not considered. **Next
+step is spatial, not statistical:** plot the flagged and unflagged `cblock1/2/3/7` quads around
+`-9700, -3500` and find out what the original would have left to stamp on. Do not run another
+whole-frame A/B until that map exists.
 
 ### Part 2 — `MinSlopeCos` is deleted, and it never culled anything
 
