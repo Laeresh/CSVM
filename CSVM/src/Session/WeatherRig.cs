@@ -27,8 +27,11 @@ namespace CSVM.Session;
 /// <para><see cref="Tick"/> also publishes each rig's own
 /// <see cref="WeatherState.CameraWeatherState"/> onto <c>PlayerRig.CameraWeatherState</c>
 /// (<c>PLAN-weather-decompile-match</c> A2) — the binary's per-frame camera zone 1/2/3, fed by
-/// this mission's <see cref="WeatherState"/> plus <see cref="SetFogVolumes"/>'s chapter data.
-/// Ships dark: nothing reads it yet.</para></summary>
+/// this mission's <see cref="WeatherState"/> plus <see cref="SetFogVolumes"/>'s chapter data — and
+/// re-applies the FOG globals for that state's zone whenever it changes (B11, see
+/// <see cref="FogStateTrigger"/>): below the deck a deck chapter wears <c>ZONE1</c>'s ranges,
+/// altitude, colour and <c>SUNLIGHT</c>, above it <c>ZONE2</c>'s. The DOME stays on the zone
+/// <see cref="Build"/> resolved — B14's business, not this one's.</para></summary>
 public sealed class WeatherRig
 {
     // ⚠ TUNE (C21/C25, 2026-08-08) — how far above the camera the deck hangs while the camera
@@ -105,6 +108,10 @@ public sealed class WeatherRig
     // wired up).
     private IReadOnlyList<FogVolumeBox> _fogVolumes = Array.Empty<FogVolumeBox>();
     private bool _fogZoneArmed;
+    // B11's edge trigger: which zone's fog globals are live, and the state they were applied for.
+    // Rebuilt by LoadWeather (a new mission is a new zone table); disarmed outright by an explicit
+    // --sky-zone, per Decision 5.
+    private FogStateTrigger _fogState = new(stateDriven: false, buildZone: string.Empty);
 
     public WeatherRig(SessionSpec spec, Node3D worldRoot)
     {
@@ -204,9 +211,8 @@ public sealed class WeatherRig
             var camPos = rig.Camera.Position;
 
             // A2's plumbing: the binary's per-frame camera weather state (1/2/3, FUN_0042ee40),
-            // published on the rig for whichever later item consumes it — nothing does yet, so
-            // this ships dark (no visual change). Logged only on a change, at debug verbosity,
-            // since a flight spends whole minutes in one state.
+            // published on the rig. B11 consumes it for fog, below the loop. Logged only on a
+            // change, at debug verbosity, since a flight spends whole minutes in one state.
             if (_weather != null)
             {
                 int state = _weather.CameraWeatherState(camPos, _fogZoneArmed, _fogVolumes);
@@ -286,6 +292,38 @@ public sealed class WeatherRig
                 // no deck, so an ungated rule would hide its street haze at street level for
                 // ever.
                 SetCloudFieldVisible(rig.Camera, cloudsVisible);
+            }
+        }
+
+        // B11: the zone the camera's own state wears, re-applied only at the state EDGE
+        // (FUN_00472ea0 is called on change, not per frame — and the C26 rim annulus reads these
+        // same fog globals, so a per-frame recompute would make it shimmer at the boundary).
+        //
+        // ⚠ Driven by rig 0, because the fog parameters this writes are GLOBAL shader uniforms —
+        // one set for the whole session, unlike the whiteout overlay and the deck regime above,
+        // which are per rig. In splitscreen with one player under the deck and one over it, both
+        // panes therefore wear player 1's fog. That is a pre-existing property of the fog chain
+        // (SetupWeather has always written one global set), not something this item introduces;
+        // making it per pane needs per-instance fog uniforms, which SetupWeather's comment on
+        // `csky_fog_on` explains is the hazard it was written to avoid.
+        if (_weather != null && rigs.Count > 0
+            && _fogState.Next(rigs[0].CameraWeatherState, _weather) is { } change)
+        {
+            if (change.FellBack)
+                // Once per state, not per crossing: a mission that authors no ZONE<n> keeps the
+                // file's first zone rather than rendering WeatherState.NoFog (fullbright, no fog).
+                // Said out loud because it is the one line explaining a state change that moves
+                // nothing on screen.
+                GD.Print($"weather: {_spec.Chapter}/{_spec.Mission} authors no 'zone{change.State}' "
+                         + $"(zones: {string.Join("/", _weather.ZoneNames)}) — camera state "
+                         + $"{change.State} keeps fog zone '{change.Zone}'");
+            if (change.Applied)
+            {
+                var fog = _weather.Fog(change.Zone);
+                ApplyFogGlobals(fog);
+                GD.Print($"weather: camera state {change.State} -> fog zone '{change.Zone}' — "
+                         + $"fog {fog.FogNear:0}-{fog.FogFar:0} m, altitude {fog.FogLow:0}-{fog.FogHigh:0} m, "
+                         + $"world light {fog.WorldLight:0.00} (sky dome stays '{_activeZone}')");
             }
         }
     }
@@ -423,6 +461,14 @@ public sealed class WeatherRig
             GD.Print($"weather: {_spec.Chapter} builds no horizon geometry under '{byFile}' "
                      + $"({string.Join(", ", HorizonZoneCounts(horizonZones))}) — "
                      + $"rendering '{_activeZone}' sky and fog");
+        // B11: the fog zone follows the camera's weather state from here on, starting from
+        // whatever _activeZone the build just resolved — so a chapter whose state-1 zone IS the
+        // built zone (every non-deck chapter: their CLOUD_COVER band is authored out of reach, so
+        // the state never leaves 1) never rewrites a single global and is pixel-identical to the
+        // static behaviour. An explicit --sky-zone disarms the machine entirely (Decision 5): the
+        // flag exists so an inspection pose renders one named zone reproducibly, and a pose that
+        // silently switched zone with altitude would not be that.
+        _fogState = new FogStateTrigger(stateDriven: !_spec.SkyZoneExplicit, buildZone: _activeZone);
         if (_weather == null)
         {
             GD.PushWarning($"no weather.json for {_spec.Chapter}/{_spec.Mission} — flying without fog / whiteout");
@@ -446,6 +492,24 @@ public sealed class WeatherRig
         if (_weather == null)
             return;
         var fog = _weather.Fog(_activeZone);
+        var fogRange = ApplyFogGlobals(fog);
+        GD.Print($"weather [{_activeZone}]{(_spec.NoFog ? " --no-fog: fog + whiteout OFF, world light unchanged;" : ":")} " +
+                 $"fog {fog.FogColor.R:0.00} gray {fogRange.X:0}–{fogRange.Y:0} m " +
+                 $"(authored {fog.FogNear:0}–{fog.FogFar:0}), " +
+                 $"altitude {fog.FogLow:0}–{fog.FogHigh:0} m; world light {fog.WorldLight:0.00}; " +
+                 $"cloud band {_weather.CloudBottom:0}–{_weather.CloudTop:0} m (±{_weather.CloudThickness:0})");
+        SetupWhiteoutAndPrecip(rigs);
+    }
+
+    /// <summary>Writes ONE zone's fog into the global shader parameters — colour, range, altitude
+    /// band and the <c>SUNLIGHT</c>-derived world light — and returns the range actually written
+    /// (<c>--no-fog</c>'s out-of-reach pair, or the authored one). Called twice: once by
+    /// <see cref="SetupWeather"/> for the zone the flight builds with, and again from
+    /// <see cref="Tick"/> each time the camera's weather state changes zone (B11). Every write
+    /// here is idempotent and order-free, which is what lets the second caller be an edge trigger
+    /// rather than a per-frame recompute.</summary>
+    private Vector2 ApplyFogGlobals(WeatherState.ZoneFog fog)
+    {
         // FOG_COLOR is a DX7-era framebuffer (sRGB) value: the original's fully-fogged pixels
         // are exactly 0.69·255 = 176 gray (measured in OriginalScreenshots/"C1 IA1 Cloudcoverage
         // 1.png", flat regions std 0). The shader mixes ALBEDO in linear space, so convert —
@@ -492,12 +556,17 @@ public sealed class WeatherRig
         // (Applied in linear space, 0.80 only reaches 210→190; gamma-space lands the deck 210→169.)
         float worldLightLinear = new Color(fog.WorldLight, fog.WorldLight, fog.WorldLight).SrgbToLinear().R;
         RenderingServer.GlobalShaderParameterSet("csky_world_light", worldLightLinear);
-        GD.Print($"weather [{_activeZone}]{(_spec.NoFog ? " --no-fog: fog + whiteout OFF, world light unchanged;" : ":")} " +
-                 $"fog {fog.FogColor.R:0.00} gray {fogRange.X:0}–{fogRange.Y:0} m " +
-                 $"(authored {fog.FogNear:0}–{fog.FogFar:0}), " +
-                 $"altitude {fog.FogLow:0}–{fog.FogHigh:0} m; world light {fog.WorldLight:0.00}; " +
-                 $"cloud band {_weather.CloudBottom:0}–{_weather.CloudTop:0} m (±{_weather.CloudThickness:0})");
+        return fogRange;
+    }
 
+    /// <summary>The per-rig whiteout overlays and the mission's precipitation field — the half of
+    /// <see cref="SetupWeather"/> that builds NODES rather than writing global shader parameters,
+    /// split out so the fog half (<see cref="ApplyFogGlobals"/>) can be re-run on a camera-state
+    /// change without rebuilding either.</summary>
+    private void SetupWhiteoutAndPrecip(IReadOnlyList<PlayerRig> rigs)
+    {
+        if (_weather == null)
+            return;
         if (_weather.HasCloudBand)
         {
             // The whiteout overlay follows *a* camera, so each rig gets its own: in splitscreen
@@ -529,6 +598,74 @@ public sealed class WeatherRig
         _precip = Precipitation.Create(_weather.Precip, _weather.CloudBottom, _weather.CloudTop);
         if (_precip != null)
             _worldRoot.AddChild(_precip);
+    }
+
+    /// <summary>What one camera-state change asks the fog chain to do: which state it is, the zone
+    /// that state resolved to, whether the globals need re-writing at all
+    /// (<see cref="Applied"/> — false when two states share a zone through the file fallback), and
+    /// whether that resolution WAS a fallback, reported once per state
+    /// (<see cref="FellBack"/>).</summary>
+    public readonly record struct FogZoneChange(int State, string Zone, bool Applied, bool FellBack);
+
+    /// <summary>The B11 edge trigger between <c>PlayerRig.CameraWeatherState</c> and the fog
+    /// globals: it answers "has the camera's state changed, and if so which zone's fog does it
+    /// now wear", and it answers <c>null</c> every other frame.
+    ///
+    /// <para>⚠ Edge-triggered, not per-frame-recomputed, and that is a requirement rather than an
+    /// optimisation: the binary applies a zone from <c>FUN_00472ea0</c> on change only, and the
+    /// C26 rim annulus reads these same fog globals — a per-frame rewrite makes it shimmer at the
+    /// boundary. <see cref="Applications"/> exists so a test can assert the count, since "wrote
+    /// the same value again" is invisible in every other instrument.</para>
+    ///
+    /// <para>Two ways it stays silent. (a) <paramref name="stateDriven"/> false — an explicit
+    /// <c>--sky-zone</c>, which per Decision 5 pins the flight to one named zone so inspection
+    /// poses reproduce. (b) The state changed but resolved to the zone already live: a mission
+    /// that authors no <c>ZONE2</c> falls back to its first zone
+    /// (<see cref="WeatherState.ZoneForState"/>), so the crossing costs nothing and moves no
+    /// pixel.</para></summary>
+    public sealed class FogStateTrigger
+    {
+        private readonly bool _stateDriven;
+        private readonly HashSet<int> _fallbacksReported = new();
+        private string _zone;
+        private int _state;
+
+        /// <param name="stateDriven">False pins the fog to <paramref name="buildZone"/> for the
+        /// whole flight (an explicit <c>--sky-zone</c>).</param>
+        /// <param name="buildZone">The zone <c>WeatherRig.Build</c> already applied — the trigger
+        /// starts live on it, so a chapter whose state-1 zone is that same zone never writes a
+        /// global and renders byte-identically to the static behaviour.</param>
+        public FogStateTrigger(bool stateDriven, string buildZone)
+        {
+            _stateDriven = stateDriven;
+            _zone = buildZone;
+        }
+
+        /// <summary>How many times this trigger has asked for the globals to be re-written.</summary>
+        public int Applications { get; private set; }
+
+        /// <summary>The zone whose fog is live.</summary>
+        public string Zone => _zone;
+
+        /// <summary>The camera's state this frame; null unless it CHANGED since the last call
+        /// (and always null when the trigger is not state-driven).</summary>
+        public FogZoneChange? Next(int state, WeatherState weather)
+        {
+            if (!_stateDriven || state == _state)
+                return null;
+            _state = state;
+            var zone = weather.ZoneForState(state);
+            bool fellBack = !zone.Equals(
+                "zone" + state.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                StringComparison.OrdinalIgnoreCase);
+            bool applied = !zone.Equals(_zone, StringComparison.OrdinalIgnoreCase);
+            if (applied)
+            {
+                _zone = zone;
+                Applications++;
+            }
+            return new FogZoneChange(state, zone, applied, fellBack && _fallbacksReported.Add(state));
+        }
     }
 
     /// <summary>ONE rig's deck copy, resolved for the lit-variant swap: its tiles with both

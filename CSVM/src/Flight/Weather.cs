@@ -234,6 +234,22 @@ public sealed class WeatherState
     public string ResolveZone(string requested) =>
         _zones.ContainsKey(requested) || _zoneNames.Count == 0 ? requested : _zoneNames[0];
 
+    /// <summary>The zone a given camera weather state wears: state <i>n</i> asks for
+    /// <c>zone<i>n</i></c> and goes through <see cref="ResolveZone(string)"/>'s file fallback —
+    /// the binary's <c>FUN_00472ea0</c>, which indexes <c>ZONE1</c>–<c>ZONE3</c> straight off the
+    /// state (<c>PLAN-weather-decompile-match</c> B11).
+    ///
+    /// <para>The fallback is what keeps this safe on data that does not author the requested
+    /// zone: C5 flying into a volume asks for <c>zone3</c> and gets it, but a hypothetical state-2
+    /// flip in a mission with no <c>ZONE2</c> lands on the file's first zone instead of
+    /// <see cref="NoFog"/> — no fog and fullbright, which is what an unguarded lookup would
+    /// render. Deliberately NOT routed through
+    /// <see cref="ResolveZone(string, IReadOnlyList{HorizonZone})"/>: the horizon correction owns
+    /// the DOME's zone (one per flight, resolved at build), and the fog zone changes underneath it
+    /// every time the camera crosses the cloud core — B14 owns reconciling the two.</para></summary>
+    public string ZoneForState(int cameraState) =>
+        ResolveZone("zone" + cameraState.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
     /// <summary>The zone to render when the chapter's own <c>horizon</c> subtree gets a say:
     /// <see cref="ResolveZone(string)"/> first, then <see cref="PreferPopulatedHorizonZone"/>,
     /// and the correction is taken only if <b>this</b> mission also defines fog for it — so the

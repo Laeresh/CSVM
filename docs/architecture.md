@@ -1812,7 +1812,7 @@ sky and fog are always the same zone. Census + per-chapter table: weather.md; th
 
 `CameraWeatherState(cameraPosition, fogZoneArmed, volumes)` (`PLAN-weather-decompile-match` A2,
 `FUN_0042ee40`) is the binary's per-frame camera zone 1/2/3, published by `WeatherRig.Tick` onto
-each `PlayerRig.CameraWeatherState` but consumed by nothing yet (ships dark): 1 default; 2 when
+each `PlayerRig.CameraWeatherState`: 1 default; 2 when
 `HasCloudBand` and the camera's altitude is at/above `CloudCoreBottom` — a THIRD spelling
 alongside `CloudBandCentre` (the deck-regime flip) and `CloudBottom` (the visual floor), all
 within ~80 m of each other in C1 but never unified (Decision 1); 3 when `fogZoneArmed`
@@ -1820,6 +1820,11 @@ within ~80 m of each other in C1 but never unified (Decision 1); 3 when `fogZone
 half-space `Contains` test, not the AABB — and state 3 wins over state 2 on overlap (never
 actually exercised in shipped data: only C5 arms `fogZoneArmed`, and its band sits far above
 every C5 volume).
+`ZoneForState(state)` is B11's consumer-side half: state *n* asks for `zone<n>` and goes through
+`ResolveZone`'s file fallback, so a mission with no `ZONE<n>` keeps its first zone rather than
+falling to `NoFog` (no fog, fullbright). Deliberately NOT routed through the horizon-aware
+`ResolveZone` overload — that one owns the DOME's single per-flight zone; the fog zone changes
+underneath it every time the camera crosses the cloud core.
 
 ## src/Flight/FlightAudio.cs
 Own-plane non-positional loops (engine with throttle-driven pitch, overspeed whine, rattle,
@@ -2449,7 +2454,8 @@ those re-anchor to the view's camera every frame, so N players need N of each.
   world transform, so per-frame anchoring reads `Camera.Position` directly (correct in both modes).
 `CameraWeatherState` (1/2/3, `PLAN-weather-decompile-match` A2) is the same shape as the deck
 regime: a per-rig field, not shared, because splitscreen panes can sit in different states at the
-same instant. Written each frame by `Session/WeatherRig.Tick`; consumed by nothing yet.
+same instant. Written each frame by `Session/WeatherRig.Tick`; rig 0's value drives the per-state
+fog switch there (B11) — the fog globals are session-wide, so only rig 0's is read for them.
 
 ## src/UI/LiveryLab.cs
 The `--viewer` livery editor (key L): squadron stepper (loads the squadron's whole livery via
@@ -3439,11 +3445,36 @@ are built from, and it is logged with the meshed counts it was decided on.
   (`GameSession`'s own `FogVolumeSpec.VolumesOf`/`Load`), not mission weather. `Tick` feeds both
   it and the resolved `WeatherState` into `WeatherState.CameraWeatherState` once per rig, per
   frame, publishing the result onto `PlayerRig.CameraWeatherState` (logged only on a change, at
-  debug verbosity). Ships dark — nothing reads it yet, and never calling `SetFogVolumes` at all
-  just keeps every camera at state 1/2.
+  debug verbosity). Never calling `SetFogVolumes` at all just keeps every camera at state 1/2.
+⚠ **The FOG follows that state; the DOME does not** (`PLAN-weather-decompile-match` B11,
+  2026-08-09, `FUN_00472ea0`). After the per-rig loop, `Tick` hands rig 0's state to
+  `FogStateTrigger.Next`, which resolves `WeatherState.ZoneForState(state)` (state *n* →
+  `zone<n>` through the file fallback) and answers non-null only when the state CHANGED; on an
+  answer that also changes the live zone, `ApplyFogGlobals` rewrites `csky_fog_color`/`_range`/
+  `_alt`/`csky_world_light` for the new zone. `_activeZone` — the dome's zone, resolved once at
+  `Build` from the mission's names plus the horizon census — is deliberately left alone; below the
+  deck a deck chapter therefore flies ZONE1's fog under ZONE2's sky, which is what the original
+  does and what `B14` will reconcile geometrically.
+  - **Edge-triggered, not per-frame**, and that is a requirement: the C26 rim annulus reads these
+    same globals, so a per-frame rewrite would shimmer at the boundary. `FogStateTrigger`
+    (nested, pure, unit-tested — `CSVM.Tests/FogZoneStateTests.cs`) counts its `Applications` so a
+    test can catch a regression that no screenshot can see.
+  - **Rig 0 drives it**, because these are GLOBAL uniforms — one set per session, unlike the
+    whiteout overlay and the deck regime, which are per rig. Splitscreen panes on opposite sides of
+    the deck therefore share player 1's fog. Pre-existing (`SetupWeather` always wrote one global
+    set), not introduced here; per-pane fog needs per-instance uniforms, the hazard the
+    `csky_fog_on` note below exists about.
+  - **`ApplyFogGlobals` is the only writer** and is idempotent; `SetupWhiteoutAndPrecip` holds the
+    node-building half of `SetupWeather`, so a state change never rebuilds an overlay.
+  - The original's per-zone `CLIP_RANGES` far is still NOT applied — a **kept divergence** (fog
+    hides distance in the remake; see `docs/formats/weather.md`'s `CLIP_RANGES` note). `ZONE3`'s
+    300 m far inherits that rule at `C22`.
 ⚠ An explicit `--sky-zone=` skips the geometry correction and is honoured literally, empty dome and
   all (`SkyZoneExplicit`) — it is the flag for looking at a named zone, and `analysis/`'s recorded
-  repro poses depend on it. The weather-file fallback still applies to it, as before.
+  repro poses depend on it. The weather-file fallback still applies to it, as before. Per Decision 5
+  of `PLAN-weather-decompile-match` it now ALSO disarms the state machine above
+  (`FogStateTrigger(stateDriven: false)`): an inspection pose that silently swapped zone with
+  altitude would not be reproducible.
 ⚠ **`GlobalShaderParameterSet`, never `Add`.** `GlobalShaderParameterAdd` runs once per process in
   `Launcher._Ready`; `Build`'s fog/whiteout writes must stay `Set`-only, or every in-process menu
   relaunch that flies a second foggy mission crashes on the duplicate `Add`.

@@ -152,6 +152,19 @@ either invisible. The remake's one-static-zone `--sky-zone` model is therefore a
 that is exact above the band and wrong below it (a below-deck C1 should wear `ZONE1`'s fog);
 whether that gap is visible enough to chase is a backlog question, not settled here.
 
+> **Landed 2026-08-09 (`PLAN-weather-decompile-match` B11).** The remake now switches the FOG
+> block (`FOG_RANGES`, `FOG_ALTITUDE`, `FOG_COLOR` and the `SUNLIGHT`-derived world light) per
+> camera state, on the state edge, exactly as `FUN_00472ea0` does — a below-deck C1 river pose
+> measures a fog wall at **1752 m** against `ZONE1`'s authored 1750, where the static model drew
+> it at 4000. The SKY DOME still comes from one zone per flight (`WeatherRig._activeZone`,
+> `B14`'s business), and the per-zone `CLIP_RANGES` far is still not applied — a kept divergence,
+> per the `CLIP_RANGES` note below. `--sky-zone` becomes a state override (Decision 5): explicit
+> ⇒ static, default ⇒ state-driven. **The `SUNLIGHT_*` pair is NOT uniformly identical across the
+> deck chapters** — 6 of the 24 C1/C1C/C2B/C4 missions author a different `SUNLIGHT_AMBIENT`/
+> `_DIFFUSE`/`_COLOR_*` per zone (C1 M02/M05, C1C M01/MP1/MP3, C2B M04), so the world light rides
+> the state too; C1/IA1 — the mission every golden and every recorded A/B pose flies — is one of
+> the 18 identical ones, which is why the change reads as fog-only in every instrument on file.
+
 Decompiled sources are reproducible from `crimson.exe` in Ghidra at the addresses named
 (loader `FUN_004bc680` = `weather.cpp`, zone parser `FUN_004bc3e0`, per-frame `FUN_0042ee40`,
 zone applier `FUN_00472ea0`, world init `FUN_004735b0`).

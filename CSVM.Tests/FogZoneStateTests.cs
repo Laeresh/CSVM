@@ -1,0 +1,155 @@
+using CSVM.Flight;
+using CSVM.Mech3;
+using CSVM.Session;
+using Xunit;
+
+namespace CSVM.Tests;
+
+/// <summary>
+/// B11: the camera weather state (A2) driving which zone's fog the flight wears —
+/// <see cref="WeatherState.ZoneForState"/> (state n → <c>ZONE&lt;n&gt;</c>, through
+/// <see cref="WeatherState.ResolveZone(string)"/>'s file fallback) and
+/// <see cref="WeatherRig.FogStateTrigger"/> (apply on the EDGE, never per frame).
+///
+/// <para>The two halves are tested apart because they fail apart: a wrong mapping renders the
+/// wrong zone's fog, a wrong trigger renders the right zone's fog over and over — and the second
+/// is invisible in a screenshot while being exactly what would make the C26 rim annulus shimmer
+/// at the boundary (the item's ⚠ trap).</para>
+/// </summary>
+public class FogZoneStateTests
+{
+    [Fact]
+    public void AStateWithNoAuthoredZoneFallsBackToTheFilesFirstZone()
+    {
+        var weather = OneZoneFixture();
+        Assert.Equal(new[] { "zone1" }, weather.ZoneNames);
+        Assert.Equal("zone1", weather.ZoneForState(1));
+        // Without the fallback this would answer "zone2", whose Fog() lookup misses and returns
+        // NoFog — no fog at all and world light 1.0 (fullbright), the failure the fallback exists
+        // to stop. Same for the C5-shaped state 3.
+        Assert.Equal("zone1", weather.ZoneForState(2));
+        Assert.Equal("zone1", weather.ZoneForState(3));
+    }
+
+    [ExtractedDataFact]
+    public void ADeckChaptersStatesMapToItsTwoAuthoredZones()
+    {
+        // C1/IA1 is the item's subject: below the deck (state 1) it must wear ZONE1's 1000-1750 m
+        // fog, above it (state 2) ZONE2's 1000-4000 m — the 2.3x below-deck error B11 closes.
+        var weather = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "IA1"));
+        Assert.NotNull(weather);
+        Assert.Equal("zone1", weather!.ZoneForState(1));
+        Assert.Equal("zone2", weather.ZoneForState(2));
+        Assert.Equal(1750f, weather.Fog(weather.ZoneForState(1)).FogFar, 1);
+        Assert.Equal(4000f, weather.Fog(weather.ZoneForState(2)).FogFar, 1);
+        // ...and the state-2 fog is what the flight rendered EVERYWHERE before this item, which is
+        // what makes the below-deck half a change and the above-deck half an invariant.
+        Assert.Equal(970f, weather.Fog(weather.ZoneForState(1)).FogLow, 1);
+        Assert.Equal(4000f, weather.Fog(weather.ZoneForState(2)).FogLow, 1);
+    }
+
+    [ExtractedDataFact]
+    public void C5sStatesResolveToItsZone1AndZone3()
+    {
+        // C5 ships ZONE1 + ZONE3 (no ZONE2 anywhere in the chapter), so its states exercise both
+        // the direct hit (3 → zone3, C22's business) and the fallback (2 → zone1).
+        var weather = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C5", "IA1"));
+        Assert.NotNull(weather);
+        Assert.Equal("zone1", weather!.ZoneForState(1));
+        Assert.Equal("zone1", weather.ZoneForState(2));
+        Assert.Equal("zone3", weather.ZoneForState(3));
+    }
+
+    [Fact]
+    public void TheTriggerAppliesOnTheEdgeAndNeverAgainWhileTheStateHolds()
+    {
+        // The ⚠ trap: FUN_00472ea0 runs on a state CHANGE. Re-writing the fog globals every frame
+        // would render identically at a static pose and shimmer the C26 rim annulus in motion, so
+        // the count is the only thing that can catch it.
+        var weather = OneZoneFixture();
+        var trigger = new WeatherRig.FogStateTrigger(stateDriven: true, buildZone: "zone2");
+
+        var first = trigger.Next(1, weather);
+        Assert.NotNull(first);
+        Assert.True(first!.Value.Applied);
+        Assert.Equal("zone1", first.Value.Zone);
+        Assert.Equal(1, trigger.Applications);
+
+        // Sixty more frames at the same altitude: nothing to say, nothing written.
+        for (int frame = 0; frame < 60; frame++)
+            Assert.Null(trigger.Next(1, weather));
+        Assert.Equal(1, trigger.Applications);
+        Assert.Equal("zone1", trigger.Zone);
+    }
+
+    [Fact]
+    public void AStateChangeThatResolvesToTheLiveZoneWritesNothing()
+    {
+        // The one-zone fixture climbing through its band: state 1 → 2 is a real edge, but both
+        // states resolve to zone1, so the globals must not be touched — the non-deck chapters'
+        // "costs nothing, changes nothing" guarantee, asserted on the rule rather than inferred
+        // from a golden. The fallback is still REPORTED, once, so a silent no-op is explained.
+        var weather = OneZoneFixture();
+        var trigger = new WeatherRig.FogStateTrigger(stateDriven: true, buildZone: "zone1");
+
+        var up = trigger.Next(2, weather);
+        Assert.NotNull(up);
+        Assert.False(up!.Value.Applied);
+        Assert.True(up.Value.FellBack);
+        Assert.Equal("zone1", up.Value.Zone);
+        Assert.Equal(0, trigger.Applications);
+
+        // Down and up again: the fallback line is not repeated.
+        Assert.False(trigger.Next(1, weather)!.Value.FellBack);
+        Assert.False(trigger.Next(2, weather)!.Value.FellBack);
+        Assert.Equal(0, trigger.Applications);
+    }
+
+    [Fact]
+    public void AnExplicitSkyZoneKeepsTheFogStatic()
+    {
+        // Decision 5: --sky-zone is a state OVERRIDE. An inspection pose that silently swapped
+        // zone with altitude would not be reproducible, and analysis/ repro poses depend on it.
+        var weather = OneZoneFixture();
+        var trigger = new WeatherRig.FogStateTrigger(stateDriven: false, buildZone: "zone2");
+
+        Assert.Null(trigger.Next(1, weather));
+        Assert.Null(trigger.Next(2, weather));
+        Assert.Null(trigger.Next(3, weather));
+        Assert.Equal(0, trigger.Applications);
+        Assert.Equal("zone2", trigger.Zone);
+    }
+
+    [ExtractedDataFact]
+    public void TheDeckChaptersSwitchBothFogAndWorldLightWhileTheOtherChaptersCannot()
+    {
+        // The SUNLIGHT_* survey's finding, pinned: the pair is NOT uniformly identical across the
+        // deck chapters (6 of 24 deck-chapter missions differ), so WorldLight rides the state too
+        // — but C1/IA1, the mission every golden and every A/B pose flies, is one of the identical
+        // ones, which is why the item's below-deck change is fog-only in practice.
+        var ia1 = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "IA1"));
+        Assert.NotNull(ia1);
+        Assert.Equal(
+            ia1!.Fog(ia1.ZoneForState(1)).WorldLight,
+            ia1.Fog(ia1.ZoneForState(2)).WorldLight,
+            3);
+
+        var m02 = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "M02"));
+        Assert.NotNull(m02);
+        // ZONE1 ambient 0.20 / diffuse 1.5 vs ZONE2 0.25 / 1.2 — a real per-state brightness the
+        // static resolution could never render.
+        Assert.NotEqual(
+            m02!.Fog(m02.ZoneForState(1)).WorldLight,
+            m02.Fog(m02.ZoneForState(2)).WorldLight,
+            3);
+    }
+
+    // The zrdr fixture authors ZONE1 only (fixtures/zrdr/weather.json), which is precisely the
+    // shape the fallback exists for — a state-2 flip there has no ZONE2 to land on.
+    private static WeatherState OneZoneFixture()
+    {
+        var weather = WeatherState.Load(TestData.Fixture("zrdr"));
+        Assert.NotNull(weather);
+        return weather!;
+    }
+}

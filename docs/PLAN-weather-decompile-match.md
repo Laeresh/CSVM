@@ -156,7 +156,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — Deck chapters: zones, deck, sky
 
-11. ☐ Per-state fog + clip + sunlight switching (ZONE1 below / ZONE2 above)
+11. ☑ Per-state fog + clip + sunlight switching (ZONE1 below / ZONE2 above)
 12. ☐ `zone_id` visibility gate switched with the camera state
 13. ☐ Above-deck floor at the authored tile altitude
 14. ☐ Below-deck ceiling = the zone-1 dome (`h_zone1scroll`), scrolling, camera-anchored
@@ -312,7 +312,109 @@ AABB (A2 of overcast-match already corrected that once).
 
 # Wave B — Deck chapters: zones, deck, sky
 
-## B11 ☐ Per-state fog + clip + sunlight switching (ZONE1 below / ZONE2 above)
+## B11 ☑ Per-state fog + clip + sunlight switching (ZONE1 below / ZONE2 above)
+
+**Landed (2026-08-09).** `WeatherRig.Tick` hands rig 0's `PlayerRig.CameraWeatherState` to a new
+nested `FogStateTrigger`, which resolves `WeatherState.ZoneForState(state)` (state *n* → `zone<n>`
+through `ResolveZone`'s file fallback) and answers non-null **only on a state edge**; where that
+edge also changes the live zone, the extracted `ApplyFogGlobals` rewrites `csky_fog_color` /
+`csky_fog_range` / `csky_fog_alt` / `csky_world_light` for the new zone, through the same
+sRGB→linear path `Build` always used. `SetupWeather` splits into that writer plus
+`SetupWhiteoutAndPrecip`, so a zone change never rebuilds an overlay. The DOME is untouched:
+`_activeZone` stays the one zone `Build` resolved (`PreferPopulatedHorizonZone` still owns it), so
+below the deck a deck chapter now flies ZONE1's fog under ZONE2's sky — `B14`'s to reconcile.
+**Far clip stays the remake's own** (fog hides distance): recorded as a kept divergence in
+`architecture.md` and `weather.md`, and `C22` inherits it for ZONE3's 300 m.
+
+**⚠ The `SUNLIGHT_*` survey (step 1) DISPROVES the plan's own "identical within each pair"
+assumption, so this item is fog + world light, not fog alone.** All 24 missions of C1/C1C/C2B/C4
+diffed key-by-key (script in the session scratchpad; regenerate by walking
+`extracted/{C1,C1C,C2B,C4}/*/zrdr/weather.zrd.json`): **6 differ**, 18 are identical.
+
+| mission | what differs between `ZONE1` and `ZONE2` | `WorldLight` (A + D·0.46) |
+|---|---|---|
+| C1 M02 | ambient .20/.25, diffuse 1.5/1.2, bicolored 1/0, both colour triples | 0.89 → 0.80 |
+| C1 M05 | same shape as M02 | 0.89 → 0.80 |
+| C1C M01 | ambient .60/.30, `COLOR_AMBIENT` (.5,.5,1)/(.3,.3,1) | 1.00 → 0.76 |
+| C1C MP1 | diffuse 2.0/0.4, `COLOR_AMBIENT` (.5,.5,1)/(1,1,1) | 1.00 → 0.68 |
+| C1C MP3 | same as MP1 | 1.00 → 0.68 |
+| C2B M04 | ambient .20/.60, diffuse 2.0/0.4 | 1.00 → 0.78 |
+
+`WorldLightFactor` therefore rides the state — it is read off `ZoneFog.WorldLight`, so routing it
+was free once the fog zone moved. **No re-tuning:** `SunIncidence`/`MinWorldLight` are untouched
+(the ⚠ trap), and every mission the calibration was measured on (C1/IA1, C1C/IA1, C2B/IA1, all of
+C4) is in the identical 18, so `CAP-11`'s numbers still stand as taken. A below-deck brightness
+residual remains `D31`'s to measure.
+
+**Verify — goldens.** `.\RunTests.ps1`: 756 units, 29/29 engine suites, **6 goldens moved and 7 did
+not**, and the moved set is exactly the predicted footprint (GOLD-5). *Not re-blessed — the
+orchestrator re-blesses once per wave.*
+
+| moved | old → new |
+|---|---|
+| `c1-waterfall` | `c81a000a0b39ddf6cb7efa92a8ff7c72` → `14259e6e51b27c8fbc119a01a8ab9f11` |
+| `c1c-rain` | `ab24ff1615815683fa848ae20d470e9d` → `609dc242ad7e62919ce1e18926837d21` |
+| `c2b-rain` | `a092c1cace4681603b41c575e9bd3767` → `1a511f632ebbd6b82e4c8911dd05ea3f` |
+| `c4-snow` | `00e3ffb482d7e6ed66287c351fdea97a` → `acca488c414077645f3cab3e3f13f14d` |
+| `c1-flight` | `9a5369f6febd59369c9218f8cae50066` → `bdab1b39d4bffb007cb04a33f2651278` |
+| `c1-destroy-effects` | `dfcad9ed412ffec851e7968a1e6d638b` → `6e584eee1c7cfe1684b4bcf90d179b97` |
+
+Every mover is a deck chapter below its band (C1 y 60/250/flight, C1C 700, C2B 200, C4 958 — all
+under their own `CloudCoreBottom`), and **no deckless chapter moved at all**: `c1b-night-sea`,
+`c2-city`, `c3-island`, `c5-city-night`, plus `viewer-bhawk` and `empty-stage`. `c1-crash` is the
+one deck-chapter golden that did NOT move, and it is inert by construction (DIAG-10): its camera
+looks steeply down at the crash site with the whole frame inside 1000 m, so the ramp is 0 under
+both zones, no horizon or dome is in shot, and C1/IA1's world light is identical between the pair.
+
+**Verify — the fog wall at the C1 river pose** (`.scratch/b11/`, instrument `fogwall.py`,
+montage `AB-river-fogwall.png`). `--freecam --chapter=C1 --det --mute --pos=-7325,192,-3829
+--direction=-0.997,-0.1,0.070` (`y 192`, the corrected overlay altitude), before =
+`--sky-zone=zone2` (which IS the pre-item behaviour, Decision 5), after = default. Both logs quote
+the zone they rendered (METHOD-15/METHOD-6): before `weather [zone2] … 1000–4000`, after the same
+build line plus `camera state 1 -> fog zone 'zone1' — fog 1000-1750 m, altitude 970-1047 m`.
+
+The measurement avoids SHOT-23's pitch/horizon half entirely by never using scene geometry: a
+third `--no-fog` render at the same pose gives every pixel's unfogged colour, both fogged frames
+are **linearised** (the shader lerps ALBEDO in linear space — reading φ off the sRGB bytes instead
+returns a systematically low 3.06 where the truth is 4.00), and φ is the least-squares projection
+onto the fog colour. Two predictions, both able to fail:
+
+- φ_after / φ_before = 3000/750 = **4.000** wherever neither ramp clamps. Measured, binned on the
+  before frame's own distance ruler `d = 1000 + 3000·φ_before`: **4.004** (1150–1300 m), **3.962**
+  (1300–1450), **3.970** (1450–1600), then falling away — 3.781, **2.825**, 2.807 — from the
+  1600–1750 bin on, which is the after ramp clamping.
+- Inverting the slope, `far_after = 1000 + 3000/3.989` = **1752 m** against ZONE1's authored
+  **1750** (the before frame's own far is 4000 by construction of the ruler). The 2.3× error the
+  plan quantified is closed to 0.1 %.
+
+Qualitatively against `OriginalScreenshots/C1 IA1 Fog river.png`: the far ridge that stands clearly
+at ~3.5–4 km in the before frame is gone in the after frame, and the original shows no such ridge —
+terrain dissolves just past the mid-ground there too.
+
+**Verify — the invariants** (METHOD-12), all pixel-exact on this build:
+
+| check | pose | result |
+|---|---|---|
+| above-deck unchanged | C1 `-7323,1192,-3829` dir `0,0,-1` (the literal pinned above-deck pose, `PLAN-overcast-match` B12/A4) | state-driven vs `--sky-zone=zone2` **pixmd5 identical**, 0 px differ |
+| able-to-fail control | same pose, `--sky-zone=zone1` | **489,117 px (53 % of frame) differ** — the identity above is a real pass, not a dead check (METHOD-9/10) |
+| C2 unchanged | `-5722,186,-3457` dir `-0.438,-0.15,-0.899` (the `c2-city` golden's pose) | state-driven vs `--sky-zone=zone1` **pixmd5 identical**; the log carries **no** `camera state -> fog zone` line at all, so not one global was rewritten — identical *by construction*, corroborated by the unmoved golden |
+
+**Non-deck chapters cost nothing** (step 4), and that is structural rather than measured: their
+`CLOUD_COVER` is authored out of reach (C1B/C3 10000–11000, C2 19024–20124, C5 9950–10150), so the
+state never leaves 1; `ZoneForState(1)` = `zone1`, which is exactly what each of their static
+resolutions already produced (C1B/C2/C3 via `PreferPopulatedHorizonZone`'s bare-marker correction,
+C5 via the file fallback), so the trigger — seeded with `Build`'s own `_activeZone` — finds nothing
+to change and never writes. Their four goldens confirm it.
+
+**Tests** (`CSVM.Tests/FogZoneStateTests.cs`, 7 new): the state→zone mapping on a deck chapter
+(C1/IA1 1→zone1 far 1750, 2→zone2 far 4000) and on C5 (3→zone3, 2→zone1 by fallback); the
+one-`ZONE1` fixture answering `zone1` for states 1/2/3 — the case that would otherwise fall to
+`NoFog`, fullbright; the trigger applying once and staying silent for 60 further frames at the same
+state; a state change that resolves to the live zone writing nothing while still reporting the
+fallback exactly once; `--sky-zone`'s `stateDriven: false` keeping every state silent; and the
+`SUNLIGHT_*` finding pinned from the extraction (C1/IA1 equal, C1/M02 not).
+
+**Original approach (kept for reference).**
 
 **Goal.** In the deck chapters, below-deck flight wears ZONE1's fog ranges/altitude/colour (C1:
 far 1750, not 4000) and above-deck flight wears ZONE2's, switched invisibly inside the whiteout
