@@ -50,4 +50,12 @@ public sealed class PlayerRig
 
     /// <summary>This player's full-pane cloud-band whiteout overlay, faded by camera altitude.</summary>
     public ColorRect? Whiteout;
+
+    /// <summary>This player's own camera weather state (1/2/3 — <c>WeatherState.CameraWeatherState</c>,
+    /// <c>PLAN-weather-decompile-match</c> A2), published once per frame by
+    /// <c>Session.WeatherRig.Tick</c>. Per rig, not per session — a splitscreen pane's camera can
+    /// sit in a different state than another pane's at the same instant, same as
+    /// <see cref="Deck"/>'s regime. Consumed by nothing yet; defaults to 1 (the binary's own
+    /// default) until the first <c>Tick</c> resolves it.</summary>
+    public int CameraWeatherState = 1;
 }

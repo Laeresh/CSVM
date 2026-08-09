@@ -18,6 +18,11 @@ namespace CSVM.Flight;
 /// mission shows isn't in these readers — the remake picks it via <c>--sky-zone</c>, default
 /// zone2 = night); the cloud band and wind are global.</para>
 ///
+/// <para><see cref="CameraWeatherState"/> is the binary's per-frame camera zone 1/2/3
+/// (<c>PLAN-weather-decompile-match</c> A2, <c>FUN_0042ee40</c>), computed from a camera position
+/// against this mission's <c>CLOUD_COVER</c> band plus the chapter's fog volumes; published each
+/// frame by <c>WeatherRig.Tick</c> but consumed by nothing yet.</para>
+///
 /// <para><b>The zone names are per chapter, not a fixed pair.</b> C1–C4 ship
 /// <c>ZONE1</c>+<c>ZONE2</c>, but all 8 C5 missions ship <c>ZONE1</c>+<b><c>ZONE3</c></b> — so
 /// the zone table is read from whatever <c>ZONE*</c> keys the file carries, and
@@ -74,6 +79,17 @@ public sealed class WeatherState
     /// only for as long as it stays inside that core. Meaningless without
     /// <see cref="HasCloudBand"/>.</summary>
     public float CloudBandCentre => (CloudTop + CloudBottom) * 0.5f;
+
+    /// <summary>The whiteout core's BOTTOM edge — <c>CloudBandCentre - CloudThickness/2</c>,
+    /// precomputed by the binary at world init (<c>FUN_004735b0</c> into <c>0071c2d0</c>) and
+    /// checked every frame by <c>FUN_0042ee40</c>: camera altitude at/above this is camera state
+    /// 2. Deliberately a THIRD spelling, distinct from <see cref="CloudBandCentre"/> (the
+    /// deck-regime ceiling/floor flip, <c>WeatherRig.DeckRegime</c>, A7) and from
+    /// <see cref="CloudBottom"/> (the visual band's own floor) — the three sit within 80 m of each
+    /// other in C1 but the binary computes state-2 and the deck flip as two separate thresholds
+    /// (Decision 1, <c>PLAN-weather-decompile-match</c>). Meaningless without
+    /// <see cref="HasCloudBand"/> (see <see cref="CameraWeatherState"/>, which guards it).</summary>
+    public float CloudCoreBottom => CloudBandCentre - (CloudThickness * 0.5f);
 
     /// <summary>The cloud band's own colours from CLOUD_COVER's <c>TOP_COLOR</c>/<c>BOTTOM_COLOR</c>,
     /// when the mission carries them (integer-RGB in the data — normalized by
@@ -291,6 +307,34 @@ public sealed class WeatherState
         if (!HasCloudBand)
             return top;
         return bottom.Lerp(top, Mathf.Clamp((altitude - CloudBottom) / (CloudTop - CloudBottom), 0f, 1f));
+    }
+
+    /// <summary>The camera's per-frame weather state (<c>FUN_0042ee40</c>, camera state 1/2/3 —
+    /// <c>PLAN-weather-decompile-match</c> A2): 1 by default; 2 when this mission authors a
+    /// <c>CLOUD_COVER</c> band and <paramref name="cameraPosition"/>'s altitude is at/above
+    /// <see cref="CloudCoreBottom"/> (the whiteout core's bottom edge, NOT the band centre and
+    /// NOT <see cref="CloudBottom"/>); 3 when <paramref name="fogZoneArmed"/> and the camera sits
+    /// inside any of <paramref name="volumes"/> — the AUTHORED shape
+    /// (<c>FogVolumeBox.Contains</c>'s exact half-space test), not the volume's AABB.
+    ///
+    /// <para>State 3 takes precedence over state 2, matching the binary's assignment order (it
+    /// computes state 3 after state 2, so an in-volume camera is always state 3 regardless of
+    /// altitude) — this never actually arbitrates in shipped data, since only C5 arms
+    /// <paramref name="fogZoneArmed"/> and its band sits at 9950-10150 m, far above any C5
+    /// volume.</para>
+    ///
+    /// <para>Exposed but consumed by nothing yet — <c>WeatherRig.Tick</c> publishes it per camera
+    /// each frame; wiring a consumer is left to later items in the same plan
+    /// (B11/B12/C21/C22).</para></summary>
+    public int CameraWeatherState(
+        Vector3 cameraPosition, bool fogZoneArmed, IReadOnlyList<FogVolumeBox> volumes)
+    {
+        int state = HasCloudBand && cameraPosition.Y >= CloudCoreBottom ? 2 : 1;
+        if (fogZoneArmed)
+            foreach (var volume in volumes)
+                if (volume.Contains(cameraPosition))
+                    return 3;
+        return state;
     }
 
     private static float WorldLightFactor(ZrdrDict zone)

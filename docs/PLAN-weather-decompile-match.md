@@ -152,7 +152,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Decode landing & plumbing
 
 1. ☑ Land the decompile decode in the format docs; retire the dead caveats
-2. ☐ Camera weather-state plumbing (state 1/2/3 in `WeatherState`, no visual change)
+2. ☑ Camera weather-state plumbing (state 1/2/3 in `WeatherState`, no visual change)
 
 ### Wave B — Deck chapters: zones, deck, sky
 
@@ -251,7 +251,40 @@ the original kept struck/quoted (see `weather.md`'s A3/A6 precedent). The A7 *be
 stays credited: it measured the right thing and named the right altitudes; only the mechanism is
 replaced.
 
-## A2 ☐ Camera weather-state plumbing (state 1/2/3, no visual change)
+## A2 ☑ Camera weather-state plumbing (state 1/2/3, no visual change)
+
+**Landed (2026-08-09).** `WeatherState.CameraWeatherState(cameraPosition, fogZoneArmed, volumes)`
+(`CSVM/src/Flight/Weather.cs`) computes the binary's per-frame camera zone exactly as
+`FUN_0042ee40` does: 1 default; 2 when `HasCloudBand` and the camera's altitude is at/above the
+new `CloudCoreBottom` property (`CloudBandCentre − CloudThickness/2` — a THIRD spelling next to
+`CloudBandCentre`, the deck-regime flip, and `CloudBottom`, the visual floor; never unified, per
+Decision 1); 3 when `fogZoneArmed` and the camera is inside any of `volumes` via the existing
+`FogVolumeBox.Contains` exact half-space test (not the AABB), and state 3 wins over state 2 on
+overlap, matching the binary's assignment order.
+
+`FogVolumeSpec` gets one new member, `FogZoneArmed` (`FogZone != 0` — `FUN_0044e010`'s "stores
+`value != 0`"), true only for C5. `WeatherRig` gets `SetFogVolumes(volumes, fogZoneArmed)`, called
+from `GameSession` right beside the existing `FogVolumeSpec.VolumesOf`/`Load` call it already made
+for the ambient cloud field — no new load path, just handing the same data to a second consumer.
+`Tick` calls `CameraWeatherState` once per rig per frame and publishes the result onto a new
+`PlayerRig.CameraWeatherState` field (default 1), logged only on a change at debug verbosity. Per
+rig, not per session, for the same reason as the deck regime: splitscreen panes can disagree.
+
+Ships dark exactly as scoped: nothing reads `PlayerRig.CameraWeatherState` yet, and `--sky-zone`
+is untouched (Decision 5's state-override semantics are B-wave's to add). New tests in
+`CSVM.Tests/CameraWeatherStateTests.cs` pin the threshold edges (just-below/at/just-above
+`CloudCoreBottom`), a control assertion that a bug reading `CloudBandCentre` or `CloudBottom`
+instead would fail even though the edge tests pass, a no-`CLOUD_COVER` mission pinned to state 1
+at any altitude, state-3 armed/disarmed/in/out combinations, and the state-3-over-state-2
+precedence case — against a new hand-authored fixture (`CSVM.Tests/fixtures/zrdr/weather.json`
++ `fixtures/weather-no-cloud/weather.json`, invented values per the fixtures' own rule, not copied
+from an extraction).
+
+**Verify.** `.\RunTests.ps1` full green: 749 unit tests (0 skipped, run with `CSVM_DATA_ROOT` set),
+29/29 engine suites, and all 13 goldens hash-identical to the committed manifest — confirming zero
+visual change, since nothing consumes the new state yet.
+
+**Original approach (kept for reference).**
 
 **Goal.** `WeatherState` exposes a per-frame `CameraWeatherZone` (1, 2, or 3) computed exactly as
 the binary does; `WeatherRig.Tick` publishes it; nothing consumes it yet. Ships dark.

@@ -873,8 +873,9 @@ public partial class GameSession : Node3D
             // it is atmosphere: a plain --viewer inspection shows the data, not the sky, and it
             // shares their `weather` startup phase ("skydome + fog + cloud visuals").
             var fogVolumes = Mech3.FogVolumeSpec.VolumesOf(state.Gamez);
+            var fogVolumeSpec = Mech3.FogVolumeSpec.Load(SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter));
             var cloudField = Effects.FogVolumeClutter.Create(state.Gamez, state.Textures,
-                Mech3.FogVolumeSpec.Load(SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter)), fogVolumes);
+                fogVolumeSpec, fogVolumes);
             if (cloudField != null)
             {
                 _worldRoot!.AddChild(cloudField);
@@ -900,6 +901,10 @@ public partial class GameSession : Node3D
             }
 
             _weatherRig = new WeatherRig(_spec, _worldRoot!);
+            // A2's plumbing: hand the rig the chapter's own fog-volume census + whether its
+            // fogvol.zrd arms fog_zone, so Tick can resolve each camera's weather state (1/2/3).
+            // Ships dark — nothing reads WeatherRig/PlayerRig.CameraWeatherState yet.
+            _weatherRig.SetFogVolumes(fogVolumes, fogVolumeSpec?.FogZoneArmed ?? false);
             // The horizon's zone children go in with the mission's weather: the zone the fog and
             // the dome share is picked from both (three chapters ship an empty zone2).
             _weatherRig.Build(state.MissionZrdrPath, _rigs, builder.HorizonZones(),

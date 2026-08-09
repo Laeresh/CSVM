@@ -133,6 +133,14 @@ public sealed class FogVolumeSpec
     /// (<c>BL-100</c>) — see the open question in docs/formats/fogvol.md.</summary>
     public int? FogZone { get; init; }
 
+    /// <summary>Whether this chapter's fogvol arms the in-volume whiteout + camera state 3
+    /// (<c>FUN_0044e010</c>: stores <c>value != 0</c>). C5 (<c>FogZone</c> 1) is the only chapter
+    /// this is true for — C1/C1C/C2B/C4 ship <c>FogZone</c> 0 (present, disarmed) and C1B/C2/C3
+    /// carry no <c>fog_zone</c> key at all (<see cref="FogZone"/> null). Consumed by
+    /// <see cref="WeatherState.CameraWeatherState"/>'s state-3 test
+    /// (<c>PLAN-weather-decompile-match</c> A2).</summary>
+    public bool FogZoneArmed => FogZone is { } zone && zone != 0;
+
     /// <summary><c>distance</c> — the scatter's mean spacing in metres, i.e. the side of the cell
     /// that carries one placement (130 in C1/C1C/C2B/C4, 80 in C5; the degenerate copies carry
     /// 206.25). An areal density, not a lattice phase — docs/formats/fogvol.md.</summary>

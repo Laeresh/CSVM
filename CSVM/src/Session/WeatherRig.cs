@@ -4,6 +4,7 @@ using CSVM.Effects;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.UI;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Session;
@@ -21,7 +22,13 @@ namespace CSVM.Session;
 /// re-add a hand-tuned per-rig cloud field keyed off <c>CLOUD_COVER</c>. It is the
 /// chapter's authored <c>fogvol.zrd</c> clutter scattered through its <c>fvol*</c> volumes —
 /// gamez + chapter-zrdr data, world-anchored and shared by every pane — built beside the world in
-/// <c>GameSession</c> (<see cref="CSVM.Effects.FogVolumeClutter"/>).</para></summary>
+/// <c>GameSession</c> (<see cref="CSVM.Effects.FogVolumeClutter"/>).</para>
+///
+/// <para><see cref="Tick"/> also publishes each rig's own
+/// <see cref="WeatherState.CameraWeatherState"/> onto <c>PlayerRig.CameraWeatherState</c>
+/// (<c>PLAN-weather-decompile-match</c> A2) — the binary's per-frame camera zone 1/2/3, fed by
+/// this mission's <see cref="WeatherState"/> plus <see cref="SetFogVolumes"/>'s chapter data.
+/// Ships dark: nothing reads it yet.</para></summary>
 public sealed class WeatherRig
 {
     // ⚠ TUNE (C21/C25, 2026-08-08) — how far above the camera the deck hangs while the camera
@@ -90,6 +97,14 @@ public sealed class WeatherRig
     // The deck tiles' undimmed meshes by dimmed-mesh RID (WorldBuilder.CloudDeckUndimmedMeshes).
     private IReadOnlyDictionary<Rid, ArrayMesh> _deckUndimmedMeshes = new Dictionary<Rid, ArrayMesh>();
     private bool _loggedDeckLighting;
+    // The chapter's fog-volume census + whether its fogvol.zrd arms fog_zone (A2) — the two
+    // inputs CameraWeatherState's state-3 test needs. Set separately from Build for the same
+    // reason as _deckCenter: this is chapter/world data (GameSession's fogVolumes census), not
+    // mission weather, built once beside the world rather than per rig. Empty/false by default,
+    // which simply never resolves to state 3 (most chapters, and every chapter before this is
+    // wired up).
+    private IReadOnlyList<FogVolumeBox> _fogVolumes = Array.Empty<FogVolumeBox>();
+    private bool _fogZoneArmed;
 
     public WeatherRig(SessionSpec spec, Node3D worldRoot)
     {
@@ -158,6 +173,19 @@ public sealed class WeatherRig
         _loggedDeckLighting = false;
     }
 
+    /// <summary>The chapter's fog-volume census (<c>FogVolumeSpec.VolumesOf</c>) and whether its
+    /// <c>fogvol.zrd</c> arms <c>fog_zone</c> (<see cref="FogVolumeSpec.FogZoneArmed"/>) — set
+    /// separately from <see cref="Build"/> for the same reason as <see cref="SetDeckCenter"/>:
+    /// this is chapter/world data (<c>GameSession</c>'s own fog-volume load), not mission weather.
+    /// Feeds <see cref="Tick"/>'s per-camera <see cref="WeatherState.CameraWeatherState"/> call
+    /// (<c>PLAN-weather-decompile-match</c> A2). Never called (or called with an empty/disarmed
+    /// pair) simply keeps every camera at state 1/2 — it never resolves to state 3.</summary>
+    public void SetFogVolumes(IReadOnlyList<FogVolumeBox> volumes, bool fogZoneArmed)
+    {
+        _fogVolumes = volumes;
+        _fogZoneArmed = fogZoneArmed;
+    }
+
     /// <summary>Everything decided per *camera*, once per rig — one in single player, one per
     /// pane in splitscreen: re-centers the skydome, fades the cloud-band whiteout, places the
     /// cloud deck in its altitude regime, and gates the two ambient cloud populations by that
@@ -174,6 +202,21 @@ public sealed class WeatherRig
         foreach (var rig in rigs)
         {
             var camPos = rig.Camera.Position;
+
+            // A2's plumbing: the binary's per-frame camera weather state (1/2/3, FUN_0042ee40),
+            // published on the rig for whichever later item consumes it — nothing does yet, so
+            // this ships dark (no visual change). Logged only on a change, at debug verbosity,
+            // since a flight spends whole minutes in one state.
+            if (_weather != null)
+            {
+                int state = _weather.CameraWeatherState(camPos, _fogZoneArmed, _fogVolumes);
+                if (state != rig.CameraWeatherState)
+                {
+                    Log.Debug("world",
+                        $"camera weather state: player {rig.Index} {rig.CameraWeatherState} -> {state}");
+                    rig.CameraWeatherState = state;
+                }
+            }
 
             // Keep the skydome centered on the camera in ALL axes (a pure zero-parallax
             // backdrop, like the original): the moon then stays at its designed 28° elevation

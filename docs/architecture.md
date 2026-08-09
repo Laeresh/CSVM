@@ -626,10 +626,11 @@ off-engine (`CSVM.Tests/FogVolumeTests.cs` pins all eight chapters).
 ⚠ **Neither half alone says whether a chapter has clouds.** C1B/C2/C3 ship a reader file naming a
   `cloudsprite` template no gamez carries, AND no `fvol*` node, AND no `clutter` key. The parser
   deliberately reads their keyless block anyway so the empty result is a proven lookup failure.
-⚠ `fog_zone` (and C5's `fog_color`/`*_fade_dist`) are read and reported, consumed by nothing. It is
-  NOT the sky/fog zone selector — `docs/HISTORY.md`'s "no chapter has a `fog_zone` key" is a wrong
-  negative (five do), but the values do not name a weather zone either; see fogvol.md. `BL-277`'s
-  geometry rule stands.
+⚠ `fog_zone` (and C5's `fog_color`/`*_fade_dist`) are read and reported. It is NOT the sky/fog zone
+  selector — `docs/HISTORY.md`'s "no chapter has a `fog_zone` key" is a wrong negative (five do),
+  but the values do not name a weather zone either; see fogvol.md. `BL-277`'s geometry rule
+  stands. `FogZoneArmed` (`FogZone != 0`, `PLAN-weather-decompile-match` A2, `FUN_0044e010`) is
+  its first consumer — `WeatherState.CameraWeatherState`'s state-3 gate, true only for C5.
 ⚠ A volume is NOT the `CLOUD_COVER` band: only C1's floor coincides, and C1C/C4/C5 all disagree.
 ⚠ `FindMapSpanningSlab` (A5) is the data-driven test for "does this chapter have a map-spanning
   slab to continue past the map edge" — never a chapter name or a hardcoded `fvol1..9`. A volume
@@ -1809,6 +1810,17 @@ sky and fog are always the same zone. Census + per-chapter table: weather.md; th
   geometry cannot decide — resolved by render evidence instead (`PLAN-overcast-match` `B12`, all
   four = `zone2`), which is what the default already ships; not a gap here.
 
+`CameraWeatherState(cameraPosition, fogZoneArmed, volumes)` (`PLAN-weather-decompile-match` A2,
+`FUN_0042ee40`) is the binary's per-frame camera zone 1/2/3, published by `WeatherRig.Tick` onto
+each `PlayerRig.CameraWeatherState` but consumed by nothing yet (ships dark): 1 default; 2 when
+`HasCloudBand` and the camera's altitude is at/above `CloudCoreBottom` — a THIRD spelling
+alongside `CloudBandCentre` (the deck-regime flip) and `CloudBottom` (the visual floor), all
+within ~80 m of each other in C1 but never unified (Decision 1); 3 when `fogZoneArmed`
+(`FogVolumeSpec.FogZoneArmed`) and the camera is inside any `FogVolumeBox` — the exact
+half-space `Contains` test, not the AABB — and state 3 wins over state 2 on overlap (never
+actually exercised in shipped data: only C5 arms `fogZoneArmed`, and its band sits far above
+every C5 volume).
+
 ## src/Flight/FlightAudio.cs
 Own-plane non-positional loops (engine with throttle-driven pitch, overspeed whine, rattle,
 damaged-engine blend keyed to `Update`'s `damageFrac` via `PlaneStats.DamagedEngineGain`) +
@@ -2435,6 +2447,9 @@ those re-anchor to the view's camera every frame, so N players need N of each.
   every loop over the rigs degenerates to the old single-camera code.
 ⚠ In splitscreen the camera's parent is a `SubViewport`, not a Node3D — local `Position` IS the
   world transform, so per-frame anchoring reads `Camera.Position` directly (correct in both modes).
+`CameraWeatherState` (1/2/3, `PLAN-weather-decompile-match` A2) is the same shape as the deck
+regime: a per-rig field, not shared, because splitscreen panes can sit in different states at the
+same instant. Written each frame by `Session/WeatherRig.Tick`; consumed by nothing yet.
 
 ## src/UI/LiveryLab.cs
 The `--viewer` livery editor (key L): squadron stepper (loads the squadron's whole livery via
@@ -3419,6 +3434,13 @@ null guard covers the frame before that deferred free lands (it can never be nul
 resolves the rendered zone from BOTH the mission's zone names and the horizon's geometry
 (`BL-277` — see `Flight/Weather.cs`). `_activeZone` is the single answer both the fog and the dome
 are built from, and it is logged with the meshed counts it was decided on.
+⚠ `SetFogVolumes(volumes, fogZoneArmed)` (`PLAN-weather-decompile-match` A2) is called separately
+  from `Build`, same reason as `SetDeckCenter`: the fog-volume census is chapter/world data
+  (`GameSession`'s own `FogVolumeSpec.VolumesOf`/`Load`), not mission weather. `Tick` feeds both
+  it and the resolved `WeatherState` into `WeatherState.CameraWeatherState` once per rig, per
+  frame, publishing the result onto `PlayerRig.CameraWeatherState` (logged only on a change, at
+  debug verbosity). Ships dark — nothing reads it yet, and never calling `SetFogVolumes` at all
+  just keeps every camera at state 1/2.
 ⚠ An explicit `--sky-zone=` skips the geometry correction and is honoured literally, empty dome and
   all (`SkyZoneExplicit`) — it is the flag for looking at a named zone, and `analysis/`'s recorded
   repro poses depend on it. The weather-file fallback still applies to it, as before.
