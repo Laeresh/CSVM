@@ -1231,6 +1231,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   in C3 sits at **yaw 45**. The authored sunlight says **yaw 135**, and our light says **yaw 150**.
   So in C3 the flare, the sun disc and the shadows currently point three different ways; the flare
   and the disc agree with each other (both come from the node) and the light agrees with neither.
+  *Decoded from `crimson.exe` 2026-08-09 (Ghidra), which settles the mechanism end to end:*
+  `FUN_004bc3e0` (`D:\zipper\Crimson\weather.cpp`) parses each zone into a 0x58-byte struct on the
+  weather singleton at `0x71dcd0` — orientation at +0x28/+0x2c/+0x30, **each multiplied by
+  0.017453292** (degrees→radians, confirming the unit) and defaulting to pitch −π/2 when absent.
+  ZONE1–3 land at +0x54, SW_ZONE1–3 at +0x15c — **two tables, hardware vs software renderer**; we
+  are the hardware path. Zone selection (`FUN_004bc320`, index at +0x29c) fires the zone-apply
+  `FUN_00472ea0`, which picks the right table and calls, on one light object,
+  `FUN_004dbcc0(ACTIVE)` / **`FUN_004dc610(pitch, yaw, roll)`** / `FUN_004dbdb0(DIFFUSE)` /
+  `FUN_004dbce0(AMBIENT)` / colour + `STATIC` + `BICOLORED`. `FUN_004dc610` is
+  `zclass\Light.c`'s rotation setter: the three radians are written as a **gamez node rotation
+  triple (x,y,z)**, so our existing gamez→Godot rotation conversion applies unchanged — no new
+  axis guesswork. The light is a **named gamez node**: `FUN_004735b0` resolves it as
+  `FUN_004d0280(0xa, "sunlight")`, and `extracted/<ch>/gamez/nodes.json` carries a parentless,
+  model-less `sunlight` node with `active: false` in **all eight chapters** — a light the weather
+  file drives, entirely separate from the `sun` billboard the flare is anchored to. Nothing in the
+  binary links the two.
   ⚠ **Traps.** (a) Do **not** "fix" this by re-anchoring the flare to `SUNLIGHT_ORIENTATION` —
   that was tried and rejected on evidence: the parameter is the shading direction, not the sun
   object's position, and the flare would draw 90° from the visible disc (`WORLD-26`,
@@ -1238,11 +1254,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   not the flare. (b) The world is rendered fullbright with a per-mission scalar
   (`WorldLight`/`SunIncidence` 0.46), so this light mostly shades **aircraft**, not terrain —
   expect the change to show on planes and their shadows, and to be nearly invisible on the ground.
-  (c) Whether the node bearing and the authored orientation *should* agree is itself unsettled: if
-  the original's shadows fall along `SUNLIGHT_ORIENTATION` while its sun billboard sits elsewhere,
-  then the original disagrees with itself too and we should reproduce that, not reconcile it.
-  *Needs an original-game A/B:* a C3 pose showing aircraft shading and shadow direction against the
-  visible sun, which settles (c) before any value is adopted.
+  (c) ⛔ **Settled 2026-08-09 — the original does disagree with itself, and we reproduce that.**
+  The `sunlight` light node and the `sun` billboard node are two unrelated objects with no code
+  path between them, so C3's yaw 135 shading beside a yaw 45 disc is authored, not a bug to
+  reconcile. This entry's earlier "needs an original-game A/B to settle (c)" is retracted.
+  (d) ⚠ **Shadows do not follow the sun at all, and ours currently do.** The shadow-blob renderer
+  `FUN_0049d0a0` takes its projection direction from the `sunlight` node's direction vector
+  (class data +0x84…+0x8c) **only as a fallback**; when a top-level `SHADOW_ANGLES` key is present
+  it uses that instead, converted by `FUN_0053c610` as
+  `(-cos p·sin y, sin p, -cos p·cos y)`. **All 53 shipped `weather.zrd.json` files author
+  `SHADOW_ANGLES [-90, 0, 0]` → `(0, -1, 0)`, straight down**, and the parser's second key
+  `SHADE_ANGLES` appears in **zero** files — so the sun-direction shadow path is dead code on this
+  install and the original's aircraft shadows are vertical drop shadows in every chapter. We set
+  `ShadowEnabled = true` on a light at yaw 150, so our planes trail raked shadows the original
+  never casts. Fixing the light bearing without also fixing this makes the shadows *more* wrong,
+  not less.
+  *Scope:* localized — add `Orientation` to the per-zone record in `Weather.cs` beside the existing
+  `SUNLIGHT_DIFFUSE`/`_AMBIENT` read, drive `_sun.RotationDegrees` from it wherever the zone-fog
+  apply already runs (it must follow zone changes, not just mission load), and move the shadow
+  source to straight-down. Whether the shadow change rides along or becomes its own item is the one
+  open decision; `SUNLIGHT_ACTIVE`/`_STATIC`/`_BICOLORED` are set on the same node in the same call
+  and are the neighbours to check before assuming the light is unconditionally on.
 
 - `BL-305` `[Bug]` **C5's city blocks are packed edge to edge where the original shows pavement
   between buildings — within-block clutter density/alignment is wrong.** Found by `CAP-22`
