@@ -62,6 +62,7 @@ wrong. Assume the neighbouring ones are suspect too until checked.
 | 6 | (Mine, earlier this session) "C3 has the suburbs" | C3 registers exactly one template, `cliff1_sandtrans`. **C2** carries the suburbs (`resblock1-6`, `filmblock1-5`, `parklot1/2`, `parkpat`). Corrected against `extracted/interp.json`; the full census is below. |
 | 7 | (Mine, from A1's ratios) "√2 in the quad-vs-world ratios means a 45°-rotated UV mapping", and "the exact-2 cases are quads spanning two texture repeats" | A2 read the UV coordinates themselves: **no 45° mapping exists anywhere in the install** (every bearing on those templates is 0° or 90°) and **every quad spans exactly 0..1**. The √2 was an artifact of A1's own statistic — a max-extent `Period` compared against a geometric mean, on a 2:1 quad. Passed to A2 as a flagged lead, not a finding, and killed there. |
 | 8 | "B11 can land as a provably inert, behaviour-preserving step" (this plan's own B11, as written) | True for 28 of the 32 templates, false for four: the current scalar `Period` genuinely misplaces `filmblock1`, `cliff1_sandtrans`, `parklot1` and `parklot2` by up to 0.74 UV. B11 is amended to predict exactly which four move. |
+| 9 | "Zero coplanar pairs → delete the `seen` dedup set" (this plan's own B13, as written) | A3 measured zero, but the zero is the *original's*: flag `0x800` **is** the subface mark, so the original never considers a subface polygon. The remake's `PlaceOnMesh` reads no such flag, so `seen` is the only thing suppressing a real double-stamp — 449 subface polygons in C5. B13 is amended: add the subface skip first, *then* delete the dedup. |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
@@ -186,7 +187,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ Measure C1's `terpat02` UV repeat in world metres against the 512 m grid constant
 2. ☑ Verify the template ground quad's UV parameterisation and the UV→world orientation
-3. ☐ Census the world's clutter-eligible polygons: layers, UV coverage, coplanar overlaps
+3. ☑ Census the world's clutter-eligible polygons: layers, UV coverage, coplanar overlaps
 
 ### Wave B — The placement rewrite
 
@@ -407,7 +408,57 @@ data actually spans. (c) Resist concluding "orientation is consistent" from a sa
 sample hillsides and the C5 street grid too (METHOD-11). (d) Do not use this item to start fixing
 anything.
 
-## A3 ☐ Census the world's clutter-eligible polygons: layers, UV coverage, coplanar overlaps
+## A3 ☑ Census the world's clutter-eligible polygons: layers, UV coverage, coplanar overlaps
+
+**Landed** (`analysis/bl-305-clutter-uv/eligibility.py`, `_raw_output.txt`, `FINDINGS-A3.md`).
+
+| chapter | polys | layer-0 | layer-1+ | remake l0 | coplanar (real) | sim sprites | sim solids |
+|---|---|---|---|---|---|---|---|
+| C1 | 23,959 | 883 | 0 | 883 | 0 | 9,303 | 0 |
+| C1B | 12,790 | 9 | 0 | 9 | 0 | 60 | 0 |
+| C1C | 11,991 | 0 | 0 | 0 | 0 | 0 | 0 |
+| C2 | 15,037 | 964 | 0 | **1,034** | 0 | 37,167 | 10,261 |
+| C2B | 10,197 | 0 | 0 | 0 | 0 | 0 | 0 |
+| C3 | 18,127 | 101 | 0 | 101 | 0 | 371 | 0 |
+| C4 | 25,793 | 1,068 | 0 | **1,143** | 0 | 88,630 | 0 |
+| C5 | 34,551 | 1,761 | 0 | **2,049** | 0 | 124,074 | 71,326 |
+
+**Verified (METHOD-15).** The script ports `ParseTemplate`/`PlaceOnWorld`/`PlaceOnMesh`/
+`PlaceOnTriangle` in full and was diffed against headless `--freecam` builds. C1 exact (9,303
+sprites, all five kinds). C5 exact on solids (71,326); **off by one** on `lightpole.tif` and
+`poleflare.tif` (live 62,036 vs sim 62,037 each) — a float32-vs-float64 boundary case where one
+candidate sits exactly on a triangle edge. 0.0016 % of C5's instances, reported rather than rounded
+away, and the script's C5 verdict is a deliberate FAIL rather than a laundered pass.
+
+**Two checked zeros.** (a) **No polygon in the install lacks a UV array**, so `FUN_004de2c0`'s null-UV
+gate never fires. (b) **No polygon's layer 1+ ever names a registered template**, so the
+"two-layer polygon stamped twice" mechanism never fires on retail data. Wave B must still iterate
+layers to match the original, but **no chapter exercises that path, so an A/B cannot verify it and no
+observed change may be credited to it.**
+
+**⚠ The headline finding — B13's rule is inverted, and B13 is amended below.** The coplanar
+double-stamp count is 0 in every chapter, but *structurally*: polygon flag `0x800`, the bit
+`FUN_004de2c0` skips on, **is the already-decoded subface mark** (`docs/formats/gamez.md`). The
+original excludes every subface polygon before texture matching, so it cannot double-stamp. A
+diagnostic ignoring that gate finds the overlap is real and large — C5 787,546 raw pairs from 449
+subface polygons, C2 876 from 18, C4 69 from 33 — which proves the zero is the flag working, not a
+broken script. **But `ClutterBuilder.PlaceOnMesh` never reads the subface flag at all**, so the
+remake *does* reach both members, and the `seen` set is what suppresses the double-stamp today. That
+is also the `remake l0` − `layer-0` delta in the table: +70 C2, +75 C4, **+288 C5**.
+
+**One doc gap.** `node+0x2c` / `0x4000000` from `FUN_004de460` is not named in `docs/formats/gamez.md`;
+it maps to `nodes.json`'s `update_flags` (checked against `tools/mech3ax`'s node struct) and is set on
+3 retail nodes, all C2, where it is always redundant with the decoded `flags.active`. Worth a line in
+`gamez.md` at B14; not worth a behaviour change.
+
+**⚠ For Wave B.** The remake's gate is **looser** than the original's on two axes (no subface
+exclusion, no active/node-type check), so it **over**-stamps — the *opposite sign* to A1's finding
+that it **under**-stamps by up to 4× in C1. These are different mechanisms on different chapters:
+C1's deficit is spacing on 883 subface-free polygons; C5's surplus is gating on 288 polygons whose
+spacing is already correct. **Do not net them against each other**, and do not accept "the instance
+count moved the right way" as a check — it would hide both.
+
+### Original approach (kept for reference)
 
 **Goal.** Know how many polygons the original would stamp that we currently do not, and vice versa —
 before the rewrite, so B14 has a baseline that can be compared.
@@ -545,10 +596,24 @@ stamps each, so it **does** double-stamp in that case. Whether that is visible, 
 any such pairs outside the already-exempted districts, decides this.
 
 **Approach.** Delete `MinSlopeCos` and its use unless A1/A3 show it is load-bearing for something
-other than hiding the grid's artifacts. For the dedup, take A3's coplanar count: zero relevant pairs
-→ delete the set (it also costs a hash per candidate); non-zero → keep it, and write the deviation
-into the class comment with the count that justifies it. Either way the outcome is a documented
-decision, not a silent constant.
+other than hiding the grid's artifacts.
+
+**⚠ Amended after A3 — the dedup rule as written is inverted and must not be followed.** This item
+originally said: zero coplanar pairs → delete the `seen` set. A3 measured zero, and the zero is
+*structural* — polygon flag `0x800`, the bit `FUN_004de2c0` gates on, **is the already-decoded
+subface mark**, so the original excludes every subface polygon before texture matching and cannot
+double-stamp. But `ClutterBuilder.PlaceOnMesh` never reads that flag, so **the remake does reach both
+members of a coplanar pair, and the `seen` set is the only thing suppressing the double-stamp
+today** — 449 subface polygons' worth in C5 (787,546 raw pairs with the gate ignored), 18 in C2, 33
+in C4. Deleting the set on the strength of the original's zero would visibly double-stamp C5's city
+blocks, a regression neither the original nor the current build shows.
+
+**The correct order: add the subface (`unk3`) skip to `PlaceOnMesh` first** — reproducing
+`FUN_004de2c0`'s actual gate, which is what the original's code justifies — **then delete `seen` as
+redundant.** Verify the two steps separately: after the skip alone, C5's instance count must be
+unchanged (the dedup was already hiding these); after the deletion, still unchanged (now the gate is).
+If either moves, the gate and the dedup are not covering the same set and the difference is the
+finding.
 
 **Model recommendation.** medium. The analysis is done by then; this is applying it, with a
 judgement call on the dedup that A3's number should largely make for you.

@@ -1,0 +1,90 @@
+﻿chapter templates polys_chk no_uv  l0     l1+    remake_l0 coplan_gated coplan_raw sim_sprites sim_solid
+C1     3         23959     0      883    0      883       0            0          9303        0        
+C1B    1         12790     0      9      0      9         0            0          60          0        
+C1C    0         11991     0      0      0      0         0            0          0           0        
+C2     17        15037     0      964    0      1034      0            876        37167       10261    
+C2B    6         10197     0      0      0      0         0            0          0           0        
+C3     1         18127     0      101    0      101       0            0          371         0        
+C4     3         25793     0      1068   0      1143      0            69         88630       0        
+C5     7         34551     0      1761   0      2049      0            787546     124074      71326    
+
+C1:
+  registered templates: ['terpat02', 'river1', 'river2']
+  layer hits: {0: 883}
+  gated-out nodes (active/type/update_flags gate failed): 9
+  degenerate polys dropped (<3 vertex indices): 0
+  coplanar pairs, BOTH members passing FUN_004de2c0 (the real answer): 0 (0 subface polys involved)
+  coplanar pairs, subface gate ignored (diagnostic only): 0 (0 subface polys involved)
+  simulated remake Summary-equivalent: bush1.tif ×206, bush2.tif ×105, dougfirtree1.tif ×2267, firtree1.tif ×4145, firtree2.tif ×2580
+
+C1B:
+  registered templates: ['rockclut']
+  layer hits: {0: 9}
+  gated-out nodes (active/type/update_flags gate failed): 0
+  degenerate polys dropped (<3 vertex indices): 0
+  coplanar pairs, BOTH members passing FUN_004de2c0 (the real answer): 0 (0 subface polys involved)
+  coplanar pairs, subface gate ignored (diagnostic only): 0 (0 subface polys involved)
+  simulated remake Summary-equivalent: bush1.tif ×2, bush2.tif ×8, dougfirtree1.tif ×50
+
+C1C:
+  registered templates: []
+  layer hits: {}
+  gated-out nodes (active/type/update_flags gate failed): 0
+  degenerate polys dropped (<3 vertex indices): 0
+  coplanar pairs, BOTH members passing FUN_004de2c0 (the real answer): 0 (0 subface polys involved)
+  coplanar pairs, subface gate ignored (diagnostic only): 0 (0 subface polys involved)
+  simulated remake Summary-equivalent: (no templates resolved)
+
+C2:
+  registered templates: ['terpat01', 'terpat04', 'terpat04-128', 'filmblock1', 'filmblock2', 'filmblock3', 'filmblock4', 'filmblock5', 'parklot1', 'parklot2', 'parkpat', 'resblock6', 'resblock5', 'resblock4', 'resblock3', 'resblock2', 'resblock1']
+  layer hits: {0: 964}
+  gated-out nodes (active/type/update_flags gate failed): 3
+  degenerate polys dropped (<3 vertex indices): 0
+  coplanar pairs, BOTH members passing FUN_004de2c0 (the real answer): 0 (0 subface polys involved)
+  coplanar pairs, subface gate ignored (diagnostic only): 876 (18 subface polys involved)
+  simulated remake Summary-equivalent: brush1.tif ×2136, brush2.tif ×6909, brush3.tif ×2588, brush4.tif ×1699, c_studebaker1.flt ×7, c_studebaker2.flt ×34, c_studebaker3.flt ×9, c_studebaker4.flt ×21, c_studebaker5.flt ×25, c_studebaker6.flt ×8, filmbuild01.flt ×6, filmbuild02.flt ×12, filmbuild03.flt ×6, filmbuild04.flt ×6, filmbuild05.flt ×6, filmbuild06.flt ×6, filmbuild07.flt ×3, filmbuild08.flt ×6, filmbuild09.flt ×12, palm1.tif ×5119, palm2.tif ×637, palm3.tif ×446, resbuild01.flt ×337, resbuild02.flt ×373, resbuild03.flt ×362, resbuild04.flt ×677, resbuild05.flt ×386, resbuild06.flt ×337, resbuild07.flt ×337, resbuild08.flt ×580, resbuild09.flt ×337, resbuild10.flt ×337, resbuild11.flt ×917, resbuild12.flt ×337, resbuild13.flt ×337, resbuild14.flt ×337, resbuild15.flt ×337, resbuild16.flt ×337, resbuild17.flt ×279, resbuild18.flt ×280, resbuild19.flt ×243, resbuild20.flt ×399, resbuild21.flt ×279, resbuild22.flt ×337, resbuild23.flt ×364, resbuild24.flt ×292, resbuild25.flt ×243, resbuild26.flt ×470, resbuild27.flt ×243, spruce.tif ×17633
+
+C2B:
+  registered templates: ['terpat01', 'terpat03', 'terpat04', 'resblock2', 'filmblock1', 'filmblock2']
+  layer hits: {}
+  gated-out nodes (active/type/update_flags gate failed): 0
+  degenerate polys dropped (<3 vertex indices): 0
+  coplanar pairs, BOTH members passing FUN_004de2c0 (the real answer): 0 (0 subface polys involved)
+  coplanar pairs, subface gate ignored (diagnostic only): 0 (0 subface polys involved)
+  simulated remake Summary-equivalent: (no templates resolved)
+
+C3:
+  registered templates: ['cliff1_sandtrans']
+  layer hits: {0: 101}
+  gated-out nodes (active/type/update_flags gate failed): 0
+  degenerate polys dropped (<3 vertex indices): 0
+  coplanar pairs, BOTH members passing FUN_004de2c0 (the real answer): 0 (0 subface polys involved)
+  coplanar pairs, subface gate ignored (diagnostic only): 0 (0 subface polys involved)
+  simulated remake Summary-equivalent: palm1.tif ×371
+
+C4:
+  registered templates: ['terpat01', 'terpat01-128', 'river5']
+  layer hits: {0: 1068}
+  gated-out nodes (active/type/update_flags gate failed): 0
+  degenerate polys dropped (<3 vertex indices): 0
+  coplanar pairs, BOTH members passing FUN_004de2c0 (the real answer): 0 (0 subface polys involved)
+  coplanar pairs, subface gate ignored (diagnostic only): 69 (33 subface polys involved)
+  simulated remake Summary-equivalent: dougfirtree1.tif ×20919, firtree1.tif ×18283, spruce.tif ×49428
+
+C5:
+  registered templates: ['cblock1', 'cblock2', 'cblock3', 'cblock4', 'cblock5', 'cblock6', 'cblock7']
+  layer hits: {0: 1761}
+  gated-out nodes (active/type/update_flags gate failed): 0
+  degenerate polys dropped (<3 vertex indices): 0
+  coplanar pairs, BOTH members passing FUN_004de2c0 (the real answer): 0 (0 subface polys involved)
+  coplanar pairs, subface gate ignored (diagnostic only): 787546 (449 subface polys involved)
+  simulated remake Summary-equivalent: cb00a.flt ×3933, cb00det01.flt ×3933, cb01a.flt ×2964, cb01det01.flt ×2964, cb02a.flt ×2976, cb02det01.flt ×2976, cb03a.flt ×1979, cb03det01.flt ×1979, cb04a.flt ×1998, cb05a.flt ×1984, cb06a.flt ×1818, cb06det01.flt ×1818, cb07a.flt ×1609, cb08a.flt ×1285, cb08det01.flt ×1285, cb09a.flt ×851, cb10a.flt ×1072, cb11a.flt ×2146, cb11det01.flt ×1615, cb12a.flt ×12069, cb13a.flt ×4824, cb14a.flt ×13248, lightpole.tif ×62037, poleflare.tif ×62037
+
+--- reconcile C1 ---
+chapter templates polys_chk no_uv  l0     l1+    remake_l0 coplan_gated coplan_raw sim_sprites sim_solid
+C1     3         23959     0      883    0      883       0            0          9303        0        
+RECONCILE OK (C1): live and simulated per-kind counts agree (5 kind(s))
+--- reconcile C5 ---
+chapter templates polys_chk no_uv  l0     l1+    remake_l0 coplan_gated coplan_raw sim_sprites sim_solid
+C5     7         34551     0      1761   0      2049      0            787546     124074      71326    
+RECONCILE FAIL (C5): poleflare.tif: live=62036 sim=62037; lightpole.tif: live=62036 sim=62037
