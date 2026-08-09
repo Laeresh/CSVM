@@ -1,0 +1,12 @@
+airframe              peak G   highGs0    margin   peak a   maxAOA    margin   worst manoeuvre (G / a)
+player_bhawk            5.01       9.0      3.99     25.6     46.0      20.4   push @ 1.5 fd / pull @ 1.5 fd
+player_pfighter         3.83       9.0      5.17     18.7     46.0      27.3   push @ 1.5 fd / pull @ 1.5 fd
+player_fury             4.43       9.0      4.57     22.1     46.0      23.9   push @ 1.5 fd / pull @ 1.5 fd
+player_warhawk          2.56       9.0      6.44     10.6     46.0      35.4   pull @ 1.5 fd / pull @ 1.5 fd
+player_autogyro         3.17       9.0      5.83     12.4     46.0      33.6   pull @ fd / pull @ 1.5 fd
+player_avenger          4.07       9.0      4.93     20.3     46.0      25.7   push @ 1.5 fd / pull @ 1.5 fd
+player_balmoral         2.13       9.0      6.87      8.9     46.0      37.1   pull @ 1.5 fd / pull @ fd
+player_brigand          3.45       9.0      5.55     15.6     46.0      30.4   push @ 1.5 fd / pull @ 1.5 fd
+player_fbrand           2.57       9.0      6.43     10.5     46.0      35.5   pull @ 1.5 fd / pull @ 1.5 fd
+player_kestrel          2.91       9.0      6.09     12.4     46.0      33.6   pull @ 1.5 fd / pull @ 1.5 fd
+player_peacemaker       4.73       9.0      4.27     24.1     46.0      21.9   push @ 1.5 fd / pull @ 1.5 fd

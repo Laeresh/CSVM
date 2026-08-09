@@ -1,0 +1,225 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Text;
+using CSVM.Flight;
+using CSVM.Testing;
+using Godot;
+using Xunit;
+
+namespace CSVM.Tests;
+
+/// <summary>
+/// The square-wave pitch-cadence sweep, run against our own flight model — the instrument
+/// <c>BL-147</c> asks for by name. The original was flown at six alternating pitch-up/pitch-down
+/// cadences and its altitude ripple measured at each; this drives the same square wave into a
+/// throwaway <see cref="FlightModel"/> and measures the ripple the same way, so the comparison is
+/// amplitude-for-amplitude with no transfer function assumed on either side.
+///
+/// <para>The statistic that decides the item is the <b>roll-off</b> — how far the ripple falls
+/// between the slowest and fastest cadence. Double integration (body rate → attitude → altitude)
+/// accounts for a factor of (f_hi/f_lo)², and a single first-order lag can add at most another
+/// (f_hi/f_lo) on top of that, in the τ → ∞ limit. Anything steeper than that product cannot be
+/// produced by one lag at any τ, which is what makes this able to fail.</para>
+///
+/// <para>⚠ Two traps, both of them <c>BL-147</c>'s own. (a) <b>Never detrend and then fit</b>: a
+/// sliding high-pass has real gain at f₀ and moved the original's 930 ms amplitude by 45 % as its
+/// span changed. The polynomial and the sinusoid are fitted <b>simultaneously</b> here, inside a
+/// window of at least eight periods, where a cubic can absorb almost none of the fundamental.
+/// (b) The cadences are quoted in the original's <b>wall</b> milliseconds; sim time runs at
+/// k = 1.390 (<c>docs/verification.md</c> DET-11), so both readings are swept and reported rather
+/// than one being picked. The roll-off ratio is invariant to the choice; only where the sweep sits
+/// on the curve is not.</para>
+///
+/// <para>⚠ This does not fit a τ and must not be quoted as one — the cadences are not at a common
+/// operating point (the slow ones are a large-amplitude manoeuvre, the fast ones a perturbation),
+/// which is exactly why the mean airspeed is reported beside every row.</para>
+/// </summary>
+public class ZzCadenceSweep
+{
+    /// <summary>Sim seconds per wall second (DET-11).</summary>
+    private const double SimPerWall = 1.390;
+
+    private const float Dt = 1f / 60f;
+    private const float Mph = 0.44704f;
+    private const float Ft = 0.3048f;
+
+    /// <summary>Periods of settling discarded before the fit window opens, then periods fitted.
+    /// Eight is <c>BL-147</c>'s floor for the simultaneous fit; twelve leaves margin.</summary>
+    private const int SettlePeriods = 3;
+    private const int FitPeriods = 12;
+
+    /// <summary>The original's six cadences, in the wall milliseconds its input log recorded
+    /// (jitter sd 0.002–0.535 ms, so these are known rather than nominal), with the ripple each one
+    /// produced in feet. The last two sat at the decode floor and are quoted as upper bounds.</summary>
+    private static readonly (int WallMs, double OriginalFt, bool AtFloor)[] Cadences =
+    {
+        (1300, 26.31, false),
+        (930, 7.07, false),
+        (700, 3.09, false),
+        (570, 0.63, false),
+        (370, 0.065, true),
+        (230, 0.037, true),
+    };
+
+    private static string ZrdrPath =>
+        SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
+
+    [ExtractedDataFact]
+    public void SweepThePitchCadences()
+    {
+        System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
+        string outPath = System.Environment.GetEnvironmentVariable("CSVM_CADENCE_OUT")
+                         ?? Path.Combine(Path.GetTempPath(), "cadence-sweep.txt");
+        var stats = PlaneStats.Load(ZrdrPath, "player_bhawk");
+
+        var sb = new StringBuilder();
+        sb.AppendLine("# BL-147 square-wave pitch-cadence sweep — player_bhawk");
+        sb.AppendLine("# alternating full pitch-up / full pitch-down, 300 mph level entry, full throttle");
+        sb.AppendLine($"# {SettlePeriods} periods settled, {FitPeriods} periods fitted "
+                      + "(cubic + sin + cos simultaneously — never detrend first)");
+        sb.AppendLine("# 'original' = the measured ripple from the original's own clips, feet");
+        sb.AppendLine();
+
+        foreach (bool simIsWall in new[] { true, false })
+        {
+            double k = simIsWall ? 1.0 : SimPerWall;
+            sb.AppendLine(simIsWall
+                ? "## cadence read as SIM seconds (period_sim = period_wall)"
+                : $"## cadence read as WALL seconds (period_sim = period_wall x {SimPerWall:0.000}, DET-11)");
+            sb.AppendLine("wall ms   period_sim   f0_sim      ripple ft   mean mph   original ft");
+            var amps = new List<double>();
+            foreach (var (wallMs, originalFt, atFloor) in Cadences)
+            {
+                double period = wallMs / 1000.0 * k;
+                var (amp, meanMph) = Ripple(stats, (float)period);
+                amps.Add(amp);
+                sb.AppendLine($"{wallMs,7}   {period,10:0.0000}   {1.0 / period,7:0.000}   "
+                              + $"{amp,9:0.0000}   {meanMph,8:0.0}   "
+                              + (atFloor ? $"<= {originalFt:0.000}" : $"{originalFt,8:0.000}"));
+            }
+
+            // The discriminating ratio: BL-147's own span, 1300 -> 570 ms, over which the original
+            // fell 42x against a frequency ratio of 2.28. Double integration explains (ratio)^2 and
+            // one first-order lag at most another (ratio), so 12x is the steepest a single lag can
+            // ever be — the excess over that is the part no single lag can produce.
+            double fRatio = 1300.0 / 570.0;
+            double model = amps[0] / amps[3];
+            double lagCeiling = fRatio * fRatio * fRatio;
+            sb.AppendLine($"roll-off 1300 -> 570 ms: model {model:0.0}x   original 42x   "
+                          + $"single-lag ceiling {lagCeiling:0.0}x   "
+                          + $"model excess {model / lagCeiling:0.00}x   original excess 3.5x");
+            sb.AppendLine();
+        }
+
+        File.WriteAllText(outPath, sb.ToString(), new UTF8Encoding(false));
+        Assert.True(File.Exists(outPath));
+    }
+
+    /// <summary>Flies one cadence and returns (ripple amplitude in feet, mean airspeed in mph over
+    /// the fit window).</summary>
+    private static (double AmplitudeFt, double MeanMph) Ripple(PlaneStats stats, float period)
+    {
+        var m = new FlightModel(stats);
+        m.Reset(Vector3.Zero, Basis.Identity, 300f * Mph, 1f);
+        m.Position = new Vector3(0f, 1000f, 0f);
+
+        double settle = SettlePeriods * period;
+        double total = settle + (FitPeriods * period);
+        var t = new List<double>();
+        var y = new List<double>();
+        double speedSum = 0;
+        for (double now = 0; now < total; now += Dt)
+        {
+            // The square wave: full up for the first half of each period, full down for the second.
+            // Alternating (rather than one key) keeps the mean rate at zero, so the aircraft
+            // porpoises about level and the operating point stays put.
+            float pitch = (now % period) < (period * 0.5) ? 1f : -1f;
+            m.Step(new FlightInput { Pitch = pitch, Throttle = 1f }, Dt);
+            if (now < settle)
+                continue;
+            t.Add(now - settle);
+            y.Add(m.Position.Y / Ft);
+            speedSum += m.Speed / Mph;
+        }
+
+        return (FitSinusoid(t, y, 1.0 / period), t.Count > 0 ? speedSum / t.Count : 0);
+    }
+
+    /// <summary>Least-squares fit of cubic + A·sin(2πf·t) + B·cos(2πf·t) over the whole window, all
+    /// six coefficients solved together; returns sqrt(A² + B²). Fitting the trend and the sinusoid
+    /// simultaneously is the point — removing the trend first has real gain at f and biases the
+    /// amplitude, which is the error that cost BL-147 a wrong figure.</summary>
+    private static double FitSinusoid(IReadOnlyList<double> t, IReadOnlyList<double> y, double f)
+    {
+        const int N = 6;
+        if (t.Count < N)
+            return 0;
+
+        // t is rescaled to [-1, 1] for the polynomial columns only, so the normal equations stay
+        // well conditioned at cubic order; the sinusoid keeps real time.
+        double span = t[t.Count - 1] - t[0];
+        var ata = new double[N, N];
+        var atb = new double[N];
+        var row = new double[N];
+        for (int i = 0; i < t.Count; i++)
+        {
+            double u = span > 0 ? (((t[i] - t[0]) / span) * 2.0) - 1.0 : 0.0;
+            row[0] = 1;
+            row[1] = u;
+            row[2] = u * u;
+            row[3] = u * u * u;
+            row[4] = Math.Sin(2 * Math.PI * f * t[i]);
+            row[5] = Math.Cos(2 * Math.PI * f * t[i]);
+            for (int a = 0; a < N; a++)
+            {
+                atb[a] += row[a] * y[i];
+                for (int b = 0; b < N; b++)
+                    ata[a, b] += row[a] * row[b];
+            }
+        }
+
+        var x = Solve(ata, atb, N);
+        return x == null ? 0 : Math.Sqrt((x[4] * x[4]) + (x[5] * x[5]));
+    }
+
+    /// <summary>Gaussian elimination with partial pivoting; null if the system is singular.</summary>
+    private static double[]? Solve(double[,] a, double[] b, int n)
+    {
+        for (int col = 0; col < n; col++)
+        {
+            int piv = col;
+            for (int r = col + 1; r < n; r++)
+                if (Math.Abs(a[r, col]) > Math.Abs(a[piv, col]))
+                    piv = r;
+            if (Math.Abs(a[piv, col]) < 1e-12)
+                return null;
+            if (piv != col)
+            {
+                for (int c = 0; c < n; c++)
+                    (a[col, c], a[piv, c]) = (a[piv, c], a[col, c]);
+                (b[col], b[piv]) = (b[piv], b[col]);
+            }
+
+            for (int r = col + 1; r < n; r++)
+            {
+                double factor = a[r, col] / a[col, col];
+                for (int c = col; c < n; c++)
+                    a[r, c] -= factor * a[col, c];
+                b[r] -= factor * b[col];
+            }
+        }
+
+        var x = new double[n];
+        for (int r = n - 1; r >= 0; r--)
+        {
+            double sum = b[r];
+            for (int c = r + 1; c < n; c++)
+                sum -= a[r, c] * x[c];
+            x[r] = sum / a[r, r];
+        }
+
+        return x;
+    }
+}

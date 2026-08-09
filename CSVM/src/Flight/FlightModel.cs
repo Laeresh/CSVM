@@ -12,29 +12,39 @@ public struct FlightInput
 
 /// <summary>
 /// Arcade flight dynamics parameterized by the original game's zrdr stats.
-/// A velocity-vector model in arcade clothing: thrust, drag and gravity
+/// A velocity-vector model in arcade clothing: thrust, drag, gravity and lift
 /// integrate on the velocity vector (so a vertical zoom tail-slides out through
-/// zero speed instead of hanging), lift cancels gravity's cross-path component
-/// only when the plane is fast enough AND the wings carry vertically AND the pull
-/// is generating the load factor to spare (lift ∝ speed² × |up·Y| × n(α), so
-/// knife-edge flight at neutral stick is near-ballistic and a slow plane sinks,
-/// while a hard pull holds altitude through a steep bank on the small vertical
-/// share of a large lift vector), and the arcade handling is the flight path
-/// chasing the nose (alignment lag, exposed each step as <see cref="Alpha"/> and
-/// consumed by the lift keying — see <see cref="LiftAoaLo"/>).
-/// In a knife-edge the nose itself also sags to a bounded angle
-/// below the horizon, so the plane noses down as it sinks rather than descending
-/// wings-level-nosed — ⚠ the original's sag is NOT bounded (a known divergence —
-/// see <see cref="KnifeNoseSag"/>). Below stall speed the nose is additionally pulled toward
-/// world-down and cannot be raised over the horizon. Thrust (sublinear in the
-/// throttle lever) vs drag (a power law in V/fd_speed, with a measured slope
-/// change at fd) gives the level-speed equilibrium at fd_speed. The torque/
+/// zero speed instead of hanging). Lift is a DEMAND rather than a fraction of
+/// gravity: the airflow is blended toward the nose over the authored
+/// <c>liftAOAs</c> cosine window, the difference against the true velocity times
+/// <c>lift_accel_rate</c> plus <c>nom_gravity</c> on world-up is projected onto
+/// the body X/Y plane, and the wings deliver that acceleration up to a hard load
+/// factor and the aerodynamic ceiling (see <see cref="LiftGMax"/>). Level flight
+/// at zero incidence therefore cancels weight as an algebraic identity, not as a
+/// tuned equilibrium. The arcade handling on top is the flight path chasing the
+/// nose (alignment lag, exposed each step as <see cref="Alpha"/>).
+/// In a knife-edge the nose sags and keeps sagging, out of the decoded bank
+/// coupling and the weathervane rather than out of any term written for it —
+/// see <see cref="KnifeAlignFloor"/>. Below stall speed the nose is additionally pulled toward
+/// world-down and cannot be raised over the horizon. Drag is the original's
+/// parabolic polar in MACH (see <see cref="DragPolarScale"/>) — there is no
+/// induced-drag term at all — and thrust is its Mach curve times a LINEAR throttle
+/// lever (see <see cref="ThrustAccelAt"/>), scaled by the nose's attitude so a climb
+/// is penalised and a dive rewarded (see <see cref="AttitudeThrustScale"/>).
+/// Gravity acts at full strength in every attitude. Neither carries a fitted constant, and
+/// the level-speed equilibrium is simply where the two cross: that lands within 1%
+/// of the authored fd_speed for nine of the eleven airframes without anything being
+/// tuned to make it. Rudder authority follows the original's own authored speed
+/// table (see <see cref="YawAuthorityAt"/>) — YAW ONLY; pitch and roll carry
+/// their own, different authority curves. Bank additionally couples straight into
+/// yaw and pitch rate (see <see cref="BankYawCoupling"/>), the original's
+/// coordinated-turn cheat, and <c>return_rate</c> is a restoring torque onto the
+/// flight path rather than extra damping (see <see cref="WeathervaneHalfAngle"/>),
+/// which makes the rotational response a spring-damper instead of a lag. The torque/
 /// damping/inertia/speed numbers come straight from vehicle.json 'dynamics';
 /// the scale constants marked TUNE are ours, adjusted against playtests — except
 /// the three *Tune rates, which are pinned to measurements of the original
-/// decoded from cockpit-gauge video and must not be retuned by feel, and the
-/// ThrustConst/DragExp*/ThrottleExp group, which is pinned the same way but only
-/// <i>jointly</i> — see <see cref="ThrustConst"/> before moving any of them.
+/// decoded from cockpit-gauge video and must not be retuned by feel.
 /// </summary>
 public sealed class FlightModel
 {
@@ -46,80 +56,114 @@ public sealed class FlightModel
     public float Throttle;
     // deg: angle(nose, VelocityDir) at frame start, i.e. before this step's forces move
     // VelocityDir — see Step()'s "α" comment. An emergent LAG from the nose-chase, not a modelled
-    // aerodynamic incidence; the lift keying reads it as the pull's stand-in (see LiftAoaLo).
+    // aerodynamic incidence. Reported for instruments only — no force term reads it.
     public float Alpha;
+    // The demanded load factor in G at this step — the length of the lift demand's body X/Y
+    // projection over StandardG — reported BEFORE the ±5/9 clamp and the aerodynamic ceiling below
+    // it. Instruments only; no force term reads it. Pre-clamp is deliberate: it is the most
+    // generous reading of "the G this aircraft is pulling", which makes it the right quantity to
+    // measure the authored highGs/lowGs control limiters against (ControlLimiterTests).
+    public float LoadFactorDemand;
 
-    // m/s² per engine-power unit per tonne. NOT a free TUNE, but NOT independently measurable
-    // either — it is only ever pinned *jointly with the drag shape below*, and that is the trap the
-    // old value fell into. 184 was solved from the level acceleration (150 → 290 mph in 3.76 sim s)
-    // and cross-checked against the terminal dive, both of which it fits — but only while drag was
-    // the lerp(x², x, 0.35) blend. `CAP-05`'s zero-thrust clip then measured the low-speed drag
-    // directly (0.36/1.11/2.82/3.74 m/s² at x = 0.25/0.35/0.46/0.50, with NO thrust term assumed),
-    // and at A = 60 no drag curve satisfies that AND the acceleration: weak low-speed drag
-    // accelerates the plane in ~2.0 s against the measured 3.76.
-    // Refitting the three together — CAP-05's four points, the acceleration, and the dive —
-    // converges at A = 34.9 m/s² on the Bloodhawk, i.e. 34.9·1.9/0.62. All four drag points then
-    // land within 4% and the acceleration within 0.01 s.
-    // ⚠ Solve it from the plane's OWN stock engine power, not the level-1 row: the Bloodhawk's
-    // 'engine' is 11 (Lvl-2, 0.62), and using 0.47 back-derives a constant 32% too big.
-    // ⚠ Do not retune this alone. Moving it without refitting DragExpLow/DragExpHigh silently
-    // breaks whichever of the three measurements you were not looking at.
-    private const float ThrustConst = 107f;
-    // Thrust is SUBLINEAR in throttle: thrust = A · throttle^ThrottleExp. Determined, not guessed —
-    // with the drag curve pinned by CAP-05 (which contains no thrust term at all), the original's
-    // measured 1/8-throttle level equilibrium of 137.9 mph fixes this exponent as the only free
-    // quantity left. Full throttle is 1^k = 1 for any k, so every full-throttle scenario the suite
-    // asserts is untouched by construction; this term is observable only at part throttle.
-    // (The old model was linear, which is why 1/8 throttle settled at 86 mph against 137.9.)
-    private const float ThrottleExp = 1.236f;
-    private const float AlignRate = 4f;           // TUNE: how fast velocity chases the nose at lift speed, 1/s
-    private const float MinControlEff = 0.25f;    // TUNE: control authority floor at low speed
-    private const float MaxControlEff = 1.15f;    // TUNE: authority ceiling in a dive
-    private const float LiftSpeedFrac = 0.40f;    // TUNE: full lift at/above this fraction of fd_speed
-                                                  // (0.40·135 = 54 m/s keeps the 120 mph spawn fully lifted)
+    // Thrust available, per unit of engine power and reference area. There is NO fitted constant
+    // here: every number is read out of the original's own thrust-available routine.
+    //
+    //   V_ref  = (ThrustVRefSlope·M + ThrustVRefMach) · a        a reference speed, ft/s
+    //   q_ref  = ½·ρ·V_ref²                                      lb/ft², same dense band as lift
+    //   C_ref  = DragPolarScale · (DragPolarParasite − M/60)     the parasite drag coefficient,
+    //                                                            with a small linear Mach trim
+    //   avail  = q_ref · C_ref / (M · ThrustPowBase^(ThrustPowMach·M))
+    //   Thrust = EnginePower · RefArea · avail · throttle        in weight units
+    //
+    // Read it as "the parasite drag force the airframe would feel at V_ref, divided by Mach" — a
+    // constant-power propeller form, but with the reference speed TRACKING the current speed rather
+    // than sitting at a fixed design point. That is why the curve does not fall like P/V: q_ref
+    // grows as M², so the net is roughly linear in M — available thrust RISES with speed (≈ +35 %
+    // between 150 and 500 mph on this atmosphere). What falls with speed in this model is the
+    // thrust MARGIN, because drag grows as M² faster than thrust grows as M.
+    //
+    // Scaling is EnginePower × RefArea — the original's own arrangement, and the dimensionally
+    // consistent one: drag carries the same q·RefArea, so RefArea cancels out of the level
+    // equilibrium and top speed depends only on EnginePower/DragFactor. Force → acceleration is
+    // × StandardG / Weight, the conversion lift and drag already share.
+    // ⚠ EnginePower is the plane's OWN stock engine row, which is always the Lvl-2 row (the
+    // Bloodhawk's `engine` is 11, power 0.62). Deriving anything from the Lvl-1 row inflates it
+    // ~32 %.
+    // ⚠ Mach is floored at ThrustMachFloor before ANY of this — the 1/M is a real singularity at
+    // rest, and this floor is the original's own guard, not one invented here.
+    private const float ThrustMachFloor = 0.1f;
+    private const float ThrustVRefSlope = 0.84f;
+    private const float ThrustVRefMach = 0.112f;
+    private const float ThrustMachTrim = 1f / 60f;
+    private const float ThrustPowMach = 1.41f;
+    // Base of the Mach-dependent divisor: 1.33 × the atmosphere's own scale factor, which for the
+    // dense band (the operative one — see the atmosphere constants) is 0.98842078.
+    private const float ThrustPowBase = 1.33f * 0.98842078f;
 
-    // How hard the pull is, read off α, expressed as a load factor multiplying the wings' vertical
-    // share. Ramps from 1 g at LiftAoaLo to LiftLoadMax at LiftAoaHi and holds there.
-    // The two edges are player.json's authored `liftAOAs [5, 9]` taken as degrees — a HYPOTHESIS,
-    // not a decode (`BL-095`: the block's units are unverified). What makes it testable is that our
-    // own manoeuvres straddle it: a sustained full-back-stick steep-bank turn settles at α = 6–14°,
-    // while knife-edge at neutral stick settles at α = 3.2° and every scenario the flight-envelope
-    // suite asserts sits at α ≤ 2.9°. So outside the hard pull the ramp reads zero and the term is
-    // inert by construction rather than by tuning — the whole calibrated envelope and (on ten of
-    // the eleven airframes) the knife-edge departure are bit-identical with and without it.
-    // ⚠ The knife-edge margin is thin and the slowest airframe has already spent it: the Balmoral
-    // knife-edges at α = 5.1°, 0.1° INSIDE the ramp, which returns 2.2% of the altitude it drops
-    // over 35 s (466.6 → 456.5 m). Anything that raises knife-edge α further turns a 2% nibble into
-    // the plane being held up in a manoeuvre that must depart, so treat 5° as a live boundary.
-    private const float LiftAoaLo = 5f;           // deg: below this the pull adds nothing
-    private const float LiftAoaHi = 9f;           // deg: at/above this the load factor is maxed
-    // g. From player.json's `highGs [9, 15]` — same units caveat. CAP-01 gives a LOWER BOUND, not a
-    // fit: holding altitude at 100° of bank needs 1/|cos 100°| = 5.8 g, and anything at or above
-    // that lands on the same clamped answer, so the plateau cannot distinguish 6 from 15.
-    private const float LiftLoadMax = 9f;
+    // Available thrust is then scaled by the NOSE'S ATTITUDE, before the engine-power and
+    // reference-area scaling. An arcade term with no aerodynamic justification, and one no video fit
+    // could ever have recovered — it would have been absorbed into gravity or drag and then failed in
+    // the opposite manoeuvre.
+    //
+    //   a     = the world-up component of the body Z axis, i.e. −nose.Y  (see AttitudeThrustScale)
+    //   scale = (1 + AttitudeThrustBoth·a) · (a ≤ 0 ? 1 + AttitudeThrustUp·a : 1)
+    //
+    // So a climb LOSES thrust (0.6612× pointing straight up) and a dive GAINS it (1.24× straight
+    // down): two coefficients, the second one-sided. Both are branchless immediates in the
+    // original's force accumulator, applied to the curve above and to the throttle lever together.
+    private const float AttitudeThrustBoth = 0.24f;
+    private const float AttitudeThrustUp = 0.13f;
 
-    // The two stall thresholds are DIFFERENT numbers and both are measured, not TUNEs. The nose does
-    // not break until 0.25 fd (the original's "Stall 0% Thrust no input" clip: the nose holds +4.2°
-    // all the way down to 76 mph, then falls), while the STALL lamp lights at 0.30 fd
-    // (0.2989–0.2996 across four clips). Confirmed inside a single clip — the warning leads the break
-    // by 2.64 sim s / 14.9 mph — so any model driving both cues off one number is wrong by
-    // construction.
-    private const float StallSpeedFrac = 0.25f;   // nose-drop begins below this fraction of fd_speed
+    // The hard lift clamp, in G — a LOAD FACTOR, never an angle. The wings will not deliver more
+    // than this however hard the demand asks, and the clamp is on the demanded acceleration, so
+    // re-deriving it as an incidence limit gives a model that looks right at small inputs and
+    // diverges at the limits.
+    // ⚠ Distinct from the authored highGs/lowGs control limiters, which are a WIDER pair
+    // ([9, 15] / [−6, −9] in this install) and therefore sit at or past this clamp — they can never
+    // engage before lift is already capped here. Do not fold the two together.
+    // ⚠ The demanded load factor is the LENGTH of the projected demand, so it is never negative and
+    // the lower bound is unreachable in practice. It is written out because it is what the model
+    // clamps to, not because this code path can reach it.
+    private const float LiftGMin = -5f;
+    private const float LiftGMax = 9f;
+
+    // The aerodynamic ceiling on the delivered lift coefficient: C_L ≤ ClMaxStatic − ClMaxMach·Mach.
+    // This — not the load clamp — is what makes a slow aircraft unable to carry its own weight, so
+    // it is the term the stall speed falls out of, and it is the only place RefArea and air density
+    // enter lift at all (below the ceiling lift is independent of both).
+    private const float ClMaxStatic = 0.75f;
+    private const float ClMaxMach = 0.15f;
+
+    // Atmosphere. A single band with no altitude gradient: the aerodynamic intermediates run in
+    // imperial (ft/s, slug/ft³, lb/ft²) and only the results come back to metric.
+    // ⚠ The thin band the original also carries is NOT the operative one — it puts the stall of a
+    // 3500/335 airframe at 309 mph against this band's 75.5 mph, which is what settles the choice.
+    private const float AirDensitySlugPerFt3 = 2.2688e-3f;
+    private const float SpeedOfSoundFps = 1109.5f;
+    private const float FeetPerMetre = 3.28084f;
+    private const float MetresPerFoot = 0.3048f;
+    // The force/acceleration conversion the lift and gravity terms share: lift force is
+    // (load factor × Weight) and acceleration is (force × StandardG / Weight), so a demanded load
+    // factor of 1 is StandardG of acceleration. Gravity enters the demand as nom_gravity and leaves
+    // it as nom_gravity, which is why level flight at zero incidence cancels weight identically.
+    private const float StandardG = 9.82f;
+
+    // The two stall thresholds are DIFFERENT numbers and neither is a TUNE. The nose-drop threshold
+    // (isStalled(), below) is now the aircraft's OWN computed stall speed — see StallSpeed — in place
+    // of the fixed fraction this replaces (B15). The STALL lamp still lights at a fixed 0.30 fd
+    // (0.2989–0.2996 across four clips) — that split is unrelated to the nose-drop mechanism, so it
+    // stays a fraction: the original's "Stall 0% Thrust no input" clip measured the warning leading
+    // the Bloodhawk's break by 2.64 sim s / 14.9 mph, and nothing here touches that lamp or its
+    // threshold.
     private const float StallWarnFrac = 0.30f;    // STALL lamp lights below this fraction of fd_speed
-    private const float MaxDiveSpeedFrac = 1.75f; // numerical backstop, NOT a terminal speed. The
-                                                  // terminal dive is emergent from the drag curve
-                                                  // and lands within 0.3% of the original, so a cap
-                                                  // that binds would replace a measured value with a
-                                                  // guess. Set above every airframe's own emergent
-                                                  // terminal — the worst is the Balmoral, a bomber
-                                                  // at A = 7.6 m/s², which reaches 1.590 in a 71°
-                                                  // dive (--dump-flight=player_balmoral) — so it
-                                                  // only ever catches the loop energy pump or a dt
-                                                  // spike. (Was 1.678 at A = 13 under the old
-                                                  // lerp(x², x, 0.35) blend; the refitted DragExpHigh
-                                                  // is steeper above fd, so every airframe's
-                                                  // terminal moved DOWN and this cap sits further
-                                                  // clear than it did.)
+    private const float MaxDiveSpeedFrac = 1.75f; // numerical backstop, NOT a terminal speed — it is
+                                                  // meant to catch only the loop energy pump or a dt
+                                                  // spike, because a cap that binds replaces a
+                                                  // measured terminal with a guess.
+                                                  // It does NOT bind: the Bloodhawk's full-throttle
+                                                  // 71° dive terminates at 1.11 × fd_speed on the
+                                                  // aerodynamics alone, so the terminal dive is an
+                                                  // emergent measurement again.
                                                   // Measured resting altitude cap — C1B IA1 footage, Bloodhawk only. NOT an energy
                                                   // limit: level full-throttle equilibrium is flat to ±0.3 mph right up to 15 m under this line,
                                                   // and holding a 22° nose-up pull against it gains no altitude at all (sub-foot over the clip's
@@ -133,89 +177,66 @@ public sealed class FlightModel
     // 6712 ft apex; it exists to bound a runaway frame, not to shape the overshoot.
     private const float AltitudeCapOvershootM = 42.8f;
     private const float StallNoseRate = 1.0f;     // TUNE: rad/s toward world-down at full stall depth (× stall_mag)
-    private const float ClimbGravityScale = 0.6f; // TUNE: climb retention — a climb bleeds less speed than
-                                                  // plain energy exchange (the original holds speed better)
     private const float KnifeAlignFloor = 0.35f;  // TUNE: fraction of the nose-chase that survives at 90°
                                                   // bank — the chase is the lift force turning the velocity,
-                                                  // so it weakens with wing verticality (deeper knife-edge sag)
-    private const float KnifeNoseSag = 0.07f;     // rad (≈4°) the NOSE settles below the horizon at full
-                                                  // knife-edge. The MAGNITUDE is measured — the original's
-                                                  // roll-in decodes as an immediate ≈4° step
-                                                  // (fitted intercepts −3.4°/−4.2° across two takes at 143 and
-                                                  // 300 mph) — but the BOUND is wrong: the original then keeps
-                                                  // sagging linearly at 0.69–0.89 °/sim-s with no equilibrium,
-                                                  // reaching −27° nose / −18.7° path / 28 m/s sink by +36 s and
-                                                  // still steepening. It spirals in, which is exactly what the
-                                                  // bound was introduced to avoid. Ours instead settles inside a
-                                                  // second at −4° nose / −10° path / 19.4 m/s.
-                                                  // ⚠ Do NOT retune this to close the gap — a bounded sag cannot
-                                                  // produce a 36-second linear drift, and raising the bound
-                                                  // destroys the first 3 s, where the original holds altitude to
-                                                  // 0.5 ft/sim-s and we do not. The shape needs replacing, with
-                                                  // the lift keying, under BL-247; the sag carries into the path
-                                                  // roughly 1:1 because the path chases the nose.
-    private const float KnifeNoseRate = 0.2f;     // rad/s toward that sag at full knife-edge, ×(1−wingVert)
-                                                  // — exactly 0 wings-level or inverted, so cruise is untouched by
-                                                  // construction. A RATE CAP, not an exponential approach: an
-                                                  // exponential's rate scales with the displacement, which at a
-                                                  // +62° stalled-zoom nose came out ~32°/s — rivalling the 33°/s
-                                                  // full elevator, and it measurably rewrote the stall recovery
-                                                  // (nose +62°→+28°, wv 0.47→0.88). Clamped to the remaining
-                                                  // angle so it approaches the sag and stops, never overshoots.
-                                                  // Drag is a power law in x = V/fd_speed, normalized so D(fd) = A — which is what makes the
-                                                  // full-throttle level equilibrium exactly fd_speed for ANY exponent, and therefore what makes
-                                                  // that scenario useless for validating the shape (the low-throttle end is the only place the
-                                                  // shape is observable). The exponent DIFFERS either side of fd, and both halves are measured:
-                                                  //
-                                                  //   below fd — `CAP-05 Stall 0% Thrust no input` is a zero-thrust deceleration, so dV/dt is
-                                                  //   drag plus gravity and nothing else: the cleanest drag probe in the set. Measured D is
-                                                  //   0.36 / 1.11 / 2.82 / 3.74 m/s² at x = 0.25 / 0.35 / 0.46 / 0.50. Fitted jointly with
-                                                  //   ThrustConst and the acceleration, that gives 3.278 and lands all four within 4%.
-                                                  //
-                                                  //   above fd — the terminal dive: 70.7° at full throttle settles at 355.2 mph = 1.176 × fd.
-                                                  //
-                                                  // ⚠ These two CANNOT be one exponent. Forcing the low-speed value everywhere puts the terminal
-                                                  // dive at 344.5 mph against a measured 355.2 ± 6 — outside by 1.8× the tolerance. The seam sits
-                                                  // at x = 1 precisely because that is the normalization point, where D = A from either side, so
-                                                  // the curve is continuous across it; only its slope steps. What the step MEANS is unexplained —
-                                                  // the original's own acceleration fall-off near fd is likewise steeper than a single power law
-                                                  // fits, and a soft governor near fd_speed is the standing hypothesis (BL-148). Recorded as a
-                                                  // measurement, not as a mechanism.
-                                                  //
-                                                  // ⚠ This curve is far weaker below cruise than the lerp(x², x, 0.35) blend it replaced (4–21×
-                                                  // at the measured points). That blend existed to answer a user report that a throttled-back
-                                                  // plane barely decelerated — so this is the direction of that complaint, and it is owed a
-                                                  // re-playtest against it specifically. The defence is that the ORIGINAL decelerates slowly too:
-                                                  // 290 → 150 mph at 1/8 throttle takes it 7.04 sim s where the old model took 2.47.
-    private const float DragExpLow = 3.278f;      // below fd_speed — CAP-05's thrust-free probe
-    private const float DragExpHigh = 2.663f;     // at/above fd_speed — the terminal dive
+                                                  // so it weakens with wing verticality (deeper knife-edge sag).
+                                                  // ⚠ This is the ONE surviving use of wingVert, and it is kept
+                                                  // on a measurement rather than on the decode: the original's
+                                                  // knife-edge holds its nose 4.8° → 8.3° BELOW the flight path
+                                                  // over 36 s, a gap that GROWS, and the chase is what sets that
+                                                  // gap. Measured (Bloodhawk, 143 mph entry, +3 s → +36 s): at
+                                                  // 0.35 the gap runs 2.9° → 1.2° and 36 s costs 1087 m; with
+                                                  // wingVert retired (floor 1.0, the bank-independent reading) it
+                                                  // collapses to 1.9° → 0.5° and the same hold costs 1334 m,
+                                                  // against a measured 540. Every knife-edge observable moves the
+                                                  // wrong way without it. The decode does not contradict that:
+                                                  // it is silent here, because this explicit kinematic chase is
+                                                  // the remake's arcade handling and the original has no such
+                                                  // term — its "lift is bank-independent" applies to the LIFT
+                                                  // demand above, which no longer reads wingVert at all.
+                                                  // ⚠ Do NOT close the remaining gap by lowering this. Lowering
+                                                  // it moves every row the right way and still cannot reach the
+                                                  // footage, because the excess is in the ROTATION rate — the
+                                                  // nose drifts 1.09 °/s against a measured 0.69 and the heading
+                                                  // sweeps 1.7 °/s against 0.68, both ≈1.6× fast, the same ≈1.6×
+                                                  // by which the sustained banked pull is fast. Retuning here
+                                                  // would hide a rotation error inside a chase constant — and it
+                                                  // runs into a real boundary: at 0.10 the knife-edge α peaks at
+                                                  // 5.36°, past liftAOAs[0] = 5°, so the airflow blend starts
+                                                  // engaging in a knife-edge, which no capture supports.
 
-    // Induced drag: the cost of the pull, added to the speed power law as A · C_i · sin²α and
-    // clamped at MaxAoaDeg. Without it a hard pull cost us nothing — the original bleeds from a
-    // 298.96 mph cruise to a 222.94 mph plateau and holds it (CAP-01), where we used to hold 299.
-    // Vanishes exactly at α = 0, so cruise, the acceleration and the terminal dive are untouched by
-    // construction rather than by luck.
-    // ⚠ TUNE, and the only genuinely fitted constant in this group: it was swept against the real
-    // integrator until `sustained-turn-speed` landed on the measured plateau (223.03 mph against
-    // 222.94), because the couplings (drag → speed → bank → wingVert → align → α → drag) have no
-    // closed form. The thrust-vectoring loss is already in that loop — thrust acts along the nose
-    // and drag along the path, so the 1 − cos α deficit falls out of the vector sum — so this
-    // supplies the REMAINDER. Never hand-compute the whole deficit and add it here; that counts the
-    // vectoring twice. At the settled α of 13.8° it contributes 0.61 A, against a base drag of
-    // 0.37 A: BL-092's "+0.380 A" was quoted against the old lerp(x², x, 0.35) blend and understates
-    // the deficit under the refitted curve by more than half, so do not re-derive C_i from it.
-    // ⚠ NOT TRANSFERABLE, and it is not a property of the original. It absorbs our turn-rate error:
-    // we sweep heading at ~32 °/s where the original sweeps 18.95, so our α in this manoeuvre is
-    // larger than the original's and a SMALLER C_i reaches the same settled speed. Close the rate
-    // gap and this must be refitted (`sustained-turn-rate`, informational for exactly that reason).
-    // ⚠ The EXPONENT is a choice, not a measurement. Both CAP-01 segments sit at essentially the
-    // same load factor (V·ω 32.96 against 34.02), so terms in n, n² or ω² fit the clip equally
-    // well; sin²α is picked on physical grounds — textbook shape, doesn't saturate where the lift
-    // ramp does, and vanishes at α = 0 — not because the data prefers it.
-    private const float InducedDragCoef = 10.75f;
-    // deg. player.json's authored `maxAOA 46.0`, units unverified (`BL-095`) — a ceiling on how far
-    // this term can grow, not a limit on α itself, which is still free to exceed it.
-    private const float MaxAoaDeg = 46f;
+    // Drag is a parabolic polar in MACH:
+    //
+    //   C_D  = DragPolarScale · (DragPolarParasite + DragPolarLinear · M + DragPolarQuad · M²)
+    //   Drag = q · RefArea · DragFactor · C_D          opposing the velocity, in weight units
+    //
+    // All three coefficients and the 0.73 scale are the same for every aircraft — airframes differ
+    // only through the authored `drag_factor` and `ref_area`.
+    //
+    // ⚠ The variable is Mach, NOT the lift coefficient. The original's drag routine takes the lift
+    // result as an argument and never reads it — so this model has **no induced drag whatsoever**,
+    // and a pull costs speed only through the lift vector's own backward tilt in the force sum.
+    // Reading the same three coefficients as a C_L polar is the natural mistake (they look exactly
+    // like one) and it gives a drag FLOOR that is speed-independent at fixed load factor, which no
+    // measurement of the original supports.
+    //
+    // ⚠ The curve conflicts with `CAP-05`'s four zero-thrust points (0.36/1.11/2.82/3.74 m/s² at
+    // x = V/fd_speed = 0.25/0.35/0.46/0.50): in Mach it gives 1.3/3.0/6.2/7.7 — the right *shape*
+    // (a 5.9× rise over the span against the measured 10.4×) but ≈2–3.6× too strong. That is NOT a
+    // units error: the force→acceleration conversion was re-read from the executable and is exactly
+    // this file's — veh_weight parsed, copied and divided raw, no lb/kg factor anywhere — so there
+    // is no missing constant to implement and none to tune (a scale that fixed the decel would
+    // break the accel row the same footage pins). The deficit is a near-constant ΔC_D ≈ 0.11, and
+    // it stands RECORDED as a decode-vs-footage conflict (docs/org/flightModel.md, "The force
+    // scale — settled"); the coefficients are the binary's and are not refitted to close it.
+    //
+    // Because thrust grows as M and this grows as M², the two cross sharply, and that crossing —
+    // not a normalization — is what puts the level equilibrium where it is. It lands within 1 % of
+    // the authored fd_speed for nine of the eleven player airframes with nothing fitted.
+    private const float DragPolarScale = 0.73f;
+    private const float DragPolarParasite = 0.12f;
+    private const float DragPolarLinear = 0.8f;
+    private const float DragPolarQuad = 0.5f;
 
     // Per-axis control-rate calibration. Steady rate = torque · recInertia · Tune /
     // ang_momentum_damp (× eff on yaw), and a full 360° takes ≈ 1/damp spin-up + 2π/rate.
@@ -225,22 +246,76 @@ public sealed class FlightModel
     // inside the video's clock uncertainty. The video also settles what was an open question: the
     // original's pitch rate does NOT fall off with speed (37.9 / 33.7 / 30.7 / 36.5 °/s binned
     // over 120–280 mph round a loop, flat within the noise), so speed-independent pitch is right.
-    // ⚠ The STEADY rates above are pinned; the TRANSIENT shape is a known divergence. A square-wave
-    // pitch-cadence sweep of the original rolls off 3.5× steeper than
-    // the τ → ∞ ceiling of the single first-order lag this integrator implements, so `1/damp` is the
-    // wrong shape for the original's pitch transient even though it gives the right steady rate.
-    // Open as BL-147; do not "fix" it by moving these Tune constants, which set the steady rate.
-    private const float PitchTune = 0.75f;        // TUNE: pinned to the measurements above
-    private const float YawTune = 1.32f;          // TUNE: pinned (at cruise eff)
-    private const float RollTune = 2.12f;         // TUNE: pinned
+    // ⚠ The STEADY rates above are pinned; the TRANSIENT shape is a known divergence, narrowed but
+    // still open as BL-147. A square-wave pitch-cadence sweep of the original falls 42× between the
+    // 1300 ms and 570 ms cadences; the same sweep driven into this model falls 23×. The weathervane
+    // below took that from 20× to 23× — the right direction, about a sixth of the gap — so a
+    // second-order response is part of the answer and not the whole of it. ⚠ Do NOT "fix" the
+    // remainder by moving these constants: they set the STEADY rate, which matches, and a transient
+    // chased through them breaks the thing that does.
+    // ⚠ PitchTune and YawTune are refit here (0.75 → 0.89, 1.33 → 1.57) for exactly the opposite
+    // reason — because the weathervane changed the steady rates and these are what re-pin them. A
+    // sustained full-stick manoeuvre holds a real misalignment (α ≈ 18° pulling, β ≈ 8° on full
+    // rudder), so the restoring torque opposes it and the un-refit rates came out 15% and 20% low.
+    // The refit is Bloodhawk-pinned, as it always was; the other ten airframes have no measured
+    // target and move with it.
+    private const float PitchTune = 0.89f;        // TUNE: pinned to the measurements above
+    private const float YawTune = 1.57f;          // TUNE: pinned against the authored yaw curve below
+    private const float RollTune = 2.12f;         // TUNE: pinned — untouched, the weathervane cannot
+                                                  // reach the roll axis (its torque is ⊥ the nose)
 
-    private readonly float _maxThrustAccel;       // m/s² at full throttle
+    // Bank coupling — the original's coordinated-turn cheat, and the only part of its rotation that
+    // no airframe authors. Two float constants compiled into the executable and writable only from
+    // its own developer console (`fall_off` = 0.205 → yaw, `bank_off` = 0.165 → pitch), so no data
+    // file carries them and none ever will. Both key off how vertical the WINGS are:
+    //
+    //   yaw   += BankYawCoupling   · (starboard·up)                   signed — bank left yaws left
+    //   pitch += BankPitchCoupling · |starboard·up|                   unsigned — any bank pulls up
+    //          + BankYawCoupling   · |bodyUp·up|   while INVERTED     (bodyUp·up < 0 only)
+    //
+    // ⚠ The inverted term reuses the YAW constant on the PITCH axis — it is not a third number, and
+    // it peaks wings-level inverted where the bank term is exactly zero, so an aeroplane on its back
+    // is pulled toward the ground instead of flying hands-off. Reading "an extra contribution when
+    // inverted" as a separate coefficient, or as an addition to the yaw term, both give a model that
+    // is right upright and wrong on its back.
+    // Each term enters the same accumulator the stick commands do — so it is damped identically —
+    // and carries that axis' RecInertia, which is the only scaling the original applies downstream.
+    // It does NOT carry the axis' *Tune: those calibrate STICK authority against measured video and
+    // are ours, and extending one to a decoded constant would be tuning it. The alternative
+    // (×Tune, preserving the binary's coupling:full-stick ratio) was measured — it moves the
+    // Bloodhawk's settled turn 255.6 → 257.4 mph and its sink 1.66 → 2.03 ft/s, i.e. past the
+    // measured sink bound — so the literal read is also the one the measurements prefer.
+    private const float BankYawCoupling = 0.205f;
+    private const float BankPitchCoupling = 0.165f;
+
+    // The weathervane: the authored `return_rate` is a RESTORING TORQUE toward the velocity vector,
+    // not extra damping on a released axis. It enters the same accumulator the stick and the bank
+    // coupling feed, so it carries that axis' RecInertia and is damped by ang_momentum_damp — but
+    // because it is a torque proportional to displacement rather than to rate, the pair is a
+    // SPRING-DAMPER (second order), where folding return_rate into the damping coefficient gave a
+    // first-order lag.
+    //
+    //   ω += ReturnRate · WeathervaneHalfAngle · angle(nose, v̂) · unit(nose × v̂)
+    //
+    // ⚠ The angle is HALVED, and the halving is the binary's rather than a simplification of it:
+    // the original builds the shortest-arc quaternion from the nose onto the unit velocity and then
+    // converts it to a rotation vector through a quaternion-log helper, which returns
+    // atan2(|q.v|, q.w) · unit(q.v) — the HALF angle, never doubled back. Reading it as the full
+    // misalignment doubles the spring rate.
+    // ⚠ The axis is perpendicular to the nose by construction, so the ROLL component is identically
+    // zero at every attitude: a weathervane cannot touch bank, and it cannot reach any roll
+    // measurement.
+    // ⚠ It vanishes identically when the nose is on the velocity vector, which is what keeps level
+    // cruise untouched — by construction, not by scale.
+    // ⚠ The original applies this to the PLAYER aircraft only (AI is skipped outright). Nothing here
+    // gates on that because this class only ever flies a player aircraft; an AI flight path added
+    // later must not reuse it without the gate.
+    private const float WeathervaneHalfAngle = 0.5f;
 
     public FlightModel(PlaneStats stats)
     {
         Stats = stats;
-        _maxThrustAccel = stats.EnginePower * Config.GetFloat("flightModel.thrustConst", ThrustConst)
-                          / (stats.VehWeight / 1000f);
+        StallSpeed = ComputeStallSpeed(stats);
     }
 
     public PlaneStats Stats { get; }
@@ -249,6 +324,107 @@ public sealed class FlightModel
     /// thresholds are measured on, and the one the STALL lamp's blink rate ramps over. Every stall
     /// cue derives from this; nothing recomputes its own margin.</summary>
     public float StallFraction => Stats.FdSpeed > 0f ? Speed / Stats.FdSpeed : 0f;
+
+    /// <summary>The speed (m/s) below which the wings' maximum available lift — the SAME aerodynamic
+    /// ceiling <see cref="Step"/> caps lift with, <c>ClMaxStatic − ClMaxMach·Mach</c> — can no longer
+    /// equal the aircraft's own weight: the solution of <c>clMax(V)·q(V)·RefArea = VehWeight</c>, a
+    /// LOAD FACTOR OF EXACTLY 1 (not <c>nom_gravity / StandardG</c> ≈ 2.04, what level flight itself
+    /// demands to cancel this install's arcade gravity — the two conventions differ by
+    /// √(nom_gravity/StandardG) ≈ 1.43×). The decode's own worked example settles which one the
+    /// binary actually compares against: it reproduces 75.5 mph for the fallback aircraft
+    /// (veh_weight 3500, ref_area 335) and 309 mph for the same aircraft under the wrong atmosphere
+    /// band — BOTH numbers match only the bare-Weight (1 G) read; the nom_gravity-scaled read gives
+    /// 109/447 mph instead, which the decode never quotes. So 1 G is what is coded, not a
+    /// simplification of it.
+    /// ⚠ Evaluated against a REAL airframe rather than the fallback numbers, this surfaces a residual
+    /// the coincidence was hiding: the Bloodhawk's own data (1900/330) computes a 56.5 mph stall
+    /// against the video-measured ~76 mph nose-drop ("Stall 0% Thrust no input" clip) — the fixed
+    /// 0.25·fd_speed this replaces only matched that footage because 0.25 × the BLOODHAWK's fd_speed
+    /// happens to sit close to the FALLBACK aircraft's own stall speed, not the Bloodhawk's (see the
+    /// B15 landing note in docs/org/flightModel.md). Recorded as a decode-vs-footage conflict, not
+    /// papered over by switching the G convention to fit one clip.</summary>
+    public float StallSpeed { get; }
+
+    /// <summary>How much of the available thrust the nose's attitude leaves: 1 wings-level and nose
+    /// on the horizon, 0.6612 pointing straight up, 1.24 pointing straight down. A climb is
+    /// PENALISED and a dive rewarded — the opposite of a climb-retention term, and the reason the two
+    /// could not both stand.
+    ///
+    /// <para>⚠ The argument is the world-up component of the BODY Z AXIS, and the nose points along
+    /// <b>−Z</b>: pass <c>Attitude.Z.Y</c>, which is <c>−nose.Y</c> and therefore NEGATIVE in a
+    /// climb. This is the one place in the force path where a dropped sign produces flight that still
+    /// looks entirely plausible — it merely swaps climb for dive — so it is asserted by a test that
+    /// fails under the flip rather than left to review.</para></summary>
+    public static float AttitudeThrustScale(float bodyZUp)
+    {
+        float a = Mathf.Clamp(bodyZUp, -1f, 1f);
+        float scale = 1f + AttitudeThrustBoth * a;
+        return a <= 0f ? scale * (1f + AttitudeThrustUp * a) : scale;
+    }
+
+    /// <summary>Thrust acceleration along the nose, m/s², at an airspeed and lever position — the
+    /// original's thrust-available curve times the lever, LINEARLY. ⚠ The attitude scale is NOT
+    /// included: <see cref="AttitudeThrustScale"/> is applied by the caller, so this stays the bare
+    /// curve an instrument can sample. Exposed so an instrument can report the curve without
+    /// re-deriving it; the step below calls the same method.</summary>
+    public float ThrustAccelAt(float speed, float throttle)
+    {
+        float mach = Mathf.Max(ThrustMachFloor, speed / (SpeedOfSoundFps * MetresPerFoot));
+        float vRefFps = (ThrustVRefSlope * mach + ThrustVRefMach) * SpeedOfSoundFps;
+        float qRef = 0.5f * AirDensitySlugPerFt3 * vRefFps * vRefFps;
+        float cRef = DragPolarScale * (DragPolarParasite - mach * ThrustMachTrim);
+        float avail = qRef * cRef / (mach * Mathf.Pow(ThrustPowBase, ThrustPowMach * mach));
+        return Stats.VehWeight > 1e-3f
+            ? Stats.EnginePower * Stats.RefArea * avail * throttle * StandardG / Stats.VehWeight
+            : 0f;
+    }
+
+    /// <summary>Rudder authority at an airspeed — the original's authored piecewise speed table
+    /// (<see cref="PlaneStats.YawFadeIn"/>/<see cref="PlaneStats.YawMax"/>/
+    /// <see cref="PlaneStats.YawFadeOut"/>/<see cref="PlaneStats.YawLowSpeed"/>/
+    /// <see cref="PlaneStats.YawHighSpeed"/>): a low-speed floor, ramping LINEARLY to full
+    /// authority at yaw_max, then declining LINEARLY to a high-speed floor at yaw_fade_out and
+    /// holding there. Deliberately NOT monotone, and NOT flat past the knee — the executable's
+    /// compiled fallbacks (knee at 45 mph, flat 0.1 beyond) are a different, wrong reading; this
+    /// install authors a curve that keeps declining out to 400 mph. YAW ONLY — pitch and roll run
+    /// their own, different authority curves and are untouched here.
+    /// Exposed so an instrument can sample the curve without re-deriving it; Step calls the same
+    /// method.</summary>
+    public float YawAuthorityAt(float speed)
+    {
+        var s = Stats;
+        if (speed <= s.YawFadeIn)
+            return s.YawLowSpeed;
+        if (speed <= s.YawMax)
+            return s.YawMax > s.YawFadeIn
+                ? Mathf.Lerp(s.YawLowSpeed, 1f, (speed - s.YawFadeIn) / (s.YawMax - s.YawFadeIn))
+                : 1f;
+        if (speed <= s.YawFadeOut)
+            return s.YawFadeOut > s.YawMax
+                ? Mathf.Lerp(1f, s.YawHighSpeed, (speed - s.YawMax) / (s.YawFadeOut - s.YawMax))
+                : s.YawHighSpeed;
+        return s.YawHighSpeed;
+    }
+
+    /// <summary>The weathervane's restoring torque for the current attitude and flight path, in
+    /// BODY axes and in the same units as the stick command (rad/s², before RecInertia and before
+    /// the damping) — <c>return_rate · (α/2)</c> about the axis that swings the nose onto the
+    /// velocity vector. Zero when the two are aligned, and its roll component is zero always.
+    /// Exposed so an instrument or a test can read the torque without re-deriving it; Step calls the
+    /// same method. See <see cref="WeathervaneHalfAngle"/> for the decode and its traps.</summary>
+    public Vector3 WeathervaneTorque()
+    {
+        var nose = -Attitude.Z;
+        var axis = nose.Cross(VelocityDir);
+        float sin = axis.Length();
+        if (sin < 1e-6f)
+            return Vector3.Zero;
+        // atan2 of the cross/dot pair, so the angle stays exact out to a fully reversed flight path
+        // where an Acos of the dot alone loses precision and a small-angle read is simply wrong.
+        float angle = Mathf.Atan2(sin, nose.Dot(VelocityDir));
+        var world = axis * (Stats.ReturnRate * WeathervaneHalfAngle * angle / sin);
+        return Attitude.Transposed() * world;
+    }
 
     public void Reset(Vector3 position, Basis attitude, float speed, float throttle)
     {
@@ -270,60 +446,76 @@ public sealed class FlightModel
         // above. Read unconditionally here — once per step — so every key registers even on a frame
         // that never enters the stall or knife-edge branches below, which keeps --dump-config's
         // template complete and the orphan/missing checks honest.
-        float minControlEff = Config.GetFloat("flightModel.minControlEff", MinControlEff);
-        float maxControlEff = Config.GetFloat("flightModel.maxControlEff", MaxControlEff);
         float pitchTune = Config.GetFloat("flightModel.pitchTune", PitchTune);
         float yawTune = Config.GetFloat("flightModel.yawTune", YawTune);
         float rollTune = Config.GetFloat("flightModel.rollTune", RollTune);
-        float stallSpeedFrac = Config.GetFloat("flightModel.stallSpeedFrac", StallSpeedFrac);
         // Read here as well as at its own site (IsStallWarned, which Step never calls) purely so the
         // key registers on a launch that never flies — --dump-config's template and the orphan check.
         _ = Config.GetFloat("flightModel.stallWarnFrac", StallWarnFrac);
         float stallNoseRate = Config.GetFloat("flightModel.stallNoseRate", StallNoseRate);
-        float climbGravityScale = Config.GetFloat("flightModel.climbGravityScale", ClimbGravityScale);
         float knifeAlignFloor = Config.GetFloat("flightModel.knifeAlignFloor", KnifeAlignFloor);
-        float knifeNoseSag = Config.GetFloat("flightModel.knifeNoseSag", KnifeNoseSag);
-        float knifeNoseRate = Config.GetFloat("flightModel.knifeNoseRate", KnifeNoseRate);
-        float dragExpLow = Config.GetFloat("flightModel.dragExpLow", DragExpLow);
-        float dragExpHigh = Config.GetFloat("flightModel.dragExpHigh", DragExpHigh);
-        float throttleExp = Config.GetFloat("flightModel.throttleExp", ThrottleExp);
-        float liftSpeedFrac = Config.GetFloat("flightModel.liftSpeedFrac", LiftSpeedFrac);
-        float liftAoaLo = Config.GetFloat("flightModel.liftAoaLo", LiftAoaLo);
-        float liftAoaHi = Config.GetFloat("flightModel.liftAoaHi", LiftAoaHi);
-        float liftLoadMax = Config.GetFloat("flightModel.liftLoadMax", LiftLoadMax);
-        float inducedDragCoef = Config.GetFloat("flightModel.inducedDragCoef", InducedDragCoef);
-        float maxAoaDeg = Config.GetFloat("flightModel.maxAoaDeg", MaxAoaDeg);
-        float alignRate = Config.GetFloat("flightModel.alignRate", AlignRate);
+        float liftGMin = Config.GetFloat("flightModel.liftGMin", LiftGMin);
+        float liftGMax = Config.GetFloat("flightModel.liftGMax", LiftGMax);
         float altitudeCapM = Config.GetFloat("flightModel.altitudeCapM", AltitudeCapM);
         float altitudeCapOvershootM = Config.GetFloat("flightModel.altitudeCapOvershootM", AltitudeCapOvershootM);
 
-        // --- rotation: torque·recInertia vs momentum damping (all from the dynamics block).
-        // Control surfaces bite proportionally to airspeed; return_rate adds extra
-        // centering on an axis while its stick is released.
-        // Inverted eff. Turns faster the slower the plane is. Still not same as original
-        float eff = 1.4f - Mathf.Clamp(Speed / s.FdSpeed, minControlEff, maxControlEff);
+        // --- rotation: torque·recInertia vs momentum damping (all from the dynamics block), plus
+        // two decoded torques into the same accumulator — the bank coupling and the weathervane.
+        // Yaw authority follows the original's authored speed table (see YawAuthorityAt) — a
+        // declining function of speed, same as the interim curve it replaces, but the original's
+        // own shape rather than a fitted stand-in. Pitch and roll carry no HIGH-speed fade here:
+        // the original fades neither with speed (its pitch fade is authored unreachable).
+        // ⚠ They do fade at LOW speed in the original and do not here — FUN_00490e10 ramps roll and
+        // pitch authority from 0 at turn_fade_in (10 mph) to 1 at turn_fade_out (50), flat above.
+        // Unimplemented, traced, and corroborated from the controls: BL-330. Do not read the line
+        // above as "roll never fades" — that misreading is what had turn_fade_* filed as a bank
+        // effect through four items.
+        float yawEff = YawAuthorityAt(Speed);
         var cmd = new Vector3(
             Mathf.Clamp(input.Pitch, -1f, 1f) * s.PitchTorque * s.RecInertia.X * pitchTune,
-            //eff only works on Yaw like the original
-            Mathf.Clamp(input.Yaw, -1f, 1f) * s.RudderTorque * s.RecInertia.Y * yawTune * eff,
+            Mathf.Clamp(input.Yaw, -1f, 1f) * s.RudderTorque * s.RecInertia.Y * yawTune * yawEff,
             Mathf.Clamp(input.Roll, -1f, 1f) * s.RollTorque * s.RecInertia.Z * rollTune);
-        var damp = new Vector3(
-            s.AngMomentumDamp + s.ReturnRate * (1f - Mathf.Min(1f, Mathf.Abs(input.Pitch))),
-            s.AngMomentumDamp + s.ReturnRate * (1f - Mathf.Min(1f, Mathf.Abs(input.Yaw))),
-            s.AngMomentumDamp + s.ReturnRate * (1f - Mathf.Min(1f, Mathf.Abs(input.Roll))));
-        BodyRates += (cmd - BodyRates * damp) * dt;
+
+        // Bank coupling (see the two constants): banking yaws the nose the way the wings point and
+        // pulls it up, with a further pull once the wings are past vertical. Read off the attitude
+        // this frame ENTERED with, alongside the stick command and before anything rotates it, which
+        // is the original's own ordering.
+        float bankComponent = Attitude.X.Dot(Vector3.Up);
+        float bodyUpComponent = Attitude.Y.Dot(Vector3.Up);
+        cmd.Y += BankYawCoupling * bankComponent * s.RecInertia.Y;
+        cmd.X += (BankPitchCoupling * Mathf.Abs(bankComponent)
+                  + (bodyUpComponent < 0f ? -BankYawCoupling * bodyUpComponent : 0f))
+                 * s.RecInertia.X;
+
+        // Weathervane (see WeathervaneHalfAngle): a restoring torque that swings the nose onto the
+        // velocity vector, half the misalignment angle about the axis that closes it. Read off the
+        // attitude and the velocity direction this frame ENTERED with, alongside the stick command
+        // and the bank coupling, which is the original's own ordering.
+        cmd += WeathervaneTorque() * s.RecInertia;
+
+        // Damping is the authored ang_momentum_damp alone. return_rate is NOT a damping term — it is
+        // the weathervane torque above, applied whether or not a stick is deflected.
+        // The original's own order (FUN_00491820): accumulate this tick's torque onto BodyRates
+        // FIRST, THEN decay the WHOLE result — the freshly-added torque included — by
+        // exp(−dt·ang_momentum_damp). That is an EXPONENTIAL decay, not the explicit-Euler linear
+        // subtraction this replaces (see C24). The two forms are the same to first order in dt per
+        // step (exp(−x) = 1 − x + O(x²), matching the linear factor (1 − x) exactly at O(x)), but the
+        // linear form is unstable at a large step: once dt·damp > 2 its factor (1 − dt·damp) goes
+        // below −1 and BodyRates flips sign and grows every tick, where exp(−dt·damp) stays in
+        // (0, 1) for any dt ≥ 0 and only ever decays.
+        BodyRates += cmd * dt;
+        BodyRates *= Mathf.Exp(-dt * s.AngMomentumDamp);
 
         // stall: below stall speed the nose is pulled toward WORLD-down (a great-circle
         // rotation about the nose×down axis — no twist about the nose, works at any
         // attitude including inverted). Deep-stall rate exceeds full-elevator authority
         // (~0.58 rad/s steady after the item-12 calibration), so the drop is decisive
         // until airspeed recovers.
-        float stallSpeed = stallSpeedFrac * s.FdSpeed;
         bool stalled = isStalled();
         float noseYBefore = (-Attitude.Z).Y;  // the nose's world elevation entering this frame
         if (stalled)
         {
-            float depth = 1f - Speed / stallSpeed;
+            float depth = 1f - Speed / StallSpeed;
             var noseNow = -Attitude.Z;
             var axis = noseNow.Cross(Vector3.Down);
             if (axis.LengthSquared() > 1e-8f)
@@ -359,53 +551,19 @@ public sealed class FlightModel
             }
         }
 
-        // knife-edge nose sag: with the wings vertical they carry nothing, and the nose
-        // falls as well as the flight path — the original drops it, and without this block
-        // the plane would descend wings-level-nosed because BOTH knife-edge terms (liftFrac
-        // and the nose-chase) act on VelocityDir and nothing else touches Attitude. Same great-circle
-        // rotation about nose×down as the stall drop, so it is attitude-independent and
-        // adds no twist about the nose; at 90° bank that axis is the plane's own up, i.e.
-        // this reads as the body YAW that top rudder is flown to cancel — which is exactly
-        // the real knife-edge control the pilot now has to hold.
-        //
-        // It targets a BOUNDED elevation rather than chasing world-down or the flight path.
-        // Both of those are unbounded and neither settles: the path chases the nose
-        // (`align`, below), so a nose that keeps falling drags the path down with it and
-        // the pair spirals into the ground instead of reaching the sag equilibrium.
-        //
-        // Sits here — after the stall block, before the translation — so `nose`, `wingVert`,
-        // the thrust direction and the nose-chase all read one consistent attitude this
-        // frame. It can only ever LOWER the nose (skipped once the nose is at or below the
-        // target), and it is **off entirely while stalled**: below stall speed the stall
-        // block owns the nose outright, so gating on `!stalled` is what makes the
-        // stall/sag interaction provably empty rather than merely benign.
-        // (Measured: WITHOUT the gate, an exponential approach reached ~32°/s at a +62°
-        // nose and moved the stalled zoom apex to +28°, wv 0.47→0.88. The two never
-        // pulled against each other — both drive the nose down — but they compounded,
-        // which is its own kind of wrong. WITH the gate the stalled phase itself is
-        // untouched; a stall-into-knife-edge run still differs slightly overall, by ~4°
-        // at the apex, because the *pre*-stall banked zoom is legitimately in scope for
-        // this term, and converges to within 1° after recovery.)
-        if (!stalled)
-        {
-            float knife = 1f - Mathf.Abs(Attitude.Y.Dot(Vector3.Up));
-            if (knife > 1e-4f)
-            {
-                var noseKnife = -Attitude.Z;
-                float noseElev = Mathf.Asin(Mathf.Clamp(noseKnife.Y, -1f, 1f));
-                float sagTarget = -knifeNoseSag * knife;
-                if (noseElev > sagTarget + 1e-5f)
-                {
-                    var axis = noseKnife.Cross(Vector3.Down);
-                    if (axis.LengthSquared() > 1e-8f)
-                    {
-                        float angle = Mathf.Min(knifeNoseRate * knife * dt,
-                                                noseElev - sagTarget);
-                        Attitude = Attitude.Rotated(axis.Normalized(), angle).Orthonormalized();
-                    }
-                }
-            }
-        }
+        // There is deliberately NO knife-edge nose-sag term here. One used to sit at this point —
+        // a bounded ≈4° drop of the nose, at a capped rate, keyed on wing verticality — because
+        // nothing else in the model dropped the nose in a knife-edge and the aircraft would
+        // otherwise have descended wings-level-nosed. The decoded bank→yaw coupling now does it:
+        // at 90° of bank the body yaw axis is horizontal, so a yaw rate IS a nose sag, and the
+        // weathervane then pulls the nose further onto the falling flight path. That produces the
+        // original's own shape — a drift with no equilibrium — which the bounded term never could,
+        // and it produces the onset better as well: at the original's +3 s sample the decoded
+        // mechanism alone reads −4.94° against a measured −4.9°, where adding the bounded step on
+        // top read −7.28°. Sinking 5.7 ft/s at that sample against a measured 0.5, rather than
+        // 12.7. ⚠ Do not reintroduce a nose-sag term to deepen the knife-edge: the remaining
+        // divergence is that the whole banked rotation runs ≈1.6× fast (see KnifeAlignFloor), and
+        // a second nose-down term would double-count the part that is already there.
 
         // --- translation: forces integrate on the velocity VECTOR (v = VelocityDir·Speed),
         // so the speed can pass through zero — a vertical zoom tail-slides out downward
@@ -425,66 +583,96 @@ public sealed class FlightModel
         // clamped dot product is, unlike Slerp's axis, safe at zero.
         Alpha = Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(nose.Dot(VelocityDir), -1f, 1f)));
 
-        // lift fraction: quadratic in speed up to the lift speed, scaled by how much of
-        // the wings' lift points vertically — |up·Y| is 1 level OR inverted (arcade:
-        // inverted flight still carries), 0 in knife-edge (near-ballistic, nose sags) —
-        // and by the LOAD FACTOR the pull is generating, which is what lets a steep bank
-        // hold altitude on the small vertical share of a large lift vector.
+        // --- lift: a DEMANDED acceleration the wings deliver, not a fraction of gravity.
         //
-        // wingVert stays the carrier and is deliberately NOT flattened: it is the same
-        // quantity the knife-edge nose-sag runs on, and a bank-independent lift term
-        // reproduces the banked turn while destroying the knife-edge departure. The load
-        // factor is the second factor, keyed on α — a quantity with no bank in it — so the
-        // two attitudes the original separates (100° bank at full back stick, which holds
-        // altitude; 94–104° at near-neutral stick, which falls out of the sky) come out
-        // different from one keying.
-        float liftSpeed = liftSpeedFrac * s.FdSpeed;
-        float speedLift = Mathf.Min(1f, (Speed / liftSpeed) * (Speed / liftSpeed));
+        // Step 1 — the oncoming airflow is faked toward the nose across the authored liftAOAs
+        // window. Below the low edge the true velocity vector is used; past the high edge the real
+        // airflow direction is discarded entirely and the wind is taken as coming straight down the
+        // nose; between the two it is a LINEAR BLEND ON cos α, because the authored degrees are
+        // cosined at load and the window is a cosine window (blending on the angle instead is a
+        // different, subtly wrong curve). This is the large arcade assist that lets a hard-
+        // manoeuvring aircraft behave as though it has no sideslip.
+        var velocity = VelocityDir * Speed;
+        float cosAlpha = Mathf.Clamp(nose.Dot(VelocityDir), -1f, 1f);
+        float cosSpan = s.LiftAoaCosLo - s.LiftAoaCosHi;
+        float windBlend = cosSpan > 1e-6f
+            ? Mathf.Clamp((s.LiftAoaCosLo - cosAlpha) / cosSpan, 0f, 1f)
+            : (cosAlpha < s.LiftAoaCosLo ? 1f : 0f);
+        var relativeWind = velocity.Lerp(nose * Speed, windBlend);
+
+        // Step 2 — the demand: swing the velocity onto that airflow at the authored rate, and carry
+        // weight on top. Only the part of it the wings can act through counts, so it is projected
+        // onto the body X/Y plane (the nose axis is body Z), and the length of that projection is
+        // the demanded LOAD FACTOR in G. ⚠ G, not degrees — this is an acceleration the wings are
+        // asked to produce, and nothing here is an incidence angle.
+        var demand = (relativeWind - velocity) * s.LiftAccelRate;
+        demand.Y += s.Gravity;
+        var noseAxis = Attitude.Z;
+        var liftDir = demand - noseAxis * demand.Dot(noseAxis);
+        LoadFactorDemand = liftDir.Length() / StandardG;
+        float loadFactor = Mathf.Clamp(LoadFactorDemand, liftGMin, liftGMax);
+
+        // Step 3 — cap the delivered force at the aerodynamic ceiling, C_L·q·RefArea in weight
+        // units, which is the same as capping the load factor at C_L·q·RefArea / Weight. This is
+        // where a slow aircraft stops being able to carry itself.
+        float speedFps = Speed * FeetPerMetre;
+        float dynPressure = 0.5f * AirDensitySlugPerFt3 * speedFps * speedFps;
+        float mach = Speed / (SpeedOfSoundFps * MetresPerFoot);
+        float clMax = Mathf.Max(0f, ClMaxStatic - ClMaxMach * mach);
+        // q·RefArea, in weight units (lb/ft² × ft²) — the scale a coefficient converts to a force,
+        // and the divisor the delivered C_L (drag, below) comes back out through.
+        float qRefArea = dynPressure * s.RefArea;
+        float loadCap = s.VehWeight > 1e-3f ? clMax * qRefArea / s.VehWeight : 0f;
+        loadFactor = Mathf.Clamp(loadFactor, -loadCap, loadCap);
+        var liftAccel = liftDir.LengthSquared() > 1e-12f
+            ? liftDir.Normalized() * (loadFactor * StandardG)
+            : Vector3.Zero;
+
+        // How much of the wings' lift points vertically — 1 level OR inverted (arcade: inverted
+        // flight still carries), 0 in knife-edge. Lift itself does NOT read it: the demand's body
+        // X/Y projection is bank-independent by construction, which is the original's own
+        // arrangement. Its one remaining reader is the nose-chase below — see KnifeAlignFloor for
+        // the measurement that keeps it there.
         float wingVert = Mathf.Abs(Attitude.Y.Dot(Vector3.Up));
-        float aoaRamp = Mathf.Clamp((Alpha - liftAoaLo) / Mathf.Max(1e-3f, liftAoaHi - liftAoaLo),
-                                    0f, 1f);
-        // Clamped at 1: this term can cancel gravity's cross-path component and no more. Lift is
-        // not rebuilt as a perpendicular force here — the flight path is turned by the nose-chase
-        // (`align`, below), and letting liftFrac exceed 1 would push the path as well and
-        // double-count it against every calibrated steady rate.
-        float liftFrac = Mathf.Min(1f, speedLift * wingVert * (1f + (liftLoadMax - 1f) * aoaRamp));
 
         // thrust pulls along the nose (its along-path share falls out of the vector sum —
-        // a stalled plane falling nose-high needs no special case), and is sublinear in the
-        // throttle lever. Drag opposes the motion: a power law in x = V/fd_speed, normalized so
-        // drag(fd_speed) = max thrust, with a measured slope change at fd (see the constants).
-        // At v ≈ 0 drag → 0 with speed, so the stale direction there is harmless.
-        // Gravity splits about the path: the
-        // cross-path component is what lift cancels (its deficit is the sink — vanishes at
-        // full lift, drops the plane when slow or knife-edge); the along-path component
-        // bleeds/returns speed — reduced climbing (climb retention: the original bleeds
-        // noticeably less speed in a sustained climb), full when diving.
-        float xSpd = Speed / s.FdSpeed;
-        // Drag is the speed power law PLUS the pull's own cost: a hard pull bleeds speed, which is
-        // what makes a sustained max-pull turn settle far below cruise instead of at it.
-        float sinAoa = Mathf.Sin(Mathf.DegToRad(Mathf.Min(Alpha, maxAoaDeg)));
-        float dragAccel = _maxThrustAccel
-                          * (Mathf.Pow(xSpd, xSpd < 1f ? dragExpLow : dragExpHigh)
-                             + (inducedDragCoef * sinAoa * sinAoa));
-        var gravity = Vector3.Down * s.Gravity;
-        var gAlong = VelocityDir * gravity.Dot(VelocityDir);
-        var gAcross = gravity - gAlong;
-        var accel = nose * (Mathf.Pow(Throttle, throttleExp) * _maxThrustAccel)
+        // a stalled plane falling nose-high needs no special case), is LINEAR in the throttle
+        // lever, and is scaled by the nose's attitude: less climbing, more diving (see
+        // AttitudeThrustScale). Drag opposes the motion: the parabolic polar in Mach (see the
+        // constants). At v ≈ 0 drag → 0 and the stale direction there is harmless.
+        // Gravity acts in FULL, and at full strength in every attitude — the lift demand above
+        // already carries weight, and subtracting it twice is the trap the old cross-path fraction
+        // was one half of. There is no climb-retention scale on it: the original's own gravity term
+        // is a plain nom_gravity/9.82 × Weight with nothing attitude-dependent anywhere near it, and
+        // what the original DOES scale by attitude is the thrust above — in the opposite direction.
+        //
+        // The polar's variable is MACH. A pull therefore costs speed only through the lift vector's
+        // own backward tilt in the force sum below — there is no induced-drag term here at all, and
+        // adding one (α-keyed, C_L-keyed or otherwise) is not this model.
+        float cd = DragPolarScale
+                   * (DragPolarParasite + DragPolarLinear * mach + DragPolarQuad * mach * mach);
+        // Force (weight units) → acceleration is × StandardG / Weight, the same conversion lift uses.
+        float dragAccel = s.VehWeight > 1e-3f
+            ? qRefArea * s.DragFactor * cd * StandardG / s.VehWeight
+            : 0f;
+        var accel = nose * (ThrustAccelAt(Speed, Throttle) * AttitudeThrustScale(Attitude.Z.Y))
                     - VelocityDir * dragAccel
-                    + gAlong * (VelocityDir.Y > 0f ? climbGravityScale : 1f)
-                    + gAcross * (1f - liftFrac);
+                    + Vector3.Down * s.Gravity
+                    + liftAccel;
         var vel = VelocityDir * Speed + accel * dt;
         Speed = Mathf.Min(vel.Length(), MaxDiveSpeedFrac * s.FdSpeed);
         if (vel.LengthSquared() > 1e-8f)
             VelocityDir = vel.Normalized();
 
-        // velocity chases the nose, weakening with airspeed (controls mush as the
-        // airflow dies, and a stalled plane keeps falling wherever momentum takes it)
-        // and with wing verticality (in knife-edge the wings can't lift the path back
-        // to the nose, so the sag equilibrium sits visibly below it — the nose-drop).
+        // velocity chases the nose, weakening with wing verticality (in knife-edge the wings can't
+        // lift the path back to the nose, so the sag equilibrium sits visibly below it — the
+        // nose-drop). The RATE is the authored lift_accel_rate, the same quantity the lift demand
+        // above swings the velocity onto the faked airflow with — it is data, not a tuning knob,
+        // and it is speed-independent because the demand it stands for is (the acceleration grows
+        // with speed, the resulting angular rate does not).
         // (Skip when path ≈ opposite the nose — slerp axis degenerates; gravity will
         // swing the path around within a few frames anyway.)
-        float align = alignRate * Mathf.Clamp(Speed / liftSpeed, 0f, 1f)
+        float align = s.LiftAccelRate
                       * (knifeAlignFloor + (1f - knifeAlignFloor) * wingVert);
         // Near-parallel is the normal cruise state, and there Slerp is unusable: it builds its
         // rotation axis from the cross product, whose float error swamps a sub-degree angle, and
@@ -524,13 +712,32 @@ public sealed class FlightModel
         Position.Y = Mathf.Min(Position.Y, altitudeCapM + altitudeCapOvershootM);
     }
 
-    /// <summary>Below the nose-drop threshold (0.25 fd) — the aerodynamic stall the flight model
-    /// flies. NOT the cue the STALL lamp shows: that one lights earlier, see IsStallWarned.</summary>
-    public bool isStalled() =>
-        StallFraction < Config.GetFloat("flightModel.stallSpeedFrac", StallSpeedFrac);
+    /// <summary>Below the airframe's own computed <see cref="StallSpeed"/> — the aerodynamic stall
+    /// the flight model flies. NOT the cue the STALL lamp shows: that one lights earlier (a fixed
+    /// fraction of fd_speed), see IsStallWarned.</summary>
+    public bool isStalled() => Speed < StallSpeed;
 
     /// <summary>Below the warning threshold (0.30 fd) — the STALL lamp, which leads the break by a
     /// measured 2.64 sim s / 14.9 mph.</summary>
     public bool IsStallWarned() =>
         StallFraction < Config.GetFloat("flightModel.stallWarnFrac", StallWarnFrac);
+
+    // Solves clMax(V)·q(V)·RefArea = VehWeight for V at a load factor of 1 (see StallSpeed's doc for
+    // why 1, not nom_gravity/StandardG). clMax's Mach term makes this implicit; a handful of
+    // fixed-point passes converge to float precision because stall speeds sit well below the speed
+    // of sound, so the correction off the Mach-free start is only a percent or two. Computed once per
+    // instance — VehWeight/RefArea never change after construction.
+    private static float ComputeStallSpeed(PlaneStats stats)
+    {
+        if (stats.VehWeight <= 1e-3f || stats.RefArea <= 1e-3f)
+            return 0f;
+        float vFps = Mathf.Sqrt(2f * stats.VehWeight / (ClMaxStatic * AirDensitySlugPerFt3 * stats.RefArea));
+        for (int i = 0; i < 5; i++)
+        {
+            float mach = vFps / SpeedOfSoundFps;
+            float clMax = Mathf.Max(0.05f, ClMaxStatic - ClMaxMach * mach);
+            vFps = Mathf.Sqrt(2f * stats.VehWeight / (clMax * AirDensitySlugPerFt3 * stats.RefArea));
+        }
+        return vFps * MetresPerFoot;
+    }
 }

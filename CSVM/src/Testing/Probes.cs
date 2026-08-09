@@ -809,10 +809,9 @@ public static class Probes
 
         bool bhawk = planeNodeName.Equals("player_bhawk", StringComparison.OrdinalIgnoreCase);
         float fd = stats.FdSpeed;
-        // ⚠ The fallback here must track FlightModel.ThrustConst — it is a second copy of the same
-        // default, and a stale one silently mis-reports the header while the model itself is fine.
-        float thrustAccel = stats.EnginePower * Config.GetFloat("flightModel.thrustConst", 107f)
-                            / (stats.VehWeight / 1000f);
+        // Thrust is a curve in Mach, not a constant, so the header samples the model's own method at
+        // fd_speed rather than keeping a second copy of the formula that could go stale.
+        float thrustAccel = new FlightModel(stats).ThrustAccelAt(fd, 1f);
 
         void Row(string name, string what, string unit, double model, double? measured,
                  double tol, string detail = "", bool info = false, bool upperBound = false)
@@ -839,21 +838,35 @@ public static class Probes
         Row("level-top-speed", "level full throttle held to equilibrium", "mph",
             m.Speed / Mph, 300.4, 4.0, $"fd_speed = {fd / Mph:0.0} mph, α {m.Alpha:0.0}°");
 
-        // --- acceleration. THE measurement that sets ThrustConst: one constant fixes both this and
-        // the terminal dive below, and the two agree, which is what makes the drag shape credible.
+        // --- acceleration.
+        // ⚠ INFORMATIONAL — an OPEN CONFLICT with the footage, not a tolerance slip. The force path
+        // is verified byte-complete against the original's executable (docs/org/flightModel.md,
+        // "The force scale — settled"): thrust, drag and the ×9.82/weight conversion are the
+        // original's own arithmetic with nothing fitted, yet this run comes out ~14.5% fast. No
+        // decoded term is left to attribute the residual to; the candidate confounds are the
+        // original's 0.5/s throttle slew (decoded, unimplemented — the clip's lever history is
+        // unknown) and the clip recipe itself. Do NOT close it by scaling thrust or drag: the same
+        // footage's decel-290-150 pulls the opposite way, and no constant scale satisfies both (a
+        // ×0.5 force scale that fixes the decel blows this row out to ~6.4 s).
         m = Fresh(stats, Level(), 150f * Mph, 1f);
         double tAccel = RunUntil(m, 1f, 30f, () => m.Speed >= 290f * Mph);
         Row("accel-150-290", "level full throttle, 150 -> 290 mph", "s", tAccel, 3.76, 0.40,
-            $"α {m.Alpha:0.0}° at finish");
+            $"α {m.Alpha:0.0}° at finish — OPEN conflict, force path verified against the binary",
+            info: true);
 
         // --- terminal dive. Nose (and path) 70.7° down, full throttle, held to terminal — the angle
         // the original's "vertical" dive clip actually came out at, so this compares like with like.
+        // Asserted again since the attitude-thrust terms landed: the dive is the side of that scale
+        // where it ADDS thrust (×1.226 at this angle), and it is what carries the row from −5.3% to
+        // +0.2% with nothing fitted. The dive is also the one attitude the retired climb-gravity
+        // constant never touched, so this row is a clean read of the attitude terms alone.
         m = Fresh(stats, Pitched(-70.7f), 0.9f * fd, 1f);
         Run(m, 1f, 120f, pitch: 0f);
         double pathDeg = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
         Row("terminal-dive", "70.7° dive at full throttle, held to terminal", "mph",
             m.Speed / Mph, 355.2, 6.0,
-            $"settled path {pathDeg:0.0}°, {m.Speed / fd:0.000} x fd_speed, α {m.Alpha:0.0}°");
+            $"settled path {pathDeg:0.0}°, {m.Speed / fd:0.000} x fd_speed, α {m.Alpha:0.0}°, "
+            + $"thrust ×{FlightModel.AttitudeThrustScale(m.Attitude.Z.Y):0.000}");
 
         // --- roll. Accumulated body roll rate: no other axis is commanded, so this is the 360° the
         // stopwatch and the video's ADI bank centroid both timed.
@@ -865,9 +878,10 @@ public static class Probes
         // --- pitch. Steady rate after the 1/damp spin-up, at three speeds: ours is
         // speed-independent by construction, and the video says the original's is too, so the point
         // of the three is to catch anything else (stall, lift, eff) leaking into pitch at the ends.
-        // Also the cleanest B11 check of the plan's central inference: wings-level, full elevator,
-        // no bank — the exact scenario "α_ss = ω_pitch / align" was derived for. With AlignRate = 4
-        // and the 33 °/s this row itself asserts, that predicts α_ss ≈ 8.25°.
+        // Also the cleanest read of the alignment lag: wings-level, full elevator, no bank, so the
+        // settled α is where the nose-chase (the authored lift_accel_rate, plus the lift demand's
+        // own swing once the airflow blend engages past liftAOAs[0]) balances the commanded body
+        // rate. Both terms scale with the SAME authored rate, so this row moves with it.
         var pitchRates = new List<double>();
         var pitchAlphas = new List<double>();
         foreach (float mph in new[] { 120f, 200f, 280f })
@@ -881,7 +895,7 @@ public static class Probes
             pitchRates[1], 33.0, 3.0,
             $"at 120/200/280 mph = {pitchRates[0]:0.0}/{pitchRates[1]:0.0}/{pitchRates[2]:0.0} °/s, "
             + $"α = {pitchAlphas[0]:0.0}/{pitchAlphas[1]:0.0}/{pitchAlphas[2]:0.0}° "
-            + "(liftAOAs [5,9] predicts α_ss ≈ 8.25° here)");
+            + "(the alignment lag at this body rate — see the note above)");
 
         // --- yaw. The one axis 'eff' scales, so it is the axis a thrust change moves: faster
         // acceleration holds the plane nearer fd_speed, where eff is at its floor.
@@ -926,22 +940,46 @@ public static class Probes
         // the same nose-down spiral at terminal speed — identically with and without the B12 lift
         // term, i.e. an instrument artifact and not a model reading. Free-roll settles honestly, at
         // its own bank rather than the original's; the row reports both, and asserts neither.
+        // ⚠ INFORMATIONAL and still unattributed. The original's bank coupling is now implemented
+        // (the 0.205/0.165 terms), which took this row from +17.1% to +14.7% — a real step, not the
+        // explanation. The remaining gap rides with the rate row below, which the same coupling
+        // moved the WRONG WAY, so whatever slows the original's banked pull sets this equilibrium
+        // too and neither row can be closed alone.
         var turn = SustainedTurn(stats, 100f, 298.96f * Mph, settle: 10f, window: 15.9f);
         Row("sustained-turn-speed", "full back stick from a banked entry, settled speed", "mph",
             turn.SpeedMph, 222.94, 5.0,
             $"entered at 100° bank, settled at {turn.BankDeg:0.0}° (emergent, not held), "
-            + $"α {turn.Alpha:0.0}°, swept {turn.SweptDeg:0} ° (original 449.8 in the same window)");
+            + $"α {turn.Alpha:0.0}°, swept {turn.SweptDeg:0} ° (original 449.8 in the same window) — "
+            + "rides the rate row below",
+            info: true);
 
-        // ⚠ Asserted as an UPPER BOUND, not a band. BL-247's defect is the aircraft falling out of
-        // this manoeuvre — 83% of gravity across the flight path at a steep bank — so "sinks no
-        // harder than the original" is the claim the measurement supports. The other side is a
-        // different question: we currently come out slightly CLIMBING, which is its own divergence
-        // and is visible in the number rather than folded into this verdict.
+        // An UPPER BOUND, not a band. BL-247's defect is the aircraft falling out of this manoeuvre
+        // — 83% of gravity across the flight path at a steep bank — so "sinks no harder than the
+        // original" is the claim the measurement supports. The other side is a different question:
+        // the turn used to come out slightly CLIMBING (−2.65), which was its own divergence, and
+        // C22's bank coupling took it to 1.66, sinking. Both sides stay visible in the number.
+        // ⚠ INFORMATIONAL, downgraded from asserting in C23, and the reason is the row above rather
+        // than this one. The weathervane torque opposes the sustained pull, so it lowers the turn
+        // rate (34.71 → 33.38 °/s) and the sink rises with it, to 2.33 — past the bound. But this is
+        // the third leg of a manoeuvre whose OTHER two legs are already informational and UNOWNED:
+        // we sweep heading 76% faster than the original at a bank it never flew, and a sink read off
+        // that flight path has no reason to land on the original's. (Owned by BL-095's turn_fade_*
+        // until 2026-08-09, when that field turned out to be an airspeed ramp saturated above
+        // 50 mph — no authored field is a candidate now; see the rate row below and CAP-33.)
+        // Asserting one leg of a manoeuvre the model gets demonstrably wrong is asserting a
+        // compensating coincidence — C22's green here sat inside the same unattributed gap. It
+        // re-asserts with the rate row, not before it.
+        // ⚠ D31 moved it much further (1.07 → 8.86) and that is attributed rather than tuned: the
+        // retired knife-edge sag term had been holding the nose down through the WHOLE pull, at up
+        // to 11.5 °/s, so this turn now settles at 88.8° of bank instead of 74.9° and actually
+        // pulls. On the other ten airframes the same removal moves this row the OTHER way (warhawk
+        // 8.96 → −15.54, balmoral 17.57 → −4.17; negative = climbing), which is the clearest sign
+        // the number is riding the turn-rate gap rather than reading a mechanism of its own.
         Row("sustained-turn-sink", "sustained max-pull turn, sink rate", "ft/s",
             turn.SinkFtS, 1.85, 0.0,
             $"upper bound — the failure this guards is falling out of the turn (before the B12 lift "
-            + $"re-key this read 18.29). Negative = climbing.",
-            upperBound: true);
+            + $"re-key this read 18.29). Negative = climbing. Rides the rate row below.",
+            info: true, upperBound: true);
 
         // ⚠ INFORMATIONAL and must stay so until the rate gap closes. We sweep heading far faster
         // than the original, which is recorded, not fixed; inventing a rate limiter to close it is
@@ -950,8 +988,23 @@ public static class Probes
         // (18.95 °/sim-s here against 30.16 round the `pitch` clip's 360° loop, same stick, same
         // throttle), while we pull the same rate in both — so this is a bank/load-factor effect,
         // not a pitch-authority error, and `zoom-climb` above is the row that shows our pitch is
-        // nearly right. player.json's unconsumed turn_fade_in/turn_fade_out/highGs are the only
-        // authored fields of that shape (BL-095). A lead; none of it is decoded.
+        // nearly right.
+        // ⚠ NO AUTHORED FIELD IS A CANDIDATE any more, and all three that were are eliminated by
+        // measurement rather than by argument (2026-08-09). highGs: the G limiter is inert on all
+        // eleven airframes (peak demand 2.13-5.01 G against a threshold of 9) and a limiter that
+        // never fires cannot slow a turn. turn_fade_in/turn_fade_out: decoded as a base ramp on
+        // AIRSPEED ALONE — 0 at 10 mph rising to 1 at 50 and flat above — so it is identically 1
+        // across the 222-260 mph this row settles at, carries no bank or load-factor term, and
+        // cannot be a bank effect at all (it is a real unimplemented LOW-speed behaviour, BL-330).
+        // What discriminates now is a capture, not a decode: this measurement is not internally
+        // consistent with a coordinated level turn (see the bank note below), and CAP-33 — the same
+        // turn held at ~60-70° instead of ~100° — settles whether the original is rate-limited,
+        // bank-limited, or being mis-read off its ADI.
+        // ⚠ It is NOT the bank coupling, and that is now settled rather than suspected. The
+        // original's own 0.205/0.165 terms are implemented, and they move this row AWAY from the
+        // target (32.35 -> 34.71 here, up on ten of eleven airframes) because both add heading rate
+        // in the direction of bank by construction. No sign or scale of them subtracts turn rate,
+        // so do not re-open them looking for one.
         // ⚠ The original's own turn is NOT internally consistent with a coordinated level turn, so
         // do not promote this by matching the ADI's bank either: 18.95 °/sim-s at 222.94 mph is
         // V·ω = 32.96 m/s² lateral, which implies atan(32.96/20) = 58.7° of bank, not the +100° the
@@ -969,10 +1022,12 @@ public static class Probes
 
         // --- part throttle. These two are the ONLY place the drag shape is observable: the
         // full-throttle equilibrium is fd_speed by construction for any curve, so it can never
-        // detect a wrong shape (BL-148 trap (b)). Both are informational pending a playtest of the
-        // "throttled-back plane barely decelerates" report that the old low-speed drag blend
-        // existed to answer — the new curve is far weaker down here and reopens exactly that
-        // question.
+        // detect a wrong shape (BL-148 trap (b)). The 1/8-throttle row passes unaided (the linear
+        // lever's discriminating test); the decel row is the recorded footage-vs-binary conflict —
+        // the polar, read out of the executable, is ~2× stronger below cruise than the zero-thrust
+        // clip measures (docs/org/flightModel.md, "The force scale — settled"), and the direction
+        // of the old "throttled-back plane barely decelerates" report is now REVERSED. Both stay
+        // informational; the decel row is also still owed a human playtest.
         m = Fresh(stats, Level(), 0.9f * fd, 0.125f);
         Run(m, 0.125f, 300f, pitch: 0f);
         double idlePath = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
@@ -992,7 +1047,8 @@ public static class Probes
         m = Fresh(stats, Level(), 290f * Mph, 0f);
         double tDecel = RunUntil(m, 0f, 60f, () => m.Speed <= 150f * Mph);
         Row("decel-290-150", "throttle cut to ZERO, 290 -> 150 mph, level", "s", tDecel, 7.04, 1.0,
-            $"pure drag — no thrust term to assume, α {m.Alpha:0.0}° at finish", info: true);
+            $"pure drag — no thrust term to assume, α {m.Alpha:0.0}° at finish — OPEN conflict, "
+            + "the polar is the binary's and the footage disagrees", info: true);
 
         // --- zoom climb. INFORMATIONAL. Measured off the `pitch` clip's loop — full throttle, full
         // back stick from a 299.4 mph level cruise, which is the SAME take that pinned the 33 °/s
@@ -1009,9 +1065,9 @@ public static class Probes
         // The C21 induced-drag term closed most of the speed gap (min speed 269 -> 205 mph against
         // 128) and overshot the altitude in the other direction (1282 ft against 936), so the energy
         // is now wrong the other way round and this stays the row to watch. Also a second,
-        // longer-duration B11 check of the wings-level-full-pull inference alongside pitch-rate
-        // above — a held pull becomes a sustained loop, so α should sit near the same ≈8°
-        // equilibrium at the point of minimum speed.
+        // longer-duration read of the alignment lag alongside pitch-rate above — a held pull
+        // becomes a sustained loop, so α should sit near the same equilibrium at the point of
+        // minimum speed.
         m = Fresh(stats, Level(), 300f * Mph, 1f);
         float apex = 0f, minSpeed = float.MaxValue, alphaAtMinSpeed = 0f;
         double tApex = RunUntil(m, 1f, 30f,
@@ -1038,15 +1094,15 @@ public static class Probes
         // manoeuvre's energy balance. Asserting it would fail on that known-open gap, not a new one.
         Row("zoom-climb-min-speed", "same loop, speed at its own minimum", "mph",
             minSpeed / Mph, 127.9, 6.0,
-            $"α {alphaAtMinSpeed:0.0}° here (liftAOAs [5,9] predicts α_ss ≈ 8.25° at wings-level "
-            + "equilibrium; this loop has carried well past that regime by its own minimum)",
+            $"α {alphaAtMinSpeed:0.0}° here (the wings-level pull settles lower — this loop has "
+            + "carried well past that regime by its own minimum)",
             info: true);
 
         var sb = new StringBuilder();
         sb.AppendLine($"# flight envelope — {planeNodeName} ({stats.DefName})");
         sb.AppendLine($"# fd_speed {fd:0.#} m/s ({fd / Mph:0.0} mph)  weight {stats.VehWeight:0} kg  "
                       + $"engine power {stats.EnginePower:0.###}  gravity {stats.Gravity:0.#} m/s²");
-        sb.AppendLine($"# max thrust accel {thrustAccel:0.00} m/s²  stepped at {EnvDt * 1000f:0.0} ms");
+        sb.AppendLine($"# thrust accel at fd_speed {thrustAccel:0.00} m/s²  stepped at {EnvDt * 1000f:0.0} ms");
         sb.AppendLine(bhawk
             ? "# 'original' = decoded from cockpit-gauge video, analysis/video-flight-calibration/"
             : $"# no measured original for {planeNodeName} — the Bloodhawk is the only airframe on video");
@@ -1066,10 +1122,235 @@ public static class Probes
                           + $"  {verdict}");
             sb.AppendLine($"{"",-22} {row.What}{(row.Detail.Length > 0 ? $" — {row.Detail}" : "")}");
         }
+        // The knife-edge hold rides along rather than living as its own flag: it is a SHAPE
+        // comparison over 36 s, not a single number with a tolerance, so it has no row here — but
+        // every instrument that dumps the envelope should carry it, or the recipe gets lost again.
+        sb.AppendLine();
+        sb.Append(KnifeEdge(zrdrPath, planeNodeName).Text);
+        // Same reasoning as the knife-edge above: a speed-against-time SHAPE rather than one number
+        // with a tolerance, and the recipe belongs in code where it cannot be lost.
+        sb.AppendLine();
+        sb.Append(SustainedClimb(zrdrPath, planeNodeName).Text);
+
         r.Text = sb.ToString();
         r.Summary = r.Failed == 0
             ? $"flight envelope: {r.Asserted} scenario(s) asserted against the original, all within tolerance"
             : $"flight envelope: {r.Failed} of {r.Asserted} asserted scenario(s) FAILED — see the !! lines above";
+        return r;
+    }
+
+    // ---- knife-edge ----------------------------------------------------------------------------
+
+    /// <summary>The knife-edge hold, the manoeuvre <c>CAP-05</c> filmed twice at very different
+    /// speeds: bank set at ENTRY and then left free, stick neutral, held 36 sim s. Reports the nose
+    /// elevation, the flight path, the gap between them, the sink, the heading rate and α at the
+    /// original's own sample times.
+    ///
+    /// <para><b>The recipe, which is the point of this probe existing.</b> It was lost once — the
+    /// "Balmoral knife-edges at α = 5.1°" figure had no instrument behind it, only prose, and could
+    /// not be reproduced from the prose. It is now the code: entry bank 90° about the nose
+    /// (<see cref="Banked"/>), nose on the horizon, flight path along the nose
+    /// (<see cref="FlightModel.Reset"/>'s convention), entry speed 143 and 300 mph — the two takes
+    /// <c>CAP-05</c> filmed — and the throttle TRIMMED for level flight at that entry speed
+    /// (<see cref="TrimThrottle"/>), not held full. Full throttle is wrong for the 143 mph take by
+    /// a factor of two in speed: the aircraft would simply accelerate to its own level top speed
+    /// inside three seconds and the run would stop being a 143 mph take at all. Nothing is held on
+    /// the stick — in particular NO roll input, because holding the bank is what the original's
+    /// pilot was not doing, and a roll controller keyed on the horizon stops measuring bank the
+    /// moment the nose leaves it.</para>
+    ///
+    /// <para>⚠ The discriminating signature is the SHAPE, not any one number: the original drifts for
+    /// the whole 36 s and never finds an equilibrium, where a bounded sag settles inside a second.
+    /// <see cref="KnifeEdgeRun.DriftDegS"/> is the least-squares slope of the nose over 3–36 s and
+    /// <see cref="KnifeEdgeRun.SettledFrac"/> is how much of the total sag arrived in the last third
+    /// of the hold — a bounded sag reports ≈0 there and a linear drift ≈1/3.</para></summary>
+    public static KnifeEdgeResult KnifeEdge(string zrdrPath, string planeNodeName)
+    {
+        System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
+        var r = new KnifeEdgeResult();
+        PlaneStats stats;
+        try
+        {
+            stats = PlaneStats.Load(zrdrPath, planeNodeName);
+        }
+        catch (Exception e)
+        {
+            r.Error = $"could not load plane stats for '{planeNodeName}' ({zrdrPath}): {e.Message}";
+            r.Summary = $"knife-edge: {r.Error}";
+            return r;
+        }
+
+        foreach (float mph in new[] { 143f, 300f })
+        {
+            r.Runs.Add(KnifeEdgeHold(stats, planeNodeName, 90f, mph));
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"# knife-edge hold — {planeNodeName} ({stats.DefName})");
+        sb.AppendLine("# 90° bank at entry then FREE; stick neutral; throttle trimmed level at entry speed");
+        sb.AppendLine("# original (Bloodhawk, CAP-05, two takes): nose −4.9° / −7.3° at +3 s, then a");
+        sb.AppendLine("# drift of 0.69 / 0.89 °/sim-s to −27° at +36 s; nose 4.8–8.3° BELOW the path");
+        sb.AppendLine("# (gap growing); sink 0.5 / 24 / 60 / 93 ft/s at +3/+12/+24/+36 s; heading 0.68–1.13 °/s");
+        foreach (var run in r.Runs)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"entry {run.EntryMph:0} mph, bank {run.EntryBankDeg:0}°, "
+                          + $"throttle {run.Throttle:0.000} — drift {run.DriftDegS:0.00} °/s over 3–36 s, "
+                          + $"last-third share {run.SettledFrac:0.00}, "
+                          + $"α peak {run.AlphaPeak:0.00}° settles {run.AlphaSettled:0.00}°");
+            sb.AppendLine($"  {"t",4} {"nose",8} {"path",8} {"nose-path",10} {"sink",9} {"Δalt",9} "
+                          + $"{"α",7} {"bank",7} {"hdg",8} {"speed",8}");
+            foreach (var x in run.Samples)
+            {
+                sb.AppendLine($"  {x.T,4:0} {x.NoseDeg,8:0.00} {x.PathDeg,8:0.00} {x.LagDeg,10:0.00} "
+                              + $"{x.SinkFtS,9:0.0} {x.AltM,9:0.0} {x.Alpha,7:0.00} {x.BankDeg,7:0.0} "
+                              + $"{x.HeadingRateDegS,8:0.00} {x.SpeedMph,8:0.0}");
+            }
+        }
+
+        r.Text = sb.ToString();
+        r.Summary = $"knife-edge: {r.Runs.Count} hold(s), drift "
+                    + string.Join(" / ", r.Runs.Select(x => $"{x.DriftDegS:0.00}")) + " °/s";
+        return r;
+    }
+
+    // ---- sustained climb -----------------------------------------------------------------------
+
+    /// <summary>The sustained full-throttle climb, speed against time — the manoeuvre the original
+    /// was filmed holding for forty seconds ("Climp 90° 100% Thrust"), and the one instrument that
+    /// separates a climb-retention term from an attitude-thrust one, because the two predict
+    /// opposite signs here.
+    ///
+    /// <para><b>The recipe.</b> Entry at the footage's own 300 mph and full throttle, attitude set
+    /// once to the path angle the original settled at (<see cref="Banked"/>'s pitched twin), stick
+    /// neutral thereafter — the same fixed-attitude shape <c>altitude-cap</c> uses, not a continuous
+    /// full-elevator pull, which loops instead of climbing. Held 18 sim s, which is long enough for
+    /// the plateau and short enough that the altitude clamp cannot bind from a sea-level entry —
+    /// <see cref="ClimbResult.ClampedAt"/> says so rather than leaving it to be assumed.</para>
+    ///
+    /// <para><b>What the original did</b> (Bloodhawk, decoded from the clip's speedometer and
+    /// altimeter): entry 298.9 mph, pulled into a climb whose flight path settles at
+    /// <b>56.3 ± 3.2°</b>, speed falls to a minimum of <b>152.4 mph at +6.5 s</b> and then RECOVERS
+    /// — <b>163.05 mph</b> across this probe's own 12–18 s window, still creeping onto a flat
+    /// <b>167.0 ± 0.5 mph</b> by +36 s, climbing ≈12,000 fpm from 900 to 6,300 ft. It leaves that
+    /// state only at ≈6,600 ft, which is the altitude ceiling and not the climb. ⚠ The UNDERSHOOT is
+    /// half the measurement: the original dips 9% below its own plateau and climbs back out of it,
+    /// which no monotone decay reproduces.</para></summary>
+    public static ClimbResult SustainedClimb(string zrdrPath, string planeNodeName)
+    {
+        System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
+        var r = new ClimbResult { Plane = planeNodeName };
+        PlaneStats stats;
+        try
+        {
+            stats = PlaneStats.Load(zrdrPath, planeNodeName);
+        }
+        catch (Exception e)
+        {
+            r.Error = $"could not load plane stats for '{planeNodeName}' ({zrdrPath}): {e.Message}";
+            r.Summary = $"sustained climb: {r.Error}";
+            return r;
+        }
+
+        const float EntryMph = 300f;
+        const float EntryPathDeg = 56.3f;
+        r.EntryMph = EntryMph;
+        r.EntryPathDeg = EntryPathDeg;
+
+        var m = Fresh(stats, Pitched(EntryPathDeg), EntryMph * Mph, 1f);
+        double Nose() => Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp((-m.Attitude.Z).Y, -1f, 1f)));
+        double Path() => Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
+
+        // ⚠ 18 s, not longer, and read from a sea-level entry: the fastest climbers in the set reach
+        // the altitude clamp at ≈21 s from here, and a sample taken against the clamp reports the
+        // clamp's speed rather than the climb's. The footage is inside 2% of its own plateau by
+        // +12 s, so the window loses nothing.
+        var want = new[] { 0f, 1f, 2f, 3f, 4f, 6f, 8f, 12f, 15f, 18f };
+        int next = 0;
+        float elapsed = 0f;
+        float prevAlt = m.Position.Y;
+        r.MinSpeedMph = m.Speed / Mph;
+        double speedSum = 0, pathSum = 0;
+        int plateau = 0;
+        while (next < want.Length)
+        {
+            if (elapsed >= want[next] - EnvDt * 0.5f)
+            {
+                r.Samples.Add(new ClimbSample
+                {
+                    T = want[next],
+                    SpeedMph = m.Speed / Mph,
+                    PathDeg = Path(),
+                    NoseDeg = Nose(),
+                    ClimbFpm = (m.Position.Y - prevAlt) / Ft / EnvDt * 60.0,
+                    AltFt = m.Position.Y / Ft,
+                    Alpha = m.Alpha,
+                    ThrustScale = FlightModel.AttitudeThrustScale(m.Attitude.Z.Y),
+                });
+                next++;
+                continue;
+            }
+
+            prevAlt = m.Position.Y;
+            m.Step(new FlightInput { Throttle = 1f }, EnvDt);
+            elapsed += EnvDt;
+            if (m.Speed / Mph < r.MinSpeedMph)
+            {
+                r.MinSpeedMph = m.Speed / Mph;
+                r.MinSpeedT = elapsed;
+            }
+
+            if (r.ClampedAt < 0 && m.Position.Y >= Config.GetFloat("flightModel.altitudeCapM", 2003f) - 1f)
+            {
+                r.ClampedAt = elapsed;
+            }
+
+            // The plateau is read over the same last-third window the footage's own is quoted over,
+            // so the two numbers are the same statistic and not one average against one endpoint.
+            if (elapsed >= 12f)
+            {
+                speedSum += m.Speed / Mph;
+                pathSum += Path();
+                plateau++;
+            }
+        }
+
+        r.PlateauMph = plateau > 0 ? speedSum / plateau : 0;
+        r.PlateauPathDeg = plateau > 0 ? pathSum / plateau : 0;
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"# sustained climb — {planeNodeName} ({stats.DefName})");
+        sb.AppendLine($"# {EntryMph:0} mph entry, path {EntryPathDeg:0.0}° set at entry then FREE, "
+                      + "full throttle, stick neutral, 24 sim s");
+        sb.AppendLine("# original (Bloodhawk, \"Climp 90° 100% Thrust\"): entry 298.9 mph, path settles");
+        sb.AppendLine("# 56.3 ± 3.2°, min 152.4 mph at +6.5 s, then RECOVERS — 163.1 mph over this");
+        sb.AppendLine("# probe's own 12–18 s window, still creeping to a flat 167.0 ± 0.5 by +36 s,");
+        sb.AppendLine("# climbing ≈12,000 fpm from 900 to 6,300 ft");
+        sb.AppendLine($"plateau (12–18 s) {r.PlateauMph:0.00} mph at path {r.PlateauPathDeg:0.0}° "
+                      + $"— original 163.05 mph at 55.5°; minimum {r.MinSpeedMph:0.00} mph at "
+                      + $"+{r.MinSpeedT:0.0} s — original 152.40 at +6.5 s"
+                      + (r.ClampedAt >= 0
+                         ? $"  ⚠ ALTITUDE CLAMP bound at +{r.ClampedAt:0.0} s — every sample after "
+                           + "that reads the clamp, not the climb"
+                         : ""));
+        sb.AppendLine($"  {"t",4} {"speed",8} {"orig",8} {"path",8} {"nose",8} {"climb",10} "
+                      + $"{"alt",9} {"α",7} {"thr×",6}");
+        // ⚠ The original column is the BLOODHAWK's, the only airframe the game was filmed flying.
+        // Another plane's run reports its own numbers against a dash, which is honest rather than a
+        // gap to fill by scaling these.
+        bool bhawk = planeNodeName.Equals("player_bhawk", StringComparison.OrdinalIgnoreCase);
+        double[] orig = { 298.92, 257.73, 215.77, 185.00, 164.13, 153.42, 154.81, 160.48, 163.08, 164.91 };
+        for (int i = 0; i < r.Samples.Count; i++)
+        {
+            var x = r.Samples[i];
+            sb.AppendLine($"  {x.T,4:0} {x.SpeedMph,8:0.00} {(bhawk ? orig[i].ToString("0.00") : "-"),8} {x.PathDeg,8:0.00} "
+                          + $"{x.NoseDeg,8:0.00} {x.ClimbFpm,10:0} {x.AltFt,9:0} {x.Alpha,7:0.00} "
+                          + $"{x.ThrustScale,6:0.000}");
+        }
+
+        r.Text = sb.ToString();
+        r.Summary = $"sustained climb: plateau {r.PlateauMph:0.0} mph (original 163.1), "
+                    + $"minimum {r.MinSpeedMph:0.0} mph (original 152.4)";
         return r;
     }
 
@@ -1280,6 +1561,126 @@ public static class Probes
                 alphaSum / samples,
                 bankSum / samples,
                 Math.Abs(swept));
+    }
+
+    /// <summary>One knife-edge hold. Sink is read over the second ENDING at each sample, which is
+    /// what an altimeter needle gives; heading is read off the flight path over the same second and
+    /// unfolded, so a slow turn is not confused with a wrap.</summary>
+    private static KnifeEdgeRun KnifeEdgeHold(PlaneStats stats, string plane, float bankDeg, float entryMph)
+    {
+        float throttle = TrimThrottle(stats, entryMph * Mph);
+        var m = Fresh(stats, Banked(bankDeg), entryMph * Mph, throttle);
+        var run = new KnifeEdgeRun
+        {
+            Plane = plane,
+            EntryMph = entryMph,
+            EntryBankDeg = bankDeg,
+            Throttle = throttle,
+        };
+
+        double Nose() => Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp((-m.Attitude.Z).Y, -1f, 1f)));
+        double Path() => Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
+        double Heading() => Mathf.RadToDeg(Mathf.Atan2(m.VelocityDir.X, -m.VelocityDir.Z));
+
+        var want = new[] { 1f, 3f, 12f, 24f, 36f };
+        int next = 0;
+        float startY = m.Position.Y;
+        // A one-second trailing window for the two rates: the altitude a second ago and the heading a
+        // second ago, both kept as ring buffers of the fixed step so the read needs no interpolation.
+        int win = Mathf.RoundToInt(1f / EnvDt);
+        var altRing = new float[win];
+        var hdgRing = new double[win];
+        for (int i = 0; i < win; i++)
+        {
+            altRing[i] = m.Position.Y;
+            hdgRing[i] = Heading();
+        }
+
+        double unfolded = Heading();
+        double prevHeading = unfolded;
+        int cursor = 0;
+        float elapsed = 0f;
+        while (elapsed < 36f + EnvDt * 0.5f && next < want.Length)
+        {
+            m.Step(new FlightInput { Throttle = throttle }, EnvDt);
+            elapsed += EnvDt;
+            run.AlphaPeak = Math.Max(run.AlphaPeak, m.Alpha);
+
+            double step = Heading() - prevHeading;
+            if (step > 180.0) { step -= 360.0; } else if (step < -180.0) { step += 360.0; }
+            unfolded += step;
+            prevHeading += step;
+
+            float altAgo = altRing[cursor];
+            double hdgAgo = hdgRing[cursor];
+            altRing[cursor] = m.Position.Y;
+            hdgRing[cursor] = unfolded;
+            cursor = (cursor + 1) % win;
+
+            if (elapsed >= want[next] - EnvDt * 0.5f)
+            {
+                run.Samples.Add(new KnifeEdgeSample
+                {
+                    T = want[next],
+                    NoseDeg = Nose(),
+                    PathDeg = Path(),
+                    LagDeg = Nose() - Path(),
+                    SinkFtS = (altAgo - m.Position.Y) / Ft,
+                    AltM = m.Position.Y - startY,
+                    Alpha = m.Alpha,
+                    BankDeg = Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(m.Attitude.Y.Dot(Vector3.Up), -1f, 1f))),
+                    HeadingRateDegS = Math.Abs(unfolded - hdgAgo),
+                    SpeedMph = m.Speed / Mph,
+                });
+                next++;
+            }
+        }
+
+        // Least squares over the samples from +3 s on, the span the original's own linear fit covers
+        // (its first three seconds carry the roll-in transient and are quoted as an intercept).
+        var fit = run.Samples.Where(x => x.T >= 3f).ToList();
+        if (fit.Count >= 2)
+        {
+            double tBar = fit.Average(x => x.T), nBar = fit.Average(x => x.NoseDeg);
+            double num = fit.Sum(x => (x.T - tBar) * (x.NoseDeg - nBar));
+            double den = fit.Sum(x => (x.T - tBar) * (x.T - tBar));
+            run.DriftDegS = den > 0 ? -num / den : 0;
+        }
+
+        double total = run.Samples.Count > 0 ? run.Samples[0].NoseDeg - run.Samples[^1].NoseDeg : 0;
+        double lastThird = run.Samples.Count > 0
+            ? run.Samples.First(x => x.T >= 24f).NoseDeg - run.Samples[^1].NoseDeg
+            : 0;
+        run.SettledFrac = Math.Abs(total) > 1e-6 ? lastThird / total : 0;
+        run.AlphaSettled = run.Samples.Count > 0 ? run.Samples[^1].Alpha : 0;
+        return run;
+    }
+
+    /// <summary>The lever position that holds <paramref name="speed"/> in level flight, bisected on
+    /// the model itself rather than solved against a copy of the thrust and drag formulas — the
+    /// copy is what goes stale. Saturates at 1 for a speed the airframe cannot reach, which is the
+    /// honest answer for it: a run entered above its own top speed decelerates whatever the
+    /// lever does.</summary>
+    private static float TrimThrottle(PlaneStats stats, float speed)
+    {
+        bool Accelerates(float th)
+        {
+            var m = Fresh(stats, Level(), speed, th);
+            Run(m, th, 0.5f);
+            return m.Speed > speed;
+        }
+
+        if (!Accelerates(1f))
+        {
+            return 1f;
+        }
+        float lo = 0f, hi = 1f;
+        for (int i = 0; i < 24; i++)
+        {
+            float mid = 0.5f * (lo + hi);
+            if (Accelerates(mid)) { hi = mid; } else { lo = mid; }
+        }
+        return 0.5f * (lo + hi);
     }
 
     /// <summary>One level of a mip chain as a standalone image. Godot stores the chain as one buffer
@@ -1535,6 +1936,84 @@ public static class Probes
         public int Asserted => Rows.Count(r => r.Asserted);
         public int Failed => Rows.Count(r => !r.Ok);
         public bool Ok => Error == null && Asserted > 0 && Failed == 0;
+    }
+
+    /// <summary>One sample of a knife-edge hold, at one of the original's own sample times.
+    /// <see cref="LagDeg"/> is nose − path, so it is NEGATIVE while the nose is below the flight
+    /// path, which is the whole of a sagging knife-edge.</summary>
+    public sealed class KnifeEdgeSample
+    {
+        public double T;
+        public double NoseDeg;
+        public double PathDeg;
+        public double LagDeg;
+        public double SinkFtS;
+        public double AltM;
+        public double Alpha;
+        public double BankDeg;
+        public double HeadingRateDegS;
+        public double SpeedMph;
+    }
+
+    /// <summary>One knife-edge hold: the samples plus the two shape statistics.
+    /// <see cref="SettledFrac"/> is the share of the total sag that arrived in the last third of the
+    /// hold — ≈0 for a bounded sag that settled early, ≈1/3 for a linear drift that never did.</summary>
+    public sealed class KnifeEdgeRun
+    {
+        public readonly List<KnifeEdgeSample> Samples = new();
+        public string Plane = "";
+        public double EntryMph;
+        public double EntryBankDeg;
+        public double Throttle;
+        public double DriftDegS;
+        public double SettledFrac;
+        public double AlphaPeak;
+        public double AlphaSettled;
+    }
+
+    /// <summary>Both knife-edge holds of one airframe, at the two speeds <c>CAP-05</c> filmed.</summary>
+    public sealed class KnifeEdgeResult
+    {
+        public readonly List<KnifeEdgeRun> Runs = new();
+        public string Text = "";
+        public string Summary = "";
+        public string? Error;
+    }
+
+    /// <summary>One sample of the sustained climb, at one of the footage's own elapsed times.</summary>
+    public sealed class ClimbSample
+    {
+        public double T;
+        public double SpeedMph;
+        public double PathDeg;
+        public double NoseDeg;
+        public double ClimbFpm;
+        public double AltFt;
+        public double Alpha;
+        public double ThrustScale;
+    }
+
+    /// <summary>One sustained full-throttle climb: the samples plus the plateau it settled on.</summary>
+    public sealed class ClimbResult
+    {
+        public readonly List<ClimbSample> Samples = new();
+        public string Plane = "";
+        public double EntryMph;
+        public double EntryPathDeg;
+        public double MinSpeedMph;
+        public double MinSpeedT;
+        public double PlateauMph;
+        public double PlateauPathDeg;
+
+        /// <summary>Sim seconds at which the altitude clamp first bound, or −1 if it never did.
+        /// ⚠ A run that reaches the clamp stops being a climb measurement at that instant — the
+        /// clamp deletes climbing velocity outright — so a finite value here invalidates every
+        /// sample after it rather than merely qualifying them.</summary>
+        public double ClampedAt = -1;
+
+        public string Text = "";
+        public string Summary = "";
+        public string? Error;
     }
 
     /// <summary>One effect's sweep reading, both halves. <see cref="MeshPeaks"/> holds every

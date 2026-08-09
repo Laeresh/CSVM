@@ -1,0 +1,58 @@
+# flight envelope — player_balmoral (pbalmoral)
+# fd_speed 79 m/s (176.7 mph)  weight 4125 kg  engine power 0.3  gravity 20 m/s²
+# thrust accel at fd_speed 34.56 m/s²  stepped at 16.7 ms
+# no measured original for player_balmoral — the Bloodhawk is the only airframe on video
+
+scenario               unit       model   original      err  verdict
+level-top-speed        mph       125.87          -        -  (not asserted)
+                       level full throttle held to equilibrium — fd_speed = 176.7 mph, α 0.0°
+accel-150-290          s          30.00          -        -  (not asserted)
+                       level full throttle, 150 -> 290 mph — α 0.0° at finish — OPEN conflict, force path verified against the binary
+terminal-dive          mph       149.49          -        -  (not asserted)
+                       70.7° dive at full throttle, held to terminal — settled path -70.7°, 0.846 x fd_speed, α 0.0° — waiting on D32's attitude-thrust terms
+roll-360               s           5.18          -        -  (not asserted)
+                       full aileron from level cruise, 360° — α 0.8° at finish
+pitch-rate             °/s        10.21          -        -  (not asserted)
+                       sustained full-elevator body pitch rate — at 120/200/280 mph = 10.2/10.2/10.2 °/s, α = 6.7/6.7/6.7° (the alignment lag at this body rate — see the note above)
+yaw-360                s          30.30          -        -  (not asserted)
+                       full rudder from 290 mph, 360° — mean speed 127.2 mph, α 7.2° at finish
+altitude-cap           ft       6572.01          -        -  (not asserted)
+                       22° nose-up hold at full throttle, altitude settled against the clamp — 125.9 mph at settle (original 173.7 mph — the existing stall model owns whatever bleed shape follows the clamp, not asserted here), α 0.0°
+level-speed-near-cap   mph       125.87          -        -  (not asserted)
+                       level full throttle at 1988 m, held to equilibrium — altitude clamp must not leak below the cap, α 0.0°
+sustained-turn-speed   mph       124.88          -        -  (not asserted)
+                       full back stick from a banked entry, settled speed — entered at 100° bank, settled at 71.3° (emergent, not held), α 7.6°, swept 172 ° (original 449.8 in the same window) — rides the rate row below
+sustained-turn-sink    ft/s       -4.17          -        -  (not asserted)
+                       sustained max-pull turn, sink rate — upper bound — the failure this guards is falling out of the turn (before the B12 lift re-key this read 18.29). Negative = climbing. Rides the rate row below.
+sustained-turn-rate    °/s        10.81          -        -  (not asserted)
+                       sustained max-pull turn, heading rate — 0.57x the original — OPEN. The original pulls 1.6x slower BANKED than wings-level (18.95 vs 30.16 °/sim-s round its own loop) and we pull the same rate in both, so the gap is bank/load-factor, not pitch authority. Its 18.95 °/sim-s at 222.94 mph also implies a 58.7° coordinated-turn bank, not the +100° its ADI reads
+eighth-throttle-speed  mph        65.29          -        -  (not asserted)
+                       1/8 throttle held to equilibrium — 0.369 x fd_speed (original 0.459), settled path -6.1°, α 0.0°
+decel-290-150          s           0.48          -        -  (not asserted)
+                       throttle cut to ZERO, 290 -> 150 mph, level — pure drag — no thrust term to assume, α 0.0° at finish — OPEN conflict, the polar is the binary's and the footage disagrees
+zoom-climb             ft       1790.84          -        -  (not asserted)
+                       full pull from 300 mph level, altitude gained — min speed 104.7 mph (original 127.9), apex at 18.5 s (original 6.5), α 8.5° at min speed
+zoom-climb-min-speed   mph       104.73          -        -  (not asserted)
+                       same loop, speed at its own minimum — α 8.5° here (the wings-level pull settles lower — this loop has carried well past that regime by its own minimum)
+
+# knife-edge hold — player_balmoral (pbalmoral)
+# 90° bank at entry then FREE; stick neutral; throttle trimmed level at entry speed
+# original (Bloodhawk, CAP-05, two takes): nose −4.9° / −7.3° at +3 s, then a
+# drift of 0.69 / 0.89 °/sim-s to −27° at +36 s; nose 4.8–8.3° BELOW the path
+# (gap growing); sink 0.5 / 24 / 60 / 93 ft/s at +3/+12/+24/+36 s; heading 0.68–1.13 °/s
+
+entry 143 mph, bank 90°, throttle 1.000 — drift 1.24 °/s over 3–36 s, last-third share 0.29, α peak 1.77° settles 1.07°
+     t     nose     path  nose-path      sink      Δalt       α    bank      hdg    speed
+     1    -1.39    -0.41      -0.98       0.4      -0.1    1.07    90.0     0.17    129.5
+     3    -4.38    -2.83      -1.56       7.1      -3.2    1.73    89.9     0.58    127.7
+    12   -17.03   -15.56      -1.47      50.2     -87.7    1.65    88.9     0.67    133.6
+    24   -32.47   -31.28      -1.18     104.5    -381.8    1.37    85.9     0.76    139.9
+    36   -45.14   -44.27      -0.87     146.1    -851.1    1.07    82.1     0.90    144.1
+
+entry 300 mph, bank 90°, throttle 1.000 — drift 1.24 °/s over 3–36 s, last-third share 0.29, α peak 1.77° settles 1.07°
+     t     nose     path  nose-path      sink      Δalt       α    bank      hdg    speed
+     1    -1.38    -0.38      -1.01       0.5      -0.1    1.10    90.0     0.15    143.2
+     3    -4.37    -2.80      -1.57       7.0      -3.2    1.74    89.9     0.59    128.2
+    12   -17.01   -15.54      -1.47      50.1     -87.6    1.65    88.9     0.67    133.6
+    24   -32.45   -31.27      -1.18     104.5    -381.3    1.37    85.9     0.76    139.9
+    36   -45.13   -44.26      -0.87     146.1    -850.5    1.07    82.1     0.90    144.1

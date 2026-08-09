@@ -31,24 +31,38 @@ public class StallWarningTests
     [Fact]
     public void TheLampLeadsTheNoseDropOverARealFdBand()
     {
-        // The split: one margin (StallFraction), two thresholds on it. Measured inside a single
-        // original-game clip — the lamp lights 2.64 sim s / 14.9 mph before the nose breaks.
-        var model = new FlightModel(new PlaneStats());
+        // The split: one margin (StallFraction), two DIFFERENT thresholds on it. The lamp still
+        // fires at a fixed 0.30 fd — measured inside a single original-game clip, 2.64 sim s /
+        // 14.9 mph ahead of the Bloodhawk's own nose-break at the time. Since B15 the nose-drop
+        // itself is the Bloodhawk's own computed StallSpeed (clMax·q·RefArea = VehWeight), not a
+        // fixed fraction, so this test flies the Bloodhawk's real dynamics (1900 kg / 330 ref_area)
+        // rather than the placeholder PlaneStats() defaults — those defaults are the executable's
+        // compiled fallback aircraft, not any real airframe, and their own computed stall speed sits
+        // almost exactly AT the 0.30 fd warn threshold (see FlightModel.StallSpeed's doc), which
+        // would invert the split rather than exercise it.
+        // ⚠ The computed Bloodhawk stall (56.5 mph) no longer reproduces the clip's measured ~76 mph
+        // nose-drop — that gap is a recorded decode-vs-footage conflict (FlightModel.StallSpeed),
+        // not something this test papers over — so only the ORDERING (warn leads stall) and the
+        // MECHANISM (two independent thresholds on one margin) are asserted here, not the original
+        // clip's absolute 2.64 s / 14.9 mph lead.
+        var model = new FlightModel(new PlaneStats { VehWeight = 1900f, RefArea = 330f, FdSpeed = 135f });
         float fd = model.Stats.FdSpeed;
+        float stallFrac = model.StallSpeed / fd;
+        Assert.True(stallFrac < 0.30f,
+            $"the lamp must still lead the break: computed stall frac {stallFrac:0.000} vs the fixed warn 0.300");
+
         void At(float frac, bool warned, bool stalled, string what)
         {
             model.Reset(Vector3.Zero, Basis.Identity, frac * fd, 0f);
             bool w = model.IsStallWarned(), s = model.isStalled();
             Assert.True(w == warned && s == stalled,
-                $"{what}: at {frac:0.000} fd warned={w} stalled={s}, expected warned={warned} stalled={stalled}");
+                $"{what}: at {frac:0.000} fd (stall frac {stallFrac:0.000}) warned={w} stalled={s}, expected warned={warned} stalled={stalled}");
         }
 
         At(0.310f, false, false, "above both thresholds neither cue shows");
         At(0.299f, true, false, "the lamp lights at 0.30 fd");
-        At(0.260f, true, false, "mid-lead: lamp lit, nose still held");
-        At(0.249f, true, true, "the nose drops at 0.25 fd");
-        Assert.True(Mathf.IsEqualApprox(model.StallFraction, 0.249f, 1e-4f),
-            $"both cues read one stall margin, StallFraction={model.StallFraction:0.0000}");
+        At((stallFrac + 0.300f) / 2f, true, false, "mid-lead: lamp lit, nose still held");
+        At(stallFrac - 0.01f, true, true, "the nose drops at its own computed stall speed");
     }
 
     [Fact]

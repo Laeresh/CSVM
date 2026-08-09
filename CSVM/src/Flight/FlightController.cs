@@ -982,7 +982,7 @@ public partial class FlightController : Node3D
             _sinceTelemetry = 0;
             var p = _model.Position;
             // path = climb/dive angle of the flight path; nose = the attitude's pitch;
-            // wv = wing verticality |up·Y| (1 level/inverted, 0 knife-edge) — the lift factor
+            // wv = wing verticality |up·Y| (1 level/inverted, 0 knife-edge) — the nose-chase factor
             GD.Print($"flight: pos=({p.X:0},{p.Y:0},{p.Z:0}) spd={_model.Speed:0.0} m/s " +
                      $"thr={_model.Throttle:0.00} rates=({_model.BodyRates.X:0.00},{_model.BodyRates.Y:0.00},{_model.BodyRates.Z:0.00}) " +
                      $"path={Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(_model.VelocityDir.Y, -1f, 1f))):0}° " +
@@ -1116,8 +1116,9 @@ public partial class FlightController : Node3D
             Gauges.AltitudeFt = ft;
             // A held plane sits at 0 m/s, which is below every stall speed — but it is pinned, not
             // stalling, so the gauge (and the HUD line below) stay quiet in the lab.
-            // The lamp is the WARNING (0.30 fd), which leads the nose-drop the model flies at 0.25;
-            // the fraction beside it is what ramps its blink rate.
+            // The lamp is the WARNING (fixed 0.30 fd), which leads the nose-drop the model now flies
+            // at the airframe's own computed StallSpeed (see FlightModel.isStalled); the fraction
+            // beside it is what ramps the lamp's blink rate.
             Gauges.StallWarning = !_crashed && !halted && !_held && _model.IsStallWarned();
             Gauges.StallFrac = _model.StallFraction;
         }
