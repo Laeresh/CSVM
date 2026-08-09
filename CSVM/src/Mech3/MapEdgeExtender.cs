@@ -77,9 +77,12 @@ public sealed partial class MapEdgeExtender : Node3D
     /// information.</summary>
     internal const float TintStrength = 0.2f;
 
-    // Window radius in cells around the focus. Sized to cover the *raw* weather fog-far
+    // Window radius in cells around the focus. Sized to cover the weather fog-far
     // (C1 zone2: 4000 m ≈ 4 × 1024 m tiles) plus one margin ring, so the fog border never
-    // creeps onto the void even mid-cell and regardless of the fogRangeFactor TUNE. TUNE.
+    // creeps onto the void even mid-cell. TUNE. ⚠ It used to say "regardless of the
+    // fogRangeFactor TUNE" — that factor halved the range and is deleted (B15, 2026-08-08), so
+    // this ring now sits against the FULL authored far, which is what it was already sized for.
+    // The chapter with the longest authored far is C1B at 4,700 m, still inside 5 × 1024 m.
     private const int Rings = 5;
 
     // The ground-tile span gate, as fractions of a cell: the floor admits the split half-tiles,
@@ -571,7 +574,12 @@ public sealed partial class MapEdgeExtender : Node3D
             var ground = new Node3D { Name = "ground", Transform = mirror };
             foreach (var (node, parentXf) in tiles)
             {
-                var leaf = _scene.BuildSubtree(node, skip: n => !ReferenceEquals(n, node));
+                // zoneGate: the mirrored tile is a copy of a real world tile, so it inherits that
+                // tile's own zone_id and is culled with it (B12). Without this, the base map's
+                // ground would vanish above the deck while its mirrored continuation kept
+                // drawing — a seam the gate would have created on its own.
+                var leaf = _scene.BuildSubtree(node, skip: n => !ReferenceEquals(n, node),
+                    zoneGate: true);
                 if (leaf == null)
                     continue;
                 if (parentXf != Transform3D.Identity)

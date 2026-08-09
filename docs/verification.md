@@ -79,6 +79,49 @@ and leave gaps when retiring old ones.
 - **SHOT-20** — **Locate a saturated feature by the centroid of its plateau, not by `argmax`.** On a clipped highlight `argmax` returns wherever the tie happens to break — 16 px off the sun's centre in C3 — and any position derived from it inherits that error multiplied. Ring 2.0 of the lens flare sits at twice the sun→centre vector, so it inherited double and measured as pure sky (BL-165).
 - **SHOT-21** — **Keep radial probes clear of the frame edge.** A circular sample that runs off-frame reads clamped pixels as if they were content, so a thin annulus averages to background and reports a confident zero. Place the subject diagonally when the probe radius would otherwise cross an edge (BL-165).
 - **SHOT-22** — **A full-screen effect needs an off switch before it contaminates unrelated captures.** The lens flare's wash reaches α ≈ 0.66, survives terrain occlusion and whitens the HUD, so in C2/C3 every screenshot with the sun near centre becomes useless for judging terrain colour, fog gradient, deck brightness or clutter density. `--no-flare` exists for the same reason `--no-fog` does (BL-165).
+- **SHOT-23** — **Measure how far fog lets a texture survive as a PLATEAU-RELATIVE high-pass, and
+  compare it in ELEVATION ABOVE THE TRUE HORIZON — never in rows from the top of frame.** Both
+  halves bit at C1's river pose (`PLAN-overcast-match` B15). (a) Fog scales a surface's texture
+  contrast by `1 − φ` while leaving a smooth gradient behind, so a per-row sd measures the gradient
+  and an *absolute* contrast threshold measures the texture's own contrast rather than the fog: the
+  original's overcast mottling runs at high-pass RMS ≈ 0.59 and ours at ≈ 0.26, so only a threshold
+  set as a fraction of each image's own unfogged plateau compares the same thing. (b) Two frames of
+  "the same pose" routinely differ in pitch and aspect — the original is level at 1250×713 with its
+  terrain 41 px *below* the true horizon, our matched render pitches 5.7° down at 1280×720 with
+  terrain rising 17 px *above* it — so a depth-from-top row number silently compares different
+  angles and can name a target the pose cannot reach whatever the change does. Convert to elevation
+  (and, where a ceiling's `f·h` is known, to a distance in metres) before drawing a conclusion.
+- **SHOT-24** — **Measure cloud-sheet structure by the sky→tops transition depth, not
+  column-autocorrelation or crest-spacing.** Perspective makes a fixed world-space placement
+  period aperiodic in screen space, so a row/column ACF over the sheet found no peak above 0.33
+  on either side of the A/B — including a 0.69 peak in the original's own underside that turned
+  out to be capture noise at sd 0.91–2.58 (`PLAN-overcast-match` A2, METHOD-14). *(Minted as
+  SHOT-20 on the plan's branch; renumbered at the 2026-08-09 merge — BL-165's session minted
+  SHOT-20/21/22 first.)*
+- **SHOT-25** — **`--tex-override` cannot separate the `fvol` cloud-sprite field from
+  `cloudparent` clusters — they share their textures.** All 626 of C1's `cloudparent` facades are
+  skinned `cloud1.tif`/`cloud2.tif`, the same two textures the `cloudsprite1`/`cloudsprite2`
+  templates use, so a green override paints both populations at once; separate them by altitude
+  or cluster position instead (`PLAN-overcast-match` A6). *(Branch-minted as SHOT-21; renumbered
+  at the merge.)*
+- **SHOT-26** — **A horizon-band artifact is a full-width, DEAD-FLAT run of rows (per-row sd ≈ 0)
+  bounded by a hard jump — measure it as the largest jump whose rows are BOTH flat, never as the
+  largest jump.** Unrestricted, terrain silhouettes and cloud edges dominate the statistic and a
+  55-luminance flat-band edge reads as ordinary scene contrast (`PLAN-overcast-match` B18).
+  *(Branch-minted as SHOT-22; renumbered at the merge.)*
+
+- **SHOT-27** — **The true horizon is a CALIBRATED row, not the sky/terrain boundary — shoot the
+  same position LEVEL and check the shift is `f·tan(pitch)`.** `SHOT-23`(b) says to convert a row
+  into an elevation above the true horizon; this is how that row is obtained without guessing.
+  Measured (`PLAN-weather-decompile-match` D31): the C1 river pose pitches 5.712° down at
+  `f` = 599.1 px (fov_y 62° over 720 rows), so its horizon is row **419.9** — and the same
+  position shot level puts every feature exactly **60 px** higher, against the predicted 59.9.
+  `PLAN-overcast-match` B15 instead read the `--no-fog` control's sky/terrain boundary (row 299)
+  as "17 px above the horizon" and worked from ~316, ~104 px off, which silently scaled every
+  elevation and every `f·h` distance derived from one. The boundary is the terrain SILHOUETTE, and
+  a silhouette can sit either side of the horizon: ours rises 115 px above it at that pose while
+  the original still's ridge sits 48 px below its own. When two frames' skies do not overlap in
+  elevation, anchor the statistic on the silhouette both frames actually have.
 
 ## GOLD — golden images
 
@@ -104,6 +147,11 @@ and leave gaps when retiring old ones.
   — the crash fireball covers the frame. So judge a timing change by what the moved shots *are*
   (all four movers were particle shots) before concluding either that it broke something or that it
   is harmless.
+- **GOLD-8** — **When an earlier item deliberately left goldens un-repinned, a later item's "moved"
+  list is about BOTH changes — recover the current item's own movers by A/B-ing hashes against a
+  temporarily reverted build.** Measured (`PLAN-overcast-match` B18): the run reported the same 9
+  movers the previous item had, yet only 8 moved for this one — `c5-city-night` was byte-identical
+  across it, and the census predicting exactly that would have been credited to the wrong change.
 - **GOLD-7** — **A golden shot that exits nonzero with no PNG is retried once, with evidence kept
   either way.** `RunTests.ps1`'s `goldens` stage reuses `.scratch\goldens\` every run, so a silent
   exit-1 (`BL-039`: a `c1-flight` shot once built its world, rendered a frame, then died with no
@@ -234,6 +282,11 @@ and leave gaps when retiring old ones.
   the residual reading after the stop is a different question from the peak, and it is the one that
   found a mesh lit at the impact point for the rest of the session.
 - **INSTR-7** — **"Not decidable from this data" is a fact about the instrument, not the question — when a census comes back uniform, ask what else varies the quantity.** A degenerate reading blocks the *inference*, not the *answer*. Measured: all 88 `destroyable_parts` pairs ship equal, which correctly made (armor, hp) undecidable from `extracted/`, and the reading sat blocked for nine days — the original's armory varies armor independently of health and settled it in one screen.
+- **INSTR-12** — **A straight-up billboard probe reads edge-on and reports nothing about
+  altitude.** A `cloudsprite` card is a `Facade`/`SphericalY` billboard, so a zero-green-pixels
+  result looking straight up is a fact about billboard orientation, not proof the field is absent
+  below that altitude — a compound-thing narrowness in INSTR-11's shape (`PLAN-overcast-match` A6,
+  the A3 probe it corrects).
 
 ## SRC — sources and documents
 

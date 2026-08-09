@@ -24,6 +24,18 @@ namespace CSVM.UI;
 /// (<see cref="SetVisualLayer"/>) and the player's camera culls the whole band except its own bit
 /// (<see cref="PlayerCullMask"/>). Everything the world builds stays on the default layer 1 and
 /// is therefore visible in every pane — including the other players' aircraft.</para>
+///
+/// <para><b>The zone-gate band</b> (<c>Mech3.ZoneGate.LayerBand</c>, layers 14–16) is the other
+/// named allocation out of the same 20, and it is not per player either: three SHARED layers, one
+/// per gamez <c>zone_id</c> 1/2/3, carrying every mesh built for a node of that zone — the placed
+/// <c>cloudparent</c> clusters, the <c>fvol</c> clutter field, the zone-1 mission targets and
+/// ground world. <c>SceneBuilder</c> stamps them at build time and <c>WeatherRig.Tick</c> keeps
+/// exactly one of the three bits in each camera's cull mask — that camera's own weather state —
+/// which is the original's <c>FUN_0056c430</c> gate per CAMERA
+/// (<c>PLAN-weather-decompile-match</c> B12). It replaced a single shared cloud-field layer gated
+/// on camera altitude (A7), which was this gate's special case. Every cull mask built here
+/// includes all three bits, so a chapter, a mode or a <c>--no-zone-cull</c> run that never applies
+/// the gate renders every zone exactly as an ungated build does.</para>
 /// </summary>
 public sealed partial class SplitScreen : CanvasLayer
 {
@@ -36,6 +48,13 @@ public sealed partial class SplitScreen : CanvasLayer
     private const int PlayerLayerBit0 = 16;
     private const uint AllLayers = 0xFFFFF;              // Godot's 20 visual layers
     private const uint PlayerBand = 0xFu << PlayerLayerBit0;
+
+    // The shared zone-gate band is Mech3.ZoneGate.LayerBand (bits 13–15 = layers 14–16, zone_id
+    // 1/2/3), taken immediately below the per-player band. Outside PlayerBand on purpose: every
+    // cull mask below starts with all three INCLUDED, so the gate is something WeatherRig switches
+    // OFF, never something a new camera has to remember to switch on. (Bit 15 alone was the single
+    // cloud-field layer that band replaced — see the class remarks.) It is allocated in Mech3
+    // rather than here because SceneBuilder stamps it at build time, node by node.
 
     private const int Gutter = 2;   // px between panes (TUNE)
 

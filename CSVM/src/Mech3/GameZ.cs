@@ -121,6 +121,35 @@ public sealed class GameZ
         return _markerGizmo[meshIndex] = true;
     }
 
+    /// <summary>An untextured (<c>Colored</c>) polygon whose every vertex colour restates the
+    /// material's OWN colour: one authored value written into two slots, not two terms meant to
+    /// modulate each other. Multiplying them squares the colour — 176 draws as 120, 200 as 156,
+    /// (16,24,48) as (0,0,3). Every chapter's skydome skirt (the below-horizon cone under the
+    /// textured dome wall) is authored this way in its zone's own <c>FOG_COLOR</c>, so squaring it
+    /// is what turns the join with the terrain's fog wall into a hard band. Install-wide: 87
+    /// polygons, 85 of them those skirts. A polygon carrying a real vertex gradient, or one whose
+    /// material colour is white, is never one of these — those two are the cases where the product
+    /// IS the authored intent, and they stay a product.</summary>
+    public bool VertexColorsRestateMaterialColor(GameZPolygon poly, int materialIndex)
+    {
+        if (materialIndex < 0 || materialIndex >= Materials.Count)
+            return false;
+        var mat = Materials[materialIndex];
+        if (mat.TextureName != null || poly.VertexColors == null || poly.VertexColors.Count == 0)
+            return false;
+        // Both sides come from the same /255f decode, so this is an equality test with room for
+        // float noise only — half a source byte.
+        const float eps = 0.5f / 255f;
+        foreach (var c in poly.VertexColors)
+        {
+            if (Mathf.Abs(c.R - mat.Color.R) > eps
+                || Mathf.Abs(c.G - mat.Color.G) > eps
+                || Mathf.Abs(c.B - mat.Color.B) > eps)
+                return false;
+        }
+        return true;
+    }
+
     public GameZNode? FindByName(string name)
     {
         foreach (var n in Nodes)
@@ -289,6 +318,12 @@ public sealed class GameZ
                 if (fl.TryGetProperty("active", out var ac))
                     node.Active = ac.ValueKind == JsonValueKind.True;
             }
+            // The original's per-node visibility zone (FUN_0056c430): a node draws iff its
+            // zone_id is -1 ("always"), or is in the camera's armed zone set {0, camera state}.
+            // Absent (a legacy extraction that does not carry the field) -> -1, i.e. ungated,
+            // which is what every reader of this field must treat as "no opinion".
+            if (header.TryGetProperty("zone_id", out var zn) && zn.ValueKind == JsonValueKind.Number)
+                node.ZoneId = zn.GetInt32();
             // Both spellings are flat list positions, NOT the node's own "index" field
             // (which the unified shape also exposes, 1-based and with duplicates — the
             // legacy "node_index" by another name). Verified on C1: reading them as flat
@@ -589,6 +624,12 @@ public sealed class GameZNode
     // never builds visible. Absent flags (legacy extraction) default to active, matching every
     // other flags.* field here.
     public bool Active = true;
+    /// <summary>The original's per-node visibility zone (<c>zone_id</c>): <b>-1</b> = always drawn;
+    /// otherwise the node draws only while that id is in the camera's armed zone set, which
+    /// <c>FUN_004d62d0</c> arms as <c>{0, camera weather state}</c> — so <b>0</b> is also always,
+    /// and 1/2/3 are the per-state buckets (docs/formats/gamez.md, docs/formats/weather.md's deck
+    /// census). Absent in a legacy extraction, which defaults to -1 = ungated.</summary>
+    public int ZoneId = -1;
     // Flat position in nodes.json. The file is a depth-first serialization of the tree,
     // so this is the original engine's draw order — the cross-node tie-break for
     // coplanar surfaces of equal polygon priority (later node draws on top).

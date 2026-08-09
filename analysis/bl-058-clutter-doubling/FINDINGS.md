@@ -182,12 +182,15 @@ persists with `cblock4/5/6` suppressed. The dominant error is the within-block p
 of `cblock1/2/3`+`cblock7` themselves — split out as `BL-305` when `BL-250` closed (2026-08-07,
 fix landed as `ClutterBuilder.BuriedClutterDistricts`; closing commit: `git log --grep=BL-250`).
 
-## Ruled out: the unparsed node `zone_id` (`BL-036`) is not the filter
+## Ruled out: the node `zone_id` is not the filter
 
-`BL-036` (found 2026-07-22, still open) already flags that `GameZ` parses no node's `zone_id` field
-at all. Since C5 uniquely ships `zone1`/`zone3` (every other chapter is `zone1`/`zone2`), and the
-node `zone_id` value set matches (`-1`/`1`/`3` in C5 vs `-1`/`1`/`2` elsewhere — see `BL-036`'s
-per-chapter counts), it was worth checking whether zone activation is actually the missing filter
+At the time of this check `GameZ` parsed no node's `zone_id` field at all (it does now — the field's
+runtime meaning was decompiled 2026-08-09 and is a per-frame camera-state visibility gate; see
+[`docs/formats/gamez.md`](../../docs/formats/gamez.md) and `CSVM/src/Mech3/ZoneGate.cs`). Since C5
+uniquely ships `zone1`/`zone3` (every other chapter is `zone1`/`zone2`), and the node `zone_id`
+value set matches (`-1`/`1`/`3` in C5 vs `-1`/`1`/`2` elsewhere — per-chapter counts in
+[`docs/formats/world-structure.md`](../../docs/formats/world-structure.md)), it was worth checking
+whether zone activation is actually the missing filter
 behind the clutter doubling. It is not, checked two ways (`zone_check.py` in this directory):
 
 - **Same node, both textures.** The repro node CBLOCK-LOD.md uses (`g4664`, node index 1847) carries
@@ -198,5 +201,5 @@ behind the clutter doubling. It is not, checked two ways (`zone_check.py` in thi
   If zone selection resolved the doubling, the base district (`cblock4/5/6`) would need to sit
   entirely in the zone the subface district (`cblock1/2/3`) does not — it doesn't.
 
-This corroborates and extends `BL-036`'s own note that both the C5 ground z-fight's surfaces are
+This corroborates and extends the earlier finding that both the C5 ground z-fight's surfaces are
 `zone_id=1` — the same "checked, not the cause" verdict, now also true for the clutter case.

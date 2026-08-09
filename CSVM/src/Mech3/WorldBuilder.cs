@@ -7,8 +7,12 @@ namespace CSVM.Mech3;
 /// <summary>One <c>zone*</c> child of the gamez <c>horizon</c> node, and how many meshed nodes its
 /// subtree carries — the dome <see cref="WorldBuilder.BuildHorizon"/> would build for it.
 /// <see cref="MeshedNodes"/> 0 means the zone is a bare marker (<c>model_index: -1</c> with no
-/// children), which is exactly what C1B, C2 and C3 ship for <c>zone2</c>.</summary>
-public readonly record struct HorizonZone(string Name, int MeshedNodes)
+/// children), which is exactly what C1B, C2 and C3 ship for <c>zone2</c>.
+///
+/// <para><see cref="ZoneId"/> is the zone node's own gamez <c>zone_id</c>, which every chapter
+/// authors to match its name (<c>zone1</c>→1, <c>zone2</c>→2, C5's <c>zone3</c>→3 — surveyed, all
+/// eight). It is what <see cref="ZoneGate"/> tests the built dome against, per rig.</para></summary>
+public readonly record struct HorizonZone(string Name, int MeshedNodes, int ZoneId = -1)
 {
     /// <summary>The zone has a dome to build.</summary>
     public bool BuildsGeometry => MeshedNodes > 0;
@@ -26,6 +30,15 @@ public sealed class WorldBuilder
     /// TextureArchive is open; the caller adds it to the scene tree. Empty on chapters whose
     /// materials carry no cycle, and it costs nothing then.</summary>
     public readonly TextureCycler Cycler = new() { Name = "TextureCycler" };
+
+    /// <summary>Godot node metadata key marking a <see cref="MeshInstance3D"/> under
+    /// <see cref="CloudDeck"/> as C26's rim extension rather than one of the 144 authored deck
+    /// tiles — <c>WeatherRig.CollectDeckTiles</c> reads it so its "N of M deck tile(s) carry an
+    /// undimmed twin" census stays 144/144 (the extension needs no undimmed twin at all; see
+    /// <see cref="AddDeckAnnulus"/>). This file's own "144 tiles" print (<see cref="Build"/>)
+    /// needs no such check — it counts <c>_deckNodes</c>, the gamez-index set, not live
+    /// children.</summary>
+    internal const string DeckExtensionMeta = "deck_extension";
 
     // The horizontal overcast DECK — the sheet covering the whole map at one altitude, as
     // opposed to the cloud1/cloud2 sprites. Split out of the static world (into CloudDeck) so
@@ -59,9 +72,9 @@ public sealed class WorldBuilder
     //
     // Deck tiles are the ONE exception to the backface culling below: they build
     // forceDoubleSided (see Add). Every one of the 144 tiles carries show_backface: false in both
-    // C1 (models 1004-1147) and C4, yet the player flies THROUGH the deck — Tick pins it to the
-    // whiteout-band centre and never re-orients it (WeatherRig.cs:86-97), so the same quad has to
-    // read as a ceiling from below and a floor from above.
+    // C1 (models 1004-1147) and C4, yet the player flies THROUGH the deck — Tick follows it in
+    // X/Z and never re-orients it (WeatherRig.cs), so the same quad has to read as a ceiling from
+    // below and a floor from above.
     //
     // The side culling lost is the UNDERSIDE: every tile's authored face points +Y, so the floor
     // seen from above was unaffected (a C1 camera at y=1400 renders bit-identical with and
@@ -83,6 +96,11 @@ public sealed class WorldBuilder
     private readonly SceneBuilder _scene;
     // Walk-root indices belonging to the deck; filled by FindCloudDeck before the walk.
     private readonly HashSet<int> _deckNodes = new();
+    // Each built deck tile's UNDIMMED mesh, keyed by the RID of the dimmed one the tile is built
+    // with; filled by Add as the deck is walked. See CloudDeckUndimmedMeshes.
+    private readonly Dictionary<Rid, ArrayMesh> _deckUndimmedMeshes = new();
+    // The built `cloudparent` cluster subtrees; filled by CollectCloudClusters after the walk.
+    private readonly List<Node3D> _cloudClusters = new();
     // Entities the chapter parks at the world origin awaiting placement (see
     // HideUnplacedEntities): the gamez node and the subtree we built for it.
     private readonly List<(GameZNode Node, Node3D Built)> _parkedAtOrigin = new();
@@ -146,6 +164,58 @@ public sealed class WorldBuilder
     /// above/below at the cloud band, as in the original. A child of the world root at its
     /// original altitude; null if the world has no map-covering deck (C1B/C2/C3/C5).</summary>
     public Node3D? CloudDeck { get; private set; }
+
+    /// <summary>Each deck tile's UNDIMMED mesh — the same geometry and the same materials built
+    /// with <c>forceLit: false</c> — keyed by the <see cref="Rid"/> of the DIMMED mesh the tile
+    /// is actually built with. Empty for a world with no deck.
+    ///
+    /// <para>The deck's <c>csky_world_light</c> dimming is regime-conditional
+    /// (<c>PLAN-overcast-match</c> C23, <c>M-a</c>): C22's dimming is the original's below the
+    /// cloud band, where the deck is the overcast's lit-from-nowhere UNDERSIDE, and wrong above
+    /// it, where the original's from-above frames hold no pixel below <c>FOG_COLOR</c> at all.
+    /// The flag is baked into the built material (a shader variant, never a uniform — see
+    /// <see cref="SceneBuilder"/>), so the switch has to be a mesh swap; both variants are built
+    /// here, once, and <c>Session/WeatherRig.Tick</c> assigns one per camera at the band
+    /// crossing. Keyed by RID because the deck copies a splitscreen session makes
+    /// (<c>GameSession.AssignCloudDecks</c>) share these very resources.</para></summary>
+    public IReadOnlyDictionary<Rid, ArrayMesh> CloudDeckUndimmedMeshes => _deckUndimmedMeshes;
+
+    /// <summary>The gamez <c>zone_id</c> the deck tiles author, or <b>−1</b> when this world has
+    /// no deck or its tiles disagree (never observed: all four deck chapters ship 144/144 on
+    /// <c>zone_id 2</c>). The deck is the one world subtree <see cref="ZoneGate"/> does NOT stamp
+    /// with a zone layer — it is a per-rig camera-anchored copy — so this is what
+    /// <c>Session.WeatherRig.Tick</c> tests instead, per rig, against that rig's own camera
+    /// weather state.</summary>
+    public int CloudDeckZoneId { get; private set; } = -1;
+
+    /// <summary>The deck tiles' own AUTHORED altitude (C1/C1C/C2B 960, C4 1050) — the Y every one
+    /// of the 144 tiles was placed at in the gamez data, read off the coverage-winning altitude
+    /// bucket <see cref="FindCloudDeck"/> already computes to classify them. 0 for a world with no
+    /// deck (never read then — <see cref="CloudDeck"/> is null).
+    ///
+    /// <para><c>PLAN-weather-decompile-match</c> B13/B14: the deck floor renders HERE at EVERY
+    /// camera altitude, world-fixed, never re-pinned to <c>CLOUD_COVER</c>'s band centre — that pin
+    /// was C4's own coincidence (its authored altitude equals its centre, 1050) — and never carried
+    /// above the camera as a ceiling either. Below the band the tiles' own <c>zone_id 2</c> culls
+    /// them outright and <c>horizon/zone1</c>'s dome is the ceiling
+    /// (<see cref="DomeZonesToBuild"/>).</para></summary>
+    public float CloudDeckAltitude => _deckAltitude;
+
+    /// <summary>Mesh instances this world put on each zone-gate layer, by <c>zone_id</c> —
+    /// <see cref="SceneBuilder.ZoneGatedMeshes"/> for the world walk. The before-census a state
+    /// flip's delta is asserted against.</summary>
+    public IReadOnlyList<int> ZoneGatedMeshes => _scene.ZoneGatedMeshes;
+
+    /// <summary>The world's placed <c>cloudparent</c> cluster subtrees, in walk order — the
+    /// ambient cloud population that is ordinary world geometry rather than <c>fvol</c> clutter
+    /// (C1 ships 28, C1B 70, C4 45; C2/C3 none). Censused so the caller can put them on the
+    /// shared cloud-field visual layer with the clutter, since the two are one population to a
+    /// camera's altitude gate (A7). Empty until <see cref="Build"/> has run.
+    ///
+    /// <para>⚠ Resolved by the node's ORIGINAL gamez name (<c>AnimRuntime.NameMeta</c>), never
+    /// by <c>Node.Name</c>: all 28 of C1's are literally named <c>cloudparent</c>, so Godot's
+    /// duplicate-sibling renaming is free to have touched the built name (WORLD-8).</para></summary>
+    public IReadOnlyList<Node3D> CloudClusters => _cloudClusters;
 
     /// <summary>This world's shared scene builder — its mesh/material/shape caches and its
     /// fullbright world materials. Handed to <see cref="ClutterBuilder"/> so the clutter's 3D
@@ -231,9 +301,143 @@ public sealed class WorldBuilder
             var child = gamez.Nodes[childIndex];
             if (!child.Name.StartsWith("zone", StringComparison.OrdinalIgnoreCase))
                 continue;
-            zones.Add(new HorizonZone(child.Name, MeshedNodesIn(gamez, child)));
+            zones.Add(new HorizonZone(child.Name, MeshedNodesIn(gamez, child), child.ZoneId));
         }
         return zones;
+    }
+
+    /// <summary>Which horizon zones this world builds a DOME for, in build order —
+    /// <paramref name="activeZone"/> first, then every other zone the
+    /// <see cref="ZoneGate"/> can tell apart from it (<c>PLAN-weather-decompile-match</c> B14).
+    ///
+    /// <para><b>Why more than one.</b> The original draws the dome of the zone the camera is IN:
+    /// below the cloud deck a deck chapter's camera is in state 1, its <c>zone_id 2</c> dome is
+    /// culled and <c>horizon/zone1</c>'s own geometry is the sky and the ceiling. That needs both
+    /// domes present in the world, one gated to each state — B12 landed the gate and left it
+    /// disarmed for a single-dome world precisely because "no sky at all" is not a frame the
+    /// original can render.</para>
+    ///
+    /// <para><b>The rule is the gate's own arithmetic, not a chapter list.</b> A second dome is
+    /// added only when it can never draw at the same time as the first: both zones' own
+    /// <c>zone_id</c> must be gateable (1…<see cref="ZoneGate.MaxZoneId"/>, since
+    /// <see cref="ZoneGate.Draws"/> passes −1/0 at every state) and distinct from every zone already
+    /// taken. Everything else is skipped, so a chapter whose data does not support the swap keeps
+    /// exactly the one dome it had. Empty zones (C1B/C2/C3's bare <c>zone2</c> marker) never
+    /// qualify — <see cref="HorizonZone.BuildsGeometry"/> — and an <paramref name="activeZone"/>
+    /// that names no zone at all returns just itself, leaving
+    /// <see cref="BuildHorizon"/>'s own fallback in charge.</para>
+    ///
+    /// <para>Pure and static because it is the rule: <c>SkyZoneTests</c> asserts it against every
+    /// chapter's real census (C1/C1C/C2B/C4 two domes, C5 two — <c>zone1</c> + its <c>zone3</c>
+    /// interior shell — C1B/C2/C3 one).</para></summary>
+    public static IReadOnlyList<string> DomeZonesToBuild(
+        IReadOnlyList<HorizonZone> zones, string activeZone)
+    {
+        var built = new List<string> { activeZone };
+        int activeId = -1;
+        foreach (var z in zones)
+            if (z.Name.Equals(activeZone, StringComparison.OrdinalIgnoreCase))
+                activeId = z.ZoneId;
+        if (ZoneGate.LayerFor(activeId) == 0)
+            return built;
+        var taken = new List<int> { activeId };
+        foreach (var z in zones)
+        {
+            if (z.Name.Equals(activeZone, StringComparison.OrdinalIgnoreCase) || !z.BuildsGeometry)
+                continue;
+            if (ZoneGate.LayerFor(z.ZoneId) == 0 || taken.Contains(z.ZoneId))
+                continue;
+            taken.Add(z.ZoneId);
+            built.Add(z.Name);
+        }
+        return built;
+    }
+
+    /// <summary>The gamez <c>zone_id</c> every <c>fvol*</c> volume node in this world authors, or
+    /// <b>−1</b> when the chapter ships none or they disagree. The <c>fvol</c> sprite FIELD
+    /// (<see cref="CSVM.Effects.FogVolumeClutter"/>) is scattered through those volumes and is
+    /// gated with them, so this is the zone its MultiMeshes go on.
+    ///
+    /// <para>⚠ It is read from the data per chapter and never assumed: <b>C2B ships its nine
+    /// <c>fvol</c> volumes at <c>zone_id −1</c></b> — always visible, never camera-state culled —
+    /// while C1/C1C/C4 ship <c>2</c> and C5 ships <c>1</c> (the A1 deck census,
+    /// docs/formats/weather.md). A gate that assumed "every deck chapter's fvol population is
+    /// zone 2" would hide C2B's ambient cloud field below its deck, which the original does
+    /// not.</para></summary>
+    public static int FogVolumeZoneIdOf(GameZ gamez)
+    {
+        int? common = null;
+        foreach (var n in gamez.Nodes)
+        {
+            if (!IsFogVolumeNode(n))
+                continue;
+            if (common is { } got && got != n.ZoneId)
+                return -1; // mixed — ungated is the only reading that cannot hide authored content
+            common = n.ZoneId;
+        }
+        return common ?? -1;
+    }
+
+    /// <summary>The same coverage-winning altitude bucket <see cref="CloudDeckAltitude"/> exposes
+    /// off a BUILT world, computed instead as a pure function of the raw <see cref="GameZ"/> data —
+    /// no scene build, no <c>TextureArchive</c>, so a test can pin a chapter's authored deck
+    /// altitude against the extraction without paying for one (<c>PLAN-weather-decompile-match</c>
+    /// B13's "read it from the data/mesh, never hardcode 960/1050" trap). Null when the chapter has
+    /// no map-covering deck at all (C1B/C2/C3/C5) or no <paramref name="worldName"/> world node.
+    /// Mirrors <see cref="Build"/>'s own world lookup and <see cref="FindCloudDeck"/>'s bucket
+    /// selection exactly — kept in step because both call the same tile test
+    /// (<see cref="FlatTileOf"/>).</summary>
+    public static float? CloudDeckAltitudeOf(GameZ gamez, string worldName = "world1")
+    {
+        GameZNode? world = null;
+        foreach (var n in gamez.Nodes)
+            if (n.Kind == "World" && string.Equals(n.Name, worldName, StringComparison.OrdinalIgnoreCase))
+            {
+                world = n;
+                break;
+            }
+        if (world == null || !world.HasArea)
+            return null;
+        float mapW = Mathf.Abs(world.AreaRight - world.AreaLeft);
+        float mapH = Mathf.Abs(world.AreaBottom - world.AreaTop);
+        if (mapW <= 0f || mapH <= 0f)
+            return null;
+        float mapLeft = Mathf.Min(world.AreaLeft, world.AreaRight);
+        float mapRight = Mathf.Max(world.AreaLeft, world.AreaRight);
+        float mapTop = Mathf.Min(world.AreaTop, world.AreaBottom);
+        float mapBottom = Mathf.Max(world.AreaTop, world.AreaBottom);
+
+        var roots = new List<int>(world.Children);
+        if (world.PartitionNodes != null)
+            roots.AddRange(world.PartitionNodes);
+
+        var buckets = new Dictionary<int, float>();
+        var seen = new HashSet<int>();
+        foreach (var idx in roots)
+        {
+            if (idx < 0 || idx >= gamez.Nodes.Count || !seen.Add(idx))
+                continue;
+            var n = gamez.Nodes[idx];
+            if (SkipWorldNode(n) || !FlatTileOf(gamez, n, out float y, out float x0, out float z0,
+                    out float x1, out float z1))
+                continue;
+            float w = Mathf.Min(x1, mapRight) - Mathf.Max(x0, mapLeft);
+            float h = Mathf.Min(z1, mapBottom) - Mathf.Max(z0, mapTop);
+            if (w <= 0f || h <= 0f)
+                continue; // wholly outside the map rect
+            int key = Mathf.RoundToInt(y);
+            buckets[key] = buckets.TryGetValue(key, out float area) ? area + w * h : w * h;
+        }
+
+        float best = DeckCoverageFraction * mapW * mapH;
+        float? altitude = null;
+        foreach (var (alt, area) in buckets)
+            if (area > best)
+            {
+                best = area;
+                altitude = alt;
+            }
+        return altitude;
     }
 
     /// <inheritdoc cref="HorizonZonesOf"/>
@@ -262,16 +466,41 @@ public sealed class WorldBuilder
             roots.AddRange(world.PartitionNodes);
 
         FindCloudDeck(world, roots);
+        _deckUndimmedMeshes.Clear();
         RankConflicts(roots);
         foreach (var idx in roots)
             Add(root, deck, idx);
 
+        // The zone census, said out loud once per world build. "0 / 0 / 0" is what a gate that
+        // stopped stamping looks like, and it is otherwise indistinguishable from a chapter that
+        // authors no zoned content (docs/verification.md's "an unchanged number is not evidence",
+        // inverted) — C1B/C2/C3 really do author almost nothing in zone 2, and C2B's fog volumes
+        // really are zone_id −1.
+        var gated = _scene.ZoneGatedMeshes;
+        GD.Print($"zone gate: {gated[1]} / {gated[2]} / {gated[3]} mesh instance(s) on zone 1 / 2 / 3 "
+                 + $"(deck zone_id {CloudDeckZoneId}, fvol zone_id {FogVolumeZoneIdOf(_gamez)})");
+
         if (deck.GetChildCount() > 0)
         {
+            // C26: the rim extension is a SIBLING of the 144 tiles under this same node — added
+            // before the print below so `deck.GetChildCount()` would include it; the print reads
+            // `_deckNodes.Count` instead (the gamez-index set FindCloudDeck classified, fixed
+            // before either loop ran) so the logged tile census stays 144 regardless.
+            AddDeckAnnulus(deck, MergedLocalAabb(deck));
             root.AddChild(deck);
             CloudDeck = deck;
-            GD.Print($"cloud deck: {deck.GetChildCount()} tiles at y={_deckAltitude} "
+            GD.Print($"cloud deck: {_deckNodes.Count} tiles at y={_deckAltitude} "
                      + $"({_deckCoverage:P0} of the map)");
+        }
+
+        // The placed cloud clusters, censused after the walk (they are nested deep — C1's sit
+        // at world1 → g0|g27816 → l2586 (Lod) → cloudparent — so there is no walk root to
+        // recognise). Said out loud per chapter: "0 clusters" is a real answer for C2/C3 and
+        // must not read the same as a census that stopped working.
+        CollectCloudClusters(root);
+        if (_cloudClusters.Count > 0)
+        {
+            GD.Print($"cloud clusters: {_cloudClusters.Count} placed 'cloudparent' subtree(s)");
         }
 
         _builtWorld = world;
@@ -424,9 +653,27 @@ public sealed class WorldBuilder
     /// radius) while the world area is x,z ∈ [-12288, 0], so the original engine must have
     /// translated it with the viewer — it is a backdrop, not scenery. Zones are day/night
     /// variants: zone2 = moon + stars + Sky1.tif dusk-gradient night sky (what the original
-    /// shows at the C1 airfield, which always loads at night); zone1 = sky2.tif day haze
-    /// dome with an unfinished flat-gray cap, likely never player-visible.
+    /// shows at the C1 airfield, which always loads at night); zone1 = sky2.tif day haze dome.
     /// Never collidable, never casts shadows.
+    ///
+    /// <para><b>Every dome is a textured wall plus an untextured skirt.</b> The wall runs from
+    /// local Y=0 (the camera's own altitude, hence the horizon line) up to a flat cap; the skirt
+    /// is a cone from Y=0 down to −3.0…−11.7 km, closed by a flat disc. The skirt carries no
+    /// texture — one <c>Colored</c> material whose colour is the zone's own <c>FOG_COLOR</c>, so
+    /// below the horizon the dome IS the fog wall the terrain fades into and the join is
+    /// invisible. Nothing here paints that; it only has to not be doubled
+    /// (<see cref="GameZ.VertexColorsRestateMaterialColor"/>).</para>
+    ///
+    /// <para><b>There is no colour-grading stage, and adding one would be a deviation.</b> The
+    /// dome's colour is wholly authored — the wall's per-vertex gradient off a base ring painted
+    /// in the zone's <c>FOG_COLOR</c>, the skirt's flat <c>FOG_COLOR</c>, and the wall texture on
+    /// top (docs/formats/weather.md, <c>PLAN-overcast-match</c> <c>B18</c>/<c>C26</c>). No tint,
+    /// grade or tonemap is applied here or downstream: the models are authored
+    /// <c>lighting: false</c> so not even <c>csky_world_light</c> reaches them, and the
+    /// <c>Environment</c> is Linear with no exposure or adjustment. So graded it matches — C1
+    /// (66.1, 74.6, 105.0) against the original's (64.9, 73.6, 103.1), and C2B likewise inside
+    /// ±10 per channel. <c>CLOUD_COVER</c>'s <c>TOP_COLOR</c>/<c>BOTTOM_COLOR</c> are the in-cloud
+    /// whiteout's colours, not a sky grade (<see cref="Flight.Weather.WhiteoutColor"/>).</para>
     ///
     /// <para><b>The zone names are per chapter.</b> C1–C4's horizon has
     /// <c>zone1</c>/<c>zone2</c> children, but C5's has <c>zone3</c>/<c>zone1</c> — so a bare
@@ -452,22 +699,23 @@ public sealed class WorldBuilder
             n.Name.StartsWith("zone", StringComparison.OrdinalIgnoreCase)
             && !n.Name.Equals(zone, StringComparison.OrdinalIgnoreCase);
         // Every horizon model in every chapter is authored `fog: false` (measured: 3-6 meshed
-        // dome nodes per chapter, all of them). Honouring that here would delete the horizon
-        // band — and the dome fogging is a deliberate decision taken with the cylindrical-fog
-        // remodel (see below), on a dome that is not the original's shape anyway. So the dome,
-        // and only the dome, builds as if fogged; its `lighting: false` is honoured normally.
-        _scene.ForceFogged = true;
+        // dome nodes per chapter, all of them), and it is honoured here like everywhere else
+        // (`lighting: false` always was). The 2026-07 cylindrical-fog remodel force-fogged the
+        // dome instead (`SceneBuilder.ForceFogged`, set only from here), reasoning that high
+        // dome fragments would stay clear via the FOG_ALTITUDE fade while the horizon band
+        // greyed toward the terrain fog wall. `B16` (`docs/plans/PLAN-overcast-match.md`) found that
+        // premise false at the dome's own authored size: every chapter's dome tops out
+        // +982…+4108 m over the camera, while every broken scene's FOG_ALTITUDE band sits at
+        // 9000-11000 m — the altitude term is 1.0 on every dome fragment under either fog
+        // hypothesis, so the "high fragments stay clear" half of the deal never happened and the
+        // dome only ever painted flat fog colour (BL-303's C3/C2B/C5 skies, and the C1 above-deck
+        // gray band one zone over). Reverted: the dome now builds unfogged, as authored.
         var built = _scene.BuildSubtree(horizon, SkipOtherZones, collisionSkip: _ => true);
-        _scene.ForceFogged = false;
         if (built == null)
             return null;
         DisableShadows(built);
         BillboardMoon(built);
         DisableLightRangeFade(built);
-        // NOT opted out of fog (a deliberate choice taken with the cylindrical-fog remodel,
-        // which is what makes it correct): high dome fragments stay clear via the
-        // FOG_ALTITUDE fade, while the horizon band fogs toward the same gray as the terrain
-        // fog wall.
         return built;
     }
 
@@ -486,6 +734,50 @@ public sealed class WorldBuilder
         n.Name.Equals("horizon", StringComparison.OrdinalIgnoreCase)
         || n.Name.Equals("dzpaths", StringComparison.OrdinalIgnoreCase)
         || IsFogVolumeNode(n);
+
+    // The deck-tile test itself (one flat, untilted 4-vertex quad — a wall or ramp fails it):
+    // static and gamez-only so CloudDeckAltitudeOf can run it with no built scene, and the
+    // instance FindCloudDeck walk (FlatTile, below) shares the exact same test rather than a
+    // parallel copy. Deck tiles carry no transform ("Initial"), but a null Local is treated as
+    // identity anyway, so a placed tile would still be measured where it sits. Internal (not
+    // private) alongside SkipWorldNode for the same reason: CloudDeckAltitudeOf, its only other
+    // caller, is a public static member of this same class, not an outside one — the accessibility
+    // just has to be at least as wide as callers need, and this repo's StyleCop ordering rule
+    // (SA1202/SA1204: internal-before-private, static-before-instance, within each grouping) is
+    // what actually pins it here rather than beside FlatTile below.
+    internal static bool FlatTileOf(GameZ gamez, GameZNode n, out float altitude, out float x0,
+        out float z0, out float x1, out float z1)
+    {
+        altitude = x0 = z0 = x1 = z1 = 0f;
+        if (n.MeshIndex < 0 || n.MeshIndex >= gamez.Meshes.Count)
+            return false;
+        var mesh = gamez.Meshes[n.MeshIndex];
+        if (mesh.Polygons.Count != 1 || mesh.Vertices.Count != 4)
+            return false;
+        var xf = n.Local ?? Transform3D.Identity;
+        var first = xf * mesh.Vertices[0];
+        x0 = x1 = first.X;
+        z0 = z1 = first.Z;
+        for (int i = 1; i < 4; i++)
+        {
+            var v = xf * mesh.Vertices[i];
+            if (Mathf.Abs(v.Y - first.Y) > 0.001f)
+                return false; // tilted — a wall or a ramp, not a deck tile
+            x0 = Mathf.Min(x0, v.X);
+            x1 = Mathf.Max(x1, v.X);
+            z0 = Mathf.Min(z0, v.Z);
+            z1 = Mathf.Max(z1, v.Z);
+        }
+        altitude = first.Y;
+        return true;
+    }
+
+    /// <summary>A placed ambient cloud cluster — the gamez node the original names
+    /// <c>cloudparent</c>, whose children are the individual cloud facades. This is the OTHER
+    /// ambient cloud population, world-placed rather than <c>fvol</c>-scattered, and the two are
+    /// gated together by camera altitude (<see cref="CloudClusters"/>, A7).</summary>
+    internal static bool IsCloudClusterName(string name) =>
+        name.StartsWith("cloudparent", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>A <c>fvol1</c>…<c>fvol34</c> fog-volume node: an invisible box the world walk
     /// skips (above) and <see cref="FogVolumeSpec.VolumesOf"/> measures. One predicate for both,
@@ -677,6 +969,41 @@ public sealed class WorldBuilder
             if (childIndex >= 0 && childIndex < gamez.Nodes.Count)
                 meshed += MeshedNodesIn(gamez, gamez.Nodes[childIndex]);
         return meshed;
+    }
+
+    // Merges EVERY MeshInstance3D under `root`, at any depth, into one LOCAL-space box — the
+    // same recursive walk as OrbitCamera.MergedAabb, composing Transform (not GlobalTransform:
+    // nothing built here is in the scene tree yet, so GlobalTransform would read identity and
+    // log an error per call). A single level of GetChildren() undercounts: SceneBuilder.
+    // BuildSubtree can wrap a leaf's MeshInstance3D in its own transform node even for a
+    // transformless source (measured — the first version of this method walked only `deck`'s
+    // direct children and came back a zero box at the origin, which then centred C26's
+    // annulus on world (0,0,0) instead of the tile grid, producing a huge mis-placed quad;
+    // caught by the climb-ladder probe before landing, not asserted from the source).
+    // Computed on the 144 tiles ALONE, before AddDeckAnnulus runs (see Build), so the annulus
+    // can be built symmetric around that exact point (PLAN-overcast-match C26) — a symmetric
+    // superset around the SAME centre leaves the eventual MERGED centre (and therefore
+    // WeatherRig's `_deckCenter`, and every existing below/above-band render) untouched; only
+    // the annulus's own new pixels move.
+    private static Aabb MergedLocalAabb(Node3D root)
+    {
+        Aabb merged = default;
+        bool first = true;
+        void Walk(Node3D node, Transform3D parentXf)
+        {
+            var xf = parentXf * node.Transform;
+            if (node is MeshInstance3D { Mesh: { } mesh })
+            {
+                var box = xf * mesh.GetAabb();
+                merged = first ? box : merged.Merge(box);
+                first = false;
+            }
+            foreach (var child in node.GetChildren())
+                if (child is Node3D n3)
+                    Walk(n3, xf);
+        }
+        Walk(root, Transform3D.Identity);
+        return merged;
     }
 
     // Rendered but not solid: the plane should fly through cloud/sky geometry and through
@@ -877,33 +1204,25 @@ public sealed class WorldBuilder
     }
 
     // True when the node's model is one flat horizontal quad, reporting its altitude and its
-    // world-space x/z footprint. Deck tiles carry no transform ("Initial"), but a null Local is
-    // treated as identity anyway, so a placed tile would still be measured where it sits.
+    // world-space x/z footprint — the instance-side wrapper FindCloudDeck (below) walks with.
     private bool FlatTile(GameZNode n, out float altitude, out float x0, out float z0,
-        out float x1, out float z1)
+        out float x1, out float z1) => FlatTileOf(_gamez, n, out altitude, out x0, out z0, out x1, out z1);
+
+    // Walks the built world for cloudparent subtrees. Stops descending at each hit: the whole
+    // subtree is the cluster, and cloud clusters do not nest. Matched on the name the DATA
+    // carries (AnimRuntime.NameMeta), never on Node.Name — see the CloudClusters remarks.
+    private void CollectCloudClusters(Node node)
     {
-        altitude = x0 = z0 = x1 = z1 = 0f;
-        if (n.MeshIndex < 0 || n.MeshIndex >= _gamez.Meshes.Count)
-            return false;
-        var mesh = _gamez.Meshes[n.MeshIndex];
-        if (mesh.Polygons.Count != 1 || mesh.Vertices.Count != 4)
-            return false;
-        var xf = n.Local ?? Transform3D.Identity;
-        var first = xf * mesh.Vertices[0];
-        x0 = x1 = first.X;
-        z0 = z1 = first.Z;
-        for (int i = 1; i < 4; i++)
+        if (node is Node3D n3d && n3d.HasMeta(AnimRuntime.NameMeta)
+            && IsCloudClusterName(n3d.GetMeta(AnimRuntime.NameMeta).AsString()))
         {
-            var v = xf * mesh.Vertices[i];
-            if (Mathf.Abs(v.Y - first.Y) > 0.001f)
-                return false; // tilted — a wall or a ramp, not a deck tile
-            x0 = Mathf.Min(x0, v.X);
-            x1 = Mathf.Max(x1, v.X);
-            z0 = Mathf.Min(z0, v.Z);
-            z1 = Mathf.Max(z1, v.Z);
+            _cloudClusters.Add(n3d);
+            return;
         }
-        altitude = first.Y;
-        return true;
+        foreach (var child in node.GetChildren())
+        {
+            CollectCloudClusters(child);
+        }
     }
 
     /// <summary>Picks the deck out of the world's flat-quad roots: bucket them by altitude
@@ -915,6 +1234,7 @@ public sealed class WorldBuilder
     private void FindCloudDeck(GameZNode world, List<int> roots)
     {
         _deckNodes.Clear();
+        CloudDeckZoneId = -1;
         if (!world.HasArea)
             return;
         float mapW = Mathf.Abs(world.AreaRight - world.AreaLeft);
@@ -958,6 +1278,22 @@ public sealed class WorldBuilder
                 _deckAltitude = alt;
                 _deckCoverage = slot.Area / (mapW * mapH);
             }
+
+        // The tiles' own zone_id, for the per-rig gate. Mixed tiles (never observed — 144/144 on
+        // zone_id 2 in all four deck chapters) read as −1, i.e. ungated, which is the only reading
+        // that cannot hide authored content it does not understand.
+        int? deckZone = null;
+        foreach (var idx in _deckNodes)
+        {
+            int zone = _gamez.Nodes[idx].ZoneId;
+            if (deckZone is { } got && got != zone)
+            {
+                deckZone = -1;
+                break;
+            }
+            deckZone = zone;
+        }
+        CloudDeckZoneId = deckZone ?? -1;
     }
 
     // True if any of the node's own-mesh polygons is skinned with a texture matching the predicate.
@@ -984,16 +1320,135 @@ public sealed class WorldBuilder
         if (!node.Active)
             return; // the build script's own NodeSetActive off — never built, like the original
         bool isDeck = _deckNodes.Contains(nodeIndex);
+        // forceLit: PLAN-overcast-match C22. The deck tiles author `lighting: false` like the
+        // dome and the cloudsprite field, but C21 traced the original's dark mottled underside
+        // to the mission's own SUNLIGHT dimming, which is authored ON for the deck alone among
+        // those three `lighting: false` populations — `SunIncidence` was calibrated on this
+        // exact surface (see `Flight/Weather.cs`). Deck-local, beside the existing
+        // forceDoubleSided override; never a change to the `lighting` gate or to
+        // `csky_world_light` itself.
+        //
+        // ⚠ C23 (M-a) made it REGIME-conditional: this is how the tile is built and how it stays
+        // below the cloud band, and the undimmed twin recorded below is what a camera above the
+        // band gets instead (CloudDeckUndimmedMeshes). Built here rather than at the flip so the
+        // swap is a resource assignment with nothing to compile or allocate.
+        // zoneGate: every world node but the DECK carries its own gamez zone_id onto a shared
+        // visual layer, so each camera's weather state culls it as FUN_0056c430 does (B12,
+        // Mech3/ZoneGate.cs). The deck is excluded because it is a per-rig camera-anchored copy —
+        // it takes the same rule through Node3D.Visible in WeatherRig.Tick, keyed on
+        // CloudDeckZoneId, since a per-player visual layer and a zone layer cannot share one
+        // instance.
         var built = _scene.BuildSubtree(node, SkipWorldNode, NoCollisionNode,
-            forceDoubleSided: isDeck);
+            forceDoubleSided: isDeck, forceLit: isDeck, zoneGate: !isDeck);
         if (built != null)
         {
             if (IsParkedAtOrigin(node, built))
             {
                 _parkedAtOrigin.Add((node, built));
             }
+            if (isDeck)
+            {
+                RecordDeckUndimmedMesh(node);
+            }
             (isDeck ? deck : root).AddChild(built);
         }
+    }
+
+    // The tile's own mesh in both lit variants, from the SceneBuilder cache the built node just
+    // used — so the dimmed side is the very resource the MeshInstance3D carries, and the RID is a
+    // key WeatherRig can look a live instance up by. A deck tile is one flat 4-vertex quad
+    // (FlatTile), so its own MeshIndex is the whole tile; a tile that somehow carried child
+    // geometry would simply not be swappable, which WeatherRig's own census reports rather than
+    // hides (DIAG-15).
+    private void RecordDeckUndimmedMesh(GameZNode node)
+    {
+        if (_scene.SharedMesh(node.MeshIndex, forceDoubleSided: true, forceLit: true) is { } dimmed
+            && _scene.SharedMesh(node.MeshIndex, forceDoubleSided: true, forceLit: false) is { } undimmed)
+        {
+            _deckUndimmedMeshes[dimmed.GetRid()] = undimmed;
+        }
+    }
+
+    /// <summary>C26: the below-band ceiling's rim sits at <c>f·K/halfSpan</c> px above the
+    /// horizon (f = 599.1 px camera projection, K = <c>DeckCeilingHeight</c> = 135 m — C21/C25).
+    ///
+    /// <para>⚠ That DERIVATION is retired (B14): the sheet is never a below-band ceiling any more,
+    /// so <c>K</c> and this rim no longer exist below the band, and <c>DeckCeilingHeight</c> is
+    /// gone from <c>WeatherRig</c>. The 20,480 m half-span it sized is KEPT unchanged and is now
+    /// justified by the ABOVE-band regime alone — the same edge-hiding job for a floor seen from
+    /// above (the rim then sits at <c>f·(camY − deckY)/halfSpan</c>, which is the same arithmetic
+    /// with a bigger numerator). Re-deriving the number against the above-band geometry is
+    /// <c>D31</c>'s, not B14's; nothing about the annulus was changed, so no golden moved for it.
+    /// The rest of this note is kept as the record of where 20,480 came from.</para>
+    /// At the shipped 144-tile sheet's own half-span (6144 m = 12×1024 m tiles ÷ 2) that is 13 px
+    /// — inside it, past the sheet's own textured rim, sits the dome WALL's own authored vertex
+    /// gradient (<c>docs/formats/weather.md</c>, "the wall's LOWEST ring"), which is what the
+    /// item's reported "horizon strip" traced to (no render defect — C26's own stop-first
+    /// analysis: the strip IS the wall, rendered correctly). Pushing the rim to ≤ ~4 px — where
+    /// that gradient has lost ≤ 2 units, i.e. invisible — needs a half-span ≥ f·K/4 ≈ 20,220 m;
+    /// K and f are ONE constant for every deck chapter (A7/C25), so one target half-span serves
+    /// C1/C1C/C2B/C4 alike. Rounded up to a whole number of 1024 m tiles for a tidy grid:
+    /// 20,480 m (20 tiles), rim 599.1×135/20480 ≈ 3.95 px — measured on the climb ladder at
+    /// 2.07 units lost (was 7.40, with a hard +5.25 px step; now a smooth +1.11 continuation
+    /// into flat <c>FOG_COLOR</c>), a hair over the illustrative 2-unit mark but no longer a
+    /// discontinuity, which is what the eye actually catches (`PLAN-overcast-match` C26's own
+    /// verification).
+    ///
+    /// <para>20,480 m is also close to the practical CEILING on this number, not just a tidy
+    /// round one: C1/C1C/C2B/C4 all fly a zone2 dome of radius 8.74 km at the shared 2.5× camera
+    /// anchor scale (<c>docs/architecture.md</c>'s <c>GameSession.HorizonScaleFor</c> entry) —
+    /// 21.85 km rendered — and this flat ceiling must stay well inside that (never touch the
+    /// dome, per this item's own brief) or its outer edge would sit past the dome wall it is
+    /// supposed to render in front of. 20,480 m leaves a 1.37 km / 6% margin; the next tile
+    /// boundary up (21,504 m) leaves under 350 m and was rejected as too close for the small
+    /// residual gain.</para>
+    ///
+    /// <para>That target is independently safe against every deck chapter's own authored
+    /// <c>FOG_RANGES</c> far (C1/C1C/C2B 4000 m, C4 4500 m — each chapter's
+    /// <c>weather.zrd.json</c>): the EXISTING 144-tile sheet's own edge, at 6144 m, already
+    /// exceeds all four, so the textured tiles nearest the rim are already rendering at
+    /// <c>fog_amt</c> == 1.0 (pure <c>FOG_COLOR</c>) before the annulus even starts — the
+    /// boundary between them is two surfaces computing the identical output, not a seam that
+    /// needs hiding.</para>
+    ///
+    /// <para>Built as a flat, untextured four-quad PICTURE FRAME around <paramref
+    /// name="tilesAabb"/> (never a full underlying plane — that would z-fight the tiles it sits
+    /// under) via <see cref="SceneBuilder.BuildFlatQuadMesh"/>, symmetric around the tile grid's
+    /// OWN measured centre (never a hardcoded origin — see <see cref="MergedLocalAabb"/>) and
+    /// tagged <see cref="DeckExtensionMeta"/> so it counts as neither a deck TILE
+    /// (<c>_deckNodes</c>, this file's own "144 tiles" census) nor a lit-variant swap target
+    /// (<c>WeatherRig.CollectDeckTiles</c>'s "N of M" census) — see both call sites. Added as a
+    /// CHILD of <paramref name="deck"/>, never a sibling node: <c>WeatherRig.Tick</c> repositions
+    /// that one node per rig, so nesting here is the entire mechanism by which the extension
+    /// follows the camera in X/Z and flips regime in Y exactly as the sheet does — no new
+    /// per-frame code.</para></summary>
+    private void AddDeckAnnulus(Node3D deck, Aabb tilesAabb)
+    {
+        const float TargetHalfSpan = 20480f;
+        Vector3 c = tilesAabb.GetCenter();
+        float innerHalfX = tilesAabb.Size.X / 2f, innerHalfZ = tilesAabb.Size.Z / 2f;
+        float halfX = Mathf.Max(TargetHalfSpan, innerHalfX);
+        float halfZ = Mathf.Max(TargetHalfSpan, innerHalfZ);
+        float innerMinX = c.X - innerHalfX, innerMaxX = c.X + innerHalfX;
+        float innerMinZ = c.Z - innerHalfZ, innerMaxZ = c.Z + innerHalfZ;
+        float outerMinX = c.X - halfX, outerMaxX = c.X + halfX;
+        float outerMinZ = c.Z - halfZ, outerMaxZ = c.Z + halfZ;
+        float y = c.Y;
+
+        Vector3 P(float x, float z) => new(x, y, z);
+        // North/south strips run the full outer width (so they cover the four corners too);
+        // east/west fill only the remaining middle strip — a standard picture-frame tiling with
+        // no overlap and no gap, regardless of how much bigger the target is than the sheet.
+        var quads = new List<(Vector3, Vector3, Vector3, Vector3)>
+        {
+            (P(outerMinX, outerMinZ), P(outerMaxX, outerMinZ), P(outerMaxX, innerMinZ), P(outerMinX, innerMinZ)),
+            (P(outerMinX, innerMaxZ), P(outerMaxX, innerMaxZ), P(outerMaxX, outerMaxZ), P(outerMinX, outerMaxZ)),
+            (P(innerMaxX, innerMinZ), P(outerMaxX, innerMinZ), P(outerMaxX, innerMaxZ), P(innerMaxX, innerMaxZ)),
+            (P(outerMinX, innerMinZ), P(innerMinX, innerMinZ), P(innerMinX, innerMaxZ), P(outerMinX, innerMaxZ)),
+        };
+        var mi = new MeshInstance3D { Mesh = _scene.BuildFlatQuadMesh(quads), Name = "deck_annulus" };
+        mi.SetMeta(DeckExtensionMeta, true);
+        deck.AddChild(mi);
     }
 
     private string ResolveHorizonZone(GameZNode horizon, string zone)
