@@ -11,9 +11,30 @@ moment an item is added, closed, or re-tagged. This skill's only job is: reparse
 This skill is scoped to regenerating the artifact. It does not edit `backlog.md`, and it does not
 decide which items belong in it — every open item in the file goes in, full stop.
 
-## 1. Parse `backlog.md` into rows
+## 1. Build the page
 
-Read `backlog.md`. Get the theme order from the file itself — the `## ` headings in file order,
+Run the skill's own parser — it does steps 1–3 (parse, serialize, inject) in one go:
+
+```powershell
+python .claude/skills/update-backlog-artifact/build.py <scratchpad>/backlog-table.html
+```
+
+It resolves `backlog.md` and `template.html` from its own location, so it works from any working
+directory and from a worktree. It prints the item count, theme count and theme order to stderr, and
+**exits non-zero** if a bullet fails to parse, if an ID is duplicated, or if the parsed row count
+does not match the raw `- \`BL-NNN\`` bullet count in the file — so a green run *is* the sanity
+check. On a non-zero exit, fix the parser (or the file) rather than falling back to a hand parse;
+the failure message names the offending item.
+
+⚠ `build.py` reads and writes explicit UTF-8. Edit it with Read/Edit/Write, never through a
+PowerShell `Get-Content`/`Set-Content` round-trip (see `CLAUDE.md`).
+
+Then go to step 4. **Sections 2–3 below document what `build.py` already does** — read them when
+`backlog.md`'s own conventions change and the parser has to follow.
+
+## 2. What the parser extracts
+
+Theme order comes from the file itself from the file itself — the `## ` headings in file order,
 **excluding** `## Standing notes` (that section holds prose, not items). Do not hardcode the theme
 list; if a theme is renamed or a new one is added, the parse should pick it up automatically.
 
@@ -31,7 +52,8 @@ For each bullet, extract:
   `Blocked: M4` / etc. — whatever text is inside the brackets). Don't shorten `Blocked: X` to
   `Blocked`; the template already treats anything starting with `Blocked` as one status class and
   displays the tag text as-is.
-- **title** — everything between the first `**` after the tags and its matching closing `**`,
+- **title** — everything between the first `**` after the tags (skipping an optional `{SCOPE}`
+  marker, as on `BL-037`/`BL-038`) and its matching closing `**`,
   even when the bold text wraps across multiple source lines. Collapse any internal newlines/runs
   of whitespace to a single space. Keep the text otherwise verbatim (inline code spans, punctuation,
   quotes) — don't paraphrase or truncate it.
@@ -40,39 +62,34 @@ Skip nothing: every bulleted item in every theme section goes into the row list,
 appears in the file (themes in heading order, items in file order within a theme — which is already
 ascending by ID per the file's own convention).
 
-Sanity check before moving on: the row count should be in the same ballpark as
-`grep -c` for the bullet pattern across the file (roughly 100+ as of 2026-08). A count far lower
-usually means the title regex swallowed a later bullet by matching too greedily across items —
-re-check with a narrower per-line pass if so.
+The parser's own guard is the count check: the row count must equal the raw bullet count in the
+file (roughly 100+ as of 2026-08). A count far lower means the title regex swallowed a later bullet
+by matching too greedily across items — `build.py` bounds each bullet's text at the next top-level
+bullet or `## ` heading to prevent exactly that.
 
-## 2. Serialize to JSON
+## 3. Serialization and injection
 
-Build the row list as a JSON array of 5-element arrays: `[theme, id, type, status, title]`, `status`
-being JSON `null` when absent. Use real JSON string escaping (`"` → `\"`, backslashes doubled) — do
-not hand-splice the strings into a JS literal, since titles routinely contain quotes, backticks, and
-em dashes that would break unescaped interpolation.
+Rows are serialized as a JSON array of 5-element arrays: `[theme, id, type, status, title]`,
+`status` being JSON `null` when absent, with real JSON string escaping — never hand-spliced into a
+JS literal, since titles routinely contain quotes, backticks, and em dashes.
 
-## 3. Inject into the template
-
-Read `.claude/skills/update-backlog-artifact/template.html`. It contains exactly one line:
+That JSON replaces `__BACKLOG_DATA__` in `.claude/skills/update-backlog-artifact/template.html`,
+whose data line is:
 
     const DATA = __BACKLOG_DATA__;
 
-Replace `__BACKLOG_DATA__` with the JSON array text from step 2 (`Edit`, exact string match on that
-placeholder). Nothing else in the template changes — theme order, filters, and counts are all
-derived from `DATA` at render time in the page's own script.
-
-Write the result to a new file in this session's scratchpad directory (path given in your system
-prompt) — e.g. `backlog-table.html`. Don't write generated output back into the skill's
-`template.html`.
+Nothing else in the template changes — theme order, filters, and counts are all derived from `DATA`
+at render time in the page's own script. The result goes to the output path given on the command
+line (a file in this session's scratchpad directory, e.g. `backlog-table.html`); generated output
+never goes back into the skill's `template.html`.
 
 ## 4. Publish to the existing URL
 
 Read `.claude/skills/update-backlog-artifact/artifact.json` for the stored `url`, `favicon`,
 `title`, and `description`.
 
-- **File exists (the normal case):** call `Artifact` with `file_path` = the scratchpad file from
-  step 3, `url` = the stored URL, and the stored `favicon`/`title`/`description`. Passing `url`
+- **File exists (the normal case):** call `Artifact` with `file_path` = the file `build.py` wrote,
+  `url` = the stored URL, and the stored `favicon`/`title`/`description`. Passing `url`
   explicitly is what makes this an in-place update instead of minting a new link — required because
   this skill usually runs in a conversation that never published the artifact itself.
 - **File missing or has no `url` (first run, or the prior artifact was lost):** call `Artifact`
