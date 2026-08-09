@@ -663,6 +663,14 @@ whole flight envelope. The earlier "flat 0.1 above 45 mph" reading was an artefa
 This substantially rehabilitates the remake's `eff = 1.4 − clamp(v/fd, 0.25, 1.15)`, which is also a
 declining function of speed — the *shape* was right, only the curve is wrong.
 
+**Implemented (C21).** `FlightModel.YawAuthorityAt` is this table, built from A1's already-plumbed
+`PlaneStats` fields, applied to yaw only. The refit `YawTune` needed was tiny (1.32 → 1.33) — at the
+290 mph cruise the yaw-360 measurement was fit against, the two curves are within a point of each
+other (`eff` ≈ 0.44, the new curve ≈ 0.43), which is exactly the "shape was right" finding above.
+The two curves diverge sharply away from cruise: at 60 mph (just above stall) `eff` was pinned to
+its 1.15 ceiling against the new curve's 0.98; at 336 mph (the model's own achieved terminal-dive
+speed) `eff` gave 0.29 against the new curve's 0.32.
+
 **Corrected — the pitch high-speed fade never fires.** Authored at 1000/1001 mph against a maximum
 attainable dive speed of ~528 mph, it cannot engage. It is real code on a threshold this game never
 reaches.

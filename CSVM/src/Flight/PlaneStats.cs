@@ -73,8 +73,10 @@ public sealed class PlaneStats
     public float Gravity = PhysicsConstants.NomGravity; // nom_gravity — the game's arcade gravity, m/s²
     public float StallMag = 1.25f;
 
-    // player.json flight globals not yet consumed by FlightModel — plumbed here so the flight-model
-    // rewrite reads authored data instead of hardcoding it.
+    // player.json flight globals, plumbed here so the flight-model rewrite reads authored data
+    // instead of hardcoding it. Consumed by FlightModel as each item lands: LiftAccelRate/
+    // LiftAoaCosLo/Hi by B11's lift demand, Yaw* by C21's rudder-authority curve. Still unread:
+    // MaxAoaCos, HighG/LowG*, TurnFadeIn/Out, HighSpeedPitchFadeLo/Hi, DragFadeSpeed.
     // Mirrors docs/org/flightModel.md's load-time conversions exactly: speeds × 0.44704 (MPH → m/s),
     // angles cosined at load where the original cosines them (liftAOAs, maxAOA), raw where it does
     // not (highGs/lowGs are plain G, yaw_low_speed/yaw_high_speed are dimensionless authority).

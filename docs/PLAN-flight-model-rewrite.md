@@ -151,7 +151,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — Rotation and control authority
 
-21. ☐ Yaw authority: the original's speed table
+21. ☑ Yaw authority: the original's speed table
 22. ☐ Bank→yaw and bank→pitch coupling
 23. ☐ `return_rate` as a weathervane torque
 24. ☐ Pitch high-speed fade and exponential angular damping
@@ -659,7 +659,36 @@ airframe is a coincidence of that aircraft's wing loading and must not be read a
 
 # Wave C — Rotation and control authority
 
-## C21 ☐ Yaw authority: the original's speed table
+## C21 ☑ Yaw authority: the original's speed table
+
+**Outcome (landed 2026-08-09).** Implemented as decoded, from A1's already-plumbed globals: yaw
+authority is `YawLowSpeed` (0.0625) at or below `YawFadeIn` (10 mph), ramping linearly to 1.0 at
+`YawMax` (50 mph), then falling linearly to `YawHighSpeed` (0.17) at `YawFadeOut` (400 mph) and
+holding there. Applied to **yaw only** — `PitchTune`/`RollTune` and their torque terms are
+byte-for-byte untouched, and the interim `eff = 1.4 − clamp(Speed/fd, 0.25, 1.15)` is retired along
+with `MinControlEff`/`MaxControlEff` and their two config keys, since nothing else read them.
+`YawTune` is refit **1.32 → 1.33** against the pinned full-rudder 360°: **28.65 s** (target 28.6,
++0.2%, was 28.68 pre-item), the only asserted row the curve touches. As the plan's own evidence
+predicted, the two curves are nearly coincident right where `YawTune` was originally fit — at the
+yaw-360 probe's 290–297 mph mean speed the old `eff` gave ≈0.44 and the new curve gives ≈0.43 — so
+the refit is a rounding correction, not a re-tune. **The three-speed sample the plan asked for
+shows why a single-speed check would have missed real movement**: at 60 mph (just above the
+Bloodhawk's stall) old `eff` sat pinned to its 1.15 ceiling while the new curve reads 0.976 (−15%);
+at 336 mph (the model's own achieved terminal-dive speed) old `eff` gave 0.287 against the new
+curve's 0.322 (+12%). Every other asserted row (`level-top-speed`, `roll-360`, `pitch-rate`,
+`altitude-cap`, `level-speed-near-cap`) is unmoved to the last printed digit — the curve change
+cannot reach them by construction — and the two rows already parked on C22
+(`sustained-turn-speed`, `sustained-turn-rate`) moved ≤ 0.00 across all eleven airframes, confirming
+yaw authority plays no part in the sustained-pull turn (that scenario commands pitch, not yaw).
+Extended to all eleven airframes (`ZzBaselineDump`): Bloodhawk 28.65 s (was 28.68), and ten more
+with no prior baseline to compare against (devastator 22.53, fury 25.85, warhawk 30.88, autogyro
+13.12, avenger 23.55, balmoral 30.32, brigand 21.48, firebrand 18.97, kestrel 19.55, peacemaker
+27.07) — `analysis/flight-model-baseline/POST-B14.md` carries the new column.
+Tests: engine 29/29, goldens 13/13 hash-identical (freecam never instantiates a `FlightModel`, and
+none of the flown-plane goldens command rudder), units 697/697 with `FlightEnvelopeTests`'s 7-row
+assert count unchanged. Every instrument re-run twice, byte-identical both times: `--dump-flight`
+for the Bloodhawk and the Balmoral, and `ZzBaselineDump` for all eleven. Full 8-chapter `--freecam`
+regression clean, zero engine errors, all eight screenshots saved.
 
 **Goal.** Rudder authority follows the original's authored speed curve — a decline from 1.0 at
 50 mph to 0.17 at 400 mph — rather than the interim linear `eff`.

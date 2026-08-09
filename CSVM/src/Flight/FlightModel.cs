@@ -33,7 +33,9 @@ public struct FlightInput
 /// lever (see <see cref="ThrustAccelAt"/>). Neither carries a fitted constant, and
 /// the level-speed equilibrium is simply where the two cross: that lands within 1%
 /// of the authored fd_speed for nine of the eleven airframes without anything being
-/// tuned to make it. The torque/
+/// tuned to make it. Rudder authority follows the original's own authored speed
+/// table (see <see cref="YawAuthorityAt"/>) — YAW ONLY; pitch and roll carry
+/// their own, different authority curves. The torque/
 /// damping/inertia/speed numbers come straight from vehicle.json 'dynamics';
 /// the scale constants marked TUNE are ours, adjusted against playtests — except
 /// the three *Tune rates, which are pinned to measurements of the original
@@ -86,8 +88,6 @@ public sealed class FlightModel
     // Base of the Mach-dependent divisor: 1.33 × the atmosphere's own scale factor, which for the
     // dense band (the operative one — see the atmosphere constants) is 0.98842078.
     private const float ThrustPowBase = 1.33f * 0.98842078f;
-    private const float MinControlEff = 0.25f;    // TUNE: control authority floor at low speed
-    private const float MaxControlEff = 1.15f;    // TUNE: authority ceiling in a dive
 
     // The hard lift clamp, in G — a LOAD FACTOR, never an angle. The wings will not deliver more
     // than this however hard the demand asks, and the clamp is on the demanded acceleration, so
@@ -229,7 +229,7 @@ public sealed class FlightModel
     // wrong shape for the original's pitch transient even though it gives the right steady rate.
     // Open as BL-147; do not "fix" it by moving these Tune constants, which set the steady rate.
     private const float PitchTune = 0.75f;        // TUNE: pinned to the measurements above
-    private const float YawTune = 1.32f;          // TUNE: pinned (at cruise eff)
+    private const float YawTune = 1.33f;          // TUNE: pinned against the authored yaw curve below
     private const float RollTune = 2.12f;         // TUNE: pinned
 
     public FlightModel(PlaneStats stats)
@@ -280,6 +280,33 @@ public sealed class FlightModel
             : 0f;
     }
 
+    /// <summary>Rudder authority at an airspeed — the original's authored piecewise speed table
+    /// (<see cref="PlaneStats.YawFadeIn"/>/<see cref="PlaneStats.YawMax"/>/
+    /// <see cref="PlaneStats.YawFadeOut"/>/<see cref="PlaneStats.YawLowSpeed"/>/
+    /// <see cref="PlaneStats.YawHighSpeed"/>): a low-speed floor, ramping LINEARLY to full
+    /// authority at yaw_max, then declining LINEARLY to a high-speed floor at yaw_fade_out and
+    /// holding there. Deliberately NOT monotone, and NOT flat past the knee — the executable's
+    /// compiled fallbacks (knee at 45 mph, flat 0.1 beyond) are a different, wrong reading; this
+    /// install authors a curve that keeps declining out to 400 mph. YAW ONLY — pitch and roll run
+    /// their own, different authority curves and are untouched here.
+    /// Exposed so an instrument can sample the curve without re-deriving it; Step calls the same
+    /// method.</summary>
+    public float YawAuthorityAt(float speed)
+    {
+        var s = Stats;
+        if (speed <= s.YawFadeIn)
+            return s.YawLowSpeed;
+        if (speed <= s.YawMax)
+            return s.YawMax > s.YawFadeIn
+                ? Mathf.Lerp(s.YawLowSpeed, 1f, (speed - s.YawFadeIn) / (s.YawMax - s.YawFadeIn))
+                : 1f;
+        if (speed <= s.YawFadeOut)
+            return s.YawFadeOut > s.YawMax
+                ? Mathf.Lerp(1f, s.YawHighSpeed, (speed - s.YawMax) / (s.YawFadeOut - s.YawMax))
+                : s.YawHighSpeed;
+        return s.YawHighSpeed;
+    }
+
     public void Reset(Vector3 position, Basis attitude, float speed, float throttle)
     {
         Position = position;
@@ -300,8 +327,6 @@ public sealed class FlightModel
         // above. Read unconditionally here — once per step — so every key registers even on a frame
         // that never enters the stall or knife-edge branches below, which keeps --dump-config's
         // template complete and the orphan/missing checks honest.
-        float minControlEff = Config.GetFloat("flightModel.minControlEff", MinControlEff);
-        float maxControlEff = Config.GetFloat("flightModel.maxControlEff", MaxControlEff);
         float pitchTune = Config.GetFloat("flightModel.pitchTune", PitchTune);
         float yawTune = Config.GetFloat("flightModel.yawTune", YawTune);
         float rollTune = Config.GetFloat("flightModel.rollTune", RollTune);
@@ -321,12 +346,14 @@ public sealed class FlightModel
         // --- rotation: torque·recInertia vs momentum damping (all from the dynamics block).
         // Control surfaces bite proportionally to airspeed; return_rate adds extra
         // centering on an axis while its stick is released.
-        // Inverted eff. Turns faster the slower the plane is. Still not same as original
-        float eff = 1.4f - Mathf.Clamp(Speed / s.FdSpeed, minControlEff, maxControlEff);
+        // Yaw authority follows the original's authored speed table (see YawAuthorityAt) — a
+        // declining function of speed, same as the interim curve it replaces, but the original's
+        // own shape rather than a fitted stand-in. Pitch and roll carry no such fade here (roll
+        // never fades in the original; the pitch fade is authored unreachable).
+        float yawEff = YawAuthorityAt(Speed);
         var cmd = new Vector3(
             Mathf.Clamp(input.Pitch, -1f, 1f) * s.PitchTorque * s.RecInertia.X * pitchTune,
-            //eff only works on Yaw like the original
-            Mathf.Clamp(input.Yaw, -1f, 1f) * s.RudderTorque * s.RecInertia.Y * yawTune * eff,
+            Mathf.Clamp(input.Yaw, -1f, 1f) * s.RudderTorque * s.RecInertia.Y * yawTune * yawEff,
             Mathf.Clamp(input.Roll, -1f, 1f) * s.RollTorque * s.RecInertia.Z * rollTune);
         var damp = new Vector3(
             s.AngMomentumDamp + s.ReturnRate * (1f - Mathf.Min(1f, Mathf.Abs(input.Pitch))),

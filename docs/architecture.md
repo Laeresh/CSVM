@@ -1859,7 +1859,10 @@ a public `Camera` accessor — all inert in plain `--freecam`. Rates TUNE.
 
 ## src/Flight/FlightModel.cs
 Velocity-vector arcade flight model: body rates = control torque × reciprocal inertia vs
-ang_momentum_damp, per axis (PitchTune/YawTune/RollTune); thrust, drag, gravity and lift integrate
+ang_momentum_damp, per axis (PitchTune/YawTune/RollTune); yaw torque is additionally scaled by
+`YawAuthorityAt` — the original's authored piecewise speed table (a low-speed floor, ramping to
+full authority at `yaw_max`, then DECLINING to a high-speed floor at `yaw_fade_out`), YAW ONLY,
+replacing the interim `eff`. Thrust, drag, gravity and lift integrate
 on the velocity vector (speed passes through zero). Lift is a DEMAND — the airflow blended toward
 the nose over the authored `liftAOAs` cosine window, `lift_accel_rate·(wind − v)` plus `nom_gravity`
 on world-up, projected onto the body X/Y plane, delivered as `clamp(|·|/9.82, −5, +9)` G and capped

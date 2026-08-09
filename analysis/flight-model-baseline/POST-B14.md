@@ -38,7 +38,7 @@ across one 28 s clip against a 0.5/s slew).
 | terminal-dive | mph | 355.26 | **336.36** | 355.2 ± 6 | **owned by D32** — informational; the decoded attitude-thrust (×≈1.38 at this dive angle) is deliberately unimplemented until D32; re-assert there |
 | roll-360 | s | 1.98 | **1.98** | 2.05 | **green** (asserted) |
 | pitch-rate | °/s | 33.47 | **33.47** | 33.0 | **green** (asserted) |
-| yaw-360 | s | 29.17 | **28.68** | 28.6 | **green** (asserted) |
+| yaw-360 | s | 29.17 | **28.68** → C21 **28.65** | 28.6 | **green** (asserted) |
 | altitude-cap | ft | 6572.09 | **6571.95** | 6571.6 | **green** (asserted) |
 | level-speed-near-cap | mph | 301.99 | **300.46** | 300.40 | **green** (asserted) |
 | sustained-turn-speed | mph | 223.03 | **261.01** | 222.94 ± 5 | **owned by C22** — informational; the missing bank→yaw/pitch coupling sets the turn equilibrium; Decision 4 forbids any refit before C22 |
@@ -148,3 +148,39 @@ Using `nom_gravity/StandardG` instead would land at 80.9 mph (6.5% over the clip
 56.5 mph (34% under) — closer, but it breaks the decode's own 75.5/309 mph anchor pair for the
 fallback aircraft, which only reproduces under 1 G. Recorded here rather than resolved by picking
 whichever convention flatters one clip; a candidate for Wave D if the gap needs closing later.
+
+## C21 — yaw authority from the original's authored speed table
+
+`FlightModel.YawAuthorityAt` replaces the interim `eff = 1.4 − clamp(Speed/fd, 0.25, 1.15)` with
+the original's own piecewise curve (`YawLowSpeed` 0.0625 below `YawFadeIn` 10 mph, ramping to 1.0
+at `YawMax` 50 mph, falling to `YawHighSpeed` 0.17 at `YawFadeOut` 400 mph, flat beyond), applied to
+yaw only. `YawTune` refit **1.32 → 1.33** against the pinned full-rudder 360°.
+
+**Rudder authority, old `eff` vs the new curve, at three speeds (Bloodhawk):**
+
+| Speed | old `eff` | new curve | Δ |
+|---|---:|---:|---:|
+| 60 mph (just above stall) | 1.150 | 0.976 | −15.1% |
+| 290–297 mph (cruise, the yaw-360 fit point) | ≈0.440 | ≈0.431 | −2.0% |
+| 336 mph (the model's own achieved terminal-dive speed) | 0.287 | 0.322 | +12.2% |
+
+The two curves are nearly coincident exactly where `YawTune` was fit, which is why the refit is a
+1-in-132 correction rather than a re-tune, and diverge sharply off cruise — a single-speed check at
+290 mph could not have distinguished the two curves at all.
+
+**Bloodhawk yaw-360:** 28.68 s (pre-C21) → **28.65 s** (target 28.6 ± 3, +0.2%, **green, asserted**).
+All ten other asserted/informational rows in the Bloodhawk table above are unmoved to the last
+printed digit; `sustained-turn-speed`/`sustained-turn-rate` (still C22's) moved ≤ 0.00 across all
+eleven airframes, confirming yaw authority has no path into the sustained-pull turn (that manoeuvre
+commands pitch, not yaw).
+
+**All eleven airframes' yaw-360 (`ZzBaselineDump`), s:** bhawk **28.65**, devastator 22.53, fury
+25.85, warhawk 30.88, autogyro 13.12, avenger 23.55, balmoral 30.32, brigand 21.48, firebrand 18.97,
+kestrel 19.55, peacemaker 27.07. Only the Bloodhawk has a measured original to compare against; the
+other ten are recorded here as the new model's own numbers, with no prior baseline.
+
+Determinism: `--dump-flight` (Bloodhawk and Balmoral) and `ZzBaselineDump` (all eleven) each run
+twice, byte-identical both times. `RunTests.ps1` green: units 697/697 (`FlightEnvelopeTests`'s
+7-row assert count unchanged), engine 29/29, goldens 13/13 hash-identical (`--freecam` never
+instantiates a `FlightModel`, and none of the four flown-plane goldens command rudder). Full
+8-chapter `--freecam` regression clean, zero engine errors.

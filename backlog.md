@@ -714,9 +714,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `yaw_high_speed 0.17`, `yaw_fade_in 10`, `yaw_max 50`, `yaw_fade_out 400`, `groundblow_elev 400`,
   `groundblow_mag 10`, `ai_groundblow 0.5`, and the `crash` block's `bounce_factor 0.6`. Units are
   unverified; decoding it deserves its own pass, and it is the upstream of other entries here:
-  the `yaw_*` fade set is the original's own speed-dependent yaw authority behind `BL-108`'s
-  interim `eff` (`1.4 − clamp(v/fd)`, whose comment already admits it is "still not same as
-  original"), and the AoA/G block (`maxAOA`, `liftAOAs`, `highGs`/`lowGs`, `lift_accel_rate`) is
+  the `yaw_*` fade set is the original's own speed-dependent yaw authority, decoded and implemented
+  by `PLAN-flight-model-rewrite` C21 in place of the interim `eff` (`1.4 − clamp(v/fd)`, retired
+  2026-08-09), and the AoA/G block (`maxAOA`, `liftAOAs`, `highGs`/`lowGs`, `lift_accel_rate`) is
   now partially consumed by the landed lift re-key — as a hypothesis under test, not a decode
   (`docs/plans/PLAN-flight-drag-lift.md` B12) — with the induced-drag exponent question owned by
   `BL-307`.
@@ -731,8 +731,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   this entry for the flight block. What each key *does* is in the write-up — and two of the readings
   standing here are now wrong: **`liftAOAs` is not a load-factor ramp**, it is the window over which
   the relative wind is blended toward the nose; and the `yaw_*` set is not a simple fade but a
-  ramp to 1.0 at 50 mph then a decline to 0.17 at 400 mph, which the plan's `C21` implements in place
-  of `BL-108`'s interim `eff`.
+  ramp to 1.0 at 50 mph then a decline to 0.17 at 400 mph — implemented by the plan's `C21`
+  (landed 2026-08-09), which retired `BL-108`'s interim `eff`.
 
   ⚠ **Three keys here are authored so the feature they gate never fires**, which is a finding, not a
   gap to fill: `high_speed_pitch_fade [1000,1001]` is beyond any attainable dive speed, and
@@ -806,9 +806,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   wrong-mechanism fix `BL-124`'s history warns about, and induced drag already supplies the
   sustained-turn energy cost (`PLAN-flight-drag-lift` C21) without touching the rate.
 
-  Still to decode in the block: the `yaw_*` set (`BL-108`), the AoA/G and `turn_*` fade sets
-  (above; exponent on `BL-307`), `high_speed_pitch_fade`, `drag_fade_speed`, and `bounce_factor`'s
-  units (`BL-172`).
+  Still to decode/implement in the block: `turn_*` (the roll/pitch base ramp — above; exponent on
+  `BL-307`), `groundblow_*`/`ai_groundblow`, and `bounce_factor`'s units (`BL-172`). The `yaw_*` set
+  is decoded and implemented (`PLAN-flight-model-rewrite` C21); `high_speed_pitch_fade` and
+  `drag_fade_speed` are decoded as authored-unreachable/dead respectively (`C24`'s pitch fade,
+  B14's dead-key finding for `drag_fade_speed`).
   One GDD lead for the AoA/G set: the design's "Elements not Simulated" list explicitly excludes
   red-outs, so `highGs [9,15]` / `lowGs [-6,-9]` are read as the lift model's load-factor envelope,
   not pilot-physiology thresholds.
@@ -832,13 +834,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   "moderate roll input" clip cannot be flown. The only measurable transient is the leading edge of a
   *held* key from steady flight — and at 30 fps that edge is unresolvable, exactly as it was for
   pitch. Any roll-transient capture needs ≥60 fps constant frame rate.
-
-- `BL-108` `[Research]` **The yaw `eff` speed shape** (`1.4 − clamp(v/fd)`) is an unvalidated interim model away from
-  cruise: the 360° rudder turn matches the original to 4%, but that is one speed. The original's
-  own version of this ships as `player.json`'s `yaw_*` fade set — see `BL-095`, which owns the
-  `player.json` decode; the two closed halves of this entry are answered: the
-  original's pitch rate is measured **flat** with speed, and it bleeds speed in a hard pull because
-  of induced drag (modelled in `PLAN-flight-drag-lift` C21) rather than a falling pitch rate.
 
 - `BL-115` `[Tuning]` `[Owed-playtest]` **Flight model** — `StallNoseRate`, `ClimbGravityScale`, `KnifeAlignFloor`
   (`LowSpeedDragBlend` closed 2026-08-07 by `PLAN-flight-drag-lift` A1).
