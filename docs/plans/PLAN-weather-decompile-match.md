@@ -1,8 +1,8 @@
 # Weather decompile match — runtime zones, cloud deck, sky dome, fog volumes
 
-**ACTIVE PLAN** (written 2026-08-09). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans/plans.md`](plans/plans.md), when every item lands.
+**✅ COMPLETE** (written 2026-08-09, completed 2026-08-09). All 10 items landed the same day on
+the `worktree-ghidra-weather-findings` branch, orchestrated per-item across subagents; indexed in
+[`plans.md`](plans.md).
 
 This plan lands the 2026-08-09 Ghidra decompile of `crimson.exe`'s weather engine in the remake:
 the runtime camera-zone state machine (ZONE1 below the deck / ZONE2 above / ZONE3 inside a fog

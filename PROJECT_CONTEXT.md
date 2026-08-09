@@ -192,9 +192,9 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt flying, or the 2–4-player splitscreen Dogfight deathmatch, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, world destructibles that take damage, die, lose collision, throw debris and reset — and planes shoot planes down (M4 A1, front-loaded). The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
-**Active plan: [`docs/PLAN-weather-decompile-match.md`](docs/PLAN-weather-decompile-match.md)**,
-Wave A complete (A1, A2), Wave B complete (B11–B15), Wave C complete (C21, C22), Wave D complete
-(D31, D32) — plan ready to archive.
+**No active plan.** The weather-decompile-match plan completed 2026-08-09
+([`docs/plans/PLAN-weather-decompile-match.md`](docs/plans/PLAN-weather-decompile-match.md)),
+unmerged on `worktree-ghidra-weather-findings`.
 Owed at the controls: `PT-28`, `PT-41`, `PT-43`, `PT-45`, `PT-47` and `CAP-36`
 ([`playtest.md`](playtest.md)). Verify any change with
 **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read
