@@ -1471,6 +1471,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   starting point, but the decode should come from footage: when they are visible, their size,
   count, and whether they move with the air or hang world-fixed. Needs a dedicated original
   capture at several altitudes in clear air away from the deck band.
+  ⚠ **Three mechanisms are ruled out — do not re-walk them** (2026-08-09, `crimson.exe` via
+  Ghidra + a census of the shipped extraction; full evidence in that day's
+  `git log --grep=BL-317`). (a) The profiler bucket **`ZBT_CAMDYN_CLOUDHACK`**, whose name
+  promises exactly this feature, brackets `FUN_0042ee40` — the `CLOUD_COVER` whiteout and band
+  flicker this repo already decodes (`WeatherRig.BandFlicker`, `weather.md`). It renders no
+  sprites at all. (b) The GameGen keyword **`fluff`** (node-flag bit 12 = `0x1000` =
+  `flags.unk12`, gated by the debug switch `CameraRenderFluffClutter`) is **foliage**: 47 nodes,
+  all in C1, all fir trees and bushes, bbox 3.7 × 6.7 m at ground level — see `gamez.md`'s
+  bit-12 bullet, written so this one is not chased twice. (c) There is **no third cloud
+  population in the world data and no ambient puffer**: sweeping every node name in all eight
+  chapters for `cloud|wisp|puff|fog|mist|haze|vapor|smoke` returns only `cloudparent` and
+  `cloudsprite1/2` plus the effect emitters, and of 1613 install-wide `PufferState` events every
+  non-`OnCall`/non-`WeaponHit` one is a C3 world prop (waterfalls, rapids, the volcano, the
+  moving Studebakers) — nothing is hosted on an aircraft. So the wisps are neither world
+  geometry, nor clutter, nor an authored puffer; whatever draws them travels with the aircraft or
+  the camera, and no candidate for that has been found yet. The capture above is now the *first*
+  step, not the fallback.
 
 - `BL-322` `[Bug]` **C5's lit facades render ×0.58–0.66 of the original with WorldLight already at
   clamp 1.0** (split out of `BL-303` at its close, 2026-08-08; measured `CAP-11`: tower faces 10.2
