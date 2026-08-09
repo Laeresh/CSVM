@@ -395,6 +395,77 @@ recovery from a departure rather than entry into one.
 
 `return_rate` is a separate centring torque, described below.
 
+⚠ **`rec_moments_inertia` is applied downstream, not here.** `FUN_00490f70` accumulates a plain
+`torque · input · dt · authority` world-frame vector; the integrator then rotates it into body
+axes, scales each by `rec_moments_inertia` (`0x4918b9`–`0x491932`) and rotates it back. The
+formula above folds the two steps together, which is exact — but it matters for anything else
+that enters the same accumulator, because that too is scaled by the reciprocal inertia and damped
+by `ang_momentum_damp`. The bank coupling below is exactly such a term.
+
+## Bank coupling — resolved, including the inverted case
+
+`FUN_00490f70` adds two more contributions to the same angular accumulator the stick commands
+feed, after the three torque blocks and before the player-only weathervane (`0x491621` and
+`0x49167b`). Both key off the **orientation matrix at `+0x180`**, whose rows are the body axes in
+world coordinates — row 0 = starboard (pitch axis), row 1 = the aircraft's own up (yaw axis),
+row 2 = −nose (roll axis) — and both are multiplied by `dt` (`0x71c56c`), so each is an angular
+**rate** contribution, i.e. an acceleration once the `dt` is divided back out:
+
+```
+bank   = m[0][1]                       ; starboard · worldUp  =  sin(bank), + = banked left
+wingUp = m[1][1]                       ; bodyUp    · worldUp  =  cos(bank)
+
+ω += 0.205 · bank                        · dt · m[1]          ; yaw  axis, SIGNED by bank
+ω += ( 0.165 · |bank|
+     + (wingUp < 0 ? −0.205 · wingUp : 0) ) · dt · m[0]        ; pitch axis, always nose-UP
+```
+
+⚠ **The inverted term is the SAME 0.205 constant applied to the PITCH axis** — not a third
+number, and not an addition to the yaw term. `0x49167b` builds `|bank|·0.165·dt`, compares
+`m[1][1]` against `0.0` (`0x6032c8`), and on the `wingUp < 0` branch subtracts
+`0.205 · dt · wingUp` — a subtraction of a negative, so it *adds*. It therefore peaks
+wings-level **inverted**, where the `0.165` bank term is identically zero: an aeroplane on its
+back is pulled toward the ground rather than left to fly hands-off. Both terms vanish exactly at
+wings-level upright, so level cruise is untouched by construction.
+
+Consequences worth stating, because each is easy to get backwards:
+
+- The **yaw** term is what drops the nose in a steep bank. At 90° of bank the body up axis is
+  horizontal, so a yaw rate is a rotation in the *vertical* plane — this is the fall, and it has
+  no equilibrium (nothing opposes it as the nose falls).
+- The **pitch** term is what makes the turn. At 90° of bank the body pitch axis is vertical, so a
+  nose-up rate is a pure heading change, in the direction of bank.
+- Neither is gated by the AOA/G limiters or by any authority curve; they are added raw.
+
+The two constants are **`.data`, not `.rdata`, because the retail build ships a developer console
+that writes them**: `fall_off` (`0x622e94`) stores to `0x6289f8` at `0x43e299` and `bank_off`
+(`0x622ea0`) stores to `0x6289fc` at `0x43e2dc`, in the same command table as `hide_plane`,
+`kill` and `revive`. So they are tunable at runtime but authored nowhere — no data file reaches
+them, and 0.205/0.165 are what every shipped flight uses. The whole block is inlined a second
+time at `0x48cc61`–`0x48ccf4` on the AI flight path, guarded by a byte flag; identical
+arithmetic, recorded for M4.
+
+**C22 landing note — what implementing it settled, and what it did not.** Landed in
+`FlightModel.cs` as an addition to the `BodyRates` command, carrying each axis' `RecInertia`
+(which the original applies downstream, above) but **not** the remake's `*Tune`, since those
+calibrate stick authority against video and are ours. Measured on the Bloodhawk: every
+wings-level scenario is unmoved to the last printed digit across all eleven airframes
+(`level-top-speed`, `terminal-dive`, `roll-360`, `pitch-rate`, `yaw-360`, `altitude-cap`,
+`accel`/`decel`, `eighth-throttle`) — the coupling cannot reach them, which is the cleanest
+possible confirmation of the "vanishes at zero bank" property.
+⚠ **It does NOT close the sustained-turn-rate gap, and it moves it the wrong way**: 32.35 →
+34.71 °/s against the original's 18.95, and up on ten of eleven airframes. Both terms *add*
+heading rate in the direction of bank, so the plan's expectation that this item would explain the
+original's 1.6×-slower banked turn is disproved at the mechanism. Whatever makes the original
+turn slowly when banked is still missing, and `turn_fade_in`/`turn_fade_out`/`highGs` (`BL-095`)
+remain the only authored fields shaped like it.
+The one place it clearly improves fidelity is the **knife-edge**: a neutral-stick 90° bank held
+for 35 s used to pin the nose at the bounded −4.01° sag and settle (−316 m); it now drifts
+linearly at ≈1.08 °/s to −41.8° with no equilibrium (−1993 m), which is the *shape*
+`BL-247` measured on the original (0.69–0.89 °/s to −27° over 36 s) and could not previously be
+produced at all. Recorded for `D31`, not acted on — the drift is now ≈1.2–1.6× too fast, which is
+a magnitude question where it used to be a mechanism question.
+
 ## The three arcade terms
 
 None of these has an aerodynamic justification, and all three distort any model fitted from
@@ -404,11 +475,10 @@ observed video.
    `(1 + 0.24 · noseUpComponent)`, and *additionally* by `(1 + 0.13 · noseUpComponent)` when the
    nose is up. Climbing loses thrust and diving gains it — **on top of** the real gravity term,
    not instead of it. Two separate coefficients, one of them one-sided.
-2. **Bank-to-yaw coupling — hardcoded, not data-driven.** Constants **0.205** and **0.165** (at
-   `0x6289f8` and `0x6289fc`, immediates in the executable, absent from every data file) convert
-   bank angle directly into yaw rate, with an extra contribution when inverted. This is the
-   coordinated-turn cheat that makes banking turn the aircraft, and it is why turn rate tracks
-   bank angle far more tightly than a real force balance would give.
+2. **Bank coupling — hardcoded, not data-driven.** Constants **0.205** and **0.165** (at
+   `0x6289f8` and `0x6289fc`) convert bank directly into yaw and pitch rate. This is the
+   coordinated-turn cheat that makes banking turn the aircraft. Fully recovered under
+   "Bank coupling — resolved" above, including the inverted case.
 3. **Weathervane centring.** `return_rate` applies a torque along `cross(−nose, v̂)`, pulling the
    nose onto the velocity vector. **Player aircraft only** — AI does not get it.
 
@@ -701,9 +771,10 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
    toward the nose. Same numbers, different mechanism. This also **settles `BL-095` for these
    keys**: the parser takes their cosine, so `liftAOAs` and `maxAOA` are confirmed **degrees**,
    while `highGs`/`lowGs` are stored raw and are plain **G**.
-3. **The two hardcoded bank-to-yaw constants (0.205, 0.165).** These are in no data file, so no
-   amount of data extraction would have surfaced them. The remake has no bank-to-turn coupling at
-   all — it turns purely by the flight path chasing the nose.
+3. **The two hardcoded bank constants (0.205, 0.165).** These are in no data file — they are
+   developer-console variables — so no amount of data extraction would have surfaced them. Landed
+   in `C22`; see "Bank coupling — resolved". ⚠ They make the banked turn **faster**, not slower,
+   so they are not the explanation of the original's 1.6×-slower banked turn.
 4. **The attitude-dependent thrust (0.24 / 0.13).** A video fit would absorb these into gravity
    or drag and then fail in the opposite manoeuvre.
 5. **Rudder at 10 % authority in flight**, full only between 22.5 and 45 mph.

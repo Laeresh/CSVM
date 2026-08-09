@@ -13,7 +13,8 @@ namespace CSVM.Tests;
 /// <para>The probe's informational rows are deliberately NOT asserted; they record open questions
 /// and must not fail a build. Three of them are recorded CONFLICTS rather than open questions —
 /// accel-150-290 (footage vs the byte-verified force path), terminal-dive (waiting on D32's
-/// attitude-thrust terms) and sustained-turn-speed (waiting on C22's bank coupling) — each with
+/// attitude-thrust terms) and sustained-turn-speed (rides the unattributed turn-rate gap, which
+/// C22's bank coupling was expected to close and demonstrably does not) — each with
 /// the attribution in its own comment in <c>Probes.FlightEnvelope</c> and the record in
 /// <c>docs/org/flightModel.md</c>.</para>
 /// </summary>

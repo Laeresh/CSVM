@@ -942,24 +942,25 @@ public static class Probes
         // the same nose-down spiral at terminal speed — identically with and without the B12 lift
         // term, i.e. an instrument artifact and not a model reading. Free-roll settles honestly, at
         // its own bank rather than the original's; the row reports both, and asserts neither.
-        // ⚠ INFORMATIONAL — attributed, waiting on C22 (same coupling gap as sustained-turn-rate
-        // below). We still turn only by the path chasing the nose, so the equilibrium sits at a
-        // higher speed and α than the original's bank-coupled turn; the +17% settled speed is that
-        // missing 0.205/0.165 term's shape, not a drag or thrust error. Decision 4: no *Tune or
-        // force-path refit against this row before C22 lands — re-assert it there.
+        // ⚠ INFORMATIONAL and still unattributed. The original's bank coupling is now implemented
+        // (the 0.205/0.165 terms), which took this row from +17.1% to +14.7% — a real step, not the
+        // explanation. The remaining gap rides with the rate row below, which the same coupling
+        // moved the WRONG WAY, so whatever slows the original's banked pull sets this equilibrium
+        // too and neither row can be closed alone.
         var turn = SustainedTurn(stats, 100f, 298.96f * Mph, settle: 10f, window: 15.9f);
         Row("sustained-turn-speed", "full back stick from a banked entry, settled speed", "mph",
             turn.SpeedMph, 222.94, 5.0,
             $"entered at 100° bank, settled at {turn.BankDeg:0.0}° (emergent, not held), "
             + $"α {turn.Alpha:0.0}°, swept {turn.SweptDeg:0} ° (original 449.8 in the same window) — "
-            + "waiting on C22's bank coupling",
+            + "rides the rate row below",
             info: true);
 
         // ⚠ Asserted as an UPPER BOUND, not a band. BL-247's defect is the aircraft falling out of
         // this manoeuvre — 83% of gravity across the flight path at a steep bank — so "sinks no
         // harder than the original" is the claim the measurement supports. The other side is a
-        // different question: we currently come out slightly CLIMBING, which is its own divergence
-        // and is visible in the number rather than folded into this verdict.
+        // different question, and C22's bank coupling settled it: the turn used to come out
+        // slightly CLIMBING (−2.65), which was its own divergence, and now sinks just inside the
+        // bound. Both sides are visible in the number rather than folded into this verdict.
         Row("sustained-turn-sink", "sustained max-pull turn, sink rate", "ft/s",
             turn.SinkFtS, 1.85, 0.0,
             $"upper bound — the failure this guards is falling out of the turn (before the B12 lift "
@@ -975,6 +976,11 @@ public static class Probes
         // not a pitch-authority error, and `zoom-climb` above is the row that shows our pitch is
         // nearly right. player.json's unconsumed turn_fade_in/turn_fade_out/highGs are the only
         // authored fields of that shape (BL-095). A lead; none of it is decoded.
+        // ⚠ It is NOT the bank coupling, and that is now settled rather than suspected. The
+        // original's own 0.205/0.165 terms are implemented, and they move this row AWAY from the
+        // target (32.35 -> 34.71 here, up on ten of eleven airframes) because both add heading rate
+        // in the direction of bank by construction. No sign or scale of them subtracts turn rate,
+        // so do not re-open them looking for one.
         // ⚠ The original's own turn is NOT internally consistent with a coordinated level turn, so
         // do not promote this by matching the ADI's bank either: 18.95 °/sim-s at 222.94 mph is
         // V·ω = 32.96 m/s² lateral, which implies atan(32.96/20) = 58.7° of bank, not the +100° the

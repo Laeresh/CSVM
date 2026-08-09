@@ -35,7 +35,9 @@ public struct FlightInput
 /// of the authored fd_speed for nine of the eleven airframes without anything being
 /// tuned to make it. Rudder authority follows the original's own authored speed
 /// table (see <see cref="YawAuthorityAt"/>) — YAW ONLY; pitch and roll carry
-/// their own, different authority curves. The torque/
+/// their own, different authority curves. Bank additionally couples straight into
+/// yaw and pitch rate (see <see cref="BankYawCoupling"/>), the original's
+/// coordinated-turn cheat. The torque/
 /// damping/inertia/speed numbers come straight from vehicle.json 'dynamics';
 /// the scale constants marked TUNE are ours, adjusted against playtests — except
 /// the three *Tune rates, which are pinned to measurements of the original
@@ -232,6 +234,30 @@ public sealed class FlightModel
     private const float YawTune = 1.33f;          // TUNE: pinned against the authored yaw curve below
     private const float RollTune = 2.12f;         // TUNE: pinned
 
+    // Bank coupling — the original's coordinated-turn cheat, and the only part of its rotation that
+    // no airframe authors. Two float constants compiled into the executable and writable only from
+    // its own developer console (`fall_off` = 0.205 → yaw, `bank_off` = 0.165 → pitch), so no data
+    // file carries them and none ever will. Both key off how vertical the WINGS are:
+    //
+    //   yaw   += BankYawCoupling   · (starboard·up)                   signed — bank left yaws left
+    //   pitch += BankPitchCoupling · |starboard·up|                   unsigned — any bank pulls up
+    //          + BankYawCoupling   · |bodyUp·up|   while INVERTED     (bodyUp·up < 0 only)
+    //
+    // ⚠ The inverted term reuses the YAW constant on the PITCH axis — it is not a third number, and
+    // it peaks wings-level inverted where the bank term is exactly zero, so an aeroplane on its back
+    // is pulled toward the ground instead of flying hands-off. Reading "an extra contribution when
+    // inverted" as a separate coefficient, or as an addition to the yaw term, both give a model that
+    // is right upright and wrong on its back.
+    // Each term enters the same accumulator the stick commands do — so it is damped identically —
+    // and carries that axis' RecInertia, which is the only scaling the original applies downstream.
+    // It does NOT carry the axis' *Tune: those calibrate STICK authority against measured video and
+    // are ours, and extending one to a decoded constant would be tuning it. The alternative
+    // (×Tune, preserving the binary's coupling:full-stick ratio) was measured — it moves the
+    // Bloodhawk's settled turn 255.6 → 257.4 mph and its sink 1.66 → 2.03 ft/s, i.e. past the
+    // measured sink bound — so the literal read is also the one the measurements prefer.
+    private const float BankYawCoupling = 0.205f;
+    private const float BankPitchCoupling = 0.165f;
+
     public FlightModel(PlaneStats stats)
     {
         Stats = stats;
@@ -355,6 +381,18 @@ public sealed class FlightModel
             Mathf.Clamp(input.Pitch, -1f, 1f) * s.PitchTorque * s.RecInertia.X * pitchTune,
             Mathf.Clamp(input.Yaw, -1f, 1f) * s.RudderTorque * s.RecInertia.Y * yawTune * yawEff,
             Mathf.Clamp(input.Roll, -1f, 1f) * s.RollTorque * s.RecInertia.Z * rollTune);
+
+        // Bank coupling (see the two constants): banking yaws the nose the way the wings point and
+        // pulls it up, with a further pull once the wings are past vertical. Read off the attitude
+        // this frame ENTERED with, alongside the stick command and before anything rotates it, which
+        // is the original's own ordering.
+        float bankComponent = Attitude.X.Dot(Vector3.Up);
+        float bodyUpComponent = Attitude.Y.Dot(Vector3.Up);
+        cmd.Y += BankYawCoupling * bankComponent * s.RecInertia.Y;
+        cmd.X += (BankPitchCoupling * Mathf.Abs(bankComponent)
+                  + (bodyUpComponent < 0f ? -BankYawCoupling * bodyUpComponent : 0f))
+                 * s.RecInertia.X;
+
         var damp = new Vector3(
             s.AngMomentumDamp + s.ReturnRate * (1f - Mathf.Min(1f, Mathf.Abs(input.Pitch))),
             s.AngMomentumDamp + s.ReturnRate * (1f - Mathf.Min(1f, Mathf.Abs(input.Yaw))),

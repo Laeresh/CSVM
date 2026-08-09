@@ -1874,6 +1874,11 @@ pull costs speed only through the lift vector's own tilt. Thrust is
 `EnginePower·RefArea·T_avail(M)·throttle` (LINEAR lever), `T_avail = q_ref·0.73·(0.12−M/60) /
 (M·pow(1.3146, 1.41·M))` at `q_ref = ½ρ((0.84M+0.112)·a)²`, Mach floored at 0.1 — it RISES with
 speed; the thrust MARGIN is what falls. Nothing in the force path is fitted.
+Bank couples straight into rate, the original's coordinated-turn cheat: `0.205·(starboard·up)` into
+yaw (signed) and `0.165·|starboard·up|` into pitch (always nose-up), plus `0.205·|bodyUp·up|` into
+PITCH once inverted — the same 0.205 constant, not a third number. Both vanish at wings-level
+upright, so nothing that flies level can see them; they make the banked turn FASTER, so they are
+not the missing explanation of the original's 1.6×-slower banked pull (`BL-095` owns that).
 `Alpha` (deg) is angle(nose, VelocityDir) — an emergent LAG, not modelled
 incidence, and now instrument-only: no force reads it — and the
 stall is TWO DIFFERENT mechanisms, not one margin split two ways (B15). `isStalled()` is the

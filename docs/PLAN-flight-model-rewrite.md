@@ -152,7 +152,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — Rotation and control authority
 
 21. ☑ Yaw authority: the original's speed table
-22. ☐ Bank→yaw and bank→pitch coupling
+22. ☑ Bank→yaw and bank→pitch coupling
 23. ☐ `return_rate` as a weathervane torque
 24. ☐ Pitch high-speed fade and exponential angular damping
 
@@ -718,7 +718,78 @@ applied to yaw *only* — do not "fix" that by extending it to the other axes; t
 the axes genuinely differ. The steady rate is what `YawTune` pins; per `BL-147`'s warning, do not
 chase transient shape by moving it.
 
-## C22 ☐ Bank→yaw and bank→pitch coupling
+## C22 ☑ Bank→yaw and bank→pitch coupling
+
+**Outcome (landed 2026-08-09).** Implemented as decoded, and the inverted case — which
+[`docs/org/flightModel.md`](org/flightModel.md) carried only as "an extra contribution when
+inverted" — is **re-derived from the bytes and now recorded exactly**. Both terms are added to the
+same angular accumulator the stick commands feed (`FUN_00490f70`, `0x491621` / `0x49167b`), keyed
+off the orientation matrix at `+0x180`:
+`ω += 0.205·(starboard·up)·dt` on the **yaw** axis, signed by bank; and
+`ω += (0.165·|starboard·up| + [bodyUp·up < 0] · −0.205·(bodyUp·up))·dt` on the **pitch** axis,
+always nose-up. ⚠ **The inverted term reuses the 0.205 constant on the PITCH axis** — not a third
+number and not more yaw — and it peaks wings-level inverted, where the 0.165 bank term is
+identically zero. Each carries the axis' `RecInertia` (which the original applies downstream, in
+the integrator, not in the accumulator — newly recorded) but **not** the remake's `*Tune`: those
+calibrate stick authority against video and are ours. The ×`*Tune` alternative was measured rather
+than argued (settled turn 255.6 → 257.4 mph, sink 1.66 → 2.03 ft/s, i.e. past the measured sink
+bound), so the literal read is also the one the measurements prefer. **No `*Tune` was refit**, so
+Decision 4's carve-out is unspent and still available to C23/C24.
+**Bonus decode: the constants live in `.data`, not `.rdata`, because the retail build ships a
+developer console that writes them** — `fall_off` → 0.205 (`0x43e299`) and `bank_off` → 0.165
+(`0x43e2dc`), in the same command table as `hide_plane`/`kill`/`revive`. Runtime-tunable, authored
+nowhere; the plan's "present in no data file" is exactly right and now has a reason.
+⚠ **The item's own primary check fails, and it fails in the direction that kills the hypothesis
+this item was written on.** `sustained-turn-rate` moves 32.35 → **34.71 °/s** against the
+original's 18.95 — *away* from it — and rises on ten of the eleven airframes (peacemaker
+29.98 → 32.25, fury 27.12 → 29.09, warhawk 14.97 → 15.68…). Both coupling terms *add* heading rate
+in the direction of bank, by construction; there is no sign or scale of them that subtracts one. So
+**the row is NOT promoted to asserting — it stays informational**, and the plan's standing
+attribution of the turn-rate gap to this coupling is disproved at the mechanism rather than at the
+magnitude. `BL-095`'s `turn_fade_in`/`turn_fade_out`/`highGs` are again the only authored fields
+shaped like the original's 1.6×-slower banked pull, and they now carry the whole of it.
+`sustained-turn-speed` moves 261.01 → **255.64 mph** against 222.94 (+17.1% → +14.7%) — a real but
+small step toward the pin, on nine of eleven airframes; it also stays informational, since the row
+it was parked behind is still open. `sustained-turn-sink` — the one **asserted** row the coupling
+can reach — moves −2.65 → **1.66 ft/s** against its ≤ 1.85 upper bound and stays green: the turn
+stops coming out *climbing*, which the row's own comment called a divergence, and lands just inside
+the original's measured sink rather than crossing it. (This is the row the ×`*Tune` variant broke
+at 2.03, and the only place the two variants are distinguishable by a verdict.)
+**What did move, cleanly: the knife-edge, and it is a shape change rather than a number change.**
+A neutral-stick 90° bank held 35 s used to pin the nose at the bounded −4.01° sag and settle
+(−316 m, sink flat at 9.5 m/s from ~10 s); it now drifts **linearly at ≈1.08 °/s to −41.8° with no
+equilibrium** (−1993 m). That is the shape `BL-247` measured on the original (0.69–0.89 °/s to
+−27° over 36 s, still steepening) and that `KnifeNoseSag`'s bound was explicitly recorded as unable
+to produce. The drift is now ≈1.2–1.6× too *fast* — a magnitude question where it was a mechanism
+question. **Recorded for `D31`, not acted on**; `KnifeNoseSag`/`KnifeNoseRate` are untouched, and
+D31 now has a live candidate for retiring the bound outright. Inverted level flight changed the
+same way and for the same term: it used to hold altitude exactly forever, and now sinks (nose
+−16.9° at 10 s), which is the arcade cheat working.
+**Invariants held, and they are the strongest evidence the term is right.** Both coupling terms
+vanish exactly at wings-level upright, so every wings-level scenario is unmoved **to the last
+printed digit on all eleven airframes**: `level-top-speed`, `level-speed-near-cap`, `terminal-dive`,
+`roll-360`, `pitch-rate`, `yaw-360`, `altitude-cap`, `accel-150-290`, `decel-290-150`,
+`eighth-throttle-speed`. Roll is untouched on all three counts — the coupling feeds two axes, not
+three (asserted), the full-aileron steady roll rate is 200.41 °/s before and after, and `roll-360`
+is 1.98 s before and after. `zoom-climb` moves slightly (1341.20 → 1321.51 ft) because a held full
+pull loops past vertical and inverted, which is legitimately in scope.
+⚠ **One anomaly, recorded not chased: the autogyro's turn rate falls 33.44 → 13.04 °/s** while its
+settled bank (75.9°) and speed (213.4 → 213.2 mph) are unchanged and every other airframe rises.
+A turn rate at fixed bank and speed cannot fall by 61% for a physical reason, and the row is a
+heading integral (`swept` 532° → 208°) — so this reads as the unfolding instrument meeting a
+near-vertical flight path on the airframe most able to reach one, not as a model result. It is the
+one number in the C22 table that should not be built on.
+Verified per [`docs/verification.md`](verification.md): `RunTests.ps1` green — units **702/702**
+(697 + the 5 new coupling tests), engine 29/29, goldens 13/13. **One golden moved, `c1-flight`, and
+which one is the evidence (GOLD-5/GOLD-1):** it is the only golden whose `--hold` carries a roll
+input (`0.2,0.1,0,1`), so it is the only one that banks — `empty-stage`, `c1-destroy-effects` and
+`c1-crash` all fly wings-level and are hash-identical. Manifest updated here, shot eyeballed.
+Before/after was taken as a same-build A/B with both constants set to 0 (METHOD-9/10/15): the
+zeroed control reproduces the post-C21 table exactly (261.01 / −2.65 / 32.35 / 1341.20), which is
+what makes every movement above attributable to this item alone; `git diff` proves the temporary
+edit restored (METHOD-17). Every cited instrument run twice, byte-identical:
+`--dump-flight` for the Bloodhawk and the Balmoral and `ZzBaselineDump` for all eleven. Full
+8-chapter `--freecam` regression clean, zero engine errors, all eight screenshots saved.
 
 **Goal.** Banking turns the aircraft through the original's coupling terms, not solely through the
 flight path chasing the nose.

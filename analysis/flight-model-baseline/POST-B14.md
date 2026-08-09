@@ -184,3 +184,89 @@ twice, byte-identical both times. `RunTests.ps1` green: units 697/697 (`FlightEn
 7-row assert count unchanged), engine 29/29, goldens 13/13 hash-identical (`--freecam` never
 instantiates a `FlightModel`, and none of the four flown-plane goldens command rudder). Full
 8-chapter `--freecam` regression clean, zero engine errors.
+
+## C22 — the original's bank→yaw / bank→pitch coupling
+
+`FlightModel.Step` adds the two hardcoded constants to the `BodyRates` command:
+`ω_yaw += 0.205·(starboard·up)` signed by bank, and
+`ω_pitch += 0.165·|starboard·up| + [inverted]·0.205·|bodyUp·up|` always nose-up, each × that axis'
+`RecInertia` (the only scaling the original applies downstream) and **not** × the axis' `*Tune`.
+No `*Tune` was refit. Full byte-level derivation, including the inverted case and the
+developer-console origin of the two constants, is in
+[`docs/org/flightModel.md`](../../docs/org/flightModel.md), "Bank coupling — resolved".
+
+**A/B method.** Before = the same build with both constants set to `0f` (METHOD-9/10/15), which
+reproduces the post-C21 table exactly — 261.01 / −2.65 / 32.35 / 1341.20 — so every movement below
+is this item's alone. The temporary edit was reverted and `git diff` checked (METHOD-17).
+
+**Bloodhawk (`.\RunProbe.ps1 --dump-flight --headless`):**
+
+| scenario | unit | post-C21 | POST-C22 | original | disposition |
+|---|---|---:|---:|---:|---|
+| level-top-speed | mph | 300.46 | **300.46** | 300.40 | green (asserted), **unmoved** |
+| accel-150-290 | s | 3.22 | **3.22** | 3.76 ± 0.40 | conflict recorded, **unmoved** |
+| terminal-dive | mph | 336.36 | **336.36** | 355.2 ± 6 | owned by D32, **unmoved** |
+| roll-360 | s | 1.98 | **1.98** | 2.05 | green (asserted), **unmoved** |
+| pitch-rate | °/s | 33.47 | **33.47** | 33.0 | green (asserted), **unmoved** |
+| yaw-360 | s | 28.65 | **28.65** | 28.6 | green (asserted), **unmoved** |
+| altitude-cap | ft | 6571.95 | **6571.95** | 6571.6 | green (asserted), **unmoved** |
+| level-speed-near-cap | mph | 300.46 | **300.46** | 300.40 | green (asserted), **unmoved** |
+| sustained-turn-speed | mph | 261.01 | **255.64** | 222.94 ± 5 | +17.1% → **+14.7%**; still informational |
+| sustained-turn-sink | ft/s | −2.65 | **1.66** | ≤ 1.85 | **green (asserted)** — stops climbing out of the turn |
+| sustained-turn-rate | °/s | 32.35 | **34.71** | 18.95 | ⚠ **moved AWAY**; stays informational — see below |
+| eighth-throttle-speed | mph | 134.52 | **134.52** | 137.9 ± 6 | green (informational), **unmoved** |
+| decel-290-150 | s | 3.48 | **3.48** | 7.04 | conflict recorded, **unmoved** |
+| zoom-climb | ft | 1341.20 | **1321.51** | 936 | informational; the loop goes inverted, so in scope |
+| zoom-climb-min-speed | mph | 236.06 | **235.50** | 127.9 | informational, same loop |
+
+The ten unmoved rows are unmoved **to the last printed digit on all eleven airframes**, not just
+the Bloodhawk — both terms vanish identically at wings-level upright, so nothing that flies
+wings-level can see this change. That is the item's able-to-fail invariant (METHOD-12) and it held.
+
+**⚠ `sustained-turn-rate` is NOT promoted to asserting, and the reason is a disproof.** The plan
+named this coupling as the leading candidate for the 32 vs 18.95 °/s gap. It is not: both terms
+*add* heading rate in the direction of bank, so the rate rises, and it rises on ten of eleven
+airframes — bhawk 32.35 → 34.71, peacemaker 29.98 → 32.25, fury 27.12 → 29.09, avenger
+24.62 → 26.29, devastator 22.92 → 24.49, brigand 18.52 → 19.66, kestrel 16.24 → 16.98, firebrand
+15.48 → 16.11, warhawk 14.97 → 15.68, balmoral 9.50 → 10.03. There is no sign or scale of the
+decoded terms that subtracts turn rate. `BL-095`'s `turn_fade_in`/`turn_fade_out`/`highGs` now
+carry the whole of the original's 1.6×-slower banked pull.
+
+**⚠ The eleventh airframe is an instrument anomaly, recorded not chased.** The autogyro's rate
+*falls* 33.44 → **13.04 °/s** while its settled bank (75.9°, unchanged) and settled speed
+(213.42 → 213.24 mph) do not move at all. A turn rate at fixed bank and speed cannot fall 61% for a
+physical reason; the row is a heading integral and its `swept` figure drops 532° → 208°, so this
+reads as the unfolding estimator meeting a near-vertical flight path on the airframe most able to
+reach one. Do not build anything on this number.
+
+**Knife-edge / inverted hold (throwaway `FlightModel` probe, Bloodhawk and Balmoral, neutral
+stick, full throttle):** the shape changed, which is the D31-relevant result.
+
+| hold | t | before: nose / alt | after: nose / alt |
+|---|---:|---|---|
+| bhawk 90° bank, 300 mph | 1 s | −4.01° / −1.9 m | −5.00° / −2.1 m |
+| | 3 s | −4.01° / −14.9 m | −7.91° / −20.2 m |
+| | 10 s | −4.01° / −79.1 m | −17.67° / −200.2 m |
+| | 35 s | −4.01° / −316.4 m | **−41.81° / −1993.0 m** |
+| balmoral 90° bank, 143 mph | 35 s | −4.01° / −134.8 m | **−40.15° / −785.2 m** |
+| bhawk inverted 180°, 300 mph | 10 s | −0.00° / 0.0 m | **−16.90° / −169.6 m** |
+| bhawk level 0°, 300 mph | 10 s | 0.00° / 0.0 m | 0.00° / 0.0 m |
+
+Before, the nose pinned at `KnifeNoseSag`'s bounded −4.01° and the sink settled flat by ~10 s.
+After, it drifts **linearly at ≈1.08 °/s with no equilibrium** — the shape `BL-247` measured on the
+original (0.69–0.89 °/s to −27° over 36 s, still steepening) and the one the bound was recorded as
+unable to produce. The drift is now ≈1.2–1.6× too fast, i.e. a magnitude question where it was a
+mechanism question. **`KnifeNoseSag`/`KnifeNoseRate` were not touched** — D31 owns this.
+Full-aileron steady roll rate is 200.41 °/s before and after, and the coupling asserts zero
+contribution to the roll axis, so roll is untouched on both a measurement and a test.
+
+**Goldens: one moved, `c1-flight`, and which one is the evidence (GOLD-5).** It is the only golden
+whose `--hold` carries a roll input (`0.2,0.1,0,1`) and therefore the only one that banks;
+`empty-stage` (`0,0,0,0.6`), `c1-destroy-effects` and `c1-crash` fly wings-level and are
+hash-identical. Manifest re-pinned in the same change, shot eyeballed (banked Bloodhawk over C1,
+HUD and gauges intact).
+
+**Determinism.** `--dump-flight` (Bloodhawk, Balmoral) and `ZzBaselineDump` (all eleven) each run
+twice with an empty diff. `RunTests.ps1` green: units **702/702** (697 + `BankCouplingTests`'s 5,
+`FlightEnvelopeTests`' 7-row assert count unchanged), engine 29/29, goldens 13/13 after the re-pin.
+Full 8-chapter `--freecam` regression clean, zero engine errors, all eight screenshots saved.

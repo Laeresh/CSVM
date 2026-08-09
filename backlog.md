@@ -803,8 +803,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   names have not been mapped to units and `maxAOA`/`liftAOAs` were consumed as a hypothesis under
   test, not as a decode (`docs/PLAN-flight-drag-lift.md` B12). Do not implement a rate limiter from
   the names alone — a naive speed/bank coupling that quietly costs pitch authority is exactly the
-  wrong-mechanism fix `BL-124`'s history warns about, and induced drag already supplies the
-  sustained-turn energy cost (`PLAN-flight-drag-lift` C21) without touching the rate.
+  wrong-mechanism fix `BL-124`'s history warns about.
+  ⚠ **These three now carry the WHOLE of that asymmetry, because the obvious other candidate is
+  dead (`PLAN-flight-model-rewrite` C22, 2026-08-09).** The original's own hardcoded bank coupling
+  — 0.205 into yaw, 0.165 into pitch, plus the inverted term — is decoded and implemented, and it
+  moves the banked rate **away** from the original (32.35 → 34.71 °/s, up on ten of eleven
+  airframes): both terms add heading rate in the direction of bank by construction, so no sign or
+  scale of them can subtract one. Do not re-open the coupling looking for the missing slowdown.
 
   Still to decode/implement in the block: `turn_*` (the roll/pitch base ramp — above; exponent on
   `BL-307`), `groundblow_*`/`ai_groundblow`, and `bounce_factor`'s units (`BL-172`). The `yaw_*` set
@@ -912,6 +917,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     gets flat and we currently get worst. For `KnifeAlignFloor`: the observable is the path lagging
     the nose by 4.8° at +3 s / 7.2° at +24 s / 8.3° at +36 s, but `CAP-05` cannot separate that from
     gravity pulling the path down over the same interval — do not back an align rate out of it.
+    ⚠ **The missing shape now exists, and it did not come from these constants**
+    (`PLAN-flight-model-rewrite` C22, 2026-08-09). The original's decoded bank→yaw term is a
+    rotation in the vertical plane at 90° of bank with nothing opposing it, so a neutral-stick
+    knife-edge hold went from pinning at the bounded −4.01° and settling (−316 m over 35 s) to
+    drifting **linearly at ≈1.08 °/s to −41.8° with no equilibrium** (−1993 m). Same shape as the
+    table above, ≈1.2–1.6× too fast — so this is now a magnitude question, and the live candidate
+    is **retiring `KnifeNoseSag`'s bound outright** rather than retuning it. `D31` owns that call;
+    all three constants are untouched.
     *Playtest after fix:* (1) does the knife-edge sink feel like the original's; (2) does the
     full-pull zoom still feel nose-heavy (the `knife`-at-zero-bank leak — pure pitch at zero bank
     still fires this term); (3) stall-into-knife-edge recovery should not feel "doubled".
