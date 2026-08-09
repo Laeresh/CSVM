@@ -195,7 +195,7 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 **No active plan.** The weather-decompile-match plan completed 2026-08-09
 ([`docs/plans/PLAN-weather-decompile-match.md`](docs/plans/PLAN-weather-decompile-match.md)),
 unmerged on `worktree-ghidra-weather-findings`.
-Owed at the controls: `PT-28`, `PT-41`, `PT-43`, `PT-45`, `PT-47` and `CAP-36`
+Owed at the controls: `PT-28`, `PT-41`, `PT-43`, `PT-45` and `PT-47`
 ([`playtest.md`](playtest.md)). Verify any change with
 **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read
 [`docs/verification.md`](docs/verification.md) first.

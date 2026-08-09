@@ -1029,10 +1029,12 @@ demonstrably blends in the framebuffer's own space — which is what a `ColorRec
 does, and is why this colour is deliberately NOT linearised the way `ApplyFogGlobals`' are
 (METHOD-1: the case separates the two spaces by 30× the residual).
 
-**Verify — at the controls: owed, not skipped.** No capture on record flies C5 at street level at
-all, so `CAP-36` is minted in `playtest.md` (low pass in, dwell, exit). ⚠ Nothing here is tuned
-against it and nothing may be: the ramps and the colour are decompiled constants, so the capture
-confirms or refutes them rather than calibrating them.
+**Verify — at the controls: CONFIRMED, `CAP-36` closed (2026-08-09).** No capture on record flew
+C5 at street level, so `CAP-36` was minted in `playtest.md` (low pass in, dwell, exit); the user
+then flew it the same day and confirmed ZONE3 and the volume whiteout work as intended, closing
+the capture (retired from `playtest.md`; record in the closing commit, `git log --grep=CAP-36`).
+⚠ Nothing here was ever tuned against it: the ramps and the colour are decompiled constants, so
+the confirmation ratifies them rather than calibrating them.
 
 **Original approach (kept for reference).**
 
