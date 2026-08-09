@@ -319,6 +319,12 @@ and `EmitPolygon` answers by writing white corners, so the value lands once. `PL
   the rank cap, where an appended group would share its base's rank and z-fight it. Declined on
   sprite/facade meshes (no biasable material); `OverlayPassDeclinedCount` is the tripwire and is 0
   across the install.
+⚠ `BuildFlatQuadMesh` (`PLAN-overcast-match` C26, `WorldBuilder.AddDeckAnnulus`) is the one caller
+  that builds geometry with NO gamez node behind it at all — raw world-space quad corners into a
+  `SurfaceTool`, given the SAME `GetMaterial(-1, …)` no-texture branch a `Colored` polygon with an
+  out-of-range material index gets, so it shares the ordinary bias-shader fog/lighting pipeline
+  (`fogged: true`, `lit: false`) rather than a hand-rolled second one. `materialIndex = -1` is a
+  deliberate reuse of an existing fallback path, not a new one.
 
 ## src/Mech3/ConflictRank.cs
 The world's cross-node draw-order tie-break. Buckets every built triangle by its world plane,
@@ -472,6 +478,23 @@ the very resource the built instance carries — and `CloudDeckUndimmedMeshes` p
 keyed by the dimmed mesh's `Rid`. `Session/WeatherRig.Tick` assigns one variant per rig at the
 band crossing; nothing here decides which. Keyed by RID because a splitscreen session's extra deck
 copies (`GameSession.AssignCloudDecks`) are `Duplicate`s sharing these resources.
+`AddDeckAnnulus` (`PLAN-overcast-match` C26, 2026-08-09) adds ONE more child under the same `deck`
+node once the 144 tiles are built: a flat, untextured four-quad picture frame around
+`MergedLocalAabb(deck)` (the tiles' own measured AABB — never a hardcoded origin, so the annulus
+stays exactly centred on the tile grid and the eventual `GameSession.AssignCloudDeckIfBuilt`
+re-measurement via `OrbitCamera.MergedAabb` lands on the same centre, unperturbed), reaching a
+20,480 m half-span (rim ≈ 3.95 px, `f·K/halfSpan` — see the `Session/WeatherRig` entry). Its
+material is `SceneBuilder.BuildFlatQuadMesh`'s `GetMaterial(-1, …)` call — the SAME no-texture
+`BuildMaterial` branch a `Colored` gamez polygon with no material entry gets, `fogged: true`, so
+its `ALBEDO = mix(ALBEDO, csky_fog_color, fog_amt)` line is byte-for-byte the deck tiles' own; every
+point it is built for sits beyond every deck chapter's own authored `FOG_RANGES` far, so `fog_amt`
+is 1.0 there and one static mesh (`lit: false`) serves both regimes with no dimmed/undimmed pair.
+Tagged `WorldBuilder.DeckExtensionMeta` node metadata so it counts toward neither this file's own
+"144 tiles" print (which reads `_deckNodes.Count`, not `deck.GetChildCount()`) nor
+`WeatherRig.CollectDeckTiles`'s "N of M deck tile(s) carry an undimmed twin" census — both stay
+144/144. ⚠ 20,480 m is close to a ceiling, not just a tidy round number: C1/C1C/C2B/C4's zone2
+dome renders at 8.74 km × 2.5 = 21.85 km, and this flat sheet must stay well inside that (never
+touch the dome) or its outer edge would sit past the dome wall it renders in front of.
 `CloudClusters` censuses the OTHER ambient cloud population after the walk — every `cloudparent`
 subtree the world places (C1 28, C1B 70, C1C 30, C4 45; C2/C2B/C3/C5 none), logged per chapter so
 "none" cannot read like a broken census. `GameSession` puts them on `UI.SplitScreen.CloudFieldLayer`
@@ -3450,6 +3473,15 @@ are built from, and it is logged with the meshed counts it was decided on.
   which is a call the fit alone cannot make. One value for every deck chapter: C1's river still
   is the only original frame that can measure one; the constant's own comment carries the full
   derivation.
+⚠ **`f·K/halfSpan` has a second free knob besides `K`, and `C26` (2026-08-09) fixed it: the
+  144-tile sheet's own radius.** `C25` left the sheet's textured half-span at 6144 m (12×1024 m
+  tiles ÷ 2), which puts the rim at 13 px — inside which the dome WALL's own authored base-ring
+  gradient (`docs/formats/weather.md`, "the wall's LOWEST ring") is still visibly darkening, the
+  residual the item traced (not a fog or `K` defect; the wall renders correctly). `WorldBuilder.
+  AddDeckAnnulus` extends the CEILING alone — an untextured, already-fog-saturated annulus around
+  the 144 tiles, never more textured tiles (the deck census stays 144) — out to a 20,480 m
+  half-span, dropping the rim to ~4 px, where that same gradient has lost only ~2 units. `K` itself
+  is untouched; only how far the ceiling that hides the wall's base reaches.
 ⚠ **The cloud gate is a per-camera CULL MASK over `UI.SplitScreen.CloudFieldLayer`, never node
   visibility.** Both ambient populations — the `fvol` clutter MultiMeshes and the world's placed
   `cloudparent` clusters — are moved onto that one shared layer by `GameSession`; hiding them as

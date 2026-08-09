@@ -257,6 +257,14 @@ own frames show no such gradient near the horizon** — `C1 IA1 Fog river.png` i
 (per-row sd 0.00) for 36 px above its horizon — so whatever hides it in the original is *not* a wall
 painting rule. Do not "fix" the wall's colours; see `PLAN-overcast-match` `C26`.
 
+⚠ **Engine-side consequence, landed (`C26`):** this ring's own colours and gradient are untouched —
+what changed is how far out the below-band CEILING reaches before it hands off to them. The rim sits
+at `f·K/halfSpan` px (`C21`/`C25`); extending the ceiling sheet's half-span from 6144 m (its 144
+textured tiles) to 20,480 m (a plain fog-saturated annulus around them, `WorldBuilder.AddDeckAnnulus`)
+pushes the rim from 13 px to ~4 px, where this ring has lost only ~2 units of its own gradient —
+invisible, and every deck chapter (C1/C1C/C2B/C4) gets the same extension since `K` and the camera
+projection are shared constants.
+
 #### The remaining four are settled: C1, C1C, C2B and C4 all fly `zone2` (2026-08-08)
 
 These four define `ZONE2` *and* build a dome for it, so the geometry above cannot decide them, and

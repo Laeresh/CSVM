@@ -537,6 +537,48 @@ void fragment() {
             ? GetMesh(meshIndex, forceDoubleSided, forceLit)
             : null;
 
+    /// <summary>An untextured quad-frame mesh, one surface, carrying the SAME fog-pipelined
+    /// material a <c>Colored</c> gamez polygon with no material entry gets (<see
+    /// cref="BuildMaterial"/>'s no-texture branch, reached here with an out-of-range material
+    /// index) — so its <c>ALBEDO = mix(ALBEDO, csky_fog_color, fog_amt)</c> line is byte-for-byte
+    /// the deck tiles' own. Exists for <see cref="WorldBuilder"/>'s below-band-ceiling extension
+    /// (<c>PLAN-overcast-match</c> C26): that geometry is nowhere in the gamez mesh table — the
+    /// residual the item chases is the dome wall's OWN authored vertex gradient showing past the
+    /// tile sheet's rim (<c>docs/formats/weather.md</c>, "the wall's LOWEST ring"), not a missing
+    /// tile — so it cannot go through <see cref="BuildSubtree"/> or <see cref="SharedMesh"/> like
+    /// every other built surface; this is the smallest hook that still shares their shader
+    /// construction rather than hand-rolling a second one.
+    ///
+    /// <para>Always double-sided (a ceiling from below, a floor from above — the tile sheet's own
+    /// reason, see <c>WorldBuilder.Add</c>) and built <c>lit: false</c>: every quad this is used
+    /// for sits well beyond every deck chapter's own authored <c>FOG_RANGES</c> far (C26's own
+    /// derivation — the existing 144-tile sheet's own rim already exceeds all four), so
+    /// <c>fog_amt</c> is 1.0 at every point of it and the mix result is <c>csky_fog_color</c>
+    /// regardless of <c>ALBEDO</c> — the per-regime SUNLIGHT-dimming swap <c>C23</c> built for the
+    /// tiles has nothing to change here, which is why this returns ONE static mesh rather than a
+    /// dimmed/undimmed pair (verified, not assumed, in C26's own landing record).</para></summary>
+    internal ArrayMesh BuildFlatQuadMesh(IReadOnlyList<(Vector3 A, Vector3 B, Vector3 C, Vector3 D)> quads)
+    {
+        var st = new SurfaceTool();
+        st.Begin(Mesh.PrimitiveType.Triangles);
+        void Vert(Vector3 p)
+        {
+            st.SetNormal(Vector3.Up);
+            st.SetColor(Colors.White);
+            st.AddVertex(p);
+        }
+        foreach (var (a, b, c, d) in quads)
+        {
+            Vert(a); Vert(b); Vert(c);
+            Vert(a); Vert(c); Vert(d);
+        }
+        st.SetMaterial(GetMaterial(-1, priority: 0, rank: 0, subface: false, doubleSided: true,
+            lit: false, fogged: true));
+        var mesh = new ArrayMesh();
+        st.Commit(mesh);
+        return mesh;
+    }
+
     /// <summary>The cross-node draw-order tie-break for one gamez node. Every instance uniform
     /// named <c>node_bias</c> — placed world, clutter decorations, map-edge tiles — comes from
     /// here, so the three cannot drift apart.</summary>

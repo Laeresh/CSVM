@@ -175,12 +175,15 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 25. ☑ C25 — The below-band ceiling covers to the horizon and fades like the original's — landed as
     a `K` correction (400 → 135 m); `C21`'s refutation meant no extension and no baked fade were
     needed at all
-26. ◐ C26 — The last strip: the dome wall's base must meet the fog wall seamlessly (user at the
-    controls, 2026-08-09) — **reproduced and traced, no code**: the wall's base ring IS `FOG_COLOR`
-    and lands to the decimal (candidate (a) refuted three ways); the strip is the wall's own
-    authored gradient over the 13 px the deck rim leaves open. ⚠ **Ends at a fork only the user can
-    take** — every mechanism that reproduces the original's flat band reopens `C25`'s `K`/extent,
-    `B16`'s no-fog verdict or `B18`'s geometry. See the section.
+26. ☑ C26 — The last strip: the dome wall's base must meet the fog wall seamlessly — traced first
+    (the wall's base ring IS `FOG_COLOR` to the decimal; the strip is the wall's own authored
+    gradient over the rim the deck sheet leaves open, not a defect), then **landed as the fork's
+    own recommendation**: the below-band ceiling's half-span extends 6144 m → 20,480 m via a
+    fog-saturated untextured annulus around the 144 tiles (`WorldBuilder.AddDeckAnnulus`), moving
+    the rim 13 px → ~4 px where the wall's own gradient is near-invisible. `K` untouched, deck
+    census still 144; goldens' standing six all still move (`C22`/`C25`'s own cause), and this
+    item's own contribution moves five of the six further (only `c1-waterfall`'s pose misses the
+    strip) — no golden outside that set moved, `0 broken` of 13.
 
 ## Dependency and parallelism notes
 
@@ -3036,9 +3039,13 @@ geometry change at all, so the geometry baseline was not needed — the before/a
 
 # Wave C — deck mesh brightness
 
-## C26 ◐ The last strip: the dome wall's base must meet the fog wall seamlessly
+## C26 ☑ The last strip: the dome wall's base must meet the fog wall seamlessly
 
-**STOPPED at candidate (b) — no code written, by this item's own brief.** (2026-08-09) The symptom
+**Landed** (2026-08-09), as the fork's own recommendation: candidate (1)'s extent half, an
+untextured fog-saturated annulus extending the below-band ceiling's half-span from 6144 m to
+20,480 m. `K` is untouched. **STOPPED at candidate (b) — no code written, by this item's own
+brief**, is the record of the analysis pass that found the fork; kept below exactly as written.
+The symptom
 reproduces exactly and its mechanism is now traced to the byte: **the strip is the dome wall's own
 authored vertex gradient, rendered correctly.** Candidate (a) — "our render is off (sRGB, mip
 selection, a vertex-colour product)" — is **refuted three independent ways**; the base ring lands on
@@ -3129,19 +3136,149 @@ touches neither a landed verdict nor the user's own `K` choice, it is bounded an
 (`A5`'s map-edge precedent), and it predicts the original's flat band by construction rather than by
 taste. But it changes an approved look, so it is the user's call — same shape as `C25`'s.
 
+**→ An anchoring-probe run after this analysis closed the remaining door on candidate (3):** the
+dome is authored at a map corner with an 8.7 km radius, not centred on the flown area, so an
+authored-STATIC placement could never cover the map from every camera position the way the
+original plainly does — the original must move the dome with the camera too, exactly like `B18`
+found. Candidate (3) (a different anchor or vertical scale) was already the least-favoured reading;
+this closes it outright rather than leaving it as a live alternative. Camera-anchoring stands.
+**The user took (1)/extent the same day**, and it is what landed below.
+
+### Fork resolved (user, 2026-08-09): the extent half of (1) lands as a fog-saturated annulus
+
+**Mechanism.** `WorldBuilder.AddDeckAnnulus` gives the below-band ceiling a second piece: a flat,
+untextured four-quad picture frame around the 144 textured tiles' own measured footprint, reaching
+a 20,480 m half-span (20×1024 m — the next tile boundary up from the sheet's own 6144 m). By
+`C21`/`C25`'s own rim formula (`f·K/halfSpan`, `f` = 599.1 px, `K` = `DeckCeilingHeight` = 135 m,
+both untouched), that moves the rim from 13 px to ≈3.95 px — inside which the dome WALL's own
+authored base-ring gradient (this item's own finding: the wall is correct, not a defect) has lost
+only ~2 units instead of ~7. The annulus is never invented colour: its material is
+`SceneBuilder.BuildFlatQuadMesh`'s call into `GetMaterial(-1, …)`, the SAME no-texture branch of
+`BuildMaterial` a `Colored` gamez polygon with no material index gets (`fogged: true`), so its
+`ALBEDO = mix(ALBEDO, csky_fog_color, fog_amt)` line is byte-for-byte the deck tiles' own — not a
+hand-picked `FOG_COLOR` constant, but the SAME fog pipeline computing the SAME output. Every point
+it is built for sits beyond every deck chapter's own authored `FOG_RANGES` far (C1/C1C/C2B 4000 m,
+C4 4500 m — the EXISTING 144-tile sheet's own edge, at 6144 m, already exceeds all four), so
+`fog_amt` is 1.0 there regardless of the per-regime SUNLIGHT-dimming swap `C23` built for the
+tiles — ONE static mesh serves both regimes, verified below, not assumed. 20,480 m is close to a
+ceiling, not just a tidy number: C1/C1C/C2B/C4's zone2 dome renders at 8.74 km × 2.5 = 21.85 km,
+and the annulus stays a 1.37 km / 6% margin inside it — the next tile boundary (21,504 m) was
+rejected as too close. Symmetric around the tile grid's OWN measured AABB centre
+(`WorldBuilder.MergedLocalAabb`, a full recursive walk — a first, shallower version of this method
+that checked only `deck`'s direct children came back a degenerate zero box and mis-centred the
+annulus on world-local (0,0,0), producing a huge mis-placed quad; the climb-ladder probe below
+caught it before landing, which is why the method's own comment records the failure), so
+`GameSession.AssignCloudDeckIfBuilt`'s later `OrbitCamera.MergedAabb` re-measurement lands on the
+identical centre and every existing tile pixel is unperturbed. Tagged
+`WorldBuilder.DeckExtensionMeta` node metadata, read by `WeatherRig.CollectDeckTiles`, so it counts
+toward neither this file's own "144 tiles" print (which reads `_deckNodes.Count`, fixed before
+either loop runs, not the live child count) nor the "N of M deck tile(s) carry an undimmed twin"
+census — both stay 144/144.
+
+**Verification.**
+
+*Climb ladder* (`--chapter=C1 --freecam --det --mute --pos=-7323,<y>,-3829 --direction=-1,0,0`,
+`.scratch/c26/rung.py`, horizon row 360):
+
+| rung | before (dip / rim step) | after (dip / rim step) | original |
+|---|---|---|---|
+| 300 m | 3.47 at 8 px / +1.76 | 1.37 at 28 px / +0.87 (4→5) | — |
+| 400–900 m | **7.40 at 13 px / +5.25 (13→14)** | **2.07 at 4 px / +1.11 (4→5)** | 0.00 over ≥17 px |
+| 1000 m (inside `CLOUD_COVER` whiteout) | −28.29 / +2.73 | −30.17 / +0.48 | — |
+
+The 400–900 m rungs are bit-identical to each other before and after, as before (both surfaces are
+camera-anchored). The rim STEP — the thing the eye actually catches — falls from a hard +5.25 to a
+soft +1.11 flowing straight into flat `FOG_COLOR`; the residual dip lands at 2.07 units, a hair over
+the fork's own illustrative "≤2" mark (the practical ceiling is the dome radius above, not the fog
+ramp) and no longer a discontinuity. Full row dump at elevations 7–21 px (the old rim, now deep
+inside the annulus) reads **RGB(176.00,176.00,176.00), per-row sd 0.00** — including row 347, the
+EXACT boundary between the 144 textured tiles and the annulus — a zero-unit, zero-variance step:
+the two surfaces are computing the identical value, not matching by luck.
+
+*Floor regime (above-deck pinned pose, `-7323,1192,-3829` / `0,0,-1`).* The stale `.scratch/c25`
+reference PNGs no longer reproduce on this machine/build even with zero code changes (a same-day
+control shot from a temporarily reverted build already differs from them by 46% of pixels — an
+environmental drift unrelated to any plan item, not a regression; METHOD-3). Comparing instead
+against a FRESH same-day control (reverted build, identical flags): fog-on is **byte-identical, 0 /
+921,600 px** — the existing sheet already covers the downward view from above and the floor regime
+needs no annulus. `--no-fog` (never part of normal play) shows a confined artifact — 0.62% of
+pixels (rows 364–373 only), the annulus rendering its raw white `ALBEDO` where fog would otherwise
+be the only thing painting it `FOG_COLOR`; noted, not fixed (fixing it would mean special-casing
+`_spec.NoFog` in geometry code, which the item's own "do not touch fog code" trap rules out for a
+debug-only flag with no gameplay path).
+
+*C4 below-band spot check* (`-4974,900,-3861` / `-1,0,0`, fogged, vs a fresh same-day control):
+**0.03% of pixels changed (251 / 921,600), max 3**, confined to rows 347–348, and every changed
+pixel moves from the wall's own gradient (189,190,193) to exact `FOG_COLOR` (192,192,192) — the
+mechanism landing at C4 exactly as it does at C1, at a smaller magnitude because C4's own gradient
+was already flatter there. `--no-fog` shows the same confined white-annulus artifact as the C1
+above-deck check, for the same reason.
+
+*Flip ladder* (`-7325,<y>,-3829` / `0,0,-1`, `--frames=20`, C1): the four rungs spanning the regime
+crossing — 1035/1046/1048/1060 — are **bit-identical to each other**, flat mean lum 243.00, same as
+`C23` found; 1025 vs 1075 (outside the opaque core) differ by 46.7% of pixels, confirming the
+instrument would have caught a leak had there been one.
+
+*8-chapter `--freecam --frames=20` regression*: **zero errors, all eight.** Deck census
+**144 tiles** at y=960 (C1/C1C/C2B) / y=1050 (C4) in every chapter, exactly as on record; `deck
+lighting: 144 of 144 deck tile(s) carry an undimmed twin` in all four; clusters C1 28 · C1B 70 ·
+C1C 30 · C4 45; sprites C1/C2B/C4 22,201 · C1C 22,748 · C5 16,170 — every number unchanged. C1's own
+`gamez nodes`/`mesh instances` count (7064 / 3423) is identical between a fresh control build and
+this one — the annulus is one new `MeshInstance3D` per deck chapter, which this broader census does
+not even count the way the deck-tile print does.
+
+**`.\RunTests.ps1`** — build PASS (0 warnings), **units 683/683**, **engine 26/26, errors clean**,
+goldens **6 moved, 0 broken of 13** (exit 1 is the golden stage alone, per convention). The six
+movers are the SAME six names as `C22`/`C25`'s own standing un-repinned set — `c1-waterfall`,
+`c1c-rain`, `c2b-rain`, `c4-snow`, `c1-flight`, `c1-destroy-effects` — and no shot outside that set
+moved, which is `GOLD-5`'s own pattern check: every mover is a deck chapter (C1/C1C/C2B/C4), every
+`ok` is not (`C1B`/`C2`/`C3`/`C5`) or has no deck/sky in frame (`c1-crash`, `viewer-bhawk`,
+`empty-stage`).
+⚠ **First run of this stage used a stale working tree** — a `git stash` opened to shoot a
+same-day control comparison was left un-popped across the launch, so the FIRST `RunTests.ps1` here
+actually built and tested the PRE-`C26` code; caught by re-checking `git status` before trusting
+the result, corrected by popping the stash, rebuilding and re-running clean (`METHOD-6`/`METHOD-16`
+— confirm which code a run used, and force/verify the rebuild after restoring). The accidental
+run is not wasted: it is exactly `GOLD-8`'s **reverted-build A/B**, run for free. Reverted-build
+hashes (`c1-waterfall c81a000a…`, `c1c-rain 81e9dccd…`, `c2b-rain 57f097e1…`, `c4-snow 421ead8f…`,
+`c1-flight 9e162b5a…`, `c1-destroy-effects 0d749511…`) are exactly `C23`'s own on-record values;
+the corrected, landed-code run's hashes (`c1-waterfall c81a000a…` — unchanged — `c1c-rain
+ab24ff16…`, `c2b-rain a092c1ca…`, `c4-snow 00e3ffb4…`, `c1-flight 9a5369f6…`, `c1-destroy-effects
+dfcad9ed…`) show **this item DOES move five of the six further**, on top of their existing
+`C22`/`C25` cause — `c1-waterfall` alone is unaffected, so its own pose does not reach the strip.
+Consistent with everything else measured (a small, sky/ceiling-confined shift) and with `0 broken`
+of 13 — `RunTests`' own broken/moved split did not flag any of the five as structurally different,
+only hash-different. Not re-pinned — `C24` re-pins once, per the plan's own convention, and its own
+landing should cite this item's contribution alongside `C22`/`C25`'s. `viewer-bhawk` hit `BL-320`'s
+known hang; the guarded runner (`.scratch/b17/run-tests-guarded.ps1`) killed the one stray Godot
+process and the shot reported `ok` on retry, hash valid.
+
+**Probes worth human eyes:** `.scratch/c26/AB-horizon-strip.png` (the original still record); a
+fresh side-by-side of `.scratch/c26/after/c1-500.png` against `.scratch/c26/ladder/c1-500.png`
+(before) is the single clearest before/after of the rim closing.
+
+**Not touched, per the brief:** `K` (`DeckCeilingHeight`, still 135), the dome, the `fvol` field,
+`cloudparent`, the whiteout, and every line of `shaders/csky_atmosphere.gdshaderinc` (the annulus
+reuses the EXISTING fog-mix code path rather than adding to it).
+
 ### Files
 
-`docs/formats/weather.md` (the wall-base-ring decode + the ⚠ not-a-defect warning), this section and
-the checklist line. **No engine code, no shader, no `docs/architecture.md`, no `PROJECT_CONTEXT.md`,
-no `backlog.md`** — nothing about the render changed, so nothing there can have. Probes and
+`CSVM/src/Mech3/WorldBuilder.cs` (`AddDeckAnnulus`, `MergedLocalAabb`, `DeckExtensionMeta`, the
+"144 tiles" print switched from `deck.GetChildCount()` to `_deckNodes.Count`),
+`CSVM/src/Mech3/SceneBuilder.cs` (`BuildFlatQuadMesh`, reusing `GetMaterial`'s existing no-texture
+branch), `CSVM/src/Session/WeatherRig.cs` (`CollectDeckTiles`'s `Collect` skips
+`DeckExtensionMeta`-tagged instances), `docs/formats/weather.md` (one paragraph pointing the
+wall-base-ring decode at this engine-side consequence), `docs/architecture.md` (the
+`WorldBuilder.cs`, `SceneBuilder.cs` and `Session/WeatherRig.cs` entries), this section and the
+checklist line. `PROJECT_CONTEXT.md` untouched. Probes and
 instruments in `.scratch/c26/`: `scout.ps1` (the clean-horizon search), `identify.ps1` (the three
-identification probes), `texcontrib.ps1` (the able-to-fail control), `ladder.ps1` + `ladder/`,
-`band.py` / `rung.py` / `diff.py` / `texrows.py` / `mat.py` / `montage.py`, and
-`AB-horizon-strip.png`.
-
-⚠ **`RunTests.ps1` was not run and no golden can have moved** — `git diff` over `CSVM/` is empty, so
-a run could only reproduce `C22`/`C25`'s six standing un-repinned movers (`METHOD-10`, the same call
-`C23` made).
+identification probes), `texcontrib.ps1` (the able-to-fail control), `ladder.ps1` + `ladder/` (the
+stop-first pass's before evidence), `band.py` / `rung.py` / `diff.py` / `texrows.py` / `mat.py` /
+`montage.py`, `AB-horizon-strip.png`, and the landing's own `after/` (the fixed-build ladder,
+above-deck and C4 shots), `control/` (fresh same-day reverted-build baselines, METHOD-3 —
+the stale `.scratch/c25` PNGs stopped reproducing on this machine independent of this item, so the
+landing's own comparisons are against these, not those), `after/flipladder/` and `after/regress/`
+(the whiteout-core and 8-chapter sweeps).
 
 ### Original brief (kept for reference)
 

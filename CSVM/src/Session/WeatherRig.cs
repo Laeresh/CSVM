@@ -332,7 +332,15 @@ public sealed class WeatherRig
 
         void Collect(Node node)
         {
-            if (node is MeshInstance3D mi)
+            // C26's rim extension is a MeshInstance3D under this same node (so it follows the
+            // deck's regime Y and X/Z exactly as the tiles do — see WorldBuilder.AddDeckAnnulus)
+            // but it is not itself a deck TILE and carries no undimmed twin to look up: it is
+            // fully fog-saturated everywhere it renders, so the dimmed/undimmed swap this method
+            // exists to drive would be an identity on it either way (verified, not assumed, in
+            // PLAN-overcast-match C26). Skipped by the meta tag so it inflates neither `instances`
+            // nor the "N of M" census below — "144 of 144" stays the deck TILE count, not
+            // "144 of 145" with a spurious "1 tile has no undimmed twin" warning.
+            if (node is MeshInstance3D mi && !mi.HasMeta(WorldBuilder.DeckExtensionMeta))
             {
                 instances++;
                 if (mi.Mesh is { } mesh && _deckUndimmedMeshes.TryGetValue(mesh.GetRid(), out var undimmed))

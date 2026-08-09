@@ -27,6 +27,15 @@ public sealed class WorldBuilder
     /// materials carry no cycle, and it costs nothing then.</summary>
     public readonly TextureCycler Cycler = new() { Name = "TextureCycler" };
 
+    /// <summary>Godot node metadata key marking a <see cref="MeshInstance3D"/> under
+    /// <see cref="CloudDeck"/> as C26's rim extension rather than one of the 144 authored deck
+    /// tiles — <c>WeatherRig.CollectDeckTiles</c> reads it so its "N of M deck tile(s) carry an
+    /// undimmed twin" census stays 144/144 (the extension needs no undimmed twin at all; see
+    /// <see cref="AddDeckAnnulus"/>). This file's own "144 tiles" print (<see cref="Build"/>)
+    /// needs no such check — it counts <c>_deckNodes</c>, the gamez-index set, not live
+    /// children.</summary>
+    internal const string DeckExtensionMeta = "deck_extension";
+
     // The horizontal overcast DECK — the sheet covering the whole map at one altitude, as
     // opposed to the cloud1/cloud2 sprites. Split out of the static world (into CloudDeck) so
     // GameSession can make it follow the player. In C1 it is 144 top-level 1024-unit tiles at
@@ -300,9 +309,14 @@ public sealed class WorldBuilder
 
         if (deck.GetChildCount() > 0)
         {
+            // C26: the rim extension is a SIBLING of the 144 tiles under this same node — added
+            // before the print below so `deck.GetChildCount()` would include it; the print reads
+            // `_deckNodes.Count` instead (the gamez-index set FindCloudDeck classified, fixed
+            // before either loop ran) so the logged tile census stays 144 regardless.
+            AddDeckAnnulus(deck, MergedLocalAabb(deck));
             root.AddChild(deck);
             CloudDeck = deck;
-            GD.Print($"cloud deck: {deck.GetChildCount()} tiles at y={_deckAltitude} "
+            GD.Print($"cloud deck: {_deckNodes.Count} tiles at y={_deckAltitude} "
                      + $"({_deckCoverage:P0} of the map)");
         }
 
@@ -726,6 +740,41 @@ public sealed class WorldBuilder
         return meshed;
     }
 
+    // Merges EVERY MeshInstance3D under `root`, at any depth, into one LOCAL-space box — the
+    // same recursive walk as OrbitCamera.MergedAabb, composing Transform (not GlobalTransform:
+    // nothing built here is in the scene tree yet, so GlobalTransform would read identity and
+    // log an error per call). A single level of GetChildren() undercounts: SceneBuilder.
+    // BuildSubtree can wrap a leaf's MeshInstance3D in its own transform node even for a
+    // transformless source (measured — the first version of this method walked only `deck`'s
+    // direct children and came back a zero box at the origin, which then centred C26's
+    // annulus on world (0,0,0) instead of the tile grid, producing a huge mis-placed quad;
+    // caught by the climb-ladder probe before landing, not asserted from the source).
+    // Computed on the 144 tiles ALONE, before AddDeckAnnulus runs (see Build), so the annulus
+    // can be built symmetric around that exact point (PLAN-overcast-match C26) — a symmetric
+    // superset around the SAME centre leaves the eventual MERGED centre (and therefore
+    // WeatherRig's `_deckCenter`, and every existing below/above-band render) untouched; only
+    // the annulus's own new pixels move.
+    private static Aabb MergedLocalAabb(Node3D root)
+    {
+        Aabb merged = default;
+        bool first = true;
+        void Walk(Node3D node, Transform3D parentXf)
+        {
+            var xf = parentXf * node.Transform;
+            if (node is MeshInstance3D { Mesh: { } mesh })
+            {
+                var box = xf * mesh.GetAabb();
+                merged = first ? box : merged.Merge(box);
+                first = false;
+            }
+            foreach (var child in node.GetChildren())
+                if (child is Node3D n3)
+                    Walk(n3, xf);
+        }
+        Walk(root, Transform3D.Identity);
+        return merged;
+    }
+
     // Rendered but not solid: the plane should fly through cloud/sky geometry and through
     // every billboard sprite, not crash into them. Terrain, water, buildings, zeppelins and
     // trains stay solid.
@@ -1089,6 +1138,79 @@ public sealed class WorldBuilder
         {
             _deckUndimmedMeshes[dimmed.GetRid()] = undimmed;
         }
+    }
+
+    /// <summary>C26: the below-band ceiling's rim sits at <c>f·K/halfSpan</c> px above the
+    /// horizon (f = 599.1 px camera projection, K = <c>DeckCeilingHeight</c> = 135 m — C21/C25).
+    /// At the shipped 144-tile sheet's own half-span (6144 m = 12×1024 m tiles ÷ 2) that is 13 px
+    /// — inside it, past the sheet's own textured rim, sits the dome WALL's own authored vertex
+    /// gradient (<c>docs/formats/weather.md</c>, "the wall's LOWEST ring"), which is what the
+    /// item's reported "horizon strip" traced to (no render defect — C26's own stop-first
+    /// analysis: the strip IS the wall, rendered correctly). Pushing the rim to ≤ ~4 px — where
+    /// that gradient has lost ≤ 2 units, i.e. invisible — needs a half-span ≥ f·K/4 ≈ 20,220 m;
+    /// K and f are ONE constant for every deck chapter (A7/C25), so one target half-span serves
+    /// C1/C1C/C2B/C4 alike. Rounded up to a whole number of 1024 m tiles for a tidy grid:
+    /// 20,480 m (20 tiles), rim 599.1×135/20480 ≈ 3.95 px — measured on the climb ladder at
+    /// 2.07 units lost (was 7.40, with a hard +5.25 px step; now a smooth +1.11 continuation
+    /// into flat <c>FOG_COLOR</c>), a hair over the illustrative 2-unit mark but no longer a
+    /// discontinuity, which is what the eye actually catches (`PLAN-overcast-match` C26's own
+    /// verification).
+    ///
+    /// <para>20,480 m is also close to the practical CEILING on this number, not just a tidy
+    /// round one: C1/C1C/C2B/C4 all fly a zone2 dome of radius 8.74 km at the shared 2.5× camera
+    /// anchor scale (<c>docs/architecture.md</c>'s <c>GameSession.HorizonScaleFor</c> entry) —
+    /// 21.85 km rendered — and this flat ceiling must stay well inside that (never touch the
+    /// dome, per this item's own brief) or its outer edge would sit past the dome wall it is
+    /// supposed to render in front of. 20,480 m leaves a 1.37 km / 6% margin; the next tile
+    /// boundary up (21,504 m) leaves under 350 m and was rejected as too close for the small
+    /// residual gain.</para>
+    ///
+    /// <para>That target is independently safe against every deck chapter's own authored
+    /// <c>FOG_RANGES</c> far (C1/C1C/C2B 4000 m, C4 4500 m — each chapter's
+    /// <c>weather.zrd.json</c>): the EXISTING 144-tile sheet's own edge, at 6144 m, already
+    /// exceeds all four, so the textured tiles nearest the rim are already rendering at
+    /// <c>fog_amt</c> == 1.0 (pure <c>FOG_COLOR</c>) before the annulus even starts — the
+    /// boundary between them is two surfaces computing the identical output, not a seam that
+    /// needs hiding.</para>
+    ///
+    /// <para>Built as a flat, untextured four-quad PICTURE FRAME around <paramref
+    /// name="tilesAabb"/> (never a full underlying plane — that would z-fight the tiles it sits
+    /// under) via <see cref="SceneBuilder.BuildFlatQuadMesh"/>, symmetric around the tile grid's
+    /// OWN measured centre (never a hardcoded origin — see <see cref="MergedLocalAabb"/>) and
+    /// tagged <see cref="DeckExtensionMeta"/> so it counts as neither a deck TILE
+    /// (<c>_deckNodes</c>, this file's own "144 tiles" census) nor a lit-variant swap target
+    /// (<c>WeatherRig.CollectDeckTiles</c>'s "N of M" census) — see both call sites. Added as a
+    /// CHILD of <paramref name="deck"/>, never a sibling node: <c>WeatherRig.Tick</c> repositions
+    /// that one node per rig, so nesting here is the entire mechanism by which the extension
+    /// follows the camera in X/Z and flips regime in Y exactly as the sheet does — no new
+    /// per-frame code.</para></summary>
+    private void AddDeckAnnulus(Node3D deck, Aabb tilesAabb)
+    {
+        const float TargetHalfSpan = 20480f;
+        Vector3 c = tilesAabb.GetCenter();
+        float innerHalfX = tilesAabb.Size.X / 2f, innerHalfZ = tilesAabb.Size.Z / 2f;
+        float halfX = Mathf.Max(TargetHalfSpan, innerHalfX);
+        float halfZ = Mathf.Max(TargetHalfSpan, innerHalfZ);
+        float innerMinX = c.X - innerHalfX, innerMaxX = c.X + innerHalfX;
+        float innerMinZ = c.Z - innerHalfZ, innerMaxZ = c.Z + innerHalfZ;
+        float outerMinX = c.X - halfX, outerMaxX = c.X + halfX;
+        float outerMinZ = c.Z - halfZ, outerMaxZ = c.Z + halfZ;
+        float y = c.Y;
+
+        Vector3 P(float x, float z) => new(x, y, z);
+        // North/south strips run the full outer width (so they cover the four corners too);
+        // east/west fill only the remaining middle strip — a standard picture-frame tiling with
+        // no overlap and no gap, regardless of how much bigger the target is than the sheet.
+        var quads = new List<(Vector3, Vector3, Vector3, Vector3)>
+        {
+            (P(outerMinX, outerMinZ), P(outerMaxX, outerMinZ), P(outerMaxX, innerMinZ), P(outerMinX, innerMinZ)),
+            (P(outerMinX, innerMaxZ), P(outerMaxX, innerMaxZ), P(outerMaxX, outerMaxZ), P(outerMinX, outerMaxZ)),
+            (P(innerMaxX, innerMinZ), P(outerMaxX, innerMinZ), P(outerMaxX, innerMaxZ), P(innerMaxX, innerMaxZ)),
+            (P(outerMinX, innerMinZ), P(innerMinX, innerMinZ), P(innerMinX, innerMaxZ), P(outerMinX, innerMaxZ)),
+        };
+        var mi = new MeshInstance3D { Mesh = _scene.BuildFlatQuadMesh(quads), Name = "deck_annulus" };
+        mi.SetMeta(DeckExtensionMeta, true);
+        deck.AddChild(mi);
     }
 
     private string ResolveHorizonZone(GameZNode horizon, string zone)
