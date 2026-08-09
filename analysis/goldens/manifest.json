@@ -14,14 +14,14 @@
     {
       "name": "c1-waterfall",
       "frame": 120,
-      "hash": "ef4a1f52dace2989a8d1311b11a16bfb",
+      "hash": "83df537102322338359cae4529a3ad83",
       "exercises": "UV scroll on the falls sheet + the mist puffer; frame-sensitive 1.28 % at 120 vs 121.",
       "args": ["--freecam", "--chapter=C1", "--pos=-7720,60,-3380", "--lookat=-7868,40,-3449", "--det", "--mute"]
     },
     {
       "name": "c1b-night-sea",
       "frame": 120,
-      "hash": "1ed1cfe33e917d704c65c500067d95fb",
+      "hash": "322b8c77c64a0724f169e0c266d163f8",
       "exercises": "night lighting, skydome, islands, the ambient cloud-puff field; static at 120 vs 121, 0.13 % at 120 vs 360 (puff drift).",
       "args": ["--freecam", "--chapter=C1B", "--pos=-6748,300,-8885", "--direction=0.242,-0.25,0.970", "--det", "--mute"]
     },
@@ -35,7 +35,7 @@
     {
       "name": "c2-city",
       "frame": 120,
-      "hash": "7ff1f9531f24b7ffc6529d41cec7bef2",
+      "hash": "3bdddf2f0c2f11d95e9849f700ee954f",
       "exercises": "C2's solid 3D city blocks, billboard clutter, backlot geometry, daylight fog; near-static, 51 px at 120 vs 121.",
       "args": ["--freecam", "--chapter=C2", "--pos=-5722,186,-3457", "--direction=-0.438,-0.15,-0.899", "--det", "--mute"]
     },
@@ -49,21 +49,21 @@
     {
       "name": "c3-island",
       "frame": 120,
-      "hash": "60231ec605a10bc2d9fdb576a4658bcf",
+      "hash": "ad0966d1c1c14fe3142d642d6c3b0a6c",
       "exercises": "coastline, surf edge and open water at close range; static — 9 px at 120 vs 360, so it proves geometry and shading, not the clock.",
       "args": ["--freecam", "--chapter=C3", "--pos=-4518,400,-2015", "--direction=-0.35,-0.35,-1", "--det", "--mute"]
     },
     {
       "name": "c4-snow",
       "frame": 120,
-      "hash": "4cb8ff657e4dd0c4110b8cced179c911",
+      "hash": "57fa1183abe7e92d51c05bf833412bd4",
       "exercises": "snow precipitation plus the chapter carrying 6 UV-scroll models; frame-sensitive 3.74 %, the largest of the freecam set.",
       "args": ["--freecam", "--chapter=C4", "--pos=-3330,958,-9181", "--direction=-0.682,-0.2,0.731", "--det", "--mute"]
     },
     {
       "name": "c5-city-night",
       "frame": 120,
-      "hash": "f35fb68fa02b928f8726445f20bfba18",
+      "hash": "883f85df05c0f81db7705c51068a69d5",
       "exercises": "the night city: LIGHT_STATE point lights packed into csky_light_data, lit window skins, moon and stars; static, 11 px at 120 vs 360.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute"]
     },
@@ -84,7 +84,7 @@
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "f8c85e312056d6fc2e51d2ba0fe9a295",
+      "hash": "99d4e9a59f0e6c5c1dddbab5db8c0323",
       "exercises": "a flying plane: chase camera on the sim clock, prop and control-surface animators, gauges, compass tape, weapon readout, impact reticle; the --hold throttle 0.5→1 jump also crosses ThrottleSlamSmoke's slam threshold, so this is the one golden carrying a live exhaust-trail Puffer; frame-sensitive 34.52 %, the strongest tripwire here.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
@@ -98,7 +98,7 @@
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "f858f76b1c537161b8dd8786de5438ce",
+      "hash": "426ee2f54fcf377660c0bc4cf0e3385d",
       "exercises": "the per-player crash rig (ForCrashRig/D32) constructing and playing player_crash_dirt: --crash=5 forces FlightController.Crash() at a fixed sim frame, the only headless trigger for this path (PLAN-animruntime-role-factories A2); moves off its Rng.Crash draw. The set's biggest puffer surface, so the TEXTURE_SEQUENCE lifetime-fraction fix moved 26.55 % of its pixels: the fireball holds its mid flipbook frames instead of the blown-out last one. Also exercises EffectCatalogue.CrashSurfaceLevelAnimNames (BL-292): flydirt_plane, the dirt burst's ground-scorch dust plane, levels to world axes instead of the plane's spawn-trim attitude at --crash=5's frame, moving a 2.16% halo ring around the fireball (>20/255 threshold) — the fireball/smoke/debris family is deliberately excluded from that set and is pixel-unchanged.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     }

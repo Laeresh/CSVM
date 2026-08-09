@@ -192,7 +192,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — The placement rewrite
 
 11. ☑ Store decoration positions as template-quad UVs, not metres
-12. ☐ Replace the world-space grid stamp with the per-triangle UV-lattice walk
+12. ☑ Replace the world-space grid stamp with the per-triangle UV-lattice walk
 13. ☐ Settle the two remake-only rules: `MinSlopeCos` and the `seen` dedup
 14. ☐ Chapter A/Bs + the 8-chapter regression, and rewrite the class comment
 
@@ -594,7 +594,132 @@ degenerate case. (b) The solid path still needs the decoration's authored **Y an
 replaces XZ only. (c) A decoration that does not project onto the quad is an error in the original
 (it logs and skips); do not silently place it at (0,0).
 
-## B12 ☐ Replace the world-space grid stamp with the per-triangle UV-lattice walk
+## B12 ☑ Replace the world-space grid stamp with the per-triangle UV-lattice walk
+
+**Landed** (`CSVM/src/Mech3/Clutter.cs`, `CSVM.Tests/ClutterQuadUvTests.cs`). **The world grid is
+gone.** `PlaceOnTriangle` builds a new public `ClutterBuilder.UvTriangle` per triangle — the UV
+bounding box floored to an integer lattice (step 4), a containment test in **UV space** (step 6),
+and the affine UV→world map (step 7) — and stamps each decoration once per lattice cell it lands
+in. `PlaceOnMesh` now passes `poly.UvCoords` through, indexed by **corner position**, under the
+same fan/strip split it already applied to vertices. `Template.ExtentX`/`ExtentZ` are deleted:
+after this item a template carries no metric size at all. The affine map supplies **Y** as well as
+XZ, per A2 — on a planar triangle it is the same number the old barycentric height gave, and a
+triangle cannot be non-planar. `MinSlopeCos` and the `seen` dedup are untouched (B13 owns both).
+
+**Predicted before measuring** (METHOD-12), from A1's per-template metres-per-repeat against each
+quad's per-axis extent, with A2's correction that the four non-square/mirrored quads match their
+world tiling **per axis** so their factor is 1.0, not A1's √2 artifact:
+
+| chapter | predicted | measured sprites | measured solids | factor |
+|---|---|---|---|---|
+| C1 | **3.9–4.0×** | 9,303 → **37,510** | — | **4.03×** ✔ |
+| C1B | ~4.1× | 60 → **339** | — | **5.65×** ⚠ over |
+| C1C | 0 | 0 → 0 | — | — ✔ |
+| C2 | ~1.0×, small rise | 37,167 → 37,254 | 10,328 → 10,346 | 1.002× ✔ |
+| C2B | 0 | 0 → 0 | — | — ✔ |
+| C3 | 1.0× | 678 → 707 | — | 1.043× ✔ |
+| C4 | ~1.0× | 88,630 → 88,705 | — | 1.001× ✔ |
+| C5 | 1.0× | 124,072 → **127,744** | 71,326 → **75,148** | 1.030× / 1.054× ✔ |
+
+**No chapter moved in a direction A1 did not predict** — every factor is ≥ 1.0, and C1 is the
+chapter that moves, by the clean factor of 4 A1 measured. Two magnitude mismatches, both the same
+error in the *predictor* rather than in the model: it used A1's **area-weighted median**
+metres-per-repeat, which under-weights the fast-stretching patches, so a template with a wide
+spread over few triangles comes out low. C1B's `rockclut` is 14 usable triangles spanning 65–163 m
+per repeat against a 256 m quad (predicted 4.1×, measured 5.65×), and C2's `parkpat` — 4 triangles,
+which A1 itself flagged as thin — went 2 → 70 against a predicted 10.2×. The correct predictor is
+Σ(uvArea) / Σ(xzArea/extent²), not (extent/median)².
+
+**C5's change is entirely `cblock7`.** `cblock1`'s `lightpole` came out at **33,682, identical to
+the grid's**, and `cblock3`'s at 7,309, likewise identical; `cblock2` moved by 3. `cblock7` rose
+12.6 % across the board (`cb12a` 12,069 → 13,595, `cb14a` 13,248 → 14,932, `cb13a` 4,824 → 5,436).
+So where A1 measured 256.0 m against a 256 m quad **and** A2 measured a 100 %-identity UV frame,
+the lattice reduces to the grid exactly — which is the strongest available check that the two
+mechanisms agree where they should. `cblock7` is the family with 2,544 triangles and A1's 5.0 m
+sliver, and it is the one that gains.
+
+**Verified.** Baseline taken on `HEAD` (B11) with the same instrument immediately before the
+changed run (METHOD-3) and reproduced B11's table exactly. Four new counters, logged as one line
+per build (LOG-5, DIAG-15):
+
+| chapter | zero WORLD area | zero UV area | no UV array | over-large lattice | outside source |
+|---|---|---|---|---|---|
+| C1 | 1,773 | 0 | 0 | 0 | **0** |
+| C1B | 6 | 0 | 0 | 0 | **0** |
+| C2 | 1,144 | 1 | 0 | 0 | **0** |
+| C3 | 100 | 0 | 0 | 0 | **0** |
+| C4 | 2,458 | 0 | 0 | 0 | **0** |
+| C5 | 8 | 0 | 0 | 0 | **0** |
+
+The zero-**world**-area counts reproduce A1's independently-derived `dropped_degenerate` figures
+**exactly** on four chapters — C1 1,617 + 38 + 118 = 1,773; C3 100; C4 50 + 1,981 + 427 = 2,458;
+C5 6 + 2 = 8 — which is a cross-check between a Python static analysis and the live engine walk
+that neither could fake. C2 reads 1,144 against A1's condensed 1,133, the difference sitting inside
+the per-template lines A1 abbreviated. **Every instance landed inside its own source triangle in
+every chapter** (asserted per placement, in the triangle's own plane rather than an XZ projection),
+and the generous 4,096-cell lattice bound never fired anywhere, which is what A1's data said should
+happen. One C2 triangle has world area and no invertible UV map — the first of its kind found in
+the install; A2's sample had none.
+
+**Eight goldens moved and are deliberately left red** (GOLD-8; not re-pinned, not regenerated —
+the user decides against images, which are in `.scratch/goldens/`): `c1-waterfall`, `c1-flight`,
+`c1-crash`, `c1b-night-sea`, `c2-city`, `c3-island`, `c4-snow`, `c5-city-night`. Five held:
+`c1c-rain` and `c2b-rain` (neither chapter places clutter — the two structural controls),
+`viewer-bhawk`, `empty-stage`, and **`c1-destroy-effects`**, which was predicted to move and did
+not. That is the one golden prediction that missed; the shot is a close-in explosion pose in a
+chapter whose forest quadrupled, so "no clutter in frame" is the likely reason, but it was not
+confirmed. `.\RunTests.ps1`: build PASS, **843 units PASS** (3 new), 29 in-engine suites PASS with
+engine errors clean, goldens FAIL on those eight alone.
+
+**Even at factor 1.0 a golden moves**, and that is the point: the grid was phase-locked to the
+world origin and the lattice is phase-locked to the painted texture. C5's near-flat count with a
+moved image is a phase change of exactly the kind A1 predicted when it found C5's spacing already
+correct.
+
+### ⚠ B12 does not fix `BL-305`. Measured, not assumed.
+
+The orchestrator re-shot `BL-305`'s **own founding pose** — CAP-22's scale-matched nadir,
+`--freecam --chapter=C5 --pos=-9490,230,-3300 --direction=0,-1,0.001 --no-fog`, the pose behind
+`playtest/CAP-22/ours-nadir-230-scale-matched.png` — on B11 and on B12. The two frames are
+**byte-identical (md5 8820B741…)**, while the two binaries are provably different (clutter build
+phase 103.0 ms vs 157.5 ms in the same runs). Over the `cblock1/2/3` downtown the UV lattice
+reduces *exactly* to the old grid, which is the same agreement B12 found in the counts:
+`cblock1`'s `lightpole` came out at 33,682, identical to the grid's, because A1 measured 256.0 m
+against a 256 m quad and A2 measured a 100 %-identity UV frame there. C5's whole instance rise is
+`cblock7`, elsewhere in the map.
+
+So the C5 golden moved and `BL-305`'s pose did not, and both are consistent: **the packing defect is
+neither a spacing error (A1) nor an alignment error (A2/B12).** It is still open, and this plan has
+now eliminated the two mechanisms it was built to test for C5. Two candidates remain, in order of
+strength:
+
+1. **The missing subface gate (A3).** `PlaceOnMesh` reads no subface flag where `FUN_004de2c0`
+   skips one, and A3 measured **+288 extra eligible polygons in C5** because of it. That is
+   `B13`'s work, which is therefore no longer a cleanup item — **it is the leading `BL-305`
+   candidate** and should be verified against this nadir pose, not just against instance counts.
+2. **`far_fade_range` (C23, currently deferred by Decision 3).** `cb00a` fades at 200–300 → 300–350 m.
+   At 230 m altitude the frame edges sit 400 m+ in slant range and would be **gone in the original**
+   while present in ours, which would make some of "pavement between buildings" a fade artifact
+   rather than a placement difference. Decision 3 deferred this because it confounds density A/Bs;
+   that reasoning still holds for Wave B, but it is now a live `BL-305` hypothesis rather than a
+   tidy-up, and C23 must weigh it as one.
+
+**The pose is the instrument for both.** Any future claim to have fixed `BL-305` must move
+`8820B741E6CFB29A5E82CFED048711E0`.
+
+**Build cost.** The clutter phase grows with the instances it places and nothing else: C1
+46 → 66 ms, C2 53 → 72 ms, C3 20 → 22 ms, C4 55 → 85 ms, C5 96 → 158 ms, C1B 20 → 22 ms. Total
+startup on C5 3,812 → 4,079 ms. No cliff — C1 quadrupled its trees for 20 ms.
+
+**Three things this could not verify.** (a) The original's **per-texture-layer** loop
+(`FUN_004de190`) is still not reproduced: `PlaceOnMesh` reads `materials[0]` only. A3 measured that
+no polygon in the install names a registered template on layer 1+, so the path is unreachable on
+retail data and an A/B could not tell the difference — but it is a deviation, and B14 should say so
+in the class comment. (b) Whether the new positions are *right* against the original, as opposed to
+right against the decode, needs footage; that is B14. (c) `c1-destroy-effects` not moving is
+unexplained, above.
+
+### Original approach (kept for reference)
 
 **Goal.** `PlaceOnTriangle` stamps at the UV lattice, exactly as `FUN_004dd6e0` steps 4–7 do, and
 `PlaceOnMesh` feeds it the polygon's per-vertex UVs for the matching texture layer.

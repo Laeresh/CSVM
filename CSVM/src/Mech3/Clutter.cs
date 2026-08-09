@@ -14,18 +14,27 @@ namespace CSVM.Mech3;
 /// TEMPLATES ("AddClutterTemplates terpat02"), which the same script loads into the
 /// gamez as parentless, unreferenced subtrees (why WorldBuilder's placed-node walk
 /// never sees them). A template is a flat ground quad (its texture names the terrain
-/// texture it decorates: terpat02.tif = the forest texture; its size the tiling period —
-/// 512 m for C1's terpat02, and the "-128" template variants elsewhere are 128 m ones)
-/// with decoration sprites scattered on it: single vertical quads, each a tree/bush
-/// billboard with a local position on the patch.
+/// texture it decorates: terpat02.tif = the forest texture) with decoration sprites
+/// scattered on it: single vertical quads, each a tree/bush billboard with a local
+/// position on the patch. That position is stored as the quad's own interpolated
+/// TEXTURE UV, in [0,1) — the quad is the domain the position is normalised against,
+/// never a metric spacing.
 ///
 /// <para>The engine then dresses every world polygon textured with a template's ground
-/// texture. The exact original alignment is undecoded (the world's UV tiling is wildly
-/// non-uniform on hillsides — 256..1280 m per repeat — so UV-space placement would
-/// stretch the clutter with it); the remake tiles each template on a fixed world-space
-/// X/Z grid of its authored period instead, which keeps the authored density everywhere,
-/// is seam-consistent across adjacent polygons (one global grid), and plants every
-/// decoration at the polygon's interpolated surface height.</para>
+/// texture, and it does so <b>in texture space</b>: per triangle, take the UV bounding
+/// box, floor it to an integer lattice, and stamp each decoration once per integer
+/// repeat of the texture across that triangle, testing containment in UV and recovering
+/// the world position through the triangle's own affine UV→world map
+/// (<c>FUN_004dd6e0</c> steps 4, 6 and 7 — see <see cref="UvTriangle"/>). The clutter
+/// therefore rotates, mirrors and stretches with the painted ground texture, which is
+/// the intent: a building sits in its painted block wherever that block lands.</para>
+///
+/// <para><b>There is no world-space grid, and there is no global clutter origin to build
+/// one on</b> — A2 looked and the original has neither
+/// (<c>analysis/bl-305-clutter-uv/FINDINGS-A2.md</c>). The fixed X/Z grid this file used
+/// until B12 was a fiction with no counterpart, and it cost C1 roughly 4× its trees:
+/// C1's terrain is painted with <c>terpat02</c> at half the template quad's scale, so
+/// one repeat spans ~260 m where the grid stepped 512 (A1).</para>
 ///
 /// <para><b>Two kinds of decoration, two rendering paths.</b>
 /// The split is <see cref="SceneBuilder.ClassifyBillboard"/>, i.e. the gamez model's own
@@ -76,6 +85,11 @@ public sealed class ClutterBuilder
     // Steeper than ~75° (XZ footprint under a quarter of the true area) grows no trees —
     // an upright billboard on a near-cliff face floats off it.
     private const float MinSlopeCos = 0.25f;
+
+    // The largest integer UV lattice one triangle may span before it is refused and counted.
+    // 64 × 64 repeats of the ground texture across a single triangle; A1's widest measured span
+    // is a handful, so this is a tripwire for a corrupt UV array, not a tuning knob.
+    private const long MaxLatticeCells = 4096;
 
     // Collision for the 3D decorations only (user decision): a city block is real
     // geometry with real sides, unlike the sprite cards, which deliberately have no colliders.
@@ -135,6 +149,10 @@ public sealed class ClutterBuilder
     // Shared collision shapes of the last collidable Build, keyed by decoration MeshIndex.
     private Dictionary<int, ConcavePolygonShape3D>? _solidShapes;
 
+    // What the UV-lattice walk skipped and what it asserted, for the one summary line Build
+    // logs (LOG-5 / DIAG-15). Replaced per Build, never accumulated across two.
+    private LatticeStats _stats = new();
+
     /// <param name="scene">The world's SceneBuilder, for the 3D-decoration path (its meshes
     /// and its fullbright world materials). Null disables that path and leaves only the
     /// sprite one.</param>
@@ -143,6 +161,20 @@ public sealed class ClutterBuilder
         _gamez = gamez;
         _textures = textures;
         _scene = scene;
+    }
+
+    /// <summary>Why <see cref="UvTriangle.Build"/> refused a triangle. The two faults are
+    /// independent: a fan or strip artifact of an n-gon with repeated or collinear corners has
+    /// zero WORLD area and a perfectly ordinary UV area, so a UV-area guard alone lets it through
+    /// and its meaningless affine map — both axes collapsed onto a line — plants a row of trees
+    /// along that line. A2 counted 1,655 of them on C1's <c>terpat02</c> alone.</summary>
+    public enum UvTriangleFault
+    {
+        /// <summary>The triangle has world-space area but no invertible UV map.</summary>
+        ZeroUvArea,
+
+        /// <summary>The triangle's three world vertices are collinear or coincident.</summary>
+        ZeroWorldArea,
     }
 
     /// <summary>Total decoration sprites (billboard cards) placed by the last Build.</summary>
@@ -168,6 +200,7 @@ public sealed class ClutterBuilder
 
     /// <summary>Shape attachments made by the last Build — one per collidable 3D decoration.</summary>
     public int SolidCollisionInstances { get; private set; }
+
 
     /// <summary>Reads the chapter's boot script out of the interp extraction
     /// (extracted/interp.json) and returns its registered clutter template names
@@ -352,7 +385,9 @@ public sealed class ClutterBuilder
         if (templates.Count == 0)
             return null;
 
+        _stats = new LatticeStats();
         PlaceOnWorld(templates, worldName);
+        _stats.Report();
 
         var root = new Node3D { Name = "clutter" };
         var parts = new List<string>();
@@ -433,10 +468,35 @@ public sealed class ClutterBuilder
         return max.Z - min.Z <= 0.1f * Mathf.Max(max.X - min.X, max.Y - min.Y);
     }
 
+    // FUN_004dd6e0 steps 4, 6 and 7: the UV bounding box floored to an integer lattice, a
+    // containment test in UV SPACE, and the world position recovered through the triangle's own
+    // affine UV→world map. Steps 5 (translate_uv_range jitter), 9 (substitute), 10
+    // (rotation/scale) and 11 (far_fade_range) are deliberately absent — Wave C owns them.
+    //
+    // <para>There is no world grid here and there must never be one again: A2 established that the
+    // original has no global "the clutter grid starts here" origin at all. Each decoration is
+    // stamped once per integer repeat of the ground texture across this triangle, so the clutter
+    // rotates, mirrors and stretches WITH the painted texture — which is why C1's forest, painted
+    // at half the template quad's scale, comes out ~4× denser than the grid made it.</para>
     private static void PlaceOnTriangle(Template template, Vector3 a, Vector3 b, Vector3 c,
-        HashSet<(int, int, int)> seen)
+        Vector2 uva, Vector2 uvb, Vector2 uvc, HashSet<(int, int, int)> seen, LatticeStats stats)
     {
-        // Signed XZ area ×2 (for the containment test and barycentric heights below).
+        // Two independent degeneracy tests, because neither implies the other (A2): a fan or
+        // strip artifact of an n-gon with repeated or collinear corners has ZERO world area and a
+        // perfectly healthy UV area — 1,655 of them on C1's terpat02 alone — and its affine map
+        // is finite but meaningless, both axes collapsed onto a line.
+        var tri = UvTriangle.Build(a, b, c, uva, uvb, uvc, out var fault);
+        if (tri == null)
+        {
+            if (fault == UvTriangleFault.ZeroWorldArea)
+                stats.ZeroWorldArea++;
+            else
+                stats.ZeroUvArea++;
+            return;
+        }
+
+        // Both remake-only rules, untouched — B13 owns them, and moving either here would make
+        // this item's A/B unreadable. Signed XZ area ×2 is what the slope cull is expressed in.
         float area2 = (b.X - a.X) * (c.Z - a.Z) - (c.X - a.X) * (b.Z - a.Z);
         float xzArea = 0.5f * Mathf.Abs(area2);
         if (xzArea < 0.5f)
@@ -445,50 +505,74 @@ public sealed class ClutterBuilder
         if (xzArea < trueArea * MinSlopeCos)
             return;
 
-        // The decorations are stored as quad UVs (see ParseTemplate). Until B12 replaces this
-        // grid with the original's per-triangle UV lattice, a UV is laid out on the world grid
-        // one quad extent wide PER AXIS: offset = uv × extent, step = extent. On the 28 square,
-        // unmirrored templates that is bit-identical to the old "metres from the quad's min
-        // corner ÷ a scalar period" — every shipped extent is a power of two, so uv = m/extent
-        // and uv × extent round-trip exactly. The four non-square or mirrored ones move, which
-        // is the correction A2 measured, not a regression.
-        float ex = template.ExtentX, ez = template.ExtentZ;
-        float minX = Mathf.Min(a.X, Mathf.Min(b.X, c.X)), maxX = Mathf.Max(a.X, Mathf.Max(b.X, c.X));
-        float minZ = Mathf.Min(a.Z, Mathf.Min(b.Z, c.Z)), maxZ = Mathf.Max(a.Z, Mathf.Max(b.Z, c.Z));
-        int gx0 = Mathf.FloorToInt(minX / ex), gx1 = Mathf.FloorToInt(maxX / ex);
-        int gz0 = Mathf.FloorToInt(minZ / ez), gz1 = Mathf.FloorToInt(maxZ / ez);
-        for (int gx = gx0; gx <= gx1; gx++)
-            for (int gz = gz0; gz <= gz1; gz++)
+        // LOG-5: a hugely stretched triangle would make the lattice loop enormous. The original
+        // has the same exposure and no bound; A1 measured every shipped span as modest (terpat02
+        // runs 134–561 m per U over triangles a few hundred metres wide), so this should never
+        // fire. If it does, the count in the summary line is a finding, not a nuisance.
+        if (tri.CellCount > MaxLatticeCells)
+        {
+            stats.OverLargeLattice++;
+            if (tri.CellCount > stats.WorstLatticeCells)
+                stats.WorstLatticeCells = tri.CellCount;
+            return;
+        }
+
+        for (int uInt = tri.MinU; uInt <= tri.MaxU; uInt++)
+            for (int vInt = tri.MinV; vInt <= tri.MaxV; vInt++)
                 for (int k = 0; k < template.Kinds.Count; k++)
                 {
                     var kind = template.Kinds[k];
                     foreach (var cell in kind.CellPlacements)
                     {
-                        // cell.Origin.X / .Z are the decoration's quad UV, in [0, 1).
-                        float px = (gx * ex) + (cell.Origin.X * ex);
-                        float pz = (gz * ez) + (cell.Origin.Z * ez);
-                        if (px < minX || px > maxX || pz < minZ || pz > maxZ)
+                        // cell.Origin.X / .Z are the decoration's quad UV, in [0, 1); the lattice
+                        // cell shifts it to this repeat of the texture (FUN_004dd6e0 step 5,
+                        // minus the jitter). Kept in double for the same reason B11's quad map
+                        // is: one extra rounding here is ~0.03 mm and enough to move a golden.
+                        double cu = uInt + (double)cell.Origin.X;
+                        double cv = vInt + (double)cell.Origin.Z;
+                        if (!tri.Contains(cu, cv))
                             continue;
-                        // Barycentric in XZ: inside iff all weights share the area sign.
-                        float w0 = (b.X - px) * (c.Z - pz) - (c.X - px) * (b.Z - pz);
-                        float w1 = (c.X - px) * (a.Z - pz) - (a.X - px) * (c.Z - pz);
-                        float w2 = (a.X - px) * (b.Z - pz) - (b.X - px) * (a.Z - pz);
-                        if (area2 > 0 ? (w0 < 0 || w1 < 0 || w2 < 0) : (w0 > 0 || w1 > 0 || w2 > 0))
-                            continue;
-                        var key = (kind.MeshIndex, Mathf.RoundToInt(px * 4f), Mathf.RoundToInt(pz * 4f));
+                        var p = tri.World(cu, cv);
+                        // The affine map gives Y as well as XZ, which is what step 7 does. On a
+                        // planar triangle — and a triangle cannot be anything else — that is the
+                        // same number the old barycentric height produced (A2 checked the two
+                        // routes agree to 1.8e-12 m), so nothing is lost by dropping the second
+                        // computation.
+                        var key = (kind.MeshIndex, Mathf.RoundToInt(p.X * 4f), Mathf.RoundToInt(p.Z * 4f));
                         if (!seen.Add(key))
                             continue;
-                        float y = (w0 * a.Y + w1 * b.Y + w2 * c.Y) / area2;
+                        // The mechanical check for "trees in the sea": a subtly wrong UV-space
+                        // containment test still yields a finite world point, and only the source
+                        // triangle can say it is the wrong one.
+                        stats.Placed++;
+                        if (!InSourceTriangle(a, b, c, p))
+                            stats.OutsideSource++;
                         // A sprite is planted flat ON the surface: its basis and its authored
                         // Y are both dropped, because its shader re-faces it from the instance
                         // origin and its own mesh already carries the card's vertical extent.
                         // A 3D decoration keeps both — the authored basis is its orientation,
                         // and the Y is its height above the block's ground plane.
                         kind.Instances.Add(kind.Solid
-                            ? new Transform3D(cell.Basis, new Vector3(px, y + cell.Origin.Y, pz))
-                            : new Transform3D(Basis.Identity, new Vector3(px, y, pz)));
+                            ? new Transform3D(cell.Basis, new Vector3(p.X, p.Y + cell.Origin.Y, p.Z))
+                            : new Transform3D(Basis.Identity, p));
                     }
                 }
+    }
+
+    // Barycentric containment in the triangle's OWN plane (not an XZ projection — a hillside
+    // triangle's XZ shadow is a different shape). The slack absorbs the single rounding the
+    // affine map ends on; a genuinely misplaced instance misses by metres, not by 1e-3.
+    private static bool InSourceTriangle(Vector3 a, Vector3 b, Vector3 c, Vector3 p)
+    {
+        const float slack = 1e-3f;
+        var n = (b - a).Cross(c - a);
+        float d = n.LengthSquared();
+        if (d < 1e-9f)
+            return false;
+        float w0 = (b - a).Cross(p - a).Dot(n) / d;
+        float w1 = (c - b).Cross(p - b).Dot(n) / d;
+        float w2 = (a - c).Cross(p - c).Dot(n) / d;
+        return w0 >= -slack && w1 >= -slack && w2 >= -slack;
     }
 
     // The mesh's triangles in its own local space, using the same fan/strip rule as
@@ -628,12 +712,7 @@ public sealed class ClutterBuilder
             Log.Info("world", $"clutter template has no textured ground quad template={name}");
             return null;
         }
-        var template = new Template
-        {
-            GroundTexture = quad.Texture,
-            ExtentX = quad.ExtentX,
-            ExtentZ = quad.ExtentZ,
-        };
+        var template = new Template { GroundTexture = quad.Texture };
 
         var kinds = new Dictionary<int, Kind>();
         // What is left in the skip list is only genuinely unusable:
@@ -800,16 +879,33 @@ public sealed class ClutterBuilder
             var tex = _gamez.Materials[poly.MaterialIndex].TextureName;
             if (tex == null || !templates.TryGetValue(tex, out var template))
                 continue;
-            // Same triangle enumeration as SceneBuilder.EmitPolygon (fan, or strip when
-            // flagged) so the surface heights match what is rendered.
+            // The UVs of the layer whose texture matched — here always materials[0], because A3
+            // measured that no polygon in the install names a registered template on layer 1+,
+            // so the original's per-layer loop (FUN_004de190) has nothing extra to find. Without
+            // them there is no lattice at all: FUN_004de2c0 skips a polygon whose UV array is
+            // null, and so does this. A3 found no such polygon either, so the counter is a
+            // measurement rather than a blind spot.
             int n = poly.VertexIndices.Count;
+            var uvs = poly.UvCoords;
+            if (uvs == null || uvs.Count < n)
+            {
+                _stats.NoUvArray++;
+                continue;
+            }
+            // Same triangle enumeration as SceneBuilder.EmitPolygon (fan, or strip when
+            // flagged) so the surface heights match what is rendered — and the UVs are indexed
+            // by CORNER POSITION, not by vertex id. That distinction is load-bearing rather than
+            // pedantic: C1 model 953's polygon 3 lists vertex 5 at two different corners with two
+            // different UVs, and reading the UV through the vertex id would stamp the second
+            // corner's lattice in the first corner's texture frame.
             if (poly.TriangleStrip)
             {
                 for (int i = 0; i + 2 < n; i++)
                     PlaceOnTriangle(template,
                         xf * mesh.Vertices[poly.VertexIndices[i]],
                         xf * mesh.Vertices[poly.VertexIndices[i + 1]],
-                        xf * mesh.Vertices[poly.VertexIndices[i + 2]], seen);
+                        xf * mesh.Vertices[poly.VertexIndices[i + 2]],
+                        uvs[i], uvs[i + 1], uvs[i + 2], seen, _stats);
             }
             else
             {
@@ -817,7 +913,8 @@ public sealed class ClutterBuilder
                     PlaceOnTriangle(template,
                         xf * mesh.Vertices[poly.VertexIndices[0]],
                         xf * mesh.Vertices[poly.VertexIndices[i]],
-                        xf * mesh.Vertices[poly.VertexIndices[i + 1]], seen);
+                        xf * mesh.Vertices[poly.VertexIndices[i + 1]],
+                        uvs[0], uvs[i], uvs[i + 1], seen, _stats);
             }
         }
     }
@@ -1022,6 +1119,145 @@ public sealed class ClutterBuilder
         public IReadOnlyList<Transform3D> Placements = null!;
     }
 
+    /// <summary>One world triangle seen as the original's stamper sees it (<c>FUN_004dd6e0</c>
+    /// steps 4, 6 and 7): the integer UV lattice its texture coordinates span, a containment test
+    /// <b>in UV space</b>, and the affine UV→world map that turns a texture coordinate back into
+    /// a position.
+    ///
+    /// <para>Everything here is <c>double</c> and rounds exactly once, in <see cref="World"/>.
+    /// B11 measured what happens otherwise: a float intermediate moved a tree by one ulp
+    /// (~0.03 mm), invisible in every instance count and enough to change the pixels of a forest
+    /// golden in a chapter that must not move.</para>
+    ///
+    /// <para>⚠ <b>The map is valid only inside its own triangle.</b> Neighbouring triangles of
+    /// the same polygon routinely carry different UV frames — A2 found eight of them on C1's
+    /// <c>terpat02</c>, with handedness split almost evenly — so reusing one triangle's map for
+    /// the next is not an optimisation, it is a wrong answer.</para></summary>
+    public sealed class UvTriangle
+    {
+        // Below this the world triangle is a sliver with no usable plane. 1e-4 m² is a square
+        // 1 cm on a side; the artifacts A2 counted are exactly zero, not merely small.
+        private const double MinWorldArea2 = 1e-8;
+
+        // Likewise in UV space, where the quantity is the map's determinant.
+        private const double MinUvArea2 = 1e-12;
+
+        private readonly double _u0, _v0, _u1, _v1, _u2, _v2;
+        private readonly double _p0X, _p0Y, _p0Z;
+        private readonly double _aX, _aY, _aZ;   // world displacement per +1 U
+        private readonly double _bX, _bY, _bZ;   // world displacement per +1 V
+        private readonly double _sign;           // the UV winding, for the edge test
+
+        private UvTriangle(Vector3 a, Vector2 uva, Vector2 uvb, Vector2 uvc,
+            double[] axisU, double[] axisV, double det)
+        {
+            _u0 = uva.X;
+            _v0 = uva.Y;
+            _u1 = uvb.X;
+            _v1 = uvb.Y;
+            _u2 = uvc.X;
+            _v2 = uvc.Y;
+            _p0X = a.X;
+            _p0Y = a.Y;
+            _p0Z = a.Z;
+            _aX = axisU[0];
+            _aY = axisU[1];
+            _aZ = axisU[2];
+            _bX = axisV[0];
+            _bY = axisV[1];
+            _bZ = axisV[2];
+            _sign = det > 0 ? 1.0 : -1.0;
+            MinU = (int)Math.Floor(Math.Min(_u0, Math.Min(_u1, _u2)));
+            MaxU = (int)Math.Floor(Math.Max(_u0, Math.Max(_u1, _u2)));
+            MinV = (int)Math.Floor(Math.Min(_v0, Math.Min(_v1, _v2)));
+            MaxV = (int)Math.Floor(Math.Max(_v0, Math.Max(_v1, _v2)));
+        }
+
+        /// <summary>The UV bounding box floored to integers (step 4), inclusive on both ends.</summary>
+        public int MinU { get; }
+
+        /// <inheritdoc cref="MinU"/>
+        public int MaxU { get; }
+
+        /// <inheritdoc cref="MinU"/>
+        public int MinV { get; }
+
+        /// <inheritdoc cref="MinU"/>
+        public int MaxV { get; }
+
+        /// <summary>Integer lattice cells the walk would visit. <c>long</c> because a corrupt UV
+        /// array could overflow an <c>int</c> before the caller's bound ever saw it.</summary>
+        public long CellCount => ((long)MaxU - MinU + 1) * ((long)MaxV - MinV + 1);
+
+        /// <summary>World displacement per +1 of U — A2's <c>A</c>. Public for the test that pins
+        /// the worked example; the walk uses <see cref="World"/>.</summary>
+        public Vector3 AxisU => new((float)_aX, (float)_aY, (float)_aZ);
+
+        /// <summary>World displacement per +1 of V — A2's <c>B</c>.</summary>
+        public Vector3 AxisV => new((float)_bX, (float)_bY, (float)_bZ);
+
+        /// <summary>Null when the triangle is degenerate in either space, with
+        /// <paramref name="fault"/> saying which — the caller counts both, because they are
+        /// different defects in the source mesh and netting them hides one.</summary>
+        public static UvTriangle? Build(Vector3 a, Vector3 b, Vector3 c,
+            Vector2 uva, Vector2 uvb, Vector2 uvc, out UvTriangleFault fault)
+        {
+            double[] e1 = { b.X - (double)a.X, b.Y - (double)a.Y, b.Z - (double)a.Z };
+            double[] e2 = { c.X - (double)a.X, c.Y - (double)a.Y, c.Z - (double)a.Z };
+            double[] n = Cross(e1, e2);
+            if ((n[0] * n[0]) + (n[1] * n[1]) + (n[2] * n[2]) < MinWorldArea2)
+            {
+                fault = UvTriangleFault.ZeroWorldArea;
+                return null;
+            }
+
+            double du1 = uvb.X - (double)uva.X, dv1 = uvb.Y - (double)uva.Y;
+            double du2 = uvc.X - (double)uva.X, dv2 = uvc.Y - (double)uva.Y;
+            double det = (du1 * dv2) - (du2 * dv1);
+            if (Math.Abs(det) < MinUvArea2)
+            {
+                fault = UvTriangleFault.ZeroUvArea;
+                return null;
+            }
+
+            // Solve A·du1 + B·dv1 = e1 and A·du2 + B·dv2 = e2 for the two world axes. This is
+            // the same map step 7 builds, written as a 2×2 inverse rather than a ray-cast.
+            var axisU = new double[3];
+            var axisV = new double[3];
+            for (int k = 0; k < 3; k++)
+            {
+                axisU[k] = ((e1[k] * dv2) - (e2[k] * dv1)) / det;
+                axisV[k] = ((e2[k] * du1) - (e1[k] * du2)) / det;
+            }
+
+            fault = UvTriangleFault.ZeroUvArea;   // unused on the success path
+            return new UvTriangle(a, uva, uvb, uvc, axisU, axisV, det);
+        }
+
+        /// <summary>Step 6: the three edge cross-products in UV space, all on the side the
+        /// triangle's own winding says is inside. Inclusive on the edge, which matches the world
+        /// test this replaces — A3 traced C5's two off-by-one instances to exactly this boundary
+        /// in float32, which is why the arithmetic here is double.</summary>
+        public bool Contains(double u, double v)
+        {
+            double w0 = (((_u1 - _u0) * (v - _v0)) - ((_v1 - _v0) * (u - _u0))) * _sign;
+            double w1 = (((_u2 - _u1) * (v - _v1)) - ((_v2 - _v1) * (u - _u1))) * _sign;
+            double w2 = (((_u0 - _u2) * (v - _v2)) - ((_v0 - _v2) * (u - _u2))) * _sign;
+            return w0 >= 0 && w1 >= 0 && w2 >= 0;
+        }
+
+        /// <summary>Step 7: the world position at a texture coordinate. The single rounding of
+        /// the whole walk happens here.</summary>
+        public Vector3 World(double u, double v)
+        {
+            double du = u - _u0, dv = v - _v0;
+            return new Vector3(
+                (float)(_p0X + (_aX * du) + (_bX * dv)),
+                (float)(_p0Y + (_aY * du) + (_bY * dv)),
+                (float)(_p0Z + (_aZ * du) + (_bZ * dv)));
+        }
+    }
+
     /// <summary>A template's ground quad, reduced to what placement needs: which terrain
     /// texture it decorates, its per-axis local extent, and the affine map from a local
     /// position on its plane to the polygon's own interpolated texture UV — which is the
@@ -1032,7 +1268,10 @@ public sealed class ClutterBuilder
         public readonly List<Vector3> Faces = new();
 
         public string Texture = "";
-        public float ExtentX, ExtentZ;   // the quad's own local X/Z extents
+        // The quad's own local X/Z extents. Descriptive only since B12 deleted the world grid:
+        // NOTHING in placement reads them any more, and nothing should — the lattice spacing
+        // comes from the WORLD polygon's UVs, not from the template's size.
+        public float ExtentX, ExtentZ;
 
         // The plane and the UV map, in DOUBLE — see the note in GroundInfo for why the single
         // rounding at the end of TryUv is load-bearing rather than pedantry.
@@ -1126,16 +1365,35 @@ public sealed class ClutterBuilder
         public bool Fogged = true;
     }
 
+    // A template carries no metric size at all any more. The ground quad's extents told the old
+    // world grid how far apart to stamp; the lattice asks the WORLD POLYGON's UVs instead, so
+    // the only thing a template needs to know about its quad is which texture it decorates.
     private sealed class Template
     {
         public readonly List<Kind> Kinds = new();
 
         public string GroundTexture = "";
+    }
 
-        // The ground quad's own local X/Z extents. NOT a tiling period and not a distance the
-        // original ever uses: the decorations are stored as quad UVs, and these are only what
-        // the surviving world-space grid in PlaceOnTriangle multiplies a UV by. B12 deletes the
-        // grid, and these two fields with it.
-        public float ExtentX, ExtentZ;
+    // What one Build's lattice walk refused, and what it asserted about what it kept. Reported
+    // as one line rather than per triangle: the counts are in the thousands, and an absent
+    // category must be distinguishable from a truncated one (LOG-5, DIAG-15).
+    private sealed class LatticeStats
+    {
+        public int ZeroWorldArea;      // fan/strip artifacts of n-gons with repeated corners
+        public int ZeroUvArea;         // no invertible affine map to recover a position through
+        public int NoUvArray;          // FUN_004de2c0's null-UV gate
+        public int OverLargeLattice;   // refused by MaxLatticeCells
+        public long WorstLatticeCells; // the largest lattice seen among those refused
+        public int Placed;             // instances the lattice produced (after the seen dedup)
+        public int OutsideSource;      // …of which any that missed their own source triangle
+
+        public void Report()
+        {
+            string worst = OverLargeLattice > 0 ? $" worst_lattice_cells={WorstLatticeCells}" : "";
+            Log.Info("world", $"clutter uv lattice: placed={Placed} outside_source={OutsideSource} skipped_zero_world_area={ZeroWorldArea} skipped_zero_uv_area={ZeroUvArea} skipped_no_uv_array={NoUvArray} skipped_over_large_lattice={OverLargeLattice}{worst}");
+            if (OutsideSource > 0)
+                Log.Warn("world", $"clutter instances landed OUTSIDE their source triangle count={OutsideSource} of {Placed} — the UV containment test disagrees with the affine map");
+        }
     }
 }

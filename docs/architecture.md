@@ -638,11 +638,30 @@ clutter (grown from `ClutterBuilder.ExportedKinds`) continuing the world past th
 
 ## src/Mech3/Clutter.cs
 Stamps the boot-script clutter templates across placed polygons carrying the template's ground
-texture, on a fixed world-space X/Z grid of the template quad's PER-AXIS extent; sprites → one fullbright Y-billboard
+texture, **at the polygon's own texture-UV lattice** — one stamp per integer UV repeat across each
+triangle; sprites → one fullbright Y-billboard
 MultiMesh per kind, solids → `SceneBuilder.SharedMesh`; the split is `SceneBuilder.ClassifyBillboard`.
 The sprite shader takes the decoration model's own `lighting`/`fog` flags as variants (every tree and
 bush card in the install is `lighting: false`, so clutter does not dim with the mission SUNLIGHT),
 plus a UV-clamp variant from `SceneBuilder.UvsWithinUnitSquare` over the kind's own card UVs.
+⚠ **There is NO world-space grid and no global clutter origin** — the original has neither
+  (`analysis/bl-305-clutter-uv/FINDINGS-A2.md`). Placement is `ClutterBuilder.UvTriangle`, i.e.
+  `FUN_004dd6e0` steps 4/6/7: floor the triangle's UV bbox to an integer lattice, test containment
+  **in UV space**, recover XYZ (Y included — a triangle is planar, so the affine map and a
+  barycentric height are the same number) through the triangle's own affine UV→world map. **That
+  map is valid only inside its own triangle**; C1's `terpat02` uses eight different UV frames with
+  handedness split almost evenly, so reusing a neighbour's is a wrong answer, not an optimisation.
+  Restoring a `gx * extent` grid re-loses C1 ~4× of its trees (A1: `terpat02` repeats every ~260 m
+  against a 512 m quad).
+⚠ **Skip on BOTH areas, not one.** A zero-area WORLD triangle can carry a healthy UV area — fan and
+  strip artifacts of n-gons with repeated or collinear corners, 1,773 of them in C1 — and its
+  affine map is finite but meaningless. Both counts, plus the null-UV-array and over-large-lattice
+  refusals and an in-source-triangle assertion over every placement, go out on one
+  `clutter uv lattice:` log line per build. All four skip counters bar the world-area one are 0 on
+  retail data, and `outside_source` is 0 in every chapter — treat any nonzero as stop-the-line.
+⚠ `PlaceOnMesh` reads `materials[0]` only, where the original iterates every texture layer
+  (`FUN_004de190`). A3 measured that no polygon in the install names a registered template on layer
+  1+, so this is unreachable on retail data — but it IS a deviation, and no A/B can detect it.
 ⚠ **A decoration's position is stored as the ground quad's own interpolated TEXTURE UV**, in
   `[0,1)`, the way `FUN_004dd230` stores it (`GroundInfo` → `GroundQuad.TryUv`, fmod-wrapped) —
   never as metres from a corner, and never divided by a scalar period. `max(extentX, extentZ)`
