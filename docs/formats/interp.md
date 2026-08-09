@@ -118,7 +118,7 @@ that selection.
 | `FindNode <name>` | 1215 | Select a node by gamez name (the `.flt` suffix is used interchangeably) |
 | `NodeSetActive on\|off` | 1125 | Activate / deactivate the selection's subtree |
 | `Object3DSetScroll on\|off <u> <v>` | 68 | **Set a texture scroll rate** on the selection's model — see below |
-| `WorldPartitionSetActive on\|off <x1> <z1> <x2> <z2>` | 25 | Toggle a rectangular region of the partition grid (C3 only) |
+| `WorldPartitionSetActive on\|off <x1> <z1> <x2> <z2>` | 25 | **`NodeSetActive` applied by area**, not to the selection — see below (C3 only) |
 | `Object3DTranslate <x> <y> <z>` | 14 | Reposition the selection |
 | `Quit` | 13 | End of script — always the last line (C4/C5 scripts only) |
 | `DeleteTree <name>` | 12 | Remove a subtree outright (C3 only) |
@@ -135,6 +135,9 @@ Semantics worth knowing:
   Never treat an unresolved name as an error.
 - **`DeleteTree` names its own target** rather than acting on the current selection, and no
   script re-activates a name it deleted (checked over all 53).
+- **`WorldPartitionSetActive` ignores the selection too** — it takes a rectangle in world XZ
+  and toggles every node the partition grid indexes inside it. It is the *same* toggle
+  `NodeSetActive` performs, reached by area instead of by name — see below.
 - **`Object3DTranslate`/`Object3DRotate` place the selection** (`MissionSetup`, BL-249, consumed
   since 2026-08-06): translate is a plain absolute position, applied through the same
   parent-frame convention `OBJECT_TRANSLATE_STATE` uses. **`Object3DRotate`'s angle unit is
@@ -189,6 +192,57 @@ model index and hands the table to the world build, because the rate has to be k
 the material is created (a scrolling model can share its material with static geometry — see
 `SceneBuilder`'s cache key in `docs/architecture.md`). Every scroll target in this install is
 a model used by exactly one node, so per-model and per-node granularity cannot disagree here.
+
+## `WorldPartitionSetActive` — `NodeSetActive`, selected by area
+
+Decompiled from `crimson.exe` in Ghidra, 2026-08-09 (`BL-037`). Reproducible at the addresses
+named: verb dispatch `FUN_005b80a0` (the interpreter — all ten verbs are matched there by
+`strncmp`), rectangle walk `FUN_004db790`, and the shared toggle `FUN_004cca30`.
+
+**The verb is a bulk `NodeSetActive`.** `FUN_004db790(world, on_off, x1, z1, x2, z2)` converts
+the rectangle to partition-grid cell indices, then calls `FUN_004cca30(node, on_off)` for every
+node every covered cell indexes. `NodeSetActive` calls **the same function**, with the same two
+arguments — Ghidra recovers its authored name from an assertion inside it, `gwNodeSetActive`,
+at `D:\zipper\gamez\zclass\Class.c:1315`. There is no second visibility system here: both verbs
+write bit 2 (`0x4`) of the node's flag word at `+0x24`, set on `on` and cleared on `off`. Node
+kinds 1/2/5/6 get only that; kind 9 additionally tests `*(node+0x38)+0xe0 & 0x200` and calls
+`FUN_004cf8b0`; kind 10 delegates to `FUN_004e0b90`; anything else logs "Unrecognized" and
+returns error 3.
+
+⚠ **This is not the ground-LOD mechanism**, a claim [`docs/HISTORY.md`](../HISTORY.md)'s M2
+polish-4 entry still makes ("we draw both because the original selects between them via
+partition visibility") and which `BL-037` retracted on 2026-07-23. The verb appears in no C5
+script at all; C5's coarse/fine ground selection is the **subface flag**
+(`analysis/item9-depth-bias/CBLOCK-LOD.md`, and `BL-250` for the clutter side).
+
+The grid it walks hangs off `world + 0x38`: origin floats at `+0x34` (x) / `+0x38` (z),
+reciprocal cell size at `+0x84` / `+0x88`, cell counts at `+0x98` (x) / `+0x9c` (z), and a
+row-pointer table at `+0xa0` with a cell stride of `0x58`. Each cell holds a `short` count at
+`+0x3a` and a pointer at `+0x3c` to 12-byte entries whose first dword is the node.
+
+Two traps for anyone reimplementing it:
+
+- **Corner order does not matter.** Each coordinate becomes
+  `floor((coord - origin) * reciprocalCellSize)`, is clamped to `[0, count-1]`, and the code
+  then explicitly swaps min/max on both axes. C3 authors the second corner below-left of the
+  first (`WorldPartitionSetActive on -10240 -2048 -2048 -6144`) and the engine normalises it.
+- **The rectangle is half-open in cell space.** Both loops are strict `<` against the max cell
+  index, so the last row and column are excluded — and **a rectangle that lands inside a single
+  cell toggles nothing at all**. An inclusive `<=` over-selects by one row and one column.
+
+All 25 uses are `support\c3\*.gw`, and they resolve to just three distinct rectangles:
+`(-10240,-2048)→(-2048,-6144)`, `(-8192,-6144)→(-2048,-8192)` and
+`(-15360,-7168)→(-8192,-14336)`. Every `off` sits in a story mission, so IA1 is unaffected in
+all eight chapters — which is why the remake has been able to skip the verb so far.
+
+Three sibling verbs exist in the same dispatch and appear in no shipped script: `WorldPartition`
+(`FUN_004daa20`, sets the grid up), `WorldPartitionInclusionTolerance` and
+`WorldPartitionMaxDECFeatureCount`.
+
+**Not consumed.** `GameZ.cs` already parses the World node's `partitions` array, but it
+dedups every cell into one flat `PartitionNodes` list behind a `HashSet<int>`, discarding the
+per-cell membership a rectangle query needs; the source JSON still carries it.
+`MapEdgeExtender` already has the world-position → cell-index helper.
 
 ## Relationship to the animation definitions
 

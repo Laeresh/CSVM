@@ -1167,13 +1167,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Environment & world
 
-- `BL-037` `[Research]` **`WorldPartitionSetActive` is unimplemented and undescribed — a C3-only mechanism.**
-  Measured: **all 25 uses are `support\c3\*.gw` — C3 only** — and it takes rectangle coordinates,
-  not node names. It never appears in any C5 script, so it is NOT the C5 ground-LOD mechanism —
-  that is the **subface flag** (`analysis/item9-depth-bias/CBLOCK-LOD.md`; the clutter side of it
-  closed as `BL-250`, `git log --grep=BL-250`) — and not "the runtime system that picks between
-  coarse and fine ground", a claim this entry once made and retracted (⛔ 2026-07-23). It is a C3
-  question, not a ground-LOD one.
+- `BL-037` `[Feature]` **`WorldPartitionSetActive` is decoded and unimplemented — `NodeSetActive`
+  selected by area.** **Decoded 2026-08-09** from `crimson.exe` in Ghidra and written up in
+  [`docs/formats/interp.md`](docs/formats/interp.md) § "`WorldPartitionSetActive` — `NodeSetActive`,
+  selected by area" (dispatch `FUN_005b80a0`, rectangle walk `FUN_004db790`, shared toggle
+  `FUN_004cca30` = the authored `gwNodeSetActive`). The verb walks the partition grid over its
+  rectangle and calls **the same toggle `NodeSetActive` calls** — bit `0x4` of the node's flag
+  word — so there is no second visibility system to build; the research question is answered and
+  what is left is the decision to implement or drop. ⚠ It is NOT the C5 ground-LOD mechanism —
+  that is the **subface flag** (`analysis/item9-depth-bias/CBLOCK-LOD.md`; the clutter side closed
+  as `BL-250`, `git log --grep=BL-250`) — and not "the runtime system that picks between coarse
+  and fine ground", a claim this entry once made and retracted (⛔ 2026-07-23), and which
+  `docs/HISTORY.md`'s M2 polish-4 entry still restates.
+  *Scope if built:* all 25 uses are `support\c3\*.gw` and resolve to three distinct rectangles;
+  every `off` sits in a story mission, so **IA1 is unaffected in all eight chapters** and no golden
+  can see it. The one real code change is in `GameZ.cs`, which parses the World `partitions` array
+  but dedups it into one flat `PartitionNodes` list, discarding the per-cell membership a rectangle
+  query needs (`MapEdgeExtender` already maps a world position to a cell). ⚠ Two traps recorded in
+  the doc: corner order is normalised by the engine, and the rectangle is **half-open** in cell
+  space — an inclusive test over-selects by one row and one column.
+  *Needs:* a decision. Verifying it means a C3 story-mission A/B against the original, since
+  Instant Action cannot show it.
 
 - `BL-038` `[Feature]` **`FogState` is a decoded animation event we do not act on** (found 2026-07-22). Fog **can** be
   changed mid-mission by animation, but the data uses it exactly once install-wide:
