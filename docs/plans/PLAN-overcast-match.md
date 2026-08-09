@@ -4,7 +4,9 @@
 and indexed in [`plans.md`](plans.md). **`PT-47` is owed at the controls** — the plan's own exit
 verdict, flying what these tables could only photograph ([`playtest.md`](../../playtest.md)).
 Closed with it: `BL-118`, `BL-312`, `BL-303`, `BL-100`, `BL-101`. Minted on the way and still open:
-`BL-320`, `BL-321`, `BL-322`, `BL-323`, `BL-325`, `BL-327`.
+`BL-320`, `BL-321`, `BL-322`, `BL-325`, `BL-327`. Also minted and since closed: `BL-323` — the C4
+"terrain-mesh spike" at `-4974,-3861` was never a defect; the pose sits *under* the ground and the
+spike is a mountain (`git log --grep=BL-323`).
 
 The goal is one picture, twice: our matched-pose renders of
 `OriginalScreenshots\C1 IA1 Fog river.png` and `OriginalScreenshots\C1 IA1 Fog above clouddeck.png`
@@ -3391,8 +3393,10 @@ branch that never reads `DeckCeilingHeight`) — verified, not assumed: full-fra
 constant (`A7`), so a below-band C4 pose should move (the ceiling is genuinely closer now) without
 anything breaking. `-4974,900,-3861` / `-1,0,0` (below C4's 1050 m band centre), `--no-fog`,
 against `.scratch/c22/c4-900-nat.png`: **mean\|d\| = 1.046, max = 168, 3.49 % of pixels changed**
-— all of it in the sky/ceiling band; the terrain silhouette (including a pre-existing sharp
-mesh spike unrelated to weather, present identically in both frames) is pixel-for-pixel the same.
+— all of it in the sky/ceiling band; the terrain silhouette (including the sharp near-vertical
+feature this plan read as a mesh spike and minted `BL-323` for — actually a mountain seen from a
+pose below the ground, `git log --grep=BL-323`; present identically in both frames) is
+pixel-for-pixel the same.
 Expected movement, no new artefact, no regime break.
 
 **4. Climb ladder 900→1250 m — the flip is still masked inside the whiteout core.** 25 m steps

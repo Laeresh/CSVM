@@ -1167,15 +1167,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Environment & world
 
-- `BL-323` `[Bug]` **A sharp terrain-mesh spike in C4 near (-4974, -, -3861)** (surfaced during
-  PLAN-overcast-match C25, 2026-08-08). Visible from `"--pos=-4974,900,-3861"
-  "--direction=-1,0,0"`: a thin vertical terrain spike, pre-existing and unrelated to the
-  weather work (bit-identical across two unrelated builds A/B'd at that pose). Looks like a
-  terrain LOD/seam defect — a stray vertex or a partition boundary artefact; diagnose from the
-  gamez terrain data before touching mesh code. Shot on record:
-  `.claude/worktrees/overcast-match/.scratch/c25/` renders at that pose (worktree scratch is
-  swept — re-shoot from the pose above if gone).
-
 - `BL-036` `[Research]` `[Blocked: zone selection unknown]` **We ignore `zone_id` entirely** (found 2026-07-22). Every gamez node carries a `zone_id`:
   `-1` = always rendered, `1`/`2`/`3` = only when that zone is active. Both zones span the **whole
   map** spatially, so they are alternative world variants, not regions. Per-chapter node counts
