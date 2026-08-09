@@ -23,10 +23,9 @@ public struct FlightInput
 /// at zero incidence therefore cancels weight as an algebraic identity, not as a
 /// tuned equilibrium. The arcade handling on top is the flight path chasing the
 /// nose (alignment lag, exposed each step as <see cref="Alpha"/>).
-/// In a knife-edge the nose itself also sags to a bounded angle
-/// below the horizon, so the plane noses down as it sinks rather than descending
-/// wings-level-nosed — ⚠ the original's sag is NOT bounded (a known divergence —
-/// see <see cref="KnifeNoseSag"/>). Below stall speed the nose is additionally pulled toward
+/// In a knife-edge the nose sags and keeps sagging, out of the decoded bank
+/// coupling and the weathervane rather than out of any term written for it —
+/// see <see cref="KnifeAlignFloor"/>. Below stall speed the nose is additionally pulled toward
 /// world-down and cannot be raised over the horizon. Drag is the original's
 /// parabolic polar in MACH (see <see cref="DragPolarScale"/>) — there is no
 /// induced-drag term at all — and thrust is its Mach curve times a LINEAR throttle
@@ -160,31 +159,31 @@ public sealed class FlightModel
                                                   // plain energy exchange (the original holds speed better)
     private const float KnifeAlignFloor = 0.35f;  // TUNE: fraction of the nose-chase that survives at 90°
                                                   // bank — the chase is the lift force turning the velocity,
-                                                  // so it weakens with wing verticality (deeper knife-edge sag)
-    private const float KnifeNoseSag = 0.07f;     // rad (≈4°) the NOSE settles below the horizon at full
-                                                  // knife-edge. The MAGNITUDE is measured — the original's
-                                                  // roll-in decodes as an immediate ≈4° step
-                                                  // (fitted intercepts −3.4°/−4.2° across two takes at 143 and
-                                                  // 300 mph) — but the BOUND is wrong: the original then keeps
-                                                  // sagging linearly at 0.69–0.89 °/sim-s with no equilibrium,
-                                                  // reaching −27° nose / −18.7° path / 28 m/s sink by +36 s and
-                                                  // still steepening. It spirals in, which is exactly what the
-                                                  // bound was introduced to avoid. Ours instead settles inside a
-                                                  // second at −4° nose / −10° path / 19.4 m/s.
-                                                  // ⚠ Do NOT retune this to close the gap — a bounded sag cannot
-                                                  // produce a 36-second linear drift, and raising the bound
-                                                  // destroys the first 3 s, where the original holds altitude to
-                                                  // 0.5 ft/sim-s and we do not. The shape needs replacing, with
-                                                  // the lift keying, under BL-247; the sag carries into the path
-                                                  // roughly 1:1 because the path chases the nose.
-    private const float KnifeNoseRate = 0.2f;     // rad/s toward that sag at full knife-edge, ×(1−wingVert)
-                                                  // — exactly 0 wings-level or inverted, so cruise is untouched by
-                                                  // construction. A RATE CAP, not an exponential approach: an
-                                                  // exponential's rate scales with the displacement, which at a
-                                                  // +62° stalled-zoom nose came out ~32°/s — rivalling the 33°/s
-                                                  // full elevator, and it measurably rewrote the stall recovery
-                                                  // (nose +62°→+28°, wv 0.47→0.88). Clamped to the remaining
-                                                  // angle so it approaches the sag and stops, never overshoots.
+                                                  // so it weakens with wing verticality (deeper knife-edge sag).
+                                                  // ⚠ This is the ONE surviving use of wingVert, and it is kept
+                                                  // on a measurement rather than on the decode: the original's
+                                                  // knife-edge holds its nose 4.8° → 8.3° BELOW the flight path
+                                                  // over 36 s, a gap that GROWS, and the chase is what sets that
+                                                  // gap. Measured (Bloodhawk, 143 mph entry, +3 s → +36 s): at
+                                                  // 0.35 the gap runs 2.9° → 1.2° and 36 s costs 1087 m; with
+                                                  // wingVert retired (floor 1.0, the bank-independent reading) it
+                                                  // collapses to 1.9° → 0.5° and the same hold costs 1334 m,
+                                                  // against a measured 540. Every knife-edge observable moves the
+                                                  // wrong way without it. The decode does not contradict that:
+                                                  // it is silent here, because this explicit kinematic chase is
+                                                  // the remake's arcade handling and the original has no such
+                                                  // term — its "lift is bank-independent" applies to the LIFT
+                                                  // demand above, which no longer reads wingVert at all.
+                                                  // ⚠ Do NOT close the remaining gap by lowering this. Lowering
+                                                  // it moves every row the right way and still cannot reach the
+                                                  // footage, because the excess is in the ROTATION rate — the
+                                                  // nose drifts 1.09 °/s against a measured 0.69 and the heading
+                                                  // sweeps 1.7 °/s against 0.68, both ≈1.6× fast, the same ≈1.6×
+                                                  // by which the sustained banked pull is fast. Retuning here
+                                                  // would hide a rotation error inside a chase constant — and it
+                                                  // runs into a real boundary: at 0.10 the knife-edge α peaks at
+                                                  // 5.36°, past liftAOAs[0] = 5°, so the airflow blend starts
+                                                  // engaging in a knife-edge, which no capture supports.
 
     // Drag is a parabolic polar in MACH:
     //
@@ -417,8 +416,6 @@ public sealed class FlightModel
         float stallNoseRate = Config.GetFloat("flightModel.stallNoseRate", StallNoseRate);
         float climbGravityScale = Config.GetFloat("flightModel.climbGravityScale", ClimbGravityScale);
         float knifeAlignFloor = Config.GetFloat("flightModel.knifeAlignFloor", KnifeAlignFloor);
-        float knifeNoseSag = Config.GetFloat("flightModel.knifeNoseSag", KnifeNoseSag);
-        float knifeNoseRate = Config.GetFloat("flightModel.knifeNoseRate", KnifeNoseRate);
         float liftGMin = Config.GetFloat("flightModel.liftGMin", LiftGMin);
         float liftGMax = Config.GetFloat("flightModel.liftGMax", LiftGMax);
         float altitudeCapM = Config.GetFloat("flightModel.altitudeCapM", AltitudeCapM);
@@ -511,53 +508,19 @@ public sealed class FlightModel
             }
         }
 
-        // knife-edge nose sag: the original drops the nose as well as the flight path, and without
-        // this block the plane would descend wings-level-nosed because the only other knife-edge
-        // term (the nose-chase, weakened by wing verticality)
-        // acts on VelocityDir and nothing else touches Attitude. Same great-circle
-        // rotation about nose×down as the stall drop, so it is attitude-independent and
-        // adds no twist about the nose; at 90° bank that axis is the plane's own up, i.e.
-        // this reads as the body YAW that top rudder is flown to cancel — which is exactly
-        // the real knife-edge control the pilot now has to hold.
-        //
-        // It targets a BOUNDED elevation rather than chasing world-down or the flight path.
-        // Both of those are unbounded and neither settles: the path chases the nose
-        // (`align`, below), so a nose that keeps falling drags the path down with it and
-        // the pair spirals into the ground instead of reaching the sag equilibrium.
-        //
-        // Sits here — after the stall block, before the translation — so `nose`, `wingVert`,
-        // the thrust direction and the nose-chase all read one consistent attitude this
-        // frame. It can only ever LOWER the nose (skipped once the nose is at or below the
-        // target), and it is **off entirely while stalled**: below stall speed the stall
-        // block owns the nose outright, so gating on `!stalled` is what makes the
-        // stall/sag interaction provably empty rather than merely benign.
-        // (Measured: WITHOUT the gate, an exponential approach reached ~32°/s at a +62°
-        // nose and moved the stalled zoom apex to +28°, wv 0.47→0.88. The two never
-        // pulled against each other — both drive the nose down — but they compounded,
-        // which is its own kind of wrong. WITH the gate the stalled phase itself is
-        // untouched; a stall-into-knife-edge run still differs slightly overall, by ~4°
-        // at the apex, because the *pre*-stall banked zoom is legitimately in scope for
-        // this term, and converges to within 1° after recovery.)
-        if (!stalled)
-        {
-            float knife = 1f - Mathf.Abs(Attitude.Y.Dot(Vector3.Up));
-            if (knife > 1e-4f)
-            {
-                var noseKnife = -Attitude.Z;
-                float noseElev = Mathf.Asin(Mathf.Clamp(noseKnife.Y, -1f, 1f));
-                float sagTarget = -knifeNoseSag * knife;
-                if (noseElev > sagTarget + 1e-5f)
-                {
-                    var axis = noseKnife.Cross(Vector3.Down);
-                    if (axis.LengthSquared() > 1e-8f)
-                    {
-                        float angle = Mathf.Min(knifeNoseRate * knife * dt,
-                                                noseElev - sagTarget);
-                        Attitude = Attitude.Rotated(axis.Normalized(), angle).Orthonormalized();
-                    }
-                }
-            }
-        }
+        // There is deliberately NO knife-edge nose-sag term here. One used to sit at this point —
+        // a bounded ≈4° drop of the nose, at a capped rate, keyed on wing verticality — because
+        // nothing else in the model dropped the nose in a knife-edge and the aircraft would
+        // otherwise have descended wings-level-nosed. The decoded bank→yaw coupling now does it:
+        // at 90° of bank the body yaw axis is horizontal, so a yaw rate IS a nose sag, and the
+        // weathervane then pulls the nose further onto the falling flight path. That produces the
+        // original's own shape — a drift with no equilibrium — which the bounded term never could,
+        // and it produces the onset better as well: at the original's +3 s sample the decoded
+        // mechanism alone reads −4.94° against a measured −4.9°, where adding the bounded step on
+        // top read −7.28°. Sinking 5.7 ft/s at that sample against a measured 0.5, rather than
+        // 12.7. ⚠ Do not reintroduce a nose-sag term to deepen the knife-edge: the remaining
+        // divergence is that the whole banked rotation runs ≈1.6× fast (see KnifeAlignFloor), and
+        // a second nose-down term would double-count the part that is already there.
 
         // --- translation: forces integrate on the velocity VECTOR (v = VelocityDir·Speed),
         // so the speed can pass through zero — a vertical zoom tail-slides out downward
@@ -622,9 +585,10 @@ public sealed class FlightModel
             : Vector3.Zero;
 
         // How much of the wings' lift points vertically — 1 level OR inverted (arcade: inverted
-        // flight still carries), 0 in knife-edge. Lift itself no longer reads it (the demand's body
-        // X/Y projection is bank-independent by construction), but it is still the carrier for the
-        // nose-chase below and the same quantity the knife-edge nose-sag runs on.
+        // flight still carries), 0 in knife-edge. Lift itself does NOT read it: the demand's body
+        // X/Y projection is bank-independent by construction, which is the original's own
+        // arrangement. Its one remaining reader is the nose-chase below — see KnifeAlignFloor for
+        // the measurement that keeps it there.
         float wingVert = Mathf.Abs(Attitude.Y.Dot(Vector3.Up));
 
         // thrust pulls along the nose (its along-path share falls out of the vector sum —

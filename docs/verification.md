@@ -27,6 +27,7 @@ and leave gaps when retiring old ones.
 - **METHOD-17** — **Use `git diff` to prove temporary edits are restored.**
 - **METHOD-19** — **Disable later mechanisms that would repair a deliberately restored fault.**
 - **METHOD-20** — **Reproduce a published measurement's pose *and* its statistic, not just its subject.** A number is only comparable under the conditions it was taken in: `CAP-13`'s ring brightnesses were read off frames that already carried the sun wash, which composites toward white and scales every difference by (1−α), and its script reports the *brightest pixel* in a window where a median around the annulus reads systematically lower. Matching the subject but not the pose or the estimator produces a confident calibration that is wrong in a direction nothing reveals (BL-165, `analysis/bl-165-lens-flare/`).
+- **METHOD-21** — **A scenario entered at a speed it cannot hold is not a measurement at that speed.** The original's 143 mph knife-edge take, replayed at full throttle, accelerates past 290 mph inside three seconds and reports the 300 mph take's numbers under the 143 mph label — the instrument manufactures its own operating point. `Probes.KnifeEdge` bisects a level-flight trim throttle for the entry speed instead; hold the *condition* the capture was flown in, not just its initial value (`D31`).
 
 ## DIAG — chasing a symptom
 

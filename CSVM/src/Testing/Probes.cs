@@ -969,6 +969,12 @@ public static class Probes
         // Asserting one leg of a manoeuvre the model gets demonstrably wrong is asserting a
         // compensating coincidence — C22's green here sat inside the same unattributed gap. It
         // re-asserts with the rate row, not before it.
+        // ⚠ D31 moved it much further (1.07 → 8.86) and that is attributed rather than tuned: the
+        // retired knife-edge sag term had been holding the nose down through the WHOLE pull, at up
+        // to 11.5 °/s, so this turn now settles at 88.8° of bank instead of 74.9° and actually
+        // pulls. On the other ten airframes the same removal moves this row the OTHER way (warhawk
+        // 8.96 → −15.54, balmoral 17.57 → −4.17; negative = climbing), which is the clearest sign
+        // the number is riding the turn-rate gap rather than reading a mechanism of its own.
         Row("sustained-turn-sink", "sustained max-pull turn, sink rate", "ft/s",
             turn.SinkFtS, 1.85, 0.0,
             $"upper bound — the failure this guards is falling out of the turn (before the B12 lift "
@@ -1106,10 +1112,91 @@ public static class Probes
                           + $"  {verdict}");
             sb.AppendLine($"{"",-22} {row.What}{(row.Detail.Length > 0 ? $" — {row.Detail}" : "")}");
         }
+        // The knife-edge hold rides along rather than living as its own flag: it is a SHAPE
+        // comparison over 36 s, not a single number with a tolerance, so it has no row here — but
+        // every instrument that dumps the envelope should carry it, or the recipe gets lost again.
+        sb.AppendLine();
+        sb.Append(KnifeEdge(zrdrPath, planeNodeName).Text);
+
         r.Text = sb.ToString();
         r.Summary = r.Failed == 0
             ? $"flight envelope: {r.Asserted} scenario(s) asserted against the original, all within tolerance"
             : $"flight envelope: {r.Failed} of {r.Asserted} asserted scenario(s) FAILED — see the !! lines above";
+        return r;
+    }
+
+    // ---- knife-edge ----------------------------------------------------------------------------
+
+    /// <summary>The knife-edge hold, the manoeuvre <c>CAP-05</c> filmed twice at very different
+    /// speeds: bank set at ENTRY and then left free, stick neutral, held 36 sim s. Reports the nose
+    /// elevation, the flight path, the gap between them, the sink, the heading rate and α at the
+    /// original's own sample times.
+    ///
+    /// <para><b>The recipe, which is the point of this probe existing.</b> It was lost once — the
+    /// "Balmoral knife-edges at α = 5.1°" figure had no instrument behind it, only prose, and could
+    /// not be reproduced from the prose. It is now the code: entry bank 90° about the nose
+    /// (<see cref="Banked"/>), nose on the horizon, flight path along the nose
+    /// (<see cref="FlightModel.Reset"/>'s convention), entry speed 143 and 300 mph — the two takes
+    /// <c>CAP-05</c> filmed — and the throttle TRIMMED for level flight at that entry speed
+    /// (<see cref="TrimThrottle"/>), not held full. Full throttle is wrong for the 143 mph take by
+    /// a factor of two in speed: the aircraft would simply accelerate to its own level top speed
+    /// inside three seconds and the run would stop being a 143 mph take at all. Nothing is held on
+    /// the stick — in particular NO roll input, because holding the bank is what the original's
+    /// pilot was not doing, and a roll controller keyed on the horizon stops measuring bank the
+    /// moment the nose leaves it.</para>
+    ///
+    /// <para>⚠ The discriminating signature is the SHAPE, not any one number: the original drifts for
+    /// the whole 36 s and never finds an equilibrium, where a bounded sag settles inside a second.
+    /// <see cref="KnifeEdgeRun.DriftDegS"/> is the least-squares slope of the nose over 3–36 s and
+    /// <see cref="KnifeEdgeRun.SettledFrac"/> is how much of the total sag arrived in the last third
+    /// of the hold — a bounded sag reports ≈0 there and a linear drift ≈1/3.</para></summary>
+    public static KnifeEdgeResult KnifeEdge(string zrdrPath, string planeNodeName)
+    {
+        System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
+        var r = new KnifeEdgeResult();
+        PlaneStats stats;
+        try
+        {
+            stats = PlaneStats.Load(zrdrPath, planeNodeName);
+        }
+        catch (Exception e)
+        {
+            r.Error = $"could not load plane stats for '{planeNodeName}' ({zrdrPath}): {e.Message}";
+            r.Summary = $"knife-edge: {r.Error}";
+            return r;
+        }
+
+        foreach (float mph in new[] { 143f, 300f })
+        {
+            r.Runs.Add(KnifeEdgeHold(stats, planeNodeName, 90f, mph));
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"# knife-edge hold — {planeNodeName} ({stats.DefName})");
+        sb.AppendLine("# 90° bank at entry then FREE; stick neutral; throttle trimmed level at entry speed");
+        sb.AppendLine("# original (Bloodhawk, CAP-05, two takes): nose −4.9° / −7.3° at +3 s, then a");
+        sb.AppendLine("# drift of 0.69 / 0.89 °/sim-s to −27° at +36 s; nose 4.8–8.3° BELOW the path");
+        sb.AppendLine("# (gap growing); sink 0.5 / 24 / 60 / 93 ft/s at +3/+12/+24/+36 s; heading 0.68–1.13 °/s");
+        foreach (var run in r.Runs)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"entry {run.EntryMph:0} mph, bank {run.EntryBankDeg:0}°, "
+                          + $"throttle {run.Throttle:0.000} — drift {run.DriftDegS:0.00} °/s over 3–36 s, "
+                          + $"last-third share {run.SettledFrac:0.00}, "
+                          + $"α peak {run.AlphaPeak:0.00}° settles {run.AlphaSettled:0.00}°");
+            sb.AppendLine($"  {"t",4} {"nose",8} {"path",8} {"nose-path",10} {"sink",9} {"Δalt",9} "
+                          + $"{"α",7} {"bank",7} {"hdg",8} {"speed",8}");
+            foreach (var x in run.Samples)
+            {
+                sb.AppendLine($"  {x.T,4:0} {x.NoseDeg,8:0.00} {x.PathDeg,8:0.00} {x.LagDeg,10:0.00} "
+                              + $"{x.SinkFtS,9:0.0} {x.AltM,9:0.0} {x.Alpha,7:0.00} {x.BankDeg,7:0.0} "
+                              + $"{x.HeadingRateDegS,8:0.00} {x.SpeedMph,8:0.0}");
+            }
+        }
+
+        r.Text = sb.ToString();
+        r.Summary = $"knife-edge: {r.Runs.Count} hold(s), drift "
+                    + string.Join(" / ", r.Runs.Select(x => $"{x.DriftDegS:0.00}")) + " °/s";
         return r;
     }
 
@@ -1320,6 +1407,126 @@ public static class Probes
                 alphaSum / samples,
                 bankSum / samples,
                 Math.Abs(swept));
+    }
+
+    /// <summary>One knife-edge hold. Sink is read over the second ENDING at each sample, which is
+    /// what an altimeter needle gives; heading is read off the flight path over the same second and
+    /// unfolded, so a slow turn is not confused with a wrap.</summary>
+    private static KnifeEdgeRun KnifeEdgeHold(PlaneStats stats, string plane, float bankDeg, float entryMph)
+    {
+        float throttle = TrimThrottle(stats, entryMph * Mph);
+        var m = Fresh(stats, Banked(bankDeg), entryMph * Mph, throttle);
+        var run = new KnifeEdgeRun
+        {
+            Plane = plane,
+            EntryMph = entryMph,
+            EntryBankDeg = bankDeg,
+            Throttle = throttle,
+        };
+
+        double Nose() => Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp((-m.Attitude.Z).Y, -1f, 1f)));
+        double Path() => Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
+        double Heading() => Mathf.RadToDeg(Mathf.Atan2(m.VelocityDir.X, -m.VelocityDir.Z));
+
+        var want = new[] { 1f, 3f, 12f, 24f, 36f };
+        int next = 0;
+        float startY = m.Position.Y;
+        // A one-second trailing window for the two rates: the altitude a second ago and the heading a
+        // second ago, both kept as ring buffers of the fixed step so the read needs no interpolation.
+        int win = Mathf.RoundToInt(1f / EnvDt);
+        var altRing = new float[win];
+        var hdgRing = new double[win];
+        for (int i = 0; i < win; i++)
+        {
+            altRing[i] = m.Position.Y;
+            hdgRing[i] = Heading();
+        }
+
+        double unfolded = Heading();
+        double prevHeading = unfolded;
+        int cursor = 0;
+        float elapsed = 0f;
+        while (elapsed < 36f + EnvDt * 0.5f && next < want.Length)
+        {
+            m.Step(new FlightInput { Throttle = throttle }, EnvDt);
+            elapsed += EnvDt;
+            run.AlphaPeak = Math.Max(run.AlphaPeak, m.Alpha);
+
+            double step = Heading() - prevHeading;
+            if (step > 180.0) { step -= 360.0; } else if (step < -180.0) { step += 360.0; }
+            unfolded += step;
+            prevHeading += step;
+
+            float altAgo = altRing[cursor];
+            double hdgAgo = hdgRing[cursor];
+            altRing[cursor] = m.Position.Y;
+            hdgRing[cursor] = unfolded;
+            cursor = (cursor + 1) % win;
+
+            if (elapsed >= want[next] - EnvDt * 0.5f)
+            {
+                run.Samples.Add(new KnifeEdgeSample
+                {
+                    T = want[next],
+                    NoseDeg = Nose(),
+                    PathDeg = Path(),
+                    LagDeg = Nose() - Path(),
+                    SinkFtS = (altAgo - m.Position.Y) / Ft,
+                    AltM = m.Position.Y - startY,
+                    Alpha = m.Alpha,
+                    BankDeg = Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(m.Attitude.Y.Dot(Vector3.Up), -1f, 1f))),
+                    HeadingRateDegS = Math.Abs(unfolded - hdgAgo),
+                    SpeedMph = m.Speed / Mph,
+                });
+                next++;
+            }
+        }
+
+        // Least squares over the samples from +3 s on, the span the original's own linear fit covers
+        // (its first three seconds carry the roll-in transient and are quoted as an intercept).
+        var fit = run.Samples.Where(x => x.T >= 3f).ToList();
+        if (fit.Count >= 2)
+        {
+            double tBar = fit.Average(x => x.T), nBar = fit.Average(x => x.NoseDeg);
+            double num = fit.Sum(x => (x.T - tBar) * (x.NoseDeg - nBar));
+            double den = fit.Sum(x => (x.T - tBar) * (x.T - tBar));
+            run.DriftDegS = den > 0 ? -num / den : 0;
+        }
+
+        double total = run.Samples.Count > 0 ? run.Samples[0].NoseDeg - run.Samples[^1].NoseDeg : 0;
+        double lastThird = run.Samples.Count > 0
+            ? run.Samples.First(x => x.T >= 24f).NoseDeg - run.Samples[^1].NoseDeg
+            : 0;
+        run.SettledFrac = Math.Abs(total) > 1e-6 ? lastThird / total : 0;
+        run.AlphaSettled = run.Samples.Count > 0 ? run.Samples[^1].Alpha : 0;
+        return run;
+    }
+
+    /// <summary>The lever position that holds <paramref name="speed"/> in level flight, bisected on
+    /// the model itself rather than solved against a copy of the thrust and drag formulas — the
+    /// copy is what goes stale. Saturates at 1 for a speed the airframe cannot reach, which is the
+    /// honest answer for it: a run entered above its own top speed decelerates whatever the
+    /// lever does.</summary>
+    private static float TrimThrottle(PlaneStats stats, float speed)
+    {
+        bool Accelerates(float th)
+        {
+            var m = Fresh(stats, Level(), speed, th);
+            Run(m, th, 0.5f);
+            return m.Speed > speed;
+        }
+
+        if (!Accelerates(1f))
+        {
+            return 1f;
+        }
+        float lo = 0f, hi = 1f;
+        for (int i = 0; i < 24; i++)
+        {
+            float mid = 0.5f * (lo + hi);
+            if (Accelerates(mid)) { hi = mid; } else { lo = mid; }
+        }
+        return 0.5f * (lo + hi);
     }
 
     /// <summary>One level of a mip chain as a standalone image. Godot stores the chain as one buffer
@@ -1575,6 +1782,48 @@ public static class Probes
         public int Asserted => Rows.Count(r => r.Asserted);
         public int Failed => Rows.Count(r => !r.Ok);
         public bool Ok => Error == null && Asserted > 0 && Failed == 0;
+    }
+
+    /// <summary>One sample of a knife-edge hold, at one of the original's own sample times.
+    /// <see cref="LagDeg"/> is nose − path, so it is NEGATIVE while the nose is below the flight
+    /// path, which is the whole of a sagging knife-edge.</summary>
+    public sealed class KnifeEdgeSample
+    {
+        public double T;
+        public double NoseDeg;
+        public double PathDeg;
+        public double LagDeg;
+        public double SinkFtS;
+        public double AltM;
+        public double Alpha;
+        public double BankDeg;
+        public double HeadingRateDegS;
+        public double SpeedMph;
+    }
+
+    /// <summary>One knife-edge hold: the samples plus the two shape statistics.
+    /// <see cref="SettledFrac"/> is the share of the total sag that arrived in the last third of the
+    /// hold — ≈0 for a bounded sag that settled early, ≈1/3 for a linear drift that never did.</summary>
+    public sealed class KnifeEdgeRun
+    {
+        public readonly List<KnifeEdgeSample> Samples = new();
+        public string Plane = "";
+        public double EntryMph;
+        public double EntryBankDeg;
+        public double Throttle;
+        public double DriftDegS;
+        public double SettledFrac;
+        public double AlphaPeak;
+        public double AlphaSettled;
+    }
+
+    /// <summary>Both knife-edge holds of one airframe, at the two speeds <c>CAP-05</c> filmed.</summary>
+    public sealed class KnifeEdgeResult
+    {
+        public readonly List<KnifeEdgeRun> Runs = new();
+        public string Text = "";
+        public string Summary = "";
+        public string? Error;
     }
 
     /// <summary>One effect's sweep reading, both halves. <see cref="MeshPeaks"/> holds every

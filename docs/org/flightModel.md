@@ -565,6 +565,56 @@ attitude** — a weathervane cannot bank an aeroplane.
   90° hold goes −41.80° → **−44.61°** (−1991 → −2124 m), i.e. ≈1.17 °/s against `BL-247`'s measured
   0.69–0.89. Recorded for `D31`; no knife constant was touched.
 
+## Bank-independent lift vs the measured knife-edge sag — reconciled (D31)
+
+The conflict as it stood: the decoded lift demand is projected onto the body **X/Y plane** and its
+magnitude is that projection's length, so at 90° of bank the body X axis is vertical and the wings
+still carry full weight — the decode says lift does not depend on bank. Against that, the original's
+own footage (`CAP-05`, two knife-edge takes at 143 and 300 mph) shows it sagging and eventually
+spiralling in. **Both are true, and neither term is where the other one thought it was.**
+
+**The sag is in the NOSE, not in the lift.** At 90° of bank the body yaw axis is horizontal, so the
+bank→yaw coupling's `0.205` *is* a nose-sag rate; the weathervane then pulls the nose further down
+onto the falling flight path. Neither term is bank-dependent lift and neither was written for the
+knife-edge — they are the original's own constants, landed in C22 and C23 for other reasons, and
+between them they reproduce the footage's shape: a drift that never finds an equilibrium.
+
+**So the remake's own bounded nose-sag term is retired, and its removal IMPROVES the onset it was
+fitted to.** `KnifeNoseSag` (0.07 rad) and `KnifeNoseRate` (0.2 rad/s) were a bounded ≈4° step at a
+capped rate, added when nothing else dropped the nose in a knife-edge. Measured against the 143 mph
+take, with the throttle trimmed for level flight at the entry speed:
+
+| | original | with the sag term | without it |
+|---|---:|---:|---:|
+| nose at +3 s | −4.9° | −7.28° | **−4.94°** |
+| sink at +3 s (ft/s) | 0.5 | 12.7 | **5.7** |
+| nose drift 3→36 s (°/s) | 0.69 | 1.05 | 1.09 |
+| altitude lost in 36 s (m) | 540 (in 38.9 s) | 1187 | **1087** |
+
+It was also never really a knife-edge term: it keyed on `1 − |bodyUp·up|`, which is 0.29 at a 45°
+nose-up attitude with the wings dead level, so it fought every pull at up to 11.5 °/s. Removing it
+moves `zoom-climb` toward its measured 936 ft on **all eleven** airframes (Bloodhawk 1396 → 1338 ft,
+Balmoral 3935 → 1791) and lets the Balmoral reach the altitude cap at all (4471 → 6572 ft).
+
+**`wingVert` stands, in its one surviving use, and the decode does not contradict that.** Lift has
+not read it since B11. Its only remaining reader is the rate at which the flight path chases the
+nose — an explicit kinematic slerp that is the *remake's* arcade handling and has no counterpart in
+the original's force path, so "lift is bank-independent" says nothing about it. What does speak to
+it is the footage: the original holds its nose 4.8° → 8.3° **below** its flight path across the
+36 s, a gap that grows. Ours runs 2.9° → 1.2°; with `wingVert` retired (chase floor 1.0) it
+collapses to 1.9° → 0.5° and the 36 s altitude loss rises 1087 → 1334 m. Every knife-edge
+observable moves the wrong way without it. Lowering the floor instead of removing it moves every
+row toward the footage (at 0.10: gap 3.5° → 2.1°, drift 0.96 °/s, 874 m) and still cannot reach it
+— and it walks the knife-edge α up to 5.36°, past `liftAOAs[0] = 5°`, where the airflow blend
+starts engaging in a knife-edge. Left at 0.35; `KnifeEdgeTests` pins the α margin on all eleven.
+
+**What is still open, and it is one number, not four.** The whole banked rotation runs ≈1.6× fast:
+nose drift 1.09 °/s against a measured 0.69–0.89, heading 1.7 °/s against 0.68–1.13 — the same
+≈1.6× by which `sustained-turn-rate` exceeds the original's banked pull (32.8 against 18.95). Two
+independent manoeuvres, two different body axes, one ratio. `BL-095`'s unconsumed
+`turn_fade_in`/`turn_fade_out`/`highGs` remain the only authored fields shaped like it; nothing is
+decoded, and nothing was tuned to close it here.
+
 ## The three arcade terms
 
 None of these has an aerodynamic justification, and all three distort any model fitted from

@@ -179,6 +179,16 @@ new one and re-derive these two numbers *as part of that item*, not inherit an u
 from A2. Until then, **the baseline for these two rows is the text quoted above, cited to its
 source**, not a value from a script.
 
+**Closed by `D31` (2026-08-09): the recipe is now `Probes.KnifeEdge`**, and both documented figures
+are retired rather than reproduced. The rebuilt probe trims the throttle for level flight at the
+entry speed instead of holding it full — full throttle turns the 143 mph take into a 300 mph one
+inside three seconds (`verification.md` METHOD-21), which is the likeliest reason the old numbers
+could not be reproduced from the prose. On the post-D31 model the Bloodhawk's knife-edge α peaks at
+**4.29°** and the Balmoral's at **1.77°**, both under `liftAOAs[0]` = 5° — which is a `player.json`
+global, so it is the same edge for all eleven. The Balmoral's margin is ≈3.2°, not the 0.1° the
+quoted text claimed, and it is the **Bloodhawk** that is tightest at ≈0.71° clear, not the bomber.
+`KnifeEdgeTests` asserts it on all eleven airframes; see [`POST-B14.md`](POST-B14.md)'s D31 section.
+
 ## Known-divergent rows (recorded so a later "it's still off" reads as informational, not a surprise)
 
 1. **Sustained-turn-rate: 32.33 deg/s (Bloodhawk) vs the original's 18.95 deg/s, +70.6%.** Captured
@@ -186,7 +196,9 @@ source**, not a value from a script.
    own doc comment: informational rows "record open questions and must not fail a build"). **What
    would move it:** C22 (bank->yaw/pitch coupling) is the plan's own leading candidate.
 2. **Knife-edge sag settles in ~1 sim-s vs the original's 36 sim-s linear drift with no
-   equilibrium.** Not independently re-run here (see the gap recorded above); quoted from
+   equilibrium.** ✅ **Closed by `D31`** — the bounded sag term is retired and the model now drifts
+   for the whole hold on all eleven airframes; see [`POST-B14.md`](POST-B14.md)'s D31 section.
+   Not independently re-run here (see the gap recorded above); quoted from
    `FlightModel.cs`'s `KnifeNoseSag` comment as the current, documented behaviour: "Ours instead
    settles inside a second at -4 deg nose / -10 deg path / 19.4 m/s" against the original's "-27 deg
    nose / -18.7 deg path / 28 m/s sink by +36 s and still steepening." **What would move it:** D31

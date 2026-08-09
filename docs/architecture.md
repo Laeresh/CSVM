@@ -1929,10 +1929,16 @@ unmoved) as the plan predicted.
   polar/thrust coefficients against it; `accel-150-290`, `decel-290-150`, `terminal-dive` (D32),
   `sustained-turn-speed` and `sustained-turn-sink` (both riding the unattributed turn-rate gap,
   `BL-095`) sit informational in `FlightEnvelopeTests` with their owners named in the rows.
-⚠ Lift is BANK-INDEPENDENT: the body X/Y projection still carries full weight at 90° of bank, so
-  the knife-edge departure is gone (35 s of neutral-stick knife-edge now costs 129 m instead of
-  flying the Bloodhawk into the ground). That contradicts the measured sag and is open. `wingVert`
-  survives only in the nose-chase and the nose-sag term — do not flatten it further.
+⚠ Lift is BANK-INDEPENDENT and the knife-edge sag has NO term of its own (D31, settled). At 90° of
+  bank the body yaw axis is horizontal, so C22's `0.205` bank→yaw IS the sag and C23's weathervane
+  deepens it — the footage's shape, from the original's own constants. The bounded
+  `KnifeNoseSag`/`KnifeNoseRate` pair is retired: it double-counted the onset (−7.3° at +3 s against
+  a measured −4.9°, −4.9° without it) and, keyed on `1 − |bodyUp·up|`, fought every wings-level pull
+  at up to 11.5 °/s. Do not add one back. `wingVert` survives ONLY in the nose-chase floor
+  (`KnifeAlignFloor`), kept on measurement not decode — the original holds its nose 4.8° → 8.3°
+  below its path and removing `wingVert` collapses that to 1.9° → 0.5° while the 36 s loss rises
+  1087 → 1334 m against a measured 540. Still open, and now one number: the whole banked rotation
+  runs ≈1.6× fast, the same ratio as `sustained-turn-rate` (`BL-095`).
 
 ## src/Flight/PropAnimator.cs
 Spins the flying aircraft's prop/rotor blur discs: Build collects every node PropParts classifies

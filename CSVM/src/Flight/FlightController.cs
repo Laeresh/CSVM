@@ -982,7 +982,7 @@ public partial class FlightController : Node3D
             _sinceTelemetry = 0;
             var p = _model.Position;
             // path = climb/dive angle of the flight path; nose = the attitude's pitch;
-            // wv = wing verticality |up·Y| (1 level/inverted, 0 knife-edge) — the lift factor
+            // wv = wing verticality |up·Y| (1 level/inverted, 0 knife-edge) — the nose-chase factor
             GD.Print($"flight: pos=({p.X:0},{p.Y:0},{p.Z:0}) spd={_model.Speed:0.0} m/s " +
                      $"thr={_model.Throttle:0.00} rates=({_model.BodyRates.X:0.00},{_model.BodyRates.Y:0.00},{_model.BodyRates.Z:0.00}) " +
                      $"path={Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(_model.VelocityDir.Y, -1f, 1f))):0}° " +

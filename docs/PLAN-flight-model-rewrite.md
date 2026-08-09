@@ -158,7 +158,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — The open conflicts
 
-31. ☐ Bank-independent lift vs the measured knife-edge sag
+31. ☑ Bank-independent lift vs the measured knife-edge sag
 32. ☐ Attitude-dependent thrust vs `ClimbGravityScale`
 33. ☐ The G and AOA limiters — live or inert in this install?
 
@@ -1002,7 +1002,84 @@ against, and there is no capture that could ever verify it.
 
 # Wave D — The open conflicts
 
-## D31 ☐ Bank-independent lift vs the measured knife-edge sag
+## D31 ☑ Bank-independent lift vs the measured knife-edge sag
+
+**Outcome (landed 2026-08-09).** **Both sources were right about different terms, and the term that
+was wrong is one neither of them owns.** The decode's bank-independent lift is already implemented
+(B11) and stands: at 90° of bank the body X/Y projection still carries full weight. The footage's
+sag is real too — and it is in the **nose**, exactly as the plan's leading candidate said. At 90° of
+bank the body yaw axis is horizontal, so C22's `0.205` bank→yaw *is* a nose-sag rate and C23's
+weathervane deepens it. Neither was written for the knife-edge; between them they produce the
+original's own shape, a drift that never finds an equilibrium, on **all eleven** airframes
+(0.48–1.42 °/s, last-third share 0.23–0.30).
+⚠ **So the thing that had to go was the remake's own bounded sag, and removing it IMPROVES the very
+onset it was fitted to** — the opposite of what the standing trap warned. `KnifeNoseSag` (0.07 rad)
+and `KnifeNoseRate` (0.2 rad/s) are retired with their two config keys and the whole `!stalled` sag
+block. Bloodhawk, 143 mph take, throttle trimmed level at entry: nose at +3 s **−4.94°** against a
+measured **−4.9°** (it read −7.28° with the bounded step stacked on top), sink at +3 s 12.7 → **5.7**
+ft/s against a measured 0.5, 36 s altitude 1187 → **1087** m against a measured 540 (in 38.9 s). The
+trap's premise — "raising the bound destroys the first 3 s" — was right about the bound and wrong
+about the term: the first 3 s is where deleting it helps most. It was also never a knife-edge term
+at all. Keyed on `1 − |bodyUp·up|`, it fought every wings-level pull at up to 11.5 °/s — `BL-115`'s
+suspected "knife-at-zero-bank leak", now confirmed and pinned closed by a test — which is why
+`zoom-climb` moves toward its measured 936 ft on **all eleven** airframes (Bloodhawk 1396 → 1338,
+Balmoral 3935 → 1791) and the Balmoral reaches the altitude cap at all (4471 → **6572** ft).
+⚠ **`wingVert` stands, and Decision 2 is satisfied by evidence rather than by either source.** Lift
+has not read it since B11; its one surviving reader is the nose-chase floor `KnifeAlignFloor`, an
+explicit kinematic slerp that is the *remake's* arcade handling and has **no counterpart in the
+original's force path** — so "lift is bank-independent" is simply silent about it. The footage is
+not: the original holds its nose 4.8° → 8.3° **below** its flight path across the 36 s, a gap that
+GROWS. Ours runs 2.9° → 1.2°; with `wingVert` retired (chase floor 1.0, the decode's reading applied
+where it does not belong) it collapses to 1.9° → 0.5°, the drift rises 1.09 → 1.19 °/s and the 36 s
+loss rises 1087 → **1334** m. Every knife-edge observable moves the wrong way without it. Lowering
+the floor instead of removing it moves every row toward the footage (0.10: gap 3.5° → 2.1°, drift
+0.96, 874 m) and still cannot reach it, while walking the knife-edge α to **5.36°**, past
+`liftAOAs[0] = 5°`, where the airflow blend would start engaging in a knife-edge. **Left at 0.35 —
+no `*Tune` and no TUNE constant moved**, so Decision 4's default holds.
+**The lost α probe is rebuilt as code, not prose.** `Probes.KnifeEdge` carries the recipe A2
+recorded as unrecoverable: 90° bank at entry then FREE, nose on the horizon, path along the nose,
+stick neutral, throttle **bisected to a level-flight trim at the entry speed**, held 36 sim s,
+sampled at the original's own +1/+3/+12/+24/+36 s, reporting nose, path, the nose−path gap, sink,
+Δalt, α, bank, heading rate and speed. It rides `--dump-flight` and `ZzBaselineDump`, so all eleven
+airframes carry it and it cannot be lost again. ⚠ **The trim is the finding, not a detail** — held
+at full throttle the 143 mph take is past 290 mph in three seconds and reports the 300 mph take's
+numbers under the wrong label; that is now `verification.md`'s **METHOD-21**. It also retires the
+stale "Balmoral knife-edges at α = 5.1°, 0.1° inside the ramp" figure — and it retires it in the
+opposite direction to the one the old text implied. `liftAOAs` is a `player.json` **global**, so the
+5° edge is the same for all eleven; the peaks run **0.71–4.29°**, the Balmoral is the *roomiest* at
+1.77° (≈3.2° clear, not 0.1°), and the **tightest is the Bloodhawk** at 4.29°, ≈0.71° clear. So the
+margin is real on every airframe but thinner than the fleet-wide figure suggests, and it is the
+Bloodhawk — not the bomber — that would cross first. `KnifeEdgeTests` asserts it per airframe
+against each one's own loaded edge, so a future per-plane `liftAOAs` override cannot slip past it.
+⚠ **One row worsens and is left worsened, attributed.** `sustained-turn-sink` 1.07 → **8.86** ft/s
+(bound ≤ 1.85): the retired term had been holding the nose down through the whole max-pull turn, so
+the turn now settles at 88.8° of bank rather than 74.9° and actually pulls. It is the third leg of a
+manoeuvre whose other two legs are informational and owned by `BL-095`'s `turn_fade_*`/`highGs` —
+we sweep heading 73% faster than the original at a bank it never flew — and C23 already demoted it
+for exactly that reason; it re-asserts with the rate row, not before. On the other ten airframes the
+same change moves it the OTHER way (warhawk 8.96 → −15.54, balmoral 17.57 → −4.17, firebrand
+1.31 → −12.48; negative = climbing), which is itself evidence it is riding the turn gap.
+`sustained-turn-rate` 32.24 → 32.80 and `sustained-turn-speed` 261.82 → 258.41, both informational.
+**Still open, and it is now ONE number rather than a mechanism question.** The whole banked rotation
+runs ≈1.6× fast: knife-edge nose drift 1.09 °/s against 0.69–0.89, knife-edge heading 1.68 °/s
+against 0.68–1.13, and `sustained-turn-rate` 32.80 against 18.95. Two manoeuvres, two different
+body axes, one ratio — and `BL-095`'s unconsumed `turn_fade_in`/`turn_fade_out`/`highGs` remain the
+only authored fields shaped like it. Nothing was tuned to close it here.
+Verified per [`docs/verification.md`](verification.md): `RunTests.ps1` green — units **717/717**
+(713 + `KnifeEdgeTests`' 4), engine 29/29, goldens 13/13 after one re-pin, `FlightEnvelopeTests`
+still asserting **6** (no scenario demoted). **One golden moved, `c1-flight`, same pattern as
+C22/C23/C24 (GOLD-5/GOLD-1):** the only golden whose `--hold` carries pitch and roll
+(`0.2,0.1,0,1`), so the only one whose attitude the retired term could touch; `empty-stage`,
+`c1-destroy-effects` and `c1-crash` are hash-identical. Manifest re-pinned here, shot eyeballed.
+Before/after is a same-build A/B against `HEAD`'s `FlightModel.cs` (METHOD-6/15) with `git diff`
+proving every temporary edit restored (METHOD-17), and every α = 0 wings-level row is unmoved to
+the last printed digit (DIAG-10). Two able-to-fail controls, demonstrated not argued (METHOD-9):
+the pre-change build fails the wings-level-pull test, and the bank-independent chase fails the
+nose-below-path test. Every cited instrument run twice, byte-identical: `--dump-flight` for the
+Bloodhawk and the Balmoral, `ZzBaselineDump` for all eleven. Full 8-chapter `--freecam` regression
+clean, zero engine errors, all eight screenshots saved. Full tables:
+[`analysis/flight-model-baseline/POST-B14.md`](../analysis/flight-model-baseline/POST-B14.md)'s D31
+section.
 
 **Goal.** Resolve whether the original's lift is genuinely bank-independent, and decide the fate of
 `wingVert` on evidence rather than on either source alone.

@@ -908,11 +908,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     here (`FINDINGS.md`, `CAP-31`).
     ⚠ `CAP-31` says **nothing** about the three constants still open below — it is a level
     deceleration, so it carries no stall, no climb and no knife-edge.
-  - **`KnifeAlignFloor` 0.35, plus `KnifeNoseSag` 0.07 rad / `KnifeNoseRate` 0.2 rad/s (all
-    `FlightModel.cs`) — still open.** `PLAN-flight-drag-lift` B12 re-keyed `liftFrac` by
-    *multiplying* `wingVert` rather than displacing it, so these three constants still run on exactly
-    the quantity they were measured against — confirmed bit-identical on 10 of 11 airframes. The
-    original's knife-edge trajectory they have to reproduce (`CAP-05`, both takes, 143/300 mph,
+  - **`KnifeAlignFloor` 0.35 — the last of the three, and the other two are gone.**
+    ✅ **`KnifeNoseSag` / `KnifeNoseRate` retired 2026-08-09** (`PLAN-flight-model-rewrite` D31): the
+    decoded bank→yaw coupling and the weathervane produce the sag, and produce its onset BETTER than
+    the fitted step did — nose at +3 s **−4.94°** against the measured −4.9°, where the bounded step
+    on top read −7.28°, and sink 12.7 → **5.7** ft/s against a measured 0.5. Playtest note (2) below
+    is confirmed and fixed: the term keyed on `1 − |bodyUp·up|`, so it fought every wings-level pull
+    at up to 11.5 °/s — `zoom-climb` moved toward its measured 936 ft on all eleven airframes and the
+    Balmoral can now reach the altitude cap (4471 → 6572 ft). `KnifeEdgeTests` pins both the shape
+    and the absence of the zero-bank leak; `Probes.KnifeEdge` is the re-runnable instrument.
+    **`KnifeAlignFloor` stays at 0.35, on evidence rather than for want of a measurement** (D31): it
+    is the ONE surviving use of `wingVert`, and the decode is silent about it (the nose-chase is the
+    remake's own arcade term). Retiring it — chase floor 1.0, the bank-independent reading — collapses
+    the nose–path gap 2.9° → 1.9° at +3 s against a measured 4.8° that GROWS, and raises the 36 s
+    altitude loss 1087 → 1334 m against a measured 540. Lowering it to 0.10 moves every row toward
+    the footage and still cannot reach it, while walking the knife-edge α to 5.36°, past
+    `liftAOAs[0] = 5°`. ⚠ **What is left is not this constant**: the whole banked rotation runs
+    ≈1.6× fast (knife-edge drift 1.09 °/s against 0.69–0.89, heading 1.68 against 0.68–1.13, the same
+    ratio as `sustained-turn-rate`'s 32.80 against 18.95) and `BL-095`'s unconsumed
+    `turn_fade_in`/`turn_fade_out`/`highGs` are the only authored fields shaped like it. Retuning
+    `KnifeAlignFloor` would hide a rotation error inside a chase constant.
+    The original's knife-edge trajectory (`CAP-05`, both takes, 143/300 mph,
     agreeing to ~13%, so driven by time-since-roll-in, not airspeed):
 
     | time since roll-in | nose | path | sink |
@@ -922,24 +938,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     | +24 s | −20.0° | −12.8° | 60 ft/sim-s |
     | +36 s | −27.0° | −18.7° | 93 ft/sim-s, still steepening |
 
-    So the sag is an immediate ≈4° step (`KnifeNoseSag` 0.07 rad is the right magnitude) followed by
-    an **unbounded linear drift of 0.69–0.89 °/sim-s that a bounded sag cannot produce**. ⚠ **Do not
-    retune `KnifeNoseSag`/`KnifeNoseRate` to fit this — the shape is what is wrong**, not the
-    magnitude: raising the bound to 27° would destroy the first three seconds, which the original
-    gets flat and we currently get worst. For `KnifeAlignFloor`: the observable is the path lagging
-    the nose by 4.8° at +3 s / 7.2° at +24 s / 8.3° at +36 s, but `CAP-05` cannot separate that from
-    gravity pulling the path down over the same interval — do not back an align rate out of it.
-    ⚠ **The missing shape now exists, and it did not come from these constants**
-    (`PLAN-flight-model-rewrite` C22, 2026-08-09). The original's decoded bank→yaw term is a
-    rotation in the vertical plane at 90° of bank with nothing opposing it, so a neutral-stick
-    knife-edge hold went from pinning at the bounded −4.01° and settling (−316 m over 35 s) to
-    drifting **linearly at ≈1.08 °/s to −41.8° with no equilibrium** (−1993 m). Same shape as the
-    table above, ≈1.2–1.6× too fast — so this is now a magnitude question, and the live candidate
-    is **retiring `KnifeNoseSag`'s bound outright** rather than retuning it. `D31` owns that call;
-    all three constants are untouched.
+    The sag reads as an immediate ≈4° step followed by an **unbounded drift of 0.69–0.89 °/sim-s
+    that a bounded sag cannot produce** — which is why the bounded pair is now retired rather than
+    retuned. ⚠ For `KnifeAlignFloor` the observable is the path lagging the nose by 4.8° at +3 s /
+    7.2° at +24 s / 8.3° at +36 s, and `CAP-05` cannot separate that from gravity pulling the path
+    down over the same interval — **do not back an absolute align rate out of it.** The D31 argument
+    above uses only the *direction* the number moves under an A/B on the same build, which the
+    confound cannot reverse (gravity pulling the path down can only shrink the gap, so the inferred
+    chase is an upper bound either way).
     *Playtest after fix:* (1) does the knife-edge sink feel like the original's; (2) does the
-    full-pull zoom still feel nose-heavy (the `knife`-at-zero-bank leak — pure pitch at zero bank
-    still fires this term); (3) stall-into-knife-edge recovery should not feel "doubled".
+    stall-into-knife-edge recovery behave now that the sag term no longer compounds with the stall
+    nose-drop (the two used to be gated apart from each other by an explicit `!stalled` check that
+    no longer exists, because there is nothing left to gate).
   - **`ClimbGravityScale` 0.6 is NOT settled and `CAP-05` cannot settle it.** ⚠ The fit is
     degenerate: holding `g` and refitting leaves rms flat (0.218–0.280 m/s²) over `g` = 17…25 m/s²,
     with `C` = 1.18 / **0.59** / 0.00 at `g` = 17 / 20 / 25. That `nom_gravity` 20.0 lands on
