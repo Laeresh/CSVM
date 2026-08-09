@@ -8,15 +8,20 @@ namespace CSVM.Tests;
 /// <summary>
 /// The cloud deck's two altitude regimes (<see cref="WeatherRig.DeckRegime"/>, A7).
 ///
-/// <para>The original's deck is engine trickery: below the <c>CLOUD_COVER</c> band's centre it
-/// is a ceiling carried with the camera (which is why its texture looks identical at every
-/// altitude on the way up) and the sheet is the overcast's dimmed underside; at or above the
-/// centre it is a world-fixed floor at the tiles' OWN AUTHORED altitude (B13, superseding A7's
-/// band-centre pin — C1's authored 960 vs its former 1047 pin) and the sheet is its undimmed top.
-/// Two things have to hold for that to be invisible rather than a hard pop, and both are asserted
-/// here: the flip is PER CAMERA (splitscreen panes on opposite sides of the band must disagree),
-/// and it happens inside the fully-opaque whiteout core, which is
+/// <para>The deck is a world-fixed sheet at the tiles' OWN AUTHORED altitude (B13, superseding
+/// A7's band-centre pin — C1's authored 960 vs its former 1047 pin) at every camera altitude;
+/// below the <c>CLOUD_COVER</c> band's centre the sheet wears the overcast's dimmed underside, at
+/// or above it its undimmed top. Two things have to hold for that flip to be invisible rather than
+/// a hard pop, and both are asserted here: it is PER CAMERA (splitscreen panes on opposite sides
+/// of the band must disagree), and it happens inside the fully-opaque whiteout core, which is
 /// <see cref="WeatherState.WhiteoutAmount"/>'s business, not this rule's.</para>
+///
+/// <para>⚠ The rule's SECOND member — the below-band ceiling carried at
+/// <c>camera.y + DeckCeilingHeight</c> — is gone as of B14: the tiles are <c>zone_id 2</c> world
+/// meshes the original culls below the deck, and the ceiling the player sees there is
+/// <c>horizon/zone1</c>'s own camera-anchored, UV-scrolled dome (<c>HorizonDomeTests</c>). The
+/// <c>DeckCeilingHeight</c> TUNE went with it — both of its fits (A7's 400 m, C21/C25's 135 m)
+/// measured a surface the original does not fog.</para>
 ///
 /// <para>⚠ The rule's third member — whether the two ambient cloud populations RENDER — is gone
 /// as of B12 (<c>PLAN-weather-decompile-match</c>): it was A7's altitude-keyed special case of the
@@ -40,16 +45,21 @@ public class DeckRegimeTests
     private const float C1AuthoredDeckY = 960f;
 
     [Fact]
-    public void BelowTheBandTheDeckIsACeilingCarriedWithTheCamera()
+    public void BelowTheBandTheDeckNoLongerMovesWithTheCamera()
     {
-        // The item's whole point: the ceiling's height above the camera — and therefore its
-        // apparent texture scale — is the same at every altitude below the band.
+        // B14, 2026-08-09: the below-band branch used to hang the sheet at
+        // `camera.y + DeckCeilingHeight` as the overcast CEILING — A7's behaviour decode, the
+        // wrong object. The tiles carry `zone_id 2` and the original culls them outright down
+        // here; the ceiling is `horizon/zone1`'s own camera-anchored dome (HorizonDomeTests). So
+        // the deck stops moving: two cameras 600 m apart below the band get the SAME deck Y, which
+        // is exactly what the retired rule made impossible.
         (float low, bool lowDimmed) = WeatherRig.DeckRegime(300f, C1Centre, C1AuthoredDeckY);
         (float high, bool highDimmed) = WeatherRig.DeckRegime(900f, C1Centre, C1AuthoredDeckY);
-        Assert.Equal(600f, high - low, 3);          // exactly the 600 m the camera climbed
-        // ...and it is the overcast's UNDERSIDE all the way up, so it keeps the mission's
+        Assert.Equal(C1AuthoredDeckY, low, 3);
+        Assert.Equal(C1AuthoredDeckY, high, 3);
+        // ...and it is still the overcast's UNDERSIDE all the way up, so it keeps the mission's
         // SUNLIGHT dimming at every altitude below the band (C22 measured that face at 168.9
-        // against the original's 167.7).
+        // against the original's 167.7) — the lit variant is the only thing the crossing flips now.
         Assert.True(lowDimmed);
         Assert.True(highDimmed);
     }
@@ -87,14 +97,14 @@ public class DeckRegimeTests
         // dimmed 168.9 sheet cannot satisfy at any fog setting.
         Assert.True(WeatherRig.DeckRegime(C1Centre - 0.5f, C1Centre, C1AuthoredDeckY).DeckDimmed);
         Assert.False(WeatherRig.DeckRegime(C1Centre + 0.5f, C1Centre, C1AuthoredDeckY).DeckDimmed);
-        // It is the SAME predicate as the floor/ceiling choice — one crossing, two consequences,
-        // so nothing can flip one of them a metre early.
+        // B14: it is now the ONLY thing the crossing decides — the sheet stays world-fixed at its
+        // authored altitude on both sides, so a camera 292 m under the band and one 145 m over it
+        // differ in lit variant and in nothing else.
         var below = WeatherRig.DeckRegime(900f, C1Centre, C1AuthoredDeckY);
         var above = WeatherRig.DeckRegime(1192f, C1Centre, C1AuthoredDeckY);
         Assert.True(below.DeckDimmed);
-        Assert.True(below.DeckY > 900f);            // a ceiling
         Assert.False(above.DeckDimmed);
-        Assert.True(above.DeckY < 1192f);           // a floor
+        Assert.Equal(below.DeckY, above.DeckY, 3);
     }
 
     [Fact]
@@ -105,15 +115,14 @@ public class DeckRegimeTests
         // copy. P1 below, P2 above.
         var p1 = WeatherRig.DeckRegime(900f, C1Centre, C1AuthoredDeckY);
         var p2 = WeatherRig.DeckRegime(1192f, C1Centre, C1AuthoredDeckY);
-        Assert.NotEqual(p1.DeckY, p2.DeckY);
-        // Including the sheet's brightness: P1 sees the dimmed underside while P2 sees the
-        // undimmed top, at the same instant, of one world's deck — which is why the swap is a
-        // per-instance mesh assignment on each rig's own copy and never a shared material.
+        // The sheet's brightness: P1 sees the dimmed underside while P2 sees the undimmed top, at
+        // the same instant, of one world's deck — which is why the swap is a per-instance mesh
+        // assignment on each rig's own copy and never a shared material.
         Assert.True(p1.DeckDimmed);
         Assert.False(p2.DeckDimmed);
-        // P1's ceiling is above P1, P2's floor is below P2 — the same instant, one world.
-        Assert.True(p1.DeckY > 900f);
-        Assert.True(p2.DeckY < 1192f);
+        // Both panes' decks sit at the one authored altitude (B14) — P1 under it, P2 over it.
+        Assert.Equal(C1AuthoredDeckY, p1.DeckY, 3);
+        Assert.Equal(C1AuthoredDeckY, p2.DeckY, 3);
     }
 
     [ExtractedDataTheory]

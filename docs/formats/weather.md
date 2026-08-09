@@ -436,6 +436,51 @@ whole-mesh `bbox_mid.y` values are strongly negative (skirt-dominated), because 
 separate cap piece pulling the average up. Whatever each chapter's below-deck ceiling distance
 actually reads as at the controls, it must be measured per chapter; C1's 396.4 does not transfer.
 
+#### ⚠ The "+396.4 m cap centre" is DISPROVEN — it is a bbox midpoint, not geometry (2026-08-09, `B14`)
+
+**`396.4` is `bbox_mid.y` of C1's `h_zone1scroll` model, i.e. `(−2000 + 2792.8) / 2`.** There is no
+polygon within 2 km of it. `B14` read the model's own vertices and polygons to place the ceiling and
+found the mesh's flat ceiling CAP — a 12-gon closing the vault — at **+2792.8 m dome-local**. The
+coincidence that made the wrong number persuasive is that A7's *measured* below-deck ceiling was
+"~400 m"; A7 was measuring the relocated deck sheet, and `C21`/`C25` later re-fit that same
+measurement to 110–155 m, so the agreement was never evidence in the first place. Everything the
+`A1` census says about the SHAPE of these meshes stands; only the reading of `bbox_mid.y` as a "cap
+centre" is retired. Do not re-cite 396.4.
+
+Each deck chapter's zone-1 dome, read from `models.json` (vertices + polygon materials), with the
+rim elevation the cap subtends from the camera — the only quantity a render can measure, since the
+dome is camera-centred and uniformly scaled about the camera:
+
+| chapter | zone-1 dome | flat ceiling cap (dome-local Y / radius / rim elevation) | texture | UV scroll |
+|---|---|---|---|---|
+| C1 | `h_zone1scroll` (vault) + `o28` (skirt) | **+2792.8** / 2470–2609 / **46.9–48.5°** | `sky2.tif` on the vault, elevations **1.76°…48.5°**; cap, skirt and floor disc are flat `FOG_COLOR` 176 | **0.07 u/s** (`texture_scroll` in the model, = `tex_fx.gw`'s `Object3DSetScroll on 0.07 0.0`) |
+| C1C | `g1164` — one mesh | **+2374.7** / 1448.2 / **58.6°** | **none** — every polygon is `Colored` 176 | none |
+| C2B | `g1166` — one mesh, identical vertex data to C1C's | **+2374.7** / 1448.2 / **58.6°** | **none** — `Colored` 176 | none |
+| C4 | `h_zone2scroll` (reused name; one mesh) | **+982.0** / 6400.0 / **8.7°** | **none** — `Colored` 192 | none |
+| C5 `zone3` | the zone node itself carries the model | **+982.0** / 10137.1 / **5.5°** | **none** — `Colored` 16 | none |
+
+**Two findings in that table, both authored rather than incidental.**
+
+1. **C1 is the only chapter whose below-deck sky carries a TEXTURE at all**, and the only one that
+   scrolls it. The other three deck chapters' zone-1 geometry is a single untextured shell painted
+   their own zone's `FOG_COLOR` — which is not a stub: an unfogged surface painted `FOG_COLOR` is
+   exactly what infinitely distant fogged geometry looks like, so below the deck those chapters
+   render a seamless flat overcast in every direction, by construction.
+2. **The `B18`/`C26` `FOG_COLOR` rule extends to the zone-1 domes unchanged** — verified against
+   each chapter's own `ZONE1` block, not `ZONE2`'s: C1/C1C/C2B `ZONE1 FOG_COLOR` 0.69 = **176** =
+   the `Colored` value on C1's `o28` skirt/cap/disc and on the whole of C1C's and C2B's shells;
+   C4 `ZONE1` **192**; C5 `ZONE3` **16** = its `zone3` shell. Nothing was repainted (`C26`'s ⚠
+   stands) — the data already agrees.
+
+⚠ **The cap altitudes are dome-local metres and are NOT an altitude the player can measure.** The
+dome is centred on the camera and scaled uniformly about it, and it is unfogged, so the metres are
+unobservable and the rim ELEVATION is the whole of what a frame shows. Measured on our own render
+(C1 river pose, camera pitched +30°, `f` = 599.1 px): the flat cap's edge appears at **48–52°**
+elevation against the authored 46.9–48.5° at the centre column — the spread being the 12-gon's own
+inradius/circumradius and the off-centre columns' geometry. See `docs/architecture.md`'s
+`GameSession.HorizonScaleFor` entry for why `B14` therefore keeps one uniform scale rather than
+pinning Y to metric.
+
 ### Zone keys
 
 List-valued dict keys:
@@ -601,16 +646,36 @@ centre is 1047, its tiles 960 — an 87 m gap the centre-pin model was silently 
 the deck, the ceiling the player sees is **not the deck mesh at all** — it is
 `horizon/zone1`'s own geometry, camera-anchored and UV-scrolled (`tex_fx.gw`, `Object3DSetScroll
 on 0.07 0.0`, [the horizon's own geometry](#the-horizons-own-geometry-settles-three-chapters-2026-08-06)
-section above). In C1 that geometry (`h_zone1scroll`, model 768) has an authored cap centre of
+section above). ~~In C1 that geometry (`h_zone1scroll`, model 768) has an authored cap centre of
 **396.4 m dome-local** (`bbox_mid.y` of the model, spanning Y −2000…2792.8), which is A7's
-measured "~400 m above the camera" to instrument precision. The two objects are swapped by the
+measured "~400 m above the camera" to instrument precision.~~ **Corrected 2026-08-09 (`B14`): 396.4
+is that bbox's MIDPOINT and no polygon sits near it — the mesh's flat ceiling cap is at
++2792.8 m dome-local, and the agreement with A7's "~400 m" was a coincidence twice over (A7 was
+measuring the deck sheet, and `C25` later re-fit that same reading to 110–155 m).** See
+[the zone-1 ceiling table](#-the-3964-m-cap-centre-is-disproven--it-is-a-bbox-midpoint-not-geometry-2026-08-09-b14).
+The two objects are swapped by the
 gate, not carried/relocated by `WeatherRig.Tick` — the deck tiles are `zone_id 2` (culled below
 the deck), the zone-1 dome is `zone_id 1` (culled above it), and each renders only when the
 camera state makes it visible. The install-wide survey — [the deck census
 below](#the-deck-census-zone_id-across-all-eight-chapters-2026-08-09) — found C1's `h_zone1scroll`
 + `o28` skirt pairing is **not** reproduced identically in C1C/C2B/C4: those three each carry a
-**single** zone-1 mesh (not the two-piece dome+skirt), so the "~396 m cap centre" number is
-C1-specific and B14 will need a per-chapter reading, not a shared constant.
+**single** zone-1 mesh (not the two-piece dome+skirt), so the ceiling geometry is per chapter, not a
+shared constant — `B14` measured all five (the four deck chapters plus C5's `zone3`) into
+[the zone-1 ceiling table](#-the-3964-m-cap-centre-is-disproven--it-is-a-bbox-midpoint-not-geometry-2026-08-09-b14).
+
+> **Landed 2026-08-09 (`PLAN-weather-decompile-match` B14).** The remake builds a dome per gateable
+> horizon zone (`WorldBuilder.DomeZonesToBuild`) and shows the one matching each camera's own
+> weather state, so below the deck a deck chapter now renders `horizon/zone1` and above it
+> `horizon/zone2`. The scroll needed no code: `h_zone1scroll`'s model carries `texture_scroll`
+> 0.07 in the shipped gamez (the `tex_fx.gw` statement is already baked in), and the build path
+> already honours that field. The deck's own below-band relocation — A7's `cam+K` ceiling
+> reconstruction and the `DeckCeilingHeight` TUNE with it — is deleted: the tiles are world-fixed at
+> their authored altitude at every camera altitude, and the original culls them below the deck
+> anyway. Measured at the C1 river pose (`-7325,192,-3829`, `--det`): looking straight up the frame
+> goes from the `zone2` night sky (64,72,100) to flat `FOG_COLOR` **176** — the zone-1 cap — across
+> **100 %** of pixels; a 1 s pair at +30° pitch differs on **47 %** of the frame (2 s: 55 %) as the
+> `sky2.tif` vault scrolls, while C2B's unscrolled zone-1 shell moves only its rain (3.5 %,
+> uniformly distributed). The pinned above-deck C1 pose, C1B and C5 are **byte-identical**.
 
 This also **un-retires** the "C1 `zone1` 970/1047 `FOG_ALTITUDE` identity" note below as a
 flown-zone fact: `zone1` is flown below the deck in every deck chapter, so its `FOG_ALTITUDE`

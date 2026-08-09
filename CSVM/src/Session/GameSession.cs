@@ -922,16 +922,57 @@ public partial class GameSession : Node3D
             _weatherRig.Build(state.MissionZrdrPath, _rigs, builder.HorizonZones(),
                 activeZone =>
             {
+                // B14: one dome per horizon zone the gate can tell apart, not just the flown one —
+                // below the cloud deck the camera is in state 1 and `horizon/zone1` IS the sky and
+                // the ceiling. The zones and their order are the data's (`DomeZonesToBuild`); the
+                // per-rig CONTAINER is what `WeatherRig.Tick` anchors to the camera, so each dome
+                // keeps its own scale and its own gate.
+                var zones = builder.HorizonZones();
+                var domeZones = Mech3.WorldBuilder.DomeZonesToBuild(zones, activeZone);
                 foreach (var rig in _rigs)
                 {
-                    var dome = builder.BuildHorizon(activeZone);
-                    if (dome == null)
+                    var anchor = new Node3D { Name = "horizon" };
+                    foreach (string zoneName in domeZones)
+                    {
+                        var dome = builder.BuildHorizon(zoneName);
+                        if (dome == null)
+                            continue;
+                        dome.Name = $"dome_{zoneName}";
+                        // Per dome, never once for the container: a chapter's two zone domes are
+                        // different sizes, and the flown one's scale must not move because a
+                        // second one was added beside it (C1B is the clamp canary — see
+                        // HorizonScaleFor).
+                        dome.Scale = Vector3.One * HorizonScaleFor(dome);
+                        anchor.AddChild(dome);
+                        int zoneId = -1;
+                        foreach (var z in zones)
+                            if (z.Name.Equals(zoneName, StringComparison.OrdinalIgnoreCase))
+                                zoneId = z.ZoneId;
+                        rig.HorizonDomes.Add(new HorizonDome(dome, zoneId));
+                    }
+                    if (anchor.GetChildCount() == 0)
+                    {
+                        anchor.QueueFree();
                         break;
-                    dome.Scale = Vector3.One * HorizonScaleFor(dome);
+                    }
                     if (rig.VisualLayer != 0)
-                        UI.SplitScreen.SetVisualLayer(dome, rig.VisualLayer);
-                    _worldRoot!.AddChild(dome);
-                    rig.Horizon = dome;
+                        UI.SplitScreen.SetVisualLayer(anchor, rig.VisualLayer);
+                    _worldRoot!.AddChild(anchor);
+                    rig.Horizon = anchor;
+                }
+
+                // The one-line evidence that the swap exists at all: a gate that stopped building
+                // the second dome and a chapter whose data supports only one render identically at
+                // the state they share (docs/verification.md, "an unchanged number is not
+                // evidence"). Names the zone AND the zone_id it will be gated on.
+                if (_rigs.Count > 0)
+                {
+                    var built = _rigs[0].HorizonDomes;
+                    var parts = new List<string>();
+                    foreach (var d in built)
+                        parts.Add($"{d.Node.Name} (zone_id {d.ZoneId})");
+                    GD.Print($"horizon: {built.Count} dome(s) per rig — {string.Join(", ", parts)}"
+                             + (built.Count > 1 ? "; shown by camera weather state" : ""));
                 }
             });
             StartupProfile.Record("weather", weatherMark);

@@ -504,6 +504,15 @@ zoned content".
 ⚠ `BuildHorizon` builds exactly the zone it is handed, INCLUDING an empty one — the selection is
   the caller's, and an explicit `--sky-zone=` is meant to be able to show a bare marker's nothing.
   Its own name-absent fallback (first zone child) stays a no-op in the normal path.
+⚠ **`DomeZonesToBuild(zones, activeZone)` decides how MANY domes a world builds**
+  (`PLAN-weather-decompile-match` B14, 2026-08-09). The original draws the dome of the zone its
+  camera is IN, so a deck chapter needs both present: below the deck its `zone_id 2` dome is culled
+  and `horizon/zone1`'s own geometry is the sky *and* the ceiling. The rule is the gate's own
+  arithmetic, never a chapter list — a second zone is added only if it builds geometry, its
+  `zone_id` is gateable (1…3; `ZoneGate.Draws` passes −1/0 at every state) and distinct from every
+  zone already taken, and only if the active zone's own id is gateable too. Result per chapter:
+  C1/C1C/C2B/C4 and C5 build two, C1B/C2/C3 build one (their `zone2` is a bare marker). Pure and
+  static; pinned against every chapter's real census in `CSVM.Tests/HorizonDomeTests.cs`.
 `BuildDzPaths` is its
 debug-only custom renderer: material-matched gate polygons green/red at 50% alpha, route as an open
 white line strip (never a filled or closed polygon).
@@ -2883,6 +2892,21 @@ scripting an actual shot.
   `HorizonFarFraction` (0.9) of the far plane from the built dome's OWN AABB, never a per-chapter
   table: C1B lands ~1.65x, every other chapter keeps 2.5x exactly, which is why no other chapter's
   sky moved. Raising `Camera3D.Far` instead would cost depth precision world-wide.
+  - **Per DOME, not per rig** (`B14`): a rig's `Horizon` is now a bare container at the camera
+    holding one dome per built horizon zone (`WorldBuilder.DomeZonesToBuild`), and each dome is
+    fitted on its OWN AABB. That is what keeps the flown dome's scale exactly where it was when a
+    second one is added beside it — C1's `zone1` is 8813 m to `zone2`'s 8744, and a shared fit
+    would have let the new dome move the old one's scale. Measured: the pinned above-deck C1 pose
+    and the C1B clamp canary are both **byte-identical** across B14.
+  - ⚠ **No vertical-only scale split, and the reason is geometric** (`B14`; `B15` owns the audit).
+    A camera-CENTRED, UNIFORMLY scaled backdrop is scale-invariant in everything a frame can show:
+    the dome is unfogged (`fog: false`) and has no parallax, so the only observable is the
+    ELEVATION each feature subtends, which a uniform scale preserves exactly and a Y-only scale
+    would change. Scaling Y by 1 while XZ stays 2.5 would flatten C1's ceiling cap from 46.9° to
+    ~24° of elevation — a visible distortion, in service of an "authored 396.4 m cap" that the data
+    does not contain (see `docs/formats/weather.md`'s zone-1 ceiling table: 396.4 is `bbox_mid.y`,
+    a bbox midpoint; the cap polygon is at +2792.8). So the domes keep one uniform fitted scale and
+    `B15` inherits the question of whether the fitted 2.5× itself is right, not of splitting it.
 ⚠ **`--pos`/`--direction` are routed by mode in ONE place** (`ResolvePlacement`): flight gets
   `_spawnAt`/`_spawnDir`, everything else `_camPos`/`_camDir`. **Never fold `_camDir` into
   `_lookAt`** — `--lookat` is a POINT, `--direction` a vector; only flight converts one to the other.
@@ -3565,16 +3589,21 @@ are built from, and it is logged with the meshed counts it was decided on.
   guarded with `_weatherRig?.SetDeckCenter(...)` rather than assumed non-null. An empty
   undimmed-mesh map is a valid state (no deck, or a caller that never supplied one): the deck then
   simply stays as built, which is the below-band look.
-⚠ **The deck is ENGINE TRICKERY in two regimes, not a placed sheet** (`A7`, 2026-08-08 — decoded
-  by the user at the controls of the original). `Tick` splits at the `CLOUD_COVER` band centre
-  (`WeatherState.CloudBandCentre`): **below** it the deck is a ceiling carried with the camera in
-  ALL THREE axes at `camera.y + DeckCeilingHeight`; **at/above** it a world-fixed floor, still
-  following in X/Z. The rule is the pure `DeckRegime(cameraY, bandCentre, authoredY)`, which also
-  answers whether that camera renders the ambient clouds AND whether the sheet carries the
-  mission's SUNLIGHT dimming — assert against that, not against the loop. Below-band consequence,
-  and it is the item's own evidence: the sky is BIT-IDENTICAL at 192/300/600/900 m, which is what
-  "the texture looks the same at every altitude" means and what a world-fixed sheet cannot do (the
-  pre-A7 build moves 87 % of those pixels).
+⚠ **The deck is a WORLD-FIXED sheet at its own authored altitude, at every camera altitude**
+  (`B13`+`B14`, 2026-08-09). `DeckRegime(cameraY, bandCentre, authoredY)` returns `authoredY`
+  unconditionally; the only thing the `CLOUD_COVER` band centre still decides is which lit variant
+  the sheet wears (`DeckDimmed`, below). The rule is pure — assert against it, not against the loop.
+  - ⚠ **RETIRED (`B14`): the below-band "ceiling carried with the camera at
+    `camera.y + DeckCeilingHeight`".** `A7` decoded the BEHAVIOUR correctly at the controls (a
+    ceiling whose texture looks identical at every altitude on the way up) but attributed it to the
+    wrong object. The tiles are ordinary world meshes carrying `zone_id 2`; nothing in the
+    decompile moves them, and below the deck the original culls them outright — what the player
+    sees overhead there is `horizon/zone1`'s own camera-anchored, UV-scrolled dome, which of course
+    looks the same at every altitude, being anchored to the eye. Both fits of the constant are void
+    with it: `A7`'s 400 m (wrong texture period) and `C21`/`C25`'s 135 m, which fitted the
+    **authored fog ramp** to a surface the original does not fog at all — every horizon model in
+    every chapter is authored `fog: false`. That same fact is the standing explanation for
+    `PLAN-overcast-match` `B15`'s "the original's ceiling texture survives to ~12.6 km" anomaly.
   - ⚠ **The above-band floor sits at the tiles' OWN AUTHORED altitude, not the band centre**
     (`PLAN-weather-decompile-match` B13, 2026-08-09 — supersedes `A7`'s band-centre pin here,
     which the disproof-4 decompile finding showed was C4's own coincidence: C4's authored altitude
@@ -3588,17 +3617,11 @@ are built from, and it is logged with the meshed counts it was decided on.
     (1050 → 1050, the coincidence above). No golden in `analysis/goldens` holds an above-deck pose,
     so the whole set is byte-identical across this item — confirmed by an A/B against the
     pre-B13 build, not merely asserted.
-  - The BELOW-band ceiling reconstruction (`camera.y + DeckCeilingHeight`) is unchanged by B13 —
-    `B14`'s to replace with the zone-1 dome (`horizon/zone1`'s own camera-anchored cap). The
-    crossing itself is still pinned at `bandCentre` (Decision 1: unified with neither the zone
-    state's own `CloudCoreBottom` threshold nor moved to chase the new target), so the JUMP at that
-    crossing grew from `DeckCeilingHeight` (135 m, the pre-B13 `bandCentre+135 → bandCentre` step)
-    to `bandCentre+135 → authoredY` (222 m in C1) — still fully inside the fully-opaque whiteout
-    core (`WhiteoutAmount` reads 1.0 throughout it, `DeckRegimeTests`), so a bigger jump is still an
-    invisible one; if it ever shows, that remains a finding about the whiteout band, never a licence
-    to move the flip.
-⚠ **The regime flip is a JUMP of `DeckCeilingHeight` AND of the deck's brightness, masked only by
-  the whiteout core.** It is
+  - The crossing itself is still pinned at `bandCentre` (Decision 1: unified with neither the zone
+    state's own `CloudCoreBottom` threshold nor moved to chase the new target), and as of `B14` the
+    deck's altitude no longer jumps there at all — only its lit variant does.
+⚠ **The band-centre crossing is a JUMP of the deck's brightness, masked only by the whiteout
+  core.** It is
   placed at the band centre precisely because that is the middle of the fully-opaque core
   (C1: total in 1032–1062) — measured: the ladder frames at 1035/1046/1048/1060 m are bit-identical
   flat white, before and after the brightness half was added. Moving the flip altitude, or thinning
@@ -3617,8 +3640,12 @@ are built from, and it is logged with the meshed counts it was decided on.
   mask: two panes on opposite sides of the band must be able to disagree. Inert where
   `WorldLight` is 1.0 (C4) by construction. `deck lighting: N of M deck tile(s)…` is printed once
   per session — `0 of 144` is what a broken RID lookup would look like.
-⚠ **`DeckCeilingHeight` (135 m) is a TUNE matched to one original still, and it is the only free
-  parameter in the model** (`C21`/`C25`, 2026-08-08). Supersedes `A7`'s 400 m, which fit apparent
+~~⚠ **`DeckCeilingHeight` (135 m) is a TUNE matched to one original still, and it is the only free
+  parameter in the model**~~ **RETIRED 2026-08-09 (`B14`) — the constant is deleted, and BOTH of
+  its fits measured the wrong surface** (see the deck entry above: the below-deck ceiling is the
+  unfogged `horizon/zone1` dome, not the deck sheet, so a fit against the deck's authored fog ramp
+  has nothing to fit). Kept below as the record of how it was derived, because the next reader
+  must not re-derive it. (`C21`/`C25`, 2026-08-08). Supersedes `A7`'s 400 m, which fit apparent
   mottling scale against the WRONG texture period — the deck's authored UVs make
   `cloudlayer.tif` repeat every 2048 m, not the 1024 m tile `A7` assumed — and against a render
   that is heavily mip-blurred at grazing angles where the original is not, both of which biased
@@ -3643,6 +3670,11 @@ are built from, and it is logged with the meshed counts it was decided on.
   the 144 tiles, never more textured tiles (the deck census stays 144) — out to a 20,480 m
   half-span, dropping the rim to ~4 px, where that same gradient has lost only ~2 units. `K` itself
   is untouched; only how far the ceiling that hides the wall's base reaches.
+  ⚠ **`B14` retires that DERIVATION but keeps the geometry.** With the sheet no longer a below-band
+  ceiling there is no `K` and no below-band rim; the 20,480 m half-span is unchanged and is now
+  justified by the ABOVE-band regime alone, where it does the same edge-hiding job for a floor seen
+  from above (rim at `f·(camY − deckY)/halfSpan`). Re-deriving the number against that geometry is
+  `D31`'s. Nothing about the annulus changed, so no golden moved for it.
 ⚠ **`Tick` is the ONE owner of render visibility, and the rule is the original's `zone_id` gate**
   (`PLAN-weather-decompile-match` B12, 2026-08-09, `FUN_0056c430` — see `Mech3/ZoneGate.cs`). Per
   rig, per frame, it narrows that camera's cull mask to the single zone layer its own weather state
@@ -3670,21 +3702,20 @@ are built from, and it is logged with the meshed counts it was decided on.
   - `--no-zone-cull` (`SessionSpec.NoZoneCull`) restores the pre-B12 picture exactly: the band goes
     back open and neither deck nor dome is hidden. It is the isolation switch Decision 4 asked for
     and the able-to-fail control every B12 probe is measured against.
-  - ⚠ **The DECK is gated, the DOME is not — yet.** The deck's tiles are `zone_id 2`, so below the
-    deck they are culled and the below-deck ceiling is GONE until `B14` builds `horizon/zone1`'s
-    own cap in its place (measured: 363,480 deck px at the C1 river pose ungated → 0 gated). The
-    single built dome is deliberately left up at every state (`_builtDomeZones <= 1`), because the
-    original always has a dome for the state it is in and gating the only one we build would leave
-    a below-deck camera with no sky at all. `B14` builds both zone subtrees and the same
-    `_domeZoneId` field starts doing the swap with no new rule.
+  - ⚠ **The DECK and the DOME are both gated** (`B14` completed the pair). The deck's tiles are
+    `zone_id 2`, so below the deck they are culled (measured: 363,480 deck px at the C1 river pose
+    ungated → 0 gated) and the ceiling in their place is `horizon/zone1`'s dome. A world holding
+    only ONE dome still leaves it up at every state (`rig.HorizonDomes.Count > 1` arms the swap),
+    because the original always has a dome for the state it is in and gating the only one we build
+    would leave a camera with no sky at all — that is C1B/C2/C3, whose `zone2` is a bare marker.
 ⚠ The deck and the `fvol` field are the SAME sheet seen from two sides, so they are read together:
   the deck mesh is what an underside view shows and the sprite field is what a view from above
   shows. Any change to either one's altitude has to be checked against the other's
   (`Effects/FogVolumeClutter`, `docs/formats/fogvol.md`). ⚠ The `fvol` sprite FIELD never moves
-  with this item — it is anchored to the volumes, not to the deck mesh — and as of `B13` the deck
-  MESH's rendered altitude equals its authored one only ABOVE the band (`_deckAltitude`); below it,
-  the mesh is still the `cam+DeckCeilingHeight` reconstruction, at neither chapter's authored
-  altitude. The authored 960/1050 is what the scatter is read against either way (fogvol.md's
+  with this item — it is anchored to the volumes, not to the deck mesh — and as of `B14` the deck
+  MESH's rendered altitude equals its authored one at EVERY camera altitude
+  (`_deckAltitude`), so mesh and field finally share one frame of reference in both regimes.
+  The authored 960/1050 is what the scatter is read against either way (fogvol.md's
   mesh-10 m-under-the-slab invariant, pinned per chapter in `DeckRegimeTests`) — a fact about the
   DATA, unaffected by which regime is currently rendering the mesh.
 

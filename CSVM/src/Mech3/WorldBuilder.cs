@@ -193,11 +193,12 @@ public sealed class WorldBuilder
     /// bucket <see cref="FindCloudDeck"/> already computes to classify them. 0 for a world with no
     /// deck (never read then — <see cref="CloudDeck"/> is null).
     ///
-    /// <para><c>PLAN-weather-decompile-match</c> B13: above the cloud band the deck floor renders
-    /// HERE, world-fixed, never re-pinned to <c>CLOUD_COVER</c>'s band centre — that pin was C4's
-    /// own coincidence (its authored altitude equals its centre, 1050). Below the band this value
-    /// is unused; the ceiling regime is still <c>WeatherRig.DeckCeilingHeight</c> above the
-    /// camera (B14's to replace with the zone-1 dome).</para></summary>
+    /// <para><c>PLAN-weather-decompile-match</c> B13/B14: the deck floor renders HERE at EVERY
+    /// camera altitude, world-fixed, never re-pinned to <c>CLOUD_COVER</c>'s band centre — that pin
+    /// was C4's own coincidence (its authored altitude equals its centre, 1050) — and never carried
+    /// above the camera as a ceiling either. Below the band the tiles' own <c>zone_id 2</c> culls
+    /// them outright and <c>horizon/zone1</c>'s dome is the ceiling
+    /// (<see cref="DomeZonesToBuild"/>).</para></summary>
     public float CloudDeckAltitude => _deckAltitude;
 
     /// <summary>Mesh instances this world put on each zone-gate layer, by <c>zone_id</c> —
@@ -303,6 +304,53 @@ public sealed class WorldBuilder
             zones.Add(new HorizonZone(child.Name, MeshedNodesIn(gamez, child), child.ZoneId));
         }
         return zones;
+    }
+
+    /// <summary>Which horizon zones this world builds a DOME for, in build order —
+    /// <paramref name="activeZone"/> first, then every other zone the
+    /// <see cref="ZoneGate"/> can tell apart from it (<c>PLAN-weather-decompile-match</c> B14).
+    ///
+    /// <para><b>Why more than one.</b> The original draws the dome of the zone the camera is IN:
+    /// below the cloud deck a deck chapter's camera is in state 1, its <c>zone_id 2</c> dome is
+    /// culled and <c>horizon/zone1</c>'s own geometry is the sky and the ceiling. That needs both
+    /// domes present in the world, one gated to each state — B12 landed the gate and left it
+    /// disarmed for a single-dome world precisely because "no sky at all" is not a frame the
+    /// original can render.</para>
+    ///
+    /// <para><b>The rule is the gate's own arithmetic, not a chapter list.</b> A second dome is
+    /// added only when it can never draw at the same time as the first: both zones' own
+    /// <c>zone_id</c> must be gateable (1…<see cref="ZoneGate.MaxZoneId"/>, since
+    /// <see cref="ZoneGate.Draws"/> passes −1/0 at every state) and distinct from every zone already
+    /// taken. Everything else is skipped, so a chapter whose data does not support the swap keeps
+    /// exactly the one dome it had. Empty zones (C1B/C2/C3's bare <c>zone2</c> marker) never
+    /// qualify — <see cref="HorizonZone.BuildsGeometry"/> — and an <paramref name="activeZone"/>
+    /// that names no zone at all returns just itself, leaving
+    /// <see cref="BuildHorizon"/>'s own fallback in charge.</para>
+    ///
+    /// <para>Pure and static because it is the rule: <c>SkyZoneTests</c> asserts it against every
+    /// chapter's real census (C1/C1C/C2B/C4 two domes, C5 two — <c>zone1</c> + its <c>zone3</c>
+    /// interior shell — C1B/C2/C3 one).</para></summary>
+    public static IReadOnlyList<string> DomeZonesToBuild(
+        IReadOnlyList<HorizonZone> zones, string activeZone)
+    {
+        var built = new List<string> { activeZone };
+        int activeId = -1;
+        foreach (var z in zones)
+            if (z.Name.Equals(activeZone, StringComparison.OrdinalIgnoreCase))
+                activeId = z.ZoneId;
+        if (ZoneGate.LayerFor(activeId) == 0)
+            return built;
+        var taken = new List<int> { activeId };
+        foreach (var z in zones)
+        {
+            if (z.Name.Equals(activeZone, StringComparison.OrdinalIgnoreCase) || !z.BuildsGeometry)
+                continue;
+            if (ZoneGate.LayerFor(z.ZoneId) == 0 || taken.Contains(z.ZoneId))
+                continue;
+            taken.Add(z.ZoneId);
+            built.Add(z.Name);
+        }
+        return built;
     }
 
     /// <summary>The gamez <c>zone_id</c> every <c>fvol*</c> volume node in this world authors, or
@@ -1312,6 +1360,15 @@ public sealed class WorldBuilder
 
     /// <summary>C26: the below-band ceiling's rim sits at <c>f·K/halfSpan</c> px above the
     /// horizon (f = 599.1 px camera projection, K = <c>DeckCeilingHeight</c> = 135 m — C21/C25).
+    ///
+    /// <para>⚠ That DERIVATION is retired (B14): the sheet is never a below-band ceiling any more,
+    /// so <c>K</c> and this rim no longer exist below the band, and <c>DeckCeilingHeight</c> is
+    /// gone from <c>WeatherRig</c>. The 20,480 m half-span it sized is KEPT unchanged and is now
+    /// justified by the ABOVE-band regime alone — the same edge-hiding job for a floor seen from
+    /// above (the rim then sits at <c>f·(camY − deckY)/halfSpan</c>, which is the same arithmetic
+    /// with a bigger numerator). Re-deriving the number against the above-band geometry is
+    /// <c>D31</c>'s, not B14's; nothing about the annulus was changed, so no golden moved for it.
+    /// The rest of this note is kept as the record of where 20,480 came from.</para>
     /// At the shipped 144-tile sheet's own half-span (6144 m = 12×1024 m tiles ÷ 2) that is 13 px
     /// — inside it, past the sheet's own textured rim, sits the dome WALL's own authored vertex
     /// gradient (<c>docs/formats/weather.md</c>, "the wall's LOWEST ring"), which is what the

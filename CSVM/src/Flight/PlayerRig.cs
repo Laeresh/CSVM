@@ -1,6 +1,12 @@
+using System.Collections.Generic;
 using Godot;
 
 namespace CSVM.Flight;
+
+/// <summary>One built skydome and the gamez <c>zone_id</c> of the <c>horizon/zone*</c> node it was
+/// built from — the pair <c>Mech3.ZoneGate.Draws</c> needs to decide whether it is this camera's
+/// sky (<c>PLAN-weather-decompile-match</c> B14).</summary>
+public readonly record struct HorizonDome(Node3D Node, int ZoneId);
 
 /// <summary>
 /// Everything one player's *view* owns for a session. A single-player session has
@@ -38,8 +44,21 @@ public sealed class PlayerRig
     /// <summary>The player's aircraft, once the flight session builds it.</summary>
     public FlightController? Controller;
 
-    /// <summary>This player's skydome copy, re-centered on <see cref="Camera"/> each frame.</summary>
+    /// <summary>This player's skydome copy, re-centered on <see cref="Camera"/> each frame. From
+    /// B14 it is a CONTAINER holding one <see cref="HorizonDomes"/> entry per built horizon zone —
+    /// the anchor moves, the zone gate picks which child draws.</summary>
     public Node3D? Horizon;
+
+    /// <summary>The zone domes under <see cref="Horizon"/>, one per horizon zone the world built
+    /// (<c>WorldBuilder.DomeZonesToBuild</c>, <c>PLAN-weather-decompile-match</c> B14), each with
+    /// the gamez <c>zone_id</c> its zone node authors. <c>Session.WeatherRig.Tick</c> shows exactly
+    /// the one matching this rig's own camera weather state — below the cloud deck a deck chapter
+    /// draws <c>horizon/zone1</c> (its ceiling), above it <c>horizon/zone2</c>.
+    ///
+    /// <para>A single entry is left visible at every state: a chapter whose data supports no swap
+    /// must not render a frame with no sky in it (the B12 rule this replaced, now per dome).</para>
+    /// </summary>
+    public List<HorizonDome> HorizonDomes = new();
 
     /// <summary>This player's cloudlayer deck copy, re-anchored under the camera each frame.</summary>
     public Node3D? Deck;

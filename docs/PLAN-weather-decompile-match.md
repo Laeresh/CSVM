@@ -56,7 +56,7 @@ Claims disproven by the decompile — do not re-derive them:
 | 2 | The gamez `zone_id` census is "not admissible; runtime meaning unknown" (`weather.md` ⚠, retired by A1) | `FUN_0056c430`: a node draws iff its `zone_id` ∈ camera zone set `{0, state}` or is −1. The "mission content unbuilt whichever zone is chosen" objection dissolved — the gate is per-frame |
 | 3 | `fogvol.zrd` `fog_zone` is "an index into something still unidentified" | `FUN_0044e010` stores `value != 0`; it arms the in-volume whiteout + ZONE3 state. C5 (=1, only ZONE3 author) and C1 (=0, no ZONE3) agree |
 | 4 | The above-deck floor sits "exactly on the band centre" (A7) | Tiles are world-fixed `zone_id 2` geometry at their authored altitude; C4's centre *equals* its tile altitude (1050), which is the coincidence that made the pin look right. C1: authored 960 vs centre-pin 1047 |
-| 5 | The below-deck ceiling is the deck mesh, engine-carried at cam+400 (A7) | It is `horizon/zone1`'s `h_zone1scroll` — camera-anchored dome geometry with an authored cap centre at **+396.4 m** (C1 model 768), which is A7's measured "~400 m" to instrument precision |
+| 5 | The below-deck ceiling is the deck mesh, engine-carried at cam+400 (A7) | It is `horizon/zone1`'s `h_zone1scroll` — camera-anchored dome geometry. ~~with an authored cap centre at **+396.4 m** (C1 model 768), which is A7's measured "~400 m" to instrument precision~~ **⚠ the cap number was wrong and B14 disproved it: 396.4 is `bbox_mid.y`, the midpoint of a bbox spanning −2000…+2792.8, and the mesh's flat ceiling cap is the 12-gon at +2792.8. The mechanism stands; the altitude does not, and the agreement with A7's "~400 m" was a coincidence (A7 measured the deck sheet, which `C25` then re-fit to 110–155 m).** |
 | 6 | C1's `h_zone1scroll` UV-scroll script line is dead décor on an unflown zone | Zone 1 is flown below the deck; the scroll (0.07/s, `tex_fx.gw`) is the drifting below-deck ceiling |
 | 7 | `VIEWING_RANGE` is unused | The original scales fog ranges and far clip by its per-detail `FOG_SCALE`/`CLIP_SCALE`; HIGH authors 1.0 everywhere, so *ignoring it stays correct at full detail* — the claim was half right |
 
@@ -65,7 +65,7 @@ Confidence roll-up:
 | Confidence | Items | What that means for you |
 |---|---|---|
 | **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, B11, B12, B13, C21, C22 | Confirm the trace (function addresses in "What the data actually ships"), then implement. |
-| **Direction sound, magnitude a judgement call** | B14, B15, D32 | The *what* is settled (dome ceiling, unscaled vertical anchor, flicker exists); blend order, scale plumbing and curve constants are TUNE — record them in `backlog.md`'s TUNE list. |
+| **Direction sound, magnitude a judgement call** | B14, B15, D32 | The *what* is settled (dome ceiling, flicker exists); blend order, scale plumbing and curve constants are TUNE — record them in `backlog.md`'s TUNE list. **B14 landed and killed the "unscaled vertical anchor" half of this row: the 396.4 m cap it rested on is a bbox midpoint, and a camera-centred unfogged dome makes uniform scale unobservable anyway.** |
 | **Leads only — no mechanism yet** | D31 | Budget for investigation; may end in a disproof. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
@@ -107,11 +107,12 @@ the rest before touching lighting. Non-deck chapters author their band out of re
 **The deck** (C1 gamez, `extracted/C1/gamez/nodes.json` + `models.json`):
 144 flat tiles at y=960, all `zone_id 2`; `cloudparent` facades `zone_id 2`; `fvol*` `zone_id 2`;
 mission targets `zone_id 1`. `horizon` container `zone_id −1`; `horizon/zone1` children
-`h_zone1scroll` (model 768: 12-sided, Y-levels −2000 / 270.7 / **396.4 cap centre** / 789 /
-1835 / 2519.4 / 2792.8) and `o28` (skirt, −2000…270.7, bottom cap −864.7); `horizon/zone2`
-children incl. `h_zone2scroll` (0…1646.4), moon, stars, skirt `g1155`. The cap-centre 396.4 =
-A7's measured "ceiling ~400 m above the camera", which pins the original's horizon anchor at
-metric scale ~1.0 vertically.
+`h_zone1scroll` (model 768: 12-sided, Y-levels −2000 / 270.7 / 789 / 1835 / 2519.4 / 2792.8) and
+`o28` (skirt, −2000…270.7); `horizon/zone2` children incl. `h_zone2scroll` (0…1646.4), moon,
+stars, skirt `g1155`. ~~The cap-centre 396.4 = A7's measured "ceiling ~400 m above the camera",
+which pins the original's horizon anchor at metric scale ~1.0 vertically.~~ **⚠ Struck (B14):
+396.4 was `bbox_mid.y`, not a cap — the flat cap polygon is at +2792.8 (rim elevation 46.9–48.5°),
+so nothing here pins a vertical scale and B15 inherits an open question rather than a fixed point.**
 
 **Fog volumes** (`FUN_0044e010` loader, `FUN_0044e6f0` evaluator): `fog_zone` bool; approach
 ramp over `fog_fade_dist` (default 400) before the wall; interior decay over
@@ -159,7 +160,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ Per-state fog + clip + sunlight switching (ZONE1 below / ZONE2 above)
 12. ☑ `zone_id` visibility gate switched with the camera state
 13. ☑ Above-deck floor at the authored tile altitude
-14. ☐ Below-deck ceiling = the zone-1 dome (`h_zone1scroll`), scrolling, camera-anchored
+14. ☑ Below-deck ceiling = the zone-1 dome (`h_zone1scroll`), scrolling, camera-anchored
 15. ☐ Horizon anchor vertical-scale audit
 
 ### Wave C — C5 fog volumes
@@ -661,7 +662,132 @@ altitude does not move with this change; only the mesh does. Expect the mesh/spr
 to return to the authored "mesh 10 m under the slab floor" (A6's table) — that relationship is
 the check.
 
-## B14 ☐ Below-deck ceiling = the zone-1 dome, scrolling, camera-anchored
+## B14 ☑ Below-deck ceiling = the zone-1 dome, scrolling, camera-anchored
+
+**Landed (2026-08-09).** `WorldBuilder.DomeZonesToBuild(zones, activeZone)` decides how many domes
+a world builds, from the gate's own arithmetic and never a chapter list: the active zone always,
+plus every other horizon zone that builds geometry, carries a gateable `zone_id` (1…3 — `Draws`
+passes −1/0 at *every* state) and does not collide with an id already taken. `GameSession`'s build
+callback then gives each rig a bare `horizon` CONTAINER at the camera holding one dome per zone
+(`dome_zone1`, `dome_zone2`, …), each fitted with its OWN `HorizonScaleFor`, and records
+`(node, zone_id)` on the new `PlayerRig.HorizonDomes`. `WeatherRig.Tick` shows the one whose
+`zone_id` matches that rig's camera state — B12's `_builtDomeZones <= 1` rule survives verbatim as
+`rig.HorizonDomes.Count > 1`, so a chapter with one dome keeps it at every state. Per chapter:
+**C1/C1C/C2B/C4 and C5 build two; C1B/C2/C3 build one** (bare `zone2` marker).
+
+**The UV scroll needed no code, and that was verified rather than assumed.** C1's `h_zone1scroll`
+model carries `texture_scroll {u: 0.07, v: 0}` in the shipped gamez — `tex_fx.gw`'s
+`Object3DSetScroll on 0.07 0.0` is already baked into the model file, exactly as
+`MissionSetup.ScrollByModel`'s own note says — and `SceneBuilder` has always applied that field
+when it builds a mesh. Building the node is the whole implementation; the C1 build's
+`texture scroll:` census goes 2 → **3 model(s)**, the third being the dome.
+
+**⚠ The item's own premise is DISPROVEN, and this is the finding: there is no "+396.4 m cap".**
+396.4 is `bbox_mid.y` of C1's model 768 — the midpoint of a bbox spanning −2000…+2792.8 — and no
+polygon sits within 2 km of it. Reading the model's vertices and polygons instead (script in this
+session's scratchpad; reproducible from `extracted/<CH>/gamez/models.json`) gives the real ceiling:
+a **flat 12-gon cap at +2792.8 dome-local**, closing a `sky2.tif`-textured vault that runs from the
+ring at +270.7 up. The agreement with A7's measured "~400 m" was a coincidence twice over — A7 was
+measuring the RELOCATED DECK, and `C25` later re-fit that same reading to 110–155 m. Per chapter:
+
+| chapter | zone-1 dome | flat cap (Y / radius / rim elevation) | texture | scroll |
+|---|---|---|---|---|
+| C1 | `h_zone1scroll` + `o28` skirt | **+2792.8** / 2470–2609 / **46.9–48.5°** | `sky2.tif`, elevations 1.76°…48.5°; cap/skirt/floor flat `FOG_COLOR` 176 | **0.07 u/s** |
+| C1C | `g1164` (one mesh) | **+2374.7** / 1448.2 / **58.6°** | none — all `Colored` 176 | none |
+| C2B | `g1166` (same vertex data as C1C's) | **+2374.7** / 1448.2 / **58.6°** | none — all `Colored` 176 | none |
+| C4 | `h_zone2scroll` (reused name) | **+982.0** / 6400.0 / **8.7°** | none — all `Colored` 192 | none |
+| C5 `zone3` | the zone node's own model | **+982.0** / 10137.1 / **5.5°** | none — all `Colored` 16 | none |
+
+**C4's verdict, since the item asked for it explicitly: its zone-1 geometry DOES provide a
+ceiling** — a flat octagonal cap 982 m over the camera spanning 6.4 km, i.e. a closed grey lid at
+8.7° rim elevation. Same for C1C/C2B (a taller, narrower lid). What those three do NOT provide is
+a *textured* one: only C1 authors any texture on its zone-1 dome. That is not a stub — an unfogged
+surface painted `FOG_COLOR` renders exactly what infinitely distant fogged geometry renders, so
+below the deck those chapters show a seamless flat overcast in every direction by construction. **No
+chapter lacks ceiling geometry, so the old relocated-deck trick is kept behind no condition at
+all — it is deleted.**
+
+**Scale decision (recorded here and in `architecture.md`): NO vertical split, and the pragmatic
+"keep Y metric" the item proposed would have been a regression.** A camera-CENTRED, uniformly
+scaled backdrop is scale-invariant in everything a frame can show — the dome is unfogged
+(`fog: false`) and has zero parallax, so the only observable is the elevation each feature
+subtends, which a uniform scale preserves exactly. Scaling Y by 1 against XZ 2.5 would flatten C1's
+cap from 46.9° to ~24° of rim elevation: a visible distortion, bought to place a cap at an altitude
+the data does not author. Domes therefore keep one uniform fitted scale, now computed **per dome**
+so a newly built neighbour can never move the flown dome's scale (C1: `zone1` radius 8813 vs
+`zone2` 8744; both unclamped at 2.5×). `B15` inherits "is the fitted 2.5× right", not "should it be
+split".
+
+**The deck's below-band relocation is DELETED, along with the `DeckCeilingHeight` TUNE.**
+`DeckRegime(cameraY, bandCentre, authoredY)` now returns `authoredY` unconditionally; only
+`DeckDimmed` still flips at the band centre. The tiles are `zone_id 2` world meshes the original
+culls below the deck, nothing in the decompile moves them, and **both** fits of the constant
+measured the wrong surface: A7's 400 m against a texture period wrong by 2×, and `C21`/`C25`'s
+135 m against the deck's authored FOG RAMP — but the original's below-deck ceiling is the dome,
+which every chapter authors `fog: false`. `C26`'s 20,480 m annulus is untouched and is now
+justified by the above-band regime alone (`WorldBuilder.AddDeckAnnulus`'s own note).
+
+**Verify — tests.** `.\RunTests.ps1`: **797 units** (0 skipped, `CSVM_DATA_ROOT` set), **29/29**
+engine suites, engine errors clean. New `CSVM.Tests/HorizonDomeTests.cs`: the `DomeZonesToBuild`
+rule (active zone first; an empty zone never added; an ungateable or duplicate `zone_id` never
+added, on either side; a zone name the horizon lacks builds alone), the per-chapter dome census
+from the real extraction, the zone-1 **cap polygon** per chapter (the assertion that tells 2792.8
+from 396.4), and the scroll rate read off each deck chapter's zone-1 models (C1 0.07, the other
+three 0). `DeckRegimeTests` keeps its shape with the below-band case inverted — two cameras 600 m
+apart below the band now get the SAME deck Y, which the retired rule made impossible.
+
+**Verify — goldens. 6 moved for THIS item, and the seventh is explained** (GOLD-8 — A/B'd against
+a temporarily reverted B13 build, rebuilt, goldens stage re-run; `git status` proves the restore):
+
+| golden | B13 → B14 |
+|---|---|
+| `c1-waterfall` | `cdbe547dd0ed0a698d4140cd8aad7f73` → `ef4a1f52dace2989a8d1311b11a16bfb` |
+| `c1c-rain` | `d39135d8d4e8542b0f94ba715e880f8b` → `7adedc7062834e7ff5acb3feaffccad5` |
+| `c2b-rain` | `d38de73ac9e1609d33bc0262c3506da3` → `0d6bbf3cbcdddfc32cfc6f89c64fae69` |
+| `c4-snow` | `4312fd169f12525d23b20b7bb9b8caa2` → `4cb8ff657e4dd0c4110b8cced179c911` |
+| `c1-flight` | `8455f61549caf2a561bf673c9147e9e0` → `f8c85e312056d6fc2e51d2ba0fe9a295` |
+| `c1-destroy-effects` | `aa2b459710992ce4dbf26a7cc0c08250` → `53ad1f62ea34c246eca63ce4d8342916` |
+| **`c1-crash`** | `f858f76b…` → `f858f76b…` — **byte-identical** |
+
+Every mover is a deck chapter below its band — the below-deck ceiling B12 removed is back, as the
+dome — and all six non-deck goldens (`c1b-night-sea`, `c2-city`, `c3-island`, `c5-city-night`,
+`viewer-bhawk`, `empty-stage`) are byte-identical on both sides (GOLD-5). `c1-crash` is inert by
+construction (DIAG-10) even though B12 *did* move it 0.26 %: its camera looks steeply down, so the
+only dome pixels in frame are BELOW the horizon line, where both zones' skirts are painted the same
+authored `FOG_COLOR` (C1's `ZONE1` and `ZONE2` both 0.69 = 176) — swapping domes there is a no-op
+by the data. *Not re-blessed — the orchestrator re-blesses once per wave.*
+
+**Verify — probes** (`.scratch/b14/`, all `--freecam --det --mute`; "before" = the B13 build,
+rebuilt from a temporary source revert, METHOD-16/17).
+
+| # | pose | before → after |
+|---|---|---|
+| a | C1 `-7325,192,-3829` dir `0,1,0.001` (straight up, below deck) | night sky **(64, 72, 100)** → flat **176.00** (centre 200×200 sd **0.000**) — **100 % of pixels differ, ∆ = 112 exactly**. 176 is C1's `ZONE1 FOG_COLOR` and the cap's own `Colored` value |
+| b | same pose, dir `0,0.5,-0.866` (+30° pitch), frames 3 vs 63 vs 123 | **47.2 %** of pixels differ over 1.0 s (max ∆ 12) and **54.9 %** over 2.0 s (max ∆ 18) — the `sky2.tif` vault scrolling. **C2B at the identical pose: 3.5 %**, spread evenly across top/middle/bottom thirds (2.9/2.9/4.6 %), i.e. its rain, not a dome that does not scroll |
+| c | C1 `-7323,1192,-3829` dir `0,0,-1` (above deck, the pinned pose) | **0 px differ.** Control: the same pose at `--sky-zone=zone1` differs on **99.8 %** — the identity is a real pass |
+| d | C1B default freecam (the `HorizonScaleFor` canary) | **0 px differ**; the log still reads `dome radius 21816 m x 2,5 would reach past the 40000 m far plane — scaled 1,65x instead`, and `1 dome(s) per rig` |
+| e | C5 default freecam | **0 px differ** while the log reads `2 dome(s) per rig — dome_zone1 (zone_id 1), dome_zone3 (zone_id 3)`. Control: `--sky-zone=zone3` differs on **58.4 %**, so the second dome exists and is genuinely gated off at state 1 |
+
+**Verify — the geometry, measured rather than assumed.** On probe (b)'s frame the flat cap's edge
+appears at **48–52°** elevation (row-sd rises from 0.00 to 4.05 between rows 120 and 160, `f` =
+599.1 px) against the authored 46.9–48.5° at the centre column — the spread is the 12-gon's own
+inradius/circumradius and the off-centre columns. The dome renders at authored proportions.
+
+**Verify — the "12.6 km ceiling texture" observation (`PLAN-overcast-match` B15), for `D31`.** At
+the river pose looking horizontally (`dir -0.997,-0.1,0.070`), rows BELOW the horizon are
+byte-identical before/after (terrain, untouched) while every row above it changes: the sky goes
+from the `zone2` night dome (means 80–167, falling away with elevation) to a textured overcast at
+**168.7–175.8 with per-row sd 3.4–6.4 all the way down to the horizon line**. **The ceiling never
+fogs out, and now we know why it does not have to: every horizon model in every chapter is authored
+`fog: false`, so the original's below-deck ceiling is unfogged geometry** — which is exactly what
+"the ceiling texture survives to ~12.6 km" describes, with no deck fog-flag lead needed. ⚠ One
+residual for `D31`, stated with numbers rather than smoothed: the original's own frame is
+**dead-flat 175.00 (sd 0.00) for 36 px above its horizon**, while ours is textured from ~18 px up.
+That 18 px is the authored boundary — C1's zone-1 vault starts at the +270.7 ring, elevation 1.76°
+= 18.4 px at `f` = 599.1 — so ours is rendering the authored geometry and the original's flat band
+is twice as deep as that geometry explains. Not chased here.
+
+**Original approach (kept for reference).**
 
 **Goal.** Below the deck, the ceiling is the chapter's `horizon/zone1` geometry — textured,
 skirted, UV-scrolling at the authored 0.07/s, riding the camera with its cap ~396 m overhead —
@@ -699,15 +825,24 @@ no scroll statement, so no scroll there.
 interacts with metric dome features (the 396 m cap, the skirt depth), and a fix if the zone-1
 ceiling lands at the wrong altitude under scaling.
 
-**Evidence (confidence: direction sound).** 396.4 authored ≈ 400 measured ⇒ the original anchors
-the dome at metric scale ~1.0 vertically. Uniform scale about the camera preserves *angles* (the
-wall/skirt look is scale-invariant) but not *metric altitude* — a 2.5× scale would put the cap at
-~990 m over the camera, contradicted by A7's measurement.
+**⚠ Evidence retired before the item started (`B14`, 2026-08-09) — read this first.** ~~396.4
+authored ≈ 400 measured ⇒ the original anchors the dome at metric scale ~1.0 vertically.~~ 396.4 is
+`bbox_mid.y`, not a cap: C1's zone-1 ceiling cap is the flat 12-gon at **+2792.8** dome-local. There
+is no measurement pinning a vertical metric scale, and the "flyable-through ceiling cap" this item
+was written around does not exist — the cap sits far above the whiteout band the camera enters at
+970 m, so it is never reached in either scaling.
 
-**Approach.** Decide per geometry class: angular features (wall gradient, skirt) may keep the
-fitted scale; the flyable-through ceiling cap must sit at authored metric height. Options: don't
-scale zone-1 domes; or scale XZ only; or anchor the cap band separately. Measure, choose, record
-in `architecture.md`.
+**What B14 already settled, so this item does not re-litigate it.** The dome is camera-CENTRED and
+unfogged, so a uniform scale is invisible: the only observable is the elevation each feature
+subtends, which uniform scaling preserves exactly and a Y-only scale would distort (C1's cap rim
+would drop from 46.9° to ~24°). B14 therefore keeps one uniform fitted scale, computed **per dome**
+(`GameSession.HorizonScaleFor`, `architecture.md`).
+
+**What is left for B15.** Whether the fitted 2.5× MAXIMUM itself is right — it is a remake
+invention (the authored domes are ~8.8 km on a 12.3 km map and would otherwise cut into terrain),
+and the question is whether the original scales the dome at all or solves the intersection some
+other way. If it does not scale, C1B's 21.8 km dome and the far plane become the real subject.
+Measure, choose, record in `architecture.md`.
 
 **Model recommendation.** high, low effort — one judgement call over a small measurement set.
 
@@ -716,7 +851,8 @@ precede reaching the visual ceiling exactly as the original footage shows; C1B's
 (the reason `HorizonScaleFor` exists) still fits the far plane.
 
 **⚠ Traps.** Do not "fix" the wall's authored gradient while in here (C26's ⚠ stands). C1B is the
-scale-clamp regression canary.
+scale-clamp regression canary — B14 re-confirmed it byte-identical, log line and all. Do not
+reinstate a Y-only scale without a measurement that beats B14's angular argument.
 
 # Wave C — C5 fog volumes
 
@@ -781,9 +917,17 @@ with new numbers, or handed a backlog item. Plus one specific lead: whether the 
 `fog: false` (which would explain the original's ceiling texture surviving to ~12.6 km).
 
 **Evidence (confidence: lead-only).** B11 changes the below-deck fog by 2.3×; every below-deck
-measurement made before it is suspect. The fog-flag lead: cloud *cards* author `fog: false`
+measurement made before it is suspect. ~~The fog-flag lead: cloud *cards* author `fog: false`
 (`fogvol.md`); the tiles' flag is one lookup in the gamez models — but under B14 the below-deck
-ceiling is the camera-anchored dome, which may resolve the 12.6 km observation without any flag.
+ceiling is the camera-anchored dome, which may resolve the 12.6 km observation without any flag.~~
+**Resolved by B14 (2026-08-09): it does.** Every horizon model in every chapter is authored
+`fog: false`, so the original's below-deck ceiling never fogs at all and the deck tiles' own flag is
+irrelevant to that observation — measured, our below-deck sky now carries texture (per-row sd
+3.4–6.4) right down to the horizon line. **One residual replaces it:** the original's frame is
+dead-flat 175.00 (sd 0.00) for 36 px above its horizon while ours turns textured at ~18 px, which
+is exactly where C1's zone-1 vault begins (the +270.7 ring, 1.76° = 18.4 px at `f` = 599.1). So the
+original's flat band is twice as deep as the geometry explains — that is this item's number to
+chase.
 
 **Approach.** Re-run the recorded poses (river y192, canyon, the C26 rim set) with the
 before/after discipline; read the tiles' `fog` flag from `models.json`; write the verdicts into
