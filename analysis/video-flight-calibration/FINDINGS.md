@@ -715,7 +715,9 @@ Both halves of the strip reading were wrong; the strip's own *correlation* numbe
   the period is where a spurious seam *must* appear, and the analysis had already written down
   that a zigzag coast is locally reflection-symmetric about every headland. **A reflection scan
   over a feature that is locally symmetric proves nothing; only the as-is-vs-time-reversed
-  asymmetry does.**
+  asymmetry does.** The scan's half-width made it worse: half-widths 30/37/55 returned seam
+  spacings of 31/31/90 — i.e. roughly the half-width itself — so a scan narrower than a full
+  half-period reports its own window, not the signal.
 - **The distance. Exact cause unknown.** 240 frames converted to 3.28–3.36 km against a true
   2.05 km — out by ~1.6×, and *not* uniformly, since the same pipeline on C4 read 2.26 cells
   against a true 2. Two candidates, neither confirmed: **altitude drift** (at a fixed screen row

@@ -192,8 +192,15 @@ both implementations). **[measured]**
 **That "the later node wins" is what the original shows.** Every scheme here preserves node index
 order, which is the documented rule (`nodes.json` is a DFS serialization = draw order) — but at
 the C1B pose it means water keeps drawing over the shoreline, more decisively than before. The
-data cannot settle it and no capture of the original covers it. Filed as `BL-251` / `CAP-23`
-rather than assumed. This is item9 §7's warning, still standing after this change.
+data cannot settle it; only the original could.
+
+**Settled 2026-08-09 at the controls, and the picture is fine** (`BL-251`, retired — `git log
+--grep=BL-251`). The original draws the *shoreline over the water*, and our build's shore/water
+boundary was judged correct in play all the same. So this section's warning is discharged: what
+it feared was a visible defect, and there is none. What stays unexplained is narrower — the
+single-pose measurement below says water wins at `-7700,49,-5798`, yet nothing wrong is visible
+at the shore. Treat the depth ordering at that one pose as unrepresentative of what the eye
+reads at a shoreline, not as a licence to re-tune the rank.
 
 ## 8. One-off observed, unrelated to this change
 

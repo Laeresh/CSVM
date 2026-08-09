@@ -279,6 +279,14 @@ statistics, NOT as Godot flicker rates]**
 
 ## 7. The fidelity question that must be settled before either fix lands
 
+> **Settled 2026-08-09 — no defect, no change.** Watched at the controls: the original draws
+> the *shoreline over the water*, and our own shore/water boundary was judged correct in play
+> regardless. The measurement below stands as written; what it predicted — a picture getting
+> worse while the flicker metric improved — did not happen. So the depth order at this one pose
+> is not what the eye reads at a shoreline, and it is **not** grounds to re-tune the rank
+> (`BL-251`, retired — `git log --grep=BL-251`). The rest of this section is kept because the
+> pose, the pair and the reasoning are still the record of how it was bracketed.
+
 `verification.md` rule 8 and rule 4 both apply, and this is the trap most likely to waste the
 next session:
 

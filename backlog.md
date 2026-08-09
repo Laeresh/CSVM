@@ -1273,63 +1273,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Needs an original-game A/B:* a C3 pose showing aircraft shading and shadow direction against the
   visible sun, which settles (c) before any value is adopted.
 
-- `BL-105` `[Research]` **Map-edge continuation — the mirror half is ANSWERED 2026-08-04 from `CAP-17`; the unit
-  size is not.** **The original mirrors.** Our alternating reflection in `MapEdgeExtender.MirrorAxis`
-  is correct and must NOT be swapped to plain repetition — the long-standing user belief that it
-  plain-repeats (NOTES.md) is withdrawn, and the class doc's "user believes the original does NOT
-  mirror" caveat with it.
-  **How it was measured** (`playtest/CAP-17/`, method and traps in its README). One take,
-  `CAP-17 C2 south.mp4`, 67.6 s of straight nose-view flight south over the C2 coast. For a fixed
-  screen row, that row from all 2027 frames is stacked into a **spatio-temporal strip**, so the
-  land/water boundary (keyed `R − B > 15`) draws the coastline along the whole flight path. Read at
-  five rows (900–1300):
-  - **Translational period 471 ± 5 frames**, NCC **+0.90…+0.95**; consecutive periods are identical
-    copies (as-is +0.899…+0.949 vs time-reversed −0.086…+0.080).
-  - **Reflection seams every 240 ± 2 frames** at NCC **0.89–0.94** — row 1200 at 896/1138/1378/1619
-    (spacings 242, 240, 241), row 1300 at 916/1157/1398/1637 (241, 241, 239). Translational period =
-    2 × seam spacing, which is exactly what alternating reflection produces and plain repetition
-    cannot.
-  - The seam crosses **later on nearer screen rows** (row 900 → 1300: frame 1250 → 1398, monotone) —
-    the signature of a real ground feature, which no camera artefact can fake.
-  Heading, speed and altitude were ruled out first: compass tape moves **4 px total** over the clip
-  (corr with the coast trace −0.067), airspeed is flat at **295–302** units/sim-s (sd 2.7, matching
-  the 299.0–300.4 level max), altitude excursion is **218 ft** total and flat after frame 800 (corr
-  +0.19). That matters because a straight coast's screen-x scales as 1/h.
-  **What is still open: the size of the mirrored unit — it is NOT one 1024 m cell, and (measured
-  2026-08-07, second map) it is NOT one universal cell count either.** The C2 seam
-  spacing is 240 frames = 8.006 wall s = 11.13 sim s at k = 1.390, i.e. **3.28–3.36 km ≈ 3.2 cells**
-  at the measured speed. A one-cell unit is excluded by ~3×, and directly: translation NCC decays
-  smoothly through the lag a 1024 m cell would occupy (lag 74 = +0.353, lag 111 = −0.038) with no
-  peak there. Two independent supports that our per-axis *border-cell* clamp is wrong: C2's own south
-  border row is nearly all water (coast between cols 8 and 9 of the 12×12 × 1024 m grid), so
-  repeating it southward would give a coastline **invariant in z** — a straight line, not the
-  observed 471-frame swing.
-  **C4 north measured 2026-08-07** (`playtest/CAP-12/c4-mapedge/`, reusing the CAP-12 file
-  `CAP-11 C4 and CAP-12 Clouddeck.mp4`, t 72–114 s: due-north flight over C4's river, compass
-  scroll 0.0 px, airspeed flat 298.5–299.6, gate dx=dy=0 peak 0.848). The river's
-  water-fraction/x-centroid traces repeat at a **translational period of 333.5 ± 6 frames**
-  (NCC +0.555; −0.30 at the half-lag), reflection seams at half that, and consecutive episodes
-  match better **time-reversed** (0.648/0.678 vs 0.563/0.587) while episodes two apart match
-  better as-is — alternating reflection again, on a second map and axis. Unit:
-  **2310 ± 60 m ≈ 2.26 cells** — not C2's ~3.2 cells, so the mirrored block is per-map (or
-  per-edge), and any fixed `Rings`-style constant is the wrong shape. Noted, unproven: both
-  measurements sit on **n + ¼ cells** (2304 m and 3328 m); a single k·V systematic cannot make
-  both integers (+12.5 % vs +7 % needed), so if the pattern is real it is about where the
-  mirrored block is anchored, not a scale error.
-  ⚠ **The cell count is the soft number, the mirroring is the hard one.** The metre conversion
-  inherits both V and k, and k = 1.390 is a machine/session property measured on *other* clips, so
-  read each unit as soft ("about three cells" on C2, "about two and a quarter" on C4 — definitely
-  not one, definitely not equal) rather than exact integers. Settling it needs either a level
-  constant-altitude pass with a known start position, or an A/B against our own
-  build once `Rings`/the clamp granularity is changed.
-  **Extent:** the clip covers ~28 km ≈ **2.3 × the 12,288 m map** and the mirrored tiling continues
-  undegraded to the last frame — no limit, no change, no fade found within that range.
-  ⚠ **A symmetric border feature cannot discriminate mirror from repeat, and a zigzag coast is
-  locally symmetric about every headland.** The 2026-07-22 open-ocean check was inconclusive for the
-  first reason; a reflection scan with too small a half-width fails for the second (half-widths
-  30/37/55 return spurious seam spacings of 31/31/90 against the true 240). Use a half-width of a
-  full half-period.
-
 - `BL-305` `[Bug]` **C5's city blocks are packed edge to edge where the original shows pavement
   between buildings — within-block clutter density/alignment is wrong.** Found by `CAP-22`
   (2026-08-07) while closing `BL-250` (the doubled-district bug, landed the same day — evidence
@@ -1354,23 +1297,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (c) `cblock7` places `cb12a`/`13a`/`14a` (models in the exempted district's name range) — a
   density census that lumps by name range will mis-attribute exactly the way `BL-250`'s first
   census did; count per template root.
-
-- `BL-251` `[Research]` `[Blocked: CAP-23]` **Does the original draw water over the shoreline, or the shoreline over the water?** Our cross-node draw order is "the later gamez node wins" — `nodes.json` is
-  a depth-first serialization, which is the original engine's own draw order — and the dense
-  conflict rank (`BL-053`, landed 2026-08-04) now enforces that decisively where it used to be a
-  near-tie. At the C1B pose `analysis/item9-depth-bias/FINDINGS.md` §7 recorded, that means
-  `wtr00000` (node 743) draws **in front of** `srf0001` (node 716), and it now wins by 9× the
-  margin it used to. The rule itself is well evidenced; what is NOT evidenced is that this
-  particular pair looks right — §7 flagged it as the case where "the flicker metric improves while
-  the picture gets worse" would be invisible to us.
-  ⚠ **Traps.** (a) The data cannot settle it: "later node wins" is the documented rule and it says
-  water. Only a capture of the original decides. (b) If the capture says surf-over-water, the fix is
-  **not** to invert the tie-break — that would break every other pair the rank now gets right
-  (666 install-wide); it would mean the two nodes' authored order carries something we are not
-  reading. (c) Do not judge it from our own render at a single frame — before the fix this pair was
-  swapping winner on 1.76% of the frame under a 1 mm camera move (`verification.md` INSTR-8), so
-  screenshots taken before 2026-08-04 show an arbitrary winner, not a decision.
-  *Playtest after fix:* `CAP-23` (water vs shoreline order, `playtest.md`).
 
 - `BL-272` `[Tuning]` **Precipitation: every unit mapping from `weather.json` to a look is invented, and
   one deviation is deliberately held back** (`Precipitation.cs:29-62` — type/tint/rate/density
