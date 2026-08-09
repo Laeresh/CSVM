@@ -134,7 +134,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ Plumb the authored flight globals into `PlaneStats`
 2. ☑ Freeze a pre-change baseline across every pinned scenario
-3. ☐ Settle what supplies `ThrustFactor`
+3. ☑ Settle what supplies `ThrustFactor`
 
 ### Wave B — The aero core
 
@@ -250,7 +250,18 @@ row, note what *would* move it, or the row is decoration. The knife-edge margin 
 Balmoral sits 0.1° inside the lift ramp, so record its knife-edge α to more precision than feels
 necessary.
 
-## A3 ☐ Settle what supplies `ThrustFactor`
+## A3 ☑ Settle what supplies `ThrustFactor`
+
+**Outcome (landed 2026-08-09).** The hypothesis is confirmed, at source: `ThrustFactor` is the
+`power` column of `engines.json` for the row the def's `engine` property selects. Full chain in
+[`docs/org/flightModel.md`](org/flightModel.md#thrustfactor-is-the-engines-power-factor--resolved)
+— parser writes it to def `+0x128`, copied to runtime `+0x66c`, read by the force accumulator as
+`Thrust = ThrustFactor · RefArea · thrustAvailable(Mach) · throttle`. No data file authors a
+thrust key (all 24 `dynamics` blocks author the same ten), and the eleven-airframe rank test
+against `fd_speed` gives Spearman +1.000. **Two consequences for B13:** thrust scales with
+`ref_area`, **not** `1/veh_weight` as the remake does; and `fd_speed` is very likely **not** the
+level-flight equilibrium (see the caveat in the decode) — do not build B12/B13 on that assumption
+without settling it. No code changed here.
 
 **Goal.** Know where the original's per-aircraft thrust scale comes from, so B13 scales thrust from
 authored data rather than from a fitted constant.
@@ -360,7 +371,8 @@ binary — see the trap.
 
 **Approach.** Make throttle a linear multiplier and drop `ThrottleExp`. Implement the
 thrust-available curve's known shape (parasite term with a linear Mach correction, divided by Mach
-— the propeller constant-power form), scaling by whatever A3 settles as the thrust factor. Leave
+— the propeller constant-power form), scaling it as A3 settled: `EnginePower · RefArea`, **not**
+`EnginePower / (VehWeight/1000)`. Leave
 the attitude-dependent terms (0.24 / 0.13) **out of this item** — they belong to D32, which owns
 the conflict with `ClimbGravityScale`.
 

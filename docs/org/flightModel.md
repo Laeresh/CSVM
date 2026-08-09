@@ -286,7 +286,10 @@ observed video.
 3. **Weathervane centring.** `return_rate` applies a torque along `cross(−nose, v̂)`, pulling the
    nose onto the velocity vector. **Player aircraft only** — AI does not get it.
 
-There is also a **boost state** multiplying thrust by **1.8** and drag by **0.8**.
+There is also a **boost state**: it **replaces** the throttle multiplier with a flat **1.8** (not a
+multiply — `mov [ebp+8], 1.8f` on the boost branch at `0x48fcb6`, where the normal branch loads the
+throttle) and multiplies the drag coefficient by **0.8**. So boost is "throttle pinned to 180 %",
+and boosting at part throttle is identical to boosting at full throttle.
 
 ## Thrust available — partially resolved
 
@@ -304,6 +307,119 @@ the propeller constant-power form (`T = P / V`).
 Closing this needs a read of the raw instructions at that call site. Until then the *shape* of
 the thrust curve is known but its exponent is not, so absolute top speeds cannot be predicted
 from first principles. The measured `TopSpeed` in `dynamics.txt` is the way around this.
+
+## `ThrustFactor` is the engine's power factor — resolved
+
+The tuner's header lists **13** authored fields but
+[vehicle.md](../formats/vehicle.md) documents only **12** `dynamics` keys. The extra one is
+`ThrustFactor`, and it is **not** an authored key: it is the `power` column of `engines.json`, for
+the row the def's `engine` property selects. Traced end to end.
+
+**1 — the assembly.** In the force accumulator (`FUN_0048fc40`), thrust force is
+
+```
+mult   = boost ? 1.8 : throttle                     ; [obj+0x128], boost flag [obj+0x947]
+avail  = thrustAvailable(Mach) · mult               ; FUN_0041acf0, call at 0x48fce2
+avail *= attitude terms (0.24 / 0.13)               ; the arcade term above
+if engine destroyed: avail = 0                      ; flag [obj+0x2dc]
+Thrust = ThrustFactor · RefArea · avail             ; 0x48fde1: fld [obj+0x66c] · [obj+0x678]
+```
+
+⚠ **Thrust scales with `ref_area`, not with `1/veh_weight`.** That is what makes the thrust/drag
+balance dimensionally consistent — drag is `q · RefArea · DragFactor · C_D`, so `RefArea` cancels
+out of the equilibrium and the top speed depends only on `ThrustFactor / DragFactor` (and weight
+through `C_L`). The remake's `EnginePower × ThrustConst / (VehWeight/1000)` divides by the wrong
+quantity; B13 owns the fix.
+
+**2 — the struct slot.** The plane *definition* struct carries the whole `dynamics` block at
+`+0x100 … +0x134`, and the runtime flight object mirrors it at `+0x644 … +0x678`:
+
+| Def | Runtime | Tuner column | Parser token |
+|---|---|---|---|
+| `+0x100` | `+0x644` | `RollTorque` | `roll_torque` |
+| `+0x104` | `+0x648` | `PitchTorque` | `pitch_torque` |
+| `+0x108` | `+0x64c` | `YawTorque` | `rudder_torque` |
+| `+0x10c` | — | — | `level_off_rate` (accepted, **never authored**) |
+| `+0x110` | `+0x654` | `ReturnRate` | `return_rate` |
+| `+0x114` | `+0x658` | `DampingRate` | `ang_momentum_damp` |
+| `+0x118`/`+0x11c`/`+0x120` | `+0x65c`/`+0x660`/`+0x664` | `RecMomentsInertiaX/Y/Z` | `rec_moments_inertia` |
+| `+0x124` | `+0x668` | `FakeDynSpeed` | `fd_speed` |
+| **`+0x128`** | **`+0x66c`** | **`ThrustFactor`** | **none — written from `engines.json`** |
+| `+0x12c` | `+0x670` | `DragFactor` | `drag_factor` |
+| `+0x130` | `+0x674` | `Weight` | `veh_weight` |
+| `+0x134` | `+0x678` | `RefArea` | `ref_area` |
+
+The def→runtime copy is the straight-line block at `0x475c40`–`0x475c76`, which fixes the mapping
+without ambiguity. The tuner (`FUN_00445090`) writes its 13 dialog floats back to `+0x644 … +0x678`
+in exactly this order, which is how the header names line up with the slots.
+
+**3 — who writes `+0x128`.** The vehicle-def parser (`FUN_00479240`) handles the def-level `engine`
+key at `0x47acc0`: it looks the id (or name) up in the `engines.zrd` table — loaded by `0x449040`
+into 0x18-byte records, searched by id at `0x449140` and by name at `0x449160` — reads the record's
+`+0x14` float through the accessor `FUN_004861f0` (`fld [ecx+0x14]; ret`), and stores it with
+`fstp [def+0x128]` at `0x47ad01`. Record `+0x14` is the third JSON column and defaults to `1.0`
+(`0x4490a4`), i.e. **`power`**. The hangar's engine-swap path does the same thing directly to the
+live object: `fld [rec+0x14]; fstp [player+0x66c]` at `0x43e97b`. Nothing else ever writes the
+slot except an AI spread — `FUN_00477280` jitters both `fd_speed` and `ThrustFactor` by a small
+random `1 ± ε` for non-player aircraft.
+
+**4 — no thrust key exists in the data.** The vehicle parser's token table
+(`0x627f94`–`0x628020`) contains eleven `dynamics` tokens: `pitch_torque`, `roll_torque`,
+`rudder_torque`, `level_off_rate`, `return_rate`, `ang_momentum_damp`, `fd_speed`, `drag_factor`,
+`veh_weight`, `ref_area`, `rec_moments_inertia`. There is no thrust token, and the literal
+`ThrustFactor` occurs exactly once in the whole 2.5 MB image — inside the tuner's CSV header.
+A census of the shipped `vehicle.json` agrees: **24 defs carry a `dynamics` block, every one of
+them authors the same ten keys, and none authors an eleventh.** (`level_off_rate` is the mirror
+case — a token the parser accepts that the shipped data never uses.) So there is no inheritance
+chain to walk: `kind_of` never has to supply a thrust value because no def has one.
+
+**5 — the data agrees, across all eleven airframes.** Independent of the binary: at a common speed
+`RefArea` cancels and the level-flight equilibrium is set by `ThrustFactor / (DragFactor · C_D)`.
+Ranking the eleven player airframes by that index against their authored `fd_speed` gives a
+**Spearman ρ of exactly +1.000** when `ThrustFactor` is the stock engine's power. The two
+alternatives fail: a uniform `ThrustFactor` of 1 gives ρ = +0.90, and one proportional to weight
+gives ρ = +0.77.
+
+| Airframe | Stock engine (id) | `power` | `drag_factor` | `fd_speed` | index `p/(df·C_D)` | null index |
+|---|---|---|---|---|---|---|
+| `pbloodhawk` | Bloodhawk Lvl-2 (11) | 0.62 | 0.37 | 302.0 mph | 15.21 | 24.53 |
+| `ppeacemaker` | Peacemaker Lvl-2 (14) | 0.58 | 0.38 | 290.8 | 14.07 | 24.26 |
+| `pfury` | Fury Lvl-2 (17) | 0.59 | 0.42 | 281.9 | 12.94 | 21.93 |
+| `pavenger` | Hellhound Lvl-2 (20) | 0.64 | 0.55 | 264.0 | 10.54 | 16.47 |
+| `pdevastator` | Devastator Lvl-2 (23) | 0.65 | 0.62 | 252.8 | 9.59 | 14.76 |
+| `pbrigand` | Brigand Lvl-2 (26) | 0.68 | 0.73 | 241.6 | 8.43 | 12.39 |
+| `pautogyro` | Hoplite gyro Lvl-2 (38) | 0.35 | 0.50 | 228.2 | 7.78 | **22.22** |
+| `pkestrel` | Kestrel Lvl-2 (29) | 0.90 | 1.28 | 217.0 | 6.34 | 7.05 |
+| `pfirebrand` | Firebrand Lvl-2 (32) | 1.00 | 1.58 | 208.0 | 5.91 | 5.91 |
+| `pwarhawk` | Warhawk Lvl-2 (35) | 1.00 | 1.70 | 201.3 | 5.38 | 5.38 |
+| `pbalmoral` | Balmoral bomber Lvl-2 (41) | 0.30 | 1.70 | 176.7 | 1.73 | 5.76 |
+
+The **Hoplite autogyro is the discriminating case**: it has the fourth-lowest `drag_factor` in the
+set but the fifth-*lowest* `fd_speed`, so drag alone ranks it third-fastest when it is authored
+seventh. Only its engine — 0.35, the second-weakest in the game — puts it where the data says it
+belongs. The Balmoral is the second discriminator at the other end.
+
+Note that **every player airframe's stock engine is its Lvl-2 row**, not Lvl-1: ids 11, 14, 17, 20,
+23, 26, 29, 32, 35, 38, 41. Solving any constant from a Lvl-1 row inflates it by ~30 %.
+
+⚠ **A caveat this item turned up, owed to B12/B13.** The table above is a *rank* test, and it is
+clean. The absolute test is not: assuming `fd_speed` is the full-throttle level equilibrium and
+solving `power · T_avail(Mach) = q · DragFactor · C_D` at each airframe's own `fd_speed` should
+give eleven samples of one smooth curve, and it does not — a log-log fit leaves ±18 % residuals
+across most of the set and the Balmoral misses by **+60 %**. Either the unrecovered `pow` term has
+strong curvature, or `fd_speed` is not the equilibrium. The second reading has support: the tuner
+calls the field **`FakeDynSpeed`** and *measures* `TopSpeed` separately (if `fd_speed` were the top
+speed there would be nothing to measure), and at runtime `fd_speed` is used as a **normalising
+reference speed** — `speed/fd_speed` for gauge and effect fractions (`0x4b1e54`), an AI target
+speed `fd_speed · throttle` (`0x48c593`), and a speed clamp (`0x46aaf4`) — never as a solved
+equilibrium. **Do not treat `fd_speed` as the original's top speed in B12/B13 without settling
+this.**
+
+**Bonus, and load-bearing for B13:** `[obj+0x124]` and `[obj+0x128]` are the **commanded** and
+**current throttle** — `FUN_0048e585` rate-limits the current toward the commanded and burns fuel
+at `[obj+0x134] -= dt · throttle · k`, and `FUN_00491820` snaps them together. The current throttle
+enters thrust as a **plain multiply** at `0x48fce7`. That is the linear-throttle claim, confirmed
+at source in this item rather than inferred.
 
 ## The measurement harness — a validation route
 
@@ -385,11 +501,18 @@ Checked against [`src/Flight/FlightModel.cs`](../../CSVM/src/Flight/FlightModel.
    a released stick.
 9. **The G/AOA limiters gating only opposing input** — a subtle asymmetry that changes departure
    and recovery behaviour, not steady turns.
+10. **Thrust scales with `ref_area`, not `1/veh_weight`.** The remake divides engine power by
+    weight; the original multiplies it by reference area, which is what makes `RefArea` cancel
+    against drag. See `ThrustFactor` above.
 
 ## Confidence
 
-- **Read directly from the executable:** all constants and formulas above, except as marked.
-- **Inferred, and marked ⚠ in place:** the atmosphere band threshold; the thrust `pow` exponent.
+- **Read directly from the executable:** all constants and formulas above, except as marked. This
+  now includes the `ThrustFactor` chain (parser → def `+0x128` → runtime `+0x66c` → force
+  assembly) and the linear throttle multiply.
+- **Inferred, and marked ⚠ in place:** the atmosphere band threshold; the thrust `pow` exponent;
+  whether `fd_speed` is a level-flight equilibrium at all (the evidence now says probably not).
 - **Verified by arithmetic:** the dense atmosphere band, via the stall-speed check against the
-  parser's fallback aircraft.
+  parser's fallback aircraft; `ThrustFactor` = engine power, via a perfect rank correlation with
+  `fd_speed` across all eleven player airframes.
 - **Untested:** whether the shipped Dynamics tuner is reachable in a retail build.
