@@ -221,6 +221,118 @@ public sealed class ClutterBuilder
         return null;
     }
 
+    /// <summary>The first node at or under <paramref name="node"/> carrying a non-empty mesh —
+    /// a template root's ground quad, or a decoration node's card/building. Public and static
+    /// because it is the other half of resolving a template (with
+    /// <see cref="FindTemplateRoot(GameZ, string)"/>), and the UV a decoration is stored at is
+    /// only checkable against A2's worked example if both halves can be reached.</summary>
+    public static GameZNode? FirstWithMesh(GameZ gamez, GameZNode node, bool includeSelf = true)
+    {
+        if (includeSelf && node.MeshIndex >= 0 && node.MeshIndex < gamez.Meshes.Count
+            && gamez.Meshes[node.MeshIndex].Polygons.Count > 0)
+            return node;
+        foreach (var c in node.Children)
+            if (c >= 0 && c < gamez.Nodes.Count && FirstWithMesh(gamez, gamez.Nodes[c]) is { } found)
+                return found;
+        return null;
+    }
+
+    /// <summary>The template's ground quad as <c>FUN_004dd230</c> uses it: the polygon's plane,
+    /// and the affine map from a local position on that plane to the polygon's own interpolated
+    /// texture UV.
+    ///
+    /// <para>⚠ <b>NOT a scalar tiling period.</b> <c>max(extentX, extentZ)</c>, what this
+    /// returned before, is an exact relabelling of the quad UV on 28 of the install's 32
+    /// template quads and WRONG on the other four: <c>filmblock1</c> (64×128),
+    /// <c>cliff1_sandtrans</c> (128×64) and <c>parklot1</c> (16×32) / <c>parklot2</c> (32×16),
+    /// the last two additionally UV-MIRRORED — u = 0 at max X. Worst error 0.74 UV. Two axes
+    /// with signs are the least that can describe them
+    /// (<c>analysis/bl-305-clutter-uv/FINDINGS-A2.md</c>). Nothing here keys off corner order
+    /// either: the winding differs between templates while the parameterisation does not.</para>
+    /// </summary>
+    public static GroundQuad? GroundInfo(GameZ gamez, GameZNode ground)
+    {
+        var mesh = gamez.Meshes[ground.MeshIndex];
+        var tex = FirstTexture(gamez, mesh);
+        if (tex == null || mesh.Vertices.Count == 0)
+            return null;
+        Vector3 min = mesh.Vertices[0], max = mesh.Vertices[0];
+        foreach (var v in mesh.Vertices)
+        {
+            min = min.Min(v);
+            max = max.Max(v);
+        }
+        float extX = max.X - min.X, extZ = max.Z - min.Z;
+        if (Mathf.Max(extX, extZ) < 1f)
+            return null;
+
+        foreach (var poly in mesh.Polygons)
+        {
+            if (poly.UvCoords == null || poly.UvCoords.Count < 3 || poly.VertexIndices.Count < 3)
+                continue;
+            Vector3 a = mesh.Vertices[poly.VertexIndices[0]],
+                    b = mesh.Vertices[poly.VertexIndices[1]],
+                    c = mesh.Vertices[poly.VertexIndices[2]];
+
+            // Everything from here down is DOUBLE, and TryUv rounds once at the very end. Not
+            // fussiness: on the 28 square, axis-aligned templates a single rounding makes
+            // `uv × extent` reproduce, BIT FOR BIT, the metres the old scalar rule stored (the
+            // extents are powers of two, so that scaling is exact and rounding commutes with
+            // it). Done in float, the intermediate `1 + (x − 256)/512` rounds separately and
+            // moves a tree by up to one ulp — ~0.03 mm, invisible in an instance count and
+            // enough to flip pixels in a golden of a forest. Measured: it moved `c1-flight`.
+            double[] e1 = { b.X - (double)a.X, b.Y - (double)a.Y, b.Z - (double)a.Z };
+            double[] e2 = { c.X - (double)a.X, c.Y - (double)a.Y, c.Z - (double)a.Z };
+            double[] n = Cross(e1, e2);
+            double d = (n[0] * n[0]) + (n[1] * n[1]) + (n[2] * n[2]);
+            if (d < 1e-9)
+                continue;   // a degenerate first triangle carries no plane and no UV map
+            // The reciprocal basis of {e1, e2, n}: f1·e1 = f2·e2 = 1 and every other pairing 0,
+            // since e1·(e2×n) = |n|². A gradient built from it is perpendicular to n, which is
+            // exactly "project along the quad normal, then read the interpolated UV" — and it
+            // carries the sign, so a mirrored quad comes out mirrored.
+            double[] f1 = Cross(e2, n), f2 = Cross(n, e1);
+            for (int k = 0; k < 3; k++)
+            {
+                f1[k] /= d;
+                f2[k] /= d;
+            }
+            double len = Math.Sqrt(d);
+            Vector2 uvA = poly.UvCoords[0], uvB = poly.UvCoords[1], uvC = poly.UvCoords[2];
+            double du1 = uvB.X - (double)uvA.X, du2 = uvC.X - (double)uvA.X;
+            double dv1 = uvB.Y - (double)uvA.Y, dv2 = uvC.Y - (double)uvA.Y;
+            var quad = new GroundQuad
+            {
+                Texture = tex,
+                ExtentX = extX,
+                ExtentZ = extZ,
+                NormalX = n[0] / len,
+                NormalY = n[1] / len,
+                NormalZ = n[2] / len,
+                AnchorX = a.X,
+                AnchorY = a.Y,
+                AnchorZ = a.Z,
+                AnchorU = uvA.X,
+                AnchorV = uvA.Y,
+                GradUX = (f1[0] * du1) + (f2[0] * du2),
+                GradUY = (f1[1] * du1) + (f2[1] * du2),
+                GradUZ = (f1[2] * du1) + (f2[2] * du2),
+                GradVX = (f1[0] * dv1) + (f2[0] * dv2),
+                GradVY = (f1[1] * dv1) + (f2[1] * dv2),
+                GradVZ = (f1[2] * dv1) + (f2[2] * dv2),
+            };
+            // The polygon's own fan, for the containment half of the projection test.
+            for (int i = 1; i + 1 < poly.VertexIndices.Count; i++)
+            {
+                quad.Faces.Add(mesh.Vertices[poly.VertexIndices[0]]);
+                quad.Faces.Add(mesh.Vertices[poly.VertexIndices[i]]);
+                quad.Faces.Add(mesh.Vertices[poly.VertexIndices[i + 1]]);
+            }
+            return quad;
+        }
+        return null;
+    }
+
     // Any billboard kind counts as a placeable card: C1's trees/bushes are CylindricalY, and
     // C5's cblock templates additionally carry SphericalY `poleflare` glows beside their
     // CylindricalY `lightpole` posts. Both are one-quad cards and both are placed, which is
@@ -333,11 +445,18 @@ public sealed class ClutterBuilder
         if (xzArea < trueArea * MinSlopeCos)
             return;
 
-        float p = template.Period;
+        // The decorations are stored as quad UVs (see ParseTemplate). Until B12 replaces this
+        // grid with the original's per-triangle UV lattice, a UV is laid out on the world grid
+        // one quad extent wide PER AXIS: offset = uv × extent, step = extent. On the 28 square,
+        // unmirrored templates that is bit-identical to the old "metres from the quad's min
+        // corner ÷ a scalar period" — every shipped extent is a power of two, so uv = m/extent
+        // and uv × extent round-trip exactly. The four non-square or mirrored ones move, which
+        // is the correction A2 measured, not a regression.
+        float ex = template.ExtentX, ez = template.ExtentZ;
         float minX = Mathf.Min(a.X, Mathf.Min(b.X, c.X)), maxX = Mathf.Max(a.X, Mathf.Max(b.X, c.X));
         float minZ = Mathf.Min(a.Z, Mathf.Min(b.Z, c.Z)), maxZ = Mathf.Max(a.Z, Mathf.Max(b.Z, c.Z));
-        int gx0 = Mathf.FloorToInt(minX / p), gx1 = Mathf.FloorToInt(maxX / p);
-        int gz0 = Mathf.FloorToInt(minZ / p), gz1 = Mathf.FloorToInt(maxZ / p);
+        int gx0 = Mathf.FloorToInt(minX / ex), gx1 = Mathf.FloorToInt(maxX / ex);
+        int gz0 = Mathf.FloorToInt(minZ / ez), gz1 = Mathf.FloorToInt(maxZ / ez);
         for (int gx = gx0; gx <= gx1; gx++)
             for (int gz = gz0; gz <= gz1; gz++)
                 for (int k = 0; k < template.Kinds.Count; k++)
@@ -345,7 +464,9 @@ public sealed class ClutterBuilder
                     var kind = template.Kinds[k];
                     foreach (var cell in kind.CellPlacements)
                     {
-                        float px = gx * p + cell.Origin.X, pz = gz * p + cell.Origin.Z;
+                        // cell.Origin.X / .Z are the decoration's quad UV, in [0, 1).
+                        float px = (gx * ex) + (cell.Origin.X * ex);
+                        float pz = (gz * ez) + (cell.Origin.Z * ez);
                         if (px < minX || px > maxX || pz < minZ || pz > maxZ)
                             continue;
                         // Barycentric in XZ: inside iff all weights share the area sign.
@@ -396,6 +517,35 @@ public sealed class ClutterBuilder
                 }
             }
         }
+    }
+
+    private static double[] Cross(double[] p, double[] q) => new[]
+    {
+        (p[1] * q[2]) - (p[2] * q[1]),
+        (p[2] * q[0]) - (p[0] * q[2]),
+        (p[0] * q[1]) - (p[1] * q[0]),
+    };
+
+    private static string? FirstTexture(GameZ gamez, GameZMesh mesh)
+    {
+        foreach (var poly in mesh.Polygons)
+            if (poly.MaterialIndex >= 0 && poly.MaterialIndex < gamez.Materials.Count
+                && gamez.Materials[poly.MaterialIndex].TextureName is { } tex)
+                return tex;
+        return null;
+    }
+
+    // Distinct example names for a one-line skip summary (many decorations share a name —
+    // repeats would read like a bug); the caller keeps the true count beside it.
+    private static string SkipExamples(List<string> names)
+    {
+        var distinct = new List<string>();
+        foreach (var n in names)
+            if (!distinct.Contains(n))
+                distinct.Add(n);
+        return distinct.Count > 5
+            ? string.Join(", ", distinct.GetRange(0, 5)) + ", …"
+            : string.Join(", ", distinct);
     }
 
     private static string Sanitize(string name)
@@ -472,13 +622,18 @@ public sealed class ClutterBuilder
             Log.Info("world", $"clutter template not in gamez template={name}");
             return null;
         }
-        var ground = FirstWithMesh(root);
-        if (ground == null || GroundInfo(ground) is not { } info)
+        var ground = FirstWithMesh(_gamez, root);
+        if (ground == null || GroundInfo(_gamez, ground) is not { } quad)
         {
             Log.Info("world", $"clutter template has no textured ground quad template={name}");
             return null;
         }
-        var template = new Template { GroundTexture = info.Texture, Period = info.Period };
+        var template = new Template
+        {
+            GroundTexture = quad.Texture,
+            ExtentX = quad.ExtentX,
+            ExtentZ = quad.ExtentZ,
+        };
 
         var kinds = new Dictionary<int, Kind>();
         // What is left in the skip list is only genuinely unusable:
@@ -486,20 +641,34 @@ public sealed class ClutterBuilder
         // resolves no texture. 3D building/car decorations take the solid path below.
         // Collected and logged as ONE summary line.
         List<string>? skipped = null;
+        // FUN_004dd230's `template %s clutter %s does not project to polygon.` path. No
+        // decoration in the retail install takes it (A2's notproj column is 0 everywhere), so
+        // this is fidelity, not a case any chapter exercises — but a miss must skip and say so,
+        // never quietly land at UV (0,0).
+        List<string>? offQuad = null;
         foreach (var childIndex in ground.Children)
         {
             var deco = _gamez.Nodes[childIndex];
-            var decoMesh = FirstWithMesh(deco, includeSelf: false);
+            var decoMesh = FirstWithMesh(_gamez, deco, includeSelf: false);
             if (decoMesh == null)
             {
                 (skipped ??= new List<string>()).Add(deco.Name);
                 continue;
             }
-            // The local transform is relative to the ground quad; its XZ becomes the offset
-            // within the tiling cell. The basis and Y are kept whole for the solid path.
+            // FUN_004dd230: project the decoration's local position onto the ground quad along
+            // the quad normal, read the polygon's INTERPOLATED TEXTURE UV there, and wrap it
+            // into [0, 1). The stored XZ is that UV pair, not metres — which is what makes the
+            // four non-square/UV-mirrored templates come out right, since no scalar period can
+            // describe them. The basis and Y stay exactly as authored: the solid path needs the
+            // basis for orientation and the Y for height above the block's ground plane.
             var local = deco.Local ?? Transform3D.Identity;
+            if (!quad.TryUv(local.Origin, out var uv))
+            {
+                (offQuad ??= new List<string>()).Add(deco.Name);
+                continue;
+            }
             var cell = new Transform3D(local.Basis, new Vector3(
-                local.Origin.X - info.Min.X, local.Origin.Y, local.Origin.Z - info.Min.Y));
+                GroundQuad.Wrap(uv.X), local.Origin.Y, GroundQuad.Wrap(uv.Y)));
 
             if (!kinds.TryGetValue(decoMesh.MeshIndex, out var kind))
             {
@@ -537,50 +706,14 @@ public sealed class ClutterBuilder
             kind.CellPlacements.Add(cell);
         }
         if (skipped != null)
-        {
-            // Distinct example names (many decorations share a name — repeats would read
-            // like a bug); the count stays the true number of skipped decoration nodes.
-            var distinct = new List<string>();
-            foreach (var s2 in skipped)
-                if (!distinct.Contains(s2))
-                    distinct.Add(s2);
-            var shown = distinct.Count > 5
-                ? string.Join(", ", distinct.GetRange(0, 5)) + ", …"
-                : string.Join(", ", distinct);
-            Log.Info("world", $"clutter template skipped decorations template={name} skipped={skipped.Count} examples='{shown}'");
-        }
+            Log.Info("world", $"clutter template skipped decorations template={name} skipped={skipped.Count} examples='{SkipExamples(skipped)}'");
+        if (offQuad != null)
+            Log.Info("world", $"clutter decorations do not project onto the ground quad template={name} skipped={offQuad.Count} examples='{SkipExamples(offQuad)}'");
         return template.Kinds.Count > 0 ? template : null;
     }
 
     /// <inheritdoc cref="FindTemplateRoot(GameZ, string)"/>
     private GameZNode? FindTemplateRoot(string name) => FindTemplateRoot(_gamez, name);
-
-    private GameZNode? FirstWithMesh(GameZNode node, bool includeSelf = true)
-    {
-        if (includeSelf && node.MeshIndex >= 0 && node.MeshIndex < _gamez.Meshes.Count
-            && _gamez.Meshes[node.MeshIndex].Polygons.Count > 0)
-            return node;
-        foreach (var c in node.Children)
-            if (c >= 0 && c < _gamez.Nodes.Count && FirstWithMesh(_gamez.Nodes[c]) is { } found)
-                return found;
-        return null;
-    }
-
-    private (string Texture, float Period, Vector2 Min)? GroundInfo(GameZNode ground)
-    {
-        var mesh = _gamez.Meshes[ground.MeshIndex];
-        var tex = FirstTexture(mesh);
-        if (tex == null || mesh.Vertices.Count == 0)
-            return null;
-        Vector3 min = mesh.Vertices[0], max = mesh.Vertices[0];
-        foreach (var v in mesh.Vertices)
-        {
-            min = min.Min(v);
-            max = max.Max(v);
-        }
-        float period = Mathf.Max(max.X - min.X, max.Z - min.Z);
-        return period < 1f ? null : (tex, period, new Vector2(min.X, min.Z));
-    }
 
     // A 3D decoration: anything with real geometry that is NOT a billboard card. C2's
     // filmblock/resblock buildings and parklot Studebakers, C5's cblock city blocks (2-27
@@ -608,7 +741,7 @@ public sealed class ClutterBuilder
     private (string Texture, float Width, float Height)? SpriteInfo(int meshIndex)
     {
         var mesh = _gamez.Meshes[meshIndex];
-        var tex = FirstTexture(mesh);
+        var tex = FirstTexture(_gamez, mesh);
         if (tex == null || mesh.Vertices.Count == 0 || !IsSpriteCard(mesh))
             return null;
         Vector3 min = mesh.Vertices[0], max = mesh.Vertices[0];
@@ -618,15 +751,6 @@ public sealed class ClutterBuilder
             max = max.Max(v);
         }
         return (tex, max.X - min.X, max.Y - min.Y);
-    }
-
-    private string? FirstTexture(GameZMesh mesh)
-    {
-        foreach (var poly in mesh.Polygons)
-            if (poly.MaterialIndex >= 0 && poly.MaterialIndex < _gamez.Materials.Count
-                && _gamez.Materials[poly.MaterialIndex].TextureName is { } tex)
-                return tex;
-        return null;
     }
 
     // Walk the placed world (the same set WorldBuilder renders: world children +
@@ -898,14 +1022,96 @@ public sealed class ClutterBuilder
         public IReadOnlyList<Transform3D> Placements = null!;
     }
 
+    /// <summary>A template's ground quad, reduced to what placement needs: which terrain
+    /// texture it decorates, its per-axis local extent, and the affine map from a local
+    /// position on its plane to the polygon's own interpolated texture UV — which is the
+    /// coordinate every decoration is stored in (<c>FUN_004dd230</c>).</summary>
+    public sealed class GroundQuad
+    {
+        // The quad polygon's triangles, in the template's local space (containment only).
+        public readonly List<Vector3> Faces = new();
+
+        public string Texture = "";
+        public float ExtentX, ExtentZ;   // the quad's own local X/Z extents
+
+        // The plane and the UV map, in DOUBLE — see the note in GroundInfo for why the single
+        // rounding at the end of TryUv is load-bearing rather than pedantry.
+        public double NormalX, NormalY, NormalZ;         // unit plane normal
+        public double AnchorX, AnchorY, AnchorZ;         // a point on the plane…
+        public double AnchorU, AnchorV;                  // …and the UV there
+        public double GradUX, GradUY, GradUZ;            // d(u) per metre of local displacement
+        public double GradVX, GradVY, GradVZ;            // d(v) likewise
+
+        // FUN_004dd230's fmod wrap, both branches. A negative coordinate maps to 1 − frac, and
+        // an exact 1.0 (a frac that rounded away) collapses back to 0. No retail decoration
+        // takes the negative branch — all 32 resolving quads span exactly 0..1, so the wrap
+        // folds nothing — but the original takes it, so this does.
+        public static float Wrap(float value)
+        {
+            float f = value % 1f;
+            if (f < 0f)
+            {
+                f += 1f;
+                if (f >= 1f)
+                    f = 0f;
+            }
+            return f;
+        }
+
+        /// <summary>The quad's interpolated texture UV under <paramref name="local"/>, projected
+        /// along the quad normal. False when the decoration does not project onto the polygon —
+        /// the original logs and skips that case, and so does the caller.</summary>
+        public bool TryUv(Vector3 local, out Vector2 uv)
+        {
+            // FUN_004dd230 ray-casts the decoration ±5 along the quad normal, so a decoration
+            // further off the plane than that reaches nothing to project onto.
+            const double rayReach = 5.0;
+
+            double ox = local.X - AnchorX, oy = local.Y - AnchorY, oz = local.Z - AnchorZ;
+            double dist = (NormalX * ox) + (NormalY * oy) + (NormalZ * oz);
+            double fx = ox - (NormalX * dist), fy = oy - (NormalY * dist), fz = oz - (NormalZ * dist);
+            uv = new Vector2(
+                (float)(AnchorU + (GradUX * fx) + (GradUY * fy) + (GradUZ * fz)),
+                (float)(AnchorV + (GradVX * fx) + (GradVY * fy) + (GradVZ * fz)));
+            var foot = new Vector3(
+                (float)(AnchorX + fx), (float)(AnchorY + fy), (float)(AnchorZ + fz));
+            return Math.Abs(dist) <= rayReach && Contains(foot);
+        }
+
+        private bool Contains(Vector3 p)
+        {
+            // Barycentric slack: an authored decoration sitting exactly on the quad's edge
+            // belongs to the quad.
+            const float edgeSlack = 1e-4f;
+
+            for (int i = 0; i + 2 < Faces.Count; i += 3)
+            {
+                Vector3 a = Faces[i], b = Faces[i + 1], c = Faces[i + 2];
+                var n = (b - a).Cross(c - a);
+                float d = n.LengthSquared();
+                if (d < 1e-9f)
+                    continue;
+                // Barycentric weights via the triangle's own normal, so the test works on a
+                // tilted quad as well as a flat one.
+                float w0 = (b - a).Cross(p - a).Dot(n) / d;
+                float w1 = (c - b).Cross(p - b).Dot(n) / d;
+                float w2 = (a - c).Cross(p - c).Dot(n) / d;
+                if (w0 >= -edgeSlack && w1 >= -edgeSlack && w2 >= -edgeSlack)
+                    return true;
+            }
+            return false;
+        }
+    }
+
     // One decoration kind: every template instance of the same decoration mesh (all 13
     // firtree1 placements share mesh + texture), plus where it sits in each grid cell.
     private sealed class Kind
     {
-        // Where each decoration of this kind sits within one template cell. Origin XZ is
-        // relative to the ground quad's min corner, i.e. in [0, period); origin Y and the
-        // basis are the decoration node's own, and are used by the solid path only (a sprite
-        // is planted flat on the surface and re-faced by its shader — see PlaceOnTriangle).
+        // Where each decoration of this kind sits on the template's ground quad, as the quad's
+        // own TEXTURE UV: Origin.X is u and Origin.Z is v, both in [0, 1) — not metres, and not
+        // relative to a corner (the winding differs between templates). Origin Y and the basis
+        // are the decoration node's own, and are used by the solid path only (a sprite is
+        // planted flat on the surface and re-faced by its shader — see PlaceOnTriangle).
         public readonly List<Transform3D> CellPlacements = new();
         public readonly List<Transform3D> Instances = new(); // world placements
 
@@ -925,6 +1131,11 @@ public sealed class ClutterBuilder
         public readonly List<Kind> Kinds = new();
 
         public string GroundTexture = "";
-        public float Period;                     // world-space tiling period (the ground quad's side)
+
+        // The ground quad's own local X/Z extents. NOT a tiling period and not a distance the
+        // original ever uses: the decorations are stored as quad UVs, and these are only what
+        // the surviving world-space grid in PlaceOnTriangle multiplies a UV by. B12 deletes the
+        // grid, and these two fields with it.
+        public float ExtentX, ExtentZ;
     }
 }

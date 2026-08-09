@@ -191,7 +191,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — The placement rewrite
 
-11. ☐ Store decoration positions as template-quad UVs, not metres
+11. ☑ Store decoration positions as template-quad UVs, not metres
 12. ☐ Replace the world-space grid stamp with the per-triangle UV-lattice walk
 13. ☐ Settle the two remake-only rules: `MinSlopeCos` and the `seen` dedup
 14. ☐ Chapter A/Bs + the 8-chapter regression, and rewrite the class comment
@@ -493,7 +493,64 @@ a truncated one.
 
 # Wave B — The placement rewrite
 
-## B11 ☐ Store decoration positions as template-quad UVs, not metres
+## B11 ☑ Store decoration positions as template-quad UVs, not metres
+
+**Landed** (`CSVM/src/Mech3/Clutter.cs`, `CSVM.Tests/ClutterQuadUvTests.cs`). `GroundInfo` no
+longer returns a scalar `Period`: it returns the ground quad's **two-axis signed UV map** — the
+polygon's plane plus the affine gradients `d(u)`, `d(v)` per metre of local displacement — and
+`ParseTemplate` projects each decoration onto that plane along the quad normal, reads the
+interpolated texture UV, and wraps it with `FUN_004dd230`'s `fmod` (both branches, including the
+exact-1.0 collapse). `Kind.CellPlacements` now carries `(u, authored Y, v)`; the basis and Y are
+untouched. `Template.Period` is gone; `PlaceOnTriangle`'s grid survives until B12 but is now
+**per axis** — step `extent`, offset `uv × extent`. `FirstWithMesh`/`GroundInfo` became public
+statics so a test can read the stored UV; nothing in the rendering half was touched.
+
+**Verified.** Prediction stated first (METHOD-12): C1/C1B/C4/C5 byte-identical, C2 and C3 change,
+and the changed instances exactly `filmblock1`, `parklot1`, `parklot2`, `cliff1_sandtrans`. The
+baseline was taken on the unchanged tree first and re-measured (METHOD-3); the pre-change goldens
+were **all 13 identical**, so no mover is inherited (GOLD-8).
+
+| chapter | sprites base → now | solids base → now | per-kind entries moved |
+|---|---|---|---|
+| C1 | 9,303 → 9,303 | — | 0 of 7 |
+| C1B | 60 → 60 | — | 0 of 3 |
+| C2 | 37,167 → 37,167 | 10,261 → **10,328** | **8 of 87** |
+| C3 | 371 → **678** | — | **1 of 1** |
+| C4 | 88,630 → 88,630 | — | 0 of 9 |
+| C5 | 124,072 → 124,072 | 71,326 → 71,326 | 0 of 39 |
+
+**The 28/4 split held exactly.** The eight moved C2 entries are `filmbuild01` (6→10) and
+`filmbuild02` (12→20) — `filmblock1`'s only two kinds, its other four film lots untouched — and
+all six `c_studebaker*` kinds, which exist only under `parklot1`/`parklot2` and occupy one
+contiguous run in the build order. C3's single kind is `cliff1_sandtrans`'s. Nothing else moved
+anywhere.
+
+**Two goldens moved: `c2-city` and `c3-island`, and only those.** Both are chapters where a named
+template was predicted to move; left un-re-blessed for the orchestrator. Deliberate control
+(METHOD-9/METHOD-10): perturbing one stored UV by +0.25 moved **8** goldens, including
+`c1-waterfall`, `c1b-night-sea`, `c1-flight`, `c1-crash`, `c4-snow` and `c5-city-night` — so every
+"identical" above is a check that could have failed. Perturbation reverted and the tree proved
+clean with `git diff` (METHOD-17). `.\RunTests.ps1`: build PASS, 840 units PASS (3 new), 29
+in-engine suites PASS with engine errors clean, goldens FAIL on those two shots alone.
+
+**⚠ One finding the item did not ask for: the quad map must be evaluated in DOUBLE.** Written in
+float it moved `c1-flight` — a chapter that must not move. The cause is not the algorithm but the
+rounding: on `terpat02` the map is anchored at the corner carrying UV (1,1), so `u` comes out as
+`1 + (x − 256)/512`, and that intermediate rounds separately from the old `x + 256`. The error is
+one ulp, ~0.03 mm, invisible in every instance count and enough to flip pixels in a forest shot.
+Computed in double and rounded **once**, `u × extent` reproduces the old metres bit for bit,
+because every shipped quad extent is a power of two and that scaling is exact. `c1-flight` came
+back identical on the next run, which is also the proof the fix was the thing that mattered
+(METHOD-15). This is a trap for B12: any further arithmetic on these UVs is one rounding away
+from moving a chapter that should not move.
+
+**Two things this could not verify.** (a) `FUN_004dd230`'s "does not project to polygon" path is
+implemented (skip + one summary log line, never a silent (0,0)) but **no chapter exercises it** —
+0 decorations off-quad install-wide, matching A2's `notproj` column, and the log sink demonstrably
+carries `[world]` lines, so the zero is a measurement and not a blind spot. (b) The `fmod` negative
+branch is likewise untaken by retail data; it is covered by a unit test instead.
+
+### Original approach (kept for reference)
 
 **Goal.** `Kind.CellPlacements` carries each decoration's position as a `[0,1)` UV pair (plus the
 authored basis and Y that the solid path still needs), derived the way `LoadTemplate` derives it.

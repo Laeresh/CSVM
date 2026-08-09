@@ -638,11 +638,19 @@ clutter (grown from `ClutterBuilder.ExportedKinds`) continuing the world past th
 
 ## src/Mech3/Clutter.cs
 Stamps the boot-script clutter templates across placed polygons carrying the template's ground
-texture, on a fixed world-space X/Z grid of the template period; sprites → one fullbright Y-billboard
+texture, on a fixed world-space X/Z grid of the template quad's PER-AXIS extent; sprites → one fullbright Y-billboard
 MultiMesh per kind, solids → `SceneBuilder.SharedMesh`; the split is `SceneBuilder.ClassifyBillboard`.
 The sprite shader takes the decoration model's own `lighting`/`fog` flags as variants (every tree and
 bush card in the install is `lighting: false`, so clutter does not dim with the mission SUNLIGHT),
 plus a UV-clamp variant from `SceneBuilder.UvsWithinUnitSquare` over the kind's own card UVs.
+⚠ **A decoration's position is stored as the ground quad's own interpolated TEXTURE UV**, in
+  `[0,1)`, the way `FUN_004dd230` stores it (`GroundInfo` → `GroundQuad.TryUv`, fmod-wrapped) —
+  never as metres from a corner, and never divided by a scalar period. `max(extentX, extentZ)`
+  relabels the UV exactly on 28 of the 32 shipped template quads and is wrong on the other four:
+  `filmblock1` 64×128, `cliff1_sandtrans` 128×64, `parklot1` 16×32 and `parklot2` 32×16, the last
+  two UV-MIRRORED, worst error 0.74 UV (`analysis/bl-305-clutter-uv/FINDINGS-A2.md`). The quad
+  map is held and evaluated in DOUBLE and rounded once: in float the square templates' round trip
+  loses an ulp and moves a golden.
 ⚠ Sprites are NOT collidable — no tree-destruction anim exists in the install (`spruce_destroy*`
   is the Spruce Goose; docs/formats/clutter.md). Solid decorations ARE collidable.
 ⚠ Collision shapes are SHARED, never expanded per placement (that costs seconds of BVH build): one

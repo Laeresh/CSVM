@@ -35,7 +35,7 @@
     {
       "name": "c2-city",
       "frame": 120,
-      "hash": "52f714594d02fcacf1f3a1421ea2cc4d",
+      "hash": "7ff1f9531f24b7ffc6529d41cec7bef2",
       "exercises": "C2's solid 3D city blocks, billboard clutter, backlot geometry, daylight fog; near-static, 51 px at 120 vs 121.",
       "args": ["--freecam", "--chapter=C2", "--pos=-5722,186,-3457", "--direction=-0.438,-0.15,-0.899", "--det", "--mute"]
     },
@@ -49,7 +49,7 @@
     {
       "name": "c3-island",
       "frame": 120,
-      "hash": "f8819e5640f3ac8f328c3b6e8fbd0327",
+      "hash": "60231ec605a10bc2d9fdb576a4658bcf",
       "exercises": "coastline, surf edge and open water at close range; static — 9 px at 120 vs 360, so it proves geometry and shading, not the clock.",
       "args": ["--freecam", "--chapter=C3", "--pos=-4518,400,-2015", "--direction=-0.35,-0.35,-1", "--det", "--mute"]
     },
