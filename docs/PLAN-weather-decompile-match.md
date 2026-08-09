@@ -172,7 +172,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Residuals & polish
 
-31. ☐ Re-baseline the overcast-match fog instruments under zone-correct fog; deck fog-flag check
+31. ☑ Re-baseline the overcast-match fog instruments under zone-correct fog; deck fog-flag check
 32. ☐ In-band turbulence flicker (optional TUNE)
 
 ## Dependency and parallelism notes
@@ -1119,7 +1119,175 @@ outside `fog_zone` chapters even where volumes exist (C1).
 
 # Wave D — Residuals & polish
 
-## D31 ☐ Re-baseline the overcast-match fog instruments; deck fog-flag check
+## D31 ☑ Re-baseline the overcast-match fog instruments; deck fog-flag check
+
+**Landed (2026-08-09) — instrument work only; not one line of `CSVM/` changed, no TUNE touched.**
+Every fog-strength residual `PLAN-overcast-match` recorded below the deck is re-measured under
+zone-correct fog and carries a dated verdict below. `PLAN-overcast-match` is a **frozen archive**
+(`docs/plans/plans.md`: completed plans are "read as history, not live work"), so nothing is
+amended there — the verdicts live here, and the durable facts in `weather.md` / `fogvol.md`.
+Probes, instruments and renders: `.scratch/d31/` (`shoot.ps1`, `shoot2.ps1`, `measure.py`).
+
+**Every measurement proves which fog it rendered (METHOD-15/METHOD-6).** "After" = the shipped
+default; its log carries `weather: camera state 1 -> fog zone 'zone1' — fog 1000-1750 m`. "Before"
+= `--sky-zone=zone2` (Decision 5's static override); its log carries `weather [zone2] … 1000–4000`
+and **no** state line at all, so not one global was rewritten.
+
+**⚠ The "before" side is no longer a fog-only control, and that is stated rather than papered
+over.** `--sky-zone=zone2` forces camera state 2, so it also swaps `B12`'s `zone_id` gate and
+`B14`'s dome — at a below-deck pose it culls C1's whole `zone_id 1` ground world (90.8 % of the
+river frame differs, and the frame has no terrain in it at all). Where the fog alone is the
+question, the before side is shot `--sky-zone=zone2 --no-zone-cull` (40.0 % of the river frame),
+and even that does not restore the pre-`B13` relocated deck sheet, which `B14` deleted. **The
+honest baseline is the recorded numbers, not a reconstructed render**, and the comparisons below
+are against `PLAN-overcast-match`'s own figures.
+
+### ⚠ Instrument correction first: our river frame's true horizon was ~104 px off
+
+Every "elevation above the true horizon" `B15` published for OUR side of the river pose is wrong,
+and the arithmetic downstream of it with it. The pose pitches 5.712° down, and at `f` = 599.1 px
+(fov_y 62° over 720 rows — `GameSession.cs:276`) that puts the true horizon at row
+**360 + 599.1·tan 5.712° = 419.9**. `B15` worked from ~316 (it read the `--no-fog` control's
+sky/terrain boundary at row 299 as "17 px above the horizon"), which is the terrain SILHOUETTE, not
+the horizon: at this pose our terrain rises **115 px above** the horizon, where the original still's
+ridge sits **48 px below** its own. Calibrated rather than asserted — the identical position shot
+LEVEL (`river-level-after.png`) puts every feature exactly **60 px** higher, against the predicted
+59.9. Minted as `SHOT-27` in `docs/verification.md`.
+
+So the two frames' skies do not overlap in elevation at all, and every band statistic below is
+anchored on the **terrain silhouette**, which both frames have (`SHOT-23`(b) taken one step
+further). Column band 300–950 in both, because the original still carries HUD gauges at both edges
+and a compass ribbon on black across its top ~40 rows — a full-width sd reads the gauges and a
+top-of-frame plateau reads the ribbon (`LOG-14`).
+
+### 1. The deck tiles' authored `fog` flag — answered: `fog: true`, in all four chapters
+
+Read straight from `extracted/<CH>/gamez/models.json` for every tile the deck classifier picks
+(one flat, untilted 4-vertex quad at the coverage-winning altitude — `WorldBuilder.FlatTileOf`'s
+own test):
+
+| chapter | tiles | texture | `fog` | `lighting` | `clouds` | `zone_id` |
+|---|---|---|---|---|---|---|
+| C1 / C1C / C2B | 144 each @ y 960 | `cloudlayer.tif` | **`true` 144/144** | `false` | `false` | 2 |
+| C4 | 144 @ y 1050 | `Sky1.tif` | **`true` 144/144** | `false` | `false` | 2 |
+
+**The lead is dead, and it was already dead.** The `fog: false` in `fogvol.md` is the `fvol`
+**cloud CARDS**' flag, and it does not extend to the deck: the tiles author `fog: true`, and so do
+all 626/1056/1453 `cloudparent` facades in C1/C1C/C4. `C25` had this right from the other side
+("the deck tiles author `fog: true` (not exempt)") and `C21` refuted the fog-exempt reading there;
+this pass confirms it against the flag itself, for all four chapters rather than one. What DOES
+author `fog: false` is every horizon model in every chapter (C1 6/6, C1C 5/5, C2B 3/3, C4 5/5) —
+`B14`'s finding, re-confirmed here. **So the "12.6 km ceiling texture" anomaly is a fact about the
+DOME, with no tile-flag component at all**, and the tiles' `fog: true` is what makes the
+above-deck floor fog to `FOG_COLOR` at the horizon — including `C26`'s annulus, which is built
+through the same fogged material path. Recorded in `weather.md`; `fogvol.md`'s card table now says
+what the flag is *not* about.
+
+### 2. The recorded below-deck poses, re-run
+
+**C3 canyon (`-3504,710,-3619` / `-0.40673,0,-0.91355`) — UNTOUCHED, and proven so.**
+`--sky-zone=zone1` vs the state-driven default: **0 px differ of 921,600, max delta 0** — the
+prediction met exactly. C3 authors its band at 10000–11000 m, so the state never leaves 1,
+`ZoneForState(1)` = `zone1`, and that is what the static resolution already produced; both logs
+read `weather [zone1] … 1000–4500` and neither carries a state line (DIAG-10: inert by
+construction, not by luck). **`BL-321`'s numbers therefore stand exactly as recorded** — near
+slope 106.1 vs 36.5, mid ridge 143.7 vs 19.9, far ridge 182.4 vs 60.3, vegetation 22.1 % vs
+47.8 % — and this plan moved none of them. Re-derived on my own boxes for corroboration only
+(`G−R > 8` over the lower half, which is not `B15`'s box and lands ~3–4 pp away from it):
+ours **17.69 %** both sides, original **51.21 %**, `--no-fog` control **75.13 %** — the same
+direction and the same gap, with the control proving the instrument can move.
+
+**C1 river (`-7323,192,-3829` / `-0.997,-0.1,0.070`) — the ceiling-survival residual is CLOSED.**
+Texture reach measured as `SHOT-23`(a) requires (a plateau-relative horizontal high-pass, cut at
+25 % of each image's own plateau), reported against the terrain silhouette:
+
+| frame | terrain silhouette | ceiling texture dies | dead-flat run above it |
+|---|---|---|---|
+| **ORIGINAL** `C1 IA1 Fog river.png` | row 404 | **never — 0 px above the silhouette** | **20 px at 175.000** (rows 372–391), 13 px of soft transition |
+| **AFTER** (state-driven, ZONE1 1000–1750) | row 305 | **never — 0 px above the silhouette** | **21 px at 176.000** (rows 275–295), 10 px of soft transition |
+| BEFORE (static ZONE2 1000–4000, gate off) | row 288 | dies **110 px** above the silhouette | 66 px at 176.000 |
+
+`B15` recorded ours saturating at **3.7 km** against the original's **~12.6 km**. Neither number
+survives, and not because the fog was re-tuned: **the surface being measured is no longer a fogged
+sheet.** `B14` made the below-deck ceiling the camera-anchored `horizon/zone1` dome, which every
+chapter authors `fog: false`, so no distance fog acts on it and "the distance at which the
+ceiling's texture saturates" has no finite value on either side. The instrument's own model
+(`f·h` over a world-fixed fogged sheet) no longer describes the subject, so the metric is retired
+rather than re-fitted (`INSTR-7` in its general form: the reading is blocked, the question is
+answered). The before column is the able-to-fail half — the same instrument on the same build
+still reports a death at 110 px.
+
+### 3. `B14`'s flat-band residual — CLOSED, and the 36 px was an instrument artifact
+
+`B14` left this open: *"the original's own frame is dead-flat 175.00 (sd 0.00) for 36 px above its
+horizon, while ours is textured from ~18 px up … the original's flat band is twice as deep as that
+geometry explains."* Re-measured like-for-like — same column band, same sd threshold, both anchored
+on the terrain silhouette (`SHOT-26`) — **the original's dead-flat run is 20 px and ours is 21 px.**
+The residual does not exist.
+
+Where the 36 px came from, so it is not re-derived: `C26` measured it FULL-WIDTH (the original
+still's HUD gauges and its crosshair sit in those rows) and anchored it on a horizon row of 370
+derived as "terrain onset 411 − 41 px", where 411 is itself a full-width onset; the still is a
+level frame 713 rows tall, so its true horizon is its centre row, **356**, and the terrain onset in
+a clean column band is **404** — which reproduces `C21`'s own "terrain 41 px below the true
+horizon" to a pixel. In the clean band the original's sky is dead flat over rows 372–391 and never
+over 36 rows.
+
+Two small deltas, recorded and not chased: our band reads **176.000** against the original's
+**175.000** — exactly C1's authored `FOG_COLOR` 176 against the original's 175, a 1.00-unit
+offset with the sign and size of a DX7 colour-quantisation step, an order under any bar this
+project measures against; and our vault texture resumes ~24–30 px above a clean horizon
+(`rung500-after.png`) against C1's authored +270.7 ring at 1.76° = 18.4 px, a ~6–11 px spread that
+is the dome's own geometry, not fog.
+
+### 4. `C26`'s 20,480 m annulus — KEEP the extent, RE-DERIVE the number (`BL-328`)
+
+**Below the deck it is now unreachable, and the strip it was built to hide is gone anyway.** The
+deck tiles are `zone_id 2`, so at state 1 the whole sheet — annulus included — is culled: the
+below-deck ceiling is the zone-1 dome. The `C26` climb ladder re-run over its own clean west
+horizon (`-7323,<y>,-3829` / `-1,0,0`, level, `FOG_COLOR` 176), before = the forced state 2 that
+still draws the sheet:
+
+| rung | before (state 2): dip / rim step | after (state 1): dip / rim step | `C26`'s record |
+|---|---|---|---|
+| 300 m | **13.03** at 17 px / 0.97 | **0.15** at 25 px / **0.14** | pre-fix 7.40 at 13 px / +5.25 |
+| 500 m | **8.12** at 12 px / 1.00 | **0.15** at 25 px / **0.14** | post-fix 2.07 at 4 px / +1.11 |
+| 900 m | 0.89 at 1 px / 0.89 | **0.15** at 25 px / **0.14** | — |
+
+The after column is **identical at every rung** (24 of the 40 rows above the horizon are dead-flat
+176.000, sd 0.0000) because the ceiling is now camera-anchored dome painted its zone's own
+`FOG_COLOR`. `C26`'s residual **2.07/+1.11 is closed to 0.15/0.14**, by `B14`'s mechanism rather
+than by the annulus. The before column also shows *why* the old derivation is dead: the dip's
+elevation now tracks `f·(960 − y)/20480` (predicted 19.3 / 13.5 / 1.8 px at the three rungs;
+measured 17 / 12 / 1) instead of sitting at a fixed 3.95 px, because `B13` made the floor
+world-fixed while `C26` sized 20,480 m against a camera-anchored `K` = 135 that `B14` then deleted.
+
+**Above the deck the annulus is still load-bearing, measured at the pinned pose.** From
+`-7323,1192,-3829` looking level west the floor's far edge lands **6 px below the horizon**;
+232 m of camera height over a 20,480 m half-span predicts **6.79 px**, and the 144-tile sheet's own
+6,144 m edge would put it at **22.62 px**. Without the annulus, 16 px of dome would show between
+the floor's edge and the horizon. Its ceiling constraint is untouched by `B14`'s per-dome fitting:
+C1's `zone2` dome is unclamped at 2.5× (no scale line in any log here), i.e. 21.86 km against the
+annulus's 20.48 km.
+
+**Verdict: keep the extension; its justification is re-derived and its NUMBER is not.** 20,480 m
+was picked from a rim formula that no longer applies, and the floor's far edge is now
+altitude-dependent: at `y` = 2,000 m the same edge sits **33 px** below the horizon (predicted
+30.4), where the pre-`B13` ceiling put it at a constant 3.95 px at every altitude. Handed to
+**`BL-328`** with these numbers rather than re-picked here — picking it is a look change, and this
+item may not make one.
+
+### Verify
+
+- `.\RunTests.ps1`: **826 unit tests** (0 failed, 0 skipped, `CSVM_DATA_ROOT` set), **29/29**
+  engine suites, engine errors clean, and **all 13 goldens hash-identical to the committed
+  manifest**. No golden may move and none did — the item changes no engine file (`git status`
+  shows only `docs/`, `backlog.md`, `PROJECT_CONTEXT.md`), which is the item's own no-TUNE rule
+  enforced by the run rather than asserted.
+- Every residual named in this item's brief has a dated verdict above with numbers; the one
+  re-opened thread is `BL-328`.
+
+**Original approach (kept for reference).**
 
 **Goal.** Every fog-strength residual recorded in `PLAN-overcast-match` (B15's split verdicts,
 C26's rim numbers) is re-measured under zone-correct fog, and each is either closed, re-opened

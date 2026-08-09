@@ -221,6 +221,14 @@ placed `cloudparent` facades keep vertex colour 255 and their range-gated `0.6` 
 carry `far_fade_range` instead. That is a deliberate reversal of what `CloudPuffs` did (it fogged
 its puffs); the fade band replaces the fog wall.
 
+⚠ **The exemption is the CARDS' alone — do not extend it to the rest of the overcast**
+(`PLAN-weather-decompile-match` `D31`, 2026-08-09). The 144 cloud-deck tiles author `fog: true` in
+all four deck chapters (144/144, C1/C1C/C2B `cloudlayer.tif` @ 960, C4 `Sky1.tif` @ 1050), and so
+do all 626/1056/1453 `cloudparent` facades in C1/C1C/C4. The surface that genuinely never fogs
+below the deck is the horizon **dome** — every horizon model in every chapter is `fog: false` —
+which is what actually explains the original's ceiling texture surviving to the horizon line
+(census and consequences in [`weather.md`](weather.md)'s deck-census section).
+
 ## What is decoded and what is inferred
 
 **Decoded, traced to data:** which templates and their weights; the volumes and their **authored

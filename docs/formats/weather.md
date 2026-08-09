@@ -412,6 +412,47 @@ because the `zone_id 2` deck that was occluding it from below is culled and the 
 is not. C1 at the identical pose reads 0 both ways, its field being `zone_id 2`. Engine-side:
 `docs/architecture.md`'s `src/Mech3/ZoneGate.cs` entry.
 
+#### The deck tiles author `fog: true` — the cards' `fog: false` does not extend to them (2026-08-09, `D31`)
+
+Read from `extracted/<CH>/gamez/models.json` for every tile the deck classifier picks (one flat,
+untilted 4-vertex quad at the coverage-winning altitude):
+
+| chapter | tiles | texture | `fog` | `lighting` | `clouds` |
+|---|---|---|---|---|---|
+| C1 / C1C / C2B | 144 each @ y 960 | `cloudlayer.tif` | **`true` 144/144** | `false` | `false` |
+| C4 | 144 @ y 1050 | `Sky1.tif` | **`true` 144/144** | `false` | `false` |
+
+The `fog: false` recorded in [`fogvol.md`](fogvol.md) belongs to the `fvol` cloud **cards**, and
+to nothing else in the overcast: the deck tiles fog, and so do all 626 / 1056 / 1453
+`cloudparent` facades in C1 / C1C / C4. What *does* author `fog: false` is **every horizon model
+in every chapter** (C1 6/6, C1C 5/5, C2B 3/3, C4 5/5) — which is why the below-deck ceiling never
+fogs out. ⚠ **So "the original's ceiling texture survives to ~12.6 km" is a fact about the DOME
+with no tile-flag component at all** (`PLAN-overcast-match` `B15`'s observation, `B14`'s
+mechanism, `D31`'s flag check); the tiles' `fog: true` is instead what makes the ABOVE-deck floor
+— the 144 tiles and `C26`'s annulus alike, both through the same fogged material path — fade to
+`FOG_COLOR` at the horizon.
+
+#### The below-deck ceiling's measured profile matches the original (2026-08-09, `D31`)
+
+At the C1 river pose (`-7323,192,-3829` / `-0.997,-0.1,0.070`) against
+`OriginalScreenshots/C1 IA1 Fog river.png`, both frames anchored on their own terrain silhouette
+(the two are not framing-matched — ours rises 115 px above its true horizon, the original's sits
+48 px below its own) and measured in a HUD-free column band:
+
+| | ceiling texture survives to | dead-flat band above the silhouette |
+|---|---|---|
+| original | the silhouette (0 px) | **20 px at 175.000** |
+| ours (`ZONE1` 1000–1750 + the zone-1 dome) | the silhouette (0 px) | **21 px at 176.000** |
+| ours under static `ZONE2` 1000–4000 (the pre-`B11` fog) | dies 110 px above it | 66 px |
+
+⚠ **The "the original is dead-flat for 36 px above its horizon" residual (`PLAN-overcast-match`
+`C26`, restated by `B14`) does not exist** — it was a full-width sd (the still's HUD gauges and
+crosshair sit in those rows) anchored on a horizon row of 370 derived as "terrain onset 411 − 41";
+the still is a level 713-row frame, so its true horizon is its centre row **356**, and its terrain
+onset in a clean band is **404**, which reproduces `C21`'s own "41 px below the horizon" exactly.
+Our band reads 176.000 against the original's 175.000 — C1's authored `FOG_COLOR` against a
+one-unit-lower render, a DX7 quantisation-sized offset, recorded and not chased.
+
 `horizon/zone1` and `horizon/zone2` subtrees, all eight chapters (`—` = zone absent/empty):
 
 | chapter | `zone1` meshed children | `zone1` Y-levels (model, `bbox_mid.y`) | `zone2` meshed children |

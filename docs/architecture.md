@@ -540,7 +540,13 @@ node once the 144 tiles are built: a flat, untextured four-quad picture frame ar
 `MergedLocalAabb(deck)` (the tiles' own measured AABB — never a hardcoded origin, so the annulus
 stays exactly centred on the tile grid and the eventual `GameSession.AssignCloudDeckIfBuilt`
 re-measurement via `OrbitCamera.MergedAabb` lands on the same centre, unperturbed), reaching a
-20,480 m half-span (rim ≈ 3.95 px, `f·K/halfSpan` — see the `Session/WeatherRig` entry). Its
+20,480 m half-span. ~~(rim ≈ 3.95 px, `f·K/halfSpan` — see the `Session/WeatherRig` entry)~~
+⚠ **That derivation is dead and the half-span now rests on nothing** (`D31`, 2026-08-09): `K`
+(`DeckCeilingHeight`) was deleted by `B14` and `B13` made the floor world-fixed, so the far edge's
+elevation is `f·(cameraY − 960)/20480` and grows with altitude instead of sitting at a constant
+3.95 px — measured 6 px below the horizon at C1 y = 1192 and 33 px at y = 2000 (against 22.6 and
+101 px for the bare 6,144 m tile sheet, so the extension is still load-bearing). `BL-328` owns
+re-deriving the number; do not reinstate a camera-anchored ceiling to make the old formula fit. Its
 material is `SceneBuilder.BuildFlatQuadMesh`'s `GetMaterial(-1, …)` call — the SAME no-texture
 `BuildMaterial` branch a `Colored` gamez polygon with no material entry gets, `fogged: true`, so
 its `ALBEDO = mix(ALBEDO, csky_fog_color, fog_amt)` line is byte-for-byte the deck tiles' own; every
@@ -3765,8 +3771,16 @@ are built from, and it is logged with the meshed counts it was decided on.
   ⚠ **`B14` retires that DERIVATION but keeps the geometry.** With the sheet no longer a below-band
   ceiling there is no `K` and no below-band rim; the 20,480 m half-span is unchanged and is now
   justified by the ABOVE-band regime alone, where it does the same edge-hiding job for a floor seen
-  from above (rim at `f·(camY − deckY)/halfSpan`). Re-deriving the number against that geometry is
-  `D31`'s. Nothing about the annulus changed, so no golden moved for it.
+  from above (rim at `f·(camY − deckY)/halfSpan`). Nothing about the annulus changed, so no golden
+  moved for it.
+  ⚠ **`D31` measured it and handed the number to `BL-328` rather than re-picking it** (2026-08-09):
+  the above-band rim is altitude-DEPENDENT where the below-band one was constant — 6 px below the
+  horizon at C1 y = 1192, 33 px at y = 2000, against 22.6/101 px for the bare sheet — so the
+  extension is still load-bearing at every above-deck altitude and 20,480 m is still inside the
+  21.86 km `zone2` dome, but it is no longer *derived* from anything. Below the deck the whole sheet
+  is culled (`zone_id 2` at camera state 1), and the strip the annulus was built to hide is closed
+  there by the zone-1 dome instead: the `C26` climb ladder now reads dip **0.15** / step **0.14** at
+  every rung, against `C26`'s own post-fix 2.07 / +1.11.
 ⚠ **`Tick` is the ONE owner of render visibility, and the rule is the original's `zone_id` gate**
   (`PLAN-weather-decompile-match` B12, 2026-08-09, `FUN_0056c430` — see `Mech3/ZoneGate.cs`). Per
   rig, per frame, it narrows that camera's cull mask to the single zone layer its own weather state
