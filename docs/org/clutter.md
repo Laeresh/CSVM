@@ -66,8 +66,8 @@ which is why `ClutterTemplateSpec` surfaces `DuplicateNodes` instead of silently
 
 ⚠ **A decoration with no block at all is legal and means "every default"**, never "do not place" —
 the stamper guards each kind-driven step on a null kind pointer. In the shipped data the surplus
-runs the other way: every *placed* decoration has a block, and the extra blocks exist to give
-substitution targets their own properties.
+runs the other way: every *placed* decoration has a block, and the extra blocks belong to models
+reachable only by substitution — which, by the source-properties rule below, are never read.
 
 **2. Where the decoration sits on the ground quad.** Not metres. The engine ray-casts the
 decoration's local position **±5 along the quad normal**, reads the ground polygon's own
@@ -254,11 +254,9 @@ model, and **keeps its share of the roll while placing nothing**.
 entry's own kind block (`fVar4`) throughout, and the roll rewrites only the model pointer — so
 scale, fade and the slope gate all come from the model the *template authored*, not from the one it
 became. A C1 `firtree2` that arrived via a `firtree1` roll is scaled by firtree1's 0.9–1.1, while a
-`firtree2` the template placed directly is scaled by its own 0.9–1.5. (Note that
-[`formats/templates.md`](../formats/templates.md)'s `substitute` section reads the opposite way in
-one sentence — "properties are resolved from the TARGET model" — and its own trap paragraph further
-down states the source rule. The decode is the source rule; the target-side blocks exist because
-targets can also be placed *directly*, which is the fact that sentence is reaching for.)
+`firtree2` the template placed directly is scaled by its own 0.9–1.5. The consequence for the file
+is that a block reachable *only* as a substitution target is never read at all;
+[`formats/templates.md`](../formats/templates.md) states the same rule from the authored side.
 
 ⚠ **The target resolves through the engine's global model table, i.e. to ONE model however many
 templates mention it.** C5 ships the same building as up to four gamez meshes, one per template
