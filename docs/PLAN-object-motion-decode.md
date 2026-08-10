@@ -219,8 +219,10 @@ Waves A (from A3), B and C strictly serially. `analysis/goldens/manifest.json` i
 (re-pin), B5 (possible re-pin), D10 (re-pin) and D11 (new shot) — same rule.
 
 **Genuinely parallelisable:** D12 (documentation) and D13 (backlog bookkeeping) touch disjoint files
-(`docs/formats/destructibles.md` + `analysis/*/FINDINGS.md` vs `backlog.md` + `playtest.md`) and can
-run concurrently once Wave C has landed, provided each agent owns only its own files.
+(`docs/org/objectMotion.md` + `docs/formats/destructibles.md` + `docs/architecture.md` +
+`analysis/*/FINDINGS.md` vs `backlog.md` + `playtest.md`) and can run concurrently once Wave C has
+landed, provided each agent owns only its own files. ⚠ D12 also edits `MotionRuntime.cs`'s class
+remark, so it contends with anything still open in Waves A–C — run it only after C9 has landed.
 
 ---
 
@@ -615,36 +617,64 @@ exercises" clause, and it is **rewritten on a re-pin, never appended to**. ⚠ D
 `--det --mute` like every other shot, and a landing that depends on the seeded RNG's draw needs its
 window chosen so every draw lands, not just the median one.
 
-## D12 ☐ Rewrite the decode records that carried the disproven readings
+## D12 ☐ Land `docs/org/objectMotion.md`, and correct the records that carried the disproven readings
 
-**Goal.** No document in the repo still teaches the readings this plan disproved, and each dead end
-carries its cause of death.
+**Goal.** This plan's decode has a home of its own in `docs/org/`, the corrected records point at it
+instead of restating it, and no document in the repo still teaches a reading this plan disproved —
+each dead end left visible with its cause of death.
 
-**Evidence (confidence: traced).** The specific passages: `docs/formats/destructibles.md:365-370`
-(the "`no_altitude` is NOT a second, default terrain test" paragraph — disproven claim 2), its
-cross-tab at `:358-363` (re-derived by A2), `:304-312` (the launch-height solve justified on the
-original "not collision-testing them either", and `PT-46` (d)), `:371-380` (`BL-245` blocked on a
-decision to diverge), and `:313-321` (`do_intersections` framed as the whole of the question);
-`MotionRuntime`'s class remark at `:26-57` (the spherical `translation_range` reading and the apex
-admission test); and `analysis/object-motion-ground-rest/FINDINGS.md:96-103` and `:112-120`.
+**Evidence (confidence: traced).** `acbb9ba` ("Harvest the executable decodes out of code comments
+into `docs/org/`") established where an executable decode lives and what it looks like: a **function
+map first, then behaviour and constants, never decompiler output**; decoded-from-executable and
+measured-off-footage labelled apart on every claim; pre-existing conflicts left recorded as
+conflicts rather than resolved in either direction; and a pointer line added to
+`docs/architecture.md` from the module whose decode the page now owns. `docs/org/puffer.md` is the
+reference style, and `docs/org/sequences.md` already owns the `SequenceRunner` decode this plan
+leans on in C8.
 
-**Approach.** Rewrite rather than annotate, but keep each disproven reading visible with what killed
-it — `destructibles.md` already does this well and the tone is set. New decode, new
-`docs/formats/` content: the flag map, the two contact tiers, the linear elevation, the ceiling and
-watchdog semantics.
+The passages needing correction: `docs/formats/destructibles.md:365-370` (the "`no_altitude` is NOT
+a second, default terrain test" paragraph — disproven claim 2), its cross-tab at `:358-363`
+(re-derived by A2), `:304-312` (the launch-height solve justified on the original "not
+collision-testing them either", plus `PT-46` (d)), `:313-321` (`do_intersections` framed as the
+whole of the question) and `:371-380` (`BL-245` blocked on a decision to diverge);
+`MotionRuntime`'s class remark at `:26-57`; and
+`analysis/object-motion-ground-rest/FINDINGS.md:96-103` and `:112-120`.
 
-**Model recommendation.** high — prose that future sessions will treat as ground truth, and the
-failure mode of this plan is a half-corrected record that leaves the next reader re-deriving the
-same wrong answer.
+**Approach.** Write `docs/org/objectMotion.md` in the `puffer.md` house style. Function map:
+`FUN_004e8fa0` (the per-frame update), `FUN_00508590` (the parser, and where each flag bit is set),
+`FUN_004e9e30` → `FUN_004c76e0` (the column tier), `FUN_004c8ec0` (the sweep tier), `FUN_0053c6c0`
+(the azimuth sincos). Then behaviour and constants: the flag word, the linear elevation and its
+non-unit magnitude, `delta` as an acceleration, the two contact tiers and how the struck surface
+picks the bounce branch, `RUN_TIME` as a ceiling with a shortened final step, the 15 s / 35 s
+watchdogs, the 0.2 restitution and the energy-loss termination. Close with the retired readings, the
+way `org/weather.md` retires `DeckCeilingHeight`'s fits.
+
+Then correct — do not duplicate — the other records: `destructibles.md` keeps the destructible's-eye
+view and gains pointers; `MotionRuntime`'s class remark is **stripped of its provenance** (dated
+narrative, plan tags, Ghidra addresses) per the coding convention `acbb9ba` is clearing the way for,
+leaving what and why plus a pointer; `architecture.md` gains its pointer line from the anim runtime.
+
+**Model recommendation.** high — prose future sessions will treat as ground truth, and this plan's
+characteristic failure is a half-corrected record that leaves the next reader re-deriving a wrong
+answer. This is the item that prevents the next `BL-319`.
 
 **Verify.** Grep the repo for the disproven phrasings and confirm none survives outside an explicit
-"this was wrong, here is how it died" context. `docs/architecture.md`'s module bullet for the anim
-runtime updated in the same turn, per the ground rules.
+"this was wrong, here is how it died" context. Confirm `docs/org/objectMotion.md` contains no
+decompiler output and no C-like transcription. Confirm every claim is labelled
+decoded-from-executable or measured-off-footage. `docs/architecture.md` updated in the same turn,
+per the ground rules.
 
-**⚠ Traps.** ⚠ Do not delete the wrong readings outright — the disproven-claims table exists so
-nobody re-derives them, and `destructibles.md`'s own convention is to leave the dead end with its
-cause of death attached. ⚠ `docs/HISTORY.md` is frozen; the narrative record goes in commit
-messages.
+**⚠ Traps.** ⚠ **Do not paste this plan's transcribed launch-direction block into `docs/org/`.** A
+pseudocode transcription is right in a plan and against the house style in `org/` — restate it as
+behaviour and constants (`dirY = elev/90`, horizontal `1 − |elev|/90`, magnitude 0.707 at 45°). ⚠
+Label the provenance split carefully on `BL-022`'s history: the 0.65 was a judged look and the ~0.58
+came from a **frame comparison off footage**, while the 0.745–0.81 is **decoded from the
+executable** — and this project's standing rule is that a footage-derived measurement never contests
+a decode. ⚠ `PT-46` (d) stays recorded as a conflict resolved *by the decode*, with the observation
+intact and only its mechanism reattributed — not deleted, and not written as though the user saw
+something that was not there. ⚠ Do not delete the wrong readings outright; the disproven-claims
+table exists so nobody re-derives them. ⚠ `docs/HISTORY.md` is frozen; the narrative record goes in
+commit messages.
 
 ## D13 ☐ Item bookkeeping: `BL-319`, `BL-245`, `PT-46` (d), and a fresh ID for the deleted tune
 
