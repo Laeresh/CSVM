@@ -746,13 +746,17 @@ empty district.
   0.25 (~75.5°) threshold. Zero culled in every chapter; the same census at 0.50 culls 3, so the
   zero is a measurement. Do not reintroduce it; a cull belongs in `templates.zrd`'s `min_slope`.
   The `xzArea < 0.5f` sliver rule beside it is a different, still-live rule (14 triangles in C5).
-⚠ **The quarter-metre `seen` dedup is KEPT deliberately, and it is remake-only.** B13 measured what
-  removing it costs and it is doing two jobs. (1) It stands in for the subface gate below. (2) Even
-  with that gate added it still removes real duplicates, because `UvTriangle.Contains` is INCLUSIVE
-  on the edge and a lattice candidate landing exactly on two triangles' shared diagonal is claimed
-  by both — C1 +38, C4 +139, C5 +1,082 without it, mostly solid buildings whose authored quad UVs
-  sit on tidy fractions. The original's step-6 test is STRICT and claims such a point in neither
-  triangle; matching that is a change to `UvTriangle`, not a change to this set.
+⚠ **The quarter-metre `seen` dedup is KEPT deliberately, and it is remake-only — NOT fully retired
+  by the `UvTriangle.Contains` fix.** B13 measured it doing two jobs. (1) Standing in for the
+  `no_clutter` gate — retired, `PlaceOnMesh` reads the flag itself now. (2) Catching real
+  duplicates from `Contains` being INCLUSIVE on the edge, where a lattice candidate landing exactly
+  on two triangles' shared diagonal was claimed by both (pre-fix: C1 38, C4 139, C5 1,096) — the
+  original's step-6 test is STRICT and claims such a point in neither triangle, so this was fixed
+  in `UvTriangle.Contains` (2026-08-10), not in this set. **Measured after the fix, per chapter
+  (`DedupRejected` in the build log), and it is NOT a clean win:** C1B/C2/C3/C5 drop to exactly
+  zero, matching the shared-diagonal hypothesis — but C1 barely moves (38→36) and C4 is unchanged
+  (139→139), so most of THEIR duplicates come from a different, still-undiagnosed source. `seen`
+  stays for that reason, not as a defensive leftover.
 ⚠ **STALE — pre-B15. `PlaceOnMesh` now DOES read `GameZPolygon.NoClutter`** (renamed 2026-08-10
   from `.Subface`) and skips a flagged polygon (`FUN_004de2c0`'s gate), and
   `ClutterBuilder.BuriedClutterDistricts` no longer exists — B13/B15 landed the gate coupled with

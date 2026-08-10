@@ -89,10 +89,16 @@ namespace CSVM.Mech3;
 /// properties of a substituted stamp come from the SOURCE kind, not the target — the stamper holds
 /// the decoration entry's own kind block throughout and the roll rewrites only the model pointer.
 /// </para>
-/// <para>One remake-only rule
-/// also survives here on purpose: the quarter-metre <c>seen</c> dedup in
-/// <see cref="PlaceOnTriangle"/>, which exists only because this file's UV containment test is
-/// inclusive on a shared edge where the original's is strict.</para>
+/// <para>One remake-only rule survives here, and is NOT fully retired. The quarter-metre
+/// <c>seen</c> dedup in <see cref="PlaceOnTriangle"/> was doing two jobs (B13): standing in for
+/// the missing <c>no_clutter</c> gate (retired — <c>PlaceOnMesh</c> reads the flag itself now),
+/// and covering for <see cref="UvTriangle.Contains"/> being inclusive on a shared edge where the
+/// original's step-6 test is strict (fixed 2026-08-10). The edge fix is NOT a clean win, measured
+/// per chapter (<c>DedupRejected</c> in the per-build log line): C1B/C2/C3/C5 drop to exactly
+/// zero, matching the shared-diagonal hypothesis — but <b>C1 (38→36) and C4 (139→139) barely
+/// move</b>, so most of their dedup hits come from a different, still-undiagnosed source. Do NOT
+/// remove <c>seen</c> on the strength of this fix; C1/C4 still need it for a reason nobody has
+/// found yet.</para>
 ///
 /// <para><b>Sprites are NOT collidable; 3D decorations are</b> (both user decisions).
 /// Do NOT give sprites a crossed-quad trimesh on the claim that "trees are
@@ -644,22 +650,24 @@ public sealed class ClutterBuilder
                         // computation.
                         // ⚠ The quarter-metre dedup, kept DELIBERATELY, and it is remake-only —
                         // the original has no such set. B13 measured what it was doing and found
-                        // two jobs. The first is now gone: it stood in for the missing
-                        // `no_clutter` gate, so that the walk did not reach both members of a
-                        // coplanar overlay/base pair. PlaceOnMesh reads the flag itself now, so
-                        // that job belongs to the gate and not to this set.
-                        //
-                        // The second job remains, and is why the set stays: it removes real
-                        // Contains() is INCLUSIVE on the edge, so a lattice candidate landing
-                        // exactly on the diagonal two triangles share is claimed by both. C1
-                        // gains 38 such duplicates without the set, C4 139, C5 1,082 — mostly
-                        // solid buildings, whose authored UVs sit on tidy fractions. The
-                        // original's step-6 test is strict, so it claims such a point in
-                        // NEITHER triangle; matching that is a change to B12's containment rule,
-                        // not to this set.
+                        // two jobs. The first stood in for the missing `no_clutter` gate;
+                        // PlaceOnMesh reads the flag itself now, so that job is retired. The
+                        // second was that UvTriangle.Contains was INCLUSIVE on the edge, so a
+                        // lattice candidate landing exactly on the diagonal two triangles share
+                        // was claimed by both — pre-fix, this set caught C1 38, C4 139, C5 1,096.
+                        // Fixed 2026-08-10 (Contains is now STRICT, matching the original's
+                        // step 6). ⚠ NOT a clean win, measured per chapter after the fix
+                        // (DedupRejected below): C1B/C2/C3/C5 drop to exactly 0, matching the
+                        // shared-diagonal hypothesis cleanly — but C1 only drops to 36 and C4 not
+                        // at all (still 139), so most of THEIR duplicates come from something
+                        // else entirely, undiagnosed. This set stays; it is still earning its keep
+                        // in C1/C4 for a reason the edge fix does not explain.
                         var key = (kind.MeshIndex, Mathf.RoundToInt(p.X * 4f), Mathf.RoundToInt(p.Z * 4f));
                         if (!seen.Add(key))
+                        {
+                            stats.DedupRejected++;
                             continue;
+                        }
                         // The mechanical check for "trees in the sea": a subtly wrong UV-space
                         // containment test still yields a finite world point, and only the source
                         // triangle can say it is the wrong one.
@@ -1566,15 +1574,24 @@ public sealed class ClutterBuilder
         }
 
         /// <summary>Step 6: the three edge cross-products in UV space, all on the side the
-        /// triangle's own winding says is inside. Inclusive on the edge, which matches the world
-        /// test this replaces — A3 traced C5's two off-by-one instances to exactly this boundary
-        /// in float32, which is why the arithmetic here is double.</summary>
+        /// triangle's own winding says is inside. STRICT on the edge, matching
+        /// <c>FUN_004dd6e0</c> step 6 (docs/architecture.md's ClutterBuilder entry): a candidate
+        /// landing exactly on an edge — in particular the diagonal two triangles of the same fan
+        /// or strip share — is claimed by NEITHER, not both. Fixed 2026-08-10; this test was
+        /// inclusive from B12 until here, which is why the quarter-metre <c>seen</c> dedup in
+        /// <see cref="PlaceOnTriangle"/> exists. ⚠ Measured, not assumed: an A/B against the old
+        /// inclusive test (per-chapter <c>DedupRejected</c>) shows the shared-diagonal duplicates
+        /// this was meant to fix go to exactly zero in C1B/C2/C3/C5, but C1 only drops 38→36 and
+        /// C4 is unchanged at 139 — most of THEIR duplicates are something else, so this fix does
+        /// not retire <c>seen</c>, only some of what it used to catch. Kept in double for the same
+        /// reason the rest of this class is: a float32 boundary evaluation is exactly what
+        /// produced two of C5's off-by-one instances pre-B12 (A3).</summary>
         public bool Contains(double u, double v)
         {
             double w0 = (((_u1 - _u0) * (v - _v0)) - ((_v1 - _v0) * (u - _u0))) * _sign;
             double w1 = (((_u2 - _u1) * (v - _v1)) - ((_v2 - _v1) * (u - _u1))) * _sign;
             double w2 = (((_u0 - _u2) * (v - _v2)) - ((_v0 - _v2) * (u - _u2))) * _sign;
-            return w0 >= 0 && w1 >= 0 && w2 >= 0;
+            return w0 > 0 && w1 > 0 && w2 > 0;
         }
 
         /// <summary>Step 7: the world position at a texture coordinate. The single rounding of
@@ -1739,11 +1756,17 @@ public sealed class ClutterBuilder
         public int OutsideSource;      // …of which any that missed their own source triangle
         public int Substituted;        // …of which any whose model the substitute roll changed
         public int SubstituteNothing;  // rolls that landed on a model the gamez does not carry
+        public int DedupRejected;      // the quarter-metre `seen` set actually catching something.
+                                       // Measured 2026-08-10 (post Contains-strict-fix): C1B/C2/
+                                       // C3/C5 read 0, C1 reads 36 (was 38), C4 reads 139
+                                       // (unchanged) — the strict fix did not explain C1/C4's
+                                       // duplicates, so this staying nonzero there is expected,
+                                       // not a regression signal, until that source is found.
 
         public void Report()
         {
             string worst = OverLargeLattice > 0 ? $" worst_lattice_cells={WorstLatticeCells}" : "";
-            Log.Info("world", $"clutter uv lattice: placed={Placed} substituted={Substituted} substitute_nothing={SubstituteNothing} outside_source={OutsideSource} skipped_no_clutter_flag={NoClutterFlagged} skipped_zero_world_area={ZeroWorldArea} skipped_zero_uv_area={ZeroUvArea} skipped_no_uv_array={NoUvArray} skipped_over_large_lattice={OverLargeLattice}{worst}");
+            Log.Info("world", $"clutter uv lattice: placed={Placed} substituted={Substituted} substitute_nothing={SubstituteNothing} outside_source={OutsideSource} dedup_rejected={DedupRejected} skipped_no_clutter_flag={NoClutterFlagged} skipped_zero_world_area={ZeroWorldArea} skipped_zero_uv_area={ZeroUvArea} skipped_no_uv_array={NoUvArray} skipped_over_large_lattice={OverLargeLattice}{worst}");
             if (OutsideSource > 0)
                 Log.Warn("world", $"clutter instances landed OUTSIDE their source triangle count={OutsideSource} of {Placed} — the UV containment test disagrees with the affine map");
         }
