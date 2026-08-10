@@ -625,6 +625,30 @@ public class SequenceRunnerTests
         Assert.Single(host.Fired.Where(f => f == "glow"));
     }
 
+    // ---- 18. an "Animation" offset reads the INSTANCE's clock, not the called sequence's ----
+
+    [Fact]
+    public void AnimationOffsetInACalledSequenceGatesOnTheInstanceClock()
+    {
+        // The shape 191 shipped events carry: an ON_CALL sequence a CALL_SEQUENCE starts partway
+        // through the animation, holding an event stamped "Animation t" — every rocket/torpedo
+        // trail's 10 s puffer shut-off, `ap_light_seq`'s LightAnimation chain, `chuteman_drop`.
+        // The instance clock is already at 1.0 s when the call lands, so an "Animation 1.5" gate is
+        // 0.5 s away; reading it against the CALLED sequence's own clock (which starts at zero)
+        // would defer it to 2.5 s, a full second late.
+        var host = new RecordingHost();
+        var main = Seq("main", CallSeq("trail", "Event", 1.0f));
+        var trail = Seq("trail", Swap("shutoff", "Animation", 1.5f));
+        var inst = Instance(new[] { main, trail }, main);
+        host.Instance = inst;
+
+        var t = RunSteps(inst, host, 0.25f, 12);
+
+        Assert.Equal(new[] { "trail" }, t[3]);        // 1.00s: the call
+        Assert.Equal(new[] { "shutoff" }, t[5]);     // 1.50s: the instance clock's 1.5, not the
+        Assert.Empty(t[9]);                            //        sequence's — which would be 2.50s
+    }
+
     // ---- WAIT_FOR_COMPLETION: the call gates the NEXT event, on the callee, not on a clock ----
 
     [Fact]
@@ -749,7 +773,7 @@ public class SequenceRunnerTests
     {
         var inst = new AnimInstance(Dummy, null);
         foreach (var s in seqs)
-            inst.Runners.Add(new SequenceRunner(s));
+            inst.AddRunner(s);
         return inst;
     }
 
@@ -765,7 +789,7 @@ public class SequenceRunnerTests
             s.OnCallOnly = !run.Contains(s);
         var inst = new AnimInstance(def, null);
         foreach (var s in run)
-            inst.Runners.Add(new SequenceRunner(s));
+            inst.AddRunner(s);
         return inst;
     }
 

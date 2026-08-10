@@ -72,6 +72,15 @@ public sealed class AnimInstance
         Anchor = anchor;
     }
 
+    /// <summary>Seconds since this instance started — the original's <c>anim+0xb0</c>, one clock
+    /// owned by the definition instance and shared by every sequence of it. A <c>START_TIME
+    /// ANIMATION t</c> gates against THIS, not against the firing sequence's own clock, which is
+    /// the whole difference for a sequence a later CALL_SEQUENCE started: the instance clock is
+    /// already running when the runner's starts at zero. Never rewound — a LOOP rewinds only the
+    /// sequence's timers. (The exe clamps it at 86,400 s inside the LOOP handler; a session never
+    /// reaches a day, so the clamp is not reproduced.)</summary>
+    public float Clock { get; private set; }
+
     /// <summary>No runner is still executing. ⚠ NOT on its own the test for retiring an instance —
     /// see <c>AnimRuntime.Retirable</c> and <c>MotionSet.OwesBounce</c>, which additionally hold an
     /// instance open while one of its
@@ -81,6 +90,9 @@ public sealed class AnimInstance
 
     public void Advance(ISequenceHost rt, float dt)
     {
+        // Before the runners, so a sequence clock and the instance clock advance together within
+        // a tick — a runner reads Clock back during its own advance to gate origin ANIMATION.
+        Clock += dt;
         for (int i = Runners.Count - 1; i >= 0; i--)
         {
             Runners[i].Advance(rt, this, dt);
@@ -131,7 +143,7 @@ public sealed class AnimInstance
     /// damage-stage host, which feed sequences that are not in <c>Def.Sequences</c> at all.</summary>
     public void AddRunner(AnimSequence seq)
     {
-        Runners.Add(new SequenceRunner(seq));
+        Runners.Add(new SequenceRunner(seq, Clock));
     }
 
     /// <summary>STOP_SEQUENCE: halts every active runner named <paramref name="name"/> —
@@ -176,10 +188,12 @@ public sealed class AnimInstance
 /// Executes one sequence's event list on a clock.
 ///
 /// Scheduling (inferred from the data, recorded in docs/formats/anim-definitions.md):
-/// an event's <c>start</c> gives an origin and a delay — "Animation" from the animation
-/// start, "Sequence" from this sequence's start, "Event" from the previous event's
-/// COMPLETION. An absent <c>start</c> is "Event + 0", i.e. as soon as the previous
-/// event finishes. That reading is what makes the C1 train work: its sequences are
+/// an event's <c>start</c> gives an origin and a delay — "Animation" from the INSTANCE's
+/// start (a clock shared by all its sequences, see <see cref="AnimInstance.Clock"/>),
+/// "Sequence" from this sequence's start, "Event" from the previous event's
+/// COMPLETION. An absent <c>start</c> encodes as "Animation + 0.0" and behaves as "as soon
+/// as the previous event finishes", because the gate is only evaluated once the previous
+/// event reports completion. That reading is what makes the C1 train work: its sequences are
 /// [ObjectMotionSiScript, Loop{-1}] with no start offsets, and only "after the previous
 /// event completes" turns that into the surveyed ~327 s track loop rather than a
 /// zero-length infinite loop.
@@ -214,6 +228,10 @@ public sealed class SequenceRunner
     private readonly List<bool> _branchTaken = new();
     private int _pc;              // next event index
     private float _clock;         // seconds since this sequence started
+    // The owning instance's clock, refreshed from AnimInstance.Clock every advance: the origin
+    // ANIMATION gate reads it, and it is NOT this runner's clock whenever a CALL_SEQUENCE started
+    // the sequence after t=0. Seeded at construction so the opening gate is right on the first tick.
+    private float _animClock;
     private float _due;           // when the next event fires
     private bool _done;
     // The original's u16 pass counter (+0x30): counts UP, never reset except by a fresh
@@ -233,9 +251,10 @@ public sealed class SequenceRunner
     // polled once per advance until it reads false. Null whenever this runner is not waiting.
     private Func<bool>? _waitingOn;
 
-    public SequenceRunner(AnimSequence seq)
+    public SequenceRunner(AnimSequence seq, float animClock)
     {
         _seq = seq;
+        _animClock = animClock;
         // The first event's OWN offset gates it, so the opening gate is not
         // unconditionally zero — a sequence may legitimately start with a delay.
         SetDue();
@@ -276,6 +295,7 @@ public sealed class SequenceRunner
     public void Advance(ISequenceHost rt, AnimInstance inst, float dt)
     {
         _clock += dt;
+        _animClock = inst.Clock;
         if (!_done && _waitingOn != null)
         {
             if (_waitingOn())
@@ -516,10 +536,22 @@ public sealed class SequenceRunner
         var ev = _seq.Events[_pc];
         _due = ev.StartOffset switch
         {
-            // "Animation"/"Sequence" are absolute against their origin; this runner's
-            // clock is the sequence clock, and an instance starts all its sequences
-            // together, so the two coincide for every case in the shipped data.
-            "Animation" or "Sequence" => ev.StartTime,
+            // Origin ANIMATION is the INSTANCE's clock (the original compares against anim+0xb0,
+            // shared by every sequence of the definition), which is not this sequence's clock for
+            // any sequence a CALL_SEQUENCE started after t=0 — 191 shipped events read the
+            // difference, among them `ap_light_seq`'s LightAnimation chain and the 10 s puffer
+            // shut-offs on every rocket/torpedo trail. Restated in this runner's own clock so a
+            // single comparison still gates every origin: both clocks tick by the same dt, so the
+            // gap between them is fixed from here to the fire, and a LOOP that rewinds _clock
+            // re-gates through here anyway.
+            "Animation" => _clock + (ev.StartTime - _animClock),
+            // Origin SEQUENCE is seq+0x24 — absolute against this sequence's own start.
+            "Sequence" => ev.StartTime,
+            // "Event" (seq+0x28) and an ABSENT start alike measure from the previous event's
+            // completion. ⚠ An absent start ENCODES as Animation + 0.0 and must NOT be routed
+            // through the animation clock: it would gate the install's ~36k unstamped compiled
+            // events on a clock that is already running. StartOffset is null for them, so they
+            // land here; keep it that way.
             _ => _base + ev.StartTime,
         };
         // "Did the DATA schedule time?" — an authored offset counts even when the clock has

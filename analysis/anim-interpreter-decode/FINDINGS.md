@@ -9,9 +9,13 @@ install, sizing each divergence found. Run it with the install extracted to `Z:\
 
 ```
 python analysis\anim-interpreter-decode\anim_census.py
+python analysis\anim-interpreter-decode\start_origin_census.py
 ```
 
-It reads only git-ignored install data and prints counts; it writes nothing.
+`start_origin_census.py` is the companion for the `START_TIME` origins specifically: it counts the
+explicit `start` objects by origin and by the `seq_state` of the sequence holding them, which is
+what sizes the `Animation`-vs-`Sequence` clock divergence. Both read only git-ignored install data
+and print counts; neither writes anything.
 
 ## Where the code is
 
@@ -84,7 +88,7 @@ Census over **3,015 compiled defs** (all 8 chapters' `cam_anim` + `mis_anim`):
 | `CALL_SEQUENCE` re-entrancy | one state per sequence; a call is `if (state == 3) state = 0` — a call into a running or `Initial` sequence is a silent no-op | appends a second concurrent runner | **77** defs call a sequence from >1 site (incl. `sonic_ground_effect → sonic_light_seq ×2`); **6** call an `Initial` sequence |
 | `STOP_SEQUENCE` on a parked sequence | unconditionally `state = 2`; since a call needs state 3, the sequence is disabled until the def resets | starts it (the "stopper idiom") | **16** — `flame_ball_01/02 → stop_p1trail`, all chapters, inside the HE explosion's chain |
 | `IF` / `ELSE` forward skip | breaks at the **first** `ELSE`/`ELSEIF`/`ENDIF` byte; no depth counter | nesting-aware | **96** nested `If`s, all in `*_gunhit` / `mag_gunhit` — played on every gun impact |
-| `START_TIME ANIMATION` | compares the *animation's* clock (`anim+0xb0`), shared across sequences | compares the sequence's own clock | every `ON_CALL` sequence started after t=0 |
+| `START_TIME ANIMATION` | compares the *animation instance's* clock (`anim+0xb0`), shared across sequences | *(fixed — CSVM now resolves it against `AnimInstance.Clock`)* | **191** events name `Animation` with a non-zero time inside an `OnCall` sequence, the only case where the two clocks can disagree; 900 more sit in `Initial` sequences, where the bootstrap starts the sequence with the instance |
 | `LOOP` rewind | hard-zeroes both timers | carries the overshoot (`BL-237`) | deliberate — the original paces on its own fixed tick, we must pace on sim time at any step |
 | `RANDOM_WEIGHT` | a fixed 200-entry table at `DAT_009fce20` with a **global** cursor, `(i+1) % 200` | per-evaluation RNG | 4,537 conditions |
 | `PLAYER_RANGE` | compares `dist² * 4.0 <= value` — **unresolved** whether the transform chain (`FUN_0053f9b0`, `DAT_009fd190`) already halves the vector | `dist² <= value` | 1,052 conditions; if unhalved, every gate radius is 2× too large |

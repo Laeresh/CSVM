@@ -162,7 +162,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. B12 ☑ `STOP_SEQUENCE`: halt only — retire the stopper idiom
 13. B13 ☑ `IF` skip: match the original's non-nesting-aware scan
 14. B14 ☑ `LOOP`: align the rewind, keep the carry, write down why
-15. B15 ☐ `START_TIME` origins: `Animation` reads the animation clock
+15. B15 ☑ `START_TIME` origins: `Animation` reads the animation clock
 16. B16 ☐ `RANDOM_WEIGHT`: the original's 200-entry shared table
 
 ### Wave C — Missing events
@@ -674,7 +674,61 @@ cap, since `-1` already covers the infinite case and a real wrap is unreachable 
 
 </details>
 
-## B15 ☐ `START_TIME` origins: `Animation` reads the animation clock
+## B15 ☑ `START_TIME` origins: `Animation` reads the animation clock
+
+**Landed.** The census the item's Verify demanded ran first, and it came back **non-zero**, so the
+change was built rather than documented away. `AnimInstance` now carries a `Clock` advanced at the
+top of its `Advance` (before the runners, so both clocks move together within a tick), seeded into
+each `SequenceRunner` at construction via `AddRunner` and refreshed from `inst.Clock` on every
+runner advance. `SetDue` resolves the three origins separately for the first time: `"Animation"`
+against the instance clock, `"Sequence"` against the runner's own, `"Event"` and **null** against
+`_base`. The `"Animation" or "Sequence"` collapse — and the comment claiming the two coincide "for
+every case in the shipped data" — are gone.
+
+**The census, over all 3,015 compiled defs**
+(`analysis/anim-interpreter-decode/start_origin_census.py`, kept beside `anim_census.py`): 3,934
+events carry an explicit `start` — `Event` 2,573, `Animation` **1,091**, `Sequence` 270 — and every
+one of the 3,934 has a **non-zero** time, which is mech3ax collapsing the `Animation + 0.0` pair to
+`None` showing up in the data exactly as disproven-claim 2 predicts. Of the 1,091 `Animation`
+events, **900 sit in `Initial` sequences** (where the bootstrap starts the sequence with the
+instance and the two clocks agree) and **191 sit in `OnCall` sequences** — the reachable blast
+radius, 17 % of the origin's uses. The 191 are: every rocket/torpedo/sonic/flak/cannonball trail
+puffer shutting off at `Animation 10.0` (and `torpuffer_trail1/2` at 3.5 s / 29.0 s),
+`ap_light_seq`'s and `torp_light_seq`'s `LightAnimation` chains at `Animation 0.25` — the same
+`ap_light_seq` B11's evidence names as double-called — `chuteman_drop`'s `ObjectMotion` at 0.5 s,
+`flydirt_plane`'s `hide_dust` at 1.9 s, `car_go_home`'s `car_dust`, `generate_smokescreen`'s two
+emitters at 2.0 s, and the 22-strong `gen_flare_yellow` family's `light_loop` `Loop` at 2.0 s.
+Under the old reading every one of those fired late by exactly however long the animation had been
+running when the `CALL_SEQUENCE` landed.
+
+**The trap was avoided by mechanism, not by care.** A null `start` leaves `AnimEvent.StartOffset`
+**null** (only `CompiledAnim.Parse` ever sets it, and only from a present `start` object), so the
+install's unstamped events never reach the `"Animation"` arm at all — they fall to the `_base`
+default exactly as before. `SetDue`'s comment states this so the next reader does not "tidy" the
+null case onto the new clock.
+
+**The gate is expressed in the runner's own clock** (`_clock + (StartTime - _animClock)`) rather
+than by adding a second comparison to the advance loop. Both clocks tick by the same `dt`, so the
+gap between them is fixed between the `SetDue` and the fire; a `LOOP` that rewinds `_clock` re-gates
+through `SetDue` anyway. That keeps `_due` a single quantity, which the `LOOP` carry
+(`_clock - _due`) and the `_frameGatePending` floor both read.
+
+**The 86,400 s clamp is a comment, not code**, as the item asked — it lives on `AnimInstance.Clock`,
+which is never rewound (a `LOOP` rewinds the sequence's timers only).
+
+**Verified.** `.\RunTests.ps1` with `CSVM_DATA_ROOT=Z:\CSVM`: **883 units** (882 + the new one),
+**30 in-engine suites**, engine errors clean, **12 of 13 goldens hash-identical with
+`c1-destroy-effects` at B12's `00ab194f…`** — no golden moved beyond the branch's known
+golden-red state. The new unit
+`AnimationOffsetInACalledSequenceGatesOnTheInstanceClock` builds the 191's shape (an `OnCall`
+sequence a `CALL_SEQUENCE` starts at 1.0 s, holding an `Animation 1.5` event) and asserts the fire
+lands at 1.5 s and not at 2.5 s; it was **shown able to fail** by restoring the old
+`"Animation" => ev.StartTime` arm, which turns it red at exactly that assertion. The two test
+fixture builders that bypassed `AddRunner` to `new SequenceRunner(...)` directly now go through
+`AddRunner`, which is what the method's own doc comment already claimed was the only path in.
+
+<details>
+<summary>Original approach (kept for reference)</summary>
 
 **Goal.** An event with `START_TIME ANIMATION t` fires when the *definition's* clock reaches `t`,
 not when its own sequence's clock does.
@@ -701,6 +755,8 @@ no-op and the item lands as a documented confirmation instead. Then `--run-tests
 nulls through the new animation clock, every unstamped event in the install starts gating on a clock
 that is not zero — and the null case is 174,938 events. Keep null on the "immediately after the
 previous event" path.
+
+</details>
 
 ## B16 ☐ `RANDOM_WEIGHT`: the original's 200-entry shared table
 

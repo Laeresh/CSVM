@@ -1231,10 +1231,15 @@ shape that was leaking.
 ## src/Mech3/SequenceRunner.cs
 The engine-free sequence interpreter, extracted from `AnimRuntime` behind the `ISequenceHost` seam
 (four members since `BL-228` added `PendingWait`; the other three are unchanged).
-`SequenceRunner` runs one sequence's event list on a clock (per-event START_TIME gating, LOOP with
-authored-count-0 = infinite, IF/ELSEIF/ELSE/ENDIF via a `_branchTaken` stack + a deliberately
+`SequenceRunner` runs one sequence's event list on a clock — **two** clocks, in fact: its own, and
+the owning `AnimInstance.Clock` that a `START_TIME ANIMATION` gates against (the original's
+`anim+0xb0`, one per definition instance and shared by all its sequences). The two differ for every
+sequence a later CALL_SEQUENCE starts, which 191 shipped events read; a null `start` encodes as
+`Animation + 0.0` but must stay on the relative path, and `SetDue`'s comment says why.
+Its scope is per-event START_TIME gating, LOOP with
+authored-count-0 = infinite, and IF/ELSEIF/ELSE/ENDIF via a `_branchTaken` stack + a deliberately
 **non**-nesting-aware `Scan` — the original counts no depth, and 48 shipped `gunhit` sequences
-observe the difference; the constraint and its one residual live in `Scan`'s own comment);
+observe the difference; the constraint and its one residual live in `Scan`'s own comment).
 `AnimInstance` holds a definition's concurrent runners and removes them as they finish, and carries
 the CALL_SEQUENCE/STOP_SEQUENCE semantics (decode in `docs/formats/anim-definitions.md`;
 `AnimRuntime`'s dispatch cases are thin shims over these). **One runner per sequence, keyed on the

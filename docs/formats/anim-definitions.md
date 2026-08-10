@@ -1146,6 +1146,19 @@ are not visible from the byte format alone, each measured against this install.
   zero-length infinite loop. A definition's sequences run **concurrently**, confirmed the same
   way — the train drives its four cars from four sibling `Initial` sequences, each with its own
   script and its own loop.
+  **`Animation` and `Sequence` are two different clocks, and the difference is reachable.**
+  `anim+0xb0` belongs to the *definition instance* and is shared by all its sequences; `seq+0x24`
+  belongs to the sequence and starts at zero whenever that sequence starts. They coincide only for
+  a sequence the bootstrap starts with the instance — for one a later `CALL_SEQUENCE` starts, the
+  animation clock is already running. Censused over the whole install
+  (`analysis/anim-interpreter-decode/start_origin_census.py`): of the 3,934 events carrying an
+  explicit `start`, **1,091 name `Animation`** — every one of them with a non-zero time, since the
+  zero pair is what mech3ax collapses to `None` — and **191 of those sit in an `OnCall`
+  sequence**, the reachable case (the other 900 are in `Initial` sequences, where the two clocks
+  agree). The 191 are the rocket/torpedo/sonic trail puffers shutting off at `Animation 10.0`,
+  `ap_light_seq`/`torp_light_seq`'s `LightAnimation` chains at `Animation 0.25`, `chuteman_drop`,
+  `car_dust`, the `gen_flare_yellow` family's `light_loop`, and `generate_smokescreen`'s two
+  emitters. CSVM resolves `Animation` against `AnimInstance.Clock` for exactly this reason.
   A present `start` gates **the event it is attached to**, not its successor — also confirmed —
   including the first event of a sequence, and including control-flow events (`LOOP`/`IF`), which
   take no run time and therefore do not advance the "previous event completed" base. The
