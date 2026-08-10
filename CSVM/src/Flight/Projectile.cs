@@ -56,9 +56,9 @@ public sealed partial class ProjectilePool : Node3D
                                                 // look without a rebuild; these consts are only the defaults (Config.GetFloat falls through
                                                 // to them verbatim with no config.json, so the defaults stay byte-identical for goldens).
                                                 // ⚠ The four tracer constants below are MEASURED off the original's own `rabbit_blur` geometry,
-                                                // not tuned by eye — see docs/org/tracers.md. They were 1.0 m / 0.10 m / ×3.0 while this pool
-                                                // drew a single hand-sized quad; the decode replaced that with the authored crossed pair plus
-                                                // its tip disc, and these are the numbers that shape carries. Retune only with the decode open.
+                                                // not tuned by eye — see docs/org/tracers.md. They are the numbers the authored shape (a crossed
+                                                // quad pair plus a tip disc) carries, so they only make sense together with it. Retune only
+                                                // with the decode open.
     internal const float TracerLength = 4.5f;   // streak length, m — the authored quad spans z -4.5..0
     internal const float TracerWidth = 0.2f;    // m — both crossed quads are 0.2 m wide
     // The streak's geometry runs FORWARD from the round's simulated position: the position is the
@@ -66,10 +66,10 @@ public sealed partial class ProjectilePool : Node3D
     // origin at the round and its geometry along -Z, the flight direction.)
     internal const float TracerTipOffset = 4.5647f; // m ahead of the round — the tip node's own transform
     internal const float TracerTipSize = 0.2891f;   // m across — the tip disc, radius 0.1445 doubled
-    // The authored streak carries white vertex colours and its texture unmodified. The ×3 overbright
-    // this used to default to was compensating for two things the shape now supplies itself: the
-    // separate tip disc (the actual bright head) and the second crossed quad. Neutral is the
-    // authored value; the config key stays so a bloom-less display can still be pushed.
+    // The authored streak carries white vertex colours and its texture unmodified, so neutral is the
+    // authored value: the separate tip disc (the actual bright head) and the second crossed quad
+    // supply the brightness an overbright multiplier would otherwise fake. The config key stays so a
+    // bloom-less display can still be pushed.
     internal const float TracerBrightness = 1.0f; // default; user tunes via weapons.tracerBrightness
     // Distance-visibility floor: the minimum screen footprint (px) a tracer's drawn width/length
     // are allowed to shrink below at range, so a round many hundred metres out still reads as a
@@ -243,9 +243,9 @@ public sealed partial class ProjectilePool : Node3D
     // The tracer ammo-type axis (weapon-effects.md "Muzzle & tracer textures"): each chapter's
     // texture archive also carries a per-ammo tracer streak (`tracer_slug`/`_dumdum`/`_armorpierce`/
     // `_magnesium`), same four-way axis as the muzzle flash — TracerIdx reuses MuzzleAmmoIndex.
-    // ⚠ The generic `tracer1` used to sit here as a fifth entry for ordnance. It is gone: no gun
-    // prototype binds it, and ordnance draws no streak at all (see the rocket note above), so the
-    // array is exactly the four the data binds.
+    // ⚠ There is deliberately no fifth entry for the generic `tracer1`: no gun prototype binds it,
+    // and ordnance draws no streak at all (see the rocket note above), so the array is exactly the
+    // four the data binds.
     private static readonly string[] TracerTextures =
         { "tracer_slug", "tracer_dumdum", "tracer_armorpierce", "tracer_magnesium" };
 
@@ -321,7 +321,7 @@ public sealed partial class ProjectilePool : Node3D
     // `3040slug_gunhit` smoke, `he_ground_effect`, `bld_damage.flt`) stay on the stand-in spark —
     // their runtime PUFFER_STATE half plays through EffectSink (the puffer factory is torn down
     // after the world build).
-    // B6: the session's wind, read by the rocket-trail puffers this pool builds. Rocket trails
+    // The session's wind, read by the rocket-trail puffers this pool builds. Rocket trails
     // carry FRICTION and no WIND_FACTOR, so they take the engine default of 1 — fully carried.
     private readonly Effects.EffectAmbience _ambience = Effects.EffectAmbience.Still;
     private readonly Dictionary<string, GameZNode?> _impactNodes = new(); // impact anim name → prototype (cached)
@@ -899,7 +899,7 @@ public sealed partial class ProjectilePool : Node3D
         : Mathf.Lerp(1f, 0f, Mathf.Min((t - SplashFadeOutStart) / SplashFadeOutTime, 1f));
 
     // The built subtree's nodes carry their gamez cs_name as NameMeta (Godot renames duplicate
-    // siblings, WORLD-8) — resolve the splash children by that, never by Godot node name.
+    // siblings) — resolve the splash children by that, never by Godot node name.
     private static Node3D? FindChildByMetaSuffix(Node node, string suffix)
     {
         if (node is Node3D n3d && node.HasMeta(AnimRuntime.NameMeta)
@@ -2033,7 +2033,7 @@ public sealed partial class ProjectilePool : Node3D
     /// <paramref name="pixels"/> for any one of them, i.e. the nearest viewer's. One world-space
     /// mesh is drawn in every pane, so no single size can satisfy them all; taking the minimum means
     /// a round is never INFLATED for a pane whose camera is closer than the one it was sized
-    /// against, which is the splitscreen bug this replaces. Each viewer is measured with its own
+    /// against — the splitscreen failure this avoids. Each viewer is measured with its own
     /// pane height and FOV. 0 with no viewers bound (the weapon lab, the headless dumps).</summary>
     private float TracerFloor(Vector3 worldPos, float pixels)
     {
@@ -2053,9 +2053,9 @@ public sealed partial class ProjectilePool : Node3D
         // The authored tracer: two perpendicular quads (CrossedStreakMesh) whose shared local Y lies
         // along the flight direction, running FORWARD from the round's position, capped by a
         // perpendicular tip disc TracerTipOffset ahead. Not billboarded and — since the crossed pair
-        // reads solid from any angle — not camera-aligned either; the eye is now only consulted for
-        // the TracerMinPixels floor. Full-size from the spawn frame: the original never scales a
-        // gun round, so the muzzle-growth ramp this used to apply is gone. See docs/org/tracers.md.
+        // reads solid from any angle — not camera-aligned either; the eye is only consulted for
+        // the TracerMinPixels floor. Full-size from the spawn frame, with no muzzle-growth ramp:
+        // the original never scales a gun round. See docs/org/tracers.md.
         // Config-driven look: read once per frame, not per round — a session-wide setting,
         // not a per-shot one. Falls through to the in-code defaults verbatim with no config.json.
         float cfgLength = Config.GetFloat("weapons.tracerLength", TracerLength);

@@ -149,8 +149,8 @@ public sealed class FlightModel
     private const float StandardG = 9.82f;
 
     // The two stall thresholds are DIFFERENT numbers and neither is a TUNE. The nose-drop threshold
-    // (isStalled(), below) is now the aircraft's OWN computed stall speed — see StallSpeed — in place
-    // of the fixed fraction this replaces (B15). The STALL lamp still lights at a fixed 0.30 fd
+    // (isStalled(), below) is the aircraft's OWN computed stall speed — see StallSpeed. The STALL
+    // lamp, by contrast, lights at a fixed 0.30 fd
     // (0.2989–0.2996 across four clips) — that split is unrelated to the nose-drop mechanism, so it
     // stays a fraction: the original's "Stall 0% Thrust no input" clip measured the warning leading
     // the Bloodhawk's break by 2.64 sim s / 14.9 mph, and nothing here touches that lamp or its
@@ -220,7 +220,8 @@ public sealed class FlightModel
     // like one) and it gives a drag FLOOR that is speed-independent at fixed load factor, which no
     // measurement of the original supports.
     //
-    // ⚠ The curve conflicts with `CAP-05`'s four zero-thrust points (0.36/1.11/2.82/3.74 m/s² at
+    // ⚠ The curve conflicts with four zero-thrust points measured off original footage
+    // (0.36/1.11/2.82/3.74 m/s² at
     // x = V/fd_speed = 0.25/0.35/0.46/0.50): in Mach it gives 1.3/3.0/6.2/7.7 — the right *shape*
     // (a 5.9× rise over the span against the measured 10.4×) but ≈2–3.6× too strong. That is NOT a
     // units error: the force→acceleration conversion was re-read from the executable and is exactly
@@ -247,7 +248,7 @@ public sealed class FlightModel
     // original's pitch rate does NOT fall off with speed (37.9 / 33.7 / 30.7 / 36.5 °/s binned
     // over 120–280 mph round a loop, flat within the noise), so speed-independent pitch is right.
     // ⚠ The STEADY rates above are pinned; the TRANSIENT shape is a known divergence, narrowed but
-    // still open as BL-147. A square-wave pitch-cadence sweep of the original falls 42× between the
+    // still open. A square-wave pitch-cadence sweep of the original falls 42× between the
     // 1300 ms and 570 ms cadences; the same sweep driven into this model falls 23×. The weathervane
     // below took that from 20× to 23× — the right direction, about a sixth of the gap — so a
     // second-order response is part of the answer and not the whole of it. ⚠ Do NOT "fix" the
@@ -338,10 +339,10 @@ public sealed class FlightModel
     /// simplification of it.
     /// ⚠ Evaluated against a REAL airframe rather than the fallback numbers, this surfaces a residual
     /// the coincidence was hiding: the Bloodhawk's own data (1900/330) computes a 56.5 mph stall
-    /// against the video-measured ~76 mph nose-drop ("Stall 0% Thrust no input" clip) — the fixed
-    /// 0.25·fd_speed this replaces only matched that footage because 0.25 × the BLOODHAWK's fd_speed
-    /// happens to sit close to the FALLBACK aircraft's own stall speed, not the Bloodhawk's (see the
-    /// B15 landing note in docs/org/flightModel.md). Recorded as a decode-vs-footage conflict, not
+    /// against the video-measured ~76 mph nose-drop ("Stall 0% Thrust no input" clip). A fixed
+    /// 0.25·fd_speed matches that footage only because 0.25 × the BLOODHAWK's fd_speed
+    /// happens to sit close to the FALLBACK aircraft's own stall speed, not the Bloodhawk's (see
+    /// docs/org/flightModel.md). Recorded as a decode-vs-footage conflict, not
     /// papered over by switching the G convention to fit one clip.</summary>
     public float StallSpeed { get; }
 
@@ -462,14 +463,14 @@ public sealed class FlightModel
         // --- rotation: torque·recInertia vs momentum damping (all from the dynamics block), plus
         // two decoded torques into the same accumulator — the bank coupling and the weathervane.
         // Yaw authority follows the original's authored speed table (see YawAuthorityAt) — a
-        // declining function of speed, same as the interim curve it replaces, but the original's
-        // own shape rather than a fitted stand-in. Pitch and roll carry no HIGH-speed fade here:
-        // the original fades neither with speed (its pitch fade is authored unreachable).
-        // ⚠ They do fade at LOW speed in the original and do not here — FUN_00490e10 ramps roll and
-        // pitch authority from 0 at turn_fade_in (10 mph) to 1 at turn_fade_out (50), flat above.
-        // Unimplemented, traced, and corroborated from the controls: BL-330. Do not read the line
-        // above as "roll never fades" — that misreading is what had turn_fade_* filed as a bank
-        // effect through four items.
+        // declining function of speed — the original's own shape, not a fitted stand-in. Pitch and
+        // roll carry no HIGH-speed fade here: the original fades neither with speed (its pitch fade
+        // is authored unreachable).
+        // ⚠ They do fade at LOW speed in the original and do not here — it ramps roll and pitch
+        // authority from 0 at turn_fade_in (10 mph) to 1 at turn_fade_out (50), flat above.
+        // Traced and corroborated from the controls, but unimplemented; see
+        // docs/org/flightModel.md. Do not read the line above as "roll never fades" — that
+        // misreading is what had turn_fade_* filed as a bank effect.
         float yawEff = YawAuthorityAt(Speed);
         var cmd = new Vector3(
             Mathf.Clamp(input.Pitch, -1f, 1f) * s.PitchTorque * s.RecInertia.X * pitchTune,
@@ -495,10 +496,10 @@ public sealed class FlightModel
 
         // Damping is the authored ang_momentum_damp alone. return_rate is NOT a damping term — it is
         // the weathervane torque above, applied whether or not a stick is deflected.
-        // The original's own order (FUN_00491820): accumulate this tick's torque onto BodyRates
+        // The original's own order: accumulate this tick's torque onto BodyRates
         // FIRST, THEN decay the WHOLE result — the freshly-added torque included — by
-        // exp(−dt·ang_momentum_damp). That is an EXPONENTIAL decay, not the explicit-Euler linear
-        // subtraction this replaces (see C24). The two forms are the same to first order in dt per
+        // exp(−dt·ang_momentum_damp). That is an EXPONENTIAL decay, not an explicit-Euler linear
+        // subtraction. The two forms are the same to first order in dt per
         // step (exp(−x) = 1 − x + O(x²), matching the linear factor (1 − x) exactly at O(x)), but the
         // linear form is unstable at a large step: once dt·damp > 2 its factor (1 − dt·damp) goes
         // below −1 and BodyRates flips sign and grows every tick, where exp(−dt·damp) stays in
@@ -509,7 +510,7 @@ public sealed class FlightModel
         // stall: below stall speed the nose is pulled toward WORLD-down (a great-circle
         // rotation about the nose×down axis — no twist about the nose, works at any
         // attitude including inverted). Deep-stall rate exceeds full-elevator authority
-        // (~0.58 rad/s steady after the item-12 calibration), so the drop is decisive
+        // (~0.58 rad/s steady at the calibrated rates), so the drop is decisive
         // until airspeed recovers.
         bool stalled = isStalled();
         float noseYBefore = (-Attitude.Z).Y;  // the nose's world elevation entering this frame
@@ -551,19 +552,16 @@ public sealed class FlightModel
             }
         }
 
-        // There is deliberately NO knife-edge nose-sag term here. One used to sit at this point —
-        // a bounded ≈4° drop of the nose, at a capped rate, keyed on wing verticality — because
-        // nothing else in the model dropped the nose in a knife-edge and the aircraft would
-        // otherwise have descended wings-level-nosed. The decoded bank→yaw coupling now does it:
-        // at 90° of bank the body yaw axis is horizontal, so a yaw rate IS a nose sag, and the
-        // weathervane then pulls the nose further onto the falling flight path. That produces the
-        // original's own shape — a drift with no equilibrium — which the bounded term never could,
-        // and it produces the onset better as well: at the original's +3 s sample the decoded
-        // mechanism alone reads −4.94° against a measured −4.9°, where adding the bounded step on
-        // top read −7.28°. Sinking 5.7 ft/s at that sample against a measured 0.5, rather than
-        // 12.7. ⚠ Do not reintroduce a nose-sag term to deepen the knife-edge: the remaining
-        // divergence is that the whole banked rotation runs ≈1.6× fast (see KnifeAlignFloor), and
-        // a second nose-down term would double-count the part that is already there.
+        // There is deliberately NO knife-edge nose-sag term here. The decoded bank→yaw coupling
+        // does that job: at 90° of bank the body yaw axis is horizontal, so a yaw rate IS a nose
+        // sag, and the weathervane then pulls the nose further onto the falling flight path. That
+        // gives the original's own shape — a drift with no equilibrium — and its onset: at the
+        // original's +3 s sample the coupling alone reads −4.94° against a measured −4.9°, sinking
+        // 5.7 ft/s against a measured 0.5. ⚠ Do not add a nose-sag term to deepen the knife-edge:
+        // a bounded ≈4° drop keyed on wing verticality, stacked on top, takes that same sample to
+        // −7.28° and 12.7 ft/s. The remaining divergence is that the whole banked rotation runs
+        // ≈1.6× fast (see KnifeAlignFloor), and a second nose-down term would double-count what is
+        // already there. See docs/org/flightModel.md.
 
         // --- translation: forces integrate on the velocity VECTOR (v = VelocityDir·Speed),
         // so the speed can pass through zero — a vertical zoom tail-slides out downward

@@ -5,7 +5,7 @@ namespace CSVM.Flight;
 
 /// <summary>One built skydome and the gamez <c>zone_id</c> of the <c>horizon/zone*</c> node it was
 /// built from — the pair <c>Mech3.ZoneGate.Draws</c> needs to decide whether it is this camera's
-/// sky (<c>PLAN-weather-decompile-match</c> B14).</summary>
+/// sky.</summary>
 public readonly record struct HorizonDome(Node3D Node, int ZoneId);
 
 /// <summary>
@@ -44,19 +44,19 @@ public sealed class PlayerRig
     /// <summary>The player's aircraft, once the flight session builds it.</summary>
     public FlightController? Controller;
 
-    /// <summary>This player's skydome copy, re-centered on <see cref="Camera"/> each frame. From
-    /// B14 it is a CONTAINER holding one <see cref="HorizonDomes"/> entry per built horizon zone —
+    /// <summary>This player's skydome copy, re-centered on <see cref="Camera"/> each frame. It is a
+    /// CONTAINER holding one <see cref="HorizonDomes"/> entry per built horizon zone —
     /// the anchor moves, the zone gate picks which child draws.</summary>
     public Node3D? Horizon;
 
     /// <summary>The zone domes under <see cref="Horizon"/>, one per horizon zone the world built
-    /// (<c>WorldBuilder.DomeZonesToBuild</c>, <c>PLAN-weather-decompile-match</c> B14), each with
+    /// (<c>WorldBuilder.DomeZonesToBuild</c>), each with
     /// the gamez <c>zone_id</c> its zone node authors. <c>Session.WeatherRig.Tick</c> shows exactly
     /// the one matching this rig's own camera weather state — below the cloud deck a deck chapter
     /// draws <c>horizon/zone1</c> (its ceiling), above it <c>horizon/zone2</c>.
     ///
     /// <para>A single entry is left visible at every state: a chapter whose data supports no swap
-    /// must not render a frame with no sky in it (the B12 rule this replaced, now per dome).</para>
+    /// must not render a frame with no sky in it.</para>
     /// </summary>
     public List<HorizonDome> HorizonDomes = new();
 
@@ -70,8 +70,8 @@ public sealed class PlayerRig
     /// <summary>This player's full-pane cloud-band whiteout overlay, faded by camera altitude.</summary>
     public ColorRect? Whiteout;
 
-    /// <summary>This player's own camera weather state (1/2/3 — <c>WeatherState.CameraWeatherState</c>,
-    /// <c>PLAN-weather-decompile-match</c> A2), published once per frame by
+    /// <summary>This player's own camera weather state (1/2/3 — <c>WeatherState.CameraWeatherState</c>),
+    /// published once per frame by
     /// <c>Session.WeatherRig.Tick</c>. Per rig, not per session — a splitscreen pane's camera can
     /// sit in a different state than another pane's at the same instant, same as
     /// <see cref="Deck"/>'s regime. Consumed by nothing yet; defaults to 1 (the binary's own

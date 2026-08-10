@@ -25,7 +25,7 @@ public sealed class PlaneShake
     // What each impact source's magnitude_factor multiplies is authored for fire_bullet only
     // (caliber, measured). For being hit: an incoming gun round reuses the caliber law; a rocket
     // has no caliber, so its armor damage stands in, doubled by he_factor when HIGH_EXPLOSIVE.
-    // The stand-ins are declared TUNE pending being-hit footage (BL-266).
+    // The stand-ins are declared TUNE pending being-hit footage.
     private readonly Osc _fire = new();
     private readonly Osc _bulletHit = new();
     private readonly Osc _missileHit = new();

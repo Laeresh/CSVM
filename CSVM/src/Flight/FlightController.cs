@@ -546,7 +546,7 @@ public partial class FlightController : Node3D
         }
         SnapCamera();
 
-        // One firing-state slot per firable gun group (turrets excluded — inert in M3).
+        // One firing-state slot per firable gun group (turrets excluded — built inert).
         if (Loadout != null)
         {
             var firable = new List<GunGroup>();
@@ -560,7 +560,7 @@ public partial class FlightController : Node3D
             // the low-ammo cases — chiefly the on-empty group hand-off — are reachable without draining
             // thousands of stock rounds. 0 = off. Capping Capacity too makes the gauge read full at
             // the cap and drain from there; RefillWeapons refills to it on every respawn. AmmoCapOverride
-            // (--ammo=N) wins over config.json so the knob survives --det (DET-8 drops config.json).
+            // (--ammo=N) wins over config.json so the knob survives --det, which drops config.json.
             int gunCap = AmmoCapOverride ?? Config.GetInt("weapons.gunAmmoCap", GunAmmoCapDefault);
             if (gunCap > 0)
             {

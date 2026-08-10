@@ -128,7 +128,7 @@ public sealed class GunSpec
     public int Caliber;
     public string Ammo = "slug";
     public List<string> Markers = new();
-    public bool Turret;           // an AI turret slot — parsed but built inert (M4)
+    public bool Turret;           // an AI turret slot — parsed but built inert
 }
 
 /// <summary>The authored hardpoint block: pylon count + the stock ordnance id.</summary>
@@ -168,7 +168,7 @@ public sealed class Loadout
     public IReadOnlyList<GunGroup> Guns { get; }
     public IReadOnlyList<Hardpoint> Hardpoints { get; }
 
-    /// <summary>The gun groups the player can actually fire (turret slots excluded — inert in M3).</summary>
+    /// <summary>The gun groups the player can actually fire (turret slots excluded — built inert).</summary>
     public IEnumerable<GunGroup> FirableGuns
     {
         get
@@ -253,7 +253,7 @@ public sealed class Loadout
     /// defaults to the stock's first gun weapon (<c>wep_30</c> when the plane has no stock guns at
     /// all) under a generic mount label. Every synthesized group is fireable (<c>IsTurret</c> is
     /// always false here, even for a slot stock marks as a turret) — a deliberate lab-only
-    /// difference from stock, where the turret slot stays inert until M4. Runs the synthesized def
+    /// difference from stock, where the turret slot stays inert. Runs the synthesized def
     /// through the same <see cref="Bind"/> every other loadout uses, so there stays exactly one
     /// bind path (and a marker the rig lacks still throws, never a silent skip).</summary>
     public static Loadout ForRig(Node3D plane, WeaponDefs weapons, LoadoutDef? stock)
@@ -373,7 +373,7 @@ public sealed class Loadout
 
 /// <summary>One live gun group: its resolved weapon, muzzle nodes, and an <b>independent</b> ammo
 /// counter (the Balmoral's two .50 groups each carry their own — playtest-confirmed). Turret
-/// groups are bound but inert in M3 (<see cref="IsTurret"/>). The <see cref="IGunSlot"/> face is
+/// groups are bound but inert (<see cref="IsTurret"/>). The <see cref="IGunSlot"/> face is
 /// what <see cref="FireControl"/> fires through — the node-free slice of this class.</summary>
 public sealed class GunGroup : IGunSlot
 {

@@ -48,11 +48,9 @@ public sealed class CameraController
     private const float Diag = 0.70710678f;     // sin/cos 45° — the four diagonal views' components
 
     // The throttle transient's relaxation rate, in 1/SIM-second. MEASURED off the original's
-    // Bloodhawk staircase clips, NOT authored: after a throttle slam the excess distance decays
-    // exponentially with τ = 1.11 wall-s = 1.55 sim-s (wall→sim k = 1.390), i.e. 0.65 /sim-s.
-    // It matches no authored camparam constant — dist_catch_up 1.0 is 1.54× it, pos_catch_up 2.0
-    // is 3× and look_catch_up 3.0 is 4.6× too fast. Applied per SIM dt; using the wall figure
-    // (0.90 /wall-s) here would run the relaxation 39% off (verification DET-11).
+    // Bloodhawk staircase clips, NOT authored, and it matches no authored camparam constant.
+    // ⚠ Applied per SIM dt: the equivalent wall-second figure is 0.90, so feeding wall time here
+    // would run the relaxation 39% off. See docs/formats/camparam.md.
     private const float DistTransientRelax = 0.65f;
 
     // Steady-state excess distance per unit of along-path acceleration, from the same clips:
@@ -193,7 +191,7 @@ public sealed class CameraController
     /// its own: the min bites for the smallest airframes (the Kestrel's 14.5 m radius is lifted
     /// to 15.5 — looking back past a plane needs clearance) and the max is never reached in
     /// practice. That reading is the data's shape, not a capture-verified decode — no look-behind
-    /// footage exists (open as BL-260). Rigid in the plane's frame and instant, like the numpad views and
+    /// footage exists. Rigid in the plane's frame and instant, like the numpad views and
     /// for the same scripted-capture reason.</summary>
     public void BackView(in Transform3D renderPose)
     {
@@ -215,7 +213,7 @@ public sealed class CameraController
     /// <para>⚠ <c>crash_elev</c> (40) and <c>crash_chord_y</c> (1000) are NOT wired:
     /// <c>crash_elev</c> duplicates the vertical role <c>crash_y</c> already fills and the
     /// footage cannot separate 45 from 40 (56° vs 53° of look-down), and <c>chord_y</c>'s
-    /// meaning is unknown. Capture-gated on <c>BL-260</c> — do not guess them into the
+    /// meaning is unknown. Both are capture-gated — do not guess them into the
     /// pose.</para></summary>
     public void CrashView(Vector3 impact, Vector3 travelDir)
     {
@@ -259,7 +257,7 @@ public sealed class CameraController
 
         // Measurement breadcrumb (file sink always writes debug): a sim-time series of the
         // realized radius, from which a plateau law fit or a transient decay fit can be made
-        // without instrumenting a build (INSTR-5).
+        // without instrumenting a build.
         _simTime += dt;
         _logAccum += dt;
         if (_logAccum >= ChaseLogInterval)

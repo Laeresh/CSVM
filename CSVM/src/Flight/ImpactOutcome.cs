@@ -45,7 +45,7 @@ public readonly record struct ImpactOutcome
     /// fireball, so the explosion stand-in carries the blast there and only there.</para>
     ///
     /// <para><c>Player</c> is a struck <c>AircraftBody</c>; <c>Enemy</c> stays unreachable until
-    /// something non-player flies (M4). Neither gets a case of its own here: both read out of the
+    /// something non-player flies. Neither gets a case of its own here: both read out of the
     /// table like any other class and fall to <see cref="ImpactStandIn.Spark"/>, which is the
     /// existing else-branch and not a behaviour invented for them — the struck plane's damage is
     /// the caller's business, not this record's.</para></summary>

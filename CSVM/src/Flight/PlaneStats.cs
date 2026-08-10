@@ -73,9 +73,9 @@ public sealed class PlaneStats
     public float Gravity = PhysicsConstants.NomGravity; // nom_gravity — the game's arcade gravity, m/s²
     public float StallMag = 1.25f;
 
-    // player.json flight globals, plumbed here so the flight-model rewrite reads authored data
-    // instead of hardcoding it. Consumed by FlightModel as each item lands: LiftAccelRate/
-    // LiftAoaCosLo/Hi by B11's lift demand, Yaw* by C21's rudder-authority curve.
+    // player.json flight globals, plumbed here so the flight model reads authored data instead of
+    // hardcoding it: LiftAccelRate/LiftAoaCosLo/Hi feed the lift demand, Yaw* the rudder-authority
+    // curve.
     // Unread ON PURPOSE, not pending: MaxAoaCos and HighG/LowG* are the control limiters' authored
     // thresholds and this install puts them out of reach (peak demand 2.13-5.01 G against 9, peak
     // alpha 8.9-25.6 deg against 46, all eleven airframes — ControlLimiterTests pins it), and
@@ -86,7 +86,7 @@ public sealed class PlaneStats
     // angles cosined at load where the original cosines them (liftAOAs, maxAOA), raw where it does
     // not (highGs/lowGs are plain G, yaw_low_speed/yaw_high_speed are dimensionless authority).
     // Fallbacks below are the executable's own compiled defaults (docs/org/flightModel.md); this
-    // install's authored values differ in several places — see BL-095 / the corrections table.
+    // install's authored values differ in several places — see the corrections table there.
     public float LiftAccelRate = 1.2f;      // lift_accel_rate, 1/s — NOT converted (a rate, not a speed)
     public float LiftAoaCosLo = 0.98f;      // cos(liftAOAs[0]) — liftAOAs is degrees, cosined at load
     public float LiftAoaCosHi = 0.96f;      // cos(liftAOAs[1])
@@ -106,7 +106,7 @@ public sealed class PlaneStats
     public float HighSpeedPitchFadeHi = 600f * PhysicsConstants.MphToMs; // high_speed_pitch_fade[1], m/s
     // drag_fade_speed's own compiled fallback is undocumented in docs/org/flightModel.md (the decode
     // covers control authority's turn_*/yaw_* fades but not this key's mechanism); 40 mph mirrors the
-    // unchanged turn_fade_out/yaw_fade_in pattern (BL-095), not a read fallback — flag if this proves wrong.
+    // unchanged turn_fade_out/yaw_fade_in pattern, not a read fallback — flag if this proves wrong.
     public float DragFadeSpeed = 40f * PhysicsConstants.MphToMs; // drag_fade_speed, m/s
 
     // The near-miss cue's shipped accumulator (warning_shot_*) — see WarningShotCue for the units
