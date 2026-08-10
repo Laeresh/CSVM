@@ -7,15 +7,15 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The in-volume whiteout (<see cref="FogVolumeWhiteout"/>, <c>PLAN-weather-decompile-match</c>
-/// C21): the decompiled approach/interior ramps, their union, the authored colour — and the
-/// exterior-distance helper they rest on (<see cref="FogVolumeBox.ExteriorDistance"/>), pinned
-/// against closed-form distances so "the projection converged" is a measurement rather than a hope.
+/// The in-volume whiteout (<see cref="FogVolumeWhiteout"/>): the decompiled approach/interior
+/// ramps, their union, the authored colour — and the exterior-distance helper they rest on
+/// (<see cref="FogVolumeBox.ExteriorDistance"/>), pinned against closed-form distances so "the
+/// projection converged" is a measurement rather than a hope.
 ///
 /// <para>⚠ The interior ramp DECAYS inward: full AT the wall, 0 at
-/// <c>interior_fog_fade_dist</c> deep. That is the decompiled shape (<c>FUN_0044e6f0</c>) and it
-/// reads backwards on its own — the volume is a transition curtain, and <c>ZONE3</c>'s own fog
-/// (<c>C22</c>) is what carries the interior look. A future session "fixing" it by inverting the
+/// <c>interior_fog_fade_dist</c> deep. That is the decompiled shape and it
+/// reads backwards on its own — the volume is a transition curtain, and <c>ZONE3</c>'s own fog is
+/// what carries the interior look. A future session "fixing" it by inverting the
 /// ramp fails these tests, which is the point of pinning both halves.</para>
 ///
 /// <para>Fixture shapes follow <c>FogVolumeTests</c>'s precedent: hand-built
@@ -53,7 +53,7 @@ public class FogVolumeWhiteoutTests
         Assert.Equal(0f, Density(box, Vector3.Zero), 4);                        // deep inside
 
         // The able-to-fail control the ⚠ above is about: an inverted ramp would read 0 at the wall
-        // and 1 deep inside, so assert the ORDER as well as the values (METHOD-9).
+        // and 1 deep inside, so assert the ORDER as well as the values.
         Assert.True(Density(box, new Vector3(Half - 2f, 0f, 0f))
                     > Density(box, new Vector3(Half - 14f, 0f, 0f)));
     }
@@ -88,7 +88,7 @@ public class FogVolumeWhiteoutTests
         // Two cubes 100 m apart in X, the point midway between their facing walls — 8 m from each
         // wall at a 16 m fade, so each contributes exactly 0.5. a + b - a·b = 0.75; picking the
         // nearer volume would give 0.5 and adding them would give 1.0, so the case separates all
-        // three readings at once (METHOD-1).
+        // three readings at once.
         var west = BoxVolume("west", new Vector3(-108f, -50f, -50f), new Vector3(-8f, 50f, 50f));
         var east = BoxVolume("east", new Vector3(8f, -50f, -50f), new Vector3(108f, 50f, 50f));
         var whiteout = Armed(new[] { west, east });
@@ -139,7 +139,7 @@ public class FogVolumeWhiteoutTests
         Assert.Equal(FogVolumeWhiteout.DefaultInteriorFadeDist, authored.InteriorFadeDist);
 
         // No fog_color: null, so WeatherRig falls back to the mission's CLOUD_COVER TOP_COLOR
-        // (FUN_0044e010's default) rather than this chapter-scope object reaching for mission data.
+        // (the engine's own default) rather than this chapter-scope object reaching for mission data.
         var bare = FogVolumeWhiteout.From(
             FogVolumeSpec.Parse(new System.Collections.Generic.List<object?>
             {
@@ -228,7 +228,8 @@ public class FogVolumeWhiteoutTests
         var whiteout = FogVolumeWhiteout.From(spec, volumes);
 
         // 101010 is 16,16,16 in hex — C5's fog_color, the same 16 its ZONE3 FOG_COLOR carries, so
-        // the "whiteout" is very nearly a blackout and the hand-off to C22 is colour-continuous.
+        // the "whiteout" is very nearly a blackout and the hand-off to ZONE3's fog is
+        // colour-continuous.
         string actual = whiteout.Armed
             ? $"armed|{volumes.Count}|"
               + $"{whiteout.FadeDist.ToString("0.##", CultureInfo.InvariantCulture)}|"
@@ -241,10 +242,9 @@ public class FogVolumeWhiteoutTests
     [ExtractedDataFact]
     public void TheC5CityNightGoldenSitsFarOutsideEveryVolumeSoC21CannotMoveIt()
     {
-        // analysis/goldens/manifest.json, shot `c5-city-night`: --pos=-9256,178,-3155. The item's
-        // own prediction, pinned BEFORE the golden run so it could fail: C5's approach ramp is
-        // 16 m long, and this camera is nowhere near a street strip, so the density is exactly 0
-        // and the only golden in a fog_zone chapter must stay byte-identical.
+        // analysis/goldens/manifest.json, shot `c5-city-night`: --pos=-9256,178,-3155. C5's approach
+        // ramp is 16 m long and this camera is nowhere near a street strip, so the density is
+        // exactly 0 and the only golden in a fog_zone chapter must stay byte-identical.
         var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, "C5"));
         var spec = FogVolumeSpec.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, "C5"));
         var volumes = FogVolumeSpec.VolumesOf(gamez);

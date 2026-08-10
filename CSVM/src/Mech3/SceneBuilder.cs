@@ -48,7 +48,7 @@ public sealed class SceneBuilder
     // The world's cross-node tie-break: one slot per conflicting layer, not per node
     // (ConflictRank). Sized by two measurements, both in analysis/bl-053-dense-rank/:
     //  - it must DOMINATE the within-mesh rank, or a surface rank of 5 still out-bids a
-    //    one-slot cross-node step, which is the defect this replaces: > 5 x SurfaceRankBias.
+    //    one-slot cross-node step: > 5 x SurfaceRankBias.
     //  - a millimetre-jitter capture at the C1B water/shoreline pair brackets the separation
     //    that actually stops the fight between 5e-6 (1,774 pixels still swap winner) and
     //    1.2e-5 (0, matching a 10x-larger control).
@@ -133,15 +133,13 @@ public sealed class SceneBuilder
     /// still emitted ONLY into variants that already write ALPHA: an opaque variant has no alpha
     /// path to multiply, and adding one would move it into the transparent pass. Declaring the
     /// uniform does not create an alpha path, so nothing moved passes.</para>
-    /// <para>The old note that omitting the declaration kept opaque materials "off the
-    /// instance-uniform buffer that had to be enlarged for C4/C5" does not apply to the
-    /// bias shader: it always declares <c>node_bias</c> and <c>csky_fog_on</c>, so those
-    /// instances were already on that buffer, and Godot's per-instance allocation is a fixed
-    /// 16-vec4 block regardless of how many uniforms a shader declares. It DOES still apply to
-    /// the opaque sprite variants, which declare nothing — and those deliberately do not take
-    /// the preamble.</para>
-    /// <para>⚠ <see cref="AnimRuntime"/> tests for this term, not the uniform name: since the
-    /// declaration is now everywhere, only the term distinguishes a shader that actually reads
+    /// <para><b>The instance-uniform buffer.</b> The bias shader always declares
+    /// <c>node_bias</c> and <c>csky_fog_on</c>, so its instances are on that buffer whatever this
+    /// term does, and Godot's per-instance allocation is a fixed 16-vec4 block regardless of how
+    /// many uniforms a shader declares. Staying OFF the buffer only matters for the opaque sprite
+    /// variants, which declare nothing — and those deliberately do not take the preamble.</para>
+    /// <para>⚠ <see cref="AnimRuntime"/> tests for this term, not the uniform name: the
+    /// declaration is everywhere, so only the term distinguishes a shader that actually reads
     /// opacity.</para></summary>
     internal const string OpacityTerm = " * csky_opacity";
 
@@ -151,9 +149,9 @@ public sealed class SceneBuilder
     /// <para><b>Why the tint lives in the world's own shaders rather than in an overlay
     /// material.</b> A <c>MaterialOverride</c>/<c>MaterialOverlay</c> is a different shader: it
     /// does not carry <c>skip_vertex_transform</c>'s depth bias, does not spin the clutter
-    /// billboards, and defaults to <c>cull_back</c> where this world is <c>cull_front</c> — all
-    /// three were visible when the class overlay did it that way (an inside-out world, then a
-    /// tint that z-fought its own geometry and ghost tree cards facing the wrong way). Tinting
+    /// billboards, and defaults to <c>cull_back</c> where this world is <c>cull_front</c> — an
+    /// overlay material shows all three at once (an inside-out world, a tint that z-fights its own
+    /// geometry, and ghost tree cards facing the wrong way). Tinting
     /// inside the real shader has none of those problems by construction, and it is the only
     /// form that can blend WITH the texture rather than replace it.</para>
     /// <para>Emitted only into shaders that already take the instance-uniform preamble — the
@@ -228,20 +226,19 @@ void fragment() {
     //   detail over its base tile, road decals over rail decals.
     private const float SurfaceRankBias = 2e-6f;
     private const int SurfaceRankCap = 5;
-    // The no_clutter draw-order offset (GameZPolygon.NoClutter): originally read as the
-    // OpenFlight SUBFACE mark — a face coplanar-with-and-contained-in the one beneath it,
-    // drawing on top — but docs/formats/gamez.md rule 23 corrected that: the bit is authored
-    // from a NODE-NAME SUBSTRING (gg_load.c's `strstr(name, "no_clutter")`), not an OpenFlight
-    // structural attribute, and it does not always describe a subface (five of six faces of
-    // every `fvol` sky box carry it, with no face beneath any of them). What survives is
-    // empirical, not derived: where two coplanar layers ARE painted over each other, the
-    // flagged one is measured to be the layer that must draw on top, in every case checked
+    // The no_clutter draw-order offset (GameZPolygon.NoClutter). The bit is authored from a
+    // NODE-NAME SUBSTRING (gg_load.c's `strstr(name, "no_clutter")`), not an OpenFlight
+    // structural attribute, and it does NOT always describe a subface (five of six faces of
+    // every `fvol` sky box carry it, with no face beneath any of them) — see
+    // docs/formats/gamez.md rule 23. So the justification is empirical, not derived: where two
+    // coplanar layers ARE painted over each other, the flagged one is measured to be the layer
+    // that must draw on top, in every case checked
     // (analysis/bl-305-clutter-uv/FINDINGS-layer-pairing.md, analysis/item9-depth-bias/
-    // cblock_probe8.py — re-run 2026-08-10 against current code: disabling this bias at C5's
-    // downtown pose puts the wrong, no_clutter-excluded ground on top for 78% of the frame;
-    // 0.5 and 1.0 of a level resolve it identically). So this term stays keyed off the same
-    // bit as the clutter gate, on that coincidence of authoring, not because the bit means
-    // "subface". The original applies ONE WHOLE priority level to it globally
+    // cblock_probe8.py: disabling this bias at C5's downtown pose puts the wrong,
+    // no_clutter-excluded ground on top for 78% of the frame; 0.5 and 1.0 of a level resolve it
+    // identically). This term is keyed off the same bit as the clutter gate on that coincidence
+    // of authoring, not because the bit means "subface". The original applies ONE WHOLE
+    // priority level to it globally
     // (`GameGenSetSubfacePriorityOffset 1` in support\init.gw, global to every mission); we
     // deliberately apply HALF a level instead: priority 1 is a genuinely authored value
     // (955 C5 polygons, 2207 in C1), and a full level would tie a flagged face with a real
@@ -296,8 +293,7 @@ void fragment() {
     // surface gets), so a deck tile's forced build must not be handed back for the same model
     // referenced normally. No model in this install is referenced both ways (the deck's 144
     // tiles have exclusive model indices in every chapter that has a deck), so this is defence,
-    // not a live case. `ForceLit` is `PLAN-overcast-match` C22's deck-underside fix — see
-    // `WorldBuilder.Add`.
+    // not a live case. `ForceLit` is the deck-underside exception — see `WorldBuilder.Add`.
     private readonly Dictionary<(int Model, bool Force, bool ForceLit), ArrayMesh?> _meshCache = new();
     private readonly Dictionary<int, Vector3> _meshPivotCache = new(); // billboard meshes only: local quad center
     private readonly Dictionary<int, ArrayMesh> _lightMeshCache = new();
@@ -312,8 +308,8 @@ void fragment() {
     // the same way; fire/flame sprites are soft and blend), and dims with the world's
     // SUNLIGHT UNLESS the texture is a light source itself (the caller's glowTexture
     // predicate — the same delegate the legacy spherical fallback uses, so one rule governs
-    // every light-vs-scenery billboard in the renderer; WorldBuilder widened it
-    // to also catch the refinery's own gas flame, fire101.tif, which isn't "*flare*"-named).
+    // every light-vs-scenery billboard in the renderer; WorldBuilder's predicate also catches
+    // the refinery's own gas flame, fire101.tif, which isn't "*flare*"-named).
     private readonly Dictionary<(int Material, int Axis, bool Lit, bool Fogged, bool ClampUv), Material> _cylindricalMaterialCache = new();
     // Every textured material this builder made, paired with the texture name it resolved
     // from — the registry a live repaint needs (the viewer's livery lab re-runs the paint
@@ -385,8 +381,8 @@ void fragment() {
     // The rendering-side spelling of ClassifyBillboard's two cylindrical cases: the mesh
     // spins about one fixed world axis to face the camera on the other two, so a tree card or
     // a flame stays upright instead of tipping over like a light glow. Kept as its own enum
-    // because it also keys the shader/material caches below. None on a legacy extraction (no
-    // per-axis fallback ever existed — those meshes rendered static, as they always did).
+    // because it also keys the shader/material caches below. None on a legacy extraction: there
+    // is no per-axis fallback, so those meshes render static.
     private enum CylAxis { None, Y, X }
 
     public int MeshInstanceCount { get; private set; }
@@ -497,10 +493,10 @@ void fragment() {
     /// clamp on them changes 80% of the C5 city pose.
     /// </para>
     /// <para>
-    /// Since the C1B shoreline seam, the test is per-axis: a surface can tile along one
+    /// The test is per-axis, because a surface can tile along one
     /// axis and map the other exactly once — C1B's animated surf strip runs V 0→3.9 along
     /// the shore while U spans [0,1] across it, from srf0001.tif's opaque foam column to its
-    /// fully transparent seaward column, and the both-axes test left that U wrap live to
+    /// fully transparent seaward column, and a both-axes test leaves that U wrap live to
     /// bleed the opaque column back in as a gray hairline out in the water. Each fitting
     /// axis is safe to clamp by the same construction; the tiling axis must keep repeating,
     /// so the partial case is applied as a shader-side coordinate clamp rather than a
@@ -525,7 +521,7 @@ void fragment() {
                     return UvClampAxes.None;
             }
         }
-        // No UVs at all ⇒ nothing to clamp; keep the surface on the old path.
+        // No UVs at all ⇒ nothing to clamp; keep the surface on the repeating path.
         return !any ? UvClampAxes.None
             : (uFits ? UvClampAxes.U : UvClampAxes.None) | (vFits ? UvClampAxes.V : UvClampAxes.None);
     }
@@ -539,9 +535,9 @@ void fragment() {
     /// <see cref="WorldBuilder"/>. Inherited by all descendants.</param>
     /// <param name="forceLit">Apply <c>csky_world_light</c> to this subtree regardless of its
     /// own authored <c>lighting</c> flag — the deck mesh's exception, beside
-    /// <paramref name="forceDoubleSided"/>: `PLAN-overcast-match` C21 traced the original's dark
-    /// mottled underside to the mission's own SUNLIGHT dimming, which the deck tiles' authored
-    /// `lighting: false` currently gates off (see <see cref="WorldBuilder"/>). Inherited by all
+    /// <paramref name="forceDoubleSided"/>: the original's dark mottled underside comes from the
+    /// mission's own SUNLIGHT dimming, which the deck tiles' authored `lighting: false` would
+    /// otherwise gate off (see <see cref="WorldBuilder"/>). Inherited by all
     /// descendants; never changes <c>csky_world_light</c> itself or the gate for any other
     /// model.</param>
     /// <param name="zoneGate">Stamp each built mesh with its node's own gamez <c>zone_id</c>
@@ -596,7 +592,7 @@ void fragment() {
     /// null for the untagged default. The collision buckets are built from this
     /// (<see cref="CollidersForMesh"/>), and <c>MapEdgeExtender</c>'s <c>--dump-tilegrid</c> census
     /// reports it for every tile candidate it rejected: what the dropped geometry IS, not how big
-    /// it was, is what says whether the continuation owed it a copy (`BL-316`).</summary>
+    /// it was, is what says whether the continuation owed it a copy.</summary>
     internal static string? ClassifySurface(string? texture)
     {
         if (string.IsNullOrEmpty(texture))
@@ -631,8 +627,7 @@ void fragment() {
     /// the same cache, so asking for a variant a built node already uses hands back that very
     /// resource. <c>WorldBuilder</c>'s deck path uses that to hold BOTH lit variants of each
     /// deck tile — one built into the node, its twin swapped in at the cloud-band flip
-    /// (<c>PLAN-overcast-match</c> C23, <c>Session/WeatherRig.DeckRegime</c>) — without building
-    /// the deck twice.</para></summary>
+    /// (<c>Session/WeatherRig.DeckRegime</c>) — without building the deck twice.</para></summary>
     internal ArrayMesh? SharedMesh(int meshIndex, bool forceDoubleSided = false, bool forceLit = false) =>
         meshIndex >= 0 && meshIndex < _gamez.Meshes.Count
             ? GetMesh(meshIndex, forceDoubleSided, forceLit)
@@ -642,22 +637,22 @@ void fragment() {
     /// material a <c>Colored</c> gamez polygon with no material entry gets (<see
     /// cref="BuildMaterial"/>'s no-texture branch, reached here with an out-of-range material
     /// index) — so its <c>ALBEDO = mix(ALBEDO, csky_fog_color, fog_amt)</c> line is byte-for-byte
-    /// the deck tiles' own. Exists for <see cref="WorldBuilder"/>'s below-band-ceiling extension
-    /// (<c>PLAN-overcast-match</c> C26): that geometry is nowhere in the gamez mesh table — the
-    /// residual the item chases is the dome wall's OWN authored vertex gradient showing past the
-    /// tile sheet's rim (<c>docs/formats/weather.md</c>, "the wall's LOWEST ring"), not a missing
+    /// the deck tiles' own. Exists for <see cref="WorldBuilder"/>'s below-band-ceiling extension:
+    /// that geometry is nowhere in the gamez mesh table — what shows past the tile sheet's rim is
+    /// the dome wall's OWN authored vertex gradient (<c>docs/formats/weather.md</c>, "the wall's
+    /// LOWEST ring"), not a missing
     /// tile — so it cannot go through <see cref="BuildSubtree"/> or <see cref="SharedMesh"/> like
     /// every other built surface; this is the smallest hook that still shares their shader
     /// construction rather than hand-rolling a second one.
     ///
     /// <para>Always double-sided (a ceiling from below, a floor from above — the tile sheet's own
     /// reason, see <c>WorldBuilder.Add</c>) and built <c>lit: false</c>: every quad this is used
-    /// for sits well beyond every deck chapter's own authored <c>FOG_RANGES</c> far (C26's own
-    /// derivation — the existing 144-tile sheet's own rim already exceeds all four), so
+    /// for sits well beyond every deck chapter's own authored <c>FOG_RANGES</c> far (the existing
+    /// 144-tile sheet's own rim already exceeds all four), so
     /// <c>fog_amt</c> is 1.0 at every point of it and the mix result is <c>csky_fog_color</c>
-    /// regardless of <c>ALBEDO</c> — the per-regime SUNLIGHT-dimming swap <c>C23</c> built for the
-    /// tiles has nothing to change here, which is why this returns ONE static mesh rather than a
-    /// dimmed/undimmed pair (verified, not assumed, in C26's own landing record).</para></summary>
+    /// regardless of <c>ALBEDO</c> — the per-regime SUNLIGHT-dimming swap the deck tiles take has
+    /// nothing to change here, which is why this returns ONE static mesh rather than a
+    /// dimmed/undimmed pair.</para></summary>
     internal ArrayMesh BuildFlatQuadMesh(IReadOnlyList<(Vector3 A, Vector3 B, Vector3 C, Vector3 D)> quads)
     {
         var st = new SurfaceTool();
@@ -933,12 +928,12 @@ void fragment() {
             // Named per class ("col", "col_water", "col_buildings") rather than "col" for all
             // of them: a mesh yields at most one bucket per class, so these names never collide
             // within one parent — sibling nodes Godot can't tell apart by the SAME requested name
-            // get silently renamed to an opaque "@StaticBody3D@N", which broke the untagged
-            // body's "col" identity check in ColliderOverlay the moment a mesh split in two.
+            // get silently renamed to an opaque "@StaticBody3D@N", which breaks the untagged
+            // body's "col" identity check in ColliderOverlay as soon as a mesh splits in two.
             var body = new StaticBody3D { Name = surface != null ? $"col_{surface}" : "col" };
             body.AddChild(new CollisionShape3D { Shape = shape });
             // Stamp the struck-surface class (water / buildings), so a weapon impact can pick the
-            // right IMPACT variant (B15). 'default' (terrain / anything unclassified) is the
+            // right IMPACT variant. 'default' (terrain / anything unclassified) is the
             // common case and stamps nothing.
             if (surface != null)
                 body.SetMeta(SurfaceMeta, surface);
@@ -1130,8 +1125,8 @@ void fragment() {
 
         // A sprite or facade mesh takes a billboard/cylindrical material, which has no depth-bias
         // parameter to order a pass with — declining the overlay there leaves such a mesh exactly
-        // as it built before. Measured zero across all 8 chapters and planes.zbd; counted so it
-        // stays that way.
+        // as it builds without one. Measured zero across all 8 chapters and planes.zbd; counted so
+        // it stays that way.
         if (overlayLevels > 0 && (glowSprite || cylAxis != CylAxis.None))
         {
             foreach (var poly in mesh.Polygons)
@@ -1171,12 +1166,11 @@ void fragment() {
         // from distance fog. Both flow into the material/shader keys, so one texture can skin a
         // lit world surface and a self-lit effect model without either borrowing the other's look.
         //
-        // `forceLit` is `PLAN-overcast-match` C22's regression fix, deck-local (see
-        // `WorldBuilder.Add`): the deck tiles author `lighting: false` like the dome and the
-        // `cloudsprite` field, but C21 traced the original's underside to the ONE surface the
-        // original actually dims by the mission's own SUNLIGHT — `SunIncidence` 0.46 was
-        // calibrated on this exact deck texture (`Flight/Weather.cs`), so the deck left that
-        // match when `lighting`/`fog` became shader variants. This never touches the gate for
+        // `forceLit` is deck-local (see `WorldBuilder.Add`): the deck tiles author
+        // `lighting: false` like the dome and the `cloudsprite` field, but the deck is the ONE
+        // surface the original actually dims by the mission's own SUNLIGHT — `SunIncidence` 0.46
+        // is calibrated on this exact deck texture (`Flight/Weather.cs`), so honouring the
+        // authored flag there would lose that match. This never touches the gate for
         // any other model, and it selects an existing lit+fogged shader VARIANT rather than
         // adding a uniform, so it cannot perturb geometry that doesn't ask for it.
         bool lit = mesh.Lighting || forceLit;
@@ -1265,9 +1259,9 @@ void fragment() {
     // are routed through _billboardTexture instead.
     //
     // The legacy branch (single polygon + a "flare"-ish texture name) is what a v0.6.1
-    // extraction gets. It under-matches — fire101.tif's refinery flame carries no "flare" in
-    // its name and rendered as static geometry — which is exactly why the data-driven rule
-    // above replaced it; it is kept only so the documented v0.6.1 rollback still works.
+    // extraction gets. ⚠ It under-matches — fire101.tif's refinery flame carries no "flare" in
+    // its name and renders as static geometry — which is why the data-driven rule above is the
+    // real one; the legacy branch is kept only so the documented v0.6.1 rollback still works.
     private bool IsGlowSpriteMesh(GameZMesh mesh)
     {
         if (ClassifyBillboard(mesh) is { } kind)
@@ -1500,10 +1494,9 @@ void fragment() {
         // uniforms (node_bias, csky_fog_on), so it always takes the full preamble — see the
         // contract in the .gdshaderinc itself. `csky_fog_on` is a per-instance runtime opt-out
         // for a model whose shader variant already carries the fog-mix code (`fogged` below);
-        // nothing sets it to 0 today. (`B16`: the skydome's below-horizon skirt was once
-        // described as using it, but no code ever did — the skirt is authored `fog: false` like
-        // the rest of the dome, so it takes the UNFOGGED variant and never emits the mix line
-        // this uniform would have gated.)
+        // nothing sets it to 0 today. In particular the skydome's below-horizon skirt does not:
+        // it is authored `fog: false` like the rest of the dome, so it takes the UNFOGGED variant
+        // and never emits the mix line this uniform would gate.
         sb.AppendLine(InstanceUniformsInclude);
         // Distance fog + the per-mission SUNLIGHT dimming.
         sb.AppendLine(AtmosphereInclude);
@@ -1511,8 +1504,8 @@ void fragment() {
             sb.AppendLine(LightsInclude); // LIGHT_STATE spill — fullbright passes only
         if (textured)
             // Anisotropic mipmap filtering: the world is viewed at grazing angles from the
-            // air, where plain isotropic mipmap selection blurs the ground to mush (the C5
-            // "blurry city ground" report — and it is NOT a missing hi-res archive: the base
+            // air, where plain isotropic mipmap selection blurs the ground to mush (worst at C5's
+            // city — and it is NOT a missing hi-res archive: the base
             // texture set is already max-res, rtexture2/4/6/8 are downscaled quality tiers and
             // rtexture14 == base). Anisotropic sharpens the receding ground without new assets.
             // repeat_disable for a surface whose UVs never leave the unit square: the wrap is
@@ -1623,9 +1616,9 @@ void fragment() {{");
         // does not dim with the mission's SUNLIGHT — the same rule the glow-flare sprites follow.
         // With no lights active csky_light_spill returns exactly vec3(0.0) and the add is an
         // identity, which is what keeps an unlit world bit-identical to the pre-lights renderer.
-        // (Braces are load-bearing: emitting the ALBEDO line unguarded put it in the SHADED
-        // shader too, where light_n does not exist — every aircraft silently fell back to
-        // Godot's untextured default material.)
+        // ⚠ Braces are load-bearing: emitting the ALBEDO line unguarded puts it in the SHADED
+        // shader too, where light_n does not exist — every aircraft then silently falls back to
+        // Godot's untextured default material.
         if (!shaded)
         {
             // The world's normals reach here flipped for the same reason the aircraft's do: its
@@ -1686,15 +1679,14 @@ void fragment() {{");
         sb.AppendLine("shader_type spatial;");
         // Fullbright like the rest of the world, double-sided, no shadows. fog_disabled turns
         // OFF Godot's built-in fog (we roll our own csky_fog_* below); blend clouds render in
-        // the transparent pass writing no depth (matches the old StandardMaterial3D), scissor/
-        // opaque render normally.
+        // the transparent pass writing no depth, scissor/opaque render normally.
         sb.Append("render_mode unshaded, cull_disabled, shadows_disabled, fog_disabled");
         if (blend)
             sb.Append(", blend_mix, depth_draw_never");
         sb.AppendLine(";");
         // A sprite whose UVs never leave the unit square never needs the sampler to wrap, and
         // wrapping it bleeds the texture's opposite edge in at the UV border — the same
-        // hairline artifact UvsWithinUnitSquare exists for (and the tracer-tail streak once was).
+        // hairline artifact UvsWithinUnitSquare exists for.
         sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, "
             + (clampUv ? "repeat_disable;" : "repeat_enable;"));
         // Same global distance-fog params as GetBiasShader's world shader. Clouds always fog,

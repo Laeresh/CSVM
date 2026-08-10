@@ -564,9 +564,9 @@ public sealed partial class MeshLab : Node
     /// which is NOT the same number as the mesh's surface count: MeshInstance3D sizes that array
     /// when the mesh is assigned, so a mesh whose surfaces were committed <i>afterwards</i> —
     /// which is exactly what SceneBuilder does, committing into an already-assigned ArrayMesh —
-    /// can leave it short. Checking the mesh instead was the first cut's bug and it errors per
-    /// call (<c>p_surface = 0 is out of bounds (size() = 0)</c>). Re-assigning the mesh forces
-    /// the resize.</para>
+    /// can leave it short. ⚠ Checking the mesh's surface count instead errors per call
+    /// (<c>p_surface = 0 is out of bounds (size() = 0)</c>). Re-assigning the mesh forces the
+    /// resize.</para>
     ///
     /// <para>It recovers rather than skips because this is a diagnostic lab: a silently
     /// un-overridden surface means half an A/B, and a conclusion drawn from it would be
@@ -1129,8 +1129,8 @@ uniform int normal_mode = 0;
 void vertex() {{
     // Leading minus mirrors SceneBuilder's shaded path: it cancels the engine's back-face
     // normal flip, which cull_front makes universal on aircraft. AsData therefore matches
-    // the shipped renderer, and Negated flips relative to that (= the old inside-out look),
-    // which is what makes it useful as a sanity mode.
+    // the shipped renderer, and Negated flips relative to that (an inside-out look), which is
+    // what makes it useful as a sanity mode.
     VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     NORMAL = -normalize(MODELVIEW_NORMAL_MATRIX * NORMAL);
     VERTEX *= 1.0 - (depth_bias + node_bias);

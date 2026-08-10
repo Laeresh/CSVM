@@ -6,11 +6,10 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// Verifies docs/PLAN-flight-model-rewrite.md A1's plumbing: the flight globals
-/// <c>PlaneStats</c> reads from player.json (lift/AoA/G limiters, turn/yaw fade curves,
-/// the pitch fade, drag_fade_speed) come off this install's AUTHORED values (BL-095), not
-/// silently off the executable's compiled fallbacks baked into each field's default. A
-/// key that reads back as its fallback is the A1 failure mode this test exists to catch.
+/// The flight globals <c>PlaneStats</c> reads from player.json (lift/AoA/G limiters, turn/yaw fade
+/// curves, the pitch fade, drag_fade_speed) come off this install's AUTHORED values, not silently
+/// off the executable's compiled fallbacks baked into each field's default. A key that reads back
+/// as its fallback is the failure mode this test exists to catch.
 /// </summary>
 public class PlaneStatsFlightGlobalsTests
 {
@@ -58,7 +57,7 @@ public class PlaneStatsFlightGlobalsTests
         Assert.Equal(1000f * PhysicsConstants.MphToMs, s.HighSpeedPitchFadeLo, 2);
         Assert.Equal(1001f * PhysicsConstants.MphToMs, s.HighSpeedPitchFadeHi, 2);
 
-        // drag_fade_speed: authored 40 mph (BL-095) — happens to equal this field's
+        // drag_fade_speed: authored 40 mph — happens to equal this field's
         // documented-as-unconfirmed fallback, so this only proves the read did not error,
         // not that the read (versus the fallback) took effect; see the field's comment.
         Assert.Equal(40f * PhysicsConstants.MphToMs, s.DragFadeSpeed, 3);

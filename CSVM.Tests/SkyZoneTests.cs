@@ -67,8 +67,6 @@ public class SkyZoneTests
     [Fact]
     public void TwoBuildableZonesLeaveTheRequestAlone()
     {
-        // The choice is then a fidelity question the geometry cannot settle — still open as
-        // BL-100; check it before changing which zone wins here.
         Assert.Equal("zone2", WeatherState.PreferPopulatedHorizonZone("zone2", Zones(("zone1", 1), ("zone2", 4))));
     }
 

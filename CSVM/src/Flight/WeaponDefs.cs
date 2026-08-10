@@ -32,7 +32,7 @@ public sealed class WeaponFlyout
 }
 
 /// <summary>The choker's <c>TANGLER</c> struct: entangle time, radius, and the engine-dead
-/// duration range. M4-scope (nothing is choked in M3) — parsed so no key is dropped.</summary>
+/// duration range. Nothing is choked yet — parsed so no key is dropped.</summary>
 public sealed class TanglerData
 {
     public float? Time;
@@ -103,7 +103,7 @@ public sealed class WeaponDef
     public bool ShakesCamera;
     public bool Crater;               // ground-attack munition
 
-    // Specials (M4-scope, parsed so no key is dropped).
+    // Specials (unimplemented, parsed so no key is dropped).
     public float? BeeperTime;         // BEEPER -> TIME
     public float? SmokeScreenTime;    // SMOKE_SCREEN -> TIME
     public TanglerData? Tangler;

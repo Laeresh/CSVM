@@ -7,7 +7,7 @@ namespace CSVM.Flight;
 /// <summary>
 /// <c>--incoming[=metres[,wep_id]]</c> — the near-miss test rig: a phantom shooter sitting on each
 /// player's six, walking a burst past the canopy at a chosen pass distance. It exists because
-/// nothing in the world shoots back yet (M4 AI), so the incoming-fire cue would otherwise
+/// nothing in the world shoots back yet (there is no AI), so the incoming-fire cue would otherwise
 /// be reachable only with a second pilot in splitscreen.
 ///
 /// <para>It fires the target's OWN gun (or the named weapon) into the shared pool under a shooter
@@ -22,7 +22,7 @@ namespace CSVM.Flight;
 /// <para><b>Near misses only.</b> A hit cannot be simulated this way: an aircraft exists to the
 /// projectile raycast as nothing at all (its collision is the swept <see cref="PlaneCollider"/>
 /// query boxes, not a body), so no round can strike one — the reason <c>bullet_hit_sg</c> stays
-/// unbuildable in M3.</para>
+/// unbuildable.</para>
 /// </summary>
 public sealed partial class IncomingFire : Node
 {

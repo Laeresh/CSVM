@@ -19,7 +19,7 @@ internal interface IAnimMotion
     bool Finished { get; }
 
     // Almost every motion drives the transform; only OpacityFade overrides this. A default
-    // interface member (C# 8) so the three pre-existing transform motions need no change.
+    // interface member, so a transform motion need not declare it.
     MotionChannel Channel => MotionChannel.Transform;
 
     void Tick(float dt);

@@ -30,8 +30,8 @@ namespace CSVM.UI;
 /// selection, as <see cref="LiveryLab"/> does.</para>
 ///
 /// <para>Without a controller (no host) there is no live loadout to drive and the panel's edits are
-/// inert — nothing in the shipping paths builds it that way since M3 D9 moved the
-/// <c>--weapon-test</c> 48-weapon pass check out to <see cref="Flight.WeaponBench"/>. This node
+/// inert — nothing in the shipping paths builds it that way, since the <c>--weapon-test</c>
+/// 48-weapon pass check lives in <see cref="Flight.WeaponBench"/>. This node
 /// takes no <see cref="ProjectilePool"/> at all.</para>
 /// </summary>
 public sealed partial class WeaponLab : Node3D

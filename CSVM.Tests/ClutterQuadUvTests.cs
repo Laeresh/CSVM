@@ -7,21 +7,20 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// Where a clutter decoration is stored: the template ground quad's own interpolated texture UV,
-/// read the way <c>FUN_004dd230</c> reads it (<c>ClutterBuilder.GroundInfo</c> +
-/// <c>GroundQuad.TryUv</c>, plan item B11).
+/// read the way the binary reads it (<c>ClutterBuilder.GroundInfo</c> + <c>GroundQuad.TryUv</c>).
 ///
-/// <para>Two cases, chosen to distinguish the UV rule from the scalar-period rule it replaces
-/// (METHOD-1). C1's <c>terpat02</c> is A2's hand-computed worked example and one of the 28
+/// <para>Two cases, chosen to distinguish the UV rule from the scalar-period rule it discriminates
+/// against. C1's <c>terpat02</c> is the hand-computed worked example and one of the 28
 /// templates on which the two rules agree exactly — it pins the arithmetic. C2's
 /// <c>parklot1</c> is one of the four on which they do not: a 16 × 32 m quad whose UVs are
-/// MIRRORED, so the old <c>(x − minX) / max(extentX, extentZ)</c> came out both half-scaled and
-/// back to front. That second case is the one that fails if a sign or a transpose is wrong,
-/// which is the whole risk of this change.</para>
+/// MIRRORED, so the scalar-period rule <c>(x − minX) / max(extentX, extentZ)</c> comes out both
+/// half-scaled and back to front. That second case is the one that fails if a sign or a transpose
+/// is wrong, which is the whole risk here.</para>
 ///
-/// <para>The last four cases cover the other half of the journey (plan item B12): the per-triangle
-/// UV lattice the decoration is stamped on, <c>FUN_004dd6e0</c> steps 4, 6 and 7, against A2's
-/// worked example end to end — C1 node 2911 <c>g777</c> model 953 poly 3 tri 5 — plus the two
-/// degeneracies that must be refused for different reasons.</para>
+/// <para>The last four cases cover the other half of the journey: the per-triangle UV lattice the
+/// decoration is stamped on — the binary's steps 4, 6 and 7 against the worked example end to end,
+/// C1 node 2911 <c>g777</c> model 953 poly 3 tri 5 — plus the two degeneracies that must be refused
+/// for different reasons.</para>
 ///
 /// <para>Numbers from <c>analysis/bl-305-clutter-uv/FINDINGS-A2.md</c>, which derived them from
 /// the extraction independently of this code.</para>
@@ -50,7 +49,7 @@ public class ClutterQuadUvTests
         // u = (x + 256) / 512, v = (z + 256) / 512 — hand-computed in FINDINGS-A2.md.
         Assert.Equal(0.708715f, uv.X, UvTolerance);
         Assert.Equal(0.630430f, uv.Y, UvTolerance);
-        // Already inside [0, 1), so FUN_004dd230's fmod wrap is a no-op here.
+        // Already inside [0, 1), so the binary's fmod wrap is a no-op here.
         Assert.Equal(uv.X, ClutterBuilder.GroundQuad.Wrap(uv.X), UvTolerance);
         Assert.Equal(uv.Y, ClutterBuilder.GroundQuad.Wrap(uv.Y), UvTolerance);
     }
@@ -85,15 +84,16 @@ public class ClutterQuadUvTests
         // Mirrored: u = (8 − x) / 16, not (x + 8) / 16 — and the quad is 16 wide, not 32.
         Assert.Equal((8f - local.X) / 16f, uv.X, UvTolerance);
         Assert.Equal(0.728f, uv.X, 1e-3f);
-        // The rule this replaced: (x − minX) / max(extentX, extentZ). It is not merely a
-        // different labelling of the same point — it is 0.59 UV away, over half the quad.
+        // The alternative this discriminates against — the scalar-period rule
+        // (x − minX) / max(extentX, extentZ) — is not merely a different labelling of the same
+        // point: it lands 0.59 UV away, over half the quad.
         float oldRule = (local.X + 8f) / 32f;
         Assert.True(Mathf.Abs(uv.X - oldRule) > 0.5f,
             $"expected the scalar-period rule to disagree; got {oldRule} vs {uv.X}");
     }
 
     /// <summary>
-    /// <c>FUN_004dd230</c>'s fmod wrap, both branches — including the degenerate case where the
+    /// The binary's fmod wrap, both branches — including the degenerate case where the
     /// negative branch's <c>1 − frac</c> rounds to exactly 1.0 and must collapse back to 0. No
     /// retail decoration reaches the negative branch (every resolving quad spans 0..1), so this
     /// is the only thing that exercises it.
@@ -114,10 +114,10 @@ public class ClutterQuadUvTests
     }
 
     /// <summary>
-    /// The lattice stamp itself (<c>FUN_004dd6e0</c> steps 4, 6 and 7), against A2's worked
-    /// example computed by hand in <c>FINDINGS-A2.md</c>: C1 node 2911 <c>g777</c>, model 953,
-    /// polygon 3, triangle 5. Every number here was derived from the extraction by a Python
-    /// script and re-derived on paper, independently of this code, before B12 was written.
+    /// The lattice stamp itself (the binary's steps 4, 6 and 7), against the worked example
+    /// computed by hand in <c>analysis/bl-305-clutter-uv/FINDINGS-A2.md</c>: C1 node 2911
+    /// <c>g777</c>, model 953, polygon 3, triangle 5. Every number here was derived from the
+    /// extraction by a Python script and re-derived on paper, independently of this code.
     ///
     /// <para>Note the frame: this triangle's +U runs toward world <b>+Z</b> and its +V toward
     /// <b>−X</b>, a 90° rotation from the template quad's own axes. It is C1's dominant frame
@@ -165,7 +165,7 @@ public class ClutterQuadUvTests
         Assert.Equal(decoU, inside[0].U, 6);
         Assert.Equal(decoV, inside[0].V, 6);
 
-        // Step 7: the world position. A2's hand arithmetic and its script agree on this to the
+        // Step 7: the world position. The hand arithmetic and its script agree on this to the
         // printed digits, and an independent barycentric route agrees to 1.8e-12 m.
         var p = tri.World(inside[0].U, inside[0].V);
         Assert.Equal(-9377.390f, p.X, 2);
@@ -174,7 +174,7 @@ public class ClutterQuadUvTests
     }
 
     /// <summary>
-    /// A zero-area WORLD triangle carrying a healthy UV area — A2's trap, and the reason a UV
+    /// A zero-area WORLD triangle carrying a healthy UV area — the trap, and the reason a UV
     /// degeneracy guard alone is not enough. Two of this triangle's corners are the same point,
     /// which is what a fan or strip triangulation of an n-gon with a repeated corner produces:
     /// 1,655 of them on C1's <c>terpat02</c> alone. Its affine map would be finite and
@@ -202,7 +202,7 @@ public class ClutterQuadUvTests
 
     /// <summary>
     /// The extraction side of the same worked example: C1 model 953's polygon 3 really is a
-    /// triangle STRIP whose triangle 5 carries A2's three corners, and its UVs really are indexed
+    /// triangle STRIP whose triangle 5 carries the worked example's three corners, and its UVs really are indexed
     /// by CORNER POSITION rather than by vertex id — corners 3 and 4 of this very polygon share
     /// vertex 5 and carry different UVs. Reading the UV through the vertex id would silently
     /// stamp one corner's lattice in another corner's texture frame, and this polygon is the

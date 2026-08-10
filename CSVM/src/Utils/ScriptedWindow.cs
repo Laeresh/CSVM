@@ -14,7 +14,7 @@ public static class ScriptedWindow
     /// always-on-bottom window flag, and --position is clamped so roughly a third of the window
     /// stays on the desktop whatever you ask for (measured: 5184 and 10000 both land at 4686 on a
     /// 5120-wide desktop). Hiding is not minimizing — a minimized window stops rendering, which
-    /// turns the captures blank (SHOT-16).</summary>
+    /// turns the captures blank.</summary>
     public static void Hide()
     {
         if (!OperatingSystem.IsWindows())

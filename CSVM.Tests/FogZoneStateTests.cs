@@ -6,15 +6,15 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// B11: the camera weather state (A2) driving which zone's fog the flight wears —
+/// The camera weather state driving which zone's fog the flight wears —
 /// <see cref="WeatherState.ZoneForState"/> (state n → <c>ZONE&lt;n&gt;</c>, through
 /// <see cref="WeatherState.ResolveZone(string)"/>'s file fallback) and
 /// <see cref="WeatherRig.FogStateTrigger"/> (apply on the EDGE, never per frame).
 ///
 /// <para>The two halves are tested apart because they fail apart: a wrong mapping renders the
 /// wrong zone's fog, a wrong trigger renders the right zone's fog over and over — and the second
-/// is invisible in a screenshot while being exactly what would make the C26 rim annulus shimmer
-/// at the boundary (the item's ⚠ trap).</para>
+/// is invisible in a screenshot while being exactly what would make the rim annulus shimmer
+/// at the boundary (the ⚠ trap).</para>
 /// </summary>
 public class FogZoneStateTests
 {
@@ -34,16 +34,16 @@ public class FogZoneStateTests
     [ExtractedDataFact]
     public void ADeckChaptersStatesMapToItsTwoAuthoredZones()
     {
-        // C1/IA1 is the item's subject: below the deck (state 1) it must wear ZONE1's 1000-1750 m
-        // fog, above it (state 2) ZONE2's 1000-4000 m — the 2.3x below-deck error B11 closes.
+        // C1/IA1: below the deck (state 1) it must wear ZONE1's 1000-1750 m fog, above it
+        // (state 2) ZONE2's 1000-4000 m — a 2.3x below-deck fog error if the state is ignored.
         var weather = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "IA1"));
         Assert.NotNull(weather);
         Assert.Equal("zone1", weather!.ZoneForState(1));
         Assert.Equal("zone2", weather.ZoneForState(2));
         Assert.Equal(1750f, weather.Zone(weather.ZoneForState(1)).FogFar, 1);
         Assert.Equal(4000f, weather.Zone(weather.ZoneForState(2)).FogFar, 1);
-        // ...and the state-2 fog is what the flight rendered EVERYWHERE before this item, which is
-        // what makes the below-deck half a change and the above-deck half an invariant.
+        // ...and the state-2 fog is what a state-blind implementation renders EVERYWHERE, so the
+        // above-deck half is an invariant and only the below-deck half moves.
         Assert.Equal(970f, weather.Zone(weather.ZoneForState(1)).FogLow, 1);
         Assert.Equal(4000f, weather.Zone(weather.ZoneForState(2)).FogLow, 1);
     }
@@ -52,7 +52,7 @@ public class FogZoneStateTests
     public void C5sStatesResolveToItsZone1AndZone3()
     {
         // C5 ships ZONE1 + ZONE3 (no ZONE2 anywhere in the chapter), so its states exercise both
-        // the direct hit (3 → zone3, C22's business) and the fallback (2 → zone1).
+        // the direct hit (3 → zone3) and the fallback (2 → zone1).
         var weather = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C5", "IA1"));
         Assert.NotNull(weather);
         Assert.Equal("zone1", weather!.ZoneForState(1));
@@ -60,7 +60,7 @@ public class FogZoneStateTests
         Assert.Equal("zone3", weather.ZoneForState(3));
     }
 
-    // C22's Verify: "ZONE3 present in all 8 C5 missions — assert from the files, not one." IA1
+    // ZONE3 is present in all 8 C5 missions, asserted from the files rather than from one. IA1
     // above only pins the mission every golden flies; this walks the other 7 so a mission whose
     // author dropped ZONE3 (or renamed it) cannot hide behind IA1 passing.
     [ExtractedDataTheory]
@@ -81,10 +81,10 @@ public class FogZoneStateTests
         Assert.Equal("zone3", weather.ZoneForState(3));
     }
 
-    // C22's core claim: state 3 wears ZONE3's fog (50-250 m, FOG_COLOR [16,16,16]) unchanged from
-    // B11's per-state machinery — no clip-range plumbing (the ⚠ trap: ZONE3's CLIP_RANGES far of
-    // 300 is NOT applied, per B11's kept divergence that the remake fogs instead of clipping), no
-    // extra smoothing (C21's whiteout curtain hides the hard switch). Leaving the volume restores
+    // State 3 wears ZONE3's fog (50-250 m, FOG_COLOR [16,16,16]) through the same per-state
+    // machinery — no clip-range plumbing (the ⚠ trap: ZONE3's CLIP_RANGES far of 300 is NOT
+    // applied; the remake fogs instead of clipping), no extra smoothing (the whiteout curtain
+    // hides the hard switch). Leaving the volume restores
     // ZONE1 exactly, proving the trigger is symmetric rather than a one-way latch.
     [ExtractedDataFact]
     public void StateThreeFlipAppliesZone3FogAndExitRestoresZone1()
@@ -120,7 +120,7 @@ public class FogZoneStateTests
         Assert.Equal(2, trigger.Applications);
     }
 
-    // The ⚠ trap restated as a layering pin: A2's state machine already keeps state 3 from
+    // The ⚠ trap restated as a layering pin: the state machine already keeps state 3 from
     // arming outside an armed fog_zone chapter (CameraWeatherState only tests volumes when
     // fogZoneArmed), so no shipped non-C5 mission can ever hand the trigger a literal 3. This
     // test bypasses that gate on purpose — feeding the trigger state 3 directly against a
@@ -146,8 +146,8 @@ public class FogZoneStateTests
     [Fact]
     public void TheTriggerAppliesOnTheEdgeAndNeverAgainWhileTheStateHolds()
     {
-        // The ⚠ trap: FUN_00472ea0 runs on a state CHANGE. Re-writing the fog globals every frame
-        // would render identically at a static pose and shimmer the C26 rim annulus in motion, so
+        // The ⚠ trap: the original applies the fog on a state CHANGE. Re-writing the fog globals
+        // every frame would render identically at a static pose and shimmer the rim annulus in motion, so
         // the count is the only thing that can catch it.
         var weather = OneZoneFixture();
         var trigger = new WeatherRig.FogStateTrigger(stateDriven: true, buildZone: "zone2");
@@ -191,7 +191,7 @@ public class FogZoneStateTests
     [Fact]
     public void AnExplicitSkyZoneKeepsTheFogStatic()
     {
-        // Decision 5: --sky-zone is a state OVERRIDE. An inspection pose that silently swapped
+        // --sky-zone is a state OVERRIDE. An inspection pose that silently swapped
         // zone with altitude would not be reproducible, and analysis/ repro poses depend on it.
         var weather = OneZoneFixture();
         var trigger = new WeatherRig.FogStateTrigger(stateDriven: false, buildZone: "zone2");
@@ -209,7 +209,7 @@ public class FogZoneStateTests
         // The SUNLIGHT_* survey's finding, pinned: the pair is NOT uniformly identical across the
         // deck chapters (6 of 24 deck-chapter missions differ), so WorldLight rides the state too
         // — but C1/IA1, the mission every golden and every A/B pose flies, is one of the identical
-        // ones, which is why the item's below-deck change is fog-only in practice.
+        // ones, which is why the below-deck difference is fog-only in practice.
         var ia1 = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "IA1"));
         Assert.NotNull(ia1);
         Assert.Equal(

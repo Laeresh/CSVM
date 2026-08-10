@@ -11,14 +11,14 @@ namespace CSVM.Tests;
 /// original is a fixed artifact, so "150 → 290 mph in 3.76 s" is an invariant of it.
 ///
 /// <para>The probe's informational rows are deliberately NOT asserted; they record open questions
-/// and must not fail a build. Two of them are recorded CONFLICTS rather than open questions —
-/// accel-150-290 (footage vs the byte-verified force path) and sustained-turn-speed (rides the
-/// unattributed turn-rate gap, which C22's bank coupling was expected to close and demonstrably
-/// does not) — each with the attribution in its own comment in <c>Probes.FlightEnvelope</c> and the
-/// record in <c>docs/org/flightModel.md</c>. C23 moved a third, sustained-turn-sink, into the same
-/// category: it is the third leg of that same turn, and it re-asserts with the rate row.
-/// <c>terminal-dive</c> came BACK from that list when the attitude-thrust terms landed (D32) — the
-/// count below went 7 → 6 → 7, and a demotion is never the quiet way to make a run green.</para>
+/// and must not fail a build. Three of them are recorded CONFLICTS rather than open questions —
+/// accel-150-290 (footage vs the byte-verified force path), sustained-turn-speed (rides the
+/// unattributed turn-rate gap that the bank coupling was expected to close and demonstrably does
+/// not), and sustained-turn-sink (the third leg of that same turn, re-asserting with the rate row)
+/// — each with the attribution in its own comment in <c>Probes.FlightEnvelope</c> and the record in
+/// <c>docs/org/flightModel.md</c>. <c>terminal-dive</c> is asserted, not informational, now that
+/// the attitude-thrust terms carry it: a demotion is never the quiet way to make a run
+/// green.</para>
 /// </summary>
 public class FlightEnvelopeTests
 {

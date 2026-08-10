@@ -32,7 +32,7 @@ public sealed class ThrottleSlamSmoke
 
     // The capture's plume is visible ≤0.5 s after the jump (onset here is 0 — the gate fires the
     // trigger frame itself) and gone by ~2.5-3 wall-s after the idle→8/8 slam (t≈11.7 s to a clean
-    // t≈14.5 s sheet). Sim-seconds = wall-seconds × 1.390 (DET-11 — the wall figure runs 39% fast).
+    // t≈14.5 s sheet). Sim-seconds = wall-seconds × 1.390 — the wall figure runs 39% fast.
     private const float DurationSimSeconds = 2.8f * 1.390f;
 
     private const float RiseEpsilon = 1e-5f;

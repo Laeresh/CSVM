@@ -10,8 +10,8 @@ namespace CSVM.Mech3;
 /// instance (two players in the same aircraft wear different liveries), and it never mutates
 /// the shared <see cref="TextureArchive"/> cache.
 ///
-/// HOW THE ORIGINAL PAINTS, and what this now does (rewritten onto the real data —
-/// see <c>docs/formats/rof.md</c>). Each pattern ships a `.BM` per aircraft skin holding a
+/// HOW THE ORIGINAL PAINTS, and what this does (see <c>docs/formats/rof.md</c>).
+/// Each pattern ships a `.BM` per aircraft skin holding a
 /// near-greyscale shading map plus three per-pixel weight masks, one per paint colour slot,
 /// summing to 255. The composite is
 ///
@@ -21,12 +21,10 @@ namespace CSVM.Mech3;
 /// `.BM`'s own base plane, NOT the ZBD skin of the same name — they are different images (the
 /// ZBD one is the blue-gray key texture; the `.BM` one is neutral).
 ///
-/// This replaced a hand-authored table of per-aircraft hue windows, written when the region
-/// data was believed absent from the game files. Everything that approach could not do falls
-/// out for free here: regions with no hue at all (the Bloodhawk's black outer wing panels),
-/// the Fury (whose ZBD skin is featureless near-black yet has full masks), correct slot order,
-/// and antialiased region borders that came with the data instead of needing a soft hue
-/// falloff to stop them speckling.
+/// Because the masks say outright which texel is which slot, a region needs no hue of its own
+/// to be painted: the Bloodhawk's black outer wing panels and the Fury (whose ZBD skin is
+/// featureless near-black) paint from full masks like any other. Slot order comes from the
+/// data, and region borders arrive already antialiased.
 ///
 /// A pattern only covers the aircraft it ships skins for; <see cref="PatternLibrary.PatternsFor"/>
 /// is the per-plane list the original's paint UI offers. Parts a pattern does not carry are
@@ -69,9 +67,9 @@ public sealed class PlanePainter
     public static string? PrefixFor(GameZ gamez, GameZNode root)
     {
         // The decal placeholders are the reliable marker: an aircraft's skins are the only
-        // textures named <prefix>_noselogo / _taillogo / _winglogo. Any of the three will
-        // do — the Firebrand ships no fir_noselogo (paint.md said all eleven had one; it is
-        // ten), so keying on the nose slot alone left it unpainted.
+        // textures named <prefix>_noselogo / _taillogo / _winglogo. ⚠ Match ANY of the three,
+        // never the nose alone: the Firebrand ships no fir_noselogo, so a nose-only test
+        // leaves it unpainted.
         string? found = null;
         void Walk(GameZNode n)
         {
@@ -176,15 +174,10 @@ public sealed class PlanePainter
         float r2 = c2.R * 255f, g2 = c2.G * 255f, b2 = c2.B * 255f;
         float r3 = c3.R * 255f, g3 = c3.G * 255f, b3 = c3.B * 255f;
 
-        // ROW ORDER: `.BM` planes are stored BOTTOM-UP, the ZBD textures and Godot's Image are
+        // ⚠ ROW ORDER: `.BM` planes are stored BOTTOM-UP, the ZBD textures and Godot's Image are
         // top-down, so every source row is read from h-1-y. Without this the livery is mirrored
-        // along the texture's V axis — user-reported as "the stripes are on the wrong sides of
-        // the wings and tail", with the Black Swan Fury (which should read close to its
-        // unpainted skin) as the clearest tell. Confirmed by matching each mask's slot-1 region
-        // against the ZBD skin's own body-hue region across all four orientations: flipV wins
-        // every case that can discriminate (blo_wing IoU 0.60 vs 0.36 unflipped, blo_fin 0.53
-        // vs 0.25, pea_wing 0.40 vs 0.15); the cases that disagree are vertically symmetric
-        // regions that score the same either way.
+        // along the texture's V axis — stripes end up on the wrong sides of the wings and tail.
+        // See docs/formats/rof.md.
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++)
             {

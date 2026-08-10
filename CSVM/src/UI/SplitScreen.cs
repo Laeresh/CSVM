@@ -31,9 +31,7 @@ namespace CSVM.UI;
 /// <c>cloudparent</c> clusters, the <c>fvol</c> clutter field, the zone-1 mission targets and
 /// ground world. <c>SceneBuilder</c> stamps them at build time and <c>WeatherRig.Tick</c> keeps
 /// exactly one of the three bits in each camera's cull mask — that camera's own weather state —
-/// which is the original's <c>FUN_0056c430</c> gate per CAMERA
-/// (<c>PLAN-weather-decompile-match</c> B12). It replaced a single shared cloud-field layer gated
-/// on camera altitude (A7), which was this gate's special case. Every cull mask built here
+/// which is the original's own zone gate, applied per CAMERA. Every cull mask built here
 /// includes all three bits, so a chapter, a mode or a <c>--no-zone-cull</c> run that never applies
 /// the gate renders every zone exactly as an ungated build does.</para>
 /// </summary>
@@ -52,8 +50,7 @@ public sealed partial class SplitScreen : CanvasLayer
     // The shared zone-gate band is Mech3.ZoneGate.LayerBand (bits 13–15 = layers 14–16, zone_id
     // 1/2/3), taken immediately below the per-player band. Outside PlayerBand on purpose: every
     // cull mask below starts with all three INCLUDED, so the gate is something WeatherRig switches
-    // OFF, never something a new camera has to remember to switch on. (Bit 15 alone was the single
-    // cloud-field layer that band replaced — see the class remarks.) It is allocated in Mech3
+    // OFF, never something a new camera has to remember to switch on. It is allocated in Mech3
     // rather than here because SceneBuilder stamps it at build time, node by node.
 
     private const int Gutter = 2;   // px between panes (TUNE)

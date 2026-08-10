@@ -37,7 +37,7 @@ internal sealed class MotionSet
     /// authored clock out instead. Only bodies that actually TEST contact are counted, so the pair
     /// answers one question: is the sweep doing anything? A <c>--fly</c> session that launched
     /// flagged bodies and reports <see cref="ContactLandings"/> 0 is the failure mode worth
-    /// catching — the query silently finding nothing looks exactly like the old behaviour.
+    /// catching — the query silently finding nothing looks exactly like no sweep at all.
     /// ⚠ Left standing by <see cref="Reset"/>, the same rule (and for the same reason) as
     /// <see cref="LaunchCount"/>: every reader takes a delta across an event.</summary>
     public int ContactLandings { get; private set; }

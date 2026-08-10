@@ -307,7 +307,7 @@ public partial class Launcher : Node3D
 
         // --headless + --screenshot can never produce a frame: the dummy renderer's GetImage()
         // comes back null forever, so the capture loop never counts down and the process never
-        // quits — an orphan that still holds the log handle (docs/verification.md SHOT-9).
+        // quits — an orphan that still holds the log handle.
         // Reject the combo here, before any session builds, rather than let it hang.
         if (_spec.ScreenshotPath != null && DisplayServer.GetName() == "headless")
         {
@@ -622,15 +622,15 @@ public partial class Launcher : Node3D
             // The DEFAULT bearing only — hand-picked to shine onto the -Z (nose) side so the plane
             // model reads, and kept for --viewer, the menu, and any mission with no weather.json.
             // A flight WITH weather overwrites this every zone-apply from the zone's authored
-            // SUNLIGHT_ORIENTATION (BL-324, WeatherRig.ApplyZone).
+            // SUNLIGHT_ORIENTATION (WeatherRig.ApplyZone).
             RotationDegrees = new Vector3(-45, 150, 0),
             LightEnergy = 1.6f,
-            // BL-324: OFF. The world is built fullbright (unshaded), and an unshaded Godot
-            // material receives neither light nor shadow — so the only thing this shadow pass ever
-            // reached was one aircraft shadowing another, which the original does not do either
-            // (it has no shadow mapping at all, only a projected blob: BL-331). Leaving it on
-            // would have made this item's bearing change swing a non-original effect as a side
-            // effect, hardest in C1B/C1C/C2/C2B where pitch -65 is nearly overhead.
+            // OFF. The world is built fullbright (unshaded), and an unshaded Godot material
+            // receives neither light nor shadow — so the only thing this shadow pass reaches is one
+            // aircraft shadowing another, which the original does not do either (it has no shadow
+            // mapping at all, only a projected blob). Leaving it on would let the zone's bearing
+            // swing a non-original effect, hardest in C1B/C1C/C2/C2B where pitch -65 is nearly
+            // overhead.
             ShadowEnabled = false,
         };
         AddChild(_sun);
@@ -753,7 +753,7 @@ public partial class Launcher : Node3D
         Log.Info("sound", $"master volume={volume:0.###} via={source}{note}");
     }
 
-    /// <summary>Settles the two <c>BL-022</c> debris-arc knobs for the launch: the
+    /// <summary>Settles the two debris-arc knobs for the launch: the
     /// <c>--debris-launch=</c>/<c>--debris-gravity=</c> flags if given, else the
     /// <c>debris.launchScale</c>/<c>debris.gravityScale</c> config keys, else the authored arc.
     ///

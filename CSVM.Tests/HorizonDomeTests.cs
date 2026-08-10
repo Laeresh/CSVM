@@ -7,7 +7,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The skydome the camera's own weather state draws (<c>PLAN-weather-decompile-match</c> B14).
+/// The skydome the camera's own weather state draws.
 ///
 /// <para>The original draws the dome of the zone it is IN: below the cloud deck a deck chapter's
 /// camera is in state 1, its <c>zone_id 2</c> dome is culled and <c>horizon/zone1</c>'s own
@@ -15,18 +15,17 @@ namespace CSVM.Tests;
 /// how many domes a world builds (<see cref="WorldBuilder.DomeZonesToBuild"/>), and what each
 /// chapter's zone-1 dome actually IS, read off the extraction.</para>
 ///
-/// <para>⚠ The second half exists because the plan's own premise died on it. B14 was written
-/// expecting C1's below-deck ceiling at <b>+396.4 m</b> — the <c>bbox_mid.y</c> of
-/// <c>h_zone1scroll</c>'s model, which A1 read as a "cap centre". It is the midpoint of a bbox
-/// spanning −2000…+2792.8 and there is no geometry within 2 km of it: the mesh's actual flat
-/// ceiling cap is the 12-gon at <b>+2792.8</b>. These cases assert the caps so the retired number
-/// cannot come back.</para>
+/// <para>⚠ The second half exists to kill a plausible wrong number. The alternative this
+/// discriminates against puts C1's below-deck ceiling at <b>+396.4 m</b> — the <c>bbox_mid.y</c> of
+/// <c>h_zone1scroll</c>'s model, read as a "cap centre". It is the midpoint of a bbox spanning
+/// −2000…+2792.8 and there is no geometry within 2 km of it: the mesh's actual flat ceiling cap is
+/// the 12-gon at <b>+2792.8</b>. These cases assert the caps so +396.4 cannot come back.</para>
 /// </summary>
 public class HorizonDomeTests
 {
     /// <summary>How many domes each chapter builds, and which zones, against the real horizon
     /// census. The four deck chapters and C5 build two; the three whose <c>zone2</c> is a bare
-    /// marker build one, exactly as before this item.</summary>
+    /// marker build one.</summary>
     public static TheoryData<string, string, string> ChapterDomeZones => new()
     {
         { "C1", "zone2", "zone2, zone1" },
@@ -157,7 +156,7 @@ public class HorizonDomeTests
         Assert.Equal(expectedCapRadius, capRadius, 1);
         // The dome is camera-centred and uniformly scaled about the camera, so the ONE thing a
         // render can measure is the elevation this cap's rim subtends — scale-invariant, and
-        // therefore the number B15's vertical-scale audit has to preserve rather than the metres.
+        // therefore the number any vertical-scale change has to preserve, rather than the metres.
         Assert.InRange(Mathf.RadToDeg(Mathf.Atan2(capY, capRadius)), 5f, 60f);
     }
 
@@ -192,11 +191,11 @@ public class HorizonDomeTests
     [ExtractedDataFact]
     public void OnlyC1sZoneOneCeilingHasARimAnythingCanSee()
     {
-        // B15's audit result, pinned from the extraction. The domes are camera-centred, unfogged
+        // Pinned from the extraction. The domes are camera-centred, unfogged
         // and uniformly scaled, so the ONLY thing a frame can show is the elevation a feature
         // subtends — and a feature needs two materials to be a feature at all. C1's zone-1 dome
         // is the one that has them: a `sky2.tif` vault under a flat FOG_COLOR cap, so its cap RIM
-        // is a visible boundary (B14 measured it at 48–52° against the authored 46.95°). Every
+        // is a visible boundary (measured at 48–52° against the authored 46.95°). Every
         // other zone-1/zone-3 dome is a SINGLE Colored material with `lighting: false`, i.e. one
         // flat authored colour in every direction: no rim, no observable, and therefore no scale
         // — uniform or split — that a render of those chapters could tell apart.

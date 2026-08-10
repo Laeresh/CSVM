@@ -117,8 +117,9 @@ firtree2]]` is **90 % / 10 %**, not "nine of something". Weight sums in the ship
 alternatives at 5.0: it is replaced 99 % of the time.
 
 Every shipped list names its own model as one of the alternatives — that is how "usually
-stays itself" is expressed — and **properties are resolved from the TARGET model**, which is
-why the file carries blocks for models that are never placed directly.
+stays itself" is expressed. ⚠ **The roll rewrites the model and nothing else: properties
+stay those of the SOURCE block** — the one the template authored, not the one it became.
+See the trap at the bottom of this page, which works the case through.
 
 A target the engine cannot resolve logs `%s: cannot find clutter substitution node,
 interpreting it as nothing.` and is stored as a null model: it keeps its share of the roll
@@ -177,9 +178,14 @@ actually carry:
 
 **No chapter has the converse** — every decoration that is actually placed has a block. So
 the file is complete over what it dresses, and its surplus is exactly the set of models
-reachable only by substitution. That is the shape a consumer should expect: resolve a
-substituted stamp's properties from the target's own block, falling back to the defaults for
-the two C5 targets that have none.
+reachable only by substitution.
+
+⚠ **Those surplus blocks are inert.** Since a substituted stamp keeps its source block's
+properties, a block belonging to a model that is only ever *arrived at* by a roll is never
+read — the authoring is complete rather than load-bearing. It becomes load-bearing only for a
+model that is ALSO placed directly somewhere, which is the ordinary case for the names that
+appear in both columns. This is why the two C5 targets with no block of their own
+(`cb05det02.flt`, `cb06det03.flt`) cost nothing: there was nothing to read either way.
 
 ### C5 ships one duplicate, and the first block wins
 

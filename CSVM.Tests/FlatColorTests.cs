@@ -10,7 +10,7 @@ namespace CSVM.Tests;
 /// <see cref="GameZ.VertexColorsRestateMaterialColor"/>: the untextured polygon whose vertex
 /// colours only repeat its own material's colour. Two authored slots, one authored value —
 /// multiplying them squares it, which is what turned every skydome's below-horizon skirt into a
-/// hard band against the terrain's fog wall (<c>PLAN-overcast-match</c> B18).
+/// hard band against the terrain's fog wall.
 ///
 /// <para>The census below is the tripwire for the rule's blast radius: 85 of the 87 non-white
 /// cases install-wide are those skirts, and a future extraction that grows the number means
@@ -22,8 +22,8 @@ public class FlatColorTests
     /// material. The white ones are identity (white × white), and are counted only so the split
     /// stays visible. The non-white ones are the skydome skirts — C4 also has two black
     /// <c>g206</c> polygons, which are inert either way (black × black is black) — and C5 has
-    /// none at all, because its skirt is textured rather than <c>Colored</c>, which is why the
-    /// C5 renders were bit-identical across this change.</summary>
+    /// none at all, because its skirt is textured rather than <c>Colored</c> — which is why C5
+    /// renders are unaffected by the rule.</summary>
     public static TheoryData<string, string> ChapterRestatedCounts => new()
     {
         { "C1", "43|14" },

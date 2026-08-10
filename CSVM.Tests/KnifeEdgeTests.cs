@@ -8,19 +8,19 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The knife-edge, and the two things D31 settled about it.
+/// The knife-edge, and the two things settled about it.
 ///
-/// <para><b>1. The sag has no dedicated term any more, and must not grow one back.</b> A bounded
-/// nose-sag term used to sit in <see cref="FlightModel.Step"/>, keyed on wing verticality, because
-/// nothing else in the model dropped the nose at 90° of bank. The decoded bank→yaw coupling and the
-/// weathervane now do it — at 90° bank the body yaw axis is horizontal, so a yaw rate IS a nose
-/// sag — and they do it in the original's own shape, a drift with no equilibrium, which the bounded
-/// term never could. They also do it BETTER at the onset the bounded term was fitted to: the
+/// <para><b>1. The sag has no dedicated term, and must not grow one.</b> The tempting alternative
+/// is a bounded nose-sag term in <see cref="FlightModel.Step"/> keyed on wing verticality, on the
+/// reasoning that nothing else in the model drops the nose at 90° of bank. The decoded bank→yaw
+/// coupling and the weathervane do it — at 90° bank the body yaw axis is horizontal, so a yaw rate
+/// IS a nose sag — and they do it in the original's own shape, a drift with no equilibrium, which a
+/// bounded term cannot. They also do it BETTER at the onset such a term would be fitted to: the
 /// original's +3 s sample reads −4.9° and the decoded mechanism alone gives −4.94°, against −7.28°
-/// with the bounded step stacked on top.</para>
+/// with a bounded step stacked on top.</para>
 ///
 /// <para><b>2. <c>wingVert</c> survives in the nose-chase, on a measurement.</b> The decode says
-/// lift does not depend on bank, and lift no longer reads <c>wingVert</c> at all. Its one remaining
+/// lift does not depend on bank, and lift does not read <c>wingVert</c> at all. Its one remaining
 /// reader is the rate at which the flight path chases the nose, which the original has no
 /// counterpart for — so the decode is silent there and the footage is not: the original holds its
 /// nose 4.8° → 8.3° BELOW its flight path through a 36 s knife-edge, and that gap is what the chase
@@ -28,8 +28,8 @@ namespace CSVM.Tests;
 /// with <c>wingVert</c> retired (chase floor 1.0, the bank-independent reading) that gap collapses
 /// and the test fails.</para>
 ///
-/// <para>The recipe itself lives in <see cref="Probes.KnifeEdge"/> — it was lost once as prose and
-/// is code now precisely so that it cannot be again.</para>
+/// <para>The recipe itself lives in <see cref="Probes.KnifeEdge"/> — code rather than prose, so it
+/// cannot go missing.</para>
 /// </summary>
 public class KnifeEdgeTests
 {
@@ -49,11 +49,10 @@ public class KnifeEdgeTests
     /// the model is identically zero there — the bank coupling keys off bank, the weathervane off
     /// nose-versus-path — so one step must leave the attitude EXACTLY where it was.
     ///
-    /// <para>This is the retired sag term's own footprint. It keyed on <c>1 − |bodyUp·up|</c>, which
-    /// is 0.29 at a 45° nose-up attitude with the wings dead level, so it rotated the nose down here
-    /// at up to 11.5 °/s — a nose-down bias in every pull, at any bank, that nothing in the original
-    /// authorises. `BL-115` had it filed as a suspected defect ("the knife-at-zero-bank leak"); this
-    /// pins that it is gone.</para></summary>
+    /// <para>This is the dedicated sag term's own footprint, and the reason there is none. Keyed on
+    /// <c>1 − |bodyUp·up|</c>, which is 0.29 at a 45° nose-up attitude with the wings dead level, it
+    /// rotates the nose down here at up to 11.5 °/s — a nose-down bias in every pull, at any bank,
+    /// that nothing in the original authorises. This pins that no such leak exists.</para></summary>
     [Fact]
     public void NothingRotatesTheAttitudeInAWingsLevelPullWithTheStickCentred()
     {
@@ -116,9 +115,9 @@ public class KnifeEdgeTests
         }
     }
 
-    /// <summary>The rebuilt α reading, replacing a lost prose figure ("the Balmoral knife-edges at
-    /// α = 5.1°, 0.1° inside the liftAOAs ramp") that no instrument could reproduce. α at the
-    /// knife-edge is an emergent alignment lag, and what matters about it is whether it crosses
+    /// <summary>α at the knife-edge, measured — against the claim this discriminates against, that
+    /// "the Balmoral knife-edges at α = 5.1°, 0.1° inside the liftAOAs ramp", which no instrument
+    /// reproduces. α here is an emergent alignment lag, and what matters about it is whether it crosses
     /// <c>liftAOAs[0]</c> — past that edge the airflow starts being faked toward the nose and the
     /// lift demand changes character. It does not, on any airframe: the peak runs 0.71–4.29°
     /// against the authored 5°, which `liftAOAs` sets globally in `player.json` and is therefore

@@ -9,18 +9,16 @@ namespace CSVM.Mech3;
 
 /// <summary>
 /// The animation engine: binds an <see cref="AnimProgram"/> to a built world and executes
-/// it. Replaces the start-state-only applier this project had before, whose
-/// node resolution and INACTIVE semantics it keeps verbatim — those are user-verified and
-/// were never the limitation.
+/// it.
 ///
-/// At world build it performs the same four bootstrap passes as before:
+/// At world build it performs four bootstrap passes:
 ///  1. every anchored definition's RESET_STATE (base states — hides the `destroyed`
 ///     building/vehicle variants the gamez stores overlaid on their healthy twins),
 ///  2. ACTIVATION ON_STARTUP definitions (zepstate.json — the per-mission object roster),
 ///  3. the mission's startanims.json NEW_GAME_START animations, in order,
 ///  4. a logged safety net hiding any still-visible `destroyed` subtree nothing covered.
 ///
-/// The difference is that 2 and 3 now *run* rather than being posed at their end state: a
+/// Passes 2 and 3 *run* rather than posing at their end state: a
 /// definition becomes a live instance with a clock, so hangar doors swing open over their
 /// authored 9 s and the C1 train drives its 327 s SI-script track loop. Anything the engine
 /// cannot yet act on is counted per event kind and reported once, never fatal — that is
@@ -119,7 +117,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     public Func<IReadOnlyList<Vector3>>? PlayerPositions;
 
     /// <summary>Answers the data's <c>PLAYER_1ST_PERSON</c> condition. No cockpit view
-    /// exists yet (backlog), so false.</summary>
+    /// exists yet, so false.</summary>
     public bool FirstPerson;
 
     /// <summary>Whether <see cref="Bootstrap"/> runs the ambient-playback passes — pass 2
@@ -238,13 +236,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// resolution is both unambiguous and the only correct choice.</summary>
     public bool NameResolveFallback;
 
-    /// <summary>Hands a named effect off to another runtime (the D32 world-effects runtime) instead
+    /// <summary>Hands a named effect off to another runtime (the world-effects runtime) instead
     /// of starting it locally. Set on the WORLD runtime: when a death sequence's CALL_ANIMATION names
     /// a destruction/impact effect the effects runtime handles, the world runtime — whose puffer
     /// factory is gone after the build — routes it there with the call-site world point, the resolved
     /// call-site NODE (the callee's INPUT_NODE, which the local path expresses by anchoring the
     /// callee on it), and returns true, so the local Start (which would render nothing) is skipped.
-    /// Null on every other runtime, where CALL_ANIMATION behaves exactly as before.</summary>
+    /// Null on every other runtime, where CALL_ANIMATION starts the callee locally.</summary>
     public Func<string, Vector3, Node3D?, bool>? ExternalEffect;
 
     /// <summary>Stops a named effect on the external runtime <see cref="ExternalEffect"/> routes to
@@ -282,9 +280,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     public Action<Color, Color, float>? ScreenFlash;
 
     /// <summary>This runtime does not own audio — its SOUND / SOUND_NODE events are no-ops, not
-    /// late-failure reports. Set on the D32 world-effects runtime: it renders an effect def's
+    /// late-failure reports. Set on the world-effects runtime: it renders an effect def's
     /// puffers, but the same effect's impact/death SOUND is already played by the projectile pool
-    /// (D30) or the world runtime (D31), so playing it here too would double it, and with no audio
+    /// or the world runtime, so playing it here too would double it, and with no audio
     /// session it would only spam "silent for the session" warnings.</summary>
     public bool SoundHandledElsewhere;
 
@@ -302,20 +300,20 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// carry the plane's momentum and scatter along its travel — the authored launch alone is a small
     /// relative pop (5–10 m/s straight up), which reads as "the pieces barely drift" against a plane
     /// that hit at 60–90 m/s. It is the physical part the def leaves to the engine; a TUNE on the
-    /// fraction, not a decode. The crash case is backed by footage (<c>CAP-16</c>: a wing panel
-    /// travels down-and-forward along the flight direction, it does not pop upward) — direction
+    /// fraction, not a decode. The crash case is backed by footage (a wing panel travels
+    /// down-and-forward along the flight direction, it does not pop upward) — direction
     /// confirmed, magnitude not pinned.
     /// <para>⚠ Crash-only BY MEASUREMENT, not merely by wiring. The world runtime deliberately
-    /// leaves this zero: at the controls (2026-08-08) the original's world debris showed no
-    /// directional bias with the attack heading, so a shot building's pieces inherit nothing there
-    /// either. Giving world destructibles a <c>WreckMomentum</c> analogue would be a divergence,
-    /// not a fix — the former <c>BL-008</c>, closed on that evidence.</para></summary>
+    /// leaves this zero: at the controls the original's world debris shows no directional bias
+    /// with the attack heading, so a shot building's pieces inherit nothing there either. Giving
+    /// world destructibles a <c>WreckMomentum</c> analogue would be a divergence, not a
+    /// fix.</para></summary>
     public Vector3 InheritedWorldVelocity;
 
     /// <summary>Animation names <see cref="InheritedWorldVelocity"/> must not reach — the
     /// caller-supplied opt-out <see cref="Anim.MotionRuntime.Create"/> needs, since the data shape
     /// alone cannot distinguish a launched piece from a ground-planted effect (see its own remark).
-    /// Null (the default) means every ballistic motion inherits, unchanged from before this existed.
+    /// Null (the default) means every ballistic motion inherits.
     /// The crash rig sets this alongside <see cref="InheritedWorldVelocity"/> so the world-space
     /// nudge that legitimately scatters wreck pieces does not also drag the crash splash off with
     /// them.</summary>
@@ -358,7 +356,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// predict (a motion still owing a BOUNCE_SEQUENCE, a recycled pool copy) would wedge the
     /// caller's sequence silently, and a silent wedge is indistinguishable from the behaviour
     /// before this landed. Every trip is counted and named (<see cref="ReportUnhandled"/>), so it
-    /// produces evidence instead of a mystery (DIAG-15).</summary>
+    /// produces evidence instead of a mystery.</summary>
     private const float WaitCeilingS = 120f;
 
     /// <summary>The magic sequence name a destructible's progressive-damage script carries in
@@ -417,7 +415,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // CALL_ANIMATION that lands on the SAME anchor as the dying instance (facade_parts on its own
     // fcpanNN, blockit2 on its own gate2 — the same idiom AT_NODE/no-site calls back onto the
     // caller's own site) register itself on that instance's <see
-    // cref="DestructibleRegistry.Instance.LocalCallTargets"/>, so a reset (C28) can Stop and
+    // cref="DestructibleRegistry.Instance.LocalCallTargets"/>, so a reset can Stop and
     // restore it too — otherwise a reset before the called def's own motions finish (facade_parts'
     // 8 s flight) leaves its pieces flown and never returns them to RESET.
     private readonly Stack<DestructibleRegistry.Instance> _dyingInstances = new();
@@ -445,7 +443,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // WAIT_FOR_COMPLETION: callee name -> how many holds it took. NAMES, not just a total: a hold's
     // whole effect is to keep a caller's sequence (and therefore its instance) alive longer, so it
     // surfaces as a live-instance count that moved, and "which one" is the only question worth
-    // asking about that (DIAG-11). Bounded by the install's 38 distinct flagged callees.
+    // asking about that. Bounded by the install's 38 distinct flagged callees.
     private readonly Dictionary<string, int> _waitsByCallee = new(StringComparer.OrdinalIgnoreCase);
 
     // Callees whose routed-away hold has already been named in the log — the print is once per
@@ -559,8 +557,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private int _soundsUnknown, _soundsAfterBuild;
 
     /// <summary>Set once <see cref="Bootstrap"/> has printed its emitter census. After this, a
-    /// failed SOUND_NODE is invisible unless reported at the point of use — which is exactly how
-    /// C1's police siren stayed silent undetected: the census is a bootstrap
+    /// failed SOUND_NODE is invisible unless reported at the point of use — which is how a late
+    /// failure (C1's police siren) can stay silent undetected: the census is a bootstrap
     /// snapshot, so it cannot distinguish "never requested" from "requested later and failed".
     /// Reported once per name, not per event: snd_fire1 alone has 363 sites.</summary>
     private bool _soundCensusPrinted;
@@ -588,7 +586,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     // Sim seconds this runtime has advanced — the clock a wait's ceiling is measured against.
     // Deliberately the runtime's own accumulation of Advance's dt, not a wall clock and not
-    // GameClock: a wait is authored animation time and must not scale with the client (DET-11).
+    // GameClock: a wait is authored animation time and must not scale with the client.
     private float _elapsed;
 
     // How many waits were installed, and how many hit WaitCeilingS instead of their callee
@@ -634,8 +632,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     /// <summary>How many <see cref="PlayEffectAt"/> calls took a pool slot whose previous instance
     /// was still live — the pool being smaller than the concurrency it met, so those two calls
-    /// share a template copy exactly as every call did before the pool
-    /// (<see cref="TemplateStage{TNode}.Pooled"/>). Zero
+    /// share one template copy (<see cref="TemplateStage{TNode}.Pooled"/>). Zero
     /// is "the pool covered everything asked of it"; a growing count is the number to size against
     /// (the pool size itself is a TUNE, `WorldEffectsFactory.EffectPoolSlots`). Forwards to
     /// <see cref="TemplateStage{TNode}.Recycles"/>, which counts both wrap flavours.</summary>
@@ -643,7 +640,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     /// <summary>Running count of ballistic <see cref="MotionRuntime"/> bodies launched — the debris
     /// pieces a death or crash flings (translation/translation_range/scale/forward_rotation over a
-    /// run time). Zero at bootstrap (nothing ambient fires the ballistic path); the C26 harness
+    /// run time). Zero at bootstrap (nothing ambient fires the ballistic path); the damage harness
     /// samples the delta across a kill to prove the wreck actually tumbles.</summary>
     public int BallisticMotionsLaunched => Motions.LaunchCount;
 
@@ -652,13 +649,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     /// <summary>Per-kind counts of events (and puffer/sound sub-reasons) this runtime processed but
     /// could not act on — the same tally <c>ReportUnhandled</c> prints at bootstrap, exposed so a
-    /// post-bootstrap harness (the D32 effects-test) can see WHY an effect built no puffer
+    /// post-bootstrap harness (the effects test) can see WHY an effect built no puffer
     /// (<c>PufferState(no host node)</c>, <c>PufferState(no texture: …)</c>).</summary>
     public IReadOnlyDictionary<string, int> UnhandledEventCounts => _unhandled;
 
-    /// <summary>The live per-instance HP of every destructible node group in this world (C21).
+    /// <summary>The live per-instance HP of every destructible node group in this world.
     /// Built during the bootstrap; the source of the value <c>ANIM_HEALTH</c> conditions read.
-    /// C23's weapon damage and C24's death sequence act through it.</summary>
+    /// Weapon damage and the death sequence act through it.</summary>
     public DestructibleRegistry Destructibles => _destructibles;
 
     /// <summary>Pins the runtime's RNG for a reproducible run. Every session sets one, derived from
@@ -700,9 +697,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     public int OneShotSoundsPlayed { get; private set; }
 
     /// <summary>How many PUFFER_STATE emitters this runtime has actually built (not just started
-    /// the owning def). The D32 world-effects verify checks this rather than "the def ran" — a
+    /// the owning def). The world-effects verify checks this rather than "the def ran" — a
     /// started effect whose factory is retired or whose textures are missing builds nothing and
-    /// renders nothing (verification.md WORLD-12).</summary>
+    /// renders nothing (verification.md).</summary>
     public int PuffersBuilt => Emitters.Built;
 
     /// <summary>Every PUFFER_STATE emitter's whole life on this runtime — start, the four stops,
@@ -1146,7 +1143,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary>Stops every live instance of an animation name (optionally only on one anchor) and
     /// tears down the live resources it created. Used by STOP_ANIMATION / INVALIDATE_ANIMATION, and
     /// — through the explicit Restart it enables (Stop → re-apply RESET_STATE → Start) — by the
-    /// animation debugger and the crash plan's respawn. Removing the instance alone left the
+    /// animation debugger and the crash respawn. Removing the instance alone would leave the
     /// definition's motions driving nodes, its puffers emitting, its lights lit and its sounds
     /// playing; <see cref="TearDownResourcesOf"/> clears all four. Start's own restart deliberately
     /// does NOT come through here — it keeps the resources so re-assertion is a seamless no-op
@@ -1154,7 +1151,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     public void Stop(string? animName, Node3D? anchor = null) =>
         RemoveInstances(animName, anchor, tearDown: true);
 
-    // ---- world-effects runtime (D32) ----
+    // ---- world-effects runtime ----
     /// <summary>Does this runtime's program hold a definition for an effect animation name? The
     /// world runtime tests this before routing a death's CALL_ANIMATION here, so only the curated
     /// impact/destruction effects are handed off (doors and other calls fall through).</summary>
@@ -1221,7 +1218,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     }
 
     /// <summary>Stops every live instance and clears the effect-TTL list — a full reset of what
-    /// PlayEffectAt started, so the D32 verify measures each effect in a clean window (these effects
+    /// PlayEffectAt started, so the verify measures each effect in a clean window (these effects
     /// share puffer names/hosts, so a lingering one would contaminate the next). Not used in play.</summary>
     public void StopAll()
     {
@@ -1233,11 +1230,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary>Escalates a destructible's visible damage to the stage its current HP now sits
     /// in, running its <c>DAMAGE_SEQUENCE</c> so the progressive-damage effect for that stage
     /// fires — the water tower's black smoke at ≤36, fire smoke at ≤18. Call it after the
-    /// instance's HP changes (C23's weapon hit, or a debug poke).
+    /// instance's HP changes (a weapon hit, or a debug poke).
     ///
     /// <para>The stage is how many of the cascade's descending <c>ANIM_HEALTH</c> thresholds the
     /// live HP has fallen past; the method only ever <b>escalates</b> — it runs the script only
-    /// when a new, deeper threshold is crossed, and the script (an IF/ELSEIF chain C21 evaluates
+    /// when a new, deeper threshold is crossed, and the script (an IF/ELSEIF chain evaluated
     /// against the live value via <see cref="HealthOf"/>) then fires the deepest active branch,
     /// exactly one effect. The stage gate is what makes "each stage once" hold for <b>every</b>
     /// effect kind: a sustained smoke would be spared re-firing by <c>CALL_ANIMATION</c>'s own
@@ -1246,8 +1243,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     ///
     /// <para>Returns whether it escalated. False means no change: the HP has not crossed a new
     /// threshold, or the destructible carries no <c>DAMAGE_SEQUENCE</c> (many just die outright,
-    /// with no progressive stages). It neither decrements HP (C23) nor runs the death sequence
-    /// (C24).</para></summary>
+    /// with no progressive stages). It neither decrements HP nor runs the death
+    /// sequence.</para></summary>
     public bool ApplyDamageStages(DestructibleRegistry.Instance inst)
     {
         var seq = inst.Def.Sequences.FirstOrDefault(s =>
@@ -1271,14 +1268,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     }
 
     /// <summary>Applies weapon damage to whatever destructible a struck world node belongs to, and
-    /// escalates its visible damage. <paramref name="struck"/> is the raycast-hit collider (B15) —
+    /// escalates its visible damage. <paramref name="struck"/> is the raycast-hit collider —
     /// or any node under a destructible — resolved to the owning instance by walking up to the
     /// nearest registered anchor (compiled def preferred, <see cref="DestructibleRegistry.Resolve"/>).
     /// World destructibles carry HEALTH only, so <paramref name="healthDamage"/> (the weapon's
     /// <c>HEALTH_DAMAGE</c>) is the whole model — there is no armour pool (docs/formats/
-    /// destructibles.md). Subtracts it, runs the damage stages, and marks the instance
-    /// <c>Destroyed</c> at zero; the death <b>sequence</b> (the healthy→destroyed swap, debris,
-    /// fireball) is C24, so today a killed object just holds its final smoking stage. Returns true
+    /// destructibles.md). Subtracts it, runs the damage stages, and at zero marks the instance
+    /// <c>Destroyed</c> and runs its death <b>sequence</b> (the healthy→destroyed swap, debris,
+    /// fireball). Returns true
     /// when the hit landed on a destructible (false for terrain/water/clutter); a no-op once
     /// destroyed.</summary>
     public bool DamageAt(Node? struck, float healthDamage)
@@ -1287,7 +1284,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (inst == null)
             return false;
         if (inst.Status == DestructibleRegistry.State.Destroyed)
-            return true;   // already dead — the death sequence (C24) owns it from here
+            return true;   // already dead — the death sequence owns it from here
         float before = inst.Health;
         inst.Health = Math.Max(0f, inst.Health - Math.Max(0f, healthDamage));
         ApplyDamageStages(inst);
@@ -1307,11 +1304,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return true;
     }
 
-    /// <summary>A plane <b>collision</b> with a world node (C27). Only the 44
+    /// <summary>A plane <b>collision</b> with a world node. Only the 44
     /// <c>WeaponOrCollideHit</c> destructibles — the Hollywood facades, the warehouse windows and
     /// <c>agyrobus</c> — take collision damage; a <c>WeaponHit</c> object (water tower, gate) is left
-    /// untouched, so ramming it kills the plane and the object stands (decision 6: the 0.01 health
-    /// marks these as fly-through set dressing). Returns true when the struck node is a
+    /// untouched, so ramming it kills the plane and the object stands (the 0.01 health marks these
+    /// as fly-through set dressing). Returns true when the struck node is a
     /// <c>WeaponOrCollideHit</c> destructible — the caller then flies the plane THROUGH it — and false
     /// for everything else (a <c>WeaponHit</c> object, plain geometry, terrain), which the caller
     /// treats as a solid crash/graze. The damage itself runs through <see cref="DamageAt"/>, identical
@@ -1328,14 +1325,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return true;
     }
 
-    /// <summary>Returns a destroyed destructible to healthy (C28) — for the debug tools (F40/F41) and
+    /// <summary>Returns a destroyed destructible to healthy — for the debug tools and
     /// respawn. The inverse of the death: (1) <see cref="Stop"/> the def's live death, tearing down its
     /// motions/puffers/fires; (2) restore the authored pose of any node the death physically MOVED —
     /// the ballistic debris pieces, whose motion Stop removes but leaves wherever they flew, so a
     /// re-destroy would launch from the wrong place; (3) re-apply the def's <c>RESET_STATE</c>, whose
     /// <c>OBJECT_ACTIVE_STATE</c> base states make the <c>healthy</c> subtree visible+collidable again
     /// and hide the <c>destroyed</c> one (<see cref="SetSubtreeActive"/> restores colliders with
-    /// visibility, C25), undoing both the death swap and the <see cref="ApplyDeathSwap"/> fallback; and
+    /// visibility), undoing both the death swap and the <see cref="ApplyDeathSwap"/> fallback; and
     /// (4) restore the live HP pool. Idempotent — destroy→reset→destroy produces the same result each
     /// time, whether the reset lands before or after a chained death call (<see
     /// cref="ChainedSwapTarget"/>) fires: Stop cancels it while still pending, and tears down /
@@ -1408,11 +1405,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     /// <summary>Where a world node visually IS, for effect siting and puffer emission. An
     /// absolute-modelled gamez subtree carries its vertices in world space under an identity node
-    /// transform (WORLD-15), so its origin is the map corner, kilometers from the object — the
+    /// transform, so its origin is the map corner, kilometers from the object — the
     /// damage-stage smoke measurably emitted there. When the node's own origin lies outside its
     /// subtree's world mesh bounds, the bounds centre is the honest position; a node whose origin
     /// sits inside them (a real transform: the waterfall, the train, debris pieces) keeps it
-    /// exactly, so every effect that rendered correctly before is untouched. Meshless nodes have
+    /// exactly, so every effect the node origin already sites correctly is untouched. Meshless nodes have
     /// no bounds and keep their origin.</summary>
     internal static Vector3 VisualOriginOf(Node3D node)
     {
@@ -1652,8 +1649,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     //
     // Opaque world variants deliberately have no alpha path (see SceneBuilder.OpacityTerm) —
     // correct for the opacity-1.0 writes the bootstrap sends, but a genuine fade landing on
-    // one rendered nothing: the kkgate wreck pieces stayed fully opaque through their authored
-    // 3–6 s fades and vanished at deactivate. So a partial opacity installs a per-surface
+    // one would render nothing: the kkgate wreck pieces would stay fully opaque through their
+    // authored 3–6 s fades and vanish at deactivate. So a partial opacity installs a per-surface
     // override on THIS instance wearing the fade twin of the shared material (materials and
     // meshes are cached and shared across nodes, so the swap must never edit them), and
     // opacity 1 removes it again, returning the surface to the opaque pass. A twin is a
@@ -1763,10 +1760,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // world (player-plane anims, cutscene rigs) must not stomp globally-resolved bare
         // names like 'destroyed'.
         //
-        // This is also where the destructible registry (C21) is built: a def with HEALTH > 0 is
+        // This is also where the destructible registry is built: a def with HEALTH > 0 is
         // a destructible, and each node its NAME resolves to is an independent instance with its
-        // own mutable HP. Nothing damages them yet (C23), so this only changes where ANIM_HEALTH
-        // reads its value from, not the value — a fresh world is unchanged.
+        // own mutable HP — the value ANIM_HEALTH conditions read.
         int anchored = 0;
         foreach (var def in program.Defs)
         {
@@ -1787,8 +1783,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // Passes 2 and 3 START the world animating (ON_STARTUP defs, then the mission's
         // startanims). A quiet-stage bootstrap (AutoStart=false, the debugger) skips them and runs
         // them later through StartAmbient; the passes around them still run, so the stage is fully
-        // set up, just still. When AutoStart is true this is byte-for-byte the inline passes 2/3,
-        // in the same place, before the pass-4 safety net.
+        // set up, just still. When AutoStart is true they run inline here, before the pass-4
+        // safety net.
         int startupRun = 0;
         var ran = new List<string>();
         var missing = new List<string>();
@@ -1853,8 +1849,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     /// <summary>Runs the two ambient-playback bootstrap passes — pass 2 (ACTIVATION ON_STARTUP
     /// definitions) and pass 3 (the mission's startanims, by ANIMATION_NAME, in list order) —
-    /// and returns their tallies for the census. Extracted verbatim from <see cref="Bootstrap"/>
-    /// so a quiet-stage bootstrap can defer them to <see cref="StartAmbient"/>.</summary>
+    /// and returns their tallies for the census. Shared with <see cref="Bootstrap"/>, so a
+    /// quiet-stage bootstrap can defer them to <see cref="StartAmbient"/>.</summary>
     private (int StartupRun, List<string> Ran, List<string> Missing) RunAmbientPasses()
     {
         // Pass 2: ON_STARTUP definitions run for real (zepstate's roster is instantaneous
@@ -1862,7 +1858,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // A def carrying EXECUTION_BY_RANGE is authored to execute only near the player
         // (the C3 spiderweb's 50 m fade), so it defers to the proximity check instead of
         // firing blind at t=0. An unanchored one has no position to measure from and starts
-        // immediately, like before.
+        // immediately.
         int startupRun = 0;
         _rangeDeferred.Clear();
         foreach (var def in _program.Defs.Where(d => d.OnStartup))
@@ -1985,12 +1981,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <para>The ceiling (<see cref="WaitCeilingS"/>) is a backstop with a log line, not a
     /// timeout the data authors — see its own comment. It reports at the moment it trips rather
     /// than through <see cref="Count"/>, because the bootstrap census has already printed by then
-    /// and a counter raised afterwards is never seen (LOG-16).</para></summary>
+    /// and a counter raised afterwards is never seen.</para></summary>
     /// <summary>Records a flagged call whose callee was handed to the world-effects runtime, where
     /// this runtime has no instance to hold on. Printed ONCE per callee, at the moment it happens —
     /// deliberately not through <see cref="Count"/>, whose report is the bootstrap census: every
-    /// routed call is a death-time event, so the census channel could never carry one (LOG-16), and
-    /// a dropped hold that no report can express is exactly the silent skip DIAG-15 forbids.
+    /// routed call is a death-time event, so the census channel could never carry one, and a
+    /// dropped hold that no report can express is a silent skip.
     /// </summary>
     private void NoteRoutedWait(string callName)
     {
@@ -2332,12 +2328,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         // A bounce this event ARMED is acted on — TickMotions dispatches it when the
                         // body lands — so it must not be filed as unhandled; doing so would report a
                         // working feature as a missing one, the same rule the retarget tallies follow.
-                        // What stays deferred is BL-245's: the falls that author
-                        // `do_intersections: false` — no apex to solve, so they never arm, and the
-                        // data does not ask for a collider test that would tell us where they land.
-                        // ⚠ The 204 RUN_TIME+bounce events are NOT that case, whatever this comment
-                        // said before: 150 of them author `do_intersections: true` and now arm at
-                        // contact, water branch and all.
+                        // What stays deferred is the falls that author `do_intersections: false` —
+                        // no apex to solve, so they never arm, and the data does not ask for a
+                        // collider test that would tell us where they land.
+                        // ⚠ The 204 RUN_TIME+bounce events are NOT that case: 150 of them author
+                        // `do_intersections: true` and arm at contact, water branch and all.
                         if (ev.Data.Has("bounce_sequence") && !bounceArmed)
                             Count("ObjectMotion(bounce_sequence deferred)");
                         duration = instant ? 0f : ballTime;
@@ -2435,9 +2430,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 // which re-issues the call on EVERY frame the condition holds — C1/MP1's
                 // `rearm_node_1/call_door` fires `rearm_door_close` for as long as the player
                 // stays within 25 m. Restarting there pins the 2 s door at its first frame for
-                // as long as you hover, which is exactly backwards. (Nothing regresses: the
-                // bootstrap passes call Start directly, and the hangar-door pair that relies
-                // on "later registration wins" resolves through MotionSet.Add, not through this.)
+                // as long as you hover, which is exactly backwards. (The bootstrap passes call
+                // Start directly, and the hangar-door pair that relies on "later registration
+                // wins" resolves through MotionSet.Add, not through this.)
                 if (ev.Data.Str("name") is { } callName)
                 {
                     // A call may re-anchor the callee onto ANOTHER node. That is the data's
@@ -2445,20 +2440,20 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     // fireball roots) are parentless single copies, and the call is what puts
                     // one at a specific site — `CallAnimation{huge_30sec_fire, WithNode:
                     // rc*_dbase1}` burns one ship section. 29,633 WITH_NODE + 7,640 AT_NODE +
-                    // 179 OPERAND_NODE call sites carry a target; ignoring it ran every one of
-                    // them on the CALLER's anchor instead of where the data put it.
+                    // 179 OPERAND_NODE call sites carry a target; ignoring it would run every one
+                    // of them on the CALLER's anchor instead of where the data put it.
                     var (siteNode, siteOffset) = CallTargetSite(ev, def, anchor);
                     var callAnchor = siteNode ?? anchor;
                     // The world runtime can't render an effect template (its puffer factory is
-                    // torn down after the build, WORLD-12). When a death sequence calls one of the
-                    // named destruction/impact effects, hand it to the world-effects runtime (D32),
+                    // torn down after the build). When a death sequence calls one of the named
+                    // destruction/impact effects, hand it to the world-effects runtime,
                     // which keeps textures open, stages the templates and relocates them onto the
                     // call site — and skip the local Start that would only build nothing.
                     if (ExternalEffect != null && callAnchor != null && IsInstanceValid(callAnchor))
                     {
                         var siteXform = callAnchor.GlobalTransform;
                         // VisualOriginOf, not the raw origin: an absolute-modelled call target's
-                        // node origin is the map corner (WORLD-15), which placed the routed
+                        // node origin is the map corner, which would place the routed
                         // effect kilometers off-site. The resolved site node rides along too: it
                         // is the callee's INPUT_NODE (the local path below expresses that by
                         // anchoring the callee on it), and the effects runtime needs it for defs
@@ -2468,7 +2463,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             // A routed call leaves no instance on THIS runtime, so there is
                             // nothing here to wait on and the caller advances as it always did.
                             // Counted rather than passed over: it is the one scope boundary the
-                            // wait has, and a dropped hold must be visible (DIAG-15). Honouring
+                            // wait has, and a dropped hold must be visible. Honouring
                             // it would mean the world runtime polling the effects runtime's
                             // instance list across the ExternalEffect delegate, which today
                             // carries no return path for that.
@@ -2535,9 +2530,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         // the same compiled indices) and falls to the name rescue scoped to ITS OWN
                         // subtree, so the copy has to BE the anchor for that scope to find anything
                         // (the same shape genx12 uses, anchored on the call site instead).
-                        // TemplateStage.Places' un-pooled templates keep the old shape (anchored on
-                        // the call site, resolved by the def-wide TemplateStage.RootsFor/by-index map as
-                        // always).
+                        // TemplateStage.Places' un-pooled templates take the other shape (anchored
+                        // on the call site, resolved by the def-wide TemplateStage.RootsFor /
+                        // by-index map).
                         var startAnchor = libraryCopy ?? callAnchor;
                         // Added whether or not the Start below actually fires. A call onto an
                         // ALREADY-LIVE callee is skipped by the live guard (the poll idiom's
@@ -2596,7 +2591,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             // CALLED template stays dark while its puffers — which draw at world
                             // level, independent of the root — emit at the site, so the effect
                             // shows its particles and none of its authored geometry. Measured on the
-                            // rocket rings the D31 staging exists for: `he_ground_effect` calls
+                            // rocket rings the staging exists for: `he_ground_effect` calls
                             // `call_he_ring1` (root `he_ring1`), `sonic_ground_effect` calls
                             // `ring_up1`-`4`/`ring_down1` (roots `sonic_ring1`-`5`), and every one
                             // of those roots carries meshes its own def activates and never showed
@@ -2607,7 +2602,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                                 _templateStage.Reveal(target, startAnchor, visible: true);
                             // A death-triggered call whose relocation was permitted, landing on the
                             // SAME anchor as the dying instance, is the caller's own choreography
-                            // (facade_parts on its own fcpanNN) — a reset (C28) has to stop and
+                            // (facade_parts on its own fcpanNN) — a reset has to stop and
                             // restore it too, or its motions (facade_parts' 8 s flight) can leave
                             // pieces flown past the reset. Tracked against the actual
                             // Start anchor (the pooled copy, not the call site), since that is what
@@ -2616,9 +2611,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             // same anchor: a shared, WORLD-PLACED template several unrelated
                             // destructibles all call (C5's `small_yellow_sparks`) is not this def's
                             // own private choreography, and stopping/restoring it on THIS def's
-                            // reset tore down a sibling destructible's still-flying pieces
+                            // reset would tear down a sibling destructible's still-flying pieces
                             // mid-sweep, moving their debris counts for no authored reason
-                            // (measured: `lfspt`/`rfspt`/`w_lite` shifted) — the same mistake
+                            // (measured: `lfspt`/`rfspt`/`w_lite` shift) — the same mistake
                             // relocation's own test already guards against. A pool wrap that
                             // recycles a copy still tracked by its ORIGINAL owner leaves that
                             // owner's entry stale (its pieces are already gone, overwritten by the
@@ -2653,16 +2648,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
             case "LightAnimation":
                 // The ramp is the event's DURATION, so the next step of a pulse chain waits for it.
-                // Traced (D31): the original's handler is dispatch slot 5, `004e82b0`. It advances
-                // the light by one tick's worth of the authored delta per dispatch — clamping the
-                // last tick to the remainder — and ends `return (seq->event_timer < run_time) ? 1
-                // : 2`, i.e. STILL RUNNING until the run time is up, exactly as
-                // `FBFX_COLOR_FROM_TO` (`004ec6a0`) does. CSVM ramps the light asynchronously
-                // instead (`AnimLight.TweenLeft`, ticked in `TickLights`), which is the same
-                // picture only if the sequence is also held: reporting 0 fired every step of a
-                // chain in one instant, each overwriting the previous tween, so the light snapped
-                // to the last step and `he_light_seq`'s authored 0.41 s flicker — seven ramps —
-                // was a single frame. The `ordnance-burst-timeline` suite is where that shows.
+                // The original's handler is dispatch slot 5: it advances the light by one tick's
+                // worth of the authored delta per dispatch — clamping the last tick to the
+                // remainder — and ends `return (seq->event_timer < run_time) ? 1 : 2`, i.e. STILL
+                // RUNNING until the run time is up, exactly as `FBFX_COLOR_FROM_TO` does. CSVM
+                // ramps the light asynchronously instead (`AnimLight.TweenLeft`, ticked in
+                // `TickLights`), which is the same picture only if the sequence is also held:
+                // reporting 0 would fire every step of a chain in one instant, each overwriting
+                // the previous tween, so the light would snap to the last step and
+                // `he_light_seq`'s authored 0.41 s flicker — seven ramps — would be a single
+                // frame. The `ordnance-burst-timeline` suite is where that shows.
                 HandleLightAnimation(ev, anchor, instant);
                 // A RESET_STATE lands the delta whole (see the handler), so it takes no time.
                 duration = instant ? 0f : ev.Data.Num("run_time") ?? 0f;
@@ -2678,7 +2673,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
             case "FbfxColorFromTo":
                 {
-                    // A full-screen wash: the original's handler (FUN_004ec6a0, dispatch slot 36)
+                    // A full-screen wash: the original's handler (dispatch slot 36)
                     // interpolates RGBA linearly from `from` toward `to` over `run_time`, clamps each
                     // channel to 0..1, packs RGB into one frame-buffer pixel value and hands it plus
                     // the alpha — separately, as a blend weight, not a premultiplied component — to the
@@ -2736,7 +2731,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // AT_NODE INPUT_NODE / MAIN_ROOT_NODE are the sentinels for "the node this def was invoked
         // on" = the anchor (same rule ConditionNode applies). A destruction fire authored as
         // `PufferState(fire_n_smoke, at=INPUT_NODE)` thus emits on the effect's own relocated root,
-        // which is what puts it at the call/hit site (D32) rather than nowhere.
+        // which is what puts it at the call/hit site rather than nowhere.
         var host = ev.Data.Str("at_node") is { } atNode
             ? (IsSelfNodeRef(atNode) ? InputNodeOf(def, anchor) ?? anchor : Resolve(atNode, def, anchor))
             : anchor;
@@ -2853,13 +2848,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 Sounds.Attach(handle, host, atData.Vec3("pos"));
         }
         // The reader form carries no active_state at all (its ACTIVE comes as the next event), so
-        // an absent field must mean "leave it alone" rather than the `?? 0` = OFF that silently
-        // killed the C1 waterfall's puffers when PUFFER_STATE had no reader normalizer.
+        // an absent field must mean "leave it alone" rather than the `?? 0` = OFF that would
+        // silently kill the C1 waterfall's puffers.
         //
-        // Note the compiled field is a JSON **boolean** here, where PUFFER_STATE's same-named field
-        // is numeric — reading it with Num() alone returns null for `true` and leaves every emitter
-        // in the world switched off, which is exactly what it did until the --debug-anim log showed
-        // 38 correctly-placed emitters all reading "off".
+        // ⚠ The compiled field is a JSON **boolean** here, where PUFFER_STATE's same-named field
+        // is numeric — reading it with Num() alone returns null for `true` and leaves every
+        // emitter in the world switched off.
         if (ev.Data.Has("active_state"))
             Sounds.SetActive(handle, ev.Data.Bool("active_state") || ev.Data.Num("active_state") >= 1f);
     }
@@ -3149,8 +3143,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary>Whether any live motion is still driving something inside a template copy — the
     /// hold that keeps a finished effect's root revealed, because the reveal is paired with the
     /// EFFECT's life and not its instance's: the ring defs' scale/opacity motions outlive the
-    /// sequence that launched them, and hiding on instance-finish cuts the ring off mid-expansion
-    /// (D31).
+    /// sequence that launched them, and hiding on instance-finish cuts the ring off
+    /// mid-expansion.
     ///
     /// <para>Asked of the ROOT, never of the def that just finished. What a template flings is
     /// routinely driven by a CALLEE's motions running on the CALLER's copy —
@@ -3195,8 +3189,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             // created, so a stop-less emitter stops emitting and its live particles decay.
             Stop(def.AnimName, anchor);
             // ...but Stop reaches resources only THROUGH a live instance, and an effect whose
-            // sequences already ended has none — which made this whole sweep a silent no-op for
-            // every effect that outlived nothing but its own emitters. Tear down by (def, anchor)
+            // sequences already ended has none — which would make this whole sweep a silent no-op
+            // for every effect that outlives nothing but its own emitters. Tear down by (def, anchor)
             // directly as well; the second pass finds nothing when the Stop above already ran.
             // FinishEffectInstance normally gets there first — this stays the backstop for the
             // defs that never finish (the `LOOP -1` poll idiom).
@@ -3233,16 +3227,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     }
 
     /// <summary>
-    /// Evaluates one IF/ELSEIF condition. Every kind the data uses is answerable — an
-    /// earlier reading held them to be opaque gameplay state and skipped every branch, which
-    /// meant the refinery/dock/lighthouse light sequences never ran at all. Semantics and the
+    /// Evaluates one IF/ELSEIF condition. Every kind the data uses is answerable — treating them
+    /// as opaque gameplay state and skipping every branch would leave the refinery/dock/lighthouse
+    /// light sequences never running at all. Semantics and the
     /// evidence for each are in docs/formats/anim-definitions.md; the two units that bite are
     /// that compiled <c>PlayerRange</c> is metres SQUARED (reader 270 → compiled 72900) and
     /// that compiled <c>AnimHealth</c> is a "damaged down to" threshold, so an undamaged
     /// object fails it.
     ///
-    /// An unparseable or unknown condition returns false — the old skip-the-branch behaviour,
-    /// which is the safe direction: a branch that should not have run poses objects wrongly.
+    /// An unparseable or unknown condition returns false, skipping the branch — the safe
+    /// direction: a branch that should not have run poses objects wrongly.
     /// </summary>
     private bool EvaluateCondition(AnimData? condition, AnimDefinition def, Node3D? anchor)
     {
@@ -3268,10 +3262,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             "PlayerRange" => anchor != null
                              && WorldPos(anchor).DistanceSquaredTo(PlayerPos()) <= num,
             // ANIM_HEALTH gates damage effects: "if this object has been worn down to N".
-            // Read against the LIVE per-instance HP (C21), not the def's authored value, so a
-            // tower damaged to 30 smokes while its undamaged siblings do not. Until C23 wires
-            // weapon damage nothing decrements HP, so every instance sits at full health and
-            // these stay uniformly false — the pre-C21 behaviour, unchanged.
+            // Read against the LIVE per-instance HP, not the def's authored value, so a
+            // tower damaged to 30 smokes while its undamaged siblings do not.
             "AnimHealth" => HealthOf(def, anchor) <= num,
             "AnimHealthRange" => obj != null
                                  && HealthOf(def, anchor) >= (obj.Num("min") ?? 0f)
@@ -3306,8 +3298,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary>The live HP an <c>ANIM_HEALTH</c> threshold tests against: the registered
     /// destructible instance for this <c>(def, anchor)</c> pair, falling back to the def's
     /// authored value when the pair is not a registered destructible (an unanchored evaluation,
-    /// or a def whose NAME resolved nothing at bootstrap). The fallback reproduces the exact
-    /// pre-C21 read, so anything the registry does not cover behaves as it always did.</summary>
+    /// or a def whose NAME resolved nothing at bootstrap). The fallback is the def's own authored
+    /// constant, so anything the registry does not cover reads a fixed value.</summary>
     private float HealthOf(AnimDefinition def, Node3D? anchor) =>
         _destructibles.Get(def, anchor)?.Health ?? def.Health;
 
@@ -3333,7 +3325,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
     }
 
-    /// <summary>Runs a destructible's death sequence (C24) the instant its HP reaches zero: the
+    /// <summary>Runs a destructible's death sequence the instant its HP reaches zero: the
     /// healthy→destroyed <c>OBJECT_ACTIVE_STATE</c> swap, the debris sequences and the puffer
     /// calls. Those ARE the definition's own Initial sequences — the def's <c>anim_name</c> is the
     /// destruction (<c>h2twr_destruction1</c>, <c>destroy_mp1zreng11</c>), so its animation is the
@@ -3343,7 +3335,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// (docs/formats/destructibles.md), but is always <c>Initial</c>, so Start reaches every case.
     /// The <c>DAMAGE_SEQUENCE</c> among them just re-fires the final smoke stage idempotently (its
     /// effect is already live), which is also what a one-shot kill wants. Every event kind the death
-    /// emits now runs — the swap, the debris ballistic <c>OBJECT_MOTION</c>, the puffer calls, and
+    /// emits runs — the swap, the debris ballistic <c>OBJECT_MOTION</c>, the puffer calls, and
     /// the one-shot <c>Sound</c> (<see cref="HandleSound"/>); the safety net that hides
     /// <c>destroyed</c> subtrees only runs at bootstrap, so it does not fight this.
     ///
@@ -3534,8 +3526,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// census, which is a real (if partial) window on this one: the bootstrap's own ON_STARTUP
     /// bursts dispatch through sequence runners, so a hold armed there is already counted — and it
     /// is what makes the census's live-instance total move, since a held caller's sequence is by
-    /// definition still running. Anything armed LATER is outside this print by construction
-    /// (LOG-16); the runtime tallies stay readable on <see cref="WaitsInstalled"/> for a probe or
+    /// definition still running. Anything armed LATER is outside this print by construction;
+    /// the runtime tallies stay readable on <see cref="WaitsInstalled"/> for a probe or
     /// a suite, and an abandoned hold reports itself where it happens.</summary>
     private void ReportWaits()
     {
@@ -3578,8 +3570,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         _debugClock = 0f;
         // The contact tally: is the `do_intersections` sweep actually finding anything? Printed
         // whenever a flagged body has ended at all, because the answer that matters is the one
-        // nobody would otherwise notice — all clock, no contact, which looks identical to the
-        // behaviour this replaced.
+        // nobody would otherwise notice — all clock, no contact, which every other line reports
+        // exactly as a working sweep.
         if (Motions.ContactLandings + Motions.ClockEndings > 0)
         {
             // "contact-tested", not "do_intersections": a settle hop inherits the test from the
@@ -3603,7 +3595,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
         // Totals BEFORE the list, which is capped at 12: a debris piece is routinely past the cap
         // (five tank kills put 34 motions in flight at once), so reading "it never launched" out of
-        // the truncated list is LOG-5. BallisticMotionsLaunched is cumulative and uncapped, and is
+        // the truncated list is unsound. BallisticMotionsLaunched is cumulative and uncapped, and is
         // the only headless answer to "did the launch happen at all".
         GD.Print($"anim/debug: {Motions.Count} live motion(s), "
                  + $"{BallisticMotionsLaunched} ballistic launch(es) so far");
@@ -3679,10 +3671,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // it either, so without this the event resolves to nothing and is silently dropped:
         // 154 events install-wide, and all 90 of the OBJECT_MOTION ones — the eleven airframes'
         // whole-hull fall (8 chapters × 11) and `agyrobus`' two — author `do_intersections: true`,
-        // i.e. the entire self-referencing half of this plan's population never launched at all.
-        // At the controls: the shot-down C5 autogyro bus exploded and flew on along its route,
-        // because its death's OBJECT_MOTION targeted nothing and never displaced `agbus_fly`'s
-        // SI-script playback. The other 64 are `genx12`'s two ACTIVE_STATEs and the `map` prop's
+        // i.e. the entire self-referencing half of that population would never launch at all.
+        // At the controls that shows as the shot-down C5 autogyro bus exploding and flying on
+        // along its route, its death's OBJECT_MOTION targeting nothing and never displacing
+        // `agbus_fly`'s SI-script playback. The other 64 are `genx12`'s two ACTIVE_STATEs and the `map` prop's
         // open/close pose ops.
         if ((ev.Data.Str("node") ?? ev.Data.Str("name")) is { } selfRef && IsSelfNodeRef(selfRef))
         {
@@ -3784,9 +3776,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     // Any still-visible node named like a destroyed variant that no definition touched:
     // hide it and report — each name is a data-coverage gap (a def we failed to anchor).
-    // Match 'destroyed' only: a '_dest' suffix rule proved WRONG — C1's `ref_tank_dest` is
+    // ⚠ Match 'destroyed' only: a '_dest' suffix rule is WRONG — C1's `ref_tank_dest` is
     // the parent GROUP of the five healthy harbor refuel tanks ("destructible", not
-    // "destroyed"), and hiding it wiped the visible tanks (user-reported).
+    // "destroyed"), and hiding it wipes the visible tanks.
     private List<string> HideUncoveredDestroyed()
     {
         var hidden = new List<string>();

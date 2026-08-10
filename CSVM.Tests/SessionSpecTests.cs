@@ -415,8 +415,8 @@ public class SessionSpecTests
     }
 
     /// <summary>An unpinned seed is drawn from the clock by the CALLER, not here — a spec that read
-    /// the clock would not be a function of its args, and a baseline would differ from itself
-    /// (DET-9).</summary>
+    /// the clock would not be a function of its args, and a baseline would differ from
+    /// itself.</summary>
     [Fact]
     public void AnUnpinnedSeedIsNullRatherThanDrawnHere()
     {

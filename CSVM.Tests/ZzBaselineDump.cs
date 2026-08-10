@@ -6,8 +6,8 @@ using Xunit;
 
 namespace CSVM.Tests;
 
-/// <summary>THROWAWAY — A1 baseline capture for PLAN-flight-drag-lift. Delete before the plan
-/// lands. Writes every airframe's flight envelope to a file so a global constant change can be
+/// <summary>THROWAWAY baseline capture — delete once the drag/lift tuning it feeds is settled.
+/// Writes every airframe's flight envelope to a file so a global constant change can be
 /// diffed against it (ThrustConst scales all eleven planes together).</summary>
 public class ZzBaselineDump
 {

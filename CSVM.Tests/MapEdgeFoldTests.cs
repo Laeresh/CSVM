@@ -9,16 +9,16 @@ namespace CSVM.Tests;
 /// cell an out-of-map index maps to, and whether that copy is reflected.
 ///
 /// <para><see cref="BlockOfOneMirrorIsTheHistoricalClamp"/> pins the generalization against the
-/// closed form it replaced, rather than against hand-copied expectations. That equivalence is no
-/// longer the shipping path — the original <b>repeats</b> rather than mirrors, A/B'd at the
-/// controls 2026-08-08 — but it stays as the fold's algebraic anchor: mirror at block 1 is the one
-/// case with an independent reference implementation.</para>
+/// closed form it generalizes, rather than against hand-copied expectations. That equivalence is
+/// not the shipping path — the original <b>repeats</b> rather than mirrors, A/B'd at the controls —
+/// but it stays as the fold's algebraic anchor: mirror at block 1 is the one case with an
+/// independent reference implementation.</para>
 /// </summary>
 public class MapEdgeFoldTests
 {
     private const int Grid = 12; // C1/C2/C4/C5 are all 12x12 x 1024 m (docs/formats/world-structure.md)
 
-    // ---- block=1, mirror: bit-identical to what shipped, on both edges and well past them ----
+    // ---- block=1, mirror: bit-identical to the closed-form clamp, on both edges and past them ----
 
     [Fact]
     public void BlockOfOneMirrorIsTheHistoricalClamp()
@@ -233,7 +233,7 @@ public class MapEdgeFoldTests
         }
     }
 
-    // ---- the per-chapter block depths, A/B'd against the original 2026-08-08 ----
+    // ---- the per-chapter block depths, A/B'd against the original ----
 
     [Theory]
     [InlineData("C1", 2)]

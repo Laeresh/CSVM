@@ -64,9 +64,9 @@ public class TracerScreenSizeTests
     }
 
     /// <summary>The splitscreen rule: with several viewers the floor is the SMALLEST of their
-    /// individual floors, i.e. the nearest camera's. The worked case is the reported bug — a round
-    /// 1000 m from P1 and 100 m from P2. Sized against P1 (the old behaviour) the mesh is ~10x
-    /// larger than P2's own pane needs, which is what read as "P2's tracers are huge"; taking the
+    /// individual floors, i.e. the nearest camera's. The worked case: a round 1000 m from P1 and
+    /// 100 m from P2. Sizing against P1 — the alternative this discriminates against — makes the
+    /// mesh ~10x larger than P2's own pane needs, which reads as "P2's tracers are huge"; taking the
     /// minimum sizes it for P2 and leaves it merely under-floored in P1's distant view.</summary>
     [Fact]
     public void NearerViewerAlwaysWinsSoNoPaneIsEverInflated()
@@ -80,7 +80,7 @@ public class TracerScreenSizeTests
         Assert.Equal(ScreenSize.MinWorldSizeForPixels(2f, 100f, Fov, FullHeight), chosen, 6);
         // Order must not matter — the rule is "nearest", not "first" or "last".
         Assert.Equal(chosen, ScreenSize.NearestFloor(2f, new[] { viewers[1], viewers[0] }), 6);
-        // The inflation the old rule produced, stated as a number so a regression is legible:
+        // The inflation a farthest-viewer rule produces, stated as a number so a regression is legible:
         // sized for P1, the mesh covers ten times its 2 px target in P2's pane.
         float forP1 = ScreenSize.MinWorldSizeForPixels(2f, 1000f, Fov, FullHeight);
         float pxInP2sPaneIfSizedForP1 = forP1 * FullHeight / (2f * 100f * Tan35);

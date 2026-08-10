@@ -6,7 +6,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// <c>PufferState.StartAgeMin</c>/<c>StartAgeMax</c> (docs/plans/PLAN-puffer-engine-deltas.md B4): both
+/// <c>PufferState.StartAgeMin</c>/<c>StartAgeMax</c> (see <c>docs/org/puffer.md</c>): both
 /// parsers must wire <c>START_AGE_RANGE</c>/<c>start_age_range</c> through, and an unauthored
 /// state must keep both at 0 with <see cref="PufferState.HasStartAgeRange"/> false — the flag the
 /// spawn paths gate their extra <c>Rand()</c> draw on, so the ~2,900 puffers that don't author the

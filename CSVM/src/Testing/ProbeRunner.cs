@@ -160,7 +160,7 @@ public sealed class ProbeRunner
     /// rig — name, plane-frame position, gun-pair grouping and shared mounts — to stdout and
     /// <c>./.scratch/markers_dump.txt</c>, then quit (see <see cref="Mech3.MarkerRig"/>). This is
     /// the committed instrument the <c>docs/formats/markers.md</c> tables regenerate from, so the
-    /// user can see and name every mount when handing back the airframe gun-group table (item A3).
+    /// user can see and name every mount when handing back the airframe gun-group table.
     /// An optional value filters to one plane by model node (<c>player_bhawk</c>) or display name
     /// (<c>Bloodhawk</c>), matched case-insensitively as a substring.</summary>
     /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
@@ -224,9 +224,9 @@ public sealed class ProbeRunner
         };
         if (DisplayServer.GetName() == "headless")
         {
-            // LOG-8's sibling: the dummy renderer compiles no shaders, so a shader error cannot
-            // occur — and therefore cannot be screened. Say so rather than letting the clean error
-            // census read as proof.
+            // The dummy renderer compiles no shaders, so a shader error cannot occur — and
+            // therefore cannot be screened. Say so rather than letting the clean error census read
+            // as proof.
             Log.Warn("test", $"headless display — no shaders compiled, so the error screen cannot see a shader error");
         }
         int code = TestHarness.Run(ctx, spec.RunTestsFilter);
@@ -239,7 +239,7 @@ public sealed class ProbeRunner
     /// over <c>weapons.json</c>, print one line per def (id, name, key ballistics, flags,
     /// bindings) to stdout and <c>./.scratch/weapons_dump.txt</c>, and report any unmapped keys,
     /// then quit. The committed verification instrument the weapons.md table is checked against —
-    /// a clean run (no UNHANDLED lines) is the B11 pass. An optional value filters by id
+    /// a clean run (no UNHANDLED lines) is the pass. An optional value filters by id
     /// (<c>wep_06</c>) or <c>NAME</c> substring, matched case-insensitively.</summary>
     /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
     public bool DumpWeapons(SessionSpec spec)
@@ -281,7 +281,7 @@ public sealed class ProbeRunner
     }
 
     /// <summary>--dump-loadout[=plane]: for each plane in <c>stock_loadouts.json</c>, build its
-    /// model and bind the stock loadout (<see cref="Flight.Loadout"/>, B12), reporting the resolved
+    /// model and bind the stock loadout (<see cref="Flight.Loadout"/>), reporting the resolved
     /// gun groups (mount, weapon, per-group ammo, muzzle nodes) and hardpoints — or the loud error
     /// if a marker doesn't resolve. Writes to stdout and <c>./.scratch/loadout_dump.txt</c>, then
     /// quits. <c>--loadout=&lt;def&gt;</c> binds that def's loadout instead of each plane's own (a

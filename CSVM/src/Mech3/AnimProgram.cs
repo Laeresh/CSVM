@@ -142,7 +142,7 @@ public sealed class AnimProgram
     /// auto-starts).</summary>
     public AnimProgram Subset(string rootAnimName) => Subset(new[] { rootAnimName });
 
-    /// <summary>The closure over several roots at once — the world-effects runtime (D32) binds the
+    /// <summary>The closure over several roots at once — the world-effects runtime binds the
     /// union of the impact + destruction effect names, so one runtime serves every effect a hit or a
     /// death calls. Same closure rule as the single-root overload; the reused defs share this
     /// program's script pool.</summary>

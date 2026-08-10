@@ -5,8 +5,8 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// D32's decompiled in-cloud flicker (<see cref="WeatherRig.BandFlicker"/>, <c>FUN_0042ee40</c>):
-/// two opacity remaps blended by a drifting parameter. Off-engine like <c>RngTests</c> — the class
+/// The decompiled in-cloud flicker (<see cref="WeatherRig.BandFlicker"/>): two opacity remaps
+/// blended by a drifting parameter. Off-engine like <c>RngTests</c> — the class
 /// takes a plain <see cref="Random"/> rather than the shared Godot <c>RandomNumberGenerator</c>
 /// stream precisely so this suite can pin it without the engine running.
 /// </summary>
@@ -20,7 +20,7 @@ public class BandFlickerTests
     [Fact]
     public void TheFirstCallForAFreshInstanceIsAnIdentityWhateverTheOpacity()
     {
-        // The trap this item exists to not break: FlatColorTests/DeckRegimeTests read a static
+        // The trap: FlatColorTests/DeckRegimeTests read a static
         // pose's WhiteoutAmount directly, and any golden shot's frame 0 must match. Neither curve
         // equals the identity function at an interior opacity (AtanCurve(0.5) = 0.267), so this
         // has to hold by construction (the amplitude ramp), not by t happening to start at a fixed
@@ -35,7 +35,7 @@ public class BandFlickerTests
     [Fact]
     public void TheCurvesAtTheirMidpointMatchTheDecompiledFormulas()
     {
-        // FUN_0042ee40: log curve ln(op*5+1)/ln(6); atan curve (atan((op-0.5)*10)+0.5)/(atan(5)+0.5).
+        // The decompiled curves: log ln(op*5+1)/ln(6); atan (atan((op-0.5)*10)+0.5)/(atan(5)+0.5).
         // At op=0.5 the atan argument is 0, so atan(0)=0 collapses that curve to a closed form.
         double expectedLog = Math.Log(0.5 * 5 + 1) / Math.Log(6);
         double expectedAtan = 0.5 / (Math.Atan(5) + 0.5);
@@ -102,8 +102,8 @@ public class BandFlickerTests
     [Fact]
     public void ADifferentSeedEventuallyDrawsADifferentSequence()
     {
-        // An able-to-fail control (verification.md INSTR-6): if the rng draw were dead code this
-        // would also pass identically.
+        // The able-to-fail control: if the rng draw were dead code, this would also pass
+        // identically, so a green result here only means something because that case would fail.
         var a = new WeatherRig.BandFlicker(new Random(1));
         var b = new WeatherRig.BandFlicker(new Random(2));
 

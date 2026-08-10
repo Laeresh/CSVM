@@ -98,7 +98,7 @@ public class ControlLimiterTests
 
     /// <summary>α is an emergent alignment lag here, and the hardest sustained pull reaches roughly
     /// half the authored <c>maxAOA</c>. The suite's own scenarios agree from the other side: the
-    /// sustained pitch-rate row reports ≈20°, the zoom-climb ≈23°, and D31's knife-edge probe peaks
+    /// sustained pitch-rate row reports ≈20°, the zoom-climb ≈23°, and the knife-edge probe peaks
     /// at 0.71–4.29° per airframe.</summary>
     [ExtractedDataFact]
     public void TheAoaLimiterCannotEngageOnAnyAirframe()
@@ -115,7 +115,7 @@ public class ControlLimiterTests
         }
     }
 
-    /// <summary>The able-to-fail control (METHOD-9): the two disproofs above are worth nothing if
+    /// <summary>The able-to-fail control: the two disproofs above are worth nothing if
     /// the manoeuvre they fly is too gentle to trip any threshold. Halving both authored
     /// thresholds — the stand-in for a data edit or a per-plane override that brings them into
     /// reach — makes both checks fail, so each is measuring the margin rather than asserting an
@@ -125,7 +125,7 @@ public class ControlLimiterTests
     /// peak demand lands at 5.01 G, within 0.2 % of the executable's compiled fallback
     /// <c>highGs[0] = 5</c> (<see cref="FallbackHighGStart"/>). Under the fallbacks the limiter
     /// would engage — barely, a fraction of a percent into a 4 G-wide ramp. It is the AUTHORED 9 G
-    /// that puts it firmly out of reach, which is the trap this whole plan is written around: a
+    /// that puts it firmly out of reach, which is the trap this suite is written around: a
     /// fallback is evidence of intent, not of behaviour.</para></summary>
     [ExtractedDataFact]
     public void TheDisproofIsAbleToFail()

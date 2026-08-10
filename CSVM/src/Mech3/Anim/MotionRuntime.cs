@@ -9,9 +9,8 @@ namespace CSVM.Mech3.Anim;
 /// tumble, driving one node over its run time, in the node's own parent frame (the same
 /// absolute-in-parent-frame convention as <see cref="FromToMotion"/>). Each channel is
 /// optional and an absent one holds the node's live value, seeded once at creation so the
-/// motion cannot compound into itself. This is the reachable half of OBJECT_MOTION that the
-/// old handler only counted — thrown by a crash or (in M3) a weapon hit; nothing ambient
-/// fires it.
+/// motion cannot compound into itself. This is the reachable half of OBJECT_MOTION — thrown by a
+/// crash or a weapon hit; nothing ambient fires it.
 ///
 /// <para><b>Semantics</b> (established from <c>player_crash_dirt</c>'s pieces,
 /// <c>call_crash_trails</c> and <c>flydirt</c>; ⚠ several are TUNE, not a settled decode):
@@ -37,7 +36,7 @@ namespace CSVM.Mech3.Anim;
 ///   constant acceleration. It is an ABSOLUTE m/s², not an offset to the aircraft's arcade
 ///   <c>nom_gravity</c> of 20: the census carries a literal <b>−9.8</b> on 173 events (and −10
 ///   on 400), which is Earth gravity spelled out. The weak values (−1/−2/−3) sit on smoke
-///   trails, where floating is the authored look. What is still deferred is <c>BL-245</c>'s: the
+///   trails, where floating is the authored look. Still unresolved: the
 ///   379 events that FALL with <c>do_intersections: false</c> — no apex to solve, and no authored
 ///   collider test to tell us where they land — which the body still integrates freely over the
 ///   run time and then holds at rest.
@@ -46,11 +45,11 @@ namespace CSVM.Mech3.Anim;
 ///   and end with the piece's own deactivation instead — <see cref="FlightToLaunchHeight"/> ends
 ///   the flight when the parabola returns to launch height: a CHOICE, not a decode. It stands, and
 ///   deliberately: all 120 of the bounce shape and all 167 of the vanish shape author
-///   <c>do_intersections: false</c>, so the original was not collision-testing them either, and
-///   <c>PT-46</c> (d) confirmed at the controls that its debris sinks through terrain the same way.
+///   <c>do_intersections: false</c>, so the original was not collision-testing them either, and the
+///   original was confirmed at the controls to sink its debris through terrain the same way.
 ///   The choice agrees wherever the ground under the piece is flat, which is every reachable case
 ///   measured. The apex is the ADMISSION TEST, not the bounce: anything with no apex is declined
-///   here and stays BL-245's.
+///   here and left posed at rest.
 ///   <para>Where the flag IS authored — 166 events, 150 of them RUN_TIME+bounce —
 ///   <see cref="TryContact"/> sweeps the trajectory against real colliders and ends the body
 ///   there, which is the original's own test rather than an approximation of it. See
@@ -75,7 +74,7 @@ namespace CSVM.Mech3.Anim;
 ///
 /// <para>⚠ <b>Every speed above is the AUTHORED one; what flies is that scaled by
 /// <see cref="DebrisTune"/>.</b> <c>LaunchScale</c> ships at <b>0.65</b> — a judged look matched at
-/// the controls against the original (`BL-022`, 2026-08-08, `git log --grep=BL-022`), not a decode —
+/// the controls against the original, not a decode —
 /// so a piece whose data says it leaves at 10 m/s actually leaves at 6.5. Anything computing an
 /// expected arc from the extracted numbers must apply the scale, or pin the raw arc with
 /// <see cref="DebrisTune.UseAuthored"/> (what the launch suites do) to assert the decode instead.</para>
@@ -90,7 +89,7 @@ internal sealed class MotionRuntime : IAnimMotion
     /// (a warhawk drops 5 cm in the first 0.1 s). Arming on APEX instead was considered and
     /// rejected: the eleven airframes and <c>agyrobus</c> never rise, so they would never arm.
     ///
-    /// <para><b>Measured, 2026-08-09</b> (B5's TUNE, C1 airfield dive, `--det`). Both values were
+    /// <para><b>Measured</b> (C1 airfield dive, `--det`). Both values are
     /// kept, and the A/B says why. With arming disabled outright the four LAUNCHES land at
     /// byte-identical coordinates — so the epsilon suppresses no real contact and buys the launches
     /// nothing here. What it buys is the SETTLE HOP: that body starts lying on the surface, so
@@ -100,9 +99,10 @@ internal sealed class MotionRuntime : IAnimMotion
     /// ~0.6 s round trip, below by one frame. <c>ArmDistance</c> binds only for a body fast enough
     /// to clear 2 m inside 0.1 s (a launch inheriting a dive), and no measured case exercises it;
     /// it stays as an unfalsified guard rather than a confirmed value, and that is the honest
-    /// status. ⚠ Do not read the 0.044 s tunnelling that buried the settle hops before B9 as an
-    /// argument to tighten this — that body had no business carrying the dive's momentum at all,
-    /// and removing it, not shrinking the window, is the fix that holds.</para></summary>
+    /// status. ⚠ Do not read the 0.044 s tunnelling that could bury a settle hop as an
+    /// argument to tighten this — such a body has no business carrying the dive's momentum at all,
+    /// and removing that, not shrinking the window, is the fix that holds (see
+    /// <c>InheritedLocal</c>).</para></summary>
     private const float ArmDistance = 2f;
 
     private const float ArmSeconds = 0.1f;
@@ -134,8 +134,8 @@ internal sealed class MotionRuntime : IAnimMotion
     // Armed only for the 166 events install-wide that author `do_intersections: true` (150 of them
     // RUN_TIME+bounce), and only in a session that handed the runtime a collision mask. Everything
     // else keeps its flag-free behaviour byte-for-byte — the 120 bounce-shape launches and the 167
-    // vanish-shape all author `false`, and `PT-46` (d) confirmed the original sinks those through
-    // the terrain too. See `docs/PLAN-ground-contact.md`, Decisions 1-5.
+    // vanish-shape all author `false`, and the original was confirmed at the controls to sink those
+    // through the terrain too.
     private bool _contactTest;
     private uint _contactMask;
     private AnimData? _bounce;      // the BOUNCE_SEQUENCE block, chosen from AT CONTACT
@@ -200,7 +200,7 @@ internal sealed class MotionRuntime : IAnimMotion
         float RandSym() => (float)(rt._rng.NextDouble() * 2.0 - 1.0); // [-1, 1] via the seedable RNG
         float Rand(float a, float b) => a + (float)rt._rng.NextDouble() * (b - a);
 
-        // BL-022's arc knobs. Both default to 1 and multiply exactly, so an untuned run — and
+        // The debris arc knobs. Both default to 1 and multiply exactly, so an untuned run — and
         // every golden — is byte-identical to a build without them. See DebrisTune for why the
         // launch and the gravity are separate sliders rather than one "size" scalar.
         var gravityBlock = data.Obj("gravity");
@@ -266,7 +266,7 @@ internal sealed class MotionRuntime : IAnimMotion
             // as its size.
             rampTotal = tr.Vec3("delta") * launchScale;
             // InheritedLocal is OUTSIDE the scale: it is the plane's measured momentum, not part
-            // of the authored launch, and BL-122 owns its magnitude.
+            // of the authored launch, and its magnitude is tuned separately (WreckMomentum).
             m._v0 = (v0 * launchScale) + InheritedLocal();
             m._accel = new Vector3(0f, gravity, 0f);
             m._hasBallistic = true;
@@ -329,8 +329,8 @@ internal sealed class MotionRuntime : IAnimMotion
         // flat, which is every reachable case here — debris thrown off a ground-sitting structure.
         // A down-ray replaces it, and must, for the events that FALL rather than launch (a
         // shot-down zeppelin, a parachutist): those have no apex, `FlightToLaunchHeight` declines
-        // them, and they stay posed at rest until BL-245 lands the ray. That guard is what keeps
-        // this widening off BL-245's falls — it is the apex, not the bounce, that admits a launch,
+        // them, and they stay posed at rest until a ray lands them. That guard is what keeps
+        // this off the falls — it is the apex, not the bounce, that admits a launch,
         // and the census found 8 of the 167 with no reliable apex (a `bridge_truck` dropped level,
         // `susp_bridge`'s burning ropes at −0.5 m/s ± 1, two `fuelbox` rockerarms whose speed range
         // is −45…45) that keep behaving exactly as they do today.
@@ -402,17 +402,17 @@ internal sealed class MotionRuntime : IAnimMotion
         }
 
         // ⚠ A settle hop INHERITS the test from the landing it continues, whatever its own flag
-        // says — the one place this plan reads `do_intersections: false` as "unset" rather than
+        // says — the one place `do_intersections: false` is read as "unset" rather than
         // "opted out", and it is a judged divergence, not a decode. `player_crash_dirt`'s pieces are
         // the case: `pieceNseq` lands the piece on the ground (flag true), the dispatched `pNhit`
         // throws the SAME node again at +3 m/s over a 5-7 s RUN_TIME with the flag false, and
-        // nothing stops it — 3t − 4.9t² is 107 m under the airfield at t=5. At the controls,
-        // B5 round 3: "no repetition but plane went through ground". These four pieces are 4 of the
+        // nothing stops it — 3t − 4.9t² is 107 m under the airfield at t=5, seen at the controls as
+        // "plane went through ground". These four pieces are 4 of the
         // 16 (def, node) pairs the census calls ground-tested AND left lying there — the only debris
-        // a player can walk up to — so burying them defeats the item outright.
+        // a player can walk up to — so burying them defeats the whole point.
         //
-        // The narrowness is the whole defence. This is not "widen to the 379 that author false"
-        // (Decision 3, BL-245's population, confirmed correct at the controls by PT-46 (d)): the
+        // The narrowness is the whole defence. ⚠ This is NOT a licence to widen to the 379 events
+        // that author false (the original sinks those, confirmed at the controls): the
         // mark is set only by a CONTACT landing, is one-shot, and is consumed above, so the only
         // motions it can reach are follow-ups the sweep itself dispatched on a node the data DID
         // flag. A compiled gravity block always carries all four bits, so "false" here cannot be
@@ -502,8 +502,8 @@ internal sealed class MotionRuntime : IAnimMotion
     ///
     /// <para>A segment along the trajectory, not a ray straight down: the original tested real
     /// geometry, and only a segment can rest a piece on a rooftop or stop it against a wall — the
-    /// <c>agyrobus</c> lost between C5 buildings is the case that chose this over a terrain ray
-    /// (<c>docs/PLAN-ground-contact.md</c>, Decision 1). Masked by whatever the session handed over,
+    /// <c>agyrobus</c> lost between C5 buildings is the case that chose this over a terrain ray.
+    /// Masked by whatever the session handed over,
     /// which is the world layer alone: debris is not solid to aircraft, and that follows
     /// <c>CollisionLayers</c>' own rule that world-only probes stay blind to planes.</para></summary>
     private bool TryContact(float dt)
@@ -515,7 +515,7 @@ internal sealed class MotionRuntime : IAnimMotion
         // thing it launched from.
         if (_t < ArmSeconds && (BallisticOrigin(_t) - _heldOrigin).LengthSquared() < ArmDistance * ArmDistance)
             return false;
-        // No collision world → today's behaviour, untouched (Decision 2). Gated on the live space
+        // No collision world → the flag-free behaviour, untouched. Gated on the live space
         // state rather than on SessionSpec so this class stays free of the session, and so it
         // self-corrects if the collision rule ever moves.
         if (Target.GetWorld3D()?.DirectSpaceState is not { } space)

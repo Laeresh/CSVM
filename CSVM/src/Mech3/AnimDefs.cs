@@ -166,10 +166,10 @@ public static class AnimDefs
         // even where it just repeats NAME — see the waterfall01 dump in
         // docs/formats/anim-definitions.md). Mirroring that here is what lets a reader-only
         // def COLLIDE with its compiled counterpart in AnimProgram's (Name, AnimName) dedupe
-        // key instead of instantiating a second, independently-running copy alongside it —
-        // the bug that silently killed the C1 waterfall's splash puffers every frame (a
-        // reader duplicate whose PUFFER_STATE events parsed as OFF — see below — kept
-        // tearing down the compiled instance's puffers moments after they spawned).
+        // key instead of instantiating a second, independently-running copy alongside it.
+        // ⚠ Without the collision, a reader duplicate whose PUFFER_STATE events parse as OFF
+        // (see below) tears down the compiled instance's puffers moments after they spawn —
+        // silently, every frame; that is what kills C1's waterfall splash.
         def.AnimName ??= def.Name;
         return def;
     }
@@ -263,8 +263,8 @@ public static class AnimDefs
                 // Measured inert today: removing this case leaves every chapter's live-motion
                 // count identical, because every reachable OBJECT_MOTION is compiled. It is
                 // kept because a reader-only def silently carrying none of its own fields is
-                // exactly how PUFFER_STATE killed the C1 waterfall and SOUND_NODE would have
-                // muted every emitter — a missing case here fails silently, never loudly.
+                // exactly how PUFFER_STATE kills C1's waterfall and how SOUND_NODE would mute
+                // every emitter — a missing case here fails silently, never loudly.
                 if (Spin(fields, "XYZ_ROTATION") is { } spin)
                     data["xyz_rotation"] = spin;
                 if (Num(fields, "RUN_TIME") is { } motionRun)
@@ -320,7 +320,7 @@ public static class AnimDefs
                 // the compiled form carries the field on CallAnimation and nothing else
                 // (56,750/56,750 — analysis/wait-for-completion/), so a same-instance sequence
                 // wait has no compiled counterpart to decode its semantics from. Recorded here
-                // rather than silently dropped (DIAG-15).
+                // rather than silently dropped.
                 break;
             case "ObjectAddChild":
             case "ObjectDeleteChild":
@@ -411,19 +411,18 @@ public static class AnimDefs
         if (RangeObj(fields, "LIFETIME_RANGE") is { } lr) data["lifetime_range"] = lr;
         if (RangeObj(fields, "START_AGE_RANGE") is { } sa) data["start_age_range"] = sa;
         if (Num(fields, "WIND_FACTOR") is { } wf) data["wind_factor"] = wf;
-        // C7's camera-distance bands. The compiled surface spells NEAR_FADE `unk_range` and
+        // The camera-distance fade bands. The compiled surface spells NEAR_FADE `unk_range` and
         // FADE_RANGE/FAR_FADE `fade_range`; the two reader spellings of the far band are one
-        // block (see PufferState.Parse). START_AGE_RANGE and WIND_FACTOR above are B4's and B6's
-        // keys, which this normalizer had never carried — a reader-scope puffer event silently
-        // lost them on the way to FromAnimEvent, which is the same class of gap the waterfall
-        // active_state bug was.
+        // block (see PufferState.Parse). ⚠ START_AGE_RANGE and WIND_FACTOR above must stay
+        // normalized here too — a key this normalizer misses is silently lost on a reader-scope
+        // puffer event's way to FromAnimEvent (see docs/org/puffer.md).
         if (RangeObj(fields, "NEAR_FADE") is { } nf) data["unk_range"] = nf;
         if ((RangeObj(fields, "FADE_RANGE") ?? RangeObj(fields, "FAR_FADE")) is { } ff)
             data["fade_range"] = ff;
         // GROWTH_FACTOR is one scalar in the reader. Compiled, it is not a growth parameter at
         // all: `growth_factors` is the SCALE_SEQUENCE age->scale ramp, entry i = (age_i, scale_i)
-        // under the `min`/`max` field labels, and the original's parser (crimson.exe
-        // FUN_004f7120) synthesises exactly the two-stop ramp (0, 1), (1, G) when SCALE_SEQUENCE
+        // under the `min`/`max` field labels, and the original's parser synthesises exactly
+        // the two-stop ramp (0, 1), (1, G) when SCALE_SEQUENCE
         // is absent — which it is, in every reader in this install. Mirror those two stops, so the
         // normalized reader shape is byte-for-byte the compiled one; PufferState.FromAnimEvent's
         // `growth[1].max` then reads G from either source. See

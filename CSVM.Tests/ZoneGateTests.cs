@@ -6,9 +6,9 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The original's <c>zone_id</c> visibility gate (<see cref="ZoneGate"/>, <c>FUN_0056c430</c>,
-/// <c>PLAN-weather-decompile-match</c> B12): a node draws iff its gamez <c>zone_id</c> is −1, or
-/// is in the camera's armed set <c>{0, camera weather state}</c>.
+/// The original's <c>zone_id</c> visibility gate (<see cref="ZoneGate"/>): a node draws iff its
+/// gamez <c>zone_id</c> is −1, or is in the camera's armed set
+/// <c>{0, camera weather state}</c>.
 ///
 /// <para>Two halves are pinned here. The RULE — which is four lines and would be trivial if it
 /// were not the thing that decides whether a mission's targets exist on screen — and the DATA the
@@ -23,7 +23,7 @@ public class ZoneGateTests
 {
     /// <summary>Per chapter: the <c>fvol*</c> volumes' zone (−1 when the chapter ships none), and
     /// the horizon's zone children as <c>name:zone_id</c> in gamez child order. Surveyed off
-    /// <c>extracted/*/gamez/nodes.json</c> 2026-08-09 (A1's deck census, docs/formats/weather.md).</summary>
+    /// <c>extracted/*/gamez/nodes.json</c>; see docs/formats/weather.md.</summary>
     public static TheoryData<string, int, string> ChapterZoneCensus => new()
     {
         { "C1", 2, "zone1:1 zone2:2" },
@@ -131,7 +131,7 @@ public class ZoneGateTests
     [Fact]
     public void SkyZoneNamesResolveToTheStateTheyForce()
     {
-        // Decision 5: an explicit --sky-zone drives the gate as well as the fog, or an inspection
+        // An explicit --sky-zone drives the gate as well as the fog, or an inspection
         // pose renders one zone's sky over another zone's content.
         Assert.Equal(1, WeatherRig.ZoneNumberOf("zone1"));
         Assert.Equal(2, WeatherRig.ZoneNumberOf("zone2"));
@@ -165,10 +165,10 @@ public class ZoneGateTests
     [ExtractedDataFact]
     public void C2BIsTheChapterWhoseFogVolumesAreNeverCulled()
     {
-        // ⚠ The A1 census finding, pinned on its own because an implementation that reads "deck
+        // ⚠ The census finding, pinned on its own because an implementation that reads "deck
         // chapter ⇒ fvol zone 2" passes every other assertion in this file. C2B ships nine fvol*
         // volumes like C1 and C4 do, and authors them −1 — so its ambient cloud field renders
-        // below its deck, where the altitude rule this gate replaced hid it. Measured at
+        // below its deck, where an altitude-keyed rule would hide it. Measured at
         // (-7325, 192, -3829): 123,989 green sprite px with the gate on against 0 with
         // --no-zone-cull, because the ungated field is only revealed once the zone-2 deck stops
         // occluding it.
@@ -183,7 +183,7 @@ public class ZoneGateTests
             }
         }
 
-        Assert.Equal(9, volumes);   // the population really is there to be gated (DIAG-15)
+        Assert.Equal(9, volumes);   // the population really is there to be gated
         Assert.Equal(-1, WorldBuilder.FogVolumeZoneIdOf(c2b));
         Assert.True(ZoneGate.Draws(WorldBuilder.FogVolumeZoneIdOf(c2b), 1));
         Assert.True(ZoneGate.Draws(WorldBuilder.FogVolumeZoneIdOf(c2b), 2));
@@ -201,8 +201,8 @@ public class ZoneGateTests
     {
         // C1's flaglite1/flaglite2 are zone_id −1 children of a zone-1 parent — the data's own
         // counter-example to "stamp the subtree". SceneBuilder therefore reads each node's own
-        // zone_id and moves only that node's mesh instances, which is also what FUN_0056c430 does
-        // (it is called per node during the walk, with that node's id). A subtree-inherited gate
+        // zone_id and moves only that node's mesh instances, which is also what the original does
+        // (the gate is applied per node during the walk, with that node's id). A subtree-inherited gate
         // would hide these two above the deck and pass every other test here.
         var c1 = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, "C1"));
         int found = 0;

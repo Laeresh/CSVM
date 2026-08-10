@@ -9,8 +9,8 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The headless charter for the sequence interpreter (<c>src/Mech3/SequenceRunner.cs</c>): each of
-/// its documented semantics — every one a shipped, measured bug — encoded as a named test against a
-/// hand-authored fixture shaped like the case the comment describes. The fixtures carry NO game data
+/// its documented semantics encoded as a named test against a hand-authored fixture shaped like the
+/// case the comment describes. The fixtures carry NO game data
 /// (the no-assets rule covers extracted event lists); the shapes come from the comments, the values
 /// are invented. Everything runs through the real <see cref="AnimInstance"/> and
 /// <see cref="SequenceRunner"/> — never a re-implemented advance loop — so the reverse-iteration
@@ -31,8 +31,8 @@ public class SequenceRunnerTests
     [Fact]
     public void StartTimeGatesTheCarryingEventNotItsSuccessor()
     {
-        // The bowl sign: strict des_on/des_off SWAP pairs, only the FIRST of each pair stamped. The
-        // shipped bug applied a stamp to the NEXT event, splitting every pair — both variants lit at
+        // The bowl sign: strict des_on/des_off SWAP pairs, only the FIRST of each pair stamped. A
+        // runner that applies the stamp to the NEXT event splits every pair — both variants lit at
         // t=0, then nothing for the gap (38% blank frames). Correct: each pair fires together after
         // its own pause; the unstamped partner fires immediately after its stamped predecessor.
         var host = new RecordingHost();
@@ -131,15 +131,13 @@ public class SequenceRunnerTests
         // residual is bounded by the step size, never by the count, which is the whole property.
         // `want` is exact, not approximate: at dt == AnimFrame (the calibration step) this
         // fixture measures 3.3333309s, matching 200 x AnimFrame to float32 noise. Traced against
-        // FUN_004ecbb0 (the exe's stepper): a rewind always returns (state 4), so the next pass
-        // can only start on the FOLLOWING tick — pass 1 costs a tick exactly like every other
-        // pass, there is no free first pass, and 200 passes cost 200 ticks. The pre-fix
-        // down-counter (authored + 1 passes) measured 3.3499975s at this same dt — a full
-        // AnimFrame LONG, not a compensating error that happened to land on `want` — so the
-        // up-counting rewrite fixed the duration along with the pass count, it did not trade one
-        // for the other. 4 steps of headroom, not 3: fixing the count moved which side of the
-        // boundary the last pass's step-quantisation residual falls on at the finest tested step
-        // (1/240, four sub-steps per AnimFrame); it does not move `want` itself.
+        // the exe's own stepper: a rewind always returns (state 4), so the next pass can only start
+        // on the FOLLOWING tick — pass 1 costs a tick exactly like every other pass, there is no
+        // free first pass, and 200 passes cost 200 ticks. The alternative this discriminates
+        // against, a down-counter spending authored + 1 passes, measures 3.3499975s at this same dt
+        // — a full AnimFrame LONG. 4 steps of headroom, not 3, because at the finest tested step
+        // (1/240, four sub-steps per AnimFrame) the last pass's step-quantisation residual can fall
+        // either side of the boundary; that headroom does not move `want` itself.
         float want = 200f * SequenceRunner.AnimFrame;
         Assert.True(inst.Finished, "a counted loop must terminate");
         Assert.InRange(elapsed, want - 4f * dt, want + 4f * dt);
@@ -257,9 +255,9 @@ public class SequenceRunnerTests
     public void TrailingLoopStartOffsetIsHonouredBetweenCycles()
     {
         // The bowl sign's trailing `Loop {Event 1.2}` is its pause between cycles. Control flow does
-        // not fire an event but IS gated, so the Loop's own offset delays the next iteration. The
-        // shipped bug discarded it (the Loop branch hard-reset the gate to zero), so the sign cycled
-        // with no pause. Here a 1.0 s trailing offset must space the body's fires one full second
+        // not fire an event but IS gated, so the Loop's own offset delays the next iteration. A
+        // runner that discards it — the Loop branch hard-resetting the gate to zero — cycles the
+        // sign with no pause. Here a 1.0 s trailing offset must space the body's fires one full second
         // (two 0.5 s steps) apart.
         var host = new RecordingHost();
         var inst = Instance(Seq(Swap("blink", "Event", 0f), Loop(0, "Event", 1.0f)));
@@ -676,7 +674,7 @@ public class SequenceRunnerTests
     [Fact]
     public void AnUnflaggedCallDoesNotHold()
     {
-        // METHOD-9/METHOD-10: the same fixture with the flag cleared must NOT hold, or the test
+        // The able-to-fail control: the same fixture with the flag cleared must NOT hold, or the test
         // above would pass on a runner that blocks every call. `0` and `null` are different
         // authored states (3,639 vs 53,019) and this is the `null` one.
         var host = new RecordingHost();

@@ -5,15 +5,14 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The original's angular damping: an EXPONENTIAL decay of <c>dt · ang_momentum_damp</c>
-/// (<c>crimson.exe</c> <c>FUN_00491820</c>, steps 2-3), applied to the WHOLE body rate AFTER this
-/// tick's torque is accumulated onto it. The stick, the bank coupling (C22) and the weathervane
-/// (C23) all land in the same accumulator before the decay runs, so the decay carries every one of
-/// them, not just whatever rate was carried over from the previous frame.
+/// The original's angular damping: an EXPONENTIAL decay of <c>dt · ang_momentum_damp</c>, applied
+/// to the WHOLE body rate AFTER this tick's torque is accumulated onto it. The stick, the bank
+/// coupling and the weathervane all land in the same accumulator before the decay runs, so the decay
+/// carries every one of them, not just whatever rate was carried over from the previous frame.
 ///
-/// <para>That ordering is the point: the explicit-Euler linear subtraction this item replaces
-/// (<c>(cmd − BodyRates·damp)·dt</c>) only ever damped the OLD rate — each tick's own torque
-/// contribution went out undamped until the FOLLOWING tick. <see
+/// <para>That ordering is the point. The alternative this discriminates against — an explicit-Euler
+/// linear subtraction, <c>(cmd − BodyRates·damp)·dt</c> — only ever damps the OLD rate, so each
+/// tick's own torque contribution goes out undamped until the FOLLOWING tick. <see
 /// cref="ThisTicksOwnTorqueIsDampedTooNotJustTheCarriedOverRate"/> is the test a decay-then-add
 /// implementation (decay the old state, then add this tick's undamped torque — a different, wrong
 /// reading of the same two lines) fails.</para>
@@ -51,19 +50,19 @@ public class AngularDampingTests
     [Fact]
     public void ThisTicksOwnTorqueIsDampedTooNotJustTheCarriedOverRate()
     {
-        // Full roll stick from rest. The OLD linear form gave BodyRates = cmd·dt EXACTLY on this
-        // first tick (BodyRates started at 0, so the subtracted damping term was zero) — this tick's
-        // own torque went out completely undamped. The original damps the accumulated total, torque
-        // included, so the right answer is cmd·dt·exp(-dt·damp), strictly smaller in magnitude. A
-        // build that decays only the carried-over rate before adding this tick's torque (rather than
-        // adding then decaying the sum) passes the OLD formula's reading below and fails this one —
-        // that is the ordering mistake the class doc warns about.
+        // Full roll stick from rest. The linear form this discriminates against gives
+        // BodyRates = cmd·dt EXACTLY on this first tick (BodyRates starts at 0, so the subtracted
+        // damping term is zero) — this tick's own torque goes out completely undamped. The original
+        // damps the accumulated total, torque included, so the right answer is cmd·dt·exp(-dt·damp),
+        // strictly smaller in magnitude. A build that decays only the carried-over rate before adding
+        // this tick's torque (rather than adding then decaying the sum) matches the linear form's
+        // reading below and fails this one — that is the ordering mistake the class doc warns about.
         var stats = Stats();
         var m = new FlightModel(stats);
         m.Reset(Vector3.Zero, Basis.Identity, 120f, 1f);
         m.Step(new FlightInput { Roll = 1f }, Dt);
 
-        const float rollTune = 2.12f; // FlightModel.RollTune — untouched since C22/C23
+        const float rollTune = 2.12f; // mirrors FlightModel.RollTune
         float cmdZ = stats.RollTorque * stats.RecInertia.Z * rollTune;
         float undamped = cmdZ * Dt;
         float expected = undamped * Mathf.Exp(-Dt * stats.AngMomentumDamp);
@@ -91,7 +90,7 @@ public class AngularDampingTests
         float expDecay = Mathf.Exp(-stats.AngMomentumDamp * largeDt);
         Assert.True(Mathf.IsEqualApprox(m.BodyRates.Z, expDecay, 1e-6f),
             $"roll rate {m.BodyRates.Z:0.000000} vs exp(-damp·dt) {expDecay:0.000000}");
-        // The point of the item: bounded, positive, strictly decayed at any dt — never the sign flip
+        // The point: bounded, positive, strictly decayed at any dt — never the sign flip
         // and 4x growth the linear form would have produced here (linearFactor · 1 = -4).
         Assert.True(m.BodyRates.Z is > 0f and < 1f,
             $"roll rate {m.BodyRates.Z:0.000000} must stay in (0, 1) — positive and decayed, unlike "

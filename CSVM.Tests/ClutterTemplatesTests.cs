@@ -23,8 +23,7 @@ namespace CSVM.Tests;
 public class ClutterTemplatesTests
 {
     /// <summary>Per chapter: <see cref="ClutterTemplateSpec.Census"/>. Every number is measured off
-    /// the shipped files; the per-key columns match the plan's own survey
-    /// (docs/PLAN-clutter-uv-placement.md, B14's table). The five all-zero columns are the finding:
+    /// the shipped files. The five all-zero columns are the finding:
     /// no chapter authors <c>translate_uv_range</c>, <c>rotation_range</c>, <c>min_slope</c>,
     /// <c>max_slope</c> or <c>align_normal</c>, and none authors a damage block either.</summary>
     public static TheoryData<string, string> ChapterTemplateCensus => new()
@@ -58,7 +57,7 @@ public class ClutterTemplatesTests
                 "node", new List<object?> { "firtree1.flt" },
                 "scale_range", new List<object?> { 0.9f, 1.5f },
                 // Nested pairs are grouped by BOUND, not by band: [[nearMin, farMin], [nearMax,
-                // farMax]] — the grouping FUN_004dd6e0's lerps prove (kind+0x2c→+0x30 for near).
+                // farMax]] — the grouping the engine's own fade lerps prove.
                 "far_fade_range", new List<object?>
                 {
                     new List<object?> { 300f, 600f },
@@ -107,7 +106,7 @@ public class ClutterTemplatesTests
             new List<object?> { "node", new List<object?> { "bush1.flt" } },
         });
 
-        // FUN_004de7d0's initialiser, field for field — the state the whole install's
+        // The engine's own initialiser, field for field — the state the whole install's
         // slope/jitter/rotation behaviour actually runs on, since no chapter authors those keys.
         var kind = Assert.Single(spec.Kinds);
         Assert.Equal(Vector2.One, kind.ScaleRange);
@@ -126,7 +125,7 @@ public class ClutterTemplatesTests
     public void SubstituteWeightsAreRelativeAndTheReaderNormalisesThem()
     {
         // The trap this exists for: 9.0/1.0 is 90/10, not "nine of something". The file never
-        // normalises; FUN_004deab0 sums the list and divides as it stores.
+        // normalises; the engine sums the list and divides as it stores.
         var spec = ClutterTemplateSpec.Parse(new List<object?>
         {
             new List<object?>
@@ -149,7 +148,7 @@ public class ClutterTemplatesTests
     [Fact]
     public void ADamageBlockIsArmedByItsHealthKeyAndCarriesItsAnimAndModel()
     {
-        // Decoded from FUN_004deab0 and shipped by nothing — the reader exists so "no chapter
+        // Decoded from the binary and shipped by nothing — the reader exists so "no chapter
         // authors these" is a measurement over a reader that WOULD have read them.
         var spec = ClutterTemplateSpec.Parse(new List<object?>
         {
@@ -175,7 +174,7 @@ public class ClutterTemplatesTests
     [Fact]
     public void ADuplicateNodeResolvesToItsFirstBlock()
     {
-        // C5's cb05det01.flt, in miniature. The engine's lookup (FUN_004dd230) is a linear scan of
+        // C5's cb05det01.flt, in miniature. The engine's lookup is a linear scan of
         // the load order that stops at the first strcmp match, so the later block is unreachable —
         // and in C5 the unreachable one is the one WITHOUT the substitute.
         var spec = ClutterTemplateSpec.Parse(new List<object?>
@@ -236,8 +235,8 @@ public class ClutterTemplatesTests
     [MemberData(nameof(EveryChapter))]
     public void NoChapterAuthorsJitterRotationAlignmentOrASlopeCull(string chapter)
     {
-        // The plan's load-bearing negative, asserted per chapter rather than as a total: these five
-        // keys are what FUN_004dd6e0's step 5 and half of step 10 read, so an install that authors
+        // The load-bearing negative, asserted per chapter rather than as a total: these five
+        // keys are what the stamper's step 5 and half of step 10 read, so an install that authors
         // none of them has NO random input affecting a decoration's position or orientation. That is
         // the structural reason the remake's unseeded lattice reproduces C1's tree positions
         // exactly rather than approximately — see docs/formats/templates.md.
@@ -253,7 +252,7 @@ public class ClutterTemplatesTests
     [ExtractedDataFact]
     public void TheInstallsAuthoredRangesAreMultipliersAndMetresRatherThanRadians()
     {
-        // WORLD-23: range-test every decoded field. A scale_range of 0.9-1.5 is plausible; 0.9-1.5
+        // Range-test every decoded field. A scale_range of 0.9-1.5 is plausible; 0.9-1.5
         // RADIANS would not be, and a fade band in the tens of thousands would mean the pairs were
         // grouped wrong. Bounds are the whole install's measured span, asserted as a band rather
         // than as exact values so this stays a units check and not a second census.

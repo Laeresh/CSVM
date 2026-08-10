@@ -36,12 +36,11 @@ namespace CSVM.UI;
 /// <c>MaterialOverride</c>/<c>MaterialOverlay</c>, which is a different shader entirely (see
 /// <see cref="SceneBuilder.TintLine"/>).</para>
 ///
-/// <para><b>What it settled.</b> F15/F16 answered the map-edge fold on 2026-08-08: A/B against the
-/// original at the controls found that the continuation <b>repeats</b> — it does not mirror — over
-/// a block of 2 cells on C1/C2/C4 and 1 on C5, with no seam gaps. Both are now the defaults, and
-/// F16's `mirror` is the mode kept only to look at. Two sessions of spatio-temporal strip analysis
-/// had concluded the opposite; this took minutes, which is the argument for keeping the keys
-/// around (see `analysis/video-flight-calibration/FINDINGS.md`).</para>
+/// <para><b>What it settled.</b> F15/F16 answered the map-edge fold: A/B against the original at
+/// the controls found that the continuation <b>repeats</b> — it does not mirror — over a block of
+/// 2 cells on C1/C2/C4 and 1 on C5, with no seam gaps. Both are the defaults, and F16's `mirror` is
+/// the mode kept only to look at. The keys stay because that question is re-checkable at the
+/// controls in minutes, where measuring it off footage is neither fast nor reliable.</para>
 ///
 /// <para>F14/F15/F16 sit in the F13–F24 range reserved for debug overlays (docs/controls.md);
 /// F13 is the patrol nets.</para>
@@ -55,8 +54,8 @@ public sealed partial class TileGridOverlay : Node
     private static readonly int[] BaseCycle = { 1, 2, 3, 4, 12 };
 
     // Band-parity swatches. Named for what they ARE — alternating repetition bands — rather than
-    // for the fold, because the fold is no longer what they encode and "mirrored" would be a lie
-    // in the default repeat mode.
+    // for the fold, because band parity is what they encode and "mirrored" would be a lie in the
+    // default repeat mode.
     private static readonly string[] LegendLabels =
     {
         "band even", "band odd x", "band odd z", "band odd xz",

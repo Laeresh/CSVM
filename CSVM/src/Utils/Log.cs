@@ -51,7 +51,7 @@ public static class Log
     // not the same storage as ConsoleSink below: that one is the process-wide default, and it has
     // to be, because CSVM.Tests installs it from a [ModuleInitializer] — an AsyncLocal written
     // there is invisible on the threads xunit later runs tests on, so folding the two tiers into
-    // one would drop every test back onto the host-killing GD.Print fallthrough (BL-302, BL-306).
+    // one would drop every test back onto the host-killing GD.Print fallthrough.
     private static readonly AsyncLocal<Action<string>?> ScopedSink = new();
 
     private static readonly object Gate = new();
@@ -86,7 +86,7 @@ public static class Log
     /// disposing twice does nothing.
     ///
     /// <para>Per-flow, not global: a concurrent flow — an xunit test class running in parallel —
-    /// has its own, so it can neither steal these lines nor add its own to them (BL-306). The
+    /// has its own, so it can neither steal these lines nor add its own to them. The
     /// converse is the one sharp edge: a thread this flow spawns does NOT inherit the scope
     /// unless it captures the execution context, so its lines go to <see cref="ConsoleSink"/>
     /// instead.</para></summary>

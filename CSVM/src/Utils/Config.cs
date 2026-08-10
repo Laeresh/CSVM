@@ -247,11 +247,10 @@ public static class Config
             GetFloat("puffer.burstSizeScale", Effects.Puffer.SizeScaleDefault);
             GetFloat("puffer.trailSizeScale", Effects.Puffer.SizeScaleDefault);
             GetFloat("puffer.sustainSizeScale", Effects.Puffer.SizeScaleDefault);
-            // `puffer.fireRiseScale` / `puffer.fireLifetimeScale` were here until 2026-08-10 and
-            // are GONE, not defaulted to 1 — see Puffer.cs's remark where they used to be
-            // declared. Judged 2x too tall at the controls, which the decode had already
-            // measured; do not re-add a knob to compensate for authored data.
-            // C7's three distance switches and the original's own far-band multiplier, read at the
+            // ⚠ There are deliberately no `puffer.fireRiseScale` / `puffer.fireLifetimeScale` keys
+            // — see Puffer.cs. The fire rise and lifetime are authored data the decode already
+            // measured; do not re-add a knob to compensate for them.
+            // The three distance switches and the original's own far-band multiplier, read at the
             // same Init the warmup never reaches. All three default to the original's behaviour.
             GetBool("puffer.distanceFade", true);
             GetBool("puffer.farCull", true);

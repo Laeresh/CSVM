@@ -10,10 +10,9 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// C4 Danger Zones require their authored entry and exit apertures, not a marker sphere (moved
-/// from the in-engine <c>stunt-gates</c> suite, engine-free-suites A4 — <see cref="StuntMission"/>
-/// itself has been engine-free since A2's <c>Log</c> conversion). <c>StuntMission.Load</c> logs
-/// through <see cref="Log"/>; with no sink installed that falls through to the real
+/// C4 Danger Zones require their authored entry and exit apertures, not a marker sphere. This runs
+/// engine-free: <see cref="StuntMission"/> logs through <see cref="Log"/> rather than touching the
+/// engine. With no sink installed that falls through to the real
 /// <c>GD.Print</c>, which crashes the whole test host outside the engine (the
 /// <c>StuntRaceTests</c> precedent) — which the process-wide no-op sink in
 /// <c>TestHostLogSink</c> covers, so no per-test ceremony is needed here.

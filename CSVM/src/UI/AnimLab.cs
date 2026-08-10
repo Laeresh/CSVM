@@ -32,7 +32,7 @@ namespace CSVM.UI;
 /// rolls the same dice. Ambient playback (ON_STARTUP defs + startanims) toggles on <i>and</i> off
 /// (off returns to the quiet stage, keeping the played def running).</para>
 ///
-/// <para>The picker/timeline/transport are fed from the runtime's Wave-2 B4 hooks and are the
+/// <para>The picker/timeline/transport are fed from the runtime's UI hooks and are the
 /// whole interactive UI, hidden in a scripted <c>--screenshot</c> so those shots stay
 /// byte-identical; <c>--debug-anim-ui</c> forces them visible. The hooks are attached only when
 /// the UI is shown, so a plain scripted run pays nothing.</para>

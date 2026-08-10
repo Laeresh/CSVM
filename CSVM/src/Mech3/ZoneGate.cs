@@ -1,14 +1,14 @@
 namespace CSVM.Mech3;
 
-/// <summary>The original's per-node visibility gate — <c>FUN_0056c430</c>, the one rule every
-/// gamez <c>zone_id</c> obeys (<c>PLAN-weather-decompile-match</c> B12, docs/formats/gamez.md).
+/// <summary>The original's per-node visibility gate — the one rule every gamez <c>zone_id</c>
+/// obeys (docs/org/weather.md, docs/formats/gamez.md).
 ///
-/// <para><b>The rule.</b> <c>FUN_004d62d0</c> arms the camera each frame with the zone set
+/// <para><b>The rule.</b> The engine arms the camera each frame with the zone set
 /// <c>{0, camera weather state}</c> (the state machine's 1 = below the cloud deck / 2 = above it /
 /// 3 = inside a <c>fog_zone</c> volume — <c>WeatherState.CameraWeatherState</c>); the walk then
 /// draws a node iff its <c>zone_id</c> is <b>−1</b> (always), or is <b>in that set</b>. So −1 and
 /// 0 are ungated, and 1/2/3 are three buckets of which exactly one is live at a time. Nothing else
-/// is gated: the geometric point-in-zone fallback (<c>FUN_004c7630</c>) runs only when no explicit
+/// is gated: the engine's geometric point-in-zone fallback runs only when no explicit
 /// state was armed, which the remake never does.</para>
 ///
 /// <para><b>How the remake applies it: a visual layer per zone, and a cull-mask bit per
@@ -45,8 +45,8 @@ public static class ZoneGate
 
     // Bits 13-15 (layers 14-16) of Godot's 20, immediately below UI.SplitScreen's reserved
     // per-player band at 16-19. The world builds everything else on the default layer 1 (bit 0).
-    // Bit 15 alone was the single shared cloud-field layer this band replaced (A7's altitude gate
-    // over the two ambient cloud populations, which is this gate's special case).
+    // The altitude gate over the two ambient cloud populations is a special case of this band,
+    // not a separate mechanism.
     private const int LayerBit0 = 13;
 
     /// <summary>The shared visual layer carrying every mesh built for a node of

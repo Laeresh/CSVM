@@ -6,8 +6,8 @@ namespace CSVM.Mech3;
 
 /// <summary>One <c>fvol*</c> node of the world: the authored volume a fog volume occupies, in
 /// world coordinates. These carry no visible geometry — <see cref="WorldBuilder.SkipWorldNode"/>
-/// has excluded them from the render since the world build was written — they are the shape the
-/// original fills with the <c>fogvol.zrd</c> clutter (see docs/formats/fogvol.md).
+/// excludes them from the render — they are the shape the original fills with the
+/// <c>fogvol.zrd</c> clutter (see docs/formats/fogvol.md).
 ///
 /// <para><see cref="Box"/> is the axis-aligned bounds, which is what the scatter walks cells over.
 /// <see cref="Contains"/> is the authored shape itself, and the two are the same thing only in
@@ -18,8 +18,8 @@ namespace CSVM.Mech3;
 ///
 /// <para>Named <c>…Box</c> because <c>Godot.FogVolume</c> is a real engine type (volumetric fog),
 /// which this is not: it is authored data. What the remake does render from it is a camera-space
-/// screen overlay, not volumetric fog — <see cref="FogVolumeWhiteout"/> (C21) plus the <c>ZONE3</c>
-/// fog globals the camera state flips to inside a volume (C22).</para>
+/// screen overlay, not volumetric fog — <see cref="FogVolumeWhiteout"/> plus the <c>ZONE3</c>
+/// fog globals the camera state flips to inside a volume.</para>
 /// </summary>
 /// <param name="Name">The gamez node's own name, e.g. <c>fvol10</c>.</param>
 /// <param name="Box">World-space axis-aligned bounds of the node's mesh.</param>
@@ -63,8 +63,8 @@ public readonly record struct FogVolumeBox(string Name, Aabb Box, IReadOnlyList<
         return true;
     }
 
-    /// <summary>The binary's own outside-positive / inside-negative distance to this volume
-    /// (<c>FUN_0044e6f0</c>): the largest signed distance to any face plane.
+    /// <summary>The binary's own outside-positive / inside-negative distance to this volume:
+    /// the largest signed distance to any face plane.
     ///
     /// <para><b>Inside it is EXACT and it is the distance to the boundary</b> — for a convex
     /// polytope the nearest wall is the least-negative face plane, so <c>-SignedDistance</c> is the
@@ -99,7 +99,7 @@ public readonly record struct FogVolumeBox(string Name, Aabb Box, IReadOnlyList<
     }
 
     /// <summary>The Euclidean distance from an OUTSIDE point to this volume's authored shape —
-    /// 0 for a point inside it. The quantity <c>FUN_0044e6f0</c>'s approach ramp runs over.
+    /// 0 for a point inside it. The quantity the binary's approach ramp runs over.
     ///
     /// <para><b>Method: Dykstra's alternating projection onto the face half-spaces.</b> The volume
     /// is the intersection of its outward face half-spaces (exact, because every one of the 65
@@ -175,9 +175,8 @@ public readonly record struct FogVolumeBox(string Name, Aabb Box, IReadOnlyList<
     /// map-spanning slabs and C1C's own <c>fvol1</c>-<c>fvol9</c> (hull/AABB 1.000); false for
     /// C1C's twelve rotated build-up frusta and most of C5's polygonal street prisms — see the
     /// per-chapter shape census in docs/formats/fogvol.md. Used both by
-    /// <c>CSVM.Tests/FogVolumeTests.cs</c>'s census and by <see cref="FogVolumeSpec.FindMapSpanningSlab"/>
-    /// (A5's map-edge continuation), which is why it lives on the type rather than being
-    /// duplicated at each call site.</summary>
+    /// <c>CSVM.Tests/FogVolumeTests.cs</c>'s census and by <see cref="FogVolumeSpec.FindMapSpanningSlab"/>,
+    /// which is why it lives on the type rather than being duplicated at each call site.</summary>
     public bool IsAxisAlignedBox()
     {
         for (int corner = 0; corner < 8; corner++)
@@ -195,7 +194,7 @@ public readonly record struct FogVolumeBox(string Name, Aabb Box, IReadOnlyList<
 /// axis-aligned <c>fvol*</c> volume that tiles it exactly (see
 /// <see cref="FogVolumeSpec.FindMapSpanningSlab"/>). <see cref="MinX"/>/<see cref="MaxX"/>/
 /// <see cref="MinZ"/>/<see cref="MaxZ"/> are the combined bounds (C1/C1C/C2B/C4: the base map's
-/// own <c>World.area</c>, to the metre — A1's "exact 3x3 partition" finding); <see cref="TopY"/>
+/// own <c>World.area</c>, to the metre — the nine pieces partition it exactly 3x3); <see cref="TopY"/>
 /// is the one authored altitude every piece's own top agrees on.</summary>
 public readonly record struct MapSpanningSlab(float MinX, float MaxX, float MinZ, float MaxZ, float TopY);
 
@@ -203,9 +202,9 @@ public readonly record struct MapSpanningSlab(float MinX, float MaxX, float MinZ
 /// template node to scatter, and its relative weight among the block's alternatives.</summary>
 public readonly record struct FogClutterNode(float Weight, string Node);
 
-/// <summary>The chapter's in-volume whiteout: the camera-space density <c>FUN_0044e6f0</c>
-/// computes every frame from the <c>fvol*</c> volumes when <c>fogvol.zrd</c>'s <c>fog_zone</c> is
-/// set, and the colour it paints (<c>PLAN-weather-decompile-match</c> C21, docs/formats/fogvol.md).
+/// <summary>The chapter's in-volume whiteout: the camera-space density the engine computes every
+/// frame from the <c>fvol*</c> volumes when <c>fogvol.zrd</c>'s <c>fog_zone</c> is
+/// set, and the colour it paints (docs/formats/fogvol.md).
 /// <b>C5 is the only chapter in the install that arms it.</b>
 ///
 /// <para><b>Two linear ramps over one signed distance</b> (<see cref="FogVolumeBox.SignedDistance"/>,
@@ -217,7 +216,7 @@ public readonly record struct FogClutterNode(float Weight, string Node);
 /// <item><b>Interior</b> — inside, density DECAYS from 1 at the wall to 0 at
 /// <see cref="InteriorFadeDist"/> metres of penetration. ⚠ That reads backwards on its own and must
 /// not be "fixed" by inverting it: the volume is a transition CURTAIN, and what carries the look
-/// once the camera is properly inside is <c>ZONE3</c>'s own fog (state 3, <c>C22</c>).</item>
+/// once the camera is properly inside is <c>ZONE3</c>'s own fog (camera weather state 3).</item>
 /// </list>
 ///
 /// <para>Volumes union as <c>a + b − a·b</c>, the binary's own combiner, so a camera near a corner
@@ -226,12 +225,12 @@ public readonly record struct FogClutterNode(float Weight, string Node);
 /// <para>Pure and off-engine (no nodes, no shader state), so the whole rule is unit-testable —
 /// <c>CSVM.Tests/FogVolumeWhiteoutTests.cs</c>. <c>Session/WeatherRig.Tick</c> is the one consumer:
 /// it blends <see cref="Density"/> onto the same screen overlay the <c>CLOUD_COVER</c> band
-/// whiteout uses (Decision 6 of the plan — one camera-space density blended into the frame, never
-/// per-volume fog meshes).</para></summary>
+/// whiteout uses — one camera-space density blended into the frame, never per-volume fog
+/// meshes.</para></summary>
 public sealed class FogVolumeWhiteout
 {
     /// <summary>The loader's defaults for a chapter that arms <c>fog_zone</c> but authors no
-    /// distances (<c>FUN_0044e010</c>). No shipped chapter is in that state — C5 authors 16/16 —
+    /// distances. No shipped chapter is in that state — C5 authors 16/16 —
     /// but the defaults are decoded, so they are stated rather than invented at the call site.</summary>
     public const float DefaultFadeDist = 400f;
 
@@ -409,17 +408,16 @@ public sealed class FogClutter
 public sealed class FogVolumeSpec
 {
     /// <summary><c>fog_zone</c> — present in the five chapters that ship fog volumes (0, except
-    /// C5's 1). A BOOL arming the in-volume whiteout and camera state 3 (<c>FUN_0044e010</c>
-    /// stores <c>value != 0</c>), consumed through <see cref="FogZoneArmed"/>. It is NOT the
-    /// sky/fog zone selector (<c>BL-100</c>) — see docs/formats/fogvol.md.</summary>
+    /// C5's 1). A BOOL arming the in-volume whiteout and camera state 3 (the loader stores
+    /// <c>value != 0</c>), consumed through <see cref="FogZoneArmed"/>. ⚠ It is NOT the
+    /// sky/fog zone selector — see docs/formats/fogvol.md.</summary>
     public int? FogZone { get; init; }
 
     /// <summary>Whether this chapter's fogvol arms the in-volume whiteout + camera state 3
-    /// (<c>FUN_0044e010</c>: stores <c>value != 0</c>). C5 (<c>FogZone</c> 1) is the only chapter
+    /// (the loader stores <c>value != 0</c>). C5 (<c>FogZone</c> 1) is the only chapter
     /// this is true for — C1/C1C/C2B/C4 ship <c>FogZone</c> 0 (present, disarmed) and C1B/C2/C3
     /// carry no <c>fog_zone</c> key at all (<see cref="FogZone"/> null). Consumed by
-    /// <see cref="WeatherState.CameraWeatherState"/>'s state-3 test
-    /// (<c>PLAN-weather-decompile-match</c> A2).</summary>
+    /// <see cref="WeatherState.CameraWeatherState"/>'s state-3 test.</summary>
     public bool FogZoneArmed => FogZone is { } zone && zone != 0;
 
     /// <summary><c>distance</c> — the scatter's mean spacing in metres, i.e. the side of the cell
@@ -429,7 +427,7 @@ public sealed class FogVolumeSpec
 
     /// <summary><c>fog_fade_dist</c> / <c>interior_fog_fade_dist</c> / <c>fog_color</c> — C5 only
     /// (16 / 16 / [16,16,16]), the in-volume whiteout's approach ramp, interior decay depth and
-    /// colour. Consumed by <see cref="FogVolumeWhiteout"/> (C21), which also holds the loader's
+    /// colour. Consumed by <see cref="FogVolumeWhiteout"/>, which also holds the loader's
     /// defaults for a chapter that arms <c>fog_zone</c> without authoring them
     /// (docs/formats/fogvol.md).</summary>
     public float? FogFadeDist { get; init; }
@@ -566,19 +564,20 @@ public sealed class FogVolumeSpec
         return volumes;
     }
 
-    /// <summary>The chapter's map-spanning cloud slab, if it has one — the data-driven test A5
-    /// (docs/plans/PLAN-overcast-match.md) uses to decide which volumes may continue past the map edge,
+    /// <summary>The chapter's map-spanning cloud slab, if it has one — the data-driven test that
+    /// decides which volumes may continue past the map edge,
     /// kept here (pure geometry, no RNG, no render state) so it is testable off-engine like
     /// <see cref="VolumesOf"/> beside it. A volume qualifies only if ALL THREE hold:
     /// <list type="number">
     /// <item>its authored shape IS its own AABB (<see cref="FogVolumeBox.IsAxisAlignedBox"/>) —
     /// no sloped or rotated wall a straight continuation would misrepresent;</item>
     /// <item>it is TOP-ANCHORED by the SAME rule <c>FogVolumeClutter.Scatter</c> classifies
-    /// volumes with (A3) — a build-up or a street strip is local geometry, not a field to tile
+    /// volumes with — a build-up or a street strip is local geometry, not a field to tile
     /// outward;</item>
     /// <item>together with every other volume passing (1)+(2), the set's footprints exactly TILE
-    /// their own combined bounding rectangle — no gap, no overlap (A1's "exact 3x3 partition of
-    /// World.area" finding, re-checked from the volumes' own extents rather than assumed).</item>
+    /// their own combined bounding rectangle — no gap, no overlap (the nine pieces partition
+    /// <c>World.area</c> exactly 3x3, re-checked from the volumes' own extents rather than
+    /// assumed).</item>
     /// </list>
     /// Verified against the shipped data: C1/C2B/C4's nine slab pieces and C1C's own map-spanning
     /// <c>fvol1</c>-<c>fvol9</c> pass; C1C's twelve build-up frusta fail (2) (shortest is 299.7 m,
@@ -588,7 +587,7 @@ public sealed class FogVolumeSpec
     ///
     /// <para>Returns <c>(null, reason)</c> rather than throwing when a candidate set is found but
     /// fails (2)/(3)'s cross-check, so the caller can log why rather than silently doing
-    /// nothing (verification.md DIAG-15) — no shipped chapter is expected to hit this branch.</para></summary>
+    /// nothing — no shipped chapter is expected to hit this branch.</para></summary>
     public static (MapSpanningSlab? Slab, string? SkipReason) FindMapSpanningSlab(
         IReadOnlyList<FogVolumeBox> volumes, float cardHeight, float topAnchorHeightFactor)
     {

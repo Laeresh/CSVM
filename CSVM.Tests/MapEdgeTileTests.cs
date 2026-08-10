@@ -11,10 +11,11 @@ namespace CSVM.Tests;
 /// (<see cref="MapEdgeExtender.ClassifyGroundMesh"/>) and the completion-strip test
 /// (<see cref="MapEdgeExtender.IsCompletionStrip"/>) that <c>AdoptComplements</c> is built on.
 ///
-/// <para>Both were extracted from a private <c>IsGroundTile</c> for `BL-316`, which nothing could
-/// reach by test: C5's continuation had a void strip through it because three flat water sheets —
-/// each COMPLETING a border cell its base tile only partly covered — measure 256–384 m across and
-/// so fell under the classifier's 0.4-cell floor. Every figure below is a measurement off
+/// <para>Both are lifted out of a private <c>IsGroundTile</c> that nothing could reach by test. The
+/// failure they exist to catch: C5's continuation gets a void strip through it when three flat
+/// water sheets — each COMPLETING a border cell its base tile only partly covers — measure
+/// 256–384 m across and so fall under the classifier's 0.4-cell floor. Every figure below is a
+/// measurement off
 /// <c>--dump-tilegrid</c> on the shipped chapters, not an invention.</para>
 /// </summary>
 public class MapEdgeTileTests

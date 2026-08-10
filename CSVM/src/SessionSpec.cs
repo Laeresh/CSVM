@@ -224,15 +224,14 @@ public sealed record SessionSpec
     public IReadOnlyList<string>? ClutterTemplates { get; private set; }
 
     /// <summary><c>--no-zone-cull</c>: switch off the gamez <c>zone_id</c> visibility gate
-    /// (<see cref="Mech3.ZoneGate"/>, <c>PLAN-weather-decompile-match</c> B12, Decision 4) — every
-    /// zone draws at every camera state, as builds before that item did. The one switch the plan
-    /// asked for so a regression anywhere in the world's content can be isolated at the controls:
-    /// the gate hides a lot on purpose (in C1 the whole ground world above the deck, the deck and
+    /// (<see cref="Mech3.ZoneGate"/>) — every zone draws at every camera state. The one switch that
+    /// isolates a regression anywhere in the world's content at the controls: the gate hides a lot
+    /// on purpose (in C1 the whole ground world above the deck, the deck and
     /// the cloud populations below it), so "did the gate eat it?" has to be answerable in one
     /// flag. Not a fidelity switch — the default IS the original's behaviour.</summary>
     public bool NoZoneCull { get; private set; }
 
-    /// <summary><c>--no-flare</c>: suppress the sun's lens flare (BL-165). Not a fidelity switch —
+    /// <summary><c>--no-flare</c>: suppress the sun's lens flare. Not a fidelity switch —
     /// a verification one. The flare's full-screen wash reaches α ≈ 0.66 and survives terrain
     /// occlusion, so in C2/C3 any capture with the sun near screen centre is contaminated for every
     /// *other* comparison (terrain colour, fog gradient, deck brightness, clutter density). Same
@@ -265,7 +264,7 @@ public sealed record SessionSpec
     public int GunSelect { get; private set; }
     public bool InfiniteAmmo { get; private set; }
     /// <summary>The <c>--ammo=</c> low-ammo start knob: caps both gun groups and pylons to this many
-    /// rounds at rig build, bypassing config.json (DET-8 drops it) so the cap survives <c>--det</c>.
+    /// rounds at rig build, bypassing config.json — which <c>--det</c> drops, so the cap survives it.
     /// Null when the flag was absent. Mutually exclusive with <see cref="InfiniteAmmo"/> — whichever
     /// flag comes last in the arg list wins; the loser is logged in <see cref="Warnings"/>.</summary>
     public int? AmmoCap { get; private set; }
@@ -397,7 +396,7 @@ public sealed record SessionSpec
     public string DumpMipsFilter { get; private set; } = "";
 
     /// <summary><c>--dump-tilegrid</c>: build the chapter world, write the map-edge tile census
-    /// (`BL-316`) and quit. The written twin of <c>--debug-tilegrid</c>, and strictly more: the
+    /// and quit. The written twin of <c>--debug-tilegrid</c>, and strictly more: the
     /// overlay can only paint the tiles the extender ACCEPTED, so a rejected border tile — the
     /// thing that leaves a void strip through the continuation — is visible on screen solely as
     /// the hole it causes, and here as a row saying which node and why.</summary>
@@ -495,9 +494,8 @@ public sealed record SessionSpec
     public int? MapEdgeBlock { get; private set; }
 
     /// <summary><c>--map-edge-mode=mirror</c> turns this off. <b>True by default: repetition is
-    /// what the original does</b>, A/B'd at the controls (2026-08-08). Alternating
-    /// reflection was the shipped behaviour until 2026-08-08 and is now only a thing to look
-    /// at.</summary>
+    /// what the original does</b>, A/B'd at the controls. Alternating reflection is kept only as
+    /// something to look at.</summary>
     public bool MapEdgeRepeat { get; private set; } = true;
 
     // ---- Where the data comes from: override VALUES only, null = not given ---------------------
@@ -531,7 +529,7 @@ public sealed record SessionSpec
     /// At volume 0 every sound still loads, plays, counts and logs; it is simply inaudible.</para></summary>
     public float? Volume { get; private set; }
 
-    /// <summary>Multiplier on launched debris' authored launch speed (<c>BL-022</c>). Null when
+    /// <summary>Multiplier on launched debris' authored launch speed. Null when
     /// <c>--debris-launch=</c> was not given, which lets the <c>debris.launchScale</c> config key
     /// supply it instead — an explicit flag always beats the tuning file.
     ///
@@ -541,7 +539,7 @@ public sealed record SessionSpec
     /// any probe rendered to check it.</para></summary>
     public float? DebrisLaunchScale { get; private set; }
 
-    /// <summary>Multiplier on launched debris' authored <c>gravity.value</c> (<c>BL-022</c>).
+    /// <summary>Multiplier on launched debris' authored <c>gravity.value</c>.
     /// Same flag-beats-config, flag-survives-<c>--det</c> rule as
     /// <see cref="DebrisLaunchScale"/>.</summary>
     public float? DebrisGravityScale { get; private set; }
@@ -993,7 +991,7 @@ public sealed record SessionSpec
     }
 
     /// <summary>Parse the scripted hold argument: '|' separates one sequence per player (the last
-    /// one covers any remaining players, so the old single-sequence form still drives everyone),
+    /// one covers any remaining players, so a single-sequence argument still drives everyone),
     /// ';' separates that sequence's segments, each "pitch,roll,yaw,throttle" with an optional
     /// "@seconds" duration. The last segment (or one without a duration) holds forever.</summary>
     public static (FlightInput, float)[][] ParseHold(string s)
