@@ -362,6 +362,29 @@ That poll idiom pins down one more semantic: **`CALL_ANIMATION` does not restart
 that is already running** on the same anchor. The call is re-issued every frame the condition
 holds, so restarting would freeze the 2 s door at its first frame for as long as you hover.
 
+**The forward skip counts no nesting depth, and nesting ships.** `FUN_004ec080`, on a false
+condition, walks forward event by event and breaks at the **first** `ELSE` (0x20), `ELSEIF` (0x21)
+or `ENDIF` (0x22) — landing on an `ELSEIF` it loads that condition and re-tests it in the same loop;
+landing on anything else it returns and the stepper steps past. The `ELSE`/`ELSEIF` fall-through
+(`004ec5a0`, shared by both opcodes) likewise scans to the first `ENDIF`. Neither keeps a depth
+counter, and `ENDIF` (`004ec5d0`) is inert, so a nested chain is not skipped over — it is walked
+into. **48 sequences nest**, all one shape, in every chapter's `gunhit-*slug_gunhit` and
+`mag_gunhit-*` — played on every gun impact:
+
+```
+If AnimationLod 2 / If PlayerRange 1000000 / If RandomWeight 0.2
+    LIGHT_STATE gunhit_lt (range 0.5..21.25) ; OBJECT_ACTIVE_STATE gunhit_lt off
+Elseif RandomWeight 0.2
+    LIGHT_STATE gunhit_lt (range 0.9..12.25) ; OBJECT_ACTIVE_STATE gunhit_lt off
+Else Endif / Else Endif / Endif
+```
+
+Both `ELSE` bodies are empty, which is what makes the missing depth counter observable: a false
+`ANIMATION_LOD` or a false `PLAYER_RANGE` lands on the inner `ELSEIF` and **re-tests it**, so the
+dimmer impact light still fires on its 20 % roll with either outer gate failed. A nesting-aware
+reading skips the whole block and fires nothing. The original's reading is the one CSVM runs
+(`SequenceRunner.Scan`); it reads like a compiler bug and it is the shipped behaviour.
+
 No `RESET_STATE` in either source contains control flow (verified across the install), so the
 instantaneous base-state pass never has to interpret a branch.
 

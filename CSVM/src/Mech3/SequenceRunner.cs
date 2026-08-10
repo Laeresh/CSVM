@@ -207,6 +207,10 @@ public sealed class SequenceRunner
     // One entry per open IF: has any branch of that chain already run? An ELSEIF/ELSE
     // reached with the flag set is the *fall-through* off the end of a taken branch and
     // must skip to the ENDIF; reached with it clear, it is the next candidate to test.
+    // The original carries no such state — it distinguishes the two by ARRIVAL: a branch
+    // marker the stepper walked into is dispatched (fall-through), one a failed condition's
+    // scan landed on is stepped past unread. This stack is our stand-in for that, not a
+    // model of the original; see Scan for the one place the difference could show.
     private readonly List<bool> _branchTaken = new();
     private int _pc;              // next event index
     private float _clock;         // seconds since this sequence started
@@ -532,29 +536,40 @@ public sealed class SequenceRunner
         }
     }
 
-    // The next ELSEIF/ELSE/ENDIF of this chain (nesting-aware) — where a FAILED condition
-    // continues. Lands ON the event, so the loop re-dispatches it as the next candidate.
+    // The next ELSEIF/ELSE/ENDIF — where a FAILED condition continues. Lands ON the event,
+    // so the loop re-dispatches it as the next candidate.
     private int NextBranch(int from) => Scan(from, stopAtElse: true);
 
-    // The chain's own ENDIF — where a branch that ran, or one skipped past its whole
-    // chain, continues. Lands ON the ENDIF so it pops the frame.
+    // The next ENDIF — where a branch that ran, or one skipped past its whole chain,
+    // continues. Lands ON the ENDIF so it pops the frame.
     private int SkipToEnd(int from) => Scan(from, stopAtElse: false);
 
+    /// <summary>
+    /// Walk forward to the event a branch jump lands on. ⚠ Deliberately NOT nesting-aware:
+    /// the original walks event by event and breaks on the FIRST byte in its stop set, with
+    /// no depth counter — a false IF at <c>FUN_004ec080</c> stops at ELSE/ELSEIF/ENDIF alike,
+    /// the ELSE/ELSEIF fall-through at <c>004ec5a0</c> stops at ENDIF only. Those two stop sets
+    /// are the <paramref name="stopAtElse"/> flag and must stay separate.
+    ///
+    /// <para>This is observable, not academic. 48 shipped sequences nest — every chapter's
+    /// <c>gunhit-*slug_gunhit</c> / <c>mag_gunhit-*</c>, played on every gun impact — all in one
+    /// shape: <c>If lod / If range / If weight … Elseif weight … Else Endif / Else Endif /
+    /// Endif</c>. A false OUTER condition lands on the INNER chain's ELSEIF and re-tests it, so
+    /// the impact light still fires on its 20% roll with the LOD gate and the 1 km range gate
+    /// both failed. A depth counter skips the whole thing instead. That reads like a compiler
+    /// bug in the original and it is what the original does; do not "fix" it.</para>
+    /// </summary>
     private int Scan(int from, bool stopAtElse)
     {
-        int depth = 0;
         for (int i = from + 1; i < _seq.Events.Count; i++)
         {
             switch (_seq.Events[i].Kind)
             {
-                case "If": depth++; break;
                 case "Endif":
-                    if (depth == 0) return i;
-                    depth--;
-                    break;
+                    return i;
                 case "Else":
                 case "Elseif":
-                    if (depth == 0 && stopAtElse) return i;
+                    if (stopAtElse) return i;
                     break;
             }
         }

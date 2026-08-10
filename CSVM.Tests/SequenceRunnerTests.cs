@@ -262,15 +262,16 @@ public class SequenceRunnerTests
         Assert.Equal(new[] { "blink" }, t[4]);   // 2.5s
     }
 
-    // ---- 6. a taken branch falls through to its own ENDIF, depth-aware; a failed one advances ----
+    // ---- 6. a taken branch falls through to its own ENDIF; a failed one advances, NOT depth-aware ----
 
     [Fact]
-    public void BranchesFallThroughToEndifDepthAwareAndFailedConditionsAdvance()
+    public void BranchesFallThroughToEndifAndFailedConditionsAdvanceWithoutCountingDepth()
     {
-        // A nested IF inside the outer branch: the fall-through off a taken branch must skip past
-        // ELSEIF/ELSE to the OUTER Endif (index 9), NOT the inner one (index 3) already popped —
-        // that is the depth-aware Scan. A failed outer condition must instead advance to the next
-        // ELSEIF, again skipping the whole inner chain.
+        // A nested IF inside the outer branch. The fall-through off a taken branch skips to the
+        // next ENDIF and the ENDIF is what pops the frame, so the taken path is unremarkable.
+        // The FAILED path is the interesting one: the scan has no depth counter, so a false outer
+        // condition lands on the INNER chain's Endif at index 3 — not on the outer Elseif at 5 —
+        // and the outer branch's own tail at index 4 runs anyway.
         //
         //  0 If(outer) 1 If(inner) 2 SWAP inner_a 3 Endif 4 SWAP outer_a
         //  5 Elseif(elseif) 6 SWAP branch2 7 Else 8 SWAP else_body 9 Endif 10 SWAP after
@@ -287,10 +288,85 @@ public class SequenceRunnerTests
         RunSteps(Instance(Seq(body)), taken, 1f, 1);
         Assert.Equal(new[] { "inner_a", "outer_a", "after" }, taken.Fired);
 
-        // Outer false: advance past the inner chain to the elseif, which is true.
+        // Outer false: the scan stops at the inner Endif (3), which pops the ONE open frame, so
+        // the outer tail (4) fires and the chain behind it reads as an unopened one — the elseif
+        // is re-tested and its ELSE body runs too. The original would fire only outer_a and after:
+        // its ELSEIF/ELSE handler always skips to the ENDIF, so nothing downstream of the landing
+        // can run twice. That residual is the _branchTaken stack, and it needs a chain whose inner
+        // IF closes BEFORE the outer chain's next branch marker — a shape no shipped def has (all
+        // 48 nesting sequences close inner-first, where the two readings agree; see the gunhit
+        // test below). Asserted as-is so the residual is visible rather than buried.
         var elseif = new RecordingHost { Conditions = { ["outer"] = false, ["elseif"] = true } };
         RunSteps(Instance(Seq(body)), elseif, 1f, 1);
-        Assert.Equal(new[] { "branch2", "after" }, elseif.Fired);
+        Assert.Equal(new[] { "outer_a", "branch2", "else_body", "after" }, elseif.Fired);
+    }
+
+    // ---- 6b. the real gunhit chain: the shipped nesting shape, every condition combination ----
+
+    [Fact]
+    public void GunhitNestedChainFiresInTheOriginalsOrder()
+    {
+        // C1's gunhit-3040slug_gunhit, sequence 5 — the shape ALL 48 shipped nesting sequences
+        // have (every chapter's gunhit-*slug_gunhit / mag_gunhit-*, played on every gun impact):
+        //
+        //  0 If(AnimationLod 2) 1 If(PlayerRange 1000000) 2 If(RandomWeight 0.2)
+        //  3 LightState gunhit_lt range 21.25   4 ObjectActiveState gunhit_lt off (Event+0.0001)
+        //  5 Elseif(RandomWeight 0.2)
+        //  6 LightState gunhit_lt range 12.25   7 ObjectActiveState gunhit_lt off (Event+0.0001)
+        //  8 Else 9 Endif   10 Else 11 Endif   12 Endif
+        //
+        // Both empty ELSE bodies are what make the depth counter's absence observable: a false LOD
+        // or range gate lands on the ELSEIF at 5 and RE-TESTS it, so the dim light still fires on
+        // its 20% roll with either outer gate failed. A depth-aware scan skipped to 12 and fired
+        // nothing. This is the original's behaviour, quirk and all.
+        AnimEvent[] Body() => new[]
+        {
+            Branch("If", "lod"), Branch("If", "range"), Branch("If", "weight1"),
+            Light("lt_bright"), Swap("off_bright", offset: "Event", time: 0.0001f),
+            Branch("Elseif", "weight2"),
+            Light("lt_dim"), Swap("off_dim", offset: "Event", time: 0.0001f),
+            Ctrl("Else"), Ctrl("Endif"),
+            Ctrl("Else"), Ctrl("Endif"),
+            Ctrl("Endif"),
+        };
+
+        // Two steps, because the authored OBJECT_ACTIVE_STATE carries `Event + 0.0001` and so
+        // cannot land in the same step as the LIGHT_STATE it switches off.
+        static string[] Run(RecordingHost host, AnimEvent[] body)
+        {
+            var inst = Instance(Seq(body));
+            RunSteps(inst, host, 1f, 2);
+            Assert.True(inst.Finished);
+            return host.Fired.ToArray();
+        }
+
+        // LOD gate false — the outer IF. The scan still reaches the inner ELSEIF.
+        Assert.Equal(new[] { "lt_dim", "off_dim" }, Run(
+            new RecordingHost { Conditions = { ["lod"] = false, ["weight2"] = true } }, Body()));
+        Assert.Empty(Run(
+            new RecordingHost { Conditions = { ["lod"] = false, ["weight2"] = false } }, Body()));
+
+        // Range gate false — the middle IF. Same landing, same re-test.
+        Assert.Equal(new[] { "lt_dim", "off_dim" }, Run(
+            new RecordingHost { Conditions = { ["lod"] = true, ["range"] = false, ["weight2"] = true } },
+            Body()));
+
+        // Both gates pass: the inner chain runs as authored, one branch or the other.
+        Assert.Equal(new[] { "lt_bright", "off_bright" }, Run(
+            new RecordingHost { Conditions = { ["lod"] = true, ["range"] = true, ["weight1"] = true } },
+            Body()));
+        Assert.Equal(new[] { "lt_dim", "off_dim" }, Run(
+            new RecordingHost
+            {
+                Conditions = { ["lod"] = true, ["range"] = true, ["weight1"] = false, ["weight2"] = true },
+            },
+            Body()));
+        Assert.Empty(Run(
+            new RecordingHost
+            {
+                Conditions = { ["lod"] = true, ["range"] = true, ["weight1"] = false, ["weight2"] = false },
+            },
+            Body()));
     }
 
     // ---- 7. an ELSE with no IF degrades to running the branch (malformed-chain safety) ----
@@ -695,6 +771,11 @@ public class SequenceRunnerTests
     /// bowl sign flickers with).</summary>
     private static AnimEvent Swap(string name, string? offset = null, float time = 0f) =>
         new() { Kind = "ObjectActiveState", StartOffset = offset, StartTime = time,
+                Data = new AnimData(new Dictionary<string, object?> { ["name"] = name }) };
+
+    /// <summary>An instantaneous LIGHT_STATE named <paramref name="name"/>.</summary>
+    private static AnimEvent Light(string name) =>
+        new() { Kind = "LightState",
                 Data = new AnimData(new Dictionary<string, object?> { ["name"] = name }) };
 
     /// <summary>A timed motion whose run time the host reports (its Kind keys

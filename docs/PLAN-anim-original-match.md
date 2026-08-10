@@ -160,7 +160,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. B11 ☑ `CALL_SEQUENCE`: one instance per sequence, startable only from the parked state
 12. B12 ☑ `STOP_SEQUENCE`: halt only — retire the stopper idiom
-13. B13 ☐ `IF` skip: match the original's non-nesting-aware scan
+13. B13 ☑ `IF` skip: match the original's non-nesting-aware scan
 14. B14 ☐ `LOOP`: align the rewind, keep the carry, write down why
 15. B15 ☐ `START_TIME` origins: `Animation` reads the animation clock
 16. B16 ☐ `RANDOM_WEIGHT`: the original's 200-entry shared table
@@ -482,7 +482,65 @@ stop and re-diagnose rather than re-adding a special case.
 
 </details>
 
-## B13 ☐ `IF` skip: match the original's non-nesting-aware scan
+## B13 ☑ `IF` skip: match the original's non-nesting-aware scan
+
+**Landed.** The depth counter is gone from `SequenceRunner.Scan`
+(`CSVM/src/Mech3/SequenceRunner.cs`). `NextBranch` now returns the first `Else`/`Elseif`/`Endif`
+after the failed condition and `SkipToEnd` the first `Endif` after a fall-through — the two stop
+sets stay separate, matching `FUN_004ec080` and `004ec5a0` respectively. `_branchTaken` was kept.
+
+**The two readings disagree, on 48 shipped sequences, and the hand trace is the evidence.** A census
+over all 3,015 compiled defs found nesting in exactly **48 sequences** — every chapter's
+`gunhit-*slug_gunhit` and `mag_gunhit-*`, played on every gun impact — and all 48 have the *same*
+shape (`C1/cam_anim/gunhit-3040slug_gunhit.json`, sequence 5):
+
+```
+ 0 If AnimationLod 2      1 If PlayerRange 1000000      2 If RandomWeight 0.2
+ 3 LIGHT_STATE gunhit_lt (0.5..21.25)   4 OBJECT_ACTIVE_STATE gunhit_lt off (Event + 0.0001)
+ 5 Elseif RandomWeight 0.2
+ 6 LIGHT_STATE gunhit_lt (0.9..12.25)   7 OBJECT_ACTIVE_STATE gunhit_lt off (Event + 0.0001)
+ 8 Else   9 Endif   10 Else   11 Endif   12 Endif
+```
+
+Both `ELSE` bodies are empty, and that is what exposes the depth counter. With the LOD gate false:
+
+| | old (depth-aware) | new / `crimson.exe` |
+|---|---|---|
+| `IF` @0 false → | scan skips the nested chain → **12** (the outer `Endif`) | scan breaks on the first marker → **5** (the inner `Elseif`) |
+| then | `Endif` @12, `_pc`=13, sequence over | re-tests `RandomWeight 0.2`: on a hit fires **6, 7**; on a miss lands @8 |
+| fires | **nothing, ever** | **the dim impact light, on a 20 % roll** |
+
+The `PlayerRange 1000000` (1 km) gate behaves identically: false, the scan lands on the same inner
+`Elseif` and re-tests it. So the original lights a `gunhit_lt` point source at any range and at any
+LOD setting, one impact in five, and CSVM lit none. All four remaining combinations (both gates
+true, inner weight true/false) were traced and **agree** between the two readings.
+
+Per Decision 1 this is recorded, not fixed: it reads like a compiler bug in the original's
+`zeff_ani` emitter and it is what the original does.
+
+**One residual, unreachable in the install.** `_branchTaken` is a stack; the original has no state
+at all and distinguishes a fall-through from a landing by *arrival* — a marker the stepper walked
+into is dispatched (skip to `ENDIF`), a marker a failed scan landed on is stepped past unread.
+Those coincide on the shipped shape (traced above, all six combinations), but not on a chain whose
+inner `IF` closes **before** the outer chain's next marker (`If … If … Endif … Elseif …`): there
+the landing pops the only open frame, and a following `ELSE` body runs that the original would
+skip. No shipped def has that shape — the census found one shape, 48 times. Recorded in `Scan`'s
+doc comment and asserted, deliberately, in
+`BranchesFallThroughToEndifAndFailedConditionsAdvanceWithoutCountingDepth` so it is visible rather
+than buried.
+
+**Verified.** `.\RunTests.ps1` with `CSVM_DATA_ROOT=Z:\CSVM` before the change: **881 units, 30
+in-engine suites, 12 of 13 goldens hash-identical**, `c1-destroy-effects` moved — B12's known
+golden-red, Decision 5. After: **882 units, 30 suites, engine errors clean, and the same 12 of 13
+goldens hash-identical with `c1-destroy-effects` at the same
+`00ab194f…`**. **No golden moved for this item.** New unit
+`GunhitNestedChainFiresInTheOriginalsOrder` is built from the real `3040slug_gunhit` event list and
+asserts the exact firing order over all six condition combinations; it and the reworked
+depth-counter unit were **both shown able to fail** by temporarily restoring the depth counter,
+which turns both red.
+
+<details>
+<summary>Original approach (kept for reference)</summary>
 
 **Goal.** A false `IF` and a fall-through `ELSE` land where `crimson.exe` lands them, including
 inside nested chains.
@@ -506,6 +564,8 @@ event list, asserting the exact firing order. Then `--run-tests` and the golden 
 **⚠ Traps.** "More correct" is the wrong axis here (Decision 1). If matching the original makes a
 `gunhit` chain run a branch that looks wrong, that is the original's behaviour and it stays —
 record it, do not fix it.
+
+</details>
 
 ## B14 ☐ `LOOP`: align the rewind, keep the carry, write down why
 

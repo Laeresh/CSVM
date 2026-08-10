@@ -1232,7 +1232,9 @@ shape that was leaking.
 The engine-free sequence interpreter, extracted from `AnimRuntime` behind the `ISequenceHost` seam
 (four members since `BL-228` added `PendingWait`; the other three are unchanged).
 `SequenceRunner` runs one sequence's event list on a clock (per-event START_TIME gating, LOOP with
-authored-count-0 = infinite, IF/ELSEIF/ELSE/ENDIF via a `_branchTaken` stack + nesting-aware `Scan`);
+authored-count-0 = infinite, IF/ELSEIF/ELSE/ENDIF via a `_branchTaken` stack + a deliberately
+**non**-nesting-aware `Scan` — the original counts no depth, and 48 shipped `gunhit` sequences
+observe the difference; the constraint and its one residual live in `Scan`'s own comment);
 `AnimInstance` holds a definition's concurrent runners and removes them as they finish, and carries
 the CALL_SEQUENCE/STOP_SEQUENCE semantics (decode in `docs/formats/anim-definitions.md`;
 `AnimRuntime`'s dispatch cases are thin shims over these). **One runner per sequence, keyed on the
