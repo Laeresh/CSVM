@@ -1564,6 +1564,16 @@ weapon-level spelling of the same `HasBlastDamage` rule, so the rule exists once
   invented coverage.
 
 ## src/Flight/Projectile.cs
+**The original's projectile-visual runtime is written up in [org/tracers.md](org/tracers.md)** — how
+the engine draws a round at all (the `FLYOUT MODEL` is aimed ONCE at spawn and thereafter only
+translated; the shared model node is multi-parented, not cloned, so one `slug.flt` serves every live
+round), plus the authored tracer geometry the hand-tuned constants here stand in for: two crossed
+0.2 × 4.5 m quads whose **tail** is the tracked point, a separate 0.29 m `*tip` quad 4.56 m ahead,
+and a 600 m LOD past which the original draws nothing. Its closing table lists every place this file
+deliberately differs — read it before retuning `TracerLength`/`TracerWidth`/`TracerBrightness`/
+`TracerMinPixels`. ⚠ Same siting rule as `org/puffer.md`: executable decodes live in `docs/org/`,
+never in the CC-BY `docs/formats/` tree.
+
 `ProjectilePool` — the shared-world weapon-fire subsystem: a fixed pool of projectiles integrated
 with `Ballistics` (VELOCITY/ACCELERATION/GRAVITY, expiring at RANGE), plus tracer streaks,
 muzzle flashes, and the per-surface IMPACT sound + effect model. Per-class impact looks (A2): a
