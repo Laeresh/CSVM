@@ -62,7 +62,9 @@ wrong. Assume the neighbouring ones are suspect too until checked.
 | 6 | (Mine, earlier this session) "C3 has the suburbs" | C3 registers exactly one template, `cliff1_sandtrans`. **C2** carries the suburbs (`resblock1-6`, `filmblock1-5`, `parklot1/2`, `parkpat`). Corrected against `extracted/interp.json`; the full census is below. |
 | 7 | (Mine, from A1's ratios) "√2 in the quad-vs-world ratios means a 45°-rotated UV mapping", and "the exact-2 cases are quads spanning two texture repeats" | A2 read the UV coordinates themselves: **no 45° mapping exists anywhere in the install** (every bearing on those templates is 0° or 90°) and **every quad spans exactly 0..1**. The √2 was an artifact of A1's own statistic — a max-extent `Period` compared against a geometric mean, on a 2:1 quad. Passed to A2 as a flagged lead, not a finding, and killed there. |
 | 8 | "B11 can land as a provably inert, behaviour-preserving step" (this plan's own B11, as written) | True for 28 of the 32 templates, false for four: the current scalar `Period` genuinely misplaces `filmblock1`, `cliff1_sandtrans`, `parklot1` and `parklot2` by up to 0.74 UV. B11 is amended to predict exactly which four move. |
-| 9 | "Zero coplanar pairs → delete the `seen` dedup set" (this plan's own B13, as written) | A3 measured zero, but the zero is the *original's*: flag `0x800` **is** the subface mark, so the original never considers a subface polygon. The remake's `PlaceOnMesh` reads no such flag, so `seen` is the only thing suppressing a real double-stamp — 449 subface polygons in C5. B13 is amended: add the subface skip first, *then* delete the dedup. ⚠ **B13 ran that order and both of its predictions failed** — the gate removes 25 % of C5's clutter (not 0), deleting the dedup after it still adds duplicates (C1 +38, C5 +1,072 solids, from an inclusive edge test), and the gate alone **empties C5's downtown** because `BL-250`'s exemption already removed the base layer it would leave behind. Neither landed; see B13. |
+| 9 | "Zero coplanar pairs → delete the `seen` dedup set" (this plan's own B13, as written) | A3 measured zero, but the zero is the *original's*: flag `0x800` **is** the subface mark, so the original never considers a subface polygon. The remake's `PlaceOnMesh` reads no such flag, so `seen` is the only thing suppressing a real double-stamp — 449 subface polygons in C5. B13 is amended: add the subface skip first, *then* delete the dedup. ⚠ **B13 ran that order and both of its predictions failed** — the gate removes 25 % of C5's clutter (not 0), deleting the dedup after it still adds duplicates (C1 +38, C5 +1,072 solids, from an inclusive edge test), and the gate alone **empties C5's downtown** because `BL-250`'s exemption already removed the base layer it would leave behind. Neither landed in B13; **both landed together in B15**, once the user's flyover showed why the gate needs the base layer restored rather than exempted. |
+| 10 | (This plan's own working assumption, through A3 and all of B13) "`0x800` means the original stamps nothing on this polygon" | It means *this layer* stamps nothing. Where two coplanar layers are painted over each other the bit selects which one decorates, and the layer beneath does the work — so a flagged polygon is usually decorated, just not by the district you were looking at. Killed by the user at the controls and confirmed at odds ratio 1,037× (`FINDINGS-layer-pairing.md`). This is the row that cost the most: it made the gate look like a fidelity fix that "deletes the skyline", when the deletion was entirely an artifact of `BuriedClutterDistricts` having already removed the replacement. |
+| 11 | "`unk3`/`0x800` is the OpenFlight `SUBFACE` mark" (`docs/formats/gamez.md`, decoded 2026-07-23) | It is `no_clutter`, set from a node-name substring in `gg_load.c`, single-writer at `005654f6`. The bit's *measurements* survive; what does not is the reason `SceneBuilder.SubfaceBias` gives for layering it. Corrected in `gamez.md` 2026-08-10, with the depth-order justification explicitly reopened rather than re-asserted. |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
@@ -194,7 +196,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ Store decoration positions as template-quad UVs, not metres
 12. ☑ Replace the world-space grid stamp with the per-triangle UV-lattice walk
 13. ☑ Settle the two remake-only rules: `MinSlopeCos` and the `seen` dedup
-14. ☐ Chapter A/Bs + the 8-chapter regression, and rewrite the class comment
+14. ☑ Chapter A/Bs + the 8-chapter regression, and rewrite the class comment
 15. ☑ **Land `BL-305`'s fix: the `no_clutter` gate + retire `BuriedClutterDistricts`** (added
     2026-08-10, after the mechanism was confirmed at the controls; runs *before* 14, which is the
     close-out item and now has this build to regress)
@@ -1274,7 +1276,67 @@ constant with another; if a cull is needed, it belongs in `templates.zrd`'s `min
 chapter authors it — which would make the honest answer "we deviate, here is the count". (c) The
 dedup's quarter-metre quantisation is itself arbitrary; do not "tune" it, delete it or keep it.
 
-## B14 ☐ Chapter A/Bs + the 8-chapter regression, and rewrite the class comment
+## B14 ☑ Chapter A/Bs + the 8-chapter regression, and rewrite the class comment
+
+### ✅ Landed 2026-08-10
+
+**The 8-chapter regression, against the plan's own merge-base `99f3b9b`** (not `main`'s tip — main
+has moved under concurrent sessions, and the merge-base is the only stable "before this plan"). Zero
+engine errors in all eight. Predictions were stated before measuring (METHOD-12): C1 up ~4× from
+A1's UV-repeat finding, C2/C4 down slightly from the gate alone, C5 down with a substitution,
+C1C/C2B unchanged at zero.
+
+| chapter | `99f3b9b` | now | change | gate skipped |
+|---|---|---|---|---|
+| C1 | 9,303 spr | 37,510 spr | **×4.03** | 0 |
+| C1B | 60 spr | 339 spr | ×5.65 | 0 |
+| C1C | no templates | no templates | — | — |
+| C2 | 37,167 spr + 10,261 3D | 36,406 spr + 10,346 3D | −761 spr, **+85 3D** | 67 |
+| C2B | none | none | — | — |
+| C3 | 371 spr | 707 spr | ×1.91 | 0 |
+| C4 | 88,630 spr | 87,239 spr | −1,391 | 75 |
+| C5 | 124,072 spr + 71,326 3D | 110,668 spr + 67,836 3D | −13,404 spr, −3,490 3D | 453 |
+
+**DIAG-11 — what moved, and why, before anything is called clean.** C1's ×4.03 is A1's prediction
+(3.9–4.0×) landing on the nose. C1B ×5.65 and C3 ×1.91 are the same mechanism at different painted
+scales, and both are *uniform over an unchanged kind set* — C1B is `dougfirtree1` 50→273, `bush1`
+2→21, `bush2` 8→45, i.e. one density change, not a redistribution. C2's **+85 solid decorations
+against −761 sprites** is the one mixed sign: the increase is B11/B12's (the B15-only A/B had C2's
+3D count flat at 10,346 on both sides), so the lattice found building placements the grid missed
+while the gate removed sprites. C4 and C5 are the gate and the layer swap. **Nothing moved that has
+no account**, and the two chapters registering no templates moved not at all.
+
+**The C5 nadir A/B is still unscoreable, and that is the honest result.** Re-shot at CAP-22's
+`-9490,230,-3300`. Against `ours-nadir-230-scale-matched.png` — same pose, same build lineage — the
+change is unambiguous: towers crowding the frame and burying the streets become low blocks with the
+crossroads and the diagonal avenue plainly legible, which is `BL-305`'s reported symptom resolved.
+Against `orig-c-t4-nadir-crossroads.png` it cannot be scored at all, because that frame is somewhere
+else — established earlier in this plan and by the user directly ("could it be that the screenshot
+from the video and your position aren't the same?"). Do not read our low-rise result at this pose as
+"too short" versus the original's towers; the original frame is tower country and our pose cell is
+100 % low-rise under the decoded rule. **The confirmation that counts came from a located landmark**
+— the user's own flyover 1 km north of `brooklynbridge` — which is strictly better evidence than
+this pose could ever produce.
+
+**C1's forest is denser and remains UNCONFIRMED** (trap (c), honoured). The stands are visibly
+populated at `-6350,300,-4144` and the count matches A1's arithmetic, but no original capture of a
+C1 forest exists, so this is a measurement agreeing with a decode — not an A/B. Same for C2's
+suburbs and C4.
+
+**Docs rewritten.** `Clutter.cs`'s class comment gains an explicit *what this does not do* section
+(the five unimplemented `FUN_004dd6e0` steps and the unseeded build, with the warning that the first
+of them to land must bring `srand(0x8EA91836)` with it); `docs/architecture.md`'s entry gets the
+`no_clutter` gate and the deviation list, and loses the `BuriedClutterDistricts` description;
+`docs/formats/gamez.md`'s `unk3` bullet is corrected from SUBFACE to `no_clutter` **without**
+re-asserting a depth-order story it can no longer justify (rows 10 and 11 of the disproven table).
+
+**Deliberately NOT done here.** Renaming `GameZPolygon.Subface` → `NoClutter`, because
+`SceneBuilder.SubfaceBias` reads the same field for draw order and its justification has to be
+re-derived rather than assumed; and the `UvTriangle.Contains` edge-strictness fix, which is a
+behaviour change to B12's containment rule and would move goldens again. Both are handed to the
+backlog rather than smuggled into a close-out item.
+
+### Original approach (kept for reference)
 
 **Goal.** The change is confirmed at the controls, the regression is clean, and `Clutter.cs`'s class
 comment describes what the code now does — with every claim in the disproven table above removed.

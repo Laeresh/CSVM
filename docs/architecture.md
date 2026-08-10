@@ -39,7 +39,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/WingLights.cs` — the one source for wingtip nav lights: flare node names, glow texture, warm-amber colour, blink period.
 - `src/Mech3/WorldBuilder.cs` — builds a chapter world: placed + partition subtrees, cloud deck, camera-anchored skydome, edge extender.
 - `src/Mech3/MapEdgeExtender.cs` — rolling window of repeated border-cell blocks + clutter continuing the world past the map edge, per camera; block depth is per chapter (`DefaultBlockCells`).
-- `src/Mech3/Clutter.cs` — stamps interp.json clutter templates onto matching-textured terrain: sprites, plus C2/C5's solid 3D city blocks.
+- `src/Mech3/Clutter.cs` — stamps interp.json clutter templates onto matching-textured terrain at the polygon's own UV lattice, gated per polygon by `no_clutter`: sprites, plus C2/C5's solid 3D city blocks.
 - `src/Mech3/FogVolumes.cs` — the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
 - `src/Mech3/Zrdr.cs` — zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's list.
 - `src/Mech3/AiNets.cs` — the chapter AI patrol nets: `ne0NNNNN` waypoint graphs + the `neindex` id→name table, raw tags/trailer included.
@@ -653,12 +653,29 @@ MultiMesh per kind, solids → `SceneBuilder.SharedMesh`; the split is `SceneBui
 The sprite shader takes the decoration model's own `lighting`/`fog` flags as variants (every tree and
 bush card in the install is `lighting: false`, so clutter does not dim with the mission SUNLIGHT),
 plus a UV-clamp variant from `SceneBuilder.UvsWithinUnitSquare` over the kind's own card UVs.
-`TemplateNames` reads the chapter's `AddClutterTemplates` list minus the `BuriedClutterDistricts`
-exemption (C5's `cblock4/5/6`); `OverrideTemplateNames` is `--clutter-templates=`'s replacement for
-it — the caller's names, filtered to the ones this gamez carries a root for and **without** that
-exemption, so the buried district can be loaded on demand and A/B'd against the original. It prints
-one line naming what was requested, what resolved and what this chapter does not carry, since an
-absent name is retail-data-normal and would otherwise read as an empty district.
+`TemplateNames` reads the chapter's `AddClutterTemplates` list **unfiltered** — which district
+dresses a given patch is a per-polygon decision, see the `no_clutter` note below;
+`OverrideTemplateNames` is `--clutter-templates=`'s replacement for it — the caller's names,
+filtered to the ones this gamez carries a root for — so one district can be loaded alone and A/B'd
+against the original. It prints one line naming what was requested, what resolved and what this
+chapter does not carry, since an absent name is retail-data-normal and would otherwise read as an
+empty district.
+⚠ **`no_clutter` (raw polygon bit `0x800`, carried as `GameZPolygon.Subface`) gates every stamp**,
+  reproducing `FUN_004de2c0`. It does **not** mean "leave this ground bare": where two COPLANAR
+  layers are painted over each other it selects which one decorates, and flagged means skip the
+  overlay so the layer beneath stamps instead. All of C5's city is such a pair — flagged ground is
+  dressed by `cblock4/5/6` (low-rise, ≤52 m), clear ground by `cblock1/2/3/7` (towers, ≤108 m),
+  measured at odds ratio 1,037× and confirmed at the controls
+  (`analysis/bl-305-clutter-uv/FINDINGS-layer-pairing.md`). Reading it as "no clutter here" and
+  dressing flagged ground with towers is `BL-305`, and the map-wide `BuriedClutterDistricts`
+  exemption that stood in for this gate is **gone** — do not reintroduce either half alone: the
+  gate without the districts empties C5's downtown, the districts without the gate double the city
+  (`BL-250`).
+⚠ **Five of `FUN_004dd6e0`'s eleven steps are not implemented**, all of them `templates.zrd`-driven
+  and all owned by Wave C: the step-5 UV jitter, `substitute`, `rotation_range`/`scale_range`/
+  `align_normal`, `far_fade_range`, and the `srand(0x8EA91836)` seeding that makes the original's
+  placement reproducible. Nothing here draws a random number, so the unseeded build is stable today
+  — but the first of those steps to land must bring the seed with it.
 ⚠ **There is NO world-space grid and no global clutter origin** — the original has neither
   (`analysis/bl-305-clutter-uv/FINDINGS-A2.md`). Placement is `ClutterBuilder.UvTriangle`, i.e.
   `FUN_004dd6e0` steps 4/6/7: floor the triangle's UV bbox to an integer lattice, test containment
