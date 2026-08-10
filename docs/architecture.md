@@ -1627,17 +1627,33 @@ draws every texture un-mirrored (a `Uv1Scale` mirror without a matching `Uv1Offs
 degenerated, under `TextureRepeat=false` clamping, into every sprite this pool draws — tracer,
 muzzle, impact, smoke — rendering as a flat single-column colour stripe, C21); a texture needing a
 flip gets it from its own geometry instead, never from that shared material — the tracer streak
-(C25) carries the same per-ammo axis (`tracer_slug`/`_dumdum`/`_armorpierce`/`_magnesium`, ordnance
-falling back to the generic `tracer1`) and rotates its own quad 180° about its facing normal
-(`RenderTracers`: `new Basis(-yAxis*len, -xAxis*width, zAxis)`) to put the authored texture's head at
-the round's current position, drawn with a uniform overbright tint baked from `weapons.tracerBrightness`
-at spawn since additive blending with no bloom pass otherwise caps a tracer at the texture's own
-pixel value. `weapons.tracerLength`/`tracerWidth`/`tracerBrightness` (C23) route the C25 constants
-through `Config`, defaults unchanged; `RenderTracers` also floors the drawn width/length per round
-against `weapons.tracerMinPixels` via `MinWorldSizeForPixels` (inverts the listener camera's vertical
-FOV/viewport-height projection), so a round far enough out still reads as a fleck instead of
-shrinking under a pixel — floored *before* the muzzle-growth cap, so it never outgrows how far the
-round has actually flown.
+carries the same per-ammo axis (`tracer_slug`/`_dumdum`/`_armorpierce`/`_magnesium`) and takes its
+UVs from its own mesh.
+
+**The tracer is the authored shape, not a tuned sprite** (`org/tracers.md`). `CrossedStreakMesh`
+is the original's `rabbit_blur`: two perpendicular quads in ONE `ArrayMesh` — so a round still costs
+one instance — 0.2 m wide × 4.5 m long, its local +Y the front, U running 0-at-front to 1-at-tail.
+`RenderTracers` scales both width axes by `TracerWidth` and the length axis by `TracerLength`
+(`new Basis(xAxis*width, yAxis*len, zAxis*width)`) and places the round's position at the streak's
+**tail**, geometry running forward, because that is where the engine attaches the model. A second
+pass draws the **tip disc** — the authored bright head is a separate mesh (`TipTextures`:
+`slugtip`/`dumdumtip`/`armourpiercetip`/`magnesiumtip`), `TracerTipSize` across, `TracerTipOffset`
+ahead of the round and perpendicular to flight, so it self-hides side-on exactly as the data does.
+Three consequences worth not re-litigating: **no camera** enters the streak basis (the crossed pair
+reads solid from any angle — the eye is consulted only for the pixel floor below), **no growth ramp**
+(the engine never scales a gun round; it is full size from the spawn frame), and **ordnance draws no
+streak at all** (every rocket `FLYOUT` prototype is a missile body — its trail is the
+`MODEL_ANIMATION` puffer smoke, so `RocketStreakScale`/`RocketExhaustScale` and the generic `tracer1`
+entry are gone). `weapons.tracerLength`/`tracerWidth`/`tracerBrightness` (C23) still route the
+constants through `Config`, but the defaults are now **measured off the model**, not tuned by eye —
+and `tracerBrightness` sits at a neutral 1.0, since the ×3 overbright was compensating for the tip
+disc and second quad this shape supplies itself.
+⚠ `RenderTracers` still floors the drawn width/length per round against `weapons.tracerMinPixels`
+via `MinWorldSizeForPixels` (inverts the listener camera's vertical FOV/viewport-height projection),
+so a round far enough out reads as a fleck instead of shrinking under a pixel. **This is a known,
+deliberate conflict with the decode**, which measures a hard 600 m LOD past which the original draws
+nothing at all. It stays until a shot fired at a *known* range settles which reading is right; the
+tip disc is deliberately left unfloored.
 `Spawn(weapon, worldMuzzle, inheritVel, shooterId)` fires one round; one pool per session, fed by
 every player's guns — `shooterId` is the firing `PlayerIndex` (`NoShooter` for the lab's), carried on
 the round so the near-miss cue can exclude its own. `NearMissTargets` is that cue's registry (BL-087):
@@ -1705,9 +1721,10 @@ and gates through `DETONATION_DOT_PRODUCT` toward the nearest hull point. The li
   its whole impact pattern (two `--det` C1B dives: 8/8 identical impact positions); new randomness
   must route through it. Trail-puffer scatter draws each emitter's own `Rng.Puffer` stream.
 ⚠ A trail emitter is reusable only when its round died AND `LiveCount == 0` — reusing sooner
-  grafts the new rocket's trail onto the old one's live smoke. `RocketStreakScale` stays the
-  fallback when a chapter lacks the rocket's prototype model; the empty stage (no world program)
-  flies trail-less.
+  grafts the new rocket's trail onto the old one's live smoke. A chapter lacking the rocket's
+  prototype model now flies the smoke trail **alone** — the `RocketStreakScale` stand-in streak that
+  used to cover that case is deleted, since the data gives ordnance no streak at all; the empty stage
+  (no world program) flies trail-less.
 
 ## src/Flight/WarningShotCue.cs
 The incoming-fire near-miss cue's shipped accumulator (player.json `warning_shot_max` 2.0 /
