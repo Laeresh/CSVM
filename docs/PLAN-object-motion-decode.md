@@ -63,9 +63,9 @@ decode error into a "look" is the exact failure this plan exists to undo.
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code, with the data that proves it** | B4, B5, C6, C7, C8, C9 | Confirm the trace against `FUN_004e8fa0` yourself, then implement. Every one of these is transcribed from the original's update, not inferred from behaviour. |
+| **Traced to an exact mechanism in code, with the data that proves it** | A3, B4, B5, C6, C7, C8, C9 | Confirm the trace against `FUN_004e8fa0` yourself, then implement. Every one of these is transcribed from the original's update, not inferred from behaviour. |
 | **Direction sound, magnitude a judgement call** | C9 (the 0.2 restitution's *feel*, not its value), D11 (which shot to pin) | The value is read from the binary; what is judged is whether the resulting look needs a follow-up item. Do not answer a bad look with a new scalar — see the milestone boundary. |
-| **Leads only — no mechanism yet** | A1, A2, A3 | Budget for investigation. A2 in particular may end in a disproof, and that is a success. A3's *mechanism* is traced but the authored field that drives it is not, which is why it is here and not above. |
+| **Leads only — no mechanism yet** | A1 | Budget for investigation. A correct disproof that lands no code is a success here. (A2 has since landed and moved A3 up: the bit it was to name is `COMPLEX`, confirmed at the parser.) |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
 worktree session here; use a local commit or a file copy.
@@ -119,35 +119,38 @@ overshoot so the motion ends exactly on time, and the update returns "done" once
 `RUN_TIME`. With no `RUN_TIME`, `+0x148` is reused as a watchdog accumulator that kills the body at
 **15 s** on the column path and **35 s** on the sweep path.
 
-**The flag word at `motion+0xc`, as far as it is read.** Two bits are confirmed from the parser;
-the rest are inferred from the update's use sites and are A2's job to confirm or kill.
+**The flag word at `motion+0xc`, every bit named from the parser** (A2, 2026-08-10 — each bit is
+the `OR` `FUN_00508590` executes on recognising the token, at the address given; full table and
+corroboration in `analysis/object-motion-flags/FINDINGS.md`).
 
-| Bit | Reading | Basis |
-|---|---|---|
-| `0x1` | `GRAVITY` present | gates the gravity add and the whole contact block |
-| `0x2` | `IMPACT_FORCE` | gates adding the parent object's velocity (`param_1+0xc0..0xc8`) into the launch — see A2's traps |
-| `0x4` | `TRANSLATION` (vector form) | copies `+0x40..0x54` into the live slots |
-| `0x8` | `TRANSLATION_RANGE` | draws the four ranges and builds the direction |
-| `0x20` | `XYZ_ROTATION` | steady spin integration |
-| `0x40` / `0x80` | `FORWARD_ROTATION` | tumble, two parameterisations |
-| `0x100` | `SCALE` | scale ramp, clamped at 0.001 |
-| `0x200` | opacity/fade channel | writes `node+0x3c → +0x24`, clamped to 1 |
-| `0x400` | `RUN_TIME` authored | selects ceiling semantics over watchdog semantics |
-| `0x800` | `BOUNCE_SEQUENCE` | resolves the branch name against the def's table |
-| `0x1000` | `BOUNCE_SOUND` | volume scaled by impact speed / `FULL_VOLUME_VELOCITY` |
-| `0x2000` | **unknown** | suppresses the gravity add *and* widens the landing test; `complex` (254 events) is the leading candidate |
-| `0x4000` | `NO_ALTITUDE` | **confirmed**, `00508bf8` |
-| `0x8000` | `DO_INTERSECTIONS` | **confirmed**, `00508c41` |
+| Bit | Token | Parser | What the update does with it |
+|---|---|---|---|
+| `0x1` | `GRAVITY` | `0050868b` | gates the gravity add and the whole contact block |
+| `0x2` | `IMPACT_FORCE` | `00508d03` | gates adding the parent object's velocity (`param_1+0xc0..0xc8`) into the launch — out of scope, filed as `BL-343` |
+| `0x4` | `TRANSLATION` (vector form) | `00508d27` | copies `+0x40..0x54` into the live slots |
+| `0x8` / `0x10` | `TRANSLATION_RANGE_MIN` / `_MAX` | `005095de` / `00509df0` | draws the four ranges and builds the direction |
+| `0x20` | `XYZ_ROTATION` | `0050a60f` | steady spin integration |
+| `0x40` / `0x80` | `FORWARD_ROTATION DISTANCE` / `TIME` | `0050b309` / `0050b34b` | tumble, two parameterisations |
+| `0x100` | `SCALE` | `0050b7ac` | scale ramp, clamped at 0.001 |
+| `0x200` | `MORPH` | `0050c21a` | writes `node+0x3c → +0x24`, clamped to 1 |
+| `0x400` | `RUN_TIME` | `0050ca4e` | selects ceiling semantics over watchdog semantics |
+| `0x800` | `BOUNCE_SEQUENCE` | `0050c678` | resolves the branch name against the def's table |
+| `0x1000` | `BOUNCE_SOUND` | `0050c732` | volume scaled by impact speed / `FULL_VOLUME_VELOCITY` |
+| **`0x2000`** | **`GRAVITY COMPLEX`** | **`0050899c`** | suppresses the gravity add *and* widens the landing test |
+| `0x4000` | `GRAVITY NO_ALTITUDE` | `00508bf8` | opt-out from the landing test |
+| `0x8000` | `GRAVITY DO_INTERSECTIONS` | `00508c41` | upgrades the landing test to the geometry sweep |
 
-**The flag census, as it stands and as it must be re-derived.**
-`docs/formats/destructibles.md:358-363` records 1,378 / 166 / 88 / 8 across the four combinations —
-a grep of `extracted/` for `"no_altitude": true` found it in 5 chapter files against that table's
-8 events, so the counts want re-deriving rather than carrying forward. Under the new reading the
-1,378 + 88 = **1,466** default-combination events are bodies that should be landing and are not,
-alongside the 120 bounce-shape and 167 vanish-shape launches currently ended by
-`FlightToLaunchHeight`. The parser also recognises a **`GRAVITY LOCAL`** token (`00631ae8`) that
-the extractor's `gravity` block does not surface at all — three booleans ship where the original
-parses four.
+**The flag census, re-derived** (A2, 2026-08-10, `analysis/object-motion-flags/census.py`). Over
+3,051 `ObjectMotion` events in all 8 chapters, 1,625 carry a `gravity` block and every one of them
+is ballistic: **1,363** / 166 / 88 / 8 across the four combinations. `do_intersections` reproduces
+**166** exactly, and `no_altitude`'s 8 (`gunshell`, one per chapter) were never wrong — the "5
+chapter files" grep does not reproduce. The all-false row moved from the published 1,378, which was
+an arithmetic slip against `destructibles.md`'s own `do_intersections`×shape table rather than a
+data change. So the default-combination bodies that should be landing and are not are
+1,363 + 88 = **1,451**, alongside the 120 bounce-shape and 167 vanish-shape launches currently
+ended by `FlightToLaunchHeight`. The parser's fifth `GRAVITY` token, **`LOCAL <value>`**, sets no
+bit and only selects where the gravity number comes from, so it is erased at compile time and
+*cannot* be surfaced by the extractor — the three booleans that ship are the three that exist.
 
 ## Ground rules
 
@@ -176,7 +179,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — ground truth before any code moves
 
 1. ☑ Establish what the goldens actually cover, and take the pre-change baseline
-2. ☐ Finish the gravity-flag map (`0x2000`, `GRAVITY LOCAL`) and re-derive the census
+2. ☑ Finish the gravity-flag map (`0x2000`, `GRAVITY LOCAL`) and re-derive the census
 3. ☐ Handle flag `0x2000`: the suppressed gravity add and the widened landing test
 
 ### Wave B — the launch decode
@@ -228,7 +231,7 @@ remark, so it contends with anything still open in Waves A–C — run it only a
 
 # Wave A — ground truth before any code moves
 
-## A1 ☐ Establish what the goldens actually cover, and take the pre-change baseline
+## A1 ☑ Establish what the goldens actually cover, and take the pre-change baseline
 
 **Goal.** A written, checked-in answer to "which goldens exercise ballistic debris, which of them
 build world colliders, and does any capture window contain a piece actually coming to rest" — plus
@@ -266,7 +269,18 @@ under test. And `docs/verification.md`'s rule bites hard here: an unchanged numb
 unless you have seen it able to fail, so before trusting a zero `ContactLandings` reading, prove the
 counter can move by forcing a landing.
 
-## A2 ☐ Finish the gravity-flag map (`0x2000`, `GRAVITY LOCAL`) and re-derive the census
+## A2 ☑ Finish the gravity-flag map (`0x2000`, `GRAVITY LOCAL`) and re-derive the census
+
+**Landed 2026-08-10** — `analysis/object-motion-flags/`. `0x2000` **is** `COMPLEX`
+(`OR ESI, 0x2000` at `0050899c`), and all sixteen bits now carry a parser address; the table in
+"What the data actually ships" above is the result. Two of this plan's own inferred rows were wrong
+and are corrected there (`0x200` is `MORPH`; `TRANSLATION_RANGE` is two bits). `GRAVITY LOCAL` sets
+no bit — it is a value selector, erased at compile time, so the extractor cannot surface it and
+there is nothing to teach it. The census reproduces 166 and 8; the all-false row is **1,363**, not
+1,378, which makes A3/C6's population **1,451**. `impact_force` filed as `BL-343`. ⚠ For A3: every
+one of the 254 `complex` carriers is aircraft wreckage, and three of them author gravity *stronger*
+than Earth's (−15, −20) — the value is authored deliberately, so the non-constant path A3 is told to
+find had better exist.
 
 **Goal.** Every bit of `motion+0xc` that this plan depends on is named with its parser evidence, and
 the four-way flag census is re-derived from `extracted/` rather than carried forward.
@@ -315,32 +329,33 @@ written answer to what that flag *is*, rather than a bit nobody named. Concretel
 does not receive the one-time constant gravity add, and its landing test is not restricted to
 descending steps.
 
-**Evidence (confidence: mechanism traced, authored field lead-only).** In `FUN_004e8fa0` the bit
+**Evidence (confidence: traced).** In `FUN_004e8fa0` the bit
 does exactly two things, both unambiguous in the decompile. Gravity: `+0x68 += +0x18` runs only when
 `0x1` is set **and** `0x2000` is clear, so a `0x2000` body never gets the constant acceleration from
 the `gravity.value` field. Landing: the contact block's admission test is
 `local_28 < 0.0 || (flags & 0x2000)` — with the bit set, the test fires on *every* step, not only a
-descending one. What is **not** known is which authored field sets it; A2 supplies that. `complex`
-is the leading candidate on population grounds (166 + 88 = 254 events).
+descending one. The authored field is settled: A2 confirmed the bit is set by the `GRAVITY COMPLEX`
+token at `0050899c`, on 254 events / 25 distinct shapes, all of them aircraft wreckage.
 
 **Approach.** Land the gravity half here — it is standalone and needs no contact tier. **Specify**
-the landing half here and let C6 consume the specification; do not re-decide it there. If A2
-identifies the bit before this item starts, name it throughout instead of `0x2000`; if A2 fails to
-identify it, implement against the bit anyway and say so in the commit — the mechanism is traced
-even where the name is not, and an unnamed bit correctly handled beats a named bit guessed.
+the landing half here and let C6 consume the specification; do not re-decide it there. Name the bit
+`COMPLEX` throughout, per A2.
 
 **Model recommendation.** high — the gravity half can silently remove gravity from a quarter of the
 install's ballistic events, and a wrong reading here looks like "debris floats" three items later
 with no obvious cause.
 
-**Verify.** Count the affected events from A2's census *before* changing anything, and check that
-many bodies change behaviour — no more, no fewer. If `0x2000` really is `complex`, 254 events lose
-their constant gravity and must be visibly accounted for (see traps). The 8-chapter regression, plus
-a targeted anim-lab look at one affected def.
+**Verify.** A2's census says **254 events / 25 distinct shapes** carry `COMPLEX` — check that many
+bodies change behaviour, no more and no fewer, and that they are the aircraft-wreckage family the
+census names (the eleven airframes, `player`, both `player_crash_*`, `agyrobus`,
+`autogyro_loserotor`, `drop_smokescreen_canister`) rather than any world destructible. The
+8-chapter regression, plus a targeted anim-lab look at one affected def.
 
-**⚠ Traps.** ⚠ **"No constant gravity add" almost certainly does not mean "no gravity".** If
-`0x2000` is `complex`, the name itself argues that gravity is computed by a *different, non-constant*
-path rather than switched off — and 254 pieces of debris floating away is the loud, obvious symptom
+**⚠ Traps.** ⚠ **"No constant gravity add" does not mean "no gravity".** The name argues that
+gravity is computed by a *different, non-constant* path rather than switched off, and A2 supplies
+the data that backs it: three of the `COMPLEX` shapes (`player` pieces 2/3/4) author gravity of
+**−15 and −20**, stronger than anything non-`COMPLEX` in the install, which is not what a body with
+gravity switched off gets authored. 254 pieces of debris floating away is the loud, obvious symptom
 of implementing only the suppression. Find that path before landing this, and if you cannot find it,
 **stop and say so** rather than shipping the suppression alone. A correct disproof lands no code and
 is a success. ⚠ The widened landing test is not cosmetic: a body tested on ascending steps can land
@@ -449,7 +464,7 @@ that wires no mask still takes the untouched path, which is what keeps the labs 
 deterministic. Reuse the existing surface classification hook (`SurfaceIsWater`) so a landing piece,
 a round's impact and a wingtip graze cannot disagree.
 
-**Model recommendation.** max — the widest behaviour change in the plan (~1,466 events plus every
+**Model recommendation.** max — the widest behaviour change in the plan (~1,451 events plus every
 bounce and vanish launch), on the hot path, in the file everything else touches.
 
 **Verify.** `ContactLandings` non-zero for the column tier specifically — instrument it separately
@@ -478,8 +493,8 @@ opt out of a landing.
 
 **Approach.** Read the flag in `MotionRuntime.Create` and use it as the column tier's veto. It has
 never been read by this engine, so `AnimDefs`/`AnimData` plumbing may need it surfaced — check
-before assuming it arrives. Confirm against A2's re-derived census which defs actually carry it,
-rather than against the 8-event figure in `destructibles.md`, which this plan already suspects.
+before assuming it arrives. A2's re-derived census settles which defs carry it: `gunshell` alone,
+8 events, one per chapter — the published figure, confirmed rather than replaced.
 
 **Model recommendation.** medium — small and well-bounded once C6 exists, but it decides the fate of
 the one def that sits in both halves of this plan.
@@ -490,8 +505,9 @@ lands. A `gunshell` that suddenly rests on the ground means the veto is inverted
 
 **⚠ Traps.** ⚠ `gunshell` is also touched by B4 — its ejection direction moves in Wave B and its
 contact behaviour is decided here. Do not read a B4 regression as a C7 failure; check the commit
-order first. ⚠ The census figure for `no_altitude` is contested (5 files vs 8 events, see A2). Do
-not hard-code an expectation of which defs carry it.
+order first. ⚠ `gunshell` authors `RUN_TIME 2.0`, so the parser's
+`OBJECT_MOTION: NO_ALTITUDE fall lacks RUN_TIME` diagnostic never fires on this install — the flag's
+dependency on `RUN_TIME` is real in the parser but has no unbounded case here to guard against.
 
 ## C8 ☐ `RUN_TIME` as a universal ceiling; retire `FlightToLaunchHeight` for the watchdog
 
@@ -688,7 +704,8 @@ everywhere, and both its symptoms have separate, identified causes. `BL-245` clo
 `PT-46` (d) is re-opened per Decision 1: its observation stands, its mechanism attribution does not.
 `BL-022` is already closed (`a151289`) and its constant is deleted by D10 — under the never-reuse
 rule the follow-up (re-judge the debris arc at the controls now that it is a decode) is a **new ID
-from `./New-ItemId.ps1 -Kind BL`**, not a reopen. A2's `impact_force` finding also needs minting.
+from `./New-ItemId.ps1 -Kind BL`**, not a reopen. A2's `impact_force` finding is already minted as
+`BL-343` and needs nothing here.
 
 **Approach.** Use `/close-backlog-item` for the closures — it retires the IDs, logs the outcome in
 the closing commit and strikes the caveat everywhere it was restated, which is exactly the failure

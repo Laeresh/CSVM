@@ -106,6 +106,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     absorbs whatever this turns out to be**, so settling it will likely move that number too — re-judge the
     look at the controls afterwards rather than assuming 0.65 survives.
 
+- `BL-343` `[Research]` **`IMPACT_FORCE` is a real velocity-inheritance mechanism in the original, and
+    `BL-008` was closed without it.** The `OBJECT_MOTION` flag word's bit `0x2` is set by the parser's
+    `IMPACT_FORCE` token (`FUN_00508590` at `00508d03`), and the per-frame update gates a parent-velocity
+    add on it (`FUN_004e8fa0` at `004e925e`, reading the parent object's velocity at `param_1+0xc0..0xc8`).
+    The engine reads the extractor's `impact_force` boolean nowhere. A census
+    (`analysis/object-motion-flags/`) puts it on **182 events / 25 distinct shapes**, and the list is
+    exclusively aircraft wreckage: the eleven airframes' `MAIN_ROOT_NODE`, `player` and both
+    `player_crash_*` defs' four pieces, `agyrobus`, and `drop_smokescreen_canister`'s `smoker`.
+    *To settle:* read the update's gate in full — the bit is necessary but a condition on the parent also
+    has to hold, and which parent state that is decides whether this fires on a shot-down plane at all —
+    then decide whether to implement the add or record a reasoned divergence.
+    ⚠ **Traps.** (a) **`BL-008` is closed (`1f09c2d`) on "the original does not inherit velocity into world
+    debris", and that closure is still right — for world debris.** Not one world destructible authors this
+    flag; every carrier is aircraft wreckage, which is the population the closure never looked at. Do not
+    reopen `BL-008`; this is the part of the question it did not answer. (b) `PLAN-object-motion-decode`
+    deliberately left this out of scope, so do not fold it back in mid-plan — the launch decode's
+    verification is already wide, and a second mechanism landing in the same window makes a moved golden
+    impossible to attribute. (c) The engine already has a **judged** inheritance rule pointing the other
+    way: a motion that continues a contact landing inherits *none* of the aircraft's momentum
+    (`docs/formats/destructibles.md`, the `player_crash_dirt` `pNhit` case). If this lands, that rule and
+    this flag have to be reconciled, not stacked. (d) `BL-122`'s crash-debris look was signed off on
+    *direction* only (`CAP-16`), never magnitude — it is not evidence either way here.
+
 - `BL-059` `[Feature]` **Data-driven crash — the remaining variants/follow-ups.** The dirt/ground crash is
   complete and the default (`PLAN-data-driven-crash`, `docs/HISTORY.md`). What is still open:
   1. **The air variant.** `player_crash_default` — no-impact destruct, `destroyed=false`, pieces arc
