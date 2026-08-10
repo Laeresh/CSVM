@@ -15,12 +15,11 @@ namespace CSVM.Mech3;
 /// instance with its own hit points. Keying on <c>(def, anchor)</c> is what keeps one tower's
 /// damage from breaking its siblings.
 ///
-/// This registry is the C21 foundation: it holds current/max HP and coarse lifecycle state, and
-/// makes <c>ANIM_HEALTH</c> condition evaluation read the live value instead of the static
-/// authored one. It applies no damage itself — nothing decrements HP until C23's
-/// <c>WeaponHit</c> path — so a freshly built world reads identically to before (every instance
-/// sits at full health). C22's damage-stage evaluation and C24's death sequence hang off the
-/// same instances.
+/// The registry holds current/max HP and coarse lifecycle state, and makes <c>ANIM_HEALTH</c>
+/// condition evaluation read the live value instead of the static authored one. It applies no
+/// damage itself — the <c>WeaponHit</c> path is what decrements HP — so a freshly built world
+/// has every instance at full health. Damage-stage evaluation and the death sequence hang off
+/// the same instances.
 /// </summary>
 public sealed class DestructibleRegistry
 {
@@ -33,17 +32,17 @@ public sealed class DestructibleRegistry
     private readonly HashSet<ulong> _anchors = new();
 
     // The ONE authoritative instance per anchor node, for resolving a struck world node back to a
-    // destructible (C23). A node can carry several instances (reader wildcard + compiled
+    // destructible. A node can carry several instances (reader wildcard + compiled
     // per-instance); the compiled def is the better data, so it wins.
     private readonly Dictionary<ulong, Instance> _authoritative = new();
 
-    /// <summary>Coarse lifecycle state of one destructible instance. Populated from C22/C24 on;
-    /// C21 leaves everything <see cref="Healthy"/> because no damage is applied yet.</summary>
+    /// <summary>Coarse lifecycle state of one destructible instance. Everything sits at
+    /// <see cref="Healthy"/> until damage is applied.</summary>
     public enum State
     {
         Healthy,   // at full HP, undamaged
-        Damaged,   // below max, above zero — a DAMAGE_SEQUENCE stage is showing (C22)
-        Destroyed, // HP reached zero, death sequence run (C24)
+        Damaged,   // below max, above zero — a DAMAGE_SEQUENCE stage is showing
+        Destroyed, // HP reached zero, death sequence run
     }
 
     /// <summary>Number of live destructible instances — one per <c>(def, anchor)</c> pair.
@@ -164,14 +163,14 @@ public sealed class DestructibleRegistry
 
         /// <summary>How many of the DAMAGE_SEQUENCE's descending health thresholds this instance
         /// has fallen past — the deepest progressive-damage stage it has escalated to. Only ever
-        /// increases (C22 escalates, never heals), so a stage effect fires exactly once; a reset
-        /// (C28) puts it back to 0.</summary>
+        /// increases (damage escalates, never heals), so a stage effect fires exactly once; a
+        /// reset puts it back to 0.</summary>
         public int DamageStage { get; set; }
 
         /// <summary>Set when the death CHAIN authors the healthy→destroyed swap in a
         /// <c>CALL_ANIMATION</c> target (gate2's <c>blockit2</c>) rather than in this def's own
         /// sequences — so <c>ApplyDeathSwap</c>'s fallback yielded and the swap, wreck colliders,
-        /// fireball and flying debris all arrive when the chained call fires. A reset (C28) must
+        /// fireball and flying debris all arrive when the chained call fires. A reset must
         /// stop this def too (its own pending scheduled call, or its already-run motions) and
         /// restore the pose of whatever it moved.</summary>
         public AnimDefinition? ChainedDeathDef { get; set; }
@@ -183,7 +182,7 @@ public sealed class DestructibleRegistry
         /// ran. Carries the anchor <c>Start</c> actually used, not necessarily THIS instance's own
         /// (a pooled library-root call anchors on its own copy, not the call
         /// site), since that is what <c>Stop</c>/<c>RestoreRestPoses</c> need to find it again. A
-        /// reset (C28) stops and restores each of these too, or a called def's own motions (a
+        /// reset stops and restores each of these too, or a called def's own motions (a
         /// flying debris piece still mid-flight) can outlive the reset.</summary>
         public HashSet<(AnimDefinition Def, Node3D Anchor)> LocalCallTargets { get; } = new();
     }

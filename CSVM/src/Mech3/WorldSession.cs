@@ -176,8 +176,8 @@ public sealed class WorldSession
                              ? $" + {clutterBuilder.SolidCount} 3D decorations"
                                + (clutterBuilder.SolidCollisionShapes > 0
                                    // Shared shapes: N distinct shapes / T distinct triangles,
-                                   // attached M times. The old line printed the expanded
-                                   // triangle total, which is exactly what stopped existing.
+                                   // attached M times — the distinct totals, not the expanded
+                                   // per-attachment triangle count.
                                    ? $" ({clutterBuilder.SolidCollisionShapes} shared collision shapes"
                                      + $", {clutterBuilder.SolidCollisionTriangles} tris"
                                      + $", {clutterBuilder.SolidCollisionInstances} attachments)"

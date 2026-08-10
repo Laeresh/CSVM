@@ -11,8 +11,8 @@ namespace CSVM.Mech3;
 ///
 /// Four planes over the same w×h grid: a near-greyscale shading map, three 8-bit per-pixel
 /// weight masks (one per paint colour slot, summing to 255), and a 32bpp overlay for the
-/// pattern's decorative artwork. This is the region table the earlier hue-window
-/// implementation had to guess at.
+/// pattern's decorative artwork. The masks are the engine's region table: they say which
+/// texel belongs to which paint slot.
 /// </summary>
 public sealed class PaintBitmap
 {

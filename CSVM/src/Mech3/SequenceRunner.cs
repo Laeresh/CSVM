@@ -580,9 +580,9 @@ public sealed class SequenceRunner
     /// <summary>
     /// Walk forward to the event a branch jump lands on. ⚠ Deliberately NOT nesting-aware:
     /// the original walks event by event and breaks on the FIRST byte in its stop set, with
-    /// no depth counter — a false IF at <c>FUN_004ec080</c> stops at ELSE/ELSEIF/ENDIF alike,
-    /// the ELSE/ELSEIF fall-through at <c>004ec5a0</c> stops at ENDIF only. Those two stop sets
-    /// are the <paramref name="stopAtElse"/> flag and must stay separate.
+    /// no depth counter — a false IF stops at ELSE/ELSEIF/ENDIF alike, while the ELSE/ELSEIF
+    /// fall-through stops at ENDIF only. Those two stop sets are the
+    /// <paramref name="stopAtElse"/> flag and must stay separate.
     ///
     /// <para>This is observable, not academic. 48 shipped sequences nest — every chapter's
     /// <c>gunhit-*slug_gunhit</c> / <c>mag_gunhit-*</c>, played on every gun impact — all in one

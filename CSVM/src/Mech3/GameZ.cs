@@ -318,7 +318,7 @@ public sealed class GameZ
                 if (fl.TryGetProperty("active", out var ac))
                     node.Active = ac.ValueKind == JsonValueKind.True;
             }
-            // The original's per-node visibility zone (FUN_0056c430): a node draws iff its
+            // The original's per-node visibility zone (see ZoneGate): a node draws iff its
             // zone_id is -1 ("always"), or is in the camera's armed zone set {0, camera state}.
             // Absent (a legacy extraction that does not carry the field) -> -1, i.e. ungated,
             // which is what every reader of this field must treat as "no opinion".
@@ -426,8 +426,9 @@ public sealed class GameZ
                     && bf.ValueKind == JsonValueKind.True;
                 // no_clutter ("unk3", raw bit 0x0800): set from a NODE-NAME SUBSTRING the artists
                 // author (gg_load.c's strstr(name, "no_clutter")), not an OpenFlight structural
-                // attribute — the earlier "SUBFACE" reading is corrected in docs/formats/gamez.md
-                // rule 23. Serialized with skip_serializing_if bool_false by both mech3ax trees, so
+                // attribute, and ⚠ not the OpenFlight "SUBFACE" bit it resembles — see
+                // docs/formats/gamez.md rule 23.
+                // Serialized with skip_serializing_if bool_false by both mech3ax trees, so
                 // it is ABSENT when false — TryGetProperty with a false default is required.
                 poly.NoClutter = pf.TryGetProperty("unk3", out var sf) && sf.ValueKind == JsonValueKind.True;
                 // Draw-priority layer. mech3ax v0.6.1 emits it as "unk04"; upstream has
@@ -627,7 +628,7 @@ public sealed class GameZNode
     public bool Active = true;
     /// <summary>The original's per-node visibility zone (<c>zone_id</c>): <b>-1</b> = always drawn;
     /// otherwise the node draws only while that id is in the camera's armed zone set, which
-    /// <c>FUN_004d62d0</c> arms as <c>{0, camera weather state}</c> — so <b>0</b> is also always,
+    /// the engine arms as <c>{0, camera weather state}</c> — so <b>0</b> is also always,
     /// and 1/2/3 are the per-state buckets (docs/formats/gamez.md, docs/formats/weather.md's deck
     /// census). Absent in a legacy extraction, which defaults to -1 = ungated.</summary>
     public int ZoneId = -1;

@@ -12,8 +12,8 @@ namespace CSVM.Mech3;
 /// follows the plane past the map boundary, so the world continues indefinitely under the
 /// fog — terrain over terrain edges, sea over sea — instead of ending in a void.
 ///
-/// <para>The original does exactly this (user video "C1 IA1 Tile Loading.mp4": 10+ minutes
-/// of continuous flight past the edge; the fog wall creeps closer for ~10 s, then the
+/// <para>The original does exactly this (observed over 10+ minutes
+/// of continuous flight past the edge: the fog wall creeps closer for ~10 s, then the
 /// engine re-centers its loaded tile grid around the plane and the visible radius jumps
 /// back out — with clutter trees on the continued terrain). What it repeats is a block of
 /// <b>border cells</b>, not the map: user-tested — flying east, the map interior (the
@@ -22,19 +22,15 @@ namespace CSVM.Mech3;
 /// per chapter (<see cref="DefaultBlockCells"/>). That keeps the continuation type-matched to
 /// the local edge — sea edge → sea forever, forest edge → forest — as user-observed.</para>
 ///
-/// <para>⚠ <b>It REPEATS; it does not mirror. Settled 2026-08-08 by A/B against the original
-/// at the controls</b> — `repeat` at the per-chapter block below matches the original exactly,
-/// on C1, C2, C4 and C5, with no seam gaps. <see cref="RepeatInsteadOfMirror"/> defaults true
-/// for that reason, and alternating reflection is the mode kept only to look at.</para>
+/// <para>⚠ <b>It REPEATS; it does not mirror</b> — A/B'd against the original at the controls:
+/// `repeat` at the per-chapter block below matches the original exactly, on C1, C2, C4 and C5,
+/// with no seam gaps. <see cref="RepeatInsteadOfMirror"/> defaults true for that reason, and
+/// alternating reflection is the mode kept only to look at.</para>
 ///
-/// <para>⚠ <b>That reversed the `CAP-17` strip analysis, whose DATA was always consistent with
-/// repetition</b> — its consecutive translational periods matched <i>as-is</i> at +0.899…+0.949
-/// against time-reversed −0.086…+0.080, which is what repetition predicts and reflection does
-/// not. The mirroring claim came from a reflection scan finding "seams" at half that spacing,
-/// which is the zigzag-coast symmetry that analysis itself documented as a trap, and a signal of
-/// period P correlates at 2P for free. ⚠ Its metre figures were wrong too (~3.2 cells for a
-/// C2 edge that measures 2): <b>do not size a map-edge block from a video-derived period</b> —
-/// see `analysis/video-flight-calibration/FINDINGS.md`. Fly it and look.</para>
+/// <para>⚠ <b>Do not size a map-edge block from a video-derived period</b> — those metre figures
+/// come out wrong (~3.2 cells for a C2 edge that measures 2), and a signal of period P correlates
+/// at 2P for free, so a reflection scan reports "seams" at half the true spacing wherever the
+/// coast zigzags. See `analysis/video-flight-calibration/FINDINGS.md`. Fly it and look.</para>
 ///
 /// <para><b>Deliberately not offered: repetition that shares the map-edge vertex row</b>
 /// (floated in `docs/formats/world-structure.md`), which would repeat without stepping. Mirror
@@ -43,11 +39,11 @@ namespace CSVM.Mech3;
 /// needed: plain repeat at the per-chapter block shows no step and no gap at the controls, the
 /// tile meshes evidently spanning their cells exactly.</para>
 ///
-/// <para>⚠ <b>A cell's ground is not always ONE tile</b> — and that was `BL-316`. Three C5 border
+/// <para>⚠ <b>A cell's ground is not always ONE tile.</b> Three C5 border
 /// cells are a base tile plus a flat water strip 256–384 m across that completes it, and the strip
-/// falls under <see cref="ClassifyGroundMesh"/>'s 0.4-cell floor. Dropped from the scan, it left a
+/// falls under <see cref="ClassifyGroundMesh"/>'s 0.4-cell floor. Dropped from the scan, it leaves a
 /// hole its own width in every copy: sky, no collision, wide enough to fly through, outward
-/// forever. <see cref="AdoptComplements"/> is the fix — a cell short of ground adopts the
+/// forever. <see cref="AdoptComplements"/> is what prevents that — a cell short of ground adopts the
 /// full-cell-spanning flat strips the classifier refused. ⚠ It is keyed on the CELL being short,
 /// never on the strip alone: flatness by itself adopts hangar floors and city-block rooftops
 /// (<c>cblock*</c>, the city ground texture, classifies as <c>buildings</c>, so the surface class
@@ -79,16 +75,14 @@ public sealed partial class MapEdgeExtender : Node3D
 
     // Window radius in cells around the focus. Sized to cover the weather fog-far
     // (C1 zone2: 4000 m ≈ 4 × 1024 m tiles) plus one margin ring, so the fog border never
-    // creeps onto the void even mid-cell. TUNE. ⚠ It used to say "regardless of the
-    // fogRangeFactor TUNE" — that factor halved the range and is deleted (B15, 2026-08-08), so
-    // this ring now sits against the FULL authored far, which is what it was already sized for.
-    // The chapter with the longest authored far is C1B at 4,700 m, still inside 5 × 1024 m.
+    // creeps onto the void even mid-cell. TUNE. ⚠ The ring sits against the FULL authored far;
+    // the chapter with the longest authored far is C1B at 4,700 m, still inside 5 × 1024 m.
     private const int Rings = 5;
 
     // The ground-tile span gate, as fractions of a cell: the floor admits the split half-tiles,
-    // the ceiling keeps multi-cell sheets out. ⚠ Named, not inlined, because they are the numbers
-    // `BL-316` is about — a real C5 border strip falls under the floor and is dropped from the
-    // continuation. Do not retune them without reading the --dump-tilegrid census first: lowering
+    // the ceiling keeps multi-cell sheets out. ⚠ Named, not inlined, because they are delicate: a
+    // real C5 border strip falls under the floor and is dropped from the continuation (see
+    // AdoptComplements). Do not retune them without reading the --dump-tilegrid census first: lowering
     // the floor far enough to admit a strip also admits every prop mesh at the border, and
     // BuildCell would then copy those, which the design forbids.
     private const float MinSpanFraction = 0.4f;
@@ -125,11 +119,11 @@ public sealed partial class MapEdgeExtender : Node3D
     // the same AnimRuntime.IndexMeta stamp the built scene already carries.
     private readonly Dictionary<int, (int, int)> _tileCell = new();
     // Flat sheets the classifier rejected for being thin, kept per cell as candidates for
-    // AdoptComplements — the `BL-316` fix. Cleared once adoption has run.
+    // AdoptComplements. Cleared once adoption has run.
     private readonly Dictionary<(int, int),
         List<(int Idx, GameZNode Node, Transform3D ParentXf, Vector3 WorldCenter, Vector3 Span)>> _spares = new();
-    // Node indices adopted by AdoptComplements, so the census can say so rather than reporting
-    // them as rejections that are, since the fix, nothing of the kind.
+    // Node indices adopted by AdoptComplements, so the census reports them as the ground they now
+    // are rather than as rejections.
     private readonly HashSet<int> _adopted = new();
     // Per cell, the world-space X/Z bounds its ACCEPTED tiles reach between them. ⚠ A union of
     // AABBs, not a true union of footprints: two disjoint tiles that between them touch all four
@@ -188,8 +182,9 @@ public sealed partial class MapEdgeExtender : Node3D
         /// too, so this is what keeps the sky out of the ground.</summary>
         SkyOrCloud,
 
-        /// <summary>Spans less than <see cref="MinSpanFraction"/> of the cell on X or Z. The
-        /// `BL-316` suspect: a real border terrain strip, dropped for being thin.</summary>
+        /// <summary>Spans less than <see cref="MinSpanFraction"/> of the cell on X or Z. ⚠ A real
+        /// border terrain strip can land here, dropped for being thin — see
+        /// <c>AdoptComplements</c>.</summary>
         TooSmall,
 
         /// <summary>Spans more than <see cref="MaxSpanFraction"/> of the cell on X or Z — a
@@ -205,9 +200,8 @@ public sealed partial class MapEdgeExtender : Node3D
     public int BlockCells => _blockCells;
 
     /// <summary>Translate the block rather than alternately reflecting it. <b>True by default —
-    /// this is what the original does</b>, A/B'd at the controls on every chapter (2026-08-08).
-    /// False alternately reflects, which was the shipped behaviour until then and is now kept
-    /// only to look at.</summary>
+    /// this is what the original does</b>, A/B'd at the controls on every chapter. False
+    /// alternately reflects, which is kept only to look at.</summary>
     public bool RepeatInsteadOfMirror => _repeat;
 
     /// <summary>The widest block this world can take — a block deeper than the grid has no more
@@ -236,7 +230,7 @@ public sealed partial class MapEdgeExtender : Node3D
     // ---------------------------------------------------------------- fold mapping
 
     /// <summary>How many border cells deep this chapter's repeated block is — all eight measured
-    /// by A/B against the original at the controls (user, 2026-08-08).
+    /// by A/B against the original at the controls.
     ///
     /// <para><b>C1, C2 and C4 are 2; everything else is 1.</b> C5 was read directly. The remaining
     /// four — C1B, C1C, C2B, C3 — carry <b>only water tiles at their borders</b> (measured), which
@@ -254,9 +248,8 @@ public sealed partial class MapEdgeExtender : Node3D
     /// <summary>Which repetition band an out-of-map index falls in: 0 inside the map, then ±1, ±2…
     /// outward, one step per <paramref name="block"/> cells. The tile-grid overlay colours by this
     /// rather than by <see cref="FoldAxis"/>'s flip, because <b>under repetition nothing ever
-    /// flips</b> — keying the hue on the flip painted the entire continuation one colour in the
-    /// mode that is now the default, and the whole point of the overlay is that one colour band is
-    /// one block.
+    /// flips</b> — keying the hue on the flip paints the entire continuation one colour in the
+    /// default mode, and the whole point of the overlay is that one colour band is one block.
     /// <para>Under mirroring the two are the same thing (a band is odd exactly when its copy is
     /// reflected), so this changes nothing there — it is a strict generalization.</para></summary>
     public static int FoldBandIndex(int i, int n, int block)
@@ -280,9 +273,8 @@ public sealed partial class MapEdgeExtender : Node3D
     /// drops the reflected half and never flips.</para>
     ///
     /// <para>At <paramref name="block"/> = 1 with <paramref name="repeat"/> false this reduces
-    /// exactly to the historical clamp-to-border-cell — the odd ring mirrored, the even ring a
-    /// straight copy — which is what makes the generalization safe to land ahead of a decision on
-    /// the value. <c>MapEdgeFoldTests</c> pins that equivalence.</para></summary>
+    /// exactly to a clamp to the border cell — the odd ring mirrored, the even ring a straight
+    /// copy. <c>MapEdgeFoldTests</c> pins that equivalence.</para></summary>
     public static (int Src, bool Flip) FoldAxis(int i, int n, int block, bool repeat)
     {
         if (i >= 0 && i < n)
@@ -296,13 +288,14 @@ public sealed partial class MapEdgeExtender : Node3D
     }
 
     /// <summary>The ground-tile decision, as a pure function of ONE mesh — its vertices, its
-    /// polygons' texture names and the cell size. Extracted from <see cref="IsGroundTile"/> so it
-    /// can be pinned by test the way <see cref="FoldAxis"/> is: this classifier decides what the
-    /// world looks like past the map edge, and until `BL-316` no test could reach it.
+    /// polygons' texture names and the cell size. Kept separate from <see cref="IsGroundTile"/> so
+    /// it can be pinned by test the way <see cref="FoldAxis"/> is: this classifier decides what the
+    /// world looks like past the map edge.
     ///
     /// <para><b>What a rejection costs.</b> A rejected node is absent from the per-cell tile map,
     /// so <see cref="BuildCell"/> never copies it and every extension copy of its cell carries a
-    /// hole exactly its footprint — outward, forever, with no collision. That is `BL-316` on C5.
+    /// hole exactly its footprint — outward, forever, with no collision. C5's border water strips
+    /// are the case that does this.
     /// The verdict is returned rather than a bool precisely so the <c>--dump-tilegrid</c> census
     /// can say WHY, which the accept-only tile-grid overlay cannot.</para>
     ///
@@ -330,7 +323,7 @@ public sealed partial class MapEdgeExtender : Node3D
         center = (min + max) * 0.5f;
         span = max - min;
         float spanX = span.X, spanZ = span.Z;
-        // Before the span gate, as it always was: the cloudlayer deck tiles are cell-sized too, so
+        // Before the span gate: the cloudlayer deck tiles are cell-sized too, so
         // size alone cannot tell them from ground. Node names are unreliable here (cloud layers
         // ship under generic names like 'g27517') — WorldBuilder.IsCloudOrSkyTexture is the rule.
         foreach (var tex in polygonTextures)
@@ -352,7 +345,7 @@ public sealed partial class MapEdgeExtender : Node3D
     }
 
     /// <summary>Whether a mesh the classifier dropped for being thin looks like a strip of ground
-    /// that COMPLETES a cell — the `BL-316` shape. Two conditions, and both are needed:
+    /// that COMPLETES a cell. Two conditions, and both are needed:
     ///
     /// <para><b>Flat</b> — shorter than it is wide on both horizontal axes, which separates a strip
     /// of ground from an upright object without a size threshold. C5's void-causing water strips
@@ -360,8 +353,8 @@ public sealed partial class MapEdgeExtender : Node3D
     /// a footprint of centimetres. Strict, so a degenerate 0x0x0 marker gizmo is not a sheet.</para>
     ///
     /// <para><b>Full-cell on one axis</b> — a strip that fills a cell's gap runs the whole way
-    /// across it; a building floor, roof or awning does not. ⚠ This is the condition that carries
-    /// the fix, and it was NOT obvious: flatness alone adopted 89 nodes on C5, most of them hangar
+    /// across it; a building floor, roof or awning does not. ⚠ This condition is what carries the
+    /// distinction, and it is not obvious: flatness alone adopts 89 nodes on C5, most of them hangar
     /// floors and city-block rooftops, because <c>cblock*</c> — the city GROUND texture — classifies
     /// as <c>buildings</c>, so the surface class cannot separate them either. Measured across all
     /// eight chapters: every real completion strip spans a full cell on one axis, and no building
@@ -477,7 +470,7 @@ public sealed partial class MapEdgeExtender : Node3D
     /// <summary>Builds the extender for a world, or null when the world carries no usable
     /// area/partition grid. <paramref name="clutter"/> (the chapter's built ClutterBuilder,
     /// if any) lets the extension grow the same trees the map grows — the original shows
-    /// clutter on the continued terrain (see the class doc video evidence).</summary>
+    /// clutter on the continued terrain.</summary>
     /// <param name="blockCells">Initial <see cref="BlockCells"/> — normally
     /// <see cref="DefaultBlockCells"/> for the chapter, overridden by <c>--map-edge-block=</c>.
     /// Clamped to the grid, so the caller may pass anything.</param>
@@ -520,7 +513,7 @@ public sealed partial class MapEdgeExtender : Node3D
             ? new Color(TintFor(cell.Item1, cell.Item2), TintStrength)
             : null;
 
-    /// <summary>The <c>--dump-tilegrid</c> report (`BL-316`): every tile candidate with its
+    /// <summary>The <c>--dump-tilegrid</c> report: every tile candidate with its
     /// <see cref="TileVerdict"/>, plus a per-cell roll-up, as indented JSON.
     ///
     /// <para><b>It answers three questions at once</b>, deliberately, because the walk visits every
@@ -575,7 +568,7 @@ public sealed partial class MapEdgeExtender : Node3D
             foreach (var (node, parentXf) in tiles)
             {
                 // zoneGate: the mirrored tile is a copy of a real world tile, so it inherits that
-                // tile's own zone_id and is culled with it (B12). Without this, the base map's
+                // tile's own zone_id and is culled with it. Without this, the base map's
                 // ground would vanish above the deck while its mirrored continuation kept
                 // drawing — a seam the gate would have created on its own.
                 var leaf = _scene.BuildSubtree(node, skip: n => !ReferenceEquals(n, node),
@@ -613,7 +606,7 @@ public sealed partial class MapEdgeExtender : Node3D
     /// <para>The mix goes through <see cref="SceneBuilder.TintParam"/>, the world shaders' own
     /// per-instance parameter — never a <c>MaterialOverride</c>/<c>MaterialOverlay</c>, which is a
     /// different shader entirely (see <see cref="SceneBuilder.TintLine"/> for the three ways that
-    /// has gone wrong before).</para></summary>
+    /// breaks).</para></summary>
     private void ApplyTint(Node cell, int ix, int iz)
     {
         var color = _tinted ? new Color(TintFor(ix, iz), TintStrength) : Untinted;
@@ -635,7 +628,7 @@ public sealed partial class MapEdgeExtender : Node3D
     /// countable number of cells. In-map cells take a neutral tint so the map boundary is never in
     /// doubt.
     /// <para>⚠ Keyed on the band, <b>not</b> on <see cref="FoldAxis"/>'s flip. Under repetition —
-    /// the default — nothing ever flips, and keying on the flip painted the whole continuation one
+    /// the default — nothing ever flips, so keying on the flip paints the whole continuation one
     /// colour, destroying the only thing the overlay is for.</para></summary>
     private Color TintFor(int ix, int iz)
     {
@@ -659,7 +652,7 @@ public sealed partial class MapEdgeExtender : Node3D
     // The source cell's decorations at mirrored placements. A sprite mirrors as its position
     // alone (the billboard shader re-faces it from the instance origin), but a 3D city block
     // has to carry the mirror's reflection in its basis or the continued city would face the
-    // wrong way — which is why the export switched from positions to whole transforms.
+    // wrong way — which is why the export carries whole transforms rather than positions.
     // The reflection flips winding; world geometry renders double-sided
     // and fullbright, so nothing reads the inverted normals.
     //
@@ -762,8 +755,8 @@ public sealed partial class MapEdgeExtender : Node3D
             }
             else if (verdict == TileVerdict.TooSmall && IsCompletionStrip(span, _tileX, _tileZ))
             {
-                // A dropped strip of ground is the `BL-316` shape: a piece of terrain the
-                // classifier refuses for being thin, whose absence is a hole in every copy. Held
+                // A dropped strip of ground: a piece of terrain the classifier refuses for being
+                // thin, whose absence is a hole in every copy. Held
                 // here rather than accepted outright — whether it is owed a copy depends on its
                 // cell, which is not known until the whole scan has run (AdoptComplements).
                 var worldCenter = xf * center;
@@ -830,7 +823,7 @@ public sealed partial class MapEdgeExtender : Node3D
             && c.MinZ <= z0 + Slack && c.MaxZ >= z0 + _tileZ - Slack;
     }
 
-    // `BL-316`. A cell short of ground adopts the flat sheets the classifier dropped for being
+    // A cell short of ground adopts the flat sheets the classifier dropped for being
     // thin: without this, every extension copy of that cell carries a hole exactly the dropped
     // sheet's footprint — sky, no collision, wide enough to fly through, outward forever.
     //
@@ -857,7 +850,7 @@ public sealed partial class MapEdgeExtender : Node3D
                 _tileCell[spare.Idx] = cell;
                 _adopted.Add(spare.Idx);
                 AccumulateCoverage(cell, spare.WorldCenter, spare.Span);
-                Log.Info("world", $"map edge: cell ({cell.Item1},{cell.Item2}) is short of ground — adopting dropped sheet '{spare.Node.Name}' ({spare.Span.X:F0} x {spare.Span.Z:F0} m). BL-316.");
+                Log.Info("world", $"map edge: cell ({cell.Item1},{cell.Item2}) is short of ground — adopting dropped sheet '{spare.Node.Name}' ({spare.Span.X:F0} x {spare.Span.Z:F0} m).");
             }
         }
         _spares.Clear();
@@ -966,8 +959,8 @@ public sealed partial class MapEdgeExtender : Node3D
         foreach (var row in _census)
         {
             var key = (row.Cx, row.Cz);
-            // An adopted sheet is reported as what it now is — part of the cell's ground — with
-            // the classifier's original verdict kept in the row, so the fix stays legible.
+            // An adopted sheet is reported as what it is — part of the cell's ground — with the
+            // classifier's own verdict kept in the row, so the adoption stays legible.
             if (row.Verdict == nameof(TileVerdict.Accepted) || _adopted.Contains(row.Node))
             {
                 accepted.TryGetValue(key, out int count);

@@ -893,7 +893,7 @@ public sealed class TextureArchive : IDisposable
                     opaque++;
             }
         }
-        // No ink at all draws nothing either way; call it soft, as the old rule did.
+        // No ink at all draws nothing either way; call it soft.
         return opaque < ink * 0.45f || ink == 0;
     }
 

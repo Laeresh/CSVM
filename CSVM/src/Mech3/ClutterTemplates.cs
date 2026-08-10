@@ -8,7 +8,7 @@ namespace CSVM.Mech3;
 /// become instead of the decoration the template authored.
 ///
 /// <para><b>The file's weights are relative, not percentages</b>, and the engine normalises them
-/// itself (<c>FUN_004deab0</c> sums the list, then stores each entry as <c>w / total</c>).
+/// itself: it sums the list, then stores each entry as <c>w / total</c>.
 /// <see cref="Weight"/> is the number as authored and <see cref="Fraction"/> is the engine's
 /// normalised share, so a reader of either cannot mistake C1's <c>9.0</c>/<c>1.0</c> for anything
 /// but 90 %/10 % — and C5's <c>hotelsign0</c>, which weights ITSELF 0.1 against two alternatives at
@@ -25,23 +25,22 @@ public readonly record struct ClutterSubstitute(float Weight, float Fraction, st
 /// does when it is shot, cratered or flown into. <b>No chapter in the install authors any of the
 /// three</b> — decoded and documented so the absence is a measurement rather than a gap. See
 /// docs/formats/templates.md.</summary>
-/// <param name="Health">The <c>health</c> key. Its presence is what arms the block at all
-/// (<c>FUN_0057a130</c> returns whether it was found), which is why the type is non-nullable here
-/// and the whole block is null when unarmed.</param>
+/// <param name="Health">The <c>health</c> key. Its presence is what arms the block at all, which
+/// is why the type is non-nullable here and the whole block is null when unarmed.</param>
 /// <param name="Anim">The <c>anim</c> key — an animation-definition name, resolved by the engine at
-/// parse time (<c>FUN_00523820</c>). Null when the key is absent.</param>
+/// parse time. Null when the key is absent.</param>
 /// <param name="Model">The <c>model</c> key — a debris/wreck model name, resolved by the engine's
-/// model lookup at parse time (<c>FUN_004d0280(7, …)</c>). Null when the key is absent.</param>
+/// model lookup at parse time. Null when the key is absent.</param>
 public readonly record struct ClutterDamageResponse(float Health, string? Anim, string? Model);
 
 /// <summary>
 /// One <c>templates.zrd</c> block: the authored properties of ONE decoration model, keyed by the
 /// model's own node name (<c>firtree1.flt</c>, <c>cb00a.flt</c>) — never by the template that
-/// scatters it. Every property here is consumed by the stamper <c>FUN_004dd6e0</c>; the schema, the
+/// scatters it. Every property here is consumed by the clutter stamper; the schema, the
 /// per-chapter census and which keys the retail data leaves at their defaults are in
 /// docs/formats/templates.md.
 ///
-/// <para><b>Every default here is the engine's own</b>, read off <c>FUN_004de7d0</c>'s initialiser
+/// <para><b>Every default here is the engine's own</b>, read off its block initialiser
 /// rather than chosen — which matters because a decoration whose name appears in NO block is
 /// legitimate (the stamper simply skips every kind-driven step for it), and because five of the
 /// eleven keys are authored by no chapter at all, so their defaults are what the whole install
@@ -51,13 +50,13 @@ public sealed class ClutterKindProps
 {
     /// <summary>The decoration model's node name, as both the file and the gamez spell it —
     /// with the <c>.flt</c> suffix (<c>firtree1.flt</c>). The engine matches it to a decoration by
-    /// a plain <c>strcmp</c> against the gamez node's name (<c>FUN_004dd230</c>); every shipped
+    /// a plain <c>strcmp</c> against the gamez node's name; every shipped
     /// name agrees exactly, so the case-insensitive lookup here is a courtesy, not a fixup.</summary>
     public string Node { get; init; } = "";
 
     /// <summary><c>scale_range</c> — the uniform per-instance scale multiplier, drawn once per
-    /// stamp between the two components (<c>FUN_004dd6e0</c> step 10's final
-    /// <c>FUN_0053a820(s, s)</c>). A FLAT pair in the file, unlike the nested pairs beside it.
+    /// stamp between the two components (the stamper's step 10, applied as a uniform scale).
+    /// A FLAT pair in the file, unlike the nested pairs beside it.
     /// Default (1, 1), i.e. exactly the authored size. Authored by all 143 shipped kinds; the
     /// install's span is 0.5–3.0.</summary>
     public Vector2 ScaleRange { get; init; } = Vector2.One;
@@ -70,7 +69,7 @@ public sealed class ClutterKindProps
     /// file's SECOND pair.
     ///
     /// <para>⚠ <b>The two file pairs are the MIN and MAX of the two distances, not the two
-    /// distances themselves.</b> <c>FUN_004dd6e0</c> lerps the near distance between
+    /// distances themselves.</b> The stamper lerps the near distance between
     /// <c>kind+0x2c</c> and <c>+0x30</c> — the two pairs' FIRST components — and the far distance
     /// between <c>+0x34</c> and <c>+0x38</c>, their second components. So C1's <c>firtree2</c>,
     /// authored <c>[[300,600],[1000,2000]]</c>, fades from somewhere in 300–1000 m to somewhere in
@@ -80,14 +79,14 @@ public sealed class ClutterKindProps
     /// near and far are perfectly correlated per instance, not rolled independently.</para>
     ///
     /// <para>A zero <c>farMax</c> is the engine's "never fades" sentinel (the initialiser's own
-    /// value, so it is also what a decoration with no block gets). Not rendered by the remake —
-    /// Decision 3 of docs/PLAN-clutter-uv-placement.md defers it, and C23 owns the decision.</para></summary>
+    /// value, so it is also what a decoration with no block gets). Not rendered by the remake:
+    /// applying it REMOVES distant clutter, so it is deferred deliberately.</para></summary>
     public Vector2 FarFadeMax { get; init; }
 
     /// <summary><c>translate_uv_range</c> lower bounds — <c>(uMin, vMin)</c>, in UV units, from the
     /// file's first pair; the same min-pair/max-pair grouping as
     /// <see cref="FarFadeMax"/> documents. The per-axis jitter added to a lattice candidate in
-    /// <c>FUN_004dd6e0</c> step 5. <b>Authored by no chapter</b>, so the whole of step 5 is inert
+    /// the stamper's step 5. <b>Authored by no chapter</b>, so the whole of step 5 is inert
     /// on retail data — which is the structural reason the original's placement has no random input
     /// affecting position at all.</summary>
     public Vector2 TranslateUvMin { get; init; }
@@ -96,7 +95,7 @@ public sealed class ClutterKindProps
     public Vector2 TranslateUvMax { get; init; }
 
     /// <summary><c>rotation_range</c> lower bounds — the per-axis minimum rotation, <b>in radians</b>
-    /// (the file authors DEGREES; <c>FUN_004deab0</c> multiplies by π/180 as it stores). Same
+    /// (the file authors DEGREES; the engine multiplies by π/180 as it stores). Same
     /// min-pair/max-pair grouping as the two above. <b>Authored by no chapter</b> — and note that
     /// the engine still draws three <c>rand()</c> values per stamp for it, so it is inert in effect
     /// rather than skipped.</summary>
@@ -115,10 +114,10 @@ public sealed class ClutterKindProps
     ///
     /// <para>⚠ <b>The bounds are named for the field they gate, not for the key they come from,
     /// because the mapping INVERTS</b>: cosine decreases with angle, so the *minimum* slope angle
-    /// becomes the *maximum* admissible normal Y. <c>FUN_004dd6e0</c> step 3 rejects the triangle
+    /// becomes the *maximum* admissible normal Y. The stamper's step 3 rejects the triangle
     /// when its clamped normal Y falls outside <c>[NormalYMin, NormalYMax]</c>. <b>No chapter
-    /// authors either key</b>, so the cull is off everywhere — and `ClutterBuilder`'s old
-    /// <c>MinSlopeCos = 0.25f</c>, deleted in B13, was an invention with no counterpart here.</para></summary>
+    /// authors either key</b>, so the cull is off everywhere — which is why `ClutterBuilder` has
+    /// no hard-coded slope threshold of its own.</para></summary>
     public float NormalYMax { get; init; } = 1f;
 
     /// <summary><c>align_normal</c> — a BARE FLAG (no value list): present means align the placed
@@ -126,7 +125,7 @@ public sealed class ClutterKindProps
     /// chapter</b>; default false.</summary>
     public bool AlignNormal { get; init; }
 
-    /// <summary><c>substitute</c> — the weighted model roll of <c>FUN_004dd6e0</c> step 9, in file
+    /// <summary><c>substitute</c> — the weighted model roll of the stamper's step 9, in file
     /// order (the order matters: the engine walks the list subtracting <see
     /// cref="ClutterSubstitute.Fraction"/> from one uniform draw). Empty when the key is absent, in
     /// which case the stamp is always the decoration's own model. Authored by 41 kinds.</summary>
@@ -192,8 +191,9 @@ public sealed class ClutterKindProps
 /// </summary>
 public sealed class ClutterTemplateSpec
 {
-    // FUN_004deab0's degrees→radians factor, written as the binary writes it. Godot's Mathf.DegToRad
-    // uses the same constant to more digits; this keeps the parse bit-comparable with the original.
+    // The engine's degrees→radians factor, written to exactly the digits the binary carries.
+    // Godot's Mathf.DegToRad uses the same constant to more digits; this keeps the parse
+    // bit-comparable with the original.
     private const float DegreesToRadians = 0.01745329251994f;
 
     private readonly Dictionary<string, ClutterKindProps> _byNode;
@@ -240,7 +240,7 @@ public sealed class ClutterTemplateSpec
 
     /// <summary>Parses an already-loaded reader list: one block per decoration model, each an
     /// alternating key/value list. A block with no <c>node</c> key is skipped — that is the engine's
-    /// own gate (<c>FUN_004de7d0</c> allocates nothing without it), not leniency.</summary>
+    /// own gate (it allocates nothing without one), not leniency.</summary>
     public static ClutterTemplateSpec Parse(List<object?> root)
     {
         var kinds = new List<ClutterKindProps>();
@@ -280,10 +280,10 @@ public sealed class ClutterTemplateSpec
 
     /// <summary>A one-line census of what this chapter authors: block and distinct-kind counts,
     /// then how many blocks author each key the parser accepts — every key listed, so an unauthored
-    /// one reads as a measured zero rather than as an omission (verification.md LOG-2).
+    /// one reads as a measured zero rather than as an omission.
     ///
     /// <para>Counted by key PRESENCE over every block, which is what makes the numbers comparable
-    /// with the plan's own per-chapter survey: most of C5's 78 blocks author
+    /// with a per-chapter survey of the files themselves: most of C5's 78 blocks author
     /// <c>scale_range</c> as 1.0/1.0, and counting parsed values instead would score those as
     /// unauthored.</para></summary>
     public string Census()
@@ -330,7 +330,7 @@ public sealed class ClutterTemplateSpec
         return new ClutterKindProps
         {
             Node = node,
-            // A flat pair, deliberately not run through NestedPairs beside it (trap (b) of C21).
+            // ⚠ A flat pair, deliberately not run through NestedPairs like the keys beside it.
             ScaleRange = scale != null ? Pair(scale) : Vector2.One,
             TranslateUvMin = translate.First,
             TranslateUvMax = translate.Second,
@@ -339,7 +339,7 @@ public sealed class ClutterTemplateSpec
             RotationMin = Triple(rotation, 0) * DegreesToRadians,
             RotationMax = Triple(rotation, 1) * DegreesToRadians,
             // The inversion, in one place: max_slope's cosine is the LOWER bound on the normal's Y
-            // and min_slope's the UPPER (FUN_004deab0 stores them at kind+0x58 / +0x5c).
+            // and min_slope's the UPPER, as the engine stores them.
             NormalYMin = dict.TryFloat("max_slope", out var maxSlope)
                 ? Mathf.Cos(maxSlope * DegreesToRadians) : -1f,
             NormalYMax = dict.TryFloat("min_slope", out var minSlope)
@@ -383,7 +383,7 @@ public sealed class ClutterTemplateSpec
         {
             return Array.Empty<ClutterSubstitute>();
         }
-        // FUN_004deab0 divides by the sum and stores the share; a zero total would make the engine
+        // The engine divides by the sum and stores the share; a zero total would make it
         // skip the list entirely, so it is reported as zero shares rather than as a division.
         var subs = new List<ClutterSubstitute>(raw.Count);
         foreach (var (weight, model) in raw)
@@ -395,7 +395,7 @@ public sealed class ClutterTemplateSpec
 
     private static ClutterDamageResponse? ParseDamage(ZrdrDict? block)
     {
-        // The `health` key is what arms the block — FUN_004deab0 reads the model and anim only when
+        // The `health` key is what arms the block — the engine reads the model and anim only when
         // it was found, and stores the "is destructible" bit from that same test.
         if (block == null || !block.TryFloat("health", out var health))
         {

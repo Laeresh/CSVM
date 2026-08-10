@@ -278,8 +278,8 @@ public sealed class MissionSetup
     // high-precision radians triple (-0.000010 -3.144009 -0.000000, i.e. pi on Y) — and the two
     // families are cleanly separable by magnitude, so the decision is made once per script rather
     // than guessed globally (docs/formats/interp.md's "Object3DRotate's angle unit is ambiguous").
-    // Cross-ref BL-034: the same question over OBJECT_3D_ROTATE data must not be resolved
-    // differently there.
+    // ⚠ The same ambiguity exists over OBJECT_3D_ROTATE data elsewhere; it must be resolved the
+    // same way there.
     private Vector3 RotateAsRadians(Vector3 euler)
     {
         _rotateDegrees ??= _ops.Any(o => o.Verb == "Object3DRotate"

@@ -41,20 +41,11 @@ public sealed class PaintScheme
     public int TailDecal = -1;
     public int WingDecal = -1;
 
-    // player_fortune ships a pattern name and NO colours (they come from wherever the engine
-    // keeps its pattern defaults — still not located), so the catalog entry has to supply
-    // them. Red from the paint UI's own swatch and a saved .pln at 0x68; black + white for
-    // slots 2/3 read off the reference top view in
-    // OriginalScreenshots/CustomPlane Paint1 Bloodhawk.png, where the Bloodhawk's outer wing
-    // panels are BLACK and the swoosh dividing them WHITE. That is the same shape every
-    // shipped scheme has (identity colour, dark trim, light trim) — `hughes` is
-    // yellow/black/white — and rendering all three combinations against the reference singled
-    // this one out: white/white loses the black wing entirely, black in slot 3 puts it on the
-    // swoosh instead of the panel.
-    // Corroborated independently once "Shade" was explained (it is the colour's BRIGHTNESS,
-    // so the stored RGB is Colour x Shade): that same screenshot's dropdowns read red/red,
-    // white/BLACK, white/white — slot 2 being white at black brightness IS black. Two
-    // unrelated routes, same triple. See paint.md.
+    // player_fortune ships a pattern name and NO colours (they live engine-side, wherever the
+    // pattern defaults are kept — still not located), so the catalog entry has to supply them.
+    // Red / black / white, the same shape every shipped scheme has (identity colour, dark
+    // trim, light trim). Inferred from the original's artwork, not read out of a file — see
+    // docs/formats/paint.md.
     private static readonly Color FortuneRed = FromBytes(223, 0, 41);
     private static readonly Color FortuneTrim = FromBytes(0, 0, 0);
     private static readonly Color FortuneFlash = FromBytes(255, 255, 255);
