@@ -39,7 +39,8 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/WingLights.cs` — the one source for wingtip nav lights: flare node names, glow texture, warm-amber colour, blink period.
 - `src/Mech3/WorldBuilder.cs` — builds a chapter world: placed + partition subtrees, cloud deck, camera-anchored skydome, edge extender.
 - `src/Mech3/MapEdgeExtender.cs` — rolling window of repeated border-cell blocks + clutter continuing the world past the map edge, per camera; block depth is per chapter (`DefaultBlockCells`).
-- `src/Mech3/Clutter.cs` — stamps interp.json clutter templates onto matching-textured terrain: sprites, plus C2/C5's solid 3D city blocks.
+- `src/Mech3/Clutter.cs` — stamps interp.json clutter templates onto matching-textured terrain at the polygon's own UV lattice, gated per polygon by `no_clutter`: sprites, plus C2/C5's solid 3D city blocks.
+- `src/Mech3/ClutterTemplates.cs` — the `templates.zrd` reader: each clutter decoration model's authored substitution table, scale range and fade distances, plus the five keys no chapter authors.
 - `src/Mech3/FogVolumes.cs` — the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
 - `src/Mech3/Zrdr.cs` — zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's list.
 - `src/Mech3/AiNets.cs` — the chapter AI patrol nets: `ne0NNNNN` waypoint graphs + the `neindex` id→name table, raw tags/trailer included.
@@ -307,6 +308,15 @@ where the two are the same authored value, which `GameZ.VertexColorsRestateMater
 and `EmitPolygon` answers by writing white corners, so the value lands once. `PLAN-overcast-match`
 `B18`: every skydome's below-horizon skirt is an untextured polygon authored in its zone's own
 `FOG_COLOR`, and squaring that is what made the horizon join a hard band in seven of eight chapters.
+`DebugClutterFlag` (`--debug-clutterflag`, set by the caller before building) is the one thing that
+overrides that colour: `EmitTriangle` writes the polygon's decoded `no_clutter` bit as the vertex
+colour (red flagged / green clear) and the fullbright shader's last ALBEDO write becomes
+`ClutterFlagTintLine` instead of `TintLine`, since C5's night art would swallow a tint. Per polygon
+because the flag varies WITHIN a mesh, which no per-instance tint can express; the tint mix survives
+in that line so `WorldSession` can still force the clutter populations blue per instance. Off — every
+other builder, and the shaded aircraft path always — emits `TintLine` itself, so the default shader
+text is byte-for-byte unchanged. `FlaggedPolygonCount`/`ClearPolygonCount` count per BUILT MODEL, not
+per placement.
 ⚠ Instance-uniform block is an ORDERING CONTRACT — every shader on one instance declares the same
   block (csky_instance_uniforms); a shader with NO instance uniform must not take the preamble
   (16-vec4 per-instance buffer cost). The model's `lighting`/`fog` flags therefore select shader
@@ -372,8 +382,8 @@ so the layering is a topological order of the original's own draw order and cann
 layering. `WorldBuilder.RankConflicts` runs it before the build; 11–45 ms per chapter.
 ⚠ The step (`SceneBuilder.ConflictRankBias`, 1.2e-5) is boxed in from both sides and is the only
   value that fits: it must exceed `SurfaceRankCap × SurfaceRankBias` = 1e-5 or within-mesh rank
-  out-bids it, and `ConflictRankCap × it + 1e-5` must stay under `SubfaceBias` so subface +
-  tie-break keeps inside one priority level. Measured in Godot: 5e-6 leaves a coplanar pair
+  out-bids it, and `ConflictRankCap × it + 1e-5` must stay under `NoClutterLayerBias` so a
+  no_clutter overlay + tie-break keeps inside one priority level. Measured in Godot: 5e-6 leaves a coplanar pair
   swapping winner on 1,774 px under a 1 mm camera move, 1.2e-5 leaves 0 (analysis/bl-053-dense-rank).
 ⚠ The origin-parked pile is EXCLUDED from the graph — it is hidden at bootstrap
   (`WorldBuilder.HideUnplacedEntities`) so nothing in it is on screen to fight, and it alone
@@ -640,11 +650,85 @@ clutter (grown from `ClutterBuilder.ExportedKinds`) continuing the world past th
 
 ## src/Mech3/Clutter.cs
 Stamps the boot-script clutter templates across placed polygons carrying the template's ground
-texture, on a fixed world-space X/Z grid of the template period; sprites → one fullbright Y-billboard
+texture, **at the polygon's own texture-UV lattice** — one stamp per integer UV repeat across each
+triangle; sprites → one fullbright Y-billboard
 MultiMesh per kind, solids → `SceneBuilder.SharedMesh`; the split is `SceneBuilder.ClassifyBillboard`.
 The sprite shader takes the decoration model's own `lighting`/`fog` flags as variants (every tree and
 bush card in the install is `lighting: false`, so clutter does not dim with the mission SUNLIGHT),
 plus a UV-clamp variant from `SceneBuilder.UvsWithinUnitSquare` over the kind's own card UVs.
+`TemplateNames` reads the chapter's `AddClutterTemplates` list **unfiltered** — which district
+dresses a given patch is a per-polygon decision, see the `no_clutter` note below;
+`OverrideTemplateNames` is `--clutter-templates=`'s replacement for it — the caller's names,
+filtered to the ones this gamez carries a root for — so one district can be loaded alone and A/B'd
+against the original. It prints one line naming what was requested, what resolved and what this
+chapter does not carry, since an absent name is retail-data-normal and would otherwise read as an
+empty district.
+⚠ **`no_clutter` (raw polygon bit `0x800`, carried as `GameZPolygon.NoClutter`) gates every stamp**,
+  reproducing `FUN_004de2c0`. It does **not** mean "leave this ground bare": where two COPLANAR
+  layers are painted over each other it selects which one decorates, and flagged means skip the
+  overlay so the layer beneath stamps instead. All of C5's city is such a pair — flagged ground is
+  dressed by `cblock4/5/6` (low-rise, ≤52 m), clear ground by `cblock1/2/3/7` (towers, ≤108 m),
+  measured at odds ratio 1,037× and confirmed at the controls
+  (`analysis/bl-305-clutter-uv/FINDINGS-layer-pairing.md`). Reading it as "no clutter here" and
+  dressing flagged ground with towers is `BL-305`, and the map-wide `BuriedClutterDistricts`
+  exemption that stood in for this gate is **gone** — do not reintroduce either half alone: the
+  gate without the districts empties C5's downtown, the districts without the gate double the city
+  (`BL-250`).
+⚠ **`substitute` and `scale_range` ARE applied (C22); `far_fade_range` is not.** The per-kind data
+  comes from `Mech3/ClutterTemplates.cs` (docs/formats/templates.md), handed in at construction —
+  a null spec rebuilds the pre-C22 monoculture at authored size, which is what a caller with no
+  reader gets. `translate_uv_range`, `rotation_range` and `align_normal` are authored by **no
+  chapter in the install** — inert, not missing, and that is precisely why the original's placement
+  has no random input affecting position or orientation, and why C1's tree positions come out
+  *exactly* the original's (confirmed at the controls). `far_fade_range` (143 blocks) stays
+  unapplied by Decision 3 of the plan; C23 owns it.
+⚠ **The substitute/scale stream is seeded with a FIXED constant, deliberately not `Rng.Master`.**
+  The original seeds its whole world build with one (`srand(0x8EA91836)` … `srand(time(0))`,
+  `FUN_004df1d0`), so a chapter's forest is the same forest on every launch; deriving from the
+  session master instead rerolled C1's species mix on every unpinned run (measured: firtree1 15,154
+  vs 15,148), which no golden could survive. Do not "fix" this to respect `--seed=`. Matching the
+  original's *sequence* is a different thing and is not attempted — different PRNG, different
+  traversal, different draw count. `clutter-determinism` (in-engine suite) is the guard.
+⚠ **A substituted stamp keeps the SOURCE kind's properties.** `FUN_004dd6e0` holds the decoration
+  entry's own kind block throughout and the roll rewrites only the model pointer, so a `firtree2`
+  that came from a `firtree1` roll is scaled by *firtree1's* 0.9–1.1, while a `firtree2` the
+  template placed itself is scaled by its own 0.9–1.5. The plan's C22 predicted the opposite; the
+  decompile says otherwise.
+⚠ **A substitution target that no template scatters is MINTED as a kind** (`ResolveModel`), because
+  the engine resolves targets through its global model table — 40 such in C5, plus C3's
+  `palmtree2/3` and C4's `firtree2`. Minted kinds live in `_allKinds`, never in `Template.Kinds`:
+  they have no `CellPlacements` and must never be walked as a source. An entry naming the kind's
+  OWN model stays in that kind rather than being re-resolved, so mesh duplicates of one model do
+  not shuffle instances between themselves for no visible reason.
+⚠ **Cull margins scale with the placements.** `KindExport.CullMargin` is the card width times the
+  largest scale any instance actually drew (C2's spruce reaches 3.0×); `MapEdgeExtender` uses the
+  same value, or a scaled card would pop at the screen edge.
+⚠ **There is NO world-space grid and no global clutter origin** — the original has neither
+  (`analysis/bl-305-clutter-uv/FINDINGS-A2.md`). Placement is `ClutterBuilder.UvTriangle`, i.e.
+  `FUN_004dd6e0` steps 4/6/7: floor the triangle's UV bbox to an integer lattice, test containment
+  **in UV space**, recover XYZ (Y included — a triangle is planar, so the affine map and a
+  barycentric height are the same number) through the triangle's own affine UV→world map. **That
+  map is valid only inside its own triangle**; C1's `terpat02` uses eight different UV frames with
+  handedness split almost evenly, so reusing a neighbour's is a wrong answer, not an optimisation.
+  Restoring a `gx * extent` grid re-loses C1 ~4× of its trees (A1: `terpat02` repeats every ~260 m
+  against a 512 m quad).
+⚠ **Skip on BOTH areas, not one.** A zero-area WORLD triangle can carry a healthy UV area — fan and
+  strip artifacts of n-gons with repeated or collinear corners, 1,773 of them in C1 — and its
+  affine map is finite but meaningless. Both counts, plus the null-UV-array and over-large-lattice
+  refusals and an in-source-triangle assertion over every placement, go out on one
+  `clutter uv lattice:` log line per build. All four skip counters bar the world-area one are 0 on
+  retail data, and `outside_source` is 0 in every chapter — treat any nonzero as stop-the-line.
+⚠ `PlaceOnMesh` reads `materials[0]` only, where the original iterates every texture layer
+  (`FUN_004de190`). A3 measured that no polygon in the install names a registered template on layer
+  1+, so this is unreachable on retail data — but it IS a deviation, and no A/B can detect it.
+⚠ **A decoration's position is stored as the ground quad's own interpolated TEXTURE UV**, in
+  `[0,1)`, the way `FUN_004dd230` stores it (`GroundInfo` → `GroundQuad.TryUv`, fmod-wrapped) —
+  never as metres from a corner, and never divided by a scalar period. `max(extentX, extentZ)`
+  relabels the UV exactly on 28 of the 32 shipped template quads and is wrong on the other four:
+  `filmblock1` 64×128, `cliff1_sandtrans` 128×64, `parklot1` 16×32 and `parklot2` 32×16, the last
+  two UV-MIRRORED, worst error 0.74 UV (`analysis/bl-305-clutter-uv/FINDINGS-A2.md`). The quad
+  map is held and evaluated in DOUBLE and rounded once: in float the square templates' round trip
+  loses an ulp and moves a golden.
 ⚠ Sprites are NOT collidable — no tree-destruction anim exists in the install (`spruce_destroy*`
   is the Spruce Goose; docs/formats/clutter.md). Solid decorations ARE collidable.
 ⚠ Collision shapes are SHARED, never expanded per placement (that costs seconds of BVH build): one
@@ -657,21 +741,72 @@ plus a UV-clamp variant from `SceneBuilder.UvsWithinUnitSquare` over the kind's 
   (`Effects/FogVolumeClutter`, driven by a different reader) resolves `cloudsprite*` by the same
   parentless-Object3d rule. A null return is retail-data-normal — C2B registers three templates
   its gamez lacks, and C1B/C2/C3's `fogvol.zrd` names a `cloudsprite` no chapter carries.
-⚠ **`PlaceOnMesh` matches a template to a polygon by TEXTURE NAME ONLY — it never reads
-  `GameZPolygon.Subface`.** In C5, `cblock1/2/3`'s subface polygons sit directly on top of
-  `cblock4/5/6`'s base polygons (88.5–100% footprint overlap, `analysis/item9-depth-bias/CBLOCK-LOD.md`),
-  so stamping both doubled the clutter buildings — settled 2026-08-07 by excluding the always-buried
-  `cblock4/5/6` via `ClutterBuilder.BuriedClutterDistricts` (CAP-22 established the original draws
-  the `cblock1/2/3` city; closing commit: `git log --grep=BL-250`). The subface depth-bias fix
-  (`SceneBuilder.SubfaceBias`) only resolves which ground TEXTURE wins the z-fight; it has no effect
-  on this file, which walks the same gamez tree independently.
+⚠ **No slope cull.** `MinSlopeCos = 0.25f` was deleted in B13 as an inert invention: the original's
+  cull is authored per kind (`min_slope`/`max_slope` → cosines, `FUN_004deab0`) and defaults to
+  ±1.0, no chapter authors either key, **and the constant never fired** — `xzArea/trueArea` is
+  `|Ny|`, and the steepest clutter-eligible triangle in the install is C1's at 0.4598 against a
+  0.25 (~75.5°) threshold. Zero culled in every chapter; the same census at 0.50 culls 3, so the
+  zero is a measurement. Do not reintroduce it; a cull belongs in `templates.zrd`'s `min_slope`.
+  The `xzArea < 0.5f` sliver rule beside it is a different, still-live rule (14 triangles in C5).
+⚠ **The quarter-metre `seen` dedup is KEPT deliberately, and it is remake-only — NOT fully retired
+  by the `UvTriangle.Contains` fix.** B13 measured it doing two jobs. (1) Standing in for the
+  `no_clutter` gate — retired, `PlaceOnMesh` reads the flag itself now. (2) Catching real
+  duplicates from `Contains` being INCLUSIVE on the edge, where a lattice candidate landing exactly
+  on two triangles' shared diagonal was claimed by both (pre-fix: C1 38, C4 139, C5 1,096) — the
+  original's step-6 test is STRICT and claims such a point in neither triangle, so this was fixed
+  in `UvTriangle.Contains` (2026-08-10), not in this set. **Measured after the fix, per chapter
+  (`DedupRejected` in the build log), and it is NOT a clean win:** C1B/C2/C3/C5 drop to exactly
+  zero, matching the shared-diagonal hypothesis — but C1 barely moves (38→36) and C4 is unchanged
+  (139→139), so most of THEIR duplicates come from a different, still-undiagnosed source. `seen`
+  stays for that reason, not as a defensive leftover.
+⚠ **STALE — pre-B15. `PlaceOnMesh` now DOES read `GameZPolygon.NoClutter`** (renamed 2026-08-10
+  from `.Subface`) and skips a flagged polygon (`FUN_004de2c0`'s gate), and
+  `ClutterBuilder.BuriedClutterDistricts` no longer exists — B13/B15 landed the gate coupled with
+  retiring that exemption, which is what actually resolves `BL-305`'s CAP-22 pose (the visible
+  ground there is the flagged overlay; the exempted base layer had to come back for the gate to
+  leave anything behind). See `docs/plans/PLAN-clutter-uv-placement.md` items B13/B14/B15 for the
+  full account; this paragraph needs rewriting to match, not just re-pointing — flagged rather than
+  silently corrected here.
+  The `SceneBuilder.NoClutterLayerBias` depth-bias fix (renamed 2026-08-10 from `SubfaceBias`) is a
+  separate mechanism: it only resolves which ground TEXTURE wins the z-fight, and has no effect on
+  this file, which walks the same gamez tree independently.
+
+## src/Mech3/ClutterTemplates.cs
+The chapter's `templates.zrd` (`ClutterTemplateSpec.Load`/`.Parse`): one `ClutterKindProps` per
+clutter DECORATION MODEL — `substitute`'s weighted roll, `scale_range`, `far_fade_range`, and the
+jitter/rotation/slope/damage keys the retail data leaves at their defaults. Schema, offsets and the
+per-chapter census: docs/formats/templates.md. Static over a reader list, so all eight chapters are
+pinned off-engine (`CSVM.Tests/ClutterTemplatesTests.cs`). Consumed by `ClutterBuilder` for
+`substitute` + `scale_range` (C22); `far_fade_range` is read and unapplied (C23).
+⚠ **Keyed by decoration model, NOT by template.** C3 registers only `cliff1_sandtrans` and its file
+  describes palms, because that template's quad scatters `palmtree1.flt`. The template registry is
+  `interp.json`'s `AddClutterTemplates` (`ClutterBuilder.TemplateNames`); this file never meets it.
+⚠ **Five keys plus all three damage blocks are authored by NO chapter** — `translate_uv_range`,
+  `rotation_range`, `align_normal`, `min_slope`, `max_slope`. Read anyway, and asserted per chapter,
+  because that zero is the evidence the original's placement has no positional randomness at all.
+  Do not "simplify" the reader by dropping them: the measurement disappears with them.
+⚠ **The nested pairs group by BOUND, not by band**: `[[nearMin, farMin], [nearMax, farMax]]`, which
+  `FUN_004dd6e0`'s lerps (`+0x2c`→`+0x30` for near) settle. The two readings agree on the chained
+  values (`[[200,300],[300,350]]`) and differ on C1's `firtree2` — so a wrong grouping survives
+  casual inspection. `scale_range` is a FLAT pair and must not go through the same helper.
+⚠ **The slope keys invert**: `min_slope`'s cosine is the UPPER bound on the normal's Y. Fields are
+  named `NormalYMin`/`NormalYMax` after what they bound, never after the key.
+⚠ `substitute` weights are RELATIVE and the engine normalises them (9.0/1.0 = 90/10). Properties of
+  a substituted stamp resolve from the TARGET model — which is why 43 of C5's 78 blocks describe
+  models that are never placed directly. Two C5 targets have no block: that means defaults, not
+  "skip".
+⚠ C5 ships one duplicate name (`cb05det01.flt`). `Find` returns the FIRST block, matching the
+  engine's linear scan — and the first is the one carrying the substitute.
 
 ## src/Mech3/Zrdr.cs
-Zrdr extraction reader (zip or unpacked dir): `LoadFile`, content-sniffing `LoadMatchingFiles`,
-name-predicate `LoadFilesNamed` (for families with nothing to sniff, e.g. the `ne0*` nets),
-and `ZrdrDict`, the key/[values…] view over a reader's alternating list.
+Zrdr extraction reader (zip or unpacked dir): `LoadFile`, `LoadFileOrEmpty`, content-sniffing
+`LoadMatchingFiles`, name-predicate `LoadFilesNamed` (for families with nothing to sniff, e.g. the
+`ne0*` nets), and `ZrdrDict`, the key/[values…] view over a reader's alternating list.
 ⚠ `LoadFile` accepts both entry namings — v0.6.1 writes `X.json`, the fork writes `X.zrd.json` —
   in both the zip and directory branches.
+⚠ An EMPTY reader is the four bytes `null`, which `LoadFile` rejects as "not a reader list" —
+  indistinguishable there from corruption. `LoadFileOrEmpty` returns an empty list instead, still
+  throwing when the entry is absent. C1C/C2B's `templates.zrd` are the shipped case.
 ⚠ `ZrdrDict` COLLAPSES duplicate keys; anim definitions repeat keys meaningfully, so AnimDefs
   walks the raw lists instead.
 ⚠ It also DROPS an unkeyed value in the root list. `FogVolumeSpec.Parse` walks by hand for that
@@ -3239,7 +3374,13 @@ Builds one chapter world and binds its `AnimProgram` — the world+anim half of 
 archive and `EffectsParent`) is read once, here, and never reassigned after `Build` returns — a
 caller supplies its own to observe emitter lifetime with no GPU (`CSVM.Testing.CountingEmitterFactory`
 is the one caller, through `TestContext.EmitterFactory`); a post-build swap would miss the bootstrap,
-where most `PUFFER_STATE`s fire.
+where most `PUFFER_STATE`s fire. Two debug options ride the clutter step: `Options.NoClutter`
+(`--no-clutter`) skips the clutter build outright, leaving `Clutter` null exactly as a chapter with
+no templates does, and `Options.DebugClutterFlag` (`--debug-clutterflag`) hands the flag view to
+`WorldBuilder`, then stamps every clutter MultiMesh with a full-strength `SceneBuilder.ClutterColor`
+tint and prints the flagged/clear polygon census. The blue is stamped per instance rather than per
+material because both clutter paths share the placed world's materials — colouring those would
+repaint the ground with them.
 ⚠ Disposal contract, **one flag per archive because the two lifetimes differ**: calls
   `Runtime.Emitters.RetireFactory()` unless `Options.TexturesOutliveBuild` **or the caller supplied
   its own `Options.EmitterFactory`** (a caller-supplied one holds no archive reference, so it is

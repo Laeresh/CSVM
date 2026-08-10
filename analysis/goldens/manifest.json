@@ -15,14 +15,14 @@
     {
       "name": "c1-waterfall",
       "frame": 120,
-      "hash": "d3688dbe1865130ab00a090c2afb7a31",
+      "hash": "873fe6e045e805f71573bafff1a30640",
       "exercises": "UV scroll on the falls sheet + the mist puffer; frame-sensitive 1.28 % at 120 vs 121.",
       "args": ["--freecam", "--chapter=C1", "--pos=-7720,60,-3380", "--lookat=-7868,40,-3449", "--det", "--mute"]
     },
     {
       "name": "c1b-night-sea",
       "frame": 120,
-      "hash": "1ed1cfe33e917d704c65c500067d95fb",
+      "hash": "322b8c77c64a0724f169e0c266d163f8",
       "exercises": "night lighting, skydome, islands, the ambient cloud-puff field; static at 120 vs 121, 0.13 % at 120 vs 360 (puff drift).",
       "args": ["--freecam", "--chapter=C1B", "--pos=-6748,300,-8885", "--direction=0.242,-0.25,0.970", "--det", "--mute"]
     },
@@ -36,7 +36,7 @@
     {
       "name": "c2-city",
       "frame": 120,
-      "hash": "52f714594d02fcacf1f3a1421ea2cc4d",
+      "hash": "0af0605b56a172f51b06ef096822759f",
       "exercises": "C2's solid 3D city blocks, billboard clutter, backlot geometry, daylight fog; near-static, 51 px at 120 vs 121.",
       "args": ["--freecam", "--chapter=C2", "--pos=-5722,186,-3457", "--direction=-0.438,-0.15,-0.899", "--det", "--mute"]
     },
@@ -50,21 +50,21 @@
     {
       "name": "c3-island",
       "frame": 120,
-      "hash": "28abb90fce59e2ded66848cf492947a8",
+      "hash": "321e9a5ea523395b0aa400eb3c41e9c5",
       "exercises": "coastline, surf edge and open water at close range; static — 9 px at 120 vs 360, so it proves geometry and shading, not the clock.",
       "args": ["--freecam", "--chapter=C3", "--pos=-4518,400,-2015", "--direction=-0.35,-0.35,-1", "--det", "--mute"]
     },
     {
       "name": "c4-snow",
       "frame": 120,
-      "hash": "753e26511f79e6d1e3231cb5b72831fb",
+      "hash": "e270860b89d077597c00caffb7abe2b2",
       "exercises": "snow precipitation plus the chapter carrying 6 UV-scroll models; frame-sensitive 3.74 %, the largest of the freecam set.",
       "args": ["--freecam", "--chapter=C4", "--pos=-3330,958,-9181", "--direction=-0.682,-0.2,0.731", "--det", "--mute"]
     },
     {
       "name": "c5-city-night",
       "frame": 120,
-      "hash": "6c139dc5f4449eb36ec26370f142a415",
+      "hash": "59ce2730871aa632ceb402e99caa19fb",
       "exercises": "the night city: LIGHT_STATE point lights packed into csky_light_data, lit window skins, moon and stars; static, 11 px at 120 vs 360.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute"]
     },
@@ -85,7 +85,7 @@
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "7e20094d6a0253b6eaa3fbaebd0d5308",
+      "hash": "7be47c666ac71748788cb66e8d7a0b8c",
       "exercises": "a flying plane, the only shaded surface in a flight: chase camera on the sim clock, prop and control-surface animators, the mission's sun bearing, gauges, compass tape, weapon readout, a live exhaust-trail puffer, and the chapter-authored SpeedCue wisps 60 m ahead; frame-sensitive 34.52 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
@@ -99,7 +99,7 @@
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "932a7d8fa3bda89deeabf695b6204af9",
+      "hash": "1c6843422a489e013c37f246a0331451",
       "exercises": "the per-player crash rig building and playing player_crash_dirt (--crash=5 is its only headless trigger), the airframe under the mission's sun, the moving distance-puffer AT_NODE offset path, and the set's largest puffer surface: fireball, wreck fire, smoke, debris, ground scorch.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     }

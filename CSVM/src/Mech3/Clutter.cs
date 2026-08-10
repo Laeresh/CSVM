@@ -14,18 +14,36 @@ namespace CSVM.Mech3;
 /// TEMPLATES ("AddClutterTemplates terpat02"), which the same script loads into the
 /// gamez as parentless, unreferenced subtrees (why WorldBuilder's placed-node walk
 /// never sees them). A template is a flat ground quad (its texture names the terrain
-/// texture it decorates: terpat02.tif = the forest texture; its size the tiling period —
-/// 512 m for C1's terpat02, and the "-128" template variants elsewhere are 128 m ones)
-/// with decoration sprites scattered on it: single vertical quads, each a tree/bush
-/// billboard with a local position on the patch.
+/// texture it decorates: terpat02.tif = the forest texture) with decoration sprites
+/// scattered on it: single vertical quads, each a tree/bush billboard with a local
+/// position on the patch. That position is stored as the quad's own interpolated
+/// TEXTURE UV, in [0,1) — the quad is the domain the position is normalised against,
+/// never a metric spacing.
 ///
 /// <para>The engine then dresses every world polygon textured with a template's ground
-/// texture. The exact original alignment is undecoded (the world's UV tiling is wildly
-/// non-uniform on hillsides — 256..1280 m per repeat — so UV-space placement would
-/// stretch the clutter with it); the remake tiles each template on a fixed world-space
-/// X/Z grid of its authored period instead, which keeps the authored density everywhere,
-/// is seam-consistent across adjacent polygons (one global grid), and plants every
-/// decoration at the polygon's interpolated surface height.</para>
+/// texture, and it does so <b>in texture space</b>: per triangle, take the UV bounding
+/// box, floor it to an integer lattice, and stamp each decoration once per integer
+/// repeat of the texture across that triangle, testing containment in UV and recovering
+/// the world position through the triangle's own affine UV→world map
+/// (<c>FUN_004dd6e0</c> steps 4, 6 and 7 — see <see cref="UvTriangle"/>). The clutter
+/// therefore rotates, mirrors and stretches with the painted ground texture, which is
+/// the intent: a building sits in its painted block wherever that block lands.</para>
+///
+/// <para><b>Which polygons get dressed is a per-polygon decision, and the flag that makes it is
+/// <c>no_clutter</c></b> (raw bit <c>0x800</c>, carried as <see cref="GameZPolygon.NoClutter"/>,
+/// gated in <c>FUN_004de2c0</c>). It does not mean "leave this ground bare" — where two
+/// COPLANAR layers are painted over each other, as C5's whole city is, it selects which layer
+/// decorates: flagged skips the overlay so the layer beneath stamps instead. C5's flagged
+/// ground is dressed by <c>cblock4/5/6</c> (low-rise, ≤52 m) and its clear ground by
+/// <c>cblock1/2/3/7</c> (towers, ≤108 m). Getting this backwards is BL-305: dressing flagged
+/// ground with towers buries the pavement between the blocks.</para>
+///
+/// <para><b>There is no world-space grid, and there is no global clutter origin to build
+/// one on</b> — A2 looked and the original has neither
+/// (<c>analysis/bl-305-clutter-uv/FINDINGS-A2.md</c>). The fixed X/Z grid this file used
+/// until B12 was a fiction with no counterpart, and it cost C1 roughly 4× its trees:
+/// C1's terrain is painted with <c>terpat02</c> at half the template quad's scale, so
+/// one repeat spans ~260 m where the grid stepped 512 (A1).</para>
 ///
 /// <para><b>Two kinds of decoration, two rendering paths.</b>
 /// The split is <see cref="SceneBuilder.ClassifyBillboard"/>, i.e. the gamez model's own
@@ -43,6 +61,44 @@ namespace CSVM.Mech3;
 /// so they are fullbright, fogged and depth-biased identically and, being real meshes, cannot
 /// billboard. They keep their authored local basis, and they ARE collidable.</item>
 /// </list>
+///
+/// <para><b>The per-kind data, and what is left of it.</b> The original's stamper
+/// (<c>FUN_004dd6e0</c>) has eleven steps. This reproduces 4, 6 and 7 (the lattice), and — since
+/// C22 — 9 and 10's scale, driven by <see cref="ClutterTemplateSpec"/>
+/// (<c>templates.zrd</c>, docs/formats/templates.md). What remains absent is one step and a set of
+/// keys no chapter authors, each a known deviation with a measured shape rather than an
+/// oversight:</para>
+/// <list type="bullet">
+/// <item><b>Step 5, the per-axis UV jitter</b> (<c>translate_uv_range</c>), and step 10's
+/// <c>rotation_range</c> / <c>align_normal</c> — <b>INERT, not missing.</b> No chapter in the
+/// install authors any of the three, so they cannot move a decoration on retail data. This is why
+/// the original's placement has no random input affecting position or orientation at all, and why
+/// the user reports C1's tree positions as <i>exactly</i> the original's rather than merely as
+/// dense. Implementing them would change nothing; treat them as decoded and closed.</item>
+/// <item><b>Step 11, <c>far_fade_range</c></b> — the per-kind distance fade, the one authored
+/// behaviour still unapplied. C5 authors [[200,300],[300,350]]; here the cylindrical world fog is
+/// the only distance cue. Deferred by Decision 3 of the plan (it REMOVES distant clutter and would
+/// confound every density A/B); C23 owns the decision.</item>
+/// </list>
+/// <para><b>Steps 9 and 10 landed in C22 and brought a seed with them.</b> A stamp rolls its model
+/// against the kind's <c>substitute</c> table and takes a uniform scale from its
+/// <c>scale_range</c> — see <see cref="Roll"/> and <see cref="PlaceOnTriangle"/>. ⚠ Both draws come
+/// off a stream seeded with a FIXED constant, never the session master: the original seeds its
+/// whole world build with one (<c>srand(0x8EA91836)</c> … <c>srand(time(0))</c>,
+/// <c>FUN_004df1d0</c>), so a chapter's forest is the same forest on every launch. ⚠ And the
+/// properties of a substituted stamp come from the SOURCE kind, not the target — the stamper holds
+/// the decoration entry's own kind block throughout and the roll rewrites only the model pointer.
+/// </para>
+/// <para>One remake-only rule survives here, and is NOT fully retired. The quarter-metre
+/// <c>seen</c> dedup in <see cref="PlaceOnTriangle"/> was doing two jobs (B13): standing in for
+/// the missing <c>no_clutter</c> gate (retired — <c>PlaceOnMesh</c> reads the flag itself now),
+/// and covering for <see cref="UvTriangle.Contains"/> being inclusive on a shared edge where the
+/// original's step-6 test is strict (fixed 2026-08-10). The edge fix is NOT a clean win, measured
+/// per chapter (<c>DedupRejected</c> in the per-build log line): C1B/C2/C3/C5 drop to exactly
+/// zero, matching the shared-diagonal hypothesis — but <b>C1 (38→36) and C4 (139→139) barely
+/// move</b>, so most of their dedup hits come from a different, still-undiagnosed source. Do NOT
+/// remove <c>seen</c> on the strength of this fix; C1/C4 still need it for a reason nobody has
+/// found yet.</para>
 ///
 /// <para><b>Sprites are NOT collidable; 3D decorations are</b> (both user decisions).
 /// Do NOT give sprites a crossed-quad trimesh on the claim that "trees are
@@ -73,9 +129,17 @@ public sealed class ClutterBuilder
         + "    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);\n"
         + "    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);\n";
 
-    // Steeper than ~75° (XZ footprint under a quarter of the true area) grows no trees —
-    // an upright billboard on a near-cliff face floats off it.
-    private const float MinSlopeCos = 0.25f;
+    // The seed of the substitute/scale stream. The original's own world-build constant
+    // (FUN_004df1d0's srand(0x8EA91836)), borrowed as a label rather than as a claim: our PRNG,
+    // traversal and draw count all differ, so the sequences cannot and do not agree. What IS
+    // reproduced is the property that matters — the placement is a function of the data alone,
+    // identical on every launch, pinned session or not. See the note at the draw site.
+    private const int PlacementSeed = unchecked((int)0x8EA91836);
+
+    // The largest integer UV lattice one triangle may span before it is refused and counted.
+    // 64 × 64 repeats of the ground texture across a single triangle; A1's widest measured span
+    // is a handful, so this is a tripwire for a corrupt UV array, not a tuning knob.
+    private const long MaxLatticeCells = 4096;
 
     // Collision for the 3D decorations only (user decision): a city block is real
     // geometry with real sides, unlike the sprite cards, which deliberately have no colliders.
@@ -105,29 +169,41 @@ public sealed class ClutterBuilder
     // node knows — i.e. nothing. Do not mix the two APIs on these bodies.
     private const float CollisionRegion = 1024f;
 
-    // C5's boot script registers cblock1..cblock7, but cblock4/5/6 dress a ground layer the
-    // player can never see: cblock1/2/3's subface polygons cover their base polygons at
-    // 97.0/99.9/100.0% and win the ground z-fight unconditionally — no day/night/zone/LOD
-    // state ever picks the low-res pass (analysis/item9-depth-bias/CBLOCK-LOD.md §1c/§2, the
-    // r≈0.70 same-scene-two-fidelities pairing). Stamping their buildings anyway doubled the
-    // city's clutter and interpenetrated the visible district's buildings. CAP-22 settled the
-    // original's side: its downtown lattice carries the 59–108 m towers that exist only in
-    // cblock1/2/3's templates, and shows no interpenetration anywhere — so the original draws
-    // the cblock1/2/3 city and not this set (closing commit of BL-250, and
-    // playtest/CAP-22/README.md while it lives). A curated, measured list like
-    // TextureArchive.KnownAbsentFromGameData, not a runtime overlap computation: the base
-    // polygon carries no flag of its own (Subface marks the OVERLAY), so a live rule would
-    // need CBLOCK-LOD.md's coplanar-overlap computation at every load.
-    // ⚠ cblock7 stays: same artwork family, but a VISIBLE subface district (78 C5 nodes) — and
-    // it places cb12a/13a/14a, so those names must NOT read as proof this exemption failed.
-    private static readonly HashSet<string> BuriedClutterDistricts = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "cblock4", "cblock5", "cblock6", // C5 only
-    };
+    // ⚠ THERE IS NO LONGER A `BuriedClutterDistricts` EXEMPTION, and reintroducing one would be
+    // a regression. It suppressed cblock4/5/6 MAP-WIDE on the reasoning that cblock1/2/3's
+    // subface polygons cover their base polygons at 97.0/99.9/100.0% and win the ground z-fight
+    // unconditionally (analysis/item9-depth-bias/CBLOCK-LOD.md §1c/§2), corroborated by CAP-22's
+    // downtown lattice carrying the 59–108 m towers that exist only in cblock1/2/3 (BL-250).
+    // Both observations are still true and neither was ever the whole map: what the exemption
+    // was actually standing in for is the `no_clutter` gate in PlaceOnMesh, which this file did
+    // not have. With that gate in place the exemption is not merely unnecessary, it is wrong —
+    // it deletes the low-rise district the original stamps wherever the overlay is flagged,
+    // which is BL-305's reported symptom (pavement swallowed by oversized blocks).
+    //
+    // The two are ONE COUPLED CHANGE. The gate alone empties C5's downtown; the restore alone
+    // doubles the city and interpenetrates it, which is what BL-250 measured. Neither may be
+    // reverted without the other.
 
     private readonly GameZ _gamez;
     private readonly TextureArchive _textures;
     private readonly SceneBuilder? _scene;
+
+    // The chapter's templates.zrd, or null when it has none (C1C/C2B ship an empty one, which is
+    // a spec with no blocks — a different thing, and the reader keeps them apart). A decoration
+    // with no block here is retail-data-normal and means every default: no substitution, scale 1.
+    private readonly ClutterTemplateSpec? _props;
+
+    // Every kind this Build will export, INCLUDING the substitution-only kinds minted in
+    // ResolveProperties — models no template scatters directly, which exist solely as the target
+    // of somebody else's roll (43 of C5's 78 blocks). They carry no CellPlacements, so they are
+    // deliberately absent from Template.Kinds: the lattice walk must never treat one as a source.
+    private readonly List<Kind> _allKinds = new();
+
+    // Model name → the one kind a substitution to that name resolves to. The original resolves a
+    // target through the engine's global model table (FUN_004d0280), i.e. to ONE model however
+    // many templates mention it; first-seen wins here, which is the same statement over a
+    // deterministic walk.
+    private readonly Dictionary<string, Kind> _kindsByModel = new(StringComparer.OrdinalIgnoreCase);
 
     // One sprite shader per (lit, fogged) pair the decoration models actually ask for.
     private readonly Dictionary<int, Shader> _shaders = new();
@@ -135,14 +211,38 @@ public sealed class ClutterBuilder
     // Shared collision shapes of the last collidable Build, keyed by decoration MeshIndex.
     private Dictionary<int, ConcavePolygonShape3D>? _solidShapes;
 
+    // What the UV-lattice walk skipped and what it asserted, for the one summary line Build
+    // logs (LOG-5 / DIAG-15). Replaced per Build, never accumulated across two.
+    private LatticeStats _stats = new();
+
     /// <param name="scene">The world's SceneBuilder, for the 3D-decoration path (its meshes
     /// and its fullbright world materials). Null disables that path and leaves only the
     /// sprite one.</param>
-    public ClutterBuilder(GameZ gamez, TextureArchive textures, SceneBuilder? scene = null)
+    /// <param name="props">The chapter's <c>templates.zrd</c> (docs/formats/templates.md), which
+    /// drives <c>substitute</c> and <c>scale_range</c>. Null builds every decoration at its
+    /// authored model and size — the pre-C22 behaviour, kept so a caller with no reader (the map
+    /// lab, a test) still gets clutter rather than an exception.</param>
+    public ClutterBuilder(GameZ gamez, TextureArchive textures, SceneBuilder? scene = null,
+        ClutterTemplateSpec? props = null)
     {
         _gamez = gamez;
         _textures = textures;
         _scene = scene;
+        _props = props;
+    }
+
+    /// <summary>Why <see cref="UvTriangle.Build"/> refused a triangle. The two faults are
+    /// independent: a fan or strip artifact of an n-gon with repeated or collinear corners has
+    /// zero WORLD area and a perfectly ordinary UV area, so a UV-area guard alone lets it through
+    /// and its meaningless affine map — both axes collapsed onto a line — plants a row of trees
+    /// along that line. A2 counted 1,655 of them on C1's <c>terpat02</c> alone.</summary>
+    public enum UvTriangleFault
+    {
+        /// <summary>The triangle has world-space area but no invertible UV map.</summary>
+        ZeroUvArea,
+
+        /// <summary>The triangle's three world vertices are collinear or coincident.</summary>
+        ZeroWorldArea,
     }
 
     /// <summary>Total decoration sprites (billboard cards) placed by the last Build.</summary>
@@ -169,10 +269,13 @@ public sealed class ClutterBuilder
     /// <summary>Shape attachments made by the last Build — one per collidable 3D decoration.</summary>
     public int SolidCollisionInstances { get; private set; }
 
+
     /// <summary>Reads the chapter's boot script out of the interp extraction
     /// (extracted/interp.json) and returns its registered clutter template names
-    /// (the "AddClutterTemplates X" lines of support\&lt;chapter&gt;\adjust.gw),
-    /// minus <see cref="BuriedClutterDistricts"/>.
+    /// (the "AddClutterTemplates X" lines of support\&lt;chapter&gt;\adjust.gw).
+    /// <b>Every registered name, unfiltered</b> — which districts actually decorate a given
+    /// patch of ground is decided per polygon by the <c>no_clutter</c> gate in PlaceOnMesh,
+    /// not by a curated exclusion list here (see the remarks above the fields).
     /// Empty when the file or script is missing.</summary>
     public static List<string> TemplateNames(string interpPath, string chapter)
     {
@@ -191,11 +294,38 @@ public sealed class ClutterBuilder
                 var parts = (line.GetString() ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length >= 2 && parts[0] == "AddClutterTemplates")
                     for (int i = 1; i < parts.Length; i++)
-                        if (!BuriedClutterDistricts.Contains(parts[i]))
-                            names.Add(parts[i]);
+                        names.Add(parts[i]);
             }
         }
         return names;
+    }
+
+    /// <summary><c>--clutter-templates=</c>'s replacement for <see cref="TemplateNames"/>: the
+    /// caller's names, filtered to the ones this gamez actually carries a template root for.
+    ///
+    /// <para>Built to reach <c>cblock4/5/6</c> when a map-wide exemption made them unloadable;
+    /// that exemption is gone, so the flag is now simply "build this template set instead of the
+    /// chapter's", which is what makes it a district-by-district A/B instrument. It does
+    /// <b>not</b> bypass the <c>no_clutter</c> gate — that is per polygon, not per template, and
+    /// bypassing it would defeat the comparison.</para>
+    ///
+    /// <para>Prints one line naming what was asked for, what resolved and what did not. A name no
+    /// chapter carries is retail-data-normal (see <see cref="FindTemplateRoot(GameZ, string)"/>)
+    /// and is not an error — but it must be visible, or an absent district reads as an empty
+    /// one.</para></summary>
+    public static List<string> OverrideTemplateNames(GameZ gamez, IReadOnlyList<string> requested)
+    {
+        var resolved = new List<string>();
+        var absent = new List<string>();
+        foreach (var name in requested)
+            (FindTemplateRoot(gamez, name) != null ? resolved : absent).Add(name);
+        GD.Print($"clutter: --clutter-templates={string.Join(",", requested)} replaces the chapter's"
+                 + " registered set (the per-polygon no_clutter gate still applies) — in gamez: "
+                 + (resolved.Count > 0 ? string.Join(",", resolved) : "(none)")
+                 + "; not carried by this chapter: "
+                 + (absent.Count > 0 ? string.Join(",", absent) : "(none)")
+                 + " (retail-data-normal, not an error)");
+        return resolved;
     }
 
     /// <summary>Template roots are parentless (they hang off nothing; the boot script
@@ -221,6 +351,118 @@ public sealed class ClutterBuilder
         return null;
     }
 
+    /// <summary>The first node at or under <paramref name="node"/> carrying a non-empty mesh —
+    /// a template root's ground quad, or a decoration node's card/building. Public and static
+    /// because it is the other half of resolving a template (with
+    /// <see cref="FindTemplateRoot(GameZ, string)"/>), and the UV a decoration is stored at is
+    /// only checkable against A2's worked example if both halves can be reached.</summary>
+    public static GameZNode? FirstWithMesh(GameZ gamez, GameZNode node, bool includeSelf = true)
+    {
+        if (includeSelf && node.MeshIndex >= 0 && node.MeshIndex < gamez.Meshes.Count
+            && gamez.Meshes[node.MeshIndex].Polygons.Count > 0)
+            return node;
+        foreach (var c in node.Children)
+            if (c >= 0 && c < gamez.Nodes.Count && FirstWithMesh(gamez, gamez.Nodes[c]) is { } found)
+                return found;
+        return null;
+    }
+
+    /// <summary>The template's ground quad as <c>FUN_004dd230</c> uses it: the polygon's plane,
+    /// and the affine map from a local position on that plane to the polygon's own interpolated
+    /// texture UV.
+    ///
+    /// <para>⚠ <b>NOT a scalar tiling period.</b> <c>max(extentX, extentZ)</c>, what this
+    /// returned before, is an exact relabelling of the quad UV on 28 of the install's 32
+    /// template quads and WRONG on the other four: <c>filmblock1</c> (64×128),
+    /// <c>cliff1_sandtrans</c> (128×64) and <c>parklot1</c> (16×32) / <c>parklot2</c> (32×16),
+    /// the last two additionally UV-MIRRORED — u = 0 at max X. Worst error 0.74 UV. Two axes
+    /// with signs are the least that can describe them
+    /// (<c>analysis/bl-305-clutter-uv/FINDINGS-A2.md</c>). Nothing here keys off corner order
+    /// either: the winding differs between templates while the parameterisation does not.</para>
+    /// </summary>
+    public static GroundQuad? GroundInfo(GameZ gamez, GameZNode ground)
+    {
+        var mesh = gamez.Meshes[ground.MeshIndex];
+        var tex = FirstTexture(gamez, mesh);
+        if (tex == null || mesh.Vertices.Count == 0)
+            return null;
+        Vector3 min = mesh.Vertices[0], max = mesh.Vertices[0];
+        foreach (var v in mesh.Vertices)
+        {
+            min = min.Min(v);
+            max = max.Max(v);
+        }
+        float extX = max.X - min.X, extZ = max.Z - min.Z;
+        if (Mathf.Max(extX, extZ) < 1f)
+            return null;
+
+        foreach (var poly in mesh.Polygons)
+        {
+            if (poly.UvCoords == null || poly.UvCoords.Count < 3 || poly.VertexIndices.Count < 3)
+                continue;
+            Vector3 a = mesh.Vertices[poly.VertexIndices[0]],
+                    b = mesh.Vertices[poly.VertexIndices[1]],
+                    c = mesh.Vertices[poly.VertexIndices[2]];
+
+            // Everything from here down is DOUBLE, and TryUv rounds once at the very end. Not
+            // fussiness: on the 28 square, axis-aligned templates a single rounding makes
+            // `uv × extent` reproduce, BIT FOR BIT, the metres the old scalar rule stored (the
+            // extents are powers of two, so that scaling is exact and rounding commutes with
+            // it). Done in float, the intermediate `1 + (x − 256)/512` rounds separately and
+            // moves a tree by up to one ulp — ~0.03 mm, invisible in an instance count and
+            // enough to flip pixels in a golden of a forest. Measured: it moved `c1-flight`.
+            double[] e1 = { b.X - (double)a.X, b.Y - (double)a.Y, b.Z - (double)a.Z };
+            double[] e2 = { c.X - (double)a.X, c.Y - (double)a.Y, c.Z - (double)a.Z };
+            double[] n = Cross(e1, e2);
+            double d = (n[0] * n[0]) + (n[1] * n[1]) + (n[2] * n[2]);
+            if (d < 1e-9)
+                continue;   // a degenerate first triangle carries no plane and no UV map
+            // The reciprocal basis of {e1, e2, n}: f1·e1 = f2·e2 = 1 and every other pairing 0,
+            // since e1·(e2×n) = |n|². A gradient built from it is perpendicular to n, which is
+            // exactly "project along the quad normal, then read the interpolated UV" — and it
+            // carries the sign, so a mirrored quad comes out mirrored.
+            double[] f1 = Cross(e2, n), f2 = Cross(n, e1);
+            for (int k = 0; k < 3; k++)
+            {
+                f1[k] /= d;
+                f2[k] /= d;
+            }
+            double len = Math.Sqrt(d);
+            Vector2 uvA = poly.UvCoords[0], uvB = poly.UvCoords[1], uvC = poly.UvCoords[2];
+            double du1 = uvB.X - (double)uvA.X, du2 = uvC.X - (double)uvA.X;
+            double dv1 = uvB.Y - (double)uvA.Y, dv2 = uvC.Y - (double)uvA.Y;
+            var quad = new GroundQuad
+            {
+                Texture = tex,
+                ExtentX = extX,
+                ExtentZ = extZ,
+                NormalX = n[0] / len,
+                NormalY = n[1] / len,
+                NormalZ = n[2] / len,
+                AnchorX = a.X,
+                AnchorY = a.Y,
+                AnchorZ = a.Z,
+                AnchorU = uvA.X,
+                AnchorV = uvA.Y,
+                GradUX = (f1[0] * du1) + (f2[0] * du2),
+                GradUY = (f1[1] * du1) + (f2[1] * du2),
+                GradUZ = (f1[2] * du1) + (f2[2] * du2),
+                GradVX = (f1[0] * dv1) + (f2[0] * dv2),
+                GradVY = (f1[1] * dv1) + (f2[1] * dv2),
+                GradVZ = (f1[2] * dv1) + (f2[2] * dv2),
+            };
+            // The polygon's own fan, for the containment half of the projection test.
+            for (int i = 1; i + 1 < poly.VertexIndices.Count; i++)
+            {
+                quad.Faces.Add(mesh.Vertices[poly.VertexIndices[0]]);
+                quad.Faces.Add(mesh.Vertices[poly.VertexIndices[i]]);
+                quad.Faces.Add(mesh.Vertices[poly.VertexIndices[i + 1]]);
+            }
+            return quad;
+        }
+        return null;
+    }
+
     // Any billboard kind counts as a placeable card: C1's trees/bushes are CylindricalY, and
     // C5's cblock templates additionally carry SphericalY `poleflare` glows beside their
     // CylindricalY `lightpole` posts. Both are one-quad cards and both are placed, which is
@@ -240,7 +482,10 @@ public sealed class ClutterBuilder
         if (templates.Count == 0)
             return null;
 
+        ResolveProperties(templates);
+        _stats = new LatticeStats();
         PlaceOnWorld(templates, worldName);
+        _stats.Report();
 
         var root = new Node3D { Name = "clutter" };
         var parts = new List<string>();
@@ -250,38 +495,40 @@ public sealed class ClutterBuilder
         InstanceCount = SolidCount = SolidCollisionTriangles = 0;
         SolidCollisionShapes = SolidCollisionInstances = 0;
         _solidShapes = null;
-        foreach (var template in templates.Values)
-            foreach (var kind in template.Kinds)
+        // _allKinds, not templates.Values — a substitution-only kind has instances to export and
+        // no template to be found under.
+        foreach (var kind in _allKinds)
+        {
+            if (kind.Instances.Count == 0)
+                continue;
+            var mmi = kind.Solid ? BuildSolidInstance(kind) : BuildKindInstance(kind);
+            if (mmi == null)
+                continue;
+            root.AddChild(mmi);
+            exported.Add(new KindExport
             {
-                if (kind.Instances.Count == 0)
-                    continue;
-                var mmi = kind.Solid ? BuildSolidInstance(kind) : BuildKindInstance(kind);
-                if (mmi == null)
-                    continue;
-                root.AddChild(mmi);
-                exported.Add(new KindExport
-                {
-                    Texture = kind.Label,
-                    Mesh = (ArrayMesh)mmi.Multimesh!.Mesh,
-                    Material = mmi.MaterialOverride,
-                    Solid = kind.Solid,
-                    NodeBias = NodeBiasOf(kind),
-                    Width = kind.Width,
-                    Height = kind.Height,
-                    Placements = kind.Instances,
-                });
-                exportedMesh.Add(kind.MeshIndex);
-                if (kind.Solid)
-                {
-                    SolidCount += kind.Instances.Count;
-                    solidKinds.Add(kind);
-                }
-                else
-                {
-                    InstanceCount += kind.Instances.Count;
-                }
-                parts.Add($"{kind.Label} ×{kind.Instances.Count}");
+                Texture = kind.Label,
+                Mesh = (ArrayMesh)mmi.Multimesh!.Mesh,
+                Material = mmi.MaterialOverride,
+                Solid = kind.Solid,
+                NodeBias = NodeBiasOf(kind),
+                Width = kind.Width,
+                Height = kind.Height,
+                CullMargin = CullMarginOf(kind),
+                Placements = kind.Instances,
+            });
+            exportedMesh.Add(kind.MeshIndex);
+            if (kind.Solid)
+            {
+                SolidCount += kind.Instances.Count;
+                solidKinds.Add(kind);
             }
+            else
+            {
+                InstanceCount += kind.Instances.Count;
+            }
+            parts.Add($"{kind.Label} ×{kind.Instances.Count}");
+        }
         if (collision && solidKinds.Count > 0)
         {
             BuildSolidCollision(root, solidKinds);
@@ -321,53 +568,189 @@ public sealed class ClutterBuilder
         return max.Z - min.Z <= 0.1f * Mathf.Max(max.X - min.X, max.Y - min.Y);
     }
 
+    // FUN_004dd6e0 steps 4, 6 and 7: the UV bounding box floored to an integer lattice, a
+    // containment test in UV SPACE, and the world position recovered through the triangle's own
+    // affine UV→world map. Steps 5 (translate_uv_range jitter), 9 (substitute), 10
+    // (rotation/scale) and 11 (far_fade_range) are deliberately absent — Wave C owns them.
+    //
+    // <para>There is no world grid here and there must never be one again: A2 established that the
+    // original has no global "the clutter grid starts here" origin at all. Each decoration is
+    // stamped once per integer repeat of the ground texture across this triangle, so the clutter
+    // rotates, mirrors and stretches WITH the painted texture — which is why C1's forest, painted
+    // at half the template quad's scale, comes out ~4× denser than the grid made it.</para>
     private static void PlaceOnTriangle(Template template, Vector3 a, Vector3 b, Vector3 c,
-        HashSet<(int, int, int)> seen)
+        Vector2 uva, Vector2 uvb, Vector2 uvc, HashSet<(int, int, int)> seen, LatticeStats stats,
+        Random rng)
     {
-        // Signed XZ area ×2 (for the containment test and barycentric heights below).
+        // Two independent degeneracy tests, because neither implies the other (A2): a fan or
+        // strip artifact of an n-gon with repeated or collinear corners has ZERO world area and a
+        // perfectly healthy UV area — 1,655 of them on C1's terpat02 alone — and its affine map
+        // is finite but meaningless, both axes collapsed onto a line.
+        var tri = UvTriangle.Build(a, b, c, uva, uvb, uvc, out var fault);
+        if (tri == null)
+        {
+            if (fault == UvTriangleFault.ZeroWorldArea)
+                stats.ZeroWorldArea++;
+            else
+                stats.ZeroUvArea++;
+            return;
+        }
+
+        // A sub-half-square-metre XZ footprint carries no lattice cell worth walking. This is the
+        // one remaining remake-only geometry rule here and it does fire — 14 triangles in C5,
+        // 0 in every other chapter (B13's census).
+        //
+        // What used to sit beside it was `xzArea < trueArea * MinSlopeCos` with MinSlopeCos =
+        // 0.25 — "steeper than ~75° grows no trees". B13 deleted it as an invention that never
+        // fired. The original's slope cull is authored per kind (min_slope/max_slope → cosines
+        // at kind+0x58/+0x5c, FUN_004deab0) and DEFAULTS TO ±1.0, i.e. no cull; no shipped
+        // templates.zrd authors either key. And the constant was inert anyway: xzArea/trueArea
+        // is exactly |Ny| of the plane normal, and the steepest clutter-eligible triangle in the
+        // whole install is C1's at 0.4598 (~62.6°), against a 0.25 (~75.5°) threshold. Zero
+        // triangles culled in every chapter; same instrument at 0.50 culls 3 in C1, so the zero
+        // is a measurement. Do not reintroduce it — a cull belongs in templates.zrd's min_slope,
+        // which no chapter authors.
         float area2 = (b.X - a.X) * (c.Z - a.Z) - (c.X - a.X) * (b.Z - a.Z);
         float xzArea = 0.5f * Mathf.Abs(area2);
         if (xzArea < 0.5f)
             return;
-        float trueArea = 0.5f * (b - a).Cross(c - a).Length();
-        if (xzArea < trueArea * MinSlopeCos)
-            return;
 
-        float p = template.Period;
-        float minX = Mathf.Min(a.X, Mathf.Min(b.X, c.X)), maxX = Mathf.Max(a.X, Mathf.Max(b.X, c.X));
-        float minZ = Mathf.Min(a.Z, Mathf.Min(b.Z, c.Z)), maxZ = Mathf.Max(a.Z, Mathf.Max(b.Z, c.Z));
-        int gx0 = Mathf.FloorToInt(minX / p), gx1 = Mathf.FloorToInt(maxX / p);
-        int gz0 = Mathf.FloorToInt(minZ / p), gz1 = Mathf.FloorToInt(maxZ / p);
-        for (int gx = gx0; gx <= gx1; gx++)
-            for (int gz = gz0; gz <= gz1; gz++)
+        // LOG-5: a hugely stretched triangle would make the lattice loop enormous. The original
+        // has the same exposure and no bound; A1 measured every shipped span as modest (terpat02
+        // runs 134–561 m per U over triangles a few hundred metres wide), so this should never
+        // fire. If it does, the count in the summary line is a finding, not a nuisance.
+        if (tri.CellCount > MaxLatticeCells)
+        {
+            stats.OverLargeLattice++;
+            if (tri.CellCount > stats.WorstLatticeCells)
+                stats.WorstLatticeCells = tri.CellCount;
+            return;
+        }
+
+        for (int uInt = tri.MinU; uInt <= tri.MaxU; uInt++)
+            for (int vInt = tri.MinV; vInt <= tri.MaxV; vInt++)
                 for (int k = 0; k < template.Kinds.Count; k++)
                 {
                     var kind = template.Kinds[k];
                     foreach (var cell in kind.CellPlacements)
                     {
-                        float px = gx * p + cell.Origin.X, pz = gz * p + cell.Origin.Z;
-                        if (px < minX || px > maxX || pz < minZ || pz > maxZ)
+                        // cell.Origin.X / .Z are the decoration's quad UV, in [0, 1); the lattice
+                        // cell shifts it to this repeat of the texture (FUN_004dd6e0 step 5,
+                        // minus the jitter). Kept in double for the same reason B11's quad map
+                        // is: one extra rounding here is ~0.03 mm and enough to move a golden.
+                        double cu = uInt + (double)cell.Origin.X;
+                        double cv = vInt + (double)cell.Origin.Z;
+                        if (!tri.Contains(cu, cv))
                             continue;
-                        // Barycentric in XZ: inside iff all weights share the area sign.
-                        float w0 = (b.X - px) * (c.Z - pz) - (c.X - px) * (b.Z - pz);
-                        float w1 = (c.X - px) * (a.Z - pz) - (a.X - px) * (c.Z - pz);
-                        float w2 = (a.X - px) * (b.Z - pz) - (b.X - px) * (a.Z - pz);
-                        if (area2 > 0 ? (w0 < 0 || w1 < 0 || w2 < 0) : (w0 > 0 || w1 > 0 || w2 > 0))
-                            continue;
-                        var key = (kind.MeshIndex, Mathf.RoundToInt(px * 4f), Mathf.RoundToInt(pz * 4f));
+                        var p = tri.World(cu, cv);
+                        // The affine map gives Y as well as XZ, which is what step 7 does. On a
+                        // planar triangle — and a triangle cannot be anything else — that is the
+                        // same number the old barycentric height produced (A2 checked the two
+                        // routes agree to 1.8e-12 m), so nothing is lost by dropping the second
+                        // computation.
+                        // ⚠ The quarter-metre dedup, kept DELIBERATELY, and it is remake-only —
+                        // the original has no such set. B13 measured what it was doing and found
+                        // two jobs. The first stood in for the missing `no_clutter` gate;
+                        // PlaceOnMesh reads the flag itself now, so that job is retired. The
+                        // second was that UvTriangle.Contains was INCLUSIVE on the edge, so a
+                        // lattice candidate landing exactly on the diagonal two triangles share
+                        // was claimed by both — pre-fix, this set caught C1 38, C4 139, C5 1,096.
+                        // Fixed 2026-08-10 (Contains is now STRICT, matching the original's
+                        // step 6). ⚠ NOT a clean win, measured per chapter after the fix
+                        // (DedupRejected below): C1B/C2/C3/C5 drop to exactly 0, matching the
+                        // shared-diagonal hypothesis cleanly — but C1 only drops to 36 and C4 not
+                        // at all (still 139), so most of THEIR duplicates come from something
+                        // else entirely, undiagnosed. This set stays; it is still earning its keep
+                        // in C1/C4 for a reason the edge fix does not explain.
+                        var key = (kind.MeshIndex, Mathf.RoundToInt(p.X * 4f), Mathf.RoundToInt(p.Z * 4f));
                         if (!seen.Add(key))
+                        {
+                            stats.DedupRejected++;
                             continue;
-                        float y = (w0 * a.Y + w1 * b.Y + w2 * c.Y) / area2;
+                        }
+                        // The mechanical check for "trees in the sea": a subtly wrong UV-space
+                        // containment test still yields a finite world point, and only the source
+                        // triangle can say it is the wrong one.
+                        stats.Placed++;
+                        if (!InSourceTriangle(a, b, c, p))
+                            stats.OutsideSource++;
+
+                        // FUN_004dd6e0 step 9, and it happens HERE — after the point is known to
+                        // be kept. The stamp may become a different model, so which kind collects
+                        // the instance is decided per stamp, not per kind. ⚠ The two draws are
+                        // taken in the engine's order (substitute, then scale) and only for a
+                        // point that survives the dedup, which is what keeps the sequence a pure
+                        // function of the seed and the authored data.
+                        var target = Roll(kind, rng, stats);
+                        if (target == null)
+                            continue;   // an unresolvable target: it keeps its share, places nothing
+
+                        // Step 10's uniform scale. ⚠ It is drawn from the SOURCE kind's
+                        // scale_range even when the model was substituted — the stamper holds the
+                        // decoration entry's own kind block in `fVar4` throughout and the roll
+                        // only rewrites the model pointer. A C1 firtree2 that came from a
+                        // firtree1 roll is therefore scaled 0.9-1.1 (firtree1's range), while a
+                        // firtree2 the template placed itself is scaled 0.9-1.5.
+                        float scale = kind.ScaleRange.X
+                            + ((kind.ScaleRange.Y - kind.ScaleRange.X) * (float)rng.NextDouble());
+                        if (scale > target.MaxScale)
+                            target.MaxScale = scale;
+
                         // A sprite is planted flat ON the surface: its basis and its authored
                         // Y are both dropped, because its shader re-faces it from the instance
                         // origin and its own mesh already carries the card's vertical extent.
                         // A 3D decoration keeps both — the authored basis is its orientation,
-                        // and the Y is its height above the block's ground plane.
-                        kind.Instances.Add(kind.Solid
-                            ? new Transform3D(cell.Basis, new Vector3(px, y + cell.Origin.Y, pz))
-                            : new Transform3D(Basis.Identity, new Vector3(px, y, pz)));
+                        // and the Y is its height above the block's ground plane. The scale is a
+                        // UNIFORM factor compounded onto whichever basis that leaves, never a
+                        // replacement of it (trap (c)) — and on retail data no solid decoration
+                        // authors a scale_range at all, so this only ever moves a card.
+                        var basis = (target.Solid ? cell.Basis : Basis.Identity)
+                            .Scaled(new Vector3(scale, scale, scale));
+                        target.Instances.Add(target.Solid
+                            ? new Transform3D(basis, new Vector3(p.X, p.Y + cell.Origin.Y, p.Z))
+                            : new Transform3D(basis, p));
                     }
                 }
+    }
+
+    // FUN_004dd6e0 step 9: one uniform draw walked against the kind's cumulative substitution
+    // table. The engine subtracts each normalised share from the draw and takes the first entry
+    // that sends it negative, which is the same selection as this comparison against the running
+    // sum. A kind with no table always stamps itself, and a draw that falls past the last entry
+    // (float error only, since the shares sum to 1) does too — the engine's own fallback, which
+    // leaves the model pointer at the entry's own node.
+    private static Kind? Roll(Kind kind, Random rng, LatticeStats stats)
+    {
+        if (kind.Substitutes.Count == 0)
+            return kind;
+        float r = (float)rng.NextDouble();
+        foreach (var (cumulative, target) in kind.Substitutes)
+        {
+            if (r >= cumulative)
+                continue;
+            if (target == null)
+                stats.SubstituteNothing++;
+            else if (!ReferenceEquals(target, kind))
+                stats.Substituted++;
+            return target;
+        }
+        return kind;
+    }
+
+    // Barycentric containment in the triangle's OWN plane (not an XZ projection — a hillside
+    // triangle's XZ shadow is a different shape). The slack absorbs the single rounding the
+    // affine map ends on; a genuinely misplaced instance misses by metres, not by 1e-3.
+    private static bool InSourceTriangle(Vector3 a, Vector3 b, Vector3 c, Vector3 p)
+    {
+        const float slack = 1e-3f;
+        var n = (b - a).Cross(c - a);
+        float d = n.LengthSquared();
+        if (d < 1e-9f)
+            return false;
+        float w0 = (b - a).Cross(p - a).Dot(n) / d;
+        float w1 = (c - b).Cross(p - b).Dot(n) / d;
+        float w2 = (a - c).Cross(p - c).Dot(n) / d;
+        return w0 >= -slack && w1 >= -slack && w2 >= -slack;
     }
 
     // The mesh's triangles in its own local space, using the same fan/strip rule as
@@ -396,6 +779,35 @@ public sealed class ClutterBuilder
                 }
             }
         }
+    }
+
+    private static double[] Cross(double[] p, double[] q) => new[]
+    {
+        (p[1] * q[2]) - (p[2] * q[1]),
+        (p[2] * q[0]) - (p[0] * q[2]),
+        (p[0] * q[1]) - (p[1] * q[0]),
+    };
+
+    private static string? FirstTexture(GameZ gamez, GameZMesh mesh)
+    {
+        foreach (var poly in mesh.Polygons)
+            if (poly.MaterialIndex >= 0 && poly.MaterialIndex < gamez.Materials.Count
+                && gamez.Materials[poly.MaterialIndex].TextureName is { } tex)
+                return tex;
+        return null;
+    }
+
+    // Distinct example names for a one-line skip summary (many decorations share a name —
+    // repeats would read like a bug); the caller keeps the true count beside it.
+    private static string SkipExamples(List<string> names)
+    {
+        var distinct = new List<string>();
+        foreach (var n in names)
+            if (!distinct.Contains(n))
+                distinct.Add(n);
+        return distinct.Count > 5
+            ? string.Join(", ", distinct.GetRange(0, 5)) + ", …"
+            : string.Join(", ", distinct);
     }
 
     private static string Sanitize(string name)
@@ -472,13 +884,13 @@ public sealed class ClutterBuilder
             Log.Info("world", $"clutter template not in gamez template={name}");
             return null;
         }
-        var ground = FirstWithMesh(root);
-        if (ground == null || GroundInfo(ground) is not { } info)
+        var ground = FirstWithMesh(_gamez, root);
+        if (ground == null || GroundInfo(_gamez, ground) is not { } quad)
         {
             Log.Info("world", $"clutter template has no textured ground quad template={name}");
             return null;
         }
-        var template = new Template { GroundTexture = info.Texture, Period = info.Period };
+        var template = new Template { GroundTexture = quad.Texture };
 
         var kinds = new Dictionary<int, Kind>();
         // What is left in the skip list is only genuinely unusable:
@@ -486,100 +898,190 @@ public sealed class ClutterBuilder
         // resolves no texture. 3D building/car decorations take the solid path below.
         // Collected and logged as ONE summary line.
         List<string>? skipped = null;
+        // FUN_004dd230's `template %s clutter %s does not project to polygon.` path. No
+        // decoration in the retail install takes it (A2's notproj column is 0 everywhere), so
+        // this is fidelity, not a case any chapter exercises — but a miss must skip and say so,
+        // never quietly land at UV (0,0).
+        List<string>? offQuad = null;
         foreach (var childIndex in ground.Children)
         {
             var deco = _gamez.Nodes[childIndex];
-            var decoMesh = FirstWithMesh(deco, includeSelf: false);
+            var decoMesh = FirstWithMesh(_gamez, deco, includeSelf: false);
             if (decoMesh == null)
             {
                 (skipped ??= new List<string>()).Add(deco.Name);
                 continue;
             }
-            // The local transform is relative to the ground quad; its XZ becomes the offset
-            // within the tiling cell. The basis and Y are kept whole for the solid path.
+            // FUN_004dd230: project the decoration's local position onto the ground quad along
+            // the quad normal, read the polygon's INTERPOLATED TEXTURE UV there, and wrap it
+            // into [0, 1). The stored XZ is that UV pair, not metres — which is what makes the
+            // four non-square/UV-mirrored templates come out right, since no scalar period can
+            // describe them. The basis and Y stay exactly as authored: the solid path needs the
+            // basis for orientation and the Y for height above the block's ground plane.
             var local = deco.Local ?? Transform3D.Identity;
+            if (!quad.TryUv(local.Origin, out var uv))
+            {
+                (offQuad ??= new List<string>()).Add(deco.Name);
+                continue;
+            }
             var cell = new Transform3D(local.Basis, new Vector3(
-                local.Origin.X - info.Min.X, local.Origin.Y, local.Origin.Z - info.Min.Y));
+                GroundQuad.Wrap(uv.X), local.Origin.Y, GroundQuad.Wrap(uv.Y)));
 
             if (!kinds.TryGetValue(decoMesh.MeshIndex, out var kind))
             {
-                if (SpriteInfo(decoMesh.MeshIndex) is { } s)
-                {
-                    kind = new Kind
-                    {
-                        MeshIndex = decoMesh.MeshIndex,
-                        NodeIndex = decoMesh.Index,
-                        Label = s.Texture,
-                        Width = s.Width,
-                        Height = s.Height,
-                        Lit = _gamez.Meshes[decoMesh.MeshIndex].Lighting,
-                        Fogged = _gamez.Meshes[decoMesh.MeshIndex].Fog,
-                    };
-                }
-                else if (IsSolidDecoration(decoMesh.MeshIndex))
-                {
-                    kind = new Kind
-                    {
-                        MeshIndex = decoMesh.MeshIndex,
-                        NodeIndex = decoMesh.Index,
-                        Label = deco.Name,
-                        Solid = true,
-                    };
-                }
-                else
+                if (MakeKind(decoMesh, deco.Name) is not { } made)
                 {
                     (skipped ??= new List<string>()).Add(deco.Name);
                     continue;
                 }
+                kind = made;
                 kinds[decoMesh.MeshIndex] = kind;
                 template.Kinds.Add(kind);
             }
             kind.CellPlacements.Add(cell);
         }
         if (skipped != null)
-        {
-            // Distinct example names (many decorations share a name — repeats would read
-            // like a bug); the count stays the true number of skipped decoration nodes.
-            var distinct = new List<string>();
-            foreach (var s2 in skipped)
-                if (!distinct.Contains(s2))
-                    distinct.Add(s2);
-            var shown = distinct.Count > 5
-                ? string.Join(", ", distinct.GetRange(0, 5)) + ", …"
-                : string.Join(", ", distinct);
-            Log.Info("world", $"clutter template skipped decorations template={name} skipped={skipped.Count} examples='{shown}'");
-        }
+            Log.Info("world", $"clutter template skipped decorations template={name} skipped={skipped.Count} examples='{SkipExamples(skipped)}'");
+        if (offQuad != null)
+            Log.Info("world", $"clutter decorations do not project onto the ground quad template={name} skipped={offQuad.Count} examples='{SkipExamples(offQuad)}'");
         return template.Kinds.Count > 0 ? template : null;
     }
 
     /// <inheritdoc cref="FindTemplateRoot(GameZ, string)"/>
     private GameZNode? FindTemplateRoot(string name) => FindTemplateRoot(_gamez, name);
 
-    private GameZNode? FirstWithMesh(GameZNode node, bool includeSelf = true)
+    // One decoration kind from the node carrying its mesh. Shared by the template walk and by the
+    // substitution-target minting below, so a model reached either way is classified, labelled and
+    // rendered identically — a `firtree2` stamped because `firtree1` rolled it must be the same
+    // kind of thing as a `firtree2` the template placed itself. Null when the mesh is neither a
+    // sprite card nor a solid decoration (no texture, or no SceneBuilder for the solid path).
+    private Kind? MakeKind(GameZNode meshNode, string model)
     {
-        if (includeSelf && node.MeshIndex >= 0 && node.MeshIndex < _gamez.Meshes.Count
-            && _gamez.Meshes[node.MeshIndex].Polygons.Count > 0)
-            return node;
-        foreach (var c in node.Children)
-            if (c >= 0 && c < _gamez.Nodes.Count && FirstWithMesh(_gamez.Nodes[c]) is { } found)
-                return found;
+        if (SpriteInfo(meshNode.MeshIndex) is { } s)
+        {
+            return new Kind
+            {
+                MeshIndex = meshNode.MeshIndex,
+                NodeIndex = meshNode.Index,
+                Model = model,
+                Label = s.Texture,
+                Width = s.Width,
+                Height = s.Height,
+                Lit = _gamez.Meshes[meshNode.MeshIndex].Lighting,
+                Fogged = _gamez.Meshes[meshNode.MeshIndex].Fog,
+            };
+        }
+        if (IsSolidDecoration(meshNode.MeshIndex))
+        {
+            return new Kind
+            {
+                MeshIndex = meshNode.MeshIndex,
+                NodeIndex = meshNode.Index,
+                Model = model,
+                Label = model,
+                Solid = true,
+            };
+        }
         return null;
     }
 
-    private (string Texture, float Period, Vector2 Min)? GroundInfo(GameZNode ground)
+    // FUN_004deab0's per-kind properties attached to the parsed kinds, and every `substitute`
+    // target resolved to the kind its stamps will land in. Runs ONCE, after every template is
+    // parsed and before a single lattice cell is walked, for two reasons: a target may be another
+    // template's decoration (so all templates must exist first), and a target may be no template's
+    // decoration at all (so a kind has to be minted — which cannot happen mid-walk, where
+    // PlaceOnTriangle is iterating Template.Kinds by index).
+    private void ResolveProperties(Dictionary<string, Template> templates)
     {
-        var mesh = _gamez.Meshes[ground.MeshIndex];
-        var tex = FirstTexture(mesh);
-        if (tex == null || mesh.Vertices.Count == 0)
-            return null;
-        Vector3 min = mesh.Vertices[0], max = mesh.Vertices[0];
-        foreach (var v in mesh.Vertices)
+        _allKinds.Clear();
+        _kindsByModel.Clear();
+        foreach (var template in templates.Values)
+            foreach (var kind in template.Kinds)
+            {
+                _allKinds.Add(kind);
+                // First-seen wins, matching the engine's one-model-per-name resolution. C5 ships
+                // the same building as up to four gamez meshes (one per template that uses it), so
+                // without this a substitution's target would depend on which template rolled it.
+                if (kind.Model.Length > 0)
+                    _kindsByModel.TryAdd(kind.Model, kind);
+            }
+        if (_props == null)
+            return;
+
+        // Two passes: every kind gets its own block's scale first, because minting a target below
+        // appends to _allKinds and a target minted for one source may be another source's target.
+        foreach (var kind in _allKinds)
+            if (_props.Find(kind.Model) is { } block)
+                kind.ScaleRange = block.ScaleRange;
+
+        int minted = 0, missing = 0;
+        // Indexed rather than foreach: MintSubstituteKind appends, and a minted kind must itself
+        // be given its block's scale (it can be placed) but never its own substitutes (a stamp is
+        // rolled once — FUN_004dd6e0 rolls the SOURCE's list and places the result, it does not
+        // then re-roll the target's).
+        for (int i = 0, sources = _allKinds.Count; i < sources; i++)
         {
-            min = min.Min(v);
-            max = max.Max(v);
+            var kind = _allKinds[i];
+            if (_props.Find(kind.Model) is not { Substitutes.Count: > 0 } block)
+                continue;
+            var table = new List<(float Cumulative, Kind? Target)>(block.Substitutes.Count);
+            float acc = 0f;
+            foreach (var sub in block.Substitutes)
+            {
+                acc += sub.Fraction;
+                // An entry naming the kind's OWN model stays in this kind. The engine resolves
+                // even that entry through its global model table, but it has exactly one model per
+                // name where the remake can have several Kinds for one model (C5 ships the same
+                // building as up to four gamez meshes, one per template that uses it). Sending a
+                // "stays itself" roll to whichever of those was seen first would shuffle instances
+                // between mesh duplicates for no visible reason and move goldens that nothing
+                // actually changed — so the distinction the original cannot express is not
+                // invented here.
+                var target = string.Equals(sub.Model, kind.Model, StringComparison.OrdinalIgnoreCase)
+                    ? kind
+                    : ResolveModel(sub.Model, ref minted);
+                if (target == null)
+                    missing++;
+                table.Add((acc, target));
+            }
+            kind.Substitutes = table;
         }
-        float period = Mathf.Max(max.X - min.X, max.Z - min.Z);
-        return period < 1f ? null : (tex, period, new Vector2(min.X, min.Z));
+
+        if (minted > 0 || missing > 0)
+            Log.Info("world", $"clutter substitute targets: minted={minted} unresolvable={missing}");
+    }
+
+    // A substitution target as a kind: an existing one where the templates already carry the
+    // model, otherwise minted from the gamez node of that name. Null when the gamez has no such
+    // model — the engine's own `%s: cannot find clutter substitution node, interpreting it as
+    // nothing.` path, which keeps its share of the roll and places nothing. ⚠ No PLACED decoration
+    // in the retail install has an unresolvable target (the four that exist — hotelsign0/1/2 and
+    // cb05det01 — belong to C5 blocks whose own model is never scattered), so this branch is
+    // fidelity, not a case any chapter exercises.
+    private Kind? ResolveModel(string model, ref int minted)
+    {
+        if (_kindsByModel.TryGetValue(model, out var known))
+            return known;
+
+        // The engine's global model lookup (FUN_004d0280) reaches any model in the gamez, not just
+        // the ones hanging under a template. C5's `cb00b`, C3's `palmtree2/3` and C4's `firtree2`
+        // are all in this class: authored as substitution targets only.
+        foreach (var node in _gamez.Nodes)
+        {
+            if (!string.Equals(node.Name, model, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (FirstWithMesh(_gamez, node) is not { } meshNode)
+                continue;
+            if (MakeKind(meshNode, model) is not { } kind)
+                continue;
+            if (_props?.Find(model) is { } block)
+                kind.ScaleRange = block.ScaleRange;
+            _kindsByModel[model] = kind;
+            _allKinds.Add(kind);
+            minted++;
+            return kind;
+        }
+        return null;
     }
 
     // A 3D decoration: anything with real geometry that is NOT a billboard card. C2's
@@ -608,7 +1110,7 @@ public sealed class ClutterBuilder
     private (string Texture, float Width, float Height)? SpriteInfo(int meshIndex)
     {
         var mesh = _gamez.Meshes[meshIndex];
-        var tex = FirstTexture(mesh);
+        var tex = FirstTexture(_gamez, mesh);
         if (tex == null || mesh.Vertices.Count == 0 || !IsSpriteCard(mesh))
             return null;
         Vector3 min = mesh.Vertices[0], max = mesh.Vertices[0];
@@ -618,15 +1120,6 @@ public sealed class ClutterBuilder
             max = max.Max(v);
         }
         return (tex, max.X - min.X, max.Y - min.Y);
-    }
-
-    private string? FirstTexture(GameZMesh mesh)
-    {
-        foreach (var poly in mesh.Polygons)
-            if (poly.MaterialIndex >= 0 && poly.MaterialIndex < _gamez.Materials.Count
-                && _gamez.Materials[poly.MaterialIndex].TextureName is { } tex)
-                return tex;
-        return null;
     }
 
     // Walk the placed world (the same set WorldBuilder renders: world children +
@@ -645,6 +1138,26 @@ public sealed class ClutterBuilder
             return;
 
         var seen = new HashSet<(int Kind, int X, int Z)>(); // dedup across decal-layered coplanar polys
+
+        // The clutter's own stream, off a FIXED seed — deliberately not the session's
+        // Rng.Master, and this is the one place in the codebase where that is the right call.
+        // The original seeds its whole world build with a constant and only restores a
+        // time seed afterwards (FUN_004df1d0: srand(0x8EA91836) … srand(time(0))), so a
+        // chapter's forest is the same forest on every launch. Deriving from the master
+        // would instead reroll the species mix on any unpinned run — measured, before this
+        // was fixed: two `--freecam --chapter=C1` runs gave firtree1 15,154 vs 15,148.
+        // Variety across launches is a property the original does not have here, and a
+        // golden could not be photographed in an unpinned run if it did.
+        //
+        // ⚠ This is NOT the original's stream and cannot be. Reproducing its sequence would
+        // take the same PRNG, the same traversal order AND the same number of draws per
+        // stamp — the engine spends three rotation draws per instance that retail data
+        // renders inert. Do not try to match 0x8EA91836 beyond borrowing it as a label;
+        // what matters, and what `clutter-determinism` asserts, is that OURS is stable.
+        // Positions already match the original exactly (B14) because no authored key in the
+        // install perturbs them — only species and size come from this stream.
+        var rng = new Random(PlacementSeed);
+
         void Walk(int nodeIndex, Transform3D xf)
         {
             if (nodeIndex < 0 || nodeIndex >= _gamez.Nodes.Count)
@@ -655,7 +1168,7 @@ public sealed class ClutterBuilder
             if (node.Local is { } local)
                 xf *= local;
             if (node.MeshIndex >= 0 && node.MeshIndex < _gamez.Meshes.Count)
-                PlaceOnMesh(_gamez.Meshes[node.MeshIndex], xf, templates, seen);
+                PlaceOnMesh(_gamez.Meshes[node.MeshIndex], xf, templates, seen, rng);
             foreach (var c in node.Children)
                 Walk(c, xf);
         }
@@ -667,7 +1180,7 @@ public sealed class ClutterBuilder
     }
 
     private void PlaceOnMesh(GameZMesh mesh, Transform3D xf,
-        Dictionary<string, Template> templates, HashSet<(int, int, int)> seen)
+        Dictionary<string, Template> templates, HashSet<(int, int, int)> seen, Random rng)
     {
         foreach (var poly in mesh.Polygons)
         {
@@ -676,16 +1189,54 @@ public sealed class ClutterBuilder
             var tex = _gamez.Materials[poly.MaterialIndex].TextureName;
             if (tex == null || !templates.TryGetValue(tex, out var template))
                 continue;
-            // Same triangle enumeration as SceneBuilder.EmitPolygon (fan, or strip when
-            // flagged) so the surface heights match what is rendered.
+            // FUN_004de2c0's gate: a polygon flagged 0x800 grows no clutter. The bit is
+            // `no_clutter`, authored by node name (gg_load.c's `strstr(name, "no_clutter")`,
+            // single-writer at 005654f6) and parsed by mech3ax as `unk3`, decoded into
+            // GameZPolygon.NoClutter. SceneBuilder.NoClutterLayerBias reads the same field
+            // for draw order — that use is independent of this gate and stays keyed off the
+            // same bit only because the layer that must draw on top happens to be the one
+            // artists also named `no_clutter`.
+            //
+            // ⚠ It does NOT mean "the original leaves this ground bare". C5's city is TWO
+            // COPLANAR LAYERS at the same Y — a cblock1/2/3/7 overlay and a cblock4/5/6 base
+            // — and the flag selects WHICH ONE decorates the ground: flagged means skip the
+            // overlay, so the layer underneath stamps instead. Measured over every cblock1/2/3/7
+            // polygon by exact XZ polygon-intersection area, odds ratio 1,036.8x, with the
+            // user's own flyover matching (analysis/bl-305-clutter-uv/FINDINGS-layer-pairing.md).
+            // That is why this gate MUST NOT land without the cblock4/5/6 exemption being
+            // removed below: alone it deletes the low-rise city and leaves bare pavement.
+            if (poly.NoClutter)
+            {
+                _stats.NoClutterFlagged++;
+                continue;
+            }
+            // The UVs of the layer whose texture matched — here always materials[0], because A3
+            // measured that no polygon in the install names a registered template on layer 1+,
+            // so the original's per-layer loop (FUN_004de190) has nothing extra to find. Without
+            // them there is no lattice at all: FUN_004de2c0 skips a polygon whose UV array is
+            // null, and so does this. A3 found no such polygon either, so the counter is a
+            // measurement rather than a blind spot.
             int n = poly.VertexIndices.Count;
+            var uvs = poly.UvCoords;
+            if (uvs == null || uvs.Count < n)
+            {
+                _stats.NoUvArray++;
+                continue;
+            }
+            // Same triangle enumeration as SceneBuilder.EmitPolygon (fan, or strip when
+            // flagged) so the surface heights match what is rendered — and the UVs are indexed
+            // by CORNER POSITION, not by vertex id. That distinction is load-bearing rather than
+            // pedantic: C1 model 953's polygon 3 lists vertex 5 at two different corners with two
+            // different UVs, and reading the UV through the vertex id would stamp the second
+            // corner's lattice in the first corner's texture frame.
             if (poly.TriangleStrip)
             {
                 for (int i = 0; i + 2 < n; i++)
                     PlaceOnTriangle(template,
                         xf * mesh.Vertices[poly.VertexIndices[i]],
                         xf * mesh.Vertices[poly.VertexIndices[i + 1]],
-                        xf * mesh.Vertices[poly.VertexIndices[i + 2]], seen);
+                        xf * mesh.Vertices[poly.VertexIndices[i + 2]],
+                        uvs[i], uvs[i + 1], uvs[i + 2], seen, _stats, rng);
             }
             else
             {
@@ -693,7 +1244,8 @@ public sealed class ClutterBuilder
                     PlaceOnTriangle(template,
                         xf * mesh.Vertices[poly.VertexIndices[0]],
                         xf * mesh.Vertices[poly.VertexIndices[i]],
-                        xf * mesh.Vertices[poly.VertexIndices[i + 1]], seen);
+                        xf * mesh.Vertices[poly.VertexIndices[i + 1]],
+                        uvs[0], uvs[i], uvs[i + 1], seen, _stats, rng);
             }
         }
     }
@@ -734,10 +1286,17 @@ public sealed class ClutterBuilder
             Multimesh = mm,
             MaterialOverride = mat,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            ExtraCullMargin = kind.Width, // the shader may swing verts outside the static AABB
+            ExtraCullMargin = CullMarginOf(kind),
             Name = Sanitize(kind.Label),
         };
     }
+
+    // The billboard shader swings verts outside the MultiMesh's static AABB, so the card's own
+    // width is the margin — GROWN BY THE LARGEST SCALE any of its instances actually got
+    // (trap (d) of C22). C2's spruce reaches 3.0×, and a margin left at 1× would pop a third of
+    // that card off the screen edge. Measured from the placements rather than from the kind's own
+    // scale_range, because a kind reached by substitution is scaled by its sources' ranges.
+    private float CullMarginOf(Kind kind) => kind.Width * kind.MaxScale;
 
     // A 3D decoration kind: the SAME mesh and materials the placed world uses, drawn once per
     // placement through a MultiMesh. Nothing here is a billboard — the world shader has no
@@ -894,37 +1453,322 @@ public sealed class ClutterBuilder
         public bool Solid;
         public float NodeBias;      // solid kinds: the `node_bias` instance uniform value
         public float Width, Height;
+        public float CullMargin;    // Width grown by the largest scale_range draw these got
         public Shape3D? CollisionShape;
         public IReadOnlyList<Transform3D> Placements = null!;
+    }
+
+    /// <summary>One world triangle seen as the original's stamper sees it (<c>FUN_004dd6e0</c>
+    /// steps 4, 6 and 7): the integer UV lattice its texture coordinates span, a containment test
+    /// <b>in UV space</b>, and the affine UV→world map that turns a texture coordinate back into
+    /// a position.
+    ///
+    /// <para>Everything here is <c>double</c> and rounds exactly once, in <see cref="World"/>.
+    /// B11 measured what happens otherwise: a float intermediate moved a tree by one ulp
+    /// (~0.03 mm), invisible in every instance count and enough to change the pixels of a forest
+    /// golden in a chapter that must not move.</para>
+    ///
+    /// <para>⚠ <b>The map is valid only inside its own triangle.</b> Neighbouring triangles of
+    /// the same polygon routinely carry different UV frames — A2 found eight of them on C1's
+    /// <c>terpat02</c>, with handedness split almost evenly — so reusing one triangle's map for
+    /// the next is not an optimisation, it is a wrong answer.</para></summary>
+    public sealed class UvTriangle
+    {
+        // Below this the world triangle is a sliver with no usable plane. 1e-4 m² is a square
+        // 1 cm on a side; the artifacts A2 counted are exactly zero, not merely small.
+        private const double MinWorldArea2 = 1e-8;
+
+        // Likewise in UV space, where the quantity is the map's determinant.
+        private const double MinUvArea2 = 1e-12;
+
+        private readonly double _u0, _v0, _u1, _v1, _u2, _v2;
+        private readonly double _p0X, _p0Y, _p0Z;
+        private readonly double _aX, _aY, _aZ;   // world displacement per +1 U
+        private readonly double _bX, _bY, _bZ;   // world displacement per +1 V
+        private readonly double _sign;           // the UV winding, for the edge test
+
+        private UvTriangle(Vector3 a, Vector2 uva, Vector2 uvb, Vector2 uvc,
+            double[] axisU, double[] axisV, double det)
+        {
+            _u0 = uva.X;
+            _v0 = uva.Y;
+            _u1 = uvb.X;
+            _v1 = uvb.Y;
+            _u2 = uvc.X;
+            _v2 = uvc.Y;
+            _p0X = a.X;
+            _p0Y = a.Y;
+            _p0Z = a.Z;
+            _aX = axisU[0];
+            _aY = axisU[1];
+            _aZ = axisU[2];
+            _bX = axisV[0];
+            _bY = axisV[1];
+            _bZ = axisV[2];
+            _sign = det > 0 ? 1.0 : -1.0;
+            MinU = (int)Math.Floor(Math.Min(_u0, Math.Min(_u1, _u2)));
+            MaxU = (int)Math.Floor(Math.Max(_u0, Math.Max(_u1, _u2)));
+            MinV = (int)Math.Floor(Math.Min(_v0, Math.Min(_v1, _v2)));
+            MaxV = (int)Math.Floor(Math.Max(_v0, Math.Max(_v1, _v2)));
+        }
+
+        /// <summary>The UV bounding box floored to integers (step 4), inclusive on both ends.</summary>
+        public int MinU { get; }
+
+        /// <inheritdoc cref="MinU"/>
+        public int MaxU { get; }
+
+        /// <inheritdoc cref="MinU"/>
+        public int MinV { get; }
+
+        /// <inheritdoc cref="MinU"/>
+        public int MaxV { get; }
+
+        /// <summary>Integer lattice cells the walk would visit. <c>long</c> because a corrupt UV
+        /// array could overflow an <c>int</c> before the caller's bound ever saw it.</summary>
+        public long CellCount => ((long)MaxU - MinU + 1) * ((long)MaxV - MinV + 1);
+
+        /// <summary>World displacement per +1 of U — A2's <c>A</c>. Public for the test that pins
+        /// the worked example; the walk uses <see cref="World"/>.</summary>
+        public Vector3 AxisU => new((float)_aX, (float)_aY, (float)_aZ);
+
+        /// <summary>World displacement per +1 of V — A2's <c>B</c>.</summary>
+        public Vector3 AxisV => new((float)_bX, (float)_bY, (float)_bZ);
+
+        /// <summary>Null when the triangle is degenerate in either space, with
+        /// <paramref name="fault"/> saying which — the caller counts both, because they are
+        /// different defects in the source mesh and netting them hides one.</summary>
+        public static UvTriangle? Build(Vector3 a, Vector3 b, Vector3 c,
+            Vector2 uva, Vector2 uvb, Vector2 uvc, out UvTriangleFault fault)
+        {
+            double[] e1 = { b.X - (double)a.X, b.Y - (double)a.Y, b.Z - (double)a.Z };
+            double[] e2 = { c.X - (double)a.X, c.Y - (double)a.Y, c.Z - (double)a.Z };
+            double[] n = Cross(e1, e2);
+            if ((n[0] * n[0]) + (n[1] * n[1]) + (n[2] * n[2]) < MinWorldArea2)
+            {
+                fault = UvTriangleFault.ZeroWorldArea;
+                return null;
+            }
+
+            double du1 = uvb.X - (double)uva.X, dv1 = uvb.Y - (double)uva.Y;
+            double du2 = uvc.X - (double)uva.X, dv2 = uvc.Y - (double)uva.Y;
+            double det = (du1 * dv2) - (du2 * dv1);
+            if (Math.Abs(det) < MinUvArea2)
+            {
+                fault = UvTriangleFault.ZeroUvArea;
+                return null;
+            }
+
+            // Solve A·du1 + B·dv1 = e1 and A·du2 + B·dv2 = e2 for the two world axes. This is
+            // the same map step 7 builds, written as a 2×2 inverse rather than a ray-cast.
+            var axisU = new double[3];
+            var axisV = new double[3];
+            for (int k = 0; k < 3; k++)
+            {
+                axisU[k] = ((e1[k] * dv2) - (e2[k] * dv1)) / det;
+                axisV[k] = ((e2[k] * du1) - (e1[k] * du2)) / det;
+            }
+
+            fault = UvTriangleFault.ZeroUvArea;   // unused on the success path
+            return new UvTriangle(a, uva, uvb, uvc, axisU, axisV, det);
+        }
+
+        /// <summary>Step 6: the three edge cross-products in UV space, all on the side the
+        /// triangle's own winding says is inside. STRICT on the edge, matching
+        /// <c>FUN_004dd6e0</c> step 6 (docs/architecture.md's ClutterBuilder entry): a candidate
+        /// landing exactly on an edge — in particular the diagonal two triangles of the same fan
+        /// or strip share — is claimed by NEITHER, not both. Fixed 2026-08-10; this test was
+        /// inclusive from B12 until here, which is why the quarter-metre <c>seen</c> dedup in
+        /// <see cref="PlaceOnTriangle"/> exists. ⚠ Measured, not assumed: an A/B against the old
+        /// inclusive test (per-chapter <c>DedupRejected</c>) shows the shared-diagonal duplicates
+        /// this was meant to fix go to exactly zero in C1B/C2/C3/C5, but C1 only drops 38→36 and
+        /// C4 is unchanged at 139 — most of THEIR duplicates are something else, so this fix does
+        /// not retire <c>seen</c>, only some of what it used to catch. Kept in double for the same
+        /// reason the rest of this class is: a float32 boundary evaluation is exactly what
+        /// produced two of C5's off-by-one instances pre-B12 (A3).</summary>
+        public bool Contains(double u, double v)
+        {
+            double w0 = (((_u1 - _u0) * (v - _v0)) - ((_v1 - _v0) * (u - _u0))) * _sign;
+            double w1 = (((_u2 - _u1) * (v - _v1)) - ((_v2 - _v1) * (u - _u1))) * _sign;
+            double w2 = (((_u0 - _u2) * (v - _v2)) - ((_v0 - _v2) * (u - _u2))) * _sign;
+            return w0 > 0 && w1 > 0 && w2 > 0;
+        }
+
+        /// <summary>Step 7: the world position at a texture coordinate. The single rounding of
+        /// the whole walk happens here.</summary>
+        public Vector3 World(double u, double v)
+        {
+            double du = u - _u0, dv = v - _v0;
+            return new Vector3(
+                (float)(_p0X + (_aX * du) + (_bX * dv)),
+                (float)(_p0Y + (_aY * du) + (_bY * dv)),
+                (float)(_p0Z + (_aZ * du) + (_bZ * dv)));
+        }
+    }
+
+    /// <summary>A template's ground quad, reduced to what placement needs: which terrain
+    /// texture it decorates, its per-axis local extent, and the affine map from a local
+    /// position on its plane to the polygon's own interpolated texture UV — which is the
+    /// coordinate every decoration is stored in (<c>FUN_004dd230</c>).</summary>
+    public sealed class GroundQuad
+    {
+        // The quad polygon's triangles, in the template's local space (containment only).
+        public readonly List<Vector3> Faces = new();
+
+        public string Texture = "";
+        // The quad's own local X/Z extents. Descriptive only since B12 deleted the world grid:
+        // NOTHING in placement reads them any more, and nothing should — the lattice spacing
+        // comes from the WORLD polygon's UVs, not from the template's size.
+        public float ExtentX, ExtentZ;
+
+        // The plane and the UV map, in DOUBLE — see the note in GroundInfo for why the single
+        // rounding at the end of TryUv is load-bearing rather than pedantry.
+        public double NormalX, NormalY, NormalZ;         // unit plane normal
+        public double AnchorX, AnchorY, AnchorZ;         // a point on the plane…
+        public double AnchorU, AnchorV;                  // …and the UV there
+        public double GradUX, GradUY, GradUZ;            // d(u) per metre of local displacement
+        public double GradVX, GradVY, GradVZ;            // d(v) likewise
+
+        // FUN_004dd230's fmod wrap, both branches. A negative coordinate maps to 1 − frac, and
+        // an exact 1.0 (a frac that rounded away) collapses back to 0. No retail decoration
+        // takes the negative branch — all 32 resolving quads span exactly 0..1, so the wrap
+        // folds nothing — but the original takes it, so this does.
+        public static float Wrap(float value)
+        {
+            float f = value % 1f;
+            if (f < 0f)
+            {
+                f += 1f;
+                if (f >= 1f)
+                    f = 0f;
+            }
+            return f;
+        }
+
+        /// <summary>The quad's interpolated texture UV under <paramref name="local"/>, projected
+        /// along the quad normal. False when the decoration does not project onto the polygon —
+        /// the original logs and skips that case, and so does the caller.</summary>
+        public bool TryUv(Vector3 local, out Vector2 uv)
+        {
+            // FUN_004dd230 ray-casts the decoration ±5 along the quad normal, so a decoration
+            // further off the plane than that reaches nothing to project onto.
+            const double rayReach = 5.0;
+
+            double ox = local.X - AnchorX, oy = local.Y - AnchorY, oz = local.Z - AnchorZ;
+            double dist = (NormalX * ox) + (NormalY * oy) + (NormalZ * oz);
+            double fx = ox - (NormalX * dist), fy = oy - (NormalY * dist), fz = oz - (NormalZ * dist);
+            uv = new Vector2(
+                (float)(AnchorU + (GradUX * fx) + (GradUY * fy) + (GradUZ * fz)),
+                (float)(AnchorV + (GradVX * fx) + (GradVY * fy) + (GradVZ * fz)));
+            var foot = new Vector3(
+                (float)(AnchorX + fx), (float)(AnchorY + fy), (float)(AnchorZ + fz));
+            return Math.Abs(dist) <= rayReach && Contains(foot);
+        }
+
+        private bool Contains(Vector3 p)
+        {
+            // Barycentric slack: an authored decoration sitting exactly on the quad's edge
+            // belongs to the quad.
+            const float edgeSlack = 1e-4f;
+
+            for (int i = 0; i + 2 < Faces.Count; i += 3)
+            {
+                Vector3 a = Faces[i], b = Faces[i + 1], c = Faces[i + 2];
+                var n = (b - a).Cross(c - a);
+                float d = n.LengthSquared();
+                if (d < 1e-9f)
+                    continue;
+                // Barycentric weights via the triangle's own normal, so the test works on a
+                // tilted quad as well as a flat one.
+                float w0 = (b - a).Cross(p - a).Dot(n) / d;
+                float w1 = (c - b).Cross(p - b).Dot(n) / d;
+                float w2 = (a - c).Cross(p - c).Dot(n) / d;
+                if (w0 >= -edgeSlack && w1 >= -edgeSlack && w2 >= -edgeSlack)
+                    return true;
+            }
+            return false;
+        }
     }
 
     // One decoration kind: every template instance of the same decoration mesh (all 13
     // firtree1 placements share mesh + texture), plus where it sits in each grid cell.
     private sealed class Kind
     {
-        // Where each decoration of this kind sits within one template cell. Origin XZ is
-        // relative to the ground quad's min corner, i.e. in [0, period); origin Y and the
-        // basis are the decoration node's own, and are used by the solid path only (a sprite
-        // is planted flat on the surface and re-faced by its shader — see PlaceOnTriangle).
+        // Where each decoration of this kind sits on the template's ground quad, as the quad's
+        // own TEXTURE UV: Origin.X is u and Origin.Z is v, both in [0, 1) — not metres, and not
+        // relative to a corner (the winding differs between templates). Origin Y and the basis
+        // are the decoration node's own, and are used by the solid path only (a sprite is
+        // planted flat on the surface and re-faced by its shader — see PlaceOnTriangle).
         public readonly List<Transform3D> CellPlacements = new();
         public readonly List<Transform3D> Instances = new(); // world placements
 
         public int MeshIndex;
         public int NodeIndex;                    // a representative decoration node (draw order)
+        public string Model = "";                // the decoration node's own name, e.g. firtree1.flt
         public string Label = "";                // texture (sprites) or node name (solids)
         public bool Solid;                       // a 3D decoration, not a billboard card
         public float Width, Height;              // sprite quad extents (sprites only)
+
+        // templates.zrd's `scale_range` for THIS kind's model, (1,1) when it authors none or no
+        // spec was supplied. ⚠ It is the SOURCE kind's range that scales a substituted stamp —
+        // see the roll in PlaceOnTriangle.
+        public Vector2 ScaleRange = Vector2.One;
+
+        // `substitute` as a CUMULATIVE table: the running sum of the engine's own normalised
+        // shares, paired with the kind each share lands in. A null target is a model the gamez
+        // does not carry — it keeps its share and places nothing, as the original does. Empty
+        // when the kind authors no substitution, which is every stamp landing in its own kind.
+        public IReadOnlyList<(float Cumulative, Kind? Target)> Substitutes =
+            Array.Empty<(float, Kind?)>();
+
+        // The largest scale any instance of this kind actually received, so the billboard's cull
+        // margin can grow with it (trap (d) of C22). Measured rather than derived from ScaleRange:
+        // a kind reached by substitution is scaled by its SOURCES' ranges, not by its own.
+        public float MaxScale = 1f;
         // The decoration model's own render flags (sprites only — a solid decoration draws
         // through SceneBuilder's materials, which read them themselves).
         public bool Lit = true;
         public bool Fogged = true;
     }
 
+    // A template carries no metric size at all any more. The ground quad's extents told the old
+    // world grid how far apart to stamp; the lattice asks the WORLD POLYGON's UVs instead, so
+    // the only thing a template needs to know about its quad is which texture it decorates.
     private sealed class Template
     {
         public readonly List<Kind> Kinds = new();
 
         public string GroundTexture = "";
-        public float Period;                     // world-space tiling period (the ground quad's side)
+    }
+
+    // What one Build's lattice walk refused, and what it asserted about what it kept. Reported
+    // as one line rather than per triangle: the counts are in the thousands, and an absent
+    // category must be distinguishable from a truncated one (LOG-5, DIAG-15).
+    private sealed class LatticeStats
+    {
+        public int ZeroWorldArea;      // fan/strip artifacts of n-gons with repeated corners
+        public int ZeroUvArea;         // no invertible affine map to recover a position through
+        public int NoUvArray;          // FUN_004de2c0's null-UV gate
+        public int NoClutterFlagged;   // FUN_004de2c0's 0x800 gate — the OTHER layer decorates here
+        public int OverLargeLattice;   // refused by MaxLatticeCells
+        public long WorstLatticeCells; // the largest lattice seen among those refused
+        public int Placed;             // instances the lattice produced (after the seen dedup)
+        public int OutsideSource;      // …of which any that missed their own source triangle
+        public int Substituted;        // …of which any whose model the substitute roll changed
+        public int SubstituteNothing;  // rolls that landed on a model the gamez does not carry
+        public int DedupRejected;      // the quarter-metre `seen` set actually catching something.
+                                       // Measured 2026-08-10 (post Contains-strict-fix): C1B/C2/
+                                       // C3/C5 read 0, C1 reads 36 (was 38), C4 reads 139
+                                       // (unchanged) — the strict fix did not explain C1/C4's
+                                       // duplicates, so this staying nonzero there is expected,
+                                       // not a regression signal, until that source is found.
+
+        public void Report()
+        {
+            string worst = OverLargeLattice > 0 ? $" worst_lattice_cells={WorstLatticeCells}" : "";
+            Log.Info("world", $"clutter uv lattice: placed={Placed} substituted={Substituted} substitute_nothing={SubstituteNothing} outside_source={OutsideSource} dedup_rejected={DedupRejected} skipped_no_clutter_flag={NoClutterFlagged} skipped_zero_world_area={ZeroWorldArea} skipped_zero_uv_area={ZeroUvArea} skipped_no_uv_array={NoUvArray} skipped_over_large_lattice={OverLargeLattice}{worst}");
+            if (OutsideSource > 0)
+                Log.Warn("world", $"clutter instances landed OUTSIDE their source triangle count={OutsideSource} of {Placed} — the UV containment test disagrees with the affine map");
+        }
     }
 }

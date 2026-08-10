@@ -4,6 +4,10 @@ Part of the [format documentation](README.md). Covers how the original populates
 forests/bushes (and city blocks) without a single placed tree node in the gamez.
 Consumed by `CSVM/src/Mech3/Clutter.cs`.
 
+**The decorations' own authored properties — substitution tables, scale ranges, fade distances —
+are a separate file**, `templates.zrd`, keyed by decoration model rather than by template. See
+[templates.md](templates.md).
+
 **A second, independent clutter system uses the same template roots**: `fogvol.zrd` scatters
 `cloudsprite1`/`cloudsprite2` through the world's `fvol*` fog volumes, with its own reader-side
 weights and ranges rather than `AddClutterTemplates`. Template-root lookup is shared
@@ -33,8 +37,9 @@ templateRoot (parentless Object3d, e.g. terpat02)
 └─ ground node — first descendant with a mesh: a flat quad whose
    │             • texture names the terrain texture it decorates
    │             •   (terpat02.tif = C1's forest texture)
-   │             • quad size = the world-space tiling period
-   │             •   (512 m for C1 terpat02; "-128" template variants = 128 m)
+   │             • UV parameterisation is the DOMAIN each decoration's
+   │             •   position is normalised against — never a metric
+   │             •   spacing (see "no world grid" below)
    └─ decoration nodes — one local transform each (position within the patch),
       └─ decoration mesh, exactly one level below: either a single vertical
          one-sided quad (tree/bush billboard, e.g. firtree1.tif) or a 3D
@@ -57,17 +62,35 @@ from one that dropped the basis on this data.)
 Decoration Y offsets are likewise near-zero: template ground quads sit at exactly `y = 0`
 and building bases sit at `−0.02 … +3.67` relative to it.
 
-The engine dresses **every world polygon textured with a template's ground texture**
-with that template's decorations, repeated at the tiling period. C1's three templates
-stamp 9,303 tree/bush sprites. The decorations are single one-sided cards, so the
-original must render them as upright (Y-axis) billboards.
+The engine dresses **every world polygon textured with a template's ground texture** with that
+template's decorations. The decorations are single one-sided cards, so the original must render
+them as upright (Y-axis) billboards.
 
-**Undecoded:** the original's exact alignment of the pattern to the terrain. The world's
-UV tiling is wildly non-uniform on hillsides (256–1280 m per repeat), so UV-space
-placement would visibly stretch the clutter with it; the remake tiles each template on a
-fixed world-space X/Z grid of its authored period instead (authored density everywhere,
-seam-consistent across polygons), planting each decoration at the polygon's interpolated
-surface height.
+## ✅ Decoded 2026-08-09/10: the placement is a UV lattice, and there is no world grid
+
+This section previously said the original's alignment of the pattern to the terrain was
+**undecoded**, and that UV-space placement was ruled out because "the world's UV tiling is wildly
+non-uniform on hillsides, so it would visibly stretch the clutter". Both claims are dead.
+Stretching with the UV is precisely what the original does.
+
+`FUN_004dd230` stores each decoration's position as its **interpolated texture UV on the ground
+quad**, wrapped into [0,1) — which is why the quad is a domain and not a distance. `FUN_004dd6e0`
+then stamps it **once per integer UV cell of each world triangle**: take the triangle's UV bounding
+box, floor it to an integer lattice, test containment *in UV space*, and recover the world XYZ
+through the triangle's own affine UV→world map. The clutter therefore rotates, mirrors and
+stretches with the painted ground texture, and a building sits in its painted block wherever that
+block lands.
+
+There is **no world-space grid and no global clutter origin** in the original at all. The remake's
+fixed X/Z grid was a fiction with no counterpart, and it cost C1 roughly 4× its trees — its terrain
+is painted with `terpat02` at half the template quad's scale, so one repeat spans ~260 m where the
+grid stepped 512. Rewritten 2026-08-10; the measurements are in
+`analysis/bl-305-clutter-uv/FINDINGS-A1.md` / `-A2.md` and `docs/PLAN-clutter-uv-placement.md`.
+
+**Which polygons get dressed is a per-polygon decision**, made by the `no_clutter` flag (raw
+polygon bit `0x800`, `FUN_004de2c0`). It does not mean "leave this ground bare": where two coplanar
+layers are painted over each other it selects which one decorates. See `docs/architecture.md`'s
+`src/Mech3/Clutter.cs` entry and [gamez.md](gamez.md).
 
 **Sprite vs non-sprite is in the data, not the shape.** A decoration is a billboard card
 iff its model carries `model_type: "Facade"` — the original engine's own billboard flag
@@ -81,36 +104,42 @@ in local Z; every 3D building decoration is `model_type: "Default"` with 2–27 
 
 C2's `filmblock*` / `resblock*` / `parklot*` and C5's `cblock*` templates carry **3D
 building meshes** as decorations, not sprite quads. They are placed by exactly the same
-rule as the sprites — same grid, same period, same phase, same surface-height sample — and
-differ only in what is drawn and whether it is solid. Implemented 2026-07-22 (polish-3
+rule as the sprites — the same UV lattice, the same containment test, the same affine recovery of
+the world position — and differ only in what is drawn and whether it is solid (a 3D decoration also
+keeps its authored basis and Y, which a sprite drops). Implemented 2026-07-22 (polish-3
 item 6); before that they were skipped, which is why C2 and C5 rendered painted city-block
 ground with nothing standing on it.
 
-| chapter | templates | period | 3D decorations placed | sprites placed |
-|---|---|---|---|---|
-| C2 | `filmblock1-5`, `resblock1-6`, `parklot1-2` | 128 m (`parklot*` 32 m) | 10,261 | 37,167 |
-| C5 | `cblock1-7` registered; `cblock1/2/3` + `cblock7` placed (see below) | 256 m | 71,326 | 124,072 |
+Counts are the remake's, after the UV-lattice rewrite (2026-08-10); the pre-rewrite grid produced
+10,261/37,167 and 71,326/124,072 respectively.
 
-`parkpat` (C2, 512 m) and every other chapter's templates are sprite-only, so no other
-chapter gains or loses anything. **C2B registers `resblock2`/`filmblock1`/`filmblock2` in
-its `adjust.gw` but its gamez ships none of those template roots** — the boot script and
-the gamez disagree, and C2B has always placed no clutter at all. That is retail data, not
-a bug in the reader.
+| chapter | templates | 3D decorations placed | sprites placed |
+|---|---|---|---|
+| C2 | `filmblock1-5`, `resblock1-6`, `parklot1-2` | 10,346 | 36,406 |
+| C5 | `cblock1-7`, all registered and all placed (see below) | 67,836 | 110,668 |
+
+`parkpat` (C2) and every other chapter's templates are sprite-only, so no other
+chapter gains or loses anything. **C2B's `adjust.gw` registers six templates — `terpat01`,
+`terpat03`, `terpat04`, `resblock2`, `filmblock1`, `filmblock2` — and its gamez ships not one of
+those roots** (the original logs `ClutterLoadTemplates(): cannot find node for template %s` six
+times). The boot script and the gamez disagree, C2B has always placed no clutter at all, and its
+`templates.zrd` is consistently empty. That is retail data, not a bug in the reader.
 
 **A block's variety comes from its model list.** `cblock1` names 28 3D decorations drawn
-from 11 distinct models; each is stamped at every 256 m grid cell whose terrain carries
-`cblock1.tif`.
+from 11 distinct models; each is stamped once per integer UV repeat of `cblock1.tif` across
+every triangle painted with it.
 
-**C5's `cblock4/5/6` templates are registered by the boot script but excluded by the reader
-(`ClutterBuilder.BuriedClutterDistricts`), settled 2026-08-07.** They dress the *base* ground
-layer, which `cblock1/2/3`'s subface overlays cover at 97.0/99.9/100.0% and beat in the ground
-z-fight unconditionally (`analysis/item9-depth-bias/CBLOCK-LOD.md` — the same painted scene at
-two fidelities, r≈0.70 per pair); since `PlaceOnMesh` matches by **texture name only** and never
-reads the polygon's `Subface` flag, stamping them too doubled the city's buildings
-(`analysis/bl-058-clutter-doubling/FINDINGS.md`). `CAP-22` footage settled the original's side:
-its downtown lattice carries the 59–108 m towers that exist only in `cblock1/2/3`'s templates
-and shows no interpenetration, so the original draws the `cblock1/2/3` city (closing commit:
-`git log --grep=BL-250`). ⚠ The building sets are **not** disjoint by name range: `cblock5/6`
+**C5's `cblock4/5/6` are placed like every other district**, and the map-wide
+`BuriedClutterDistricts` exemption that used to remove them is **gone** (2026-08-10). It existed
+because the remake stamped both members of every coplanar overlay/base pair — matching a template
+to a polygon by texture name only, never reading the polygon's flag — which doubled the city's
+buildings (`analysis/bl-058-clutter-doubling/FINDINGS.md`). The real mechanism is the `no_clutter`
+flag: flagged ground is dressed by `cblock4/5/6` (low-rise) and clear ground by `cblock1/2/3/7`
+(towers), measured at odds ratio 1,037× and confirmed at the controls
+(`analysis/bl-305-clutter-uv/FINDINGS-layer-pairing.md`). ⚠ Neither half works alone — the flag
+gate *with* the exemption still in force empties C5's downtown, because the ground there IS the
+flagged layer and its replacement was the exempted one. ⚠ The building sets are **not** disjoint by
+name range: `cblock5/6`
 also place `cb06a`/`cb11a`, and the *visible* `cblock7` places `cb12a`/`13a`/`14a` — census by
 template root, never by `cbNNa` name range.
 

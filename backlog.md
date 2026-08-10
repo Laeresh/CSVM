@@ -1688,6 +1688,56 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Playtest after fix:* the C2B low pose (`--pos=-3843,200,-1101`) against
   `playtest/CAP-11/t0.5-c2b-spawn-ocean.png`.
 
+- `BL-337` `[Feature]` **`far_fade_range` is authored on all 143 `templates.zrd` clutter blocks and
+  read but not applied** (C23, 2026-08-10; deferred since Decision 3 of
+  `docs/PLAN-clutter-uv-placement.md`, which held mid-plan because a fade that removes distant
+  clutter would confound Wave B's density A/Bs — see [`docs/formats/templates.md`](docs/formats/templates.md)).
+  *Evidence:* `far_fade_range` decodes to `[[nearMin, farMin], [nearMax, farMax]]`, both distances
+  drawn from **one** `rand()` per instance (`FUN_004dd6e0` step 11); C5's city blocks fade
+  200–350 m, C1's firs 500–2000 m, the install spans 50–2000 m over 27 distinct pairs. The runtime
+  scale is `CameraSetClutterFadeScaleSq` (script-command string `0x0063f5bc`, dispatch
+  `FUN_005b80a0` case `'C'`), which writes a single global `_DAT_0062d170` via `FUN_004d2120`. That
+  global is **not clutter-specific and not per-mission** — it is the squared distance-fade scale
+  for every type-5 scene node's LOD/fade (consumers `FUN_004d5de0`/`FUN_004d6010`, which compute
+  `fadeScale * distanceSq` against each node's near²/far² thresholds and blend an alpha). Its
+  default comes from the graphics **detail-level** setter `FUN_00440750`: level 0/1/2 write
+  `0x3f800000`/`0x40800000`/`0x41100000` = 1.0/4.0/9.0, i.e. fade distance scales ×1/×2/×3 with
+  detail. The script command can override it per mission on top of that. So the authored metres are
+  **not literal** — they are a base multiplied by up to 3× depending on the detail setting, before
+  any mission script override.
+  *Fix shape:* a rendering-side change, not a placement one — a distance-fade path in (at least) the
+  clutter draw shader(s), fed by the per-instance near/far pair `ClutterBuilder` already stores but
+  ignores, plus a detail-level-driven global scale mirroring `_DAT_0062d170` (currently nothing in
+  the remake reads the graphics detail setting for this). Interacts with `MapEdgeExtender` (fringe
+  clutter must not pop at the same distance the authored fade would remove it in the original).
+  ⚠ Traps: implementing this without the detail-scale half only matches the game at one detail
+  level; the two fade bounds are one draw, not independent ("`translate_uv_range`, `far_fade_range`
+  and `rotation_range` are grouped by BOUND" — `docs/formats/templates.md`).
+
+- `BL-341` `[Research]` **Reopened `BL-250`: with the real `no_clutter` gate landed, 7.6% of C5's ground
+  (13.8 million m², the flagged overlay area with no base layer beneath it) renders bare, and
+  whether that is what the original does is untested.** `BL-250` closed 2026-08-07 on a curated
+  list (`ClutterBuilder.BuriedClutterDistricts`, excluding `cblock4/5/6` map-wide) that turned out
+  to be standing in for a mechanism nobody had decoded yet. B13/B15
+  (`docs/plans/PLAN-clutter-uv-placement.md`) landed that mechanism — `PlaceOnMesh` now skips a
+  polygon carrying the decoded `no_clutter` flag, the flag SELECTS which of two coplanar layers
+  decorates rather than meaning "bare here", and the curated list was retired because it was wrong
+  on 14.1% of the map even though it happened to be right where `CAP-22` looked (78.3% of C5's
+  ground by area is genuinely tower country). *Evidence:* B15's landing commit
+  (`git log --grep="B15: land BL-305"`) measured the gate against every flagged/base pair in C5
+  and found 35% of flagged overlay area has no coplanar base polygon underneath it at all — for
+  that ground the gate now has nothing left to fall back on and leaves it undecorated. *Fix
+  shape:* find what the original actually draws on that 7.6% — either a third layering mechanism
+  this plan didn't decode, or the original genuinely leaves it bare too (which would close this
+  outright). Start from a located landmark pose the way `BL-305` was finally confirmed (the user's
+  own flyover, not a nadir — `SHOT-28`, `docs/verification.md`), not from `CAP-22`'s pose, which
+  cannot resolve this question (it already reads correctly). *⚠ Traps:* (a) do not re-curate a
+  list as a stopgap — that is exactly the mistake this item exists to not repeat. (b) A nadir
+  shot cannot distinguish a painted rooftop from bare ground any better than it could distinguish
+  a rooftop from a building (`SHOT-28`); use a low oblique. *Cross-refs:* `BL-305` (the fix that
+  surfaced this), `BL-250` (the closed item this supersedes — do not reopen that ID; IDs are never
+  reused, per this file's own rule).
+
 ## Effects & animation runtime
 
 - `BL-339` `[Bug]` **In splitscreen only player 1 sees the rocket smoke trails — the puffer distance

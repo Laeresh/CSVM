@@ -54,10 +54,23 @@ public sealed class SceneBuilder
     //    1.2e-5 (0, matching a 10x-larger control).
     public const float ConflictRankBias = 1.2e-5f;
     // Measured worst across all eight chapters is 7. The cap keeps the whole tie-break
-    // (7 x 1.2e-5 + 5 x SurfaceRankBias = 9.4e-5) below SubfaceBias, so subface + tie-break
-    // stays inside one priority level; a chapter that ever needs more is logged, not silently
-    // collapsed.
+    // (7 x 1.2e-5 + 5 x SurfaceRankBias = 9.4e-5) below NoClutterLayerBias, so a no_clutter
+    // overlay + tie-break stays inside one priority level; a chapter that ever needs more is
+    // logged, not silently collapsed.
     public const int ConflictRankCap = 7;
+
+    /// <summary>A polygon carrying the <c>no_clutter</c> flag (raw bit <c>0x800</c>) in the
+    /// <see cref="DebugClutterFlag"/> view: nothing is scattered on this ground.</summary>
+    public static readonly Color FlaggedColor = new(1f, 0f, 0f);
+
+    /// <summary>A polygon without it: clutter-eligible ground.</summary>
+    public static readonly Color ClearColor = new(0f, 1f, 0f);
+
+    /// <summary>What the clutter itself is painted in that view — the decorations and sprite cards
+    /// scattered ONTO the ground, stamped per instance as a full-strength
+    /// <see cref="TintParam"/>. Their own polygons are unflagged, so without this a city block
+    /// would read as clutter-eligible ground.</summary>
+    public static readonly Color ClutterColor = new(0.1f, 0.35f, 1f, 1f);
 
     /// <summary>Surfaces given a CLAMPed sampler because their UVs never leave the unit square
     /// (the hairline-seam fix — see <see cref="UvsWithinUnitSquare"/>). Process-wide across every
@@ -69,6 +82,15 @@ public sealed class SceneBuilder
     /// <see cref="UvAxesWithinUnitSquare"/>). Same load-log role as
     /// <see cref="ClampedSurfaceTotal"/>.</summary>
     public static int EdgeClampedSurfaceTotal;
+
+    /// <summary>The <c>--debug-clutterflag</c> view (<c>docs/cli.md</c>): every world polygon this
+    /// builder emits is painted by its decoded <c>no_clutter</c> flag — <see cref="FlaggedColor"/>
+    /// where the flag is set, <see cref="ClearColor"/> where it is not — and the fullbright shader
+    /// shows that vertex colour instead of the lit, fogged texture. Set by the caller before
+    /// building (like <see cref="Cycler"/>); the recolour happens at build time, so it cannot be
+    /// toggled at runtime. Off leaves every emitted vertex colour and every generated shader
+    /// exactly as they are.</summary>
+    public bool DebugClutterFlag;
 
     /// <summary>Where a material's own texture flipbook (the gamez `cycle` block) is delivered.
     /// Set by the caller before building; null leaves cycling materials static.</summary>
@@ -140,6 +162,18 @@ public sealed class SceneBuilder
     /// pixel while the overlay is off.</para></summary>
     internal const string TintLine = "    ALBEDO = mix(ALBEDO, csky_tint.rgb, csky_tint.a);";
 
+    /// <summary><see cref="TintLine"/>'s twin under <see cref="DebugClutterFlag"/>: the same last
+    /// write to ALBEDO, with the lit-and-fogged result replaced by the raw vertex colour
+    /// <see cref="EmitTriangle"/> painted the flag into. Emitted ONLY into the fullbright world
+    /// shader of a builder that asked for the debug view — every other build, and every shader
+    /// variant of this one when the flag is absent, emits <see cref="TintLine"/> itself, so the
+    /// default shader text stays byte-for-byte what it was.
+    /// <para>Keeping the tint mix rather than assigning <c>COLOR.rgb</c> outright is what lets the
+    /// clutter decorations be forced blue per instance (<c>WorldSession</c>) — a MultiMesh has one
+    /// instance-uniform set, which is exactly the granularity "this whole population is clutter"
+    /// needs.</para></summary>
+    internal const string ClutterFlagTintLine = "    ALBEDO = mix(COLOR.rgb, csky_tint.rgb, csky_tint.a);";
+
     /// <summary>The world's conflict ranks (<see cref="ConflictRank"/>), set by the caller before
     /// building. Null — every aircraft, every <c>--node=</c> subtree, any build with no conflict
     /// graph — leaves the cross-node tie-break on the flat node index, which is what those builds
@@ -194,22 +228,34 @@ void fragment() {
     //   detail over its base tile, road decals over rail decals.
     private const float SurfaceRankBias = 2e-6f;
     private const int SurfaceRankCap = 5;
-    // The OpenFlight SUBFACE offset (GameZPolygon.Subface): a face marked coplanar-with-and-
-    // contained-in the one beneath it draws on top of it. The original applies ONE WHOLE
-    // priority level to this — `GameGenSetSubfacePriorityOffset 1` in support\init.gw, global
-    // to every mission. We deliberately apply HALF a level instead: priority 1 is a genuinely
-    // authored value (955 C5 polygons, 2207 in C1), and a full level would make a subface tie
-    // with a real priority-1 overlay. Measured across every subface/base overlap in C5, 0.5 and
-    // 1.0 of a level resolve identically (25,732,146 m² front / 120,999 behind either way), so
-    // the smaller offset is free. Still 50x SurfaceRankBias and 2000x NodeOrderBias.
-    private const float SubfaceBias = DepthBiasPerLevel * 0.5f;
+    // The no_clutter draw-order offset (GameZPolygon.NoClutter): originally read as the
+    // OpenFlight SUBFACE mark — a face coplanar-with-and-contained-in the one beneath it,
+    // drawing on top — but docs/formats/gamez.md rule 23 corrected that: the bit is authored
+    // from a NODE-NAME SUBSTRING (gg_load.c's `strstr(name, "no_clutter")`), not an OpenFlight
+    // structural attribute, and it does not always describe a subface (five of six faces of
+    // every `fvol` sky box carry it, with no face beneath any of them). What survives is
+    // empirical, not derived: where two coplanar layers ARE painted over each other, the
+    // flagged one is measured to be the layer that must draw on top, in every case checked
+    // (analysis/bl-305-clutter-uv/FINDINGS-layer-pairing.md, analysis/item9-depth-bias/
+    // cblock_probe8.py — re-run 2026-08-10 against current code: disabling this bias at C5's
+    // downtown pose puts the wrong, no_clutter-excluded ground on top for 78% of the frame;
+    // 0.5 and 1.0 of a level resolve it identically). So this term stays keyed off the same
+    // bit as the clutter gate, on that coincidence of authoring, not because the bit means
+    // "subface". The original applies ONE WHOLE priority level to it globally
+    // (`GameGenSetSubfacePriorityOffset 1` in support\init.gw, global to every mission); we
+    // deliberately apply HALF a level instead: priority 1 is a genuinely authored value
+    // (955 C5 polygons, 2207 in C1), and a full level would tie a flagged face with a real
+    // priority-1 overlay. Measured across every flagged/base overlap in C5, 0.5 and 1.0 of a
+    // level resolve identically (25,732,146 m² front / 120,999 behind either way), so the
+    // smaller offset is free. Still 50x SurfaceRankBias and 2000x NodeOrderBias.
+    private const float NoClutterLayerBias = DepthBiasPerLevel * 0.5f;
     // Overlay passes (GameZPolygon.OverlayPasses) draw on the SAME triangles as their base pass
     // and must land in front of it. Surface rank cannot carry that: 97 of the 307 overlay-bearing
     // models already have SurfaceRankCap or more base groups, so an overlay group appended after
     // them would share its base's capped rank and z-fight it. Hence a term of its own — a tenth
     // of a level is 2x the entire rank budget (5 × SurfaceRankBias = 0.05 level) so it always
-    // out-ranks within-mesh order, and 5x below SubfaceBias so two stacked overlays (the deepest
-    // in this install, 7 polygons) still sit below a real subface.
+    // out-ranks within-mesh order, and 5x below NoClutterLayerBias so two stacked overlays (the
+    // deepest in this install, 7 polygons) still sit below a real flagged layer.
     private const float OverlayPassBias = DepthBiasPerLevel * 0.1f;
 
     private readonly GameZ _gamez;
@@ -230,9 +276,9 @@ void fragment() {
     // ClampUv is part of the key because it selects a different sampler wrap mode, and two
     // surfaces on the same material can disagree about it (a 0..1 mapped tile and a tiling
     // one share plenty of textures) — see UvsWithinUnitSquare.
-    // Subface is part of the key for the same reason Priority is: it selects a different depth
+    // NoClutter is part of the key for the same reason Priority is: it selects a different depth
     // bias, and one material legitimately skins both roles (C5's cblock1/2/3 appear 236/91/52
-    // times as a plain face and 96/121/98 times as a subface over the cblock4/5/6 base).
+    // times as a plain face and 96/121/98 times as a flagged layer over the cblock4/5/6 base).
     // Lit/Fogged are part of the key because they are the model's own render flags, not the
     // material's: one texture legitimately skins both a lit world surface and a self-lit effect
     // model (C1's `fire1` shares its flame texture with static refinery geometry), and the two
@@ -241,7 +287,7 @@ void fragment() {
     // pass (both would otherwise share a cached material at the base's bias, putting the overlay
     // back where it z-fights): C5's fadedsign01 is a base skin on one wall and an overlay on
     // another.
-    private readonly Dictionary<(int Material, int Priority, int Rank, bool Subface, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv, UvClampAxes EdgeClamp, bool Lit, bool Fogged, int Pass), Material> _materialCache = new();
+    private readonly Dictionary<(int Material, int Priority, int Rank, bool NoClutter, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv, UvClampAxes EdgeClamp, bool Lit, bool Fogged, int Pass), Material> _materialCache = new();
     private readonly Dictionary<int, Shader> _biasShaderCache = new(); // keyed by feature bits
     private readonly Dictionary<int, Shader> _billboardShaderCache = new(); // cloud sprites, keyed by blend/scissor bits
     private readonly Dictionary<int, Shader> _cylindricalShaderCache = new(); // Y/X-axis facades, keyed by axis/blend/scissor/glow bits
@@ -376,6 +422,15 @@ void fragment() {
     public int OverlayPassSurfaceCount { get; private set; }
 
     public int OverlayPassDeclinedCount { get; private set; }
+
+    /// <summary>Polygons this builder built that carry the <c>no_clutter</c> flag (raw bit
+    /// <c>0x800</c>), and those that do not. Counted per BUILT MODEL, not per placement: a model
+    /// instanced a hundred times is one mesh build and counts once, which is the granularity the
+    /// flag itself has. Logged by <c>WorldSession</c> under <see cref="DebugClutterFlag"/>, so a
+    /// screenshot of the view carries the census that explains it.</summary>
+    public int FlaggedPolygonCount { get; private set; }
+
+    public int ClearPolygonCount { get; private set; }
 
     /// <summary>The textured materials built here, each with its source texture name, so a
     /// caller can re-resolve and swap them without a rebuild. See <see cref="Repaint"/>.</summary>
@@ -618,7 +673,7 @@ void fragment() {
             Vert(a); Vert(b); Vert(c);
             Vert(a); Vert(c); Vert(d);
         }
-        st.SetMaterial(GetMaterial(-1, priority: 0, rank: 0, subface: false, doubleSided: true,
+        st.SetMaterial(GetMaterial(-1, priority: 0, rank: 0, noClutter: false, doubleSided: true,
             lit: false, fogged: true));
         var mesh = new ArrayMesh();
         st.Commit(mesh);
@@ -657,8 +712,11 @@ void fragment() {
     /// material's own colour (<see cref="GameZ.VertexColorsRestateMaterialColor"/>) — emit white
     /// instead, so the shader's <c>vertex × albedo_color</c> applies that one authored value once
     /// rather than squaring it.</param>
+    /// <param name="flagColors">The <c>--debug-clutterflag</c> view: emit the polygon's
+    /// <c>no_clutter</c> flag as the vertex colour instead of its authored one. Per polygon
+    /// because the flag varies WITHIN a mesh — which is why this cannot be an instance tint.</param>
     private static void EmitPolygon(SurfaceTool st, GameZMesh mesh, GameZPolygon poly, Vector3 offset,
-        List<Vector2>? uvs, bool flatColorRestated = false)
+        List<Vector2>? uvs, bool flatColorRestated = false, bool flagColors = false)
     {
         int n = poly.VertexIndices.Count;
         if (n < 3)
@@ -669,20 +727,20 @@ void fragment() {
             {
                 // alternate winding so all triangles of the strip face the same way
                 if ((i & 1) == 0)
-                    EmitTriangle(st, mesh, poly, i, i + 1, i + 2, offset, uvs, flatColorRestated);
+                    EmitTriangle(st, mesh, poly, i, i + 1, i + 2, offset, uvs, flatColorRestated, flagColors);
                 else
-                    EmitTriangle(st, mesh, poly, i, i + 2, i + 1, offset, uvs, flatColorRestated);
+                    EmitTriangle(st, mesh, poly, i, i + 2, i + 1, offset, uvs, flatColorRestated, flagColors);
             }
         }
         else
         {
             for (int i = 1; i + 1 < n; i++)
-                EmitTriangle(st, mesh, poly, 0, i, i + 1, offset, uvs, flatColorRestated);
+                EmitTriangle(st, mesh, poly, 0, i, i + 1, offset, uvs, flatColorRestated, flagColors);
         }
     }
 
     private static void EmitTriangle(SurfaceTool st, GameZMesh mesh, GameZPolygon poly, int a, int b, int c,
-        Vector3 offset, List<Vector2>? uvs, bool flatColorRestated = false)
+        Vector3 offset, List<Vector2>? uvs, bool flatColorRestated = false, bool flagColors = false)
     {
         Vector3 Pos(int corner) => mesh.Vertices[poly.VertexIndices[corner]] - offset;
         // flat normal fallback for polygons without normal data
@@ -699,9 +757,11 @@ void fragment() {
                     normal = mesh.Normals[ni].Normalized();
             }
             st.SetNormal(normal);
-            st.SetColor(!flatColorRestated && poly.VertexColors != null && corner < poly.VertexColors.Count
-                ? poly.VertexColors[corner]
-                : Colors.White);
+            st.SetColor(flagColors
+                ? poly.NoClutter ? FlaggedColor : ClearColor
+                : !flatColorRestated && poly.VertexColors != null && corner < poly.VertexColors.Count
+                    ? poly.VertexColors[corner]
+                    : Colors.White);
             if (uvs != null && corner < uvs.Count)
                 st.SetUV(uvs[corner]);
             st.AddVertex(Pos(corner));
@@ -1035,10 +1095,10 @@ void fragment() {
             _meshPivotCache[meshIndex] = offset;
         }
 
-        // One Godot surface per (material, draw priority, subface, sidedness): polygons of
+        // One Godot surface per (material, draw priority, no_clutter, sidedness): polygons of
         // different priority need different materials (the priority becomes a depth
-        // bias — see GetMaterial), a subface takes an extra bias on top of its priority
-        // (SubfaceBias), and SHOW_BACKFACE polygons need a different cull
+        // bias — see GetMaterial), a no_clutter-flagged polygon takes an extra bias on top of
+        // its priority (NoClutterLayerBias), and SHOW_BACKFACE polygons need a different cull
         // mode when backface culling is on. Groups are kept in first-occurrence order
         // = the original's within-mesh draw order; the group's rank is the
         // equal-priority tie-break (later polygons drew over earlier ones — e.g. the
@@ -1047,19 +1107,23 @@ void fragment() {
         // Overlay passes (materials[1..]) become further groups AFTER every base group, one per
         // overlay level, so a mesh's whole base skin is committed before anything drawn on top of
         // it. Their ordering over their own base is OverlayPassBias, not rank — see the constant.
-        var groups = new List<(int Material, int Priority, bool Subface, bool DoubleSided, int Pass, List<GameZPolygon> Polys)>();
+        var groups = new List<(int Material, int Priority, bool NoClutter, bool DoubleSided, int Pass, List<GameZPolygon> Polys)>();
         var groupIndex = new Dictionary<(int, int, bool, bool, int), int>();
         int overlayLevels = 0;
         foreach (var poly in mesh.Polygons)
         {
             bool doubleSided = forceDoubleSided || !_cullBackfaces || poly.ShowBackface;
-            var key = (poly.MaterialIndex, poly.Priority, poly.Subface, doubleSided, 0);
+            var key = (poly.MaterialIndex, poly.Priority, poly.NoClutter, doubleSided, 0);
             if (!groupIndex.TryGetValue(key, out int gi))
             {
                 groupIndex[key] = gi = groups.Count;
-                groups.Add((poly.MaterialIndex, poly.Priority, poly.Subface, doubleSided, 0, new List<GameZPolygon>()));
+                groups.Add((poly.MaterialIndex, poly.Priority, poly.NoClutter, doubleSided, 0, new List<GameZPolygon>()));
             }
             groups[gi].Polys.Add(poly);
+            if (poly.NoClutter)
+                FlaggedPolygonCount++;
+            else
+                ClearPolygonCount++;
             if (poly.OverlayPasses != null)
                 overlayLevels = Math.Max(overlayLevels, poly.OverlayPasses.Count);
         }
@@ -1082,11 +1146,11 @@ void fragment() {
                 if (poly.OverlayPasses == null || poly.OverlayPasses.Count < pass)
                     continue;
                 bool doubleSided = forceDoubleSided || !_cullBackfaces || poly.ShowBackface;
-                var key = (poly.OverlayPasses[pass - 1].MaterialIndex, poly.Priority, poly.Subface, doubleSided, pass);
+                var key = (poly.OverlayPasses[pass - 1].MaterialIndex, poly.Priority, poly.NoClutter, doubleSided, pass);
                 if (!groupIndex.TryGetValue(key, out int gi))
                 {
                     groupIndex[key] = gi = groups.Count;
-                    groups.Add((key.Item1, poly.Priority, poly.Subface, doubleSided, pass, new List<GameZPolygon>()));
+                    groups.Add((key.Item1, poly.Priority, poly.NoClutter, doubleSided, pass, new List<GameZPolygon>()));
                     OverlayPassSurfaceCount++;
                 }
                 groups[gi].Polys.Add(poly);
@@ -1125,12 +1189,12 @@ void fragment() {
         var arrayMesh = new ArrayMesh();
         for (int rank = 0; rank < groups.Count; rank++)
         {
-            var (materialIndex, priority, subface, doubleSided, pass, polys) = groups[rank];
+            var (materialIndex, priority, noClutter, doubleSided, pass, polys) = groups[rank];
             var st = new SurfaceTool();
             st.Begin(Mesh.PrimitiveType.Triangles);
             foreach (var poly in polys)
                 EmitPolygon(st, mesh, poly, offset, PassUvs(poly, pass),
-                    _gamez.VertexColorsRestateMaterialColor(poly, materialIndex));
+                    _gamez.VertexColorsRestateMaterialColor(poly, materialIndex), DebugClutterFlag);
             // A surface whose UVs never leave the unit square never needs the sampler to wrap,
             // and wrapping it is what produces the hairline seams (see UvsWithinUnitSquare).
             // A scrolling surface is excluded: its UVs deliberately run past 1 and rely on
@@ -1158,7 +1222,7 @@ void fragment() {
             // authored inside the unit square, so the partial case cannot arise there.
             st.SetMaterial(glowSprite ? GetGlowMaterial(materialIndex, fogged, clampUv)
                 : cylAxis != CylAxis.None ? GetCylindricalMaterial(materialIndex, cylAxis, lit, fogged, clampUv)
-                : GetMaterial(materialIndex, priority, rank, subface, doubleSided, scroll, clampUv, lit, fogged, pass, edgeClamp));
+                : GetMaterial(materialIndex, priority, rank, noClutter, doubleSided, scroll, clampUv, lit, fogged, pass, edgeClamp));
             st.Commit(arrayMesh);
         }
         return arrayMesh;
@@ -1230,7 +1294,7 @@ void fragment() {
         var tex = texName != null ? Resolve(texName) : null;
         Material mat = tex != null
             ? BillboardMaterial(tex, blend: true, scissor: false, glow: true, lit: true, fogged: fogged, clampUv: clampUv)
-            : GetMaterial(materialIndex, 0, 0, subface: false, doubleSided: true, lit: true, fogged: fogged);
+            : GetMaterial(materialIndex, 0, 0, noClutter: false, doubleSided: true, lit: true, fogged: fogged);
         _glowMaterialCache[key] = mat;
         return mat;
     }
@@ -1252,21 +1316,21 @@ void fragment() {
         }
         else
         {
-            mat = GetMaterial(materialIndex, 0, 0, subface: false, doubleSided: true, lit: lit, fogged: fogged);
+            mat = GetMaterial(materialIndex, 0, 0, noClutter: false, doubleSided: true, lit: lit, fogged: fogged);
         }
         _cylindricalMaterialCache[key] = mat;
         return mat;
     }
 
-    private Material GetMaterial(int materialIndex, int priority, int rank, bool subface, bool doubleSided,
+    private Material GetMaterial(int materialIndex, int priority, int rank, bool noClutter, bool doubleSided,
         Vector2 scroll = default, bool clampUv = false, bool lit = true, bool fogged = true, int pass = 0,
         UvClampAxes edgeClamp = UvClampAxes.None)
     {
         rank = Math.Min(rank, SurfaceRankCap);
-        var key = (materialIndex, priority, rank, subface, doubleSided, scroll.X, scroll.Y, clampUv, edgeClamp, lit, fogged, pass);
+        var key = (materialIndex, priority, rank, noClutter, doubleSided, scroll.X, scroll.Y, clampUv, edgeClamp, lit, fogged, pass);
         if (_materialCache.TryGetValue(key, out var cached))
             return cached;
-        var mat = BuildMaterial(materialIndex, priority, rank, subface, doubleSided, scroll, clampUv, lit, fogged, pass, edgeClamp);
+        var mat = BuildMaterial(materialIndex, priority, rank, noClutter, doubleSided, scroll, clampUv, lit, fogged, pass, edgeClamp);
         _materialCache[key] = mat;
         return mat;
     }
@@ -1305,7 +1369,7 @@ void fragment() {
         Cycler.Add(mat, frames, src.CycleSpeed, src.CycleLooping, src.TextureName ?? "?");
     }
 
-    private Material BuildMaterial(int materialIndex, int priority, int rank, bool subface, bool doubleSided,
+    private Material BuildMaterial(int materialIndex, int priority, int rank, bool noClutter, bool doubleSided,
         Vector2 scroll, bool clampUv, bool lit, bool fogged, int pass, UvClampAxes edgeClamp = UvClampAxes.None)
     {
         var src = materialIndex >= 0 && materialIndex < _gamez.Materials.Count
@@ -1339,14 +1403,14 @@ void fragment() {
             // flare texture also skins polys inside regular geometry, which must stay put.)
             if (_billboardTexture != null && _billboardTexture(texName))
                 return BillboardMaterial(tex, blend, scissor, glow: false, lit: lit, fogged: fogged, clampUv: clampUv);
-            var textured = BiasMaterial(priority, rank, subface, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp);
+            var textured = BiasMaterial(priority, rank, noClutter, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp);
             _texturedMaterials.Add((textured, texName)); // for a live repaint, see Repaint()
             RegisterCycle(src, textured);
             return textured;
         }
 
         var color = src?.Color ?? Colors.White;
-        return BiasMaterial(priority, rank, subface, doubleSided, null, color, blend: color.A < 1f, scissor: false,
+        return BiasMaterial(priority, rank, noClutter, doubleSided, null, color, blend: color.A < 1f, scissor: false,
             scroll: Vector2.Zero, clampUv: false, lit: lit, fogged: fogged, pass: pass);
     }
 
@@ -1371,7 +1435,7 @@ void fragment() {
     // A ShaderMaterial that mirrors NewStandard's look but pulls the geometry toward the
     // eye (or pushes it away, negative priority) by a fraction of its view distance.
     // The per-node draw-order term is added at instance level (see BuildSubtree).
-    private ShaderMaterial BiasMaterial(int priority, int rank, bool subface, bool doubleSided, ImageTexture? tex,
+    private ShaderMaterial BiasMaterial(int priority, int rank, bool noClutter, bool doubleSided, ImageTexture? tex,
         Color? color, bool blend, bool scissor, Vector2 scroll, bool clampUv, bool lit, bool fogged, int pass = 0,
         UvClampAxes edgeClamp = UvClampAxes.None)
     {
@@ -1385,10 +1449,10 @@ void fragment() {
                 scrolls, clampUv && tex != null, lit, fogged, edgeClamp),
         };
         float bias = Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) + rank * SurfaceRankBias;
-        if (subface)
-            bias += SubfaceBias;
-        // An overlay pass shares its base's priority and subface flag by construction — it is the
-        // same polygon — so this term is the whole of what puts it in front (OverlayPassBias).
+        if (noClutter)
+            bias += NoClutterLayerBias;
+        // An overlay pass shares its base's priority and no_clutter flag by construction — it is
+        // the same polygon — so this term is the whole of what puts it in front (OverlayPassBias).
         bias += pass * OverlayPassBias;
         mat.SetShaderParameter("depth_bias", bias);
         if (tex != null)
@@ -1579,7 +1643,12 @@ void fragment() {{");
             sb.AppendLine("    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);");
             sb.AppendLine("    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);");
         }
-        sb.AppendLine(TintLine); // the debug overlays' per-instance tint; a no-op at alpha 0
+        // The debug overlays' per-instance tint; a no-op at alpha 0. Under --debug-clutterflag the
+        // fullbright world shows the flag colour EmitTriangle wrote into COLOR instead of the lit,
+        // fogged texture — C5's night art would otherwise swallow a tint whole. The shaded
+        // (aircraft) path never takes that variant, and neither does any builder that did not ask
+        // for the view, so the default shader text is unchanged by construction.
+        sb.AppendLine(DebugClutterFlag && !shaded ? ClutterFlagTintLine : TintLine);
         if (blend || scissor)
             sb.AppendLine($"    ALPHA = col.a{OpacityTerm};");
         if (scissor)

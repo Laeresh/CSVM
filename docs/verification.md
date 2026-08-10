@@ -122,6 +122,20 @@ and leave gaps when retiring old ones.
   a silhouette can sit either side of the horizon: ours rises 115 px above it at that pose while
   the original still's ridge sits 48 px below its own. When two frames' skies do not overlap in
   elevation, anchor the statistic on the silhouette both frames actually have.
+- **SHOT-28** — **A nadir shot cannot tell a painted rooftop from an extruded building, and a global
+  instance count cannot tell you where the instances went — a placement claim needs a low oblique.**
+  Directly overhead, a ground texture depicting city blocks and the 3D blocks standing on it are the
+  same pixels, so "the streets are clear" reads identically whether the placement improved or the
+  buildings vanished. A per-kind census fails the same way from the other side: placement changes
+  **relocate** a population as well as thin it, so the totals can barely move while a whole
+  viewpoint empties. Measured (`BL-305`, `PLAN-clutter-uv-placement` B13 + the `no_clutter` decode):
+  gating clutter on polygon bit `0x800` made C5's crossroads look markedly closer to `CAP-22`'s
+  original at nadir, moved the pinned frame hash, and passed the interpenetration check; the
+  per-kind counts said the city was *intact*, with `cb00a` at 79 % and `cb12a` at 96 % of baseline
+  and nothing at zero; and a 180 m oblique over the same crossroads showed the near-field skyline
+  completely gone, flat painted ground to the horizon, even brightened 3.2×. Three instruments, two
+  of them reassuring, one of them right. The nadir pose was the founding evidence of the bug, which
+  is exactly why it was trusted alone.
 
 ## GOLD — golden images
 

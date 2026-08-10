@@ -202,6 +202,27 @@ public sealed record SessionSpec
     public bool SkyZoneExplicit { get; private set; }
     public bool NoFog { get; private set; }
 
+    /// <summary><c>--no-clutter</c>: skip the chapter's ground-clutter build entirely
+    /// (<see cref="Mech3.ClutterBuilder"/> — the scattered tree/bush cards and the C2/C5 3D
+    /// city-block decorations), so the painted ground they stand on is visible. Does not touch the
+    /// ambient cloud field (<c>Effects.FogVolumeClutter</c>), which is a different population that
+    /// happens to share the word.</summary>
+    public bool NoClutter { get; private set; }
+
+    /// <summary><c>--debug-clutterflag</c>: recolour the built world by each polygon's decoded
+    /// <c>no_clutter</c> flag (raw polygon bit <c>0x800</c>, <see cref="Mech3.GameZPolygon.NoClutter"/>)
+    /// — flagged red, clear green, clutter blue. A build-time recolour, so there is no runtime
+    /// toggle. See <c>docs/cli.md</c>.</summary>
+    public bool DebugClutterFlag { get; private set; }
+
+    /// <summary><c>--clutter-templates=a,b,c</c>: build these clutter templates instead of the
+    /// chapter's own <c>AddClutterTemplates</c> list, so one district at a time can be A/B'd
+    /// against the original. Names are matched case-insensitively against the gamez's template
+    /// roots. The per-polygon <c>no_clutter</c> gate still applies — this replaces the template
+    /// SET, not the placement rule. Null → the chapter's own list;
+    /// <see cref="NoClutter"/> wins if both are given. See <c>docs/cli.md</c>.</summary>
+    public IReadOnlyList<string>? ClutterTemplates { get; private set; }
+
     /// <summary><c>--no-zone-cull</c>: switch off the gamez <c>zone_id</c> visibility gate
     /// (<see cref="Mech3.ZoneGate"/>, <c>PLAN-weather-decompile-match</c> B12, Decision 4) — every
     /// zone draws at every camera state, as builds before that item did. The one switch the plan
@@ -633,6 +654,20 @@ public sealed record SessionSpec
             else if (arg == "--debug-colliders") { s.ShowColliders = true; }
             else if (arg == "--debug-classoverlay") { s.ShowClassOverlay = true; }
             else if (arg == "--debug-tilegrid") { s.ShowTileGrid = true; }
+            else if (arg == "--debug-clutterflag") { s.DebugClutterFlag = true; }
+            else if (arg.StartsWith("--clutter-templates="))
+            {
+                var names = arg["--clutter-templates=".Length..]
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (names.Length == 0)
+                {
+                    notes.Add(new Note("world", "--clutter-templates= names no templates — keeping the chapter's own list"));
+                }
+                else
+                {
+                    s.ClutterTemplates = names;
+                }
+            }
             else if (arg.StartsWith("--map-edge-block="))
             {
                 string want = arg["--map-edge-block=".Length..];
@@ -778,6 +813,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--sounds=")) { s.Sounds = arg["--sounds=".Length..]; }
             else if (arg.StartsWith("--messages=")) { s.Messages = arg["--messages=".Length..]; }
             else if (arg == "--no-fog") { s.NoFog = true; }
+            else if (arg == "--no-clutter") { s.NoClutter = true; }
             else if (arg == "--no-zone-cull") { s.NoZoneCull = true; }
             else if (arg == "--no-flare") { s.NoFlare = true; }
             else if (arg.StartsWith("--mips=")) { s.SetMips(arg["--mips=".Length..]); }

@@ -17,36 +17,22 @@ public static class Zrdr
     /// <summary>Loads one reader file (e.g. "vehicle.json") from a zrdr ZIP or a directory of JSON files.</summary>
     public static List<object?> LoadFile(string zrdrPath, string fileName)
     {
-        byte[]? bytes = null;
-        if (Directory.Exists(zrdrPath))
-        {
-            foreach (var candidate in CandidateNames(fileName))
-            {
-                var p = Path.Combine(zrdrPath, candidate);
-                if (File.Exists(p))
-                {
-                    bytes = File.ReadAllBytes(p);
-                    break;
-                }
-            }
-        }
-        else
-        {
-            using var zip = ZipFile.OpenRead(zrdrPath);
-            foreach (var candidate in CandidateNames(fileName))
-            {
-                if (zip.GetEntry(candidate) is not { } entry)
-                    continue;
-                using var s = entry.Open();
-                using var ms = new MemoryStream();
-                s.CopyTo(ms);
-                bytes = ms.ToArray();
-                break;
-            }
-        }
-        if (bytes == null)
-            throw new FileNotFoundException($"'{fileName}' missing from '{zrdrPath}'");
-        using var doc = JsonDocument.Parse(bytes);
+        using var doc = JsonDocument.Parse(ReadEntry(zrdrPath, fileName));
+        return Convert(doc.RootElement) as List<object?>
+            ?? throw new InvalidDataException($"'{fileName}' is not a reader list");
+    }
+
+    /// <summary>Loads one reader file, treating an EMPTY reader as an empty list rather than as an
+    /// error. mech3ax writes a reader with no entries as the four bytes <c>null</c>, which
+    /// <see cref="LoadFile"/> rejects as "not a reader list" — indistinguishable there from a
+    /// corrupt file. Two shipped `templates.zrd` are in that state (C1C, C2B), and for a caller
+    /// that must tell "this chapter authors nothing" apart from "this file is broken", that
+    /// difference is the whole point. Still throws when the entry is absent.</summary>
+    public static List<object?> LoadFileOrEmpty(string zrdrPath, string fileName)
+    {
+        using var doc = JsonDocument.Parse(ReadEntry(zrdrPath, fileName));
+        if (doc.RootElement.ValueKind == JsonValueKind.Null)
+            return new List<object?>();
         return Convert(doc.RootElement) as List<object?>
             ?? throw new InvalidDataException($"'{fileName}' is not a reader list");
     }
@@ -148,6 +134,38 @@ public static class Zrdr
     /// instead ("vehicle.zrd.json"), keeping the original extension visible. Content is
     /// identical — all 222 readers verified semantically equal across the two — so only
     /// the lookup needs to accept both.</summary>
+    private static byte[] ReadEntry(string zrdrPath, string fileName)
+    {
+        byte[]? bytes = null;
+        if (Directory.Exists(zrdrPath))
+        {
+            foreach (var candidate in CandidateNames(fileName))
+            {
+                var p = Path.Combine(zrdrPath, candidate);
+                if (File.Exists(p))
+                {
+                    bytes = File.ReadAllBytes(p);
+                    break;
+                }
+            }
+        }
+        else
+        {
+            using var zip = ZipFile.OpenRead(zrdrPath);
+            foreach (var candidate in CandidateNames(fileName))
+            {
+                if (zip.GetEntry(candidate) is not { } entry)
+                    continue;
+                using var s = entry.Open();
+                using var ms = new MemoryStream();
+                s.CopyTo(ms);
+                bytes = ms.ToArray();
+                break;
+            }
+        }
+        return bytes ?? throw new FileNotFoundException($"'{fileName}' missing from '{zrdrPath}'");
+    }
+
     private static IEnumerable<string> CandidateNames(string fileName)
     {
         yield return fileName;

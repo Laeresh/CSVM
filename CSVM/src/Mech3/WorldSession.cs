@@ -111,7 +111,8 @@ public sealed class WorldSession
         StartupProfile.Record("zrdr", mark);
         mark = StartupProfile.Mark();
         var builder = new WorldBuilder(gamez, textures, collision: o.Collision,
-            scrollOverrides: missionSetup?.ScrollByModel(gamez));
+            scrollOverrides: missionSetup?.ScrollByModel(gamez),
+            debugClutterFlag: o.DebugClutterFlag);
         s.Builder = builder;
         // every chapter has exactly one world node; --node= replaces it with one named subtree
         var root = o.NodeSubtree is { } only
@@ -145,16 +146,31 @@ public sealed class WorldSession
         // since they are real geometry (also a user decision).
         mark = StartupProfile.Mark();
         ClutterBuilder? clutterBuilder = null;
+        Node3D? clutterRoot = null;
         // Clutter stamps onto matching-textured world terrain, of which a --node= stage has none.
-        var clutterNames = o.NodeSubtree != null
+        // --clutter-templates= replaces the chapter's registered set outright, so one district can
+        // be A/B'd against the original; the per-polygon no_clutter gate still applies either way.
+        // --no-clutter still wins, since it is the stronger statement.
+        var clutterNames = o.NodeSubtree != null || o.NoClutter
             ? new List<string>()
-            : ClutterBuilder.TemplateNames(o.InterpPath, o.Chapter);
-        if (clutterNames.Count > 0)
+            : o.ClutterTemplates is { } wanted
+                ? ClutterBuilder.OverrideTemplateNames(gamez, wanted)
+                : ClutterBuilder.TemplateNames(o.InterpPath, o.Chapter);
+        if (o.NoClutter)
         {
-            clutterBuilder = new ClutterBuilder(gamez, textures, builder.Scene);
+            GD.Print("clutter: skipped (--no-clutter)");
+        }
+        else if (clutterNames.Count > 0)
+        {
+            // templates.zrd drives `substitute` and `scale_range` (docs/formats/templates.md).
+            // Null when the chapter ships no such file — every decoration then stands at its
+            // authored model and size, which is also what an empty file (C1C/C2B) produces.
+            var clutterProps = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(o.DataRoot, o.Chapter));
+            clutterBuilder = new ClutterBuilder(gamez, textures, builder.Scene, clutterProps);
             if (clutterBuilder.Build(clutterNames, collision: o.Collision) is { } clutter)
             {
                 root.AddChild(clutter);
+                clutterRoot = clutter;
                 GD.Print($"clutter: {clutterBuilder.InstanceCount} sprites"
                          + (clutterBuilder.SolidCount > 0
                              ? $" + {clutterBuilder.SolidCount} 3D decorations"
@@ -176,6 +192,21 @@ public sealed class WorldSession
         }
         StartupProfile.Record("clutter", mark);
         s.Clutter = clutterBuilder;
+
+        // --debug-clutterflag: force every clutter population blue, and print the census that
+        // explains the picture. The blue is the one colour the world shader cannot express by
+        // itself — a decoration's OWN polygons are unflagged, so under the flag colours a whole
+        // city block would read as clutter-eligible ground, which is exactly how an earlier
+        // throwaway probe was misread.
+        if (o.DebugClutterFlag)
+        {
+            int painted = clutterRoot != null ? TintClutterBlue(clutterRoot) : 0;
+            GD.Print("debug: --debug-clutterflag view — world polygons "
+                     + $"no_clutter={builder.Scene.FlaggedPolygonCount} (red), "
+                     + $"clear={builder.Scene.ClearPolygonCount} (green), over the models built for "
+                     + $"{o.Chapter}; clutter blue ({painted} multimesh"
+                     + (painted == 1 ? ")" : "es)"));
+        }
 
         // Animations: bind the mission's animation program to the built world and run it. Base
         // states first (hides the destroyed building variants behind their healthy twins, and the
@@ -360,6 +391,30 @@ public sealed class WorldSession
         return s;
     }
 
+    /// <summary>Stamps <see cref="SceneBuilder.ClutterColor"/> onto every clutter draw under
+    /// <paramref name="clutter"/> as a full-strength <see cref="SceneBuilder.TintParam"/>, and
+    /// returns how many it painted. Per instance rather than per material because both clutter
+    /// paths are MultiMeshes sharing the placed world's materials — the sprite cards' own shader
+    /// and, for the 3D decorations, literally the world's — so a material-level colour would
+    /// repaint the ground with them.</summary>
+    private static int TintClutterBlue(Node3D clutter)
+    {
+        int painted = 0;
+        foreach (var child in clutter.GetChildren())
+        {
+            if (child is MultiMeshInstance3D mmi)
+            {
+                mmi.SetInstanceShaderParameter(SceneBuilder.TintParam, SceneBuilder.ClutterColor);
+                painted++;
+            }
+            else if (child is Node3D nested)
+            {
+                painted += TintClutterBlue(nested);
+            }
+        }
+        return painted;
+    }
+
     /// <summary>Build settings that vary by mode; the loaded archives are passed to
     /// <see cref="Build"/> separately.</summary>
     public sealed class Options
@@ -394,6 +449,22 @@ public sealed class WorldSession
         public bool DebugAnim { get; init; }
         public int AnimLod { get; init; } = AnimRuntime.HighLod;
         public bool DebugDzPaths { get; init; }
+
+        /// <summary><c>--no-clutter</c>: skip the ground-clutter build (the tree/bush cards and the
+        /// 3D city-block decorations) entirely, leaving the ground they stand on visible.</summary>
+        public bool NoClutter { get; init; }
+
+        /// <summary><c>--debug-clutterflag</c>: build the world recoloured by the decoded
+        /// per-polygon <c>no_clutter</c> flag — flagged red, clear green — and force whatever
+        /// clutter is built blue, so "which ground is flagged" and "where the decorations are" can
+        /// never be confused. See <see cref="SceneBuilder.DebugClutterFlag"/>.</summary>
+        public bool DebugClutterFlag { get; init; }
+
+        /// <summary><c>--clutter-templates=</c>: build these clutter templates instead of the
+        /// chapter's own registered list, so one district at a time can be A/B'd against the
+        /// original. The per-polygon <c>no_clutter</c> gate still applies. Null → the chapter's
+        /// own list. <see cref="NoClutter"/> wins over this.</summary>
+        public IReadOnlyList<string>? ClutterTemplates { get; init; }
 
         /// <summary>The caller's <see cref="TextureArchive"/> outlives this build, so the runtime
         /// keeps its emitter factory and every <c>PUFFER_STATE</c> reached at RUNTIME — a

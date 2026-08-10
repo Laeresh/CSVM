@@ -120,8 +120,11 @@ public sealed class WorldBuilder
     /// script (<see cref="MissionSetup.ScrollByModel"/>). Null leaves every model on its own
     /// gamez <c>texture_scroll</c> field, which is what a chapter with no scroll statements
     /// gets either way.</param>
+    /// <param name="debugClutterFlag"><c>--debug-clutterflag</c>: build the world recoloured by
+    /// each polygon's decoded <c>no_clutter</c> flag — see
+    /// <see cref="SceneBuilder.DebugClutterFlag"/>.</param>
     public WorldBuilder(GameZ gamez, TextureArchive textures, bool collision = false,
-        IReadOnlyDictionary<int, Vector2>? scrollOverrides = null)
+        IReadOnlyDictionary<int, Vector2>? scrollOverrides = null, bool debugClutterFlag = false)
     {
         _gamez = gamez;
         _textures = textures;
@@ -140,6 +143,7 @@ public sealed class WorldBuilder
             billboardTexture: IsCloudSpriteTexture, glowTexture: IsFlareTexture,
             cullBackfaces: true, scrollOverrides: scrollOverrides);
         _scene.Cycler = Cycler;
+        _scene.DebugClutterFlag = debugClutterFlag;
     }
 
     public int MeshInstanceCount => _scene.MeshInstanceCount;

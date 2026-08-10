@@ -8,7 +8,7 @@ namespace CSVM.Mech3;
 /// The cross-node draw-order tie-break, as a DENSE rank over the world's conflict graph.
 ///
 /// <para>Two world surfaces that are exactly coplanar, carry the same polygon priority and the
-/// same SUBFACE flag have nothing but the tie-break to separate them; the original draws the
+/// same <c>no_clutter</c> flag have nothing but the tie-break to separate them; the original draws the
 /// later node on top (nodes.json is a depth-first serialization = its draw order). Ranking by
 /// the node's flat index directly — <see cref="SceneBuilder.NodeOrderBias"/> — spends the whole
 /// index range on that, which measures 1.22–2.86 priority levels per chapter, so a within-mesh
@@ -138,7 +138,7 @@ internal static class ConflictRank
             (int)Math.Round(nz / NormalTolerance), (int)Math.Round(d / PlaneTolerance));
         if (!buckets.TryGetValue(key, out var list))
             buckets[key] = list = new List<Tri>();
-        list.Add(new Tri(node.Index, poly.Priority, poly.Subface, va, vb, vc));
+        list.Add(new Tri(node.Index, poly.Priority, poly.NoClutter, va, vb, vc));
         count++;
     }
 
@@ -161,14 +161,14 @@ internal static class ConflictRank
         u = u.Normalized();
         var v = n.Cross(u);
 
-        var flat = new List<(int Node, int Priority, bool Subface, Vector2 A, Vector2 B, Vector2 C,
+        var flat = new List<(int Node, int Priority, bool NoClutter, Vector2 A, Vector2 B, Vector2 C,
             float MinX, float MaxX, float MinY, float MaxY)>(tris.Count);
         foreach (var t in tris)
         {
             var a = new Vector2(t.A.Dot(u), t.A.Dot(v));
             var b = new Vector2(t.B.Dot(u), t.B.Dot(v));
             var c = new Vector2(t.C.Dot(u), t.C.Dot(v));
-            flat.Add((t.Node, t.Priority, t.Subface, a, b, c,
+            flat.Add((t.Node, t.Priority, t.NoClutter, a, b, c,
                 Mathf.Min(a.X, Mathf.Min(b.X, c.X)), Mathf.Max(a.X, Mathf.Max(b.X, c.X)),
                 Mathf.Min(a.Y, Mathf.Min(b.Y, c.Y)), Mathf.Max(a.Y, Mathf.Max(b.Y, c.Y))));
         }
@@ -183,7 +183,7 @@ internal static class ConflictRank
                 var b = flat[j];
                 if (b.MinX >= a.MaxX)
                     break; // sorted by MinX: nothing further along can reach back into a
-                if (a.Node == b.Node || a.Priority != b.Priority || a.Subface != b.Subface)
+                if (a.Node == b.Node || a.Priority != b.Priority || a.NoClutter != b.NoClutter)
                     continue;
                 if (a.MaxY <= b.MinY || b.MaxY <= a.MinY)
                     continue;
@@ -297,16 +297,16 @@ internal static class ConflictRank
     {
         public readonly int Node;
         public readonly int Priority;
-        public readonly bool Subface;
+        public readonly bool NoClutter;
         public readonly Vector3 A;
         public readonly Vector3 B;
         public readonly Vector3 C;
 
-        public Tri(int node, int priority, bool subface, Vector3 a, Vector3 b, Vector3 c)
+        public Tri(int node, int priority, bool noClutter, Vector3 a, Vector3 b, Vector3 c)
         {
             Node = node;
             Priority = priority;
-            Subface = subface;
+            NoClutter = noClutter;
             A = a;
             B = b;
             C = c;

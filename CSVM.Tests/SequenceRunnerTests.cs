@@ -805,8 +805,13 @@ public class SequenceRunnerTests
     /// <summary>An instantaneous OBJECT_ACTIVE_STATE swap named <paramref name="name"/> (the SWAP the
     /// bowl sign flickers with).</summary>
     private static AnimEvent Swap(string name, string? offset = null, float time = 0f) =>
-        new() { Kind = "ObjectActiveState", StartOffset = offset, StartTime = time,
-                Data = new AnimData(new Dictionary<string, object?> { ["name"] = name }) };
+        new()
+        {
+            Kind = "ObjectActiveState",
+            StartOffset = offset,
+            StartTime = time,
+            Data = new AnimData(new Dictionary<string, object?> { ["name"] = name })
+        };
 
     /// <summary>An instantaneous LIGHT_STATE named <paramref name="name"/>.</summary>
     private static AnimEvent Light(string name) =>
@@ -816,30 +821,58 @@ public class SequenceRunnerTests
     /// <summary>A timed motion whose run time the host reports (its Kind keys
     /// <see cref="RecordingHost.Durations"/>).</summary>
     private static AnimEvent Timed(string name, string? offset = null, float time = 0f) =>
-        new() { Kind = "ObjectMotion", StartOffset = offset, StartTime = time,
-                Data = new AnimData(new Dictionary<string, object?> { ["name"] = name }) };
+        new()
+        {
+            Kind = "ObjectMotion",
+            StartOffset = offset,
+            StartTime = time,
+            Data = new AnimData(new Dictionary<string, object?> { ["name"] = name })
+        };
 
     private static AnimEvent CallSeq(string name, string? offset = null, float time = 0f) =>
-        new() { Kind = "CallSequence", StartOffset = offset, StartTime = time,
-                Data = new AnimData(new Dictionary<string, object?> { ["name"] = name }) };
+        new()
+        {
+            Kind = "CallSequence",
+            StartOffset = offset,
+            StartTime = time,
+            Data = new AnimData(new Dictionary<string, object?> { ["name"] = name })
+        };
 
     private static AnimEvent StopSeq(string name, string? offset = null, float time = 0f) =>
-        new() { Kind = "StopSequence", StartOffset = offset, StartTime = time,
-                Data = new AnimData(new Dictionary<string, object?> { ["name"] = name }) };
+        new()
+        {
+            Kind = "StopSequence",
+            StartOffset = offset,
+            StartTime = time,
+            Data = new AnimData(new Dictionary<string, object?> { ["name"] = name })
+        };
 
     private static AnimEvent Loop(int count, string? offset = null, float time = 0f) =>
-        new() { Kind = "Loop", StartOffset = offset, StartTime = time,
-                Data = new AnimData(new Dictionary<string, object?> { ["Count"] = count }) };
+        new()
+        {
+            Kind = "Loop",
+            StartOffset = offset,
+            StartTime = time,
+            Data = new AnimData(new Dictionary<string, object?> { ["Count"] = count })
+        };
 
     private static AnimEvent Call(string callee, bool wait = false, string? offset = null, float time = 0f) =>
-        new() { Kind = "CallAnimation", StartOffset = offset, StartTime = time,
-                WaitsForCompletion = wait,
-                Data = new AnimData(new Dictionary<string, object?> { ["name"] = callee }) };
+        new()
+        {
+            Kind = "CallAnimation",
+            StartOffset = offset,
+            StartTime = time,
+            WaitsForCompletion = wait,
+            Data = new AnimData(new Dictionary<string, object?> { ["name"] = callee })
+        };
 
     private static AnimEvent Branch(string kind, string tag) =>
-        new() { Kind = kind,
-                Data = new AnimData(new Dictionary<string, object?>
-                    { ["condition"] = new Dictionary<string, object?> { ["tag"] = tag } }) };
+        new()
+        {
+            Kind = kind,
+            Data = new AnimData(new Dictionary<string, object?>
+            { ["condition"] = new Dictionary<string, object?> { ["tag"] = tag } })
+        };
 
     private static AnimEvent Ctrl(string kind) => new() { Kind = kind };
 
