@@ -216,7 +216,9 @@ public sealed class SequenceRunner
     private float _clock;         // seconds since this sequence started
     private float _due;           // when the next event fires
     private bool _done;
-    private int _loopsLeft = -2;  // -2 = no loop seen yet
+    // The original's u16 pass counter (+0x30): counts UP, never reset except by a fresh
+    // runner. See the "Loop" case for the termination test this drives.
+    private int _loopPasses;
     // The instant the CURRENT event's start offset is measured from: when the previous
     // event fired, plus that event's own run time. Control flow does not advance it.
     private float _base;
@@ -336,30 +338,29 @@ public sealed class SequenceRunner
             switch (ev.Kind)
             {
                 case "Loop":
-                    if (_loopsLeft == -2)
-                    {
-                        int authored = (int)(ev.Data.Num("value") ?? CountOf(ev) ?? -1f);
-                        // An AUTHORED count of 0 means INFINITE, not "stop immediately".
-                        // Surveyed across the whole install: 26 Loop events
-                        // in 25 defs ship Count 0, and every one of them is a ground-vehicle
-                        // route (C1's police/mafia/black_car/truck traffic, C2's and C3/M02's
-                        // studebakers) whose Loop is the LAST event of its sequence — the
-                        // original drives these continuously. Nothing that must terminate
-                        // uses it: no door, gate, one-shot, bomb or explosion def, and the
-                        // reader/zrdr scope has 703 Loop events with zero Count 0. Reading it
-                        // as "stop" made each car drive its route once and freeze.
-                        // Normalise here rather than at the test below, so the test keeps
-                        // meaning "a finite loop has run out" — that is the only way a
-                        // positive count can ever terminate.
-                        _loopsLeft = authored == 0 ? -1 : authored;
-                    }
-                    if (_loopsLeft == 0)
+                    // Original mechanism (004ebfd0): a u16 counter at +0x30 increments on
+                    // every visit, THEN the visit terminates the loop if the counter now
+                    // equals the authored count; an authored -1 is special-cased infinite
+                    // regardless of the counter. Reading the count fresh off the event (not
+                    // caching it) matches the exe, which re-reads its own event struct too.
+                    //
+                    // An authored 0 is infinite as a CONSEQUENCE of this shape, not a case
+                    // of its own: the counter starts at 0 and is incremented BEFORE the
+                    // compare, so after the first visit it only ever grows and can't equal 0
+                    // again — the 26 ground-vehicle routes that ship Count 0 (surveyed across
+                    // the whole install: C1's police/mafia/black_car/truck traffic, C2's and
+                    // C3/M02's studebakers, every one the LAST event of its sequence) run
+                    // continuously for exactly that reason, with no normalisation needed to
+                    // say so. A real u16 wrap would re-hit 0 at pass 65,536; that wrap is not
+                    // implemented — it is unreachable within a session and -1 already covers
+                    // the deliberately-infinite case.
+                    int authored = (int)(ev.Data.Num("value") ?? CountOf(ev) ?? -1f);
+                    _loopPasses++;
+                    if (authored != -1 && _loopPasses == authored)
                     {
                         _done = true;
                         break;
                     }
-                    if (_loopsLeft > 0)
-                        _loopsLeft--;
                     // A loop over purely instantaneous events is the data's "keep this
                     // animation alive" idiom (C1's waterfall is [PufferState ×3, Loop{-1}],
                     // whose emitters run on their own TIME_INTERVAL; the poll idiom

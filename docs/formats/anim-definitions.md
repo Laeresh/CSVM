@@ -1339,8 +1339,11 @@ writing this and match the state machine and struct offsets above exactly, inclu
 `state ← +0x21`, `event ptr ← +0x38`, both timers to 0. `LOOP` (`004ebfd0`) has no
 Ghidra-recognised function boundary — it is reached only through the dispatch table — but was
 disassembled directly: it folds the sequence timer into `+0x2c`, does `INC word ptr [+0x30]`,
-terminates on `counter == authored` (`-1` special-cased infinite) or, in its second form, on the
-accumulated time reaching the authored float, then calls the reset routine and returns 4.
+terminates on `counter == authored` (`-1` special-cased infinite) or, in its second form
+(`flags & 2`, `LOOP_RUN_TIME`), on the accumulated time reaching the authored float, then calls the
+reset routine and returns 4. **The exe has that second form; nothing shipped builds it** — of
+3,015 compiled defs' 1,018 `Loop` events, all 1,018 carry `Count` and none carries `RunTime`.
+Disproven, not merely unimplemented: see the census in `analysis/anim-interpreter-decode/FINDINGS.md`.
 
 The struct offsets above are otherwise mech3ax's `SeqDefInfoC` layout, taken as given rather than
 independently re-derived field-by-field; only the offsets the stepper and `LOOP` actually touch

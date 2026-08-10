@@ -161,7 +161,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. B11 ☑ `CALL_SEQUENCE`: one instance per sequence, startable only from the parked state
 12. B12 ☑ `STOP_SEQUENCE`: halt only — retire the stopper idiom
 13. B13 ☑ `IF` skip: match the original's non-nesting-aware scan
-14. B14 ☐ `LOOP`: align the rewind, keep the carry, write down why
+14. B14 ☑ `LOOP`: align the rewind, keep the carry, write down why
 15. B15 ☐ `START_TIME` origins: `Animation` reads the animation clock
 16. B16 ☐ `RANDOM_WEIGHT`: the original's 200-entry shared table
 
@@ -567,7 +567,83 @@ record it, do not fix it.
 
 </details>
 
-## B14 ☐ `LOOP`: align the rewind, keep the carry, write down why
+## B14 ☑ `LOOP`: align the rewind, keep the carry, write down why
+
+**Landed.** Replaced `SequenceRunner`'s down-counting `_loopsLeft` (initialised once via
+`authored == 0 ? -1 : authored`, then decremented) with an up-counting `_loopPasses` that mirrors
+`004ebfd0` directly: read `authored` fresh off the event every visit (the exe re-reads its own event
+struct too, nothing is cached), increment `_loopPasses`, and terminate when `authored != -1 &&
+_loopPasses == authored`. `0` is infinite as a **consequence** of that shape — the counter starts at
+0 and only grows once a pass has run, so it can't re-equal 0 within a session — with no
+normalisation and no census-carrying comment needed to justify it; the comment at the call site now
+cites the mechanism (and the still-unimplemented 65,536 wrap) instead. `LOOP_RUN_TIME` (`flags & 2`)
+is now also named explicitly in `anim-definitions.md` as implemented-but-unreachable (1,018 of 1,018
+shipped `Loop` events carry `Count`, none carries `RunTime`), closing disproven-claim 1 for good.
+
+**The literal mechanism fixed a real, previously undocumented overshoot — in both pass count AND
+duration, confirmed against `FUN_004ecbb0` directly, not just against `004ebfd0`'s description.**
+Tracing the old down-counter by hand (and confirming empirically, by instrumenting
+`CountedInstantLoopTakesItsAuthoredFramesInSeconds` before and after) showed the old code ran
+`authored + 1` total passes, not `authored` — its zero-check landed one visit later than the
+decrement that should have stopped it. A first pass at the fix widened that test's tolerance
+(`3 * dt` to `4 * dt`) without re-deriving *why* the measured total moved, which invited (correctly)
+the question of whether `want = 200 * AnimFrame` was still the right centre or whether the fix had
+introduced a one-frame-short fencepost (dropping a "free" first pass along with the spurious one).
+Settled by decompiling the stepper (`FUN_004ecbb0`) directly rather than reasoning from its
+description: a `LOOP` rewind always returns (state 4), so the next pass can only start on the
+*following* stepper call — there is no pass that shares a tick with the one before it. Hand-tracing
+calls against passes at `dt == AnimFrame` confirms pass *k* completes on call *k* for every *k*,
+including pass 1 (CSVM's own `_clock += dt` runs before any dispatch on every `Advance()` call, so
+pass 1 is not free there either) — `N` passes cost `N` ticks, not `N - 1`. The instrumented numbers
+confirm it lands exactly there: at `dt = 1/60` (the calibration rate `CAP-19` measured against),
+the new code measures `3.3333309 s` against `want = 3.333333 s` — float32 noise only, zero
+shortfall — while the *old* code measured `3.3499975 s`, a full `AnimFrame` **over** `want`, at the
+very same step. So the old code was wrong in duration too (long by one frame, ~0.5% for this
+fixture), not accidentally correct via a wrong count; the up-counting rewrite fixed both together.
+The residual noise at finer steps (`1/144`, `1/240`) is ordinary last-pass step-quantisation, present
+before this item too, just landing with a different sign now that the pass count shifted by one —
+the `4 * dt` headroom absorbs it without moving `want`. `CAP-19`'s "~3 s" cannot discriminate 199
+from 200 frames and was not leaned on either way. None of this is the carry, and none of it is
+something `BL-237` or any golden could have exposed, since none measures total loop-pass duration
+that precisely; the comment in `CountedInstantLoopTakesItsAuthoredFramesInSeconds` carries the
+evidence now.
+
+**(b) The yield difference is not a second divergence — it is the carry's own mechanism, already
+covered by Decision 2.** The original always returns after one `LOOP` pass, no matter what; our
+runner returns early only for an instantaneous pass (`_frameGatePending`) and otherwise keeps
+advancing the `while` loop for a timed pass. Two things rule this unobservable as anything beyond
+what Decision 2 already accepts: **(1)** `GameClock`'s shipped `Realtime` mode (every mode except
+`--det`/the lab) feeds `SequenceRunner.Advance` the real per-frame wall delta, not a fixed `1/60` —
+so a coarse step *can* let a short-period timed loop (`ftank_boom*` at 0.02 s, `ww_balmoral*` at
+0.01 s) roll over more than once within a single `Advance` call. **(2)** That is exactly what the
+overshoot carry is *for* — running the correct number of iterations against elapsed sim time rather
+than the original's own tick-quantised count — and the architecture.md comment already says so
+("pre-fix code reached for an early `return`, and that return *was* the frame lock" / "dropping the
+return is the whole change"). Forcing a yield after every pass would not restore a second, distinct
+piece of original behaviour; it would undo the carry and reopen the exact `BL-237` regressions
+(the 0.02 s-period loops running at 60% speed, `ww_balmoral1/2/3` taking 16.7 s for an authored
+10 s). No code change.
+
+**(c) The carry is written down as a deliberate divergence** in `docs/architecture.md`'s
+`SequenceRunner` entry, folded into the existing `AnimFrame` ⚠ bullet rather than added as a sixth
+(the entry was already at the 3-per-module budget's overage of 5, owned by D32): the original
+hard-zeroes both timers and returns immediately, one pass per its own engine tick always, which
+quantises correctly only because the original paces itself; CSVM must pace an authored duration
+against sim time at whatever step size the session runs, and `BL-237` measured what dropping the
+overshoot costs. The neighbouring ⚠ bullet's stale `_loopsLeft == -2` sentinel mention was updated to
+name the new up-counting mechanism instead — both edits are text within existing bullets, not new
+ones.
+
+**Verified.** `.\RunTests.ps1` with `CSVM_DATA_ROOT=Z:\CSVM`: **882 units, 30 in-engine suites,
+engine errors clean, 12 of 13 goldens hash-identical, `c1-destroy-effects` unmoved from B12/B13's
+`00ab194f…`** — no golden moved beyond the branch's known golden-red state. The timed-loop cases
+(`ww_balmoral1/2/3` at `LOOP 1000 @ Sequence 0.01 s`, the `ftank_boom*` family at 0.02 s) are
+covered by the existing `AuthoredPeriodIsHonouredAtStepsCoarserThanItself` and
+`AuthoredPeriodShorterThanAnAnimFrameIsNotStretchedToOne` theories, both run at 60 Hz and steps
+finer than it (down to 1/600 s); no new unit was needed.
+
+<details>
+<summary>Original approach (kept for reference)</summary>
 
 **Goal.** Our `LOOP` differs from the original in exactly one respect — the overshoot carry — and
 that is stated, deliberate and justified in `docs/architecture.md`.
@@ -595,6 +671,8 @@ independence `BL-237` bought must survive.
 **⚠ Traps.** `AnimFrame` is deliberately its own constant, not `GameClock.FixedDt` — do not merge
 them while in here. The u16 wrap is a mechanism, not a feature: do not implement an actual 65,536
 cap, since `-1` already covers the infinite case and a real wrap is unreachable in a session.
+
+</details>
 
 ## B15 ☐ `START_TIME` origins: `Animation` reads the animation clock
 

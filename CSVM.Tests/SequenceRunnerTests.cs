@@ -129,9 +129,20 @@ public class SequenceRunnerTests
 
         // 200 frames of sim time, give or take the step the last pass quantises onto — the
         // residual is bounded by the step size, never by the count, which is the whole property.
+        // `want` is exact, not approximate: at dt == AnimFrame (the calibration step) this
+        // fixture measures 3.3333309s, matching 200 x AnimFrame to float32 noise. Traced against
+        // FUN_004ecbb0 (the exe's stepper): a rewind always returns (state 4), so the next pass
+        // can only start on the FOLLOWING tick — pass 1 costs a tick exactly like every other
+        // pass, there is no free first pass, and 200 passes cost 200 ticks. The pre-fix
+        // down-counter (authored + 1 passes) measured 3.3499975s at this same dt — a full
+        // AnimFrame LONG, not a compensating error that happened to land on `want` — so the
+        // up-counting rewrite fixed the duration along with the pass count, it did not trade one
+        // for the other. 4 steps of headroom, not 3: fixing the count moved which side of the
+        // boundary the last pass's step-quantisation residual falls on at the finest tested step
+        // (1/240, four sub-steps per AnimFrame); it does not move `want` itself.
         float want = 200f * SequenceRunner.AnimFrame;
         Assert.True(inst.Finished, "a counted loop must terminate");
-        Assert.InRange(elapsed, want - 3f * dt, want + 3f * dt);
+        Assert.InRange(elapsed, want - 4f * dt, want + 4f * dt);
     }
 
     [Fact]

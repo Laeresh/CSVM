@@ -1253,10 +1253,12 @@ both a call and a stop, but no def is known to reach the stop first. Both are
 public so `CSVM.Tests` drives them against a fake host; the host is any `ISequenceHost` (the game's
 real one is `AnimRuntime`, tests pass a recorder). Anchors are opaque `Node3D?` pass-through — the
 interpreter never dereferences them.
-⚠ Behaviour-preserving move only — the `_loopsLeft == -2` sentinel, the `goto case "Elseif"` and the
-  256-fires-per-frame guard all LOOK refactorable and are all load-bearing (each a shipped, measured
-  bug: the bowl sign's 38% blank frames, frozen traffic loops, the double-polling waterfall). The
-  comments carry the measured evidence; do not trim them.
+⚠ Behaviour-preserving move only — the up-counting `_loopPasses` mechanism (0 is infinite because
+  the counter starts at 0 and only grows, so it can't re-equal 0 once a pass has run — no
+  normalisation needed), the `goto case "Elseif"` and the 256-fires-per-frame guard all LOOK
+  refactorable and are all load-bearing (each a shipped, measured bug: the bowl sign's 38% blank
+  frames, frozen traffic loops, the double-polling waterfall). The comments carry the measured
+  evidence; do not trim them.
 ⚠ **An instantaneous LOOP pass costs one `AnimFrame` (1/60 s) of SIM time, never one rendered
   frame** — a `LOOP n` is an authored timer of n frames, so pacing it per frame made every such
   timer scale with the client's hardware. The gate is applied at the FOOT of the advance loop
@@ -1264,7 +1266,15 @@ interpreter never dereferences them.
   flow landed on and silently overwrites a `_due` written in the LOOP case — which is why the
   pre-fix code reached for an early `return`, and that return *was* the frame lock. Below 60 Hz the
   loop catches up within the frame (the 256 guard bounds it); at 1/60 it is one pass per step,
-  bit-identical, which is why no `--det` capture moved.
+  bit-identical, which is why no `--det` capture moved. **The catch-up is a DELIBERATE divergence
+  from `crimson.exe`** (`004ebfd0`), recorded, not accidental: the original hard-zeroes both timers
+  on every pass and returns immediately — one pass per its OWN engine tick, always, whatever that
+  tick's length. That quantises correctly only because the original paces itself; CSVM must pace an
+  authored duration against sim time at whatever step size the session runs, so dropping the
+  overshoot instead of carrying it costs real accuracy — `BL-237` measured a 0.02 s period taking 2
+  steps instead of 1.2 at 60 Hz, and `ww_balmoral1/2/3` (`LOOP 1000 @ 0.01 s`, authored 10 s) taking
+  16.7 s. The carry is what keeps a timed loop's total duration correct at any step size; the
+  original's own tick-quantised total is not the target.
 ⚠ **A called sequence's first event fires one tick LATE, and that is a known, measured, deliberate
   non-fix** (`BL-135`): `CallSequence` appends past the descending walk's cursor. A bounded
   same-pass drain was built and measured install-wide on 2026-08-04 and NOT kept — it repairs
