@@ -426,14 +426,15 @@ public class SequenceRunnerTests
         Assert.True(inst.Finished);                        // removed by the sweep, same Advance
     }
 
-    // ---- 13. STOP_SEQUENCE with no running target calls it, exactly like CALL_SEQUENCE ----
+    // ---- 13. STOP_SEQUENCE with no running target starts nothing, and disables the target ----
 
     [Fact]
-    public void StopSequenceWithNoRunningTargetCallsItLikeCallSequence()
+    public void StopSequenceWithNoRunningTargetStartsNothingAndLeavesItUncallable()
     {
-        // The stopper idiom, shaped like the rocket fireball: activate starts a trail and, a
-        // beat later, names an ON_CALL stopper nothing else calls. Not running -> STOP_SEQUENCE
-        // invokes it, and the stopper's own events dispatch in order on the next frames.
+        // Shaped like the rocket fireball: activate starts a trail and, a beat later, names an
+        // ON_CALL stopper nothing else calls. The original writes the target DONE and stops, so
+        // the stopper's teardown never dispatches — and because a call only starts from PARKED,
+        // a later CALL_SEQUENCE on that name cannot revive it either.
         var host = new RecordingHost();
         var activate = Seq("activate",
             Swap("on"), CallSeq("trail"), StopSeq("stopper", "Event", 0.5f));
@@ -446,9 +447,14 @@ public class SequenceRunnerTests
 
         Assert.Equal(new[] { "on", "trail" }, t[0]);      // 0.25s: start + the call
         Assert.Equal(new[] { "emit" }, t[1]);             // 0.50s: the called trail runs
-        Assert.Equal(new[] { "stopper" }, t[2]);          // 0.75s: the stop finds nothing running
-        Assert.Equal(new[] { "off1", "off2" }, t[3]);     //        and calls the stopper instead
+        Assert.Equal(new[] { "stopper" }, t[2]);          // 0.75s: the stop resolves, halts nothing
+        Assert.DoesNotContain("off1", host.Fired);        //        and starts nothing
+        Assert.DoesNotContain("off2", host.Fired);
         Assert.True(inst.Finished);
+
+        // The stop still reports FOUND — callers read that as "did the name resolve".
+        Assert.True(inst.StopSequence("stopper"));
+        Assert.False(inst.StopSequence("ghost"));
     }
 
     // ---- 14. STOP_SEQUENCE halts every duplicate runner of the name ----

@@ -2412,11 +2412,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 return true;
 
             case "StopSequence":
-                // Halt the named sequence's active runners on this instance — or, when none is
-                // running, start it exactly like CALL_SEQUENCE (the stopper idiom: an ON_CALL
-                // teardown sequence nothing else calls). Halting never retracts motions or
-                // puffers the sequence already launched; their lifetimes are authored
-                // independently. Decode in docs/formats/anim-definitions.md.
+                // Halt the named sequence's active runners on this instance, and nothing else —
+                // a stop naming a sequence that is not running leaves it stopped, which for a
+                // parked ON_CALL sequence means no later call can start it. Halting never
+                // retracts motions or puffers the sequence already launched; their lifetimes are
+                // authored independently. Decode in docs/formats/anim-definitions.md.
                 if (ev.Data.Str("name") is { } stopName)
                     StopSequence(def, anchor, stopName);
                 return true;

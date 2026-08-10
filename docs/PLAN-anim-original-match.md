@@ -43,6 +43,8 @@ a light range, a puffer parameter or a mesh is out of scope and belongs in `back
 | 2 | The `SequenceRunner` loop-overshoot carry (`BL-237`) contradicts the original, which hard-zeroes the sequence clock on `LOOP`. Revert it? | **Keep the carry, record it as deliberate.** The original runs its own fixed update tick, so hard-zeroing quantises to *its* tick; we must pace against sim time at any step size. `BL-237` measured the cost of not carrying. B14 writes this down rather than reverting it. |
 | 3 | Where does the ground truth live? | **`docs/formats/anim-definitions.md`**, with exe addresses cited. It is the existing home of the scheduling section; a second page would split the topic. |
 | 4 | Test shape for the three bursts? | **An in-engine `--run-tests` suite**, beside `effects-census` / `wait-for-completion` in `Suites.cs` — not a new probe flag. The existing suites already own effect playback and the harness prints one PASS/FAIL table. |
+| 5 | Re-baseline a moved golden per item, or once? | **Once, in D32.** Several items can move a golden; re-pinning per item churns the manifest and each re-pin quietly blesses whatever the previous one missed. The branch runs golden-red from B12 until D32 — that is the intended state, not a failure, and D32 owns explaining every moved hash before it re-pins. |
+| 6 | Reproduce the original's stopped-sequence disable? | **No — filed as `BL-334`.** The original leaves a stopped sequence un-callable until the def resets; 123 definitions name one sequence in both a call and a stop, but whether any reaches the stop first is control flow a static census cannot settle. Implementing it would change all 123 to match a rule none is known to observe, and a sequence wrongly disabled fails silently. The instrument comes first. |
 
 ## ⚠ Read this before implementing anything
 
@@ -157,7 +159,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — Interpreter semantics
 
 11. B11 ☑ `CALL_SEQUENCE`: one instance per sequence, startable only from the parked state
-12. B12 ☐ `STOP_SEQUENCE`: halt only — retire the stopper idiom
+12. B12 ☑ `STOP_SEQUENCE`: halt only — retire the stopper idiom
 13. B13 ☐ `IF` skip: match the original's non-nesting-aware scan
 14. B14 ☐ `LOOP`: align the rewind, keep the carry, write down why
 15. B15 ☐ `START_TIME` origins: `Animation` reads the animation clock
@@ -394,7 +396,62 @@ fallbacks will misfire.
 
 </details>
 
-## B12 ☐ `STOP_SEQUENCE`: halt only — retire the stopper idiom
+## B12 ☑ `STOP_SEQUENCE`: halt only — retire the stopper idiom
+
+**Landed.** `AnimInstance.StopSequence` (`CSVM/src/Mech3/SequenceRunner.cs`) now halts every runner
+matching the name and returns whether the name resolved — nothing else. The stopper idiom is gone,
+and with it `_everStarted` (the instance-wide "has this name ever run" set) and
+`LaunchesContactTestedBody` (the `do_intersections` exception `PLAN-ground-contact` B7 added to
+bound the idiom's damage); `AddRunner`'s doc comment, which existed to explain the bookkeeping
+`_everStarted` needed, was rewritten to say what it now does. `AnimRuntime`'s `StopSequence`
+dispatch comment was corrected to match. The return contract is unchanged: false only when the name
+matched neither a runner nor a sequence.
+
+**The disable is not persisted, and that is a stated residual divergence.** The original writes the
+sequence's state byte to *done*, which — because `CALL_SEQUENCE` starts only from *parked* — makes a
+stopped sequence un-callable until the definition resets. Reproducing that needs a per-sequence
+stopped set, i.e. re-adding exactly the kind of instance-wide state this item deleted, and a census
+run for this item found **123 definitions** that name one sequence in both a call and a stop (mostly
+`flame_light_seq`, plus `chuteman_drop`/`chuteman_sway`, the `sail_splash*`/`yacht_splash*` sets and
+`warhawk`'s `smokepuff1..3`). Whether any of them reaches the stop *before* the call at run time is
+a control-flow question the static census cannot answer, so persisting the flag would change all 123
+on a divergence none is known to observe. Recorded in the `StopSequence` doc comment, in
+`docs/architecture.md`'s `SequenceRunner` entry and in `anim-definitions.md`, and filed as
+**`BL-334`** with the instrument that would settle it (Decision 6).
+
+**The `p1hit`/`piece1seq` loop did not reproduce.** `ground-contact` passes with the exception
+deleted, which is the expected result — B11 removed the concurrent-runner model the loop depended
+on, and with no start path at all the stop cannot relaunch a landed piece in the first place.
+
+**Two tests changed, both at the assertion, not around it.** The unit
+`StopSequenceWithNoRunningTargetCallsItLikeCallSequence` became
+`StopSequenceWithNoRunningTargetStartsNothingAndLeavesItUncallable`: the stopper's `off1`/`off2`
+must never fire, and the stop must still report *found*. The in-engine `stop-sequence` suite's
+fireball half asserted `stop_p1trail` dispatching its `PUFFER_STATE` at the authored 0.3 s; it now
+asserts `stop_p1trail` dispatches **nothing**, with the fireball's own puffer events as the
+still-alive control so the check cannot pass on an effect that never started. The 30 s fire's halt
+half is untouched — that is the idiom that *is* the original's.
+
+**Verified.** `.\RunTests.ps1` with `CSVM_DATA_ROOT=Z:\CSVM` before the change: PASS — **881 units,
+30 in-engine suites, 13 goldens hash-identical**. After: **881 units pass, 30 suites pass, engine
+errors clean, 12 of 13 goldens hash-identical and `c1-destroy-effects` moved**
+(`fa27f0cd… → 00ab194f…`). `analysis/goldens/manifest.json` was deliberately **not** re-baselined.
+Before/after renders of the moved shot are in `.scratch/b12-goldens/`. The move is **4 pixels of
+921,600** (0.0004 %), in a 3×2 patch at (909,289), each channel changed by 1–3/255: the fogged
+far-distance haze above the airfield where the destroyed `ap_radiotwr`'s `great_balls_of_fire`
+smoke sits, ~1.5 km out. Nothing in the frame is visibly different.
+
+**⚠ What that pose cannot show.** `c1-destroy-effects` is one camera at frame 120 of a kill whose
+effect is at the horizon — it can only ever report that the burst still renders, not *what* the
+change did. The behaviour this item removed is a teardown (`PUFFER_STATE INACTIVE` +
+`OBJECT_ACTIVE_STATE INACTIVE`) that used to fire 0.3 s into `flame_ball_01`; deleting it changes an
+effect's **lifetime**, and a single pinned frame is exactly the instrument blind to that. A 4-pixel
+move is therefore evidence that the pose is insensitive here, not evidence that the change is small.
+The assertion that actually carries this item is the `stop-sequence` suite's timeline, and D31's
+`ordnance-burst-timeline` is what will measure the burst end to end.
+
+<details>
+<summary>Original approach (kept for reference)</summary>
 
 **Goal.** `STOP_SEQUENCE` halts matching runners and does nothing else. A stop naming a parked
 `ON_CALL` sequence leaves it un-callable until the def resets, as the original does.
@@ -422,6 +479,8 @@ exception was added for — B11 should have removed the loop's cause).
 **⚠ Traps.** The `p1hit`/`piece1seq` re-launch loop documented in `StopSequence` is a symptom of the
 concurrent-runner model, not of the idiom. Land B11 first; if the loop still reproduces after B11,
 stop and re-diagnose rather than re-adding a special case.
+
+</details>
 
 ## B13 ☐ `IF` skip: match the original's non-nesting-aware scan
 
@@ -630,10 +689,21 @@ them, or a 1.2 s flash is truncated at 0.3 s and the timeline "passes" short.
 read of `docs/architecture.md`'s `SequenceRunner` / `AnimRuntime` entries against what actually
 landed. Refresh `PROJECT_CONTEXT.md`'s "Current status" pointer and archive the plan.
 
+**This item owns the single golden re-baseline** (Decision 5). No earlier item touches
+`analysis/goldens/manifest.json`, so the branch runs golden-red from B12 onward by design. Here,
+every moved hash gets **named, rendered before/after, and explained** before it is re-pinned — a
+re-pin with no reading attached is the failure mode this decision exists to prevent. Already known
+to have moved: `c1-destroy-effects` (B12, 4 px of 921,600 in fogged far-distance haze; the pose is
+blind to the lifetime change that caused it — see B12's ⚠).
+
 **Model recommendation.** medium.
 
 **Verify.** One exit code from `RunTests.ps1`; the 8-chapter sweep's logs in `.scratch/logs/`.
 
-**⚠ Traps.** The `⚠` budget in `docs/architecture.md` is **max 3 per module**. Wave B will want to
-add more than three to `SequenceRunner`; merging or retiring an existing one is part of this item,
-not an excuse to exceed it.
+**⚠ Traps.** The `⚠` budget in `docs/architecture.md` is **max 3 per module**, and the
+`SequenceRunner.cs` entry was **already at 5 before this plan started** — B12 looked for one to
+retire and found none of the five is about anything this plan touched (they cover the load-bearing
+sentinels, `AnimFrame` LOOP pacing, `BL-135`'s one-tick call lag, the `OnEventDispatched` delegate
+shape, and the `WAIT_FOR_COMPLETION` hold). Bringing that entry back to budget is real work here,
+by merging or moving one to a code comment — not by deleting a still-binding constraint to make the
+count fit.

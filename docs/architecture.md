@@ -1241,8 +1241,13 @@ definition's own sequence array (`004eb570`), so `CallSequence` starts a sequenc
 is running it AND its authored activation is ON_CALL; a call into a running or non-ON_CALL sequence
 is a silent no-op that still reports *found*, since callers read the return as "did the name
 resolve" for the CALL_ANIMATION fallback. Names are not unique (`he_ground_effect` ships two
-unnamed sequences), which is why identity is the object. `StopSequence` halts every matching runner,
-else calls. Both are
+unnamed sequences), which is why identity is the object. `StopSequence` halts every matching runner
+**and does nothing else** (`004eb610` writes the sequence DONE and has no start-if-not-running
+path): a stop naming a parked ON_CALL sequence therefore runs no teardown at all, which is what 16
+shipped definitions author (`flame_ball_01/02 → stop_p1trail`, every chapter, inside the HE
+explosion's chain). CSVM does not persist the resulting DISABLE, so a later CALL_SEQUENCE can still
+start a stopped sequence where the original would refuse it — 123 definitions name one sequence in
+both a call and a stop, but no def is known to reach the stop first. Both are
 public so `CSVM.Tests` drives them against a fake host; the host is any `ISequenceHost` (the game's
 real one is `AnimRuntime`, tests pass a recorder). Anchors are opaque `Node3D?` pass-through — the
 interpreter never dereferences them.

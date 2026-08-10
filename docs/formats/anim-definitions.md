@@ -520,15 +520,18 @@ component tracks up/down. `he_ground_effect` lifts its fireball 12 m over a ring
 seven explosions over 165 m of a 231 m hull at constant height. **A reading that is 8 m too high is
 therefore authored, not mis-parsed** — look at where the def's host was staged, not at the axes.
 
-## `STOP_SEQUENCE` halts the named running sequence — or calls it (the stopper idiom)
+## `STOP_SEQUENCE` halts the named sequence, and does nothing else
 
-Decoded 2026-08-01 from an install-wide survey of every site (94 raw occurrences across the
-readers, ~73 distinct authored signatures; the wire format is identical to `CALL_SEQUENCE` — a
-36-byte struct carrying only the name). One rule satisfies all of them, with zero counter-sites:
+The wire format is identical to `CALL_SEQUENCE` — a 36-byte struct carrying only the name — and so
+is the name resolution. `004eb610` resolves the name to an index in the definition's own sequence
+array and then unconditionally writes that sequence's state byte to **2 (done)**. There is no
+start-if-not-running path anywhere in the handler.
 
 **`STOP_SEQUENCE [NAME [x]]`: halt every active runner of sequence `x` on this instance —
-including the sequence carrying the event. If none is running, invoke `x` exactly like
-`CALL_SEQUENCE`.** Three authored idioms hang off it:
+including the sequence carrying the event.** Because `CALL_SEQUENCE` can only start a sequence
+from the parked state (3), stopping an `ON_CALL` sequence that was never called *disables* it: no
+later call reaches it until the whole definition resets. Two authored idioms use the halt, and a
+third — the "stopper" — turns out to author a teardown that never runs:
 
 - **Break** (`test_player`×33, `setprop`×8): a sequence stops *itself* inside an `IF` branch —
   `random_prop` picks one of 8 random prop rotations and `STOP_SEQUENCE [setprop]` ends the
@@ -541,15 +544,23 @@ including the sequence carrying the event. If none is running, invoke `x` exactl
   would re-light it one frame later.
 - **Stopper** (`flame_ball.zrd`'s `stop_p1trail`): the target is `ACTIVATION ON_CALL`, not
   running at fire time, and its body is pure teardown (`PUFFER_STATE … INACTIVE`,
-  `OBJECT_ACTIVE_STATE … INACTIVE`) — the event falls through to a call. The same file uses a
-  literal `CALL_SEQUENCE [stop_p1trail]` for the identical purpose elsewhere
-  (`moving_fire_ball_01`'s `fly_flare`), which is what settles the fallback: the two events are
-  author-interchangeable for reaching a stopper. No target install-wide is reachable *only* via
-  `STOP_SEQUENCE`.
+  `OBJECT_ACTIVE_STATE … INACTIVE`). The 2026-08-01 survey read this as a fall-through to a call,
+  on the strength of the same file reaching the same sequence by a literal
+  `CALL_SEQUENCE [stop_p1trail]` elsewhere (`moving_fire_ball_01`'s `fly_flare`). The exe says
+  otherwise: the stop marks it done and the teardown never dispatches. The two events are *not*
+  interchangeable — a call reaches a stopper, a stop buries it. **16 definitions** author this
+  (`flame_ball_01`/`flame_ball_02` → `stop_p1trail`, in all 8 chapters), and the effects those
+  sequences would have switched off are instead left to their own authored lifetimes.
 
 Halting a runner never retracts what its events already launched — motions, puffers and lights
 run out their own authored lifetimes (the same independence that keeps a rocket ring's scale
 motion alive after its launching sequence ends).
+
+⚠ **CSVM does not persist the disable.** It halts matching runners and reports whether the name
+resolved; it does not remember that a sequence was stopped, so a later `CALL_SEQUENCE` still
+starts it where the original's done state would refuse. 123 definitions name one sequence in both
+a call and a stop (mostly `flame_light_seq`), but whether any of them reaches the stop *before*
+the call at run time is a control-flow question the static census cannot answer.
 
 ## Fire: templates, flipbooks, and a trigger that lives in the exe
 

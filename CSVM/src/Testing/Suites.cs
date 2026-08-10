@@ -1640,8 +1640,8 @@ public static class Suites
     /// measures an effect's DURATION (<c>--effects-test</c> only proves a puffer builds;
     /// verification.md WORLD-19). Asserts on the dispatch timeline via
     /// <see cref="AnimRuntime.OnEventDispatched"/>, not on puffers, so it needs no textures:
-    /// the rocket fireball's ON_CALL stopper is reached through the call fallback at its
-    /// authored 0.3 s, and the 30 s fire's emitting poll loop is halted — an un-halted
+    /// the rocket fireball's ON_CALL stopper is named by a stop while nothing runs it and must
+    /// therefore stay silent, and the 30 s fire's emitting poll loop is halted — an un-halted
     /// <c>Loop{-1}</c> re-fires every frame forever, so "no dispatches after the stop" is the
     /// crisp discriminator.</summary>
     private static void StopSequenceStops(TestContext ctx)
@@ -1670,36 +1670,29 @@ public static class Suites
                 runtime.OnEventDispatched = d => timeline.Add((clock, d.Sequence, d.EventKind));
 
                 // The fireball: activate_puffer names its ON_CALL stopper at EVENT_OFFSET 0.3 while
-                // nothing runs under that name — the stop must CALL it (the stopper idiom).
+                // nothing runs under that name — the stop halts nothing and must START nothing,
+                // so the stopper's teardown never dispatches at all.
                 runtime.Start(fireball[0], stage);
                 for (int i = 0; i < 60; i++)
                 {
                     clock += 1f / 60f;
                     runtime.Advance(1f / 60f);
                 }
-                int stopperPuffs = 0;
-                float stopAt = -1f;
-                bool objectOffAfter = false;
+                int stopperDispatches = 0;
+                int trailPuffs = 0;
                 foreach (var e in timeline)
                 {
-                    if (e.Seq != "stop_p1trail")
+                    if (e.Seq == "stop_p1trail")
                     {
-                        continue;
+                        stopperDispatches++;
                     }
-                    if (e.Kind == "PufferState")
+                    else if (e.Kind == "PufferState")
                     {
-                        stopperPuffs++;
-                        stopAt = e.T;
-                    }
-                    else if (e.Kind == "ObjectActiveState" && stopAt >= 0f)
-                    {
-                        objectOffAfter = true;
+                        trailPuffs++;
                     }
                 }
-                ctx.Same(1, stopperPuffs, $"stop_p1trail PUFFER_STATE dispatches within 1 s");
-                ctx.Check(stopAt >= 0.3f && stopAt <= 0.45f,
-                    $"the stopper runs at its authored 0.3 s t={stopAt:0.000}");
-                ctx.Check(objectOffAfter, $"the stopper's OBJECT_ACTIVE_STATE off follows its puffer stop");
+                ctx.Check(trailPuffs > 0, $"the fireball's own puffer events dispatch puffs={trailPuffs}");
+                ctx.Same(0, stopperDispatches, $"stop_p1trail dispatches nothing within 1 s");
 
                 // The 30 s fire: fire_n_smoke is a running Loop{-1} poll re-asserting its emitter
                 // every frame — the ANIMATION_OFFSET 30 stop must HALT it (the halt idiom), or the

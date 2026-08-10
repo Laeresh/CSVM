@@ -66,11 +66,6 @@ public sealed class AnimInstance
     public readonly Node3D? Anchor;
     public readonly List<SequenceRunner> Runners = new();
 
-    /// <summary>Every sequence name this instance has ever started a runner for. Only
-    /// <see cref="StopSequence"/> reads it, and only to tell "nothing ever called this" from
-    /// "it ran and finished" — see the stopper idiom there.</summary>
-    private readonly HashSet<string> _everStarted = new(StringComparer.OrdinalIgnoreCase);
-
     public AnimInstance(AnimDefinition def, Node3D? anchor)
     {
         Def = def;
@@ -130,26 +125,37 @@ public sealed class AnimInstance
         return false;
     }
 
-    /// <summary>Starts a runner for one sequence and records that this instance has now run it —
-    /// the ONE way a runner joins an instance, so the bookkeeping cannot be bypassed. The
-    /// bootstrap that starts a definition's non-ON_CALL sequences goes through here too: those
-    /// are exactly the ones nothing ever CALLs (`player_crash_dirt`'s `pieceNseq` are reached by
-    /// no call site in the whole def), and <see cref="StopSequence"/>'s stopper idiom has to be
-    /// able to tell them from a sequence that has genuinely never run.</summary>
+    /// <summary>Starts a runner for one sequence — the ONE way a runner joins an instance, so
+    /// nothing can put a sequence into flight behind the list's back. The bootstrap that starts a
+    /// definition's non-ON_CALL sequences goes through here too, as do the death slot and the
+    /// damage-stage host, which feed sequences that are not in <c>Def.Sequences</c> at all.</summary>
     public void AddRunner(AnimSequence seq)
     {
         Runners.Add(new SequenceRunner(seq));
-        if (seq.Name is { Length: > 0 } named)
-            _everStarted.Add(named);
     }
 
     /// <summary>STOP_SEQUENCE: halts every active runner named <paramref name="name"/> —
-    /// including the caller's own runner (the data's break-out-of-my-own-IF-chain idiom). If
-    /// none is running, starts the sequence instead (the stopper idiom: reaching an ON_CALL
-    /// teardown sequence nothing else calls) — unconditionally, NOT through
-    /// <see cref="CallSequence"/>'s parked-state gate. Semantics decoded in
-    /// docs/formats/anim-definitions.md. Returns false only when the name matched no runner
-    /// and no sequence.</summary>
+    /// including the caller's own runner (the data's break-out-of-my-own-IF-chain idiom) — and
+    /// does nothing else. The original resolves the name exactly as <see cref="CallSequence"/>
+    /// does and then unconditionally marks that sequence DONE; there is no start-if-not-running
+    /// path anywhere in it. Since a call can only start a sequence from the PARKED state,
+    /// stopping an ON_CALL sequence that was never called leaves it un-callable until the whole
+    /// definition resets — a stop on a parked sequence is a DISABLE. 16 shipped definitions hit
+    /// exactly that (`flame_ball_01`/`flame_ball_02` → `stop_p1trail`, in every chapter, inside
+    /// the HE explosion's call chain), so the teardown those definitions name simply never runs.
+    /// Decode in docs/formats/anim-definitions.md.
+    ///
+    /// <para>⚠ The DISABLE is not persisted: a halt here is not remembered, so a later
+    /// CALL_SEQUENCE on the same name still starts the sequence, where the original's DONE state
+    /// would refuse it until the definition resets. 123 definitions name one sequence in both a
+    /// call and a stop (mostly `flame_light_seq`), but whether any of them reaches the stop
+    /// BEFORE the call at run time is a control-flow question the static census cannot answer —
+    /// persisting the flag would change all 123 on a divergence none of them is known to
+    /// observe.</para>
+    ///
+    /// <para>⚠ Returns whether the name RESOLVED — a matching runner, or failing that a sequence
+    /// of that name on the definition — never whether anything was halted. False means the name
+    /// is not this definition's at all.</para></summary>
     public bool StopSequence(string name)
     {
         bool halted = false;
@@ -161,50 +167,8 @@ public sealed class AnimInstance
             halted = true;
         }
 
-        if (halted)
-            return true;
-
-        // ⚠ The stopper idiom — "nothing is running under this name, so START it" — stays exactly
-        // as it was, with ONE exception, because the idiom is load-bearing install-wide (removing
-        // it wholesale moves the `c1-destroy-effects` golden).
-        //
-        // The exception: a sequence that has ALREADY RUN on this instance and whose body launches
-        // a `do_intersections` body. Restarting that re-throws a piece that has already landed,
-        // and the landing dispatches the very sequence that stops it — a loop. Measured on
-        // `player_crash_dirt` (PLAN-ground-contact B5): `p1hit`, dispatched when `piece1` lands,
-        // opens with `STOP_SEQUENCE piece1seq`; `piece1seq` is a single OBJECT_MOTION, so its
-        // runner is finished the instant the piece leaves, and the "stop" relaunched it from the
-        // crash point. At the controls: the wreck "jumps back to the crash point 4 times". Pieces
-        // 2-4 never did — and the data says why, since only `p1hit` carries a STOP_SEQUENCE.
-        var seq = Def.Sequences.FirstOrDefault(s =>
+        return halted || Def.Sequences.Any(s =>
             string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
-        if (seq != null && _everStarted.Contains(name) && LaunchesContactTestedBody(seq))
-            return true;
-
-        // Starts unconditionally rather than going through CallSequence: the idiom predates the
-        // one-instance-per-sequence rule and is not gated by it, so its start must not inherit
-        // CallSequence's parked-state test while the idiom still stands.
-        if (seq == null)
-            return false;
-        AddRunner(seq);
-        return true;
-    }
-
-    /// <summary>Whether this sequence throws a body the engine ground-tests — an OBJECT_MOTION
-    /// authoring <c>do_intersections</c>. The narrow gate on <see cref="StopSequence"/>'s stopper
-    /// idiom: only these can loop, because only these land and dispatch a sequence back.</summary>
-    private static bool LaunchesContactTestedBody(AnimSequence seq)
-    {
-        foreach (var ev in seq.Events)
-        {
-            if (ev.Kind == "ObjectMotion"
-                && (ev.Data.Obj("gravity")?.Bool("do_intersections") ?? false))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 }
 
