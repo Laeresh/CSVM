@@ -1348,7 +1348,8 @@ public partial class GameSession : Node3D
             // the pass check is WeaponBench's.
             var benchPool = new ProjectilePool(state.Textures, null, null);
             _worldRoot!.AddChild(benchPool);
-            benchPool.Listener = _camera;
+            if (_camera != null)
+                benchPool.Viewers.Add(_camera);
             // Mount and fire every one of the 48 weapons once per mount and report any that throw,
             // then quit (windowless under --headless). The report is synchronous (Spawn does the
             // muzzle math + pool insert without needing a frame), so no world tick is required.
@@ -1492,12 +1493,27 @@ public partial class GameSession : Node3D
             flyoutGamez: state.Gamez, flyoutScene: state.WorldScene, flyoutAnims: state.CrashProgram,
             soundGroups: state.SoundGroups, ambience: _ambience)
         {
-            Listener = _rigs.Count > 0 ? _rigs[0].Camera : _camera,
             // Route weapon hits to the world's destructibles: the pool's raycast
             // reports the struck collider, the runtime resolves it to a destructible and
             // spends the weapon's HEALTH_DAMAGE. Null runtime ⇒ impacts stay cosmetic.
             DamageSink = state.WorldRuntime != null ? state.WorldRuntime.DamageAt : null,
         };
+        // EVERY pane's camera, not just player 1's. The tracer pixel floor is a screen-space rule
+        // over one shared world mesh, so binding P1 alone sized every round against P1's distance
+        // and pane and then drew that geometry in all the other panes — the splitscreen bug where
+        // P1's tracers looked right and everyone else's were far too big. The pool takes the
+        // nearest viewer; the rigs are built before this point and are not rebuilt on respawn.
+        if (_rigs.Count > 0)
+        {
+            foreach (var rig in _rigs)
+            {
+                projectiles.Viewers.Add(rig.Camera);
+            }
+        }
+        else if (_camera != null)
+        {
+            projectiles.Viewers.Add(_camera);
+        }
         _worldRoot!.AddChild(projectiles);
         _projectiles = projectiles;
 

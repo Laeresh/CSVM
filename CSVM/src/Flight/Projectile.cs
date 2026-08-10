@@ -51,18 +51,26 @@ public sealed partial class ProjectilePool : Node3D
                                                 // 1.0 = neutral. Rocket feel is a pending playtest A/B — scales
                                                 // both launch velocity and acceleration together so the whole
                                                 // profile stays proportional and the round still expires at RANGE.
-                                                // Tuned to the reference shots' short discrete dashes (longer/wider values read as a long
-                                                // glowing streak) — magnitudes are user-owned tuning, and all three route
-                                                // through Config (weapons.tracerLength/tracerWidth/tracerBrightness) so the user can retune the
-                                                // look without a rebuild; these consts are only the defaults now (Config.GetFloat falls through
+                                                // Magnitudes below route through Config
+                                                // (weapons.tracerLength/tracerWidth/tracerBrightness) so the user can retune the
+                                                // look without a rebuild; these consts are only the defaults (Config.GetFloat falls through
                                                 // to them verbatim with no config.json, so the defaults stay byte-identical for goldens).
-    internal const float TracerLength = 1.0f;   // streak length behind the round, m — default; user tunes via weapons.tracerLength
-    internal const float TracerWidth = 0.10f;   // m — default; user tunes via weapons.tracerWidth
-    // Additive blending with no glow/bloom pass caps a tracer at the texture's own pixel value, which
-    // read visibly dimmer than the reference captures' near-white core — an overbright multiplier (>1,
-    // clipped by the additive blend itself) is the only lever available without a bloom pipeline.
-    // Uniform across channels so it brightens rather than recolours the per-ammo texture's own hue.
-    internal const float TracerBrightness = 3.0f; // default; user tunes via weapons.tracerBrightness
+                                                // ⚠ The four tracer constants below are MEASURED off the original's own `rabbit_blur` geometry,
+                                                // not tuned by eye — see docs/org/tracers.md. They were 1.0 m / 0.10 m / ×3.0 while this pool
+                                                // drew a single hand-sized quad; the decode replaced that with the authored crossed pair plus
+                                                // its tip disc, and these are the numbers that shape carries. Retune only with the decode open.
+    internal const float TracerLength = 4.5f;   // streak length, m — the authored quad spans z -4.5..0
+    internal const float TracerWidth = 0.2f;    // m — both crossed quads are 0.2 m wide
+    // The streak's geometry runs FORWARD from the round's simulated position: the position is the
+    // streak's TAIL, and the bright head sits at the far end. (The engine attaches the model with its
+    // origin at the round and its geometry along -Z, the flight direction.)
+    internal const float TracerTipOffset = 4.5647f; // m ahead of the round — the tip node's own transform
+    internal const float TracerTipSize = 0.2891f;   // m across — the tip disc, radius 0.1445 doubled
+    // The authored streak carries white vertex colours and its texture unmodified. The ×3 overbright
+    // this used to default to was compensating for two things the shape now supplies itself: the
+    // separate tip disc (the actual bright head) and the second crossed quad. Neutral is the
+    // authored value; the config key stays so a bloom-less display can still be pushed.
+    internal const float TracerBrightness = 1.0f; // default; user tunes via weapons.tracerBrightness
     // Distance-visibility floor: the minimum screen footprint (px) a tracer's drawn width/length
     // are allowed to shrink below at range, so a round many hundred metres out still reads as a
     // fleck instead of vanishing into sub-pixel geometry (the original screenshots show distant fire
@@ -98,10 +106,12 @@ public sealed partial class ProjectilePool : Node3D
 
     private const int MaxProjectiles = 1024;
     private const int MaxFlashes = 128;
-    private const float RocketStreakScale = 2.4f; // fatter/longer streak, the fallback when a rocket has
-                                                  // NO FLYOUT model (a chapter missing the prototype)
-    private const float RocketExhaustScale = 0.5f; // a slim exhaust streak behind a rocket that HAS a
-                                                   // MODEL body: the body is the round, this is its trail
+    // ⚠ No rocket streak constants here any more. `he_rocket`/`ap_rocket` and every other ordnance
+    // FLYOUT prototype are LOD-wrapped missile BODIES — no `rabbit_blur` streak child, no tip disc
+    // (measured, docs/org/tracers.md). An ordnance round's visible trail is its MODEL_ANIMATION
+    // puffer smoke, which AcquireTrails already draws. The old RocketStreakScale/RocketExhaustScale
+    // streaks had no counterpart in the data and are deleted; a chapter missing the prototype now
+    // shows the smoke trail alone rather than a stand-in streak.
     private const float MuzzleSize = 0.5f;    // m
     private const float MuzzleLife = 0.05f;   // s
     // The flash triad: three quads 120 degrees apart sharing one continuous per-shot roll, matched
@@ -232,11 +242,22 @@ public sealed partial class ProjectilePool : Node3D
 
     // The tracer ammo-type axis (weapon-effects.md "Muzzle & tracer textures"): each chapter's
     // texture archive also carries a per-ammo tracer streak (`tracer_slug`/`_dumdum`/`_armorpierce`/
-    // `_magnesium`), same four-way axis as the muzzle flash — TracerIndex reuses MuzzleAmmoIndex for
-    // guns. Ordnance carries no FIRE ammo-type binding, so it falls back to the generic `tracer1`
-    // (index 4), the last entry.
+    // `_magnesium`), same four-way axis as the muzzle flash — TracerIdx reuses MuzzleAmmoIndex.
+    // ⚠ The generic `tracer1` used to sit here as a fifth entry for ordnance. It is gone: no gun
+    // prototype binds it, and ordnance draws no streak at all (see the rocket note above), so the
+    // array is exactly the four the data binds.
     private static readonly string[] TracerTextures =
-        { "tracer_slug", "tracer_dumdum", "tracer_armorpierce", "tracer_magnesium", "tracer1" };
+        { "tracer_slug", "tracer_dumdum", "tracer_armorpierce", "tracer_magnesium" };
+
+    // The tip disc's own texture axis, index-parallel to TracerTextures: the authored streak's
+    // bright head is a SEPARATE mesh on its own texture (`slugtip`/`dumdumtip`/`armourpiercetip`/
+    // `magnesiumtip`), an octagonal disc perpendicular to the flight axis sitting TracerTipOffset
+    // ahead of the round. Perpendicular means it shows its full face only to a round coming at or
+    // going away from the viewer and is edge-on from the side — that self-hiding is authored, not a
+    // bug to compensate for. ⚠ Note the spelling: the AP entry is `armourpiercetip` (British) while
+    // its streak is `tracer_armorpierce` (American); both are as shipped.
+    private static readonly string[] TipTextures =
+        { "slugtip", "dumdumtip", "armourpiercetip", "magnesiumtip" };
 
     // The dirt-debris chip textures: the gunhit def's flung-debris art. The def's bit1/bit2/bit3
     // gamez nodes carry no geometry in this install (0 vertices, measured C1/C2) — the bit0N
@@ -345,8 +366,15 @@ public sealed partial class ProjectilePool : Node3D
     // instance-count scratch array, cleared and refilled every frame in RenderTracers.
     private readonly MultiMesh[] _tracerMm = new MultiMesh[TracerTextures.Length];
     private readonly int[] _tracerCounts = new int[TracerTextures.Length];
+    // The tip discs, index-parallel to the streak pools above: one instance per round, so one
+    // shared count array serves both and _tracerCounts is reused for the tip pools too.
+    private readonly MultiMesh[] _tipMm = new MultiMesh[TipTextures.Length];
     // One MultiMesh per dirt-debris chip texture (DirtDebrisTextures) — built in _Ready.
     private readonly MultiMesh[] _debrisMm = new MultiMesh[DirtDebrisTextures.Length];
+    // The per-round working set behind the TracerMinPixels floor: one sample per bound viewer,
+    // cleared and refilled per round (distance is per round), so the floor allocates nothing
+    // after the first frame.
+    private readonly List<ScreenSize.ViewerSample> _viewerScratch = new();
 
     private int _projHigh;                     // highest slot ever used (bounds the scan)
     private Node3D _flyoutModels = null!;   // container for the live rocket-body instances
@@ -354,7 +382,6 @@ public sealed partial class ProjectilePool : Node3D
     private Node3D _casingModels = null!;    // container for the pooled shell-casing instances
     private MultiMesh _impactMm = null!;
     private MultiMesh _smokeMm = null!;
-    private Camera3D? _listener;               // billboards align their streak to this camera
     private int _sfxNext;
     private bool _flyoutPoseLogged;
     private int _muzzleBasisLogs;
@@ -383,9 +410,16 @@ public sealed partial class ProjectilePool : Node3D
         Name = "projectiles";
     }
 
-    /// <summary>The camera a tracer streak orients its length toward (player 1's, in splitscreen).
-    /// Tracers still render in every pane; only the streak's screen-space direction uses this.</summary>
-    public Camera3D? Listener { get => _listener; set => _listener = value; }
+    /// <summary>Every camera that can see this pool's tracers — one per player pane in splitscreen.
+    /// Used only by the <see cref="TracerMinPixels"/> distance floor, which is a SCREEN-space rule
+    /// applied to ONE shared world-space mesh, so it can only ever be satisfied exactly for one
+    /// viewer. ⚠ Bind them ALL. Binding player 1's alone (as this did until the splitscreen fix)
+    /// floors every round against P1's distance and P1's pane height and then draws that same
+    /// inflated geometry in every other pane, where a round 1000 m from P1 but 100 m from P2 is
+    /// blown up roughly 10x in P2's view. The floor now takes the NEAREST viewer, so a round is
+    /// never inflated for anyone — at worst it is under-floored for a distant pane, which is just
+    /// the un-floored look.</summary>
+    public List<Camera3D> Viewers { get; } = new();
 
     /// <summary>The aircraft each round's swept step is measured against for the near-miss cue
     /// one per flight rig. Empty in every build that has no player aircraft (the weapon
@@ -446,8 +480,16 @@ public sealed partial class ProjectilePool : Node3D
         // basis, the impact spark faces the struck surface normal; neither is a fixed world plane.
         // One MultiMesh per tracer texture (TracerTextures) — its material is shared across every
         // instance it draws, same reason the muzzle flash is split per ammo texture.
+        // The streak mesh is the authored CROSSED PAIR, not a single quad: two perpendicular quads
+        // in one mesh, so a round still costs one instance and the streak reads solid from every
+        // angle without consulting the camera at all (docs/org/tracers.md).
         for (int i = 0; i < TracerTextures.Length; i++)
-            _tracerMm[i] = AddMultiMesh(TracerTextures[i], MaxProjectiles, additive: true, billboard: false, out _);
+            _tracerMm[i] = AddMultiMesh(TracerTextures[i], MaxProjectiles, additive: true, billboard: false, out _, CrossedStreakMesh());
+        // The tip discs. Carried on a plain quad rather than the authored octagon: the texture is a
+        // radial disc with its own alpha, so the carrier's corners only matter if the art's corners
+        // are opaque — swap in a real 8-gon here if they turn out to be.
+        for (int i = 0; i < TipTextures.Length; i++)
+            _tipMm[i] = AddMultiMesh(TipTextures[i], MaxProjectiles, additive: true, billboard: false, out _);
         for (int i = 0; i < MuzzleAmmoTextures.Length; i++)
             _muzzleMm[i] = AddMultiMesh(MuzzleAmmoTextures[i], MaxFlashes, additive: true, billboard: false, out _);
         _impactMm = AddMultiMesh("slug_muzzle2", MaxFlashes, additive: true, billboard: false, out _);
@@ -502,10 +544,11 @@ public sealed partial class ProjectilePool : Node3D
             accel *= scale;
         }
         var tint = weapon.IsRocket ? RocketTint : SlugTint;
-        // The tracer's own ammo-type axis (TracerTextures) — reuses MuzzleAmmoIndex for guns (same
-        // FIRE-binding resolution as the muzzle flash); ordnance carries no ammo-type FIRE binding,
-        // so it falls back to the generic tracer1 (the array's last entry).
-        int tracerIdx = weapon.IsRocket ? TracerTextures.Length - 1 : MuzzleAmmoIndex(weapon);
+        // The tracer's own ammo-type axis (TracerTextures/TipTextures, index-parallel) — reuses
+        // MuzzleAmmoIndex, the same FIRE-binding resolution as the muzzle flash. Ordnance draws no
+        // streak at all (RenderTracers skips it), so the old generic-tracer1 fallback is gone and
+        // this index is simply unused on a rocket.
+        int tracerIdx = MuzzleAmmoIndex(weapon);
         // Brightness is baked into the tint at spawn (weapons.tracerBrightness) rather than read
         // per frame — a round's tint stands for its whole life, same as everything else in Proj.
         float brightness = Config.GetFloat("weapons.tracerBrightness", TracerBrightness);
@@ -1006,9 +1049,12 @@ public sealed partial class ProjectilePool : Node3D
         mm.VisibleInstanceCount = n;
     }
 
-    private MultiMesh AddMultiMesh(string texture, int cap, bool additive, bool billboard, out MultiMeshInstance3D mmi)
+    /// <summary>Builds one pooled sprite/streak pool: a MultiMesh of <paramref name="cap"/>
+    /// instances over a single shared material. <paramref name="crossed"/> supplies a mesh other
+    /// than the default unit quad — the tracer pools pass <see cref="CrossedStreakMesh"/>; everything
+    /// else takes the quad.</summary>
+    private MultiMesh AddMultiMesh(string texture, int cap, bool additive, bool billboard, out MultiMeshInstance3D mmi, ArrayMesh? crossed = null)
     {
-        var quad = new QuadMesh { Size = Vector2.One };
         var mat = new StandardMaterial3D
         {
             ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
@@ -1032,12 +1078,21 @@ public sealed partial class ProjectilePool : Node3D
             // own facing normal — never from a `Uv1Scale` mirror on this shared material.)
             TextureRepeat = false,
         };
-        quad.Material = mat;
+        Mesh drawn;
+        if (crossed != null)
+        {
+            crossed.SurfaceSetMaterial(0, mat);
+            drawn = crossed;
+        }
+        else
+        {
+            drawn = new QuadMesh { Size = Vector2.One, Material = mat };
+        }
         var mm = new MultiMesh
         {
             TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
             UseColors = true,
-            Mesh = quad,
+            Mesh = drawn,
             InstanceCount = cap,
             VisibleInstanceCount = 0,
         };
@@ -1048,6 +1103,40 @@ public sealed partial class ProjectilePool : Node3D
         };
         AddChild(mmi);
         return mm;
+    }
+
+    /// <summary>The authored tracer streak's shape: two perpendicular quads sharing the length axis,
+    /// in one mesh (the original's `rabbit_blur` is one model with two polys, so one instance draws
+    /// both). Unit-sized — local +Y is the FRONT and spans [-0.5, +0.5]; X and Z are the two width
+    /// axes, so <see cref="RenderTracers"/> scaling X and Z by the width and Y by the length yields
+    /// two width x length quads. U runs along the length, 0 at the front to 1 at the tail: the
+    /// authored UV convention, measured off the model (u tracks length, v tracks width).</summary>
+    private ArrayMesh CrossedStreakMesh()
+    {
+        var verts = new Vector3[]
+        {
+            // quad A — the XY plane
+            new(-0.5f, 0.5f, 0f), new(0.5f, 0.5f, 0f), new(0.5f, -0.5f, 0f), new(-0.5f, -0.5f, 0f),
+            // quad B — the ZY plane, perpendicular to A
+            new(0f, 0.5f, -0.5f), new(0f, 0.5f, 0.5f), new(0f, -0.5f, 0.5f), new(0f, -0.5f, -0.5f),
+        };
+        var uvs = new Vector2[]
+        {
+            new(0f, 0f), new(0f, 1f), new(1f, 1f), new(1f, 0f),
+            new(0f, 0f), new(0f, 1f), new(1f, 1f), new(1f, 0f),
+        };
+        // Winding is irrelevant here and deliberately not fussed over: the shared material runs
+        // CullMode.Disabled, which is the authored `show_backface` on both polys.
+        var indices = new int[] { 0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7 };
+        var arrays = new Godot.Collections.Array();
+        arrays.Resize((int)Mesh.ArrayType.Max);
+        arrays[(int)Mesh.ArrayType.Vertex] = verts;
+        arrays[(int)Mesh.ArrayType.TexUV] = uvs;
+        arrays[(int)Mesh.ArrayType.Index] = indices;
+        // No normals: the material is Unshaded, so nothing consumes them.
+        var mesh = new ArrayMesh();
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+        return mesh;
     }
 
     private Vector3 ApplySpread(Vector3 forward, float coneDeg)
@@ -1940,28 +2029,33 @@ public sealed partial class ProjectilePool : Node3D
         player.Play();
     }
 
-    // The minimum world-space size (m) that projects to `pixels` on screen at `distance` from the
-    // listener camera — inverts Godot's default vertical (KEEP_HEIGHT) perspective projection:
-    // screenPx = worldSize * viewportHeight / (2 * distance * tan(fov/2)). 0 with no bound camera or
-    // a degenerate distance/viewport (the weapon lab, a headless dump with no listener).
-    private float MinWorldSizeForPixels(float distance, float pixels)
+    /// <summary>The floor for one round across every bound viewer: the SMALLEST size that satisfies
+    /// <paramref name="pixels"/> for any one of them, i.e. the nearest viewer's. One world-space
+    /// mesh is drawn in every pane, so no single size can satisfy them all; taking the minimum means
+    /// a round is never INFLATED for a pane whose camera is closer than the one it was sized
+    /// against, which is the splitscreen bug this replaces. Each viewer is measured with its own
+    /// pane height and FOV. 0 with no viewers bound (the weapon lab, the headless dumps).</summary>
+    private float TracerFloor(Vector3 worldPos, float pixels)
     {
-        if (_listener == null || distance <= 0f || pixels <= 0f)
-            return 0f;
-        float viewportHeight = _listener.GetViewport()?.GetVisibleRect().Size.Y ?? 0f;
-        if (viewportHeight <= 0f)
-            return 0f;
-        float fovRad = Mathf.DegToRad(_listener.Fov);
-        return pixels * 2f * distance * Mathf.Tan(fovRad * 0.5f) / viewportHeight;
+        _viewerScratch.Clear();
+        foreach (var cam in Viewers)
+        {
+            if (cam == null || !GodotObject.IsInstanceValid(cam))
+                continue;
+            float height = cam.GetViewport()?.GetVisibleRect().Size.Y ?? 0f;
+            _viewerScratch.Add(new ScreenSize.ViewerSample((cam.GlobalPosition - worldPos).Length(), cam.Fov, height));
+        }
+        return ScreenSize.NearestFloor(pixels, _viewerScratch);
     }
 
     private void RenderTracers()
     {
-        // A velocity-aligned, camera-facing streak: the quad's local Y (its length) lies along the
-        // flight direction, its local Z (the normal) points as near the camera as staying ⟂ to Y
-        // allows, and local X is the width. Not billboarded, so the streak keeps its length instead
-        // of collapsing to a screen-vertical bar. The quad trails behind the round by half its length.
-        var eye = _listener?.GlobalPosition;
+        // The authored tracer: two perpendicular quads (CrossedStreakMesh) whose shared local Y lies
+        // along the flight direction, running FORWARD from the round's position, capped by a
+        // perpendicular tip disc TracerTipOffset ahead. Not billboarded and — since the crossed pair
+        // reads solid from any angle — not camera-aligned either; the eye is now only consulted for
+        // the TracerMinPixels floor. Full-size from the spawn frame: the original never scales a
+        // gun round, so the muzzle-growth ramp this used to apply is gone. See docs/org/tracers.md.
         // Config-driven look: read once per frame, not per round — a session-wide setting,
         // not a per-shot one. Falls through to the in-code defaults verbatim with no config.json.
         float cfgLength = Config.GetFloat("weapons.tracerLength", TracerLength);
@@ -1993,43 +2087,49 @@ public sealed partial class ProjectilePool : Node3D
                     GD.Print($"flyout orientation: nose·velocity = {nose.Dot(vdir):0.000} (1.000 = nose-forward)");
                 }
             }
+            // Ordnance draws no streak and no tip: its FLYOUT prototype is a missile body, and its
+            // trail is the MODEL_ANIMATION puffer smoke AcquireTrails already runs.
+            if (p.Weapon.IsRocket)
+                continue;
             var yAxis = p.Vel.Normalized();
-            var toEyeVec = eye is { } e ? (e - p.Pos) : Vector3.Up;
-            float eyeDist = toEyeVec.Length();
-            var toEye = eyeDist > 1e-6f ? toEyeVec / eyeDist : Vector3.Up;
-            var zAxis = (toEye - yAxis * toEye.Dot(yAxis)); // camera dir, projected ⟂ to the streak
-            if (zAxis.LengthSquared() < 1e-6f)
-                zAxis = yAxis.Cross(Vector3.Right);
-            zAxis = zAxis.Normalized();
+            // The two width axes. Any pair ⟂ to the flight direction will do — the crossed mesh
+            // reads the same from every angle, which is exactly why the original consults no camera
+            // here and why nothing in this basis depends on the eye any more.
+            var zAxis = yAxis.Cross(Mathf.Abs(yAxis.Dot(Vector3.Up)) > 0.99f ? Vector3.Right : Vector3.Up).Normalized();
             var xAxis = yAxis.Cross(zAxis).Normalized();
-            // A rocket with a MODEL body trails a slim exhaust; one without (chapter missing the
-            // prototype) keeps the fatter stand-in streak so it still reads; guns stay at 1×.
-            float scale = p.Model != null ? RocketExhaustScale
-                : p.Weapon.IsRocket ? RocketStreakScale
-                : 1f;
-            // The distance-visibility floor: the minimum world size that still covers
-            // minPixels on screen at this round's distance from the listener camera — 0 with no
-            // camera bound (the weapon lab). Raises the streak's baseline size before the muzzle-growth
-            // cap below, so a round that has flown far enough to need it still gets to show it; a
-            // fresh round can never exceed how far it has actually travelled, floor or not.
-            float floorSize = MinWorldSizeForPixels(eyeDist, minPixels);
-            float width = Mathf.Max(cfgWidth * scale, floorSize);
-            // Cap the drawn streak to how far the round has actually flown, so it grows out of the
-            // muzzle instead of pre-extending a full length behind it on the spawn frame.
-            float traveled = Mathf.Max(0f, (p.Weapon.Range ?? 1000f) - p.DistLeft);
-            float len = Mathf.Min(Mathf.Max(cfgLength * scale, floorSize), traveled);
-            // The authored texture's head sits at the opposite end of its V axis from where this
-            // quad's +local-Y (the round's current position, per the trailing offset below) lands —
-            // rotate the quad 180° about its own facing normal (negate X and Y together, a proper
-            // rotation, not a mirror) so the bright head reads at the round instead of the tail.
-            var basis = new Basis(-yAxis * len, -xAxis * width, zAxis);
+            // The distance-visibility floor: the minimum world size that still covers minPixels on
+            // screen for the NEAREST bound viewer — 0 with none bound (the weapon lab). ⚠ This is
+            // the one place this pool knowingly contradicts the decode: the authored LOD stops
+            // drawing a round past 600 m outright, while this floor keeps inflating it. Kept
+            // deliberately (it came from the reference captures' distant fire) until a shot fired at
+            // a KNOWN range settles which reading is right — see docs/org/tracers.md's closing note.
+            // The tip disc below is deliberately NOT floored.
+            float floorSize = TracerFloor(p.Pos, minPixels);
+            float width = Mathf.Max(cfgWidth, floorSize);
+            float len = Mathf.Max(cfgLength, floorSize);
+            // Both width axes scale by the width, the length axis by the length: the mesh's local +Y
+            // is its front, so the streak runs FORWARD from the round. The round's position is the
+            // streak's TAIL — hence the +half-length origin offset rather than the -half this used
+            // to apply, and no 180° flip: the mesh's own UVs already put the head at the front.
+            var basis = new Basis(xAxis * width, yAxis * len, zAxis * width);
             var mm = _tracerMm[p.TracerIdx];
             int n = _tracerCounts[p.TracerIdx]++;
-            mm.SetInstanceTransform(n, new Transform3D(basis, p.Pos - yAxis * (len * 0.5f)));
+            mm.SetInstanceTransform(n, new Transform3D(basis, p.Pos + yAxis * (len * 0.5f)));
             mm.SetInstanceColor(n, p.Tint);
+            // The tip disc: perpendicular to flight (its quad spans the two width axes, its normal
+            // is the flight direction), TracerTipOffset ahead of the round. Same instance index as
+            // the streak, so one count array serves both pools.
+            var tip = _tipMm[p.TracerIdx];
+            tip.SetInstanceTransform(
+                n,
+                new Transform3D(new Basis(xAxis * TracerTipSize, zAxis * TracerTipSize, yAxis), p.Pos + yAxis * TracerTipOffset));
+            tip.SetInstanceColor(n, p.Tint);
         }
         for (int i = 0; i < _tracerMm.Length; i++)
+        {
             _tracerMm[i].VisibleInstanceCount = _tracerCounts[i];
+            _tipMm[i].VisibleInstanceCount = _tracerCounts[i];
+        }
     }
 
     private struct Proj
