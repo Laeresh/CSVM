@@ -8,23 +8,58 @@ Method: read-only decompile and cross-reference census; the Ghidra project was n
 
 ## Result
 
-No dedicated cloud-wisp spawner was found in the executable's enumerated puffer, world-card,
-camera-cloud or weather systems. This does **not** prove that no other render/compositing path
-exists.
+The wisps are the authored **`speed_cue` distance puffers** in each chapter's
+`zrdr/speed_cue.zrd`, not a hidden cloud renderer. The earlier extraction census accidentally
+excluded them by filtering out `ON_CALL` puffers. That filter was invalid here: `speed_cue` is
+called during player setup and its `mcue_sequence` loops forever at 0.1-second intervals.
 
-The one previously missed aircraft-attached sprite emitter is a hard-coded **engine-exhaust
+The observation supplied on 2026-08-10 identifies this mechanism independently: the visible
+sprites match `smoke101`/`smoke102`/`smoke103` at low opacity, appear immediately ahead of
+the aircraft, remain world-fixed while the aircraft passes, and cross the view for about 24 frames
+at 110 mph versus 8 frames at 300 mph. The 3:1 duration change closely follows the 2.73:1 speed
+change, as expected for a fixed spatial field rather than a plane-attached lifetime.
+
+The separate executable-side aircraft-attached sprite emitter is a hard-coded **engine-exhaust
 puffer**. It is constructed for each model locator found with `exhaust%d`, emits the ordinary
 `smoke101`/`smoke102`/`smoke103` particle pool, and is driven by a positive
 commanded-versus-current throttle gap. Its particles detach into world space after emission, so
 they pass the aircraft, but the decoded size, trigger and lifetime do not match an ambient cloud
 population that is visible continuously.
 
-This is therefore a negative finding for the systems traced so far, not an address for a third
-cloud population. **BL-317 remains incomplete:** none of the required constructor/allocation,
-per-frame placement/recycling, or final render-submission links has been identified for the
-observed wisps themselves. The observation still needs a controlled original capture which
-separates the already-known world cloud populations and this exhaust effect. Until then, it should
-not be implemented as a new renderer.
+The hard-coded exhaust puffer below remains a separate, correctly ruled-out effect. It reuses the
+same three textures but is sub-metre, near-black, rear-mounted, short-lived and throttle-rise
+gated. Texture identity alone was never sufficient to distinguish the two emitters.
+
+## Actual wisp mechanism: authored `speed_cue`
+
+`cam_anim.zrd` loads the chapter-local `speed_cue.zrd`. The definition is hosted on `camera1`,
+is `ON_CALL`, and calls `mcue_sequence` when hardware rendering is active. C4's player-hook
+setup contains the explicit `CALL_ANIMATION speed_cue` and a corresponding stop when the player
+is detached. The sequence polls camera altitude every 0.1 seconds and selects one of three distance
+puffers:
+
+| Camera band | Puffer | Interval | Deviation | C1 peak alpha | C4 peak alpha |
+|---|---|---:|---:|---:|---:|
+| within 50 m of ground | inactive | — | — | — | — |
+| below 800 m | `cuepuffer1` | 30 m | 18 m | 0.4 | 0.6 |
+| 800–900 m | `cuepuffer2` | 15 m | 25 m | 0.5 | 0.7 |
+| 900–1200 m | `cuepuffer3` | 8 m | 30 m | 0.5 | 0.7 |
+| 1200–1500 m | `cuepuffer2` | 15 m | 25 m | 0.5 | 0.7 |
+
+All three attach at `player` local offset `(0,0,-60)`. Aircraft gun/fire locators occupy negative
+local Z while exhaust locators occupy positive local Z, confirming that this offset is 60 m ahead
+of the nose. Each uses zero local and world velocity, random velocity −0.8..+0.8 m/s per axis,
+friction 1, initial size 2.5..4.5 m, lifetime 3..4 s, growth 1.25, distance fade 500..600 m, and a
+random static choice among `smoke101`, `smoke102`, and `smoke103`. The colour ramp is transparent
+white at birth, low-alpha white at normalized age 0.5, and transparent black at death. C1 and C4
+differ only in the three peak-alpha values shown above.
+
+The compiled `PUFFER_STATE` event path is `FUN_004eeb10` → `FUN_00550100`. The global update
+`FUN_0054ee10` → `FUN_0054f8b0` samples the attached node's world transform and emits along its
+travelled segment at the selected distance interval. Each emitted particle is then an independent
+world-space record in `DAT_00763d9c`, which explains both the aircraft passing the puff and the
+inverse relationship between speed and visible frames. `FUN_0054f8b0` also chooses one of the
+three texture handles and copies the full size/lifetime/colour state into the live particle.
 
 ## Complete hidden aircraft-puffer chain
 
@@ -40,8 +75,8 @@ global emitter list headed by `DAT_00763d8c`. It stores the exhaust node at emit
 through `FUN_00550370`, with zero local translation through `FUN_00550380`.
 
 The allocator's direct callers were enumerated. Apart from this path, they are the authored
-`PUFFER_STATE` path (`FUN_004eeb10`) and two animation load/copy paths (`FUN_00520910`,
-`FUN_00521b80`). There is no second hard-coded aircraft or camera emitter.
+`PUFFER_STATE` path (`FUN_004eeb10`) used by `speed_cue`, and two animation load/copy paths
+(`FUN_00520910`, `FUN_00521b80`). There is no second hard-coded aircraft or camera emitter.
 
 ### Emission, placement and lifetime
 
@@ -88,10 +123,9 @@ explicit colour ramp ends at alpha zero, and no `cloud1`/`cloud2` material occur
 This is the same particle-state path used by authored puffers, not the world facade/clutter path
 used by `cloudsprite1/2` and `cloudparent`.
 
-**Partial link:** the trace reaches the live-particle submission record and its complete
-texture/material state, but the final dynamically dispatched draw leaf is not resolved. That
-missing leaf does not change the exhaust-vs-cloud identification, but it means the ruled-out
-candidate's render link does not meet BL-317's original completion bar.
+The trace reaches the live-particle submission record and its complete texture/material state;
+the final dynamically dispatched draw leaf is not named. That missing symbol does not affect the
+identification because the actual wisp uses this same generic particle submission path.
 
 ## Why the known cloud mechanisms do not provide a third spawner
 
@@ -108,18 +142,13 @@ candidate's render link does not meet BL-317's original completion bar.
 - Weather precipitation is not common to both observations: C4 IA1 authors snow; C1 IA1 has no
   precipitation `TYPE`.
 
-## Confidence and remaining discriminator
+## Confidence and capture status
 
-**High confidence** that the enumerated puffer and world-card systems contain no third spawner
-attached to the aircraft/camera: all direct puffer allocations, direct world-card insertions,
-aircraft init/update paths, the camera-dynamic cloud function and weather constructors were
-censused. Indirect allocation, a static pool, or a non-sprite compositing path is not ruled out.
+**High confidence.** The authored name, forward offset, exact texture pool, opacity ramp,
+altitude-dependent density and generic puffer world-space behavior jointly explain every reported
+property. No new renderer is required; CSVM should run this authored animation/puffer definition.
 
-**Unresolved visual identification:** the footage record does not isolate one alleged wisp while
-holding throttle steady and excluding both authored cloud families by position. The next capture
-should use clear air, hold throttle unchanged for at least five seconds, then make one large
-increase. If puffs appear only after the increase and trail from `exhaust%d`, they are this
-effect. If they persist at steady throttle, keep a landmark and altitude/position visible long
-enough to establish whether each puff is a world object. A persistent steady-throttle puff would
-contradict the executable census and justify looking for a non-sprite compositing artifact rather
-than another spawn system.
+The new recording itself was not available in the workspace during this update, so the frame
+counts and visual texture match above are explicitly user-reported measurements rather than claims
+from direct frame inspection. If the file is added, its timestamps can be attached as durable
+capture evidence, but it is no longer needed to locate the spawning mechanism.

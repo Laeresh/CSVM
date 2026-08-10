@@ -73,6 +73,26 @@ sprites flip. A presence-of-COLORS rule alone was not enough: `fire_n_smoke` and
 `large_black_smokeball` both carry `colors: null` yet end on black sprites, and adding those
 turned every dying smoke puff into more glow.
 
+## Aircraft speed-cue wisps
+
+Each chapter's `speed_cue.zrd` authors the pale puffs that appear ahead of the player's aircraft.
+Although the animation and its three puffer sequences are `ON_CALL`, player setup starts
+`speed_cue`; its controller then loops every 0.1 s. This is why a census that excludes `ON_CALL`
+puffers incorrectly misses an ambient effect.
+
+The controller disables the effect within 50 m of the ground. By camera altitude it selects a
+30 m interval / 18 m deviation puffer below 800 m, 15 m / 25 m from 800–900 m, 8 m / 30 m from
+900–1200 m, and 15 m / 25 m from 1200–1500 m. Each emitter is attached to `player` at local
+`(0,0,-60)`, 60 m ahead of the aircraft. All use zero base velocity, ±0.8 m/s random velocity,
+2.5–4.5 m initial size, 3–4 s lifetime, growth 1.25, and random static
+`smoke101`/`smoke102`/`smoke103` textures. Their colour ramp is transparent white → low-alpha
+white at half-life → transparent black. C1 uses peak alpha 0.4/0.5/0.5; C4 uses 0.6/0.7/0.7.
+
+The generic distance-puffer update leaves emitted particles in world space. Consequently the
+aircraft passes through each puff, and its screen-visible duration falls approximately inversely
+with airspeed. This effect is separate from both chapter cloud-card populations and the
+hard-coded throttle-rise exhaust below.
+
 ## Hard-coded aircraft throttle-rise exhaust
 
 `crimson.exe` also constructs one puffer outside the authored `PUFFER_STATE` readers. Aircraft
@@ -90,8 +110,7 @@ commanded-versus-current throttle gap and otherwise decays it to off. The generi
 particles in world space, which is why they pass behind the moving aircraft.
 
 This is the executable counterpart of the throttle-rise smoke described in
-`CSVM/src/Flight/ThrottleSlamSmoke.cs`, not an ambient cloud system. The full BL-317 trace and
-the remaining uncertainty about the apparent cloud wisps are in
+`CSVM/src/Flight/ThrottleSlamSmoke.cs`, not the speed-cue wisp system. The full BL-317 trace is in
 `analysis/bl-317-plane-wisps/FINDINGS.md`.
 
 

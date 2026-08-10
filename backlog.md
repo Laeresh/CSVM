@@ -1471,7 +1471,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   starting point, but the decode should come from footage: when they are visible, their size,
   count, and whether they move with the air or hang world-fixed. Needs a dedicated original
   capture at several altitudes in clear air away from the deck band.
-  ⚠ **Three mechanisms are ruled out — do not re-walk them** (2026-08-09, `crimson.exe` via
+  ⚠ **The original exclusion of authored puffers was wrong** (corrected 2026-08-10). The census
+  filtered out `ON_CALL` events, but chapter-local `speed_cue.zrd` is an `ON_CALL` animation that
+  player setup starts automatically and that loops every 0.1 s. Its three distance puffers attach
+  at `player (0,0,-60)` — 60 m ahead — and use `smoke101`–`103`, 2.5–4.5 m size, 3–4 s life,
+  transparent→low-alpha white→transparent colour, and 30/15/8 m intervals selected by camera
+  altitude. Emitted particles stay in world space. C1 and C4 have the same geometry and timing;
+  C4 raises the three midpoint alphas from 0.4/0.5/0.5 to 0.6/0.7/0.7. This exactly matches the
+  user's new observations: the texture pool, low opacity, spawning directly ahead, the aircraft
+  passing each puff, and ~24 visible frames at ~110 mph versus ~8 at ~300 mph. Full data and
+  Ghidra runtime chain: `analysis/bl-317-plane-wisps/FINDINGS.md`.
+  ⚠ **Three other mechanisms are ruled out — do not re-walk them** (2026-08-09, `crimson.exe` via
   Ghidra + a census of the shipped extraction; full evidence in that day's
   `git log --grep=BL-317`). (a) The profiler bucket **`ZBT_CAMDYN_CLOUDHACK`**, whose name
   promises exactly this feature, brackets `FUN_0042ee40` — the `CLOUD_COVER` whiteout and band
@@ -1480,29 +1490,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `flags.unk12`, gated by the debug switch `CameraRenderFluffClutter`) is **foliage**: 47 nodes,
   all in C1, all fir trees and bushes, bbox 3.7 × 6.7 m at ground level — see `gamez.md`'s
   bit-12 bullet, written so this one is not chased twice. (c) There is **no third cloud
-  population in the world data and no ambient puffer**: sweeping every node name in all eight
-  chapters for `cloud|wisp|puff|fog|mist|haze|vapor|smoke` returns only `cloudparent` and
-  `cloudsprite1/2` plus the effect emitters, and of 1613 install-wide `PufferState` events every
-  non-`OnCall`/non-`WeaponHit` one is a C3 world prop (waterfalls, rapids, the volcano, the
-  moving Studebakers) — nothing is hosted on an aircraft. So the wisps are neither world
-  geometry, nor clutter, nor an authored puffer; whatever draws them travels with the aircraft or
-  the camera, and no candidate for that has been found yet. The capture above is now the *first*
-  step, not the fallback.
-  ⚠ **A census of the known executable-side sprite systems found no ambient aircraft/camera
-  spawner** (2026-08-10; `analysis/bl-317-plane-wisps/FINDINGS.md`). The one missed aircraft-local
-  path is hard-coded **engine exhaust**: `FUN_00476250` creates a `FUN_00550100` puffer at every
+  population in the world data**: sweeping every node name in all eight chapters returns only
+  `cloudparent` and `cloudsprite1/2` plus effect emitters. The wisps are neither world geometry nor
+  clutter; they are the authored `speed_cue` puffer above.
+  ⚠ **The hard-coded aircraft-local puffer is separate engine exhaust** (2026-08-10):
+  `FUN_00476250` creates a `FUN_00550100` puffer at every
   `exhaust%d` locator (`exhaust1`, `exhaust2`, …); `FUN_004afbc0` enables it only from a
   positive commanded-vs-current
   throttle gap; `FUN_0054ee10` / `FUN_0054f8b0` leave world-space `smoke101`–`103` particles
   behind the moving plane (0.4 m distance interval, 0.2–0.3 m initial size, 0.5–1.5 s life,
-  near-black→transparent). That explains why those puffs pass the aircraft but contradicts “pale
-  and present at steady throttle,” so it is **ruled out**, not the answer. All direct puffer
-  allocations and world-card insertions are now enumerated, but indirect/static-pool or non-sprite
-  paths are not; **BL-317 remains open, with all three actual-wisp links (allocation, per-frame
-  placement/recycling, final draw) still missing.** Do not invent a third renderer from this
-  observation. The remaining task is a controlled original capture: steady throttle for ≥5 s,
-  then one large increase, with a fixed landmark/altitude to distinguish exhaust from the
-  world-fixed `cloudsprite`/`cloudparent` populations.
+  near-black→transparent). Its shared textures explain the false lead, but its rear attachment,
+  scale, colour, life and throttle trigger rule it out. **BL-317's spawning mechanism is now
+  located; remaining work is to implement the authored `speed_cue` animation/puffers in CSVM.**
 
 - `BL-322` `[Bug]` **C5's lit facades render ×0.58–0.66 of the original with WorldLight already at
   clamp 1.0** (split out of `BL-303` at its close, 2026-08-08; measured `CAP-11`: tower faces 10.2
