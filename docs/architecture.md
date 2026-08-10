@@ -1649,11 +1649,21 @@ constants through `Config`, but the defaults are now **measured off the model**,
 and `tracerBrightness` sits at a neutral 1.0, since the ×3 overbright was compensating for the tip
 disc and second quad this shape supplies itself.
 ⚠ `RenderTracers` still floors the drawn width/length per round against `weapons.tracerMinPixels`
-via `MinWorldSizeForPixels` (inverts the listener camera's vertical FOV/viewport-height projection),
+via `ScreenSize.MinWorldSizeForPixels` (inverts a camera's vertical FOV/viewport-height projection),
 so a round far enough out reads as a fleck instead of shrinking under a pixel. **This is a known,
 deliberate conflict with the decode**, which measures a hard 600 m LOD past which the original draws
 nothing at all. It stays until a shot fired at a *known* range settles which reading is right; the
 tip disc is deliberately left unfloored.
+⚠ **The floor is a screen-space rule over ONE shared world-space mesh, so bind every pane's camera
+to `ProjectilePool.Viewers`, not just player 1's.** `ScreenSize.NearestFloor` sizes each round for
+the **nearest** viewer, measuring every camera with its own FOV and its own pane height. Binding P1
+alone (as this did until the splitscreen fix) sized every round against P1's distance and then drew
+that geometry in all the other panes — a round 1000 m from P1 but 100 m from P2 came out ~10×
+oversized in P2's view, which is what "P1's tracers look right, everyone else's are huge" was.
+Minimum is load-bearing: sizing for the *farthest* viewer inflates every nearer pane, while sizing
+for the nearest can only under-floor a distant one, which is just the un-floored look.
+`TracerScreenSizeTests` pins the rule (and the per-viewer pane height, where a far viewer in a tall
+pane legitimately beats a near one in a short pane).
 `Spawn(weapon, worldMuzzle, inheritVel, shooterId)` fires one round; one pool per session, fed by
 every player's guns — `shooterId` is the firing `PlayerIndex` (`NoShooter` for the lab's), carried on
 the round so the near-miss cue can exclude its own. `NearMissTargets` is that cue's registry (BL-087):

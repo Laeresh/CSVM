@@ -193,6 +193,7 @@ per round. The decode settles the numbers that tuning was standing in for.
 | Colour | white vertex colours, texture unmodified | `TracerBrightness` ×3 overbright, additive | ours compensates for the missing tip disc and no bloom |
 | Growth | full 4.5 m from the spawn frame; nothing ever scales a gun round | length capped by distance travelled, so it grows out of the muzzle | ours is an invention; harmless at 8 shots/s but not the original |
 | Range cutoff | LOD **600 m**, then nothing draws | `TracerMinPixels` 2.0 floor *inflates* distant rounds | ⚠ direct conflict — ours deliberately shows what the original hides |
+| Who the floor is for | n/a — the LOD is per-viewer, because each pane draws its own | one shared world mesh, floored for the **nearest** bound viewer | the original's per-camera LOD has no equivalent for a shared mesh; sizing for P1 alone was the splitscreen bug |
 | Rockets | prototype body only, no streak; the trail is `MODEL_ANIMATION` puffer smoke | a `tracer1` streak at `RocketExhaustScale` 0.5 / `RocketStreakScale` 2.4 | ours invents a streak the data has no counterpart for |
 | Per-frame work | one position write per round | per-round basis rebuild against the listener camera | |
 
