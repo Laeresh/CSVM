@@ -211,7 +211,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — The authored per-kind data
 
 21. ☑ `templates.zrd` reader + `docs/formats/templates.md`
-22. ☐ Apply `substitute` and `scale_range`
+22. ☑ Apply `substitute` and `scale_range`
 23. ☐ Survey `far_fade_range`, `rotation_range`, `translate_uv_range` → decide or hand to backlog
 
 ## Dependency and parallelism notes
@@ -1520,7 +1520,77 @@ and divides. A 9.0/1.0 pair is 90/10, not 9:1 of something else. (b) `translate_
 `far_fade_range` are nested pairs-of-pairs in the reader; `scale_range` is a flat pair. Do not
 flatten one into the other. (c) Do not consume anything in this item — reader and docs only.
 
-## C22 ☐ Apply `substitute` and `scale_range`
+## C22 ☑ Apply `substitute` and `scale_range`
+
+### ✅ Landed 2026-08-10
+
+`ClutterBuilder` takes a `ClutterTemplateSpec` at construction (null = the pre-C22 monoculture at
+authored size, which is what the A/B below is measured against). Per accepted stamp, after the
+dedup: roll the model against the kind's cumulative `substitute` table, then draw a uniform scale
+from `scale_range` and compound it onto whatever basis the placement keeps.
+
+**⚠ Trap (b) is DISPROVEN, and it is the opposite of what this item predicted.** The plan said
+"resolve properties from the *target*, not the source". `FUN_004dd6e0` says the reverse: the
+decoration entry's own kind block is held in `fVar4` for the whole function — the slope gate, the
+jitter, the rotation, the scale AND the fade all read it — and the substitute roll rewrites only
+`local_110`, the model pointer. So a C1 `firtree2` that came from a `firtree1` roll is scaled by
+*firtree1's* 0.9–1.1, while a `firtree2` the template placed itself is scaled by its own 0.9–1.5.
+Implemented as the decompile has it.
+
+**⚠ The first implementation failed DET-9, and the assertion is what caught it.** Seeding from
+`Rng.IntSeedFor(Rng.Clutter)` makes the stream a function of the session master, which is
+time-derived on any unpinned run — two `--freecam --chapter=C1` runs gave firtree1 15,154 then
+15,148. But the original re-seeds with `time(0)` only *after* the world build
+(`FUN_004df1d0`), so its forest is the same forest on every launch. The stream now runs off a
+fixed constant, deliberately independent of `--seed=`; two runs are now identical to the instance.
+
+**The measured A/B, in-suite rather than pasted** (`clutter-determinism`, three builds over the
+same gamez differing only in whether a spec was handed in): C1 bare `firtree1` 16,846 /
+`firtree2` 10,469 → dressed 15,182 / 12,133. 1,664 stamps moved, **9.88 % of firtree1's** against
+an authored 9:1. Scales span exactly 0.900–1.500, uniform on all three axes, and the bare build's
+are all 1.0. Two dressed builds in one process, no reseed between them: identical transform for
+transform.
+
+**Eight-chapter regression, zero engine errors, and the instance TOTAL is unchanged everywhere** —
+substitution moves a stamp between kinds, it never adds or drops one:
+
+| chapter | total | substituted | what changed |
+|---|---|---|---|
+| C1 | 37,510 (=) | 2,250 | firtree1 → firtree2 1-in-10; bush1 ↔ bush2 half each |
+| C1B | 339 (=) | 0 | scale only (dougfir 0.8–1.3, bushes 0.9–1.1/0.9–1.3) |
+| C1C | none | — | registers no templates |
+| C2 | 46,752 (=) | 12,457 | spruce → brush1/3/4; palm1 → palm2/palm3 |
+| C2B | none | — | its gamez carries none of its six registered roots |
+| C3 | 707 (=) | 456 | palm1 → 251/238/218 three ways, was 707 palm1 |
+| C4 | 87,239 (=) | 6,432 | firtree1 → firtree2 (a kind C4 never placed directly) |
+| C5 | 178,504 (=) | 38,451 | 40 minted kinds: `cb00b`, `cb01c/d`, `cb14b/c`, `cb00det02/03`, … |
+
+`substitute_nothing=0` in every chapter, which was predicted from the data before the run: the
+install's four unresolvable targets (`hotelsign0/1/2`, `cb05det01`) all belong to C5 blocks whose
+own model is never scattered, so the engine's `cannot find clutter substitution node` path cannot
+fire on retail data. It is implemented anyway, and counted.
+
+**Two design points the data settled, both recorded in `architecture.md`:**
+
+1. **A target no template scatters is minted as a kind** — the engine resolves targets through its
+   global model table, so `cb00b` and friends must be placeable without being any template's
+   decoration. 40 in C5, 2 in C3, 1 in C4; every target of every *placed* decoration resolves.
+2. **An entry naming the kind's own model stays in that kind.** Resolving it globally instead
+   shuffled instances between the mesh duplicates one model has across templates (C5 ships the
+   same building as up to four gamez meshes) — visible as C1's bush counts merging 331+255 → 586,
+   with 2,662 "substitutions" where the data predicts 2,275. The original cannot express the
+   distinction (it has one model per name); inventing it only moves goldens for nothing.
+
+**`.\RunTests.ps1`: build clean, 867 units, 30 engine suites** (incl. the new
+`clutter-determinism`), engine errors clean, 13 goldens hash-identical after the re-pin.
+
+**Seven goldens moved and were re-pinned on the user's call against the images** (2026-08-10):
+`c1-waterfall`, `c1-flight`, `c1-crash`, `c2-city`, `c3-island`, `c4-snow`, `c5-city-night`. The
+six that held are exactly the shots with no clutter in frame (`c1b-night-sea`, `c1c-rain`,
+`c2b-rain`, `c1-destroy-effects`, `viewer-bhawk`, `empty-stage`) — the able-to-fail control on
+"only clutter changed". Old → new hashes are in the landing commit.
+
+### Original approach (kept for reference)
 
 **Goal.** C1's firs are 90 % `firtree1` / 10 % `firtree2` with per-instance scale 0.9–1.5×; C5's
 `cb00a` blocks are half `cb00b`; C2's spruce mixes in brush. Reproducibly.

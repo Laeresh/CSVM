@@ -115,6 +115,8 @@ public static class Suites
             "an OBJECT_MOTION naming NEITHER RUN_TIME nor BOUNCE_SEQUENCE flies its solved parabola before its own deactivation switches it off (BL-257)", NulledLaunch));
         into.Add(new TestHarness.Suite("destructible-census",
             "per-chapter destructible registry totals", DestructibleCensus));
+        into.Add(new TestHarness.Suite("clutter-determinism",
+            "templates.zrd's substitute + scale_range move C1's species mix and sizes without changing the instance total, and two builds of the same chapter are identical transform for transform", ClutterDeterminism));
         into.Add(new TestHarness.Suite("lens-flare-gates",
             "the sun's lens flare is gated on chapter data alone, and its two independent gates — the gamez `sun` node and init.gw's LensFlareTexture slots — agree chapter by chapter, in C2 and C3 and nowhere else (BL-165)", LensFlareGates));
         into.Add(new TestHarness.Suite("tex-dropin",
@@ -1493,6 +1495,112 @@ public static class Suites
                 $"census colour is full brightness texture={name} colour={key}");
         }
         ctx.Note($"{colors.Count} sample textures flattened, {seen.Count} distinct colours");
+    }
+
+    /// <summary>C22's two authored per-kind behaviours, asserted as an A/B against the build that
+    /// does not read <c>templates.zrd</c> at all — the same <see cref="ClutterBuilder"/> over the
+    /// same gamez, differing only in whether a spec was handed to it.
+    ///
+    /// <para>Three builds, because three separate things can go wrong and each needs its own
+    /// able-to-fail control:</para>
+    /// <list type="number">
+    /// <item><b>Bare</b> (no spec) — the pre-C22 monoculture at authored size. The baseline every
+    /// other claim is measured against, rather than against numbers pasted from a previous
+    /// session.</item>
+    /// <item><b>Dressed</b> — with C1's spec. The instance TOTAL must be unchanged (a substitution
+    /// moves a stamp between kinds, it never adds or drops one — a total that moved would mean the
+    /// roll is running somewhere it should not), the species mix must have moved (<c>firtree1</c>
+    /// rolls 9:1 to <c>firtree2</c>), and the scales must span a range rather than sit at 1.</item>
+    /// <item><b>Dressed again</b> — DET-9. Identical transform for transform, in the SAME process
+    /// and with no <see cref="Rng"/> reset between them, which is the strong form: the stream is a
+    /// function of the data alone. ⚠ This is the assertion that caught the first implementation,
+    /// which seeded from <c>Rng.Master</c> and so rerolled C1's forest on every unpinned launch
+    /// (15,154 firtree1 one run, 15,148 the next) where the original's is fixed.</item>
+    /// </list></summary>
+    private static void ClutterDeterminism(TestContext ctx)
+    {
+        const string chapter = "C1";
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
+        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+        ctx.RequireData(texturesPath, $"{chapter} textures");
+        ctx.RequireData(gamezPath, $"{chapter} gamez");
+        ctx.RequireData(ctx.InterpPath, $"interp.json");
+
+        var gamez = GameZ.Load(gamezPath);
+        using var textures = new TextureArchive(texturesPath);
+        var names = ClutterBuilder.TemplateNames(ctx.InterpPath, chapter);
+        var props = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
+        ctx.Check(props != null && props.Kinds.Count > 0, $"{chapter} templates.zrd read");
+
+        // Each build's kinds as (label → placements), plus the flat transform list in kind order.
+        static (Dictionary<string, int> ByKind, List<Transform3D> Placements, int Total) Take(
+            ClutterBuilder builder, IReadOnlyList<string> names)
+        {
+            var root = builder.Build(names);
+            var byKind = new Dictionary<string, int>(System.StringComparer.Ordinal);
+            var placements = new List<Transform3D>();
+            foreach (var kind in builder.ExportedKinds ?? System.Array.Empty<ClutterBuilder.KindExport>())
+            {
+                byKind.TryGetValue(kind.Texture, out int had);
+                byKind[kind.Texture] = had + kind.Placements.Count;
+                placements.AddRange(kind.Placements);
+            }
+            int total = builder.InstanceCount + builder.SolidCount;
+            root?.Free();
+            return (byKind, placements, total);
+        }
+
+        var bare = Take(new ClutterBuilder(gamez, textures), names);
+        var dressed = Take(new ClutterBuilder(gamez, textures, null, props), names);
+        var again = Take(new ClutterBuilder(gamez, textures, null, props), names);
+
+        ctx.Check(bare.Total > 0, $"the bare build placed something total={bare.Total}");
+        ctx.Same(bare.Total, dressed.Total, $"{chapter} instance total is unchanged by substitution");
+
+        // The mix moved, and in the authored direction: firtree1 sheds a tenth of its stamps to
+        // firtree2. Asserted as a direction plus a band rather than as an exact count, so the
+        // suite survives a re-seed but still fails if the roll stops happening or inverts.
+        bare.ByKind.TryGetValue("firtree1.tif", out int bareFir1);
+        dressed.ByKind.TryGetValue("firtree1.tif", out int dressedFir1);
+        bare.ByKind.TryGetValue("firtree2.tif", out int bareFir2);
+        dressed.ByKind.TryGetValue("firtree2.tif", out int dressedFir2);
+        int moved = bareFir1 - dressedFir1;
+        ctx.Check(moved > 0 && dressedFir2 - bareFir2 == moved,
+            $"firtree1 sheds stamps and firtree2 gains exactly those lost={moved} gained={dressedFir2 - bareFir2}");
+        ctx.Check(moved > bareFir1 * 0.08f && moved < bareFir1 * 0.12f,
+            $"the shed fraction is the authored 9:1 moved={moved} of {bareFir1}");
+
+        // Scale: uniform, inside C1's widest authored band, and actually varying. A build that
+        // silently dropped the draw would pass every count assertion above.
+        float lo = float.MaxValue, hi = float.MinValue;
+        foreach (var xf in dressed.Placements)
+        {
+            var s = xf.Basis.Scale;
+            ctx.Check(Mathf.Abs(s.X - s.Y) < 1e-5f && Mathf.Abs(s.X - s.Z) < 1e-5f,
+                $"the scale is uniform scale={s}");
+            lo = Mathf.Min(lo, s.X);
+            hi = Mathf.Max(hi, s.X);
+        }
+        foreach (var xf in bare.Placements)
+        {
+            ctx.Check(Mathf.Abs(xf.Basis.Scale.X - 1f) < 1e-5f,
+                $"the bare build leaves every instance at its authored size scale={xf.Basis.Scale.X}");
+        }
+        ctx.Check(lo >= 0.9f - 1e-4f && hi <= 1.5f + 1e-4f, $"scales stay inside C1's authored 0.9-1.5 lo={lo} hi={hi}");
+        ctx.Check(hi - lo > 0.4f, $"scales actually vary lo={lo} hi={hi}");
+
+        // DET-9, the strong form: same process, no reseed, transform for transform.
+        ctx.Same(dressed.Placements.Count, again.Placements.Count, $"the second dressed build placed the same count");
+        int drift = 0;
+        for (int i = 0; i < Mathf.Min(dressed.Placements.Count, again.Placements.Count); i++)
+        {
+            if (dressed.Placements[i] != again.Placements[i])
+            {
+                drift++;
+            }
+        }
+        ctx.Same(0, drift, $"two dressed builds are identical transform for transform");
+        ctx.Note($"{chapter} bare firtree1={bareFir1} firtree2={bareFir2}; dressed firtree1={dressedFir1} firtree2={dressedFir2}; scales {lo:0.000}-{hi:0.000}");
     }
 
     private static void DestructibleCensus(TestContext ctx)

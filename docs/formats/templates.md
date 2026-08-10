@@ -196,17 +196,26 @@ chapter authors — the negative is only a measurement if the reader would have 
 `ClutterKindProps` holds one block; `Find` resolves a model name the way the engine does
 (first block wins); `Census()` prints the per-key counts the table above pins.
 
-As of C21 nothing consumes it: `ClutterBuilder` still places every instance at its authored
-size and its authored model. `scale_range` and `substitute` are C22, and `far_fade_range` is
-deferred by Decision 3 of `docs/PLAN-clutter-uv-placement.md` (implementing a fade that
-*removes* distant clutter mid-plan would confound every density A/B) with C23 owning the
-decision. ⚠ The moment either of the first two lands, a **seeded** PRNG has to land with it:
-the original wraps its whole world build in `srand(0x8EA91836)` … `srand(time(0))`
-(`FUN_004df1d0`), so its result is identical run to run, and an unseeded remake would shimmer
-between runs. Matching the original's *stream* byte for byte is not achievable and not worth
-chasing — different PRNG, different traversal order — but stability across runs is.
+`ClutterBuilder` consumes `substitute` and `scale_range` (C22): a stamp rolls its model against
+the kind's table and takes a uniform scale from its range. `far_fade_range` is read and **not
+applied**, deferred by Decision 3 of `docs/PLAN-clutter-uv-placement.md` (a fade that *removes*
+distant clutter mid-plan would confound every density A/B) with C23 owning the decision. The five
+unauthored keys are read and, being unauthored, do nothing.
 
-One nuance for whoever implements step 10: the engine draws three `rand()` values for the
-rotation **even when `rotation_range` is absent**, so the key is inert in its effect, not
-skipped in the stream. That only matters to somebody trying to match the original's draw
-order, which the paragraph above says not to attempt.
+⚠ **The draws come off a FIXED seed, not the session's.** The original wraps its whole world build
+in `srand(0x8EA91836)` … `srand(time(0))` (`FUN_004df1d0`), so a chapter's forest is the same
+forest on every launch — variety across launches is a property it deliberately does not have here.
+Matching the original's *stream* is not achievable and not worth chasing (different PRNG,
+traversal and draw count), but being fixed is.
+
+⚠ **A substituted stamp keeps the SOURCE kind's properties.** The stamper holds the decoration
+entry's own kind block in `fVar4` throughout `FUN_004dd6e0`, and the roll rewrites only the model
+pointer — so scale, fade and the slope gate all come from the model the template authored, not from
+the one it became. C1's `firtree1` rolls 1-in-10 to `firtree2` and those trees are scaled by
+firtree1's 0.9–1.1, while the `firtree2` the templates place directly are scaled by its own
+0.9–1.5.
+
+One nuance for whoever implements step 10's rotation: the engine draws three `rand()` values for
+it **even when `rotation_range` is absent**, so the key is inert in its effect, not skipped in the
+stream. That only matters to somebody trying to match the original's draw order, which the
+paragraph above says not to attempt.

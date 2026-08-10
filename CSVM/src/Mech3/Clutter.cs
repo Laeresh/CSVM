@@ -62,12 +62,12 @@ namespace CSVM.Mech3;
 /// billboard. They keep their authored local basis, and they ARE collidable.</item>
 /// </list>
 ///
-/// <para><b>What this does NOT do, deliberately and knowingly.</b> The original's stamper
-/// (<c>FUN_004dd6e0</c>) has eleven steps and this reproduces 4, 6 and 7. The rest are driven by
-/// <c>templates.zrd</c>, which every chapter ships and which
-/// <see cref="ClutterTemplateSpec"/> now reads and nothing here consumes yet
-/// (docs/formats/templates.md) — so each of these is a known deviation with a measured shape, not
-/// an oversight:</para>
+/// <para><b>The per-kind data, and what is left of it.</b> The original's stamper
+/// (<c>FUN_004dd6e0</c>) has eleven steps. This reproduces 4, 6 and 7 (the lattice), and — since
+/// C22 — 9 and 10's scale, driven by <see cref="ClutterTemplateSpec"/>
+/// (<c>templates.zrd</c>, docs/formats/templates.md). What remains absent is one step and a set of
+/// keys no chapter authors, each a known deviation with a measured shape rather than an
+/// oversight:</para>
 /// <list type="bullet">
 /// <item><b>Step 5, the per-axis UV jitter</b> (<c>translate_uv_range</c>), and step 10's
 /// <c>rotation_range</c> / <c>align_normal</c> — <b>INERT, not missing.</b> No chapter in the
@@ -75,25 +75,21 @@ namespace CSVM.Mech3;
 /// the original's placement has no random input affecting position or orientation at all, and why
 /// the user reports C1's tree positions as <i>exactly</i> the original's rather than merely as
 /// dense. Implementing them would change nothing; treat them as decoded and closed.</item>
-/// <item><b>Step 9, <c>substitute</c></b> — the weighted model roll, authored on 41 kinds and the
-/// most visible real gap. C1's <c>firtree1</c> should
-/// become <c>firtree2</c> nine times in ten and C3's palms roll three ways evenly; here every
-/// stamp of a kind is the same model, so the species mix is wrong even where the count is
-/// right.</item>
-/// <item><b>Step 10's <c>scale_range</c></b>, authored on all 143 shipped blocks — every kind that
-/// authors anything at all. Every instance here is exactly its authored size where the original
-/// varies it (C1 0.9–1.5×, C2 up to 1.0–3.0×).</item>
-/// <item><b>Step 11, <c>far_fade_range</c></b> — the per-kind distance fade. C5 authors
-/// [[200,300],[300,350]]; here the cylindrical world fog is the only distance cue.</item>
-/// <item><b>The whole build is unseeded.</b> The original wraps it in
-/// <c>srand(0x8EA91836)</c> … <c>srand(time(0))</c> (<c>FUN_004df1d0</c>), so its placement is
-/// deterministic and reproducible run to run. Nothing here draws a random number at all, which
-/// on retail data is the same outcome by a different route — since the only authored random
-/// inputs left are <c>substitute</c> and <c>scale_range</c>, and neither moves a decoration.
-/// ⚠ The moment either of those lands, a seeded PRNG has to land with it or the clutter will
-/// shimmer between runs.</item>
+/// <item><b>Step 11, <c>far_fade_range</c></b> — the per-kind distance fade, the one authored
+/// behaviour still unapplied. C5 authors [[200,300],[300,350]]; here the cylindrical world fog is
+/// the only distance cue. Deferred by Decision 3 of the plan (it REMOVES distant clutter and would
+/// confound every density A/B); C23 owns the decision.</item>
 /// </list>
-/// <para>Wave C of <c>docs/PLAN-clutter-uv-placement.md</c> owns all five. One remake-only rule
+/// <para><b>Steps 9 and 10 landed in C22 and brought a seed with them.</b> A stamp rolls its model
+/// against the kind's <c>substitute</c> table and takes a uniform scale from its
+/// <c>scale_range</c> — see <see cref="Roll"/> and <see cref="PlaceOnTriangle"/>. ⚠ Both draws come
+/// off a stream seeded with a FIXED constant, never the session master: the original seeds its
+/// whole world build with one (<c>srand(0x8EA91836)</c> … <c>srand(time(0))</c>,
+/// <c>FUN_004df1d0</c>), so a chapter's forest is the same forest on every launch. ⚠ And the
+/// properties of a substituted stamp come from the SOURCE kind, not the target — the stamper holds
+/// the decoration entry's own kind block throughout and the roll rewrites only the model pointer.
+/// </para>
+/// <para>One remake-only rule
 /// also survives here on purpose: the quarter-metre <c>seen</c> dedup in
 /// <see cref="PlaceOnTriangle"/>, which exists only because this file's UV containment test is
 /// inclusive on a shared edge where the original's is strict.</para>
@@ -126,6 +122,13 @@ public sealed class ClutterBuilder
         "    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;\n"
         + "    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);\n"
         + "    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);\n";
+
+    // The seed of the substitute/scale stream. The original's own world-build constant
+    // (FUN_004df1d0's srand(0x8EA91836)), borrowed as a label rather than as a claim: our PRNG,
+    // traversal and draw count all differ, so the sequences cannot and do not agree. What IS
+    // reproduced is the property that matters — the placement is a function of the data alone,
+    // identical on every launch, pinned session or not. See the note at the draw site.
+    private const int PlacementSeed = unchecked((int)0x8EA91836);
 
     // The largest integer UV lattice one triangle may span before it is refused and counted.
     // 64 × 64 repeats of the ground texture across a single triangle; A1's widest measured span
@@ -179,6 +182,23 @@ public sealed class ClutterBuilder
     private readonly TextureArchive _textures;
     private readonly SceneBuilder? _scene;
 
+    // The chapter's templates.zrd, or null when it has none (C1C/C2B ship an empty one, which is
+    // a spec with no blocks — a different thing, and the reader keeps them apart). A decoration
+    // with no block here is retail-data-normal and means every default: no substitution, scale 1.
+    private readonly ClutterTemplateSpec? _props;
+
+    // Every kind this Build will export, INCLUDING the substitution-only kinds minted in
+    // ResolveProperties — models no template scatters directly, which exist solely as the target
+    // of somebody else's roll (43 of C5's 78 blocks). They carry no CellPlacements, so they are
+    // deliberately absent from Template.Kinds: the lattice walk must never treat one as a source.
+    private readonly List<Kind> _allKinds = new();
+
+    // Model name → the one kind a substitution to that name resolves to. The original resolves a
+    // target through the engine's global model table (FUN_004d0280), i.e. to ONE model however
+    // many templates mention it; first-seen wins here, which is the same statement over a
+    // deterministic walk.
+    private readonly Dictionary<string, Kind> _kindsByModel = new(StringComparer.OrdinalIgnoreCase);
+
     // One sprite shader per (lit, fogged) pair the decoration models actually ask for.
     private readonly Dictionary<int, Shader> _shaders = new();
 
@@ -192,11 +212,17 @@ public sealed class ClutterBuilder
     /// <param name="scene">The world's SceneBuilder, for the 3D-decoration path (its meshes
     /// and its fullbright world materials). Null disables that path and leaves only the
     /// sprite one.</param>
-    public ClutterBuilder(GameZ gamez, TextureArchive textures, SceneBuilder? scene = null)
+    /// <param name="props">The chapter's <c>templates.zrd</c> (docs/formats/templates.md), which
+    /// drives <c>substitute</c> and <c>scale_range</c>. Null builds every decoration at its
+    /// authored model and size — the pre-C22 behaviour, kept so a caller with no reader (the map
+    /// lab, a test) still gets clutter rather than an exception.</param>
+    public ClutterBuilder(GameZ gamez, TextureArchive textures, SceneBuilder? scene = null,
+        ClutterTemplateSpec? props = null)
     {
         _gamez = gamez;
         _textures = textures;
         _scene = scene;
+        _props = props;
     }
 
     /// <summary>Why <see cref="UvTriangle.Build"/> refused a triangle. The two faults are
@@ -450,6 +476,7 @@ public sealed class ClutterBuilder
         if (templates.Count == 0)
             return null;
 
+        ResolveProperties(templates);
         _stats = new LatticeStats();
         PlaceOnWorld(templates, worldName);
         _stats.Report();
@@ -462,38 +489,40 @@ public sealed class ClutterBuilder
         InstanceCount = SolidCount = SolidCollisionTriangles = 0;
         SolidCollisionShapes = SolidCollisionInstances = 0;
         _solidShapes = null;
-        foreach (var template in templates.Values)
-            foreach (var kind in template.Kinds)
+        // _allKinds, not templates.Values — a substitution-only kind has instances to export and
+        // no template to be found under.
+        foreach (var kind in _allKinds)
+        {
+            if (kind.Instances.Count == 0)
+                continue;
+            var mmi = kind.Solid ? BuildSolidInstance(kind) : BuildKindInstance(kind);
+            if (mmi == null)
+                continue;
+            root.AddChild(mmi);
+            exported.Add(new KindExport
             {
-                if (kind.Instances.Count == 0)
-                    continue;
-                var mmi = kind.Solid ? BuildSolidInstance(kind) : BuildKindInstance(kind);
-                if (mmi == null)
-                    continue;
-                root.AddChild(mmi);
-                exported.Add(new KindExport
-                {
-                    Texture = kind.Label,
-                    Mesh = (ArrayMesh)mmi.Multimesh!.Mesh,
-                    Material = mmi.MaterialOverride,
-                    Solid = kind.Solid,
-                    NodeBias = NodeBiasOf(kind),
-                    Width = kind.Width,
-                    Height = kind.Height,
-                    Placements = kind.Instances,
-                });
-                exportedMesh.Add(kind.MeshIndex);
-                if (kind.Solid)
-                {
-                    SolidCount += kind.Instances.Count;
-                    solidKinds.Add(kind);
-                }
-                else
-                {
-                    InstanceCount += kind.Instances.Count;
-                }
-                parts.Add($"{kind.Label} ×{kind.Instances.Count}");
+                Texture = kind.Label,
+                Mesh = (ArrayMesh)mmi.Multimesh!.Mesh,
+                Material = mmi.MaterialOverride,
+                Solid = kind.Solid,
+                NodeBias = NodeBiasOf(kind),
+                Width = kind.Width,
+                Height = kind.Height,
+                CullMargin = CullMarginOf(kind),
+                Placements = kind.Instances,
+            });
+            exportedMesh.Add(kind.MeshIndex);
+            if (kind.Solid)
+            {
+                SolidCount += kind.Instances.Count;
+                solidKinds.Add(kind);
             }
+            else
+            {
+                InstanceCount += kind.Instances.Count;
+            }
+            parts.Add($"{kind.Label} ×{kind.Instances.Count}");
+        }
         if (collision && solidKinds.Count > 0)
         {
             BuildSolidCollision(root, solidKinds);
@@ -544,7 +573,8 @@ public sealed class ClutterBuilder
     // rotates, mirrors and stretches WITH the painted texture — which is why C1's forest, painted
     // at half the template quad's scale, comes out ~4× denser than the grid made it.</para>
     private static void PlaceOnTriangle(Template template, Vector3 a, Vector3 b, Vector3 c,
-        Vector2 uva, Vector2 uvb, Vector2 uvc, HashSet<(int, int, int)> seen, LatticeStats stats)
+        Vector2 uva, Vector2 uvb, Vector2 uvc, HashSet<(int, int, int)> seen, LatticeStats stats,
+        Random rng)
     {
         // Two independent degeneracy tests, because neither implies the other (A2): a fan or
         // strip artifact of an n-gon with repeated or collinear corners has ZERO world area and a
@@ -636,16 +666,67 @@ public sealed class ClutterBuilder
                         stats.Placed++;
                         if (!InSourceTriangle(a, b, c, p))
                             stats.OutsideSource++;
+
+                        // FUN_004dd6e0 step 9, and it happens HERE — after the point is known to
+                        // be kept. The stamp may become a different model, so which kind collects
+                        // the instance is decided per stamp, not per kind. ⚠ The two draws are
+                        // taken in the engine's order (substitute, then scale) and only for a
+                        // point that survives the dedup, which is what keeps the sequence a pure
+                        // function of the seed and the authored data.
+                        var target = Roll(kind, rng, stats);
+                        if (target == null)
+                            continue;   // an unresolvable target: it keeps its share, places nothing
+
+                        // Step 10's uniform scale. ⚠ It is drawn from the SOURCE kind's
+                        // scale_range even when the model was substituted — the stamper holds the
+                        // decoration entry's own kind block in `fVar4` throughout and the roll
+                        // only rewrites the model pointer. A C1 firtree2 that came from a
+                        // firtree1 roll is therefore scaled 0.9-1.1 (firtree1's range), while a
+                        // firtree2 the template placed itself is scaled 0.9-1.5.
+                        float scale = kind.ScaleRange.X
+                            + ((kind.ScaleRange.Y - kind.ScaleRange.X) * (float)rng.NextDouble());
+                        if (scale > target.MaxScale)
+                            target.MaxScale = scale;
+
                         // A sprite is planted flat ON the surface: its basis and its authored
                         // Y are both dropped, because its shader re-faces it from the instance
                         // origin and its own mesh already carries the card's vertical extent.
                         // A 3D decoration keeps both — the authored basis is its orientation,
-                        // and the Y is its height above the block's ground plane.
-                        kind.Instances.Add(kind.Solid
-                            ? new Transform3D(cell.Basis, new Vector3(p.X, p.Y + cell.Origin.Y, p.Z))
-                            : new Transform3D(Basis.Identity, p));
+                        // and the Y is its height above the block's ground plane. The scale is a
+                        // UNIFORM factor compounded onto whichever basis that leaves, never a
+                        // replacement of it (trap (c)) — and on retail data no solid decoration
+                        // authors a scale_range at all, so this only ever moves a card.
+                        var basis = (target.Solid ? cell.Basis : Basis.Identity)
+                            .Scaled(new Vector3(scale, scale, scale));
+                        target.Instances.Add(target.Solid
+                            ? new Transform3D(basis, new Vector3(p.X, p.Y + cell.Origin.Y, p.Z))
+                            : new Transform3D(basis, p));
                     }
                 }
+    }
+
+    // FUN_004dd6e0 step 9: one uniform draw walked against the kind's cumulative substitution
+    // table. The engine subtracts each normalised share from the draw and takes the first entry
+    // that sends it negative, which is the same selection as this comparison against the running
+    // sum. A kind with no table always stamps itself, and a draw that falls past the last entry
+    // (float error only, since the shares sum to 1) does too — the engine's own fallback, which
+    // leaves the model pointer at the entry's own node.
+    private static Kind? Roll(Kind kind, Random rng, LatticeStats stats)
+    {
+        if (kind.Substitutes.Count == 0)
+            return kind;
+        float r = (float)rng.NextDouble();
+        foreach (var (cumulative, target) in kind.Substitutes)
+        {
+            if (r >= cumulative)
+                continue;
+            if (target == null)
+                stats.SubstituteNothing++;
+            else if (!ReferenceEquals(target, kind))
+                stats.Substituted++;
+            return target;
+        }
+        return kind;
     }
 
     // Barycentric containment in the triangle's OWN plane (not an XZ projection — a hillside
@@ -840,34 +921,12 @@ public sealed class ClutterBuilder
 
             if (!kinds.TryGetValue(decoMesh.MeshIndex, out var kind))
             {
-                if (SpriteInfo(decoMesh.MeshIndex) is { } s)
-                {
-                    kind = new Kind
-                    {
-                        MeshIndex = decoMesh.MeshIndex,
-                        NodeIndex = decoMesh.Index,
-                        Label = s.Texture,
-                        Width = s.Width,
-                        Height = s.Height,
-                        Lit = _gamez.Meshes[decoMesh.MeshIndex].Lighting,
-                        Fogged = _gamez.Meshes[decoMesh.MeshIndex].Fog,
-                    };
-                }
-                else if (IsSolidDecoration(decoMesh.MeshIndex))
-                {
-                    kind = new Kind
-                    {
-                        MeshIndex = decoMesh.MeshIndex,
-                        NodeIndex = decoMesh.Index,
-                        Label = deco.Name,
-                        Solid = true,
-                    };
-                }
-                else
+                if (MakeKind(decoMesh, deco.Name) is not { } made)
                 {
                     (skipped ??= new List<string>()).Add(deco.Name);
                     continue;
                 }
+                kind = made;
                 kinds[decoMesh.MeshIndex] = kind;
                 template.Kinds.Add(kind);
             }
@@ -882,6 +941,140 @@ public sealed class ClutterBuilder
 
     /// <inheritdoc cref="FindTemplateRoot(GameZ, string)"/>
     private GameZNode? FindTemplateRoot(string name) => FindTemplateRoot(_gamez, name);
+
+    // One decoration kind from the node carrying its mesh. Shared by the template walk and by the
+    // substitution-target minting below, so a model reached either way is classified, labelled and
+    // rendered identically — a `firtree2` stamped because `firtree1` rolled it must be the same
+    // kind of thing as a `firtree2` the template placed itself. Null when the mesh is neither a
+    // sprite card nor a solid decoration (no texture, or no SceneBuilder for the solid path).
+    private Kind? MakeKind(GameZNode meshNode, string model)
+    {
+        if (SpriteInfo(meshNode.MeshIndex) is { } s)
+        {
+            return new Kind
+            {
+                MeshIndex = meshNode.MeshIndex,
+                NodeIndex = meshNode.Index,
+                Model = model,
+                Label = s.Texture,
+                Width = s.Width,
+                Height = s.Height,
+                Lit = _gamez.Meshes[meshNode.MeshIndex].Lighting,
+                Fogged = _gamez.Meshes[meshNode.MeshIndex].Fog,
+            };
+        }
+        if (IsSolidDecoration(meshNode.MeshIndex))
+        {
+            return new Kind
+            {
+                MeshIndex = meshNode.MeshIndex,
+                NodeIndex = meshNode.Index,
+                Model = model,
+                Label = model,
+                Solid = true,
+            };
+        }
+        return null;
+    }
+
+    // FUN_004deab0's per-kind properties attached to the parsed kinds, and every `substitute`
+    // target resolved to the kind its stamps will land in. Runs ONCE, after every template is
+    // parsed and before a single lattice cell is walked, for two reasons: a target may be another
+    // template's decoration (so all templates must exist first), and a target may be no template's
+    // decoration at all (so a kind has to be minted — which cannot happen mid-walk, where
+    // PlaceOnTriangle is iterating Template.Kinds by index).
+    private void ResolveProperties(Dictionary<string, Template> templates)
+    {
+        _allKinds.Clear();
+        _kindsByModel.Clear();
+        foreach (var template in templates.Values)
+            foreach (var kind in template.Kinds)
+            {
+                _allKinds.Add(kind);
+                // First-seen wins, matching the engine's one-model-per-name resolution. C5 ships
+                // the same building as up to four gamez meshes (one per template that uses it), so
+                // without this a substitution's target would depend on which template rolled it.
+                if (kind.Model.Length > 0)
+                    _kindsByModel.TryAdd(kind.Model, kind);
+            }
+        if (_props == null)
+            return;
+
+        // Two passes: every kind gets its own block's scale first, because minting a target below
+        // appends to _allKinds and a target minted for one source may be another source's target.
+        foreach (var kind in _allKinds)
+            if (_props.Find(kind.Model) is { } block)
+                kind.ScaleRange = block.ScaleRange;
+
+        int minted = 0, missing = 0;
+        // Indexed rather than foreach: MintSubstituteKind appends, and a minted kind must itself
+        // be given its block's scale (it can be placed) but never its own substitutes (a stamp is
+        // rolled once — FUN_004dd6e0 rolls the SOURCE's list and places the result, it does not
+        // then re-roll the target's).
+        for (int i = 0, sources = _allKinds.Count; i < sources; i++)
+        {
+            var kind = _allKinds[i];
+            if (_props.Find(kind.Model) is not { Substitutes.Count: > 0 } block)
+                continue;
+            var table = new List<(float Cumulative, Kind? Target)>(block.Substitutes.Count);
+            float acc = 0f;
+            foreach (var sub in block.Substitutes)
+            {
+                acc += sub.Fraction;
+                // An entry naming the kind's OWN model stays in this kind. The engine resolves
+                // even that entry through its global model table, but it has exactly one model per
+                // name where the remake can have several Kinds for one model (C5 ships the same
+                // building as up to four gamez meshes, one per template that uses it). Sending a
+                // "stays itself" roll to whichever of those was seen first would shuffle instances
+                // between mesh duplicates for no visible reason and move goldens that nothing
+                // actually changed — so the distinction the original cannot express is not
+                // invented here.
+                var target = string.Equals(sub.Model, kind.Model, StringComparison.OrdinalIgnoreCase)
+                    ? kind
+                    : ResolveModel(sub.Model, ref minted);
+                if (target == null)
+                    missing++;
+                table.Add((acc, target));
+            }
+            kind.Substitutes = table;
+        }
+
+        if (minted > 0 || missing > 0)
+            Log.Info("world", $"clutter substitute targets: minted={minted} unresolvable={missing}");
+    }
+
+    // A substitution target as a kind: an existing one where the templates already carry the
+    // model, otherwise minted from the gamez node of that name. Null when the gamez has no such
+    // model — the engine's own `%s: cannot find clutter substitution node, interpreting it as
+    // nothing.` path, which keeps its share of the roll and places nothing. ⚠ No PLACED decoration
+    // in the retail install has an unresolvable target (the four that exist — hotelsign0/1/2 and
+    // cb05det01 — belong to C5 blocks whose own model is never scattered), so this branch is
+    // fidelity, not a case any chapter exercises.
+    private Kind? ResolveModel(string model, ref int minted)
+    {
+        if (_kindsByModel.TryGetValue(model, out var known))
+            return known;
+
+        // The engine's global model lookup (FUN_004d0280) reaches any model in the gamez, not just
+        // the ones hanging under a template. C5's `cb00b`, C3's `palmtree2/3` and C4's `firtree2`
+        // are all in this class: authored as substitution targets only.
+        foreach (var node in _gamez.Nodes)
+        {
+            if (!string.Equals(node.Name, model, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (FirstWithMesh(_gamez, node) is not { } meshNode)
+                continue;
+            if (MakeKind(meshNode, model) is not { } kind)
+                continue;
+            if (_props?.Find(model) is { } block)
+                kind.ScaleRange = block.ScaleRange;
+            _kindsByModel[model] = kind;
+            _allKinds.Add(kind);
+            minted++;
+            return kind;
+        }
+        return null;
+    }
 
     // A 3D decoration: anything with real geometry that is NOT a billboard card. C2's
     // filmblock/resblock buildings and parklot Studebakers, C5's cblock city blocks (2-27
@@ -937,6 +1130,26 @@ public sealed class ClutterBuilder
             return;
 
         var seen = new HashSet<(int Kind, int X, int Z)>(); // dedup across decal-layered coplanar polys
+
+        // The clutter's own stream, off a FIXED seed — deliberately not the session's
+        // Rng.Master, and this is the one place in the codebase where that is the right call.
+        // The original seeds its whole world build with a constant and only restores a
+        // time seed afterwards (FUN_004df1d0: srand(0x8EA91836) … srand(time(0))), so a
+        // chapter's forest is the same forest on every launch. Deriving from the master
+        // would instead reroll the species mix on any unpinned run — measured, before this
+        // was fixed: two `--freecam --chapter=C1` runs gave firtree1 15,154 vs 15,148.
+        // Variety across launches is a property the original does not have here, and a
+        // golden could not be photographed in an unpinned run if it did.
+        //
+        // ⚠ This is NOT the original's stream and cannot be. Reproducing its sequence would
+        // take the same PRNG, the same traversal order AND the same number of draws per
+        // stamp — the engine spends three rotation draws per instance that retail data
+        // renders inert. Do not try to match 0x8EA91836 beyond borrowing it as a label;
+        // what matters, and what `clutter-determinism` asserts, is that OURS is stable.
+        // Positions already match the original exactly (B14) because no authored key in the
+        // install perturbs them — only species and size come from this stream.
+        var rng = new Random(PlacementSeed);
+
         void Walk(int nodeIndex, Transform3D xf)
         {
             if (nodeIndex < 0 || nodeIndex >= _gamez.Nodes.Count)
@@ -947,7 +1160,7 @@ public sealed class ClutterBuilder
             if (node.Local is { } local)
                 xf *= local;
             if (node.MeshIndex >= 0 && node.MeshIndex < _gamez.Meshes.Count)
-                PlaceOnMesh(_gamez.Meshes[node.MeshIndex], xf, templates, seen);
+                PlaceOnMesh(_gamez.Meshes[node.MeshIndex], xf, templates, seen, rng);
             foreach (var c in node.Children)
                 Walk(c, xf);
         }
@@ -959,7 +1172,7 @@ public sealed class ClutterBuilder
     }
 
     private void PlaceOnMesh(GameZMesh mesh, Transform3D xf,
-        Dictionary<string, Template> templates, HashSet<(int, int, int)> seen)
+        Dictionary<string, Template> templates, HashSet<(int, int, int)> seen, Random rng)
     {
         foreach (var poly in mesh.Polygons)
         {
@@ -1014,7 +1227,7 @@ public sealed class ClutterBuilder
                         xf * mesh.Vertices[poly.VertexIndices[i]],
                         xf * mesh.Vertices[poly.VertexIndices[i + 1]],
                         xf * mesh.Vertices[poly.VertexIndices[i + 2]],
-                        uvs[i], uvs[i + 1], uvs[i + 2], seen, _stats);
+                        uvs[i], uvs[i + 1], uvs[i + 2], seen, _stats, rng);
             }
             else
             {
@@ -1023,7 +1236,7 @@ public sealed class ClutterBuilder
                         xf * mesh.Vertices[poly.VertexIndices[0]],
                         xf * mesh.Vertices[poly.VertexIndices[i]],
                         xf * mesh.Vertices[poly.VertexIndices[i + 1]],
-                        uvs[0], uvs[i], uvs[i + 1], seen, _stats);
+                        uvs[0], uvs[i], uvs[i + 1], seen, _stats, rng);
             }
         }
     }
@@ -1064,10 +1277,17 @@ public sealed class ClutterBuilder
             Multimesh = mm,
             MaterialOverride = mat,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            ExtraCullMargin = kind.Width, // the shader may swing verts outside the static AABB
+            ExtraCullMargin = CullMarginOf(kind),
             Name = Sanitize(kind.Label),
         };
     }
+
+    // The billboard shader swings verts outside the MultiMesh's static AABB, so the card's own
+    // width is the margin — GROWN BY THE LARGEST SCALE any of its instances actually got
+    // (trap (d) of C22). C2's spruce reaches 3.0×, and a margin left at 1× would pop a third of
+    // that card off the screen edge. Measured from the placements rather than from the kind's own
+    // scale_range, because a kind reached by substitution is scaled by its sources' ranges.
+    private float CullMarginOf(Kind kind) => kind.Width * kind.MaxScale;
 
     // A 3D decoration kind: the SAME mesh and materials the placed world uses, drawn once per
     // placement through a MultiMesh. Nothing here is a billboard — the world shader has no
@@ -1224,6 +1444,7 @@ public sealed class ClutterBuilder
         public bool Solid;
         public float NodeBias;      // solid kinds: the `node_bias` instance uniform value
         public float Width, Height;
+        public float CullMargin;    // Width grown by the largest scale_range draw these got
         public Shape3D? CollisionShape;
         public IReadOnlyList<Transform3D> Placements = null!;
     }
@@ -1465,9 +1686,27 @@ public sealed class ClutterBuilder
 
         public int MeshIndex;
         public int NodeIndex;                    // a representative decoration node (draw order)
+        public string Model = "";                // the decoration node's own name, e.g. firtree1.flt
         public string Label = "";                // texture (sprites) or node name (solids)
         public bool Solid;                       // a 3D decoration, not a billboard card
         public float Width, Height;              // sprite quad extents (sprites only)
+
+        // templates.zrd's `scale_range` for THIS kind's model, (1,1) when it authors none or no
+        // spec was supplied. ⚠ It is the SOURCE kind's range that scales a substituted stamp —
+        // see the roll in PlaceOnTriangle.
+        public Vector2 ScaleRange = Vector2.One;
+
+        // `substitute` as a CUMULATIVE table: the running sum of the engine's own normalised
+        // shares, paired with the kind each share lands in. A null target is a model the gamez
+        // does not carry — it keeps its share and places nothing, as the original does. Empty
+        // when the kind authors no substitution, which is every stamp landing in its own kind.
+        public IReadOnlyList<(float Cumulative, Kind? Target)> Substitutes =
+            Array.Empty<(float, Kind?)>();
+
+        // The largest scale any instance of this kind actually received, so the billboard's cull
+        // margin can grow with it (trap (d) of C22). Measured rather than derived from ScaleRange:
+        // a kind reached by substitution is scaled by its SOURCES' ranges, not by its own.
+        public float MaxScale = 1f;
         // The decoration model's own render flags (sprites only — a solid decoration draws
         // through SceneBuilder's materials, which read them themselves).
         public bool Lit = true;
@@ -1497,11 +1736,13 @@ public sealed class ClutterBuilder
         public long WorstLatticeCells; // the largest lattice seen among those refused
         public int Placed;             // instances the lattice produced (after the seen dedup)
         public int OutsideSource;      // …of which any that missed their own source triangle
+        public int Substituted;        // …of which any whose model the substitute roll changed
+        public int SubstituteNothing;  // rolls that landed on a model the gamez does not carry
 
         public void Report()
         {
             string worst = OverLargeLattice > 0 ? $" worst_lattice_cells={WorstLatticeCells}" : "";
-            Log.Info("world", $"clutter uv lattice: placed={Placed} outside_source={OutsideSource} skipped_no_clutter_flag={NoClutterFlagged} skipped_zero_world_area={ZeroWorldArea} skipped_zero_uv_area={ZeroUvArea} skipped_no_uv_array={NoUvArray} skipped_over_large_lattice={OverLargeLattice}{worst}");
+            Log.Info("world", $"clutter uv lattice: placed={Placed} substituted={Substituted} substitute_nothing={SubstituteNothing} outside_source={OutsideSource} skipped_no_clutter_flag={NoClutterFlagged} skipped_zero_world_area={ZeroWorldArea} skipped_zero_uv_area={ZeroUvArea} skipped_no_uv_array={NoUvArray} skipped_over_large_lattice={OverLargeLattice}{worst}");
             if (OutsideSource > 0)
                 Log.Warn("world", $"clutter instances landed OUTSIDE their source triangle count={OutsideSource} of {Placed} — the UV containment test disagrees with the affine map");
         }

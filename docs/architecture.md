@@ -672,17 +672,35 @@ empty district.
   exemption that stood in for this gate is **gone** — do not reintroduce either half alone: the
   gate without the districts empties C5's downtown, the districts without the gate double the city
   (`BL-250`).
-⚠ **`FUN_004dd6e0`'s `templates.zrd`-driven steps are not implemented, but only three of them
-  matter.** `translate_uv_range`, `rotation_range` and `align_normal` are authored by **no chapter
-  in the install** — inert, not missing, and that is precisely why the original's placement has no
-  random input affecting position or orientation, and why C1's tree positions come out *exactly*
-  the original's (confirmed at the controls). What IS authored and unapplied: `scale_range` (143
-  blocks), `far_fade_range` (143) and `substitute` (41) — so positions are right while sizes are
-  uniform and the species mix is wrong. Wave C owns those; the file itself is read by
-  `Mech3/ClutterTemplates.cs` (docs/formats/templates.md), which nothing consumes yet.
-  Nothing here draws a random number, so
-  the unseeded build is stable; the moment `substitute` or `scale_range` lands, a seeded PRNG has
-  to land with it.
+⚠ **`substitute` and `scale_range` ARE applied (C22); `far_fade_range` is not.** The per-kind data
+  comes from `Mech3/ClutterTemplates.cs` (docs/formats/templates.md), handed in at construction —
+  a null spec rebuilds the pre-C22 monoculture at authored size, which is what a caller with no
+  reader gets. `translate_uv_range`, `rotation_range` and `align_normal` are authored by **no
+  chapter in the install** — inert, not missing, and that is precisely why the original's placement
+  has no random input affecting position or orientation, and why C1's tree positions come out
+  *exactly* the original's (confirmed at the controls). `far_fade_range` (143 blocks) stays
+  unapplied by Decision 3 of the plan; C23 owns it.
+⚠ **The substitute/scale stream is seeded with a FIXED constant, deliberately not `Rng.Master`.**
+  The original seeds its whole world build with one (`srand(0x8EA91836)` … `srand(time(0))`,
+  `FUN_004df1d0`), so a chapter's forest is the same forest on every launch; deriving from the
+  session master instead rerolled C1's species mix on every unpinned run (measured: firtree1 15,154
+  vs 15,148), which no golden could survive. Do not "fix" this to respect `--seed=`. Matching the
+  original's *sequence* is a different thing and is not attempted — different PRNG, different
+  traversal, different draw count. `clutter-determinism` (in-engine suite) is the guard.
+⚠ **A substituted stamp keeps the SOURCE kind's properties.** `FUN_004dd6e0` holds the decoration
+  entry's own kind block throughout and the roll rewrites only the model pointer, so a `firtree2`
+  that came from a `firtree1` roll is scaled by *firtree1's* 0.9–1.1, while a `firtree2` the
+  template placed itself is scaled by its own 0.9–1.5. The plan's C22 predicted the opposite; the
+  decompile says otherwise.
+⚠ **A substitution target that no template scatters is MINTED as a kind** (`ResolveModel`), because
+  the engine resolves targets through its global model table — 40 such in C5, plus C3's
+  `palmtree2/3` and C4's `firtree2`. Minted kinds live in `_allKinds`, never in `Template.Kinds`:
+  they have no `CellPlacements` and must never be walked as a source. An entry naming the kind's
+  OWN model stays in that kind rather than being re-resolved, so mesh duplicates of one model do
+  not shuffle instances between themselves for no visible reason.
+⚠ **Cull margins scale with the placements.** `KindExport.CullMargin` is the card width times the
+  largest scale any instance actually drew (C2's spruce reaches 3.0×); `MapEdgeExtender` uses the
+  same value, or a scaled card would pop at the screen edge.
 ⚠ **There is NO world-space grid and no global clutter origin** — the original has neither
   (`analysis/bl-305-clutter-uv/FINDINGS-A2.md`). Placement is `ClutterBuilder.UvTriangle`, i.e.
   `FUN_004dd6e0` steps 4/6/7: floor the triangle's UV bbox to an integer lattice, test containment
@@ -756,8 +774,8 @@ The chapter's `templates.zrd` (`ClutterTemplateSpec.Load`/`.Parse`): one `Clutte
 clutter DECORATION MODEL — `substitute`'s weighted roll, `scale_range`, `far_fade_range`, and the
 jitter/rotation/slope/damage keys the retail data leaves at their defaults. Schema, offsets and the
 per-chapter census: docs/formats/templates.md. Static over a reader list, so all eight chapters are
-pinned off-engine (`CSVM.Tests/ClutterTemplatesTests.cs`). **Nothing consumes it yet** — C22 applies
-`substitute` + `scale_range`, C23 decides `far_fade_range`.
+pinned off-engine (`CSVM.Tests/ClutterTemplatesTests.cs`). Consumed by `ClutterBuilder` for
+`substitute` + `scale_range` (C22); `far_fade_range` is read and unapplied (C23).
 ⚠ **Keyed by decoration model, NOT by template.** C3 registers only `cliff1_sandtrans` and its file
   describes palms, because that template's quad scatters `palmtree1.flt`. The template registry is
   `interp.json`'s `AddClutterTemplates` (`ClutterBuilder.TemplateNames`); this file never meets it.

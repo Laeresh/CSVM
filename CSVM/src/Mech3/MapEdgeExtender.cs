@@ -716,7 +716,10 @@ public sealed partial class MapEdgeExtender : Node3D
                 Multimesh = mm,
                 MaterialOverride = kind.Material,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-                ExtraCullMargin = kind.Width, // the billboard shader swings verts outside the AABB
+                // The billboard shader swings verts outside the AABB, and a scale_range draw can
+                // make a card up to 3× its authored width — ClutterBuilder measured the margin
+                // these placements need, so the extension uses that rather than the raw width.
+                ExtraCullMargin = kind.CullMargin,
                 Name = $"clutter_{kindIndex}",
             };
             if (kind.Solid)

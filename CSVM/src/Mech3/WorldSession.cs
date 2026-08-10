@@ -162,7 +162,11 @@ public sealed class WorldSession
         }
         else if (clutterNames.Count > 0)
         {
-            clutterBuilder = new ClutterBuilder(gamez, textures, builder.Scene);
+            // templates.zrd drives `substitute` and `scale_range` (docs/formats/templates.md).
+            // Null when the chapter ships no such file — every decoration then stands at its
+            // authored model and size, which is also what an empty file (C1C/C2B) produces.
+            var clutterProps = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(o.DataRoot, o.Chapter));
+            clutterBuilder = new ClutterBuilder(gamez, textures, builder.Scene, clutterProps);
             if (clutterBuilder.Build(clutterNames, collision: o.Collision) is { } clutter)
             {
                 root.AddChild(clutter);
