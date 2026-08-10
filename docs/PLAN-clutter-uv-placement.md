@@ -212,7 +212,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ `templates.zrd` reader + `docs/formats/templates.md`
 22. ☑ Apply `substitute` and `scale_range`
-23. ☐ Survey `far_fade_range`, `rotation_range`, `translate_uv_range` → decide or hand to backlog
+23. ☑ Survey `far_fade_range`, `rotation_range`, `translate_uv_range` → decide or hand to backlog
 
 ## Dependency and parallelism notes
 
@@ -1623,7 +1623,46 @@ apply it as a uniform scale, not a basis replacement. (d) Sprite kinds get their
 `SpriteInfo`, which feeds `ExtraCullMargin` — a 1.5× scaled tree needs the margin to grow with it or
 it will pop at the screen edge.
 
-## C23 ☐ Survey `far_fade_range`, `rotation_range`, `translate_uv_range` → decide or hand to backlog
+## C23 ☑ Survey `far_fade_range`, `rotation_range`, `translate_uv_range` → decide or hand to backlog
+
+### ✅ Landed 2026-08-10 — decision only, no code
+
+**`rotation_range`, `align_normal`, `translate_uv_range`, `min_slope`, `max_slope`: documented as
+unused, not built.** All five default everywhere in the retail install (B14/C21's census, restated
+in `docs/formats/templates.md`) — a decode to write down, not a feature with anything to exercise
+it. No backlog entry: there is nothing to defer when no chapter authors the key.
+
+**`far_fade_range`: deferred to `backlog.md` as `BL-337`.** Read `CameraSetClutterFadeScaleSq`'s
+consumers in Ghidra (the string at `0x0063f5bc`, dispatched from `FUN_005b80a0`'s `'C'` case) to
+settle whether the fade scale is per-mission or a detail setting:
+
+- The script command parses one float argument and calls `FUN_004d2120(scale)`, which writes a
+  single global, `_DAT_0062d170`. **Not a per-node or per-mission struct field** — one scalar for
+  the whole engine.
+- That global is read by `FUN_004d5de0` and `FUN_004d6010`, which multiply it against squared
+  camera distance and compare against each **type-5 scene node's** own near²/far² thresholds to
+  blend a fade alpha. So the mechanism is generic node LOD/fade, not clutter-exclusive — clutter
+  instances are one caller of a shared system, which is why the plan's "two shaders" framing
+  undersold it slightly; the fade path lives wherever type-5 nodes are drawn.
+- The global's *default* comes from the graphics **detail-level** setter, `FUN_00440750`: called
+  with 0/1/2 and writing `FUN_004d2120(0x3f800000 | 0x40800000 | 0x41100000)` = 1.0 / 4.0 / 9.0 —
+  a squared scale, so fade **distance** scales ×1 / ×2 / ×3 with detail. The script command can
+  then override that per mission on top of the detail default; `extracted/interp.json` (the
+  install-wide record of every `CameraSet*` script-command call, six other `CameraSet*` verbs
+  present) has **zero** `CameraSetClutterFadeScaleSq` calls, so every shipped mission runs on the
+  detail-level default alone.
+- **Answer: it's a detail setting, not a per-mission tuning value** — and the authored metres in
+  `far_fade_range` are therefore a *base* distance, not literal: C5's `cb00a` starting fade at
+  200–300 m is 200–300 m only at the lowest detail preset and up to 600–900 m at the highest.
+
+Decision 3 (implementing the fade mid-plan would confound every Wave B density A/B) still holds —
+this item does not implement it, it decides *what to write down when deferring*. `BL-337` carries
+the ranges, the `CameraSetClutterFadeScaleSq` finding above, and the fix shape (a shader-side fade
+path plus the missing detail-scale global) so the next session does not re-derive any of it.
+`docs/formats/templates.md`'s "What the remake reads" section points at `BL-337` instead of this
+plan.
+
+### Original approach (kept for reference)
 
 ### ⚠ Half of this item is already answered (2026-08-10) — census run under B14
 

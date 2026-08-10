@@ -192,8 +192,8 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt flying, or the 2–4-player splitscreen Dogfight deathmatch, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, world destructibles that take damage, die, lose collision, throw debris and reset — and planes shoot planes down (M4 A1, front-loaded). The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
-**Active plan: [`docs/PLAN-clutter-uv-placement.md`](docs/PLAN-clutter-uv-placement.md)** — Wave C
-(authored per-kind data) on `worktree-clutter-uv-placement`. Next: `C23`.
+**Active plan: [`docs/PLAN-clutter-uv-placement.md`](docs/PLAN-clutter-uv-placement.md)** — all
+items landed on `worktree-clutter-uv-placement`. Next: archive to `docs/plans/plans.md`.
 Owed at the controls: `PT-28`, `PT-41`, `PT-43`, `PT-45` and `PT-47`
 ([`playtest.md`](playtest.md)). Verify any change with
 **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read

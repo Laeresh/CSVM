@@ -198,9 +198,15 @@ chapter authors — the negative is only a measurement if the reader would have 
 
 `ClutterBuilder` consumes `substitute` and `scale_range` (C22): a stamp rolls its model against
 the kind's table and takes a uniform scale from its range. `far_fade_range` is read and **not
-applied**, deferred by Decision 3 of `docs/PLAN-clutter-uv-placement.md` (a fade that *removes*
-distant clutter mid-plan would confound every density A/B) with C23 owning the decision. The five
-unauthored keys are read and, being unauthored, do nothing.
+applied** — deferred to `BL-337` (C23, 2026-08-10). It is a rendering-side feature, not a
+placement one: the runtime's `CameraSetClutterFadeScaleSq` (`0x0063f5bc`) writes one global that
+scales *every* type-5 scene node's LOD/distance fade, defaulted by the graphics detail level
+(×1/×2/×3, `FUN_00440750`) and overridable per mission — so the authored metres in this file are a
+base distance, not a literal one, and implementing the fade needs the detail-scale system alongside
+the shader path. `rotation_range`, `align_normal` and `translate_uv_range` are unauthored
+everywhere in the install (censused under B14/C21) and so need no decision beyond "document,
+don't build" — recorded above. The five unauthored keys are read and, being unauthored, do
+nothing.
 
 ⚠ **The draws come off a FIXED seed, not the session's.** The original wraps its whole world build
 in `srand(0x8EA91836)` … `srand(time(0))` (`FUN_004df1d0`), so a chapter's forest is the same
