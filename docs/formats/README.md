@@ -7,8 +7,12 @@ Microsoft), validated against a retail install with [mech3ax](https://github.com
 model: **format documentation and code only — no game asset data.** Pages carry field
 tables and tiny excerpt values, never bulk extracted content.
 
-Everything here was decoded by inspecting extracted data and matching behavior against
-the original game (screenshots, videos, in-game measurements) — no exe decompilation.
+Most of this was decoded by inspecting extracted data and matching behavior against the original
+game (screenshots, videos, in-game measurements). A few pages additionally cite `crimson.exe` —
+where the retail binary embeds a literal that settles a question the data cannot, such as the
+editor format comment naming every `aiv` roster field ([ai-rosters.md](ai-rosters.md)) or the
+absent `ThrustFactor` token ([vehicle.md](vehicle.md)). Such claims name the evidence at the point
+of use; no code is reproduced.
 
 ## Pages
 
@@ -25,6 +29,7 @@ the original game (screenshots, videos, in-game measurements) — no exe decompi
 | [missions.md](missions.md) | Mission objectives: the stunt `dzones` Danger Zones + their entry/exit gate geometry, per-mission `dzones.json` overrides, `targets.json` node→string keys, the `messages.json` string table |
 | [mission-entities.md](mission-entities.md) | `zeppelins.json` (motion, gasbags, broadside cannons, critical-zone threshold) and `egen.json` (enemy generators, the zeppelin fighter-launch altitude gate) |
 | [ai-nets.md](ai-nets.md) | The chapter AI patrol graphs: `ne0NNNNN.zrd` waypoint nets (nodes + explicit branching edge list + attach-target trailer) and the `neindex.zrd` id→name table every AI reader references |
+| [ai-rosters.md](ai-rosters.md) | The per-mission AI roster `aiv.zrd` (all 81 fields named from the binary), the nine-slot pilot skill vector and the `ai_skill_parameters` curves it indexes, and `maneuvers.zrd` — the 17-entry maneuver library as timed control programs |
 | [sounds.md](sounds.md) | `sounds.json` SETS, the `player.json` volume/pitch curves, the game's MS-ADPCM WAV format |
 | [weather.md](weather.md) | `weather.json`: per-zone fog, `SUNLIGHT_*` world lighting, cloud cover, wind, precipitation, the dual colour encoding |
 | [anim-definitions.md](anim-definitions.md) | `ANIMATION_DEFINITION` readers (zepstate/startanims/building anims) + the compiled `cam_anim.zbd`/`mis_anim.zbd` survey |
