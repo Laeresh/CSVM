@@ -15,9 +15,9 @@ namespace CSVM.Testing;
 ///
 /// <para>Each probe does the work once and returns <b>both</b> halves: the human-readable report
 /// text the <c>--dump-*</c> flag prints and writes, and a structured verdict (counts, per-row
-/// booleans, failure strings) a <c>--run-tests</c> suite asserts on. That split is the point —
-/// before it, the verdicts lived as <c>✓</c>/<c>✗</c> glyphs inside a formatted string, and the
-/// only way to automate them would have been to parse the report back.</para>
+/// booleans, failure strings) a <c>--run-tests</c> suite asserts on. That split is the point: a
+/// verdict rendered only as a <c>✓</c>/<c>✗</c> glyph inside a formatted string can be automated
+/// only by parsing the report back.</para>
 ///
 /// <para>Every probe renders numbers with <see cref="CultureInfo.InvariantCulture"/>: a German
 /// machine otherwise writes <c>HEALTH 0,01</c> into a committed verification artifact.</para>
@@ -395,8 +395,8 @@ public static class Probes
     /// The swap targets nodes through the compiled symbol table, which can resolve to geometry
     /// OUTSIDE the small anim anchor, so a census under the anchor misses it — pass
     /// <see cref="WorldRootOf"/> and compare the two sets around one kill.
-    /// <para><b>Report the two directions separately, never the signed sum</b> (verification
-    /// WORLD-10): a death both switches the healthy collider off and brings wreck colliders on, and the
+    /// <para><b>Report the two directions separately, never the signed sum</b>
+    /// (<c>docs/verification.md</c>): a death both switches the healthy collider off and brings wreck colliders on, and the
     /// net can be positive while the real removal happened.</para></summary>
     public static HashSet<CollisionShape3D> EnabledColliders(Node root)
     {
@@ -927,24 +927,24 @@ public static class Probes
         Row("level-speed-near-cap", "level full throttle at 1988 m, held to equilibrium", "mph",
             m.Speed / Mph, 300.4, 4.0, $"altitude clamp must not leak below the cap, α {m.Alpha:0.0}°");
 
-        // --- sustained turn. CAP-01: full throttle, stick full back throughout (pilot-confirmed),
-        // entered from the 298.96 mph cruise, held to a true equilibrium — 15.9 sim s and 449.8° of
-        // heading. Sampling early measures the bleed-in instead, which is a different number (0.369
-        // A against the plateau's 0.380) that happens to look plausible, so this settles for 10 s
-        // first and then averages over the original's own 15.9 s window.
+        // --- sustained turn. The recipe: full throttle, stick full back throughout, entered from
+        // the 298.96 mph cruise at 100° of bank, held to a true equilibrium — the original's own
+        // window is 15.9 sim s and 449.8° of heading. Sampling early measures the bleed-in instead,
+        // which is a different number (0.369 A against the plateau's 0.380) that happens to look
+        // plausible, so this settles for 10 s first and then averages over that same 15.9 s window.
         //
-        // ⚠ The bank is set at entry and then LEFT FREE — no roll input, which is what the original's
-        // pilot was doing to the stick and is NOT what "hold 100°" would mean here. Forcing it is
-        // worse than useless: a roll controller keyed on atan2(-X.Y, Y.Y) stops measuring bank the
-        // moment the nose leaves the horizontal, and drove entry banks of 60°, 75° and 100° all into
-        // the same nose-down spiral at terminal speed — identically with and without the B12 lift
-        // term, i.e. an instrument artifact and not a model reading. Free-roll settles honestly, at
-        // its own bank rather than the original's; the row reports both, and asserts neither.
-        // ⚠ INFORMATIONAL and still unattributed. The original's bank coupling is now implemented
-        // (the 0.205/0.165 terms), which took this row from +17.1% to +14.7% — a real step, not the
-        // explanation. The remaining gap rides with the rate row below, which the same coupling
-        // moved the WRONG WAY, so whatever slows the original's banked pull sets this equilibrium
-        // too and neither row can be closed alone.
+        // ⚠ The bank is set at entry and then LEFT FREE — no roll input, which is what the
+        // original's pilot was doing to the stick and is NOT what "hold 100°" would mean here.
+        // Forcing it is worse than useless: a roll controller keyed on atan2(-X.Y, Y.Y) stops
+        // measuring bank the moment the nose leaves the horizontal, and drives entry banks of 60°,
+        // 75° and 100° all into the same nose-down spiral at terminal speed — an instrument
+        // artifact, not a model reading. Free-roll settles honestly, at its own bank rather than the
+        // original's; the row reports both, and asserts neither.
+        // ⚠ INFORMATIONAL and unattributed. The original's bank coupling (the 0.205/0.165 terms) is
+        // implemented and narrows this row without explaining it. The remaining gap rides with the
+        // rate row below, which that same coupling moves the WRONG WAY, so whatever slows the
+        // original's banked pull sets this equilibrium too and neither row can be closed alone.
+        // See docs/org/flightModel.md.
         var turn = SustainedTurn(stats, 100f, 298.96f * Mph, settle: 10f, window: 15.9f);
         Row("sustained-turn-speed", "full back stick from a banked entry, settled speed", "mph",
             turn.SpeedMph, 222.94, 5.0,
@@ -953,28 +953,23 @@ public static class Probes
             + "rides the rate row below",
             info: true);
 
-        // An UPPER BOUND, not a band. BL-247's defect is the aircraft falling out of this manoeuvre
-        // — 83% of gravity across the flight path at a steep bank — so "sinks no harder than the
-        // original" is the claim the measurement supports. The other side is a different question:
-        // the turn used to come out slightly CLIMBING (−2.65), which was its own divergence, and
-        // C22's bank coupling took it to 1.66, sinking. Both sides stay visible in the number.
-        // ⚠ INFORMATIONAL, downgraded from asserting in C23, and the reason is the row above rather
-        // than this one. The weathervane torque opposes the sustained pull, so it lowers the turn
-        // rate (34.71 → 33.38 °/s) and the sink rises with it, to 2.33 — past the bound. But this is
-        // the third leg of a manoeuvre whose OTHER two legs are already informational and UNOWNED:
-        // we sweep heading 76% faster than the original at a bank it never flew, and a sink read off
-        // that flight path has no reason to land on the original's. (Owned by BL-095's turn_fade_*
-        // until 2026-08-09, when that field turned out to be an airspeed ramp saturated above
-        // 50 mph — no authored field is a candidate now; see the rate row below and CAP-33.)
-        // Asserting one leg of a manoeuvre the model gets demonstrably wrong is asserting a
-        // compensating coincidence — C22's green here sat inside the same unattributed gap. It
-        // re-asserts with the rate row, not before it.
-        // ⚠ D31 moved it much further (1.07 → 8.86) and that is attributed rather than tuned: the
-        // retired knife-edge sag term had been holding the nose down through the WHOLE pull, at up
-        // to 11.5 °/s, so this turn now settles at 88.8° of bank instead of 74.9° and actually
-        // pulls. On the other ten airframes the same removal moves this row the OTHER way (warhawk
-        // 8.96 → −15.54, balmoral 17.57 → −4.17; negative = climbing), which is the clearest sign
-        // the number is riding the turn-rate gap rather than reading a mechanism of its own.
+        // An UPPER BOUND, not a band. The defect this guards is the aircraft falling out of the
+        // manoeuvre — 83% of gravity across the flight path at a steep bank — so "sinks no harder
+        // than the original" is the claim the measurement supports. The other side is a different
+        // question: the turn coming out CLIMBING is its own divergence, so both signs stay visible
+        // in the number.
+        // ⚠ INFORMATIONAL, and the reason is the row above rather than this one. This is the third
+        // leg of a manoeuvre whose OTHER two legs are informational and UNOWNED: we sweep heading
+        // 76% faster than the original at a bank it never flew, and a sink read off that flight path
+        // has no reason to land on the original's. Asserting one leg of a manoeuvre the model gets
+        // demonstrably wrong is asserting a compensating coincidence. It re-asserts with the rate
+        // row, not before it.
+        // ⚠ The figure moves a long way with the pitch terms and that is attributed rather than
+        // tuned: a nose-down sag term applied through the WHOLE pull, at up to 11.5 °/s, changes the
+        // settled bank by more than 10° and with it the sink. On the other ten airframes the same
+        // change moves this row the OTHER way (negative = climbing), which is the clearest sign the
+        // number rides the turn-rate gap rather than reading a mechanism of its own.
+        // See docs/org/flightModel.md.
         Row("sustained-turn-sink", "sustained max-pull turn, sink rate", "ft/s",
             turn.SinkFtS, 1.85, 0.0,
             $"upper bound — the failure this guards is falling out of the turn (before the B12 lift "
@@ -983,23 +978,23 @@ public static class Probes
 
         // ⚠ INFORMATIONAL and must stay so until the rate gap closes. We sweep heading far faster
         // than the original, which is recorded, not fixed; inventing a rate limiter to close it is
-        // the wrong-mechanism fix BL-092 trap (b) and BL-124's history both warn about.
+        // the wrong-mechanism fix — a limiter fitted to this row explains nothing and hides the
+        // real term.
         // ⚠ What the gap IS has narrowed: the original pulls 1.6x slower BANKED than wings-level
         // (18.95 °/sim-s here against 30.16 round the `pitch` clip's 360° loop, same stick, same
         // throttle), while we pull the same rate in both — so this is a bank/load-factor effect,
         // not a pitch-authority error, and `zoom-climb` above is the row that shows our pitch is
         // nearly right.
-        // ⚠ NO AUTHORED FIELD IS A CANDIDATE any more, and all three that were are eliminated by
-        // measurement rather than by argument (2026-08-09). highGs: the G limiter is inert on all
-        // eleven airframes (peak demand 2.13-5.01 G against a threshold of 9) and a limiter that
-        // never fires cannot slow a turn. turn_fade_in/turn_fade_out: decoded as a base ramp on
-        // AIRSPEED ALONE — 0 at 10 mph rising to 1 at 50 and flat above — so it is identically 1
-        // across the 222-260 mph this row settles at, carries no bank or load-factor term, and
-        // cannot be a bank effect at all (it is a real unimplemented LOW-speed behaviour, BL-330).
-        // What discriminates now is a capture, not a decode: this measurement is not internally
-        // consistent with a coordinated level turn (see the bank note below), and CAP-33 — the same
-        // turn held at ~60-70° instead of ~100° — settles whether the original is rate-limited,
-        // bank-limited, or being mis-read off its ADI.
+        // ⚠ NO AUTHORED FIELD IS A CANDIDATE, and all three that were are eliminated by measurement
+        // rather than by argument. highGs: the G limiter is inert on all eleven airframes (peak
+        // demand 2.13-5.01 G against a threshold of 9) and a limiter that never fires cannot slow a
+        // turn. turn_fade_in/turn_fade_out: decoded as a base ramp on AIRSPEED ALONE — 0 at 10 mph
+        // rising to 1 at 50 and flat above — so it is identically 1 across the 222-260 mph this row
+        // settles at, carries no bank or load-factor term, and cannot be a bank effect at all (it is
+        // a real unimplemented LOW-speed behaviour). What discriminates now is a capture, not a
+        // decode: this measurement is not internally consistent with a coordinated level turn (see
+        // the bank note below), and the same turn held at ~60-70° instead of ~100° would settle
+        // whether the original is rate-limited, bank-limited, or being mis-read off its ADI.
         // ⚠ It is NOT the bank coupling, and that is now settled rather than suspected. The
         // original's own 0.205/0.165 terms are implemented, and they move this row AWAY from the
         // target (32.35 -> 34.71 here, up on ten of eleven airframes) because both add heading rate
@@ -1008,7 +1003,7 @@ public static class Probes
         // ⚠ The original's own turn is NOT internally consistent with a coordinated level turn, so
         // do not promote this by matching the ADI's bank either: 18.95 °/sim-s at 222.94 mph is
         // V·ω = 32.96 m/s² lateral, which implies atan(32.96/20) = 58.7° of bank, not the +100° the
-        // ADI sky-region centroid reads (trusted only to ±4°, BL-247 trap (b)). Ours IS consistent —
+        // ADI sky-region centroid reads (trusted only to ±4°). Ours IS consistent —
         // it settles at exactly the bank its own lateral acceleration implies — which is why the
         // two banks differ by more than the two rates do.
         Row("sustained-turn-rate", "sustained max-pull turn, heading rate", "°/s",
@@ -1022,12 +1017,11 @@ public static class Probes
 
         // --- part throttle. These two are the ONLY place the drag shape is observable: the
         // full-throttle equilibrium is fd_speed by construction for any curve, so it can never
-        // detect a wrong shape (BL-148 trap (b)). The 1/8-throttle row passes unaided (the linear
-        // lever's discriminating test); the decel row is the recorded footage-vs-binary conflict —
-        // the polar, read out of the executable, is ~2× stronger below cruise than the zero-thrust
-        // clip measures (docs/org/flightModel.md, "The force scale — settled"), and the direction
-        // of the old "throttled-back plane barely decelerates" report is now REVERSED. Both stay
-        // informational; the decel row is also still owed a human playtest.
+        // detect a wrong shape. The 1/8-throttle row passes unaided (the linear lever's
+        // discriminating test); the decel row is the recorded footage-vs-binary conflict — the
+        // polar, read out of the executable, is ~2× stronger below cruise than the zero-thrust clip
+        // measures (docs/org/flightModel.md). Both stay informational; the decel row is also still
+        // owed a human playtest.
         m = Fresh(stats, Level(), 0.9f * fd, 0.125f);
         Run(m, 0.125f, 300f, pitch: 0f);
         double idlePath = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
@@ -1037,34 +1031,30 @@ public static class Probes
             + $"α {m.Alpha:0.0}°",
             info: true);
 
-        // ⚠ This is a ZERO-throttle run, not 1/8. The clip it is measured against holds 8/8, cuts
-        // to 0/8, and touches nothing else in level flight (pilot-confirmed 2026-08-07) — it was
-        // modelled here at 1/8 for want of that fact, which made it a thrust-vs-drag scenario
-        // instead of the pure drag probe it actually is. At 1/8 the model reads 12.1 s against the
-        // same 7.04 target, and that miss is an artifact of the wrong throttle setting, not a
-        // finding: 150 mph sits only 8% above the 1/8-throttle equilibrium, so the approach is
-        // asymptotic and the time runs away. With no thrust there is no equilibrium to crowd.
+        // ⚠ This is a ZERO-throttle run, not 1/8. The footage it is measured against holds 8/8,
+        // cuts to 0/8, and touches nothing else in level flight — so this is a pure drag probe, not
+        // a thrust-vs-drag scenario. Run it at 1/8 instead and the model reads 12.1 s against the
+        // same 7.04 target, which is an artifact of the wrong throttle setting and not a finding:
+        // 150 mph sits only 8% above the 1/8-throttle equilibrium, so the approach is asymptotic and
+        // the time runs away. With no thrust there is no equilibrium to crowd.
         m = Fresh(stats, Level(), 290f * Mph, 0f);
         double tDecel = RunUntil(m, 0f, 60f, () => m.Speed <= 150f * Mph);
         Row("decel-290-150", "throttle cut to ZERO, 290 -> 150 mph, level", "s", tDecel, 7.04, 1.0,
             $"pure drag — no thrust term to assume, α {m.Alpha:0.0}° at finish — OPEN conflict, "
             + "the polar is the binary's and the footage disagrees", info: true);
 
-        // --- zoom climb. INFORMATIONAL. Measured off the `pitch` clip's loop — full throttle, full
-        // back stick from a 299.4 mph level cruise, which is the SAME take that pinned the 33 °/s
-        // pitch rate, so its stick history is known rather than inferred. The original bleeds to
-        // 127.9 mph 4.4 sim s into the pull and tops out 936 ft up at 6.5 s, still climbing past its
-        // own slowest point (the speed minimum leads the apex by 2.2 s and 63 mph, because speed
-        // bottoms where thrust − drag = g·sinγ, not where the climb stops).
+        // --- zoom climb. INFORMATIONAL. The recipe: full throttle, full back stick held from a
+        // 299.4 mph level cruise — the SAME take that pinned the 33 °/s pitch rate, so its stick
+        // history is known rather than inferred. ⚠ A held FULL pull is what makes these targets the
+        // right ones; a slower or released pull is a different flight with a different apex, and the
+        // two must not be averaged. The original bleeds to 127.9 mph 4.4 sim s into the pull and
+        // tops out 936 ft up at 6.5 s, still climbing past its own slowest point (the speed minimum
+        // leads the apex by 2.2 s and 63 mph, because speed bottoms where thrust − drag = g·sinγ,
+        // not where the climb stops).
         //
-        // ⚠ These targets REPLACE the "+1635 ft, 104 mph, 10.5 s" figures this row carried until
-        // 2026-08-07. That set is a real measurement of a different flight, with an unknown stick
-        // history — it cannot be a held full pull, because a held full pull is this loop and this
-        // loop reaches its apex in 6.5 s, not 10.5. Do not average the two or split the difference.
-        //
-        // The C21 induced-drag term closed most of the speed gap (min speed 269 -> 205 mph against
-        // 128) and overshot the altitude in the other direction (1282 ft against 936), so the energy
-        // is now wrong the other way round and this stays the row to watch. Also a second,
+        // The induced-drag term closes most of the speed gap and overshoots the altitude in the
+        // other direction (1282 ft against 936), so the energy is wrong the other way round and this
+        // stays the row to watch. Also a second,
         // longer-duration read of the alignment lag alongside pitch-rate above — a held pull
         // becomes a sustained loop, so α should sit near the same equilibrium at the point of
         // minimum speed.
@@ -1087,11 +1077,11 @@ public static class Probes
             + $"apex at {tApex:0.0} s (original 6.5), α {alphaAtMinSpeed:0.0}° at min speed",
             info: true);
 
-        // ⚠ INFORMATIONAL, same loop as the row above — a direction check, not an assertion. C21
-        // closed most of this gap (269 -> 205 mph against 127.9) but the energy split still reads
-        // wrong: the row above now OVERSHOOTS altitude (1282 ft against 936) while this UNDERSHOOTS
-        // speed, so C_i (fitted to the sustained-turn plateau only) does not yet reproduce this
-        // manoeuvre's energy balance. Asserting it would fail on that known-open gap, not a new one.
+        // ⚠ INFORMATIONAL, same loop as the row above — a direction check, not an assertion. The
+        // induced-drag term closes most of this gap but the energy split still reads wrong: the row
+        // above OVERSHOOTS altitude (1282 ft against 936) while this UNDERSHOOTS speed, so C_i
+        // (fitted to the sustained-turn plateau only) does not yet reproduce this manoeuvre's energy
+        // balance. Asserting it would fail on that known-open gap, not a new one.
         Row("zoom-climb-min-speed", "same loop, speed at its own minimum", "mph",
             minSpeed / Mph, 127.9, 6.0,
             $"α {alphaAtMinSpeed:0.0}° here (the wings-level pull settles lower — this loop has "
@@ -1141,17 +1131,15 @@ public static class Probes
 
     // ---- knife-edge ----------------------------------------------------------------------------
 
-    /// <summary>The knife-edge hold, the manoeuvre <c>CAP-05</c> filmed twice at very different
-    /// speeds: bank set at ENTRY and then left free, stick neutral, held 36 sim s. Reports the nose
-    /// elevation, the flight path, the gap between them, the sink, the heading rate and α at the
-    /// original's own sample times.
+    /// <summary>The knife-edge hold, filmed twice at very different speeds: bank set at ENTRY and
+    /// then left free, stick neutral, held 36 sim s. Reports the nose elevation, the flight path,
+    /// the gap between them, the sink, the heading rate and α at the original's own sample times.
     ///
-    /// <para><b>The recipe, which is the point of this probe existing.</b> It was lost once — the
-    /// "Balmoral knife-edges at α = 5.1°" figure had no instrument behind it, only prose, and could
-    /// not be reproduced from the prose. It is now the code: entry bank 90° about the nose
-    /// (<see cref="Banked"/>), nose on the horizon, flight path along the nose
-    /// (<see cref="FlightModel.Reset"/>'s convention), entry speed 143 and 300 mph — the two takes
-    /// <c>CAP-05</c> filmed — and the throttle TRIMMED for level flight at that entry speed
+    /// <para><b>The recipe, which is the point of this probe existing</b> — a knife-edge figure
+    /// stated as prose has no instrument behind it and cannot be reproduced. It lives here instead:
+    /// entry bank 90° about the nose (<see cref="Banked"/>), nose on the horizon, flight path along
+    /// the nose (<see cref="FlightModel.Reset"/>'s convention), the two filmed entry speeds of 143
+    /// and 300 mph, and the throttle TRIMMED for level flight at that entry speed
     /// (<see cref="TrimThrottle"/>), not held full. Full throttle is wrong for the 143 mph take by
     /// a factor of two in speed: the aircraft would simply accelerate to its own level top speed
     /// inside three seconds and the run would stop being a 143 mph take at all. Nothing is held on
@@ -1358,8 +1346,8 @@ public static class Probes
 
     /// <summary>Play every impact/destruction effect through the world-effects runtime at
     /// <paramref name="playPoint"/> and report, per effect, whether it RESOLVES (its def is bound)
-    /// and whether it BUILDS a puffer (WORLD-12 — a started def whose factory/textures are missing
-    /// renders nothing). Each effect is stopped before the next so effects sharing a template root
+    /// and whether it BUILDS a puffer — a started def whose factory/textures are missing renders
+    /// nothing. Each effect is stopped before the next so effects sharing a template root
     /// (the gun family shares <c>gunhit</c>) get an independent count.
     ///
     /// <para>With <paramref name="stage"/> (the world-effects template stage) it also reports the
@@ -1482,7 +1470,7 @@ public static class Probes
     private static Basis Pitched(float deg) => Basis.Identity.Rotated(Vector3.Right, Mathf.DegToRad(deg));
 
     /// <summary>Attitude banked <paramref name="deg"/>° about the nose, nose level. Over 90° is past
-    /// vertical, which is where <c>CAP-01</c>'s ADI reads; this is the ENTRY only — the run's own
+    /// vertical, which is where the original's ADI reads; this is the ENTRY only — the run's own
     /// settled bank is reported beside it, because nothing holds this one there.</summary>
     private static Basis Banked(float deg) => Basis.Identity.Rotated(Vector3.Forward, Mathf.DegToRad(deg));
 
@@ -1525,7 +1513,7 @@ public static class Probes
 
     /// <summary>Full throttle and full back stick from a banked entry, settled for
     /// <paramref name="settle"/> s and then averaged over <paramref name="window"/> s — the shape
-    /// <c>CAP-01</c> was flown in. Heading is accumulated off the flight path with wrap unfolded, so
+    /// the original was flown in. Heading is accumulated off the flight path with wrap unfolded, so
     /// a turn past 360° reports what it swept rather than what is left over; sink is the window's
     /// net altitude change over its own duration, which is the quantity the original's altimeter
     /// gave. No roll input: see the call site for why forcing the bank cannot be measured.</summary>
@@ -1909,8 +1897,8 @@ public static class Probes
         /// <summary>Assert an UPPER BOUND (model ≤ original + tolerance) instead of a two-sided
         /// band. For a measurement whose failure mode is one-directional and whose other side is a
         /// different question: the sustained turn's sink is the original's worst case, so sinking
-        /// harder is the BL-247 defect while sinking less is a separate divergence that this row
-        /// would misreport as the same fault.</summary>
+        /// harder is the defect this guards while sinking less is a separate divergence that this
+        /// row would misreport as the same fault.</summary>
         public bool UpperBound;
 
         public bool Asserted => !Informational && Measured != null;
@@ -1971,7 +1959,8 @@ public static class Probes
         public double AlphaSettled;
     }
 
-    /// <summary>Both knife-edge holds of one airframe, at the two speeds <c>CAP-05</c> filmed.</summary>
+    /// <summary>Both knife-edge holds of one airframe, at the two speeds the original was filmed
+    /// at.</summary>
     public sealed class KnifeEdgeResult
     {
         public readonly List<KnifeEdgeRun> Runs = new();
