@@ -195,6 +195,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☑ Replace the world-space grid stamp with the per-triangle UV-lattice walk
 13. ☑ Settle the two remake-only rules: `MinSlopeCos` and the `seen` dedup
 14. ☐ Chapter A/Bs + the 8-chapter regression, and rewrite the class comment
+15. ☑ **Land `BL-305`'s fix: the `no_clutter` gate + retire `BuriedClutterDistricts`** (added
+    2026-08-10, after the mechanism was confirmed at the controls; runs *before* 14, which is the
+    close-out item and now has this build to regress)
 
 ### Wave C — The authored per-kind data
 
@@ -1161,11 +1164,15 @@ landmark that can be flown to and matched.
 `BuriedClutterDistricts` suppresses `cblock4/5/6` **map-wide**, and on 14.1 % of the ground that is
 wrong. The exemption must become conditional on the flag rather than absolute.
 
-**Still open.** Whether the original really stamps `cblock4/5/6` there is a prediction from static
-geometry, not a matched frame — the confirming test is a `--clutter-templates=cblock4,cblock5,cblock6`
-render at the bridge against the user's recordings. And **35 % of flagged overlay area (13.8 M m²,
-7.6 % of C5) has no base at all**, where this rule says the original stamps nothing; whether that is
-right or whether a third mechanism fills it is untested.
+**✅ Confirmed at the controls (2026-08-10).** The prediction above was tested the way it asked to
+be: `--clutter-templates=cblock4,cblock5,cblock6` at `-10112,400,-3562`, ~1 km north of
+`brooklynbridge`. The user's verdict was *"yes this matches my recording"*. That closes the last gap
+between the static-geometry measurement and the original's own frames, and is what authorised B15.
+
+**Still open.** **35 % of flagged overlay area (13.8 M m², 7.6 % of C5) has no base at all**, where
+this rule says the original stamps nothing; whether that is right or whether a third mechanism fills
+it is untested. B15 ships that behaviour — flagged with no base is now bare ground — so if a later
+look finds the original decorating it, that is the next thread, not a regression of the gate.
 
 ### Part 2 — `MinSlopeCos` is deleted, and it never culled anything
 

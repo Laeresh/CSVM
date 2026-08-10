@@ -216,10 +216,10 @@ public sealed record SessionSpec
     public bool DebugClutterFlag { get; private set; }
 
     /// <summary><c>--clutter-templates=a,b,c</c>: build these clutter templates instead of the
-    /// chapter's own <c>AddClutterTemplates</c> list, <b>bypassing</b>
-    /// <c>ClutterBuilder.BuriedClutterDistricts</c> so the exempted <c>cblock4/5/6</c> can be
-    /// loaded on demand and A/B'd against the original. Names are matched case-insensitively
-    /// against the gamez's template roots. Null → the chapter's list, exemption and all;
+    /// chapter's own <c>AddClutterTemplates</c> list, so one district at a time can be A/B'd
+    /// against the original. Names are matched case-insensitively against the gamez's template
+    /// roots. The per-polygon <c>no_clutter</c> gate still applies — this replaces the template
+    /// SET, not the placement rule. Null → the chapter's own list;
     /// <see cref="NoClutter"/> wins if both are given. See <c>docs/cli.md</c>.</summary>
     public IReadOnlyList<string>? ClutterTemplates { get; private set; }
 

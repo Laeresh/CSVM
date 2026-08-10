@@ -29,6 +29,15 @@ namespace CSVM.Mech3;
 /// therefore rotates, mirrors and stretches with the painted ground texture, which is
 /// the intent: a building sits in its painted block wherever that block lands.</para>
 ///
+/// <para><b>Which polygons get dressed is a per-polygon decision, and the flag that makes it is
+/// <c>no_clutter</c></b> (raw bit <c>0x800</c>, carried as <see cref="GameZPolygon.Subface"/>,
+/// gated in <c>FUN_004de2c0</c>). It does not mean "leave this ground bare" — where two
+/// COPLANAR layers are painted over each other, as C5's whole city is, it selects which layer
+/// decorates: flagged skips the overlay so the layer beneath stamps instead. C5's flagged
+/// ground is dressed by <c>cblock4/5/6</c> (low-rise, ≤52 m) and its clear ground by
+/// <c>cblock1/2/3/7</c> (towers, ≤108 m). Getting this backwards is BL-305: dressing flagged
+/// ground with towers buries the pavement between the blocks.</para>
+///
 /// <para><b>There is no world-space grid, and there is no global clutter origin to build
 /// one on</b> — A2 looked and the original has neither
 /// (<c>analysis/bl-305-clutter-uv/FINDINGS-A2.md</c>). The fixed X/Z grid this file used
@@ -115,25 +124,20 @@ public sealed class ClutterBuilder
     // node knows — i.e. nothing. Do not mix the two APIs on these bodies.
     private const float CollisionRegion = 1024f;
 
-    // C5's boot script registers cblock1..cblock7, but cblock4/5/6 dress a ground layer the
-    // player can never see: cblock1/2/3's subface polygons cover their base polygons at
-    // 97.0/99.9/100.0% and win the ground z-fight unconditionally — no day/night/zone/LOD
-    // state ever picks the low-res pass (analysis/item9-depth-bias/CBLOCK-LOD.md §1c/§2, the
-    // r≈0.70 same-scene-two-fidelities pairing). Stamping their buildings anyway doubled the
-    // city's clutter and interpenetrated the visible district's buildings. CAP-22 settled the
-    // original's side: its downtown lattice carries the 59–108 m towers that exist only in
-    // cblock1/2/3's templates, and shows no interpenetration anywhere — so the original draws
-    // the cblock1/2/3 city and not this set (closing commit of BL-250, and
-    // playtest/CAP-22/README.md while it lives). A curated, measured list like
-    // TextureArchive.KnownAbsentFromGameData, not a runtime overlap computation: the base
-    // polygon carries no flag of its own (Subface marks the OVERLAY), so a live rule would
-    // need CBLOCK-LOD.md's coplanar-overlap computation at every load.
-    // ⚠ cblock7 stays: same artwork family, but a VISIBLE subface district (78 C5 nodes) — and
-    // it places cb12a/13a/14a, so those names must NOT read as proof this exemption failed.
-    private static readonly HashSet<string> BuriedClutterDistricts = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "cblock4", "cblock5", "cblock6", // C5 only
-    };
+    // ⚠ THERE IS NO LONGER A `BuriedClutterDistricts` EXEMPTION, and reintroducing one would be
+    // a regression. It suppressed cblock4/5/6 MAP-WIDE on the reasoning that cblock1/2/3's
+    // subface polygons cover their base polygons at 97.0/99.9/100.0% and win the ground z-fight
+    // unconditionally (analysis/item9-depth-bias/CBLOCK-LOD.md §1c/§2), corroborated by CAP-22's
+    // downtown lattice carrying the 59–108 m towers that exist only in cblock1/2/3 (BL-250).
+    // Both observations are still true and neither was ever the whole map: what the exemption
+    // was actually standing in for is the `no_clutter` gate in PlaceOnMesh, which this file did
+    // not have. With that gate in place the exemption is not merely unnecessary, it is wrong —
+    // it deletes the low-rise district the original stamps wherever the overlay is flagged,
+    // which is BL-305's reported symptom (pavement swallowed by oversized blocks).
+    //
+    // The two are ONE COUPLED CHANGE. The gate alone empties C5's downtown; the restore alone
+    // doubles the city and interpenetrates it, which is what BL-250 measured. Neither may be
+    // reverted without the other.
 
     private readonly GameZ _gamez;
     private readonly TextureArchive _textures;
@@ -200,8 +204,10 @@ public sealed class ClutterBuilder
 
     /// <summary>Reads the chapter's boot script out of the interp extraction
     /// (extracted/interp.json) and returns its registered clutter template names
-    /// (the "AddClutterTemplates X" lines of support\&lt;chapter&gt;\adjust.gw),
-    /// minus <see cref="BuriedClutterDistricts"/>.
+    /// (the "AddClutterTemplates X" lines of support\&lt;chapter&gt;\adjust.gw).
+    /// <b>Every registered name, unfiltered</b> — which districts actually decorate a given
+    /// patch of ground is decided per polygon by the <c>no_clutter</c> gate in PlaceOnMesh,
+    /// not by a curated exclusion list here (see the remarks above the fields).
     /// Empty when the file or script is missing.</summary>
     public static List<string> TemplateNames(string interpPath, string chapter)
     {
@@ -220,17 +226,20 @@ public sealed class ClutterBuilder
                 var parts = (line.GetString() ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length >= 2 && parts[0] == "AddClutterTemplates")
                     for (int i = 1; i < parts.Length; i++)
-                        if (!BuriedClutterDistricts.Contains(parts[i]))
-                            names.Add(parts[i]);
+                        names.Add(parts[i]);
             }
         }
         return names;
     }
 
     /// <summary><c>--clutter-templates=</c>'s replacement for <see cref="TemplateNames"/>: the
-    /// caller's names, filtered to the ones this gamez actually carries a template root for, and
-    /// <b>without the <see cref="BuriedClutterDistricts"/> exemption</b> — that bypass is the
-    /// entire point of the flag, since <c>cblock4/5/6</c> are reachable no other way.
+    /// caller's names, filtered to the ones this gamez actually carries a template root for.
+    ///
+    /// <para>Built to reach <c>cblock4/5/6</c> when a map-wide exemption made them unloadable;
+    /// that exemption is gone, so the flag is now simply "build this template set instead of the
+    /// chapter's", which is what makes it a district-by-district A/B instrument. It does
+    /// <b>not</b> bypass the <c>no_clutter</c> gate — that is per polygon, not per template, and
+    /// bypassing it would defeat the comparison.</para>
     ///
     /// <para>Prints one line naming what was asked for, what resolved and what did not. A name no
     /// chapter carries is retail-data-normal (see <see cref="FindTemplateRoot(GameZ, string)"/>)
@@ -243,7 +252,7 @@ public sealed class ClutterBuilder
         foreach (var name in requested)
             (FindTemplateRoot(gamez, name) != null ? resolved : absent).Add(name);
         GD.Print($"clutter: --clutter-templates={string.Join(",", requested)} replaces the chapter's"
-                 + " registered set and bypasses the cblock4/5/6 exemption — in gamez: "
+                 + " registered set (the per-polygon no_clutter gate still applies) — in gamez: "
                  + (resolved.Count > 0 ? string.Join(",", resolved) : "(none)")
                  + "; not carried by this chapter: "
                  + (absent.Count > 0 ? string.Join(",", absent) : "(none)")
@@ -568,22 +577,13 @@ public sealed class ClutterBuilder
                         // routes agree to 1.8e-12 m), so nothing is lost by dropping the second
                         // computation.
                         // ⚠ The quarter-metre dedup, kept DELIBERATELY, and it is remake-only —
-                        // the original has no such set. B13 measured what happens without it and
-                        // the answer is that it is doing two different jobs, neither optional
-                        // today:
+                        // the original has no such set. B13 measured what it was doing and found
+                        // two jobs. The first is now gone: it stood in for the missing
+                        // `no_clutter` gate, so that the walk did not reach both members of a
+                        // coplanar overlay/base pair. PlaceOnMesh reads the flag itself now, so
+                        // that job belongs to the gate and not to this set.
                         //
-                        // (1) It stands in for the subface gate this file does not have.
-                        // FUN_004de2c0 skips a polygon flagged 0x800 (GameZPolygon.Subface);
-                        // PlaceOnMesh never reads it, so the walk reaches BOTH members of a
-                        // coplanar base/subface pair — 452 template-textured subface polygons in
-                        // C5, 75 in C4, 67 in C2. Adding the real gate is measured and is the
-                        // leading BL-305 candidate, but it cannot land on its own: it empties
-                        // C5's downtown, because BuriedClutterDistricts already removed the
-                        // BASE-layer templates (cblock4/5/6) it would leave behind. See B13 in
-                        // docs/PLAN-clutter-uv-placement.md — the two are one coupled change and
-                        // the coupling is a user decision about BL-250.
-                        //
-                        // (2) Even with that gate added, it still removes real duplicates:
+                        // The second job remains, and is why the set stays: it removes real
                         // Contains() is INCLUSIVE on the edge, so a lattice candidate landing
                         // exactly on the diagonal two triangles share is claimed by both. C1
                         // gains 38 such duplicates without the set, C4 139, C5 1,082 — mostly
@@ -932,6 +932,26 @@ public sealed class ClutterBuilder
             var tex = _gamez.Materials[poly.MaterialIndex].TextureName;
             if (tex == null || !templates.TryGetValue(tex, out var template))
                 continue;
+            // FUN_004de2c0's gate: a polygon flagged 0x800 grows no clutter. The bit is
+            // `no_clutter`, authored by node name (gg_load.c's `strstr(name, "no_clutter")`,
+            // single-writer at 005654f6) and parsed by mech3ax as `unk3` —
+            // GameZPolygon.Subface is a misnomer this file cannot fix alone, because
+            // SceneBuilder.SubfaceBias reads the same field for draw order and the two uses
+            // are independent.
+            //
+            // ⚠ It does NOT mean "the original leaves this ground bare". C5's city is TWO
+            // COPLANAR LAYERS at the same Y — a cblock1/2/3/7 overlay and a cblock4/5/6 base
+            // — and the flag selects WHICH ONE decorates the ground: flagged means skip the
+            // overlay, so the layer underneath stamps instead. Measured over every cblock1/2/3/7
+            // polygon by exact XZ polygon-intersection area, odds ratio 1,036.8x, with the
+            // user's own flyover matching (analysis/bl-305-clutter-uv/FINDINGS-layer-pairing.md).
+            // That is why this gate MUST NOT land without the cblock4/5/6 exemption being
+            // removed below: alone it deletes the low-rise city and leaves bare pavement.
+            if (poly.Subface)
+            {
+                _stats.NoClutterFlagged++;
+                continue;
+            }
             // The UVs of the layer whose texture matched — here always materials[0], because A3
             // measured that no polygon in the install names a registered template on layer 1+,
             // so the original's per-layer loop (FUN_004de190) has nothing extra to find. Without
@@ -1436,6 +1456,7 @@ public sealed class ClutterBuilder
         public int ZeroWorldArea;      // fan/strip artifacts of n-gons with repeated corners
         public int ZeroUvArea;         // no invertible affine map to recover a position through
         public int NoUvArray;          // FUN_004de2c0's null-UV gate
+        public int NoClutterFlagged;   // FUN_004de2c0's 0x800 gate — the OTHER layer decorates here
         public int OverLargeLattice;   // refused by MaxLatticeCells
         public long WorstLatticeCells; // the largest lattice seen among those refused
         public int Placed;             // instances the lattice produced (after the seen dedup)
@@ -1444,7 +1465,7 @@ public sealed class ClutterBuilder
         public void Report()
         {
             string worst = OverLargeLattice > 0 ? $" worst_lattice_cells={WorstLatticeCells}" : "";
-            Log.Info("world", $"clutter uv lattice: placed={Placed} outside_source={OutsideSource} skipped_zero_world_area={ZeroWorldArea} skipped_zero_uv_area={ZeroUvArea} skipped_no_uv_array={NoUvArray} skipped_over_large_lattice={OverLargeLattice}{worst}");
+            Log.Info("world", $"clutter uv lattice: placed={Placed} outside_source={OutsideSource} skipped_no_clutter_flag={NoClutterFlagged} skipped_zero_world_area={ZeroWorldArea} skipped_zero_uv_area={ZeroUvArea} skipped_no_uv_array={NoUvArray} skipped_over_large_lattice={OverLargeLattice}{worst}");
             if (OutsideSource > 0)
                 Log.Warn("world", $"clutter instances landed OUTSIDE their source triangle count={OutsideSource} of {Placed} — the UV containment test disagrees with the affine map");
         }
