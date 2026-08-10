@@ -67,7 +67,8 @@ worktree session here; use a local commit or a file copy.
 ## What the data actually ships
 
 Census over **3,015 compiled defs** across all 8 chapters' `cam_anim` + `mis_anim`
-(`.scratch/anim_census.py`, re-runnable; move it to `analysis/` if an item cites it):
+(`analysis/anim-interpreter-decode/anim_census.py`, re-runnable; its `FINDINGS.md` beside it is the
+decode this plan works from):
 
 **Event kinds present** (top of the distribution, and the tail that matters):
 `ObjectActiveState` 8,928 · `CallSequence` 4,649 · `CallAnimation` 4,589 · `ObjectMotion` 3,051 ·
@@ -145,7 +146,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Ground truth
 
-1. A1 ☐ Record the decoded interpreter in `docs/formats/anim-definitions.md`
+1. A1 ☑ Record the decoded interpreter in `docs/formats/anim-definitions.md`
 2. A2 ☐ Correct the three claims the decode changes, and open the `PLAYER_RANGE` question
 
 ### Wave B — Interpreter semantics
@@ -187,7 +188,37 @@ D31 depends on all of Wave B and C21. D32 is last.
 
 # Wave A — Ground truth
 
-## A1 ☐ Record the decoded interpreter in `docs/formats/anim-definitions.md`
+## A1 ☑ Record the decoded interpreter in `docs/formats/anim-definitions.md`
+
+**Landed.** Extended "Consuming the extraction (playback, 2026-07-21)" in
+`docs/formats/anim-definitions.md` with: an address table for the stepper, reset, dispatch table,
+`IF`/`ELSE`/`ENDIF`, `LOOP`, `CALL_SEQUENCE`/`STOP_SEQUENCE` and `FBFX_COLOR_FROM_TO`; the
+`SeqDefInfoC` field map (with the mech3ax offset-36/40/44 naming correction called out, left
+unchanged in the fork per the trap below); the handler-return-value state machine (2/1/4, and
+parked state 3, including which stepper states re-evaluate the start-time gate); and the opcode
+table finding (47 slots match `EventType` exactly, including the null slot 29, plus four real
+handlers at slots 38/43/44/45 that mech3ax leaves undecoded and nothing ships). The six existing
+inference narratives (three `START_TIME` origins / start gates its own event / concurrent
+sequences, `LOOP 0` infinite, the 1/60 tick, and the `WAIT_FOR_COMPLETION` next-event-gate census)
+each now carry an inline "Decode status" line marking them confirmed (with the address) or, for the
+null-`start` mechanism specifically, superseded — left for A2 to reword, not rewritten here.
+
+**Verified.** Read `FUN_004ecbb0` (stepper) and `FUN_004ebfa0` (reset) in full — both match the
+state machine and struct offsets exactly, including the three `START_TIME` origin codes and the
+reset's `state ← +0x21` / `event ptr ← +0x38` / timers-to-0. Read `FUN_004ee1a0` in full — confirms
+the dispatch table's 47 entries slot-for-slot, the null slot 29 (`_DAT_00727e54 = 0`), and real
+handlers at 38/43/44/45. Confirmed `004ec5d0` is a bare `MOV EAX,2 / RET`. Read `FUN_004ec080` (the
+`IF`/`ELSEIF` evaluator) in full — confirms the `RANDOM_WEIGHT` 200-entry table read/increment, the
+`PLAYER_RANGE` `dist² * 4.0` comparison, and the non-nesting-aware scan to the first `Else`/`Elseif`
+byte. **Not independently re-checked this pass:** `LOOP` (`004ebfd0`) has no Ghidra-recognised
+function boundary (it's reached only through the dispatch table) and was not disassembled here — its
+use of struct offsets `+0x2c`/`+0x30` rests on the existing decode in
+`analysis/anim-interpreter-decode/FINDINGS.md`, not on a re-check in this session. The
+`SeqDefInfoC` field layout itself is taken from mech3ax as given, not independently re-derived
+field-by-field.
+
+<details>
+<summary>Original approach (kept for reference)</summary>
 
 **Goal.** A reader of `anim-definitions.md` can tell which scheduling rules are *decoded from the
 exe* and which remain inferences from the data, and can re-find any of it from a cited address.
@@ -212,6 +243,8 @@ one **confirmed** or **superseded** rather than deleting it; the reasoning is wh
 **⚠ Traps.** Do not "fix" mech3ax's `SeqDefInfoC` field names in the fork as part of this item —
 renaming a struct field there is a round-trip-test surface and belongs in its own change. Record the
 correction in prose here.
+
+</details>
 
 ## A2 ☐ Correct the three claims the decode changes, and open the `PLAYER_RANGE` question
 

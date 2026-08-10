@@ -454,6 +454,14 @@ those reached by `CALL_SEQUENCE`, which is what makes the hold outlast the call'
 call that reaches no live instance (a callee whose whole choreography fires at t=0 — 16 of the 165)
 holds for nothing, by design.
 
+**Decode status: confirmed at the state-machine level, not pinned to a `CALL_ANIMATION`-specific
+address.** A handler returning **1** ("still running") from the stepper `FUN_004ecbb0` keeps the
+caller re-dispatching the same event every tick without advancing — exactly the "gates the caller's
+next event, not a lifetime hold" behaviour this census derived independently from data. The
+`CALL_ANIMATION` dispatch slot's own handler address was not individually decoded (see the opcode
+table below), so this is confirmed by the general contract every handler obeys, not by reading the
+wait-specific code.
+
 All flagged compiled owners are `OnCall` (2,844) or `WeaponHit` (8 in these blocks), never
 `OnStartup`, so no ambient world boot arms one — measured: an 8-chapter `--freecam` regression arms
 zero holds and leaves every bootstrap count identical. The clearest timing case is
@@ -1105,6 +1113,14 @@ are not visible from the byte format alone, each measured against this install.
   the install by one slot (timestamped events fire a slot early, their unstamped partners a slot
   late, the sign spends 38% of frames blank), and a loop back-jump that resets the gate to zero
   discards the trailing `Loop {Event 1.2}`'s inter-cycle pause.
+
+  **Decode status: confirmed for the three origins, an event gating itself, and concurrent
+  sequences** — `FUN_004ecbb0` gates origin `Animation` against `anim+0xb0`, origin `Sequence`
+  against `seq+0x24`, origin `Event` against `seq+0x28`, evaluated only against the event that
+  carries the `start`. **Superseded for the null-`start` mechanism** — the encoding is
+  `Animation + 0.0`, collapsed to `None` by mech3ax, not `Event + 0`; the *observed behaviour*
+  above is still correct only because the gate is evaluated exclusively once the previous event has
+  reported completion, regardless of which origin it names.
 - **`LOOP` has two spellings of "infinite": `-1` and `0`** (decoded 2026-07-22). `-1` is the
   common one; `0` is *not* "run zero more times". Across the compiled `cam_anim`/`mis_anim` of the
   whole install the count distribution is **`-1` × 2,919, `0` × 26, positive N × 530**, and all 26
@@ -1115,6 +1131,11 @@ are not visible from the byte format alone, each measured against this install.
   from/to (so a replay re-seats the car at the route start). Nothing that must terminate uses it:
   no door, gate, one-shot, hangar, bomb or explosion def carries `Count: 0`. Reading `0` as "stop"
   makes every car in the game drive its route once and freeze.
+
+  **Decode status: confirmed** — `004ebfd0` maintains a **u16** counter that counts *up* and
+  terminates when `counter == authored`, with `-1` special-cased infinite; `0` is infinite only as
+  a consequence of that mechanism, since it can't match until pass 65,536. The census above is now
+  a corroborating measurement of a known mechanism rather than the only evidence for it.
   **The reader (`zrdr`) scope never uses it** — 703 `LOOP` events there, `LOOP_COUNT` ∈ {`-1`
   (575), positive N}, zero zeros. (An earlier note claimed the reader scope has *no* `LOOP` events
   at all; it has 703. The usable fact is the absence of `0`, not the absence of `LOOP`.)
@@ -1131,6 +1152,13 @@ are not visible from the byte format alone, each measured against this install.
   windowed**: the burn took **the same time in both**. Per-rendered-frame ticking would have halved
   it at 120. **The sequence tick is decoupled from rendering, and 1/60 is the original's own
   number** — every untimed count is a real authored duration.
+
+  **Decode status: confirmed by mechanism, not by a rate constant** — `004ebfd0` returns state 4
+  unconditionally after completing a loop pass, and the stepper (`FUN_004ecbb0`) treats state 4 as
+  "re-gate from the top, then stop for this tick" (see the handler state machine below). That is
+  exactly the coupling this fps-doubling measurement inferred from outside the process: one pass per
+  engine update, never more, regardless of render rate. The `1/60` figure itself is a measurement,
+  not a constant read from the exe; nothing in the decode pins the update rate to a cited address.
   ⚠ The one hypothesis those two points cannot exclude is a tick of `min(render rate, 60)` — capped
   at 60, coupled below it — because no rate below 60 could be provoked (and the run went through
   dgVoodoo). It changes nothing: CSVM paces against SIM time at a fixed 1/60, so there is no
@@ -1197,3 +1225,84 @@ are not visible from the byte format alone, each measured against this install.
   **directory** the engine resolves anim sources from (`..\data\c1\ia1\zrdr\zeps`), not a
   waypoint-motion primitive; no waypoint-path op exists in any C1 reader — path motion is
   SI scripts.
+
+### The decoded interpreter (traced in `crimson.exe`)
+
+Everything above this point in the section was inferred from the shipped data. The original's
+interpreter itself has since been located and read directly — `crimson.exe` (image base
+`0x400000`), compiled from `D:\zipper\gamez\zEffect\zeff_ani*.c`. Each paragraph above now carries
+a "Decode status" line saying whether the exe confirmed it as stated or superseded the stated
+mechanism (never the observed behaviour, which is what the data census actually measured). What
+follows is the interpreter itself, cited by address so any of it can be re-found and re-checked.
+
+**Where the code is.**
+
+| Piece | Address |
+|---|---|
+| Sequence stepper (one sequence, one tick) | `FUN_004ecbb0` |
+| Sequence reset (rewind + re-arm) | `FUN_004ebfa0` |
+| Event dispatch table, 47 slots, index 1–0x2f | `DAT_00727de0`, populated by `FUN_004ee1a0` |
+| `IF` / `ELSEIF` condition evaluator | `FUN_004ec080` |
+| `ELSE` / `ELSEIF` fall-through (scan to `ENDIF`) | `004ec5a0` |
+| `ENDIF` | `004ec5d0` (a bare `MOV EAX,2 / RET` — no-op) |
+| `LOOP` | `004ebfd0` |
+| `CALL_SEQUENCE` / `STOP_SEQUENCE` | `004eb570` / `004eb610` |
+| `FBFX_COLOR_FROM_TO` | `FUN_004ec6a0` |
+
+**The live sequence struct is mech3ax's `SeqDefInfoC`** (64 bytes), mutated in place by the
+stepper on every tick:
+
+| Offset | Meaning |
+|---|---|
+| `+0x20` | current state |
+| `+0x21` | reset state (`SeqDefState`: `Initial`=0, `OnCall`=3) |
+| `+0x24` | sequence timer — `START_TIME SEQUENCE` compares against this |
+| `+0x28` | event timer — `START_TIME EVENT` compares against this |
+| `+0x2c` | accumulated loop time |
+| `+0x30` | u16 loop counter (counts up) |
+| `+0x34` / `+0x38` / `+0x3c` | current event pointer / start pointer / byte size |
+
+⚠ mech3ax's own field-name guesses at offsets 36/40/44 (`loop_time` / `event_time` / `seq_time`)
+are mis-ordered against this layout — compare `+0x24`/`+0x28`/`+0x2c` above against offsets 36/40/44
+decimal. They are not load-bearing for round-tripping (nothing reads a compiled def by field name),
+so the fork's names were left alone; this paragraph is the correction, and renaming the fork's
+struct field is explicitly out of scope for this record (it is a round-trip-test surface and belongs
+in its own change).
+
+**The handler state machine.** Every handler returns one of four values, and the stepper writes the
+result into the state byte at `+0x20`:
+
+| Return | Meaning |
+|---|---|
+| **2** | event complete — advance to the next event |
+| **1** | still running — re-dispatch the SAME event next tick |
+| **4** | sequence rewound by `LOOP` — re-gate from the top of the sequence, and yield the rest of this tick |
+| *(state)* **3** | parked, awaiting a `CALL_SEQUENCE` (not a return value — a resting state) |
+
+The start-time gate is evaluated only when the stepper is in state 0 (freshly advanced past a
+completed event) or state 4 (freshly rewound) — i.e. only once the previous event has actually
+reported completion, never mid-event. An `ON_CALL` sequence that runs off the end of its event list
+is rewound and re-parked at state 3, ready to be called again; an `Initial` sequence instead stops
+at state 2 and does not re-arm.
+
+**The opcode table.** `crimson.exe`'s 47-slot dispatch table at `DAT_00727de0` (populated by
+`FUN_004ee1a0`, read directly rather than reconstructed from behaviour) matches mech3ax's
+`EventType` enum exactly, slot for slot — **including the null slot 29** (`FUN_004ee1a0` writes
+`_DAT_00727e54 = 0`), which mech3ax also marks as a gap. That agreement is an independent
+confirmation the fork's event numbering is correct, not an assumption inherited from it. The exe
+additionally has real handlers at slots 38, 43, 44 and 45 (`LAB_004ecb70`, `LAB_004eac40`,
+`FUN_004eac90`, `FUN_004eadd0` respectively) that mech3ax leaves undecoded; no shipped def uses any
+of the four, so nothing downstream needs them yet.
+
+**What this record could not confirm.** `FUN_004ecbb0` and `FUN_004ebfa0` were read in full while
+writing this and match the state machine and struct offsets above exactly, including the three
+`START_TIME` origin codes (1/2/3 → `anim+0xb0` / `seq+0x24` / `seq+0x28`) and the reset writing
+`state ← +0x21`, `event ptr ← +0x38`, both timers to 0. `LOOP` (`004ebfd0`) has no
+Ghidra-recognised function boundary — it is reached only through the dispatch table — but was
+disassembled directly: it folds the sequence timer into `+0x2c`, does `INC word ptr [+0x30]`,
+terminates on `counter == authored` (`-1` special-cased infinite) or, in its second form, on the
+accumulated time reaching the authored float, then calls the reset routine and returns 4.
+
+The struct offsets above are otherwise mech3ax's `SeqDefInfoC` layout, taken as given rather than
+independently re-derived field-by-field; only the offsets the stepper and `LOOP` actually touch
+have been seen in code.
