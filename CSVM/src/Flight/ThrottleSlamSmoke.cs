@@ -56,14 +56,15 @@ public sealed class ThrottleSlamSmoke
     /// puffer the boost uses, just driven independently of it. Null when the plane carries no
     /// exhaust nodes or the reader/textures are unavailable (every call site null-checks).</summary>
     public static ThrottleSlamSmoke? Build(Node3D planeRoot, string zrdrPath, TextureArchive textures,
-        Node parent, float initialThrottle)
+        Node parent, float initialThrottle, EffectAmbience? ambience = null)
     {
         var exhausts = new List<(Node3D, Puffer)>();
         for (int i = 1; i <= 4; i++)
         {
             if (FindNode(planeRoot, $"exhaust{i}") is not { } node)
                 continue;
-            if (Puffer.MakePuffer(zrdrPath, textures, parent, "plane_props.json", $"nitropuff{i}") is { } trail)
+            if (Puffer.MakePuffer(zrdrPath, textures, parent, "plane_props.json", $"nitropuff{i}",
+                    ambience: ambience) is { } trail)
                 exhausts.Add((node, trail));
         }
         return exhausts.Count > 0 ? new ThrottleSlamSmoke(exhausts, initialThrottle) : null;

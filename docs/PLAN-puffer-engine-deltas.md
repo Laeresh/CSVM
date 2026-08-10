@@ -50,8 +50,8 @@ measurement disagree, **the decode wins and the disagreement is a note, not an o
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, B3, B4, B5, C7, C8 | Confirm the trace, then implement. |
-| **Direction sound, magnitude a judgement call** | B6 | The coupling is traced; the global wind vector's authored source is not, so its magnitude is TUNE. |
+| **Traced to an exact mechanism in code, with the data that proves it** | A1, A2, B3, B4, B5, **B6**, C7, C8 | Confirm the trace, then implement. |
+| ~~Direction sound, magnitude a judgement call~~ | ~~B6~~ | **Emptied.** B6 was here because the wind's authored source was untraced, making its magnitude TUNE. It is authored — every `weather.zrd.json` ships a `WIND` block — so B6 moved up to traced and this row now has no members. |
 | **Leads only — no mechanism yet** | C9 | Budget for investigation; this may end in a disproof. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
@@ -232,7 +232,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 3. ❌ `SCALE_SEQUENCE`: the age→scale ramp — **disproven, unreachable**; landed as a doc correction
 4. ☑ `START_AGE_RANGE`: random birth age (⚠ its born-dead disproof was **wrong** — corrected by B5)
 5. ☑ Sub-frame emission — spread a frame's puffs along the emitter's motion segment
-6. ☐ Friction damps toward the wind, not toward zero
+6. ☑ Friction damps toward the wind, not toward zero — **and the wind is authored, not TUNE**
 
 ### Wave C — the render-side rules
 
@@ -672,7 +672,88 @@ current position rather than interpolating from a stale one, exactly as `TrailAd
 ghost-trail rule (`Puffer.cs:488-497`). Getting this wrong draws a line of puffs from wherever the
 emitter last was, which is the rocket-explosion bug that commit 450131a already fixed once.
 
-## B6 ☐ Friction damps toward the wind, not toward zero
+## B6 ☑ Friction damps toward the wind, not toward zero
+
+**Landed — including half 2, which the plan expected might dead-end.** The wind's authored source is
+found: **every one of the 53 `weather.zrd.json` in the install ships a `WIND` block**, and all 53
+author it *identically* — `STATIC_VELOCITY (0,2,0)`, `RANDOM_MAX_SPEED 10`, `RANDOM_ACCEL 5`,
+`RANDOM_ANG_VEL 5`. A steady 2 m/s updraft under a gust wandering a 10 m/s horizontal disc, in every
+mission. **The magnitude is therefore data, not TUNE**, and B6 moved into the traced row.
+
+**The key→global mapping, confirmed at two independent call sites**: the weather reader
+`FUN_004bc680` (assert string `D:\zipper\Crimson\weather.cpp`) and the debug console `FUN_005b80a0`,
+which names the same four setters `GlobalWindStaticVelocity` / `GlobalWindRandomMaxSpeed` /
+`GlobalWindRandomAccel` / `GlobalWindRandomAngVel` — the original's own name for the mechanism.
+
+| `WIND` key | Global | Setter |
+|---|---|---|
+| `STATIC_VELOCITY` | `00763db4`/`b8`/`bc` | `FUN_00550690` |
+| `RANDOM_MAX_SPEED` | `00763dc8` | `FUN_005506b0` |
+| `RANDOM_ACCEL` | **`00763dd0`** (the plan said `00763dc4`, which is the magnitude *state*) | `FUN_005506c0` |
+| `RANDOM_ANG_VEL` | **`00763dcc`** (corrected) | `FUN_005506d0` |
+
+**Three findings the earlier trace did not have**, all in raw x87: `RANDOM_ANG_VEL` is in
+**degrees/s** (`FUN_004bc680` multiplies by `0.017453292` on the way in); the magnitude step carries
+**no `dt`** while the heading step does — one `±RANDOM_ACCEL` jump per *frame*, i.e. frame-rate
+dependent, **reproduced as traced rather than smoothed**, because a `dt` nobody wrote would be an
+invented breeze; and the gust is **horizontal** — `wind.y` is `STATIC_VELOCITY.y` copied verbatim
+(`0054ef5f`), only x/z carry `mag·cos/sin(heading)`.
+
+**⚠ `WIND_FACTOR`'s default is 1, not 0 — and this plan had it backwards.** `FUN_00550100` writes
+`0x3f800000` to `+0x6c` and `FUN_004e7e40` only overwrites it under flag `0x100000`, so **a puffer
+that says nothing about wind is fully carried by it**. Reading an absent key as 0 would have becalmed
+2,802 of the install's 2,863 friction-bearing events. Absent and explicit-zero must stay
+distinguishable, and they are (`wind_factor: null` vs `0.0`). Effective factor across the
+friction-bearing events: **1.0 (default) on 2,802 / 225 names**, 0.3 on 29, 0.1 on 19, 0.0 on 12
+(the six `subdoors_puffer*` opting out), 0.5 on 1. Note also that only **5 reader blocks** author the
+key at all — the plan's "27" was the distinct *compiled* name count.
+
+**The integration order landed in full**, beyond the plan's accel-before-damp: `FUN_0054ee10`
+advances position on the velocity from the **top of the frame** (`0054efd0`–`0054eff0` read
+`ESI+0xc` before `0054eff8` writes it), *then* adds `a·dt`, and only then damps — and the damp sits
+inside the engine's own `if (friction != 0)` gate (`0054f016`). Ours did all three the other way
+round. That gate used to be an `Exp(0) == 1` identity in our code; with a wind inside the block it is
+load-bearing.
+
+**The seam is injected, not a singleton.** `Effects/WorldWind.cs` carries the gust model and
+`EffectAmbience`, the per-frame world state a `Puffer` reads but does not own. `GameSession` owns
+the single instance (it must reach the emitter factories at `StartSession`, long before `WeatherRig`
+exists); `WeatherRig.Tick` writes it **once per frame before the rig loop** — one wind for the world,
+not one per camera. `EffectAmbience.Still` is a null object that *throws* if written, so a missed
+wire fails loudly instead of silently becalming an emitter. **C7's camera position belongs on this
+same seam** as a second property. The gust draws off its own `Rng.Wind` stream so its frame count can
+never perturb an emitter's spawn scatter.
+
+**Verified.** 882 units (11 new), 30/30 engine suites (new `puffer-wind`), 13/13 goldens — baseline
+before the change was 871/29/13, and the whole run was confirmed independently by the orchestrator.
+8-chapter `--freecam --det --frames=90`: 8/8 exit 0, 8/8 screenshots, 8/8 logs, zero real errors.
+Manifest diff reviewed before trusting the golden result (`GOLD-9`).
+
+**Six goldens moved, and a zero-wind able-to-fail control splits them cleanly.** `c1-waterfall`
+(5,915 px, max Δ 6), `c3-island` (39 px, max 8) and `c4-snow` (5 px, max 2) reproduce the zero-wind
+hashes *digit for digit* — they moved on the reorder alone, and their emitters carry `FRICTION 0`, so
+the gate keeps them out of the wind entirely. `c1-flight` (10,354 px, max 38), `c1-destroy-effects`
+(3,496 px, max 66) and `c1-crash` (67,750 px, max 140) hash *differently* with and without wind,
+which is the proof it reaches real puffers and not only the suite's synthetic ones. Eye-checked:
+`c1-crash`'s fireball keeps its size, shape and colour and shifts bodily a few pixels with a slightly
+tilted plume; `c1-flight`'s two wing damage-trails are subtly narrower and displaced;
+`c1-destroy-effects` is indistinguishable side by side, its amplified diff tracing the airframe
+outline (a sprite *behind* the plane). `c5-city-night` is the one puffer-bearing golden left
+byte-identical — its emitter has neither friction nor world acceleration, making the reorder an exact
+algebraic identity there.
+
+**⚠ Unverified.** Nothing was checked **at the controls** — whether a 10 m/s wandering gust *looks*
+right on the C1 train plume, the waterfall mist or a rocket trail is owed to the user, and this is
+the item most likely to read wrong despite being traced correctly. The gust's frame-rate dependence
+is deliberate and unaddressed. `WorldWind`'s `rand()` quantisation matches the engine
+(`rand()/16384 − 1`) but the underlying generator is .NET's, not MSVC's — sequences differ,
+distributions do not. The 0.3/0.1/0.5 `WIND_FACTOR` puffers (chimneys, train, torches, markers)
+appear in no golden pose, so their coupling is proven only by the headless linearity assertion. Node
+and mesh instance counts were not read across the sweep.
+
+### Original approach (kept for reference)
+
+## B6 (original) Friction damps toward the wind, not toward zero
 
 **Goal.** Puffer particles drift with the world's wind the way the original's do, and the damping
 integrates in the same order.

@@ -22,11 +22,15 @@ public sealed class PufferEmitterFactory : IEmitterFactory
 {
     private readonly TextureArchive _textures;
     private readonly Node _parent;
+    // B6: the session's wind, read by every emitter this builds. Still air when a caller has no
+    // session to take it from (the suites' fake runtimes).
+    private readonly EffectAmbience _ambience;
 
-    public PufferEmitterFactory(TextureArchive textures, Node parent)
+    public PufferEmitterFactory(TextureArchive textures, Node parent, EffectAmbience? ambience = null)
     {
         _textures = textures;
         _parent = parent;
+        _ambience = ambience ?? EffectAmbience.Still;
     }
 
     public IEmitter? Create(PufferState state, out string? miss)
@@ -40,7 +44,7 @@ public sealed class PufferEmitterFactory : IEmitterFactory
             miss = $"PufferState(stub, no textures: {state.Name})";
             return null;
         }
-        if (Puffer.Create(state, _textures, sustained: true) is not { } puffer)
+        if (Puffer.Create(state, _textures, sustained: true, ambience: _ambience) is not { } puffer)
         {
             // Name it: a puffer whose textures are absent from this chapter's archive is a
             // data-coverage fact worth being able to look up, not an anonymous count.

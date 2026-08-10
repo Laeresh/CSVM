@@ -84,6 +84,10 @@ public sealed class WeatherRig
 
     private readonly SessionSpec _spec;
     private readonly Node3D _worldRoot;
+    // B6: the seam every puffer in the session reads its wind through. Owned by GameSession (which
+    // has to hand it to the emitter factories long before this rig exists), written here because
+    // this is the class that holds the mission's weather and already ticks once per frame.
+    private readonly EffectAmbience _ambience;
     // One rig's deck tiles and which variant they currently carry, keyed by the deck node's
     // instance id — per rig, because each rig flies its own copy of the deck (AssignCloudDecks)
     // through its own altitude regime.
@@ -130,11 +134,17 @@ public sealed class WeatherRig
     // (PlayerRig.HorizonDomes, B14) — there is one per built horizon zone, not one per rig.
     private int _deckZoneId = -1;
 
-    public WeatherRig(SessionSpec spec, Node3D worldRoot)
+    // B6: the mission's global wind — the WIND block's static vector plus its random-walk gust
+    // (Effects.WorldWind, FUN_0054ee10). Still air until LoadWeather reads a weather.json, and
+    // still air for a mission that has none.
+    private WorldWind _wind = WorldWind.Still();
+
+    public WeatherRig(SessionSpec spec, Node3D worldRoot, EffectAmbience? ambience = null)
     {
         _spec = spec;
         _worldRoot = worldRoot;
         _activeZone = spec.SkyZone;
+        _ambience = ambience ?? new EffectAmbience();
     }
 
     /// <summary>The deck's regime for ONE camera: where its cloud-deck copy sits, and whether the
@@ -285,6 +295,15 @@ public sealed class WeatherRig
         // freezes the flicker rather than pacing it off a wall clock (DET-1) — nothing calls Tick
         // there anyway.
         float frameDt = GameClock.Current?.FrameDt ?? 0f;
+
+        // B6 — the mission's global wind, stepped ONCE per frame and before anything reads it,
+        // exactly where FUN_0054ee10 steps it: at the head of the tick, ahead of every emitter and
+        // every particle. Outside the rig loop deliberately — the original has one wind for the
+        // world, not one per camera, and stepping it per rig would make a splitscreen session's
+        // gust walk twice as fast as a single-player one.
+        _wind.Step(frameDt);
+        _ambience.SetWind(_wind.Velocity);
+
         foreach (var rig in rigs)
         {
             var camPos = rig.Camera.Position;
@@ -629,6 +648,24 @@ public sealed class WeatherRig
     private void LoadWeather(string missionZrdrPath, IReadOnlyList<HorizonZone> horizonZones)
     {
         _weather = WeatherState.Load(missionZrdrPath);
+        // B6: the mission's WIND block. Every weather.zrd in the install authors the same four
+        // values — STATIC_VELOCITY (0,2,0), MAX_SPEED 10, ACCEL 5, ANG_VEL 5 — but they are read
+        // per mission, not baked, because the reader is the authority and a mission without a
+        // weather.json must get still air rather than someone else's breeze.
+        _wind = _weather == null
+            ? WorldWind.Still()
+            : new WorldWind(_weather.WindStatic, _weather.WindRandomMaxSpeed,
+                _weather.WindRandomAccel, _weather.WindRandomAngVel,
+                Rng.NewSystemRandom(Rng.Wind));
+        if (_weather != null)
+            // Said out loud once per session: a puffer that drifts sideways for no visible reason
+            // is otherwise indistinguishable from a broken spawn (DIAG-15), and this is the one
+            // line that names the force doing it.
+            GD.Print($"wind: static ({_weather.WindStatic.X:0.##}, {_weather.WindStatic.Y:0.##}, "
+                     + $"{_weather.WindStatic.Z:0.##}) m/s, gust <= {_weather.WindRandomMaxSpeed:0.##} m/s "
+                     + $"(step {_weather.WindRandomAccel:0.##} m/s per frame, turning "
+                     + $"{_weather.WindRandomAngVel:0.##} deg/s) — carries every puffer with FRICTION "
+                     + "by its WIND_FACTOR");
         string byFile = _weather?.ResolveZone(_spec.SkyZone) ?? _spec.SkyZone;
         _activeZone = _spec.SkyZoneExplicit
             ? byFile

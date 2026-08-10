@@ -57,6 +57,8 @@ public sealed class WorldEffectsFactory
     private readonly SessionSpec _spec;
     private readonly Node3D _worldRoot;
     private readonly Func<Vector3> _playerPosition;
+    // B6: the session's wind, handed to every Puffer this factory's emitter factories build.
+    private readonly EffectAmbience _ambience;
 
     // The authored per-root pool sizes (see the EffectPoolSlots remark above). Read once per
     // session, like the rest of this factory's inputs.
@@ -64,11 +66,13 @@ public sealed class WorldEffectsFactory
 
     private AnimRuntime? _worldEffects;
 
-    public WorldEffectsFactory(SessionSpec spec, Node3D worldRoot, Func<Vector3> playerPosition)
+    public WorldEffectsFactory(SessionSpec spec, Node3D worldRoot, Func<Vector3> playerPosition,
+        EffectAmbience? ambience = null)
     {
         _spec = spec;
         _worldRoot = worldRoot;
         _playerPosition = playerPosition;
+        _ambience = ambience ?? EffectAmbience.Still;
     }
 
     /// <summary>The world-effects template stage — the subtree
@@ -342,7 +346,7 @@ public sealed class WorldEffectsFactory
         var crashRuntime = AnimRuntime.ForCrashRig(
             NewCrashTemplateStage(_spec.DebugAnim),
             Rng.NewIntSeed(Rng.Crash),
-            new PufferEmitterFactory(textures, _worldRoot), _spec.DebugAnim);
+            new PufferEmitterFactory(textures, _worldRoot, _ambience), _spec.DebugAnim);
         // Excuses the ground splash from the momentum nudge FlightController.Crash sets on
         // InheritedWorldVelocity — set once here, unlike the velocity itself (which is
         // per-crash), because which defs are exempt never changes across a session.
@@ -508,7 +512,7 @@ public sealed class WorldEffectsFactory
             AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true,
                 debugMotions: _spec.DebugAnim),
             Rng.IntSeedFor(Rng.Effects),
-            new PufferEmitterFactory(textures, _worldRoot),
+            new PufferEmitterFactory(textures, _worldRoot, _ambience),
             _spec.DebugAnim, EffectRuntimeTtl, _playerPosition);
         // Bind name resolution to the template stage — so the effect names resolve to these
         // templates and not to the world's or the crash roots' same-named nodes — but parent the

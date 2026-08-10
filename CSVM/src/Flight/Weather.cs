@@ -99,15 +99,30 @@ public sealed class WeatherState
 
     public Color? CloudBottomColor { get; private set; }
 
-    /// <summary>Steady wind (m/s) plus the random-gust bounds. Parsed so the loader is complete;
-    /// currently unconsumed — the cloud clutter is the authored <c>fogvol.zrd</c> geometry
-    /// (docs/formats/fogvol.md), which is static world geometry, and no reader says wind
-    /// moves it.</summary>
+    /// <summary>The <c>WIND</c> block: a steady base velocity (m/s) plus the three parameters of
+    /// the horizontal random-walk gust laid over it. Consumed by <c>WeatherRig</c>, which builds
+    /// the mission's <see cref="CSVM.Effects.WorldWind"/> from these four and publishes the
+    /// resulting per-frame vector to every puffer through <c>EffectAmbience</c>
+    /// (<c>PLAN-puffer-engine-deltas</c> B6).
+    ///
+    /// <para>⚠ It still does not move the cloud clutter — that is the authored <c>fogvol.zrd</c>
+    /// geometry (docs/formats/fogvol.md), static world geometry, and no reader says wind touches
+    /// it. Wind's one decoded consumer is the puffer particle system.</para>
+    ///
+    /// <para>Every one of the install's 53 <c>weather.zrd.json</c> files authors all four keys
+    /// with identical values: <c>STATIC_VELOCITY (0, 2, 0)</c>, <c>RANDOM_MAX_SPEED 10</c>,
+    /// <c>RANDOM_ACCEL 5</c>, <c>RANDOM_ANG_VEL 5</c>.</para></summary>
     public Vector3 WindStatic { get; private set; }
 
     public float WindRandomMaxSpeed { get; private set; }
 
     public float WindRandomAccel { get; private set; }
+
+    /// <summary>The gust's turn rate in DEGREES per second, exactly as the key spells it — the
+    /// binary converts on the way into its global (<c>FUN_004bc680</c>:
+    /// <c>FUN_005506d0(value * 0.017453292)</c>), and so does
+    /// <see cref="CSVM.Effects.WorldWind"/>, which is where the conversion belongs.</summary>
+    public float WindRandomAngVel { get; private set; }
 
     /// <summary>The mission's precipitation, or null when the weather.json has no TYPE block.</summary>
     public PrecipData? Precip { get; private set; }
@@ -148,6 +163,7 @@ public sealed class WeatherState
             w.WindStatic = Vec3After(wind, "STATIC_VELOCITY");
             w.WindRandomMaxSpeed = ScalarAfter(wind, "RANDOM_MAX_SPEED");
             w.WindRandomAccel = ScalarAfter(wind, "RANDOM_ACCEL");
+            w.WindRandomAngVel = ScalarAfter(wind, "RANDOM_ANG_VEL");
         }
         foreach (var zone in ZoneKeys(inner))
             if (dict.Dict(zone) is { } z)

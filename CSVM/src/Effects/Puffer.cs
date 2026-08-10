@@ -56,6 +56,25 @@ public sealed class PufferState
     /// lifetime in the install. The skip is implemented in all three spawn paths.</para></summary>
     public float StartAgeMin, StartAgeMax;
 
+    /// <summary>How strongly this puffer's particles are carried by the world's wind
+    /// (<see cref="WorldWind"/>): <c>FRICTION</c> damps each particle's velocity toward
+    /// <c>wind × WindFactor</c> rather than toward rest (<c>FUN_0054ee10</c>, object <c>+0x6c</c>,
+    /// particle <c>[0x14]</c>, parser flag <c>0x100000</c>).
+    ///
+    /// <para>⚠ <b>The default is 1, not 0.</b> The puffer object's constructor
+    /// (<c>FUN_00550100</c>) writes <c>0x3f800000</c> to <c>+0x6c</c> and the applier
+    /// (<c>FUN_004e7e40</c>) only overwrites it when the authoring flag is set, so a puffer that
+    /// says nothing about wind is FULLY carried by it. Reading an absent key as 0 would silently
+    /// becalm 2,802 of the install's 2,863 friction-bearing events. Absent and explicit-zero must
+    /// therefore stay distinguishable, and they are: the compiled surface writes
+    /// <c>wind_factor: null</c> when unauthored and <c>0.0</c> when a puffer deliberately opts out
+    /// (6 names, 12 events — the <c>subdoors_puffer</c> family).</para>
+    ///
+    /// <para>Inert unless <see cref="Friction"/> is non-zero: the engine's whole damp-toward-wind
+    /// block sits inside <c>if (friction != 0)</c>, so a frictionless puffer feels no wind at any
+    /// factor.</para></summary>
+    public float WindFactor = 1f;
+
     /// <summary>AT_NODE's optional trailing offset (AT_NODE is [nodeName, dx?, dy?, dz?]),
     /// in the host node's own frame — the same convention as <see cref="LocalVelocity"/>.
     /// This is what spreads a multi-emitter effect around its anchor instead of stacking
@@ -191,6 +210,8 @@ public sealed class PufferState
             LifetimeMax = Range("lifetime_range", "max", 1f),
             StartAgeMin = Range("start_age_range", "min", 0f),
             StartAgeMax = Range("start_age_range", "max", 0f),
+            // Absent (null) falls back to the ctor's 1.0, never to 0 — see WindFactor's remark.
+            WindFactor = d.Num("wind_factor") ?? 1f,
             DeviationDistance = d.Num("deviation_distance") ?? 0f,
             Number = Mathf.Max(1, (int)(d.Num("number") ?? 1f)),
             AtNodeOffset = Vec("translate"),
@@ -254,6 +275,9 @@ public sealed class PufferState
             LifetimeMax = d.Float("LIFETIME_RANGE", 1f, 1),
             StartAgeMin = d.Float("START_AGE_RANGE", 0f, 0),
             StartAgeMax = d.Float("START_AGE_RANGE", 0f, 1),
+            // Absent falls back to the ctor's 1.0, never to 0 — see WindFactor's remark. Only 5
+            // reader blocks in the install author the key at all (3 at 0.3, 2 at 1.0).
+            WindFactor = d.Float("WIND_FACTOR", 1f),
             GrowthFactor = d.Float("GROWTH_FACTOR", 1f),
             DeviationDistance = d.Float("DEVIATION_DISTANCE"),
             Number = (int)d.Float("NUMBER", 1f),
@@ -375,6 +399,9 @@ public sealed partial class Puffer : Node3D
 
     private PufferState _state = null!;
     private IEmitterRenderer _renderer = null!;
+    // The world state this emitter reads but does not own (B6's wind; C7's camera position next).
+    // Still air unless a caller wired the session's own — see EffectAmbience.
+    private EffectAmbience _ambience = EffectAmbience.Still;
     private Particle[] _particles = Array.Empty<Particle>();
     private int _liveCount;
 
@@ -413,8 +440,12 @@ public sealed partial class Puffer : Node3D
     /// pairs it with the blend: off for MIX, whose dark sprites emit at ground-level sites where
     /// the fade would zero them against the terrain right behind them, on for additive, which
     /// leaks through the fade anyway.</param>
+    /// <param name="ambience">The session's world state (B6's wind). Null — the default — is
+    /// still air, which is the right answer for a caller with no session (the unit suites, the
+    /// plane viewer) and the wrong one for anything in a flown mission.</param>
     public static Puffer? Create(PufferState state, TextureArchive textures, float activeDuration = 0.3f,
-        bool sustained = false, PufferBlend blend = PufferBlend.Auto, bool? softParticles = null)
+        bool sustained = false, PufferBlend blend = PufferBlend.Auto, bool? softParticles = null,
+        EffectAmbience? ambience = null)
     {
         bool sequenced = state.TextureSequence.Count > 0;
         var frameNames = sequenced
@@ -431,7 +462,7 @@ public sealed partial class Puffer : Node3D
         var puffer = new Puffer();
         puffer.Init(state, new MultiMeshEmitterRenderer(atlas, frameNames.Count,
             resolved == PufferBlend.Mix, softParticles ?? resolved != PufferBlend.Mix),
-            activeDuration, sustained);
+            activeDuration, sustained, ambience);
         return puffer;
     }
 
@@ -445,10 +476,10 @@ public sealed partial class Puffer : Node3D
     /// entry point and not a general one: calling it on a capture path would move every
     /// puffer-bearing golden.</para></summary>
     public static Puffer CreateWith(PufferState state, IEmitterRenderer renderer,
-        float activeDuration = 0.3f, bool sustained = false)
+        float activeDuration = 0.3f, bool sustained = false, EffectAmbience? ambience = null)
     {
         var puffer = new Puffer();
-        puffer.Init(state, renderer, activeDuration, sustained);
+        puffer.Init(state, renderer, activeDuration, sustained, ambience);
         return puffer;
     }
 
@@ -457,10 +488,10 @@ public sealed partial class Puffer : Node3D
     /// the reader or its textures are missing. Shared by the flight assembly and the
     /// static damage lab.</summary>
     public static Puffer? MakePuffer(string zrdrPath, TextureArchive textures, Node parent,
-        string file, string name, float duration = 0.3f)
+        string file, string name, float duration = 0.3f, EffectAmbience? ambience = null)
     {
         var state = PufferState.Load(zrdrPath, file, name);
-        var puffer = state != null ? Create(state, textures, duration) : null;
+        var puffer = state != null ? Create(state, textures, duration, ambience: ambience) : null;
         if (puffer != null)
             parent.AddChild(puffer);
         return puffer;
@@ -556,6 +587,13 @@ public sealed partial class Puffer : Node3D
         bool flipbook = _state.TextureSequence.Count > 0;
         bool hasRamp = _state.Colors.Count > 0;
         float damp = Mathf.Exp(-_state.Friction * dt);
+        // B6: friction damps toward the WIND, not toward rest. The target is read once per frame
+        // because the original's is: FUN_0054ee10 re-derives the one global wind vector at the
+        // head of the tick and every particle in the world integrates against that same value.
+        // Zero wind (no session, no weather.json, or WIND_FACTOR 0) makes the whole thing an
+        // algebraic no-op — (v - 0)·damp + 0 == v·damp — which is what lets it land without
+        // moving a windless golden.
+        var windTarget = _ambience.Wind * _state.WindFactor;
         for (int i = 0; i < _liveCount; i++)
         {
             ref var p = ref _particles[i];
@@ -566,8 +604,22 @@ public sealed partial class Puffer : Node3D
                 i--;
                 continue;
             }
-            p.Vel = p.Vel * damp + _state.WorldAcceleration * dt;
+            // B6 — the engine's integration ORDER, verbatim from FUN_0054ee10 (raw x87 at
+            // 0054efd0…0054f083): position advances on the velocity it had at the top of the
+            // frame, THEN acceleration is added, and only then does friction damp. Ours used to
+            // do all three the other way round (`v = v*damp + a*dt; pos += v*dt`), which lands a
+            // different position on the very first frame of any accelerated puffer and a
+            // different steady state for every damped one.
             p.Pos += p.Vel * dt;
+            p.Vel += _state.WorldAcceleration * dt;
+            // The engine gates the whole damp block on `friction != 0` (0054f016 FCOMP against
+            // 0.0, JNZ past it), so a frictionless puffer feels no wind at any WIND_FACTOR. Ours
+            // used to apply damp unconditionally, which was identity at friction 0 — it is NOT
+            // identity once the wind is in it, so the gate is load-bearing now.
+            if (_state.Friction != 0f)
+            {
+                p.Vel = ((p.Vel - windTarget) * damp) + windTarget;
+            }
 
             // A negative-age particle (START_AGE_RANGE authoring a negative minimum, e.g.
             // fire_at_zepskin3's -1.0) is still drawn on the frame it's born — FUN_0054e6e0 clamps
@@ -779,10 +831,11 @@ public sealed partial class Puffer : Node3D
     private void SustainEnd() => _sustaining = false;
 
     private void Init(PufferState state, IEmitterRenderer renderer, float activeDuration,
-        bool sustained)
+        bool sustained, EffectAmbience? ambience = null)
     {
         _state = state;
         _renderer = renderer;
+        _ambience = ambience ?? EffectAmbience.Still;
         Name = "puffer_" + state.Name;
         _burstSizeScale = Config.GetFloat("puffer.burstSizeScale", SizeScaleDefault);
         _trailSizeScale = Config.GetFloat("puffer.trailSizeScale", SizeScaleDefault);

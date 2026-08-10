@@ -141,6 +141,11 @@ public partial class GameSession : Node3D
     // session (same lifetime as _worldEffectsFactory); null before the first weathered build and
     // nulled by ReturnToMenu so _Process's null guard covers the frame before the deferred free.
     private WeatherRig? _weatherRig;
+    // The world state every puffer in this session reads but none of them owns — B6's wind today,
+    // C7's camera position next (see Effects/WorldWind.cs). Constructed here rather than on
+    // _weatherRig because the emitter factories need it at StartSession, long before the first
+    // weathered build exists to write it; WeatherRig.Tick is what fills it in.
+    private Effects.EffectAmbience _ambience = new();
     private LensFlareRig? _lensFlareRig;
     private Node3D? _plane;
     // The session's simulation clock (see GameClock). Also published as GameClock.Current, which
@@ -257,8 +262,10 @@ public partial class GameSession : Node3D
         // so these must not be cached across a rebuild.
         _liveryResolver = new LiveryResolver(_spec, _rofPath);
         _spawnPicker = new SpawnPicker(_spec);
+        _ambience = new Effects.EffectAmbience();
         _worldEffectsFactory = new WorldEffectsFactory(_spec, _worldRoot,
-            () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam ? cam.GlobalPosition : Vector3.Zero);
+            () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam ? cam.GlobalPosition : Vector3.Zero,
+            _ambience);
         // Re-derive every subsystem RNG from the master before anything in the session draws, so a
         // rebuild (Esc to the launchscreen and back) repeats the run rather than continuing it.
         Rng.Reset(_masterSeed, _spec.SeedPinned);
@@ -905,7 +912,7 @@ public partial class GameSession : Node3D
                 UI.SplitScreen.SetVisualLayer(cloudField, fvolLayer);
             }
 
-            _weatherRig = new WeatherRig(_spec, _worldRoot!);
+            _weatherRig = new WeatherRig(_spec, _worldRoot!, _ambience);
             // B12: the deck's own zone_id, the one gated population that cannot ride a visual
             // layer (it is a per-rig camera-anchored copy — see WeatherRig.SetDeckZoneId).
             _weatherRig.SetDeckZoneId(builder.CloudDeckZoneId);
@@ -1202,11 +1209,11 @@ public partial class GameSession : Node3D
                 // distance-interval trail defs the FLIGHT lab plays would emit nothing here —
                 // these burn in place instead (DamageVisuals.UpdateStatic), the heavy pair at the
                 // authored prop1 anchor.
-                var smoke = Effects.Puffer.MakePuffer(state.ZrdrPath, state.Textures, _worldRoot!, "pufftrails.json", "smokepuffer");
-                var fire = Effects.Puffer.MakePuffer(state.ZrdrPath, state.Textures, _worldRoot!, "pufftrails.json", "firepuffer");
+                var smoke = Effects.Puffer.MakePuffer(state.ZrdrPath, state.Textures, _worldRoot!, "pufftrails.json", "smokepuffer", ambience: _ambience);
+                var fire = Effects.Puffer.MakePuffer(state.ZrdrPath, state.Textures, _worldRoot!, "pufftrails.json", "firepuffer", ambience: _ambience);
                 var panelTrails = new List<Effects.Puffer>();
                 for (int i = 0; i < 8; i++) // pool one per pdp panel — the lab can flip all of them
-                    if (Effects.Puffer.MakePuffer(state.ZrdrPath, state.Textures, _worldRoot!, "pufftrails.json", "firepuffer") is { } pt)
+                    if (Effects.Puffer.MakePuffer(state.ZrdrPath, state.Textures, _worldRoot!, "pufftrails.json", "firepuffer", ambience: _ambience) is { } pt)
                         panelTrails.Add(pt);
                 // The healthy↔torn candidate sets from the authored defs — the viewer
                 // has no anim program, so the two reader files are loaded directly.
@@ -1467,7 +1474,7 @@ public partial class GameSession : Node3D
         // Null on the empty stage (no world program) — rockets there fly trail-less, like the body.
         var projectiles = new ProjectilePool(state.Textures, state.Sounds, state.SoundDefs,
             flyoutGamez: state.Gamez, flyoutScene: state.WorldScene, flyoutAnims: state.CrashProgram,
-            soundGroups: state.SoundGroups)
+            soundGroups: state.SoundGroups, ambience: _ambience)
         {
             Listener = _rigs.Count > 0 ? _rigs[0].Camera : _camera,
             // Route weapon hits to the world's destructibles: the pool's raycast
@@ -1558,6 +1565,7 @@ public partial class GameSession : Node3D
         var assembler = new FlightRigAssembler(_spec, _liveryResolver, flightStarts,
             _worldEffectsFactory, _worldRoot!, new FlightRigAssembler.Inputs
             {
+                Ambience = _ambience,
                 PlanesGamez = planesGamez,
                 StatsFor = StatsFor,
                 CamParamsFor = CamParamsFor,

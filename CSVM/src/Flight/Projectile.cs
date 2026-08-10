@@ -300,6 +300,9 @@ public sealed partial class ProjectilePool : Node3D
     // `3040slug_gunhit` smoke, `he_ground_effect`, `bld_damage.flt`) stay on the stand-in spark —
     // their runtime PUFFER_STATE half plays through EffectSink (the puffer factory is torn down
     // after the world build).
+    // B6: the session's wind, read by the rocket-trail puffers this pool builds. Rocket trails
+    // carry FRICTION and no WIND_FACTOR, so they take the engine default of 1 — fully carried.
+    private readonly Effects.EffectAmbience _ambience = Effects.EffectAmbience.Still;
     private readonly Dictionary<string, GameZNode?> _impactNodes = new(); // impact anim name → prototype (cached)
     private readonly HashSet<string> _impactFxLogged = new();
     private readonly List<ImpactFx> _impactFx = new();
@@ -366,8 +369,10 @@ public sealed partial class ProjectilePool : Node3D
     public ProjectilePool(TextureArchive textures, SoundArchive? sounds,
         IReadOnlyDictionary<string, SoundDef>? soundDefs,
         GameZ? flyoutGamez = null, SceneBuilder? flyoutScene = null, AnimProgram? flyoutAnims = null,
-        IReadOnlyDictionary<string, SoundGroup>? soundGroups = null)
+        IReadOnlyDictionary<string, SoundGroup>? soundGroups = null,
+        Effects.EffectAmbience? ambience = null)
     {
+        _ambience = ambience ?? Effects.EffectAmbience.Still;
         _textures = textures;
         _sounds = sounds;
         _soundDefs = soundDefs;
@@ -1103,7 +1108,7 @@ public sealed partial class ProjectilePool : Node3D
             }
             if (emitter == null)
             {
-                var puffer = Puffer.Create(state, _textures);
+                var puffer = Puffer.Create(state, _textures, ambience: _ambience);
                 if (puffer == null)
                 {
                     if (_flyoutLogged.Add("trail:" + state.Name))

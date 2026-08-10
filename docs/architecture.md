@@ -125,6 +125,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Effects/EmitterRenderer.cs` — the `IEmitterRenderer` seam under `Puffer` (particles → GPU) and the real `MultiMesh` + billboard-shader renderer behind it.
 - `src/Effects/FogVolumeClutter.cs` — the authored ambient cloud field: `fogvol.zrd`'s clutter scattered through the gamez `fvol*` boxes, one static MultiMesh per sprite kind.
 - `src/Effects/Precipitation.cs` — weather.json rain/snow: one camera-following MultiMesh of flakes or streaks, self-animating on the GPU.
+- `src/Effects/WorldWind.cs` — the mission's global wind (weather.json's `WIND` block: static vector + horizontal random-walk gust) and `EffectAmbience`, the per-session seam a `Puffer` reads it through.
 
 ### `src/UI/` — screens, overlays and the inspection labs
 
@@ -2041,6 +2042,31 @@ leftover accumulator drains at a normal `dt`. Do not "fix" this by clamping the 
 that clamp was tried, it keeps dead batches alive, and it is an invented divergence the skip exists
 to make unnecessary. Every draw is made before the skip decides, so a skipped particle consumes the
 same `_rng` stream a created one would.
+**Wind-coupled friction and the traced integration order** (`PLAN-puffer-engine-deltas` B6).
+`_Process` now integrates exactly as `FUN_0054ee10` does, and the ORDER is the change:
+`pos += v·dt` on the velocity the particle had at the top of the frame, **then** `v += a·dt`,
+**then** — only when `FRICTION != 0` (`0054f016`'s own gate) —
+`v = (v − wind·WIND_FACTOR)·damp + wind·WIND_FACTOR`. Friction damps toward the WIND, not toward
+rest. Ours previously did all three the other way round (`v = v·damp + a·dt; pos += v·dt`), which
+puts an accelerating particle exactly one frame of velocity ahead of where the engine puts it.
+`WIND_FACTOR` (`PufferState.WindFactor`) **defaults to 1, not 0** — the puffer object's ctor
+(`FUN_00550100`) writes `1.0` to `+0x6c` and the applier only overwrites it when the flag is set,
+so 2,802 of the install's 2,863 friction-bearing compiled events are FULLY wind-carried and only
+12 (the six `subdoors_puffer` names) author an explicit `0.0` to opt out. Both parsers therefore
+distinguish absent from zero.
+B6 moved **six** goldens, and an able-to-fail control (a build publishing `Vector3.Zero` instead of
+the stepped wind) splits them cleanly: `c1-waterfall`, `c3-island` and `c4-snow` reproduce the
+zero-wind hashes exactly, so those three moved on the INTEGRATION REORDER alone and their emitters
+never feel the wind (`FRICTION 0`, so the gate excludes them); `c1-flight`,
+`c1-destroy-effects` and `c1-crash` hash differently with and without it, which is the proof the
+wind reaches real puffers rather than only the suite's synthetic ones. `c5-city-night` is the one
+puffer-bearing golden B6 left byte-identical — its emitter carries neither friction nor world
+acceleration, which makes the reorder an exact algebraic identity there.
+⚠ The friction gate is load-bearing now. It used to be an unconditional `Exp(0) == 1` damp, an
+identity at `FRICTION 0`; with a wind inside the block it is not, and a frictionless puffer must
+feel no wind at all.
+The wind itself is `Effects/WorldWind.cs` — see its own entry.
+
 ⚠ `DEVIATION_DISTANCE` scatters **±0.5·d**, not ±d (`PLAN-puffer-engine-deltas` A2):
   `FUN_0054f8b0` spawns at `prev + delta*frac + (rand01 - 0.5) * d` per axis, so the offset is a
   HALF-width around the origin — `Rand(-d, d)` was drawing twice the authored width per axis
@@ -2056,6 +2082,43 @@ same `_rng` stream a created one would.
   and pinned to WHERE `new Puffer()` sits in `Create`. Moving it, or constructing one anywhere on a
   capture path, re-pins all seven puffer-bearing goldens (the `SizeScaleDefault` list above — an
   earlier "four", then "five", here was a stale count); `CreateWith` is a test entry point only.
+
+## src/Effects/WorldWind.cs
+Two small types, one job: get the mission's authored wind to every puffer that reads it.
+
+`WorldWind` is the gust model, decoded verbatim from `FUN_0054ee10`'s opening block and authored in
+`weather.json`'s `WIND` block (schema and addresses: docs/formats/weather.md). A static base vector
+plus a HORIZONTAL random-walk gust — heading turned by `±RANDOM_ANG_VEL·dt`, magnitude stepped by
+`±RANDOM_ACCEL`, reflected through +π when it goes negative and clamped to `RANDOM_MAX_SPEED`.
+`Step(dt)` once per frame; `Velocity` is the answer. All 53 `weather.zrd.json` in the install
+author the identical block: `STATIC_VELOCITY (0,2,0)`, `MAX_SPEED 10`, `ACCEL 5`, `ANG_VEL 5` — a
+steady 2 m/s updraft under a gust wandering a 10 m/s horizontal disc, so this is a real visual
+force everywhere, not a nil default.
+⚠ `RANDOM_ANG_VEL` is in **degrees** per second; the binary converts on the way into its global and
+so does the constructor.
+⚠ **The magnitude step carries no `dt`** — traced (`0054eea1` multiplies by the rate and nothing
+else, while `0054ee3c` multiplies the heading rate by the frame delta). One `±RANDOM_ACCEL` jump
+per FRAME makes the gust magnitude frame-rate dependent, and at the shipped 5-against-10 it is
+effectively re-drawn every frame. Reproduced as traced, not smoothed: a `dt` nobody wrote would be
+an invented breeze. Deterministic under `--det` (fixed step) off its own `Rng.Wind` stream — its
+own, not `Rng.Puffer`, so the wind's frame count can never perturb any emitter's spawn scatter.
+
+`EffectAmbience` is the seam: a small mutable holder of the per-frame world state a `Puffer` READS
+but does not own, handed in at construction (`Puffer.Create`/`CreateWith`/`MakePuffer`'s `ambience`
+parameter) rather than reached for. `GameSession` owns the one instance — it has to hand it to the
+emitter factories at `StartSession`, long before the first weathered build exists — passes it to
+`WorldEffectsFactory` → `PufferEmitterFactory`, to `ProjectilePool` (rocket trails), to
+`FlightRigAssembler.Inputs` (`ThrottleSlamSmoke`'s exhaust) and to the damage lab's stand-ins, and
+`WeatherRig.Tick` writes it once per frame, before the rig loop — one wind for the world, exactly
+where `FUN_0054ee10` derives it, and NOT once per camera (a splitscreen session must not walk the
+gust twice as fast).
+⚠ **C7 belongs here too.** The `NEAR_FADE`/`FAR_FADE` distance alpha needs the active camera's
+world position on precisely this seam; it goes in as a second property on `EffectAmbience`, not as
+a second mechanism.
+`EffectAmbience.Still` is the null object every unwired puffer reads (unit suites, the plane
+viewer, a mission with no weather.json). It **refuses to be written**, so a session that forgets to
+hand its own over fails loudly at the writer instead of silently blowing one wind through the whole
+process.
 
 ## src/Effects/EmitterRenderer.cs
 `Puffer`'s lower seam: `IEmitterRenderer` takes live particles (`Attach` sizes the pool, `Write`

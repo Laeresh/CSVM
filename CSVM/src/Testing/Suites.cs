@@ -73,6 +73,10 @@ public static class Suites
             "a destructible's death starts a PUFFER_STATE emitter and BL-236's own retirement rule stops it", EmitterLifetime));
         into.Add(new TestHarness.Suite("puffer-modes",
             "every continuous emitter path through Emit/Stop (plus Burst), driven through a fake renderer with no GPU", PufferModes));
+        into.Add(new TestHarness.Suite("puffer-wind",
+            "the traced integration order (position on last frame's velocity, then accel, then damp) "
+            + "and friction damping toward the WIND rather than toward rest, WIND_FACTOR and all (B6)",
+            PufferWind));
         into.Add(new TestHarness.Suite("loadout-bind",
             "every stock loadout binds to its model with every marker resolved", LoadoutBind));
         into.Add(new TestHarness.Suite("weapons-fire",
@@ -277,6 +281,226 @@ public static class Suites
         {
             GameClock.Current = clock;
         }
+    }
+
+    /// <summary>B6 (<c>docs/PLAN-puffer-engine-deltas.md</c>) — the particle integrator against
+    /// <c>FUN_0054ee10</c>'s own arithmetic, on a state built here rather than loaded, because the
+    /// point is the closed form and an authored puffer's random draws would only obscure it.
+    ///
+    /// <para>Three claims, each with the control that makes its "unchanged" readable:
+    /// (1) at ZERO wind the coupling is algebraically absent — the track is the pure damped curve
+    /// — and the same emitter in a wind is provably not, so "matches the curve" is evidence rather
+    /// than an untested branch; (2) acceleration is applied AFTER the position step and BEFORE the
+    /// damp, which puts a moving particle exactly one frame of velocity behind where our old order
+    /// put it; (3) <c>WIND_FACTOR</c> 0 is genuinely becalmed and 1 is fully carried, with the
+    /// engine's <c>friction != 0</c> gate keeping a frictionless puffer out of the wind
+    /// entirely.</para></summary>
+    private static void PufferWind(TestContext ctx)
+    {
+        var clock = GameClock.Current;
+        GameClock.Current = null;
+        try
+        {
+            PufferWindZeroIsNoOp(ctx);
+            PufferAccelOrder(ctx);
+            PufferWindFactorCoupling(ctx);
+            PufferFrictionlessIgnoresWind(ctx);
+            PufferWindGustModel(ctx);
+        }
+        finally
+        {
+            GameClock.Current = clock;
+        }
+    }
+
+    /// <summary>One particle, no randomness: NUMBER 1, a degenerate random-velocity range (min ==
+    /// max, so the draw is exact), no deviation, no growth, no ramps. Burst mode, so the single
+    /// batch lands at t = 0 at the burst point.</summary>
+    private static PufferState WindTestState(string name, Vector3 v0, Vector3 accel,
+        float friction, float windFactor) => new()
+        {
+            Name = name,
+            Number = 1,
+            TimeInterval = 10f,          // one batch only, inside the 0.01 s active duration below
+            SizeMin = 1f,
+            SizeMax = 1f,
+            LifetimeMin = 100f,
+            LifetimeMax = 100f,
+            MinRandomVelocity = v0,
+            MaxRandomVelocity = v0,
+            WorldAcceleration = accel,
+            Friction = friction,
+            WindFactor = windFactor,
+            Textures = new[] { "smoke101" },
+        };
+
+    /// <summary>Runs one <see cref="WindTestState"/> particle for <paramref name="frames"/> steps of
+    /// <paramref name="dt"/> and returns its displacement. The burst is fired at the world origin
+    /// and a burst puffer's particles are stored in its own (there, identity) frame, so the
+    /// written position IS the displacement.</summary>
+    private static Vector3 RunWindParticle(TestContext ctx, PufferState state, EffectAmbience ambience,
+        int frames, float dt)
+    {
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu, activeDuration: 0.01f, ambience: ambience);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            puffer.Burst(Vector3.Zero);
+            for (int i = 0; i < frames; i++)
+                puffer._Process(dt);
+            ctx.Same(1, gpu.Shown, $"{state.Name}: exactly one particle is under test");
+            return gpu.LastFrame.Count > 0 ? gpu.LastFrame[0].Position : Vector3.Zero;
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    /// <summary>Zero wind ⇒ the coupling term vanishes: <c>(v − 0)·damp + 0 == v·damp</c>, so a
+    /// friction particle decays to rest on the pure damped curve. Its closed form is exact — with
+    /// no acceleration, <c>v_n = v0·damp^n</c> and <c>pos_n = v0·dt·(1 − damp^n)/(1 − damp)</c>,
+    /// the geometric sum of the positions step, which the traced order takes BEFORE the damp.
+    ///
+    /// <para>⚠ The able-to-fail control matters more than the match: the identical emitter in a
+    /// 10 m/s wind must land somewhere else, or "it followed the windless curve" would be a
+    /// statement about a branch nothing exercised (<c>docs/verification.md</c>).</para></summary>
+    private static void PufferWindZeroIsNoOp(TestContext ctx)
+    {
+        const float Dt = 1f / 60f, Friction = 3f;
+        const int Frames = 120;
+        var v0 = new Vector3(20f, 0f, 0f);
+        float damp = Mathf.Exp(-Friction * Dt);
+        float expectedX = v0.X * Dt * (1f - Mathf.Pow(damp, Frames)) / (1f - damp);
+
+        var still = new EffectAmbience();   // never written: Wind stays Vector3.Zero
+        var calm = RunWindParticle(ctx, WindTestState("wind_zero", v0, Vector3.Zero, Friction, 1f),
+            still, Frames, Dt);
+        ctx.Check(Mathf.IsEqualApprox(calm.X, expectedX, 0.01f),
+            $"at zero wind a friction particle rides the pure damped curve x={calm.X:0.0000} expected={expectedX:0.0000}");
+        ctx.Check(Mathf.Abs(calm.Y) < 1e-4f && Mathf.Abs(calm.Z) < 1e-4f,
+            $"and moves in no other axis y={calm.Y:0.000000} z={calm.Z:0.000000}");
+        // 2 s at friction 3 leaves damp^120 = e^-6 = 0.0025 of the launch speed: at rest, and the
+        // remaining travel per frame is below a millimetre.
+        ctx.Check(Mathf.Pow(damp, Frames) < 0.01f,
+            $"120 frames at friction 3 really is 'to rest' remaining={Mathf.Pow(damp, Frames):0.0000}");
+
+        var blowing = new EffectAmbience();
+        blowing.SetWind(new Vector3(0f, 0f, 10f));
+        var carried = RunWindParticle(ctx, WindTestState("wind_control", v0, Vector3.Zero, Friction, 1f),
+            blowing, Frames, Dt);
+        ctx.Check(carried.Z > 5f,
+            $"ABLE-TO-FAIL CONTROL: the same particle in a 10 m/s crosswind is carried instead z={carried.Z:0.000}");
+        ctx.Check(Mathf.IsEqualApprox(carried.X, expectedX, 0.01f),
+            $"and the crosswind leaves the unblown axis alone x={carried.X:0.0000}");
+    }
+
+    /// <summary>The reorder, isolated: friction 0, no wind, a pure world acceleration. The traced
+    /// order steps position on LAST frame's velocity and only then adds <c>a·dt</c>, giving
+    /// <c>pos_n = a·dt²·n(n−1)/2</c>. Our old order (<c>v += a·dt</c> first, position after) gave
+    /// <c>a·dt²·n(n+1)/2</c> — larger by exactly <c>a·dt²·n</c>, i.e. one frame of the current
+    /// velocity, which is the whole of the difference and is asserted as such.</summary>
+    private static void PufferAccelOrder(TestContext ctx)
+    {
+        const float Dt = 1f / 60f;
+        const int Frames = 60;
+        var accel = new Vector3(0f, -9.8f, 0f);
+        float traced = accel.Y * Dt * Dt * Frames * (Frames - 1) / 2f;
+        float oldOrder = accel.Y * Dt * Dt * Frames * (Frames + 1) / 2f;
+
+        var still = new EffectAmbience();
+        var end = RunWindParticle(ctx, WindTestState("accel_order", Vector3.Zero, accel, 0f, 1f),
+            still, Frames, Dt);
+
+        ctx.Check(Mathf.IsEqualApprox(end.Y, traced, 0.0005f),
+            $"accel lands after the position step y={end.Y:0.00000} traced={traced:0.00000}");
+        ctx.Check(!Mathf.IsEqualApprox(end.Y, oldOrder, 0.0005f),
+            $"and NOT where the old order put it old={oldOrder:0.00000}");
+        ctx.Check(Mathf.IsEqualApprox(oldOrder - traced, accel.Y * Dt * Dt * Frames, 0.0005f),
+            $"the gap is exactly one frame of the final velocity gap={oldOrder - traced:0.00000}");
+    }
+
+    /// <summary>The per-puffer coupling. Both particles start at rest with no acceleration, so the
+    /// ONLY thing that can move them is the wind: <c>WIND_FACTOR</c> 0 must therefore not move at
+    /// all, and 1 must converge on the wind velocity. The carried one's closed form is exact —
+    /// <c>v_n = w(1 − damp^n)</c>, <c>pos_n = w·dt·(n − (1 − damp^n)/(1 − damp))</c>.</summary>
+    private static void PufferWindFactorCoupling(TestContext ctx)
+    {
+        const float Dt = 1f / 60f, Friction = 3f;
+        const int Frames = 120;
+        var wind = new Vector3(8f, 0f, 0f);
+        float damp = Mathf.Exp(-Friction * Dt);
+        float geometric = (1f - Mathf.Pow(damp, Frames)) / (1f - damp);
+        float carriedX = wind.X * Dt * (Frames - geometric);
+
+        var blowing = new EffectAmbience();
+        blowing.SetWind(wind);
+
+        var uncoupled = RunWindParticle(ctx,
+            WindTestState("wf_zero", Vector3.Zero, Vector3.Zero, Friction, 0f), blowing, Frames, Dt);
+        ctx.Check(uncoupled.Length() < 1e-5f,
+            $"WIND_FACTOR 0 is genuinely becalmed in an 8 m/s wind drift={uncoupled.Length():0.000000}");
+
+        var carried = RunWindParticle(ctx,
+            WindTestState("wf_one", Vector3.Zero, Vector3.Zero, Friction, 1f), blowing, Frames, Dt);
+        ctx.Check(Mathf.IsEqualApprox(carried.X, carriedX, 0.01f),
+            $"WIND_FACTOR 1 is fully carried x={carried.X:0.0000} expected={carriedX:0.0000}");
+
+        var half = RunWindParticle(ctx,
+            WindTestState("wf_half", Vector3.Zero, Vector3.Zero, Friction, 0.3f), blowing, Frames, Dt);
+        ctx.Check(Mathf.IsEqualApprox(half.X, carriedX * 0.3f, 0.01f),
+            $"and the coupling is linear in WIND_FACTOR — 0.3 drifts 0.3× as far x={half.X:0.0000}");
+    }
+
+    /// <summary>The engine's own gate: the whole damp-toward-wind block sits inside
+    /// <c>if (friction != 0)</c> (<c>0054f016</c>), so a frictionless puffer is untouched by any
+    /// wind at any factor. This was invisible before B6 — an unconditional <c>Exp(0) == 1</c> damp
+    /// is the identity — and is load-bearing now that there is a wind term inside it.</summary>
+    private static void PufferFrictionlessIgnoresWind(TestContext ctx)
+    {
+        const float Dt = 1f / 60f;
+        const int Frames = 120;
+        var blowing = new EffectAmbience();
+        blowing.SetWind(new Vector3(50f, 0f, 0f));
+
+        var end = RunWindParticle(ctx,
+            WindTestState("no_friction", Vector3.Zero, Vector3.Zero, 0f, 1f), blowing, Frames, Dt);
+        ctx.Check(end.Length() < 1e-5f,
+            $"a FRICTION 0 puffer feels no wind at all drift={end.Length():0.000000}");
+    }
+
+    /// <summary>The gust itself (<see cref="WorldWind"/>), against the shipped authored values —
+    /// <c>STATIC_VELOCITY (0,2,0)</c>, <c>RANDOM_MAX_SPEED 10</c>, <c>RANDOM_ACCEL 5</c>,
+    /// <c>RANDOM_ANG_VEL 5</c>, which every one of the install's 53 weather readers carries.</summary>
+    private static void PufferWindGustModel(TestContext ctx)
+    {
+        var wind = new WorldWind(new Vector3(0f, 2f, 0f), 10f, 5f, 5f, new System.Random(7));
+        ctx.Check(wind.Velocity == new Vector3(0f, 2f, 0f),
+            $"frame 0 is the static vector alone (the engine's globals start at BSS zero)");
+
+        float maxHorizontal = 0f;
+        bool everGusted = false;
+        for (int i = 0; i < 2000; i++)
+        {
+            wind.Step(1f / 60f);
+            ctx.Check(wind.Magnitude >= 0f && wind.Magnitude <= 10f,
+                $"gust magnitude stays in [0, RANDOM_MAX_SPEED] mag={wind.Magnitude:0.000}");
+            if (!Mathf.IsEqualApprox(wind.Velocity.Y, 2f))
+                ctx.Check(false, $"the gust is horizontal — Y must stay the static 2 m/s, saw {wind.Velocity.Y}");
+            float h = new Vector2(wind.Velocity.X, wind.Velocity.Z).Length();
+            maxHorizontal = Mathf.Max(maxHorizontal, h);
+            if (h > 1f)
+                everGusted = true;
+        }
+        ctx.Check(everGusted, $"the gust actually blows over 2000 frames");
+        ctx.Check(maxHorizontal <= 10.001f, $"and never exceeds the ceiling max={maxHorizontal:0.000}");
+
+        // The still-air wind a mission without a weather.json gets: no draws, no drift, ever.
+        var still = WorldWind.Still();
+        for (int i = 0; i < 100; i++)
+            still.Step(1f / 60f);
+        ctx.Check(still.Velocity == Vector3.Zero, $"WorldWind.Still() never blows v={still.Velocity}");
     }
 
     /// <summary>Burst: the pool is sized from the calling animation's stop time, the first batch is

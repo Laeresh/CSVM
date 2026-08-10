@@ -112,7 +112,7 @@ GODOT --path CSVM res://scenes/Main.tscn -- --plane=player_bhawk
 
 - `src/Mech3/` (40) — extraction readers, the GameZ→Godot builders, and the animation runtime: install → live world.
 - `src/Flight/` (33) — the aircraft as a flying, shooting, damageable thing, plus its HUD and stunt mode.
-- `src/Effects/` (3) — particle systems: puffers, the ambient cloud field, precipitation.
+- `src/Effects/` (4) — particle systems: puffers, the ambient cloud field, precipitation, the world wind.
 - `src/UI/` (16) — launchscreen, splitscreen rig, and the inspection labs (each with a scripted `--debug-*` twin).
 - `src/Utils/` (6) — session-wide services: clock, log, seed, shader time, config, startup profile. Determinism lives here.
 - `src/Testing/` (6) — the in-engine assertion harness behind `--run-tests` and the `--dump-*` probes.
@@ -195,7 +195,8 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 **Active plan:** [`docs/PLAN-puffer-engine-deltas.md`](docs/PLAN-puffer-engine-deltas.md) — Wave A
 (A1/A2, the two factor-of-two conventions) landed; in Wave B, B3 is closed as a disproof
 (`SCALE_SEQUENCE` is authored nowhere in this install) and B4 (`START_AGE_RANGE`) and B5
-(sub-frame emission) have landed — B6 (wind-coupled friction) is next, then Wave C. Two other plans completed on 2026-08-09, both archived in
+(sub-frame emission) and B6 (wind-coupled friction) have landed — Wave C is next, starting at
+C7. Two other plans completed on 2026-08-09, both archived in
 [`docs/plans/`](docs/plans/plans.md):
 [`PLAN-weather-decompile-match.md`](docs/plans/PLAN-weather-decompile-match.md) and
 [`PLAN-flight-model-rewrite.md`](docs/plans/PLAN-flight-model-rewrite.md).

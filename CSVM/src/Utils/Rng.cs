@@ -37,6 +37,11 @@ public static class Rng
     public const string Puffer = "puffer";
     public const string Clouds = "clouds";
     public const string Precip = "precip";
+    // The mission's global wind gust (Effects.WorldWind). Its own stream, not Puffer's: the wind
+    // is one random walk for the whole world, stepped once per frame by WeatherRig, while
+    // Rng.Puffer is drawn per emitter at spawn — sharing one would make every puffer's scatter a
+    // function of how many frames the wind had been blowing.
+    public const string Wind = "wind";
 
     private static readonly Dictionary<string, RandomNumberGenerator> Streams = new(StringComparer.Ordinal);
 

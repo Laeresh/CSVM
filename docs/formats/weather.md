@@ -22,7 +22,7 @@ returns "no fog" then.
 | Block | Read as | Notes |
 |---|---|---|
 | `VIEWING_RANGE` | dict | not used by the remake (the original scales `FOG_RANGES`/far clip by its per-detail `FOG_SCALE`/`CLIP_SCALE`; HIGH is 1.0 everywhere, so inert at full detail — see the decompile section) |
-| `WIND` | **bare-scalar block** | `STATIC_VELOCITY [x,y,z]`, `RANDOM_MAX_SPEED s`, `RANDOM_ACCEL a` |
+| `WIND` | **bare-scalar block** | `STATIC_VELOCITY [x,y,z]`, `RANDOM_MAX_SPEED s`, `RANDOM_ACCEL a`, `RANDOM_ANG_VEL deg/s` |
 | `CLOUD_COVER` | **bare-scalar block** | `TOP`, `BOTTOM`, `THICKNESS` (metres) + optional `TOP_COLOR`/`BOTTOM_COLOR` |
 | `ZONE<n>` | dict (+ `SW_*` twin) | per-zone fog; the `SW_*` software-renderer twin is ignored. **The names are per chapter — see below** |
 
@@ -750,13 +750,64 @@ original; the remake does not reproduce it). The shipped data alone could never 
 (of the reachable bands only C4 authors colours, and equal ones), which is why this stayed
 marked inferred until the decompile.
 
-## Wind (`WIND`)
+## Wind (`WIND`) — decoded and consumed (2026-08-10, `PLAN-puffer-engine-deltas` B6)
 
-Bare-scalar block: `STATIC_VELOCITY [x,y,z]` (steady wind m/s) + `RANDOM_MAX_SPEED` /
-`RANDOM_ACCEL` (random-gust bounds). Parsed in full and **currently unconsumed**: it used to drive
-the drift of the hand-tuned `CloudPuffs` field, which the authored `fogvol.zrd` clutter replaced
-on 2026-08-06 (`BL-273`, [fogvol.md](fogvol.md)) — that field is static world geometry and the
-reader says nothing about wind moving it.
+Bare-scalar block, four keys, **all four present in all 53 `weather.zrd.json` files in the
+install and all 53 authoring the same values**:
+
+| Key | Shape | Every mission | Global | Setter |
+|---|---|---|---|---|
+| `STATIC_VELOCITY` | `[x,y,z]` m/s | `(0, 2, 0)` | `00763db4`/`b8`/`bc` | `FUN_00550690` |
+| `RANDOM_MAX_SPEED` | float, m/s | `10.0` | `00763dc8` | `FUN_005506b0` |
+| `RANDOM_ACCEL` | float, m/s per **frame** | `5.0` | `00763dd0` | `FUN_005506c0` |
+| `RANDOM_ANG_VEL` | float, **degrees**/s | `5.0` | `00763dcc` | `FUN_005506d0` |
+
+The reader is `FUN_004bc680` (its assert string names `D:\zipper\Crimson\weather.cpp`), which
+reads the four keys straight into those setters and multiplies `RANDOM_ANG_VEL` by `0.017453292`
+on the way in — **the key is in degrees per second and the global is radians per second.** The
+same four setters are exposed on the debug console (`FUN_005b80a0`) as
+`GlobalWindStaticVelocity` / `GlobalWindRandomMaxSpeed` / `GlobalWindRandomAccel` /
+`GlobalWindRandomAngVel`, which is the original's own name for the mechanism and independently
+confirms the mapping.
+
+**The model** (`FUN_0054ee10`, at the head of the one puffer tick, before any emitter or particle
+is touched — so there is exactly one wind for the whole world, re-derived once per frame):
+
+```
+heading  += rand(-1,+1) * RANDOM_ANG_VEL_rad * dt      // wrapped into [0, 2pi)
+magnitude += rand(-1,+1) * RANDOM_ACCEL                //  <-- no dt (see below)
+if (magnitude < 0) { heading += pi; magnitude = -magnitude; }
+if (magnitude > RANDOM_MAX_SPEED) magnitude = RANDOM_MAX_SPEED;
+
+wind = ( magnitude*cos(heading) + STATIC_VELOCITY.x,
+                                  STATIC_VELOCITY.y,      // vertical is the static value verbatim
+         magnitude*sin(heading) + STATIC_VELOCITY.z )
+```
+
+⚠ **The magnitude step carries no `dt` and the heading step does.** Raw x87: `0054ee3c`
+`FMUL [00763dcc]` then `FMUL [EBP-0x10]` (the frame delta) for the heading; `0054eea1`
+`FMUL [00763dd0]` and nothing else for the magnitude. The gust magnitude therefore takes one
+`±RANDOM_ACCEL` jump **per frame**, which at the shipped 5 m/s step against a 10 m/s ceiling makes
+it effectively re-drawn every frame and frame-rate dependent. Reproduced as traced (CSVM's
+`Effects.WorldWind`), not smoothed — a `dt` nobody wrote would be an invented breeze.
+
+⚠ **The gust is horizontal.** Only x and z carry it; y is `STATIC_VELOCITY.y` copied straight
+through (`0054ef5f MOV [00763dac], ECX`). With the shipped data that is a steady +2 m/s updraft
+under a gust that wanders anywhere in a 10 m/s disc.
+
+⚠ **Not the same thing as the `PARTICLES` block's `WIND_DIR`/`WIND_VEL`** further down the same
+file. Those are precipitation drift (see below) and touch nothing else.
+
+**Its one consumer is the puffer particle system.** `FUN_0054ee10` damps each particle's velocity
+toward `wind × WIND_FACTOR` rather than toward rest, and only when the puffer authors a non-zero
+`FRICTION`. `WIND_FACTOR` defaults to **1**, not 0 (the puffer object's ctor `FUN_00550100` writes
+`1.0` to `+0x6c`), so 2,802 of the install's 2,863 friction-bearing compiled `PufferState` events
+are fully wind-carried; only 12 events across the six-strong `subdoors_puffer` family author an
+explicit `0.0` to opt out. See `PLAN-puffer-engine-deltas.md` B6.
+
+It still does **not** move the cloud clutter. It used to drive the drift of the hand-tuned
+`CloudPuffs` field, which the authored `fogvol.zrd` clutter replaced on 2026-08-06 (`BL-273`,
+[fogvol.md](fogvol.md)) — that field is static world geometry and no reader says wind moves it.
 
 ## Precipitation (the item-5 decode, 2026-07-18)
 

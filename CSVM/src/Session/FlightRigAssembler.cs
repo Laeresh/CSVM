@@ -359,7 +359,7 @@ public sealed class FlightRigAssembler
         // nodes plus the live throttle Setup just wrote, so it builds after Setup rather than
         // alongside Props/WingLights above.
         controller.ThrottleSmoke = ThrottleSlamSmoke.Build(planeModel, _in.ZrdrPath, _in.Textures,
-            controller, controller.Throttle);
+            controller, controller.Throttle, _in.Ambience);
 
         // The incoming-fire near-miss cue: this aircraft becomes a target every OTHER
         // pilot's rounds are measured against. After Setup — the target reads the live flight
@@ -470,6 +470,10 @@ public sealed class FlightRigAssembler
         /// Every rig in the session (--vs opponent markers, C24) — the same list GameSession
         /// keeps live for the whole session, not a snapshot; see the Assemble call site.
         public IReadOnlyList<PlayerRig>? Rigs;
+
+        /// B6: the session's wind (see Effects/WorldWind.cs), for the puffers assembled here —
+        /// the throttle-slam exhaust smoke. Still air unless the session hands its own over.
+        public Effects.EffectAmbience Ambience = Effects.EffectAmbience.Still;
 
         // The build's archives and world outputs (BuildState's, unchanged).
         public TextureArchive Textures = null!;
