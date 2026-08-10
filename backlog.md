@@ -1487,6 +1487,30 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   level; the two fade bounds are one draw, not independent ("`translate_uv_range`, `far_fade_range`
   and `rotation_range` are grouped by BOUND" — `docs/formats/templates.md`).
 
+- `BL-341` `[Research]` **Reopened `BL-250`: with the real `no_clutter` gate landed, 7.6% of C5's ground
+  (13.8 million m², the flagged overlay area with no base layer beneath it) renders bare, and
+  whether that is what the original does is untested.** `BL-250` closed 2026-08-07 on a curated
+  list (`ClutterBuilder.BuriedClutterDistricts`, excluding `cblock4/5/6` map-wide) that turned out
+  to be standing in for a mechanism nobody had decoded yet. B13/B15
+  (`docs/plans/PLAN-clutter-uv-placement.md`) landed that mechanism — `PlaceOnMesh` now skips a
+  polygon carrying the decoded `no_clutter` flag, the flag SELECTS which of two coplanar layers
+  decorates rather than meaning "bare here", and the curated list was retired because it was wrong
+  on 14.1% of the map even though it happened to be right where `CAP-22` looked (78.3% of C5's
+  ground by area is genuinely tower country). *Evidence:* B15's landing commit
+  (`git log --grep="B15: land BL-305"`) measured the gate against every flagged/base pair in C5
+  and found 35% of flagged overlay area has no coplanar base polygon underneath it at all — for
+  that ground the gate now has nothing left to fall back on and leaves it undecorated. *Fix
+  shape:* find what the original actually draws on that 7.6% — either a third layering mechanism
+  this plan didn't decode, or the original genuinely leaves it bare too (which would close this
+  outright). Start from a located landmark pose the way `BL-305` was finally confirmed (the user's
+  own flyover, not a nadir — `SHOT-28`, `docs/verification.md`), not from `CAP-22`'s pose, which
+  cannot resolve this question (it already reads correctly). *⚠ Traps:* (a) do not re-curate a
+  list as a stopgap — that is exactly the mistake this item exists to not repeat. (b) A nadir
+  shot cannot distinguish a painted rooftop from bare ground any better than it could distinguish
+  a rooftop from a building (`SHOT-28`); use a low oblique. *Cross-refs:* `BL-305` (the fix that
+  surfaced this), `BL-250` (the closed item this supersedes — do not reopen that ID; IDs are never
+  reused, per this file's own rule).
+
 ## Effects & animation runtime
 
 - `BL-326` `[Bug]` **C3's skydome draws a magenta rectangle below the camera: its gamez names
