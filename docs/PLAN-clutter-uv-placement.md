@@ -132,8 +132,14 @@ CLAUDE.md.
 | C4 | 1,148 B — `firtree1/2`, `dougfirtree1`, `spruce` | — |
 | C5 | 22,956 B — `lightpole`, `w_lightglow`, `hotelsign0-2`, `cb00a/b`, `cb00det01-03`, … | `cb00a` substitutes 1:1 with `cb00b`; `far_fade_range` [[200,300],[300,350]] |
 
-No chapter authors `min_slope`, `max_slope`, `align_normal` or `rotation_range`. `translate_uv_range`
-appears in none of the small files; **check C2's and C5's before assuming that holds** (C21).
+**No chapter authors `min_slope`, `max_slope`, `align_normal`, `rotation_range` or
+`translate_uv_range`** — all five default everywhere. ✅ **Settled 2026-08-10**: C2's and C5's files
+were the open case here and they were checked, so C21 does *not* need to re-run this. Full per-chapter
+counts are in B14's landed section; the consequence — that `FUN_004dd6e0`'s step 5 and the
+rotate/align half of step 10 are **inert on retail data**, so the original's placement has no random
+input affecting position or orientation, which is why C1's tree positions come out *exactly* the
+original's — is written up there and in C23. What IS authored and unapplied: `scale_range` (148
+kinds), `far_fade_range` (148), `substitute` (41).
 
 **Which templates each chapter registers** (`extracted/interp.json`, `AddClutterTemplates` lines —
 this is the census that corrects claim 6 above):
@@ -1408,7 +1414,12 @@ property blocks, plus the format page that documents every key and what the engi
 and the unit conversions (`rotation_range` is degrees → radians; `min_slope`/`max_slope` are degrees
 → **cosines**, and note the inversion: `min_slope`'s cosine becomes the *upper* bound). Defaults from
 `FUN_004de7d0`'s initialiser: scale 1.0/1.0, slope bounds −1.0/+1.0, `align_normal` false. The eight
-shipped files are surveyed in *What the data actually ships*.
+shipped files are surveyed in *What the data actually ships*, and **which keys they author is already
+settled** — the per-chapter count of every key is in B14's landed section (2026-08-10). Five of them
+(`min_slope`, `max_slope`, `align_normal`, `rotation_range`, `translate_uv_range`) are authored by no
+chapter at all, so the format page can state that as fact rather than as an open question. Do not
+re-run that census; **do** still read all five keys in the reader, since "unused in retail data" is a
+thing to document, not a reason to drop parsing.
 
 **Approach.** Follow the existing `Zrdr.cs` / `ZrdrDict` pattern — this is the same reader family as
 `fogvol.zrd` and `weather.zrd`, so there is a shape to copy rather than invent. Read every key the
