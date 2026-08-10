@@ -1416,3 +1416,56 @@ of the original's "return 1 until done": the sequence runner gates the next even
 instant. The sink is `UI.ScreenFlash` (`docs/architecture.md`) — one ramp at a time, replaced
 outright by a later event, painted into every rendered view. Asserted by the `fbfx-flash`
 `--run-tests` suite.
+
+## The last four unhandled kinds — decoded and triaged, none built
+
+`Callback` (slot 35, `004ec5e0`), `ObjectCycleTexture` (slot 17, `004eabd0`), `ObjectDeleteChild`
+(slot 16, `004eab90`) and `CameraState` (slot 20, `004e85c0`) are the whole of what the census in
+`analysis/anim-interpreter-decode/FINDINGS.md` counts as shipped-but-unhandled. All four were
+missing from Ghidra's function list (reached only through the dispatch table, like `LOOP`) and were
+recovered by forcing a function at each dispatch address, then decompiled in full. None gets a
+handler: for each, either CSVM has no consumer of what the exe does, or the def(s) that carry it are
+never reached by anything CSVM plays. A def-census over all 3,015 compiled defs (ad hoc, same method
+as `anim_census.py`) located every occurrence of all four kinds to check reachability, not just count
+them.
+
+- **`Callback`** (288 events, 120 defs — e.g. `player-player.json`'s `destroy_craft` sequence,
+  `value: 15`/`16`). The handler calls the anim instance's own registered native function pointer
+  (`anim+0x74`) with a per-event code (`anim+0x78`, the event's own `+0xc`) if one is registered —
+  pure `has_callbacks`-gated mission-scripting plumbing, notifying a host that installed a callback.
+  CSVM's `AnimRuntime` never installs one; there is no consumer to notify.
+- **`ObjectCycleTexture`** (96 events, 96 defs — exactly the player's own
+  `<part>_damage_{green,yellow,red}` cockpit indicator lights for `leftwing`/`rightwing`/`nose`/
+  `tail`, one set per chapter, nothing else). The handler resets an object's per-mesh texture-cycle
+  list to frame 0 (`FUN_005642a0`) then jumps straight to a specific frame (`FUN_00564410`, index
+  from the event's `+0x12`) — i.e. "snap this object's cycling texture to state N", not "start a
+  cycle". `docs/architecture.md`'s `Flight/DamageVisuals.cs` entry already records these same defs as
+  deliberately unwired: CSVM has no first-person cockpit to show the indicator on, and
+  `GaugeCluster.OnPartDamage` covers the same information a different way. The decode confirms it is
+  the same mechanism, not a second consumer — nothing changes.
+- **`ObjectDeleteChild`** (48 events, 40 defs). The handler unconditionally detaches a named child
+  from a named parent (`FUN_004cd6d0`, dispatched by the child's own node type) — a pure scene-graph
+  reparent, no visibility or transform change of its own. Every shipped use is one of two shapes:
+  - `camera1-generic_intro.json`'s `check_warhawk`/`start_script` sequences detach `camera1` and
+    `player` from `world1` — cutscene camera rigging, `OnCall` and never reached by anything CSVM
+    plays (`docs/plans/PLAN-anim-rendering-followups.md` already logs `camera1`/`player`/`cpilot` as
+    cutscene machinery for cutscenes this project does not have), and `apassengers-rem_pas.json`'s
+    `remove_passenger` detaches `apassengers` from `pass_st` — `pass_st` is not a gamez node in any
+    chapter (confirmed earlier, `docs/HISTORY.md`), so the parent can never resolve even if a handler
+    were written.
+  - `player-cpeject1/2/cpejectstop.json` detach `cpilot` from `pilot_pos`. These ARE reached — they
+    are called from the player's own `destroy_it` crash sequence (`docs/plans/PLAN-M2-polish-4.md`)
+    — but in all three files the delete is the first of exactly two events, and the second is
+    `ObjectActiveState(cpilot, false)`: `cpilot` is hidden immediately after, whether or not it was
+    ever detached. Reached, and still a no-op to build: CSVM already renders the correct (invisible)
+    outcome without it.
+- **`CameraState`** (8 events, 8 defs — one `player-gi_1stperson.json` each). The handler writes a
+  camera node's clip near/far, LOD multiplier, FOV and zoom fields, each gated by its own bit in the
+  event's flags byte. `gi_1stperson` is `OnCall` and its only caller anywhere in the install is
+  `camera1-generic_intro.json`'s `check_warhawk` sequence — the same unreached intro-cutscene
+  machinery as `ObjectDeleteChild` above. CSVM has no scripted first-person camera to configure
+  either (`PlayerFirstPerson` reads `false` — no cockpit view — `docs/formats/anim-definitions.md`'s
+  own condition table).
+
+`AnimRuntime`'s `default:` case keeps counting all four by name (`Count(ev.Kind)`) exactly as
+before — this record is what makes that report legible, not a code change.

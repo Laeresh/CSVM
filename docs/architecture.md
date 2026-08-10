@@ -1013,6 +1013,14 @@ belongs to the session, which sets it on the world and world-effects runtimes. R
 a wash is a thing that happens, not a base state. Decode (blend, interpolation, the single global
 state a second burst overwrites, and why `alpha_delta` is not read) in
 `docs/formats/anim-definitions.md`.
+`Callback`/`ObjectCycleTexture`/`ObjectDeleteChild`/`CameraState` (dispatch slots 35/17/16/20) stay
+on `default:` — decoded in full (`docs/formats/anim-definitions.md`), none gets a case. `Callback`
+is `has_callbacks` mission plumbing with no registered consumer here; `ObjectCycleTexture` is the
+`<part>_damage_*` cockpit indicator already recorded unwired on `Flight/DamageVisuals.cs` (no
+cockpit); `ObjectDeleteChild`'s scene-graph reparent is either unreached (`camera1-generic_intro`'s
+rig, `apassengers-rem_pas`'s `pass_st`, which is not a gamez node anywhere) or reached but masked
+(the `cpeject*` defs hide `cpilot` immediately after, delete or not); `CameraState`'s only caller is
+the same unreached intro-cutscene chain.
 ⚠ `_rng` is the runtime's ONE die (`RANDOM_WEIGHT`, `SOUND_GROUPS` picks, crash-debris scatter) —
   every session sets `Seed` (`Rng.Anim`/`Rng.Crash`/`Rng.Effects`); route new dice through it or a
   replay stops being identical. `Reseed()` also clears the sound groups' recency memory, which

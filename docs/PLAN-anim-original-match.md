@@ -168,7 +168,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — Missing events
 
 21. C21 ☑ `FBFX_COLOR_FROM_TO` — the full-screen flash
-22. C22 ☐ Triage the remaining four unhandled kinds that ship (`Callback`, `ObjectCycleTexture`, `ObjectDeleteChild`, `CameraState`)
+22. C22 ☑ Triage the remaining four unhandled kinds that ship (`Callback`, `ObjectCycleTexture`, `ObjectDeleteChild`, `CameraState`)
 
 ### Wave D — Proof
 
@@ -939,7 +939,39 @@ ships **zero** occurrences; do not build it for symmetry.
 
 </details>
 
-## C22 ☐ Triage the remaining four unhandled kinds that ship
+## C22 ☑ Triage the remaining four unhandled kinds that ship
+
+**Landed: none of the four gets a handler — all disproven reachable, not just judgement calls.**
+All four dispatch targets (slots 35/17/16/20) were missing Ghidra function boundaries — reached only
+through the table, like `LOOP` — so each was forced into a function and decompiled in full before
+judging it. The plan's own lead ("`ObjectCycleTexture` is the most likely real gap") did not survive
+that read: it turned out to be the SAME `<part>_damage_{green,yellow,red}` cockpit indicator
+`docs/architecture.md`'s `Flight/DamageVisuals.cs` entry already records as deliberately unwired (no
+cockpit), not a second, unrelated mechanism — a disproof, not new code. Full per-kind decode, exe
+addresses and def census in `docs/formats/anim-definitions.md`'s "The last four unhandled kinds";
+summary:
+
+- **`Callback`** (288, 120 defs) — calls a native callback the anim instance never has registered
+  here (`has_callbacks` mission plumbing, no consumer).
+- **`ObjectCycleTexture`** (96, 96 defs) — the already-unwired cockpit indicator; confirmed same
+  mechanism, no new gap.
+- **`ObjectDeleteChild`** (48, 40 defs) — a scene-graph reparent. `camera1-generic_intro`'s rig and
+  `apassengers-rem_pas` (whose parent `pass_st` is not a gamez node anywhere, so it can never
+  resolve) are unreached by anything CSVM plays; the `cpeject1/2/cpejectstop` defs ARE reached (the
+  player's own `destroy_it` crash sequence calls them) but the very next event in all three hides the
+  same node regardless, so the delete changes nothing observable either way.
+- **`CameraState`** (8, 8 defs) — `gi_1stperson`'s only caller anywhere in the install is the same
+  unreached `camera1-generic_intro` chain as above, and CSVM has no scripted first-person camera to
+  configure regardless (`PlayerFirstPerson` reads `false`).
+
+**Verified.** No code changed (`AnimRuntime.cs`'s `default:` case already counts all four by name),
+so `.\RunTests.ps1` with `CSVM_DATA_ROOT=Z:\CSVM` was run as a docs-change sanity check rather than a
+behaviour check: build clean, units and in-engine suites unchanged, goldens unchanged from B12's
+known golden-red state (`c1-destroy-effects` still at `00ab194fba6b99d169ee27fcc213f4fa`, nothing
+else moved).
+
+<details>
+<summary>Original approach (kept for reference)</summary>
 
 **Goal.** `Callback` (288), `ObjectCycleTexture` (96), `ObjectDeleteChild` (48) and `CameraState`
 (8) each have a handler or a one-line recorded reason they do not.
@@ -963,6 +995,8 @@ handler lands, D31 or an existing suite must cover it.
 
 **⚠ Traps.** Do not implement all four for completeness. Three of them have zero reachable effect in
 the modes CSVM has, and an unexercised handler is worse than a documented gap.
+
+</details>
 
 ---
 

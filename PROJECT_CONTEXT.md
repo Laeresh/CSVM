@@ -194,8 +194,8 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Active plan: [`docs/PLAN-anim-original-match.md`](docs/PLAN-anim-original-match.md)** — align the
 animation interpreter with the decompiled original (evidence:
-[`analysis/anim-interpreter-decode/`](analysis/anim-interpreter-decode/FINDINGS.md)). Waves A–B and
-`C21` landed; next `C22`, then `D31` (the HE/flash/sonic timeline suite) and `D32`, which owns the
+[`analysis/anim-interpreter-decode/`](analysis/anim-interpreter-decode/FINDINGS.md)). Waves A–C
+landed; next `D31` (the HE/flash/sonic timeline suite) and `D32`, which owns the
 one golden re-baseline the branch is deliberately red on.
 Owed at the controls: `PT-28`, `PT-41`, `PT-43`, `PT-45` and `PT-47`
 ([`playtest.md`](playtest.md)). Verify any change with
