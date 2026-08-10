@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Mech3;
 using Godot;
 using Xunit;
@@ -488,6 +489,49 @@ public class SequenceRunnerTests
         Assert.True(inst.Finished);
     }
 
+    // ---- 16. CALL_SEQUENCE is one instance per sequence: a second call while it runs is inert ----
+
+    [Fact]
+    public void CallingASequenceThatIsAlreadyRunningStartsNoSecondCopy()
+    {
+        // The original keeps a sequence's state inside the definition, so a call is
+        // `if (parked) start` and nothing else. 77 shipped definitions call one sequence from
+        // more than one site (sonic_ground_effect calls sonic_light_seq twice); each such pair
+        // must produce ONE run of the body, not two overlapping ones.
+        var host = new RecordingHost();
+        var main = Seq("main", CallSeq("light"), CallSeq("light"));
+        var light = Seq("light", Swap("pulse", "Event", 0.5f));
+        var inst = Instance(new[] { main, light }, main);
+        host.Instance = inst;
+
+        RunSteps(inst, host, 0.25f, 6);
+
+        Assert.Single(host.Fired.Where(f => f == "pulse"));
+        Assert.True(inst.Finished);
+    }
+
+    // ---- 17. CALL_SEQUENCE naming a non-ON_CALL sequence does nothing, but still reports found ----
+
+    [Fact]
+    public void CallingANonOnCallSequenceIsANoOpThatStillResolvesTheName()
+    {
+        // Only an ON_CALL sequence is ever parked, so a call naming one that runs with the
+        // animation cannot start it (reflight1..6 → refinery_light_seq, 6 shipped definitions).
+        // The return still says FOUND: callers read it as "did the name resolve", and a false
+        // would send a CALL_ANIMATION fallback after a name that was there.
+        var host = new RecordingHost();
+        var main = Seq("main", CallSeq("ambient"));
+        var ambient = Seq("ambient", Swap("glow", "Event", 0.5f));
+        var inst = Instance(new[] { main, ambient }, main, ambient);
+        host.Instance = inst;
+
+        Assert.True(inst.CallSequence("ambient"));
+        RunSteps(inst, host, 0.25f, 6);
+
+        // Its own runner ran it once; the calls added nothing.
+        Assert.Single(host.Fired.Where(f => f == "glow"));
+    }
+
     // ---- WAIT_FOR_COMPLETION: the call gates the NEXT event, on the callee, not on a clock ----
 
     [Fact]
@@ -618,11 +662,14 @@ public class SequenceRunnerTests
 
     /// <summary>An instance over a definition that KNOWS the given sequences (so CALL_SEQUENCE /
     /// STOP_SEQUENCE can look them up by name), with runners started only for
-    /// <paramref name="run"/> — the rest sit ON_CALL.</summary>
+    /// <paramref name="run"/> — the rest sit ON_CALL, and are MARKED so: only an ON_CALL sequence
+    /// is ever parked, and CALL_SEQUENCE starts nothing else.</summary>
     private static AnimInstance Instance(AnimSequence[] defined, params AnimSequence[] run)
     {
         var def = new AnimDefinition();
         def.Sequences.AddRange(defined);
+        foreach (var s in defined)
+            s.OnCallOnly = !run.Contains(s);
         var inst = new AnimInstance(def, null);
         foreach (var s in run)
             inst.Runners.Add(new SequenceRunner(s));

@@ -1234,9 +1234,15 @@ The engine-free sequence interpreter, extracted from `AnimRuntime` behind the `I
 `SequenceRunner` runs one sequence's event list on a clock (per-event START_TIME gating, LOOP with
 authored-count-0 = infinite, IF/ELSEIF/ELSE/ENDIF via a `_branchTaken` stack + nesting-aware `Scan`);
 `AnimInstance` holds a definition's concurrent runners and removes them as they finish, and carries
-the CALL_SEQUENCE/STOP_SEQUENCE semantics (`CallSequence`/`StopSequence`: halt every matching
-runner, else call — decode in `docs/formats/anim-definitions.md`; `AnimRuntime`'s dispatch cases are
-thin shims over these). Both are
+the CALL_SEQUENCE/STOP_SEQUENCE semantics (decode in `docs/formats/anim-definitions.md`;
+`AnimRuntime`'s dispatch cases are thin shims over these). **One runner per sequence, keyed on the
+`AnimSequence` OBJECT and never on its name** — the original holds a sequence's state inside the
+definition's own sequence array (`004eb570`), so `CallSequence` starts a sequence only when nothing
+is running it AND its authored activation is ON_CALL; a call into a running or non-ON_CALL sequence
+is a silent no-op that still reports *found*, since callers read the return as "did the name
+resolve" for the CALL_ANIMATION fallback. Names are not unique (`he_ground_effect` ships two
+unnamed sequences), which is why identity is the object. `StopSequence` halts every matching runner,
+else calls. Both are
 public so `CSVM.Tests` drives them against a fake host; the host is any `ISequenceHost` (the game's
 real one is `AnimRuntime`, tests pass a recorder). Anchors are opaque `Node3D?` pass-through — the
 interpreter never dereferences them.

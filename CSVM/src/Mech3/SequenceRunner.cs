@@ -56,7 +56,10 @@ public readonly record struct EventDispatch(
 
 /// <summary>One running definition: its anchor plus a runner per active sequence. The
 /// sequences of a definition run CONCURRENTLY — the C1 train drives its four cars from
-/// four sibling sequences, each with its own SI script and its own loop.</summary>
+/// four sibling sequences, each with its own SI script and its own loop — but at most ONE
+/// runner per sequence: the original keeps a sequence's execution state inside the definition's
+/// own sequence array, so a sequence is a single instance and cannot run two copies of itself.
+/// See <see cref="CallSequence"/>.</summary>
 public sealed class AnimInstance
 {
     public readonly AnimDefinition Def;
@@ -91,17 +94,40 @@ public sealed class AnimInstance
         }
     }
 
-    /// <summary>CALL_SEQUENCE: adds a runner for this definition's named sequence. Duplicates
-    /// are legitimate — a second call runs a second concurrent copy. Returns whether the
-    /// definition has that sequence.</summary>
+    /// <summary>CALL_SEQUENCE: starts this definition's named sequence, but only from the parked
+    /// state. The original resolves the name to an index in the definition's OWN sequence array and
+    /// then does exactly one thing — <c>if (state == parked) state = running;</c> — so a call into a
+    /// sequence that is already running is a silent no-op, and so is a call naming a sequence whose
+    /// authored activation is not ON_CALL (such a sequence is never parked: it runs with the
+    /// animation and stops done). Both no-ops are load-bearing in the shipped data: 77 definitions
+    /// call one sequence from more than one site (`sonic_ground_effect` calls `sonic_light_seq`
+    /// twice, `player` calls `destroy_craft` three times), and 6 call a non-ON_CALL sequence
+    /// (`reflight1..6 → refinery_light_seq`).
+    ///
+    /// <para>⚠ Returns whether the definition HAS that sequence, not whether anything started —
+    /// callers read it to decide whether the name resolved at all, and a no-op call must still
+    /// report found or the CALL_ANIMATION fallback fires on a name that was there.</para></summary>
     public bool CallSequence(string name)
     {
         var seq = Def.Sequences.FirstOrDefault(s =>
             string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
         if (seq == null)
             return false;
-        AddRunner(seq);
+        if (seq.OnCallOnly && !IsRunning(seq))
+            AddRunner(seq);
         return true;
+    }
+
+    /// <summary>Is a runner for exactly this sequence still executing? Identity is the
+    /// <see cref="AnimSequence"/> OBJECT, never its name: the empty name is not unique
+    /// (`he_ground_effect` ships two unnamed sequences), so a name-keyed test would collapse them
+    /// into one and lose half the burst.</summary>
+    public bool IsRunning(AnimSequence seq)
+    {
+        foreach (var r in Runners)
+            if (ReferenceEquals(r.Sequence, seq) && !r.Done)
+                return true;
+        return false;
     }
 
     /// <summary>Starts a runner for one sequence and records that this instance has now run it —
@@ -119,8 +145,9 @@ public sealed class AnimInstance
 
     /// <summary>STOP_SEQUENCE: halts every active runner named <paramref name="name"/> —
     /// including the caller's own runner (the data's break-out-of-my-own-IF-chain idiom). If
-    /// none is running, starts the sequence exactly like CALL_SEQUENCE instead (the stopper
-    /// idiom: reaching an ON_CALL teardown sequence nothing else calls). Semantics decoded in
+    /// none is running, starts the sequence instead (the stopper idiom: reaching an ON_CALL
+    /// teardown sequence nothing else calls) — unconditionally, NOT through
+    /// <see cref="CallSequence"/>'s parked-state gate. Semantics decoded in
     /// docs/formats/anim-definitions.md. Returns false only when the name matched no runner
     /// and no sequence.</summary>
     public bool StopSequence(string name)
@@ -154,7 +181,13 @@ public sealed class AnimInstance
         if (seq != null && _everStarted.Contains(name) && LaunchesContactTestedBody(seq))
             return true;
 
-        return CallSequence(name);
+        // Starts unconditionally rather than going through CallSequence: the idiom predates the
+        // one-instance-per-sequence rule and is not gated by it, so its start must not inherit
+        // CallSequence's parked-state test while the idiom still stands.
+        if (seq == null)
+            return false;
+        AddRunner(seq);
+        return true;
     }
 
     /// <summary>Whether this sequence throws a body the engine ground-tests — an OBJECT_MOTION
@@ -239,6 +272,11 @@ public sealed class SequenceRunner
     }
 
     public bool Done => _done;
+
+    /// <summary>The authored sequence this runner is executing — the identity
+    /// <see cref="AnimInstance.CallSequence"/> matches on, since sequence NAMES are not
+    /// unique within a definition.</summary>
+    public AnimSequence Sequence => _seq;
 
     public string SequenceName => _seq.Name;
 

@@ -64,6 +64,11 @@ worktree session here; use a local commit or a file copy.
 **⚠ `extracted/` is absent from a worktree** (git-ignored). Read install data by absolute path
 (`Z:\CSVM\extracted\...`); never link it in — see `CLAUDE.md` on junctions.
 
+**⚠ A bare `.\RunTests.ps1` in this worktree is a green that measured nothing** — no `tools/godot`
+and no `extracted/` means the in-engine suites and the golden hashes skip silently and the exit code
+still says PASS. Set `$env:CSVM_DATA_ROOT="Z:\CSVM"` first and check the printed counts
+(`verification.md` LOG-17). Every item in Waves B–D depends on this.
+
 ## What the data actually ships
 
 Census over **3,015 compiled defs** across all 8 chapters' `cam_anim` + `mis_anim`
@@ -151,7 +156,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — Interpreter semantics
 
-11. B11 ☐ `CALL_SEQUENCE`: one instance per sequence, startable only from the parked state
+11. B11 ☑ `CALL_SEQUENCE`: one instance per sequence, startable only from the parked state
 12. B12 ☐ `STOP_SEQUENCE`: halt only — retire the stopper idiom
 13. B13 ☐ `IF` skip: match the original's non-nesting-aware scan
 14. B14 ☐ `LOOP`: align the rewind, keep the carry, write down why
@@ -307,7 +312,52 @@ it needs the trace or an at-the-controls capture first.
 
 # Wave B — Interpreter semantics
 
-## B11 ☐ `CALL_SEQUENCE`: one instance per sequence, startable only from the parked state
+## B11 ☑ `CALL_SEQUENCE`: one instance per sequence, startable only from the parked state
+
+**Landed.** `AnimInstance.CallSequence` (`CSVM/src/Mech3/SequenceRunner.cs`) now starts a sequence
+only when nothing is already running it **and** its authored activation is `ON_CALL`; both other
+cases are silent no-ops that still return *found*. Runner identity is the `AnimSequence` **object**,
+matched by reference in a new `AnimInstance.IsRunning(AnimSequence)` over the existing
+`List<SequenceRunner>`, with `SequenceRunner.Sequence` exposed to make the match possible.
+
+**The `List<SequenceRunner>` was kept rather than replaced by a map.** A dictionary keyed on the
+sequence buys nothing here: instances hold a handful of runners, so the linear scan is free, and the
+list is the only thing that fixes *advance order*, which a `Dictionary` does not guarantee — swapping
+it would have put every golden at risk for no semantic gain. It also keeps `AnimInstance.Finished`,
+`AnimRuntime.Retirable` and `MotionSet.OwesBounce` reading exactly what they read before, which is
+why none of the three needed a change: they ask "is any runner still live", and that question is
+unaffected by how many runners a call may add.
+
+**No new `seq_state` field was needed** — the plan expected one, but `AnimSequence.OnCallOnly` is
+*already* the single field both spellings feed (`CompiledAnim.cs` from `seq_state == "OnCall"`,
+`AnimDefs.cs` from `ACTIVATION ON_CALL`), so the gate reads it directly. Gating on `OnCallOnly` alone
+covers every `Initial` case the original's state byte does: an `Initial` sequence is never parked at
+state 3, whether it is mid-run (state 0/1), finished (state 2) or not yet started.
+
+**`StopSequence`'s tail no longer routes through `CallSequence`.** The stopper idiom's fall-through
+now adds its runner directly, so the idiom's behaviour is byte-identical to before this item and its
+retirement (B12) stays a separate, attributable change. Nothing else in `StopSequence` — the idiom,
+`_everStarted`, `LaunchesContactTestedBody` — was touched.
+
+**Two new units and one fixture correction** in `CSVM.Tests/SequenceRunnerTests.cs`: a second call
+into a running sequence starts no second copy, and a call naming a non-`ON_CALL` sequence starts
+nothing yet returns *found*. The correction is in the `Instance(defined, run)` builder, whose own doc
+comment already said the sequences it does not start "sit ON_CALL" while never setting the flag —
+`StopSequenceWithNoRunningTargetCallsItLikeCallSequence` was the one test that noticed, and it
+noticed correctly.
+
+**Verified.** `.\RunTests.ps1` (with `CSVM_DATA_ROOT=Z:\CSVM`, since a worktree has no `tools/godot`
+or `extracted/`) before the change: PASS — 879 units, 30 in-engine suites, **13 goldens
+hash-identical**. After the change: PASS — 881 units, 30 suites, **all 13 golden hashes unmoved**.
+The suites
+the item put at risk (`stop-sequence`, `wait-for-completion`, `effects-census`, `bounce-launch`,
+`ground-contact`, `self-ref-launch`, `nulled-launch`) all pass. That the goldens did not move is the
+expected result and not a weak one: `c1-destroy-effects` and `c1-crash` are single frames, and the
+77-def doubled-call divergence is a *timeline* difference that D31's suite is what will actually
+assert.
+
+<details>
+<summary>Original approach (kept for reference)</summary>
 
 **Goal.** Calling a sequence that is already running does nothing; calling a sequence whose
 `seq_state` is `Initial` does nothing. A def never runs two copies of one sequence.
@@ -341,6 +391,8 @@ explained, not re-baselined silently.
 `AnimInstance.CallSequence` returning "the def has that sequence" is read by callers to decide
 whether a name resolved at all; a no-op call must still report *found*, or `CALL_ANIMATION`
 fallbacks will misfire.
+
+</details>
 
 ## B12 ☐ `STOP_SEQUENCE`: halt only — retire the stopper idiom
 

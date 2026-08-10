@@ -215,6 +215,11 @@ and leave gaps when retiring old ones.
 - **LOG-14** — **Read every field in a multi-metric row.**
 - **LOG-15** — **When an error lacks identity, log candidate state at the failure boundary.**
 - **LOG-16** — **A census printed at the end of setup cannot report a runtime miss** 
+- **LOG-17** — **In a worktree, `RunTests.ps1` exits 0 having run only the units.** A worktree has
+  no `tools/godot` and no `extracted/` — both git-ignored — so the in-engine suites and the golden
+  hashes skip silently and the exit code still says PASS. Set `$env:CSVM_DATA_ROOT="Z:\CSVM"`
+  before the run, and confirm the printed suite and golden counts are non-zero; a green with no
+  golden line is a green that measured nothing.
 
 ## WORLD — world data and runtime traps
 
