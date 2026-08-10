@@ -305,6 +305,15 @@ where the two are the same authored value, which `GameZ.VertexColorsRestateMater
 and `EmitPolygon` answers by writing white corners, so the value lands once. `PLAN-overcast-match`
 `B18`: every skydome's below-horizon skirt is an untextured polygon authored in its zone's own
 `FOG_COLOR`, and squaring that is what made the horizon join a hard band in seven of eight chapters.
+`DebugClutterFlag` (`--debug-clutterflag`, set by the caller before building) is the one thing that
+overrides that colour: `EmitTriangle` writes the polygon's decoded `no_clutter` bit as the vertex
+colour (red flagged / green clear) and the fullbright shader's last ALBEDO write becomes
+`ClutterFlagTintLine` instead of `TintLine`, since C5's night art would swallow a tint. Per polygon
+because the flag varies WITHIN a mesh, which no per-instance tint can express; the tint mix survives
+in that line so `WorldSession` can still force the clutter populations blue per instance. Off — every
+other builder, and the shaded aircraft path always — emits `TintLine` itself, so the default shader
+text is byte-for-byte unchanged. `FlaggedPolygonCount`/`ClearPolygonCount` count per BUILT MODEL, not
+per placement.
 ⚠ Instance-uniform block is an ORDERING CONTRACT — every shader on one instance declares the same
   block (csky_instance_uniforms); a shader with NO instance uniform must not take the preamble
   (16-vec4 per-instance buffer cost). The model's `lighting`/`fog` flags therefore select shader
@@ -2870,7 +2879,13 @@ Builds one chapter world and binds its `AnimProgram` — the world+anim half of 
 archive and `EffectsParent`) is read once, here, and never reassigned after `Build` returns — a
 caller supplies its own to observe emitter lifetime with no GPU (`CSVM.Testing.CountingEmitterFactory`
 is the one caller, through `TestContext.EmitterFactory`); a post-build swap would miss the bootstrap,
-where most `PUFFER_STATE`s fire.
+where most `PUFFER_STATE`s fire. Two debug options ride the clutter step: `Options.NoClutter`
+(`--no-clutter`) skips the clutter build outright, leaving `Clutter` null exactly as a chapter with
+no templates does, and `Options.DebugClutterFlag` (`--debug-clutterflag`) hands the flag view to
+`WorldBuilder`, then stamps every clutter MultiMesh with a full-strength `SceneBuilder.ClutterColor`
+tint and prints the flagged/clear polygon census. The blue is stamped per instance rather than per
+material because both clutter paths share the placed world's materials — colouring those would
+repaint the ground with them.
 ⚠ Disposal contract, **one flag per archive because the two lifetimes differ**: calls
   `Runtime.Emitters.RetireFactory()` unless `Options.TexturesOutliveBuild` **or the caller supplied
   its own `Options.EmitterFactory`** (a caller-supplied one holds no archive reference, so it is

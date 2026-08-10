@@ -659,6 +659,8 @@ public partial class GameSession : Node3D
                 DebugAnim = _spec.DebugAnim,
                 AnimLod = _spec.AnimLod,
                 DebugDzPaths = _spec.DebugDzPaths,
+                NoClutter = _spec.NoClutter,
+                DebugClutterFlag = _spec.DebugClutterFlag,
                 // The texture archive belongs to the SESSION in every mode (LoadArchives hands it
                 // to _sessionTextures, or to the lab node), not to this build scope — so the world
                 // runtime keeps a live PufferFactory and a death's fire/trails, or a car's dust,

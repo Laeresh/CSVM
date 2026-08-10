@@ -59,6 +59,19 @@ public sealed class SceneBuilder
     // collapsed.
     public const int ConflictRankCap = 7;
 
+    /// <summary>A polygon carrying the <c>no_clutter</c> flag (raw bit <c>0x800</c>) in the
+    /// <see cref="DebugClutterFlag"/> view: nothing is scattered on this ground.</summary>
+    public static readonly Color FlaggedColor = new(1f, 0f, 0f);
+
+    /// <summary>A polygon without it: clutter-eligible ground.</summary>
+    public static readonly Color ClearColor = new(0f, 1f, 0f);
+
+    /// <summary>What the clutter itself is painted in that view — the decorations and sprite cards
+    /// scattered ONTO the ground, stamped per instance as a full-strength
+    /// <see cref="TintParam"/>. Their own polygons are unflagged, so without this a city block
+    /// would read as clutter-eligible ground.</summary>
+    public static readonly Color ClutterColor = new(0.1f, 0.35f, 1f, 1f);
+
     /// <summary>Surfaces given a CLAMPed sampler because their UVs never leave the unit square
     /// (the hairline-seam fix — see <see cref="UvsWithinUnitSquare"/>). Process-wide across every
     /// builder, purely for the load log; it is also what tells a capture which build made it.</summary>
@@ -69,6 +82,15 @@ public sealed class SceneBuilder
     /// <see cref="UvAxesWithinUnitSquare"/>). Same load-log role as
     /// <see cref="ClampedSurfaceTotal"/>.</summary>
     public static int EdgeClampedSurfaceTotal;
+
+    /// <summary>The <c>--debug-clutterflag</c> view (<c>docs/cli.md</c>): every world polygon this
+    /// builder emits is painted by its decoded <c>no_clutter</c> flag — <see cref="FlaggedColor"/>
+    /// where the flag is set, <see cref="ClearColor"/> where it is not — and the fullbright shader
+    /// shows that vertex colour instead of the lit, fogged texture. Set by the caller before
+    /// building (like <see cref="Cycler"/>); the recolour happens at build time, so it cannot be
+    /// toggled at runtime. Off leaves every emitted vertex colour and every generated shader
+    /// exactly as they are.</summary>
+    public bool DebugClutterFlag;
 
     /// <summary>Where a material's own texture flipbook (the gamez `cycle` block) is delivered.
     /// Set by the caller before building; null leaves cycling materials static.</summary>
@@ -139,6 +161,18 @@ public sealed class SceneBuilder
     /// the include). <c>mix(x, t, 0.0)</c> is exactly <c>x</c>, so carrying this line changes no
     /// pixel while the overlay is off.</para></summary>
     internal const string TintLine = "    ALBEDO = mix(ALBEDO, csky_tint.rgb, csky_tint.a);";
+
+    /// <summary><see cref="TintLine"/>'s twin under <see cref="DebugClutterFlag"/>: the same last
+    /// write to ALBEDO, with the lit-and-fogged result replaced by the raw vertex colour
+    /// <see cref="EmitTriangle"/> painted the flag into. Emitted ONLY into the fullbright world
+    /// shader of a builder that asked for the debug view — every other build, and every shader
+    /// variant of this one when the flag is absent, emits <see cref="TintLine"/> itself, so the
+    /// default shader text stays byte-for-byte what it was.
+    /// <para>Keeping the tint mix rather than assigning <c>COLOR.rgb</c> outright is what lets the
+    /// clutter decorations be forced blue per instance (<c>WorldSession</c>) — a MultiMesh has one
+    /// instance-uniform set, which is exactly the granularity "this whole population is clutter"
+    /// needs.</para></summary>
+    internal const string ClutterFlagTintLine = "    ALBEDO = mix(COLOR.rgb, csky_tint.rgb, csky_tint.a);";
 
     /// <summary>The world's conflict ranks (<see cref="ConflictRank"/>), set by the caller before
     /// building. Null — every aircraft, every <c>--node=</c> subtree, any build with no conflict
@@ -376,6 +410,15 @@ void fragment() {
     public int OverlayPassSurfaceCount { get; private set; }
 
     public int OverlayPassDeclinedCount { get; private set; }
+
+    /// <summary>Polygons this builder built that carry the <c>no_clutter</c> flag (raw bit
+    /// <c>0x800</c>), and those that do not. Counted per BUILT MODEL, not per placement: a model
+    /// instanced a hundred times is one mesh build and counts once, which is the granularity the
+    /// flag itself has. Logged by <c>WorldSession</c> under <see cref="DebugClutterFlag"/>, so a
+    /// screenshot of the view carries the census that explains it.</summary>
+    public int FlaggedPolygonCount { get; private set; }
+
+    public int ClearPolygonCount { get; private set; }
 
     /// <summary>The textured materials built here, each with its source texture name, so a
     /// caller can re-resolve and swap them without a rebuild. See <see cref="Repaint"/>.</summary>
@@ -657,8 +700,11 @@ void fragment() {
     /// material's own colour (<see cref="GameZ.VertexColorsRestateMaterialColor"/>) — emit white
     /// instead, so the shader's <c>vertex × albedo_color</c> applies that one authored value once
     /// rather than squaring it.</param>
+    /// <param name="flagColors">The <c>--debug-clutterflag</c> view: emit the polygon's
+    /// <c>no_clutter</c> flag as the vertex colour instead of its authored one. Per polygon
+    /// because the flag varies WITHIN a mesh — which is why this cannot be an instance tint.</param>
     private static void EmitPolygon(SurfaceTool st, GameZMesh mesh, GameZPolygon poly, Vector3 offset,
-        List<Vector2>? uvs, bool flatColorRestated = false)
+        List<Vector2>? uvs, bool flatColorRestated = false, bool flagColors = false)
     {
         int n = poly.VertexIndices.Count;
         if (n < 3)
@@ -669,20 +715,20 @@ void fragment() {
             {
                 // alternate winding so all triangles of the strip face the same way
                 if ((i & 1) == 0)
-                    EmitTriangle(st, mesh, poly, i, i + 1, i + 2, offset, uvs, flatColorRestated);
+                    EmitTriangle(st, mesh, poly, i, i + 1, i + 2, offset, uvs, flatColorRestated, flagColors);
                 else
-                    EmitTriangle(st, mesh, poly, i, i + 2, i + 1, offset, uvs, flatColorRestated);
+                    EmitTriangle(st, mesh, poly, i, i + 2, i + 1, offset, uvs, flatColorRestated, flagColors);
             }
         }
         else
         {
             for (int i = 1; i + 1 < n; i++)
-                EmitTriangle(st, mesh, poly, 0, i, i + 1, offset, uvs, flatColorRestated);
+                EmitTriangle(st, mesh, poly, 0, i, i + 1, offset, uvs, flatColorRestated, flagColors);
         }
     }
 
     private static void EmitTriangle(SurfaceTool st, GameZMesh mesh, GameZPolygon poly, int a, int b, int c,
-        Vector3 offset, List<Vector2>? uvs, bool flatColorRestated = false)
+        Vector3 offset, List<Vector2>? uvs, bool flatColorRestated = false, bool flagColors = false)
     {
         Vector3 Pos(int corner) => mesh.Vertices[poly.VertexIndices[corner]] - offset;
         // flat normal fallback for polygons without normal data
@@ -699,9 +745,11 @@ void fragment() {
                     normal = mesh.Normals[ni].Normalized();
             }
             st.SetNormal(normal);
-            st.SetColor(!flatColorRestated && poly.VertexColors != null && corner < poly.VertexColors.Count
-                ? poly.VertexColors[corner]
-                : Colors.White);
+            st.SetColor(flagColors
+                ? poly.Subface ? FlaggedColor : ClearColor
+                : !flatColorRestated && poly.VertexColors != null && corner < poly.VertexColors.Count
+                    ? poly.VertexColors[corner]
+                    : Colors.White);
             if (uvs != null && corner < uvs.Count)
                 st.SetUV(uvs[corner]);
             st.AddVertex(Pos(corner));
@@ -1060,6 +1108,10 @@ void fragment() {
                 groups.Add((poly.MaterialIndex, poly.Priority, poly.Subface, doubleSided, 0, new List<GameZPolygon>()));
             }
             groups[gi].Polys.Add(poly);
+            if (poly.Subface)
+                FlaggedPolygonCount++;
+            else
+                ClearPolygonCount++;
             if (poly.OverlayPasses != null)
                 overlayLevels = Math.Max(overlayLevels, poly.OverlayPasses.Count);
         }
@@ -1130,7 +1182,7 @@ void fragment() {
             st.Begin(Mesh.PrimitiveType.Triangles);
             foreach (var poly in polys)
                 EmitPolygon(st, mesh, poly, offset, PassUvs(poly, pass),
-                    _gamez.VertexColorsRestateMaterialColor(poly, materialIndex));
+                    _gamez.VertexColorsRestateMaterialColor(poly, materialIndex), DebugClutterFlag);
             // A surface whose UVs never leave the unit square never needs the sampler to wrap,
             // and wrapping it is what produces the hairline seams (see UvsWithinUnitSquare).
             // A scrolling surface is excluded: its UVs deliberately run past 1 and rely on
@@ -1579,7 +1631,12 @@ void fragment() {{");
             sb.AppendLine("    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);");
             sb.AppendLine("    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);");
         }
-        sb.AppendLine(TintLine); // the debug overlays' per-instance tint; a no-op at alpha 0
+        // The debug overlays' per-instance tint; a no-op at alpha 0. Under --debug-clutterflag the
+        // fullbright world shows the flag colour EmitTriangle wrote into COLOR instead of the lit,
+        // fogged texture — C5's night art would otherwise swallow a tint whole. The shaded
+        // (aircraft) path never takes that variant, and neither does any builder that did not ask
+        // for the view, so the default shader text is unchanged by construction.
+        sb.AppendLine(DebugClutterFlag && !shaded ? ClutterFlagTintLine : TintLine);
         if (blend || scissor)
             sb.AppendLine($"    ALPHA = col.a{OpacityTerm};");
         if (scissor)
