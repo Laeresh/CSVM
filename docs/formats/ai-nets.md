@@ -52,6 +52,17 @@ carry four**. These per-node tags are **undecoded**; the design describes stop/v
 nodes on patrol routes (zeppelins halt at script-armed stop nodes), and these tags are
 the obvious candidate. Read them raw; do not interpret.
 
+**Stop points are real, and they are scripted.** The binary's mission-script vocabulary
+(`D:\zipper\Crimson\mission.cpp`) includes a **`COMPLETED_STOPPOINT`** condition, in the same
+family as `COMPLETED_ZEPCANNONS` and `COMPLETED_SOUND_GROUP` — so a mission waits on a zeppelin
+reaching its stop point, exactly as the design describes. That raises the confidence that the
+per-node tags above encode stop points, but it does **not** decode them: nothing yet ties a
+specific tag value to the condition. Still a lead, not a finding.
+
+Two neighbouring script ops retarget net-followers at runtime — **`SET_AI_NET`** (accepts a vehicle
+*or* a zeppelin) and **`SET_AI_TEAM`** — which is the design's "retreat is expressed as a net
+change, not a special mode", confirmed.
+
 ### EDGES — `[i, j]` node-index pairs
 
 **2,149 edges** install-wide; 1–43 per net. **This list is the connectivity** — the graph

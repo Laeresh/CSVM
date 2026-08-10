@@ -254,12 +254,35 @@ milestone consequences:
   item**, do not assume "0 means unlimited"; the `zep_rearm_node_%d` string is the strongest lead.
   Written up in [`formats/mission-entities.md`](formats/mission-entities.md#the-capacity-puzzle).
 
+### The mission-script surface, and what it means for M4's boundary
+
+The binary carries the mission-script vocabulary (`D:\zipper\Crimson\mission.cpp`):
+`WAKEUP_ENEMIES` · `WAKEUP_TURRETS` · `WAKEUP_ZEP_TURRETS` · `WAKEUP_GENERATOR` · `WARP_VEHICLE` ·
+`SET_AI_TEAM` · `SET_AI_NET` · `SET_AI_ATTACK_RADIUS` · `ADD_/REMOVE_OTHER_TARGET` ·
+`ADD_/REMOVE_OBJECTIVE_TARGET` · `START_TAXI` · `SET_HELP_LABEL` · `COMPLETED_ZEPCANNONS` ·
+`COMPLETED_STOPPOINT` · `COMPLETED_SOUND_GROUP` · `WAKE_ANIM` / `SLEEP_ANIM` ·
+`WAKEUP_SOUND_GROUP` · `STOP_QUEUED_SOUNDS` · `END_TIMER` · `INSTANTWIN` / `INSTANTLOSE` ·
+`primary`/`secondary`/`tertiary`.
+
+Objectives scripting is **explicitly out of M4's scope** and this does not change that. It matters
+here for two reasons:
+
+- **It is the AI's runtime control surface, and it closes the loop on the roster decode.** Six
+  `aiv` slots are script-mutable rather than static: `otherTarget` (36) and `objectiveTarget` (37)
+  via the `ADD_`/`REMOVE_` pairs, `helpLabel` (39) via `SET_HELP_LABEL`, `taxiPath` (40) via
+  `START_TAXI`, plus the activation volumes via `SET_AI_ATTACK_RADIUS` and the net via `SET_AI_NET`.
+  **Anything M4 builds on those fields must expect them to change mid-mission**, so design the AI
+  controller's inputs as mutable from the start rather than read-once at spawn.
+- **F17's stop nodes are confirmed to exist as a scripted concept** — `COMPLETED_STOPPOINT` is a
+  *condition*, so a mission waits on a zeppelin reaching its stop point. That raises confidence
+  that `ai-nets`' per-node tags encode stop points but **does not decode them**; nothing yet ties a
+  tag value to the condition. Still F17's remaining open item.
+
 **Still not examined**, and costed as written: turret AI internals (C9 — `ai.zrd` is
-self-describing anyway), the patrol-net **stop nodes** F17 needs (the
-per-node tags on 81 nodes in [`formats/ai-nets.md`](formats/ai-nets.md) remain the candidate), and
-E16's trigger dispatch, though the binary does show voice lines are gated by a numeric id behind a
-`talker` roll (*"Talker test passed. Play AI sound #%d."*). The three unnamed roster slots are
-localised to 8–19 and are unauthored install-wide — deliberately left unresolved.
+self-describing anyway) and E16's trigger dispatch, though the binary does show voice lines are
+gated by a numeric id behind a `talker` roll (*"Talker test passed. Play AI sound #%d."*). The three
+unnamed roster slots are localised to 8–19 and are unauthored install-wide — deliberately left
+unresolved.
 
 ---
 
@@ -990,8 +1013,9 @@ of A3 via the 2026-08-10 decompile pass), not a started milestone.
 ### Wave F — Zeppelins
 
 17. ☐ F17 — Zeppelin motion: net following, pitch/rate limits, engine-loss deceleration —
-    **the deceleration curve is decoded (a square root, not the design's bands)**; stop nodes
-    still open
+    **the deceleration curve is decoded (a square root, not the design's bands)**; stop nodes are
+    confirmed to exist as a scripted concept (`COMPLETED_STOPPOINT`) but their per-node tag
+    encoding is still undecoded
 18. ☐ F18 — Multi-zone zeppelin damage — **the survivor threshold is decoded and its polarity
     confirmed against the engine**; the multi-zone `DestructibleRegistry` work (A4) is what remains
 19. ☐ F19 — Broadside cannons: side-alternating volleys and the 90° arc — ⚠ **build it ballistic:
