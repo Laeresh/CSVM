@@ -127,7 +127,7 @@ has ground airfields `eairg31`/`eairg32`, a ship `eshipg31`, and a submarine `ba
 |---|---|---|
 | `node` | 23/23 | the host world node |
 | `vehicle` | 23/23 | nested: `params` (an `aiv.json` roster entry, e.g. `Eairg31_params`), `nets` (one or more AI net names), `choose_nets` (`cyclic` throughout) |
-| `capacity` | 23/23 | `0` throughout — unbounded |
+| `capacity` | 23/23 | `0` throughout — a lifetime spawn budget, decremented per launch. ⚠ **`0` does not obviously mean "unbounded"** — see [the capacity puzzle](#the-capacity-puzzle) |
 | `max_active` | 23/23 | concurrent live spawns (1/4/5/6/10) |
 | `wave_size` | 23/23 | planes per wave (1, once 3) |
 | `wave_period` | 23/23 | seconds between waves (1–20) |
@@ -135,7 +135,7 @@ has ground airfields `eairg31`/`eairg32`, a ship `eshipg31`, and a submarine `ba
 | `zeppelin` | 17/23 | `[1]` — marks the zeppelin-hangar variant |
 | `open_anim` / `close_anim` | 17/23 | the hangar-door animations, run before and after a wave |
 | `origin` | 17/23 | the node the fighters appear at — `cargobay` on 16 of 17 |
-| `rotation` | 17/23 | `[-90, 0, 0]` throughout — the drop attitude |
+| `rotation` | 17/23 | `[-90, 0, 0]` throughout — the drop attitude. Read as **three** angles (all converted to radians), not the single value the data suggests |
 | `min_altitude` | 17/23 | **100–300 m: the launch gate** |
 | `healthy` | 1/23 | the node whose destruction stops the generator (`subhealthy`, the submarine) |
 | `moving_path` | 1/23 | bare flag |
@@ -148,3 +148,73 @@ altitude is reached; and it names the file — `egen.zrd`. The `open_anim` → s
 design document and the shipped data agree field-for-field.
 
 33 of the 53 `egen.json` files are an empty `[null]` — most multiplayer maps have no generator.
+
+### The generator cycle
+
+Decoded from the binary. One generator holds a timer, a next-event threshold, a per-wave counter
+and a door state; each tick advances the timer by the frame delta (and stops entirely while the
+game is paused).
+
+```
+if host is dead                    -> disable this generator permanently
+blocked = (wave_size - spawnedThisWave) + active   > max_active
+       or (wave_size - spawnedThisWave)            > capacityRemaining
+       or (min_altitude set and host altitude < min_altitude)
+
+if blocked:      if door open and timer >= 4 -> close door        # hold, do not cancel
+else:
+  door open  and timer >= 4 and timer + 8 < nextEvent -> close door
+  door closed and timer >= nextEvent - 4               -> open door
+  door open  and timer >= nextEvent                    -> SPAWN
+```
+
+On a successful spawn: `capacityRemaining--`, `active++`, timer resets to 0, and the wave counter
+advances. If the wave is now complete the counter resets and
+`nextEvent = ind_period + wave_period`; otherwise `nextEvent = ind_period`.
+
+Three things that reading pins down:
+
+- **`ind_period` and `wave_period` compose, they do not alternate.** `ind_period` is the gap between
+  individuals *within* a wave; the gap *between* waves is `ind_period + wave_period`, not
+  `wave_period` alone.
+- **The door timings are hardcoded, not data.** The door opens **4 s before** a due spawn, stays
+  open at least 4 s, and only closes early if the next spawn is more than 8 s away — so a
+  fast-cycling generator simply leaves its hangar open.
+- **The altitude gate holds, it does not cancel** — exactly as the design document says. The wave
+  counter and the timer are untouched while blocked; only the door closes. The gate is skipped
+  entirely when `min_altitude` is unset (a `-1.0` sentinel).
+
+**The host's death disables the generator.** For a fixed installation that is the `healthy` node
+going inactive; for a zeppelin it is the zeppelin's own destroyed flag. Two further load-time
+rejections: a generator whose `node` cannot be resolved is **dropped**, and so is one where **none**
+of its `vehicle.nets` names resolve — a generator with no valid net does not load inert, it does not
+load at all.
+
+Smaller loader findings: `open_anim`/`close_anim` **default from the node name** when unauthored
+(`<node>_open_<nn>` / `close_<nn>`), so the 6 non-zeppelin generators still get a door pair;
+`choose_nets` parses only its first letter and accepts **`random`** as well as the `cyclic` every
+file authors; and the `vehicle` block additionally accepts **`primary_target`** and **`title`**,
+neither authored in this install.
+
+### The capacity puzzle
+
+⚠ **Unresolved, and it matters before anyone implements this.** `capacity` is `0` on all 23
+generators, `capacityRemaining` is initialised from it, and the blocking rule above reads
+
+```
+(wave_size - spawnedThisWave) > capacityRemaining     ->  blocked
+```
+
+With `capacity` 0 and `wave_size` ≥ 1 that is `1 > 0` on the very first tick, which would hold every
+generator in this install forever — yet zeppelins visibly launch fighters in the original. So one of
+these must be true, and static reading cannot choose between them:
+
+- the counter is topped up at runtime by something not yet traced (the binary carries a
+  `zep_rearm_node_%d` string, which is the strongest lead);
+- `capacity` is gated by a global the loader consults (`0` there forces `capacity` to `0`), and the
+  retail configuration takes the other branch with a different source for the value;
+- the guard's operand mapping is misread.
+
+**Do not implement `capacity` as "0 means unlimited" on the strength of this page** — that reading is
+a guess that happens to produce working behaviour. Settle it by observing a zeppelin launching in
+the original, or by tracing the rearm path, before relying on it.

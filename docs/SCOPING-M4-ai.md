@@ -240,8 +240,22 @@ milestone consequences:
   a zeppelin, which is the design's "retreat is expressed as a net change, not a special mode",
   confirmed. `WAKEUP_ZEP_TURRETS` and `COMPLETED_ZEPCANNONS` are further zeppelin-facing script ops.
 
+- **F20's launch cycle is fully decoded**, and the design's "generation is *held* below the altitude,
+  not cancelled" is confirmed in code — while blocked, the wave counter and timer are untouched and
+  only the hangar door closes. Two corrections to §4's reading: **`ind_period` and `wave_period`
+  compose** (the gap between waves is `ind_period + wave_period`, not `wave_period`), and the
+  **door timings are hardcoded, not data** — open 4 s before a due spawn, minimum 4 s open, close
+  early only if the next spawn is >8 s away. The host's death permanently disables its generator,
+  and a generator whose node or whose entire `nets` list fails to resolve is dropped at load rather
+  than loaded inert.
+- ⚠ **F20 carries one unresolved discrepancy — `capacity`.** It is `0` on all 23 generators, and the
+  blocking rule reads `(wave_size - spawned) > capacityRemaining`, which would hold every generator
+  in this install forever — yet zeppelins visibly launch in the original. **Budget an investigation
+  item**, do not assume "0 means unlimited"; the `zep_rearm_node_%d` string is the strongest lead.
+  Written up in [`formats/mission-entities.md`](formats/mission-entities.md#the-capacity-puzzle).
+
 **Still not examined**, and costed as written: turret AI internals (C9 — `ai.zrd` is
-self-describing anyway), F20's fighter-launch path, the patrol-net **stop nodes** F17 needs (the
+self-describing anyway), the patrol-net **stop nodes** F17 needs (the
 per-node tags on 81 nodes in [`formats/ai-nets.md`](formats/ai-nets.md) remain the candidate), and
 E16's trigger dispatch, though the binary does show voice lines are gated by a numeric id behind a
 `talker` roll (*"Talker test passed. Play AI sound #%d."*). The three unnamed roster slots are
@@ -982,7 +996,9 @@ of A3 via the 2026-08-10 decompile pass), not a started milestone.
     confirmed against the engine**; the multi-zone `DestructibleRegistry` work (A4) is what remains
 19. ☐ F19 — Broadside cannons: side-alternating volleys and the 90° arc — ⚠ **build it ballistic:
     the probabilistic hit curve is design-era and is not in the shipped engine**
-20. ☐ F20 — Zeppelin fighter launch off the 17 zeppelin generators
+20. ☐ F20 — Zeppelin fighter launch — **the launch cycle is decoded** (hold-not-cancel confirmed,
+    door timings hardcoded, `ind_period`+`wave_period` compose); ⚠ **carries the unresolved
+    `capacity` discrepancy** — budget an investigation
 
 ## Dependency and parallelism notes
 
