@@ -1,11 +1,16 @@
 # 📋 PLAN TEMPLATE — copy, don't edit in place
 
 > **This file is the skeleton, not a plan.** The normal way to start a plan is the **`/new-plan`
-> skill**, which writes a `docs/PLAN-<name>.md` pre-stubbed with the right sections. This file is
-> that skill's source of truth, and is here to be read as the canonical structure. To scaffold by
-> hand instead: copy it to **`docs/PLAN-<name>.md`** (note: `docs/` root, *not* `docs/plans/` — a
-> plan there is *live*; `docs/plans/` is only for completed ones), fill in the `<…>` placeholders,
-> and **delete every `<!-- guidance -->` comment and this banner**.
+> skill**, which writes a `docs/PLAN-<name>.md` with the right sections — and, when the session it
+> runs in has already done the analysis (a grilling, a backlog sweep, a capture analysis), offers to
+> fill the plan out from it rather than handing back a stub. It records only what that session
+> established: anything it can't source becomes a visible `<TODO: …>`, and each Evidence line's
+> confidence is capped by provenance, so discussion-derived items stay `lead-only`. Answer "scaffold
+> only" and you get structure alone. This file is that skill's source of truth, and is here to be
+> read as the canonical structure. To scaffold by hand instead: copy it to
+> **`docs/PLAN-<name>.md`** (note: `docs/` root, *not* `docs/plans/` — a plan there is *live*;
+> `docs/plans/` is only for completed ones), fill in the `<…>` placeholders, and **delete every
+> `<!-- guidance -->` comment and this banner**.
 >
 > **Naming:** milestone plans → `PLAN-M<n>-<name>.md`; feature/refactor plans → `PLAN-<name>.md`.
 >
