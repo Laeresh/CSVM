@@ -91,7 +91,8 @@ white at half-life → transparent black. C1 uses peak alpha 0.4/0.5/0.5; C4 use
 The generic distance-puffer update leaves emitted particles in world space. Consequently the
 aircraft passes through each puff, and its screen-visible duration falls approximately inversely
 with airspeed. This effect is separate from both chapter cloud-card populations and the
-hard-coded throttle-rise exhaust below.
+hard-coded throttle-rise exhaust below. CSVM implements it in `Flight.SpeedCue`, loading the
+chapter reader verbatim and assigning one private renderer set to each player rig.
 
 ## Hard-coded aircraft throttle-rise exhaust
 

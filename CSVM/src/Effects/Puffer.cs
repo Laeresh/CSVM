@@ -474,13 +474,17 @@ public sealed partial class Puffer : Node3D
             SustainAt(worldPos, worldBasis, dt);
             return;
         }
-        bool moved = _trailing && (worldPos - _trailPrev).LengthSquared() > 1e-8f;
+        // DISTANCE_INTERVAL follows the authored AT_NODE point, not the host origin. The still-host
+        // fallback already applies this in SustainAt; applying it here keeps moving emissions at
+        // that same point (speed_cue is player + local (0,0,-60), 60 m ahead of the aircraft).
+        var trailPos = worldPos + worldBasis * _state.AtNodeOffset;
+        bool moved = _trailing && (trailPos - _trailPrev).LengthSquared() > 1e-8f;
         if (!moved && staticBurnMps > 0f)
         {
-            TrailBurnAt(worldPos, dt, staticBurnMps);
+            TrailBurnAt(trailPos, dt, staticBurnMps);
             return;
         }
-        TrailAdvance(worldPos);
+        TrailAdvance(trailPos);
         if (!moved)
             SustainAt(worldPos, worldBasis, dt);
     }

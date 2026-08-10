@@ -1582,6 +1582,7 @@ public partial class GameSession : Node3D
                 Rigs = _rigs,
                 Textures = state.Textures,
                 ZrdrPath = state.ZrdrPath,
+                ChapterZrdrPath = SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter),
                 MissionZrdrPath = state.MissionZrdrPath,
                 Gamez = state.Gamez,
                 WorldScene = state.WorldScene,
