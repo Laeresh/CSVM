@@ -84,6 +84,9 @@ public static class Suites
         into.Add(new TestHarness.Suite("puffer-priority-size",
             "PRIORITY inflates the drawn sprite by 1 + K·PRIORITY, folded into BaseSize at spawn (C8)",
             PufferPrioritySize));
+        into.Add(new TestHarness.Suite("puffer-fire-column",
+            "the 30 s fire's column height, authored against tuned — the readout the fireRiseScale/fireLifetimeScale pair is judged on (D10)",
+            PufferFireColumn));
         into.Add(new TestHarness.Suite("loadout-bind",
             "every stock loadout binds to its model with every marker resolved", LoadoutBind));
         into.Add(new TestHarness.Suite("weapons-fire",
@@ -291,7 +294,7 @@ public static class Suites
         }
     }
 
-    /// <summary>B6 (<c>docs/PLAN-puffer-engine-deltas.md</c>) — the particle integrator against
+    /// <summary>B6 (<c>docs/plans/PLAN-puffer-engine-deltas.md</c>) — the particle integrator against
     /// <c>FUN_0054ee10</c>'s own arithmetic, on a state built here rather than loaded, because the
     /// point is the closed form and an authored puffer's random draws would only obscure it.
     ///
@@ -1208,6 +1211,183 @@ public static class Suites
             for (int i = 0; i < 60; i++) // + 1 s more = past every particle's 2 s worst case
                 puffer._Process(1f / 60f);
             ctx.Same(0, gpu.Shown, $"every particle eventually reaps once its real (shifted) age reaches its lifetime");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    /// <summary>D10 (`PLAN-puffer-engine-deltas`): the `fire_n_smoke` column, measured — the
+    /// readout the `puffer.fireRiseScale`/`fireLifetimeScale` TUNE pair is judged against now that
+    /// A1–C9 have landed.
+    ///
+    /// <para>The A/B is the honest one available headless: the SAME compiled payload is parsed
+    /// TWICE and one copy is renamed. <see cref="Puffer.Init"/> keys the tune on the state's NAME
+    /// alone (<c>FirePufferName</c>), so the renamed copy runs the authored numbers verbatim and
+    /// every other parameter, the RNG stream and the frame schedule are identical. Config cannot
+    /// be written from a suite (DET-7), which is why the name is the lever.</para>
+    ///
+    /// <para>The state comes from the chapter's own compiled program, not from a reader:
+    /// `large_30sec_fire`'s `fire_n_smoke` authors neither NUMBER nor DISTANCE_INTERVAL, so
+    /// <see cref="PufferState.FindInReader"/> would call it a stub and return null (BL-218's
+    /// observation). The compiled event is what the game actually runs.</para>
+    ///
+    /// <para>Two heights are recorded because they answer different questions. The CENTRE apex is
+    /// the integration — spawn velocity against FRICTION and WORLD_ACCELERATION — and no item in
+    /// this plan touched it. The DRAWN top adds the sprite's own half-extent, which A1 doubled,
+    /// so it is the one the plan could have moved. The fade switches are forced off: this puffer
+    /// authors NEAR_FADE (70, 20), and at the suite's origin-camera every particle would otherwise
+    /// be near-culled and nothing would be measured at all.</para>
+    ///
+    /// <para>Both arms are run twice: in still air, and in C1 IA1's own authored wind. That
+    /// weather's <c>STATIC_VELOCITY</c> is <c>(0, 2, 0)</c> — straight UP — and B6 made friction
+    /// damp toward the wind rather than toward rest, so with FRICTION 0.6 against
+    /// WORLD_ACCELERATION −1 the particle's terminal velocity is <c>2 − 1/0.6 = +0.33 m/s</c>: it
+    /// never turns over, and the column keeps climbing until the lifetime ends. That is the one
+    /// route by which this plan COULD have moved the rise, so it is measured rather than argued.
+    /// The static part is held constant here; the shipped model gusts around it
+    /// (<c>RANDOM_MAX_SPEED</c> 10, <c>RANDOM_ACCEL</c> 5), which is a distribution, not a
+    /// height.</para>
+    ///
+    /// <para>⚠ <b>Every height is one seed's EXTREME</b> — the tallest particle of ~300 draws — and
+    /// each emitter's <c>_rng</c> is seeded by how many puffers were constructed before it, so this
+    /// suite's own numbers move ~±1.5 m between a <c>-Filter</c> run and the full 33-suite run.
+    /// That is why the checks below are ratios and wide bands and the exact figures live in
+    /// <c>ctx.Note</c>: pinning a decimal here would fail on a run order, not on a regression.</para></summary>
+    private static void PufferFireColumn(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var defs = world.Session.Program.Subset(new[] { "large_30sec_fire" }).ByAnimName("large_30sec_fire");
+            ctx.Check(defs.Count > 0, $"chapter program has large_30sec_fire defs={defs.Count}");
+            if (defs.Count == 0)
+                return;
+
+            AnimData? payload = null;
+            foreach (var seq in defs[0].Sequences)
+            {
+                foreach (var ev in seq.Events)
+                {
+                    if (payload == null && ev.Kind == "PufferState" && (ev.Data.Num("active_state") ?? 0f) > 0f)
+                        payload = ev.Data;
+                }
+            }
+            ctx.Check(payload != null, $"large_30sec_fire carries an ACTIVE_STATE 1 PufferState event");
+            if (payload == null)
+                return;
+
+            var tuned = PufferState.FromAnimEvent(payload);
+            var authored = PufferState.FromAnimEvent(payload);
+            authored.Name += "_authored";   // the tune is keyed on the NAME and nothing else
+
+            // The compiled numbers this measurement rests on, asserted rather than assumed: a data
+            // change must fail here naming itself, not silently re-baseline the heights below.
+            ctx.Check(tuned.Name == "fire_n_smoke", $"the 30 s fire's emitter is the tuned family's own name name={tuned.Name}");
+            ctx.Same(1, tuned.Number, $"large_30sec_fire authors no NUMBER — one puff per interval (BL-218)");
+            ctx.Check(Mathf.IsEqualApprox(0.1f, tuned.TimeInterval), $"TIME_INTERVAL 0.1 s");
+            ctx.Check(Mathf.IsEqualApprox(5f, tuned.LocalVelocity.Y) && Mathf.IsEqualApprox(4f, tuned.WorldVelocity.Y),
+                $"the rise is LOCAL_VELOCITY 5 + WORLD_VELOCITY 4 m/s");
+            ctx.Check(Mathf.IsEqualApprox(-1f, tuned.WorldAcceleration.Y), $"WORLD_ACCELERATION −1 m/s²");
+            ctx.Check(Mathf.IsEqualApprox(0.6f, tuned.Friction), $"FRICTION 0.6");
+            ctx.Check(Mathf.IsEqualApprox(1f, tuned.SizeMin) && Mathf.IsEqualApprox(3.5f, tuned.SizeMax),
+                $"SIZE_RANGE 1–3.5 m (a RADIUS — A1)");
+            ctx.Check(Mathf.IsEqualApprox(3.5f, tuned.LifetimeMin) && Mathf.IsEqualApprox(5.5f, tuned.LifetimeMax),
+                $"LIFETIME_RANGE 3.5–5.5 s");
+            ctx.Check(Mathf.IsEqualApprox(2.5f, tuned.GrowthFactor), $"GROWTH_FACTOR 2.5");
+
+            var clock = GameClock.Current;
+            GameClock.Current = null;
+            try
+            {
+                // C1 IA1's authored weather, static part held: extracted/C1/IA1/zrdr/weather.zrd.json
+                // WIND STATIC_VELOCITY [0, 2, 0].
+                var breeze = new EffectAmbience();
+                breeze.SetWind(new Vector3(0f, 2f, 0f));
+
+                var withTune = MeasureFireColumn(ctx, tuned, EffectAmbience.Still);
+                var asAuthored = MeasureFireColumn(ctx, authored, EffectAmbience.Still);
+                var withTuneWind = MeasureFireColumn(ctx, tuned, breeze);
+                var asAuthoredWind = MeasureFireColumn(ctx, authored, breeze);
+
+                ctx.Note($"large_30sec_fire column, 30 s at 1/60, still host — heights above the emitter:");
+                ctx.Note($"  authored, still air: centre apex {asAuthored.Centre:0.0} m, drawn top {asAuthored.Top:0.0} m (pre-A1 sprite: {asAuthored.PreA1Top:0.0} m), peak live {asAuthored.Live}, largest sprite {asAuthored.Sprite:0.0} m");
+                ctx.Note($"  tuned ({Puffer.FireRiseScaleDefault:0.0}x rise, {Puffer.FireLifetimeScaleDefault:0.0}x life), still air: centre apex {withTune.Centre:0.0} m, drawn top {withTune.Top:0.0} m (pre-A1 sprite: {withTune.PreA1Top:0.0} m), peak live {withTune.Live}, largest sprite {withTune.Sprite:0.0} m");
+                ctx.Note($"  authored, C1 IA1 wind (0,2,0): centre apex {asAuthoredWind.Centre:0.0} m, drawn top {asAuthoredWind.Top:0.0} m, peak live {asAuthoredWind.Live}");
+                ctx.Note($"  tuned, C1 IA1 wind (0,2,0): centre apex {withTuneWind.Centre:0.0} m, drawn top {withTuneWind.Top:0.0} m, peak live {withTuneWind.Live}");
+
+                // What the re-judgement rests on, as assertions rather than prose:
+                // (1) the authored column is still the short one the tune was invented against —
+                //     A1–C9 moved the sprite, not the rise;
+                ctx.Check(asAuthored.Centre > 8f && asAuthored.Centre < 18f,
+                    $"the authored rise still integrates to a low-teens column centre={asAuthored.Centre:0.0} m");
+                // (2) the sprite's own half-extent is a large share of that column, which is the
+                //     part A1 doubled — so the DRAWN plume grew without the rise changing;
+                ctx.Check(asAuthored.Top > asAuthored.Centre * 1.4f,
+                    $"the drawn top stands well above the centre apex — the A1 sprite is a real share of the plume top={asAuthored.Top:0.0} centre={asAuthored.Centre:0.0}");
+                // (3) the tune is still doing what it was invented to do, at the magnitude claimed.
+                ctx.Check(withTune.Centre > asAuthored.Centre * 2f,
+                    $"the tune more than doubles the column apex tuned={withTune.Centre:0.0} authored={asAuthored.Centre:0.0}");
+                // (4) B6's wind coupling really does lift this puffer — an UPWARD authored wind
+                //     with FRICTION non-zero is the one way an item in this plan could have raised
+                //     the column, and it does, without coming near what the tune supplies.
+                ctx.Check(asAuthoredWind.Centre > asAuthored.Centre,
+                    $"C1's upward wind lifts the authored column wind={asAuthoredWind.Centre:0.0} still={asAuthored.Centre:0.0}");
+                ctx.Check(asAuthoredWind.Top < withTune.Top,
+                    $"even wind-carried, the authored column stays below the tuned one wind={asAuthoredWind.Top:0.0} tuned={withTune.Top:0.0}");
+            }
+            finally
+            {
+                GameClock.Current = clock;
+            }
+        });
+    }
+
+    /// <summary>Drives one sustained emitter for 30 s of held-still emission and reports the
+    /// column it built: the highest particle CENTRE, the highest drawn sprite TOP (centre plus the
+    /// quad's half-side — the renderer scales a 1×1 quad by <c>Size</c>), the peak live population
+    /// and the largest sprite ever drawn. Heights are relative to the emitter's own origin.</summary>
+    private static (float Centre, float Top, float PreA1Top, int Live, float Sprite) MeasureFireColumn(
+        TestContext ctx, PufferState state, EffectAmbience ambience)
+    {
+        var gpu = new RecordingEmitterRenderer();
+        // Every switch off: this puffer authors NEAR_FADE (70, 20) and the suite's camera sits at
+        // the origin, so the authored near cull would discard the whole column before it is read.
+        var puffer = Puffer.CreateWith(state, gpu, sustained: true, ambience: ambience,
+            fade: new PufferFadeSwitches(DistanceFade: false, FarCull: false, NearCull: false));
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            var origin = Vector3.Zero;
+            const float dt = 1f / 60f;
+            float centre = 0f, top = 0f, preA1 = 0f, sprite = 0f;
+            int live = 0;
+            for (int i = 0; i < 1800; i++)   // the authored 30 s of ACTIVE_STATE 1
+            {
+                puffer.Emit(origin, Basis.Identity, dt);
+                puffer._Process(dt);
+                foreach (var p in gpu.LastFrame)
+                {
+                    float y = p.Position.Y - origin.Y;
+                    if (y > centre)
+                        centre = y;
+                    if (y + p.Size * 0.5f > top)
+                        top = y + p.Size * 0.5f;
+                    // The same run read at the PRE-A1 sprite convention. `Size` is exactly linear
+                    // in SizeScaleDefault (1 → 2 at A1) and the RNG stream does not depend on it,
+                    // so quartering the side here is that build's drawn top exactly, not an
+                    // estimate — which is what makes "did A1 close the fire gap?" answerable
+                    // without a second build.
+                    if (y + p.Size * 0.25f > preA1)
+                        preA1 = y + p.Size * 0.25f;
+                    if (p.Size > sprite)
+                        sprite = p.Size;
+                }
+                if (puffer.LiveCount > live)
+                    live = puffer.LiveCount;
+            }
+            ctx.Check(live > 0, $"{state.Name}: the emitter actually ran live={live}");
+            return (centre, top, preA1, live, sprite);
         }
         finally
         {

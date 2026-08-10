@@ -6,7 +6,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// C7's two camera-distance bands (docs/PLAN-puffer-engine-deltas.md): both parsers must wire
+/// C7's two camera-distance bands (docs/plans/PLAN-puffer-engine-deltas.md): both parsers must wire
 /// <c>NEAR_FADE</c>/<c>unk_range</c> and <c>FADE_RANGE</c>|<c>FAR_FADE</c>/<c>fade_range</c>
 /// through, an unauthored state must keep the puffer object's own ctor defaults (near
 /// <c>(0, 0)</c>, far <c>(FLT_MAX, FLT_MAX)</c> — i.e. no fade and no cull), and the reader's two

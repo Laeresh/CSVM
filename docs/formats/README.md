@@ -8,7 +8,11 @@ model: **format documentation and code only — no game asset data.** Pages carr
 tables and tiny excerpt values, never bulk extracted content.
 
 Everything here was decoded by inspecting extracted data and matching behavior against
-the original game (screenshots, videos, in-game measurements) — no exe decompilation.
+the original game (screenshots, videos, in-game measurements) — **no exe decompilation**. Where a
+page's claim comes from the executable instead, it names the function and links out to
+[`docs/org/`](../org/), which sits outside this directory and outside its licence:
+[flightModel.md](../org/flightModel.md) (the flight model) and [puffer.md](../org/puffer.md) (the
+particle runtime behind [effects.md](effects.md)).
 
 ## Pages
 

@@ -2147,6 +2147,35 @@ C1's `spew_puffer` (the waterfall splash) is one of them, which is why `c1-water
 golden C8 moved — every other puffer-bearing golden's emitters author no `PRIORITY` and are
 byte-identical across the change.
 
+**The whole original runtime is written up in [org/puffer.md](org/puffer.md)** (`PLAN-puffer-engine-deltas`
+D10) — the function map, the emitter/particle layouts, the ctor's defaults (which settle every
+"what does an unauthored key do?" question), the tick order, the accumulator, the render equation,
+and one table of every place this implementation deliberately differs. Read it before adding a
+mechanism here; the authored-key side stays in [formats/effects.md](formats/effects.md).
+⚠ It is in `docs/org/`, NOT `docs/formats/`: the formats tree is the CC-BY public deliverable and
+  states "no exe decompilation", so executable decodes live outside it (the decision is
+  `PLAN-flight-model-rewrite`'s item 6, and `docs/org/flightModel.md` is the precedent).
+
+**The fire pair, re-judged and RETAINED** (D10). `puffer.fireRiseScale` 2.5 / `fireLifetimeScale`
+1.5 were invented against footage while the sprite was half size; measured against the corrected sim
+(`puffer-fire-column` suite, `large_30sec_fire`'s own compiled payload, 30 s) the plan did raise the
+authored column — drawn top 21.6 → 25.9 m from A1's doubled sprite, and 32.1 m in C1 IA1's authored
+wind, since B6 made friction damp toward a wind that in this mission blows straight UP — but the
+tuned column is 57.2 / 67.8 m, so the plan closed about a fifth of the gap. Deleting the pair would
+cut the plume by 2.2×; the trap this item carries is doing exactly that on the strength of the other
+items landing.
+⚠ The A/B is the same compiled payload parsed twice with one copy RENAMED — `Init` keys the tune on
+  the state's name alone, and `Config` has no setter (DET-7), so the name is the only lever a suite
+  has. Renaming is not a hack here; it is the narrowest possible intervention.
+⚠ What the measurement does NOT settle: the tuned column is now ~25 % taller than the version signed
+  off at the controls (67.8 m against ~54 m), almost all of it B6's wind. Whether that reads as too
+  tall is a judgement at the controls — `PT-48`, and those two config keys are where it would be
+  made. Do not reach for a third knob.
+⚠ Every height is one seed's EXTREME (the run's tallest particle) and moves ~±1.5 m with the
+  emitter's RNG stream — which is seeded by how many puffers were built before it, so the same suite
+  under `-Filter` reads different decimals than the full run. The suite's assertions are ratios and
+  bands for that reason; do not tighten them onto a decimal.
+
 ## src/Effects/WorldWind.cs
 Two small types, one job: get the mission's authored wind to every puffer that reads it.
 

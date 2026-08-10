@@ -1835,10 +1835,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 - `BL-218` `[Tuning]` `[Owed-playtest]` **Puffer `NUMBER` default (2026-08-01)** — `NUMBER` is absent from 680 of C1's 721
   `PufferState` events, including `large_30sec_fire`'s `fire_n_smoke`, and `PufferState.FromAnimEvent`
-  falls back to **1** sprite per `TIME_INTERVAL`. That fallback is a guess at the original engine's
-  default, not decoded data: the sibling `large_10sec_fire` authors `NUMBER 3` from otherwise
-  comparable values, so the real default may well be higher and every unnumbered emitter in the game
-  correspondingly thin. Judge the density at the controls now that the fire's *shape* is right
+  falls back to **1** sprite per `TIME_INTERVAL`.
+  ✅ **The default half is SETTLED, and our 1 is right** (2026-08-10, `PLAN-puffer-engine-deltas`
+  D10): the puffer object's ctor `FUN_00550100` writes `1` to `+0x04` before any authored key is
+  applied ([`docs/org/puffer.md`](docs/org/puffer.md)). This entry's original reasoning — that the
+  sibling `large_10sec_fire`'s `NUMBER 3` implied a higher default, leaving every unnumbered emitter
+  thin — is **withdrawn**: 3 is that puffer's own authored value and was never evidence about the
+  unauthored case. **Do not raise the fallback**; a
+  density gap is now a look question about our sprites, never a default question. What remains:
+  judge the density at the controls now that the fire's *shape* is right
   (`PT-22`) — it is a whole-effect multiplier, so a wrong value is visible on the destruction fires,
   the damage-stage sputters and the wreck smoke at once.
   ⚠ Traps: this is not the `puffer.*SizeScale` knobs — those scale sprite size, and trading

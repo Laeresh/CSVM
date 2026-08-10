@@ -1,8 +1,10 @@
 # Puffer — the engine deltas
 
-**ACTIVE PLAN** (written 2026-08-09). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE 2026-08-10** (written 2026-08-09). All ten items landed: eight as code, B3 as a recorded
+disproof, and C9 with its own framing corrected. Kept for its evidence and its dead ends — read as
+history, not live work. The decode it produced is [`docs/org/puffer.md`](../org/puffer.md); one
+verdict is owed at the controls (`PT-48`, the fire column's height), which is a judgement on a
+retained TUNE, not an unfinished item.
 
 This plan closes the gap between our CPU puffer simulation (`CSVM/src/Effects/Puffer.cs`) and the
 original engine's, as traced through `crimson.exe` in Ghidra on 2026-08-09. It carries **only what
@@ -243,7 +245,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — record and re-judge
 
-10. ☐ Write `docs/formats/puffer.md` and re-judge the fire TUNE pair against the corrected sim
+10. ☑ Write the puffer decode — landed as [`docs/org/puffer.md`](../org/puffer.md), outside the CC-BY
+    formats tree — and re-judge the fire TUNE pair: **measured, and it stays** (`PT-48` owed on the
+    tuned column's own height)
 
 ## Dependency and parallelism notes
 
@@ -804,8 +808,8 @@ landing for this item.
 
 **Landed 2026-08-10.** Both bands, both culls and the cross-wire, in `Puffer.DistanceAlpha`, off a
 camera pose published on B6's `EffectAmbience` seam. The mechanism is written up in
-[`docs/formats/effects.md`](formats/effects.md) ("The camera-distance fade") and the plumbing in
-[`docs/architecture.md`](architecture.md); the corrections and surprises this item produced are
+[`docs/formats/effects.md`](../formats/effects.md) ("The camera-distance fade") and the plumbing in
+[`docs/architecture.md`](../architecture.md); the corrections and surprises this item produced are
 below. The 1-pixel cull was **skipped** as planned — it is a 320×200 resolution optimisation, not a
 look.
 
@@ -1022,7 +1026,52 @@ removing it blind and eating a pool blowout on the next long frame.
 
 # Wave D — record and re-judge
 
-## D10 ☐ Write `docs/formats/puffer.md` and re-judge the fire TUNE pair against the corrected sim
+## D10 ☑ Write `docs/formats/puffer.md` and re-judge the fire TUNE pair against the corrected sim
+
+**Landed 2026-08-10.** Both halves, and the document moved directory.
+
+**The document is [`docs/org/puffer.md`](../org/puffer.md), not `docs/formats/puffer.md`.** The
+formats tree is the project's CC-BY public deliverable and its README states, in the second
+paragraph, "no exe decompilation"; a page whose every claim cites a `FUN_` address does not belong
+inside that boundary. The precedent is explicit — `PLAN-flight-model-rewrite`'s decision 6 put the
+flight-model decode in `docs/org/` for exactly this reason. Consequences taken with it: the decoded
+accumulator pseudocode C9 had put into `formats/effects.md` moved to the new page and left a link
+behind, `formats/effects.md` gained a header line pointing at it, and the formats README's blanket
+"no exe decompilation" sentence — already false when this plan started, since C7 and C9 had cited
+addresses there — now says what is actually true and names `docs/org/`.
+
+**The fire pair SURVIVES, on a measurement.** New `puffer-fire-column` suite: `large_30sec_fire`'s
+own compiled payload, parsed twice with one copy renamed (the tune is keyed on the emitter's NAME
+and `Config` has no setter under DET-7, so the name is the only lever a suite has), driven through
+the real emitter for its authored 30 s. Drawn top of the column, above the emitter:
+
+| Arm | Centre apex | Drawn top | At the pre-A1 sprite | Peak live |
+|---|---|---|---|---|
+| Authored, still air | 17.9 m | 25.9 m | 21.6 m | 50 |
+| Authored, C1 IA1's authored wind `(0, 2, 0)` | 24.3 m | 32.1 m | — | 50 |
+| Tuned (2.5× / 1.5×), still air | 50.7 m | 57.2 m | 53.7 m | 72 |
+| Tuned, C1 IA1's wind | 60.1 m | 67.8 m | — | 73 |
+
+⚠ One seed's extremes, good to ~±1.5 m: the figure is the run's TALLEST particle, and each
+emitter's RNG stream is seeded by how many puffers preceded it — the same suite run under `-Filter`
+reads 25.6 / 31.7 / 58.4 / 68.1. The verdict rests on the ratios, which are stable.
+
+The plan really did raise the authored column, 21.6 → 32.1 m (+49 %): A1's doubled sprite is +4.3 m
+of it, and the rest is B6 — C1 IA1's wind is `STATIC_VELOCITY (0, 2, 0)`, straight **up**, and with
+friction now damping toward it the terminal velocity is `2 − 1/0.6 = +0.33 m/s`, so the column never
+turns over and climbs until the lifetime ends. That is a fifth of the gap, not the gap: deleting the
+pair would cut the plume by 2.2×. The trap warning below is answered by measuring, not by
+reasoning from the other items having landed.
+
+⚠ **The one thing that DID move against the tune**: the tuned column is now ~25 % taller than the
+version signed off at the controls on 2026-08-06 (67.8 m against ~54 m), almost all of it the wind.
+Whether that reads as too tall is a judgement no instrument here can make — `PT-48`, filed with the
+A/B references and an explicit "too tall is as useful a verdict as right".
+
+Also settled on the way: **`BL-218`'s `NUMBER` default question is answered** — the ctor writes 1,
+so our fallback is the engine's own and must not be raised; the entry's original reasoning is
+withdrawn there. `anim-definitions.md`'s `growth_factors` correction was already landed by B3 and
+needed nothing here.
 
 **Goal.** The puffer runtime is documented from the disassembly, and the invented fire scales are
 re-judged against a simulation that no longer has two factor-of-two errors in it.

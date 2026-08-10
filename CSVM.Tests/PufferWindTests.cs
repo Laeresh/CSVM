@@ -9,7 +9,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// <c>PufferState.WindFactor</c> and <see cref="WorldWind"/>
-/// (docs/PLAN-puffer-engine-deltas.md B6).
+/// (docs/plans/PLAN-puffer-engine-deltas.md B6).
 ///
 /// <para>The load-bearing claim here is the DEFAULT. The puffer object's constructor
 /// (<c>FUN_00550100</c>) writes <c>1.0</c> to <c>+0x6c</c> and the applier only overwrites it when

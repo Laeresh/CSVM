@@ -396,7 +396,7 @@ public sealed partial class Puffer : Node3D
     /// <c>param_2 + *param_1</c> in both axes, confirmed by the <c>0.5 / param_2</c> UV-clip
     /// term in the same function), so the authored value is a radius and the sprite spans
     /// <c>2 × SIZE_RANGE</c> — the decoded radius→diameter conversion
-    /// (`docs/PLAN-puffer-engine-deltas.md` A1). The three <c>puffer.*SizeScale</c> config keys
+    /// (`docs/plans/PLAN-puffer-engine-deltas.md` A1). The three <c>puffer.*SizeScale</c> config keys
     /// remain as knobs for deliberate per-path tuning, now defaulting to the decode rather than
     /// a guess. Referenced by <see cref="Utils.Config.WarmTuningRegistry"/> so
     /// <c>--dump-config</c> documents the keys.</summary>
@@ -405,11 +405,28 @@ public sealed partial class Puffer : Node3D
     /// <summary>TUNE defaults (config.json <c>puffer.fireRiseScale</c> /
     /// <c>puffer.fireLifetimeScale</c>): multiply the fire puffer's world-vertical spawn velocity
     /// and its per-puff lifetime. INVENTED against the original's footage, not decoded — the
-    /// authored numbers integrate to a ~10–12 m column for the 30 s fire under FRICTION 0.6,
-    /// while the original's tank/destruction fire columns read as an unbroken ~3+
-    /// building-height plume (`OriginalScreenshots/C1 IA1 Burning Fuel Tanks.png`, the
-    /// `C1 IA1 Destruction.mp4` t≈176 s columns). 2.5×/1.5× puts the 30 s fire's apex at
-    /// ~30–45 m and lets particles live to it.</summary>
+    /// authored numbers build a much shorter column than the original's tank/destruction fires,
+    /// which read as an unbroken ~3+ building-height plume
+    /// (`OriginalScreenshots/C1 IA1 Burning Fuel Tanks.png`, the `C1 IA1 Destruction.mp4` t≈176 s
+    /// columns).
+    ///
+    /// <para><b>Re-judged at D10</b> (`PLAN-puffer-engine-deltas`), against the sim the whole plan
+    /// corrected, and RETAINED. Measured through the real emitter on `large_30sec_fire`'s own
+    /// compiled payload for its authored 30 s (suite <c>puffer-fire-column</c>), as the drawn top
+    /// of the column: authored 25.9 m in still air and 32.1 m in C1 IA1's authored wind, against
+    /// 57.2 / 67.8 m with these two scales. The plan DID raise the authored plume — +4.3 m from
+    /// A1's doubled sprite and more from B6's wind coupling, since that mission's wind blows
+    /// straight up and friction now damps toward it — but it closed a fifth of the gap, not the
+    /// gap. The prior comment's "~10–12 m" was an analytic mean-particle estimate; these are
+    /// instrumented extremes and the two are not comparable.</para>
+    ///
+    /// <para>⚠ What DID move is the tuned column itself: 67.8 m against the ~54 m signed off at
+    /// the controls on 2026-08-06, most of it B6's wind. The magnitude is owed a fresh look
+    /// (`PT-48`); these two knobs are where it would be made.</para>
+    ///
+    /// <para>⚠ Every height above is one seed's EXTREME (the tallest particle of the run) and moves
+    /// ~±1.5 m with the emitter's RNG stream, which is seeded by how many puffers were constructed
+    /// before it. Read the ratios, not the decimals.</para></summary>
     public const float FireRiseScaleDefault = 2.5f;
     public const float FireLifetimeScaleDefault = 1.5f;
 

@@ -4,6 +4,11 @@ Part of the [format documentation](README.md). Covers the original's fully data-
 effect system (surveyed 2026-07-14 for the crash sequence + damage trails; no binary anim
 format needed for any of it). Consumed by `CSVM/src/Effects/Puffer.cs`.
 
+**This page is the authored side** — the keys, the files, the textures. What the original's
+*runtime* does with them (the object and particle layouts, the constructor's defaults, the
+integration order, the emission accumulator, the render equation) is decoded from the executable in
+[`../org/puffer.md`](../org/puffer.md), which is outside this directory and its licence.
+
 The system has three layers, all in zrdr + the chapter `texture.zbd`:
 
 1. **Sequencing scripts** — `ANIMATION_DEFINITIONS` readers (`ai_plane_destruct.json`,
@@ -56,21 +61,14 @@ A state is a **fully-defined emitter iff it has `NUMBER` (burst) or `DISTANCE_IN
 
 ## The emission accumulator (`FUN_0054f8b0`)
 
-Both continuous modes run one accumulator, `+0x48` on the emitter object, and the branch that feeds
-it is where they differ. Decoded 2026-08-10 (`PLAN-puffer-engine-deltas` C9):
+Both continuous modes run one accumulator on the emitter object, and the branch that feeds it is
+where they differ: a **distance** emitter adds the frame's motion length, but only when that length
+is under 200 m; a **time** emitter adds `dt`. Emission is then the whole
+`floor(accumulator / interval)` with the remainder carried. The decoded form, offsets and
+addresses are in [`../org/puffer.md`](../org/puffer.md#the-emission-accumulator-fun_0054f8b0)
+(decoded 2026-08-10, `PLAN-puffer-engine-deltas` C9).
 
-```
-if (byDistance)  { len = |pos - prevPos|;  if (len < 200.0) accum += len; }
-else             {                                          accum += dt;  }
-count = floor(accum * (1/interval));            // +0x44 holds the reciprocal
-for (b = 0; b < count; b++) {                   // NO per-frame cap
-    frac      = (b + 1) * interval / accum;     // position along prevPos -> pos
-    ageOffset = (1 - frac) * dt;                // the sub-frame birth age (B5)
-}
-accum -= count * interval;                      // remainder carried
-```
-
-Three things this settles:
+Three things this settles for a reader of the authored keys:
 
 - **The 200 m test is a teleport guard, and it exists only on the distance arm.** Time mode
   accumulates `dt` with no test of any kind. So the guard and a per-frame batch cap are not

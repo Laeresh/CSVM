@@ -194,6 +194,33 @@ an upper bound, and the correction to the 137.9 mph equilibrium are on `BL-115` 
   *Variations:* `--chapter=C4` for the one deck chapter whose `WorldLight` clamps to 1.0 — its
   deck must look exactly as it did, and its cards must still be *there* above the band.
 
+- `PT-48` `[A/B: OriginalScreenshots/C1 IA1 Burning Fuel Tanks.png + C1 IA1 Destruction.mp4 t≈176 s]`
+  **The fire column's height, after the puffer decode moved it** (`docs/plans/PLAN-puffer-engine-deltas.md`
+  D10; the two knobs are `puffer.fireRiseScale` 2.5 / `puffer.fireLifetimeScale` 1.5). The pair was
+  signed off at the controls on 2026-08-06 and D10 re-measured rather than deleted it: the authored
+  column really did grow (drawn top 21.6 → 32.1 m — A1's doubled sprite, and more from B6's
+  friction now damping toward a wind that in this mission blows straight *up*), but the authored
+  plume is still 2.2× short, so **the scales stay**. What is owed is the other direction: the
+  **tuned** column also grew, to 67.8 m against the ~54 m that was signed off, so this sortie asks
+  whether the fires are now too tall rather than whether they are tall enough. Numbers and method:
+  the `puffer-fire-column` suite and [`docs/org/puffer.md`](docs/org/puffer.md).
+  *Look for:*
+  - (a) **height against the reference** — shoot the refinery fuel tanks and hold a station off to
+    the side. Against the still and the t≈176 s columns, does the plume read as the original's
+    ~3-building plume, taller than it, or shorter? A verdict of "too tall" is as useful as "right";
+  - (b) **shape, not just height** — the tune multiplies rise AND lifetime, so an over-tall column
+    also thins at the top. Judge whether the plume stays a body of fire or stretches into a
+    streamer;
+  - (c) **the wind tilt** — C1 IA1's wind is `(0, 2, 0)`, straight up, and gusts around it
+    (`RANDOM_MAX_SPEED` 10). Watch a column for a few seconds: it should breathe and lean, not
+    stand rigid, and not blow apart.
+  *Blocks:* a verdict retires the last open question on the puffer plan. "Right" closes it with the
+  scales as they are; "too tall" is a value change to those two config keys and nothing else — mint
+  a `BL` against them naming the direction, since the whole point of the plan was to make the
+  authored numbers trustworthy and reaching for a third invented knob is what it exists to prevent.
+  *Variations:* `--infinite-ammo` to make the tanks easy to reach; the same fires play on the
+  medium/small buildings and on a downed passenger plane if the tanks are inconvenient.
+
 ### C1 · two pilots — Dogfight (splitscreen VS)
 
 ```powershell
