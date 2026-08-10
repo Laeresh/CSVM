@@ -282,6 +282,7 @@ public static class Suites
             PufferStillSputter(ctx, trailState);
             PufferStaticBurn(ctx, trailState);
             PufferStopRevive(ctx, trailState);
+            PufferTeleportGuard(ctx, trailState);
             PufferStartAgeBehavior(ctx);
         }
         finally
@@ -790,10 +791,11 @@ public static class Suites
 
     /// <summary>A TIME_INTERVAL state through <c>Emit</c>: the authored state, not the caller,
     /// picks the sustain path; the pool is sized to the steady-state population, emission starts
-    /// on the very first frame, a long frame's catch-up batches are born already dead (B5's
-    /// sub-frame age offset + the engine's born-dead skip) while the frame that drains the
-    /// leftover accumulator still cannot overrun the pool, and <c>Stop</c> ends emission without
-    /// cutting the live particles short.</summary>
+    /// on the very first frame, a long frame's OLDER catch-up batches are born already dead (B5's
+    /// sub-frame age offset + the engine's born-dead skip) while its youngest are born alive and
+    /// still cannot overrun the pool, the hitch drains its own accumulator so no burst follows it
+    /// (C9 — the per-frame batch cap is gone), and <c>Stop</c> ends emission without cutting the
+    /// live particles short.</summary>
     private static void PufferSustainMode(TestContext ctx, PufferState state)
     {
         var gpu = new RecordingEmitterRenderer();
@@ -811,37 +813,43 @@ public static class Suites
             ctx.Check(gpu.LastFrame.All(p => p.Position.DistanceTo(origin) < 3f),
                 $"sustained particles spawn at the world point they are driven at, not at the node");
 
-            // A 5 s hitch asks for 25 batches, capped at MaxSustainBatchesPerFrame = 8. Those 8 are
-            // CATCH-UP batches: B5 gives batch b the engine's sub-frame start-age offset
-            // (1 - frac)·dt with frac = (b+1)·interval/accumulator, so over an accumulator of
-            // 5.017 s they are born at 4.80, 4.60, … 3.41 s old — every one of them past this
-            // state's ≤ 1 s LIFETIME_RANGE. That is not a bug to be clamped away: a batch whose
-            // virtual emission moment was 4.8 s ago really is 4.8 s old, and it is exactly why
-            // FUN_0054f8b0 carries the born-dead skip. So the hitch's own batches are never
-            // created at all, and — this is the load-bearing half — they consume no pool slot:
-            // LiveCount is still the 18 from the first frame. Read before _Process, so it is the
-            // SPAWN path being asserted and not the reaper tidying up after it. (Able to fail:
-            // without the skip these 144 spawns fill the pool to 108 and this reads 108.)
+            // A 5 s hitch. Uncapped (C9 — FUN_0054f8b0's batch loop has no per-frame cap), the
+            // accumulator of 5.017 s over TIME_INTERVAL 0.2 asks for all 25 batches at once. B5
+            // gives batch b the engine's sub-frame start-age offset (1 - frac)·dt with
+            // frac = (b+1)·interval/accumulator, so they are born 4.80, 4.60, … 0.01 s old: the
+            // early ones are far past this state's ≤ 1 s LIFETIME_RANGE and the born-dead skip
+            // discards them without taking a pool slot, while the LAST few — those whose virtual
+            // emission moment is within a lifetime of now — are born alive, which is exactly the
+            // ~1 s of particles a 1 s-lifetime emitter should have left after a 5 s stall.
+            // Read before _Process, so this is the SPAWN path and not the reaper tidying up.
             puffer.Emit(origin, Basis.Identity, 5f);
-            ctx.Same(18, puffer.LiveCount,
-                $"a 5 s hitch's catch-up batches are born older than their own lifetime and are skipped, consuming no pool slot live={puffer.LiveCount}");
+            int afterHitch = puffer.LiveCount;
+            ctx.Check(afterHitch <= gpu.Capacity,
+                $"a 25-batch hitch cannot overrun the pool live={afterHitch} pool={gpu.Capacity}");
+            ctx.Check(afterHitch > 18,
+                $"its youngest batches ARE born alive — the hitch is not silently dropped whole live={afterHitch}");
+            // ⚠ Not asserted here: how many of the 450 spawns the born-dead skip discarded. The
+            // pool is sized to one LIFETIME's worth of emission and the survivors ARE one
+            // lifetime's worth, so the two meet and the count saturates at capacity — a check on
+            // the discard fraction would be answered by the pool clamp, not by the skip. The
+            // skip's own arithmetic is read where it can be: the drain assertion below, whose
+            // exactness depends on all 25 batches having been generated and charged to the
+            // accumulator.
             puffer._Process(1f / 60f);
-            ctx.Same(18, gpu.Shown, $"nothing from the hitch reaches the draw either shown={gpu.Shown}");
 
-            // The pool-overrun guard, kept and made able to fail. The cap left 3.417 s of
-            // accumulator carried, so the very next frame emits its 8 batches again — but now
-            // against dt = 1/60, whose offsets are ≤ 0.016 s, so they all live. 8 × 18 = 144
-            // spawns against 90 free slots: the spawn loop must clamp at the pool, not write past
-            // it. (That 90 spawns land at all is also the proof that the hitch's batches were
-            // genuinely ATTEMPTED and discarded rather than never generated — a bare dt = 1/60
-            // with no carry would emit no batch at all.)
+            // The load-bearing half of dropping the cap: the hitch DRAINED its own accumulator
+            // (25 × 0.2 = 5.0 of 5.017), so the next ordinary frame carries 0.033 s — a sixth of
+            // an interval — and emits nothing. Under the old cap the same frame emitted 8 more
+            // batches and filled the pool, a burst the engine never produces. Measured with no
+            // _Process in between, so only the spawn path can move the count.
+            // (Able to fail: with the cap restored this reads a full pool instead of no change.)
+            int beforeNext = puffer.LiveCount;
             puffer.Emit(origin, Basis.Identity, 1f / 60f);
-            ctx.Same(gpu.Capacity, puffer.LiveCount,
-                $"the drained accumulator fills the pool exactly and stops there live={puffer.LiveCount} pool={gpu.Capacity}");
+            ctx.Same(beforeNext, puffer.LiveCount,
+                $"the hitch drained its accumulator; the next frame emits no catch-up burst live={puffer.LiveCount}");
             puffer._Process(1f / 60f);
-            ctx.Same(108, gpu.Shown, $"a full pool draws every slot shown={gpu.Shown}");
-            ctx.Check(gpu.MaxIndex == gpu.Capacity - 1,
-                $"the catch-up reached the pool's last slot and no further max={gpu.MaxIndex} pool={gpu.Capacity}");
+            ctx.Check(gpu.MaxIndex < gpu.Capacity,
+                $"the sustain path never writes past its pool max={gpu.MaxIndex} pool={gpu.Capacity}");
 
             puffer.Stop();
             puffer._Process(0.05f);
@@ -928,7 +936,8 @@ public static class Suites
 
             // Restart case: Stop() then Emit() at a new, far site — the first frame's puffs must
             // appear only at the new site, never strung back from B (the ghost-trail trap). The
-            // restart frame is ALSO given a multi-batch accumulator (0.8 s, capped at 8 batches):
+            // restart frame is ALSO given a multi-batch accumulator (the re-home's own 0.1 s of
+            // carry plus 0.8 s of dt = 9 batches, uncapped since C9):
             // a batch count of exactly 1 would land at frac=1 regardless of prevOrigin, which
             // would pass even with the re-home fix missing — this is the able-to-fail control
             // (a stale prevOrigin=B would string 8 puffs from ~211 to ~989, well inside the
@@ -1072,6 +1081,65 @@ public static class Suites
                 $"a stopped trail revived at a far site re-homes there, no puff line across the jump");
             ctx.Check(gpu.LastFrame.Any(p => p.Position.DistanceTo(b) < 3f),
                 $"the revive restarted emission fresh at the new site");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    /// <summary>`PLAN-puffer-engine-deltas` C9 — the original's teleport guard on the DISTANCE
+    /// path. <c>FUN_0054f8b0</c> adds the frame's motion length to the emission accumulator only
+    /// <c>if (len &lt; 200.0)</c>, so an emitter carried across the world in one frame lays no puff
+    /// line along the jump. <see cref="PufferStopRevive"/> covers the jump that goes through
+    /// <c>Stop</c> (which re-homes); this is the one that does NOT — a pooled slot re-pointed at a
+    /// new site while still trailing, which before C9 drew the whole 500 m as smoke.
+    ///
+    /// <para>Four steps, each of which fails differently: a 199 m move pins the boundary FROM BELOW
+    /// (a guard written as "any big move" would eat it), the 500 m jump emits nothing, the guard
+    /// counter reads 1 — which is also the proof the log line executed, since it is incremented in
+    /// the same statement that emits it (METHOD-9: the zero counts in the regression log are only
+    /// evidence because this makes the line fire) — and a 20 m move afterwards proves the carried
+    /// remainder survived the guard untouched rather than being reset with it.</para></summary>
+    private static void PufferTeleportGuard(TestContext ctx, PufferState state)
+    {
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            const float dt = 1f / 60f;
+            const float interval = 2f;   // smokepuffer's authored DISTANCE_INTERVAL, asserted above
+            var a = new Vector3(0f, 1400f, 0f);
+            puffer.Emit(a, Basis.Identity, dt);          // homes, + one still-host sputter batch
+            puffer._Process(dt);
+            ctx.Same(1, gpu.Shown, $"the homing frame sputters its own batch shown={gpu.Shown}");
+
+            // 199 m: one metre under the guard, and the largest move the engine still accumulates.
+            var b = a + new Vector3(199f, 0f, 0f);
+            puffer.Emit(b, Basis.Identity, dt);
+            puffer._Process(dt);
+            ctx.Same(1 + (int)(199f / interval), gpu.Shown,
+                $"a 199 m move is under the 200 m guard and emits its full 99 puffs shown={gpu.Shown}");
+            ctx.Same(0, puffer.TeleportGuardCount, $"and does not trip the guard");
+
+            // The teleport: 500 m in one frame, with no Stop in between — the case Stop's re-home
+            // rule cannot reach.
+            int before = gpu.Shown;
+            var c = b + new Vector3(500f, 0f, 0f);
+            puffer.Emit(c, Basis.Identity, dt);
+            puffer._Process(dt);
+            ctx.Same(before, gpu.Shown, $"a 500 m frame emits nothing at all shown={gpu.Shown}");
+            ctx.Same(1, puffer.TeleportGuardCount,
+                $"the guard tripped once, which is also the proof its log line fired");
+            ctx.Same(0, gpu.LastFrame.Count(p => p.Position.X > b.X + 10f && p.Position.X < c.X - 10f),
+                $"no puff was laid anywhere along the 500 m jump");
+
+            // 20 m from the new pose: 1 m of carry survived the guard, so 21 m buys 10 puffs.
+            puffer.Emit(c + new Vector3(20f, 0f, 0f), Basis.Identity, dt);
+            puffer._Process(dt);
+            ctx.Same(before + 10, gpu.Shown,
+                $"the emitter resumes at the new site with its carry intact shown={gpu.Shown}");
         }
         finally
         {

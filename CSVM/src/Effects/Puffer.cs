@@ -453,9 +453,12 @@ public sealed partial class Puffer : Node3D
     // A sustained emitter never stops, so its pool is sized to the steady-state population
     // (Number per interval, each living up to LifetimeMax) rather than to a burst duration.
     private const int SustainPoolMin = 16, SustainPoolMax = 2048;
-    // Cap catch-up after a long frame (or a paused window): without it a 5 s hitch would
-    // spawn 5 s worth of particles in one frame and blow the pool.
-    private const int MaxSustainBatchesPerFrame = 8;
+    /// <summary>C9: the original's teleport guard on the DISTANCE path. <c>FUN_0054f8b0</c>
+    /// accumulates the frame's motion length into the emitter's interval counter only
+    /// <c>if (len &lt; 200.0)</c> — a respawned or pooled emitter that jumps across the world
+    /// lays no line of puffs along the jump. The time path has no equivalent test: there the
+    /// engine accumulates <c>dt</c> unconditionally.</summary>
+    private const float TeleportGuardMeters = 200f;
 
     // Particle spread/size/life/frame jitter. One stream per emitter, drawn off the master seed's
     // puffer stream, so a run repeats and two emitters still scatter independently.
@@ -511,6 +514,16 @@ public sealed partial class Puffer : Node3D
     private bool _sustaining;      // continuous TIME_INTERVAL mode (AnimRuntime's PUFFER_STATE)
     private float _sustainCarry;   // seconds carried into the next emission interval
     private Vector3 _sustainPrevOrigin; // last frame's emitter origin, for sub-frame interpolation (B5)
+
+    // C9 instrumentation. A teleport is supposed to be rare, so the first occurrence per emitter
+    // logs with its numbers and the rest are counted silently — LOG-5: the suppression is
+    // announced in the line itself, so a reader never mistakes one line for one event.
+    private int _teleportGuardCount;
+
+    /// <summary>C9 diagnostics: how many frames this emitter's motion tripped the original's
+    /// <see cref="TeleportGuardMeters"/> distance guard. Readable so a suite can assert the guard
+    /// fired without parsing a log.</summary>
+    public int TeleportGuardCount => _teleportGuardCount;
 
     /// <summary>Live particle count — diagnostics only (the <c>--debug-anim</c> puffer census, which
     /// is how a headless run confirms a crash's emitters are actually spawning).</summary>
@@ -939,6 +952,17 @@ public sealed partial class Puffer : Node3D
         _trailPrev = worldPos;
         if (dist < 1e-5f)
             return;
+        // C9 — the original's teleport guard, verbatim: FUN_0054f8b0 adds the frame's motion
+        // length to the interval accumulator only `if (len < 200.0)`, so a jump lays no puff line
+        // along itself. The carried remainder is left alone and is by construction below one
+        // interval, so the engine's `floor(accumulator/interval)` is 0 on that frame — which is
+        // why skipping the whole emit here is the same behaviour and not a stronger rule.
+        if (dist >= TeleportGuardMeters)
+        {
+            if (_teleportGuardCount++ == 0)
+                Log.Info("world", $"puffer teleport guard tripped name={_state.Name} dist={dist:0.0}m guard={TeleportGuardMeters:0}m (first occurrence only; further ones counted silently)");
+            return;
+        }
         var dir = delta / dist;
         float interval = _state.DistanceInterval;
         _trailCarry += dist;
@@ -993,6 +1017,26 @@ public sealed partial class Puffer : Node3D
     /// live in world space, so they are left behind rather than dragged along. Call every frame
     /// while the puffer is on; <see cref="SustainEnd"/> stops emission and lets the live
     /// particles decay.
+    ///
+    /// <para><b>No per-frame batch cap</b> (C9). <c>FUN_0054f8b0</c>'s batch loop runs the full
+    /// <c>floor(accumulator / interval)</c>; a <c>MaxSustainBatchesPerFrame = 8</c> used to sit
+    /// here, and it came out for three measured reasons. (1) It was not a hitch guard in practice:
+    /// it never fired once across the 8-chapter regression, while it bound EVERY FRAME at 60 fps
+    /// on the one puffer in the install that authors a 1 ms interval (<c>torpufferblast</c>, the
+    /// torpedo trail, 8 compiled events) — where the engine emits 16 batches a frame and the cap
+    /// emitted 8, a permanent halving wearing a safeguard's name. (2) On a real hitch it was
+    /// actively WRONG: capped, a 5 s frame emits nothing and then delivers a full pool over the
+    /// following frames, whereas the engine's 5 s frame emits exactly the tail of batches young
+    /// enough to still be alive and returns to normal next frame. (3) The pool blowout it was
+    /// written against is prevented twice over without it — the born-dead skip in
+    /// <see cref="SpawnSustained"/> discards a hitch's older catch-up batches before they take a
+    /// slot, and the spawn path clamps at the pool. The trade it leaves: the loop's ITERATION
+    /// count is now unbounded in <c>dt</c> (the OUTPUT is still bounded by the pool), so a
+    /// pathological frame delta buys a proportional one-frame cost. Bounding it faithfully is
+    /// possible — a batch whose age offset alone already exceeds <c>LIFETIME_RANGE</c> max can
+    /// never produce a live particle — but hoisting the born-dead test out of the spawn would
+    /// change which draws the <c>_rng</c> stream makes, which is pinned (see the class remark), so
+    /// it is left undone until a hitch measurably costs something.</para>
     /// </summary>
     private void SustainAt(Vector3 worldPos, Basis worldBasis, float dt)
     {
@@ -1014,7 +1058,10 @@ public sealed partial class Puffer : Node3D
         _sustainCarry += dt;
         float interval = Mathf.Max(_state.TimeInterval, 1e-3f);
         float accumulator = _sustainCarry;
-        int batches = Mathf.Min((int)(accumulator / interval), MaxSustainBatchesPerFrame);
+        // C9: the FULL floor(accumulator / interval), uncapped, exactly as FUN_0054f8b0's batch
+        // loop runs it. There used to be a MaxSustainBatchesPerFrame = 8 here, defending against a
+        // hitch filling the pool; it is gone, and the reasons are in this method's remark.
+        int batches = (int)(accumulator / interval);
         // The age offset rides the RAW dt, exactly as FUN_0054f8b0 does — deliberately unclamped.
         // On a long frame the early batches are handed an offset of seconds, which is physically
         // what they are: a batch whose virtual emission moment was 4.8 s ago really is 4.8 s old,

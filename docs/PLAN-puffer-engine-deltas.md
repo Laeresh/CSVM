@@ -238,7 +238,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 7. ☑ `NEAR_FADE` / `FAR_FADE` camera-distance alpha (the 1-pixel cull deliberately skipped)
 8. ☑ `PRIORITY` inflates the sprite by `1 + K·PRIORITY`
-9. ☐ Emission-accumulator rules: the 200 m teleport guard vs. our per-frame batch cap
+9. ☑ Emission-accumulator rules — ⚠ the item's own "vs." was wrong: the guard and the cap are on
+   **different branches**, so both moved (guard added, cap deleted)
 
 ### Wave D — record and re-judge
 
@@ -956,7 +957,35 @@ instead and record the constant in `docs/formats/puffer.md`.
 **⚠ Traps.** Do not use `PRIORITY` for draw ordering on the strength of its name — this pass found
 only the size use. If a depth use exists it is elsewhere, and it needs its own trace.
 
-## C9 ☐ Emission-accumulator rules: the 200 m teleport guard vs. our per-frame batch cap
+## C9 ☑ Emission-accumulator rules: the 200 m teleport guard vs. our per-frame batch cap
+
+**Landed 2026-08-10.** ⚠ **The item's framing was wrong and that is the finding.** "The guard *vs.*
+the cap" presumes a trade; `FUN_0054f8b0` puts them on **different branches** — the 200 m test is
+the DISTANCE arm's, the TIME arm accumulates `dt` with no test at all, and neither arm has a batch
+cap. There was never a choice, and both halves moved independently:
+
+- **The guard landed**, verbatim, on `TrailAdvance` only (`Puffer.TeleportGuardMeters`). It reaches
+  1,523 of 4,535 compiled events (33.6 %), the plan's named `spurtpuffer1..5` crash-debris trails
+  among them. `Stop()`'s re-home rule already covered the teleport that goes through a stop; the
+  pooled slot re-pointed while still trailing had nothing, and drew the whole jump as smoke.
+- **The cap was deleted.** Measured, not assumed: it never fired as a hitch guard across the
+  8-chapter regression, while it bound **every frame at 60 fps** on `torpufferblast` (the torpedo
+  trail, the install's only 1 ms interval, 8 compiled events) — halving an authored rate under a
+  safeguard's name — and on a real hitch it produced a full-pool burst on the FOLLOWING frames
+  that the engine never produces. The blowout it was written against is prevented twice over
+  without it (born-dead skip + pool clamp). The trade, as the item asked: loop iterations are now
+  unbounded in `dt`, output still bounded by the pool.
+- **"Is 200 m a world constant?"** No. It is an **inline float immediate** in `FUN_0054f8b0`, not a
+  `_DAT_` global — the same decompile that renders `K` as `_DAT_00a06fb0` in C8's function renders
+  this one as the literal `200.0`. Nothing else in the engine shares it, so it is the puffer
+  emitter tick's own number and there is no world-scale parameter behind it to track.
+- **One thing deliberately not fixed:** the ctor `FUN_00550100` settles the unauthored
+  `TIME_INTERVAL` at **1.0** (`+0x40`/`+0x44` = `0x3f800000`) against our invented 0.1. It is not a
+  constant swap — the same 0.1 doubles as our synthetic still-host sputter cadence, which the
+  engine has no equivalent of — so it left as `BL-331` rather than being changed inside C9.
+
+The original detail follows.
+
 
 **Goal.** Understand — and then match or deliberately diverge from — how the original stops a
 teleporting emitter from vomiting a frame's worth of particles.

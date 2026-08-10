@@ -196,7 +196,8 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 (A1/A2, the two factor-of-two conventions) landed; in Wave B, B3 is closed as a disproof
 (`SCALE_SEQUENCE` is authored nowhere in this install) and B4 (`START_AGE_RANGE`) and B5
 (sub-frame emission) and B6 (wind-coupled friction) have landed; in Wave C, C7 (the camera-distance
-fade) and C8 (`PRIORITY` sprite-size nudge) have landed — C9 is next. Two other plans completed on
+fade), C8 (`PRIORITY` sprite-size nudge) and C9 (the emission accumulator) have landed — D10, the
+last item, is next. Two other plans completed on
 2026-08-09, both archived in
 [`docs/plans/`](docs/plans/plans.md):
 [`PLAN-weather-decompile-match.md`](docs/plans/PLAN-weather-decompile-match.md) and

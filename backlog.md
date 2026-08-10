@@ -1645,6 +1645,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Effects & animation runtime
 
+- `BL-331` `[Fidelity]` **An unauthored puffer `TIME_INTERVAL` is `1.0` s in the original; both our
+  parsers invent `0.1`.** Decoded 2026-08-10 while closing `PLAN-puffer-engine-deltas` C9: the
+  puffer object's constructor `FUN_00550100` writes `0x3f800000` = **1.0** to both `+0x40`
+  (interval) and `+0x44` (its reciprocal), and the applier only overwrites them when the parser set
+  the flag — the same absent-vs-zero shape `WIND_FACTOR` has (`B6`). Ours defaults to `0.1` in
+  `PufferState.Parse` (`TIME_INTERVAL`'s fallback) and in the field initialiser, a factor of ten
+  fast.
+  ⚠ **Not a straight constant swap, which is why C9 left it alone.** The same `0.1` does double
+  duty in `FromAnimEvent` as the **synthetic still-host sputter cadence** handed to every DISTANCE
+  state (`TimeInterval = byDistance ? 0.1f : …`). That one is not a default at all — it is our own
+  invention for a fallback mode the engine does not have (a distance emitter on a motionless host),
+  signed off separately, and moving it to 1.0 would make every static building's sputter ten times
+  slower for a reason that has nothing to do with the ctor. Separate the two before touching either.
+  ⚠ The same ctor settles `NUMBER`'s default at `+0x04` = **1**, which is `BL-218`'s open question —
+  check it there before re-deriving it.
+  *Cost of being wrong today:* small. Every fully-defined reader puffer that reaches the sustained
+  path authors its own `TIME_INTERVAL`; the default is only reached by states that do not.
+
 - `BL-326` `[Bug]` **C3's skydome draws a magenta rectangle below the camera: its gamez names
   `cloud1`/`cloud2`, the two textures C3 is the only chapter not to ship.** Seen at the controls
   by the user 2026-08-09 and confirmed by them to be on **`main`**, then reproduced and traced

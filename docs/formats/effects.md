@@ -35,8 +35,8 @@ A state is a **fully-defined emitter iff it has `NUMBER` (burst) or `DISTANCE_IN
 | `NAME` | string | referenced by anims' `PUFFER_STATE` calls |
 | `AT_NODE` | `[nodeName, dx?, dy?, dz?]` | attach point; the optional trailing offset is in the host node's own frame, same convention as `LOCAL_VELOCITY` — what spreads C1's three waterfall splash puffers ±11 m either side of the shared anchor `waterfall01` instead of stacking them on one point (2026-07-21 fix: the offset was parsed nowhere and silently dropped, in both the compiled-event and reader-event front-ends — 862 of 4387 PUFFER_STATE events in this install carry a non-zero one) |
 | `NUMBER` | int | burst mode: sprites spawned per `TIME_INTERVAL` |
-| `TIME_INTERVAL` | s | burst spawn period (default 0.1) |
-| `DISTANCE_INTERVAL` | m | trail mode: one sprite per N meters of the followed node's motion (`dense_firetrail`: smoke 1.0 m / fire 0.25 m) |
+| `TIME_INTERVAL` | s | burst/sustained spawn period. ⚠ The **engine's** unauthored default is **1.0** (the puffer ctor `FUN_00550100` writes `0x3f800000` to `+0x40` and to its reciprocal at `+0x44`); ours is an invented 0.1 — `BL-331`. The smallest authored value in the install is 0.001 s (`torpufferblast`, the torpedo trail) |
+| `DISTANCE_INTERVAL` | m | trail mode: one sprite per N meters of the followed node's motion (`dense_firetrail`: smoke 1.0 m / fire 0.25 m). ⚠ Only accumulated when the frame's motion is **under 200 m** — the teleport guard, see the emission-accumulator section below |
 | `LOCAL_VELOCITY` / `WORLD_VELOCITY` | xyz | initial velocity, emitter-local / world frame |
 | `MIN_RANDOM_VELOCITY` / `MAX_RANDOM_VELOCITY` | xyz | per-sprite random velocity range |
 | `WORLD_ACCELERATION` | xyz | constant acceleration (buoyant smoke rises) |
@@ -53,6 +53,42 @@ A state is a **fully-defined emitter iff it has `NUMBER` (burst) or `DISTANCE_IN
 | `START_AGE_RANGE` | [min, max] s | random birth age — a particle is born at `Rand(min, max)` instead of age 0, negative values included (`fire_at_zepskin3`: −1.0 to 0.1). **Implemented** (`PufferState.StartAgeMin`/`StartAgeMax`); authored by only 4 puffers in the install, 80 compiled events total (`PLAN-puffer-engine-deltas` B4). ⚠ The key is not the whole birth age: the engine's `age0` is this draw **plus** `(1 - frac)·dt`, the sub-frame term of the time-cadence spawn (B5), and it discards the particle outright when `age0 >= life` — so that skip fires on a long frame for **any** puffer, authored key or not |
 | `WIND_FACTOR` | float | how strongly the world's wind carries this puffer's particles; **defaults to 1, not 0**, and is inert unless `FRICTION` is non-zero. **Implemented** (B6) — see [architecture.md](../architecture.md)'s `Effects/WorldWind.cs` entry |
 | `PRIORITY` | float | a per-puffer sprite-size nudge, `1 + K·PRIORITY` with `K = 0.02` (the hardware-path constant — this project has no software path), folded into `BaseSize` at spawn. **Implemented** (`PufferState.Priority`, `Puffer.PriorityScaleDefault`, `PLAN-puffer-engine-deltas` C8) — 192 compiled events over 47 puffers; default 0, so an unauthored puffer's factor is exactly 1. Almost certainly a depth-priority constant reused for size — this trace found only the size use |
+
+## The emission accumulator (`FUN_0054f8b0`)
+
+Both continuous modes run one accumulator, `+0x48` on the emitter object, and the branch that feeds
+it is where they differ. Decoded 2026-08-10 (`PLAN-puffer-engine-deltas` C9):
+
+```
+if (byDistance)  { len = |pos - prevPos|;  if (len < 200.0) accum += len; }
+else             {                                          accum += dt;  }
+count = floor(accum * (1/interval));            // +0x44 holds the reciprocal
+for (b = 0; b < count; b++) {                   // NO per-frame cap
+    frac      = (b + 1) * interval / accum;     // position along prevPos -> pos
+    ageOffset = (1 - frac) * dt;                // the sub-frame birth age (B5)
+}
+accum -= count * interval;                      // remainder carried
+```
+
+Three things this settles:
+
+- **The 200 m test is a teleport guard, and it exists only on the distance arm.** Time mode
+  accumulates `dt` with no test of any kind. So the guard and a per-frame batch cap are not
+  alternatives — they are not even on the same branch.
+- **Nothing bounds `count`.** A long frame emits the whole catch-up in that frame; what stops it
+  from being visible is not a cap but the spawn's own **born-dead skip** (`age0 >= life` ⇒ no
+  particle), which the age offset above makes reachable for any puffer on any long frame.
+- **The guard suppresses the frame's emission entirely**, not just the jump's share: the carried
+  remainder is by construction below one interval, so `count` is 0 on a guarded frame.
+
+⚠ The emitter's previous position (`+0x78`) is written **unconditionally** at the end of the tick,
+guarded frame or not, and a `+0x84` "have I a previous position" flag suppresses the whole emit
+block on the emitter's first ever tick. A teleport therefore costs exactly one frame of emission,
+and the emitter resumes from the new pose with its remainder intact.
+
+Distance mode is 1,523 of the install's 4,535 compiled `PufferState` events (33.6 %); the crash
+debris trails `spurtpuffer1..5` are among them, which is the pooled-and-teleported case the guard
+was written for.
 
 ## The camera-distance fade (`FADE_RANGE` + `NEAR_FADE`)
 

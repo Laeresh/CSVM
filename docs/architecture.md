@@ -2102,6 +2102,37 @@ count, at most `_liveCount`.
   capture path, re-pins all seven puffer-bearing goldens (the `SizeScaleDefault` list above — an
   earlier "four", then "five", here was a stale count); `CreateWith` is a test entry point only.
 
+**The emission accumulator: a teleport guard, and no batch cap** (`PLAN-puffer-engine-deltas` C9).
+`FUN_0054f8b0` accumulates into the emitter's interval counter under a branch, and the two arms are
+NOT alternatives — the plan's own framing ("the 200 m guard *vs.* our cap") was wrong. In DISTANCE
+mode (`+0x3c` set) it adds the frame's motion length **only `if (len < 200.0)`**; in TIME mode it
+adds `dt` with no test at all. Emission is then `floor(accumulator × 1/interval)` with the remainder
+carried, and **neither arm has a per-frame batch cap**.
+- The guard is ours now, verbatim: `Puffer.TeleportGuardMeters`, in `TrailAdvance` only. A jump
+  lays no puff line along itself. `TrailBurnAt` has no equivalent because it spends VIRTUAL metres
+  at a held pose — the engine has no such mode, so there is no motion length to test. `Stop()`'s
+  re-home rule already covered the teleport that goes through a stop; this covers the pooled slot
+  re-pointed at a new site while still trailing, which had nothing. It reaches 1,523 of the
+  install's 4,535 compiled events (33.6 %), including the `spurtpuffer1..5` crash-debris trails.
+- **`MaxSustainBatchesPerFrame = 8` was deleted.** It was written against a pool blowout that the
+  born-dead skip and the pool clamp already prevent twice over; it never fired as a hitch guard
+  across an 8-chapter regression; it bound EVERY FRAME at 60 fps on `torpufferblast` (the torpedo
+  trail, the one puffer authoring a 1 ms interval, 8 compiled events), halving its authored rate;
+  and on a real hitch it produced a full-pool burst on the FOLLOWING frames that the engine never
+  produces. The reasoning and the one trade it leaves — loop iterations unbounded in `dt`, output
+  still bounded by the pool — are in `SustainAt`'s own remark. Read that before re-adding a cap.
+⚠ The 0.1 s TIME_INTERVAL both parsers fall back to is **invented**, and the engine's own answer is
+  now decoded: the puffer ctor `FUN_00550100` writes `1.0` to `+0x40`/`+0x44` (and `1` to `+0x04`,
+  `NUMBER`). It is left alone deliberately — on a DISTANCE state that 0.1 s is not a default but our
+  synthetic still-host sputter cadence, a mechanism the engine does not have, and changing it would
+  move goldens for a reason unrelated to C9. `BL-331`.
+⚠ A `PUFFER_STATE` event carrying only `NAME` + `ACTIVE_STATE` is a **re-activation toggle**, not a
+  definition — 1,589 of the install's 3,012 time-typed events are these, and they compile with
+  `has_interval_value: false` and a filler `interval_value` of 0. They never build an emitter
+  (`PufferEmitterFactory` returns null on a textureless stub), which is why that 0 never reaches
+  `SustainAt`'s `Max(interval, 1e-3)` divide guard. A census that counts them as emitters will
+  conclude the sub-millisecond path is 13× busier than it is.
+
 **`PRIORITY` inflates the sprite** (`PLAN-puffer-engine-deltas` C8). `FUN_0054e6e0` scales the
 drawn screen radius by `1 + K·PRIORITY`; `PufferState.Priority` (both parsers, default 0 — the
 puffer object's own ctor default) is folded into `BaseSize` at spawn instead, via
