@@ -1,8 +1,7 @@
 # Clutter placement — reproduce the original's UV-space stamping
 
-**ACTIVE PLAN** (written 2026-08-09). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**✅ COMPLETE** (written 2026-08-09, completed 2026-08-10). All 11 items landed on the
+`worktree-clutter-uv-placement` branch, unmerged; indexed in [`plans.md`](plans.md).
 
 This plan replaces the mechanism `ClutterBuilder` uses to decide *where* clutter goes. The original
 engine stamps every decoration at a fixed **texture-UV** coordinate, repeated once per integer UV
