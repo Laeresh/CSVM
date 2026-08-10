@@ -60,7 +60,7 @@ key do?" question, and two of them contradict guesses this project had shipped:
 
 | Field | Default | Note |
 |---|---|---|
-| `TIME_INTERVAL` (`+0x40`, `+0x44`) | **1.0** s | `0x3f800000` written to both the interval and its reciprocal. ⚠ Ours invents **0.1** — `BL-331` |
+| `TIME_INTERVAL` (`+0x40`, `+0x44`) | **1.0** s | `0x3f800000` written to both the interval and its reciprocal. ⚠ Ours invents **0.1** — `BL-336` |
 | `NUMBER` (`+0x04`) | **1** | Settles `BL-218`: our fallback of 1 is the engine's own, and raising it would be a divergence |
 | `SIZE_RANGE`, `LIFETIME_RANGE` | 1.0 | |
 | `WIND_FACTOR` (`+0x6c`) | **1.0, not 0** | So an unauthored puffer is FULLY wind-carried; only an explicit `0.0` opts out |
@@ -209,7 +209,7 @@ Everything here is a known, deliberate divergence — not a gap waiting to be cl
 
 | Divergence | Why |
 |---|---|
-| **The still-host synthetic `0.1 s` cadence** on `DISTANCE_INTERVAL` states | The engine has no such fallback: a distance emitter whose host never moves emits nothing. Ours sputters, so a damaged building smokes. Entangled with `BL-331` — the same 0.1 doubles as our unauthored `TIME_INTERVAL`, where the engine's default is 1.0 |
+| **The still-host synthetic `0.1 s` cadence** on `DISTANCE_INTERVAL` states | The engine has no such fallback: a distance emitter whose host never moves emits nothing. Ours sputters, so a damaged building smokes. Entangled with `BL-336` — the same 0.1 doubles as our unauthored `TIME_INTERVAL`, where the engine's default is 1.0 |
 | **`TrailBurnAt`** — spending *virtual* metres at a held pose | For hosts that cannot move (the damage lab's parked plane). The engine has no equivalent, which is also why the 200 m teleport guard is not applied to it: there is no motion length to test |
 | **The 1-pixel cull** (`FUN_0057c5c0`), skipped | A software-rasteriser fill defence; at modern resolutions it would discard sprites the original drew |
 | **`K = 0.02`** rather than the software `0.01` | This project has no software path |

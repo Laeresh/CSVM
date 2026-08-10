@@ -621,8 +621,8 @@ light the baked-vertex world. List-valued keys:
 
 | Key | Meaning |
 |---|---|
-| `SUNLIGHT_ACTIVE` | `[1]`/`[0]` |
-| `SUNLIGHT_ORIENTATION` | `[pitch, yaw, roll]°` sun direction |
+| `SUNLIGHT_ACTIVE` | `[1]`/`[0]` — **`1` in every `ZONE*`, `0` in every `SW_ZONE*`, all 212 blocks install-wide**, so on the hardware path (ours) the light is unconditionally on |
+| `SUNLIGHT_ORIENTATION` | `[pitch, yaw, roll]°` sun **shading** direction — consumed, see below |
 | `SUNLIGHT_DIFFUSE` | directional intensity (`[0.4]`…`[2.0]` across the install) |
 | `SUNLIGHT_AMBIENT` | ambient floor (`[0.15]`…`[0.6]`) |
 | `SUNLIGHT_COLOR_DIFFUSE` / `SUNLIGHT_COLOR_AMBIENT` | light colours (usually white) |
@@ -642,13 +642,55 @@ clamp 1.0. **Confirmed against original footage 2026-08-07** (`CAP-11`, matched-
 0.426 / 0.784 / clamp 1.0 — C1B terrain −12%, C2B deck tops −9%, C2 suburb +5–15%;
 `git log --grep=BL-110`, evidence `playtest/CAP-11/README.md`). Two exemptions the original
 applies that we don't yet: water renders unmodulated (`BL-304`), and night cloud sprites are
-directionally moonlit rather than uniformly dimmed (`BL-325`). `Weather.WorldLightFactor` computes it (`ZoneFog.WorldLight`); `WeatherRig` sets
+directionally moonlit rather than uniformly dimmed (`BL-325`). `Weather.WorldLightFactor` computes it (`ZoneWeather.WorldLight`); `WeatherRig` sets
 the global shader scalar `csky_world_light` — **linearised** first, so the shader's
 linear-space `ALBEDO ×` lands the dimming in gamma space (matching the DX7 chain
 texel×vertex×light, all sRGB-space; a raw linear ×0.80 only reaches 210→190, gamma-space
 lands 210→169). Applied before the fog mix, so `FOG_COLOR` is unaffected. Paired with the
 **gamma-space vertex modulate** (the other item-6 half — see `SceneBuilder.cs`), which fixes
 the terrain's washed-yellow → saturated-green hue independent of brightness.
+
+### `SUNLIGHT_ORIENTATION` — the shading direction (consumed 2026-08-09, `BL-324`)
+
+Read per zone into `ZoneWeather.SunOrientation` and written to the world's one
+`DirectionalLight3D` by the same zone-apply that writes the fog, so it follows a zone change
+(`WeatherRig.ApplyZone`). It varies by chapter and is adopted with **no TUNE**:
+
+| Chapter | `[pitch, yaw]°` |
+|---|---|
+| C1 | `[-25, 90]` |
+| C1B / C1C / C2 / C2B | `[-65, 90]` |
+| C3 | `[-25, 135]` |
+| C4 | `[-45, 135]` |
+| C5 | `[-25, -135]` |
+
+Effectively constant across a chapter's zones — **C2/MP2 and C2/MP3 are the only two files in the
+install whose `ZONE1` (−65°) and `ZONE2` (−25°) pitch differ**, which is why the in-engine
+`sun-orientation` suite flies exactly that mission: anywhere else a zone change moves the light
+from a value to the same value and would pass with the write deleted.
+
+The mapping needs **no conversion**. The binary multiplies these degrees by `0.017453292`
+(`FUN_004bc3e0`) and writes the three radians into an ordinary gamez node rotation triple via
+`zclass\Light.c`'s setter (`FUN_004dc610`), on a **named `sunlight` Light node** that ships in all
+eight chapters' gamez (`active: false`, parentless, no model — resolved by
+`FUN_004d0280(0xa, "sunlight")`). We already read gamez node eulers as
+`Basis.FromEuler(v, EulerOrder.Yxz)`, Godot's default order is YXZ, and a directional light shines
+along local −Z — which reproduces the original's own euler→direction helper `FUN_0053c610`
+(`(-cos p·sin y, sin p, -cos p·cos y)`) exactly.
+
+⚠ **It is the shading direction, not the sun's position.** The gamez `sun` billboard the lens
+flare anchors to is a *different node* and disagrees — C3 authors yaw 135 while its `sun` sits at
+yaw 45. Nothing in the binary links the two, so the original disagrees with itself and we
+reproduce that rather than reconcile it (`WORLD-26`, `BL-165`).
+
+⚠ **Shadows do not follow it.** A top-level `SHADOW_ANGLES` key outranks the sunlight direction in
+the original's shadow renderer (`FUN_0049d0a0`), and all 53 shipped files author
+`[-90, 0, 0]` → straight down; `SHADE_ANGLES`, the parser's second key, appears in none. We draw
+no ground shadow at all yet (`BL-331`).
+
+⚠ **It shades aircraft only.** The world is fullbright, so an unshaded surface takes neither light
+nor shadow from this — which is why the eight `--freecam` goldens did not move when it landed and
+the three flight goldens did. Its *intensity* is still hardcoded (`BL-332`).
 
 ⚠ **It does not reach every surface, and that is the data's decision, not a special case.** Since
 2026-08-02 a model authored `flags.lighting: false` skips the multiply entirely — the original turns

@@ -20,9 +20,31 @@ turn-off validity gate, the "found something?" report line) written for external
 contributors. It is **not** parsed from `playtest.md` — leave it alone unless the user explicitly
 asks to change the HowTo copy itself.
 
-## 1. Parse `playtest.md` into CAP rows (Section 0)
+## 1. Build the page
 
-Read `playtest.md`. Find `## 0 · Owed captures`. Get theme order from the `### ` headings within
+Run the skill's own parser — it does steps 1–4 (parse both sections, serialize, inject) in one go:
+
+```powershell
+python .claude/skills/update-playtest-artifact/build.py <scratchpad>/playtest-table.html
+```
+
+It resolves `playtest.md` and `template.html` from its own location, so it works from any working
+directory and from a worktree. It prints the CAP row/theme and PT item/profile counts to stderr, and
+**exits non-zero** if the parsed counts do not match the raw `| \`CAP-` / `- \`PT-` counts in the
+file — so a green run *is* the sanity check. Unparsed item heads, unknown tags and missing bold
+titles are named on stderr. On a failure, fix the parser (or the file) rather than falling back to a
+hand parse.
+
+⚠ `build.py` reads and writes explicit UTF-8 and contains the `·`/`—` separators `playtest.md`
+itself uses. Edit it with Read/Edit/Write, never through a PowerShell `Get-Content`/`Set-Content`
+round-trip (see `CLAUDE.md`).
+
+Then go to step 5. **Sections 2–4 below document what `build.py` already does** — read them when
+`playtest.md`'s own conventions change and the parser has to follow.
+
+## 2. CAP rows (Section 0)
+
+From `## 0 · Owed captures`. Get theme order from the `### ` headings within
 that section, in file order. Each theme heading's trailing clause (after the em dash, if present)
 is descriptive only — use the heading text verbatim as the theme name.
 
@@ -41,11 +63,11 @@ For each data row `| \`CAP-NN\` | Capture | Detail | Unblocks |`:
 empty themes by design; `playtest.md` itself keeps the empty table as a "nothing owed right now"
 marker, but that's a file-only convention).
 
-Sanity check: row count should match `grep -c '| \`CAP-' playtest.md`.
+Sanity check (the parser's own): row count must match `grep -c '| \`CAP-' playtest.md`.
 
-## 2. Parse `playtest.md` into PT profiles (Section 1)
+## 3. PT profiles (Section 1)
 
-Find `## 1 · Actionable now`. Each `### ` heading within it is one **flight profile**. Parse the
+From `## 1 · Actionable now`. Each `### ` heading within it is one **flight profile**. Parse the
 heading `<Chapter> · <Plane/Pilots> — <Situation>` into:
 - **chapter** — text before the first ` · ` (e.g. `C1`, `C1B`).
 - **planeOrPilots** — text between ` · ` and ` — `.
@@ -105,9 +127,9 @@ chapter/plane beyond what the file's own sectioning already does (an item "free 
 already piggybacks on an existing section per the file's convention; the parser doesn't need to
 infer that).
 
-Sanity check: item count should match `grep -c '^- \`PT-' playtest.md`.
+Sanity check (the parser's own): item count must match `grep -c '^- \`PT-' playtest.md`.
 
-## 3. Serialize to JSON
+## 4. Serialize and inject
 
 Build two structures:
 
@@ -126,30 +148,27 @@ Build two structures:
            "notes": "...", "blocks": "...", "variations": "..." }, ...
        ]}, ...]
 
-Use real JSON string escaping — do not hand-splice strings into a JS literal, since titles and
-context routinely contain quotes, backticks, and em dashes.
+Both use real JSON string escaping — never hand-spliced into a JS literal, since titles and context
+routinely contain quotes, backticks, and em dashes.
 
-## 4. Inject into the template
-
-Read `.claude/skills/update-playtest-artifact/template.html`. It contains exactly two lines:
+Each replaces its placeholder in `.claude/skills/update-playtest-artifact/template.html`, whose two
+data lines are:
 
     const CAP_DATA = __CAP_DATA__;
     const PT_DATA = __PT_DATA__;
 
-Replace each placeholder with its JSON text from step 3 (`Edit`, exact string match). Nothing else
-in the template changes — tabs, filters, grouping, and the preamble/HowTo copy are static or derived
-from the data at render time.
-
-Write the result to a new file in this session's scratchpad directory — e.g. `playtest-table.html`.
-Don't write generated output back into the skill's `template.html`.
+Nothing else in the template changes — tabs, filters, grouping, and the preamble/HowTo copy are
+static or derived from the data at render time. The result goes to the output path given on the
+command line (a file in this session's scratchpad directory, e.g. `playtest-table.html`); generated
+output never goes back into the skill's `template.html`.
 
 ## 5. Publish to the existing URL
 
 Read `.claude/skills/update-playtest-artifact/artifact.json` for the stored `url`, `favicon`,
 `title`, and `description`.
 
-- **File exists (the normal case):** call `Artifact` with `file_path` = the scratchpad file from
-  step 4, `url` = the stored URL, and the stored `favicon`/`title`/`description`.
+- **File exists (the normal case):** call `Artifact` with `file_path` = the file `build.py` wrote,
+  `url` = the stored URL, and the stored `favicon`/`title`/`description`.
 - **File missing or has no `url` (first run, or the prior artifact was lost):** call `Artifact`
   without `url` to publish fresh, using favicon `🎬` and title `CSVM Playtest — Captures & Flights`
   (or what's already in `artifact.json`, if present). Then write the returned URL back into

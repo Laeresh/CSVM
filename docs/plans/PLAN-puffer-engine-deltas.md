@@ -987,7 +987,7 @@ cap. There was never a choice, and both halves moved independently:
 - **One thing deliberately not fixed:** the ctor `FUN_00550100` settles the unauthored
   `TIME_INTERVAL` at **1.0** (`+0x40`/`+0x44` = `0x3f800000`) against our invented 0.1. It is not a
   constant swap — the same 0.1 doubles as our synthetic still-host sputter cadence, which the
-  engine has no equivalent of — so it left as `BL-331` rather than being changed inside C9.
+  engine has no equivalent of — so it left as `BL-336` rather than being changed inside C9.
 
 The original detail follows.
 

@@ -277,7 +277,7 @@ public sealed class FogVolumeWhiteout
     /// nearly a BLACKOUT, matching C5's <c>ZONE3</c> <c>FOG_COLOR</c> of the same 16 that takes
     /// over inside. It is a DX7 framebuffer (sRGB) value and stays in that space: the overlay it
     /// paints is a <c>ColorRect</c>, not a shader input, so unlike the fog globals
-    /// (<c>WeatherRig.ApplyFogGlobals</c>) it is never linearised — same as the band whiteout's own
+    /// (<c>WeatherRig.ApplyZone</c>) it is never linearised — same as the band whiteout's own
     /// <c>WeatherState.WhiteoutColor</c> beside it.</para></summary>
     public Color? Color { get; }
 

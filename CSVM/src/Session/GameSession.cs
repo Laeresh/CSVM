@@ -912,7 +912,10 @@ public partial class GameSession : Node3D
                 UI.SplitScreen.SetVisualLayer(cloudField, fvolLayer);
             }
 
-            _weatherRig = new WeatherRig(_spec, _worldRoot!, _ambience);
+            // The sun goes in with the weather: its bearing is the zone's own
+            // SUNLIGHT_ORIENTATION, applied by the same zone-apply that writes the fog (BL-324).
+            // The ambience rides along as B6's wind seam — same reason, different authored block.
+            _weatherRig = new WeatherRig(_spec, _worldRoot!, _sun, _ambience);
             // B12: the deck's own zone_id, the one gated population that cannot ride a visual
             // layer (it is a per-rig camera-anchored copy — see WeatherRig.SetDeckZoneId).
             _weatherRig.SetDeckZoneId(builder.CloudDeckZoneId);

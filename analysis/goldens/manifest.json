@@ -71,36 +71,36 @@
     {
       "name": "viewer-bhawk",
       "frame": 30,
-      "hash": "71d5c3bfbfd36a477df5f9f1e0ca69bb",
-      "exercises": "one aircraft built and painted: PlaneBuilder, the pinned livery seed, decals, the orbit camera's framing; static by construction, 0 px at 30 vs 360.",
+      "hash": "d952186fbb529953ce2eb38d72dd7488",
+      "exercises": "one aircraft built and painted: PlaneBuilder, the pinned livery seed, decals, the orbit camera's framing, and the launcher-default light (--viewer loads no weather); static by construction, 0 px at 30 vs 360.",
       "args": ["--viewer", "--plane=player_bhawk", "--det", "--mute"]
     },
     {
       "name": "empty-stage",
       "frame": 120,
-      "hash": "a5f53de7ab630f9c8300382055d5fb2a",
+      "hash": "6edc1b0b92c6003e84dcac15ac96559e",
       "exercises": "the synthetic stage with no gamez at all — code-drawn grid, default sky and sun, flight model, HUD; frame-sensitive 12.21 %, and the one shot that still renders with extracted/ absent.",
       "args": ["--stage=empty", "--plane=player_bhawk", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "3f3dedc1299b0467366f7b5ae8cf8077",
-      "exercises": "a flying plane: chase camera on the sim clock, prop and control-surface animators, gauges, compass tape, weapon readout, reticle, and a live exhaust-trail puffer; frame-sensitive 34.52 %, the strongest tripwire here.",
+      "hash": "c96994b9f46238b76a715176ecdba8c1",
+      "exercises": "a flying plane, the only shaded surface in a flight: chase camera on the sim clock, prop and control-surface animators, the mission's sun bearing, gauges, compass tape, weapon readout, a live exhaust-trail puffer; frame-sensitive 34.52 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "2f8620b8f1153bef2ca1e7c5ede4fe1a",
+      "hash": "7c4a156d16024ca7bae3d533defd2e49",
       "exercises": "the world-effects runtime rendering a puffer — a flight-session kill of the single ap_radiotwr instance calls great_balls_of_fire onto the world-effects stage; frame-sensitive (distinct hashes at 119/120/121), and moves off its Rng.Effects seed.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "44328291c116ef4911e8c5573c6e8dbd",
-      "exercises": "the per-player crash rig building and playing player_crash_dirt (--crash=5 is its only headless trigger), and the set's largest puffer surface: fireball, wreck fire, smoke, debris, ground scorch; moves off its Rng.Crash draw.",
+      "hash": "1342581dce996814bcd835c6c6be3b7a",
+      "exercises": "the per-player crash rig building and playing player_crash_dirt (--crash=5 is its only headless trigger), the airframe under the mission's sun, and the set's largest puffer surface: fireball, wreck fire, smoke, debris, ground scorch.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     }
   ]

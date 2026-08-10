@@ -31,6 +31,9 @@ be scanned across all three:
 | `dzones.json` (per-mission zone overrides) | [missions.md](missions.md) |
 | `zeppelins.json`, `egen.json` (mission entities) | [mission-entities.md](mission-entities.md) |
 | `ne0NNNNN.zrd` patrol nets + `neindex.zrd` (the chapter AI waypoint graphs) | [ai-nets.md](ai-nets.md) |
+| `aiv.zrd` (AI rosters), `maneuvers.zrd`, `player.zrd`'s `ai_skill_parameters` | [ai-rosters.md](ai-rosters.md) |
+| `ai.zrd` (turrets and AA emplacements) | [turrets.md](turrets.md) |
+| `voice.zrd` (the `accentID` → pilot-voice table) | [combat-voice.md](combat-voice.md) |
 | `sounds.json` SETS, `player.json` sound curves, WAV format | [sounds.md](sounds.md) |
 | `weather.json` (fog / sunlight / cloud cover / wind / precipitation) | [weather.md](weather.md) |
 | `zepstate.json`, `startanims.json`, `mis_anim.json`, building/vehicle anims, the compiled `cam_anim.zbd`/`mis_anim.zbd` | [anim-definitions.md](anim-definitions.md) |

@@ -1,6 +1,7 @@
 # Milestone 4 — Artificial Intelligence (scoping study)
 
-> **⚠ SCOPED, NOT STARTED, NOT SCHEDULED — written 2026-07-25; premises re-checked 2026-08-04.**
+> **⚠ SCOPED, NOT STARTED, NOT SCHEDULED — written 2026-07-25; premises re-checked 2026-08-04;
+> roster/skill/maneuver half re-decoded from the binary 2026-08-10.**
 > This is **not** a live plan. The active plan is whatever PROJECT_CONTEXT.md's "Current status"
 > names (`PLAN-m3-polish-6.md` at re-check time). This file is deliberately **not** called
 > `PLAN-M4-ai.md`, because this repo's convention is that a `PLAN-*.md` sitting in `docs/` *is
@@ -8,8 +9,9 @@
 > IDs, per-item Goal/Evidence/Approach/Verify) so that scheduling it is a rename to
 > `docs/PLAN-M4-ai.md`, a date, and a PROJECT_CONTEXT.md pointer swap — nothing else.
 >
-> Nothing in here has been implemented. Every checklist item is ☐ and stays ☐ until M4 is actually
-> scheduled.
+> No *engine* work in here has been implemented, and none should be until M4 is scheduled. The
+> ticked checklist items are documentation and decode work that other sessions reached first —
+> read the dated Delta sections below before trusting any body text.
 
 ## Why this document exists
 
@@ -118,6 +120,334 @@ A pre-M4 debug-tool session (`--debug-ainets` / F13, `UI/AiNetsOverlay.cs`) land
   misleads: the leading number is an allocation figure ≥ the pair count (C1: 46 over 29
   pairs). Parse pairs to the end of the list, never the header.
 
+## Delta — 2026-08-10: the binary names the roster, and three items collapse to data-loads
+
+A Ghidra pass over `crimson.exe` answered more of this document's open questions than the whole
+data survey did. **The single find that does it: the retail binary embeds its editor's own text
+format comment for the roster file** (`.rdata:0x00622508`), naming **every `aiv` field in order**.
+Everything below follows from that plus the shipped files it points at. The decode is now a format
+page — [`docs/formats/ai-rosters.md`](formats/ai-rosters.md) — and this section is only the
+milestone consequences. Read §2 ("AI vehicle rosters") and the D-wave items through this lens.
+
+**Three items stop being reverse-engineering and become reading a file:**
+
+- **D10 (skill-slot mapping + scale) is answered, not "budget for investigation".** Slots 22–30 are
+  `dare_devil natural_touch sixth_sense dead_eye quick_draw steady_hand stun_recovery talker
+  constitution` — document order, exactly as §2's hypothesis had it, and every discriminating case
+  the survey named lands correctly (the cabbie's two 3s on `dead_eye`/`quick_draw`, the stunt
+  plane's lone 9 on `steady_hand`, the 89 mooks' lone 1 on `dead_eye`). **The two "default 5" slots
+  are `talker` and `constitution`, not the signature stats** — §2's closing paragraph about
+  "signature" defaults is wrong and its inference from it should be dropped.
+- **The scale conflict is dead, and the constants are shipped.** `extracted/zrdr/player.zrd.json`
+  carries an **`ai_skill_parameters`** block: a `[value@1, value@9]` interpolation pair per stat
+  (`dead_eye_angle` 4.0°→1.45°, `quick_draw_angle` 50°→89°, `steady_hand_chance` 0.5→0.08,
+  `stun_recovery_interval` 4.8 s→0.6 s, `constitution_chance` 0.35→0.95, …). The scale is **1–9
+  indexing this table**; the design's `100 − DareDevil` formula is design-era and is replaced by
+  `daredevil_chance` 0.35→0.99. `natural_touch` correctly has no entry — it compares directly
+  against maneuver difficulty. **D14's gunnery model and D15's assist strength are now constants to
+  load, not values to tune.**
+- **D13's maneuver library is shipped data.** `extracted/zrdr/maneuvers.zrd.json` holds **17
+  maneuvers**, each a `natural_touch` difficulty plus a `steps` list of
+  `[duration, pitch, yaw, roll]` — precisely the "timed control-input program plus difficulty" this
+  document proposed to author by hand from design prose. Difficulties match the design's 1–9 column
+  exactly on the fourteen they share. Two are shipped-only: `nitro_evade` (difficulty 0) and
+  `high_yo_yo` — and **`high_yo_yo` is a stub**: difficulty 99 against a stat capped at 9, with no
+  `steps` list. Do not implement it.
+
+**Corrections to §2's field decodes** (all confirmed against the extraction):
+
+| slot | §2 called it | it is |
+|---|---|---|
+| 6 | formation leader name | **`primary_target`** — an assigned target, not a leader. The engine prints it as "Primary target: %s" |
+| 31 | engagement radius, metres | **`pref_engage_alt`** — preferred engagement *altitude*; 350/1100/1500/1600 are altitudes |
+| 32 | flag bitmask | **`signature_maneuvers`** — a bitmask over the 17-entry library. `2064` = `dive`+`split_s`, `2048` = `split_s` (the Black Swan's signature). ⚠ bit order is the exe's table order, **not** the JSON file's |
+| 33 | target-priority list | **`rating_biases`** — `[nodeNamePattern, bias, ?]` triples with wildcards, feeding target ranking |
+| 57–64 | (undecoded) | **`anose hnose atail htail aleft hleft aright hright`** — per-zone armour+health over nose/tail/left/right |
+| 65 | voice id | confirmed: **`accentID`**, exactly as inferred |
+
+⚠ **B7 loses its premise.** "Formation flying off the roster's leader field" was built on slot 6;
+there is no leader field. `group` (slot 4) is the only candidate left and is unexamined. **Re-scope
+or drop B7** — do not implement it as written.
+
+**New fact A4 must absorb:** the roster's own damage model is **four zones (nose/tail/left/right),
+each an (armour, health) pair** — the same shape as the player's `destroyable_parts`. That is
+independent corroboration of the armour-first two-pool model and tells A4 that the aircraft case
+needs no new zone vocabulary; only the zeppelin's N-of-M threshold does.
+
+**Open questions, restated:**
+
+- **#1 (Evade entry, pass or fail)** — **answered by the engine's own strings**: *"Absorbed %f
+  damage; steady hand test **failed**. Evading."* / *"…test **passed**. Not evading."* Failure
+  triggers the reaction. Same for sixth sense: a *failed* test stuns. Use this vocabulary and
+  never restate it.
+- **#3 (0–100 or 1–9)** — **closed: 1–9**, per `ai_skill_parameters` above.
+- **#4 (skill-slot mapping)** — **closed**, per D10 above.
+- **#5 (`num_healthy_required` polarity)**, **#6 (`DA-*`/`DE-*`)**, **#7 (`net.zrd`)** — untouched,
+  still open.
+
+**D11's state machine is nine modes, not five.** The engine's debug readout dispatches on one mode
+field: `patrol` · `pursue` · **`lay off`** · `evade` · `evasive maneuver` · `stunned` ·
+`avoid crash` · `approaching danger zone` · `navigating danger zone`. Note what is *absent*:
+there is no `flee` and no `inactive` mode in that dispatch. ⚠ **`lay off` — the "let the player
+catch up" behaviour — is a first-class mode**, which makes D15's `--no-assist` switch cheap and the
+assist directly observable rather than inferred from steering behaviour.
+
+**D12 gains a shape.** The same readout recomputes target ranking inline:
+`rank = weight × 1200 + distance + objectiveBias`, minimised, where the weight starts at **1.0 for
+any target except the player, which starts at 0.7** — the design's "rank the player last" rule as a
+hard constant — then takes ±0.2 terms for bearing, altitude sign and target facing.
+
+**Also worth knowing:** `player.zrd`'s `min_ai_active_dist` (2000 m) is the activation radius this
+document was guessing at, and the roster's own volume slots (8–19) are `0.0` in all 414 blocks, so
+every AI falls back to it and to `vehicle.zrd`'s `attack` / `return_range`. `vehicle.zrd`'s AI keys
+were already documented in [`formats/vehicle.md`](formats/vehicle.md) — this document's §2 simply
+never cross-referenced them.
+
+### Wave F — the zeppelin half, same pass
+
+The zeppelin loader, kill check, broadside fire routine and engine-loss curve are all decoded. The
+format consequences are in [`formats/mission-entities.md`](formats/mission-entities.md); the
+milestone consequences:
+
+- **F18's threshold question (open question #5) is closed in code.** The engine counts `healthy`
+  nodes still active and kills the zeppelin when `survivors < num_healthy_required`. **The data's
+  survivor reading is right and the design's destroy-count is the inverse.** The field also defaults
+  to **1** and is clamped at load to the length of the `healthy` list. Still assert the direction in
+  a test — the failure mode is an immortal zeppelin, which reads as a damage bug.
+- **F17's engine-loss model is a square root, not the design's three bands.**
+  `f = sqrt(alive/total)`, `max_speed' = f·max_speed`, `max_accel' = (0.8f + 0.2)·max_accel`. The
+  design's qualitative claim (each further engine hurts more) survives; its arithmetic does not.
+  **Do not implement the 10/40/50 bands.**
+- ⚠ **F19's probabilistic hit curve does not exist in the shipped engine.** The design's "20 % at
+  maximum range ramping to 100 % at ~200 m" roll is absent: broadside fire runs a lead/intercept
+  solve and spawns a real projectile scattered by `cannon_inaccuracy`, skipping targets with no
+  solution. This document's §5 restated the design curve as though it were shipped behaviour —
+  **it is not**, and F19 should be built as ballistic fire.
+- **F19's arc is confirmed exactly as the design states it**: `dot(toTarget, sideNormal) > 0.707`,
+  a 90° cone on the firing side's perpendicular. The "randomly chosen section" is confirmed too, but
+  only for zeppelin-vs-zeppelin: the engine collects the *target zeppelin's* in-arc gasbags and picks
+  one with `rand()`. Broadside ammunition is **hardcoded `wep_28`**, not a data key. Cannons carry
+  their own state machine (stowed → deploy → ready → fire) and their own per-cannon re-fire timer.
+- **A load-time unit bug worth knowing before matching behaviour**: `min_pitch`/`max_pitch` stay in
+  degrees while `pitch` is converted to radians, so the original's initial-pitch clamp never fires.
+  Harmless in shipped data; don't reproduce it as a working clamp, and don't read ±30 as radians.
+- **E16 gains a correction.** The `ZZ` voice family (`ZZ-GasB-Dest`/`-Lost`, `ZZ-Zep-Dest`/`-Lost`)
+  pairs with an engine-side sound table — `snd_Zep_GBdest`/`GBlost`/`Zep_dest`/`Zep_lost` plus
+  **team-numbered `GB1`/`GB2` variants**, preloaded alongside the CTF and multiplayer
+  mission-won/lost cues. **This family is multiplayer-scoped and team-relative** ("destroyed" =
+  theirs, "lost" = yours), not a general zeppelin trigger. §6 treated it as the latter.
+- **Mission script can retarget a zeppelin at runtime** — `SET_AI_NET` and `SET_AI_TEAM` both accept
+  a zeppelin, which is the design's "retreat is expressed as a net change, not a special mode",
+  confirmed. `WAKEUP_ZEP_TURRETS` and `COMPLETED_ZEPCANNONS` are further zeppelin-facing script ops.
+
+- **F20's launch cycle is fully decoded**, and the design's "generation is *held* below the altitude,
+  not cancelled" is confirmed in code — while blocked, the wave counter and timer are untouched and
+  only the hangar door closes. Two corrections to §4's reading: **`ind_period` and `wave_period`
+  compose** (the gap between waves is `ind_period + wave_period`, not `wave_period`), and the
+  **door timings are hardcoded, not data** — open 4 s before a due spawn, minimum 4 s open, close
+  early only if the next spawn is >8 s away. The host's death permanently disables its generator,
+  and a generator whose node or whose entire `nets` list fails to resolve is dropped at load rather
+  than loaded inert.
+- ⚠ **F20 carries one unresolved discrepancy — `capacity`.** It is `0` on all 23 generators, and the
+  blocking rule reads `(wave_size - spawned) > capacityRemaining`, which would hold every generator
+  in this install forever — yet zeppelins visibly launch in the original. **Budget an investigation
+  item**, do not assume "0 means unlimited"; the `zep_rearm_node_%d` string is the strongest lead.
+  Written up in [`formats/mission-entities.md`](formats/mission-entities.md#the-capacity-puzzle).
+
+### The mission-script surface, and what it means for M4's boundary
+
+The binary carries the mission-script vocabulary (`D:\zipper\Crimson\mission.cpp`):
+`WAKEUP_ENEMIES` · `WAKEUP_TURRETS` · `WAKEUP_ZEP_TURRETS` · `WAKEUP_GENERATOR` · `WARP_VEHICLE` ·
+`SET_AI_TEAM` · `SET_AI_NET` · `SET_AI_ATTACK_RADIUS` · `ADD_/REMOVE_OTHER_TARGET` ·
+`ADD_/REMOVE_OBJECTIVE_TARGET` · `START_TAXI` · `SET_HELP_LABEL` · `COMPLETED_ZEPCANNONS` ·
+`COMPLETED_STOPPOINT` · `COMPLETED_SOUND_GROUP` · `WAKE_ANIM` / `SLEEP_ANIM` ·
+`WAKEUP_SOUND_GROUP` · `STOP_QUEUED_SOUNDS` · `END_TIMER` · `INSTANTWIN` / `INSTANTLOSE` ·
+`primary`/`secondary`/`tertiary`.
+
+Objectives scripting is **explicitly out of M4's scope** and this does not change that. It matters
+here for two reasons:
+
+- **It is the AI's runtime control surface, and it closes the loop on the roster decode.** Six
+  `aiv` slots are script-mutable rather than static: `otherTarget` (36) and `objectiveTarget` (37)
+  via the `ADD_`/`REMOVE_` pairs, `helpLabel` (39) via `SET_HELP_LABEL`, `taxiPath` (40) via
+  `START_TAXI`, plus the activation volumes via `SET_AI_ATTACK_RADIUS` and the net via `SET_AI_NET`.
+  **Anything M4 builds on those fields must expect them to change mid-mission**, so design the AI
+  controller's inputs as mutable from the start rather than read-once at spawn.
+- **F17's stop nodes are confirmed to exist as a scripted concept** — `COMPLETED_STOPPOINT` is a
+  *condition*, so a mission waits on a zeppelin reaching its stop point. That raises confidence
+  that `ai-nets`' per-node tags encode stop points but **does not decode them**; nothing yet ties a
+  tag value to the condition. Still F17's remaining open item.
+
+### Wave C — the turrets are not self-describing after all
+
+Decoded from `turret.cpp` in the binary; written up in full as a new page,
+[`formats/turrets.md`](formats/turrets.md). The study's §3 called `ai.zrd` "fully self-describing,
+needs no reverse engineering — the cheapest deliverable in the milestone." **The file is
+self-describing; the behaviour it configures is not**, and four of the findings change what C9 has
+to build. C9's cost goes up, from "read a table" to "read a table and implement a tracking loop",
+but it stays a leaf and its ordering does not move.
+
+- ⚠ **`YAW [0,0]` means *unrestricted*, not *fixed*.** The arc clamp is gated on `min != max`, so
+  equal limits — or an absent key — remove the limit rather than lock the axis. One shipped entry
+  authors `YAW [0,0]`; four omit `PITCH` and six omit `YAW`. Reading these the natural way points
+  those turrets permanently down their rest bearing and they never fire. This is the single most
+  likely way to get C9 visibly wrong.
+- ⚠ **The yaw arc is a directed interval on the circle, and out-of-arc snaps to the nearer end
+  stop** — not the shortest-path one. `YAW [105,255]` and `YAW [-155,-5]` are different arcs.
+- ⚠ **Hit resolution is geometric, not probabilistic** — the same refutation already recorded for
+  the zeppelin broadside cannons (F19). `INACCURACY` is a scatter cone applied to the *shot*
+  direction after the model nodes have been written, and the hit test compares the perturbed
+  direction against the target's angular radius. There is no roll anywhere.
+- **`ATTACK_INTERVAL`/`BORED_INTERVAL` are a duty cycle, and bored suppresses firing only.** The
+  aim solution is computed first and the fire flag cleared afterwards, so a bored turret keeps
+  tracking the player while holding fire. That is visible behaviour and cheap to get right.
+
+Two facts change the C9 ↔ mission-script dependency, and one changes the census:
+
+- **22 of the 42 entries ship `ACTIVATED 0`** — over half the turret roster is inert until a script
+  fires `WAKEUP_TURRETS`. Since objectives scripting is out of M4's scope, **C9 needs a stand-in
+  activation path** or half the emplacements will never engage. This is a new, small dependency
+  that the original costing did not carry.
+- **The `CREATE_STANDALONE` split is the engine's own, and it is exact.** `CREATE_STANDALONE 0`
+  (16) excludes an entry from the world placement pass; those are looked up **by `TITLE`** from a
+  host. The other 26 are placed at their own `NODES` patterns. 16 = `HEALTHY_NODE` 16, 26 =
+  `NODES` 26, 16 + 26 = 42. §3's two families are right; this is their mechanism.
+- **§3's census has `PITCH` at 37; it is 38.** Everything else in that census re-counts clean.
+
+Also worth having in hand, though it does not change scope: `NODES` patterns mean **one entry can
+instantiate many turrets**, so emplacement counts are a property of the world model, not of
+`ai.zrd`; multiple firepoints fire **round-robin, one per shot**, not together; line-of-sight is
+tested **only against the player**, on a cached 1–2 s refresh; and **eight of the 22 keys the
+engine accepts are never authored** (`DEACTIVATE`, `EFFECT`, `FIRE_LIMITS`, `STICKINESS`,
+`SHOOT_UP_ONLY`, `CATEGORY_LABEL`, `HELP_LABEL`, and the `ON`/`START`/`STOP` sounds) — a reader
+should tolerate them, an implementation needs the fourteen that ship.
+
+### Wave E — the trigger taxonomy is 29 ids, and the binary names all of them
+
+Decoded and written up as [`formats/combat-voice.md`](formats/combat-voice.md). E16 was graded
+*"direction sound, magnitude a judgement call"* — the direction was right and **the magnitude is no
+longer a judgement call**. `crimson.exe` carries the trigger table as a contiguous ordered array of
+`TYPE` tokens, and the loop that fills a pilot's voice slots is bounded at `0x1d`: **29 triggers,
+ids 0–28**, each naming a family the clip survey already inventoried. § 6's taxonomy and the
+engine's table are the same list.
+
+Sixteen of the 29 ids were confirmed independently at their dispatch sites, and two of those
+confirmations are exact numbers the study wanted:
+
+- **`DI-LowDmg`/`MedDmg`/`HighDmg` fire at 70 % / 50 % / 30 % of health**, tested most-severe-first.
+  § 6's "distress at three zone-damage tiers" now has its thresholds.
+- **The 12 `WA-Enemy` bearing call-outs are computed, not enumerated** — `id = 1 + 3*bearing +
+  altitudeBand`, ordered low/level/high within each of the 12/3/6/9 o'clock bearings.
+
+Three findings change what E16 has to build:
+
+- ⚠ **The 15-second per-slot cooldown is armed by a *failed* talker roll exactly as by a successful
+  one.** A quiet pilot does not retry on the next event — losing the roll silences that trigger for
+  15 s. Re-deriving `talker` from the design prose (a chattiness stat) gets this wrong, and it is
+  the difference between "sometimes quiet" and "reliably sparse".
+- ⚠ **Triggers 1–12 have their talker chance halved, hardcoded** — on top of only 7 of 31 pilot ids
+  owning bearing clips at all. Two independent suppressions, not one.
+- **Broadcasts elect a speaker.** Several triggers address the flight, not a pilot: the engine
+  collects every eligible living teammate that owns that slot, picks one at random, and **on a
+  failed roll passes the line to the next candidate**, wrapping. So E16 is not N independent rolls
+  — it is a speaker election, and modelling it as per-pilot rolls makes the flight either silent or
+  a chorus.
+
+Two open questions close, one narrows:
+
+- **Open question 6 closes.** `DA` *is* the ally counterpart of `DE`, and the split is by team
+  rather than by outcome: both are the dying pilot's own death cry, id 20 if the aircraft is on the
+  player's team and id 21 if not. Both are dispatched with the force flag, because the speaker has
+  just been marked dead.
+- **The `aiv` → voice chain is no longer inference.** § 6 called it "strongly-supported inference,
+  not proven fact". It is traced: `accentID` (roster slot 65) → a `voice.zrd` row → a pool of pilot
+  VO ids → that pilot's clips → the 29 slots. ⚠ **`voice.zrd` is the accent table, not the trigger
+  table** — its 35 rows sit suspiciously close to 29 and are a different thing entirely.
+- **`TA-FailTail` is confirmed as a real engine trigger with a real dispatch site** (id 25), not an
+  orphan clip family. § 6 flagged it as audio documenting a behaviour the design prose omits; that
+  now has engine backing.
+
+Left open and recorded on the page: the exact attacker/victim polarity of the three gloat triggers
+(22–24), no located dispatch site for id 16 (`PR-EnemyDwn`), and how the `-A`/`-B`/`-C` and
+`Bail`/`NoBail` variants are chosen below the family root.
+
+E16 still needs B8's voice runtime and does not move in the ordering. Its **cost drops**: the
+taxonomy no longer needs deriving from clip names, and the dispatch rules are constants rather than
+TUNEs.
+
+### Decisions and closures — 2026-08-10
+
+**C9's activation question is answered by the data, and the answer is that it barely exists.** The
+`CREATE_STANDALONE` split is *also* the awake/dormant split: **all 16 carried turrets ship
+`ACTIVATED 1`; all 22 dormant entries are standalone world emplacements.** Carried turrets come up
+with their host and need no `WAKEUP_TURRETS`, no stand-in and no decision. So C9 splits cleanly, and
+the half that matters for the next playable mission is unblocked:
+
+- **C9a — carried turrets.** The aircraft/zeppelin gunners, including the player's own turret slots
+  that M3 left parsed-but-inert ([`formats/loadouts.md`](formats/loadouts.md)). Zero activation
+  dependency. This is the half the zeppelin hunt exercises, and it is where the turret UI lands.
+- **C9b — world emplacements.** Still wants an activation path for the 22 dormant entries. Now
+  *deferrable* rather than blocking, because nothing on the playable path depends on it.
+
+Two supporting facts, both measured:
+
+- **The 16 carried entries are 8 AI + 8 player.** Titles run `MSG_TUR_{AC,BRIGAND,FRONT,REAR}_{G1,G3}`
+  with a `P`-prefixed mirror; the `P` set is the player airframes. The player's turret and an
+  enemy's are the same system with different rows — which is why C9a and the turret UI are one
+  piece of work, not two.
+- ⚠ **`_G1`/`_G3` are gun-group slots, not difficulty grades.** Across all eight pairs the two rows
+  differ in *exactly* `HEALTHY_NODE` and `PARTS` and nothing else — same accuracy, same rate, same
+  arcs, same weapon. Reading `G3` as "grade 3" invents a difficulty system the data does not have.
+
+**F20's `capacity` — chased through the binary, and every in-engine explanation is eliminated.** The
+code route was taken in preference to a capture. All three candidates fail: the `zep_rearm_node_%d`
+lead is **dead** (it enumerates *player rearm-pad* scene nodes, the counterpart of `rearm_rad`, and
+never touches a generator); a **runtime top-up does not exist** (three writes to the counter in the
+whole module — load-time assign, decrement, and a reset that restores it *to* `capacity`; and the
+loader has a single caller, so there is no second construction path); the **global cannot rescue
+it** (both branches yield `0` for an authored `0`, and it must be set in retail or no turret would
+load); and the **operands are not misread** (a single unsigned compare and a jump-if-below in the
+disassembly). Re-measured: `capacity` present on 23/23 and `0` on 23/23.
+
+That converts a three-way puzzle into one located suspicion — **what the engine reads for `capacity`
+may not be the `0` the extraction reports** — and the next discriminating step is to read its raw
+bytes out of the un-extracted `egen.zbd` rather than the JSON. Still a code route; no capture owed.
+The standing instruction is unchanged: **do not implement "0 means unlimited".**
+
+**The three unnamed roster slots are closed.** Most likely inherited padding from the engine's
+earlier `mech3` lineage — recorded as a hypothesis, not asserted. What is established suffices: the
+exe's own editor comment names nine where the format has twelve, all twelve are `0.0` install-wide,
+and the fallback they defer to is documented. ⚠ A reader must still **parse** twelve to keep later
+field indices aligned; beyond that, ignore them. Not to be reopened without a different build or an
+authored non-zero value.
+
+**F17's per-node tags — narrowed sharply, still not decoded.** Attacked directly rather than
+deferred. The binary route does not reach the parser: the only code naming `ne%06d.zrd` is the
+editor's text I/O and a debug dump, so the shipped loader is not reachable by string search. The
+*data* route paid off instead. Cross-referencing the 40 tagged nets against `neindex` names, the
+`zeppelins.json` `net` field and each node's edge-list degree:
+
+- ⚠ **The two tag widths are two different systems on disjoint net populations** — not one
+  optional-length field, which is how the format page previously read.
+- **The 2-extra shape is zeppelin-exclusive.** All 36 are zeppelin routes by name, 31 directly
+  referenced by a `zeppelins.json` `net`, the rest unreferenced alternates. **No fighter net carries
+  one.** That is the strongest evidence yet for the stop-point reading — it is what the hypothesis
+  predicted, and it could easily have come out the other way.
+- **The 4-extra shape is `[0,0,1,N]` on exactly four nets** — `M3StuntCourse`, `M1FilmShot`,
+  `M1Cabbie`, `M4MilesRun`. Stunt/cinematic/escort, not zeppelin: this belongs with the Danger Zone
+  gate system, not with `COMPLETED_STOPPOINT`.
+- Within the 2-extra shape, `b` is a flag that is **not** graph topology (it occurs on degree-1 and
+  degree-2 nodes alike) and concentrates on first/last nodes; `a` is a small id **allocated
+  sequentially per chapter across files** (C5's three cargo routes use 1–2, 3–4, 5–6).
+
+**Two readings survive and the data cannot choose:** `a` = stop-point id with `b` = halt, or
+`a` = segment id with `b` = boundary. So F17 keeps one open item, but it is now bounded, has a
+worked example, and has a single named discriminating instrument — **locate the runtime net loader**
+(not via the filename string; try the `SET_AI_NET` handler or the net-follower's node access). Until
+then: parse and preserve the tags, act on neither reading. F17's cost and ordering are unchanged.
+
+**Still not examined:** nothing in the wave list.
+
 ---
 
 ## Milestone goal
@@ -162,9 +492,9 @@ otherwise.
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code or data, reproducible by a committed script** | A1–A4, B5, B6, B8, C9, F17, F19, F20 | Confirm the trace, then implement. |
-| **Direction sound, magnitude a judgement call (TUNE, not fact)** | D14, D15, E16, F18 | The *what* is settled; the *how much* goes on `backlog.md`'s TUNE list, never invented as fact. |
-| **Leads only — a hypothesis with a named discriminating instrument** | D10, D11, D12, D13 | Budget for investigation; **a correct disproof that lands no code is a success here.** |
+| **Traced to an exact mechanism in code or data, reproducible by a committed script** | A1–A4, B5, B6, B8, C9, F17, F19, F20 | Confirm the trace, then implement. *(C9 stays in this row and its trace is now the binary's, not the data's — but the trace turned out to be a tracking loop rather than a table read, so its **cost** rose even though its confidence did not. Confidence is not effort.)* |
+| **Direction sound, magnitude a judgement call (TUNE, not fact)** | D14, D15, ~~E16~~, F18 | The *what* is settled; the *how much* goes on `backlog.md`'s TUNE list, never invented as fact. *(E16 graduated out on 2026-08-10 — the 29-id trigger table, the damage thresholds and the cooldown are read from the binary, so its magnitudes are constants, not TUNEs.)* |
+| **Leads only — a hypothesis with a named discriminating instrument** | D11, D12, D13 | Budget for investigation; **a correct disproof that lands no code is a success here.** *(D10 graduated out of this row on 2026-08-10 — it is now traced to shipped data.)* |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
 worktree session here; use a local commit or a file copy (`docs/verification.md` METHOD-5).
@@ -296,8 +626,16 @@ i.e. a stat with no effect.** Decide the rescaling explicitly (D10), record it a
 **One shared file, one `TURRET` section, 42 entries, fully self-describing, needs no reverse
 engineering.** This is the cheapest deliverable in the milestone.
 
+⚠ **The second sentence is wrong and the third overstates it.** The *file* is self-describing; the
+*behaviour* is not, and four of the decoded semantics are counter-intuitive enough to get C9
+visibly wrong — `YAW [0,0]` meaning unrestricted chief among them. Superseded by
+[Delta § Wave C](#wave-c--the-turrets-are-not-self-describing-after-all) and
+[`formats/turrets.md`](formats/turrets.md); the family split and the value ranges below survive
+intact.
+
 Key coverage across the 42: `TITLE` 42, `ACTIVATED` 42, `PARTS` 42, `WEAPON` 42, `INACCURACY` 42,
-`ATTACK_INTERVAL` 42, `BORED_INTERVAL` 42, `PITCH` 37, `SOUNDS` 37, `YAW` 36, `NODES` 26, `TEAM` 20,
+`ATTACK_INTERVAL` 42, `BORED_INTERVAL` 42, `PITCH` 38 (⚠ 37 above was a miscount), `SOUNDS` 37,
+`YAW` 36, `NODES` 26, `TEAM` 20,
 `HEALTH` 17, `CREATE_STANDALONE` 16, `HEALTHY_NODE` 16.
 
 Two structural families (9 distinct key orderings in total):
@@ -315,7 +653,9 @@ always 1; `CREATE_STANDALONE` always 0; `HEALTH` 2/8/10/30; `SOUNDS.CANNON` alwa
 `TITLE` 32 distinct `MSG_TUR_*` keys, all resolving in `messages.json`.
 
 `PARTS` is always `[turretNode, gunNode, firepointNode]`, though 4 of 126 elements are themselves
-lists (`["brigturret", "hgun", ["hfirepoint", "hfirepoint1"]]`).
+lists (`["brigturret", "hgun", ["hfirepoint", "hfirepoint1"]]`). ⚠ The engine reads this as a
+kinematic chain — `[yawNode, pitchNode, firepoint(s)]`, and a 2-element form drops the traverse
+ring — and cycles multiple firepoints round-robin, one per shot.
 
 **All 8 distinct `WEAPON.NAME` ids resolve in `weapons.zrd.json`**, and six of the eight sit in the
 AI-detuned `wep_1xx` tier that `docs/formats/weapons.md` already documents:
@@ -402,7 +742,7 @@ one-to-one onto the design's communication-trigger list:
 | `WA` | 188 | `WA-Enemy-{12,3,6,9}{,H,L}` (12), `WA-Attack-A/B/C`, `WA-HighDmg-A/B`, `WA-Turret-A/B` | threat warning: bearing call-out, enemy threatening, player zone at 70 %, player entered a turret's arc |
 | `DI` | 100 | `DI-LowDmg-A/B`, `DI-MedDmg-A/B`, `DI-HighDmg-A/B` | distress at three zone-damage tiers |
 | `DE` | 99 | `DE-Bail-A/B`, `DE-NoBail-A/B` | destroyed, with / without a successful bail-out |
-| `DA` | 68 | `DA-Bail-A/B`, `DA-NoBail-A/B` | the ally counterpart of `DE` *(inferred — see open question 6)* |
+| `DA` | 68 | `DA-Bail-A/B`, `DA-NoBail-A/B` | the ally counterpart of `DE` — ⚠ *confirmed 2026-08-10: both are the dying pilot's own cry, split by team (open question 6)* |
 | `DS` | 48 | `DS-Ally-A/B/C` | ally distress |
 | `GL` | 207 | `GL-AllyDwn-A/B/C`, `GL-EnemyDwn-A/B/C`, `GL-PlyrDwn-A/B/C` | gloat, by whose plane went down |
 | `PR` | 248 | `PR-EnemyDwn-A/B/C`, `PR-EngineDst-A/B/C`, `PR-ObjDst-A/B`, `PR-ZepDst-A/B/C`, `PR-DngrZn-A/B/C/D`, `PR-DangerZone-A/B` | praise |
@@ -426,6 +766,14 @@ Three findings worth carrying forward:
 0–10 are 2–3-id pools, rows 11–34 are single ids) → `soundsh/VO_id<N>_*`. All 21 observed field-65
 values are valid rows. **Caveat: 5 of the 21 mapped VO ids (5, 15, 17, 36, 40) have no clips at all.**
 Treat the chain as strongly-supported inference, not proven fact.
+
+⚠ **Confirmed 2026-08-10 — it is no longer inference.** The chain is traced in the binary, and the
+selected pilot's clips are loaded into 29 per-trigger slots at spawn. The table above is the
+engine's own taxonomy: `crimson.exe` carries all 29 `TYPE` tokens as an ordered array, so the
+families and their order are read, not derived. See
+[Delta § Wave E](#wave-e--the-trigger-taxonomy-is-29-ids-and-the-binary-names-all-of-them) and
+[`formats/combat-voice.md`](formats/combat-voice.md) — which also settles `DA` vs `DE` (open
+question 6), gives the `DI` tiers their 70/50/30 % thresholds, and confirms `TA-FailTail`.
 
 ---
 
@@ -557,7 +905,9 @@ update as needing more work, so the shipped behaviour may not match the describe
   animation is side-specific: hatch opens, muzzle burst, fly-out. The zeppelin may make a temporary
   turn to bring a target into arc, then resumes its path. Re-fire is deliberately slow —
   `cannon_fire_delay`, 20 s in the design and in the data.
-- **Broadside hit resolution is probabilistic, not ballistic.** Hits are rolled against distance:
+- **Broadside hit resolution is probabilistic, not ballistic.** ⚠ **Refuted 2026-08-10 — the shipped
+  engine fires real projectiles with a lead solve; this whole bullet is design-era. See the wave F
+  delta above.** Hits are rolled against distance:
   **20 % at maximum range, ramping linearly to 100 % at roughly 200 m**, and only within a **90° arc
   centred on the perpendicular of the firing side**. Damage is per-cannon damage × the number of
   cannons still alive in the volley (so destroying cannons directly weakens the broadside), applied to
@@ -567,7 +917,8 @@ update as needing more work, so the shipped behaviour may not match the describe
   above a minimum altitude**; below it, generation is held rather than cancelled. The door-open
   animation runs, the wave spawns, the door-close animation runs. This is exactly the shape of the 17
   zeppelin `egen` generators.
-- **Non-linear deceleration as engines die.** Speed and acceleration loss is banded by the *fraction*
+- **Non-linear deceleration as engines die.** ⚠ **Refuted 2026-08-10 — the shipped curve is a square
+  root, not these bands. See the wave F delta above.** Speed and acceleration loss is banded by the *fraction*
   of engines destroyed, not the count: the first 30 % of engines cost 10 % total, the 30–70 % band
   costs a further 40 %, and the last 30 % costs the remaining 50 % — so the reduction per engine grows
   through each band and reaches 100 % at total engine loss. Percentages are absolute, cumulative
@@ -622,6 +973,11 @@ These are places the source is ambiguous, self-contradictory, or contradicted by
    The natural reading is self vs ally, and it fits the design's four destroyed rows (target bails /
    target does not / ally bails / ally does not). **Unconfirmed** — the clip contents have not been
    listened to. Cheap to settle; do it before wiring triggers.
+   ⚠ **Closed 2026-08-10 — and the natural reading was half wrong.** `DA` and `DE` are both the
+   *dying pilot's own* death cry, split by **team**, not by self-vs-ally: id 20 if the aircraft is
+   on the player's team, id 21 if not. `DI` is the speaker's own damage (ids 17–19 at 70/50/30 %)
+   and `DS` is ally distress (id 28). See
+   [`formats/combat-voice.md`](formats/combat-voice.md). No listening required.
 7. **What `<Cx>/<mission>/zrdr/net.zrd.json` actually is.** Undecoded. Shape says spawn table. It is
    *not* needed for patrol, so this is a curiosity, not a blocker — but do not let a future session
    waste a day on it assuming it is the route data.
@@ -795,8 +1151,9 @@ implementation) belongs in wave A, before `DestructibleRegistry` grows more call
 
 ## Checklist
 
-Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Everything here is ☐; this
-milestone has not started.**
+Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **The milestone is still not
+scheduled** — the ticked items are ones other work reached first (A1 via PLAN-vs-mode, D10 and half
+of A3 via the 2026-08-10 decompile pass), not a started milestone.
 
 ### Wave A — Foundations (nothing downstream is verifiable without these)
 
@@ -805,39 +1162,66 @@ milestone has not started.**
    the shared `PlaneCollider` boxes, per-shot owner exclusion, part-mapped damage, attributed
    kills, aircraft-only proximity fuse + blast falloff, all pinned by the `air-to-air` suite
 2. ☐ A2 — The AI actor seam: runtime spawn, a non-player `FlightModel` driver, `GameClock` wiring
-3. ☐ A3 — `docs/formats/ai-data.md`: nets, rosters, turrets, generators, zeppelins — plus `--dump-ai`
+3. ◐ A3 — the AI format pages — **rosters, skills and maneuvers landed 2026-08-10**
+   ([`formats/ai-rosters.md`](formats/ai-rosters.md)); nets already had
+   [`formats/ai-nets.md`](formats/ai-nets.md) and zeppelins/generators
+   [`formats/mission-entities.md`](formats/mission-entities.md). **Remaining: `ai.zrd` turrets
+   and `--dump-ai`**
 4. ☐ A4 — **Decision + design note only:** multi-zone destructibles and the kill threshold
 
 ### Wave B — Non-combat presence
 
 5. ☐ B5 — Net following: the `ne`/`neindex` graph as a patrol behaviour
 6. ☐ B6 — Generators: `egen` waves, capacity and periods
-7. ☐ B7 — Formation flying off the roster's leader field
+7. ☐ B7 — Formation flying — ⚠ **premise refuted 2026-08-10: there is no leader field** (slot 6 is
+   `primary_target`). Re-scope onto `group` (slot 4) or drop
 8. ☐ B8 — The voice runtime: prewarm, source-following one-shots, the `aiv`→voice→clip chain
 
 ### Wave C — Emplacements
 
-9. ☐ C9 — Turret and AA AI from `ai.zrd.json`, both structural families
+9. ☐ C9 — Turret and AA AI from `ai.zrd.json`, both structural families — **spec complete
+   2026-08-10** in [`formats/turrets.md`](formats/turrets.md): the `CREATE_STANDALONE` placement
+   split, the `PARTS` kinematic chain, the wrap-aware yaw arc (⚠ `[0,0]` = unrestricted), the
+   attack/bored duty cycle, rate-limited slew + the 15° fire gate, and geometric hit resolution.
+   Cost is up — a tracking loop, not a table read. **Split 2026-08-10:**
+    - ☐ **C9a — carried turrets** (16 entries, all `ACTIVATED 1`, 8 AI + 8 player airframes). No
+      activation dependency; this is the turret-UI half and what the zeppelin hunt exercises
+    - ☐ **C9b — world emplacements** (26 entries, 22 of them dormant). Needs an activation stand-in
+      for `WAKEUP_TURRETS`; deferrable, since nothing on the playable path depends on it
 
 ### Wave D — The pilot model
 
-10. ☐ D10 — Confirm or disprove the skill-slot mapping and settle the scale
-11. ☐ D11 — The five-mode state machine with the two activation radii
-12. ☐ D12 — Target selection, ranking and ally deconfliction
-13. ☐ D13 — The maneuver library as timed input programs, with selection and collision culling
+10. ☑ D10 — Skill-slot mapping and scale — **settled 2026-08-10** from the binary + the shipped
+    `ai_skill_parameters` curves; no longer blocks D11–D15, which now load constants
+11. ☐ D11 — The state machine — **nine modes, not five** (and no `flee`/`inactive` in the dispatch);
+    activation radius is `min_ai_active_dist` 2000 m
+12. ☐ D12 — Target selection, ranking and ally deconfliction — ranking formula recovered
+13. ☐ D13 — The maneuver library — **shipped as `maneuvers.zrd`**, so this is a loader plus
+    selection/culling, not an authoring job
 14. ☐ D14 — Gunnery: the lead-sphere accuracy model and the shot-angle cones
 15. ☐ D15 — The rubber-band assist, behind a switch
 
 ### Wave E — Communication
 
-16. ☐ E16 — Trigger dispatch across the shipped taxonomy, gated by the talker stat
+16. ☐ E16 — Trigger dispatch across the shipped taxonomy, gated by the talker stat — **spec complete
+    2026-08-10** in [`formats/combat-voice.md`](formats/combat-voice.md): 29 trigger ids named by the
+    binary, the `accentID`→`voice.zrd`→pilot chain traced, the `DI` thresholds at 70/50/30 %, the
+    computed bearing index, ⚠ the 15 s cooldown armed by a *failed* roll, ⚠ the hardcoded halving on
+    ids 1–12, and broadcasts as a speaker election rather than N rolls. Cost down; still needs B8
 
 ### Wave F — Zeppelins
 
-17. ☐ F17 — Zeppelin motion: net following, stop nodes, pitch/rate limits, engine-loss deceleration
-18. ☐ F18 — Multi-zone zeppelin damage and the survivor threshold
-19. ☐ F19 — Broadside cannons: side-alternating volleys, the arc, the probabilistic hit curve
-20. ☐ F20 — Zeppelin fighter launch off the 17 zeppelin generators
+17. ☐ F17 — Zeppelin motion: net following, pitch/rate limits, engine-loss deceleration —
+    **the deceleration curve is decoded (a square root, not the design's bands)**; stop nodes are
+    confirmed to exist as a scripted concept (`COMPLETED_STOPPOINT`) but their per-node tag
+    encoding is still undecoded
+18. ☐ F18 — Multi-zone zeppelin damage — **the survivor threshold is decoded and its polarity
+    confirmed against the engine**; the multi-zone `DestructibleRegistry` work (A4) is what remains
+19. ☐ F19 — Broadside cannons: side-alternating volleys and the 90° arc — ⚠ **build it ballistic:
+    the probabilistic hit curve is design-era and is not in the shipped engine**
+20. ☐ F20 — Zeppelin fighter launch — **the launch cycle is decoded** (hold-not-cancel confirmed,
+    door timings hardcoded, `ind_period`+`wave_period` compose); ⚠ **carries the unresolved
+    `capacity` discrepancy** — budget an investigation
 
 ## Dependency and parallelism notes
 
@@ -848,10 +1232,15 @@ path, A2 owns `PlaneViewer.cs` / a new controller / `AnimRuntime.cs`'s index inv
 A4 are documentation and design, touch no engine code, and can run alongside anything.**
 
 B5–B8 all need A2. B5 blocks F17 (the same net-follower serves both). B8 blocks E16. C9 needs A1 only
-— it can run as soon as A1 lands, in parallel with all of wave B.
+— it can run as soon as A1 lands, in parallel with all of wave B. **Amended 2026-08-10:** C9 splits.
+**C9a (carried turrets) needs A1 only** and has no activation dependency — all 16 ship awake — so it
+can run the moment A1 lands and is the half the zeppelin hunt needs. **C9b (world emplacements)**
+additionally needs a stand-in for `WAKEUP_TURRETS` for its 22 dormant entries; that is a decision,
+not a blocker, and it no longer gates anything playable.
 
-Within D: D10 blocks D11–D15 (every one reads the skill vector). D11 blocks D12 and D15. D13 is
-independent of D12 and can run alongside it. D14 needs A1 and D10 but not D11.
+Within D: **D10 is settled, so it no longer blocks D11–D15** — they read the shipped skill vector and
+`ai_skill_parameters` directly and can all start at once. D11 blocks D12 and D15. D13 is independent
+of D12 and can run alongside it. D14 needs A1 but not D11.
 
 Within F: A4's decision blocks F18. F17 needs B5. F19 needs F17 (the arc is relative to a moving
 hull) and F18 (destroyed cannons weaken the volley). F20 needs B6 and F17.

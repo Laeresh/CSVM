@@ -1413,32 +1413,46 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-076` `[Feature]` **Star twinkle + undecoded light fields** (flags 523/…, the 0.17 float) — stars/beacons
   render as fixed-size soft sprites, no twinkle.
 
-- `BL-324` `[Bug]` **Our sun shines from a hardcoded direction; every mission authors one and we
-  read none of it.** `Launcher.SetupLighting` builds the world's only `DirectionalLight3D` at a
-  fixed `RotationDegrees (-45, 150, 0)`, with the comment "shine onto the -Z (nose) side" — i.e.
-  the angle was picked to make the *plane model* read well, not to match any chapter. Meanwhile
-  every mission's `weather.zrd.json` carries a per-zone **`SUNLIGHT_ORIENTATION [pitch, yaw,
-  roll]°`** (`docs/formats/weather.md`, the item-6 decode), and it varies by chapter: C1
-  `[-25, 90]`, C1B/C1C/C2/C2B `[-65, 90]`, C3 `[-25, 135]`, C4 `[-45, 135]`, C5 `[-25, -135]`
-  (census 2026-08-08 over all 54 weather files; effectively constant across a chapter's zones,
-  C2 varying by mission). `Weather.cs` parses `SUNLIGHT_DIFFUSE`/`_AMBIENT` for the `WorldLight`
-  scalar and **never reads `ORIENTATION` at all** — zero hits install-wide.
-  *Why it is visible now:* `BL-165` landed the lens flare anchored to the gamez `sun` node, which
-  in C3 sits at **yaw 45**. The authored sunlight says **yaw 135**, and our light says **yaw 150**.
-  So in C3 the flare, the sun disc and the shadows currently point three different ways; the flare
-  and the disc agree with each other (both come from the node) and the light agrees with neither.
-  ⚠ **Traps.** (a) Do **not** "fix" this by re-anchoring the flare to `SUNLIGHT_ORIENTATION` —
-  that was tried and rejected on evidence: the parameter is the shading direction, not the sun
-  object's position, and the flare would draw 90° from the visible disc (`WORLD-26`,
-  `analysis/bl-165-lens-flare/FINDINGS.md`). The open question is whether the *light* should move,
-  not the flare. (b) The world is rendered fullbright with a per-mission scalar
-  (`WorldLight`/`SunIncidence` 0.46), so this light mostly shades **aircraft**, not terrain —
-  expect the change to show on planes and their shadows, and to be nearly invisible on the ground.
-  (c) Whether the node bearing and the authored orientation *should* agree is itself unsettled: if
-  the original's shadows fall along `SUNLIGHT_ORIENTATION` while its sun billboard sits elsewhere,
-  then the original disagrees with itself too and we should reproduce that, not reconcile it.
-  *Needs an original-game A/B:* a C3 pose showing aircraft shading and shadow direction against the
-  visible sun, which settles (c) before any value is adopted.
+- `BL-331` `[Feature]` **Aircraft cast no ground shadow; the original draws one, straight down**
+  (split out of `BL-324`, 2026-08-09). The original projects a shadow under each aircraft in
+  `FUN_0049d0a0`: it takes a direction (the `sunlight` node's vector, or — on every shipped
+  mission — the top-level `SHADOW_ANGLES [-90, 0, 0]`, i.e. **straight down**), raycasts the
+  terrain below the aircraft for a ground height, and draws a fading quad there. We draw nothing:
+  the world is built `fullbright: true` (unshaded) and an unshaded Godot material receives no
+  shadow, so Godot shadow mapping **cannot** be the mechanism — `BL-324` turned
+  `_sun.ShadowEnabled` off (landed 2026-08-09, `git log --grep=BL-324`) precisely because the only
+  thing it reached was other aircraft, which the original never shadows either. Recorded here so
+  that removal is not rediscovered as a regression.
+  ⚠ **Check the authored mesh first.** The original's plane models carry a node literally named
+  `shadow`, which `PlaneBuilder.cs:26` excludes from what we build (`WorldEffectsFactory.cs:54`
+  lists it among the plane's own nodes). That may *be* the shadow — an authored flat card the
+  engine drops to ground level — in which case this is a placement problem, not a renderer to
+  write. Settle that before designing a procedural blob.
+  *Not decoded:* `FUN_0049d0a0`'s size law, its distance fade (two squared-range terms), the
+  altitude ramp against the raycast hit, and the `0.8`/`3.0 − 2·a` alpha terms. Deliberately left
+  open rather than guessed at.
+  *Needs:* an original-game A/B — a low pass over flat ground showing the shadow's size and
+  softness against the aircraft's altitude.
+
+- `BL-332` `[Bug]` **The aircraft light's intensity is hardcoded; the mission authors it**
+  (split out of `BL-324`, 2026-08-09). `Launcher.cs` sets `LightEnergy 1.6` and
+  `AmbientLightEnergy 0.9` (ambient source `Sky`) once at launcher level, for every mission.
+  The original sets `SUNLIGHT_DIFFUSE` and `SUNLIGHT_AMBIENT` **on the same `sunlight` node in the
+  same zone-apply call** as the orientation — `FUN_00472ea0` calls `FUN_004dbdb0` (diffuse) and
+  `FUN_004dbce0` (ambient) directly beside `FUN_004dc610` (the rotation setter), on the named
+  `sunlight` gamez Light node every chapter ships. They swing hard: `DIFFUSE` 0.4–2.0,
+  `AMBIENT` 0.15–0.6, with
+  C1B night at `0.6 / 0.15` against C1C day at `2.0 / 0.6`. `Weather.cs` already parses both, but
+  only collapses them into the `WorldLight` scalar for the **fullbright world**
+  (`AMBIENT + DIFFUSE·SunIncidence`); the shaded path — aircraft, the only lit things in the scene
+  — never sees them. So a plane in C1B's night mission is lit exactly as brightly as one in C1C's
+  daylight, and since `BL-324` its bearing is now per-chapter while its brightness is not.
+  ⚠ Not a straight port: `DIFFUSE` is a DX7-era intensity, not Godot's `LightEnergy` units, so
+  mapping 0.4–2.0 onto the light is a **new calibration**, not a substitution — which is why it is
+  not part of `BL-324`. Keep it to those two constants; whether Godot's ambient should stop being
+  `Sky`-sourced is a separate rendering-design question, not this.
+  *Needs an original-game A/B:* a matched night/day pose showing aircraft brightness, in the spirit
+  of `CAP-11`'s `WorldLight` calibration (which pinned the world half of the same pair).
 
 - `BL-305` `[Bug]` **C5's city blocks are packed edge to edge where the original shows pavement
   between buildings — within-block clutter density/alignment is wrong.** Found by `CAP-22`
@@ -1488,6 +1502,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   starting point, but the decode should come from footage: when they are visible, their size,
   count, and whether they move with the air or hang world-fixed. Needs a dedicated original
   capture at several altitudes in clear air away from the deck band.
+  ⚠ **Three mechanisms are ruled out — do not re-walk them** (2026-08-09, `crimson.exe` via
+  Ghidra + a census of the shipped extraction; full evidence in that day's
+  `git log --grep=BL-317`). (a) The profiler bucket **`ZBT_CAMDYN_CLOUDHACK`**, whose name
+  promises exactly this feature, brackets `FUN_0042ee40` — the `CLOUD_COVER` whiteout and band
+  flicker this repo already decodes (`WeatherRig.BandFlicker`, `weather.md`). It renders no
+  sprites at all. (b) The GameGen keyword **`fluff`** (node-flag bit 12 = `0x1000` =
+  `flags.unk12`, gated by the debug switch `CameraRenderFluffClutter`) is **foliage**: 47 nodes,
+  all in C1, all fir trees and bushes, bbox 3.7 × 6.7 m at ground level — see `gamez.md`'s
+  bit-12 bullet, written so this one is not chased twice. (c) There is **no third cloud
+  population in the world data and no ambient puffer**: sweeping every node name in all eight
+  chapters for `cloud|wisp|puff|fog|mist|haze|vapor|smoke` returns only `cloudparent` and
+  `cloudsprite1/2` plus the effect emitters, and of 1613 install-wide `PufferState` events every
+  non-`OnCall`/non-`WeaponHit` one is a C3 world prop (waterfalls, rapids, the volcano, the
+  moving Studebakers) — nothing is hosted on an aircraft. So the wisps are neither world
+  geometry, nor clutter, nor an authored puffer; whatever draws them travels with the aircraft or
+  the camera, and no candidate for that has been found yet. The capture above is now the *first*
+  step, not the fallback.
 
 - `BL-322` `[Bug]` **C5's lit facades render ×0.58–0.66 of the original with WorldLight already at
   clamp 1.0** (split out of `BL-303` at its close, 2026-08-08; measured `CAP-11`: tower faces 10.2
@@ -1675,7 +1706,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `SizeScaleDefault` note). Sorting particles by depth inside the emitter is a *different*,
   additional change and is NOT what the original does — it draws its list in order too.
 
-- `BL-331` `[Fidelity]` **An unauthored puffer `TIME_INTERVAL` is `1.0` s in the original; both our
+- `BL-336` `[Fidelity]` **An unauthored puffer `TIME_INTERVAL` is `1.0` s in the original; both our
   parsers invent `0.1`.** Decoded 2026-08-10 while closing `PLAN-puffer-engine-deltas` C9: the
   puffer object's constructor `FUN_00550100` writes `0x3f800000` = **1.0** to both `+0x40`
   (interval) and `+0x44` (its reciprocal), and the applier only overwrites them when the parser set

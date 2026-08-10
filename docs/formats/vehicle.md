@@ -95,8 +95,15 @@ zeppelins; measured 2026-08-07 as a lateral control bias away from the surface a
 the [command inventory](strings.md#the-bindable-command-table-messagesjson)); `rogue` (three
 `[fameThreshold, soundName]` steps warning a player who is shooting allies);
 `respawn_rad`/`respawn_el` (multiplayer respawn ring); `score_kill`/`_zep`/`_suicide`/
-`_return_flag`/`_enemy_flag` (multiplayer scoring); `min_ai_active_dist` 2000 m;
-`ai_skill_parameters` (the chance/factor curves the nine pilot skills index into).
+`_return_flag`/`_enemy_flag` (multiplayer scoring); `min_ai_active_dist` 2000 m — the AI
+activation radius, and the fallback for every roster whose own volume fields are unauthored (all of
+them).
+
+**`ai_skill_parameters` is now decoded** — one `[value@skill1, value@skill9]` pair per pilot stat,
+the endpoints a 1–9 rating interpolates between, covering aiming cone, shot-angle cone, break-off
+chance, stun duration, bail-out chance and more. Full table, and the roster slots that index it, in
+[ai-rosters.md](ai-rosters.md#ai_skill_parameters--what-a-19-rating-actually-means). It settles
+that the pilot-skill scale is **1–9 and nothing else**.
 
 ## destroyable_parts (Run-2 item 10)
 
@@ -353,7 +360,9 @@ NPC's Dead Eye statistic sets the radius of a lead sphere it will shoot into.
 
 **AI-combatant tuning** (AI variant defs, M4): pilot skill/personality (`dare_devil`,
 `dead_eye`, `quick_draw`, `steady_hand`, `sixth_sense`, `natural_touch`, `stun_recovery`,
-`talker`, `constitution`, `accentID`); flight/behaviour (`mode`/`mode_alt`, `target_bias`,
+`talker`, `constitution`, `accentID`) — the same nine-stat vector the mission rosters author
+per pilot, decoded in [ai-rosters.md](ai-rosters.md#the-skill-vector), so a def value here is the
+airframe-level default a roster entry overrides; flight/behaviour (`mode`/`mode_alt`, `target_bias`,
 `struct_bias`, `pursuit_range`, `attack`/`attack_dwell`/`not_pursuit_dwell`, `rates`,
 `turns`, `*_damping`, `mass`, `friction`, `chas_*`, `ai_input_*` / `ai_emerg_input_*` limits
 and scales, `preferred_engagement_altitude`/`return_range`, `activation` = spawn/aggro

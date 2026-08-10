@@ -619,9 +619,19 @@ public partial class Launcher : Node3D
     {
         _sun = new DirectionalLight3D
         {
-            RotationDegrees = new Vector3(-45, 150, 0), // shine onto the -Z (nose) side
+            // The DEFAULT bearing only — hand-picked to shine onto the -Z (nose) side so the plane
+            // model reads, and kept for --viewer, the menu, and any mission with no weather.json.
+            // A flight WITH weather overwrites this every zone-apply from the zone's authored
+            // SUNLIGHT_ORIENTATION (BL-324, WeatherRig.ApplyZone).
+            RotationDegrees = new Vector3(-45, 150, 0),
             LightEnergy = 1.6f,
-            ShadowEnabled = true,
+            // BL-324: OFF. The world is built fullbright (unshaded), and an unshaded Godot
+            // material receives neither light nor shadow — so the only thing this shadow pass ever
+            // reached was one aircraft shadowing another, which the original does not do either
+            // (it has no shadow mapping at all, only a projected blob: BL-331). Leaving it on
+            // would have made this item's bearing change swing a non-original effect as a side
+            // effect, hardest in C1B/C1C/C2/C2B where pitch -65 is nearly overhead.
+            ShadowEnabled = false,
         };
         AddChild(_sun);
 

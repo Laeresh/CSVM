@@ -54,9 +54,15 @@ public sealed class WeatherState
     // Confirmed against original footage at 0.426/0.784/clamp-1.0 (CAP-11 matched-pose A/B,
     // 2026-08-07; git log --grep=BL-110). Known exemptions in the original, not yet ours:
     // water is unmodulated (BL-304); night cloud sprites are moonlit directionally (BL-325).
-    private static readonly ZoneFog NoFog = new(new Color(0.69f, 0.69f, 0.69f), 1e8f, 1e9f, 1e8f, 1e9f, 1e9f, 1f);
+    // The sun bearing here is the LAUNCHER's hand-picked (-45, 150, 0) rather than the binary's
+    // straight-down default: NoFog is what a mission with no weather.json (and --viewer, and the
+    // menu) wears, and there the angle's only job is to make the plane model read — which is
+    // exactly what that value was chosen for. A mission that HAS a weather.json never reaches
+    // this; its zone's authored bearing wins (BL-324).
+    private static readonly ZoneWeather NoFog = new(new Color(0.69f, 0.69f, 0.69f), 1e8f, 1e9f, 1e8f, 1e9f, 1e9f, 1f,
+        new Vector3(Mathf.DegToRad(-45f), Mathf.DegToRad(150f), 0f));
 
-    private readonly Dictionary<string, ZoneFog> _zones = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, ZoneWeather> _zones = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _zoneNames = new(); // file order — ResolveZone's fallback order
 
     public enum PrecipKind { Rain, Snow }
@@ -179,11 +185,14 @@ public sealed class WeatherState
                         ? (l, h)
                         : (NoFog.FogNear, NoFog.FogFar);
                 float clip = z.List("CLIP_RANGES") is { Count: >= 2 } cr && cr[1] is float c ? c : NoFog.ClipFar;
-                w._zones[zone] = new ZoneFog(color, near, far, low, high, clip, WorldLightFactor(z));
+                w._zones[zone] = new ZoneWeather(color, near, far, low, high, clip,
+                    WorldLightFactor(z), SunOrientationOf(z));
                 var zf = w._zones[zone];
                 // The fields, not the record: a composite ToString() renders its own floats in
                 // the current culture, so it would escape Log's invariant formatting outright.
-                Log.Info("world", $"weather zone zone={zone} fog_color={zf.FogColor.ToHtml(false)} fog_near={zf.FogNear:0.###} fog_far={zf.FogFar:0.###} fog_low={zf.FogLow:0.###} fog_high={zf.FogHigh:0.###} clip_far={zf.ClipFar:0.###} world_light={zf.WorldLight:0.###}");
+                // The sun bearing is logged in DEGREES, as the file authors it — radians here
+                // would have to be converted back by hand at every reading of the log.
+                Log.Info("world", $"weather zone zone={zone} fog_color={zf.FogColor.ToHtml(false)} fog_near={zf.FogNear:0.###} fog_far={zf.FogFar:0.###} fog_low={zf.FogLow:0.###} fog_high={zf.FogHigh:0.###} clip_far={zf.ClipFar:0.###} world_light={zf.WorldLight:0.###} sun_pitch={Mathf.RadToDeg(zf.SunOrientation.X):0.###} sun_yaw={Mathf.RadToDeg(zf.SunOrientation.Y):0.###} sun_roll={Mathf.RadToDeg(zf.SunOrientation.Z):0.###}");
             }
         w.ParsePrecip(inner);
         return w;
@@ -288,9 +297,10 @@ public sealed class WeatherState
     }
 
 
-    /// <summary>Fog for a zone ("zone1"/"zone2"/"zone3"); a no-op fog if the zone is absent.
-    /// Callers should pass a <see cref="ResolveZone"/> result rather than a raw request.</summary>
-    public ZoneFog Fog(string zone) => _zones.TryGetValue(zone, out var z) ? z : NoFog;
+    /// <summary>One zone's weather ("zone1"/"zone2"/"zone3") — fog, world light and sun bearing;
+    /// <see cref="NoFog"/> if the zone is absent. Callers should pass a <see cref="ResolveZone"/>
+    /// result rather than a raw request.</summary>
+    public ZoneWeather Zone(string zone) => _zones.TryGetValue(zone, out var z) ? z : NoFog;
 
     /// <summary>Whiteout opacity 0..1 at a given altitude: a symmetric trapezoid across the
     /// cloud band (user-observed in-game). Clear sight (0) at BOTTOM and TOP, ramping
@@ -377,6 +387,24 @@ public sealed class WeatherState
         float diffuse = zone.List("SUNLIGHT_DIFFUSE") is { Count: >= 1 } sd && sd[0] is float dv ? dv : 1f;
         float ambient = zone.List("SUNLIGHT_AMBIENT") is { Count: >= 1 } sa && sa[0] is float av ? av : 0f;
         return Mathf.Clamp(ambient + diffuse * SunIncidence, MinWorldLight, 1f);
+    }
+
+    /// <summary>The zone's <c>SUNLIGHT_ORIENTATION</c> as Godot euler RADIANS, ready to assign
+    /// straight to a <see cref="DirectionalLight3D"/>'s <c>Rotation</c> — see
+    /// <see cref="ZoneWeather.SunOrientation"/> for why no axis conversion is needed. The data is
+    /// degrees; the binary multiplies by the same 0.017453292 at
+    /// <c>FUN_004bc3e0</c>. Absent (or short) → the binary's own default, pitch −π/2: straight
+    /// down.</summary>
+    private static Vector3 SunOrientationOf(ZrdrDict zone)
+    {
+        if (zone.List("SUNLIGHT_ORIENTATION") is not { Count: >= 2 } so
+            || so[0] is not float pitch || so[1] is not float yaw)
+            return new Vector3(-Mathf.Pi * 0.5f, 0f, 0f);
+        // ROLL is optional in shape but present install-wide (always 0). A directional light is
+        // rotationally symmetric about its own beam, so roll cannot change the shading — it is
+        // carried anyway rather than dropped, so the record holds what the file holds.
+        float roll = so.Count >= 3 && so[2] is float r ? r : 0f;
+        return new Vector3(Mathf.DegToRad(pitch), Mathf.DegToRad(yaw), Mathf.DegToRad(roll));
     }
 
     // The file's own per-zone block names, in FILE ORDER — "ZONE1", "ZONE2" in C1–C4;
@@ -492,7 +520,14 @@ public sealed class WeatherState
             AlphaGradient: Vec2After(inner, "ALPHA_GRADIENT"));
     }
 
-    /// <summary>Distance fog for one day/night zone: haze toward <see cref="FogColor"/> between
+    /// <summary>One day/night zone's weather: everything the original's zone-apply
+    /// (<c>FUN_00472ea0</c>) writes in a single call when the camera's weather state changes —
+    /// the distance fog, the world-brightness scalar, and the sun's bearing. Named for the whole
+    /// block rather than for the fog alone because those three genuinely travel together: a zone
+    /// change that applied the fog and forgot the light would be a bug the single record exists to
+    /// make unrepresentable.
+    ///
+    /// <para>Distance fog: haze toward <see cref="FogColor"/> between</para>
     /// <see cref="FogNear"/> and <see cref="FogFar"/> metres of **horizontal** view distance —
     /// the original's fog volume is a vertical cylinder around the camera, not a sphere
     /// (user-diagnosed) — scaled by an altitude fade from <c>FOG_ALTITUDE</c>: full
@@ -507,8 +542,25 @@ public sealed class WeatherState
     /// The ramp between near and far is LINEAR, per the gamez world node's own
     /// <c>fog_state == 1</c> (B15). <see cref="ClipFar"/> is the original's hard far clip (informational —
     /// our far plane is much larger; the fog is what hides distant terrain, matching the
-    /// original's short view distance).</summary>
-    public readonly record struct ZoneFog(Color FogColor, float FogNear, float FogFar, float FogLow, float FogHigh, float ClipFar, float WorldLight);
+    /// original's short view distance).
+    ///
+    /// <para><see cref="SunOrientation"/> is the zone's <c>SUNLIGHT_ORIENTATION</c> as Godot euler
+    /// RADIANS — assign it straight to a <see cref="DirectionalLight3D"/>'s <c>Rotation</c>. The
+    /// gamez→Godot mapping is the <b>identity</b>, which is worth stating because it looks like it
+    /// should not be: the binary writes these three radians into an ordinary gamez node rotation
+    /// triple (<c>FUN_004dc610</c>, <c>zclass\Light.c</c>), <see cref="Mech3.GameZ"/> already reads
+    /// gamez node eulers as <c>Basis.FromEuler(v, EulerOrder.Yxz)</c> verbatim, Godot's
+    /// <c>Node3D</c> default order is YXZ, and a directional light shines along local −Z. That
+    /// reproduces the original's own euler→direction helper <c>FUN_0053c610</c>
+    /// (<c>(-cos p·sin y, sin p, -cos p·cos y)</c>) exactly — pinned at (0,0), (−90,0) and (0,90)
+    /// in <c>CSVM.Tests</c>. Varies by chapter (C1 <c>[-25, 90]</c>, C3 <c>[-25, 135]</c>,
+    /// C5 <c>[-25, -135]</c>), and is adopted with no TUNE: it is authored data, not a look to
+    /// tune (`BL-324`).
+    /// ⚠ It is the <b>shading</b> direction, NOT the sun object's position — the gamez <c>sun</c>
+    /// billboard the lens flare anchors to is a different node entirely and disagrees with this in
+    /// C3 by 90°. That disagreement is the original's, and reproducing it is correct
+    /// (<c>WORLD-26</c>).</para></summary>
+    public readonly record struct ZoneWeather(Color FogColor, float FogNear, float FogFar, float FogLow, float FogHigh, float ClipFar, float WorldLight, Vector3 SunOrientation);
 
     /// <summary>The mission's precipitation, from the bare-scalar block at the end of
     /// weather.json (after <c>SHADOW_ANGLES</c>). Only some missions carry one — C4 (SNOW),

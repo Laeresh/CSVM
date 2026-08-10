@@ -131,6 +131,8 @@ public static class Suites
             "per-chapter destructible registry totals", DestructibleCensus));
         into.Add(new TestHarness.Suite("lens-flare-gates",
             "the sun's lens flare is gated on chapter data alone, and its two independent gates — the gamez `sun` node and init.gw's LensFlareTexture slots — agree chapter by chapter, in C2 and C3 and nowhere else (BL-165)", LensFlareGates));
+        into.Add(new TestHarness.Suite("sun-orientation",
+            "the world's light wears the flown zone's authored SUNLIGHT_ORIENTATION, and follows it across a zone change (BL-324)", SunOrientation));
         into.Add(new TestHarness.Suite("tex-dropin",
             "the census/override flatten repaints RGB and changes nothing else", TexDropIn));
         into.Add(new TestHarness.Suite("gltf-export",
@@ -2424,6 +2426,76 @@ public static class Suites
     /// <para>Data-only on purpose — no world is built. The interp parse is a file read and the sun
     /// node is a gamez lookup, so this stays a fast suite rather than a third full eight-chapter
     /// world sweep beside <c>destructible-census</c> and <c>collision-visibility</c>.</para></summary>
+    /// <summary>BL-324: the <c>DirectionalLight3D</c> is pointed by the flown zone's authored
+    /// <c>SUNLIGHT_ORIENTATION</c>, and keeps following it when the camera's weather state moves
+    /// to another zone.
+    ///
+    /// <para>The unit tests in <c>CSVM.Tests</c> already pin the parse and the euler→direction
+    /// mapping; neither can see the failure this suite exists for — the light being wired to the
+    /// wrong seam, or the zone edge firing without carrying it. Both are invisible in a screenshot
+    /// too: a light at the previous zone's bearing looks like a light.</para>
+    ///
+    /// <para><b>C2/MP2 is the only shape in the install that can fail this.</b> Every other mission
+    /// authors the same bearing in both its zones (the <c>PLAN-overcast-match</c> census), so a
+    /// zone change there moves the light from a value to the same value and would pass with the
+    /// write deleted. C2's MP2 and MP3 are the two files whose ZONE1 (−65°) and ZONE2 (−25°) pitch
+    /// differ. Do not "simplify" this onto C1/IA1.</para></summary>
+    private static void SunOrientation(TestContext ctx)
+    {
+        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C2", "MP2");
+        ctx.RequireData(zrdr, $"C2/MP2 mission zrdr");
+
+        var sun = new DirectionalLight3D { Name = "sun-orientation-probe" };
+        ctx.Host.AddChild(sun);
+        var camera = new Camera3D { Name = "sun-orientation-camera" };
+        ctx.Host.AddChild(camera);
+        try
+        {
+            // No --sky-zone: an explicit one disarms the state machine outright (Decision 5), which
+            // would make the zone change below unobservable. The default request is zone2, and with
+            // no horizon geometry to correct it that is what the flight builds with.
+            var spec = SessionSpec.Parse(new[] { "--chapter=C2", "--mission=MP2" });
+            var rig = new PlayerRig { Index = 0, Camera = camera, HudParent = ctx.Host };
+            var rigs = new List<PlayerRig> { rig };
+
+            var weatherRig = new WeatherRig(spec, ctx.Host, sun);
+            weatherRig.Build(zrdr, rigs, System.Array.Empty<HorizonZone>(), _ => { });
+            ctx.Check(NearDegrees(sun.RotationDegrees, -25f, 90f),
+                $"C2/MP2 builds at ZONE2's bearing (got {sun.RotationDegrees.X:0.#}°/{sun.RotationDegrees.Y:0.#}°)");
+
+            // Below the cloud band (19024–20124 m) the camera is in weather state 1, so the edge
+            // trigger swaps to ZONE1 — and the light must ride along. Ticked twice: the first Tick
+            // publishes the rig's new state, and the swap is asserted after it has settled.
+            camera.Position = new Vector3(0f, 0f, 0f);
+            weatherRig.Tick(rigs);
+            ctx.Same(1, rig.CameraWeatherState, $"camera below the band is in weather state 1");
+            ctx.Check(NearDegrees(sun.RotationDegrees, -65f, 90f),
+                $"a zone change carries the sun to ZONE1's bearing (got {sun.RotationDegrees.X:0.#}°/{sun.RotationDegrees.Y:0.#}°)");
+
+            // ...and back. A one-way test would pass on a light that moved once and stuck.
+            camera.Position = new Vector3(0f, 25000f, 0f);
+            weatherRig.Tick(rigs);
+            ctx.Same(2, rig.CameraWeatherState, $"camera above the band is in weather state 2");
+            ctx.Check(NearDegrees(sun.RotationDegrees, -25f, 90f),
+                $"and back to ZONE2's on the return crossing (got {sun.RotationDegrees.X:0.#}°/{sun.RotationDegrees.Y:0.#}°)");
+
+            // The item's other half, asserted where it would regress: shadow mapping stays off, so
+            // this light cannot cast the raked plane-on-plane shadows the original never draws
+            // (BL-331 owns the real ground shadow).
+            ctx.Check(!sun.ShadowEnabled, $"the world light casts no shadow map");
+        }
+        finally
+        {
+            sun.QueueFree();
+            camera.QueueFree();
+        }
+    }
+
+    // Degrees, not radians, and a loose epsilon: the assertion is "this is the authored bearing",
+    // not "this is bit-identical to a round trip through Basis".
+    private static bool NearDegrees(Vector3 rotationDegrees, float pitch, float yaw)
+        => Mathf.Abs(rotationDegrees.X - pitch) < 0.1f && Mathf.Abs(rotationDegrees.Y - yaw) < 0.1f;
+
     private static void LensFlareGates(TestContext ctx)
     {
         ctx.RequireData(ctx.InterpPath, $"interp.json");
