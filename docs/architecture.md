@@ -1710,6 +1710,12 @@ deliberately differs — read it before retuning `TracerLength`/`TracerWidth`/`T
 `TracerMinPixels`. ⚠ Same siting rule as `org/puffer.md`: executable decodes live in `docs/org/`,
 never in the CC-BY `docs/formats/` tree.
 
+**Rounds leave the muzzle along the nose axis — the original's don't.** The retail engine runs a
+per-muzzle gun aim assist at spawn time (target scan → constant-velocity intercept → plane-local
+smoothing → scatter cone), decoded in [org/aim-assist.md](org/aim-assist.md) and unbuilt here
+(`BL-342`). ⚠ It is a **launch-direction** assist: nothing steers a round in flight, so it belongs
+at the fire call, not in this file's integrator.
+
 `ProjectilePool` — the shared-world weapon-fire subsystem: a fixed pool of projectiles integrated
 with `Ballistics` (VELOCITY/ACCELERATION/GRAVITY, expiring at RANGE), plus tracer streaks,
 muzzle flashes, and the per-surface IMPACT sound + effect model. Per-class impact looks (A2): a

@@ -533,21 +533,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     health 40`). `PlaneStats` does not read either. The model is **armour-first, then health**
     (see `docs/plans/PLAN-M3-weapons.md` C23 for the dominance argument that settles it).
 
-- `BL-091` `[Research]` **`sticky_bullet_*` — a shipped aim-assist system nothing reads.** `player.json` carries
-  `sticky_bullet_catchup_rate 5.0`, `sticky_bullet_inaccuracy 1.0`,
-  `sticky_bullet_forget_interval 1.5`, `sticky_bullet_dist_factor 0.0`; **zero references anywhere
-  in the repo.** The names read as bullet magnetism toward a tracked target — how fast rounds catch
-  up, a scatter term, and how long a round remembers its target — with distance attenuation shipped
-  **off** (`dist_factor 0`).
-  ⚠ **Traps.** `player.json` is the *global* tuning file, not a player-only one (it also holds
-  `min_ai_active_dist`, `ai_groundblow`, `ai_skill_parameters`), so whether this assists the
-  **player's** gunnery or the **AI's** is unsettled — settle that first, because "your bullets
-  curve" and "their bullets curve" are opposite feel promises. Untestable either way until aircraft
-  are hittable (see the incoming-fire entry). **The cheap first half is documentation:** no
-  `docs/formats/` page covers `player.json`'s combat/AI globals — `vehicle.md` documents only
-  `nom_gravity` and `sounds.md` the curve blocks — so `warning_shot_*`, `sticky_bullet_*`, the
-  `crash` armour/health ranges and `respawn_rad`/`respawn_el` are all undocumented shipped tuning.
-
 - `BL-141` `[Research]` **`shell1.png`/`shell2.png` — the doc's own listed "tracer" texture pair — are wired to
   nothing: not `gunshell`, not any reader def, not any engine code.**
   `docs/formats/weapon-effects.md:148` groups them under "Tracer" textures. Traced the actual
@@ -723,6 +708,45 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `VELOCITY`; a fast launch would then visibly slow, as a drop-torpedo physically should. `CAP-28`
   films it; measurement can reuse `analysis/video-flight-calibration` if the HUD is in frame.
   `wep_14` is mountable via `--rocket=wep_14` (no stock loadout carries it).
+
+- `BL-342` `[Feature]` **Sticky bullets — build the player's gun aim assist the original ships and we don't.**
+  Guns currently fire straight down the muzzle axis with no lead and no assist, which is the direct
+  cause of `BL-301`/`PT-43`'s "gun kills are impractical, everything leans on rockets". The
+  original's mechanism is fully decoded — build it, do not re-derive it.
+  *Evidence:* [`docs/org/aim-assist.md`](docs/org/aim-assist.md) — the whole mechanism read out of
+  `crimson.exe` 2026-08-10 (`FUN_004b6530` the assist, `FUN_004b3e50` the per-frame slot update,
+  `FUN_00460e30` the intercept solver, `FUN_004bae60` + 3 twins the scorer). Tuning is
+  `player.json`'s `sticky_bullet_catchup_rate 5.0` / `_inaccuracy 1.0` (degrees) /
+  `_forget_interval 1.5` / `_dist_factor 0.0`, decoded in
+  [`docs/formats/vehicle.md`](docs/formats/vehicle.md)'s `player.json` table.
+  *Fix shape:* eight per-muzzle slots on the plane (4 weapon groups × 2 alternating barrels), each
+  holding a **plane-local** gun-line direction and a target direction. Per frame: unwind the target
+  to local forward once `forget_interval` has passed since that barrel last fired, then slerp the
+  gun line toward it at `catchup_rate · dt` (snap at `≥ 1`). At spawn: scan candidates, reject
+  same-team / out-of-`RANGE` / outside the assist cone / no intercept, rank by
+  `alignment − distance · dist_factor`, write the winner into the target slot, and fire along the
+  **smoothed** line with a `inaccuracy`-wide random cone applied. Shooter-authoritative in MP — the
+  original transmits the assisted vector rather than re-running the scan per client.
+  *⚠ Traps:* **this is not bullet steering** — the pre-decode `vehicle.md` wording said rounds in
+  flight are pulled toward a target and that is wrong, nothing touches a round after spawn;
+  smoothing is in **plane-local** space, so the assist must lag your own roll/pitch, and doing it in
+  world space is a different feel; `forget_interval` counts from the **last shot**, so it never
+  expires while you hold the trigger; `dist_factor 0` means selection is *purely* most-aligned, so
+  a far target dead ahead legitimately outranks a near one off-axis; the scatter's polar angle is
+  uniform in `[0, θ]`, **not** uniform over the cone's solid angle; the candidate set is **not
+  aircraft-only** — it is vehicles + turrets + `targets.zrd` mission structures + **live
+  proximity-fused ordnance in flight**, so guns legitimately snap onto an incoming rocket, and
+  scoping the port to planes would be a silent behaviour change. **Unsettled before tuning:** how
+  the 1° assist scatter composes with the per-gun `CANNON_SPREAD 6.0` (`docs/formats/weapons.md`) —
+  replace, stack, or different stage — was not traced and must be settled first, or both numbers
+  get tuned against each other.
+  *Playtest after fix:* `--vs` dogfight, and the `PT-43` gun-feel line — guns should become a
+  practical kill weapon without rockets. The honest risk is over-assist reading as aimbot; the
+  shipped constants are the original's answer, so tune only against footage, not taste.
+  *Cross-refs:* `BL-301` (Dogfight tuning — its bullet-magnetism line is this item, and the
+  strength call stays there), `PT-43` (where it gets judged), `docs/org/tracers.md` (the same
+  spawn-time-only orientation rule on the visual side). Supersedes `BL-091`, whose research half
+  the decode above closes.
 
 ## Flight model & collision physics
 
@@ -2845,8 +2869,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   uncovered canard tips are the known gap to close.
 
 - `BL-301` `[Tuning]` `[Owed-playtest]` **Dogfight (VS mode) tuning** — every deliberate v1 deferral, to be re-judged from
-  `PT-43` evidence, not speculation: **bullet magnetism / aim assistance** (the original assists
-  gun aim; without it kills lean on rockets — decide mechanism and strength), spawn
+  `PT-43` evidence, not speculation: **aim-assist strength** (the mechanism is no longer a question
+  — it is decoded in [`docs/org/aim-assist.md`](docs/org/aim-assist.md) and built by `BL-342`; what
+  stays here is whether the original's shipped constants feel right in VS), spawn
   camping / spawn protection (none in v1), suicide penalty and last-damager credit (0 / none in
   v1), sudden-death overtime on a drawn time-out (draw declared in v1), menu-side match options
   (kill target and time limit are CLI-only), `dogfight_ace` vs `zeppelin_run` spawn spacing, the

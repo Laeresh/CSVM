@@ -76,7 +76,7 @@ stock-loadout file.
   the stand-off you chose; the panel names what you clicked and its surface class.
 
 **Boundary: no new weapon *systems*.** No armour pool (`BL-085`), no hittable aircraft
-(`BL-226`), no sticky-bullet aim assist (`BL-091`), no new effect decodes. This plan changes only
+(`BL-226`), no sticky-bullet aim assist (`BL-091`, since closed → `BL-342`), no new effect decodes. This plan changes only
 *where and how the existing firing code is driven* — every visual it unlocks already exists and is
 already exercised by `--fly`.
 

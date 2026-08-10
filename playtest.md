@@ -208,7 +208,8 @@ an upper bound, and the correction to the 137.9 mph equilibrium are on `BL-115` 
     does that read as right at the controls, and do rockets (fuse + falloff blast) feel like the
     practical weapon they were in the original;
   - (b) **hitting at all without the original's aim assistance** — if landing guns feels hopeless,
-    that is `BL-301`'s bullet-magnetism line, not a damage tune;
+    that is `BL-342` (build the decoded sticky-bullet assist) and `BL-301`'s strength call, not a
+    damage tune;
   - (c) spawn camping viability after the 3 s auto-respawn (no invulnerability by design);
   - (d) opponent edge-arrows + the status line: readable at 2- and 4-player pane sizes, arrows
     flip to the right edge, marker vanishes while the opponent is down;
