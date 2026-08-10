@@ -1,12 +1,13 @@
 ---
 name: plan-item
-description: Explain the active plan's item in plain language — where it sits, its goal, evidence, traps, how it gets done, and how you'd know it worked; then start it, close it, or defer it. Use when the user names a plan item (`A1`, `B11`) or asks what to work on next.
+description: Explain the active plan's item in plain language — where it sits, its goal, evidence, traps, how it gets done, and how you'd know it worked; then start it, decode it out of the original binary, close it, or defer it. Use when the user names a plan item (`A1`, `B11`) or asks what to work on next.
 ---
 
 Explain one item of the **active plan** so it can be worked cold, then start it, close it, or park it.
 
 The sibling skill for `backlog.md` entries is [`/backlog`](../backlog/SKILL.md) — a `BL-NNN` that is
-*not* scheduled into the active plan belongs there, not here.
+*not* scheduled into the active plan belongs there, not here. The binary-decode rule below — §4's
+provenance triage and §5's decode option — is mirrored from that skill; keep the two in sync.
 
 The explanation phase is **read-only**: no builds, no `RunTests.ps1`, no `--freecam` runs. Once the
 user picks *start it here*, that restriction lifts — that is the work.
@@ -15,7 +16,7 @@ user picks *start it here*, that restriction lifts — that is the work.
 skill's entire deliverable, so it must be the **final message after the last tool call** — do all the
 reading of §1–§3 first, then emit §4 and §5 together as one message and stop. Do **not** call
 `AskUserQuestion` (or any other tool) to pose §5's choice: that turns the explanation into
-between-calls text and the user sees only the question. §5's three options are plain text at the end
+between-calls text and the user sees only the question. §5's options are plain text at the end
 of that message.
 
 ## 1. Resolve the plan
@@ -26,8 +27,8 @@ One authority; do not glob for candidates.
 - **No active plan named** → list any `docs/PLAN-*.md` files and ask which, or if there are none say
   so and point at `/new-plan`. Never guess.
 - **An explicitly named plan** (`/plan-item A1 in PLAN-m3-polish-5`, or a path) → honour it, but if
-  it carries a `COMPLETE` banner or lives in `docs/plans/`, explain it **read-only** and skip §4
-  entirely: retroactively starting or deferring a finished item is nonsense. Point at its landing
+  it carries a `COMPLETE` banner or lives in `docs/plans/`, explain it **read-only** and skip §5's
+  handoff entirely: retroactively starting or deferring a finished item is nonsense. Point at its landing
   commit (`git log --grep`) or pre-freeze `docs/HISTORY.md` entry instead.
 
 ## 2. Resolve the item
@@ -78,6 +79,26 @@ use — "`DestructibleRegistry`, the list of things a weapon can damage". No cod
 snippet is the clearest way to show a trap. Keep each section to what it needs; say "nothing stated"
 rather than padding.
 
+### The binary outranks footage and observation
+
+`crimson.exe` is readable through the ghidra-mcp tools, so a quantity the original engine holds — a
+constant, a rate, a threshold, a ramp, a curve — is **decodable**, not a TUNE and not a taste call.
+This matters more here than anywhere else in the repo: `/plan-item` is the last gate before
+read-only lifts and a number gets compiled into the engine. Two consequences while writing §4, both
+of them *routing only* — this skill calls no MCP tool of its own (see §5, option 2):
+
+- An open question the binary could settle is named as decodable **where the item raises it**, in the
+  words the item got wrong: "the plan files this as an unsettled TUNE; it is a constant in
+  `crimson.exe`."
+- A number the plan or its backlog entry asserts as **settled**, whose stated provenance is footage, a
+  screenshot A/B or how it felt at the controls, is flagged as decodable-and-unverified. This project
+  has been wrong that way repeatedly, and such an item reads as evidenced — which is exactly why
+  nobody re-checks it before building on it.
+
+Bound the flag to quantities the binary plausibly holds. Art direction, whether a mission *feels*
+right, whether a texture looks right — the executable has nothing to say about those, and flagging
+them is noise that trains the reader to skip the flag.
+
 Use these headings, in this order:
 
 - **Where it sits** — plan, wave, checklist status; from the dependency notes: what must land first,
@@ -92,13 +113,21 @@ Use these headings, in this order:
 - **The evidence, and how far it goes** — the item's own confidence label (traced / direction-sound-
   magnitude-TUNE / lead-only) said in plain words, plus whether the tier-3 reading confirmed it still
   holds, and what remains unverified without a run. An item flagged **lead-only** is a question, not
-  a finding; treating it as a finding is this repo's most-repeated failure.
+  a finding; treating it as a finding is this repo's most-repeated failure. **Say where each number
+  came from** — a decode, a measurement off footage, a cockpit observation — because that provenance
+  is what the triage above ranks.
 - **Traps** — the ⚠ notes from both the plan item and the backlog entry, plus anything the code
   reading revealed: wrong-mechanism "fixes", unsettled decodes, things that look like the bug.
+  **Plus the provenance flags** — every number the item states as settled that came from footage, a
+  screenshot A/B or feel, and sits in a slot `crimson.exe` could answer. Name the quantity, name its
+  stated source, and say the binary holds the real one.
 - **How it gets done** — the Approach as an ordered route: survey → decide → implement, files named.
 - **How you'd know it worked** — the Verify step, including which goldens are expected to move and
   which `docs/verification.md` rule bites here.
-- **Open questions** — what only the user can settle: an unsettled TUNE, a needed original-game A/B.
+- **Open questions** — what neither the code nor the binary can settle: a genuine taste call, a
+  live-cockpit feel judgement. **Not** the decodable ones — those were named as decodable above. If
+  the item's own "unsettled TUNE" or "needs an original-game A/B" line is really a constant in
+  `crimson.exe`, say that instead of repeating it.
 - **Related** — only the `BL-NNN`s, sibling plan items, and doc sections the item itself cites. No
   adjacency guessing; don't invent links nobody authored.
 
@@ -107,11 +136,23 @@ If the item looks stale, already landed, or self-contradictory, say so under **S
 
 ## 5. Offer the handoff
 
-End the same message with the three options below as plain text — numbered, one line each, naming the
+End the same message with the four options below as plain text — numbered, one line each, naming the
 default. No tool call (see the output rule at the top; an `AskUserQuestion` here hides §4 entirely).
 **Take no action until the user answers.**
 
-### Option 1 — start it here *(the default)*
+**Which one is the default depends on what §4 flagged.** *Start it here* is the default in the
+ordinary case. But when §4 flagged a decodable constant **that this item's own work would use or
+replace** — not any decodable number mentioned in passing — present *decode it* **first, as the
+default for this invocation**, list *start it here* without the label, and give a one-line reason
+naming the specific quantity: "B7 retunes the stall onset rate; today's value came from a video and
+`crimson.exe` holds the real one." Never two labels at once — a menu with a "default" and a
+"recommended" pointing at different lines is a menu people stop reading. A secondary decodable number
+stays a trap line in §4 and leaves the default alone.
+
+It is a re-ordering, never a gate. Nothing here refuses *start it here*; plenty of items are worth
+starting while a secondary constant stays unknown.
+
+### Option 1 — start it here *(the default, unless §5's rule above moved it)*
 
 Work the item in this context. The paste-and-clear variant is `/commit-next <ID>` — do not re-add it
 here.
@@ -131,7 +172,59 @@ skipping it. What they did **not** cover is touched-module-dependent: **read the
 `docs/architecture.md` entry for every module you are about to modify**, since dead ends are recorded
 there precisely so they are not re-chased.
 
-### Option 2 — close it
+### Option 2 — decode it in `crimson.exe`
+
+Read the flagged quantity out of the original binary through the ghidra-mcp tools, before the item's
+work builds on a number that came from a video.
+
+**The Ghidra project is strictly read-only.** No `rename_function`, no `set_comment`, no structs, no
+prototypes, no `save_program` — not once, not "just this label". The database is not in git, so a bad
+write is unreviewable and unrevertable, and this project already gets bitten by concurrent sessions
+sharing state. Knowledge accumulates in the repo (below), never in the database. A deliberate
+annotation pass is a different job with its own plan; it is not this.
+
+Connection facts — server, port, project name, program path — live in the MCP configuration and
+**are not restated here**; that config is the single source of truth. If the MCP is unreachable, say
+so plainly and fall back to §4's routing half. Never fill the gap with a footage measurement: an
+unrun decode is an open question, not a licence to guess.
+
+**Size it before starting**, on one tell — do the item and its backlog entry name their own addresses
+or symbols?
+
+1. **They do** (`FUN_0042ee40`, `0071c2d0`, `gwNodeSetActive`) → **decode inline**, here, bounded to
+   what was named. No prospecting outward from it. The item is already in context, which is the whole
+   reason tier 1 of §3 refuses subagents.
+2. **They do not** → hand to a **fresh-context subagent**. It prospects; it **reports and never
+   writes**. Require every constant back **with the address it came from** and the condition it
+   applies under, so the write-up carries provenance and any number can be re-checked at source.
+3. **It is genuinely large** — a body of work the size of `PLAN-weather-decompile-match.md`, not a
+   "what is this constant" question → say so and point at `/new-plan`. Rare; most decodes are not
+   plan-sized.
+
+**What a decode reports: numbers, then formulas, then rules.** The MCP is for *understanding* the
+original game, not for re-expressing it in another language. A scalar is the answer — state it with
+its address. A closed-form relationship is the answer — state it as a formula (`degrees ×
+0.017453292`). When the value is conditional — a state machine, a piecewise ramp, a per-state table —
+state it as a **rule in prose with its constants**: "below the altitude precomputed into `0071c2d0`,
+state 2; the whiteout opacity remaps 0→1 across the top of the core." Control flow **described**,
+never transcribed; dropping the condition is how a number ends up right in one state and wrong in the
+other. Decompiler output or pseudocode only when a genuine multi-step algorithm *is* the answer — an
+interpreter dispatch, a hash — and nothing shorter is faithful.
+
+**Writing it down is offered, never automatic** — the explanation phase's read-only rule still holds
+until *start it here* is picked. When the answer is wanted on disk: **`docs/org/<topic>.md`** if it
+falls inside an existing decode page's topic (weather, clutter, flightModel, tracers, puffer,
+sequences, aim-assist), matching those pages' contract — behaviour and constants, every claim naming
+the function it came from, no decompiler output reproduced; otherwise **`analysis/<slug>/FINDINGS.md`**,
+dated, with the method stated. **In either case also offer the one-line amendment to the `backlog.md`
+entry** — the number, its address, the date, the pointer. That line is load-bearing: without it the
+next explanation re-reads the stale footage number, re-flags it, and re-recommends the decode that was
+already done.
+
+Then re-offer the handoff. A decode usually makes *start it here* the obvious next move, and may
+change what the item's work should be — say so if it does.
+
+### Option 3 — close it
 
 The plan bookkeeping is this skill's; the `BL-NNN` side is not.
 
@@ -148,7 +241,7 @@ The plan bookkeeping is this skill's; the `BL-NNN` side is not.
   finished plan left in `docs/` still resolves as "active" for the next session.
 - **No commit.** Offer it in one line and stop.
 
-### Option 3 — defer it
+### Option 4 — defer it
 
 **Write nothing.** The item stays `☐ open` in the plan, `backlog.md` is untouched, and
 `PROJECT_CONTEXT.md` is untouched — "not now" is a session decision, and a deferral note that is
