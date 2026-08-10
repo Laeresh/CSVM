@@ -1113,6 +1113,60 @@ chapter's template set and **bypasses `BuriedClutterDistricts`**, so `cblock4/5/
 alone and compared against the recordings district by district. That is the cheapest way to test
 (2), and it tests it where the user saw the problem rather than at `BL-305`'s unlocatable pose.
 
+### ✅ BL-305's mechanism, found by the user at the controls and confirmed 1,037× over
+
+Flying with both new flags, the user reported the rule:
+
+> **on the red areas cblock4, 5 and 6 are active, and on green cblock1, 2, 3 and 7**
+
+`analysis/bl-305-clutter-uv/FINDINGS-layer-pairing.md` tested it and it holds, in all four overlay
+textures, with no counter-example in either direction. **`no_clutter` is not "no clutter here". It
+is "not from this layer" — a per-district switch selecting which of two coplanar districts
+decorates that ground.**
+
+| | `cblock4/5/6` base beneath | no base beneath |
+|---|---|---|
+| overlay **FLAGGED** | **25,524,629 m² (64.9 %)** | 13,831,347 m² (35.1 %) |
+| overlay **CLEAR** | **7,517 m² (0.02 %)** | 141,652,679 m² (99.98 %) |
+
+Odds ratio **1,036.8×**. Exactly **one** clear overlay polygon in the whole chapter has a base
+under it. And two column facts that settle the shape of the thing:
+
+- **Every square metre of the `cblock4/5/6` base lies under a `cblock1/2/3/7` overlay** — exposed
+  base area is **0 m² of 25.5 M**. The base is never the visible ground anywhere.
+- **99.97 % of that base sits under a FLAGGED overlay.** The base layer and the flag are, to three
+  significant figures, the same region of the map.
+
+The 1↔4, 2↔5, 3↔6 pairing `CBLOCK-LOD.md` measured is reproduced from the other direction. The two
+layers are **coincident, not stacked** — dY is `+0.000` for all 183 paired polygons, both at
+Y = 5.0, with draw order decided by `SubfaceBias`; "beneath" is a statement about render order, not
+geometry. `cblock7` is the weakest case and still does not break the rule: its *clear* half is
+perfect (0 of 1,198 polygons, 0 of 75.8 M m² have a base), while only 26 % of its flagged area has
+one — so on `cblock7`'s flagged ground the original stamps *nothing*, which is why it sits in the
+user's green group.
+
+**So `BL-305` is explained.** Our build ignores the flag **and** exempts `cblock4/5/6`, so on
+flagged ground we stamp the tall district (`cblock1/2/3`, models to 108 m, median 62.6 m) where the
+original stamps the short one (`cblock4/5/6`, to 52 m, median 20–30 m). Too big and too dense,
+swallowing the pavement — the reported symptom, exactly. **`BL-305`'s own pose cell is 100 % `L`**:
+under the original's rule it stamps the low-rise district and nothing else.
+
+**The bridge is located**, which the footage never was: C5 carries a node named `brooklynbridge`
+(index 2299) spanning X[−10148, −10076] Z[−3700, −1423], rising to 122.6 m. North is −Z. The rule
+predicts **low-rise out to ~1.5 km north of it, towers again beyond** — the user's report, at a
+landmark that can be flown to and matched.
+
+**Consequences for `BL-250`.** Its conclusion — the original draws the `cblock1/2/3` city — holds
+*where CAP-22 looked*, and 78.3 % of C5's ground by area is indeed tower country. But
+`BuriedClutterDistricts` suppresses `cblock4/5/6` **map-wide**, and on 14.1 % of the ground that is
+wrong. The exemption must become conditional on the flag rather than absolute.
+
+**Still open.** Whether the original really stamps `cblock4/5/6` there is a prediction from static
+geometry, not a matched frame — the confirming test is a `--clutter-templates=cblock4,cblock5,cblock6`
+render at the bridge against the user's recordings. And **35 % of flagged overlay area (13.8 M m²,
+7.6 % of C5) has no base at all**, where this rule says the original stamps nothing; whether that is
+right or whether a third mechanism fills it is untested.
+
 ### Part 2 — `MinSlopeCos` is deleted, and it never culled anything
 
 `MinSlopeCos = 0.25f` is gone. It is an invention — `FUN_004deab0` initialises the kind block's
