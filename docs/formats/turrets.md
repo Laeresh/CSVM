@@ -14,10 +14,15 @@ no per-chapter or per-mission override ([zrdr.md](zrdr.md)).
 
 The 42 entries divide 16 / 26, and the discriminator is `CREATE_STANDALONE`:
 
-| | Count | Discriminator | Placed by |
-|---|---|---|---|
-| **Carried** | 16 | `CREATE_STANDALONE 0` | a host looking the entry up **by `TITLE`** |
-| **Standalone** | 26 | key absent | a world pass over the entry's own `NODES` |
+| | Count | Discriminator | Placed by | `ACTIVATED` |
+|---|---|---|---|---|
+| **Carried** | 16 | `CREATE_STANDALONE 0` | a host looking the entry up **by `TITLE`** | `1` on all 16 |
+| **Standalone** | 26 | key absent | a world pass over the entry's own `NODES` | `1` on 4, **`0` on 22** |
+
+⚠ **The split is also exactly the awake/dormant split.** Every carried turret ships awake and every
+dormant turret is a world emplacement. Aircraft and zeppelin turrets therefore need no
+`WAKEUP_TURRETS` and no activation path at all — they come up with their host. Only the world AA
+depends on mission scripting.
 
 The world pass walks every `TURRET` entry and **skips those whose `CREATE_STANDALONE` is present
 and zero**; the rest are instantiated at the scene nodes their `NODES` list names. The carried
@@ -33,6 +38,22 @@ sets and nothing is in neither.
 comparison is only reached when the key is present; an entry without one short-circuits into "build
 this". No shipped entry omits `TITLE`, so this never fires in retail — but a reader that reorders or
 filters entries must not rely on the lookup being total.
+
+### The 16 carried entries, and the `_G1`/`_G3` suffix
+
+The carried titles run `MSG_TUR_{AC,BRIGAND,FRONT,REAR}_{G1,G3}` and a `P`-prefixed mirror
+(`MSG_TUR_{PAC,PBRIGAND,PFRONT,PREAR}_{G1,G3}`) — 4 mount positions × 2 suffixes × 2 sets. The
+`P`-prefixed eight are the **player airframes** (`pavenger`, `pbalmoral`, `pbrigand`, `pfirebrand`,
+`pkestrel` — [loadouts.md](loadouts.md)); the unprefixed eight are their AI counterparts. So the
+player's own turret and an enemy's are the same system with different tuning rows.
+
+⚠ **`_G1` and `_G3` are gun-group slots, not difficulty tiers.** Measured across all eight pairs,
+a `_G1` entry and its `_G3` twin differ in **exactly two keys — `HEALTHY_NODE` and `PARTS`** — and
+in nothing else. Every behavioural field (`INACCURACY`, `FIRE_RATE`, `DETECTION_RANGE`, the arcs,
+the intervals, the weapon) is identical. The suffix picks which node set on the airframe the turret
+drives, matching the `IDS_AIRFRAMEGUNGROUPNAMES` gun-group enum ([markers.md](markers.md)); it does
+not make one gunner better than the other. Reading `G3` as "grade 3" and scaling accuracy off it
+invents a difficulty system the data does not have.
 
 `NODES` entries are **name patterns, not single names** (`["aagun**"]`, `["thug*"]`), resolved
 against the scene graph by the shared wildcard rule ([README.md](README.md#shared-conventions-zrdr-readers)).
@@ -118,10 +139,16 @@ Three gates, in order:
 1. The **`HEALTHY_NODE`** must be alive. If it dies the turret goes permanently quiet.
 2. The **`DEACTIVATE`** node, if the entry names one, must *also* be alive — destroying it
    disables the turret without destroying it. (Unauthored in retail; the mechanism exists.)
-3. **`ACTIVATED`** must be set. **22 of the 42 entries ship `ACTIVATED 0`** and are inert until a
-   mission script wakes them — `WAKEUP_TURRETS` and `WAKEUP_ZEP_TURRETS`
-   ([ai-nets.md](ai-nets.md) lists the script vocabulary). `ACTIVATED` is also savegame state, not
-   just a load-time value: it round-trips through save/restore alongside `AMMO`.
+3. **`ACTIVATED`** must be set. **22 entries ship `ACTIVATED 0`** and are inert until a mission
+   script wakes them — `WAKEUP_TURRETS` and `WAKEUP_ZEP_TURRETS` ([ai-nets.md](ai-nets.md) lists
+   the script vocabulary). All 22 are standalone world emplacements; no carried turret is dormant.
+   `ACTIVATED` is also savegame state, not just a load-time value: it round-trips through
+   save/restore alongside `AMMO`.
+
+Separately, **both loaders bail out entirely if a global world-state flag is clear** — the same
+flag that gates the `capacity` read in the generator loader
+([mission-entities.md](mission-entities.md#the-capacity-puzzle)). In retail it must be set, or no
+turret would exist at all; it is noted because the two subsystems share it.
 
 An entry with no resolvable `WEAPON` ticks no further.
 

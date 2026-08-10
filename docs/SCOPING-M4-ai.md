@@ -375,9 +375,53 @@ E16 still needs B8's voice runtime and does not move in the ordering. Its **cost
 taxonomy no longer needs deriving from clip names, and the dispatch rules are constants rather than
 TUNEs.
 
-**Still not examined:** nothing in the wave list. The three unnamed roster slots are localised to
-8–19 and are unauthored install-wide — deliberately left unresolved — and F20's `capacity`
-discrepancy still wants either a capture or a trace of the `zep_rearm_node_%d` path.
+### Decisions and closures — 2026-08-10
+
+**C9's activation question is answered by the data, and the answer is that it barely exists.** The
+`CREATE_STANDALONE` split is *also* the awake/dormant split: **all 16 carried turrets ship
+`ACTIVATED 1`; all 22 dormant entries are standalone world emplacements.** Carried turrets come up
+with their host and need no `WAKEUP_TURRETS`, no stand-in and no decision. So C9 splits cleanly, and
+the half that matters for the next playable mission is unblocked:
+
+- **C9a — carried turrets.** The aircraft/zeppelin gunners, including the player's own turret slots
+  that M3 left parsed-but-inert ([`formats/loadouts.md`](formats/loadouts.md)). Zero activation
+  dependency. This is the half the zeppelin hunt exercises, and it is where the turret UI lands.
+- **C9b — world emplacements.** Still wants an activation path for the 22 dormant entries. Now
+  *deferrable* rather than blocking, because nothing on the playable path depends on it.
+
+Two supporting facts, both measured:
+
+- **The 16 carried entries are 8 AI + 8 player.** Titles run `MSG_TUR_{AC,BRIGAND,FRONT,REAR}_{G1,G3}`
+  with a `P`-prefixed mirror; the `P` set is the player airframes. The player's turret and an
+  enemy's are the same system with different rows — which is why C9a and the turret UI are one
+  piece of work, not two.
+- ⚠ **`_G1`/`_G3` are gun-group slots, not difficulty grades.** Across all eight pairs the two rows
+  differ in *exactly* `HEALTHY_NODE` and `PARTS` and nothing else — same accuracy, same rate, same
+  arcs, same weapon. Reading `G3` as "grade 3" invents a difficulty system the data does not have.
+
+**F20's `capacity` — chased through the binary, and every in-engine explanation is eliminated.** The
+code route was taken in preference to a capture. All three candidates fail: the `zep_rearm_node_%d`
+lead is **dead** (it enumerates *player rearm-pad* scene nodes, the counterpart of `rearm_rad`, and
+never touches a generator); a **runtime top-up does not exist** (three writes to the counter in the
+whole module — load-time assign, decrement, and a reset that restores it *to* `capacity`; and the
+loader has a single caller, so there is no second construction path); the **global cannot rescue
+it** (both branches yield `0` for an authored `0`, and it must be set in retail or no turret would
+load); and the **operands are not misread** (a single unsigned compare and a jump-if-below in the
+disassembly). Re-measured: `capacity` present on 23/23 and `0` on 23/23.
+
+That converts a three-way puzzle into one located suspicion — **what the engine reads for `capacity`
+may not be the `0` the extraction reports** — and the next discriminating step is to read its raw
+bytes out of the un-extracted `egen.zbd` rather than the JSON. Still a code route; no capture owed.
+The standing instruction is unchanged: **do not implement "0 means unlimited".**
+
+**The three unnamed roster slots are closed.** Most likely inherited padding from the engine's
+earlier `mech3` lineage — recorded as a hypothesis, not asserted. What is established suffices: the
+exe's own editor comment names nine where the format has twelve, all twelve are `0.0` install-wide,
+and the fallback they defer to is documented. ⚠ A reader must still **parse** twelve to keep later
+field indices aligned; beyond that, ignore them. Not to be reopened without a different build or an
+authored non-zero value.
+
+**Still not examined:** nothing in the wave list.
 
 ---
 
@@ -1114,8 +1158,11 @@ of A3 via the 2026-08-10 decompile pass), not a started milestone.
    2026-08-10** in [`formats/turrets.md`](formats/turrets.md): the `CREATE_STANDALONE` placement
    split, the `PARTS` kinematic chain, the wrap-aware yaw arc (⚠ `[0,0]` = unrestricted), the
    attack/bored duty cycle, rate-limited slew + the 15° fire gate, and geometric hit resolution.
-   Cost is up — a tracking loop, not a table read — and it now carries a **new small dependency**:
-   22 of 42 entries ship `ACTIVATED 0` and need a stand-in for `WAKEUP_TURRETS`
+   Cost is up — a tracking loop, not a table read. **Split 2026-08-10:**
+    - ☐ **C9a — carried turrets** (16 entries, all `ACTIVATED 1`, 8 AI + 8 player airframes). No
+      activation dependency; this is the turret-UI half and what the zeppelin hunt exercises
+    - ☐ **C9b — world emplacements** (26 entries, 22 of them dormant). Needs an activation stand-in
+      for `WAKEUP_TURRETS`; deferrable, since nothing on the playable path depends on it
 
 ### Wave D — The pilot model
 
@@ -1160,10 +1207,11 @@ path, A2 owns `PlaneViewer.cs` / a new controller / `AnimRuntime.cs`'s index inv
 A4 are documentation and design, touch no engine code, and can run alongside anything.**
 
 B5–B8 all need A2. B5 blocks F17 (the same net-follower serves both). B8 blocks E16. C9 needs A1 only
-— it can run as soon as A1 lands, in parallel with all of wave B. **Amended 2026-08-10:** C9 also
-needs a way to activate the 22 shipped-dormant turrets. That is not a new blocker (a debug toggle
-or a mission-load default suffices, and A3 should record which), but it must be decided before C9
-is playtestable, because half the emplacements are otherwise invisible in play.
+— it can run as soon as A1 lands, in parallel with all of wave B. **Amended 2026-08-10:** C9 splits.
+**C9a (carried turrets) needs A1 only** and has no activation dependency — all 16 ship awake — so it
+can run the moment A1 lands and is the half the zeppelin hunt needs. **C9b (world emplacements)**
+additionally needs a stand-in for `WAKEUP_TURRETS` for its 22 dormant entries; that is a decision,
+not a blocker, and it no longer gates anything playable.
 
 Within D: **D10 is settled, so it no longer blocks D11–D15** — they read the shipped skill vector and
 `ai_skill_parameters` directly and can all start at once. D11 blocks D12 and D15. D13 is independent

@@ -85,6 +85,20 @@ one of the 414 blocks — the volumes are never authored, so every AI falls back
 `activation` / `attack` / `return_range` in `vehicle.json` and to `player.json`'s
 `min_ai_active_dist` (2000 m). Do not spend time on it; do not invent values for it.
 
+**Closed 2026-08-10 — treat them as inherited padding.** The likeliest explanation is that they are
+a remnant: this engine is a descendant of Zipper's earlier `mech3` lineage (the same lineage the
+extraction toolchain targets — [extraction.md](extraction.md)), and a record layout that outlived
+the fields it was written for is exactly what a carried-over roster format looks like. That is a
+hypothesis and this page does not assert it. What *is* established is enough to act on:
+
+- the exe's own editor comment — the authoritative field list — **names nine, not twelve**;
+- all twelve are `0.0` across every block in the install, so nothing reads a meaningful value;
+- the fallback path they defer to is fully documented and independently sourced.
+
+**A reader must still parse twelve slots** to keep the following field indices aligned — that part
+is load-bearing. Beyond preserving positions, ignore them. This question is closed and should not
+be reopened without new evidence (a different build, or an authored non-zero value).
+
 ### The skill vector
 
 Slots 22–30 are nine consecutive integers valued `-1` (unset) or **1–9**, in the exe's order:

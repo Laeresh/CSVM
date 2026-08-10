@@ -218,3 +218,38 @@ these must be true, and static reading cannot choose between them:
 **Do not implement `capacity` as "0 means unlimited" on the strength of this page** — that reading is
 a guess that happens to produce working behaviour. Settle it by observing a zeppelin launching in
 the original, or by tracing the rearm path, before relying on it.
+
+#### Chased through the binary, 2026-08-10 — all three candidates fail
+
+The three explanations above were each pushed to the end in code. **None survives**, and the
+contradiction is now sharper rather than resolved.
+
+- ⚠ **The `zep_rearm_node_%d` lead is dead.** It has nothing to do with generators. The single
+  function that formats it enumerates scene nodes `zep_rearm_node_1, 2, …` (and `rearm_node_N` in
+  another game mode), stopping at the first index that does not resolve, and files them into a
+  global list — **player rearm pads**, the counterpart of the `rearm_rad` / `rearmrad` tuning keys.
+  It never touches a generator.
+- **A runtime top-up does not exist.** In the whole generator module there are exactly three writes
+  to `capacityRemaining`: the loader's `= capacity`, the tick's decrement, and a reset routine that
+  sets it *back to* `capacity` (along with `active`, the wave counter and the timer). Nothing ever
+  raises it above `capacity`, so with `capacity` `0` it is `0` or negative forever. The loader has
+  a single caller, so there is no second construction path either.
+- **The global cannot rescue it.** Both loader branches yield `0` when the authored value is `0` —
+  one assigns `0` directly, the other reads a `0` from the file. And the flag must be set in
+  retail, because the same flag gates the turret loaders, which bail out entirely when it is clear
+  ([turrets.md](turrets.md)).
+- **The operands are not misread.** In the disassembly the test is a single unsigned compare of
+  `capacityRemaining` against `wave_size − spawnedThisWave` followed by a jump-if-below. The
+  polarity is unambiguous.
+
+Re-measured from the extraction at the same time: `capacity` is **present on all 23 generators and
+`0` on all 23**, and `wave_size` is `1` on 22 and `3` on one — so the blocked branch is taken on the
+first tick of every generator in the install.
+
+**Where that leaves it.** Every explanation that lives in the engine has been eliminated, which
+points the remaining suspicion at the *value*: what the engine reads for `capacity` may not be the
+`0` the extraction reports. The same value slot is read as an integer for `wave_size` and as a float
+for `wave_period`, so the reader format distinguishes the two and the extractor is preserving both —
+which makes this less likely, not impossible. **The discriminating step is now to read `capacity`'s
+raw bytes out of the un-extracted `egen.zbd` rather than the JSON.** Until then the guidance above
+stands unchanged: do not implement "0 means unlimited".
