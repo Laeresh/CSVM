@@ -1284,12 +1284,16 @@ both a call and a stop, but no def is known to reach the stop first. Both are
 public so `CSVM.Tests` drives them against a fake host; the host is any `ISequenceHost` (the game's
 real one is `AnimRuntime`, tests pass a recorder). Anchors are opaque `Node3D?` pass-through — the
 interpreter never dereferences them.
-⚠ Behaviour-preserving move only — the up-counting `_loopPasses` mechanism (0 is infinite because
-  the counter starts at 0 and only grows, so it can't re-equal 0 once a pass has run — no
-  normalisation needed), the `goto case "Elseif"` and the 256-fires-per-frame guard all LOOK
-  refactorable and are all load-bearing (each a shipped, measured bug: the bowl sign's 38% blank
-  frames, frozen traffic loops, the double-polling waterfall). The comments carry the measured
-  evidence; do not trim them.
+The up-counting `_loopPasses` mechanism (0 is infinite because the counter starts at 0 and only
+grows, so it can't re-equal 0 once a pass has run — no normalisation needed), the
+`goto case "Elseif"` and the 256-fires-per-frame guard all LOOK refactorable and are all
+load-bearing (each a shipped, measured bug: the bowl sign's 38% blank frames, frozen traffic loops,
+the double-polling waterfall) — the `Loop`/`Advance` code comments in `SequenceRunner.cs` carry the
+measured evidence; read them before touching any of the three. `OnEventDispatched` being a get-only
+nullable delegate on the seam is the same shape: the null-conditional at the fire site short-circuits
+the `EventDispatch` construction when no debugger is attached, the documented zero-cost contract on
+the hot dispatch path, explained on `ISequenceHost.OnEventDispatched`'s own doc comment — making it a
+method would break that.
 ⚠ **An instantaneous LOOP pass costs one `AnimFrame` (1/60 s) of SIM time, never one rendered
   frame** — a `LOOP n` is an authored timer of n frames, so pacing it per frame made every such
   timer scale with the client's hardware. The gate is applied at the FOOT of the advance loop
@@ -1315,9 +1319,6 @@ interpreter never dereferences them.
   carries the implementation, the cap sized from the data (deepest authored same-tick fan-out 15,
   so 64) and the one def that makes a bound mandatory (`marypickford` rings, instantaneously,
   because `OBJECT_MOTION_SI_SCRIPT_ALL_NAMES` has no handler and reports duration 0).
-⚠ `OnEventDispatched` is a get-only nullable delegate on the seam ON PURPOSE — the null-conditional
-  at the fire site short-circuits the `EventDispatch` construction when no debugger is attached, the
-  documented zero-cost contract on the hot dispatch path. Making it a method breaks that.
 `WAIT_FOR_COMPLETION` (`BL-228`) is the seam's fourth member, `PendingWait` — a `Func<bool>?` the
 host arms during `Dispatch` and the runner reads back once, then polls each advance until it reads
 false. A PREDICATE, not a duration, because the callee's length is not knowable at the call (its

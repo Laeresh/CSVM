@@ -1,8 +1,10 @@
 # Animation runtime — match the original interpreter
 
-**ACTIVE PLAN** (written 2026-08-10). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE** (written 2026-08-10, completed 2026-08-10). Archived under `docs/plans/`; all 15 items
+landed except `B16`, closed ❌ disproven (the original's `RANDOM_WEIGHT` table has no run-time form
+in the shipped data). `D32` re-baselined the three goldens B12/D31 already named, ran clean across an
+883-unit / 32-suite / 13-golden `RunTests.ps1` pass and an 8-chapter `--freecam` sweep, and brought
+`SequenceRunner.cs`'s `docs/architecture.md` entry back to the 3-`⚠` budget.
 
 Everything CSVM knows about how an animation definition *executes* was inferred from the shipped
 data — the C1 train, the bowl sign, the `LOOP 0` census, the 2,999-call `WAIT_FOR_COMPLETION`
@@ -173,7 +175,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — Proof
 
 31. D31 ☑ `ordnance-burst-timeline` suite: HE, flash and sonic played end to end
-32. D32 ☐ Full regression + docs sweep
+32. D32 ☑ Full regression + docs sweep
 
 ## Dependency and parallelism notes
 
@@ -1102,7 +1104,55 @@ them, or a 1.2 s flash is truncated at 0.3 s and the timeline "passes" short.
 
 </details>
 
-## D32 ☐ Full regression + docs sweep
+## D32 ☑ Full regression + docs sweep
+
+**Landed.** `.\RunTests.ps1` with `CSVM_DATA_ROOT=Z:\CSVM`: **883 units, 32 in-engine suites, engine
+errors clean**. Goldens moved exactly the three shots the plan already tracked and named — no
+fourth move, so nothing new needed reading. Re-baselined `analysis/goldens/manifest.json` to the new
+hashes and folded each move's explanation (already written and rendered in B12/D31) directly into
+that shot's `exercises` field: `c1-destroy-effects` (`fa27f0cd…` → `00ab194f…`, B12's stopper-idiom
+retirement, 4 of 921,600 px in the fogged far-distance haze), `c1-flight` (`38adfec0…` → `e2eb44c8…`,
+D31's `LIGHT_ANIMATION` duration fix, 10,960 px, the police car's beacon now lit mid-flash) and
+`c1-crash` (`2e44dc12…` → `3c7b4154…`, same fix, 9 px of sky at the noise floor). A second full
+`RunTests.ps1` pass after the re-pin came back **13/13 goldens hash-identical**.
+
+An 8-chapter `--freecam --chapter=<X> --det --mute --frames=120 --screenshot=…` sweep
+(`.scratch/d32-freecam-sweep.ps1`, logs in `.scratch/logs/`) came back **exit 0 and a saved
+screenshot in every chapter**, zero unallowlisted engine errors (C1 carries the one known
+allowlisted `no audio session` warning from `--mute`, the same line `docs/architecture.md`'s
+`SoundArchive.Find` entry already documents) and sane per-chapter node/mesh counts: C1 7,064/3,425,
+C1B 5,603/3,099, C1C 5,644/2,965, C2 4,956/1,616, C2B 4,901/2,708, C3 5,408/2,331, C4 8,289/4,204, C5
+11,438/4,722 (gamez nodes/mesh instances) — no chapter is empty or truncated.
+
+`docs/architecture.md`'s `SequenceRunner.cs` entry was at 5 `⚠` against the plan's 3-`⚠` budget
+(flagged in this item's own Traps below). Brought it back to budget by folding two of the five into
+plain prose rather than deleting them: the `_loopPasses`/`goto case "Elseif"`/256-guard
+"looks-refactorable" note and the `OnEventDispatched` zero-cost-contract note were both already
+duplicated almost verbatim as code comments in `SequenceRunner.cs` (the `Loop`/`Advance` bodies and
+`ISequenceHost.OnEventDispatched`'s own doc comment respectively), so the architecture.md copy was
+redundant, not load-bearing — the constraint survives at its enforcement point, just not doubled
+here. The three that stayed are the ones with no code-comment counterpart: the LOOP `AnimFrame`
+carry's deliberate divergence from `crimson.exe`, `BL-135`'s one-tick call lag (a `SequenceRunner.cs`
+constraint that actually lives on `AnimInstance.CallSequence`/`Advance`, which carry no such note),
+and the `WAIT_FOR_COMPLETION` next-event-not-lifetime hold with its census. `AnimRuntime.cs`'s entry
+was re-read against what the plan actually landed (C21, C22, the resolver-fallback and pool
+paragraphs) and is unchanged — it sits at 3 `⚠` already and nothing this plan touched needed a new
+one.
+
+Swept `PROJECT_CONTEXT.md`'s "Current status" to point past this plan (no active plan; playtests
+unchanged) and archived this file to `docs/plans/` with a `COMPLETE` banner, row added to
+`docs/plans/plans.md`.
+
+**Verified.** `.\RunTests.ps1` before the re-pin: **883 units, 32 suites, 3 of 13 goldens moved**
+(`c1-flight`, `c1-destroy-effects`, `c1-crash` — exactly the three the plan named, hashes matching
+what B12/D31 recorded). After re-pinning the manifest: **883 units, 32 suites, 13/13 goldens
+hash-identical, exit 0**. The freecam sweep: 8/8 chapters exit 0 with a screenshot, only the one
+known allowlisted warning, node/mesh counts all in the range prior full-install sweeps have measured
+(`docs/HISTORY.md`'s 2026-07-30 entry: C5 largest, C2B smallest — reproduced here). `⚠` count in
+`SequenceRunner.cs`'s architecture.md entry: 3 (was 5); `AnimRuntime.cs`'s: 3 (unchanged).
+
+<details>
+<summary>Original approach (kept for reference)</summary>
 
 **Goal.** The plan lands with the install-wide surfaces green and the docs matching the code.
 
@@ -1133,3 +1183,5 @@ sentinels, `AnimFrame` LOOP pacing, `BL-135`'s one-tick call lag, the `OnEventDi
 shape, and the `WAIT_FOR_COMPLETION` hold). Bringing that entry back to budget is real work here,
 by merging or moving one to a code comment — not by deleting a still-binding constraint to make the
 count fit.
+
+</details>
