@@ -75,6 +75,13 @@ public sealed class WorldEffectsFactory
         _ambience = ambience ?? EffectAmbience.Still;
     }
 
+    /// <summary>The session's <see cref="UI.ScreenFlash"/> sink, handed to every runtime this
+    /// factory builds — an <c>FBFX_COLOR_FROM_TO</c> wash is screen-space and session-owned, and
+    /// the runtimes built here are the ones that play the defs carrying one (<c>he_ground_effect</c>,
+    /// <c>ap_ground_effect</c>, <c>flak_effect</c>). Set once, before the first build; null leaves
+    /// the event undrawn.</summary>
+    public Action<Color, Color, float>? ScreenFlash { get; set; }
+
     /// <summary>The world-effects template stage — the subtree
     /// <see cref="EffectCatalogue.WorldStageRoots"/>' roots are built into, one
     /// <c>pool&lt;N&gt;</c> container per slot. Null until
@@ -514,6 +521,7 @@ public sealed class WorldEffectsFactory
             Rng.IntSeedFor(Rng.Effects),
             new PufferEmitterFactory(textures, _worldRoot, _ambience),
             _spec.DebugAnim, EffectRuntimeTtl, _playerPosition);
+        effects.ScreenFlash = ScreenFlash;
         // Bind name resolution to the template stage — so the effect names resolve to these
         // templates and not to the world's or the crash roots' same-named nodes — but parent the
         // runtime node itself under the visible world root, a plain logic node that self-ticks.

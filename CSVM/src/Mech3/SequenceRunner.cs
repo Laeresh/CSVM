@@ -56,23 +56,30 @@ public readonly record struct EventDispatch(
 
 /// <summary>One running definition: its anchor plus a runner per active sequence. The
 /// sequences of a definition run CONCURRENTLY — the C1 train drives its four cars from
-/// four sibling sequences, each with its own SI script and its own loop.</summary>
+/// four sibling sequences, each with its own SI script and its own loop — but at most ONE
+/// runner per sequence: the original keeps a sequence's execution state inside the definition's
+/// own sequence array, so a sequence is a single instance and cannot run two copies of itself.
+/// See <see cref="CallSequence"/>.</summary>
 public sealed class AnimInstance
 {
     public readonly AnimDefinition Def;
     public readonly Node3D? Anchor;
     public readonly List<SequenceRunner> Runners = new();
 
-    /// <summary>Every sequence name this instance has ever started a runner for. Only
-    /// <see cref="StopSequence"/> reads it, and only to tell "nothing ever called this" from
-    /// "it ran and finished" — see the stopper idiom there.</summary>
-    private readonly HashSet<string> _everStarted = new(StringComparer.OrdinalIgnoreCase);
-
     public AnimInstance(AnimDefinition def, Node3D? anchor)
     {
         Def = def;
         Anchor = anchor;
     }
+
+    /// <summary>Seconds since this instance started — the original's <c>anim+0xb0</c>, one clock
+    /// owned by the definition instance and shared by every sequence of it. A <c>START_TIME
+    /// ANIMATION t</c> gates against THIS, not against the firing sequence's own clock, which is
+    /// the whole difference for a sequence a later CALL_SEQUENCE started: the instance clock is
+    /// already running when the runner's starts at zero. Never rewound — a LOOP rewinds only the
+    /// sequence's timers. (The exe clamps it at 86,400 s inside the LOOP handler; a session never
+    /// reaches a day, so the clamp is not reproduced.)</summary>
+    public float Clock { get; private set; }
 
     /// <summary>No runner is still executing. ⚠ NOT on its own the test for retiring an instance —
     /// see <c>AnimRuntime.Retirable</c> and <c>MotionSet.OwesBounce</c>, which additionally hold an
@@ -83,6 +90,9 @@ public sealed class AnimInstance
 
     public void Advance(ISequenceHost rt, float dt)
     {
+        // Before the runners, so a sequence clock and the instance clock advance together within
+        // a tick — a runner reads Clock back during its own advance to gate origin ANIMATION.
+        Clock += dt;
         for (int i = Runners.Count - 1; i >= 0; i--)
         {
             Runners[i].Advance(rt, this, dt);
@@ -91,38 +101,73 @@ public sealed class AnimInstance
         }
     }
 
-    /// <summary>CALL_SEQUENCE: adds a runner for this definition's named sequence. Duplicates
-    /// are legitimate — a second call runs a second concurrent copy. Returns whether the
-    /// definition has that sequence.</summary>
+    /// <summary>CALL_SEQUENCE: starts this definition's named sequence, but only from the parked
+    /// state. The original resolves the name to an index in the definition's OWN sequence array and
+    /// then does exactly one thing — <c>if (state == parked) state = running;</c> — so a call into a
+    /// sequence that is already running is a silent no-op, and so is a call naming a sequence whose
+    /// authored activation is not ON_CALL (such a sequence is never parked: it runs with the
+    /// animation and stops done). Both no-ops are load-bearing in the shipped data: 77 definitions
+    /// call one sequence from more than one site (`sonic_ground_effect` calls `sonic_light_seq`
+    /// twice, `player` calls `destroy_craft` three times), and 6 call a non-ON_CALL sequence
+    /// (`reflight1..6 → refinery_light_seq`).
+    ///
+    /// <para>⚠ Returns whether the definition HAS that sequence, not whether anything started —
+    /// callers read it to decide whether the name resolved at all, and a no-op call must still
+    /// report found or the CALL_ANIMATION fallback fires on a name that was there.</para></summary>
     public bool CallSequence(string name)
     {
         var seq = Def.Sequences.FirstOrDefault(s =>
             string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
         if (seq == null)
             return false;
-        AddRunner(seq);
+        if (seq.OnCallOnly && !IsRunning(seq))
+            AddRunner(seq);
         return true;
     }
 
-    /// <summary>Starts a runner for one sequence and records that this instance has now run it —
-    /// the ONE way a runner joins an instance, so the bookkeeping cannot be bypassed. The
-    /// bootstrap that starts a definition's non-ON_CALL sequences goes through here too: those
-    /// are exactly the ones nothing ever CALLs (`player_crash_dirt`'s `pieceNseq` are reached by
-    /// no call site in the whole def), and <see cref="StopSequence"/>'s stopper idiom has to be
-    /// able to tell them from a sequence that has genuinely never run.</summary>
+    /// <summary>Is a runner for exactly this sequence still executing? Identity is the
+    /// <see cref="AnimSequence"/> OBJECT, never its name: the empty name is not unique
+    /// (`he_ground_effect` ships two unnamed sequences), so a name-keyed test would collapse them
+    /// into one and lose half the burst.</summary>
+    public bool IsRunning(AnimSequence seq)
+    {
+        foreach (var r in Runners)
+            if (ReferenceEquals(r.Sequence, seq) && !r.Done)
+                return true;
+        return false;
+    }
+
+    /// <summary>Starts a runner for one sequence — the ONE way a runner joins an instance, so
+    /// nothing can put a sequence into flight behind the list's back. The bootstrap that starts a
+    /// definition's non-ON_CALL sequences goes through here too, as do the death slot and the
+    /// damage-stage host, which feed sequences that are not in <c>Def.Sequences</c> at all.</summary>
     public void AddRunner(AnimSequence seq)
     {
-        Runners.Add(new SequenceRunner(seq));
-        if (seq.Name is { Length: > 0 } named)
-            _everStarted.Add(named);
+        Runners.Add(new SequenceRunner(seq, Clock));
     }
 
     /// <summary>STOP_SEQUENCE: halts every active runner named <paramref name="name"/> —
-    /// including the caller's own runner (the data's break-out-of-my-own-IF-chain idiom). If
-    /// none is running, starts the sequence exactly like CALL_SEQUENCE instead (the stopper
-    /// idiom: reaching an ON_CALL teardown sequence nothing else calls). Semantics decoded in
-    /// docs/formats/anim-definitions.md. Returns false only when the name matched no runner
-    /// and no sequence.</summary>
+    /// including the caller's own runner (the data's break-out-of-my-own-IF-chain idiom) — and
+    /// does nothing else. The original resolves the name exactly as <see cref="CallSequence"/>
+    /// does and then unconditionally marks that sequence DONE; there is no start-if-not-running
+    /// path anywhere in it. Since a call can only start a sequence from the PARKED state,
+    /// stopping an ON_CALL sequence that was never called leaves it un-callable until the whole
+    /// definition resets — a stop on a parked sequence is a DISABLE. 16 shipped definitions hit
+    /// exactly that (`flame_ball_01`/`flame_ball_02` → `stop_p1trail`, in every chapter, inside
+    /// the HE explosion's call chain), so the teardown those definitions name simply never runs.
+    /// Decode in docs/formats/anim-definitions.md.
+    ///
+    /// <para>⚠ The DISABLE is not persisted: a halt here is not remembered, so a later
+    /// CALL_SEQUENCE on the same name still starts the sequence, where the original's DONE state
+    /// would refuse it until the definition resets. 123 definitions name one sequence in both a
+    /// call and a stop (mostly `flame_light_seq`), but whether any of them reaches the stop
+    /// BEFORE the call at run time is a control-flow question the static census cannot answer —
+    /// persisting the flag would change all 123 on a divergence none of them is known to
+    /// observe.</para>
+    ///
+    /// <para>⚠ Returns whether the name RESOLVED — a matching runner, or failing that a sequence
+    /// of that name on the definition — never whether anything was halted. False means the name
+    /// is not this definition's at all.</para></summary>
     public bool StopSequence(string name)
     {
         bool halted = false;
@@ -134,44 +179,8 @@ public sealed class AnimInstance
             halted = true;
         }
 
-        if (halted)
-            return true;
-
-        // ⚠ The stopper idiom — "nothing is running under this name, so START it" — stays exactly
-        // as it was, with ONE exception, because the idiom is load-bearing install-wide (removing
-        // it wholesale moves the `c1-destroy-effects` golden).
-        //
-        // The exception: a sequence that has ALREADY RUN on this instance and whose body launches
-        // a `do_intersections` body. Restarting that re-throws a piece that has already landed,
-        // and the landing dispatches the very sequence that stops it — a loop. Measured on
-        // `player_crash_dirt` (PLAN-ground-contact B5): `p1hit`, dispatched when `piece1` lands,
-        // opens with `STOP_SEQUENCE piece1seq`; `piece1seq` is a single OBJECT_MOTION, so its
-        // runner is finished the instant the piece leaves, and the "stop" relaunched it from the
-        // crash point. At the controls: the wreck "jumps back to the crash point 4 times". Pieces
-        // 2-4 never did — and the data says why, since only `p1hit` carries a STOP_SEQUENCE.
-        var seq = Def.Sequences.FirstOrDefault(s =>
+        return halted || Def.Sequences.Any(s =>
             string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
-        if (seq != null && _everStarted.Contains(name) && LaunchesContactTestedBody(seq))
-            return true;
-
-        return CallSequence(name);
-    }
-
-    /// <summary>Whether this sequence throws a body the engine ground-tests — an OBJECT_MOTION
-    /// authoring <c>do_intersections</c>. The narrow gate on <see cref="StopSequence"/>'s stopper
-    /// idiom: only these can loop, because only these land and dispatch a sequence back.</summary>
-    private static bool LaunchesContactTestedBody(AnimSequence seq)
-    {
-        foreach (var ev in seq.Events)
-        {
-            if (ev.Kind == "ObjectMotion"
-                && (ev.Data.Obj("gravity")?.Bool("do_intersections") ?? false))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 }
 
@@ -179,10 +188,12 @@ public sealed class AnimInstance
 /// Executes one sequence's event list on a clock.
 ///
 /// Scheduling (inferred from the data, recorded in docs/formats/anim-definitions.md):
-/// an event's <c>start</c> gives an origin and a delay — "Animation" from the animation
-/// start, "Sequence" from this sequence's start, "Event" from the previous event's
-/// COMPLETION. An absent <c>start</c> is "Event + 0", i.e. as soon as the previous
-/// event finishes. That reading is what makes the C1 train work: its sequences are
+/// an event's <c>start</c> gives an origin and a delay — "Animation" from the INSTANCE's
+/// start (a clock shared by all its sequences, see <see cref="AnimInstance.Clock"/>),
+/// "Sequence" from this sequence's start, "Event" from the previous event's
+/// COMPLETION. An absent <c>start</c> encodes as "Animation + 0.0" and behaves as "as soon
+/// as the previous event finishes", because the gate is only evaluated once the previous
+/// event reports completion. That reading is what makes the C1 train work: its sequences are
 /// [ObjectMotionSiScript, Loop{-1}] with no start offsets, and only "after the previous
 /// event completes" turns that into the surveyed ~327 s track loop rather than a
 /// zero-length infinite loop.
@@ -210,12 +221,22 @@ public sealed class SequenceRunner
     // One entry per open IF: has any branch of that chain already run? An ELSEIF/ELSE
     // reached with the flag set is the *fall-through* off the end of a taken branch and
     // must skip to the ENDIF; reached with it clear, it is the next candidate to test.
+    // The original carries no such state — it distinguishes the two by ARRIVAL: a branch
+    // marker the stepper walked into is dispatched (fall-through), one a failed condition's
+    // scan landed on is stepped past unread. This stack is our stand-in for that, not a
+    // model of the original; see Scan for the one place the difference could show.
     private readonly List<bool> _branchTaken = new();
     private int _pc;              // next event index
     private float _clock;         // seconds since this sequence started
+    // The owning instance's clock, refreshed from AnimInstance.Clock every advance: the origin
+    // ANIMATION gate reads it, and it is NOT this runner's clock whenever a CALL_SEQUENCE started
+    // the sequence after t=0. Seeded at construction so the opening gate is right on the first tick.
+    private float _animClock;
     private float _due;           // when the next event fires
     private bool _done;
-    private int _loopsLeft = -2;  // -2 = no loop seen yet
+    // The original's u16 pass counter (+0x30): counts UP, never reset except by a fresh
+    // runner. See the "Loop" case for the termination test this drives.
+    private int _loopPasses;
     // The instant the CURRENT event's start offset is measured from: when the previous
     // event fired, plus that event's own run time. Control flow does not advance it.
     private float _base;
@@ -230,15 +251,21 @@ public sealed class SequenceRunner
     // polled once per advance until it reads false. Null whenever this runner is not waiting.
     private Func<bool>? _waitingOn;
 
-    public SequenceRunner(AnimSequence seq)
+    public SequenceRunner(AnimSequence seq, float animClock)
     {
         _seq = seq;
+        _animClock = animClock;
         // The first event's OWN offset gates it, so the opening gate is not
         // unconditionally zero — a sequence may legitimately start with a delay.
         SetDue();
     }
 
     public bool Done => _done;
+
+    /// <summary>The authored sequence this runner is executing — the identity
+    /// <see cref="AnimInstance.CallSequence"/> matches on, since sequence NAMES are not
+    /// unique within a definition.</summary>
+    public AnimSequence Sequence => _seq;
 
     public string SequenceName => _seq.Name;
 
@@ -268,6 +295,7 @@ public sealed class SequenceRunner
     public void Advance(ISequenceHost rt, AnimInstance inst, float dt)
     {
         _clock += dt;
+        _animClock = inst.Clock;
         if (!_done && _waitingOn != null)
         {
             if (_waitingOn())
@@ -330,30 +358,29 @@ public sealed class SequenceRunner
             switch (ev.Kind)
             {
                 case "Loop":
-                    if (_loopsLeft == -2)
-                    {
-                        int authored = (int)(ev.Data.Num("value") ?? CountOf(ev) ?? -1f);
-                        // An AUTHORED count of 0 means INFINITE, not "stop immediately".
-                        // Surveyed across the whole install: 26 Loop events
-                        // in 25 defs ship Count 0, and every one of them is a ground-vehicle
-                        // route (C1's police/mafia/black_car/truck traffic, C2's and C3/M02's
-                        // studebakers) whose Loop is the LAST event of its sequence — the
-                        // original drives these continuously. Nothing that must terminate
-                        // uses it: no door, gate, one-shot, bomb or explosion def, and the
-                        // reader/zrdr scope has 703 Loop events with zero Count 0. Reading it
-                        // as "stop" made each car drive its route once and freeze.
-                        // Normalise here rather than at the test below, so the test keeps
-                        // meaning "a finite loop has run out" — that is the only way a
-                        // positive count can ever terminate.
-                        _loopsLeft = authored == 0 ? -1 : authored;
-                    }
-                    if (_loopsLeft == 0)
+                    // Original mechanism (004ebfd0): a u16 counter at +0x30 increments on
+                    // every visit, THEN the visit terminates the loop if the counter now
+                    // equals the authored count; an authored -1 is special-cased infinite
+                    // regardless of the counter. Reading the count fresh off the event (not
+                    // caching it) matches the exe, which re-reads its own event struct too.
+                    //
+                    // An authored 0 is infinite as a CONSEQUENCE of this shape, not a case
+                    // of its own: the counter starts at 0 and is incremented BEFORE the
+                    // compare, so after the first visit it only ever grows and can't equal 0
+                    // again — the 26 ground-vehicle routes that ship Count 0 (surveyed across
+                    // the whole install: C1's police/mafia/black_car/truck traffic, C2's and
+                    // C3/M02's studebakers, every one the LAST event of its sequence) run
+                    // continuously for exactly that reason, with no normalisation needed to
+                    // say so. A real u16 wrap would re-hit 0 at pass 65,536; that wrap is not
+                    // implemented — it is unreachable within a session and -1 already covers
+                    // the deliberately-infinite case.
+                    int authored = (int)(ev.Data.Num("value") ?? CountOf(ev) ?? -1f);
+                    _loopPasses++;
+                    if (authored != -1 && _loopPasses == authored)
                     {
                         _done = true;
                         break;
                     }
-                    if (_loopsLeft > 0)
-                        _loopsLeft--;
                     // A loop over purely instantaneous events is the data's "keep this
                     // animation alive" idiom (C1's waterfall is [PufferState ×3, Loop{-1}],
                     // whose emitters run on their own TIME_INTERVAL; the poll idiom
@@ -509,10 +536,22 @@ public sealed class SequenceRunner
         var ev = _seq.Events[_pc];
         _due = ev.StartOffset switch
         {
-            // "Animation"/"Sequence" are absolute against their origin; this runner's
-            // clock is the sequence clock, and an instance starts all its sequences
-            // together, so the two coincide for every case in the shipped data.
-            "Animation" or "Sequence" => ev.StartTime,
+            // Origin ANIMATION is the INSTANCE's clock (the original compares against anim+0xb0,
+            // shared by every sequence of the definition), which is not this sequence's clock for
+            // any sequence a CALL_SEQUENCE started after t=0 — 191 shipped events read the
+            // difference, among them `ap_light_seq`'s LightAnimation chain and the 10 s puffer
+            // shut-offs on every rocket/torpedo trail. Restated in this runner's own clock so a
+            // single comparison still gates every origin: both clocks tick by the same dt, so the
+            // gap between them is fixed from here to the fire, and a LOOP that rewinds _clock
+            // re-gates through here anyway.
+            "Animation" => _clock + (ev.StartTime - _animClock),
+            // Origin SEQUENCE is seq+0x24 — absolute against this sequence's own start.
+            "Sequence" => ev.StartTime,
+            // "Event" (seq+0x28) and an ABSENT start alike measure from the previous event's
+            // completion. ⚠ An absent start ENCODES as Animation + 0.0 and must NOT be routed
+            // through the animation clock: it would gate the install's ~36k unstamped compiled
+            // events on a clock that is already running. StartOffset is null for them, so they
+            // land here; keep it that way.
             _ => _base + ev.StartTime,
         };
         // "Did the DATA schedule time?" — an authored offset counts even when the clock has
@@ -530,29 +569,40 @@ public sealed class SequenceRunner
         }
     }
 
-    // The next ELSEIF/ELSE/ENDIF of this chain (nesting-aware) — where a FAILED condition
-    // continues. Lands ON the event, so the loop re-dispatches it as the next candidate.
+    // The next ELSEIF/ELSE/ENDIF — where a FAILED condition continues. Lands ON the event,
+    // so the loop re-dispatches it as the next candidate.
     private int NextBranch(int from) => Scan(from, stopAtElse: true);
 
-    // The chain's own ENDIF — where a branch that ran, or one skipped past its whole
-    // chain, continues. Lands ON the ENDIF so it pops the frame.
+    // The next ENDIF — where a branch that ran, or one skipped past its whole chain,
+    // continues. Lands ON the ENDIF so it pops the frame.
     private int SkipToEnd(int from) => Scan(from, stopAtElse: false);
 
+    /// <summary>
+    /// Walk forward to the event a branch jump lands on. ⚠ Deliberately NOT nesting-aware:
+    /// the original walks event by event and breaks on the FIRST byte in its stop set, with
+    /// no depth counter — a false IF at <c>FUN_004ec080</c> stops at ELSE/ELSEIF/ENDIF alike,
+    /// the ELSE/ELSEIF fall-through at <c>004ec5a0</c> stops at ENDIF only. Those two stop sets
+    /// are the <paramref name="stopAtElse"/> flag and must stay separate.
+    ///
+    /// <para>This is observable, not academic. 48 shipped sequences nest — every chapter's
+    /// <c>gunhit-*slug_gunhit</c> / <c>mag_gunhit-*</c>, played on every gun impact — all in one
+    /// shape: <c>If lod / If range / If weight … Elseif weight … Else Endif / Else Endif /
+    /// Endif</c>. A false OUTER condition lands on the INNER chain's ELSEIF and re-tests it, so
+    /// the impact light still fires on its 20% roll with the LOD gate and the 1 km range gate
+    /// both failed. A depth counter skips the whole thing instead. That reads like a compiler
+    /// bug in the original and it is what the original does; do not "fix" it.</para>
+    /// </summary>
     private int Scan(int from, bool stopAtElse)
     {
-        int depth = 0;
         for (int i = from + 1; i < _seq.Events.Count; i++)
         {
             switch (_seq.Events[i].Kind)
             {
-                case "If": depth++; break;
                 case "Endif":
-                    if (depth == 0) return i;
-                    depth--;
-                    break;
+                    return i;
                 case "Else":
                 case "Elseif":
-                    if (depth == 0 && stopAtElse) return i;
+                    if (stopAtElse) return i;
                     break;
             }
         }

@@ -147,6 +147,8 @@ public partial class GameSession : Node3D
     // weathered build exists to write it; WeatherRig.Tick is what fills it in.
     private Effects.EffectAmbience _ambience = new();
     private LensFlareRig? _lensFlareRig;
+    // The FBFX_COLOR_FROM_TO full-screen wash — one ramp state painted into every rendered view.
+    private UI.ScreenFlash? _screenFlash;
     private Node3D? _plane;
     // The session's simulation clock (see GameClock). Also published as GameClock.Current, which
     // is how the sim consumers scattered through the tree reach it; dropped by ReturnToMenu.
@@ -284,6 +286,13 @@ public partial class GameSession : Node3D
         // One rig per rendered view, before anything camera-anchored is built (the skydome and
         // weather visuals below are per-rig). Single player reuses the main-viewport camera.
         BuildRigs(_spec.Fly ? _spec.Players : 1);
+        // The FBFX_COLOR_FROM_TO wash (C21): one ramp state, one overlay per rendered view, built
+        // as soon as the rigs exist so every runtime below can be handed the same sink. Screen-space
+        // and session-scoped on purpose — an AnimRuntime is world-scoped and is instanced per effect
+        // pool and per crash rig.
+        _screenFlash = UI.ScreenFlash.Build(_rigs.Select(r => r.HudParent));
+        _worldRoot!.AddChild(_screenFlash);
+        _worldEffectsFactory.ScreenFlash = _screenFlash.Play;
 
         // The build body reads the base paths as plain locals (unchanged from when this was inline
         // in _Ready); the chapter-dependent paths are recomputed here so a new launchscreen chapter
@@ -698,6 +707,10 @@ public partial class GameSession : Node3D
         state.CrashProgram = session.Program;
         state.WorldScene = session.Builder.Scene;
         state.WorldRuntime = session.Runtime;
+        // The screen wash (C21). Set here rather than inside WorldSession for the same reason the
+        // contact mask below is: the overlay is a session-owned surface and WorldSession builds
+        // runtimes for the test harness too, where there is no session to own one.
+        session.Runtime.ScreenFlash = _screenFlash != null ? _screenFlash.Play : null;
         // Ground contact for the world's own `do_intersections` bodies — `agyrobus`' root and
         // pieces, the C1B airframes. Set here rather than inside WorldSession because the mask is
         // a flight-layer constant and the runtime is the animation layer; this is where the two

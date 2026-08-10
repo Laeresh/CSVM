@@ -85,7 +85,7 @@
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "c96994b9f46238b76a715176ecdba8c1",
+      "hash": "fce1a6b7eeb5411031e125b2d7b3f088",
       "exercises": "a flying plane, the only shaded surface in a flight: chase camera on the sim clock, prop and control-surface animators, the mission's sun bearing, gauges, compass tape, weapon readout, a live exhaust-trail puffer; frame-sensitive 34.52 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
@@ -99,7 +99,7 @@
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "1342581dce996814bcd835c6c6be3b7a",
+      "hash": "c4d247ea35801eba1cf01e050497897a",
       "exercises": "the per-player crash rig building and playing player_crash_dirt (--crash=5 is its only headless trigger), the airframe under the mission's sun, and the set's largest puffer surface: fireball, wreck fire, smoke, debris, ground scorch.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     }

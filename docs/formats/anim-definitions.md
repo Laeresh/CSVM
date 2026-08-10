@@ -362,13 +362,37 @@ That poll idiom pins down one more semantic: **`CALL_ANIMATION` does not restart
 that is already running** on the same anchor. The call is re-issued every frame the condition
 holds, so restarting would freeze the 2 s door at its first frame for as long as you hover.
 
+**The forward skip counts no nesting depth, and nesting ships.** `FUN_004ec080`, on a false
+condition, walks forward event by event and breaks at the **first** `ELSE` (0x20), `ELSEIF` (0x21)
+or `ENDIF` (0x22) — landing on an `ELSEIF` it loads that condition and re-tests it in the same loop;
+landing on anything else it returns and the stepper steps past. The `ELSE`/`ELSEIF` fall-through
+(`004ec5a0`, shared by both opcodes) likewise scans to the first `ENDIF`. Neither keeps a depth
+counter, and `ENDIF` (`004ec5d0`) is inert, so a nested chain is not skipped over — it is walked
+into. **48 sequences nest**, all one shape, in every chapter's `gunhit-*slug_gunhit` and
+`mag_gunhit-*` — played on every gun impact:
+
+```
+If AnimationLod 2 / If PlayerRange 1000000 / If RandomWeight 0.2
+    LIGHT_STATE gunhit_lt (range 0.5..21.25) ; OBJECT_ACTIVE_STATE gunhit_lt off
+Elseif RandomWeight 0.2
+    LIGHT_STATE gunhit_lt (range 0.9..12.25) ; OBJECT_ACTIVE_STATE gunhit_lt off
+Else Endif / Else Endif / Endif
+```
+
+Both `ELSE` bodies are empty, which is what makes the missing depth counter observable: a false
+`ANIMATION_LOD` or a false `PLAYER_RANGE` lands on the inner `ELSEIF` and **re-tests it**, so the
+dimmer impact light still fires on its 20 % roll with either outer gate failed. A nesting-aware
+reading skips the whole block and fires nothing. The original's reading is the one CSVM runs
+(`SequenceRunner.Scan`); it reads like a compiler bug and it is the shipped behaviour.
+
 No `RESET_STATE` in either source contains control flow (verified across the install), so the
 instantaneous base-state pass never has to interpret a branch.
 
 Playback ops seen and deferred: `OBJECT_DELETE_CHILD`,
 `SOUND` (the one-shot form — see below), `OBJECT_CYCLE_TEXTURE`, `CAMERA_STATE`,
-`FBFX_COLOR_FROM_TO`, `CALLBACK`, `DETONATE_WEAPON`.
-(`LIGHT_STATE`/`LIGHT_ANIMATION` landed 2026-07-21 — see below;
+`CALLBACK`, `DETONATE_WEAPON`.
+(`FBFX_COLOR_FROM_TO` landed — see "FBFX_COLOR_FROM_TO is a full-screen wash";
+`LIGHT_STATE`/`LIGHT_ANIMATION` landed 2026-07-21 — see below;
 `SOUND_NODE` + the sound half of `OBJECT_ADD_CHILD` landed 2026-07-22 — see "SOUND_NODE is a
 three-event triple"; `OBJECT_MOTION`'s rotation half landed 2026-07-22 and its
 ballistic/scale/tumble half 2026-07-23 — see "OBJECT_MOTION is two ops in one";
@@ -454,6 +478,14 @@ those reached by `CALL_SEQUENCE`, which is what makes the hold outlast the call'
 call that reaches no live instance (a callee whose whole choreography fires at t=0 — 16 of the 165)
 holds for nothing, by design.
 
+**Decode status: confirmed at the state-machine level, not pinned to a `CALL_ANIMATION`-specific
+address.** A handler returning **1** ("still running") from the stepper `FUN_004ecbb0` keeps the
+caller re-dispatching the same event every tick without advancing — exactly the "gates the caller's
+next event, not a lifetime hold" behaviour this census derived independently from data. The
+`CALL_ANIMATION` dispatch slot's own handler address was not individually decoded (see the opcode
+table below), so this is confirmed by the general contract every handler obeys, not by reading the
+wait-specific code.
+
 All flagged compiled owners are `OnCall` (2,844) or `WeaponHit` (8 in these blocks), never
 `OnStartup`, so no ambient world boot arms one — measured: an 8-chapter `--freecam` regression arms
 zero holds and leaves every bootstrap count identical. The clearest timing case is
@@ -477,9 +509,11 @@ flags behave like any dispatched call's (a routed effect call's hold is counted,
 emitter definition onto it, switch the node off again — and the author means the emitter to keep
 running: the four splash definitions (`big_splash`, `huge_splash`, `med_splash`,
 `plane_big_splash`, all on `sp_1`) wrap `hg_splasher`, which authors a 0.5 s `STOP_SEQUENCE` plus its
-own `PUFFER_STATE 0` 0.1 s later. Since an absent `START_TIME` is `EVENT_OFFSET 0`, all three land in
-one instant, so a consumer that reads the deactivation as "stop the emitters here" kills the effect
-on the tick it starts. The same-shaped pair a few seconds APART means the opposite and is the far
+own `PUFFER_STATE 0` 0.1 s later. An absent `START_TIME` gates the moment the previous event
+completes — not, as the encoding might suggest, `EVENT_OFFSET 0` (see "Event scheduling" below) —
+so all three land in one instant regardless, and a consumer that reads the deactivation as "stop the
+emitters here" kills the effect on the tick it starts. The same-shaped pair a few seconds APART
+means the opposite and is the far
 larger population — a `partN` activated, given a debris trail, flown by a 3.5–5 s `OBJECT_MOTION`
 and only then switched off, where that deactivation is the trail's ONLY authored stop. Censused
 install-wide (`analysis/bl-229-emitter-host-deactivation/`): 414 pairs, 32 same-instant in 4 shapes
@@ -510,15 +544,18 @@ component tracks up/down. `he_ground_effect` lifts its fireball 12 m over a ring
 seven explosions over 165 m of a 231 m hull at constant height. **A reading that is 8 m too high is
 therefore authored, not mis-parsed** — look at where the def's host was staged, not at the axes.
 
-## `STOP_SEQUENCE` halts the named running sequence — or calls it (the stopper idiom)
+## `STOP_SEQUENCE` halts the named sequence, and does nothing else
 
-Decoded 2026-08-01 from an install-wide survey of every site (94 raw occurrences across the
-readers, ~73 distinct authored signatures; the wire format is identical to `CALL_SEQUENCE` — a
-36-byte struct carrying only the name). One rule satisfies all of them, with zero counter-sites:
+The wire format is identical to `CALL_SEQUENCE` — a 36-byte struct carrying only the name — and so
+is the name resolution. `004eb610` resolves the name to an index in the definition's own sequence
+array and then unconditionally writes that sequence's state byte to **2 (done)**. There is no
+start-if-not-running path anywhere in the handler.
 
 **`STOP_SEQUENCE [NAME [x]]`: halt every active runner of sequence `x` on this instance —
-including the sequence carrying the event. If none is running, invoke `x` exactly like
-`CALL_SEQUENCE`.** Three authored idioms hang off it:
+including the sequence carrying the event.** Because `CALL_SEQUENCE` can only start a sequence
+from the parked state (3), stopping an `ON_CALL` sequence that was never called *disables* it: no
+later call reaches it until the whole definition resets. Two authored idioms use the halt, and a
+third — the "stopper" — turns out to author a teardown that never runs:
 
 - **Break** (`test_player`×33, `setprop`×8): a sequence stops *itself* inside an `IF` branch —
   `random_prop` picks one of 8 random prop rotations and `STOP_SEQUENCE [setprop]` ends the
@@ -531,15 +568,23 @@ including the sequence carrying the event. If none is running, invoke `x` exactl
   would re-light it one frame later.
 - **Stopper** (`flame_ball.zrd`'s `stop_p1trail`): the target is `ACTIVATION ON_CALL`, not
   running at fire time, and its body is pure teardown (`PUFFER_STATE … INACTIVE`,
-  `OBJECT_ACTIVE_STATE … INACTIVE`) — the event falls through to a call. The same file uses a
-  literal `CALL_SEQUENCE [stop_p1trail]` for the identical purpose elsewhere
-  (`moving_fire_ball_01`'s `fly_flare`), which is what settles the fallback: the two events are
-  author-interchangeable for reaching a stopper. No target install-wide is reachable *only* via
-  `STOP_SEQUENCE`.
+  `OBJECT_ACTIVE_STATE … INACTIVE`). The 2026-08-01 survey read this as a fall-through to a call,
+  on the strength of the same file reaching the same sequence by a literal
+  `CALL_SEQUENCE [stop_p1trail]` elsewhere (`moving_fire_ball_01`'s `fly_flare`). The exe says
+  otherwise: the stop marks it done and the teardown never dispatches. The two events are *not*
+  interchangeable — a call reaches a stopper, a stop buries it. **16 definitions** author this
+  (`flame_ball_01`/`flame_ball_02` → `stop_p1trail`, in all 8 chapters), and the effects those
+  sequences would have switched off are instead left to their own authored lifetimes.
 
 Halting a runner never retracts what its events already launched — motions, puffers and lights
 run out their own authored lifetimes (the same independence that keeps a rocket ring's scale
 motion alive after its launching sequence ends).
+
+⚠ **CSVM does not persist the disable.** It halts matching runners and reports whether the name
+resolved; it does not remember that a sequence was stopped, so a later `CALL_SEQUENCE` still
+starts it where the original's done state would refuse. 123 definitions name one sequence in both
+a call and a stop (mostly `flame_light_seq`), but whether any of them reaches the stop *before*
+the call at run time is a control-flow question the static census cannot answer.
 
 ## Fire: templates, flipbooks, and a trigger that lives in the exe
 
@@ -604,6 +649,30 @@ carry `LIGHT_STATE`, so the zrdr front-end needs the same normalizer (`AnimDefs.
 then `{min −50, max −160}` over 0.05 s, and a negative range is not a value a light can hold.
 The reader's `RANGE` carries four numbers (`[min, max, altMin, altMax]`) where the compiled
 form splits the trailing pair into `range_alt` (null throughout this install).
+
+**The ramp is the event's DURATION — it holds its sequence** (decoded 2026-08-10, D31). The
+handler is dispatch slot 5, `004e82b0`. On its first dispatch (`seq+0x20 == 0`, i.e. state
+*starting*) it copies the authored per-second deltas into the event's working slots
+(`+0x30/0x34 → +0x40/0x44` for the range pair, `+0x48/0x4c/0x50 → +0x60/0x64/0x68` for the
+colour triple); on every dispatch it reads the light's current range and colour back out of the
+light object, adds one tick's worth of delta, clamps each colour channel to `0…1` and writes
+them back — with the last tick shortened to the remainder (`dt − (event_timer − run_time)`) so
+the ramp lands exactly on its end value. It then ends
+`return (seq->event_timer < run_time) ? 1 : 2` — **still running until the run time is up**,
+which is the same gate `FBFX_COLOR_FROM_TO` (`004ec6a0`) uses and the same one the
+handler-return state machine above describes.
+
+So a chain of `LIGHT_ANIMATION`s is a *timed* chain, not a burst. CSVM ramps the light
+asynchronously instead (`AnimLight.TweenLeft`, ticked in `AnimRuntime.TickLights`), which draws
+the same picture **only if the sequence is also held** — and until D31 it was not: the handler
+reported duration 0, so every step of a chain fired in one instant and each re-armed the tween
+the previous one had just started. The observable cost was total, not subtle. C1's `red_police`
+(`police_lights`) authors `LIGHT_STATE` red `{0…10}` / `LIGHT_ANIMATION {max +40}` over 0.25 s /
+`LIGHT_ANIMATION {max −40}` over 0.1 s / `LOOP −1` — a 0.35 s flashing beacon. Collapsed, the
+two ramps cancelled each other every animation frame and the police light did not flash at all;
+held, it flashes at its authored rate (and the `LOOP −1` paces off the ramps instead of running
+one instantaneous pass per `AnimFrame`). `he_ground_effect`'s `he_light_seq` is the same shape
+with seven ramps over 0.41 s.
 
 **Which chapters actually light anything:** only **C1**. It is the sole chapter with
 `OnStartup` definitions containing `LIGHT_STATE` (36 of them — the refinery flare, six
@@ -1088,33 +1157,55 @@ are not visible from the byte format alone, each measured against this install.
   world-scope `cam_anim`/`mis_anim` defs; a consumer binding plane-scope defs must resolve by
   NAME (and note a plane subtree staged into a world scene mixes two index spaces that collide —
   world index 400 and plane index 400 are different nodes).
-- **Event scheduling** (inferred from the data, not stated by the format): each event's optional
-  `start` is `{offset, time}` with `offset` ∈ `Animation` (since the animation started) /
-  `Sequence` (since this sequence started) / `Event` (since the **previous event completed**);
-  an absent `start` — 174,938 of the install's events — is `Event + 0`, i.e. as soon as the
-  previous event finishes. The discriminating case is the C1 train: each car's sequence is
-  `[ObjectMotionSiScript, Loop{-1}]` with no start offsets, and only "after the previous event
-  completes" turns that into the surveyed ~327 s track loop instead of a zero-length infinite
-  loop. A definition's sequences run **concurrently** — the train drives its four cars from four
-  sibling `Initial` sequences, each with its own script and its own loop.
-  A present `start` gates **the event it is attached to**, not its successor — including the first
-  event of a sequence, and including control-flow events (`LOOP`/`IF`), which take no run time and
-  therefore do not advance the "previous event completed" base. The discriminating case is C1's
-  bowl sign (`bowl`, gamez 4868, def `on_off`): nine strict on/off SWAP pairs where only the first
-  event of each pair carries a timestamp — gating the *successor* instead shifts every sequence in
-  the install by one slot (timestamped events fire a slot early, their unstamped partners a slot
-  late, the sign spends 38% of frames blank), and a loop back-jump that resets the gate to zero
-  discards the trailing `Loop {Event 1.2}`'s inter-cycle pause.
-- **`LOOP` has two spellings of "infinite": `-1` and `0`** (decoded 2026-07-22). `-1` is the
-  common one; `0` is *not* "run zero more times". Across the compiled `cam_anim`/`mis_anim` of the
-  whole install the count distribution is **`-1` × 2,919, `0` × 26, positive N × 530**, and all 26
-  zeros sit in 25 defs that are, without exception, **ground-vehicle route animations** — C1's
-  `police_car`/`mafia`/`black_car1`/`truck1`/`car_loop1`/`car_go_home`, C2's ten `studebaker*`,
-  C3/M02's nine `stude_move*`. Every one is `activation: OnStartup`, and in every one the `LOOP`
-  is the **last event of its sequence**, over a body of `ObjectMotionFromTo` legs carrying explicit
-  from/to (so a replay re-seats the car at the route start). Nothing that must terminate uses it:
-  no door, gate, one-shot, hangar, bomb or explosion def carries `Count: 0`. Reading `0` as "stop"
-  makes every car in the game drive its route once and freeze.
+- **Event scheduling, confirmed against `crimson.exe`:** each event's optional `start` is
+  `{offset, time}` with `offset` ∈ `Animation` (since the animation started, gated against
+  `anim+0xb0`) / `Sequence` (since this sequence started, gated against `seq+0x24`) / `Event`
+  (since the **previous event completed**, gated against `seq+0x28`) — `FUN_004ecbb0` evaluates
+  whichever origin is named exclusively against the event that carries the `start`. An absent
+  `start` — 174,938 of the install's events — encodes as `Animation + 0.0` (mech3ax's `common.rs`
+  collapses that pair to `None`), not `Event + 0`; it behaves as "as soon as the previous event
+  finishes" only because the gate above is evaluated exclusively once the previous event has
+  reported completion, regardless of which origin it names. The discriminating case is the C1
+  train: each car's sequence is `[ObjectMotionSiScript, Loop{-1}]` with no start offsets, and only
+  "after the previous event completes" turns that into the surveyed ~327 s track loop instead of a
+  zero-length infinite loop. A definition's sequences run **concurrently**, confirmed the same
+  way — the train drives its four cars from four sibling `Initial` sequences, each with its own
+  script and its own loop.
+  **`Animation` and `Sequence` are two different clocks, and the difference is reachable.**
+  `anim+0xb0` belongs to the *definition instance* and is shared by all its sequences; `seq+0x24`
+  belongs to the sequence and starts at zero whenever that sequence starts. They coincide only for
+  a sequence the bootstrap starts with the instance — for one a later `CALL_SEQUENCE` starts, the
+  animation clock is already running. Censused over the whole install
+  (`analysis/anim-interpreter-decode/start_origin_census.py`): of the 3,934 events carrying an
+  explicit `start`, **1,091 name `Animation`** — every one of them with a non-zero time, since the
+  zero pair is what mech3ax collapses to `None` — and **191 of those sit in an `OnCall`
+  sequence**, the reachable case (the other 900 are in `Initial` sequences, where the two clocks
+  agree). The 191 are the rocket/torpedo/sonic trail puffers shutting off at `Animation 10.0`,
+  `ap_light_seq`/`torp_light_seq`'s `LightAnimation` chains at `Animation 0.25`, `chuteman_drop`,
+  `car_dust`, the `gen_flare_yellow` family's `light_loop`, and `generate_smokescreen`'s two
+  emitters. CSVM resolves `Animation` against `AnimInstance.Clock` for exactly this reason.
+  A present `start` gates **the event it is attached to**, not its successor — also confirmed —
+  including the first event of a sequence, and including control-flow events (`LOOP`/`IF`), which
+  take no run time and therefore do not advance the "previous event completed" base. The
+  discriminating case is C1's bowl sign (`bowl`, gamez 4868, def `on_off`): nine strict on/off SWAP
+  pairs where only the first event of each pair carries a timestamp — gating the *successor*
+  instead shifts every sequence in the install by one slot (timestamped events fire a slot early,
+  their unstamped partners a slot late, the sign spends 38% of frames blank), and a loop back-jump
+  that resets the gate to zero discards the trailing `Loop {Event 1.2}`'s inter-cycle pause.
+- **`LOOP` has two spellings of "infinite": `-1` and `0`, confirmed by mechanism.** `004ebfd0`
+  maintains a **u16** counter that counts *up* and terminates when `counter == authored`, with `-1`
+  special-cased infinite; `0` is infinite only as a consequence of that mechanism — a u16 starting
+  at 0 cannot match an authored `0` until pass 65,536, not because the data merely happens to use it
+  that way. `-1` is the common spelling; `0` is *not* "run zero more times". The install-wide count
+  distribution corroborates the mechanism rather than standing in for it: across the compiled
+  `cam_anim`/`mis_anim` of the whole install the count distribution is **`-1` × 2,919, `0` × 26,
+  positive N × 530**, and all 26 zeros sit in 25 defs that are, without exception, **ground-vehicle
+  route animations** — C1's `police_car`/`mafia`/`black_car1`/`truck1`/`car_loop1`/`car_go_home`,
+  C2's ten `studebaker*`, C3/M02's nine `stude_move*`. Every one is `activation: OnStartup`, and in
+  every one the `LOOP` is the **last event of its sequence**, over a body of `ObjectMotionFromTo`
+  legs carrying explicit from/to (so a replay re-seats the car at the route start). Nothing that
+  must terminate uses it: no door, gate, one-shot, hangar, bomb or explosion def carries `Count: 0`.
+  Reading `0` as "stop" makes every car in the game drive its route once and freeze.
   **The reader (`zrdr`) scope never uses it** — 703 `LOOP` events there, `LOOP_COUNT` ∈ {`-1`
   (575), positive N}, zero zeros. (An earlier note claimed the reader scope has *no* `LOOP` events
   at all; it has 703. The usable fact is the absence of `0`, not the absence of `LOOP`.)
@@ -1131,6 +1222,13 @@ are not visible from the byte format alone, each measured against this install.
   windowed**: the burn took **the same time in both**. Per-rendered-frame ticking would have halved
   it at 120. **The sequence tick is decoupled from rendering, and 1/60 is the original's own
   number** — every untimed count is a real authored duration.
+
+  **Decode status: confirmed by mechanism, not by a rate constant** — `004ebfd0` returns state 4
+  unconditionally after completing a loop pass, and the stepper (`FUN_004ecbb0`) treats state 4 as
+  "re-gate from the top, then stop for this tick" (see the handler state machine below). That is
+  exactly the coupling this fps-doubling measurement inferred from outside the process: one pass per
+  engine update, never more, regardless of render rate. The `1/60` figure itself is a measurement,
+  not a constant read from the exe; nothing in the decode pins the update rate to a cited address.
   ⚠ The one hypothesis those two points cannot exclude is a tick of `min(render rate, 60)` — capped
   at 60, coupled below it — because no rate below 60 could be provoked (and the run went through
   dgVoodoo). It changes nothing: CSVM paces against SIM time at a fixed 1/60, so there is no
@@ -1255,3 +1353,201 @@ are not visible from the byte format alone, each measured against this install.
   **directory** the engine resolves anim sources from (`..\data\c1\ia1\zrdr\zeps`), not a
   waypoint-motion primitive; no waypoint-path op exists in any C1 reader — path motion is
   SI scripts.
+
+### The decoded interpreter (traced in `crimson.exe`)
+
+Everything above this point in the section was inferred from the shipped data. The original's
+interpreter itself has since been located and read directly — `crimson.exe` (image base
+`0x400000`), compiled from `D:\zipper\gamez\zEffect\zeff_ani*.c`. Each paragraph above now states
+the mechanism the exe actually uses — where the decode corrected a stated mechanism (the null-
+`start` encoding, `LOOP 0`), the paragraph asserts the corrected one directly rather than carrying a
+bolted-on correction, and keeps the original census as corroborating measurement, never as the sole
+justification. Two paragraphs keep an explicit "Decode status" note instead of folding it in,
+because the note adds something the prose above it does not already say: `WAIT_FOR_COMPLETION`'s
+hold is confirmed only at the general handler-return-value contract, not by reading a dedicated
+address, which is worth flagging as a weaker kind of confirmation; the animation-frame tick's note
+records a hypothesis the decode cannot rule out (`min(render rate, 60)`) alongside the confirmation.
+What follows is the interpreter itself, cited by address so any of it can be re-found and
+re-checked.
+
+**Where the code is.**
+
+| Piece | Address |
+|---|---|
+| Sequence stepper (one sequence, one tick) | `FUN_004ecbb0` |
+| Sequence reset (rewind + re-arm) | `FUN_004ebfa0` |
+| Event dispatch table, 47 slots, index 1–0x2f | `DAT_00727de0`, populated by `FUN_004ee1a0` |
+| `IF` / `ELSEIF` condition evaluator | `FUN_004ec080` |
+| `ELSE` / `ELSEIF` fall-through (scan to `ENDIF`) | `004ec5a0` |
+| `ENDIF` | `004ec5d0` (a bare `MOV EAX,2 / RET` — no-op) |
+| `LOOP` | `004ebfd0` |
+| `CALL_SEQUENCE` / `STOP_SEQUENCE` | `004eb570` / `004eb610` |
+| `FBFX_COLOR_FROM_TO` | `FUN_004ec6a0` |
+
+**The live sequence struct is mech3ax's `SeqDefInfoC`** (64 bytes), mutated in place by the
+stepper on every tick:
+
+| Offset | Meaning |
+|---|---|
+| `+0x20` | current state |
+| `+0x21` | reset state (`SeqDefState`: `Initial`=0, `OnCall`=3) |
+| `+0x24` | sequence timer — `START_TIME SEQUENCE` compares against this |
+| `+0x28` | event timer — `START_TIME EVENT` compares against this |
+| `+0x2c` | accumulated loop time |
+| `+0x30` | u16 loop counter (counts up) |
+| `+0x34` / `+0x38` / `+0x3c` | current event pointer / start pointer / byte size |
+
+⚠ mech3ax's own field-name guesses at offsets 36/40/44 (`loop_time` / `event_time` / `seq_time`)
+are mis-ordered against this layout — compare `+0x24`/`+0x28`/`+0x2c` above against offsets 36/40/44
+decimal. They are not load-bearing for round-tripping (nothing reads a compiled def by field name),
+so the fork's names were left alone; this paragraph is the correction, and renaming the fork's
+struct field is explicitly out of scope for this record (it is a round-trip-test surface and belongs
+in its own change).
+
+**The handler state machine.** Every handler returns one of four values, and the stepper writes the
+result into the state byte at `+0x20`:
+
+| Return | Meaning |
+|---|---|
+| **2** | event complete — advance to the next event |
+| **1** | still running — re-dispatch the SAME event next tick |
+| **4** | sequence rewound by `LOOP` — re-gate from the top of the sequence, and yield the rest of this tick |
+| *(state)* **3** | parked, awaiting a `CALL_SEQUENCE` (not a return value — a resting state) |
+
+The start-time gate is evaluated only when the stepper is in state 0 (freshly advanced past a
+completed event) or state 4 (freshly rewound) — i.e. only once the previous event has actually
+reported completion, never mid-event. An `ON_CALL` sequence that runs off the end of its event list
+is rewound and re-parked at state 3, ready to be called again; an `Initial` sequence instead stops
+at state 2 and does not re-arm.
+
+**The opcode table.** `crimson.exe`'s 47-slot dispatch table at `DAT_00727de0` (populated by
+`FUN_004ee1a0`, read directly rather than reconstructed from behaviour) matches mech3ax's
+`EventType` enum exactly, slot for slot — **including the null slot 29** (`FUN_004ee1a0` writes
+`_DAT_00727e54 = 0`), which mech3ax also marks as a gap. That agreement is an independent
+confirmation the fork's event numbering is correct, not an assumption inherited from it. The exe
+additionally has real handlers at slots 38, 43, 44 and 45 (`LAB_004ecb70`, `LAB_004eac40`,
+`FUN_004eac90`, `FUN_004eadd0` respectively) that mech3ax leaves undecoded; no shipped def uses any
+of the four, so nothing downstream needs them yet.
+
+**What this record could not confirm.** `FUN_004ecbb0` and `FUN_004ebfa0` were read in full while
+writing this and match the state machine and struct offsets above exactly, including the three
+`START_TIME` origin codes (1/2/3 → `anim+0xb0` / `seq+0x24` / `seq+0x28`) and the reset writing
+`state ← +0x21`, `event ptr ← +0x38`, both timers to 0. `LOOP` (`004ebfd0`) has no
+Ghidra-recognised function boundary — it is reached only through the dispatch table — but was
+disassembled directly: it folds the sequence timer into `+0x2c`, does `INC word ptr [+0x30]`,
+terminates on `counter == authored` (`-1` special-cased infinite) or, in its second form
+(`flags & 2`, `LOOP_RUN_TIME`), on the accumulated time reaching the authored float, then calls the
+reset routine and returns 4. **The exe has that second form; nothing shipped builds it** — of
+3,015 compiled defs' 1,018 `Loop` events, all 1,018 carry `Count` and none carries `RunTime`.
+Disproven, not merely unimplemented: see the census in `analysis/anim-interpreter-decode/FINDINGS.md`.
+
+The struct offsets above are otherwise mech3ax's `SeqDefInfoC` layout, taken as given rather than
+independently re-derived field-by-field; only the offsets the stepper and `LOOP` actually touch
+have been seen in code.
+
+## FBFX_COLOR_FROM_TO is a full-screen wash
+
+`FUN_004ec6a0`, dispatch slot 36, read in full (decompiled and disassembled). **152 events ship**,
+in four definitions and nowhere else: `he_ground_effect`, `ap_ground_effect` and `flak_effect`
+(6 events each × 8 chapters = 144) plus the intro cutscene's `gi_scene1` (1 × 8). Each of the three
+ordnance definitions carries the same shape — a sibling `Initial` sequence doing
+`If PlayerRange … → CallSequence frame_buffer_effects1 → Endif`, and an `OnCall`
+`frame_buffer_effects1` holding the chain.
+
+**The event struct**, from the handler's own offsets (`ECX` is the event, `EDX` the live sequence):
+
+| Offset | Field |
+|---|---|
+| `+0x0c` / `+0x10` / `+0x14` | red `from` / `to` / **delta** |
+| `+0x18` / `+0x1c` / `+0x20` | green `from` / `to` / delta |
+| `+0x24` / `+0x28` / `+0x2c` | blue `from` / `to` / delta |
+| `+0x30` / `+0x34` / `+0x38` | alpha `from` / `to` / delta |
+| `+0x3c` | `run_time` |
+
+**What it does, per tick.** With `t` = the sequence's **event timer** (`seq+0x28`) clamped to
+`run_time`, each channel is `from + t * delta` — the delta is the compiled
+`(to - from) / run_time`, so the interpolation is **linear in RGBA**. Once the event timer reaches
+`run_time` the value snaps to `to` outright and the handler returns **2** (complete); before that it
+returns **1** (still running, re-dispatch me next tick). Each channel is then clamped to `0…1`; RGB
+is scaled by 255 and packed into one frame-buffer pixel through the same mask/shift globals
+(`DAT_009c67fc`/`6800`/`6804`/`680c`) the weather particles' `COLOR` uses, and the alpha is passed
+**separately, as a scalar** — not premultiplied into the pixel. Colour plus a scalar weight is an
+alpha blend over the picture (`dst = dst·(1-a) + colour·a`); it cannot be a multiply or a screen,
+and the data agrees — `he_ground_effect`'s first step is white at α 0.3, which a multiply would
+render invisible. *(The blend state itself sits behind a virtual on the renderable and was not
+traced; the colour+weight pair and the white-step argument are the evidence.)*
+
+**One global state, last writer wins.** The pair goes to a single process-wide object
+(`FUN_005ca1f0` → `FUN_005ca0e0`, `this` hard-coded to `0x9c8a98`): packed colour at `+0x60`,
+alpha at `+0x68`, then a virtual call that arms the effect **for the current frame only**
+(`FUN_005c54a0` — sets the live bit and clears the persistent one). Nothing else in the exe writes
+those fields. So two bursts overlapping do not composite: the second simply overwrites the first,
+and when the last event completes nothing re-arms the object and the wash is gone on the next frame
+rather than holding its `to` colour.
+
+**`alpha_delta` in the extraction is a round-trip artefact, not a parameter.** mech3ax recomputes
+every delta as `(to - from) / run_time` and emits `alpha_delta` only when the file's stored value
+disagrees bit-for-bit. All 8 non-null values in this install are `flak_effect`'s `-0.99999994`
+against a computed `-1.0` — one ulp, about 2e-8 of alpha across the whole 0.3 s ramp, orders below
+one 8-bit level. CSVM does not read it.
+
+**How CSVM plays it.** `AnimRuntime`'s `FbfxColorFromTo` case pushes `(from, to, run_time)` to a
+session-level sink and reports `run_time` as the event's **duration**, which is the CSVM equivalent
+of the original's "return 1 until done": the sequence runner gates the next event on it, so
+`he_ground_effect`'s six steps space out over their authored 1.2 s instead of collapsing into one
+instant. The sink is `UI.ScreenFlash` (`docs/architecture.md`) — one ramp at a time, replaced
+outright by a later event, painted into every rendered view. Asserted by the `fbfx-flash`
+`--run-tests` suite.
+
+## The last four unhandled kinds — decoded and triaged, none built
+
+`Callback` (slot 35, `004ec5e0`), `ObjectCycleTexture` (slot 17, `004eabd0`), `ObjectDeleteChild`
+(slot 16, `004eab90`) and `CameraState` (slot 20, `004e85c0`) are the whole of what the census in
+`analysis/anim-interpreter-decode/FINDINGS.md` counts as shipped-but-unhandled. All four were
+missing from Ghidra's function list (reached only through the dispatch table, like `LOOP`) and were
+recovered by forcing a function at each dispatch address, then decompiled in full. None gets a
+handler: for each, either CSVM has no consumer of what the exe does, or the def(s) that carry it are
+never reached by anything CSVM plays. A def-census over all 3,015 compiled defs (ad hoc, same method
+as `anim_census.py`) located every occurrence of all four kinds to check reachability, not just count
+them.
+
+- **`Callback`** (288 events, 120 defs — e.g. `player-player.json`'s `destroy_craft` sequence,
+  `value: 15`/`16`). The handler calls the anim instance's own registered native function pointer
+  (`anim+0x74`) with a per-event code (`anim+0x78`, the event's own `+0xc`) if one is registered —
+  pure `has_callbacks`-gated mission-scripting plumbing, notifying a host that installed a callback.
+  CSVM's `AnimRuntime` never installs one; there is no consumer to notify.
+- **`ObjectCycleTexture`** (96 events, 96 defs — exactly the player's own
+  `<part>_damage_{green,yellow,red}` cockpit indicator lights for `leftwing`/`rightwing`/`nose`/
+  `tail`, one set per chapter, nothing else). The handler resets an object's per-mesh texture-cycle
+  list to frame 0 (`FUN_005642a0`) then jumps straight to a specific frame (`FUN_00564410`, index
+  from the event's `+0x12`) — i.e. "snap this object's cycling texture to state N", not "start a
+  cycle". `docs/architecture.md`'s `Flight/DamageVisuals.cs` entry already records these same defs as
+  deliberately unwired: CSVM has no first-person cockpit to show the indicator on, and
+  `GaugeCluster.OnPartDamage` covers the same information a different way. The decode confirms it is
+  the same mechanism, not a second consumer — nothing changes.
+- **`ObjectDeleteChild`** (48 events, 40 defs). The handler unconditionally detaches a named child
+  from a named parent (`FUN_004cd6d0`, dispatched by the child's own node type) — a pure scene-graph
+  reparent, no visibility or transform change of its own. Every shipped use is one of two shapes:
+  - `camera1-generic_intro.json`'s `check_warhawk`/`start_script` sequences detach `camera1` and
+    `player` from `world1` — cutscene camera rigging, `OnCall` and never reached by anything CSVM
+    plays (`docs/plans/PLAN-anim-rendering-followups.md` already logs `camera1`/`player`/`cpilot` as
+    cutscene machinery for cutscenes this project does not have), and `apassengers-rem_pas.json`'s
+    `remove_passenger` detaches `apassengers` from `pass_st` — `pass_st` is not a gamez node in any
+    chapter (confirmed earlier, `docs/HISTORY.md`), so the parent can never resolve even if a handler
+    were written.
+  - `player-cpeject1/2/cpejectstop.json` detach `cpilot` from `pilot_pos`. These ARE reached — they
+    are called from the player's own `destroy_it` crash sequence (`docs/plans/PLAN-M2-polish-4.md`)
+    — but in all three files the delete is the first of exactly two events, and the second is
+    `ObjectActiveState(cpilot, false)`: `cpilot` is hidden immediately after, whether or not it was
+    ever detached. Reached, and still a no-op to build: CSVM already renders the correct (invisible)
+    outcome without it.
+- **`CameraState`** (8 events, 8 defs — one `player-gi_1stperson.json` each). The handler writes a
+  camera node's clip near/far, LOD multiplier, FOV and zoom fields, each gated by its own bit in the
+  event's flags byte. `gi_1stperson` is `OnCall` and its only caller anywhere in the install is
+  `camera1-generic_intro.json`'s `check_warhawk` sequence — the same unreached intro-cutscene
+  machinery as `ObjectDeleteChild` above. CSVM has no scripted first-person camera to configure
+  either (`PlayerFirstPerson` reads `false` — no cockpit view — `docs/formats/anim-definitions.md`'s
+  own condition table).
+
+`AnimRuntime`'s `default:` case keeps counting all four by name (`Count(ev.Kind)`) exactly as
+before — this record is what makes that report legible, not a code change.

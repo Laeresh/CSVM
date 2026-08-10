@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Mech3;
 using Godot;
 using Xunit;
@@ -128,9 +129,20 @@ public class SequenceRunnerTests
 
         // 200 frames of sim time, give or take the step the last pass quantises onto — the
         // residual is bounded by the step size, never by the count, which is the whole property.
+        // `want` is exact, not approximate: at dt == AnimFrame (the calibration step) this
+        // fixture measures 3.3333309s, matching 200 x AnimFrame to float32 noise. Traced against
+        // FUN_004ecbb0 (the exe's stepper): a rewind always returns (state 4), so the next pass
+        // can only start on the FOLLOWING tick — pass 1 costs a tick exactly like every other
+        // pass, there is no free first pass, and 200 passes cost 200 ticks. The pre-fix
+        // down-counter (authored + 1 passes) measured 3.3499975s at this same dt — a full
+        // AnimFrame LONG, not a compensating error that happened to land on `want` — so the
+        // up-counting rewrite fixed the duration along with the pass count, it did not trade one
+        // for the other. 4 steps of headroom, not 3: fixing the count moved which side of the
+        // boundary the last pass's step-quantisation residual falls on at the finest tested step
+        // (1/240, four sub-steps per AnimFrame); it does not move `want` itself.
         float want = 200f * SequenceRunner.AnimFrame;
         Assert.True(inst.Finished, "a counted loop must terminate");
-        Assert.InRange(elapsed, want - 3f * dt, want + 3f * dt);
+        Assert.InRange(elapsed, want - 4f * dt, want + 4f * dt);
     }
 
     [Fact]
@@ -261,15 +273,16 @@ public class SequenceRunnerTests
         Assert.Equal(new[] { "blink" }, t[4]);   // 2.5s
     }
 
-    // ---- 6. a taken branch falls through to its own ENDIF, depth-aware; a failed one advances ----
+    // ---- 6. a taken branch falls through to its own ENDIF; a failed one advances, NOT depth-aware ----
 
     [Fact]
-    public void BranchesFallThroughToEndifDepthAwareAndFailedConditionsAdvance()
+    public void BranchesFallThroughToEndifAndFailedConditionsAdvanceWithoutCountingDepth()
     {
-        // A nested IF inside the outer branch: the fall-through off a taken branch must skip past
-        // ELSEIF/ELSE to the OUTER Endif (index 9), NOT the inner one (index 3) already popped —
-        // that is the depth-aware Scan. A failed outer condition must instead advance to the next
-        // ELSEIF, again skipping the whole inner chain.
+        // A nested IF inside the outer branch. The fall-through off a taken branch skips to the
+        // next ENDIF and the ENDIF is what pops the frame, so the taken path is unremarkable.
+        // The FAILED path is the interesting one: the scan has no depth counter, so a false outer
+        // condition lands on the INNER chain's Endif at index 3 — not on the outer Elseif at 5 —
+        // and the outer branch's own tail at index 4 runs anyway.
         //
         //  0 If(outer) 1 If(inner) 2 SWAP inner_a 3 Endif 4 SWAP outer_a
         //  5 Elseif(elseif) 6 SWAP branch2 7 Else 8 SWAP else_body 9 Endif 10 SWAP after
@@ -286,10 +299,85 @@ public class SequenceRunnerTests
         RunSteps(Instance(Seq(body)), taken, 1f, 1);
         Assert.Equal(new[] { "inner_a", "outer_a", "after" }, taken.Fired);
 
-        // Outer false: advance past the inner chain to the elseif, which is true.
+        // Outer false: the scan stops at the inner Endif (3), which pops the ONE open frame, so
+        // the outer tail (4) fires and the chain behind it reads as an unopened one — the elseif
+        // is re-tested and its ELSE body runs too. The original would fire only outer_a and after:
+        // its ELSEIF/ELSE handler always skips to the ENDIF, so nothing downstream of the landing
+        // can run twice. That residual is the _branchTaken stack, and it needs a chain whose inner
+        // IF closes BEFORE the outer chain's next branch marker — a shape no shipped def has (all
+        // 48 nesting sequences close inner-first, where the two readings agree; see the gunhit
+        // test below). Asserted as-is so the residual is visible rather than buried.
         var elseif = new RecordingHost { Conditions = { ["outer"] = false, ["elseif"] = true } };
         RunSteps(Instance(Seq(body)), elseif, 1f, 1);
-        Assert.Equal(new[] { "branch2", "after" }, elseif.Fired);
+        Assert.Equal(new[] { "outer_a", "branch2", "else_body", "after" }, elseif.Fired);
+    }
+
+    // ---- 6b. the real gunhit chain: the shipped nesting shape, every condition combination ----
+
+    [Fact]
+    public void GunhitNestedChainFiresInTheOriginalsOrder()
+    {
+        // C1's gunhit-3040slug_gunhit, sequence 5 — the shape ALL 48 shipped nesting sequences
+        // have (every chapter's gunhit-*slug_gunhit / mag_gunhit-*, played on every gun impact):
+        //
+        //  0 If(AnimationLod 2) 1 If(PlayerRange 1000000) 2 If(RandomWeight 0.2)
+        //  3 LightState gunhit_lt range 21.25   4 ObjectActiveState gunhit_lt off (Event+0.0001)
+        //  5 Elseif(RandomWeight 0.2)
+        //  6 LightState gunhit_lt range 12.25   7 ObjectActiveState gunhit_lt off (Event+0.0001)
+        //  8 Else 9 Endif   10 Else 11 Endif   12 Endif
+        //
+        // Both empty ELSE bodies are what make the depth counter's absence observable: a false LOD
+        // or range gate lands on the ELSEIF at 5 and RE-TESTS it, so the dim light still fires on
+        // its 20% roll with either outer gate failed. A depth-aware scan skipped to 12 and fired
+        // nothing. This is the original's behaviour, quirk and all.
+        AnimEvent[] Body() => new[]
+        {
+            Branch("If", "lod"), Branch("If", "range"), Branch("If", "weight1"),
+            Light("lt_bright"), Swap("off_bright", offset: "Event", time: 0.0001f),
+            Branch("Elseif", "weight2"),
+            Light("lt_dim"), Swap("off_dim", offset: "Event", time: 0.0001f),
+            Ctrl("Else"), Ctrl("Endif"),
+            Ctrl("Else"), Ctrl("Endif"),
+            Ctrl("Endif"),
+        };
+
+        // Two steps, because the authored OBJECT_ACTIVE_STATE carries `Event + 0.0001` and so
+        // cannot land in the same step as the LIGHT_STATE it switches off.
+        static string[] Run(RecordingHost host, AnimEvent[] body)
+        {
+            var inst = Instance(Seq(body));
+            RunSteps(inst, host, 1f, 2);
+            Assert.True(inst.Finished);
+            return host.Fired.ToArray();
+        }
+
+        // LOD gate false — the outer IF. The scan still reaches the inner ELSEIF.
+        Assert.Equal(new[] { "lt_dim", "off_dim" }, Run(
+            new RecordingHost { Conditions = { ["lod"] = false, ["weight2"] = true } }, Body()));
+        Assert.Empty(Run(
+            new RecordingHost { Conditions = { ["lod"] = false, ["weight2"] = false } }, Body()));
+
+        // Range gate false — the middle IF. Same landing, same re-test.
+        Assert.Equal(new[] { "lt_dim", "off_dim" }, Run(
+            new RecordingHost { Conditions = { ["lod"] = true, ["range"] = false, ["weight2"] = true } },
+            Body()));
+
+        // Both gates pass: the inner chain runs as authored, one branch or the other.
+        Assert.Equal(new[] { "lt_bright", "off_bright" }, Run(
+            new RecordingHost { Conditions = { ["lod"] = true, ["range"] = true, ["weight1"] = true } },
+            Body()));
+        Assert.Equal(new[] { "lt_dim", "off_dim" }, Run(
+            new RecordingHost
+            {
+                Conditions = { ["lod"] = true, ["range"] = true, ["weight1"] = false, ["weight2"] = true },
+            },
+            Body()));
+        Assert.Empty(Run(
+            new RecordingHost
+            {
+                Conditions = { ["lod"] = true, ["range"] = true, ["weight1"] = false, ["weight2"] = false },
+            },
+            Body()));
     }
 
     // ---- 7. an ELSE with no IF degrades to running the branch (malformed-chain safety) ----
@@ -425,14 +513,15 @@ public class SequenceRunnerTests
         Assert.True(inst.Finished);                        // removed by the sweep, same Advance
     }
 
-    // ---- 13. STOP_SEQUENCE with no running target calls it, exactly like CALL_SEQUENCE ----
+    // ---- 13. STOP_SEQUENCE with no running target starts nothing, and disables the target ----
 
     [Fact]
-    public void StopSequenceWithNoRunningTargetCallsItLikeCallSequence()
+    public void StopSequenceWithNoRunningTargetStartsNothingAndLeavesItUncallable()
     {
-        // The stopper idiom, shaped like the rocket fireball: activate starts a trail and, a
-        // beat later, names an ON_CALL stopper nothing else calls. Not running -> STOP_SEQUENCE
-        // invokes it, and the stopper's own events dispatch in order on the next frames.
+        // Shaped like the rocket fireball: activate starts a trail and, a beat later, names an
+        // ON_CALL stopper nothing else calls. The original writes the target DONE and stops, so
+        // the stopper's teardown never dispatches — and because a call only starts from PARKED,
+        // a later CALL_SEQUENCE on that name cannot revive it either.
         var host = new RecordingHost();
         var activate = Seq("activate",
             Swap("on"), CallSeq("trail"), StopSeq("stopper", "Event", 0.5f));
@@ -445,9 +534,14 @@ public class SequenceRunnerTests
 
         Assert.Equal(new[] { "on", "trail" }, t[0]);      // 0.25s: start + the call
         Assert.Equal(new[] { "emit" }, t[1]);             // 0.50s: the called trail runs
-        Assert.Equal(new[] { "stopper" }, t[2]);          // 0.75s: the stop finds nothing running
-        Assert.Equal(new[] { "off1", "off2" }, t[3]);     //        and calls the stopper instead
+        Assert.Equal(new[] { "stopper" }, t[2]);          // 0.75s: the stop resolves, halts nothing
+        Assert.DoesNotContain("off1", host.Fired);        //        and starts nothing
+        Assert.DoesNotContain("off2", host.Fired);
         Assert.True(inst.Finished);
+
+        // The stop still reports FOUND — callers read that as "did the name resolve".
+        Assert.True(inst.StopSequence("stopper"));
+        Assert.False(inst.StopSequence("ghost"));
     }
 
     // ---- 14. STOP_SEQUENCE halts every duplicate runner of the name ----
@@ -486,6 +580,73 @@ public class SequenceRunnerTests
 
         Assert.Equal(new[] { "ghost", "after" }, t[0]);
         Assert.True(inst.Finished);
+    }
+
+    // ---- 16. CALL_SEQUENCE is one instance per sequence: a second call while it runs is inert ----
+
+    [Fact]
+    public void CallingASequenceThatIsAlreadyRunningStartsNoSecondCopy()
+    {
+        // The original keeps a sequence's state inside the definition, so a call is
+        // `if (parked) start` and nothing else. 77 shipped definitions call one sequence from
+        // more than one site (sonic_ground_effect calls sonic_light_seq twice); each such pair
+        // must produce ONE run of the body, not two overlapping ones.
+        var host = new RecordingHost();
+        var main = Seq("main", CallSeq("light"), CallSeq("light"));
+        var light = Seq("light", Swap("pulse", "Event", 0.5f));
+        var inst = Instance(new[] { main, light }, main);
+        host.Instance = inst;
+
+        RunSteps(inst, host, 0.25f, 6);
+
+        Assert.Single(host.Fired.Where(f => f == "pulse"));
+        Assert.True(inst.Finished);
+    }
+
+    // ---- 17. CALL_SEQUENCE naming a non-ON_CALL sequence does nothing, but still reports found ----
+
+    [Fact]
+    public void CallingANonOnCallSequenceIsANoOpThatStillResolvesTheName()
+    {
+        // Only an ON_CALL sequence is ever parked, so a call naming one that runs with the
+        // animation cannot start it (reflight1..6 → refinery_light_seq, 6 shipped definitions).
+        // The return still says FOUND: callers read it as "did the name resolve", and a false
+        // would send a CALL_ANIMATION fallback after a name that was there.
+        var host = new RecordingHost();
+        var main = Seq("main", CallSeq("ambient"));
+        var ambient = Seq("ambient", Swap("glow", "Event", 0.5f));
+        var inst = Instance(new[] { main, ambient }, main, ambient);
+        host.Instance = inst;
+
+        Assert.True(inst.CallSequence("ambient"));
+        RunSteps(inst, host, 0.25f, 6);
+
+        // Its own runner ran it once; the calls added nothing.
+        Assert.Single(host.Fired.Where(f => f == "glow"));
+    }
+
+    // ---- 18. an "Animation" offset reads the INSTANCE's clock, not the called sequence's ----
+
+    [Fact]
+    public void AnimationOffsetInACalledSequenceGatesOnTheInstanceClock()
+    {
+        // The shape 191 shipped events carry: an ON_CALL sequence a CALL_SEQUENCE starts partway
+        // through the animation, holding an event stamped "Animation t" — every rocket/torpedo
+        // trail's 10 s puffer shut-off, `ap_light_seq`'s LightAnimation chain, `chuteman_drop`.
+        // The instance clock is already at 1.0 s when the call lands, so an "Animation 1.5" gate is
+        // 0.5 s away; reading it against the CALLED sequence's own clock (which starts at zero)
+        // would defer it to 2.5 s, a full second late.
+        var host = new RecordingHost();
+        var main = Seq("main", CallSeq("trail", "Event", 1.0f));
+        var trail = Seq("trail", Swap("shutoff", "Animation", 1.5f));
+        var inst = Instance(new[] { main, trail }, main);
+        host.Instance = inst;
+
+        var t = RunSteps(inst, host, 0.25f, 12);
+
+        Assert.Equal(new[] { "trail" }, t[3]);        // 1.00s: the call
+        Assert.Equal(new[] { "shutoff" }, t[5]);     // 1.50s: the instance clock's 1.5, not the
+        Assert.Empty(t[9]);                            //        sequence's — which would be 2.50s
     }
 
     // ---- WAIT_FOR_COMPLETION: the call gates the NEXT event, on the callee, not on a clock ----
@@ -612,20 +773,23 @@ public class SequenceRunnerTests
     {
         var inst = new AnimInstance(Dummy, null);
         foreach (var s in seqs)
-            inst.Runners.Add(new SequenceRunner(s));
+            inst.AddRunner(s);
         return inst;
     }
 
     /// <summary>An instance over a definition that KNOWS the given sequences (so CALL_SEQUENCE /
     /// STOP_SEQUENCE can look them up by name), with runners started only for
-    /// <paramref name="run"/> — the rest sit ON_CALL.</summary>
+    /// <paramref name="run"/> — the rest sit ON_CALL, and are MARKED so: only an ON_CALL sequence
+    /// is ever parked, and CALL_SEQUENCE starts nothing else.</summary>
     private static AnimInstance Instance(AnimSequence[] defined, params AnimSequence[] run)
     {
         var def = new AnimDefinition();
         def.Sequences.AddRange(defined);
+        foreach (var s in defined)
+            s.OnCallOnly = !run.Contains(s);
         var inst = new AnimInstance(def, null);
         foreach (var s in run)
-            inst.Runners.Add(new SequenceRunner(s));
+            inst.AddRunner(s);
         return inst;
     }
 
@@ -642,6 +806,11 @@ public class SequenceRunnerTests
     /// bowl sign flickers with).</summary>
     private static AnimEvent Swap(string name, string? offset = null, float time = 0f) =>
         new() { Kind = "ObjectActiveState", StartOffset = offset, StartTime = time,
+                Data = new AnimData(new Dictionary<string, object?> { ["name"] = name }) };
+
+    /// <summary>An instantaneous LIGHT_STATE named <paramref name="name"/>.</summary>
+    private static AnimEvent Light(string name) =>
+        new() { Kind = "LightState",
                 Data = new AnimData(new Dictionary<string, object?> { ["name"] = name }) };
 
     /// <summary>A timed motion whose run time the host reports (its Kind keys

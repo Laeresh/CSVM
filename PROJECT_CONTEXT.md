@@ -192,8 +192,9 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt flying, or the 2–4-player splitscreen Dogfight deathmatch, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, world destructibles that take damage, die, lose collision, throw debris and reset — and planes shoot planes down (M4 A1, front-loaded). The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
-**No active plan.** [`PLAN-puffer-engine-deltas.md`](docs/plans/PLAN-puffer-engine-deltas.md)
-completed 2026-08-10 (all ten items; the decode it produced is
+**No active plan.** [`PLAN-anim-original-match.md`](docs/plans/PLAN-anim-original-match.md) and
+[`PLAN-puffer-engine-deltas.md`](docs/plans/PLAN-puffer-engine-deltas.md) both completed 2026-08-10
+(the animation interpreter matched to `crimson.exe`; the puffer engine decode at
 [`docs/org/puffer.md`](docs/org/puffer.md)), joining
 [`PLAN-weather-decompile-match.md`](docs/plans/PLAN-weather-decompile-match.md) and
 [`PLAN-flight-model-rewrite.md`](docs/plans/PLAN-flight-model-rewrite.md) of 2026-08-09 in

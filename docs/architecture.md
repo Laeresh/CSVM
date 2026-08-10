@@ -1004,6 +1004,32 @@ to the effects runtime / nothing live to hold) rather than through `Count`, whos
 bootstrap census and could never carry a death-time event (LOG-16). The routed case is the wait's
 one scope boundary: an `ExternalEffect` call leaves no instance HERE, and the delegate carries no
 return path to poll the effects runtime's.
+`FBFX_COLOR_FROM_TO` is the one event whose effect is screen-space: the case reads `from`/`to`/
+`run_time`, pushes them to the `ScreenFlash` sink (`UI/ScreenFlash.cs` — read its entry) and
+reports `run_time` as the event's **duration**, which is what spaces `he_ground_effect`'s six steps
+over their authored 1.2 s instead of collapsing them into one instant (the original's handler
+instead returns "still running" until the time is up; the gate is the same). A sink and not a node
+because this class is world-scoped and instanced per effect pool and per crash rig — the overlay
+belongs to the session, which sets it on the world and world-effects runtimes. RESET_STATE skips it:
+a wash is a thing that happens, not a base state. Decode (blend, interpolation, the single global
+state a second burst overwrites, and why `alpha_delta` is not read) in
+`docs/formats/anim-definitions.md`.
+`LIGHT_ANIMATION` reports its `run_time` as the event's **duration**, so a chain of ramps is
+spaced instead of firing in one instant — the original's handler (dispatch slot 5, `004e82b0`)
+returns "still running" until the sequence's event timer passes the run time, exactly as
+`FBFX_COLOR_FROM_TO` does. The ramp itself is asynchronous here (`AnimLight.TweenLeft`, ticked in
+`TickLights`), which is the same picture only because the sequence is held: without the duration
+each step re-armed the tween the one before it had started, and C1's `red_police` beacon
+(`LIGHT_STATE` / +40 over 0.25 s / −40 over 0.1 s / `LOOP −1`) did not flash at all. Decode in
+`docs/formats/anim-definitions.md`; the `ordnance-burst-timeline` suite is what measures it.
+`Callback`/`ObjectCycleTexture`/`ObjectDeleteChild`/`CameraState` (dispatch slots 35/17/16/20) stay
+on `default:` — decoded in full (`docs/formats/anim-definitions.md`), none gets a case. `Callback`
+is `has_callbacks` mission plumbing with no registered consumer here; `ObjectCycleTexture` is the
+`<part>_damage_*` cockpit indicator already recorded unwired on `Flight/DamageVisuals.cs` (no
+cockpit); `ObjectDeleteChild`'s scene-graph reparent is either unreached (`camera1-generic_intro`'s
+rig, `apassengers-rem_pas`'s `pass_st`, which is not a gamez node anywhere) or reached but masked
+(the `cpeject*` defs hide `cpilot` immediately after, delete or not); `CameraState`'s only caller is
+the same unreached intro-cutscene chain.
 ⚠ `_rng` is the runtime's ONE die (`RANDOM_WEIGHT`, `SOUND_GROUPS` picks, crash-debris scatter) —
   every session sets `Seed` (`Rng.Anim`/`Rng.Crash`/`Rng.Effects`); route new dice through it or a
   replay stops being identical. `Reseed()` also clears the sound groups' recency memory, which
@@ -1232,19 +1258,43 @@ shape that was leaking.
 ## src/Mech3/SequenceRunner.cs
 The engine-free sequence interpreter, extracted from `AnimRuntime` behind the `ISequenceHost` seam
 (four members since `BL-228` added `PendingWait`; the other three are unchanged).
-`SequenceRunner` runs one sequence's event list on a clock (per-event START_TIME gating, LOOP with
-authored-count-0 = infinite, IF/ELSEIF/ELSE/ENDIF via a `_branchTaken` stack + nesting-aware `Scan`);
+`SequenceRunner` runs one sequence's event list on a clock — **two** clocks, in fact: its own, and
+the owning `AnimInstance.Clock` that a `START_TIME ANIMATION` gates against (the original's
+`anim+0xb0`, one per definition instance and shared by all its sequences). The two differ for every
+sequence a later CALL_SEQUENCE starts, which 191 shipped events read; a null `start` encodes as
+`Animation + 0.0` but must stay on the relative path, and `SetDue`'s comment says why.
+Its scope is per-event START_TIME gating, LOOP with
+authored-count-0 = infinite, and IF/ELSEIF/ELSE/ENDIF via a `_branchTaken` stack + a deliberately
+**non**-nesting-aware `Scan` — the original counts no depth, and 48 shipped `gunhit` sequences
+observe the difference; the constraint and its one residual live in `Scan`'s own comment).
 `AnimInstance` holds a definition's concurrent runners and removes them as they finish, and carries
-the CALL_SEQUENCE/STOP_SEQUENCE semantics (`CallSequence`/`StopSequence`: halt every matching
-runner, else call — decode in `docs/formats/anim-definitions.md`; `AnimRuntime`'s dispatch cases are
-thin shims over these). Both are
+the CALL_SEQUENCE/STOP_SEQUENCE semantics (decode in `docs/formats/anim-definitions.md`;
+`AnimRuntime`'s dispatch cases are thin shims over these). **One runner per sequence, keyed on the
+`AnimSequence` OBJECT and never on its name** — the original holds a sequence's state inside the
+definition's own sequence array (`004eb570`), so `CallSequence` starts a sequence only when nothing
+is running it AND its authored activation is ON_CALL; a call into a running or non-ON_CALL sequence
+is a silent no-op that still reports *found*, since callers read the return as "did the name
+resolve" for the CALL_ANIMATION fallback. Names are not unique (`he_ground_effect` ships two
+unnamed sequences), which is why identity is the object. `StopSequence` halts every matching runner
+**and does nothing else** (`004eb610` writes the sequence DONE and has no start-if-not-running
+path): a stop naming a parked ON_CALL sequence therefore runs no teardown at all, which is what 16
+shipped definitions author (`flame_ball_01/02 → stop_p1trail`, every chapter, inside the HE
+explosion's chain). CSVM does not persist the resulting DISABLE, so a later CALL_SEQUENCE can still
+start a stopped sequence where the original would refuse it — 123 definitions name one sequence in
+both a call and a stop, but no def is known to reach the stop first. Both are
 public so `CSVM.Tests` drives them against a fake host; the host is any `ISequenceHost` (the game's
 real one is `AnimRuntime`, tests pass a recorder). Anchors are opaque `Node3D?` pass-through — the
 interpreter never dereferences them.
-⚠ Behaviour-preserving move only — the `_loopsLeft == -2` sentinel, the `goto case "Elseif"` and the
-  256-fires-per-frame guard all LOOK refactorable and are all load-bearing (each a shipped, measured
-  bug: the bowl sign's 38% blank frames, frozen traffic loops, the double-polling waterfall). The
-  comments carry the measured evidence; do not trim them.
+The up-counting `_loopPasses` mechanism (0 is infinite because the counter starts at 0 and only
+grows, so it can't re-equal 0 once a pass has run — no normalisation needed), the
+`goto case "Elseif"` and the 256-fires-per-frame guard all LOOK refactorable and are all
+load-bearing (each a shipped, measured bug: the bowl sign's 38% blank frames, frozen traffic loops,
+the double-polling waterfall) — the `Loop`/`Advance` code comments in `SequenceRunner.cs` carry the
+measured evidence; read them before touching any of the three. `OnEventDispatched` being a get-only
+nullable delegate on the seam is the same shape: the null-conditional at the fire site short-circuits
+the `EventDispatch` construction when no debugger is attached, the documented zero-cost contract on
+the hot dispatch path, explained on `ISequenceHost.OnEventDispatched`'s own doc comment — making it a
+method would break that.
 ⚠ **An instantaneous LOOP pass costs one `AnimFrame` (1/60 s) of SIM time, never one rendered
   frame** — a `LOOP n` is an authored timer of n frames, so pacing it per frame made every such
   timer scale with the client's hardware. The gate is applied at the FOOT of the advance loop
@@ -1252,7 +1302,15 @@ interpreter never dereferences them.
   flow landed on and silently overwrites a `_due` written in the LOOP case — which is why the
   pre-fix code reached for an early `return`, and that return *was* the frame lock. Below 60 Hz the
   loop catches up within the frame (the 256 guard bounds it); at 1/60 it is one pass per step,
-  bit-identical, which is why no `--det` capture moved.
+  bit-identical, which is why no `--det` capture moved. **The catch-up is a DELIBERATE divergence
+  from `crimson.exe`** (`004ebfd0`), recorded, not accidental: the original hard-zeroes both timers
+  on every pass and returns immediately — one pass per its OWN engine tick, always, whatever that
+  tick's length. That quantises correctly only because the original paces itself; CSVM must pace an
+  authored duration against sim time at whatever step size the session runs, so dropping the
+  overshoot instead of carrying it costs real accuracy — `BL-237` measured a 0.02 s period taking 2
+  steps instead of 1.2 at 60 Hz, and `ww_balmoral1/2/3` (`LOOP 1000 @ 0.01 s`, authored 10 s) taking
+  16.7 s. The carry is what keeps a timed loop's total duration correct at any step size; the
+  original's own tick-quantised total is not the target.
 ⚠ **A called sequence's first event fires one tick LATE, and that is a known, measured, deliberate
   non-fix** (`BL-135`): `CallSequence` appends past the descending walk's cursor. A bounded
   same-pass drain was built and measured install-wide on 2026-08-04 and NOT kept — it repairs
@@ -1262,9 +1320,6 @@ interpreter never dereferences them.
   carries the implementation, the cap sized from the data (deepest authored same-tick fan-out 15,
   so 64) and the one def that makes a bound mandatory (`marypickford` rings, instantaneously,
   because `OBJECT_MOTION_SI_SCRIPT_ALL_NAMES` has no handler and reports duration 0).
-⚠ `OnEventDispatched` is a get-only nullable delegate on the seam ON PURPOSE — the null-conditional
-  at the fire site short-circuits the `EventDispatch` construction when no debugger is attached, the
-  documented zero-cost contract on the hot dispatch path. Making it a method breaks that.
 `WAIT_FOR_COMPLETION` (`BL-228`) is the seam's fourth member, `PendingWait` — a `Func<bool>?` the
 host arms during `Dispatch` and the runner reads back once, then polls each advance until it reads
 false. A PREDICATE, not a duration, because the callee's length is not knowable at the call (its
@@ -2835,6 +2890,27 @@ gutter backdrop, one `SubViewport` pane per player sharing the main `World3D`, p
   at build time, node by node. (Bit 15 alone was `CloudFieldLayer`, the A7 altitude gate over the
   two ambient cloud populations, which this band replaced.)
 
+## src/UI/ScreenFlash.cs
+The `FBFX_COLOR_FROM_TO` full-screen wash — a close HE, AP or flak burst ramping the whole picture
+from one RGBA to another over the event's run time. **One ramp state, one hidden `ColorRect` per
+rendered view** (`HudLayers.WorldOverlay`, under each rig's `HudParent`, built with the rigs so
+every runtime can be handed the same `Play` sink). `AnimRuntime`'s handler pushes `(from, to,
+run_time)`; the node lerps in RGBA on `GameClock` sim time and ends — it does NOT hold the `to`
+colour, because the original re-arms its frame-buffer object for the current frame only and a
+completed chain simply stops re-arming. `Play` **replaces** whatever is running, which is the
+original's composition rule literally: one process-wide state a second burst overwrites (decode in
+`docs/formats/anim-definitions.md`).
+⚠ **Per view, not per window, and per-rig is what makes that right.** The original is single-view,
+  so "the whole picture" is unambiguous there; in splitscreen each pane IS a picture, and painting
+  the window instead would wash the 2 px gutters and the empty 3P quadrant, which are neither.
+  One state drives all panes, so all panes flash together as the single global state implies.
+  Under the HUD (unlike the lens flare's sun wash, which `CAP-13` measured whitening the
+  instruments — there is no footage saying this one does) and unreachable by the launchscreen and
+  the scoreboards, which sit at `HudLayers.Board`.
+⚠ The layer stays **`Visible = false` with no ramp running**, so a session that never sees a close
+  burst renders exactly what it rendered before this existed — that is what keeps the golden set
+  byte-identical rather than a claim about a transparent rect costing nothing.
+
 ## src/Flight/PlayerRig.cs
 One rendered view's state bag: index, camera, optional `SubViewport`, `HudParent`, `VisualLayer`,
 the player's FlightController, and private camera-anchored copies (`Horizon`/`Deck`/`Whiteout`) —
@@ -3163,8 +3239,10 @@ for a chapter world so flight/ballistics runs boot in ~2 s with nothing else in 
 ## src/Session/GameSession.cs
 The per-launch session node: `Session.Launcher` instantiates one per launch with
 `(SessionSpec, LauncherContext)` and runs `StartSession()` — an ordered sequence of phase methods
-sharing one `BuildState`; menu and CLI share that one build path. Owns the session `GameClock`
-and `StartupProfile`; delegates to the `src/Session/` clusters (LiveryResolver, SpawnPicker,
+sharing one `BuildState`; menu and CLI share that one build path. Owns the session `GameClock`,
+`StartupProfile` and the `UI.ScreenFlash` overlay (built with the rigs, since it needs one surface
+per view, and handed as a sink to the world runtime and — via `WorldEffectsFactory.ScreenFlash` —
+the world-effects one); delegates to the `src/Session/` clusters (LiveryResolver, SpawnPicker,
 PlaneRoster, FlightRigAssembler, WorldEffectsFactory, WeatherRig, LensFlareRig) and to `Testing.ProbeRunner`/
 `CaptureDirector` on the Launcher — read `src/Session/Launcher.cs`'s entry too before touching the
 build's edges. `BuildsCollision` is the only spelling of "does this session build colliders".
@@ -3411,7 +3489,7 @@ the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replac
 emitter's own MODES are. Neither covers the other's job.
 
 ## src/Testing/Suites.cs
-The 26 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
+The 32 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
 the full-rig `Loadout.ForRig`), live weapon fire, the air-to-air hit chain (`air-to-air`: two real
 flight rigs on manual sim steps — body strike, struck-shape→part mapping, armor-first data-value
 damage, critical-zero Crash, crashed-plane immunity, the zero-self-hits negative case, which
@@ -3476,6 +3554,30 @@ running first means it builds the shared C1 world while the fake is in effect; `
   the ceiling instead of at its callee would otherwise look like a working wait.
 ⚠ `weapons-fire` asserts `skipped == 0` as well as `ok == 48`; a skipped mount is not success.
 ⚠ `--loadout=<def>` reaches `loadout-bind`; `--run-tests=loadout-bind --loadout=pbloodhawk` is its able-to-fail cross-bind.
+`fbfx-flash` reuses `effect-template-mesh`'s `WithEffectStage` host to play `he_ground_effect` at the
+camera (so its own `PLAYER_RANGE` gate passes) with the runtime's `ScreenFlash` sink recording:
+it asserts the six wash steps' authored run times AND the gaps between their fires, since the
+per-step run time alone is reported correctly even by a handler that returns 0 as its duration and
+fires all six in one instant. Shown able to fail exactly that way. The chain's total gets one step
+of headroom per gap — the authored run times are exact multiples of the step but not of binary
+float, and three of the five gaps land one step late.
+`ordnance-burst-timeline` is `PLAN-anim-original-match` D31's proof: it plays `he_ground_effect`,
+`flash_effect` and `sonic_ground_effect` on its own miniature world-effects stage and matches the
+WHOLE recorded `OnEventDispatched` log of each — every sequence, every event, in its sequence's
+order, at its authored instant — against a table read off the def JSON by hand. Order is asserted
+by CONSUMPTION (a row is claimed by the first lane whose next unconsumed step it matches on
+sequence/index/kind/name, so an early or duplicated row matches nothing and is reported stray),
+which is what a membership check cannot do and what every Wave B item needs to be measured at all:
+`large_fireball`'s parked `stop_p1trail` must dispatch nothing (B12 — the shown-able-to-fail case),
+`sonic_light_seq` must run exactly twice, the second pass restarting at 1.2 s (B11), and the
+`START_TIME ANIMATION`/`SEQUENCE` gates must land on 1.2/1.5 s. It drives at **1/240 s**, four
+times finer than `SequenceRunner.AnimFrame`, because the authored gaps go down to 0.01 s and none
+of the three defs carries a `LOOP` for the AnimFrame floor to matter to. Two traps are closed by
+construction rather than by assertion order alone: the staged template roots are DERIVED
+(`EffectCatalogue.StageRootsFor` against the chapter gamez, which throws on an anchor that resolves
+nowhere) instead of hand-listed, and the TTL is 32 s — inheriting `--effects-test`'s 0.3 s would
+truncate the 1.2 s wash while everything else still read green. The full log of all three lands in
+`.scratch/ordnance-burst-timeline.txt`.
 ## src/Testing/GoldenShot.cs
 The engine half of the golden-image tripwire: `PixelHash(Image)` (md5, lower-case hex) and
 `Adapter()` (`"<gpu> / <api>"`). Called at the `--screenshot` save site, which prints
@@ -3791,7 +3893,9 @@ This module still does the staging: `Subset` handles 8/30 destruction targets; 2
 choreography names remain local (`analysis/death-effect-closure/`), and the stage-call closure
 excludes C4's train-anchored `b_steamtrail`. Constructed once per session (`_worldEffectsFactory`,
 same lifetime as `LiveryResolver`/`SpawnPicker`) from
-`(SessionSpec, Node3D worldRoot, Func<Vector3> playerPosition)`.
+`(SessionSpec, Node3D worldRoot, Func<Vector3> playerPosition)`, plus a settable `ScreenFlash`
+sink it hands to the effects runtime — the three defs carrying an `FBFX_COLOR_FROM_TO`
+(`he_ground_effect`/`ap_ground_effect`/`flak_effect`) all play there.
 The effects runtime's puffer factory passes `softParticles: false` for MIX-ramp states — these effects
 emit at ground-level sites, where the depth fade zeroes fresh dark puffs against the terrain (the
 crash-smokeball lesson; the damage-stage smoke measured near-invisible with it on) — and keeps the

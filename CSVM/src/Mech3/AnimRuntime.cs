@@ -273,6 +273,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <see cref="TemplateStage{TNode}.RootsFor"/> set, which would touch every copy at once.</summary>
     public Func<string, Node3D, Node3D?>? ResolveLibraryRoot;
 
+    /// <summary>Washes the whole picture from one RGBA to another over a run time — the session's
+    /// <see cref="UI.ScreenFlash"/> overlay, which an <c>FBFX_COLOR_FROM_TO</c> event drives. A sink
+    /// rather than a node here because the overlay is screen-space and belongs to the SESSION: this
+    /// runtime is world-scoped and is instanced per effect pool and per player crash rig, so an
+    /// overlay owned here would exist several times over. Null on every runtime with no session
+    /// behind it (the labs, the headless suites), where the event is simply not drawn.</summary>
+    public Action<Color, Color, float>? ScreenFlash;
+
     /// <summary>This runtime does not own audio — its SOUND / SOUND_NODE events are no-ops, not
     /// late-failure reports. Set on the D32 world-effects runtime: it renders an effect def's
     /// puffers, but the same effect's impact/death SOUND is already played by the projectile pool
@@ -2412,11 +2420,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 return true;
 
             case "StopSequence":
-                // Halt the named sequence's active runners on this instance — or, when none is
-                // running, start it exactly like CALL_SEQUENCE (the stopper idiom: an ON_CALL
-                // teardown sequence nothing else calls). Halting never retracts motions or
-                // puffers the sequence already launched; their lifetimes are authored
-                // independently. Decode in docs/formats/anim-definitions.md.
+                // Halt the named sequence's active runners on this instance, and nothing else —
+                // a stop naming a sequence that is not running leaves it stopped, which for a
+                // parked ON_CALL sequence means no later call can start it. Halting never
+                // retracts motions or puffers the sequence already launched; their lifetimes are
+                // authored independently. Decode in docs/formats/anim-definitions.md.
                 if (ev.Data.Str("name") is { } stopName)
                     StopSequence(def, anchor, stopName);
                 return true;
@@ -2644,7 +2652,20 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 return true;
 
             case "LightAnimation":
+                // The ramp is the event's DURATION, so the next step of a pulse chain waits for it.
+                // Traced (D31): the original's handler is dispatch slot 5, `004e82b0`. It advances
+                // the light by one tick's worth of the authored delta per dispatch — clamping the
+                // last tick to the remainder — and ends `return (seq->event_timer < run_time) ? 1
+                // : 2`, i.e. STILL RUNNING until the run time is up, exactly as
+                // `FBFX_COLOR_FROM_TO` (`004ec6a0`) does. CSVM ramps the light asynchronously
+                // instead (`AnimLight.TweenLeft`, ticked in `TickLights`), which is the same
+                // picture only if the sequence is also held: reporting 0 fired every step of a
+                // chain in one instant, each overwriting the previous tween, so the light snapped
+                // to the last step and `he_light_seq`'s authored 0.41 s flicker — seven ramps —
+                // was a single frame. The `ordnance-burst-timeline` suite is where that shows.
                 HandleLightAnimation(ev, anchor, instant);
+                // A RESET_STATE lands the delta whole (see the handler), so it takes no time.
+                duration = instant ? 0f : ev.Data.Num("run_time") ?? 0f;
                 return true;
 
             case "SoundNode":
@@ -2655,6 +2676,35 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 HandleSound(ev, def, anchor);
                 return true;
 
+            case "FbfxColorFromTo":
+                {
+                    // A full-screen wash: the original's handler (FUN_004ec6a0, dispatch slot 36)
+                    // interpolates RGBA linearly from `from` toward `to` over `run_time`, clamps each
+                    // channel to 0..1, packs RGB into one frame-buffer pixel value and hands it plus
+                    // the alpha — separately, as a blend weight, not a premultiplied component — to the
+                    // single global frame-buffer-effect object, which composites it over the picture.
+                    // It returns "still running" until the run time is up, so the sequence holds; here
+                    // the handler fires once and reports the run time as its duration, which is the
+                    // same gate. Without that the six steps of he_ground_effect's 1.2 s
+                    // white<->violet wash would collapse into one instant.
+                    //
+                    // `alpha_delta` is deliberately not read: it is mech3ax's binary-fidelity escape
+                    // hatch, present only when a file's precomputed alpha rate differs from
+                    // (to - from) / run_time. All 8 shipped non-null values are flak_effect's
+                    // -0.99999994 against a computed -1.0 — one ulp, ~2e-8 of alpha over the whole
+                    // ramp, far below one 8-bit level.
+                    float runTime = ev.Data.Num("run_time") ?? 0f;
+                    duration = runTime;
+                    // A RESET_STATE is base state, and a wash has none — it is a thing that happens,
+                    // not a pose. Nothing to apply instantly.
+                    if (!instant && ScreenFlash != null)
+                    {
+                        ScreenFlash(Rgba(ev.Data.Obj("from")), Rgba(ev.Data.Obj("to")), runTime);
+                        _opsApplied++;
+                    }
+                    return true;
+                }
+
             case "ObjectAddChild":
                 // Only the sound-emitter three-quarters of this event is acted on — see
                 // HandleAddChild. Everything else it does still counts as unhandled.
@@ -2663,13 +2713,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 return true;
 
             default:
-                // One-shot Sound / opacity / texture-cycle / FBFX / camera and the
+                // One-shot Sound / opacity / texture-cycle / camera and the
                 // rest: dispatched, counted, and reported once per kind. Adding a handler is
                 // a case above and nothing else.
                 Count(ev.Kind);
                 return true;
         }
     }
+
+    /// <summary>An <c>{r,g,b,a}</c> sub-object as a colour; absent → transparent black.</summary>
+    private Color Rgba(AnimData? d) => d == null
+        ? new Color(0f, 0f, 0f, 0f)
+        : new Color(d.Num("r") ?? 0f, d.Num("g") ?? 0f, d.Num("b") ?? 0f, d.Num("a") ?? 0f);
 
     private void HandlePufferState(AnimEvent ev, AnimDefinition def, Node3D? anchor)
     {
@@ -3201,7 +3256,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         float num = AnimData.AsNum(value) ?? 0f;
         bool result = kind switch
         {
-            "RandomWeight" => _rng.NextDouble() < num,
+            // The exe's roll is inclusive (`draw <= threshold`); NextDouble() is [0,1) so <=
+            // matches it exactly (a strict < would silently exclude the num==0 case's draw==0.0).
+            "RandomWeight" => _rng.NextDouble() <= num,
             "AnimationLod" => QualityLod >= (int)num,
             // The 4-byte value slot is unused for these two: the reader form takes no
             // argument (`IF HW_RENDER`) and every compiled instance stores 0, so the
