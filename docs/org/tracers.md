@@ -133,10 +133,15 @@ structurally identical:
 slug.flt              root, model_index -1, bbox_child, child_bbox z −4.71 … 0
 ├─ g11                model 48 — 0 vertices (placeholder)
 └─ l5     LOD, range 0 … 600 m
-   ├─ g10             model 49 — 8 v / 1 poly, 0.29 m quad at z = 0,
-   │                  node transform translate z −4.5647   → texture slugtip.tif
-   └─ rabbit_blur     model 50 — 8 v / 2 polys, 0.2 × 4.5 m, spanning z −4.5 … 0,
-                      show_backface, vertex colours full white → texture tracer_slug.tif
+   ├─ g10             model 49 — 8 v / ONE 8-gon poly: a regular octagon disc of
+   │                  radius 0.1445 m lying in the XY plane (z = 0), i.e. facing
+   │                  ALONG the flight axis, with radial UVs; node transform
+   │                  translates it to z −4.5647      → texture slugtip.tif
+   └─ rabbit_blur     model 50 — 8 v / 2 polys, both spanning z −4.5 … 0:
+                      poly 0 in the y = 0 plane, poly 1 in the x = 0 plane, each
+                      0.2 m wide — two PERPENDICULAR quads crossed along the flight
+                      axis. show_backface, vertex colours full white, U runs 0 at
+                      the front to 1 at the tail   → texture tracer_slug.tif
 ```
 
 | Prototype | streak model | streak texture | tip texture |
@@ -146,8 +151,8 @@ slug.flt              root, model_index -1, bbox_child, child_bbox z −4.71 …
 | `armorpiercing.flt` | 56 | `tracer_armorpierce.tif` | `armourpiercetip.tif` |
 | `magnesium.flt` | 59 | `tracer_magnesium.tif` | `magnesiumtip.tif` |
 
-So a tracer is **two crossed quads, 0.2 m wide and 4.5 m long**, plus a 0.29 m cap quad at the
-leading end. Three things follow, and each is checkable:
+So a tracer is **two perpendicular quads, 0.2 m wide and 4.5 m long**, plus a 0.29 m octagonal disc
+just past the leading end. Four things follow, and each is checkable:
 
 - **The crossed pair is why no billboarding code is needed.** Two perpendicular quads read as a
   solid streak from any viewing angle, which is exactly why the subtree contains no facade node and
@@ -155,6 +160,10 @@ leading end. Three things follow, and each is checkable:
 - **The node position is the streak's TAIL.** Geometry runs from `z = 0` forward to `z = −4.5`
   (−Z is forward), and the tip quad sits at `z = −4.5647`, just past the leading end. The round's
   tracked point trails 4.5 m behind the bright tip the player sees.
+- **The bright head is a head-on-only disc.** `g10` is perpendicular to the flight axis, so it
+  presents its full 0.29 m face when the round flies toward or away from the viewer and goes
+  edge-on — effectively invisible — from the side. A side-on tracer is the crossed streak *alone*;
+  the "glowing head" reading only holds for rounds coming at you.
 - **The `l5` LOD cuts off at 600 m.** Past that range both the streak and the tip stop drawing and
   all that remains is the zero-vertex `g11` — a round beyond 600 m is **invisible while still live
   and lethal** out to `RANGE` (900–10000 m). The disappearance is authored, not a draw-distance
@@ -163,20 +172,29 @@ leading end. Three things follow, and each is checkable:
 `tracer1.tif` — the generic fifth texture — is bound by no gun prototype; the four ammo types cover
 every gun in the install.
 
+**Rockets carry no streak at all.** `he_rocket` and `ap_rocket` are LOD-wrapped missile *bodies*
+(35 v / 8 polys, ~1.5–1.7 m long, on `missile_he`/`missile_ap` + `missil02`/`04`/`05`) with no
+`rabbit_blur` sibling and no tip disc. An ordnance round's visible trail is its `MODEL_ANIMATION`
+puffer smoke ([`formats/weapon-effects.md`](../formats/weapon-effects.md), "FLYOUT
+`MODEL_ANIMATION`"), not a tracer quad. Anything drawing a streak behind a rocket is inventing it.
+
 ## Where CSVM differs
 
 `CSVM/src/Flight/Projectile.cs` does not instance the prototype at all: it draws a hand-tuned sprite
 per round. The decode settles the numbers that tuning was standing in for.
 
-| | Original (measured) | CSVM | Note |
+| | Original (measured) | CSVM (`RenderTracers`) | Note |
 |---|---|---|---|
-| Streak length | **4.5 m**, ahead of the tracked point | `TracerLength` 1.0 m, "behind the round" | 4.5× shorter, and on the wrong side of the position |
-| Streak width | **0.2 m** | `TracerWidth` 0.10 m | |
-| Geometry | two crossed quads, `show_backface` | one camera-facing sprite | the original needs no billboarding |
-| Leading tip | a **second** 0.29 m quad on its own `*tip` texture, 4.56 m ahead | none | the bright head of the streak is a separate mesh |
-| Colour | vertex colours full white, texture unmodified | `TracerBrightness` ×3 overbright | ours compensates for having no tip quad and no bloom |
-| Range cutoff | LOD **600 m**, then nothing | `TracerMinPixels` 2.0 floor keeps distant rounds visible | ⚠ direct conflict — ours deliberately shows what the original hides |
-| Per-frame work | one position write | per-frame sprite build | |
+| Streak length | **4.5 m** | `TracerLength` 1.0 m | 4.5× short |
+| Streak width | **0.2 m** | `TracerWidth` 0.10 m | 2× narrow |
+| Where it sits | tail AT the round's position, geometry runs **forward**; head 4.56 m ahead | quad centred half a length **behind** the position | the drawn streak is on the wrong side of the simulated point — a ~5 m offset in the direction of travel |
+| Geometry | **two perpendicular** quads, `show_backface`, fixed | **one** quad, rolled about the velocity axis to face the camera every frame | the original needs no camera at all; ours degenerates when a round flies at the eye |
+| Leading head | a **second** mesh: 0.29 m octagonal disc on its own `*tip` texture, perpendicular to flight (head-on only) | none | ours has no head-on element at all |
+| Colour | white vertex colours, texture unmodified | `TracerBrightness` ×3 overbright, additive | ours compensates for the missing tip disc and no bloom |
+| Growth | full 4.5 m from the spawn frame; nothing ever scales a gun round | length capped by distance travelled, so it grows out of the muzzle | ours is an invention; harmless at 8 shots/s but not the original |
+| Range cutoff | LOD **600 m**, then nothing draws | `TracerMinPixels` 2.0 floor *inflates* distant rounds | ⚠ direct conflict — ours deliberately shows what the original hides |
+| Rockets | prototype body only, no streak; the trail is `MODEL_ANIMATION` puffer smoke | a `tracer1` streak at `RocketExhaustScale` 0.5 / `RocketStreakScale` 2.4 | ours invents a streak the data has no counterpart for |
+| Per-frame work | one position write per round | per-round basis rebuild against the listener camera | |
 
 None of these are changed by this page. `TracerMinPixels` in particular was introduced from the
 reference captures showing distant fire as visible streaks; the 600 m LOD says the original stops
