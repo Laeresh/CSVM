@@ -1086,6 +1086,33 @@ step is spatial, not statistical:** plot the flagged and unflagged `cblock1/2/3/
 `-9700, -3500` and find out what the original would have left to stamp on. Do not run another
 whole-frame A/B until that map exists.
 
+### ⚠ At the controls, 2026-08-10: the original places clutter on FLAGGED ground, and it is smaller
+
+The user flew C5 with `--debug-clutterflag` (landed `b9e6025`) against their own recordings and
+reported: **north of the bridge our ground is entirely red — flagged `no_clutter` — yet the
+original has clutter there, and its buildings are SMALLER than the ones our build draws.**
+
+Two things follow, and the second is the promising one.
+
+1. **A flagged polygon is not simply "no clutter here" in the original.** Either the flag gates
+   something narrower than we assume, or the original's buildings at that spot are stamped from a
+   surface we are not looking at. Do not weaken the `0x800 = no_clutter` decode over this — that is
+   code-level and single-writer — but the *consequence* we drew from it is not safe.
+2. **"Smaller" points straight at `cblock4/5/6`.** `playtest/CAP-22/README.md`'s own counterfactual
+   recorded that suppressing `cblock1/2/3` collapses the city to "a uniform low-rise field", which
+   is exactly what a low-rise district looks like from above. `ClutterBuilder.BuriedClutterDistricts`
+   suppresses `cblock4/5/6` everywhere, on the strength of a whole-map coverage argument. **If the
+   original draws the low-rise district north of the bridge, that exemption is wrong there** — and
+   `BL-250` was closed on evidence (`CAP-22`) that never examined this location.
+
+This is a controls report against the user's own footage, so by this project's standing rule it
+outranks the instrument readings above until an instrument disproves it.
+
+**Instrument being built for exactly this:** `--clutter-templates=<names>`, which replaces the
+chapter's template set and **bypasses `BuriedClutterDistricts`**, so `cblock4/5/6` can be loaded
+alone and compared against the recordings district by district. That is the cheapest way to test
+(2), and it tests it where the user saw the problem rather than at `BL-305`'s unlocatable pose.
+
 ### Part 2 — `MinSlopeCos` is deleted, and it never culled anything
 
 `MinSlopeCos = 0.25f` is gone. It is an invention — `FUN_004deab0` initialises the kind block's
