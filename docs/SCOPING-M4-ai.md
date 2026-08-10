@@ -278,11 +278,54 @@ here for two reasons:
   that `ai-nets`' per-node tags encode stop points but **does not decode them**; nothing yet ties a
   tag value to the condition. Still F17's remaining open item.
 
-**Still not examined**, and costed as written: turret AI internals (C9 — `ai.zrd` is
-self-describing anyway) and E16's trigger dispatch, though the binary does show voice lines are
-gated by a numeric id behind a `talker` roll (*"Talker test passed. Play AI sound #%d."*). The three
-unnamed roster slots are localised to 8–19 and are unauthored install-wide — deliberately left
-unresolved.
+### Wave C — the turrets are not self-describing after all
+
+Decoded from `turret.cpp` in the binary; written up in full as a new page,
+[`formats/turrets.md`](formats/turrets.md). The study's §3 called `ai.zrd` "fully self-describing,
+needs no reverse engineering — the cheapest deliverable in the milestone." **The file is
+self-describing; the behaviour it configures is not**, and four of the findings change what C9 has
+to build. C9's cost goes up, from "read a table" to "read a table and implement a tracking loop",
+but it stays a leaf and its ordering does not move.
+
+- ⚠ **`YAW [0,0]` means *unrestricted*, not *fixed*.** The arc clamp is gated on `min != max`, so
+  equal limits — or an absent key — remove the limit rather than lock the axis. One shipped entry
+  authors `YAW [0,0]`; four omit `PITCH` and six omit `YAW`. Reading these the natural way points
+  those turrets permanently down their rest bearing and they never fire. This is the single most
+  likely way to get C9 visibly wrong.
+- ⚠ **The yaw arc is a directed interval on the circle, and out-of-arc snaps to the nearer end
+  stop** — not the shortest-path one. `YAW [105,255]` and `YAW [-155,-5]` are different arcs.
+- ⚠ **Hit resolution is geometric, not probabilistic** — the same refutation already recorded for
+  the zeppelin broadside cannons (F19). `INACCURACY` is a scatter cone applied to the *shot*
+  direction after the model nodes have been written, and the hit test compares the perturbed
+  direction against the target's angular radius. There is no roll anywhere.
+- **`ATTACK_INTERVAL`/`BORED_INTERVAL` are a duty cycle, and bored suppresses firing only.** The
+  aim solution is computed first and the fire flag cleared afterwards, so a bored turret keeps
+  tracking the player while holding fire. That is visible behaviour and cheap to get right.
+
+Two facts change the C9 ↔ mission-script dependency, and one changes the census:
+
+- **22 of the 42 entries ship `ACTIVATED 0`** — over half the turret roster is inert until a script
+  fires `WAKEUP_TURRETS`. Since objectives scripting is out of M4's scope, **C9 needs a stand-in
+  activation path** or half the emplacements will never engage. This is a new, small dependency
+  that the original costing did not carry.
+- **The `CREATE_STANDALONE` split is the engine's own, and it is exact.** `CREATE_STANDALONE 0`
+  (16) excludes an entry from the world placement pass; those are looked up **by `TITLE`** from a
+  host. The other 26 are placed at their own `NODES` patterns. 16 = `HEALTHY_NODE` 16, 26 =
+  `NODES` 26, 16 + 26 = 42. §3's two families are right; this is their mechanism.
+- **§3's census has `PITCH` at 37; it is 38.** Everything else in that census re-counts clean.
+
+Also worth having in hand, though it does not change scope: `NODES` patterns mean **one entry can
+instantiate many turrets**, so emplacement counts are a property of the world model, not of
+`ai.zrd`; multiple firepoints fire **round-robin, one per shot**, not together; line-of-sight is
+tested **only against the player**, on a cached 1–2 s refresh; and **eight of the 22 keys the
+engine accepts are never authored** (`DEACTIVATE`, `EFFECT`, `FIRE_LIMITS`, `STICKINESS`,
+`SHOOT_UP_ONLY`, `CATEGORY_LABEL`, `HELP_LABEL`, and the `ON`/`START`/`STOP` sounds) — a reader
+should tolerate them, an implementation needs the fourteen that ship.
+
+**Still not examined**, and costed as written: E16's trigger dispatch, though the binary does show
+voice lines are gated by a numeric id behind a `talker` roll (*"Talker test passed. Play AI sound
+#%d."*). The three unnamed roster slots are localised to 8–19 and are unauthored install-wide —
+deliberately left unresolved.
 
 ---
 
@@ -328,7 +371,7 @@ otherwise.
 
 | Confidence | Items | What that means for you |
 |---|---|---|
-| **Traced to an exact mechanism in code or data, reproducible by a committed script** | A1–A4, B5, B6, B8, C9, F17, F19, F20 | Confirm the trace, then implement. |
+| **Traced to an exact mechanism in code or data, reproducible by a committed script** | A1–A4, B5, B6, B8, C9, F17, F19, F20 | Confirm the trace, then implement. *(C9 stays in this row and its trace is now the binary's, not the data's — but the trace turned out to be a tracking loop rather than a table read, so its **cost** rose even though its confidence did not. Confidence is not effort.)* |
 | **Direction sound, magnitude a judgement call (TUNE, not fact)** | D14, D15, E16, F18 | The *what* is settled; the *how much* goes on `backlog.md`'s TUNE list, never invented as fact. |
 | **Leads only — a hypothesis with a named discriminating instrument** | D11, D12, D13 | Budget for investigation; **a correct disproof that lands no code is a success here.** *(D10 graduated out of this row on 2026-08-10 — it is now traced to shipped data.)* |
 
@@ -462,8 +505,16 @@ i.e. a stat with no effect.** Decide the rescaling explicitly (D10), record it a
 **One shared file, one `TURRET` section, 42 entries, fully self-describing, needs no reverse
 engineering.** This is the cheapest deliverable in the milestone.
 
+⚠ **The second sentence is wrong and the third overstates it.** The *file* is self-describing; the
+*behaviour* is not, and four of the decoded semantics are counter-intuitive enough to get C9
+visibly wrong — `YAW [0,0]` meaning unrestricted chief among them. Superseded by
+[Delta § Wave C](#wave-c--the-turrets-are-not-self-describing-after-all) and
+[`formats/turrets.md`](formats/turrets.md); the family split and the value ranges below survive
+intact.
+
 Key coverage across the 42: `TITLE` 42, `ACTIVATED` 42, `PARTS` 42, `WEAPON` 42, `INACCURACY` 42,
-`ATTACK_INTERVAL` 42, `BORED_INTERVAL` 42, `PITCH` 37, `SOUNDS` 37, `YAW` 36, `NODES` 26, `TEAM` 20,
+`ATTACK_INTERVAL` 42, `BORED_INTERVAL` 42, `PITCH` 38 (⚠ 37 above was a miscount), `SOUNDS` 37,
+`YAW` 36, `NODES` 26, `TEAM` 20,
 `HEALTH` 17, `CREATE_STANDALONE` 16, `HEALTHY_NODE` 16.
 
 Two structural families (9 distinct key orderings in total):
@@ -481,7 +532,9 @@ always 1; `CREATE_STANDALONE` always 0; `HEALTH` 2/8/10/30; `SOUNDS.CANNON` alwa
 `TITLE` 32 distinct `MSG_TUR_*` keys, all resolving in `messages.json`.
 
 `PARTS` is always `[turretNode, gunNode, firepointNode]`, though 4 of 126 elements are themselves
-lists (`["brigturret", "hgun", ["hfirepoint", "hfirepoint1"]]`).
+lists (`["brigturret", "hgun", ["hfirepoint", "hfirepoint1"]]`). ⚠ The engine reads this as a
+kinematic chain — `[yawNode, pitchNode, firepoint(s)]`, and a 2-element form drops the traverse
+ring — and cycles multiple firepoints round-robin, one per shot.
 
 **All 8 distinct `WEAPON.NAME` ids resolve in `weapons.zrd.json`**, and six of the eight sit in the
 AI-detuned `wep_1xx` tier that `docs/formats/weapons.md` already documents:
@@ -992,7 +1045,12 @@ of A3 via the 2026-08-10 decompile pass), not a started milestone.
 
 ### Wave C — Emplacements
 
-9. ☐ C9 — Turret and AA AI from `ai.zrd.json`, both structural families
+9. ☐ C9 — Turret and AA AI from `ai.zrd.json`, both structural families — **spec complete
+   2026-08-10** in [`formats/turrets.md`](formats/turrets.md): the `CREATE_STANDALONE` placement
+   split, the `PARTS` kinematic chain, the wrap-aware yaw arc (⚠ `[0,0]` = unrestricted), the
+   attack/bored duty cycle, rate-limited slew + the 15° fire gate, and geometric hit resolution.
+   Cost is up — a tracking loop, not a table read — and it now carries a **new small dependency**:
+   22 of 42 entries ship `ACTIVATED 0` and need a stand-in for `WAKEUP_TURRETS`
 
 ### Wave D — The pilot model
 
@@ -1033,7 +1091,10 @@ path, A2 owns `PlaneViewer.cs` / a new controller / `AnimRuntime.cs`'s index inv
 A4 are documentation and design, touch no engine code, and can run alongside anything.**
 
 B5–B8 all need A2. B5 blocks F17 (the same net-follower serves both). B8 blocks E16. C9 needs A1 only
-— it can run as soon as A1 lands, in parallel with all of wave B.
+— it can run as soon as A1 lands, in parallel with all of wave B. **Amended 2026-08-10:** C9 also
+needs a way to activate the 22 shipped-dormant turrets. That is not a new blocker (a debug toggle
+or a mission-load default suffices, and A3 should record which), but it must be decided before C9
+is playtestable, because half the emplacements are otherwise invisible in play.
 
 Within D: **D10 is settled, so it no longer blocks D11–D15** — they read the shipped skill vector and
 `ai_skill_parameters` directly and can all start at once. D11 blocks D12 and D15. D13 is independent

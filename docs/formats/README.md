@@ -30,6 +30,7 @@ of use; no code is reproduced.
 | [mission-entities.md](mission-entities.md) | `zeppelins.json` (motion, gasbags, broadside cannons, critical-zone threshold) and `egen.json` (enemy generators, the zeppelin fighter-launch altitude gate) |
 | [ai-nets.md](ai-nets.md) | The chapter AI patrol graphs: `ne0NNNNN.zrd` waypoint nets (nodes + explicit branching edge list + attach-target trailer) and the `neindex.zrd` id→name table every AI reader references |
 | [ai-rosters.md](ai-rosters.md) | The per-mission AI roster `aiv.zrd` (all 81 fields named from the binary), the nine-slot pilot skill vector and the `ai_skill_parameters` curves it indexes, and `maneuvers.zrd` — the 17-entry maneuver library as timed control programs |
+| [turrets.md](turrets.md) | `ai.zrd` turrets and AA emplacements: the `CREATE_STANDALONE` split, the `PARTS` kinematic chain, the wrap-aware yaw arc, the attack/bored duty cycle, and the geometric hit resolution |
 | [sounds.md](sounds.md) | `sounds.json` SETS, the `player.json` volume/pitch curves, the game's MS-ADPCM WAV format |
 | [weather.md](weather.md) | `weather.json`: per-zone fog, `SUNLIGHT_*` world lighting, cloud cover, wind, precipitation, the dual colour encoding |
 | [anim-definitions.md](anim-definitions.md) | `ANIMATION_DEFINITION` readers (zepstate/startanims/building anims) + the compiled `cam_anim.zbd`/`mis_anim.zbd` survey |
