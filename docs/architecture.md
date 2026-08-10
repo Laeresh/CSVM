@@ -2102,6 +2102,20 @@ count, at most `_liveCount`.
   capture path, re-pins all seven puffer-bearing goldens (the `SizeScaleDefault` list above — an
   earlier "four", then "five", here was a stale count); `CreateWith` is a test entry point only.
 
+**`PRIORITY` inflates the sprite** (`PLAN-puffer-engine-deltas` C8). `FUN_0054e6e0` scales the
+drawn screen radius by `1 + K·PRIORITY`; `PufferState.Priority` (both parsers, default 0 — the
+puffer object's own ctor default) is folded into `BaseSize` at spawn instead, via
+`Puffer.PriorityScaleDefault` (`_priorityFactor`, read once at `Init`) rather than a config knob —
+it is a decoded engine constant, not a tuning surface. `K` is `_DAT_00a06fb0`, written by
+`FUN_0054d9c0` to `0.01` on the software path and `0.02` on the hardware one; this project has no
+software path (the same split `DistanceAlpha`'s remark documents), so `PriorityScaleDefault` is
+the hardware value. Almost certainly a depth-priority constant reused for a size nudge — this trace
+found only the size use; a depth-ordering use, if one exists, needs its own trace and is not
+implemented here. 47 puffers in the install author a non-zero `PRIORITY` (192 compiled events);
+C1's `spew_puffer` (the waterfall splash) is one of them, which is why `c1-waterfall` is the one
+golden C8 moved — every other puffer-bearing golden's emitters author no `PRIORITY` and are
+byte-identical across the change.
+
 ## src/Effects/WorldWind.cs
 Two small types, one job: get the mission's authored wind to every puffer that reads it.
 

@@ -81,6 +81,9 @@ public static class Suites
             "the NEAR_FADE/FAR_FADE camera-distance alpha and its two culls, against the shipped "
             + "bands of C3's spew_puffer and volcanosmoke — the cross-wire included (C7)",
             PufferDistanceFade));
+        into.Add(new TestHarness.Suite("puffer-priority-size",
+            "PRIORITY inflates the drawn sprite by 1 + K·PRIORITY, folded into BaseSize at spawn (C8)",
+            PufferPrioritySize));
         into.Add(new TestHarness.Suite("loadout-bind",
             "every stock loadout binds to its model with every marker resolved", LoadoutBind));
         into.Add(new TestHarness.Suite("weapons-fire",
@@ -508,6 +511,54 @@ public static class Suites
         ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -20f), amb) is { } near
                   && Mathf.IsEqualApprox(near, 1f),
             $"and one inside the near cull draws too");
+    }
+
+    // ---- C8: PRIORITY inflates the sprite ---------------------------------------------------------
+
+    /// <summary>The plan's own verify: a PRIORITY 10 puffer spawns particles exactly 20% larger
+    /// than the same state at PRIORITY 0 — <c>1 + 0.02·10 = 1.2</c>, the hardware-path <c>K</c>
+    /// (<c>PriorityScaleDefault</c>). Burst mode, NUMBER 1, a degenerate SIZE_RANGE so the drawn
+    /// size is deterministic and the only thing that can move it is PRIORITY.</summary>
+    private static void PufferPrioritySize(TestContext ctx)
+    {
+        static PufferState State(float priority) => new()
+        {
+            Name = "test_priority",
+            Number = 1,
+            TimeInterval = 10f,
+            SizeMin = 2f,
+            SizeMax = 2f,
+            LifetimeMin = 100f,
+            LifetimeMax = 100f,
+            Priority = priority,
+            Textures = new[] { "smoke101" },
+        };
+
+        static float DrawnSize(TestContext ctx, PufferState state)
+        {
+            var gpu = new RecordingEmitterRenderer();
+            var puffer = Puffer.CreateWith(state, gpu, activeDuration: 0.01f);
+            ctx.Host.AddChild(puffer);
+            try
+            {
+                puffer.Burst(Vector3.Zero);
+                puffer._Process(1f / 60f);
+                ctx.Same(1, gpu.Shown, $"{state.Name} priority={state.Priority}: exactly one particle is under test");
+                return gpu.LastFrame[0].Size;
+            }
+            finally
+            {
+                puffer.Free();
+            }
+        }
+
+        float baseline = DrawnSize(ctx, State(0f));
+        float inflated = DrawnSize(ctx, State(10f));
+
+        ctx.Check(Mathf.IsEqualApprox(baseline, 4f, 1e-4f),
+            $"PRIORITY 0 draws at the plain size (radius 2 × diameter convention, A1) size={baseline:0.0000}");
+        ctx.Check(Mathf.IsEqualApprox(inflated, baseline * 1.2f, 1e-4f),
+            $"PRIORITY 10 draws 20% larger than PRIORITY 0 — 1 + 0.02·10 baseline={baseline:0.0000} inflated={inflated:0.0000}");
     }
 
     /// <summary>One particle, no randomness: NUMBER 1, a degenerate random-velocity range (min ==

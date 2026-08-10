@@ -27,10 +27,9 @@ public readonly record struct PufferFadeSwitches(
 /// sprites per <see cref="TimeInterval"/>, each with a random velocity, size, and
 /// lifetime, cycling a flipbook of textures over its age.
 ///
-/// Only the fields we currently render are parsed; the reader carries more (PRIORITY is the one
-/// authored key still unread — C8) — added here as they're
-/// needed. Distances/velocities are meters and seconds, matching the world; TEXTURE_SEQUENCE
-/// times are the exception, being fractions of a particle's lifetime.
+/// Only the fields we currently render are parsed; the reader carries more — added here as
+/// they're needed. Distances/velocities are meters and seconds, matching the world;
+/// TEXTURE_SEQUENCE times are the exception, being fractions of a particle's lifetime.
 /// </summary>
 public sealed class PufferState
 {
@@ -105,6 +104,14 @@ public sealed class PufferState
 
     /// <inheritdoc cref="NearFadeStart"/>
     public float FarFadeStart = float.MaxValue, FarFadeEnd = float.MaxValue;
+
+    /// <summary>A per-puffer sprite-size nudge, almost certainly a depth-priority constant reused
+    /// for this — this pass found only the size use (object <c>+0x70</c>, particle <c>[0x15]</c>,
+    /// parser flag <c>0x400000</c>). <c>FUN_0054e6e0</c> scales the drawn screen radius by
+    /// <c>1 + K·PRIORITY</c>, folded into <see cref="Particle.BaseSize"/> at spawn instead
+    /// (<see cref="Puffer.PriorityScaleDefault"/>). Default 0, so an unauthored puffer's factor is
+    /// exactly 1 — 47 puffers in the install author a non-zero value, 192 compiled events (C8).</summary>
+    public float Priority;
 
     /// <summary>AT_NODE's optional trailing offset (AT_NODE is [nodeName, dx?, dy?, dz?]),
     /// in the host node's own frame — the same convention as <see cref="LocalVelocity"/>.
@@ -251,6 +258,7 @@ public sealed class PufferState
             NearFadeEnd = Range("unk_range", "max", 0f),
             FarFadeStart = Range("fade_range", "min", float.MaxValue),
             FarFadeEnd = Range("fade_range", "max", float.MaxValue),
+            Priority = d.Num("priority") ?? 0f,
             DeviationDistance = d.Num("deviation_distance") ?? 0f,
             Number = Mathf.Max(1, (int)(d.Num("number") ?? 1f)),
             AtNodeOffset = Vec("translate"),
@@ -328,6 +336,7 @@ public sealed class PufferState
             NearFadeEnd = d.Float("NEAR_FADE", 0f, 1),
             FarFadeStart = d.Float(farKey, float.MaxValue, 0),
             FarFadeEnd = d.Float(farKey, float.MaxValue, 1),
+            Priority = d.Float("PRIORITY"),
             GrowthFactor = d.Float("GROWTH_FACTOR", 1f),
             DeviationDistance = d.Float("DEVIATION_DISTANCE"),
             Number = (int)d.Float("NUMBER", 1f),
@@ -414,6 +423,13 @@ public sealed partial class Puffer : Node3D
     /// <c>PLAN-puffer-engine-deltas.md</c> C7 says not to do.</summary>
     public const float GlobalFadeFactorDefault = 1f;
 
+    /// <summary>C8's <c>K</c>: <c>FUN_0054e6e0</c> scales the drawn screen radius by
+    /// <c>1 + K·PRIORITY</c>. <c>_DAT_00a06fb0</c>, written by <c>FUN_0054d9c0</c>, is <c>0.01</c>
+    /// on the software path and <c>0.02</c> on the hardware one — this project has no software
+    /// path (see <see cref="DistanceAlpha"/>'s remark on the same split), so this is the hardware
+    /// value. Default <c>PRIORITY</c> is 0, so the factor is 1 unless authored.</summary>
+    public const float PriorityScaleDefault = 0.02f;
+
     /// <summary>The authored fire-column family — the crash fire (<c>large_10sec_fire</c>), the
     /// destruction fires (<c>large_30sec_fire</c>/<c>huge_30sec_fire</c>) and the burning fuel
     /// tanks all emit a sustained puffer of exactly this name, and it is the family playtesting
@@ -451,6 +467,10 @@ public sealed partial class Puffer : Node3D
     private float _burstSizeScale = SizeScaleDefault;
     private float _trailSizeScale = SizeScaleDefault;
     private float _sustainSizeScale = SizeScaleDefault;
+
+    // C8: 1 + K·PRIORITY, read once at Init off the authored state — not a config knob, since it
+    // is a decoded engine constant rather than a tuning surface.
+    private float _priorityFactor = 1f;
 
     // The fire-column scales — 1 (inert) unless this emitter IS the fire puffer family
     // (FirePufferName), which only ever spawns on the sustained path.
@@ -1033,6 +1053,7 @@ public sealed partial class Puffer : Node3D
             ?? Config.GetFloat("puffer.globalFadeFactor", GlobalFadeFactorDefault);
         _nearRecip = Reciprocal(state.NearFadeEnd - state.NearFadeStart);
         _farRecip = Reciprocal(state.FarFadeEnd - state.FarFadeStart);
+        _priorityFactor = 1f + PriorityScaleDefault * state.Priority;
         if (string.Equals(state.Name, FirePufferName, StringComparison.OrdinalIgnoreCase))
         {
             _fireRiseScale = Config.GetFloat("puffer.fireRiseScale", FireRiseScaleDefault);
@@ -1065,7 +1086,7 @@ public sealed partial class Puffer : Node3D
         // The cull margin is a fact about the particles, not about the draw: it covers the largest
         // tuned size any spawn path here could produce, and the renderer only applies it.
         renderer.Attach(this, _particles.Length,
-            Mathf.Max(4f, state.SizeMax * state.GrowthFactor
+            Mathf.Max(4f, state.SizeMax * state.GrowthFactor * _priorityFactor
                 * Mathf.Max(_burstSizeScale, Mathf.Max(_trailSizeScale, _sustainSizeScale))));
         Visible = false;
     }
@@ -1098,7 +1119,7 @@ public sealed partial class Puffer : Node3D
             // The fire tune: scale the world-vertical rise (and the puff's lifetime below)
             // of the fire family only — 1 for every other emitter, so this is the identity there.
             vel.Y *= _fireRiseScale;
-            float size = Rand(_state.SizeMin, _state.SizeMax) * _sustainSizeScale;
+            float size = Rand(_state.SizeMin, _state.SizeMax) * _sustainSizeScale * _priorityFactor;
             float life = Rand(_state.LifetimeMin, _state.LifetimeMax) * _fireLifeScale;
             // START_AGE_RANGE (B4): FUN_0054f8b0 draws lifetime, then start age, both before
             // its position draws. Ours draws pos/vel first (A2's order, load-bearing for every
@@ -1142,7 +1163,7 @@ public sealed partial class Puffer : Node3D
         // ±0.5·d, not ±d (A2) — see SpawnSustained's comment.
         var pos = worldPos + new Vector3(Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d));
         var vel = _state.WorldVelocity + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z));
-        float size = Rand(_state.SizeMin, _state.SizeMax) * _trailSizeScale;
+        float size = Rand(_state.SizeMin, _state.SizeMax) * _trailSizeScale * _priorityFactor;
         float life = Rand(_state.LifetimeMin, _state.LifetimeMax);
         // START_AGE_RANGE (B4): see SpawnSustained's comment — gated draw, right after Life.
         float age = _state.HasStartAgeRange ? Rand(_state.StartAgeMin, _state.StartAgeMax) : 0f;
@@ -1192,7 +1213,7 @@ public sealed partial class Puffer : Node3D
             // ±0.5·d, not ±d (A2) — see SpawnSustained's comment.
             var pos = new Vector3(Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d));
             var vel = baseVel + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z));
-            float size = Rand(_state.SizeMin, _state.SizeMax) * _burstSizeScale;
+            float size = Rand(_state.SizeMin, _state.SizeMax) * _burstSizeScale * _priorityFactor;
             float life = Rand(_state.LifetimeMin, _state.LifetimeMax);
             // START_AGE_RANGE (B4): see SpawnSustained's comment — gated draw, right after Life.
             float age = _state.HasStartAgeRange ? Rand(_state.StartAgeMin, _state.StartAgeMax) : 0f;

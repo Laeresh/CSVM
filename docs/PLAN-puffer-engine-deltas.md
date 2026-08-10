@@ -237,7 +237,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — the render-side rules
 
 7. ☑ `NEAR_FADE` / `FAR_FADE` camera-distance alpha (the 1-pixel cull deliberately skipped)
-8. ☐ `PRIORITY` inflates the sprite by `1 + K·PRIORITY`
+8. ☑ `PRIORITY` inflates the sprite by `1 + K·PRIORITY`
 9. ☐ Emission-accumulator rules: the 200 m teleport guard vs. our per-frame batch cap
 
 ### Wave D — record and re-judge
