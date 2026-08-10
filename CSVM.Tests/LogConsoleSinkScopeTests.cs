@@ -7,20 +7,19 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// <see cref="Log.PushConsoleSink"/> is per-flow, not process-global (BL-306).
+/// <see cref="Log.PushConsoleSink"/> is per-flow, not process-global.
 ///
-/// <para>The bug this exists to keep dead: <c>Log.ConsoleSink</c> used to be one mutable static
-/// that every test swapped by hand, and xunit runs distinct test CLASSES in parallel. A concurrent
-/// class could replace a capturing sink between its install and its assertions — which is exactly
-/// how <c>StuntRaceTests.FinishOrderAssignsPlacingsInFinishOrderNotEntryOrder</c> once read
+/// <para>The bug this exists to keep dead: a single mutable static <c>Log.ConsoleSink</c> that
+/// every test swaps by hand, while xunit runs distinct test CLASSES in parallel. A concurrent class
+/// can then replace a capturing sink between its install and its assertions — which is how
+/// <c>StuntRaceTests.FinishOrderAssignsPlacingsInFinishOrderNotEntryOrder</c> read
 /// <c>lines.Count</c> as 0 on a change that touched only comments.</para>
 ///
-/// <para>The interleaving is FORCED with a barrier rather than hunted for by hammering: the
-/// failure fired exactly once in the project's history, so a green run proves nothing and only a
-/// deliberate schedule discriminates (METHOD-9). Both directions are asserted — a capture that
-/// loses its own line (replacement, the failure actually seen) and one that gains another flow's
-/// (contamination, the failure <c>TestHostLogSink</c>'s comment predicted). Against a global
-/// static this test fails 100% of the time, not intermittently.</para>
+/// <para>The interleaving is FORCED with a barrier rather than hunted for by hammering: the failure
+/// is vanishingly rare in the wild, so a green run proves nothing and only a deliberate schedule
+/// discriminates. Both directions are asserted — a capture that loses its own line (replacement)
+/// and one that gains another flow's (contamination). Against a global static this test fails 100%
+/// of the time, not intermittently.</para>
 /// </summary>
 public class LogConsoleSinkScopeTests
 {

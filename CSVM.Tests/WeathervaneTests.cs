@@ -6,15 +6,14 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The original's weathervane: <c>return_rate</c> as a restoring torque that swings the nose onto
-/// the velocity vector (<c>crimson.exe</c> <c>FUN_00490f70</c>, <c>0x4916fe</c>–<c>0x4917f0</c>),
-/// in place of the extra per-axis damping the remake used to fold it into.
+/// the velocity vector — not extra per-axis damping folded into the damping coefficient.
 ///
 /// <para>Everything here reads <see cref="FlightModel.WeathervaneTorque"/> directly, or the body
 /// rates after ONE step from rest where the model's arithmetic is a closed form
 /// (<c>BodyRates = cmd · dt</c>) — so a sign flip, a missing halving or a leak into roll fails
 /// exactly, rather than being absorbed by the integrator a hundred frames later.</para>
 ///
-/// <para>The two properties that carry the item: it must VANISH when the nose is on the flight
+/// <para>The two properties that carry it: it must VANISH when the nose is on the flight
 /// path (that is what leaves level cruise untouched by construction rather than by scale), and its
 /// SIGN must close the misalignment rather than open it — a weathervane with the sign reversed is
 /// divergent and would still look plausible in a single frame.</para>
@@ -108,9 +107,9 @@ public class WeathervaneTests
     {
         // One step from rest with the stick centred: BodyRates = cmd·dt·exp(-dt·damp) — the torque
         // scaled by that axis' RecInertia (the only scaling the original applies downstream), THEN
-        // this tick's own exponential decay (C24 — the original damps the accumulated total, not
-        // just whatever rate was already there, and on the first tick from rest that total IS this
-        // tick's torque).
+        // this tick's own exponential decay — the original damps the accumulated total, not just
+        // whatever rate was already there, and on the first tick from rest that total IS this
+        // tick's torque.
         var stats = Stats();
         var m = Model();
         m.Reset(Vector3.Zero, Pitched(20f), 120f, 1f);
@@ -129,8 +128,8 @@ public class WeathervaneTests
     public void DampingNoLongerDependsOnWhetherAStickIsHeld()
     {
         // return_rate is out of the damping coefficient: a spinning aircraft must decay at
-        // ang_momentum_damp alone, whether or not the stick is centred. The old model damped a
-        // released axis at damp + return_rate, which is the first-order lag this item replaces.
+        // ang_momentum_damp alone, whether or not the stick is centred. The alternative this
+        // discriminates against damps a released axis at damp + return_rate, a first-order lag.
         var stats = Stats();
         var m = Model();
         m.Reset(Vector3.Zero, Basis.Identity, 120f, 1f);
@@ -138,9 +137,9 @@ public class WeathervaneTests
         m.Step(default, Dt);
 
         // Roll is the axis the weathervane provably cannot reach, so the decay there is the damping
-        // term alone and the check is not contaminated by the torque under test. EXPONENTIAL decay
-        // (C24) — the linear (1 - damp·dt) form this replaces would give a visibly different number
-        // at this damp·dt, printed alongside for contrast.
+        // term alone and the check is not contaminated by the torque under test. The decay is
+        // EXPONENTIAL — the linear (1 - damp·dt) form gives a visibly different number at this
+        // damp·dt, printed alongside for contrast.
         float expected = Mathf.Exp(-stats.AngMomentumDamp * Dt);
         Assert.True(Mathf.IsEqualApprox(m.BodyRates.Z, expected, 1e-6f),
             $"roll decayed to {m.BodyRates.Z:0.000000}, expected exp(-ang_momentum_damp·dt) "

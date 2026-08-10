@@ -8,14 +8,13 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// <see cref="WeatherState.CameraWeatherState"/>: the binary's per-frame camera weather state
-/// (1/2/3, <c>FUN_0042ee40</c>) — <c>PLAN-weather-decompile-match</c> A2. Ships dark (nothing
-/// consumes it yet), so these tests are the only thing pinning the state machine until B11/B12/
-/// C21/C22 wire a consumer in.
+/// (1/2/3). Ships dark — nothing consumes it yet, so these tests are the only thing pinning the
+/// state machine until a consumer is wired in.
 ///
 /// <para>The fixture's <c>CLOUD_COVER</c> (<c>fixtures/zrdr/weather.json</c>) is invented, not
 /// copied from an extraction (per <c>fixtures/README.md</c>): TOP 2000/BOTTOM 1000/THICKNESS 200
 /// ⇒ band centre 1500, opaque-core bottom (<see cref="WeatherState.CloudCoreBottom"/>) 1400 — the
-/// state-2 threshold, which is NOT the band centre and NOT <c>BOTTOM</c> (Decision 1).</para>
+/// state-2 threshold, which is NOT the band centre and NOT <c>BOTTOM</c>.</para>
 /// </summary>
 public class CameraWeatherStateTests
 {
@@ -63,7 +62,7 @@ public class CameraWeatherStateTests
     public void AMissionWithNoCloudCoverIsAlwaysState1()
     {
         // A mission whose weather.json carries no CLOUD_COVER block at all (HasCloudBand false)
-        // must never reach state 2, at any altitude — the gate in FUN_0042ee40 sits inside the
+        // must never reach state 2, at any altitude — the binary's gate sits inside the
         // CLOUD_COVER-exists check.
         var weather = WeatherState.Load(TestData.Fixture("weather-no-cloud"));
         Assert.NotNull(weather);
@@ -112,7 +111,7 @@ public class CameraWeatherStateTests
     [Fact]
     public void State3TakesPrecedenceOverState2()
     {
-        // The binary assigns state 3 after state 2 (FUN_0042ee40): a camera above the core bottom
+        // The binary assigns state 3 after state 2: a camera above the core bottom
         // AND inside an armed volume is state 3, not 2 — even though shipped data never actually
         // exercises this overlap (C5's fog_zone-armed band sits far above any C5 volume).
         var weather = Load();

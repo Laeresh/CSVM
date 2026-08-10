@@ -294,7 +294,7 @@ public class TemplateStageTests
         h.Live.Add((def, copies[0]));
         h.Stage.Reveal(def, copies[0], visible: true);
 
-        // The ring's scale/opacity motions outlive the sequence that launched them (D31).
+        // The ring's scale/opacity motions outlive the sequence that launched them.
         h.Animating.Add(copies[0]);
         h.Stage.RetireWhenIdle(def, copies[0]);
         Assert.True(copies[0].Visible);

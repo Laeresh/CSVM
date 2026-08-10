@@ -57,7 +57,7 @@ public class BankCouplingTests
         var stats = Bhawk();
         var rates = OneStepFrom(BankedLeft(90f));
         // One step from rest: the accumulated total (this tick's torque, nothing carried over) is
-        // itself subject to the tick's own exponential decay (C24) — see AngularDampingTests for the
+        // itself subject to the tick's own exponential decay — see AngularDampingTests for the
         // ordering this factor pins.
         float decay = Mathf.Exp(-Dt * stats.AngMomentumDamp);
 

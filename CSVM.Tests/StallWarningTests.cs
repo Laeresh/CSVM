@@ -33,14 +33,14 @@ public class StallWarningTests
     {
         // The split: one margin (StallFraction), two DIFFERENT thresholds on it. The lamp still
         // fires at a fixed 0.30 fd — measured inside a single original-game clip, 2.64 sim s /
-        // 14.9 mph ahead of the Bloodhawk's own nose-break at the time. Since B15 the nose-drop
+        // 14.9 mph ahead of the Bloodhawk's own nose-break. The nose-drop
         // itself is the Bloodhawk's own computed StallSpeed (clMax·q·RefArea = VehWeight), not a
         // fixed fraction, so this test flies the Bloodhawk's real dynamics (1900 kg / 330 ref_area)
         // rather than the placeholder PlaneStats() defaults — those defaults are the executable's
         // compiled fallback aircraft, not any real airframe, and their own computed stall speed sits
         // almost exactly AT the 0.30 fd warn threshold (see FlightModel.StallSpeed's doc), which
         // would invert the split rather than exercise it.
-        // ⚠ The computed Bloodhawk stall (56.5 mph) no longer reproduces the clip's measured ~76 mph
+        // ⚠ The computed Bloodhawk stall (56.5 mph) does not reproduce the clip's measured ~76 mph
         // nose-drop — that gap is a recorded decode-vs-footage conflict (FlightModel.StallSpeed),
         // not something this test papers over — so only the ORDERING (warn leads stall) and the
         // MECHANISM (two independent thresholds on one margin) are asserted here, not the original

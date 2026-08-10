@@ -8,11 +8,10 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// <c>PufferState.WindFactor</c> and <see cref="WorldWind"/>
-/// (docs/plans/PLAN-puffer-engine-deltas.md B6).
+/// <c>PufferState.WindFactor</c> and <see cref="WorldWind"/>. See <c>docs/org/puffer.md</c>.
 ///
-/// <para>The load-bearing claim here is the DEFAULT. The puffer object's constructor
-/// (<c>FUN_00550100</c>) writes <c>1.0</c> to <c>+0x6c</c> and the applier only overwrites it when
+/// <para>The load-bearing claim here is the DEFAULT. The puffer object's constructor writes
+/// <c>1.0</c> into the wind-factor field and the applier only overwrites it when
 /// the authoring flag is set, so an unauthored puffer is FULLY wind-coupled — 2,802 of the
 /// install's 2,863 friction-bearing compiled events are in exactly that state. Reading an absent
 /// key as 0 would becalm all of them silently, which is why absent and explicit-zero are tested
@@ -118,8 +117,8 @@ public class PufferWindTests
     }
 
     /// <summary>The static vector is the whole wind before the gust builds, and the gust never
-    /// touches the vertical: <c>FUN_0054ee10</c> copies <c>STATIC_VELOCITY.y</c> straight through
-    /// (<c>0054ef5f</c>) and only composes x/z from <c>magnitude·cos/sin(heading)</c>.</summary>
+    /// touches the vertical: the binary copies <c>STATIC_VELOCITY.y</c> straight through and only
+    /// composes x/z from <c>magnitude·cos/sin(heading)</c>.</summary>
     [Fact]
     public void GustIsHorizontalAndStartsAtTheStaticVector()
     {
@@ -151,7 +150,7 @@ public class PufferWindTests
     }
 
     /// <summary><c>RANDOM_ANG_VEL</c> is in DEGREES per second; the binary converts on the way in
-    /// (<c>FUN_004bc680</c>: <c>value * 0.017453292</c>) and so do we. With the magnitude pinned at
+    /// (<c>value * 0.017453292</c>) and so do we. With the magnitude pinned at
     /// its ceiling by a huge accel, one second of stepping at 90 deg/s must turn the heading by at
     /// most 90 degrees from where it started — measured as the SHORTEST way round, since the
     /// engine wraps a negative heading by +2π (a small negative turn reads as ~6.08 rad). A

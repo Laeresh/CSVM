@@ -17,10 +17,6 @@ namespace CSVM.Tests;
 /// safe IS this default. It is also the reason <see cref="Log"/>'s scoped sink could not simply
 /// replace the static — a <c>[ModuleInitializer]</c> runs on a flow xunit's test threads do not
 /// inherit, so an <c>AsyncLocal</c> written here would be invisible where it is needed.</para>
-///
-/// <para>The residual flake this comment used to call accepted DID fire, 2026-08-07, and is fixed:
-/// a capture is now scoped per flow (<see cref="Log.PushConsoleSink"/>, BL-306), so a parallel
-/// class can neither steal another test's capture nor add its lines to it.</para>
 /// </summary>
 internal static class TestHostLogSink
 {

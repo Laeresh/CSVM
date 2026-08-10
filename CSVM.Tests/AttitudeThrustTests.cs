@@ -17,13 +17,13 @@ namespace CSVM.Tests;
 /// identical state, so it fails under the flip rather than trusting the formula's argument name.
 /// </para>
 ///
-/// <para><b>Why the climb-gravity constant went.</b> A fitted <c>ClimbGravityScale = 0.6</c> spared
-/// a climbing aircraft, on the reasoning that the original held speed better in a climb than plain
-/// energy exchange predicts. The decoded terms do the opposite. Measured against the original's own
-/// sustained full-throttle climb, all four combinations rank unambiguously (plateau speed against a
-/// measured 163.05 mph): constant alone 276.7, neither 257.7, both mechanisms 232.2, attitude terms
-/// alone <b>204.0</b>. The constant makes the climb WORSE on the post-B14 force shapes, which is
-/// what "it was absorbing the old drag and thrust error" looks like from the outside.</para>
+/// <para><b>Why there is no climb-gravity constant.</b> A fitted <c>ClimbGravityScale = 0.6</c>
+/// would spare a climbing aircraft, on the reasoning that the original holds speed better in a climb
+/// than plain energy exchange predicts. The decoded terms do the opposite. Measured against the
+/// original's own sustained full-throttle climb, all four combinations rank unambiguously (plateau
+/// speed against a measured 163.05 mph): constant alone 276.7, neither 257.7, both mechanisms 232.2,
+/// attitude terms alone <b>204.0</b>. On the current force shapes the constant makes the climb
+/// WORSE. See <c>docs/org/flightModel.md</c>.</para>
 /// </summary>
 public class AttitudeThrustTests
 {
@@ -74,7 +74,7 @@ public class AttitudeThrustTests
     }
 
     /// <summary>Level flight is untouched — the scale is exactly 1 with the nose on the horizon, so
-    /// every wings-level measurement in the pinned envelope is inert by construction (DIAG-10) and
+    /// every wings-level measurement in the pinned envelope is inert by construction, and
     /// this change cannot have bought its climb behaviour by moving the top speed.</summary>
     [Fact]
     public void LevelFlightIsUntouched()
@@ -86,10 +86,10 @@ public class AttitudeThrustTests
 
     /// <summary>The sustained full-throttle climb the original was filmed holding for forty seconds,
     /// against the model. The bound is deliberately placed where it separates the four candidate
-    /// arrangements rather than merely passing the one that shipped: on the same build the
-    /// pre-change model (climb-gravity constant, no attitude terms) settles at 276.7 mph, the
-    /// constant alone removed at 257.7, both mechanisms together at 232.2, and only the landed
-    /// arrangement — attitude terms, no constant — reaches 204.0 against a measured 163.05.
+    /// arrangements rather than merely passing the one in place: on the same build the arrangement
+    /// with the climb-gravity constant and no attitude terms settles at 276.7 mph, neither mechanism
+    /// at 257.7, both mechanisms together at 232.2, and only the landed arrangement — attitude terms,
+    /// no constant — reaches 204.0 against a measured 163.05.
     ///
     /// <para>The residual is real and is recorded, not tuned away: see
     /// <c>docs/org/flightModel.md</c>, "The sustained climb". The clamp check is not decoration —

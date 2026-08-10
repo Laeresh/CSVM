@@ -55,13 +55,13 @@ public class FogVolumeTests
         { "C5", "17|2" },
     };
 
-    /// <summary>Per chapter: the map-spanning slab A5's map-edge continuation would extend, or
+    /// <summary>Per chapter: the map-spanning slab the map-edge continuation would extend, or
     /// "none". <c>cardHeight</c> is the authored card size docs/formats/fogvol.md documents
-    /// (132.3 m for the four deck chapters, 70 m for C5) and 1.5 is A3's own
+    /// (132.3 m for the four deck chapters, 70 m for C5) and 1.5 is
     /// <c>TopAnchorHeightFactor</c> — real per-chapter numbers, not a synthetic fixture. Bounds and
     /// top are the exact <c>fvol1</c> <c>model_bbox</c> values read from each chapter's own
     /// <c>extracted/&lt;ch&gt;/gamez/nodes.json</c> (C1/C2B's slabs and C4's share the world's own
-    /// [-12288, 0] area to the metre — A1's "exact 3x3 partition" finding).</summary>
+    /// [-12288, 0] area to the metre — the exact 3x3 partition).</summary>
     public static TheoryData<string, float, string> ChapterMapSpanningSlab => new()
     {
         { "C1", 132.3f, "found|-12288|0|-12288|0|1090.55" },
@@ -165,7 +165,7 @@ public class FogVolumeTests
         }
 
         // Invariant formatting: a German decimal comma would make the row a machine property
-        // rather than a data one (verification.md DET-9).
+        // rather than a data one.
         Assert.Equal(
             expected,
             $"{volumes.Count}|{spec.FogZone?.ToString(CultureInfo.InvariantCulture) ?? "-"}|"
@@ -185,7 +185,7 @@ public class FogVolumeTests
         {
             // A volume IS its bounding box exactly when every corner of that box is inside the
             // authored shape — an integer test with no tolerance to argue about. Same predicate
-            // A5's map-edge continuation uses to pick slab candidates (FindMapSpanningSlab).
+            // the map-edge continuation uses to pick slab candidates (FindMapSpanningSlab).
             if (volume.IsAxisAlignedBox())
             {
                 boxes++;

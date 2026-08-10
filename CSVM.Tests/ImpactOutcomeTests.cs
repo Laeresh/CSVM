@@ -28,7 +28,7 @@ public class ImpactOutcomeTests
     /// ever stamp <c>"water"</c> or <c>"buildings"</c> and default everything else — including
     /// quicksand terrain — to <c>Default</c>. A weapon's <c>quicksand</c> IMPACT entry (e.g. <c>wep_04</c>'s) is real data the
     /// reader must still parse correctly, but no code path ever asks <see cref="ImpactOutcome.Resolve"/>
-    /// for it — a suite case for it would be invented coverage, the exact trap B3 named for
+    /// for it — a suite case for it would be invented coverage, the same trap as
     /// <c>Player</c>/<c>Enemy</c>.</summary>
     private static readonly SurfaceClass[] ReachableSurfaces =
     {
@@ -205,12 +205,12 @@ public class ImpactOutcomeTests
         Assert.Equal(ImpactStandIn.DirtDebris, outcome.StandIn);
     }
 
-    // ---- B5: the 48 weapons x the reachable surfaces -----------------------------------------
+    // ---- the 48 weapons x the reachable surfaces ---------------------------------------------
 
     /// <summary>The rule, not a snapshot: every one of the 48 shipped weapons, at every reachable
     /// surface, resolves an outcome that is coherent by three checks that hold regardless of which
-    /// weapon or surface it is — never a table of expected per-row values, which is exactly the
-    /// form the plan's trap warns would break on the next weapon-polish item.
+    /// weapon or surface it is — never a table of expected per-row values, which is the form that
+    /// breaks on the next weapon-polish change without catching anything.
     ///
     /// <para>This loop is also the producer-range guard for the gun IMPACT family: whichever
     /// outcome names a <c>*_gunhit</c> effect (caliber × ammo, e.g. <c>3040slug_gunhit</c>) must

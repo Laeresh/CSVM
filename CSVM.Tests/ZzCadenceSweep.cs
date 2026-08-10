@@ -11,24 +11,24 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The square-wave pitch-cadence sweep, run against our own flight model — the instrument
-/// <c>BL-147</c> asks for by name. The original was flown at six alternating pitch-up/pitch-down
+/// The square-wave pitch-cadence sweep, run against our own flight model.
+/// The original was flown at six alternating pitch-up/pitch-down
 /// cadences and its altitude ripple measured at each; this drives the same square wave into a
 /// throwaway <see cref="FlightModel"/> and measures the ripple the same way, so the comparison is
 /// amplitude-for-amplitude with no transfer function assumed on either side.
 ///
-/// <para>The statistic that decides the item is the <b>roll-off</b> — how far the ripple falls
+/// <para>The statistic that decides it is the <b>roll-off</b> — how far the ripple falls
 /// between the slowest and fastest cadence. Double integration (body rate → attitude → altitude)
 /// accounts for a factor of (f_hi/f_lo)², and a single first-order lag can add at most another
 /// (f_hi/f_lo) on top of that, in the τ → ∞ limit. Anything steeper than that product cannot be
 /// produced by one lag at any τ, which is what makes this able to fail.</para>
 ///
-/// <para>⚠ Two traps, both of them <c>BL-147</c>'s own. (a) <b>Never detrend and then fit</b>: a
+/// <para>⚠ Two traps. (a) <b>Never detrend and then fit</b>: a
 /// sliding high-pass has real gain at f₀ and moved the original's 930 ms amplitude by 45 % as its
 /// span changed. The polynomial and the sinusoid are fitted <b>simultaneously</b> here, inside a
 /// window of at least eight periods, where a cubic can absorb almost none of the fundamental.
 /// (b) The cadences are quoted in the original's <b>wall</b> milliseconds; sim time runs at
-/// k = 1.390 (<c>docs/verification.md</c> DET-11), so both readings are swept and reported rather
+/// k = 1.390 (<c>docs/verification.md</c>), so both readings are swept and reported rather
 /// than one being picked. The roll-off ratio is invariant to the choice; only where the sweep sits
 /// on the curve is not.</para>
 ///
@@ -38,7 +38,7 @@ namespace CSVM.Tests;
 /// </summary>
 public class ZzCadenceSweep
 {
-    /// <summary>Sim seconds per wall second (DET-11).</summary>
+    /// <summary>Sim seconds per wall second.</summary>
     private const double SimPerWall = 1.390;
 
     private const float Dt = 1f / 60f;
@@ -46,7 +46,7 @@ public class ZzCadenceSweep
     private const float Ft = 0.3048f;
 
     /// <summary>Periods of settling discarded before the fit window opens, then periods fitted.
-    /// Eight is <c>BL-147</c>'s floor for the simultaneous fit; twelve leaves margin.</summary>
+    /// Eight is the floor for the simultaneous fit; twelve leaves margin.</summary>
     private const int SettlePeriods = 3;
     private const int FitPeriods = 12;
 
@@ -100,7 +100,7 @@ public class ZzCadenceSweep
                               + (atFloor ? $"<= {originalFt:0.000}" : $"{originalFt,8:0.000}"));
             }
 
-            // The discriminating ratio: BL-147's own span, 1300 -> 570 ms, over which the original
+            // The discriminating ratio: the span 1300 -> 570 ms, over which the original
             // fell 42x against a frequency ratio of 2.28. Double integration explains (ratio)^2 and
             // one first-order lag at most another (ratio), so 12x is the steepest a single lag can
             // ever be — the excess over that is the part no single lag can produce.
@@ -150,7 +150,7 @@ public class ZzCadenceSweep
     /// <summary>Least-squares fit of cubic + A·sin(2πf·t) + B·cos(2πf·t) over the whole window, all
     /// six coefficients solved together; returns sqrt(A² + B²). Fitting the trend and the sinusoid
     /// simultaneously is the point — removing the trend first has real gain at f and biases the
-    /// amplitude, which is the error that cost BL-147 a wrong figure.</summary>
+    /// amplitude, which is the error that produces a wrong figure.</summary>
     private static double FitSinusoid(IReadOnlyList<double> t, IReadOnlyList<double> y, double f)
     {
         const int N = 6;

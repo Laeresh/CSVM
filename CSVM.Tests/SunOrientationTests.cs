@@ -7,8 +7,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// BL-324: the sun's bearing is the flown zone's authored <c>SUNLIGHT_ORIENTATION</c>, which we
-/// read for the first time here.
+/// The sun's bearing is the flown zone's authored <c>SUNLIGHT_ORIENTATION</c>.
 ///
 /// <para>Two halves, tested apart because they fail apart. The <b>parse</b> can go wrong quietly —
 /// degrees left unconverted, or a zone's block missed — and would show only as a light pointing
@@ -18,7 +17,7 @@ namespace CSVM.Tests;
 /// helper rather than asserted in a comment.</para>
 ///
 /// <para>What is deliberately NOT here: any assertion that a particular bearing looks right. The
-/// authored value IS the correct value (the item adopts it with no TUNE), so a test with an
+/// authored value IS the correct value — it is adopted with no TUNE — so a test with an
 /// opinion about the look would be a fudge factor wearing a test's clothes.</para>
 /// </summary>
 public class SunOrientationTests
@@ -56,7 +55,7 @@ public class SunOrientationTests
     {
         // Not redundant with the theory above, which only proves we AGREE with the binary — if both
         // sides shared a sign error it would still pass. This one names the physical answer: the
-        // engine's default sun (FUN_004bc3e0 seeds pitch -pi/2) shines straight down, -Y in Godot.
+        // engine's default sun (seeded at pitch -pi/2) shines straight down, -Y in Godot.
         var dir = -Basis.FromEuler(new Vector3(Mathf.DegToRad(-90f), 0f, 0f), EulerOrder.Yxz).Z;
         Assert.Equal(0f, dir.X, 5);
         Assert.Equal(-1f, dir.Y, 5);
@@ -66,10 +65,9 @@ public class SunOrientationTests
     [ExtractedDataFact]
     public void EachChapterParsesItsOwnAuthoredBearing()
     {
-        // The census in BL-324, as a pin. Two things it catches that nothing else does: degrees
+        // The install's census, as a pin. Two things it catches that nothing else does: degrees
         // arriving unconverted (every value would be ~57x too large), and the chapters collapsing
-        // to one bearing — which is the bug the item exists to fix, and would otherwise look
-        // exactly like success.
+        // to one bearing — which would otherwise look exactly like success.
         AssertBearing("C1", "IA1", -25f, 90f);
         AssertBearing("C1B", "IA1", -65f, 90f);
         AssertBearing("C2", "IA1", -65f, 90f);
@@ -89,8 +87,8 @@ public class SunOrientationTests
         var below = weather!.Zone(weather.ZoneForState(1));
         var above = weather.Zone(weather.ZoneForState(2));
 
-        // C1's two zones happen to author the SAME bearing (as PLAN-overcast-match found for every
-        // chapter but C2), so this asserts the pair is READ, not that it differs — a state change
+        // C1's two zones happen to author the SAME bearing (as does every chapter but C2), so this
+        // asserts the pair is READ, not that it differs — a state change
         // must not silently return a default for one of them.
         Assert.Equal(Mathf.DegToRad(-25f), below.SunOrientation.X, 4);
         Assert.Equal(Mathf.DegToRad(-25f), above.SunOrientation.X, 4);
@@ -112,7 +110,7 @@ public class SunOrientationTests
         Assert.Equal(Mathf.DegToRad(150f), absent.SunOrientation.Y, 4);
     }
 
-    // The original's euler→direction helper, FUN_0053c610, transcribed: it converts SHADOW_ANGLES
+    // The original's euler→direction helper, transcribed: it converts SHADOW_ANGLES
     // the same way the light pipeline converts a node rotation, so it is the binary's own
     // statement of what a (pitch, yaw) pair MEANS as a direction.
     //   out.y = sin(pitch);  out.x = -cos(pitch)*sin(yaw);  out.z = -cos(pitch)*cos(yaw)

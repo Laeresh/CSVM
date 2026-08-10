@@ -11,7 +11,7 @@ namespace CSVM.Tests;
 /// Producer-range tripwires for <see cref="EffectCatalogue"/>: every producer of an effect name is
 /// checked here to still emit only names the catalogue knows about, engine-free.
 /// <see cref="ImpactOutcomeTests"/> carries the third (the gunhit formula, folded into its
-/// existing B5 battery).
+/// weapon-by-surface battery).
 /// </summary>
 public class EffectCatalogueTests
 {

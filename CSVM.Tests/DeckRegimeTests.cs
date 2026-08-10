@@ -6,29 +6,29 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The cloud deck's two altitude regimes (<see cref="WeatherRig.DeckRegime"/>, A7).
+/// The cloud deck's two altitude regimes (<see cref="WeatherRig.DeckRegime"/>).
 ///
-/// <para>The deck is a world-fixed sheet at the tiles' OWN AUTHORED altitude (B13, superseding
-/// A7's band-centre pin — C1's authored 960 vs its former 1047 pin) at every camera altitude;
-/// below the <c>CLOUD_COVER</c> band's centre the sheet wears the overcast's dimmed underside, at
-/// or above it its undimmed top. Two things have to hold for that flip to be invisible rather than
-/// a hard pop, and both are asserted here: it is PER CAMERA (splitscreen panes on opposite sides
-/// of the band must disagree), and it happens inside the fully-opaque whiteout core, which is
-/// <see cref="WeatherState.WhiteoutAmount"/>'s business, not this rule's.</para>
+/// <para>The deck is a world-fixed sheet at the tiles' OWN AUTHORED altitude at every camera
+/// altitude — the alternative this discriminates against pins it to the <c>CLOUD_COVER</c> band
+/// centre, which for C1 is 1047 against its authored 960. Below the band's centre the sheet wears
+/// the overcast's dimmed underside, at or above it its undimmed top. Two things have to hold for
+/// that flip to be invisible rather than a hard pop, and both are asserted here: it is PER CAMERA
+/// (splitscreen panes on opposite sides of the band must disagree), and it happens inside the
+/// fully-opaque whiteout core, which is <see cref="WeatherState.WhiteoutAmount"/>'s business, not
+/// this rule's.</para>
 ///
-/// <para>⚠ The rule's SECOND member — the below-band ceiling carried at
-/// <c>camera.y + DeckCeilingHeight</c> — is gone as of B14: the tiles are <c>zone_id 2</c> world
-/// meshes the original culls below the deck, and the ceiling the player sees there is
-/// <c>horizon/zone1</c>'s own camera-anchored, UV-scrolled dome (<c>HorizonDomeTests</c>). The
-/// <c>DeckCeilingHeight</c> TUNE went with it — both of its fits (A7's 400 m, C21/C25's 135 m)
-/// measured a surface the original does not fog.</para>
+/// <para>⚠ There is no second, below-band member carrying a ceiling at
+/// <c>camera.y + DeckCeilingHeight</c>: the tiles are <c>zone_id 2</c> world meshes the original
+/// culls below the deck, and the ceiling the player sees there is <c>horizon/zone1</c>'s own
+/// camera-anchored, UV-scrolled dome (<c>HorizonDomeTests</c>). There is no
+/// <c>DeckCeilingHeight</c> TUNE either — both of its fits (400 m and 135 m) measured a surface the
+/// original does not fog.</para>
 ///
-/// <para>⚠ The rule's third member — whether the two ambient cloud populations RENDER — is gone
-/// as of B12 (<c>PLAN-weather-decompile-match</c>): it was A7's altitude-keyed special case of the
-/// original's own <c>zone_id</c> gate, which now owns it per camera and reads the zone per chapter
-/// from the data. Those assertions moved to <c>ZoneGateTests</c>, which is also where the case
-/// that killed the altitude rule lives (C2B's <c>zone_id −1</c> fog volumes, which must keep
-/// rendering below its deck).</para>
+/// <para>⚠ Whether the two ambient cloud populations RENDER is not this rule's business: it is the
+/// original's own <c>zone_id</c> gate, which owns it per camera and reads the zone per chapter from
+/// the data, rather than an altitude-keyed special case. Those assertions live in
+/// <c>ZoneGateTests</c>, which is also where the case that rules out an altitude rule lives (C2B's
+/// <c>zone_id −1</c> fog volumes, which must keep rendering below its deck).</para>
 /// </summary>
 public class DeckRegimeTests
 {
@@ -37,29 +37,28 @@ public class DeckRegimeTests
     private const float C1Top = 1124f;
     private const float C1Thickness = 30f;
     private const float C1Centre = 1047f;
-    // C1/C1C/C2B's deck tiles' own authored altitude (WorldBuilder.CloudDeckAltitude,
-    // docs/formats/fogvol.md's A6 table) — what B13 places the above-band floor at, instead of
-    // C1Centre (A7's pin, which was C4's own coincidence: C4's authored 1050 equals its own
-    // centre, so a C4 fixture would not tell the two apart — C1's 87 m gap is why this suite
-    // pins C1).
+    // C1/C1C/C2B's deck tiles' own authored altitude (WorldBuilder.CloudDeckAltitude; see
+    // docs/formats/fogvol.md) — where the above-band floor sits, rather than at C1Centre. C4's
+    // authored 1050 equals its own band centre, so a C4 fixture cannot tell the two rules apart;
+    // C1's 87 m gap is why this suite pins C1.
     private const float C1AuthoredDeckY = 960f;
 
     [Fact]
     public void BelowTheBandTheDeckNoLongerMovesWithTheCamera()
     {
-        // B14, 2026-08-09: the below-band branch used to hang the sheet at
-        // `camera.y + DeckCeilingHeight` as the overcast CEILING — A7's behaviour decode, the
-        // wrong object. The tiles carry `zone_id 2` and the original culls them outright down
-        // here; the ceiling is `horizon/zone1`'s own camera-anchored dome (HorizonDomeTests). So
-        // the deck stops moving: two cameras 600 m apart below the band get the SAME deck Y, which
-        // is exactly what the retired rule made impossible.
+        // The alternative this discriminates against hangs the sheet below the band at
+        // `camera.y + DeckCeilingHeight`, as the overcast CEILING — the wrong object. The tiles
+        // carry `zone_id 2` and the original culls them outright down here; the ceiling is
+        // `horizon/zone1`'s own camera-anchored dome (HorizonDomeTests). So the deck does not move:
+        // two cameras 600 m apart below the band get the SAME deck Y, which a camera-relative
+        // ceiling makes impossible.
         (float low, bool lowDimmed) = WeatherRig.DeckRegime(300f, C1Centre, C1AuthoredDeckY);
         (float high, bool highDimmed) = WeatherRig.DeckRegime(900f, C1Centre, C1AuthoredDeckY);
         Assert.Equal(C1AuthoredDeckY, low, 3);
         Assert.Equal(C1AuthoredDeckY, high, 3);
         // ...and it is still the overcast's UNDERSIDE all the way up, so it keeps the mission's
-        // SUNLIGHT dimming at every altitude below the band (C22 measured that face at 168.9
-        // against the original's 167.7) — the lit variant is the only thing the crossing flips now.
+        // SUNLIGHT dimming at every altitude below the band (that face measures 168.9 against the
+        // original's 167.7) — the lit variant is the only thing the crossing flips.
         Assert.True(lowDimmed);
         Assert.True(highDimmed);
     }
@@ -67,9 +66,9 @@ public class DeckRegimeTests
     [Fact]
     public void AtAndAboveTheBandCentreTheDeckIsAWorldFixedFloorAtTheAuthoredAltitude()
     {
-        // B13, 2026-08-09: the above-band floor sits at the tiles' OWN authored altitude — never
-        // re-pinned to the band centre (A7's pin, superseded). C1's 960 is 87 m below its former
-        // 1047 pin; an implementation that still returned bandCentre here would fail this.
+        // The above-band floor sits at the tiles' OWN authored altitude — never re-pinned to the
+        // band centre. C1's 960 is 87 m below its band centre of 1047, so an implementation that
+        // returned bandCentre here fails this.
         Assert.Equal(C1AuthoredDeckY, WeatherRig.DeckRegime(C1Centre, C1Centre, C1AuthoredDeckY).DeckY, 3);
         Assert.Equal(C1AuthoredDeckY, WeatherRig.DeckRegime(1192f, C1Centre, C1AuthoredDeckY).DeckY, 3);
     }
@@ -78,9 +77,9 @@ public class DeckRegimeTests
     public void C4sAuthoredAltitudeEqualsItsBandCentreSoItIsUnmovedByTheAuthoredFloor()
     {
         // C4's authored deck altitude (1050) happens to equal its own CLOUD_COVER centre — the
-        // coincidence A7's band-centre pin rode without anyone noticing it was a coincidence
-        // (docs/formats/fogvol.md's A6 table). Pinned here so a C4 golden staying byte-identical
-        // across this item is expected, not a missed regression.
+        // coincidence a band-centre pin rides on undetected (see docs/formats/fogvol.md). Pinned
+        // here so a C4 golden staying byte-identical under either rule is expected, not a missed
+        // regression.
         const float c4Centre = 1050f;
         const float c4AuthoredDeckY = 1050f;
         Assert.Equal(c4AuthoredDeckY, WeatherRig.DeckRegime(c4Centre, c4Centre, c4AuthoredDeckY).DeckY, 3);
@@ -90,14 +89,14 @@ public class DeckRegimeTests
     [Fact]
     public void TheDeckKeepsSunlightBelowTheBandAndDropsItAbove()
     {
-        // C23's fork, resolved M-a: the same crossing that flips ceiling→floor flips the deck's
-        // own SUNLIGHT dimming off, because the two regimes show two different faces of the
-        // overcast. Measured both ways — the original's underside is 167.7 (ours 168.9, dimmed),
+        // The band crossing flips the deck's own SUNLIGHT dimming off, because the two regimes
+        // show two different faces of the overcast. Measured both ways — the original's underside
+        // is 167.7 (ours 168.9, dimmed),
         // and no pixel in any original ABOVE-band frame falls below FOG_COLOR 175, which a
         // dimmed 168.9 sheet cannot satisfy at any fog setting.
         Assert.True(WeatherRig.DeckRegime(C1Centre - 0.5f, C1Centre, C1AuthoredDeckY).DeckDimmed);
         Assert.False(WeatherRig.DeckRegime(C1Centre + 0.5f, C1Centre, C1AuthoredDeckY).DeckDimmed);
-        // B14: it is now the ONLY thing the crossing decides — the sheet stays world-fixed at its
+        // It is the ONLY thing the crossing decides — the sheet stays world-fixed at its
         // authored altitude on both sides, so a camera 292 m under the band and one 145 m over it
         // differ in lit variant and in nothing else.
         var below = WeatherRig.DeckRegime(900f, C1Centre, C1AuthoredDeckY);
@@ -120,7 +119,7 @@ public class DeckRegimeTests
         // assignment on each rig's own copy and never a shared material.
         Assert.True(p1.DeckDimmed);
         Assert.False(p2.DeckDimmed);
-        // Both panes' decks sit at the one authored altitude (B14) — P1 under it, P2 over it.
+        // Both panes' decks sit at the one authored altitude — P1 under it, P2 over it.
         Assert.Equal(C1AuthoredDeckY, p1.DeckY, 3);
         Assert.Equal(C1AuthoredDeckY, p2.DeckY, 3);
     }
@@ -133,13 +132,13 @@ public class DeckRegimeTests
     public void TheDeckMeshStaysAboutTenMetresBelowTheFvolSlabFloor(
         string chapter, float expectedDeckAltitude, float expectedSlabFloor)
     {
-        // B13's own trap: the fvol sprite field does NOT move with this item — only the mesh's
-        // WORLD placement above the band did (DeckRegime's new authoredY branch). The AUTHORED
-        // relationship between the two (docs/formats/fogvol.md's A6 table: "the deck mesh is the
-        // slab's floor... every deck chapter puts its CloudDeck tiles ~10 m BELOW its fvol1-fvol9
-        // slab floor") is a fact about the extraction, untouched by where WeatherRig.Tick renders
-        // the mesh — read straight off the data here rather than re-typing the table's numbers as
-        // a constant, so a change to either reader would fail this.
+        // The trap: the fvol sprite field is independent of the mesh's WORLD placement above the
+        // band (DeckRegime's authoredY branch). The AUTHORED relationship between the two — see
+        // docs/formats/fogvol.md: "the deck mesh is the slab's floor... every deck chapter puts its
+        // CloudDeck tiles ~10 m BELOW its fvol1-fvol9 slab floor" — is a fact about the extraction,
+        // untouched by where WeatherRig.Tick renders the mesh. Read straight off the data here
+        // rather than re-typing the table's numbers as a constant, so a change to either reader
+        // fails this.
         var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
 
         float? deckAltitude = WorldBuilder.CloudDeckAltitudeOf(gamez);
