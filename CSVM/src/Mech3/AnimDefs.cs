@@ -409,6 +409,17 @@ public static class AnimDefs
         if (Num(fields, "NUMBER") is { } num) data["number"] = num;
         if (RangeObj(fields, "SIZE_RANGE") is { } sr) data["size_range"] = sr;
         if (RangeObj(fields, "LIFETIME_RANGE") is { } lr) data["lifetime_range"] = lr;
+        if (RangeObj(fields, "START_AGE_RANGE") is { } sa) data["start_age_range"] = sa;
+        if (Num(fields, "WIND_FACTOR") is { } wf) data["wind_factor"] = wf;
+        // C7's camera-distance bands. The compiled surface spells NEAR_FADE `unk_range` and
+        // FADE_RANGE/FAR_FADE `fade_range`; the two reader spellings of the far band are one
+        // block (see PufferState.Parse). START_AGE_RANGE and WIND_FACTOR above are B4's and B6's
+        // keys, which this normalizer had never carried — a reader-scope puffer event silently
+        // lost them on the way to FromAnimEvent, which is the same class of gap the waterfall
+        // active_state bug was.
+        if (RangeObj(fields, "NEAR_FADE") is { } nf) data["unk_range"] = nf;
+        if ((RangeObj(fields, "FADE_RANGE") ?? RangeObj(fields, "FAR_FADE")) is { } ff)
+            data["fade_range"] = ff;
         // GROWTH_FACTOR is one scalar in the reader. Compiled, it is not a growth parameter at
         // all: `growth_factors` is the SCALE_SEQUENCE age->scale ramp, entry i = (age_i, scale_i)
         // under the `min`/`max` field labels, and the original's parser (crimson.exe

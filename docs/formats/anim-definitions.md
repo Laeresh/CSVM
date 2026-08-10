@@ -1188,6 +1188,14 @@ are not visible from the byte format alone, each measured against this install.
   NOT the event's `name` (that is the puffer's own name, a separate namespace). `ACTIVE_STATE`
   1 starts a continuous emitter and 0 stops it; definitions re-assert their puffers on every
   loop iteration, so a consumer must treat re-assertion as idempotent.
+- **`unk_range` is `NEAR_FADE`** — identified 2026-08-10 (`PLAN-puffer-engine-deltas.md` item C7).
+  The compiled `PufferState` payload carries the near camera-distance band under that placeholder
+  name, immediately before `fade_range` (which is the reader's `FADE_RANGE`/`FAR_FADE`). Proven by
+  matching both surfaces on one effect: C1's `black_smoke_ball_01-large_black_smokeball.json` has
+  `unk_range {min: 70, max: 20}` and its reader block authors `NEAR_FADE [70, 20]`. ⚠ The `min`/
+  `max` labels are the mech3ax field names, not a range: `min` is the hard discard cutoff and `max`
+  the distance alpha would reach 1, so almost every event in the install has `max < min`. The
+  semantics live in [effects.md](effects.md).
 - **`growth_factors[i]` is `(age_i, scale_i)`, not `(min, max)`** — corrected 2026-08-09
   (`PLAN-puffer-engine-deltas.md` item B3, which closed as a disproof). This bullet previously
   read the entry as a size *range* and cited a "matches 172 of 177 puffers" survey; **both

@@ -149,10 +149,9 @@ public sealed class WorldWind
 ///
 /// <para>This is deliberately a small mutable holder rather than a value passed down each
 /// <c>_Process</c>: a <see cref="Puffer"/> is a <c>Node3D</c> that ticks itself off the scene
-/// tree, so there is no per-frame call from above to thread a parameter through. C7 needs the
-/// active camera's world position on exactly the same seam (the <c>NEAR_FADE</c>/<c>FAR_FADE</c>
-/// distance alpha), and it belongs HERE as a second property rather than as a second
-/// mechanism.</para>
+/// tree, so there is no per-frame call from above to thread a parameter through. B6 put the wind
+/// here; C7 put the active camera's pose here beside it, for the same reason and on the same
+/// once-per-frame write.</para>
 ///
 /// <para><see cref="Still"/> is the null object: the wind a puffer feels when nobody wired one in
 /// (unit tests, the viewer, a mission with no weather.json). It refuses to be written, so a
@@ -175,9 +174,49 @@ public sealed class EffectAmbience
     /// <see cref="Vector3.Zero"/> until someone steps a wind into it.</summary>
     public Vector3 Wind { get; private set; }
 
+    /// <summary>Whether a camera pose has ever been published. <b>False means "no camera known",
+    /// and C7's distance fade is skipped entirely</b> rather than measured against the origin —
+    /// which is the right answer for every caller that has no camera to give (the unit suites, the
+    /// plane viewer, the damage lab) and would otherwise near-cull half their particles, the
+    /// unauthored <c>NEAR_FADE</c> default being a hard cull at depth 0.</summary>
+    public bool HasCamera { get; private set; }
+
+    /// <summary>The active camera's world position. Meaningful only while
+    /// <see cref="HasCamera"/>.</summary>
+    public Vector3 CameraPosition { get; private set; }
+
+    /// <summary>The active camera's world-space forward axis (unit, <c>-Z</c> of its basis).
+    /// Paired with <see cref="CameraPosition"/> because the original's fade distance is the
+    /// VIEW-SPACE DEPTH along this axis, not the euclidean range — see
+    /// <see cref="Puffer.DistanceAlpha"/>.</summary>
+    public Vector3 CameraForward { get; private set; } = Vector3.Forward;
+
     /// <summary>Publishes this frame's wind. Throws on <see cref="Still"/> — see the class
     /// remark.</summary>
     public void SetWind(Vector3 wind)
+    {
+        Writable();
+        Wind = wind;
+    }
+
+    /// <summary>Publishes this frame's camera pose (C7). Throws on <see cref="Still"/>, for the
+    /// same reason <see cref="SetWind"/> does.
+    ///
+    /// <para>⚠ One camera for the world, like the wind: the original evaluates the fade per
+    /// particle per DRAW, so a splitscreen pane would get its own distances, but ours is one
+    /// <c>MultiMesh</c> per emitter shared by every pane and the alpha is written once per frame.
+    /// The writer therefore publishes player 1's camera and every pane sees player 1's fade — a
+    /// known, recorded divergence that costs nothing in the single-player and freecam paths every
+    /// capture uses.</para></summary>
+    public void SetCamera(Vector3 position, Vector3 forward)
+    {
+        Writable();
+        CameraPosition = position;
+        CameraForward = forward;
+        HasCamera = true;
+    }
+
+    private void Writable()
     {
         if (_frozen)
         {
@@ -185,6 +224,5 @@ public sealed class EffectAmbience
                 "EffectAmbience.Still is the still-air null object and cannot be written — "
                 + "a session that has weather must construct its own EffectAmbience");
         }
-        Wind = wind;
     }
 }

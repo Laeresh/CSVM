@@ -2067,6 +2067,25 @@ identity at `FRICTION 0`; with a wind inside the block it is not, and a friction
 feel no wind at all.
 The wind itself is `Effects/WorldWind.cs` — see its own entry.
 
+**The camera-distance fade** (`PLAN-puffer-engine-deltas` C7, `DistanceAlpha`). `FADE_RANGE`/
+`NEAR_FADE` become a per-particle alpha and two hard culls at DRAW time — the mechanism, the field
+order, the cross-wire and the three `puffer.*` switches are all written up in
+[formats/effects.md](formats/effects.md); read that before touching this. What matters here is the
+plumbing: the distance is view-space depth off `EffectAmbience`'s camera pose (see
+`Effects/WorldWind.cs`), and a discarded particle keeps living, moving and ageing — it is simply not
+written this frame, exactly as the engine's split between `FUN_0054ee10` (sim) and `FUN_0054e6e0`
+(draw) has it. That is why `_Process` carries a separate `drawn` cursor for the renderer: its
+contract is indices `0…n-1` packed and ascending followed by `Show(n)`, and `n` is now the DRAWN
+count, at most `_liveCount`.
+⚠ The distance alpha MULTIPLIES the `COLORS` ramp's alpha or the life envelope; it replaces neither.
+  Getting that precedence wrong makes every ramped puffer invisible.
+⚠ C7 moved **two** goldens and three able-to-fail controls split them: with the fade neutered all 13
+  are hash-identical (so the parsers, the `drawn` cursor and the alpha plumbing move nothing);
+  with only the near cull disabled `c1-crash` returns to its old hash, so **its whole delta is the
+  authored 70 m near cull** on the crash fireball — a large, visible loss at an 18.5 m chase camera;
+  and `c1-destroy-effects` moves either way, so its delta is the authored far ramp (400→600 m on
+  `ap_radiotwr`'s `puffer1`) and is sub-perceptual side by side. A third control shows the
+  unauthored depth-0 rule (behind-camera particles) moves nothing anywhere in the set.
 ⚠ `DEVIATION_DISTANCE` scatters **±0.5·d**, not ±d (`PLAN-puffer-engine-deltas` A2):
   `FUN_0054f8b0` spawns at `prev + delta*frac + (rand01 - 0.5) * d` per axis, so the offset is a
   HALF-width around the origin — `Rand(-d, d)` was drawing twice the authored width per axis
@@ -2112,9 +2131,16 @@ emitter factories at `StartSession`, long before the first weathered build exist
 `WeatherRig.Tick` writes it once per frame, before the rig loop — one wind for the world, exactly
 where `FUN_0054ee10` derives it, and NOT once per camera (a splitscreen session must not walk the
 gust twice as fast).
-⚠ **C7 belongs here too.** The `NEAR_FADE`/`FAR_FADE` distance alpha needs the active camera's
-world position on precisely this seam; it goes in as a second property on `EffectAmbience`, not as
-a second mechanism.
+C7 landed on the same seam: `CameraPosition`/`CameraForward`/`HasCamera`, written by the same
+`WeatherRig.Tick` call, one camera for the world rather than one per pane. ⚠ `HasCamera` false means
+**no distance fade at all** rather than one measured against the origin — the right answer for every
+caller with no camera to give (unit suites, plane viewer, damage lab), which would otherwise be
+near-culled wholesale by the unauthored `NEAR_FADE (0,0)` cutting at depth 0. ⚠ The original
+evaluates the fade per particle per DRAW, so a splitscreen pane would get its own distances; ours is
+one `MultiMesh` per emitter shared by every pane with the alpha written once per frame, so every pane
+sees **player 1's** fade. A recorded divergence that costs nothing on the single-player and freecam
+paths every capture uses. There is also a one-frame lag at session start: an emitter that draws on
+the very first frame can beat the first `Tick` and draw unfaded once.
 `EffectAmbience.Still` is the null object every unwired puffer reads (unit suites, the plane
 viewer, a mission with no weather.json). It **refuses to be written**, so a session that forgets to
 hand its own over fails loudly at the writer instead of silently blowing one wind through the whole

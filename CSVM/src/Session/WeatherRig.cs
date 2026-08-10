@@ -304,6 +304,18 @@ public sealed class WeatherRig
         _wind.Step(frameDt);
         _ambience.SetWind(_wind.Velocity);
 
+        // C7 — the camera pose the puffer distance fade measures against, published on the same
+        // seam and in the same place, for the same reason: it is world state an emitter READS.
+        // Player 1's camera, not one per pane — see EffectAmbience.SetCamera for why, and note
+        // that a single-player, spectator or freecam session has exactly one rig anyway, so this
+        // is the only camera there is on every path a capture takes.
+        if (rigs.Count > 0)
+        {
+            var fadeCam = rigs[0].Camera;
+            var camXform = fadeCam.GlobalTransform;
+            _ambience.SetCamera(camXform.Origin, -camXform.Basis.Z);
+        }
+
         foreach (var rig in rigs)
         {
             var camPos = rig.Camera.Position;

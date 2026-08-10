@@ -236,7 +236,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — the render-side rules
 
-7. ☐ `NEAR_FADE` / `FAR_FADE` camera-distance alpha, and the 1-pixel cull
+7. ☑ `NEAR_FADE` / `FAR_FADE` camera-distance alpha (the 1-pixel cull deliberately skipped)
 8. ☐ `PRIORITY` inflates the sprite by `1 + K·PRIORITY`
 9. ☐ Emission-accumulator rules: the 200 m teleport guard vs. our per-frame batch cap
 
@@ -799,10 +799,86 @@ landing for this item.
 
 # Wave C — the render-side rules
 
-## C7 ☐ `NEAR_FADE` / `FAR_FADE` camera-distance alpha, and the 1-pixel cull
+## C7 ☑ `NEAR_FADE` / `FAR_FADE` camera-distance alpha, and the 1-pixel cull
+
+**Landed 2026-08-10.** Both bands, both culls and the cross-wire, in `Puffer.DistanceAlpha`, off a
+camera pose published on B6's `EffectAmbience` seam. The mechanism is written up in
+[`docs/formats/effects.md`](formats/effects.md) ("The camera-distance fade") and the plumbing in
+[`docs/architecture.md`](architecture.md); the corrections and surprises this item produced are
+below. The 1-pixel cull was **skipped** as planned — it is a 320×200 resolution optimisation, not a
+look.
+
+**Three things this item settled that the plan did not have.**
+
+1. **The distance is view-space DEPTH in plain metres, not euclidean range, and not a scaled
+   number.** `FUN_0054e6e0` computes `d = _DAT_009fd5c0 · (view-matrix row 2 · position)`, and that
+   row was itself pre-scaled by `_DAT_009fd5d0` in `FUN_0054ed10`. `FUN_0053c110` sets
+   `_DAT_009fd5d0 = 1/_DAT_009fd5c0` **on the hardware path**, so the two cancel exactly. On the
+   software path `_DAT_009fd5d0` is 1.0 instead and the fade distances come out scaled by that
+   constant — the same software/hardware split C8's `K` has, and the same call is made: we have no
+   software path. Measuring euclidean range instead would fade a puffer at the screen edge sooner
+   than one dead ahead.
+2. **`unk_range` in the compiled surface is `NEAR_FADE`.** Proven by matching both surfaces on
+   `large_black_smokeball` (compiled `{70, 20}`, reader `NEAR_FADE [70, 20]`). Recorded in
+   `docs/formats/anim-definitions.md`.
+3. **⚠ `puffer.farCull` on its own is a no-op, and the plan's description of it was geometrically
+   wrong.** The plan expected "distant puffers stay drawn at their authored alpha instead of
+   vanishing at the budget line". They do not: the authored far ramp reaches zero at *exactly* the
+   cutoff distance, so the ramp and the cull are the same line and the engine's own `alpha > 0` gate
+   removes whatever the cull would have. Keeping distant puffers drawn takes `distanceFade:false`
+   **and** `farCull:false` together. The three keys are still implemented as three independent
+   mechanism switches, which invents nothing; only the plan's prose about which combination is
+   interesting was wrong.
+
+**⚠ The near cull is much more visible than "an artifact guard" suggested, and that is the one
+thing here that wants the author's eyes.** `flame_ball.zrd.json` authors `NEAR_FADE [70, 20]` on
+essentially every explosion puffer — `fierypuffer`, `trailpuffer2`, `fire_n_smoke` and the whole ball
+family — so within 70 m of the camera the original draws none of them. Our `c1-crash` capture holds
+the chase camera 18.5 m from the wreck, and the crash fireball is now **culled outright**: the golden
+goes from a full orange fireball to a faint wash. That is what the traced code does with the shipped
+data, and the plan's own instruction was to keep `puffer.nearCull` on by default, so it landed that
+way — but whether the original really shows nothing at a close chase camera, or whether the
+original's crash camera simply sits beyond 70 m, is a question the decode cannot answer and a
+screenshot can. `puffer.nearCull: false` is the one-line escape.
 
 **Goal.** Distant puffers fade out and vanish the way the original's do, instead of staying at full
 alpha to the horizon.
+
+**Verified.** 887 units (5 new, `PufferDistanceFadeTests` over both parsers), 31/31 engine suites
+(new `puffer-distance-fade`: the two bands on C3 `spew_puffer`'s authored `300/400` + `40/5`, the
+cross-wire on `volcanosmoke`, each switch shown to switch, the no-camera case, and a depth-not-range
+control), 13/13 goldens after a reviewed 2-shot re-baseline. 8-chapter `--freecam --det --frames=90`
+sweep: 8/8 exit 0, 8/8 screenshots, zero real errors (C1's one `ERROR` substring is
+`godot_variant_call_error` inside the expected headless "no audio session" stack trace).
+
+*Three able-to-fail controls split the golden delta.* With the fade neutered all **13** shots are
+hash-identical, so the parsers, the new `drawn` cursor and the alpha plumbing move nothing. With only
+the near cull disabled `c1-crash` returns to its old hash exactly — its whole delta is the authored
+70 m cull. `c1-destroy-effects` moves either way, so its delta is the far ramp; eye-checked side by
+side it is indistinguishable (the tower is ~500 m out in a 400→600 band). A third control, skipping
+the near cull only where nothing authors it, left both moved — so the unauthored depth-0 rule
+(particles behind the camera plane) changes nothing anywhere in the set.
+
+*The far ramp measured on real authored data,* four ranges of the `c1-destroy-effects` pose, two
+emitters with different bands in the same frame:
+
+| plane x | depth | `trailpuffer2` 400/600 | `trailpuffer2` 600/900 | `fierypuffer` 1400/1600 |
+|---|---|---|---|---|
+| −6350 | 312 m | 1.000 | 1.000 | 1.000 |
+| −6550 | 509 m | **0.455** (= 91.1/200) | 1.000 | 1.000 |
+| −6750 | 705 m | **discarded** | **0.647** (= 194.1/300) | 1.000 |
+| −6950 | 902 m | discarded | **discarded** | 1.000 |
+
+**Not verified, stated rather than implied.** Nothing was checked at the controls — the `c1-crash`
+near-cull loss above is the item most likely to be judged differently by eye, and it is owed. The
+splitscreen divergence (one `MultiMesh` per emitter, so every pane gets player 1's fade) is recorded
+but untested; no golden runs splitscreen. The one-frame lag at session start (an emitter drawing
+before the first `WeatherRig.Tick` draws unfaded once) is real, left alone, and unobserved in any
+capture. `puffer.globalFadeFactor` is exercised only by the headless suite — nothing in the install
+authors it, since it is a script/debug-console global. Node and mesh instance counts were not read
+across the sweep, only the error census.
+
+### Original approach (kept for reference)
 
 **Evidence (confidence: traced).** `FUN_0054e6e0` opens with a distance gate: with
 `d = projZ * viewZ` and `d' = d * globalFadeFactor`, a particle is **discarded** when

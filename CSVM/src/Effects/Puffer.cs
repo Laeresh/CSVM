@@ -12,6 +12,14 @@ namespace CSVM.Effects;
 /// <c>blend_add</c>. The explicit modes force the verdict.</summary>
 public enum PufferBlend { Auto, Additive, Mix }
 
+/// <summary>C7's three distance switches plus the original's own far-band multiplier, forced
+/// instead of read from <c>config.json</c>. Only <see cref="Puffer.CreateWith"/> — the test entry
+/// point — accepts one; the real path always reads Config, whose keys default to exactly the
+/// original's behaviour (<c>true</c>, <c>true</c>, <c>true</c>,
+/// <see cref="Puffer.GlobalFadeFactorDefault"/>).</summary>
+public readonly record struct PufferFadeSwitches(
+    bool DistanceFade, bool FarCull, bool NearCull, float GlobalFadeFactor = 1f);
+
 /// <summary>
 /// The parameters of one <c>PUFFER_STATE</c> block from a zrdr effects reader
 /// (flame_ball.json, fire.json, pufftrails.json, … all share this schema). A puffer
@@ -19,8 +27,8 @@ public enum PufferBlend { Auto, Additive, Mix }
 /// sprites per <see cref="TimeInterval"/>, each with a random velocity, size, and
 /// lifetime, cycling a flipbook of textures over its age.
 ///
-/// Only the fields we currently render are parsed; the reader carries more (the FADE_RANGE
-/// camera-distance fade, NEAR_FADE, WIND_FACTOR, PRIORITY) — added here as they're
+/// Only the fields we currently render are parsed; the reader carries more (PRIORITY is the one
+/// authored key still unread — C8) — added here as they're
 /// needed. Distances/velocities are meters and seconds, matching the world; TEXTURE_SEQUENCE
 /// times are the exception, being fractions of a particle's lifetime.
 /// </summary>
@@ -74,6 +82,29 @@ public sealed class PufferState
     /// block sits inside <c>if (friction != 0)</c>, so a frictionless puffer feels no wind at any
     /// factor.</para></summary>
     public float WindFactor = 1f;
+
+    /// <summary>The camera-distance bands (C7), in metres of VIEW-SPACE DEPTH — see
+    /// <see cref="Puffer.DistanceAlpha"/>, which is the one place their meaning lives.
+    ///
+    /// <para><b>Near</b> (<c>NEAR_FADE</c>, compiled <c>unk_range</c>, object <c>+0xd0</c>):
+    /// <see cref="NearFadeStart"/> is the HARD DISCARD cutoff — a particle nearer than it is not
+    /// drawn — and <see cref="NearFadeEnd"/> is where alpha would reach 1. <b>Far</b>
+    /// (<c>FADE_RANGE</c>/<c>FAR_FADE</c>, compiled <c>fade_range</c>, object <c>+0xdc</c>):
+    /// <see cref="FarFadeStart"/> is the last full-alpha distance and <see cref="FarFadeEnd"/> the
+    /// hard cutoff.</para>
+    ///
+    /// <para>⚠ <b>Do not infer that order from the authored values.</b> Five of the install's six
+    /// near pairs are DESCENDING (<c>70,30</c>; <c>70,20</c>; <c>70,50</c>; <c>40,5</c>;
+    /// <c>30,10</c>) and read backwards at a glance. The order is settled at six independent points
+    /// in <c>crimson.exe</c> — parser, applier, the two setters <c>FUN_00550500</c>/
+    /// <c>FUN_00550550</c>, the ctor defaults, the spawn copy and the raw x87 comparisons in
+    /// <c>FUN_0054e6e0</c> — and the ctor defaults settle which block is which, being coherent only
+    /// this way round: near <c>(0, 0)</c>, far <c>(FLT_MAX, FLT_MAX)</c>, i.e. no fade and no cull
+    /// unless authored, which is exactly the defaults below.</para></summary>
+    public float NearFadeStart, NearFadeEnd;
+
+    /// <inheritdoc cref="NearFadeStart"/>
+    public float FarFadeStart = float.MaxValue, FarFadeEnd = float.MaxValue;
 
     /// <summary>AT_NODE's optional trailing offset (AT_NODE is [nodeName, dx?, dy?, dz?]),
     /// in the host node's own frame — the same convention as <see cref="LocalVelocity"/>.
@@ -212,6 +243,14 @@ public sealed class PufferState
             StartAgeMax = Range("start_age_range", "max", 0f),
             // Absent (null) falls back to the ctor's 1.0, never to 0 — see WindFactor's remark.
             WindFactor = d.Num("wind_factor") ?? 1f,
+            // C7's two bands. `unk_range` IS NEAR_FADE — confirmed against the reader surface on
+            // large_black_smokeball, whose compiled unk_range is {70, 20} and whose reader block
+            // authors NEAR_FADE [70, 20]. Absent stays at the ctor's FLT_MAX far band / (0,0)
+            // near band, i.e. no fade and no cull.
+            NearFadeStart = Range("unk_range", "min", 0f),
+            NearFadeEnd = Range("unk_range", "max", 0f),
+            FarFadeStart = Range("fade_range", "min", float.MaxValue),
+            FarFadeEnd = Range("fade_range", "max", float.MaxValue),
             DeviationDistance = d.Num("deviation_distance") ?? 0f,
             Number = Mathf.Max(1, (int)(d.Num("number") ?? 1f)),
             AtNodeOffset = Vec("translate"),
@@ -259,6 +298,11 @@ public sealed class PufferState
         Vector3 Vec(string key) =>
             new(d.Float(key, index: 0), d.Float(key, index: 1), d.Float(key, index: 2));
 
+        // FADE_RANGE and FAR_FADE are two spellings of one block (the parser FUN_004f7120 accepts
+        // both onto the same flag bit 0x1000). The install authors FADE_RANGE 574 times and
+        // FAR_FADE exactly once — C3's volcanosmoke — so the alias is not hypothetical.
+        string farKey = d.Has("FADE_RANGE") ? "FADE_RANGE" : "FAR_FADE";
+
         var s = new PufferState
         {
             Name = d.Str("NAME") ?? "",
@@ -278,6 +322,12 @@ public sealed class PufferState
             // Absent falls back to the ctor's 1.0, never to 0 — see WindFactor's remark. Only 5
             // reader blocks in the install author the key at all (3 at 0.3, 2 at 1.0).
             WindFactor = d.Float("WIND_FACTOR", 1f),
+            // C7's two bands — see NearFadeStart for which end is which, and DO NOT read it off
+            // these values: five of the six authored near pairs are descending.
+            NearFadeStart = d.Float("NEAR_FADE", 0f, 0),
+            NearFadeEnd = d.Float("NEAR_FADE", 0f, 1),
+            FarFadeStart = d.Float(farKey, float.MaxValue, 0),
+            FarFadeEnd = d.Float(farKey, float.MaxValue, 1),
             GrowthFactor = d.Float("GROWTH_FACTOR", 1f),
             DeviationDistance = d.Float("DEVIATION_DISTANCE"),
             Number = (int)d.Float("NUMBER", 1f),
@@ -354,6 +404,16 @@ public sealed partial class Puffer : Node3D
     public const float FireRiseScaleDefault = 2.5f;
     public const float FireLifetimeScaleDefault = 1.5f;
 
+    /// <summary>Default for config.json <c>puffer.globalFadeFactor</c> — the original's own
+    /// <c>PufferSetGlobalFadeFactor</c> (<c>00637a94</c>), which multiplies the distance the FAR
+    /// band is measured at and nothing else (both near comparisons use the plain, unscaled depth).
+    /// Below 1 it pushes the far fade and its cutoff outward; above 1 it pulls them in. It is a
+    /// script/debug-console knob with no authored writer in this install, so it ships at its own
+    /// default of 1.0 — exposed rather than hard-coded because it is the original's distance
+    /// multiplier, and reaching for one of our own instead is exactly what
+    /// <c>PLAN-puffer-engine-deltas.md</c> C7 says not to do.</summary>
+    public const float GlobalFadeFactorDefault = 1f;
+
     /// <summary>The authored fire-column family — the crash fire (<c>large_10sec_fire</c>), the
     /// destruction fires (<c>large_30sec_fire</c>/<c>huge_30sec_fire</c>) and the burning fuel
     /// tanks all emit a sustained puffer of exactly this name, and it is the family playtesting
@@ -396,6 +456,20 @@ public sealed partial class Puffer : Node3D
     // (FirePufferName), which only ever spawns on the sustained path.
     private float _fireRiseScale = 1f;
     private float _fireLifeScale = 1f;
+
+    // C7's three switches (config.json puffer.distanceFade / farCull / nearCull), read once at
+    // Init. All default TRUE — every one of them reproduces the original, and a flag that shipped
+    // off would be a silent divergence wearing a config key. See DistanceAlpha.
+    private bool _distanceFade = true;
+    private bool _farCull = true;
+    private bool _nearCull = true;
+    private float _globalFadeFactor = GlobalFadeFactorDefault;
+
+    // 1/(end - start) per band, precomputed at Init exactly as FUN_00550500/FUN_00550550 do at
+    // set time — and, as they do, left as the raw difference (0) when the two ends are equal,
+    // which is the unauthored far band's FLT_MAX/FLT_MAX case.
+    private float _nearRecip;
+    private float _farRecip;
 
     private PufferState _state = null!;
     private IEmitterRenderer _renderer = null!;
@@ -475,11 +549,17 @@ public sealed partial class Puffer : Node3D
     /// stream, so every emitter built after it scatters differently. That is why this is a test
     /// entry point and not a general one: calling it on a capture path would move every
     /// puffer-bearing golden.</para></summary>
+    /// <param name="fade">C7's three switches, forced rather than read from <c>config.json</c>.
+    /// Null — the default, and the only thing the real path ever passes — reads them from Config as
+    /// usual. This exists because <see cref="Utils.Config"/> is file-backed with no setter by
+    /// design (DET-7: a scripted capture stays a function of the committed tree), so a suite that
+    /// wants to see the switches actually SWITCH has nowhere else to say so.</param>
     public static Puffer CreateWith(PufferState state, IEmitterRenderer renderer,
-        float activeDuration = 0.3f, bool sustained = false, EffectAmbience? ambience = null)
+        float activeDuration = 0.3f, bool sustained = false, EffectAmbience? ambience = null,
+        PufferFadeSwitches? fade = null)
     {
         var puffer = new Puffer();
-        puffer.Init(state, renderer, activeDuration, sustained, ambience);
+        puffer.Init(state, renderer, activeDuration, sustained, ambience, fade);
         return puffer;
     }
 
@@ -594,6 +674,24 @@ public sealed partial class Puffer : Node3D
         // algebraic no-op — (v - 0)·damp + 0 == v·damp — which is what lets it land without
         // moving a windless golden.
         var windTarget = _ambience.Wind * _state.WindFactor;
+        // C7 — the camera-distance fade is a DRAW rule, not a sim rule: the original evaluates it
+        // at the head of FUN_0054e6e0 (the per-particle draw) while FUN_0054ee10 (the sim) knows
+        // nothing about it, so a discarded particle keeps living, moving and ageing and simply is
+        // not written this frame. That is why the renderer gets its own cursor below: its contract
+        // is "indices 0…n-1, packed and ascending, then Show(n)", and n is the DRAWN count, which
+        // is at most _liveCount.
+        // False until WeatherRig.Tick has published a camera — see EffectAmbience.HasCamera. In a
+        // live session that is true from the first tick on; an emitter that draws on the very
+        // first frame of a session can beat it by one frame and draw unfaded, which is one frame
+        // of full alpha at session start and is left alone rather than deferred.
+        bool fading = _ambience.HasCamera;
+        var camPos = _ambience.CameraPosition;
+        var camFwd = _ambience.CameraForward;
+        // Burst mode keeps particle positions in the node's own frame (the burst point is the
+        // node's translation); trail and sustain force the transform to identity and store world
+        // positions. Every mode leaves the basis at identity, so one addition covers all three.
+        var nodeOrigin = GlobalPosition;
+        int drawn = 0;
         for (int i = 0; i < _liveCount; i++)
         {
             ref var p = ref _particles[i];
@@ -626,16 +724,27 @@ public sealed partial class Puffer : Node3D
             // the ramp parameter (`if (0.0 < age) t = age/life; else t = 0.0f`) rather than
             // skipping the draw, so it is pinned to stop 0 of every ramp/envelope while p.Age
             // itself keeps integrating and reaping normally above.
+            // C7's distance gate, before any draw work: discarded means not written at all.
+            float distAlpha = 1f;
+            if (fading && !DistanceAlpha(nodeOrigin + p.Pos, camPos, camFwd, out distAlpha))
+                continue;
+
             float lifeFrac = p.Age > 0f ? p.Age / p.Life : 0f;
             float size = p.BaseSize * Mathf.Lerp(1f, _state.GrowthFactor, lifeFrac);
             // The COLORS ramp owns the fade when present (its alpha ends at 0);
-            // otherwise the render-nicety envelope eases the additive glow in/out.
-            _renderer.Write(i, p.Pos, size,
+            // otherwise the render-nicety envelope eases the additive glow in/out. C7's distance
+            // alpha MULTIPLIES whichever of the two owns it and replaces neither — the engine does
+            // the same, folding its distance alpha into the ramp's own alpha (`local_2c * fVar5`)
+            // or into the ramp-less envelope (`local_2c * (1 - ageFrac)`) at 0054e6e0. Getting
+            // that precedence wrong makes every ramped puffer invisible. Both land in the shader's
+            // `v_alpha`, which already multiplies by `v_color.a`, so the ramp path keeps carrying
+            // its own alpha in the colour.
+            _renderer.Write(drawn++, p.Pos, size,
                 flipbook ? FrameFor(lifeFrac) : p.Frame,
-                hasRamp ? 1f : FadeFor(lifeFrac),
+                (hasRamp ? 1f : FadeFor(lifeFrac)) * distAlpha,
                 hasRamp ? RampColor(lifeFrac) : Colors.White);
         }
-        _renderer.Show(_liveCount);
+        _renderer.Show(drawn);
 
         if (_liveCount == 0 && !_emitting && !_trailing && !_sustaining)
         {
@@ -643,6 +752,13 @@ public sealed partial class Puffer : Node3D
             Visible = false;
         }
     }
+
+    /// <summary>A fade band's <c>1/width</c>, with the engine's own degenerate case: both setters
+    /// (<c>FUN_00550500</c>, <c>FUN_00550550</c>) store the raw difference first and only invert it
+    /// when it is non-zero, so an equal-ended band keeps 0 rather than an infinity. The unauthored
+    /// far band (<c>FLT_MAX</c>, <c>FLT_MAX</c>) is exactly that case, and nothing ever reaches its
+    /// ramp anyway.</summary>
+    private static float Reciprocal(float width) => width != 0f ? 1f / width : 0f;
 
     private static float FadeFor(float lifeFrac) =>
         lifeFrac < FadeIn ? lifeFrac / FadeIn
@@ -704,6 +820,75 @@ public sealed partial class Puffer : Node3D
                 sum += (0.2126f * c.R + 0.7152f * c.G + 0.0722f * c.B) * c.A;
             }
         return sum / (w * h);
+    }
+
+    /// <summary>C7 — the camera-distance alpha, decoded verbatim from the head of
+    /// <c>FUN_0054e6e0</c>. Returns <c>false</c> when the particle is discarded for this frame;
+    /// otherwise <paramref name="alpha"/> is the factor its drawn alpha is multiplied by.
+    ///
+    /// <para><b>The distance is view-space DEPTH, not euclidean range.</b> The engine computes
+    /// <c>local_8 = m20·x + m21·y + m22·z + m23</c> off the world→view matrix
+    /// <c>FUN_0054ed10</c> built, then scales it by <c>_DAT_009fd5c0</c>. That matrix's third
+    /// column was itself pre-scaled by <c>_DAT_009fd5d0</c>, and on the hardware path
+    /// <c>FUN_0053c110</c> sets <c>_DAT_009fd5d0 = 1/_DAT_009fd5c0</c> — the two cancel exactly, so
+    /// the fade distance is plain metres along the camera's forward axis. (On the software path
+    /// <c>_DAT_009fd5d0</c> is 1.0 instead and the distances come out scaled by that constant; we
+    /// have no software path, the same call this project already makes for <c>PRIORITY</c>'s
+    /// <c>K</c>.) Measuring euclidean range instead would fade a puffer at the screen edge sooner
+    /// than one dead ahead, which the original does not do.</para>
+    ///
+    /// <para><b>⚠ The near ramp reads the FAR band's origin, and that is not a typo here.</b>
+    /// <c>0054e7b5</c> is <c>FSUB [ESI + 0x3c]</c> — particle <c>[0xf]</c>, i.e.
+    /// <see cref="PufferState.FarFadeStart"/> — against the NEAR reciprocal at <c>ESI + 0x44</c>.
+    /// Verified in raw assembly, not a decompiler artefact, and consistent with
+    /// <c>FADE_RANGE</c> being the original field (flag <c>0x1000</c>) and <c>NEAR_FADE</c> bolted
+    /// on later (flag <c>0x80000</c>) by copy-pasting the far-band line. It is reproduced rather
+    /// than repaired: "fixing" it would make C3's <c>volcanosmoke</c> — the one puffer in the
+    /// install that reaches this branch at all — fade in over 1→75 m where the original pops it in
+    /// at 75 m, which is a silent divergence dressed as a bug fix.</para>
+    ///
+    /// <para><b>With the shipped data the near band is a CULL, never a partial alpha.</b> All five
+    /// descending pairs make the ramp branch unreachable (a particle past
+    /// <see cref="PufferState.NearFadeStart"/> is already past <see cref="PufferState.NearFadeEnd"/>
+    /// too, so it takes the alpha-1 exit), and <c>volcanosmoke</c>'s lone ascending
+    /// <c>(1, 75)</c> reaches the ramp only for the cross-wire above to drive its alpha negative —
+    /// which the <c>alpha &gt; 0</c> gate then culls. That is why <c>puffer.nearCull</c> is named a
+    /// cull and defaults on: it is an artifact guard against a screen-filling billboard when the
+    /// camera flies through an emitter, not a performance budget.</para>
+    ///
+    /// <para>The three switches are three mechanisms, not one boolean: <c>_distanceFade</c> is the
+    /// authored far ramp, <c>_farCull</c> the hard discard past the band, <c>_nearCull</c> the near
+    /// discard. ⚠ Note that turning <c>_farCull</c> off ALONE changes nothing visible — the
+    /// authored ramp reaches zero at exactly the cutoff distance, so the two are the same line and
+    /// the <c>alpha &gt; 0</c> gate removes what the cull would have. Keeping distant puffers drawn
+    /// on modern hardware takes <c>distanceFade:false</c> AND <c>farCull:false</c>
+    /// together.</para></summary>
+    private bool DistanceAlpha(Vector3 worldPos, in Vector3 camPos, in Vector3 camFwd,
+        out float alpha)
+    {
+        alpha = 1f;
+        float d = camFwd.Dot(worldPos - camPos);
+        float scaled = d * _globalFadeFactor;   // the far band only — see GlobalFadeFactorDefault
+        if (_farCull && _state.FarFadeEnd <= scaled)
+            return false;
+        if (scaled <= _state.FarFadeStart)
+        {
+            // Inside the far band's full-alpha region, so the NEAR band decides. Unauthored, that
+            // is (0, 0): nothing is nearer than depth 0 except what is behind the camera, which
+            // the engine culls here and so do we.
+            if (_nearCull && d <= _state.NearFadeStart)
+                return false;
+            if (_state.NearFadeEnd <= d || !_distanceFade)
+                return true;                    // the engine's `goto`: alpha 1, past the >0 gate
+            alpha = (d - _state.FarFadeStart) * _nearRecip;   // ⚠ FarFadeStart — the cross-wire
+        }
+        else
+        {
+            if (!_distanceFade)
+                return true;
+            alpha = (_state.FarFadeEnd - scaled) * _farRecip;
+        }
+        return alpha > 0f;
     }
 
     /// <summary>Advances a DISTANCE_INTERVAL trail emitter to the followed node's new
@@ -831,7 +1016,7 @@ public sealed partial class Puffer : Node3D
     private void SustainEnd() => _sustaining = false;
 
     private void Init(PufferState state, IEmitterRenderer renderer, float activeDuration,
-        bool sustained, EffectAmbience? ambience = null)
+        bool sustained, EffectAmbience? ambience = null, PufferFadeSwitches? fade = null)
     {
         _state = state;
         _renderer = renderer;
@@ -840,6 +1025,14 @@ public sealed partial class Puffer : Node3D
         _burstSizeScale = Config.GetFloat("puffer.burstSizeScale", SizeScaleDefault);
         _trailSizeScale = Config.GetFloat("puffer.trailSizeScale", SizeScaleDefault);
         _sustainSizeScale = Config.GetFloat("puffer.sustainSizeScale", SizeScaleDefault);
+        // C7. Every default reproduces the original; see the fields' remark and DistanceAlpha.
+        _distanceFade = fade?.DistanceFade ?? Config.GetBool("puffer.distanceFade", true);
+        _farCull = fade?.FarCull ?? Config.GetBool("puffer.farCull", true);
+        _nearCull = fade?.NearCull ?? Config.GetBool("puffer.nearCull", true);
+        _globalFadeFactor = fade?.GlobalFadeFactor
+            ?? Config.GetFloat("puffer.globalFadeFactor", GlobalFadeFactorDefault);
+        _nearRecip = Reciprocal(state.NearFadeEnd - state.NearFadeStart);
+        _farRecip = Reciprocal(state.FarFadeEnd - state.FarFadeStart);
         if (string.Equals(state.Name, FirePufferName, StringComparison.OrdinalIgnoreCase))
         {
             _fireRiseScale = Config.GetFloat("puffer.fireRiseScale", FireRiseScaleDefault);

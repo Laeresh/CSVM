@@ -249,6 +249,12 @@ public static class Config
             GetFloat("puffer.sustainSizeScale", Effects.Puffer.SizeScaleDefault);
             GetFloat("puffer.fireRiseScale", Effects.Puffer.FireRiseScaleDefault);
             GetFloat("puffer.fireLifetimeScale", Effects.Puffer.FireLifetimeScaleDefault);
+            // C7's three distance switches and the original's own far-band multiplier, read at the
+            // same Init the warmup never reaches. All three default to the original's behaviour.
+            GetBool("puffer.distanceFade", true);
+            GetBool("puffer.farCull", true);
+            GetBool("puffer.nearCull", true);
+            GetFloat("puffer.globalFadeFactor", Effects.Puffer.GlobalFadeFactorDefault);
             // The race grid is constructed only by a multiplayer stunt race, which the warmup never
             // builds — register its two keys here so --dump-config documents them on any launch.
             GetFloat("raceGrid.slotSpacing", Session.RaceGrid.SlotSpacingDefault);

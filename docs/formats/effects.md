@@ -48,10 +48,51 @@ A state is a **fully-defined emitter iff it has `NUMBER` (burst) or `DISTANCE_IN
 | `TEXTURE_SEQUENCE` | [(name, t)…] | **flipbook**: frames keyed by **fraction of the sprite's own lifetime**, 0–1 — *not* seconds (see below) |
 | `TEXTURES` | [name…] | **static pool**: each sprite picks one at random (smoke101/102/103) |
 | `COLORS` | [[lifeFrac, r, g, b, a]…] | colour-over-age ramp; rgb dual-encoded (the [weather.md](weather.md) rule: any component > 1 ⇒ ÷255), alpha 0–1. `dense_firetrail`'s smoke is born orange (255,164,90) → near-black |
-| `FADE_RANGE` | [near, far] m | camera-distance fade (`fire_n_smoke`: 1500–1700). Parsed by mech3ax, **not implemented** — set on 400 of C1's 721 events |
-| `NEAR_FADE` | [a, b] | near-camera fade (70/20 almost everywhere). The compiled payload calls it `unk_range`. Parsed, **not implemented** |
+| `FADE_RANGE` (= `FAR_FADE`) | [rampStart, cutoff] m | camera-distance fade: full alpha up to `[0]`, linear to zero at `[1]`, discarded beyond (`fire_n_smoke`: 1500–1700). Two spellings of one block — 574 readers say `FADE_RANGE`, exactly one (C3's `volcanosmoke`) says `FAR_FADE`. **Implemented** (`PufferState.FarFadeStart`/`FarFadeEnd`, C7); the install's widest authored key at 2,508 compiled events over 238 puffers |
+| `NEAR_FADE` | [cutoff, fullAlpha] m | near-camera band, compiled name `unk_range`. `[0]` is the **hard discard cutoff** and `[1]` the distance alpha would reach 1 — ⚠ **do not read that order off the values**, five of the six authored pairs are descending (`70,20` almost everywhere). **Implemented** (`PufferState.NearFadeStart`/`NearFadeEnd`, C7). With the shipped data it is a **cull, never a partial alpha** — see the distance-fade section below |
 | `START_AGE_RANGE` | [min, max] s | random birth age — a particle is born at `Rand(min, max)` instead of age 0, negative values included (`fire_at_zepskin3`: −1.0 to 0.1). **Implemented** (`PufferState.StartAgeMin`/`StartAgeMax`); authored by only 4 puffers in the install, 80 compiled events total (`PLAN-puffer-engine-deltas` B4). ⚠ The key is not the whole birth age: the engine's `age0` is this draw **plus** `(1 - frac)·dt`, the sub-frame term of the time-cadence spawn (B5), and it discards the particle outright when `age0 >= life` — so that skip fires on a long frame for **any** puffer, authored key or not |
-| `WIND_FACTOR` / `PRIORITY` | — | carried by 6 / 11 C1 events, **not implemented** |
+| `WIND_FACTOR` | float | how strongly the world's wind carries this puffer's particles; **defaults to 1, not 0**, and is inert unless `FRICTION` is non-zero. **Implemented** (B6) — see [architecture.md](../architecture.md)'s `Effects/WorldWind.cs` entry |
+| `PRIORITY` | float | a per-puffer sprite-size nudge (`1 + K·PRIORITY`), **not implemented** — 192 compiled events over 47 puffers (`PLAN-puffer-engine-deltas` C8) |
+
+## The camera-distance fade (`FADE_RANGE` + `NEAR_FADE`)
+
+Decoded from the head of `FUN_0054e6e0`, the original's per-particle draw, and implemented in
+`Puffer.DistanceAlpha` (C7). The distance `d` is the **view-space DEPTH** along the camera's forward
+axis, in metres — not the euclidean range. (`FUN_0054ed10` pre-scales the view matrix's third column
+by `_DAT_009fd5d0`, the draw multiplies by `_DAT_009fd5c0`, and on the hardware path `FUN_0053c110`
+makes those exact reciprocals; on the software path they do not cancel and the distances come out
+scaled, but this project has no software path.) The evaluation, in order:
+
+1. discard if `d·globalFadeFactor >= FADE_RANGE[1]`;
+2. if `d·globalFadeFactor <= FADE_RANGE[0]` the **near** band decides: discard if `d <= NEAR_FADE[0]`,
+   full alpha if `d >= NEAR_FADE[1]`, else ramp;
+3. otherwise ramp across the far band: `alpha = (FADE_RANGE[1] − d·globalFadeFactor) / (FADE_RANGE[1] − FADE_RANGE[0])`;
+4. discard if the resulting alpha is `<= 0`.
+
+The alpha **multiplies** whatever the `COLORS` ramp or the life envelope already produced; it
+replaces neither.
+
+⚠ **A cross-wire in the original, reproduced deliberately.** The NEAR ramp's origin is
+`FADE_RANGE[0]`, not `NEAR_FADE[0]` (`0054e7b5 FSUB [ESI+0x3c]` against the near reciprocal at
+`ESI+0x44`, read in raw assembly). It is consistent with `FADE_RANGE` being the original field and
+`NEAR_FADE` bolted on later by copy-pasting the far-band line. C3's `volcanosmoke` is the only puffer
+in the install whose near pair ascends and therefore the only one that reaches that ramp — where the
+wrong origin drives its alpha negative, so it is culled below `NEAR_FADE[1]` and pops in at 75 m.
+Every other near pair descends and takes the alpha-1 exit. **The near band is therefore a hard cull
+on every puffer in the install**, and "fixing" the cross-wire would invent a 1→75 m fade-in the
+original does not have.
+
+⚠ **Almost every explosion effect in `flame_ball.zrd.json` authors `NEAR_FADE [70, 20]`** —
+`fierypuffer`, `trailpuffer2`, `fire_n_smoke` and the ball family. Within 70 m of the camera the
+original draws none of them, which is a large, visible consequence at any close chase-camera pose;
+`puffer.nearCull` exists to switch it off, and defaults on because that is what the original does.
+
+**Three config switches, all defaulting to the original's behaviour** (`puffer.distanceFade` the
+authored far ramp, `puffer.farCull` the hard discard past the band, `puffer.nearCull` the near
+discard), plus `puffer.globalFadeFactor` — the original's own `PufferSetGlobalFadeFactor`
+(`00637a94`, default 1.0), which scales the FAR band only. ⚠ `puffer.farCull:false` alone changes
+nothing visible: the authored ramp reaches zero at exactly the cutoff distance, so the two are the
+same line. Keeping distant puffers drawn takes `distanceFade:false` and `farCull:false` together.
 
 **`TEXTURE_SEQUENCE` times are lifetime fractions, not seconds.** Across all 1,750 flipbook
 `PufferState` events in this install the largest key is **0.8** and none exceeds 1.0 — while

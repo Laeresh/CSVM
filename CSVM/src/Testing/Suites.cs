@@ -77,6 +77,10 @@ public static class Suites
             "the traced integration order (position on last frame's velocity, then accel, then damp) "
             + "and friction damping toward the WIND rather than toward rest, WIND_FACTOR and all (B6)",
             PufferWind));
+        into.Add(new TestHarness.Suite("puffer-distance-fade",
+            "the NEAR_FADE/FAR_FADE camera-distance alpha and its two culls, against the shipped "
+            + "bands of C3's spew_puffer and volcanosmoke — the cross-wire included (C7)",
+            PufferDistanceFade));
         into.Add(new TestHarness.Suite("loadout-bind",
             "every stock loadout binds to its model with every marker resolved", LoadoutBind));
         into.Add(new TestHarness.Suite("weapons-fire",
@@ -311,6 +315,199 @@ public static class Suites
         {
             GameClock.Current = clock;
         }
+    }
+
+    // ---- C7: the camera-distance fade -----------------------------------------------------------
+
+    /// <summary>C7's distance alpha, driven entirely off the numbers two shipped readers author.
+    /// Every distance below is a VIEW-SPACE DEPTH: the camera sits at the origin looking down −Z
+    /// (Godot's forward), so a particle placed at <c>(0, 0, −d)</c> is at depth <c>d</c>, and one
+    /// pushed sideways is deliberately used to prove the measure is depth and not range.</summary>
+    private static void PufferDistanceFade(TestContext ctx)
+    {
+        var clock = GameClock.Current;
+        GameClock.Current = null;
+        try
+        {
+            PufferFadeBands(ctx);
+            PufferFadeCrossWire(ctx);
+            PufferFadeSwitchesOff(ctx);
+            PufferFadeNoCameraNoFade(ctx);
+        }
+        finally
+        {
+            GameClock.Current = clock;
+        }
+    }
+
+    /// <summary>One particle that never moves and never dies, carrying a COLORS ramp so the drawn
+    /// alpha channel is the DISTANCE alpha alone: the ramp path writes <c>1 × distAlpha</c> and
+    /// leaves the life envelope out of it (the ramp's own alpha rides in the colour, exactly as
+    /// the shader's <c>v_alpha × v_color.a</c> expects).</summary>
+    private static PufferState FadeTestState(string name,
+        float nearStart, float nearEnd, float farStart, float farEnd) => new()
+        {
+            Name = name,
+            Number = 1,
+            TimeInterval = 10f,
+            SizeMin = 1f,
+            SizeMax = 1f,
+            LifetimeMin = 1000f,
+            LifetimeMax = 1000f,
+            NearFadeStart = nearStart,
+            NearFadeEnd = nearEnd,
+            FarFadeStart = farStart,
+            FarFadeEnd = farEnd,
+            Textures = new[] { "smoke101" },
+            Colors = new[] { (0f, Colors.White), (1f, Colors.White) },
+        };
+
+    /// <summary>Bursts one particle at <paramref name="at"/> and returns the alpha it was drawn
+    /// with, or null when it was discarded. The burst is fired AT the point (burst mode stores
+    /// positions in the node's own frame, whose origin is the burst point), and a single
+    /// <c>_Process</c> at a dt small enough to leave the particle where it was born runs the draw.
+    /// </summary>
+    private static float? FadeAlphaAt(TestContext ctx, PufferState state, Vector3 at,
+        EffectAmbience ambience, PufferFadeSwitches? switches = null)
+    {
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu, activeDuration: 0.01f, ambience: ambience,
+            fade: switches);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            puffer.Burst(at);
+            puffer._Process(1f / 60f);
+            ctx.Same(1, puffer.LiveCount,
+                $"{state.Name}: the particle stays ALIVE whatever the fade decides — it is a draw rule, not a reaper");
+            return gpu.Shown > 0 ? gpu.LastFrame[0].Alpha : null;
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    /// <summary>C3's <c>spew_puffer</c> exactly as <c>waterfalls.zrd.json</c> authors it —
+    /// <c>FADE_RANGE [300, 400]</c>, <c>NEAR_FADE [40, 5]</c> — which is the census's capture pose
+    /// for this item and the only puffer in the install carrying both a near fade and the tightest
+    /// far band.</summary>
+    private static void PufferFadeBands(TestContext ctx)
+    {
+        var state = FadeTestState("spew_puffer", 40f, 5f, 300f, 400f);
+        var amb = new EffectAmbience();
+        amb.SetCamera(Vector3.Zero, Vector3.Forward);   // at the origin, looking down −Z
+
+        ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -20f), amb) == null,
+            $"inside NEAR_FADE[0] the particle is culled outright, not faded (20 m < 40 m)");
+        ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -100f), amb) is { } mid
+                  && Mathf.IsEqualApprox(mid, 1f),
+            $"between the bands it draws at full alpha");
+        ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -300f), amb) is { } edge
+                  && Mathf.IsEqualApprox(edge, 1f),
+            $"FADE_RANGE[0] is the LAST full-alpha distance, not the first faded one");
+
+        float? half = FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -350f), amb);
+        ctx.Check(half is { } h && Mathf.IsEqualApprox(h, 0.5f, 1e-4f),
+            $"half way across the far band the alpha is half alpha={half}");
+        ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -450f), amb) == null,
+            $"past FADE_RANGE[1] it is discarded (450 m > 400 m)");
+        ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, 100f), amb) == null,
+            $"and a particle BEHIND the camera is culled by the unauthored-near rule at depth 0");
+
+        // Depth, not range: 350 m ahead and 600 m sideways is 694 m away and still mid-band.
+        float? sideways = FadeAlphaAt(ctx, state, new Vector3(600f, 0f, -350f), amb);
+        ctx.Check(sideways is { } s && Mathf.IsEqualApprox(s, 0.5f, 1e-4f),
+            $"the measure is VIEW-SPACE DEPTH: 600 m off-axis does not change the fade alpha={sideways}");
+        float range = new Vector3(600f, 0f, -350f).Length();
+        ctx.Check(range > 400f,
+            $"ABLE-TO-FAIL CONTROL: that same point is {range:0} m away — a euclidean-range implementation would have discarded it");
+    }
+
+    /// <summary>The cross-wire, reproduced rather than repaired: the near ramp's origin is
+    /// <c>FAR_FADE[0]</c>. C3's <c>volcanosmoke</c> — <c>NEAR_FADE [1, 75]</c>,
+    /// <c>FAR_FADE [2000, 3000]</c> — is the only puffer in the install whose near pair ascends and
+    /// therefore the only one that reaches the ramp branch at all, where the wrong origin drives
+    /// the alpha hard negative and the <c>alpha &gt; 0</c> gate culls it. The near band is a cull
+    /// on every puffer in the install, and this is the one that had to be checked to say
+    /// so.</summary>
+    private static void PufferFadeCrossWire(TestContext ctx)
+    {
+        var state = FadeTestState("volcanosmoke", 1f, 75f, 2000f, 3000f);
+        var amb = new EffectAmbience();
+        amb.SetCamera(Vector3.Zero, Vector3.Forward);
+
+        ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -50f), amb) == null,
+            $"at 50 m volcanosmoke is culled: the near ramp reads FAR_FADE[0] (2000), so its alpha is (50-2000)/74");
+        ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -80f), amb) is { } beyond
+                  && Mathf.IsEqualApprox(beyond, 1f),
+            $"past NEAR_FADE[1] it pops in at full alpha — a hard edge at 75 m, not a 1-to-75 m fade-in");
+        // The repair we deliberately did NOT make, stated as a number so it cannot creep back in.
+        float repaired = (50f - 1f) / (75f - 1f);
+        ctx.Check(repaired > 0.6f,
+            $"ABLE-TO-FAIL CONTROL: with NEAR_FADE[0] as the ramp origin the 50 m sample would have drawn at alpha {repaired:0.000}");
+    }
+
+    /// <summary>The author's three switches, each shown to switch. Config is file-backed with no
+    /// setter (DET-7), so these come through <c>CreateWith</c>'s test-only override — see
+    /// <see cref="PufferFadeSwitches"/>.</summary>
+    private static void PufferFadeSwitchesOff(TestContext ctx)
+    {
+        var state = FadeTestState("spew_puffer", 40f, 5f, 300f, 400f);
+        var amb = new EffectAmbience();
+        amb.SetCamera(Vector3.Zero, Vector3.Forward);
+        var near = new Vector3(0f, 0f, -20f);
+        var far = new Vector3(0f, 0f, -450f);
+        var band = new Vector3(0f, 0f, -350f);
+
+        var noNear = new PufferFadeSwitches(DistanceFade: true, FarCull: true, NearCull: false);
+        ctx.Check(FadeAlphaAt(ctx, state, near, amb, noNear) is { } n && Mathf.IsEqualApprox(n, 1f),
+            $"puffer.nearCull false draws the particle the camera flew through");
+
+        var noFade = new PufferFadeSwitches(DistanceFade: false, FarCull: true, NearCull: true);
+        ctx.Check(FadeAlphaAt(ctx, state, band, amb, noFade) is { } b && Mathf.IsEqualApprox(b, 1f),
+            $"puffer.distanceFade false keeps full alpha across the authored band");
+        ctx.Check(FadeAlphaAt(ctx, state, far, amb, noFade) == null,
+            $"and leaves the far CUTOFF alone — the ramp and the cull are two switches");
+
+        // ⚠ farCull alone is a no-op, and that is a finding, not an oversight: the authored ramp
+        // reaches zero at exactly the cutoff distance, so the alpha > 0 gate removes what the cull
+        // would have. Asserted so the pairing stays documented in something that runs.
+        var noFarCull = new PufferFadeSwitches(DistanceFade: true, FarCull: false, NearCull: true);
+        ctx.Check(FadeAlphaAt(ctx, state, far, amb, noFarCull) == null,
+            $"puffer.farCull false ALONE changes nothing — past the band the ramp's own alpha is already negative");
+        var wideOpen = new PufferFadeSwitches(DistanceFade: false, FarCull: false, NearCull: true);
+        ctx.Check(FadeAlphaAt(ctx, state, far, amb, wideOpen) is { } w && Mathf.IsEqualApprox(w, 1f),
+            $"it takes distanceFade AND farCull together to keep a distant puffer drawn");
+
+        // The original's own far-band multiplier: below 1 it pushes the fade outward, and it
+        // touches the far band only.
+        var pushedOut = new PufferFadeSwitches(true, true, true, GlobalFadeFactor: 0.5f);
+        var wayOut = new Vector3(0f, 0f, -700f);
+        ctx.Check(FadeAlphaAt(ctx, state, wayOut, amb) == null,
+            $"ABLE-TO-FAIL CONTROL: at the default factor 700 m is well past the cutoff and culled");
+        float? scaled = FadeAlphaAt(ctx, state, wayOut, amb, pushedOut);
+        ctx.Check(scaled is { } sc && Mathf.IsEqualApprox(sc, 0.5f, 1e-4f),
+            $"globalFadeFactor 0.5 measures that same 700 m as 350 m — half way across the band alpha={scaled}");
+        ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -20f), amb, pushedOut) == null,
+            $"and it does NOT reach the near band, which still culls at 20 m on the unscaled depth");
+    }
+
+    /// <summary>No camera published ⇒ no distance fade at all, rather than one measured against
+    /// the world origin. This is what keeps the unit suites, the plane viewer and the damage lab
+    /// out of the unauthored near cull at depth 0, and it is the state every OTHER puffer suite
+    /// runs in — which is why none of them moved.</summary>
+    private static void PufferFadeNoCameraNoFade(TestContext ctx)
+    {
+        var state = FadeTestState("no_camera", 40f, 5f, 300f, 400f);
+        var amb = new EffectAmbience();          // wind may be written; a camera never is
+        ctx.Check(!amb.HasCamera, $"the ambience under test has no camera");
+        ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -450f), amb) is { } far
+                  && Mathf.IsEqualApprox(far, 1f),
+            $"with no camera a particle past the far cutoff still draws at full alpha");
+        ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -20f), amb) is { } near
+                  && Mathf.IsEqualApprox(near, 1f),
+            $"and one inside the near cull draws too");
     }
 
     /// <summary>One particle, no randomness: NUMBER 1, a degenerate random-velocity range (min ==
