@@ -59,7 +59,7 @@ decode error into a "look" is the exact failure this plan exists to undo.
 | 3 | `translation_range.y` is an elevation angle, applied as `sin(el)` with `cos(el)` on the horizontal | The original computes `dirY = elev/90` and horizontal `1 − \|elev\|/90` — an L1 direction, not unit length (0.707 at 45°). Only the azimuth goes through `deg→rad` and a sincos |
 | 4 | `translation.delta` ramps velocity over `run_time`, i.e. an acceleration of `delta/run_time` (`MotionRuntime.cs:358`) | The original stores `dir·delta` straight into the acceleration slot (`+0x4c..0x54` → `+0x64..0x6c`) and adds gravity once. No division |
 | 5 | Ending a no-`RUN_TIME` launch when its parabola returns to launch height is the best available stand-in, since the original had no test to copy | It had one. `FlightToLaunchHeight` was a stand-in for a mechanism that exists; the original bounds an untimed body with a watchdog (15 s column / 35 s sweep) and ends it on contact |
-| 6 | Every golden capture builds no world colliders (`MotionRuntime.cs:212`, `WorldEffectsFactory.cs:373`) | `SessionSpec.cs:183` makes `BuildsCollision` true for `Fly`, and goldens 11–13 are flight sessions — one of them is a plane crash, which cannot work without colliders |
+| 6 | Every golden capture builds no world colliders (`MotionRuntime.cs:212`, `WorldEffectsFactory.cs:372`) | `SessionSpec.cs:183` makes `BuildsCollision` true for `Fly`, and goldens 11–13 are flight sessions — one of them is a plane crash, which cannot work without colliders |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
@@ -238,7 +238,7 @@ the pre-change hashes every later item measures against.
 || ForceCollision || DebugDamage != null` — and `Mode` resolves "any content arg defaulting to
 flight" (`SessionSpec.cs:107`), so goldens 11–13 in `analysis/goldens/manifest.json`
 (`--chapter=C1 --plane=player_bhawk …`) are flight sessions and **do** build colliders. That
-contradicts `MotionRuntime.cs:212` and `WorldEffectsFactory.cs:373`, both of which assert every
+contradicts `MotionRuntime.cs:212` and `WorldEffectsFactory.cs:372`, both of which assert every
 golden capture builds none. Golden 13 is `--crash=5`, a plane crash, which cannot work without
 colliders. Unresolved and load-bearing: `PLAN-ground-contact` landed `TryContact` and reported all
 13 goldens hash-identical — if goldens 12–13 really do run the sweep, the most likely explanation is
@@ -260,7 +260,7 @@ conclusion decides D10's scope, so it needs judgement in the write-up.
 covers debris landing" is only accepted if `ContactLandings` is non-zero for that shot — an
 unchanged hash is not evidence that a shot covers something, only that nothing moved.
 
-**⚠ Traps.** The comments at `MotionRuntime.cs:212` and `WorldEffectsFactory.cs:373` are *assertions
+**⚠ Traps.** The comments at `MotionRuntime.cs:212` and `WorldEffectsFactory.cs:372` are *assertions
 about the goldens*, not the goldens themselves — do not treat them as evidence, they are the thing
 under test. And `docs/verification.md`'s rule bites hard here: an unchanged number is not evidence
 unless you have seen it able to fail, so before trusting a zero `ContactLandings` reading, prove the
@@ -509,7 +509,7 @@ these bodies — which disproven claim 1 removes.
 
 **Approach.** Make the ceiling universal (it is currently `PLAN-ground-contact`'s behaviour for the
 flagged set only) and add the partial final step. Replace the launch-height solve with the watchdog.
-The knock-on is that `AnimRuntime.cs:2297-2316` reads `motion.RunTime` back to decide what the
+The knock-on is that `AnimRuntime.cs:2293-2312` reads `motion.RunTime` back to decide what the
 sequence waits on — the watchdog must not become a 15 s sequence hold where a solved flight used to
 be a 5 s one. That is the single riskiest interaction in this item: `BL-257`'s 167 vanish-shape
 events are hidden by a null-start `ACTIVE_STATE` that fires when the motion's duration elapses
@@ -575,7 +575,9 @@ sessions or silently absorb a future decode error.
 via `SessionSpec.DebrisLaunchScale`/`DebrisGravityScale`; the `debris.launchScale`/
 `debris.gravityScale` config keys; `WorldDamageLab.BuildDebrisTune` (`WorldDamageLab.cs:344-376`)
 with its two sliders, three buttons and readout, plus `SyncTuneSliders`/`UpdateTuneReadout`; and a
-test in `Testing/Suites.cs`. `MotionRuntime.cs:203-208` and `:267-270` are the consumers.
+test in `Testing/Suites.cs`. `MotionRuntime.cs:203-208`, `:267` and `:299` are the code consumers,
+and `MotionRuntime`'s class remark at `:75-80` documents the 0.65 as a judged look — that paragraph
+goes with the knob, and the launch suites' `DebrisTune.UseAuthored()` pin named there goes with it.
 
 **Model recommendation.** medium, low effort — mechanical removal across a known file list, with the
 compiler as the safety net.
