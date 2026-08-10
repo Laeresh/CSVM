@@ -203,11 +203,49 @@ every AI falls back to it and to `vehicle.zrd`'s `attack` / `return_range`. `veh
 were already documented in [`formats/vehicle.md`](formats/vehicle.md) — this document's §2 simply
 never cross-referenced them.
 
-**Not examined in this pass**, and still costed as written: turret AI internals (C9 — `ai.zrd` is
-self-describing anyway), all of wave F (zeppelins), and E16's trigger dispatch, though the binary
-does show voice lines are gated by a numeric id behind a `talker` roll (*"Talker test passed. Play
-AI sound #%d."*). The three unnamed roster slots are localised to 8–19 and are unauthored
-install-wide — deliberately left unresolved.
+### Wave F — the zeppelin half, same pass
+
+The zeppelin loader, kill check, broadside fire routine and engine-loss curve are all decoded. The
+format consequences are in [`formats/mission-entities.md`](formats/mission-entities.md); the
+milestone consequences:
+
+- **F18's threshold question (open question #5) is closed in code.** The engine counts `healthy`
+  nodes still active and kills the zeppelin when `survivors < num_healthy_required`. **The data's
+  survivor reading is right and the design's destroy-count is the inverse.** The field also defaults
+  to **1** and is clamped at load to the length of the `healthy` list. Still assert the direction in
+  a test — the failure mode is an immortal zeppelin, which reads as a damage bug.
+- **F17's engine-loss model is a square root, not the design's three bands.**
+  `f = sqrt(alive/total)`, `max_speed' = f·max_speed`, `max_accel' = (0.8f + 0.2)·max_accel`. The
+  design's qualitative claim (each further engine hurts more) survives; its arithmetic does not.
+  **Do not implement the 10/40/50 bands.**
+- ⚠ **F19's probabilistic hit curve does not exist in the shipped engine.** The design's "20 % at
+  maximum range ramping to 100 % at ~200 m" roll is absent: broadside fire runs a lead/intercept
+  solve and spawns a real projectile scattered by `cannon_inaccuracy`, skipping targets with no
+  solution. This document's §5 restated the design curve as though it were shipped behaviour —
+  **it is not**, and F19 should be built as ballistic fire.
+- **F19's arc is confirmed exactly as the design states it**: `dot(toTarget, sideNormal) > 0.707`,
+  a 90° cone on the firing side's perpendicular. The "randomly chosen section" is confirmed too, but
+  only for zeppelin-vs-zeppelin: the engine collects the *target zeppelin's* in-arc gasbags and picks
+  one with `rand()`. Broadside ammunition is **hardcoded `wep_28`**, not a data key. Cannons carry
+  their own state machine (stowed → deploy → ready → fire) and their own per-cannon re-fire timer.
+- **A load-time unit bug worth knowing before matching behaviour**: `min_pitch`/`max_pitch` stay in
+  degrees while `pitch` is converted to radians, so the original's initial-pitch clamp never fires.
+  Harmless in shipped data; don't reproduce it as a working clamp, and don't read ±30 as radians.
+- **E16 gains a correction.** The `ZZ` voice family (`ZZ-GasB-Dest`/`-Lost`, `ZZ-Zep-Dest`/`-Lost`)
+  pairs with an engine-side sound table — `snd_Zep_GBdest`/`GBlost`/`Zep_dest`/`Zep_lost` plus
+  **team-numbered `GB1`/`GB2` variants**, preloaded alongside the CTF and multiplayer
+  mission-won/lost cues. **This family is multiplayer-scoped and team-relative** ("destroyed" =
+  theirs, "lost" = yours), not a general zeppelin trigger. §6 treated it as the latter.
+- **Mission script can retarget a zeppelin at runtime** — `SET_AI_NET` and `SET_AI_TEAM` both accept
+  a zeppelin, which is the design's "retreat is expressed as a net change, not a special mode",
+  confirmed. `WAKEUP_ZEP_TURRETS` and `COMPLETED_ZEPCANNONS` are further zeppelin-facing script ops.
+
+**Still not examined**, and costed as written: turret AI internals (C9 — `ai.zrd` is
+self-describing anyway), F20's fighter-launch path, the patrol-net **stop nodes** F17 needs (the
+per-node tags on 81 nodes in [`formats/ai-nets.md`](formats/ai-nets.md) remain the candidate), and
+E16's trigger dispatch, though the binary does show voice lines are gated by a numeric id behind a
+`talker` roll (*"Talker test passed. Play AI sound #%d."*). The three unnamed roster slots are
+localised to 8–19 and are unauthored install-wide — deliberately left unresolved.
 
 ---
 
@@ -648,7 +686,9 @@ update as needing more work, so the shipped behaviour may not match the describe
   animation is side-specific: hatch opens, muzzle burst, fly-out. The zeppelin may make a temporary
   turn to bring a target into arc, then resumes its path. Re-fire is deliberately slow —
   `cannon_fire_delay`, 20 s in the design and in the data.
-- **Broadside hit resolution is probabilistic, not ballistic.** Hits are rolled against distance:
+- **Broadside hit resolution is probabilistic, not ballistic.** ⚠ **Refuted 2026-08-10 — the shipped
+  engine fires real projectiles with a lead solve; this whole bullet is design-era. See the wave F
+  delta above.** Hits are rolled against distance:
   **20 % at maximum range, ramping linearly to 100 % at roughly 200 m**, and only within a **90° arc
   centred on the perpendicular of the firing side**. Damage is per-cannon damage × the number of
   cannons still alive in the volley (so destroying cannons directly weakens the broadside), applied to
@@ -658,7 +698,8 @@ update as needing more work, so the shipped behaviour may not match the describe
   above a minimum altitude**; below it, generation is held rather than cancelled. The door-open
   animation runs, the wave spawns, the door-close animation runs. This is exactly the shape of the 17
   zeppelin `egen` generators.
-- **Non-linear deceleration as engines die.** Speed and acceleration loss is banded by the *fraction*
+- **Non-linear deceleration as engines die.** ⚠ **Refuted 2026-08-10 — the shipped curve is a square
+  root, not these bands. See the wave F delta above.** Speed and acceleration loss is banded by the *fraction*
   of engines destroyed, not the count: the first 30 % of engines cost 10 % total, the 30–70 % band
   costs a further 40 %, and the last 30 % costs the remaining 50 % — so the reduction per engine grows
   through each band and reaches 100 % at total engine loss. Percentages are absolute, cumulative
@@ -934,9 +975,13 @@ of A3 via the 2026-08-10 decompile pass), not a started milestone.
 
 ### Wave F — Zeppelins
 
-17. ☐ F17 — Zeppelin motion: net following, stop nodes, pitch/rate limits, engine-loss deceleration
-18. ☐ F18 — Multi-zone zeppelin damage and the survivor threshold
-19. ☐ F19 — Broadside cannons: side-alternating volleys, the arc, the probabilistic hit curve
+17. ☐ F17 — Zeppelin motion: net following, pitch/rate limits, engine-loss deceleration —
+    **the deceleration curve is decoded (a square root, not the design's bands)**; stop nodes
+    still open
+18. ☐ F18 — Multi-zone zeppelin damage — **the survivor threshold is decoded and its polarity
+    confirmed against the engine**; the multi-zone `DestructibleRegistry` work (A4) is what remains
+19. ☐ F19 — Broadside cannons: side-alternating volleys and the 90° arc — ⚠ **build it ballistic:
+    the probabilistic hit curve is design-era and is not in the shipped engine**
 20. ☐ F20 — Zeppelin fighter launch off the 17 zeppelin generators
 
 ## Dependency and parallelism notes

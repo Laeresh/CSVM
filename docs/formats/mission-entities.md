@@ -30,14 +30,14 @@ instances; the rest are conditional.
 | `net` | name | the AI "net" (roster/behaviour group) it belongs to |
 | `targets` | node names | who it shoots at — `player`, or another zeppelin (`piratezep`, `dantezep`, …) |
 | `healthy` | `[[zoneNode, "panels"], …]` | the **critical** zones; second field is `"panels"` on all 316 entries |
-| `num_healthy_required` | 2–5 | how many of those must survive; drop below and the zeppelin dies |
+| `num_healthy_required` | 2–5 | how many of those must **survive**; drop below and the zeppelin dies. Confirmed against the engine — see [below](#the-kill-threshold-counts-survivors). Defaults to **1** when a `healthy` list is present, and is clamped at load to the length of that list |
 | `engines` | node names | the engine nacelles (12 or 14: `leng11`…`reng42`) |
 | `gasbags` | `[[name, hp, [animName]], …]` | per-gasbag hit points (80–400) and its destruction anim |
 | `cannon_fire_delay` / `cannon_fire_range` | s / m | broadside cadence (10/15/20 s) and reach (500–15000 m) |
 | `left_cannons` / `right_cannons` | `[[node, deployAnim, retractAnim], …]` | the broadside guns and the animations that run them out and back in |
 | `cannon_health` | see below | per-cannon damage record (24 of 58 instances) |
 | `cannon_inaccuracy` | ° | 10.0, on 3 instances |
-| `team` | `ally` / `enemy` | 16 instances |
+| `team` | `enemy` / `ally` / `neutral` | 16 instances. The parser accepts all three names (case-insensitively) **and** a bare integer team id; this install only authors the names, and only two of the three |
 | `deactivated` | `[1]` | 9 instances — starts switched off |
 
 **`cannon_health` entry** —
@@ -47,11 +47,75 @@ field 3 names the **gasbag the cannon is attached to**; `hp` is 200 throughout; 
 destruction anim and a descending-fraction damage-stage list (0.6 → `60_*`, 0.3 → `30_*`) with
 the same shape as `injure_anims` in [vehicle.md](vehicle.md).
 
-`healthy` + `num_healthy_required` is the design's critical-zone threshold model — an object
-dies when a stated number of its critical zones is destroyed — with the gasbags as the zones.
-The design's worked example gives a zeppelin four critical gasbags and a threshold of 3;
-this install ships 5–6 gasbags with `num_healthy_required` 3–5. *(Shape data-confirmed;
-the threshold reading is design-informed.)*
+### The kill threshold counts survivors
+
+`healthy` + `num_healthy_required` is the design's critical-zone threshold model, with the gasbags
+as the zones. **The polarity is settled**: the engine walks the `healthy` node list, counts the
+entries still flagged active, and kills the zeppelin when
+
+```
+survivors < num_healthy_required
+```
+
+⚠ **The design document expresses the same rule as a destroy-count, which is the inverse.** Reading
+it that way gives a zeppelin that will not die — a failure mode that looks like a damage bug rather
+than an off-by-one, so assert the direction in a test. The design's worked example (four critical
+gasbags, threshold 3) is a *destroy* count; this install ships 5–6 gasbags with a *survivor*
+threshold of 2–5.
+
+### Units and the load-time pitch clamp
+
+`yaw`, `pitch`, `accel_pitch`, `accel_yaw`, `max_rate_yaw`, `max_rate_pitch` and
+`cannon_inaccuracy` are authored in degrees and converted to radians as they are read.
+**`min_pitch` and `max_pitch` are not converted** — they stay in degrees.
+
+⚠ **Consequently the original's own initial-pitch clamp never fires.** Immediately after loading,
+the engine clamps the (already radian) `pitch` against the (still degree) `min_pitch`/`max_pitch`;
+with the ±30 every instance ships, the comparison is `|0.52 rad| < 30`, so the clamp is a no-op.
+This is a unit bug in the original, harmless because no instance authors an out-of-range `pitch`.
+Do not "fix" it into a clamp that actually bites, and do not read the ±30 as radians.
+
+### Broadside firing
+
+Behaviour rather than format, but it is what the cannon keys drive, and it is decoded from the
+binary rather than inferred:
+
+- **The ammunition is hardcoded `wep_28`** (the cannonball, [weapons.md](weapons.md)) — looked up by
+  name in the fire routine. No zeppelin key names a weapon.
+- **The arc is a 90° cone centred on the firing side's perpendicular.** The engine builds a ±1 unit
+  vector along the hull's lateral axis by the cannon's side flag, rotates it into world space, and
+  requires `dot(toTarget, sideNormal) > 0.707` — a 45° half-angle.
+- **A cannon fires only from its ready state.** Cannons run a small state machine; a cannon that is
+  stowed triggers its deploy animation instead of firing, and cannons mid-deploy or mid-retract are
+  skipped entirely. This is the design's hatch-open-then-fire sequence.
+- **Re-fire is per cannon**, not per zeppelin: each sets its own next-fire time to
+  `now + cannon_fire_delay`.
+- **Against another zeppelin, the target is a randomly chosen gasbag** — the engine collects that
+  zeppelin's gasbags with health ≥ 0 that fall inside the 0.707 arc and picks one with `rand()`.
+  Against anything else it aims at the target directly.
+- ⚠ **Hit resolution is ballistic, not probabilistic.** The engine runs a lead/intercept solve
+  against the target from the projectile's speed and spawns a real round along the solved
+  direction, scattered by `cannon_inaccuracy`; a target with no intercept solution is skipped. The
+  design document instead describes a rolled hit chance ramping from 20 % at maximum range to
+  100 % near 200 m. **Nothing like that roll is in the shipped fire path** — treat the design's
+  curve as design-era and do not implement it.
+
+### Engine loss
+
+The engine count at load is the denominator; live engines are those whose node is still flagged
+active. While any are missing, speed and acceleration are scaled by a **square root**:
+
+```
+f          = sqrt(alive / total)
+max_speed' = f * max_speed
+max_accel' = (0.8 * f + 0.2) * max_accel
+```
+
+So acceleration retains a 20 % floor while speed goes to zero at total engine loss. ⚠ The design
+document describes a three-band model instead (the first 30 % of engines costing 10 % of
+performance, the next 40 % band a further 40 %, the last 30 % the remaining 50 %). The *qualitative*
+claim survives — a concave curve, so each further engine lost hurts more than the last — but the
+arithmetic is the square root above, not the bands.
 
 ## `egen.json` — enemy generators
 
