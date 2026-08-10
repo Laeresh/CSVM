@@ -172,7 +172,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Proof
 
-31. D31 ☐ `ordnance-burst-timeline` suite: HE, flash and sonic played end to end
+31. D31 ☑ `ordnance-burst-timeline` suite: HE, flash and sonic played end to end
 32. D32 ☐ Full regression + docs sweep
 
 ## Dependency and parallelism notes
@@ -1002,7 +1002,69 @@ the modes CSVM has, and an unexercised handler is worse than a documented gap.
 
 # Wave D — Proof
 
-## D31 ☐ `ordnance-burst-timeline` suite: HE, flash and sonic played end to end
+## D31 ☑ `ordnance-burst-timeline` suite: HE, flash and sonic played end to end
+
+**Landed.** `ordnance-burst-timeline` in `CSVM/src/Testing/Suites.cs`, beside `fbfx-flash` and
+`effects-census`, on the existing world-effects `AnimRuntime` host. It plays each of the three defs
+once on its own miniature stage and matches the **whole** recorded `OnEventDispatched` log against a
+lane table read off the def JSON by hand — every sequence, every event, in its sequence's order, at
+its authored instant. Order is asserted by **consumption**: a recorded row is claimed by the first
+lane whose next *unconsumed* step it matches on (sequence, index, kind, name), so a row that arrives
+early, twice, or unauthored matches no pending step and is reported stray. The four-part key is
+needed because sequence names are not unique — both HE and sonic ship two unnamed `Initial`
+sequences — and it is verified unique against the JSON for all three. Driven at **1/240 s**, four
+times finer than `SequenceRunner.AnimFrame`, because the authored gaps go down to 0.01 s and none of
+the three defs carries a `LOOP` for the AnimFrame floor to matter to; the slack is six steps
+(0.025 s), sized to the mechanism (one step for the record stamp, one per CALL level for `BL-135`,
+one for float). The recorded log of all three is written to `.scratch/ordnance-burst-timeline.txt`.
+
+**It found a real divergence on its first run, and that is the item's main result.**
+`LIGHT_ANIMATION` reported duration **0**, so every authored light-pulse chain in the install fired
+in one instant and each step re-armed the tween the previous one had started. The exe settles it:
+the handler is dispatch slot **5, `004e82b0`**, read in full — it seeds the working deltas on the
+first dispatch (`seq+0x20 == 0`), adds one tick's worth per dispatch with the last tick shortened to
+the remainder, and ends `return (seq->event_timer < run_time) ? 1 : 2`, i.e. **still running until
+the run time is up**, the same gate `FBFX_COLOR_FROM_TO` (`004ec6a0`) uses and the same
+handler-return contract A1 recorded. The fix is one line in `AnimRuntime`'s `LightAnimation` case
+(`duration = instant ? 0 : run_time`; a `RESET_STATE` lands the delta whole, so it still takes no
+time). This is scheduling, not rendering — the same class of change as C21 — and it is exactly the
+case the milestone's "a fix that makes an effect look different is a scheduling consequence and must
+be visible in the timeline test" sentence describes.
+
+**What that fix restored, visibly.** C1's `red_police` (`police_lights`) authors
+`LIGHT_STATE` red `{0…10}` / `LIGHT_ANIMATION {max +40}` over 0.25 s / `LIGHT_ANIMATION {max −40}`
+over 0.1 s / `LOOP −1` — a 0.35 s flashing beacon. Collapsed, the two ramps cancelled each other
+every animation frame and **the police light did not flash at all**; held, it flashes at its
+authored rate and the `LOOP −1` paces off the ramps instead of running one instantaneous pass per
+`AnimFrame`. `he_ground_effect`'s `he_light_seq` is the same shape with seven ramps over 0.41 s.
+Recorded in `docs/formats/anim-definitions.md`'s `LIGHT_STATE`/`LIGHT_ANIMATION` section and in
+`docs/architecture.md`'s `AnimRuntime` entry.
+
+**Shown able to fail, on B12's own case.** `git checkout 8ee31a0 -- CSVM/src/Mech3/SequenceRunner.cs`
+(the file as of B11, i.e. B12's parent — which also takes back B13/B14/B15's edits to it) and the
+suite goes **red**, with exactly two failures and both of them B12's:
+`large_fireball's parked stop_p1trail dispatched nothing … (2 event(s))` and the stray-row check
+naming `0.308s [stop_p1trail] #0 PufferState fierypuffer` and `#1 ObjectActiveState flame_ball_01`
+— the stopper idiom starting a sequence the original leaves parked. Restored with
+`git checkout HEAD -- …` and green again. The `p1trail` lane is asserted alongside as the live
+control, so "the stopper fired nothing" cannot pass on a fireball that never started.
+
+**Verified.** `.\RunTests.ps1` with `CSVM_DATA_ROOT=Z:\CSVM`: **883 units pass, 32 of 32 in-engine
+suites pass, engine errors clean**. Goldens: **3 of 13 moved**. `c1-destroy-effects` is B12's known
+move and its hash is unchanged by this item (`00ab194f…` with and without the `LIGHT_ANIMATION`
+fix — measured by re-rendering the whole set against `HEAD`). The two new ones are this fix, and
+both were rendered before and after into `.scratch/d31-goldens/`:
+
+| Shot | Moved | Changed pixels | What |
+|---|---|---|---|
+| `c1-flight` | `38adfec0…` → `e2eb44c8…` | 10,960 of 921,600 (1.19 %), max channel delta 144, one 126×124 patch at (0,575) | the police car's beacon, now lit mid-flash on the road below — the light that never flashed |
+| `c1-crash` | `2e44dc12…` → `3c7b4154…` | 9 of 921,600 (0.001 %), max channel delta 2, a 10×1 strip at y=0 | sky, at the noise floor |
+
+`analysis/goldens/manifest.json` was deliberately **not** re-baselined — D32 owns the single re-pin
+(Decision 5), and now owns three named moves rather than one.
+
+<details>
+<summary>Original approach (kept for reference)</summary>
 
 **Goal.** One `--run-tests` suite plays `he_ground_effect`, `flash_effect` and
 `sonic_ground_effect` on a fixed-dt clock and asserts each one's full event timeline against the
@@ -1038,6 +1100,8 @@ pass. Assert the anchor roots resolved before asserting the timeline. Also: `--e
 0.3 s instance TTL and 0.1 s per-name throttle exist for the gun path — this suite must not inherit
 them, or a 1.2 s flash is truncated at 0.3 s and the timeline "passes" short.
 
+</details>
+
 ## D32 ☐ Full regression + docs sweep
 
 **Goal.** The plan lands with the install-wide surfaces green and the docs matching the code.
@@ -1050,9 +1114,13 @@ landed. Refresh `PROJECT_CONTEXT.md`'s "Current status" pointer and archive the 
 **This item owns the single golden re-baseline** (Decision 5). No earlier item touches
 `analysis/goldens/manifest.json`, so the branch runs golden-red from B12 onward by design. Here,
 every moved hash gets **named, rendered before/after, and explained** before it is re-pinned — a
-re-pin with no reading attached is the failure mode this decision exists to prevent. Already known
-to have moved: `c1-destroy-effects` (B12, 4 px of 921,600 in fogged far-distance haze; the pose is
-blind to the lifetime change that caused it — see B12's ⚠).
+re-pin with no reading attached is the failure mode this decision exists to prevent. **Three are
+already known to have moved, each named, rendered and explained in the item that moved it:**
+`c1-destroy-effects` (B12, 4 px of 921,600 in fogged far-distance haze; the pose is blind to the
+lifetime change that caused it — see B12's ⚠), and `c1-flight` + `c1-crash` (D31's
+`LIGHT_ANIMATION` duration fix — 10,960 px of the police car's restored flashing beacon, and 9 px
+of sky at the noise floor; before/after renders in `.scratch/d31-goldens/`). Nothing further is
+expected; a fourth move here is a new fact and needs its own reading.
 
 **Model recommendation.** medium.
 

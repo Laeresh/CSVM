@@ -1013,6 +1013,14 @@ belongs to the session, which sets it on the world and world-effects runtimes. R
 a wash is a thing that happens, not a base state. Decode (blend, interpolation, the single global
 state a second burst overwrites, and why `alpha_delta` is not read) in
 `docs/formats/anim-definitions.md`.
+`LIGHT_ANIMATION` reports its `run_time` as the event's **duration**, so a chain of ramps is
+spaced instead of firing in one instant — the original's handler (dispatch slot 5, `004e82b0`)
+returns "still running" until the sequence's event timer passes the run time, exactly as
+`FBFX_COLOR_FROM_TO` does. The ramp itself is asynchronous here (`AnimLight.TweenLeft`, ticked in
+`TickLights`), which is the same picture only because the sequence is held: without the duration
+each step re-armed the tween the one before it had started, and C1's `red_police` beacon
+(`LIGHT_STATE` / +40 over 0.25 s / −40 over 0.1 s / `LOOP −1`) did not flash at all. Decode in
+`docs/formats/anim-definitions.md`; the `ordnance-burst-timeline` suite is what measures it.
 `Callback`/`ObjectCycleTexture`/`ObjectDeleteChild`/`CameraState` (dispatch slots 35/17/16/20) stay
 on `default:` — decoded in full (`docs/formats/anim-definitions.md`), none gets a case. `Callback`
 is `has_callbacks` mission plumbing with no registered consumer here; `ObjectCycleTexture` is the
@@ -3272,7 +3280,7 @@ the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replac
 emitter's own MODES are. Neither covers the other's job.
 
 ## src/Testing/Suites.cs
-The 26 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
+The 32 registered in-engine assertion suites cover plane/loadout bindings (stock and, since M3 B4,
 the full-rig `Loadout.ForRig`), live weapon fire, the air-to-air hit chain (`air-to-air`: two real
 flight rigs on manual sim steps — body strike, struck-shape→part mapping, armor-first data-value
 damage, critical-zero Crash, crashed-plane immunity, the zero-self-hits negative case, which
@@ -3344,6 +3352,23 @@ per-step run time alone is reported correctly even by a handler that returns 0 a
 fires all six in one instant. Shown able to fail exactly that way. The chain's total gets one step
 of headroom per gap — the authored run times are exact multiples of the step but not of binary
 float, and three of the five gaps land one step late.
+`ordnance-burst-timeline` is `PLAN-anim-original-match` D31's proof: it plays `he_ground_effect`,
+`flash_effect` and `sonic_ground_effect` on its own miniature world-effects stage and matches the
+WHOLE recorded `OnEventDispatched` log of each — every sequence, every event, in its sequence's
+order, at its authored instant — against a table read off the def JSON by hand. Order is asserted
+by CONSUMPTION (a row is claimed by the first lane whose next unconsumed step it matches on
+sequence/index/kind/name, so an early or duplicated row matches nothing and is reported stray),
+which is what a membership check cannot do and what every Wave B item needs to be measured at all:
+`large_fireball`'s parked `stop_p1trail` must dispatch nothing (B12 — the shown-able-to-fail case),
+`sonic_light_seq` must run exactly twice, the second pass restarting at 1.2 s (B11), and the
+`START_TIME ANIMATION`/`SEQUENCE` gates must land on 1.2/1.5 s. It drives at **1/240 s**, four
+times finer than `SequenceRunner.AnimFrame`, because the authored gaps go down to 0.01 s and none
+of the three defs carries a `LOOP` for the AnimFrame floor to matter to. Two traps are closed by
+construction rather than by assertion order alone: the staged template roots are DERIVED
+(`EffectCatalogue.StageRootsFor` against the chapter gamez, which throws on an anchor that resolves
+nowhere) instead of hand-listed, and the TTL is 32 s — inheriting `--effects-test`'s 0.3 s would
+truncate the 1.2 s wash while everything else still read green. The full log of all three lands in
+`.scratch/ordnance-burst-timeline.txt`.
 ## src/Testing/GoldenShot.cs
 The engine half of the golden-image tripwire: `PixelHash(Image)` (md5, lower-case hex) and
 `Adapter()` (`"<gpu> / <api>"`). Called at the `--screenshot` save site, which prints

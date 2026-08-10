@@ -2652,7 +2652,20 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 return true;
 
             case "LightAnimation":
+                // The ramp is the event's DURATION, so the next step of a pulse chain waits for it.
+                // Traced (D31): the original's handler is dispatch slot 5, `004e82b0`. It advances
+                // the light by one tick's worth of the authored delta per dispatch — clamping the
+                // last tick to the remainder — and ends `return (seq->event_timer < run_time) ? 1
+                // : 2`, i.e. STILL RUNNING until the run time is up, exactly as
+                // `FBFX_COLOR_FROM_TO` (`004ec6a0`) does. CSVM ramps the light asynchronously
+                // instead (`AnimLight.TweenLeft`, ticked in `TickLights`), which is the same
+                // picture only if the sequence is also held: reporting 0 fired every step of a
+                // chain in one instant, each overwriting the previous tween, so the light snapped
+                // to the last step and `he_light_seq`'s authored 0.41 s flicker — seven ramps —
+                // was a single frame. The `ordnance-burst-timeline` suite is where that shows.
                 HandleLightAnimation(ev, anchor, instant);
+                // A RESET_STATE lands the delta whole (see the handler), so it takes no time.
+                duration = instant ? 0f : ev.Data.Num("run_time") ?? 0f;
                 return true;
 
             case "SoundNode":

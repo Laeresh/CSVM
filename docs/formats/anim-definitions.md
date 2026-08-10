@@ -650,6 +650,30 @@ then `{min −50, max −160}` over 0.05 s, and a negative range is not a value 
 The reader's `RANGE` carries four numbers (`[min, max, altMin, altMax]`) where the compiled
 form splits the trailing pair into `range_alt` (null throughout this install).
 
+**The ramp is the event's DURATION — it holds its sequence** (decoded 2026-08-10, D31). The
+handler is dispatch slot 5, `004e82b0`. On its first dispatch (`seq+0x20 == 0`, i.e. state
+*starting*) it copies the authored per-second deltas into the event's working slots
+(`+0x30/0x34 → +0x40/0x44` for the range pair, `+0x48/0x4c/0x50 → +0x60/0x64/0x68` for the
+colour triple); on every dispatch it reads the light's current range and colour back out of the
+light object, adds one tick's worth of delta, clamps each colour channel to `0…1` and writes
+them back — with the last tick shortened to the remainder (`dt − (event_timer − run_time)`) so
+the ramp lands exactly on its end value. It then ends
+`return (seq->event_timer < run_time) ? 1 : 2` — **still running until the run time is up**,
+which is the same gate `FBFX_COLOR_FROM_TO` (`004ec6a0`) uses and the same one the
+handler-return state machine above describes.
+
+So a chain of `LIGHT_ANIMATION`s is a *timed* chain, not a burst. CSVM ramps the light
+asynchronously instead (`AnimLight.TweenLeft`, ticked in `AnimRuntime.TickLights`), which draws
+the same picture **only if the sequence is also held** — and until D31 it was not: the handler
+reported duration 0, so every step of a chain fired in one instant and each re-armed the tween
+the previous one had just started. The observable cost was total, not subtle. C1's `red_police`
+(`police_lights`) authors `LIGHT_STATE` red `{0…10}` / `LIGHT_ANIMATION {max +40}` over 0.25 s /
+`LIGHT_ANIMATION {max −40}` over 0.1 s / `LOOP −1` — a 0.35 s flashing beacon. Collapsed, the
+two ramps cancelled each other every animation frame and the police light did not flash at all;
+held, it flashes at its authored rate (and the `LOOP −1` paces off the ramps instead of running
+one instantaneous pass per `AnimFrame`). `he_ground_effect`'s `he_light_seq` is the same shape
+with seven ramps over 0.41 s.
+
 **Which chapters actually light anything:** only **C1**. It is the sole chapter with
 `OnStartup` definitions containing `LIGHT_STATE` (36 of them — the refinery flare, six
 docklights, six reflights, the police light); every other chapter's light events sit in

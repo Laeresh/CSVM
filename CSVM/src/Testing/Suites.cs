@@ -25,6 +25,35 @@ public static class Suites
     private const int PlayerAirframes = 11;
     private const int WeaponDefCount = 48;
 
+    /// <summary>The fixed step <c>ordnance-burst-timeline</c> drives its three bursts at.
+    /// Deliberately FOUR TIMES finer than <see cref="SequenceRunner.AnimFrame"/>: the authored gaps
+    /// under test go down to 0.01 s, which one 1/60 s step cannot resolve at all, and nothing in
+    /// those three definitions is denominated in animation frames (none of them carries a
+    /// <c>LOOP</c>, so the AnimFrame floor is never reached). A finer step makes every authored
+    /// instant a real measurement instead of a rounding.</summary>
+    private const float BurstDt = 1f / 240f;
+
+    /// <summary>How far a burst's dispatch may sit from its authored instant. Six steps (0.025 s),
+    /// which is what the mechanism costs and no more: one step because the recorded stamp is taken
+    /// after the <c>Advance</c> that fired it, one per level of CALL the row sits under (a called
+    /// sequence's or a called animation's first event fires one tick late — <c>BL-135</c>,
+    /// deliberate), and one for a gate landing a step late on binary float. Every authored gap in
+    /// those three definitions except two is wider than this, and the two that are not (0.025 s and
+    /// 0.01 s inside <c>he_light_seq</c>) are carried by the rows behind them: a collapse there
+    /// moves the 0.35/0.40/0.41 s tail by 0.15 s.</summary>
+    private const float BurstSlack = 6f * BurstDt;
+
+    /// <summary>How long each burst is driven for — past the last authored event of its longest
+    /// lane, with room for the lag above. Sonic is the long one: its <c>sonic_growlight</c> ends at
+    /// an authored 3.2 s.</summary>
+    private const float BurstSeconds = 3.5f;
+
+    /// <summary>The burst suite's instance TTL — an order of magnitude past the longest burst, so
+    /// the bound never truncates a timeline. Explicitly NOT <c>--effects-test</c>'s 0.3 s, which
+    /// exists for the gun path and would cut the 1.2 s wash off at 0.3 s while every remaining
+    /// assertion still passed.</summary>
+    private const float BurstTtl = 32f;
+
     /// <summary>Gun-group slots <see cref="Loadout.ForRig"/> seats on any airframe — the
     /// weapon bench fires every gun from all of them, so a drop here would quietly shrink its
     /// coverage without changing the 48/48 line.</summary>
@@ -105,6 +134,8 @@ public static class Suites
             "an effect's template meshes show at the call site — including a CALLED template's — and go dark when it ends (BL-061)", EffectTemplateMesh));
         into.Add(new TestHarness.Suite("fbfx-flash",
             "he_ground_effect's six-step full-screen wash reports its authored run times, so the 1.2 s ramp does not collapse into one instant", FbfxFlash));
+        into.Add(new TestHarness.Suite("ordnance-burst-timeline",
+            "the HE, flash and sonic bursts play end to end and every sequence's whole event timeline matches the authored JSON — in order, at the authored time (D31)", OrdnanceBurstTimeline));
         into.Add(new TestHarness.Suite("effects-census",
             "the full --effects-test sweep as verdicts: every effect resolves, template meshes show at the CALL SITE (not the stage origin), and none stays lit after its stop", EffectsCensus));
         into.Add(new TestHarness.Suite("bounce-launch",
@@ -2286,6 +2317,373 @@ public static class Suites
         }
     }
 
+    // ---- three ordnance bursts, played end to end against their authored timelines -------------
+
+    /// <summary>D31 — the plan's proof. Plays `he_ground_effect`, `flash_effect` and
+    /// `sonic_ground_effect` end to end on a fixed-dt clock and asserts each one's FULL event
+    /// timeline against the authored JSON: every sequence entered, every event fired, in its
+    /// sequence's order, at its authored instant. Membership alone would pass a broken scheduler,
+    /// so nothing here is a membership check.
+    ///
+    /// <para>These three between them exercise every Wave B divergence.
+    /// `he_ground_effect` reaches `large_fireball`, whose `STOP_SEQUENCE stop_p1trail` names a
+    /// parked ON_CALL sequence nothing ever called — the stop must halt nothing and, since B12,
+    /// START nothing, so that lane's two events must never appear (16 shipped definitions author
+    /// exactly this, in every chapter, inside the HE explosion's chain). `sonic_ground_effect`
+    /// calls `sonic_light_seq` twice, which is B11's one-runner-per-sequence identity: exactly two
+    /// passes, the second beginning at the authored 1.2 s. Both carry `LightAnimation` run-time
+    /// chains, which is what the event-timer origin schedules, and both gate on the
+    /// instance clock (`START_TIME ANIMATION`, B15) — sonic at 1.2 s, flash at 1.5 s.
+    /// `he_ground_effect`'s `frame_buffer_effects1` is C21's six-step wash, reached through an
+    /// `If PlayerRange 10000` (B13's evaluator). `flash_effect` is the third because it is the
+    /// pure light/no-particle case, so it isolates the scheduler from the emitter.</para>
+    ///
+    /// <para>⚠ The staged roots are DERIVED (<c>EffectCatalogue.StageRootsFor</c>), never a hand
+    /// list, and the derivation throws on an anchor that resolves nowhere. That is the D31 failure
+    /// mode `weapon-effects.md` records: a def whose anchor root was not staged plays NOTHING,
+    /// silently, and a suite that asserted only "these events fired" would have nothing to say
+    /// about the ones that did not. The `PufferState(no host node)` tally is checked for the same
+    /// reason — it is the tell that a template staged but did not resolve.</para>
+    ///
+    /// <para>⚠ This suite is NOT `--effects-test`: it must not inherit that probe's 0.3 s instance
+    /// TTL or its 0.1 s per-name throttle, which exist for the gun path. The TTL here is
+    /// <see cref="BurstTtl"/>, an order of magnitude past the longest burst, and each burst is
+    /// played once — a 1.2 s wash truncated at 0.3 s would "pass" short.</para></summary>
+    private static void OrdnanceBurstTimeline(TestContext ctx)
+    {
+        var report = new System.Text.StringBuilder();
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            HeBurstTimeline(ctx, world, report);
+            FlashBurstTimeline(ctx, world, report);
+            SonicBurstTimeline(ctx, world, report);
+        });
+        ctx.WriteArtifact("ordnance-burst-timeline.txt", report.ToString());
+    }
+
+    /// <summary>`he_ring-he_ground_effect.json` — five sequences, two of them unnamed and Initial,
+    /// three ON_CALL — plus `flame_ball_01-large_fireball.json`, which its fourth CALL_ANIMATION
+    /// reaches and which carries the B12 case.</summary>
+    private static void HeBurstTimeline(TestContext ctx, TestWorld world, System.Text.StringBuilder report)
+    {
+        // The first unnamed Initial sequence: eight events, none carrying a start, so the whole
+        // burst fires in the instant the effect starts.
+        var opening = new BurstLane("", new[]
+        {
+            new BurstStep(0, "CallSequence", "he_light_seq", 0f),
+            new BurstStep(1, "CallAnimation", "call_he_ring", 0f),
+            new BurstStep(2, "CallAnimation", "call_hetrails_up", 0f),
+            new BurstStep(3, "CallAnimation", "large_fireball", 0f),
+            new BurstStep(4, "CallAnimation", "call_he_ring1", 0f),
+            new BurstStep(5, "Sound", "ground_mixed_exp_sg", 0f),
+            new BurstStep(6, "CallAnimation", "call_hetrails_up", 0f),
+            new BurstStep(7, "CallSequence", "he_flashes", 0f),
+        });
+        // The second unnamed Initial sequence: `If PlayerRange 10000 / CallSequence / Endif`. The
+        // IF and the ENDIF are control flow the runner interprets itself and never dispatches, so
+        // #1 is the only row this lane can produce — and it produces it only because the burst is
+        // played at the camera, which is what makes the range condition true.
+        var fbfxGate = new BurstLane("", new[]
+        {
+            new BurstStep(1, "CallSequence", "frame_buffer_effects1", 0f),
+        });
+        // he_light_seq: LIGHT_STATE on, then six LIGHT_ANIMATION ramps whose run times chain
+        // (0.05, 0.025, 0.05, 0.025 → 0.15), one `Event + 0.2` gap, then 0.05 and 0.01, then off.
+        var lightSeq = new BurstLane("he_light_seq", new[]
+        {
+            new BurstStep(0, "LightState", "he_light", 0f),
+            new BurstStep(1, "LightAnimation", "he_light", 0f),
+            new BurstStep(2, "LightAnimation", "he_light", 0.05f),
+            new BurstStep(3, "LightAnimation", "he_light", 0.075f),
+            new BurstStep(4, "LightAnimation", "he_light", 0.125f),
+            new BurstStep(5, "LightAnimation", "he_light", 0.35f),
+            new BurstStep(6, "LightAnimation", "he_light", 0.4f),
+            new BurstStep(7, "LightState", "he_light", 0.41f),
+        });
+        var flashes = new BurstLane("he_flashes", new[]
+        {
+            new BurstStep(0, "LightState", "he_light1", 0f),
+            new BurstStep(1, "LightAnimation", "he_light1", 0f),
+            new BurstStep(2, "LightAnimation", "he_light1", 0.1f),
+            new BurstStep(3, "LightState", "he_light1", 0.6f),
+        });
+        // C21's wash: six FBFX_COLOR_FROM_TO steps of 0.2/0.4/0.2/0.1/0.2/0.1 s. A handler
+        // reporting 0 as its duration fires all six in one instant, which is what the times here
+        // refuse. (`fbfx-flash` asserts the colours and run times; this asserts their place in the
+        // burst.)
+        var wash = new BurstLane("frame_buffer_effects1", new[]
+        {
+            new BurstStep(0, "FbfxColorFromTo", null, 0f),
+            new BurstStep(1, "FbfxColorFromTo", null, 0.2f),
+            new BurstStep(2, "FbfxColorFromTo", null, 0.6f),
+            new BurstStep(3, "FbfxColorFromTo", null, 0.8f),
+            new BurstStep(4, "FbfxColorFromTo", null, 0.9f),
+            new BurstStep(5, "FbfxColorFromTo", null, 1.1f),
+        });
+        // The callee. `activate_puffer` shows the fireball, calls `p1trail` (which starts the
+        // emitter) and then, at an authored `Event + 0.3`, STOPs `stop_p1trail` — an ON_CALL
+        // sequence nothing has called, so it is parked and the stop halts nothing.
+        var fireball = new[]
+        {
+            new BurstLane("activate_puffer", new[]
+            {
+                new BurstStep(0, "ObjectActiveState", "flame_ball_01", 0f),
+                new BurstStep(1, "CallSequence", "p1trail", 0f),
+                new BurstStep(2, "StopSequence", "stop_p1trail", 0.3f),
+            }),
+            new BurstLane("p1trail", new[]
+            {
+                new BurstStep(0, "PufferState", "fierypuffer", 0f),
+            }),
+        };
+
+        WithBurst(ctx, world, "he_ground_effect", report, fired =>
+        {
+            CheckLanes(ctx, "he_ground_effect", fired, new[] { opening, fbfxGate, lightSeq, flashes, wash }, report);
+            CheckLanes(ctx, "large_fireball", fired, fireball, report);
+            // B12, and the reason `large_fireball` is asserted here at all. Its `p1trail` lane
+            // above is the live control: without it, "the stopper fired nothing" is also what a
+            // fireball that never started reports.
+            int stopper = fired.Count(f => f.Anim == "large_fireball" && f.Sequence == "stop_p1trail");
+            ctx.Check(stopper == 0,
+                $"large_fireball's parked stop_p1trail dispatched nothing — a STOP_SEQUENCE halts and never starts (B12) ({stopper} event(s))");
+        });
+    }
+
+    /// <summary>`flash_control-flash_effect.json` — the pure light case, two sequences. The one
+    /// timed event in it is a `START_TIME ANIMATION 1.5`, read against the instance clock.</summary>
+    private static void FlashBurstTimeline(TestContext ctx, TestWorld world, System.Text.StringBuilder report)
+    {
+        var lanes = new[]
+        {
+            new BurstLane("", new[]
+            {
+                new BurstStep(0, "ObjectActiveState", "lens_flash", 0f),
+                new BurstStep(1, "CallSequence", "flash_flashes", 0f),
+                new BurstStep(2, "CallAnimation", "call_flasher", 0f),
+                // `Animation + 1.5` — the instance clock, which for this Initial sequence is also
+                // its own, so the value is the assertion and the origin is not (sonic's second
+                // `sonic_light_seq` pass is where the two clocks differ).
+                new BurstStep(3, "ObjectActiveState", "lens_flash", 1.5f),
+            }),
+            new BurstLane("flash_flashes", new[]
+            {
+                new BurstStep(0, "LightState", "flash_light1", 0f),
+                new BurstStep(1, "LightAnimation", "flash_light1", 0f),
+                new BurstStep(2, "LightAnimation", "flash_light1", 0.5f),
+                new BurstStep(3, "LightState", "flash_light1", 0.75f),
+            }),
+        };
+        WithBurst(ctx, world, "flash_effect", report,
+            fired => CheckLanes(ctx, "flash_effect", fired, lanes, report));
+    }
+
+    /// <summary>`sonic_effect-sonic_ground_effect.json` — four sequences, two unnamed and Initial.
+    /// The B11 case: the first Initial sequence calls `sonic_light_seq` at #0 and again at #4,
+    /// 1.2 s later.</summary>
+    private static void SonicBurstTimeline(TestContext ctx, TestWorld world, System.Text.StringBuilder report)
+    {
+        // The 15-event Initial sequence. #3 carries `START_TIME ANIMATION 1.2`; everything behind
+        // it is untimed, so the whole second half fires in that instant.
+        var main = new BurstLane("", new[]
+        {
+            new BurstStep(0, "CallSequence", "sonic_light_seq", 0f),
+            new BurstStep(1, "CallAnimation", "sonic_puff1", 0f),
+            new BurstStep(2, "CallAnimation", "call_flare", 0f),
+            new BurstStep(3, "CallAnimation", "sonic_puff4", 1.2f),
+            new BurstStep(4, "CallSequence", "sonic_light_seq", 1.2f),
+            new BurstStep(5, "CallSequence", "sonic_growlight", 1.2f),
+            new BurstStep(6, "CallAnimation", "call_flare", 1.2f),
+            new BurstStep(7, "CallAnimation", "sonic_puff5", 1.2f),
+            new BurstStep(8, "CallAnimation", "sonic_puff6", 1.2f),
+            new BurstStep(9, "CallAnimation", "sonic_puff7", 1.2f),
+            new BurstStep(10, "CallAnimation", "sonic_puff8", 1.2f),
+            new BurstStep(11, "CallAnimation", "sonic_puff9", 1.2f),
+            new BurstStep(12, "CallAnimation", "sonic_puff10", 1.2f),
+            new BurstStep(13, "CallAnimation", "sonic_puff11", 1.2f),
+            new BurstStep(14, "CallAnimation", "sonic_emit_downer", 1.2f),
+        });
+        // The second Initial sequence: four rising rings at once, then one at `START_TIME
+        // SEQUENCE 1.2` — an absolute gate against this sequence's own clock, not the instance's.
+        var rings = new BurstLane("", new[]
+        {
+            new BurstStep(0, "CallAnimation", "ring_up1", 0f),
+            new BurstStep(1, "CallAnimation", "ring_up2", 0f),
+            new BurstStep(2, "CallAnimation", "ring_up3", 0f),
+            new BurstStep(3, "CallAnimation", "ring_up4", 0f),
+            new BurstStep(4, "CallAnimation", "ring_down1", 1.2f),
+        });
+        // B11: two passes of ONE sequence, 1.2 s apart. The first must have ended (its
+        // LIGHT_ANIMATION runs 0.3 s) for the second call to find it parked and restart it —
+        // a call into a running sequence is a no-op, and a second concurrent copy is not a thing
+        // the original can express.
+        BurstLane LightPass(float from) => new("sonic_light_seq", new[]
+        {
+            new BurstStep(0, "LightState", "sonic_light", from),
+            new BurstStep(1, "LightAnimation", "sonic_light", from),
+            new BurstStep(2, "LightState", "sonic_light", from + 0.3f),
+        });
+        var grow = new BurstLane("sonic_growlight", new[]
+        {
+            new BurstStep(0, "LightState", "sonic_light1", 1.2f),
+            new BurstStep(1, "LightAnimation", "sonic_light1", 1.2f),
+            new BurstStep(2, "LightAnimation", "sonic_light1", 2.4f),
+            new BurstStep(3, "LightState", "sonic_light1", 3.2f),
+        });
+        WithBurst(ctx, world, "sonic_ground_effect", report, fired =>
+        {
+            CheckLanes(ctx, "sonic_ground_effect", fired,
+                new[] { main, rings, LightPass(0f), LightPass(1.2f), grow }, report);
+            // Stated on its own as well as through the lanes: the lane pair above proves the two
+            // passes ran, and this proves nothing else did. A third pass would be a call that
+            // found the sequence parked when the original would not have.
+            int passes = fired.Count(f => f.Anim == "sonic_ground_effect"
+                                          && f.Sequence == "sonic_light_seq" && f.Index == 0);
+            ctx.Same(2, passes, $"sonic_light_seq's two authored calls started it exactly twice (B11)");
+        });
+    }
+
+    /// <summary>Plays one burst on its own miniature world-effects stage and hands the recorded
+    /// dispatch log to <paramref name="body"/>.
+    ///
+    /// <para>The stage's template ROOTS are derived from the definition's own CALL_ANIMATION
+    /// closure against the chapter gamez — the same derivation the production bind runs — so a
+    /// definition whose anchor resolves nowhere throws here, naming it, instead of quietly playing
+    /// nothing. Everything else is the production world-effects role:
+    /// <c>TemplateStage.Pooled</c> + <c>Shown</c> + relocate-on-call, one pool slot, and the camera
+    /// as the player position so a `PLAYER_RANGE` gate reads the burst as close.</para></summary>
+    private static void WithBurst(TestContext ctx, TestWorld world, string animName,
+        System.Text.StringBuilder report, System.Action<IReadOnlyList<BurstFire>> body)
+    {
+        var roots = Session.EffectCatalogue.StageRootsFor(world.Session.Program, new[] { animName },
+            Session.WorldEffectsFactory.StageRootResolver(world.Gamez));
+        ctx.Check(roots.Count > 0,
+            $"{animName}: its call closure's anchor roots derived ({roots.Count}: {string.Join(", ", roots)})");
+        var stage = new Node3D { Name = $"BurstStage_{animName}" };
+        var pool = new Node3D { Name = "pool0" };
+        pool.SetMeta(AnimRuntime.PoolSlotMeta, 0);
+        stage.AddChild(pool);
+        int built = Session.WorldEffectsFactory.BuildEffectStage(world.Gamez,
+            world.Session.Builder.Scene, pool, roots);
+        ctx.Same(roots.Count, built, $"{animName}: template roots staged from the chapter gamez");
+        foreach (var child in pool.GetChildren())
+        {
+            if (child is Node3D root)
+            {
+                root.Visible = false;
+            }
+        }
+
+        var runtime = AnimRuntime.ForEffects(
+            AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true),
+            1, new CountingEmitterFactory(), false, BurstTtl,
+            () => ctx.Camera.GlobalPosition);
+        runtime.ManualAdvance = true;
+        ctx.Host.AddChild(stage);
+        ctx.Host.AddChild(runtime);
+        try
+        {
+            runtime.Bind(stage, world.Session.Program.Subset(animName));
+            var fired = new List<BurstFire>();
+            float clock = 0f;
+            runtime.OnEventDispatched = d => fired.Add(new BurstFire(clock,
+                d.Def.AnimName ?? d.Def.Name, d.Sequence, d.EventIndex, d.EventKind, d.EventName));
+            // At the camera, so the definitions' own PLAYER_RANGE gates pass.
+            ctx.Check(runtime.PlayEffectAt(animName, ctx.Camera.GlobalPosition),
+                $"{animName} resolved to a definition and started");
+            int steps = Mathf.RoundToInt(BurstSeconds / BurstDt);
+            for (int i = 0; i < steps; i++)
+            {
+                clock += BurstDt;
+                runtime.Advance(BurstDt);
+            }
+
+            runtime.OnEventDispatched = null;
+            runtime.UnhandledEventCounts.TryGetValue("PufferState(no host node)", out int hostless);
+            ctx.Same(0, hostless, $"{animName}: PUFFER_STATE events that found no host node");
+            ctx.Note($"{animName}: {fired.Count} dispatch(es) over {BurstSeconds:0.#} s at {BurstDt:0.####} s steps");
+            body(fired);
+        }
+        finally
+        {
+            runtime.Free();
+            stage.Free();
+        }
+    }
+
+    /// <summary>Matches a definition's recorded dispatches against its authored lanes and asserts
+    /// both halves of "the timeline is right": ORDER (each lane's rows arrive in the sequence's own
+    /// order, and nothing arrives that no lane authored) and TIME (each row lands on its authored
+    /// instant, within <see cref="BurstSlack"/>).
+    ///
+    /// <para>A row is claimed by the first lane whose next unconsumed step it matches on
+    /// (sequence, index, kind, name). Claiming in order is what makes this an order assertion: a
+    /// row that arrives early or twice matches no lane's PENDING step and is reported as stray.
+    /// The four-part key is needed because a definition's sequence NAMES are not unique — both
+    /// bursts here ship two unnamed Initial sequences — and the key is verified unique against the
+    /// JSON for all three.</para></summary>
+    private static void CheckLanes(TestContext ctx, string animName, IReadOnlyList<BurstFire> fired,
+        BurstLane[] lanes, System.Text.StringBuilder report)
+    {
+        var own = fired.Where(f => f.Anim == animName).ToList();
+        report.AppendLine($"--- {animName}: {own.Count} dispatch(es) ---");
+        foreach (var f in own)
+        {
+            report.AppendLine($"  {f.T,7:0.0000}s  [{(f.Sequence.Length == 0 ? "<unnamed>" : f.Sequence)}] "
+                              + $"#{f.Index} {f.Kind} {f.Name}");
+        }
+
+        var cursor = new int[lanes.Length];
+        var at = new float[lanes.Length][];
+        for (int i = 0; i < lanes.Length; i++)
+        {
+            at[i] = new float[lanes[i].Steps.Length];
+        }
+
+        var stray = new List<BurstFire>();
+        foreach (var f in own)
+        {
+            int lane = -1;
+            for (int l = 0; l < lanes.Length && lane < 0; l++)
+            {
+                if (cursor[l] >= lanes[l].Steps.Length)
+                {
+                    continue;
+                }
+                var step = lanes[l].Steps[cursor[l]];
+                if (lanes[l].Sequence == f.Sequence && step.Index == f.Index
+                    && step.Kind == f.Kind && step.Name == f.Name)
+                {
+                    lane = l;
+                }
+            }
+            if (lane < 0)
+            {
+                stray.Add(f);
+                continue;
+            }
+            at[lane][cursor[lane]] = f.T;
+            cursor[lane]++;
+        }
+
+        string strays = string.Join(", ",
+            stray.Select(s => $"{s.T:0.###}s [{s.Sequence}] #{s.Index} {s.Kind} {s.Name}"));
+        ctx.Check(stray.Count == 0,
+            $"{animName}: every dispatch is an authored event arriving in its sequence's order ({stray.Count} stray: {strays})");
+        for (int l = 0; l < lanes.Length; l++)
+        {
+            var lane = lanes[l];
+            string tag = $"{animName} [{(lane.Sequence.Length == 0 ? "<unnamed>" : lane.Sequence)}]";
+            ctx.Same(lane.Steps.Length, cursor[l], $"{tag}: authored events fired, in order");
+            for (int s = 0; s < cursor[l]; s++)
+            {
+                var step = lane.Steps[s];
+                ctx.Check(Mathf.Abs(at[l][s] - step.At) <= BurstSlack,
+                    $"{tag} #{step.Index} {step.Kind} fires at its authored {step.At:0.###} s ({at[l][s]:0.###} s)");
+            }
+        }
+    }
+
     // ---- a new panel's tear must not steal a live panel's template copy ------------------------
 
     /// <summary>The crash rig's damage-stage templates are pooled, and a relocating
@@ -3545,6 +3943,25 @@ public static class Suites
         }
         return null;
     }
+
+    /// <summary>One authored event on an <c>ordnance-burst-timeline</c> lane: where it sits in its
+    /// sequence, what it is, and the instant the JSON says it fires — a cumulative sum of the
+    /// preceding events' <c>run_time</c>s and start offsets, read off the definition by hand.
+    /// Never computed from the runtime, which is the whole point of the assertion.</summary>
+    private readonly record struct BurstStep(int Index, string Kind, string? Name, float At);
+
+    /// <summary>One recorded dispatch, off <see cref="AnimRuntime.OnEventDispatched"/>: the
+    /// playhead instant plus the identity the seam already carries. <c>Anim</c> is the DEFINITION's
+    /// animation name, so a burst's own timeline can be told apart from the timelines of the
+    /// definitions its CALL_ANIMATIONs reach.</summary>
+    private readonly record struct BurstFire(float T, string Anim, string Sequence, int Index,
+        string Kind, string? Name);
+
+    /// <summary>One authored sequence PASS. A pass, not a sequence: <c>sonic_ground_effect</c>
+    /// calls <c>sonic_light_seq</c> from two sites 1.2 s apart, and each call is its own lane,
+    /// which is how the timeline says the second call restarted a parked sequence rather than
+    /// being swallowed or running a second concurrent copy (B11).</summary>
+    private sealed record BurstLane(string Sequence, BurstStep[] Steps);
 
     /// <summary>Pins <see cref="DebrisTune"/> to the raw authored arc for a suite's duration and
     /// restores whatever was set before. For the launch suites, whose expected bands are computed
