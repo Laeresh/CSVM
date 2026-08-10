@@ -55,7 +55,7 @@ public sealed partial class WorldDamageLab : Node
     private readonly bool _collisionBuilt;
     private readonly List<PoolRow> _rows = new();
 
-    // The BL-022 arc sliders, each with the getter that re-reads its live value on a sync.
+    // The debris-arc sliders, each with the getter that re-reads its live value on a sync.
     private readonly List<(HSlider Slider, Func<float> Get)> _tuneSliders = new();
 
     private CanvasLayer? _layer;
@@ -327,7 +327,7 @@ public sealed partial class WorldDamageLab : Node
         _scroll.CustomMinimumSize = new Vector2(0, Mathf.Max(0, rowsHeight - overflow));
     }
 
-    /// <summary>The two <c>BL-022</c> debris-arc sliders, under the pool rows: launch-speed and
+    /// <summary>The two debris-arc sliders, under the pool rows: launch-speed and
     /// gravity multipliers on every launched <c>OBJECT_MOTION</c> body, live. They are global
     /// rather than per-pool because the authoring is — <c>m_build03</c>, <c>refuel3</c>,
     /// <c>ptboat1</c> and <c>m_build01</c> carry the same four speed/elevation rows verbatim, so a
@@ -345,7 +345,7 @@ public sealed partial class WorldDamageLab : Node
     {
         var block = new VBoxContainer();
         block.AddThemeConstantOverride("separation", 2);
-        var title = new Label { Text = "DEBRIS ARC (BL-022) — global, all launched pieces", Modulate = Amber };
+        var title = new Label { Text = "DEBRIS ARC — global, all launched pieces", Modulate = Amber };
         title.AddThemeFontSizeOverride("font_size", 11);
         block.AddChild(title);
         _tuneReadout = Small("");

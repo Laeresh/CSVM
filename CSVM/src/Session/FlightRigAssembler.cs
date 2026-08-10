@@ -89,10 +89,10 @@ public sealed class FlightRigAssembler
             // per-part HP from destroyable_parts — collisions below
             // the crash threshold damage the struck part instead of crashing
             Damage = stats.DestroyableParts.Count > 0 ? new PlaneDamage(stats.DestroyableParts) : null,
-            // C27: flying into a WeaponOrCollideHit object (the 44 facades/windows/agyrobus)
+            // Flying into a WeaponOrCollideHit object (the 44 facades/windows/agyrobus)
             // breaks it and passes through; every other collision stays solid.
             CollideDamageSink = _in.WorldRuntime != null ? _in.WorldRuntime.CollideDamageAt : null,
-            // B3: a survivable scrape plays touchdown.zrd's per-surface reaction (sparks/dust/
+            // A survivable scrape plays touchdown.zrd's per-surface reaction (sparks/dust/
             // splash) at the contact point, through the same runtime a rocket impact uses.
             GrazeEffectSink = _in.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
             // splitscreen: this player's own device(s), own pane for the HUD,
@@ -121,7 +121,7 @@ public sealed class FlightRigAssembler
         {
             try
             {
-                // The weapon lab (B4/B5) flies the FULL-RIG loadout instead: every firepoint and
+                // The weapon lab flies the FULL-RIG loadout instead: every firepoint and
                 // every pylon the airframe carries, seeded from this same stock fit — so the
                 // panel can mount a weapon on a hardpoint the stock file never names.
                 controller.Loadout = _spec.WeaponLab
@@ -141,7 +141,7 @@ public sealed class FlightRigAssembler
                 {
                     Testing.ProbeRunner.ApplyRocketOverride(controller.Loadout, _in.WeaponDefs, _spec.RocketOverride, verbose);
                 }
-                // D44: hang the FLYOUT-model ordnance under the pylons — one body per pylon,
+                // Hang the FLYOUT-model ordnance under the pylons — one body per pylon,
                 // hidden as its ammo depletes. Uses the same gamez prototype the round flies.
                 controller.Ordnance = PylonOrdnance.Build(controller.Loadout, _in.Projectiles);
                 if (verbose)
@@ -406,8 +406,8 @@ public sealed class FlightRigAssembler
                     int started = rigRuntime.Play(anim, planeModel, applyReset: false).Count;
                     // ⚠ started is instances, NOT emitters — the def's PufferState events dispatch on
                     // the runtime's NEXT tick, so a puffer-count delta taken here reads 0 no matter
-                    // what renders (verification.md WORLD-12 needs the count sampled later, which is
-                    // what the rig's cumulative total below does).
+                    // what renders — the count has to be sampled later, which is what the rig's
+                    // cumulative total below does.
                     Log.Info("anim", $"damage stage anim={anim} started={started} rig_puffers_total={rigRuntime.PuffersBuilt}");
                     // player_fuelleak's ELSE branch deactivates wing_flare2 for the rest of
                     // the leak (the def never re-activates it) — hand that lamp to the leak so
@@ -476,7 +476,7 @@ public sealed class FlightRigAssembler
         /// The dogfight match (--vs), built before this loop runs so every pane's VersusHud binds
         /// to the same instance GameSession later feeds Downed reports into.
         public VersusMatch? VersusMatch;
-        /// Every rig in the session (--vs opponent markers, C24) — the same list GameSession
+        /// Every rig in the session (--vs opponent markers) — the same list GameSession
         /// keeps live for the whole session, not a snapshot; see the Assemble call site.
         public IReadOnlyList<PlayerRig>? Rigs;
 

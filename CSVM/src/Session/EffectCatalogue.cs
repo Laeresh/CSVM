@@ -32,12 +32,12 @@ public static class EffectCatalogue
     // The impact/destruction effect ANIMATION names the world-effects runtime is bound to —
     // the closure of these is staged and playable via PlayEffectAt. IMPACT names come from
     // weapons.json (the non-model `default`/`buildings` effects of rockets/ordnance, plus the gun
-    // `*_gunhit` family, which a gun hit plays throttled and time-bounded — C8);
+    // `*_gunhit` family, which a gun hit plays throttled and time-bounded);
     // destruction roots are closed against all 2,360 install-wide destruction-slot calls
     // (analysis/death-effect-closure/): Subset handles 8/30 targets. The other 22 names are
     // fail-closed as LOCAL_CHOREOGRAPHY there: their definitions move/toggle live object subtrees
     // or wrap handled calls, so relocation would detach the work from the destroyed object.
-    // `random_gun_impact` (root `player`) is excluded too — unreachable in M3, and its generic
+    // `random_gun_impact` (root `player`) is excluded too — nothing reaches it, and its generic
     // root would mis-anchor. Every handled name resolves in all 8 chapters.
     public static readonly string[] EffectAnimNames =
     {

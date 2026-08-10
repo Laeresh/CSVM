@@ -9,17 +9,15 @@ using Godot;
 
 namespace CSVM.Session;
 
-/// <summary>Draws the sun's lens flare (BL-165): a screen-space rig of four sprites strung along
+/// <summary>Draws the sun's lens flare: a screen-space rig of four sprites strung along
 /// the sun→screen-centre vector, plus a full-screen white wash whose opacity rises as the sun
 /// nears the centre. Constructed once per session beside <see cref="WeatherRig"/> and ticked from
 /// the same per-rig block of <c>GameSession._Process</c>, because everything here is anchored to
 /// <i>a</i> camera and splitscreen needs one instance per pane.
 ///
-/// <para><b>The whole spec is measured, not invented.</b> <c>CAP-13</c> (<c>CAP-13 C3.mp4</c>,
-/// analysed 2026-08-07 — numbers and stills in <c>playtest/CAP-13/README.md</c>) fixes the element
-/// inventory, their positions along the vector, their diameters, the wash falloff and the fade.
-/// Where a constant below is a first-pass value awaiting numeric calibration against those stills,
-/// it says so on the line.</para>
+/// <para><b>The whole spec is measured off footage, not invented and not decoded</b> — the element
+/// inventory, their positions along the vector, their diameters, the wash falloff and the fade. See
+/// <c>docs/org/weather.md</c>.</para>
 ///
 /// <para><b>Two gates, read from two different files, that must agree.</b> The flare needs (1) a
 /// gamez node named <c>sun</c> in the chapter's <c>horizon</c> subtree and (2)
@@ -37,7 +35,7 @@ namespace CSVM.Session;
 /// is a bare <c>ColorRect</c>, which is why it could live there.</para></summary>
 public sealed class LensFlareRig
 {
-    // ── Measured from CAP-13, at 1280×720 ──────────────────────────────────────────────────────
+    // ── Measured off the footage, at 1280×720 ──────────────────────────────────────────────────
     // Every pixel figure below is normalised by pane HEIGHT against this reference. Godot's default
     // KeepHeight aspect means vertical FOV stays 62° whatever the window or pane shape, so height
     // is the axis that maps to a fixed angle — normalising by it keeps each element the same
@@ -59,15 +57,15 @@ public sealed class LensFlareRig
     private const float WashSlopePerPx = 0.001651f;
 
     // The rig pops in COMPLETE when the sun core crosses into frame, and fades out in ~0.1–0.15 s
-    // as it leaves (t=19.75→19.85). So: instant attack, timed release.
+    // as it leaves. So: instant attack, timed release.
     private const float FadeOutSeconds = 0.125f;
 
     // ── Calibration of the ring intensities ────────────────────────────────────────────────────
-    // Measured against CAP-13's own targets, and two things have to match or the comparison is
-    // worthless:
+    // ⚠ Measured against the footage's own targets, and two things have to match or the comparison
+    // is worthless:
     //
-    // (1) THE POSE. CAP-13's ring Δlum were read off frames that already carried the wash, and the
-    //     wash composites toward white — a true difference d reads as d·(1−α). Solved back from
+    // (1) THE POSE. The footage's ring Δlum were read off frames that already carried the wash, and
+    //     the wash composites toward white — a true difference d reads as d·(1−α). Solved back from
     //     `measure.py`'s probe coordinates, its two ring poses sit 311 px and 340 px from centre.
     //     Ours is measured at 328 px, inside that band, rather than corrected by a fudge factor.
     // (2) THE STATISTIC. `measure.py`'s `sample()` reports the BRIGHTEST pixel in a window on the
@@ -260,11 +258,11 @@ public sealed class LensFlareRig
             bool onScreen = !behind && viewport.GetVisibleRect().HasPoint(screen);
 
             // Line of sight, for the SPRITES only. One ray to the sun's centre against the
-            // colliders the world already has. Everything CAP-13 records falls out of that:
+            // colliders the world already has. Everything the footage records falls out of that:
             // terrain and the own plane carry colliders and therefore block; billboard sprites and
             // particles carry none, so the volcano's eruption puffs drifting across the sun cannot
             // occlude — which the footage says they must not. Partial cover with the centre still
-            // clear passes (t=18.5, rings persist); full cover blocks it.
+            // clear passes, rings and all; full cover blocks it.
             // ⚠ Testing the CENTRE is the simpler of two readings the footage cannot distinguish
             // (a multi-sample disc test fits it equally well). It is chosen because it needs no
             // invented coverage threshold, not because it is decoded.

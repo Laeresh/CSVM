@@ -2,14 +2,13 @@ namespace CSVM.UI;
 
 /// <summary>
 /// The <see cref="Godot.CanvasLayer"/> ordering for everything drawn over the 3D view, in one
-/// place. Godot sorts canvas layers by this number, and the numbers used to be scattered as bare
-/// literals across nine files — so "does the collider overlay draw above the cloud whiteout?" could
-/// only be answered by grepping for <c>Layer =</c> and sorting the hits by hand.
+/// place. Godot sorts canvas layers by this number, and keeping them here rather than as bare
+/// literals across nine files is what makes "does the collider overlay draw above the cloud
+/// whiteout?" answerable by reading one file.
 ///
-/// <para><b>The order below is measured, not chosen.</b> <c>CAP-13</c> (see
-/// <c>playtest/CAP-13/README.md</c>) reads the original's stacking off the footage as
-/// <c>world &lt; flare sprites &lt; HUD/cockpit &lt; sun wash</c>: the compass clips the flare's
-/// core glow at t=6.4, while at maximum wash the compass strip itself goes (20,20,18) →
+/// <para><b>The order below is measured, not chosen.</b> The original's stacking reads off the
+/// footage as <c>world &lt; flare sprites &lt; HUD/cockpit &lt; sun wash</c>: the compass clips the
+/// flare's core glow, while at maximum wash the compass strip itself goes (20,20,18) →
 /// (178,180,177) — the same α as world pixels. That is why <see cref="SunWash"/> sits *above*
 /// <see cref="Hud"/> and <see cref="FlareSprites"/> sits below it.</para>
 ///
@@ -21,12 +20,8 @@ namespace CSVM.UI;
 /// itself. <see cref="Debug"/> and <see cref="Lab"/> therefore sit above <see cref="SunWash"/>.
 /// Layer 3 is deliberately left free as headroom between the wash and the debug band.</para>
 ///
-/// <para>The values preserve the relative order the literals already had (whiteout 0 &lt; HUD 1
-/// &lt; overlays 2 &lt; labs 3 &lt; boards 10), so introducing them changed no rendering: the
-/// overlay band moved 2 → 4 and the lab band 3 → 5 with the wash taking 2, and every existing
-/// pair kept its winner. The <c>--viewer</c> lab *panels* (MeshLab, LiveryLab, WeaponLab,
-/// DamageLab) stay on <see cref="Hud"/>: they run in modes that have no flight HUD to contend
-/// with, and moving them would have been a real reordering rather than a rename.</para>
+/// <para>The <c>--viewer</c> lab *panels* (MeshLab, LiveryLab, WeaponLab, DamageLab) stay on
+/// <see cref="Hud"/>: they run in modes that have no flight HUD to contend with.</para>
 /// </summary>
 internal static class HudLayers
 {

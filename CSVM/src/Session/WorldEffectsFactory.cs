@@ -40,8 +40,7 @@ public sealed class WorldEffectsFactory
     // anim_root 'player' plus healthy/destroyed/pieces). Built into the lab stage so a played crash
     // def anchors to this 'player' and resolves 'healthy'/'destroyed' HERE — locally, in front of
     // the camera — rather than falling through to one of the world's 217 generic 'healthy' nodes.
-    // The effects (relocated templates) attach to these; the plane/wreck geometry is the crash
-    // plan's Layer-2 work.
+    // The effects (relocated templates) attach to these; the plane/wreck geometry does not.
     // ⚠ The four airframe parts are here because the lab stands in for the PLANE: the damage shims
     // (EffectCatalogue.PlaneDamageEffectAnims) are authored NAME=`nose`/`tail`/`leftwing`/`rightwing`,
     // which the real rig resolves on the bound controller's model (all 22 plane models carry them).
@@ -57,7 +56,7 @@ public sealed class WorldEffectsFactory
     private readonly SessionSpec _spec;
     private readonly Node3D _worldRoot;
     private readonly Func<Vector3> _playerPosition;
-    // B6: the session's wind, handed to every Puffer this factory's emitter factories build.
+    // The session's wind, handed to every Puffer this factory's emitter factories build.
     private readonly EffectAmbience _ambience;
 
     // The authored per-root pool sizes (see the EffectPoolSlots remark above). Read once per
@@ -129,7 +128,7 @@ public sealed class WorldEffectsFactory
     }
 
     /// <summary>The anchor lookup both binds hand <see cref="EffectCatalogue.StageRootsFor"/>
-    /// (WORLD-21 — one resolver, two scopes): a parentless gamez node is a template ROOT the bind
+    /// (one resolver, two scopes): a parentless gamez node is a template ROOT the bind
     /// must build; any other gamez node of that name rides inside one already staged above it
     /// (<c>ap_cracks</c> under <c>ap_effect</c>); a name the bind's own <paramref name="scope"/>
     /// already carries — the crash rig's <c>player</c> scaffold, its wreck, the plane's own parts —
@@ -170,7 +169,7 @@ public sealed class WorldEffectsFactory
 
     /// <summary>Stages the crash rig's pooled effect-template copies under
     /// <paramref name="crashRoot"/> — one <c>poolN</c> slot container per depth level, every copy
-    /// hidden, exactly as the world-effects stage stages its templates (D31): the flake/gunhit
+    /// hidden, exactly as the world-effects stage stages its templates: the flake/gunhit
     /// family carries meshes its own defs never deactivate, so an unhidden copy draws stacked at
     /// the plane's centre for the whole session. The stage's reveal ritual (<c>Shown</c>) lights
     /// the CALL's own copy while its effect plays. One staging for the production rig and the
@@ -203,8 +202,8 @@ public sealed class WorldEffectsFactory
 
     /// <summary>The crash rig's sealed template stage — pooled, relocating called templates,
     /// staged hidden like the world-effects stage (the flake/gunhit family carries meshes its own
-    /// defs never deactivate — before BL-288 pooled them here they lived in the world-effects
-    /// stage, whose reveal ritual was what kept them dark), and place-exempt for the
+    /// defs never deactivate, so an unhidden copy would draw for the whole session), and
+    /// place-exempt for the
     /// airframe-scoped anchor NAMEs (<see cref="EffectCatalogue.AirframeScopedAnchors"/>): the
     /// player damage/reset defs are authored NAME=<c>player_pfighter</c>, which on the Devastator
     /// is the aircraft's own model root, and a placing call must resolve it (the defs' node ops run

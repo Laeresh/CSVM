@@ -45,7 +45,8 @@ public partial class GameSession : Node3D
     private const float MinOrbitRadius = 1f;
 
     /// <summary>Seconds a downed Versus player watches the crash cam before auto-respawning
-    /// (R skips early). Decision #6: own spawn point, full HP/ammo, no invulnerability window.</summary>
+    /// (R skips early). Respawn is at the player's own spawn point, with full HP/ammo and no
+    /// invulnerability window.</summary>
     private const float VersusRespawnDelay = 3f;
 
     private static readonly string[] InstanceShaderParams =
@@ -141,8 +142,8 @@ public partial class GameSession : Node3D
     // session (same lifetime as _worldEffectsFactory); null before the first weathered build and
     // nulled by ReturnToMenu so _Process's null guard covers the frame before the deferred free.
     private WeatherRig? _weatherRig;
-    // The world state every puffer in this session reads but none of them owns — B6's wind today,
-    // C7's camera position next (see Effects/WorldWind.cs). Constructed here rather than on
+    // The world state every puffer in this session reads but none of them owns — the wind and the
+    // camera position (see Effects/WorldWind.cs). Constructed here rather than on
     // _weatherRig because the emitter factories need it at StartSession, long before the first
     // weathered build exists to write it; WeatherRig.Tick is what fills it in.
     private Effects.EffectAmbience _ambience = new();
@@ -286,7 +287,7 @@ public partial class GameSession : Node3D
         // One rig per rendered view, before anything camera-anchored is built (the skydome and
         // weather visuals below are per-rig). Single player reuses the main-viewport camera.
         BuildRigs(_spec.Fly ? _spec.Players : 1);
-        // The FBFX_COLOR_FROM_TO wash (C21): one ramp state, one overlay per rendered view, built
+        // The FBFX_COLOR_FROM_TO wash: one ramp state, one overlay per rendered view, built
         // as soon as the rigs exist so every runtime below can be handed the same sink. Screen-space
         // and session-scoped on purpose — an AnimRuntime is world-scoped and is instanced per effect
         // pool and per crash rig.
@@ -703,14 +704,14 @@ public partial class GameSession : Node3D
         var builder = session.Builder;
         state.CloudDeck = session.CloudDeck;
         // The deck's other lit variant, built beside it — the weather rig swaps it in above the
-        // cloud band (C23; WorldBuilder.CloudDeckUndimmedMeshes).
+        // cloud band (WorldBuilder.CloudDeckUndimmedMeshes).
         state.DeckUndimmedMeshes = builder.CloudDeckUndimmedMeshes;
         // Owned by the session so a teardown drops the previous world's lights.
         _worldLights = session.Lights;
         state.CrashProgram = session.Program;
         state.WorldScene = session.Builder.Scene;
         state.WorldRuntime = session.Runtime;
-        // The screen wash (C21). Set here rather than inside WorldSession for the same reason the
+        // The screen wash. Set here rather than inside WorldSession for the same reason the
         // contact mask below is: the overlay is a session-owned surface and WorldSession builds
         // runtimes for the test harness too, where there is no session to own one.
         session.Runtime.ScreenFlash = _screenFlash != null ? _screenFlash.Play : null;
@@ -755,11 +756,11 @@ public partial class GameSession : Node3D
         }
 
         // --damage-test: with the world built and its AnimRuntime bound, drive one
-        // destructible's HP through its DAMAGE_SEQUENCE stages and quit — the C22 verify
-        // stand-in until F40's interactive HP control lands. The world subtree is added to
-        // the tree (ManualAdvance so _Process doesn't double-drive) because C26 ticks the
-        // death sequences forward, which reads global transforms — invalid on an out-of-tree
-        // node (`!is_inside_tree()` spam). It also makes the C25 collider positions real.
+        // destructible's HP through its DAMAGE_SEQUENCE stages and quit — the headless stand-in
+        // for an interactive HP control. The world subtree is added to the tree (ManualAdvance so
+        // _Process doesn't double-drive) because ticking the death sequences forward reads global
+        // transforms, which are invalid on an out-of-tree node (`!is_inside_tree()` spam). It also
+        // makes the collider positions real.
         if (_spec.DamageTest)
         {
             _worldRoot!.AddChild(_plane);
@@ -771,8 +772,8 @@ public partial class GameSession : Node3D
 
         // --effects-test: build the world-effects runtime and play every impact/destruction
         // effect through it, reporting which resolve and which actually build a puffer
-        // (WORLD-12: a started def that renders nothing vs one that does), then quit — the D32
-        // headless verify. Added to the tree (self-ticking) so puffers spawn and the census
+        // (a started def that renders nothing vs one that does), then quit — the headless
+        // verify. Added to the tree (self-ticking) so puffers spawn and the census
         // is real; the world plane subtree is added so the templates' global transforms hold.
         if (_spec.EffectsTest && state.WorldScene != null)
         {
@@ -907,7 +908,7 @@ public partial class GameSession : Node3D
                          + $"map-edge extension) over {fogVolumes.Count} volume(s) — "
                          + $"{cloudField.Summary}");
             }
-            // The fvol sprite field onto the zone layer its own VOLUMES author (B12): the field is
+            // The fvol sprite field onto the zone layer its own VOLUMES author: the field is
             // scattered through them, so it is gated with them. Done HERE rather than in
             // FogVolumeClutter because the field is one MultiMesh per sprite kind spanning every
             // volume, so it cannot carry a per-volume layer — one uniform zone per chapter is the
@@ -916,8 +917,8 @@ public partial class GameSession : Node3D
             //
             // ⚠ Read from the data, never assumed: C1/C1C/C4 author 2 and C5 authors 1, but
             // **C2B authors −1** — LayerFor returns 0 there, the field stays on the default layer,
-            // and it renders below C2B's deck where the A7 altitude rule this replaced hid it.
-            // That divergence is the A1 census's finding, not a bug (docs/formats/weather.md).
+            // and it renders below C2B's deck. That divergence is authored, not a bug
+            // (docs/formats/weather.md).
             //
             // The world's own placed `cloudparent` clusters need nothing here at all any more:
             // they are ordinary world nodes and SceneBuilder already stamped them with their own
@@ -929,17 +930,17 @@ public partial class GameSession : Node3D
             }
 
             // The sun goes in with the weather: its bearing is the zone's own
-            // SUNLIGHT_ORIENTATION, applied by the same zone-apply that writes the fog (BL-324).
-            // The ambience rides along as B6's wind seam — same reason, different authored block.
+            // SUNLIGHT_ORIENTATION, applied by the same zone-apply that writes the fog. The
+            // ambience rides along as the wind seam — same reason, different authored block.
             _weatherRig = new WeatherRig(_spec, _worldRoot!, _sun, _ambience);
-            // B12: the deck's own zone_id, the one gated population that cannot ride a visual
-            // layer (it is a per-rig camera-anchored copy — see WeatherRig.SetDeckZoneId).
+            // The deck's own zone_id, the one gated population that cannot ride a visual layer (it
+            // is a per-rig camera-anchored copy — see WeatherRig.SetDeckZoneId).
             _weatherRig.SetDeckZoneId(builder.CloudDeckZoneId);
-            // B13: the deck tiles' own authored altitude (C1/C1C/C2B 960, C4 1050), read off the
-            // built data rather than hardcoded — above the cloud band Tick now leaves the deck
-            // here instead of re-pinning it to the CLOUD_COVER band centre.
+            // The deck tiles' own authored altitude (C1/C1C/C2B 960, C4 1050), read off the built
+            // data rather than hardcoded — Tick leaves the deck here rather than pinning it to the
+            // CLOUD_COVER band centre.
             _weatherRig.SetDeckAltitude(builder.CloudDeckAltitude);
-            // A2/C21: hand the rig the chapter's own fog-volume census and its parsed fogvol.zrd —
+            // Hand the rig the chapter's own fog-volume census and its parsed fogvol.zrd —
             // the same pair the cloud field above was built from, handed to a second consumer
             // rather than re-loaded. Tick resolves each camera's weather state (1/2/3) from it and,
             // where fog_zone is armed (C5 alone), its in-volume whiteout too.
@@ -949,7 +950,7 @@ public partial class GameSession : Node3D
             _weatherRig.Build(state.MissionZrdrPath, _rigs, builder.HorizonZones(),
                 activeZone =>
             {
-                // B14: one dome per horizon zone the gate can tell apart, not just the flown one —
+                // One dome per horizon zone the gate can tell apart, not just the flown one —
                 // below the cloud deck the camera is in state 1 and `horizon/zone1` IS the sky and
                 // the ceiling. The zones and their order are the data's (`DomeZonesToBuild`); the
                 // per-rig CONTAINER is what `WeatherRig.Tick` anchors to the camera, so each dome
@@ -1005,7 +1006,7 @@ public partial class GameSession : Node3D
             StartupProfile.Record("weather", weatherMark);
         }
 
-        // The sun's lens flare (BL-165). After the weather build, because it needs each rig's
+        // The sun's lens flare. After the weather build, because it needs each rig's
         // dome copy to exist — the `sun` node it anchors to is a child of the horizon subtree,
         // and finding it is one of the two gates. Safe to call unconditionally: the chapter data
         // decides, and six of the eight chapters author nothing here.
@@ -1313,7 +1314,7 @@ public partial class GameSession : Node3D
                 _sun, _env, _camera)
             { DebugSpec = _spec.DebugMesh });
         // Marker overlay (--viewer --plane, key K): the firepoint / pylon / target gizmos on the
-        // parked aircraft (item A3). Only on the parked plane — a chapter world has no marker rig
+        // parked aircraft. Only on the parked plane — a chapter world has no marker rig
         // — and after the plane joins the tree, since it reads each marker's GlobalPosition. Built
         // hidden unless --markers opened it, so an unadorned viewer screenshot is unchanged.
         if (_spec.Viewer && !_spec.WorldMode && _plane != null)
@@ -1322,10 +1323,10 @@ public partial class GameSession : Node3D
             state.What += _spec.MarkersOverlay ? " + marker overlay" : " + marker overlay (K)";
         }
         // --weapon-test: the 48-weapon pass check on a PARKED plane — the one weapon-lab host left in
-        // the viewer path. The interactive lab moved to flight (A3: it needs a real world, the
-        // session's pool and a real trigger), but this probe deliberately keeps the cheap no-world
-        // path: it only asks whether every weapon mounts and spawns without throwing, which needs no
-        // chapter, no colliders and no frame. D9 splits it out of WeaponLab entirely.
+        // the viewer path. The interactive lab lives in flight because it needs a real world, the
+        // session's pool and a real trigger; this probe deliberately keeps the cheap no-world path
+        // instead, since it only asks whether every weapon mounts and spawns without throwing,
+        // which needs no chapter, no colliders and no frame.
         if (_spec.WeaponTest && _spec.Viewer && !_spec.WorldMode && _plane != null)
         {
             long mark = StartupProfile.Mark();
@@ -1477,7 +1478,7 @@ public partial class GameSession : Node3D
         var spawnList = _spec.EmptyStage ? null : SpawnPoints.LoadIa(state.MissionZrdrPath, _spec.Scenario);
         int spawnBase = _spawnPicker.ChooseSpawnBase(spawnList);
 
-        // Weapons (M3 wave B): the typed weapons.json catalogue + the stock loadouts, loaded
+        // Weapons: the typed weapons.json catalogue + the stock loadouts, loaded
         // once, and ONE shared projectile/effect pool every player's guns fire into
         // (projectiles live in the shared world, so every splitscreen pane sees them). The
         // pool reuses the session texture/sound archives (tracer/muzzle textures, impact sounds)
@@ -2056,9 +2057,8 @@ public partial class GameSession : Node3D
             // whole band back before this session's first frame: WeatherRig.Tick only ever
             // NARROWS the band, and it does not run at all in a mode with no weather rig, so a
             // session that ended above C1's deck would otherwise cull every zone-1 node of the
-            // next flight's world for its whole duration (A7's version of this hazard hid C5's
-            // street haze). The splitscreen cameras below are built fresh each session and need
-            // no reset.
+            // next flight's world for its whole duration. The splitscreen cameras below are built
+            // fresh each session and need no reset.
             _camera.CullMask = Mech3.ZoneGate.OpenCullMask(_camera.CullMask);
             _rigs.Add(new PlayerRig { Index = 0, Camera = _camera, HudParent = _worldRoot!, VisualLayer = 0 });
             return;
