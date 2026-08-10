@@ -1928,6 +1928,30 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   is engine-side and a deliberate deviation. Cross-link: `BL-292` (crash-splash orientation,
   different spawn path; scheduled in `docs/plans/PLAN-m3-polish-10.md` A3).
 
+- `BL-333` `[Research]` **`PLAYER_RANGE`'s `dist² * 4.0` factor may mean every gate radius in the
+  game is half what we give it — the transform chain feeding the comparison is untraced.**
+  `FUN_004ec080` (the `IF`/`ELSEIF` condition evaluator in `crimson.exe`) resolves a `PlayerRange`
+  branch as `dist² * 4.0 <= value` — not the bare `dist² <= value` CSVM implements. Whether the
+  vector reaching that comparison is already halved upstream, by the transform chain
+  `FUN_0053f610` → `FUN_0053f9b0` (via `DAT_009fd190`) → `FUN_0053fca0`, is untraced. If it is not
+  halved somewhere in that chain, the `* 4.0` is real and every `PLAYER_RANGE` gate in the game
+  fires at half the radius CSVM currently gives it — a compiled `72900` (reader `270`) would gate
+  at 135 m, not 270 m. **1,052 shipped `PlayerRange` conditions** are affected install-wide
+  (`docs/formats/anim-definitions.md`'s condition table), including gates on real content:
+  `he_ground_effect`'s `frame_buffer_effects1` full-screen flash (`If PlayerRange 10000`) and
+  C1/MP1's `rearm_node_1/call_door` poll (`If { PlayerRange: 625 }`).
+  *Fix shape:* trace `FUN_0053f610`/`FUN_0053f9b0`/`FUN_0053fca0` to determine whether the vector
+  they hand to `FUN_004ec080` is already scaled by 0.5 (or an equivalent halving) before the
+  comparison runs. If it is, the `* 4.0` is compensating and CSVM's `dist² <= value` is already
+  correct — a documented disproof, not a code change. If it is not, CSVM's gate radii are 2× the
+  original's and need correcting.
+  ⚠ **Traps:** do not halve every `PLAYER_RANGE` radius on the strength of the `* 4.0` multiply
+  alone — it needs the trace above, or an at-the-controls capture measuring an actual gate
+  distance, before any change lands. A change here reads exactly like a fidelity win (a decoded
+  exe constant CSVM does not reproduce) and is exactly the shape of change that regresses: halving
+  every gate radius on an unconfirmed reading would silently break every effect currently gated
+  correctly by chance or by the original data's own margins.
+
 ## Audio
 
 - `BL-079` `[Feature]` **Positional 3D audio for other aircraft** — all sound is own-plane non-positional today;

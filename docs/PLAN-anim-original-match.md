@@ -147,7 +147,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Ground truth
 
 1. A1 ☑ Record the decoded interpreter in `docs/formats/anim-definitions.md`
-2. A2 ☐ Correct the three claims the decode changes, and open the `PLAYER_RANGE` question
+2. A2 ☑ Correct the three claims the decode changes, and open the `PLAYER_RANGE` question
 
 ### Wave B — Interpreter semantics
 
@@ -246,7 +246,37 @@ correction in prose here.
 
 </details>
 
-## A2 ☐ Correct the three claims the decode changes, and open the `PLAYER_RANGE` question
+## A2 ☑ Correct the three claims the decode changes, and open the `PLAYER_RANGE` question
+
+**Landed.** Reworded the null-`start` and `LOOP 0` passages in `docs/formats/anim-definitions.md`'s
+"Event scheduling" and `LOOP` bullets so the lead sentence states the mechanism the decode found
+(`Animation + 0.0` encoding gated post-completion; the u16 counter that counts up to the authored
+value) instead of the census that used to stand in for it — the censuses stay, now framed as
+corroborating measurement rather than the sole justification. Folded A1's two "Decode status"
+addenda for those passages into the prose directly rather than leaving them as bolted-on
+corrections; the intro sentence to "The decoded interpreter" section was reworded to match. Left
+the `WAIT_FOR_COMPLETION` and animation-frame-tick "Decode status" notes as separate markers — both
+confirm without superseding, and each adds something (a weaker confirmation route for the former, an
+unruled-out hypothesis for the latter) the surrounding prose doesn't already say, so folding them in
+would have been churn. Fixed a second, unmarked restatement of the null-`start` claim
+(`anim-definitions.md`'s `hg_splasher` paragraph, "Since an absent `START_TIME` is `EVENT_OFFSET 0`
+…") found by sweeping the rest of the file. Swept `docs/architecture.md`, `docs/verification.md`,
+`docs/formats/*.md` and this plan for the other two superseded claims (`ENDIF` popping branch
+state; `LOOP 0` infinite "because a census says so") and found no further restatements — the one
+`ENDIF`/`_branchTaken` mention in `architecture.md`'s `SequenceRunner` entry describes CSVM's own
+implementation, not a claim about the original, so it needed no change. Opened `backlog.md`
+`BL-333` `[Research]` under "Effects & animation runtime" for the `PLAYER_RANGE` `* 4.0` factor,
+naming `FUN_004ec080`, the untraced `FUN_0053f610`/`FUN_0053f9b0`/`DAT_009fd190`/`FUN_0053fca0`
+chain, the 1,052 shipped conditions, and a ⚠ Traps line against halving radii on the multiply alone.
+
+**Verified.** `grep` for `Event \+ 0` and `EVENT_OFFSET 0` across `docs/formats/anim-definitions.md`
+returns only the two corrected sentences (the encoding they now name is `Animation + 0.0`, stated as
+the correction, not the claim). No other `docs/*.md` file restates any of the three superseded
+claims. `BL-333` has an ID minted by `New-ItemId.ps1 -Kind BL`, placed in its theme's ID order as
+observed in the surrounding entries (append-at-end-of-theme, matching neighbours).
+
+<details>
+<summary>Original approach (kept for reference)</summary>
 
 **Goal.** No live doc states a mechanism the exe contradicts.
 
@@ -270,6 +300,8 @@ has an ID from `New-ItemId.ps1`.
 **⚠ Traps.** Do not act on the `PLAYER_RANGE` factor in this plan. Halving every gate radius on an
 untraced multiply is exactly the kind of change that looks like a fidelity win and is a regression;
 it needs the trace or an at-the-controls capture first.
+
+</details>
 
 ---
 

@@ -485,9 +485,11 @@ flags behave like any dispatched call's (a routed effect call's hold is counted,
 emitter definition onto it, switch the node off again — and the author means the emitter to keep
 running: the four splash definitions (`big_splash`, `huge_splash`, `med_splash`,
 `plane_big_splash`, all on `sp_1`) wrap `hg_splasher`, which authors a 0.5 s `STOP_SEQUENCE` plus its
-own `PUFFER_STATE 0` 0.1 s later. Since an absent `START_TIME` is `EVENT_OFFSET 0`, all three land in
-one instant, so a consumer that reads the deactivation as "stop the emitters here" kills the effect
-on the tick it starts. The same-shaped pair a few seconds APART means the opposite and is the far
+own `PUFFER_STATE 0` 0.1 s later. An absent `START_TIME` gates the moment the previous event
+completes — not, as the encoding might suggest, `EVENT_OFFSET 0` (see "Event scheduling" below) —
+so all three land in one instant regardless, and a consumer that reads the deactivation as "stop the
+emitters here" kills the effect on the tick it starts. The same-shaped pair a few seconds APART
+means the opposite and is the far
 larger population — a `partN` activated, given a debris trail, flown by a 3.5–5 s `OBJECT_MOTION`
 and only then switched off, where that deactivation is the trail's ONLY authored stop. Censused
 install-wide (`analysis/bl-229-emitter-host-deactivation/`): 414 pairs, 32 same-instant in 4 shapes
@@ -1096,46 +1098,42 @@ are not visible from the byte format alone, each measured against this install.
   world-scope `cam_anim`/`mis_anim` defs; a consumer binding plane-scope defs must resolve by
   NAME (and note a plane subtree staged into a world scene mixes two index spaces that collide —
   world index 400 and plane index 400 are different nodes).
-- **Event scheduling** (inferred from the data, not stated by the format): each event's optional
-  `start` is `{offset, time}` with `offset` ∈ `Animation` (since the animation started) /
-  `Sequence` (since this sequence started) / `Event` (since the **previous event completed**);
-  an absent `start` — 174,938 of the install's events — is `Event + 0`, i.e. as soon as the
-  previous event finishes. The discriminating case is the C1 train: each car's sequence is
-  `[ObjectMotionSiScript, Loop{-1}]` with no start offsets, and only "after the previous event
-  completes" turns that into the surveyed ~327 s track loop instead of a zero-length infinite
-  loop. A definition's sequences run **concurrently** — the train drives its four cars from four
-  sibling `Initial` sequences, each with its own script and its own loop.
-  A present `start` gates **the event it is attached to**, not its successor — including the first
-  event of a sequence, and including control-flow events (`LOOP`/`IF`), which take no run time and
-  therefore do not advance the "previous event completed" base. The discriminating case is C1's
-  bowl sign (`bowl`, gamez 4868, def `on_off`): nine strict on/off SWAP pairs where only the first
-  event of each pair carries a timestamp — gating the *successor* instead shifts every sequence in
-  the install by one slot (timestamped events fire a slot early, their unstamped partners a slot
-  late, the sign spends 38% of frames blank), and a loop back-jump that resets the gate to zero
-  discards the trailing `Loop {Event 1.2}`'s inter-cycle pause.
-
-  **Decode status: confirmed for the three origins, an event gating itself, and concurrent
-  sequences** — `FUN_004ecbb0` gates origin `Animation` against `anim+0xb0`, origin `Sequence`
-  against `seq+0x24`, origin `Event` against `seq+0x28`, evaluated only against the event that
-  carries the `start`. **Superseded for the null-`start` mechanism** — the encoding is
-  `Animation + 0.0`, collapsed to `None` by mech3ax, not `Event + 0`; the *observed behaviour*
-  above is still correct only because the gate is evaluated exclusively once the previous event has
-  reported completion, regardless of which origin it names.
-- **`LOOP` has two spellings of "infinite": `-1` and `0`** (decoded 2026-07-22). `-1` is the
-  common one; `0` is *not* "run zero more times". Across the compiled `cam_anim`/`mis_anim` of the
-  whole install the count distribution is **`-1` × 2,919, `0` × 26, positive N × 530**, and all 26
-  zeros sit in 25 defs that are, without exception, **ground-vehicle route animations** — C1's
-  `police_car`/`mafia`/`black_car1`/`truck1`/`car_loop1`/`car_go_home`, C2's ten `studebaker*`,
-  C3/M02's nine `stude_move*`. Every one is `activation: OnStartup`, and in every one the `LOOP`
-  is the **last event of its sequence**, over a body of `ObjectMotionFromTo` legs carrying explicit
-  from/to (so a replay re-seats the car at the route start). Nothing that must terminate uses it:
-  no door, gate, one-shot, hangar, bomb or explosion def carries `Count: 0`. Reading `0` as "stop"
-  makes every car in the game drive its route once and freeze.
-
-  **Decode status: confirmed** — `004ebfd0` maintains a **u16** counter that counts *up* and
-  terminates when `counter == authored`, with `-1` special-cased infinite; `0` is infinite only as
-  a consequence of that mechanism, since it can't match until pass 65,536. The census above is now
-  a corroborating measurement of a known mechanism rather than the only evidence for it.
+- **Event scheduling, confirmed against `crimson.exe`:** each event's optional `start` is
+  `{offset, time}` with `offset` ∈ `Animation` (since the animation started, gated against
+  `anim+0xb0`) / `Sequence` (since this sequence started, gated against `seq+0x24`) / `Event`
+  (since the **previous event completed**, gated against `seq+0x28`) — `FUN_004ecbb0` evaluates
+  whichever origin is named exclusively against the event that carries the `start`. An absent
+  `start` — 174,938 of the install's events — encodes as `Animation + 0.0` (mech3ax's `common.rs`
+  collapses that pair to `None`), not `Event + 0`; it behaves as "as soon as the previous event
+  finishes" only because the gate above is evaluated exclusively once the previous event has
+  reported completion, regardless of which origin it names. The discriminating case is the C1
+  train: each car's sequence is `[ObjectMotionSiScript, Loop{-1}]` with no start offsets, and only
+  "after the previous event completes" turns that into the surveyed ~327 s track loop instead of a
+  zero-length infinite loop. A definition's sequences run **concurrently**, confirmed the same
+  way — the train drives its four cars from four sibling `Initial` sequences, each with its own
+  script and its own loop.
+  A present `start` gates **the event it is attached to**, not its successor — also confirmed —
+  including the first event of a sequence, and including control-flow events (`LOOP`/`IF`), which
+  take no run time and therefore do not advance the "previous event completed" base. The
+  discriminating case is C1's bowl sign (`bowl`, gamez 4868, def `on_off`): nine strict on/off SWAP
+  pairs where only the first event of each pair carries a timestamp — gating the *successor*
+  instead shifts every sequence in the install by one slot (timestamped events fire a slot early,
+  their unstamped partners a slot late, the sign spends 38% of frames blank), and a loop back-jump
+  that resets the gate to zero discards the trailing `Loop {Event 1.2}`'s inter-cycle pause.
+- **`LOOP` has two spellings of "infinite": `-1` and `0`, confirmed by mechanism.** `004ebfd0`
+  maintains a **u16** counter that counts *up* and terminates when `counter == authored`, with `-1`
+  special-cased infinite; `0` is infinite only as a consequence of that mechanism — a u16 starting
+  at 0 cannot match an authored `0` until pass 65,536, not because the data merely happens to use it
+  that way. `-1` is the common spelling; `0` is *not* "run zero more times". The install-wide count
+  distribution corroborates the mechanism rather than standing in for it: across the compiled
+  `cam_anim`/`mis_anim` of the whole install the count distribution is **`-1` × 2,919, `0` × 26,
+  positive N × 530**, and all 26 zeros sit in 25 defs that are, without exception, **ground-vehicle
+  route animations** — C1's `police_car`/`mafia`/`black_car1`/`truck1`/`car_loop1`/`car_go_home`,
+  C2's ten `studebaker*`, C3/M02's nine `stude_move*`. Every one is `activation: OnStartup`, and in
+  every one the `LOOP` is the **last event of its sequence**, over a body of `ObjectMotionFromTo`
+  legs carrying explicit from/to (so a replay re-seats the car at the route start). Nothing that
+  must terminate uses it: no door, gate, one-shot, hangar, bomb or explosion def carries `Count: 0`.
+  Reading `0` as "stop" makes every car in the game drive its route once and freeze.
   **The reader (`zrdr`) scope never uses it** — 703 `LOOP` events there, `LOOP_COUNT` ∈ {`-1`
   (575), positive N}, zero zeros. (An earlier note claimed the reader scope has *no* `LOOP` events
   at all; it has 703. The usable fact is the absence of `0`, not the absence of `LOOP`.)
@@ -1230,10 +1228,17 @@ are not visible from the byte format alone, each measured against this install.
 
 Everything above this point in the section was inferred from the shipped data. The original's
 interpreter itself has since been located and read directly — `crimson.exe` (image base
-`0x400000`), compiled from `D:\zipper\gamez\zEffect\zeff_ani*.c`. Each paragraph above now carries
-a "Decode status" line saying whether the exe confirmed it as stated or superseded the stated
-mechanism (never the observed behaviour, which is what the data census actually measured). What
-follows is the interpreter itself, cited by address so any of it can be re-found and re-checked.
+`0x400000`), compiled from `D:\zipper\gamez\zEffect\zeff_ani*.c`. Each paragraph above now states
+the mechanism the exe actually uses — where the decode corrected a stated mechanism (the null-
+`start` encoding, `LOOP 0`), the paragraph asserts the corrected one directly rather than carrying a
+bolted-on correction, and keeps the original census as corroborating measurement, never as the sole
+justification. Two paragraphs keep an explicit "Decode status" note instead of folding it in,
+because the note adds something the prose above it does not already say: `WAIT_FOR_COMPLETION`'s
+hold is confirmed only at the general handler-return-value contract, not by reading a dedicated
+address, which is worth flagging as a weaker kind of confirmation; the animation-frame tick's note
+records a hypothesis the decode cannot rule out (`min(render rate, 60)`) alongside the confirmation.
+What follows is the interpreter itself, cited by address so any of it can be re-found and
+re-checked.
 
 **Where the code is.**
 
