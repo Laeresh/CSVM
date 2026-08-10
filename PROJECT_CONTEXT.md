@@ -199,7 +199,7 @@ completed 2026-08-10 (all ten items; the decode it produced is
 [`PLAN-flight-model-rewrite.md`](docs/plans/PLAN-flight-model-rewrite.md) of 2026-08-09 in
 [`docs/plans/`](docs/plans/plans.md). Next: pick the next run off `backlog.md`, or fly the owed
 verdicts.
-Owed at the controls: `PT-28`, `PT-41`, `PT-43`, `PT-45`, `PT-47` and `PT-48`
+Owed at the controls: `PT-28`, `PT-41`, `PT-43`, `PT-45` and `PT-47`
 ([`playtest.md`](playtest.md)). Verify any change with
 **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read
 [`docs/verification.md`](docs/verification.md) first.

@@ -10,7 +10,7 @@ the "Current status" pointer. This file holds only what's specific to Claude Cod
   other `.agents/`-aware tools — see [`AGENTS.md`](AGENTS.md)). Written by
   `/setup-matt-pocock-skills`; edit the files directly. Invoke with their slash commands, e.g.
   `/domain-modeling`, `/commit-next`, `/new-plan`.
-- **Hooks:** `.claude/settings.json` runs five `PreToolUse` hooks. (1) A shell-syntax guard that
+- **Hooks:** `.claude/settings.json` runs six `PreToolUse` hooks. (1) A shell-syntax guard that
   rejects a PowerShell here-string (`@'…'@`) sent to the **Bash** tool, and a heredoc or
   `/dev/null` sent to the **PowerShell** tool. (2) The **Bash** tool is blocked outright with
   "Use Powershell instead of bash" — the one exception is a command whose every `&&`/`||`/`;`/`|`
@@ -20,6 +20,10 @@ the "Current status" pointer. This file holds only what's specific to Claude Cod
   `backlog.md`/`playtest.md` defining the same `BL-`/`PT-`/`CAP-` ID twice fails the commit.
   (5) An encoding tripwire before `git commit`: any changed text file containing double-encoded
   UTF-8 (mojibake) fails the commit, naming the file and line.
+  (6) A golden-manifest prose check before `git commit`: an `exercises` field in
+  `analysis/goldens/manifest.json` over 250 chars, or carrying an item id, a date or an
+  "also exercises" clause, fails the commit. That field says what a shot covers *today* and is
+  REWRITTEN on a re-pin, never appended to — the history is `git log -p` on the file.
 - ⚠ **PowerShell 5.1 corrupts UTF-8 silently.** It reads BOM-less files as ANSI, so a
   `Get-Content`/`Set-Content` round-trip without `-Encoding utf8` on **both** ends turns every
   em dash, arrow and warning sign into double-encoded garbage — and a BOM-less `.ps1` containing

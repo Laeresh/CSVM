@@ -1645,6 +1645,36 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Effects & animation runtime
 
+- `BL-335` `[Fidelity]` **Our puffer blend verdict reads the sprite's darkness; the original reads
+  only the `COLORS` ramp — which is why dark smoke paints over fire.** Reported at the controls
+  2026-08-10 (the refuel-tank flames) and traced the same day; the decode is in
+  [`docs/org/puffer.md`](docs/org/puffer.md) ("Our blend verdict disagrees with the engine's").
+  **The engine's rule, whole:** `FUN_0054e6e0` ends in
+  `FUN_0057c5c0(pos, radius, texture, alpha, hasColourRamp)`, and on the hardware path that fifth
+  argument picks between two rasteriser dispatch entries — `DAT_009be790` (`FUN_005a4b70`) when the
+  particle has a ramp, `DAT_009be78c` (`LAB_005a4580`) when it does not, both installed by
+  `FUN_005a8c00`. The ramp-less branch also forces vertex colour to white and alpha to
+  `(1 − ageFrac)`, the engine's own life envelope. **Nothing about the texture enters the choice.**
+  **Ours** (`Puffer.Create`) is `ramp OR diesDark ⇒ Mix, else Additive`, where `diesDark` is
+  `SmokeLuminance` measured off the frame a particle dies on. `fire_n_smoke` authors `colors: null`
+  and dies on `fire_f06` (0.018), so we put on `blend_mix` an emitter the original draws ramp-less.
+  **Why it is visible:** one `MultiMesh` per emitter, `depth_draw_never`, no per-particle sort — so
+  mixed sprites paint in instance-index order and an old near-black puff can cover a young bright
+  flame. Additively a black sprite adds nothing and cannot occlude anything, so the original has no
+  such ordering artefact to solve.
+  ⚠ **Not a one-line revert.** The darkness rule was added deliberately: ramp-less near-black smoke
+  drawn additively read as *more glow*, which is the bug it fixed. Dropping it puts that back unless
+  the ramp-less branch's own `(1 − ageFrac)` white-modulated envelope — which we approximate with a
+  different curve in `FadeFor` — turns out to be what made it acceptable in the original.
+  ⚠ **Not yet pinned:** WHICH dispatch entry is additive and which is alpha-blend. `LAB_005a4580`
+  and `FUN_005a4b70` need walking for their blend state before anything is changed on this — the
+  reading above is from the branch structure and the white/`(1 − ageFrac)` handling, not from the
+  blend registers themselves. Settle that first; it is the difference between a fidelity fix and an
+  inverted one.
+  ⚠ Expect this to move every puffer-bearing golden (the seven listed in `docs/architecture.md`'s
+  `SizeScaleDefault` note). Sorting particles by depth inside the emitter is a *different*,
+  additional change and is NOT what the original does — it draws its list in order too.
+
 - `BL-331` `[Fidelity]` **An unauthored puffer `TIME_INTERVAL` is `1.0` s in the original; both our
   parsers invent `0.1`.** Decoded 2026-08-10 while closing `PLAN-puffer-engine-deltas` C9: the
   puffer object's constructor `FUN_00550100` writes `0x3f800000` = **1.0** to both `+0x40`

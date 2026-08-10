@@ -215,31 +215,58 @@ Everything here is a known, deliberate divergence — not a gap waiting to be cl
 | **`K = 0.02`** rather than the software `0.01` | This project has no software path |
 | **The life-fade envelope** (ease the additive glow in/out) | A render nicety with no authored key behind it. It is bypassed entirely whenever a `COLORS` ramp is present, since the ramp owns the alpha |
 | **The blend mode, derived from the sprite a particle dies on** | The authored data never states one. Measured rule in [`formats/effects.md`](../formats/effects.md) |
-| **`puffer.fireRiseScale` / `fireLifetimeScale`** on the `fire_n_smoke` family | Invented against footage; re-measured and retained at D10 — see below |
+| ~~`puffer.fireRiseScale` / `fireLifetimeScale`~~ | **DELETED 2026-08-10.** The one invented multiplier this system carried, and it is gone — see below |
 
-### The fire pair, re-judged (D10, 2026-08-10)
+### The fire pair, measured and then DELETED (D10, 2026-08-10)
 
 `large_30sec_fire`'s `fire_n_smoke` measured through the real emitter for its authored 30 s, still
-host, heights above the emitter (suite `puffer-fire-column`; the A/B is the same compiled payload
-parsed twice with one copy renamed, since the tune is keyed on the emitter's NAME alone):
+host, heights above the emitter (suite `puffer-fire-column`). The tuned rows are the build as it
+stood that morning; the pair was removed the same day:
 
 | Arm | Centre apex | Drawn top | Drawn top at the pre-A1 sprite | Peak live |
 |---|---|---|---|---|
 | Authored, still air | 17.9 m | 25.9 m | 21.6 m | 50 |
-| Authored, C1 IA1's wind `(0, 2, 0)` | 24.3 m | 32.1 m | — | 50 |
-| Tuned (2.5× rise, 1.5× life), still air | 50.7 m | 57.2 m | 53.7 m | 72 |
-| Tuned, C1 IA1's wind | 60.1 m | 67.8 m | — | 73 |
+| Authored, C1 IA1's wind `(0, 2, 0)` | 24.3 m | **32.1 m** | — | 50 |
+| ~~Tuned (2.5× rise, 1.5× life), still air~~ | 50.7 m | 57.2 m | 53.7 m | 72 |
+| ~~Tuned, C1 IA1's wind~~ | 60.1 m | **67.8 m** | — | 73 |
 
 The decode moved the authored column from 21.6 m to 32.1 m — the doubled sprite (+4.3 m) and,
 larger, the wind coupling: C1 IA1's `STATIC_VELOCITY` is `(0, 2, 0)`, straight **up**, and against
 `FRICTION 0.6` with `WORLD_ACCELERATION −1` the terminal velocity is `2 − 1/0.6 = +0.33 m/s`, so the
-column never turns over and climbs until the lifetime ends. That is a +49 % authored plume, and it
-is still 2.2× short of the tuned one. **The pair stays.** What did change is the tuned column
-itself: 67.8 m against the ~54 m that was signed off at the controls on 2026-08-06, so the
-*magnitude* is owed a fresh look — see `PT-48`.
+column never turns over and climbs until the lifetime ends. **That +49 % is what made the invented
+pair obsolete**: with it the plume drew to 67.8 m, i.e. the tune was contributing **2.11×**, and at
+the controls that day the refuel-tank flames read as *"~twice the height of the originals"*. A
+measured ratio and an eye agreeing to two decimals is as settled as this project gets, so both
+scales and their config keys were deleted and the fire family now runs its authored numbers like
+every other puffer.
+
+⚠ **Do not re-add a rise or lifetime multiplier for the fire family.** If a fire reads wrong, the
+candidates are the authored density (`BL-218`), the blend verdict (below), or the wind — not a
+compensating constant keyed on one emitter's name.
 
 ⚠ **These are one seed's extremes, good to about ±1.5 m.** The height reported is the tallest
 particle of the run, so it is a maximum over ~300 draws rather than a mean, and each emitter's RNG
-stream is seeded by how many puffers were built before it — the same suite under
-`RunTests.ps1 -Filter` reads 25.6 / 31.7 / 58.4 / 68.1 against the full run's 25.9 / 32.1 / 57.2 /
-67.8. Read the ratios and the deltas, not the last decimal.
+stream is seeded by how many puffers were built before it. Read the ratios and the deltas, not the
+last decimal.
+
+### ⚠ Our blend verdict disagrees with the engine's (open)
+
+Traced 2026-08-10, after the flames were reported drawing dark-smoke-over-fire. **The engine picks
+a particle's draw routine on exactly one test: does it have a `COLORS` ramp?** `FUN_0054e6e0`'s
+final call is `FUN_0057c5c0(pos, radius, texture, alpha, hasColourRamp)`, and on the hardware path
+that flag selects between two entries of the rasteriser dispatch table — `DAT_009be790`
+(`FUN_005a4b70`) with a ramp, `DAT_009be78c` (`LAB_005a4580`) without, both installed by
+`FUN_005a8c00`. In the ramp-less branch the engine also forces vertex colour to white and alpha to
+`(1 − ageFrac)`, its own life envelope.
+
+**Nothing about the sprite's darkness enters into it.** CSVM adds a second condition — the
+alpha-weighted luminance of the frame a particle dies on (`Puffer.SmokeLuminance`) — which flips
+`fire_n_smoke` (`colors: null`, so ramp-less, so additive in the original) onto `blend_mix`. Because
+each emitter is one `MultiMesh` with `depth_draw_never` and no per-particle sort, mixed sprites
+paint in instance-index order, so an old near-black puff can cover a young bright flame; drawn
+additively a black sprite adds nothing and cannot occlude. That is the reported symptom.
+
+Not yet pinned: which of the two dispatch entries is additive and which is alpha-blend — that needs
+`LAB_005a4580` and `FUN_005a4b70` walked for their blend state. The darkness rule was introduced
+deliberately (a ramp-less near-black smoke drawn additively became *more glow*), so reverting it is
+a real change with a known prior symptom, not a one-line fix.

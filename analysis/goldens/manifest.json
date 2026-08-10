@@ -8,6 +8,7 @@
     "Hashes are md5 over the RAW pixel buffer (Image.GetData()), never over the saved PNG.",
     "A GPU or driver change legitimately moves every hash at once; the gpu field above is what these were captured on. Regenerate after a driver update, and say so in the commit message.",
     "A landed visual change updates this file in the SAME commit and names the shots it moved. An unexplained flip is a stop-the-line finding, not a regeneration.",
+    "exercises = what the shot covers TODAY, one sentence under 250 chars. REWRITE it on a re-pin, never append: no past-change deltas, no item ids, no dates. A commit hook enforces this. History is git log -p on this file; reasoning is the commit message.",
     "The runner appends --screenshot=<abs path> and --log-file=<abs path>; everything else is the args below verbatim."
   ],
   "shots": [
@@ -85,21 +86,21 @@
       "name": "c1-flight",
       "frame": 120,
       "hash": "3f3dedc1299b0467366f7b5ae8cf8077",
-      "exercises": "a flying plane: chase camera on the sim clock, prop and control-surface animators, gauges, compass tape, weapon readout, impact reticle; the --hold throttle 0.5→1 jump also crosses ThrottleSlamSmoke's slam threshold, so this is the one golden carrying a live exhaust-trail Puffer; frame-sensitive 34.52 %, the strongest tripwire here.",
+      "exercises": "a flying plane: chase camera on the sim clock, prop and control-surface animators, gauges, compass tape, weapon readout, reticle, and a live exhaust-trail puffer; frame-sensitive 34.52 %, the strongest tripwire here.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-destroy-effects",
       "frame": 120,
       "hash": "2f8620b8f1153bef2ca1e7c5ede4fe1a",
-      "exercises": "the world-effects runtime (ForEffects/D32) built and rendering a puffer: a flight-session kill of the single ap_radiotwr instance CALL_ANIMATIONs great_balls_of_fire onto the world-effects stage; frame-sensitive (distinct hashes at 119/120/121), and moves off its Rng.Effects seed (PLAN-animruntime-role-factories A1).",
+      "exercises": "the world-effects runtime rendering a puffer — a flight-session kill of the single ap_radiotwr instance calls great_balls_of_fire onto the world-effects stage; frame-sensitive (distinct hashes at 119/120/121), and moves off its Rng.Effects seed.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "d73876f98a639c4b886f7fe4f9b1786f",
-      "exercises": "the per-player crash rig (ForCrashRig/D32) constructing and playing player_crash_dirt: --crash=5 forces FlightController.Crash() at a fixed sim frame, the only headless trigger for this path (PLAN-animruntime-role-factories A2); moves off its Rng.Crash draw. The set's biggest puffer surface, so the TEXTURE_SEQUENCE lifetime-fraction fix moved 26.55 % of its pixels: the fireball holds its mid flipbook frames instead of the blown-out last one. Also exercises EffectCatalogue.CrashSurfaceLevelAnimNames (BL-292): flydirt_plane, the dirt burst's ground-scorch dust plane, levels to world axes instead of the plane's spawn-trim attitude at --crash=5's frame, moving a 2.16% halo ring around the fireball (>20/255 threshold) — the fireball/smoke/debris family is deliberately excluded from that set and is pixel-unchanged.",
+      "hash": "44328291c116ef4911e8c5573c6e8dbd",
+      "exercises": "the per-player crash rig building and playing player_crash_dirt (--crash=5 is its only headless trigger), and the set's largest puffer surface: fireball, wreck fire, smoke, debris, ground scorch; moves off its Rng.Crash draw.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     }
   ]

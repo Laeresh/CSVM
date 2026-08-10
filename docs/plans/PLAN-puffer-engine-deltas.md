@@ -246,8 +246,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — record and re-judge
 
 10. ☑ Write the puffer decode — landed as [`docs/org/puffer.md`](../org/puffer.md), outside the CC-BY
-    formats tree — and re-judge the fire TUNE pair: **measured, and it stays** (`PT-48` owed on the
-    tuned column's own height)
+    formats tree — and re-judge the fire TUNE pair: measured at 2.11× and **DELETED** the same day
+    on the author's verdict at the controls (`BL-335` minted on the way: our blend rule is not the
+    engine's)
 
 ## Dependency and parallelism notes
 
@@ -1039,6 +1040,21 @@ accumulator pseudocode C9 had put into `formats/effects.md` moved to the new pag
 behind, `formats/effects.md` gained a header line pointing at it, and the formats README's blanket
 "no exe decompilation" sentence — already false when this plan started, since C7 and C9 had cited
 addresses there — now says what is actually true and names `docs/org/`.
+
+⚠ **Superseded within the day — the fire pair was DELETED, not retained.** The text below records
+the measurement as it stood when D10 first landed, and its verdict ("the pair stays") was overturned
+hours later by the author at the controls: the refuel-tank flames read as *"~twice the height of the
+originals"*, which is exactly the 2.11× the same measurement attributes to the tune. Both scales,
+their config keys and the `fire_n_smoke` name gate are gone; the fire family runs its authored
+numbers. `PT-48`, minted below for this verdict, is retired with it. **The lesson is the one this
+plan states in its own ground rules and got wrong anyway:** the instrument answered "is the authored
+column tall enough on its own?" and I read the answer as "is the tune still needed?" — those are
+different questions, and only the second one was D10's. The measurement was right; the inference
+from it was not.
+The same session also traced a second finding off that sortie — our blend verdict reads the sprite's
+darkness where the engine reads only the `COLORS` ramp, which is why dark smoke paints over fire —
+recorded as `BL-335`, deliberately NOT fixed here (it moves every puffer-bearing golden and the
+additive/mix assignment of the two dispatch entries is not yet pinned).
 
 **The fire pair SURVIVES, on a measurement.** New `puffer-fire-column` suite: `large_30sec_fire`'s
 own compiled payload, parsed twice with one copy renamed (the tune is keyed on the emitter's NAME

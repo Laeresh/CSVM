@@ -44,9 +44,12 @@ message says so. Every other mass flip is a defect.
 the commit message. An unexplained flip is stop-the-line.** A hash regenerated in a separate
 "fix the goldens" commit is indistinguishable from a hash regenerated to bury a regression.
 
-**That explanation goes in the commit message, and only there.** `exercises` describes what a shot
-covers *today*; a shot's re-pin history is what `git log -p analysis/goldens/manifest.json` is for,
-and duplicating it in the file made the entries unreadable.
+**That explanation goes in the commit message, and only there.** `exercises` says what a shot covers
+**today** — one sentence, under 250 characters, optionally plus its measured frame-sensitivity.
+**Rewrite it on a re-pin; never append.** A commit hook enforces both halves and names the offending
+shot: over the cap, or carrying an item id, a date, or an "also exercises …" clause. The re-pin
+history is `git log -p analysis/goldens/manifest.json`; a durable finding about the *mechanism*
+belongs in `docs/architecture.md` or `docs/formats/`.
 
 ## Goldens are a tripwire, not a diagnosis
 

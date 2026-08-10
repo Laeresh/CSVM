@@ -2156,25 +2156,34 @@ mechanism here; the authored-key side stays in [formats/effects.md](formats/effe
   states "no exe decompilation", so executable decodes live outside it (the decision is
   `PLAN-flight-model-rewrite`'s item 6, and `docs/org/flightModel.md` is the precedent).
 
-**The fire pair, re-judged and RETAINED** (D10). `puffer.fireRiseScale` 2.5 / `fireLifetimeScale`
-1.5 were invented against footage while the sprite was half size; measured against the corrected sim
-(`puffer-fire-column` suite, `large_30sec_fire`'s own compiled payload, 30 s) the plan did raise the
-authored column — drawn top 21.6 → 25.9 m from A1's doubled sprite, and 32.1 m in C1 IA1's authored
-wind, since B6 made friction damp toward a wind that in this mission blows straight UP — but the
-tuned column is 57.2 / 67.8 m, so the plan closed about a fifth of the gap. Deleting the pair would
-cut the plume by 2.2×; the trap this item carries is doing exactly that on the strength of the other
-items landing.
-⚠ The A/B is the same compiled payload parsed twice with one copy RENAMED — `Init` keys the tune on
-  the state's name alone, and `Config` has no setter (DET-7), so the name is the only lever a suite
-  has. Renaming is not a hack here; it is the narrowest possible intervention.
-⚠ What the measurement does NOT settle: the tuned column is now ~25 % taller than the version signed
-  off at the controls (67.8 m against ~54 m), almost all of it B6's wind. Whether that reads as too
-  tall is a judgement at the controls — `PT-48`, and those two config keys are where it would be
-  made. Do not reach for a third knob.
+**The fire pair is DELETED** (D10, 2026-08-10). `puffer.fireRiseScale` 2.5 / `fireLifetimeScale` 1.5
+— the last invented multiplier in this file — are gone, along with their config keys and the
+`fire_n_smoke` name gate; the fire family runs its authored numbers like every other puffer.
+Measured (`puffer-fire-column`, `large_30sec_fire`'s own compiled payload, 30 s, drawn top): the
+plan itself raised the authored column from 21.6 → 25.9 m in still air (A1's doubled sprite) and to
+**32.1 m** in C1 IA1's authored wind, because B6 made friction damp toward a wind that in this
+mission blows straight UP, so the plume climbs until its lifetime ends instead of turning over.
+Against that, the tuned build drew **67.8 m** — the tune was contributing **2.11×** — and at the
+controls the refuel-tank flames were judged *"~twice the height of the originals"*. The ratio and
+the eye agree, so the pair came out.
+⚠ **Do not re-add a rise/lifetime multiplier for the fire family**, and do not "restore" the keys at
+  1.0 either: the point is that no knob exists to reach for. A fire that reads wrong now is a
+  question about authored density (`BL-218`), the blend verdict (below), or the wind.
 ⚠ Every height is one seed's EXTREME (the run's tallest particle) and moves ~±1.5 m with the
   emitter's RNG stream — which is seeded by how many puffers were built before it, so the same suite
   under `-Filter` reads different decimals than the full run. The suite's assertions are ratios and
   bands for that reason; do not tighten them onto a decimal.
+
+⚠ **Our blend verdict disagrees with the engine's — open, and it is what makes dark smoke paint over
+fire.** The original selects a particle's draw routine on ONE test, "does it have a `COLORS` ramp?"
+(`FUN_0054e6e0` → `FUN_0057c5c0`'s fifth argument, dispatching to `DAT_009be790` vs `DAT_009be78c`);
+the sprite's darkness plays no part. `Puffer.Create` adds `SmokeLuminance`, the luminance of the
+frame a particle dies on, which flips `fire_n_smoke` (`colors: null` — ramp-less, so additive in the
+original) onto `blend_mix`. Since each emitter is one `MultiMesh` with `depth_draw_never` and no
+per-particle sort, mixed sprites paint in instance-index order and an old near-black puff can cover
+a young bright flame. The full trace is in [org/puffer.md](org/puffer.md). ⚠ Reverting the darkness
+rule is NOT a one-liner: it was added because ramp-less near-black smoke drawn additively became
+*more glow*, and it will move puffer-bearing goldens.
 
 ## src/Effects/WorldWind.cs
 Two small types, one job: get the mission's authored wind to every puffer that reads it.

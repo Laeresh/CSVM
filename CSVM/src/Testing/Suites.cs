@@ -85,7 +85,7 @@ public static class Suites
             "PRIORITY inflates the drawn sprite by 1 + K·PRIORITY, folded into BaseSize at spawn (C8)",
             PufferPrioritySize));
         into.Add(new TestHarness.Suite("puffer-fire-column",
-            "the 30 s fire's column height, authored against tuned — the readout the fireRiseScale/fireLifetimeScale pair is judged on (D10)",
+            "the 30 s fire's authored column height, still air and in C1's own upward wind — the readout that retired the invented fire scales (D10)",
             PufferFireColumn));
         into.Add(new TestHarness.Suite("loadout-bind",
             "every stock loadout binds to its model with every marker resolved", LoadoutBind));
@@ -1218,15 +1218,12 @@ public static class Suites
         }
     }
 
-    /// <summary>D10 (`PLAN-puffer-engine-deltas`): the `fire_n_smoke` column, measured — the
-    /// readout the `puffer.fireRiseScale`/`fireLifetimeScale` TUNE pair is judged against now that
-    /// A1–C9 have landed.
-    ///
-    /// <para>The A/B is the honest one available headless: the SAME compiled payload is parsed
-    /// TWICE and one copy is renamed. <see cref="Puffer.Init"/> keys the tune on the state's NAME
-    /// alone (<c>FirePufferName</c>), so the renamed copy runs the authored numbers verbatim and
-    /// every other parameter, the RNG stream and the frame schedule are identical. Config cannot
-    /// be written from a suite (DET-7), which is why the name is the lever.</para>
+    /// <summary>D10 (`PLAN-puffer-engine-deltas`): the `fire_n_smoke` column, measured. This is the
+    /// readout that retired the invented `puffer.fireRiseScale`/`fireLifetimeScale` pair — it put
+    /// the tune's contribution at 2.11× on the drawn column, and at the controls the same day the
+    /// refuel-tank flames read as "~twice the height of the originals". The pair is gone; what this
+    /// suite guards now is the AUTHORED column, so a future change that quietly shortens or
+    /// re-stretches the fire has to argue with a number.
     ///
     /// <para>The state comes from the chapter's own compiled program, not from a reader:
     /// `large_30sec_fire`'s `fire_n_smoke` authors neither NUMBER nor DISTANCE_INTERVAL, so
@@ -1240,13 +1237,14 @@ public static class Suites
     /// authors NEAR_FADE (70, 20), and at the suite's origin-camera every particle would otherwise
     /// be near-culled and nothing would be measured at all.</para>
     ///
-    /// <para>Both arms are run twice: in still air, and in C1 IA1's own authored wind. That
-    /// weather's <c>STATIC_VELOCITY</c> is <c>(0, 2, 0)</c> — straight UP — and B6 made friction
-    /// damp toward the wind rather than toward rest, so with FRICTION 0.6 against
-    /// WORLD_ACCELERATION −1 the particle's terminal velocity is <c>2 − 1/0.6 = +0.33 m/s</c>: it
-    /// never turns over, and the column keeps climbing until the lifetime ends. That is the one
-    /// route by which this plan COULD have moved the rise, so it is measured rather than argued.
-    /// The static part is held constant here; the shipped model gusts around it
+    /// <para>It is run twice: in still air, and in C1 IA1's own authored wind. That weather's
+    /// <c>STATIC_VELOCITY</c> is <c>(0, 2, 0)</c> — straight UP — and B6 made friction damp toward
+    /// the wind rather than toward rest, so with FRICTION 0.6 against WORLD_ACCELERATION −1 the
+    /// particle's terminal velocity is <c>2 − 1/0.6 = +0.33 m/s</c>: it never turns over, and the
+    /// column climbs until the lifetime ends. <b>That is why the authored numbers reach on their
+    /// own now and did not before</b>, and it is asserted rather than argued — a regression that
+    /// decouples the wind would show up here as the still-air and wind columns converging.
+    /// The static part is held constant; the shipped model gusts around it
     /// (<c>RANDOM_MAX_SPEED</c> 10, <c>RANDOM_ACCEL</c> 5), which is a distribution, not a
     /// height.</para>
     ///
@@ -1277,24 +1275,22 @@ public static class Suites
             if (payload == null)
                 return;
 
-            var tuned = PufferState.FromAnimEvent(payload);
-            var authored = PufferState.FromAnimEvent(payload);
-            authored.Name += "_authored";   // the tune is keyed on the NAME and nothing else
+            var fire = PufferState.FromAnimEvent(payload);
 
             // The compiled numbers this measurement rests on, asserted rather than assumed: a data
             // change must fail here naming itself, not silently re-baseline the heights below.
-            ctx.Check(tuned.Name == "fire_n_smoke", $"the 30 s fire's emitter is the tuned family's own name name={tuned.Name}");
-            ctx.Same(1, tuned.Number, $"large_30sec_fire authors no NUMBER — one puff per interval (BL-218)");
-            ctx.Check(Mathf.IsEqualApprox(0.1f, tuned.TimeInterval), $"TIME_INTERVAL 0.1 s");
-            ctx.Check(Mathf.IsEqualApprox(5f, tuned.LocalVelocity.Y) && Mathf.IsEqualApprox(4f, tuned.WorldVelocity.Y),
+            ctx.Check(fire.Name == "fire_n_smoke", $"the 30 s fire's emitter name={fire.Name}");
+            ctx.Same(1, fire.Number, $"large_30sec_fire authors no NUMBER — one puff per interval (BL-218)");
+            ctx.Check(Mathf.IsEqualApprox(0.1f, fire.TimeInterval), $"TIME_INTERVAL 0.1 s");
+            ctx.Check(Mathf.IsEqualApprox(5f, fire.LocalVelocity.Y) && Mathf.IsEqualApprox(4f, fire.WorldVelocity.Y),
                 $"the rise is LOCAL_VELOCITY 5 + WORLD_VELOCITY 4 m/s");
-            ctx.Check(Mathf.IsEqualApprox(-1f, tuned.WorldAcceleration.Y), $"WORLD_ACCELERATION −1 m/s²");
-            ctx.Check(Mathf.IsEqualApprox(0.6f, tuned.Friction), $"FRICTION 0.6");
-            ctx.Check(Mathf.IsEqualApprox(1f, tuned.SizeMin) && Mathf.IsEqualApprox(3.5f, tuned.SizeMax),
+            ctx.Check(Mathf.IsEqualApprox(-1f, fire.WorldAcceleration.Y), $"WORLD_ACCELERATION −1 m/s²");
+            ctx.Check(Mathf.IsEqualApprox(0.6f, fire.Friction), $"FRICTION 0.6");
+            ctx.Check(Mathf.IsEqualApprox(1f, fire.SizeMin) && Mathf.IsEqualApprox(3.5f, fire.SizeMax),
                 $"SIZE_RANGE 1–3.5 m (a RADIUS — A1)");
-            ctx.Check(Mathf.IsEqualApprox(3.5f, tuned.LifetimeMin) && Mathf.IsEqualApprox(5.5f, tuned.LifetimeMax),
+            ctx.Check(Mathf.IsEqualApprox(3.5f, fire.LifetimeMin) && Mathf.IsEqualApprox(5.5f, fire.LifetimeMax),
                 $"LIFETIME_RANGE 3.5–5.5 s");
-            ctx.Check(Mathf.IsEqualApprox(2.5f, tuned.GrowthFactor), $"GROWTH_FACTOR 2.5");
+            ctx.Check(Mathf.IsEqualApprox(2.5f, fire.GrowthFactor), $"GROWTH_FACTOR 2.5");
 
             var clock = GameClock.Current;
             GameClock.Current = null;
@@ -1305,36 +1301,31 @@ public static class Suites
                 var breeze = new EffectAmbience();
                 breeze.SetWind(new Vector3(0f, 2f, 0f));
 
-                var withTune = MeasureFireColumn(ctx, tuned, EffectAmbience.Still);
-                var asAuthored = MeasureFireColumn(ctx, authored, EffectAmbience.Still);
-                var withTuneWind = MeasureFireColumn(ctx, tuned, breeze);
-                var asAuthoredWind = MeasureFireColumn(ctx, authored, breeze);
+                var still = MeasureFireColumn(ctx, fire, EffectAmbience.Still);
+                var wind = MeasureFireColumn(ctx, fire, breeze);
 
                 ctx.Note($"large_30sec_fire column, 30 s at 1/60, still host — heights above the emitter:");
-                ctx.Note($"  authored, still air: centre apex {asAuthored.Centre:0.0} m, drawn top {asAuthored.Top:0.0} m (pre-A1 sprite: {asAuthored.PreA1Top:0.0} m), peak live {asAuthored.Live}, largest sprite {asAuthored.Sprite:0.0} m");
-                ctx.Note($"  tuned ({Puffer.FireRiseScaleDefault:0.0}x rise, {Puffer.FireLifetimeScaleDefault:0.0}x life), still air: centre apex {withTune.Centre:0.0} m, drawn top {withTune.Top:0.0} m (pre-A1 sprite: {withTune.PreA1Top:0.0} m), peak live {withTune.Live}, largest sprite {withTune.Sprite:0.0} m");
-                ctx.Note($"  authored, C1 IA1 wind (0,2,0): centre apex {asAuthoredWind.Centre:0.0} m, drawn top {asAuthoredWind.Top:0.0} m, peak live {asAuthoredWind.Live}");
-                ctx.Note($"  tuned, C1 IA1 wind (0,2,0): centre apex {withTuneWind.Centre:0.0} m, drawn top {withTuneWind.Top:0.0} m, peak live {withTuneWind.Live}");
+                ctx.Note($"  still air: centre apex {still.Centre:0.0} m, drawn top {still.Top:0.0} m (pre-A1 sprite: {still.PreA1Top:0.0} m), peak live {still.Live}, largest sprite {still.Sprite:0.0} m");
+                ctx.Note($"  C1 IA1 wind (0,2,0): centre apex {wind.Centre:0.0} m, drawn top {wind.Top:0.0} m, peak live {wind.Live}");
 
-                // What the re-judgement rests on, as assertions rather than prose:
-                // (1) the authored column is still the short one the tune was invented against —
-                //     A1–C9 moved the sprite, not the rise;
-                ctx.Check(asAuthored.Centre > 8f && asAuthored.Centre < 18f,
-                    $"the authored rise still integrates to a low-teens column centre={asAuthored.Centre:0.0} m");
-                // (2) the sprite's own half-extent is a large share of that column, which is the
-                //     part A1 doubled — so the DRAWN plume grew without the rise changing;
-                ctx.Check(asAuthored.Top > asAuthored.Centre * 1.4f,
-                    $"the drawn top stands well above the centre apex — the A1 sprite is a real share of the plume top={asAuthored.Top:0.0} centre={asAuthored.Centre:0.0}");
-                // (3) the tune is still doing what it was invented to do, at the magnitude claimed.
-                ctx.Check(withTune.Centre > asAuthored.Centre * 2f,
-                    $"the tune more than doubles the column apex tuned={withTune.Centre:0.0} authored={asAuthored.Centre:0.0}");
-                // (4) B6's wind coupling really does lift this puffer — an UPWARD authored wind
-                //     with FRICTION non-zero is the one way an item in this plan could have raised
-                //     the column, and it does, without coming near what the tune supplies.
-                ctx.Check(asAuthoredWind.Centre > asAuthored.Centre,
-                    $"C1's upward wind lifts the authored column wind={asAuthoredWind.Centre:0.0} still={asAuthored.Centre:0.0}");
-                ctx.Check(asAuthoredWind.Top < withTune.Top,
-                    $"even wind-carried, the authored column stays below the tuned one wind={asAuthoredWind.Top:0.0} tuned={withTune.Top:0.0}");
+                // What the authored column has to keep doing, as assertions rather than prose:
+                // (1) the rise itself — LOCAL+WORLD velocity against FRICTION and the −1 accel;
+                ctx.Check(still.Centre > 8f && still.Centre < 22f,
+                    $"the authored rise integrates to a high-teens column centre={still.Centre:0.0} m");
+                // (2) the sprite's own half-extent is a real share of the plume, which is A1's
+                //     doubled radius showing up in the picture rather than only in a constant;
+                ctx.Check(still.Top > still.Centre * 1.3f,
+                    $"the drawn top stands well above the centre apex — A1's sprite is a real share of the plume top={still.Top:0.0} centre={still.Centre:0.0}");
+                // (3) B6's wind coupling lifts this puffer. C1 IA1's authored wind blows straight
+                //     UP, and with the fire tune deleted this is the whole reason the authored
+                //     column reaches: decouple the wind and the plume loses ~6 m of height.
+                ctx.Check(wind.Centre > still.Centre + 3f,
+                    $"C1's upward wind lifts the authored column wind={wind.Centre:0.0} still={still.Centre:0.0}");
+                // (4) the height the controls verdict settled on. The deleted tune put this at
+                //     ~68 m and was judged 2x too tall; this band is what "right" measured as, and
+                //     re-introducing any rise/lifetime multiplier breaks it immediately.
+                ctx.Check(wind.Top > 24f && wind.Top < 42f,
+                    $"the wind-carried plume tops out in the judged band top={wind.Top:0.0} m");
             }
             finally
             {

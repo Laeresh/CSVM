@@ -402,33 +402,26 @@ public sealed partial class Puffer : Node3D
     /// <c>--dump-config</c> documents the keys.</summary>
     public const float SizeScaleDefault = 2f;
 
-    /// <summary>TUNE defaults (config.json <c>puffer.fireRiseScale</c> /
-    /// <c>puffer.fireLifetimeScale</c>): multiply the fire puffer's world-vertical spawn velocity
-    /// and its per-puff lifetime. INVENTED against the original's footage, not decoded — the
-    /// authored numbers build a much shorter column than the original's tank/destruction fires,
-    /// which read as an unbroken ~3+ building-height plume
-    /// (`OriginalScreenshots/C1 IA1 Burning Fuel Tanks.png`, the `C1 IA1 Destruction.mp4` t≈176 s
-    /// columns).
-    ///
-    /// <para><b>Re-judged at D10</b> (`PLAN-puffer-engine-deltas`), against the sim the whole plan
-    /// corrected, and RETAINED. Measured through the real emitter on `large_30sec_fire`'s own
-    /// compiled payload for its authored 30 s (suite <c>puffer-fire-column</c>), as the drawn top
-    /// of the column: authored 25.9 m in still air and 32.1 m in C1 IA1's authored wind, against
-    /// 57.2 / 67.8 m with these two scales. The plan DID raise the authored plume — +4.3 m from
-    /// A1's doubled sprite and more from B6's wind coupling, since that mission's wind blows
-    /// straight up and friction now damps toward it — but it closed a fifth of the gap, not the
-    /// gap. The prior comment's "~10–12 m" was an analytic mean-particle estimate; these are
-    /// instrumented extremes and the two are not comparable.</para>
-    ///
-    /// <para>⚠ What DID move is the tuned column itself: 67.8 m against the ~54 m signed off at
-    /// the controls on 2026-08-06, most of it B6's wind. The magnitude is owed a fresh look
-    /// (`PT-48`); these two knobs are where it would be made.</para>
-    ///
-    /// <para>⚠ Every height above is one seed's EXTREME (the tallest particle of the run) and moves
-    /// ~±1.5 m with the emitter's RNG stream, which is seeded by how many puffers were constructed
-    /// before it. Read the ratios, not the decimals.</para></summary>
-    public const float FireRiseScaleDefault = 2.5f;
-    public const float FireLifetimeScaleDefault = 1.5f;
+    // ⚠ `puffer.fireRiseScale` (2.5) and `puffer.fireLifetimeScale` (1.5) lived here until
+    // 2026-08-10 and are DELETED, not neutralised — the fire family now runs its authored numbers
+    // like every other puffer, and there is no knob left to reach for.
+    //
+    // They were invented in 2026-08-06 against footage, to lift a fire column that was too short.
+    // They came out because both halves of the evidence agreed. Measured (suite
+    // `puffer-fire-column`, `large_30sec_fire`'s own compiled payload, 30 s, drawn top of the
+    // column): 32.1 m authored against 67.8 m tuned in C1 IA1's wind — the tune was contributing
+    // 2.11×. At the controls the same day, the refuel-tank flames read as "~twice the height of
+    // the originals". A ratio and an eye that agree to two decimal places are as close to settled
+    // as this project gets.
+    //
+    // What made the tune obsolete was not this deletion but the plan that preceded it: A1 doubled
+    // the sprite and B6 coupled friction to the wind, and C1 IA1's authored wind blows straight UP
+    // (`STATIC_VELOCITY (0, 2, 0)`), so the column now climbs until its lifetime ends instead of
+    // turning over. The authored numbers reach on their own; they did not before.
+    //
+    // ⚠ Do not re-add a rise/lifetime multiplier for the fire family. If a fire looks wrong now,
+    // the candidates are the authored data (`BL-218`'s density), the blend verdict (see
+    // `SmokeLuminance`), or the wind — not a compensating constant on one emitter's name.
 
     /// <summary>Default for config.json <c>puffer.globalFadeFactor</c> — the original's own
     /// <c>PufferSetGlobalFadeFactor</c> (<c>00637a94</c>), which multiplies the distance the FAR
@@ -446,14 +439,6 @@ public sealed partial class Puffer : Node3D
     /// path (see <see cref="DistanceAlpha"/>'s remark on the same split), so this is the hardware
     /// value. Default <c>PRIORITY</c> is 0, so the factor is 1 unless authored.</summary>
     public const float PriorityScaleDefault = 0.02f;
-
-    /// <summary>The authored fire-column family — the crash fire (<c>large_10sec_fire</c>), the
-    /// destruction fires (<c>large_30sec_fire</c>/<c>huge_30sec_fire</c>) and the burning fuel
-    /// tanks all emit a sustained puffer of exactly this name, and it is the family playtesting
-    /// judged "climbs but not as high as the original". The two scales
-    /// above apply only to it, so gun smoke, trails, sputters and the ambient
-    /// steam/torch/waterfall emitters keep their authored numbers.</summary>
-    private const string FirePufferName = "fire_n_smoke";
 
     /// <summary>Alpha-weighted mean luminance (0–1) below which the sprite a particle dies on
     /// counts as smoke, so the emitter alpha-blends instead of adding. The measured population
@@ -491,11 +476,6 @@ public sealed partial class Puffer : Node3D
     // C8: 1 + K·PRIORITY, read once at Init off the authored state — not a config knob, since it
     // is a decoded engine constant rather than a tuning surface.
     private float _priorityFactor = 1f;
-
-    // The fire-column scales — 1 (inert) unless this emitter IS the fire puffer family
-    // (FirePufferName), which only ever spawns on the sustained path.
-    private float _fireRiseScale = 1f;
-    private float _fireLifeScale = 1f;
 
     // C7's three switches (config.json puffer.distanceFade / farCull / nearCull), read once at
     // Init. All default TRUE — every one of them reproduces the original, and a flag that shipped
@@ -1118,11 +1098,6 @@ public sealed partial class Puffer : Node3D
         _nearRecip = Reciprocal(state.NearFadeEnd - state.NearFadeStart);
         _farRecip = Reciprocal(state.FarFadeEnd - state.FarFadeStart);
         _priorityFactor = 1f + PriorityScaleDefault * state.Priority;
-        if (string.Equals(state.Name, FirePufferName, StringComparison.OrdinalIgnoreCase))
-        {
-            _fireRiseScale = Config.GetFloat("puffer.fireRiseScale", FireRiseScaleDefault);
-            _fireLifeScale = Config.GetFloat("puffer.fireLifetimeScale", FireLifetimeScaleDefault);
-        }
         if (state.DistanceInterval > 0f)
         {
             // Distance states use the trail pool even on the sustained (runtime) path: their
@@ -1134,9 +1109,11 @@ public sealed partial class Puffer : Node3D
         }
         else if (sustained)
         {
-            // The scaled lifetime raises the steady-state population with it, or the tuned fire
-            // would silently drop its extra puffs at the old pool's edge.
-            int steady = Mathf.CeilToInt(state.Number * state.LifetimeMax * _fireLifeScale
+            // Number per interval, each living up to LIFETIME_RANGE's max, plus one interval's
+            // worth of headroom. (This used to carry the fire tune's lifetime multiplier so the
+            // stretched puffs had somewhere to live; the tune is gone, so the authored lifetime
+            // is the whole story again.)
+            int steady = Mathf.CeilToInt(state.Number * state.LifetimeMax
                                          / Mathf.Max(state.TimeInterval, 1e-3f)) + state.Number;
             _particles = new Particle[Mathf.Clamp(steady, SustainPoolMin, SustainPoolMax)];
         }
@@ -1174,17 +1151,15 @@ public sealed partial class Puffer : Node3D
         {
             // Draw order (pos → vel → size → life) is deliberately the historical one: every
             // sustained emitter shares it, and reordering the draws re-scatters ALL of them —
-            // measured as the c1-waterfall golden moving with the fire tune inert there.
+            // measured as the c1-waterfall golden moving while the (now deleted) fire tune was
+            // inert there, so the movement could only have come from the draw order.
             // ±0.5·d, not ±d: FUN_0054f8b0 spawns at prev + delta*frac + (rand01 - 0.5)*d, i.e.
             // rand01 in [0,1) recentred on 0 gives a HALF-width offset (A2). Keep one Rand() draw
             // per axis — changing the draw count re-scatters every sustained emitter too.
             var pos = origin + new Vector3(Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d));
             var vel = baseVel + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z));
-            // The fire tune: scale the world-vertical rise (and the puff's lifetime below)
-            // of the fire family only — 1 for every other emitter, so this is the identity there.
-            vel.Y *= _fireRiseScale;
             float size = Rand(_state.SizeMin, _state.SizeMax) * _sustainSizeScale * _priorityFactor;
-            float life = Rand(_state.LifetimeMin, _state.LifetimeMax) * _fireLifeScale;
+            float life = Rand(_state.LifetimeMin, _state.LifetimeMax);
             // START_AGE_RANGE (B4): FUN_0054f8b0 draws lifetime, then start age, both before
             // its position draws. Ours draws pos/vel first (A2's order, load-bearing for every
             // other puffer), so the closest match is start age immediately after life, right
