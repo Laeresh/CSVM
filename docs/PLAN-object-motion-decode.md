@@ -175,7 +175,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — ground truth before any code moves
 
-1. ☐ Establish what the goldens actually cover, and take the pre-change baseline
+1. ☑ Establish what the goldens actually cover, and take the pre-change baseline
 2. ☐ Finish the gravity-flag map (`0x2000`, `GRAVITY LOCAL`) and re-derive the census
 3. ☐ Handle flag `0x2000`: the suppressed gravity add and the widened landing test
 

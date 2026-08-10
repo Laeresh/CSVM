@@ -208,11 +208,14 @@ internal sealed class MotionRuntime : IAnimMotion
         float launchScale = DebrisTune.LaunchScale;
 
         // `do_intersections` — the original's OWN collider test, and the one field that says which
-        // bodies it tested. A session that wired no mask (every lab, every headless suite that does
-        // not ask for it, every golden capture — none of which build world colliders) leaves this
-        // false and takes the untouched path: that is the fallback, made structural rather than
-        // remembered. The BOUNCE_SEQUENCE block rides along because a contact-terminated body picks
-        // its branch from the SURFACE IT STRUCK, which is not knowable here.
+        // bodies it tested. A session that wires no mask (every lab, every headless suite that does
+        // not ask for it, and 9 of the 13 golden captures — freecam/viewer/empty-stage, none of
+        // which build world colliders) leaves this false and takes the untouched path: that is the
+        // fallback, made structural rather than remembered. The remaining 4 goldens (Fly mode) DO
+        // wire a mask, but none currently completes a landing inside its own capture window —
+        // see analysis/object-motion-goldens/FINDINGS.md (A1). The BOUNCE_SEQUENCE block rides along
+        // because a contact-terminated body picks its branch from the SURFACE IT STRUCK, which is
+        // not knowable here.
         m._contactMask = rt.ContactMask;
         m._contactTest = (gravityBlock?.Bool("do_intersections") ?? false) && rt.ContactMask != 0;
         m._bounce = data.Obj("bounce_sequence");

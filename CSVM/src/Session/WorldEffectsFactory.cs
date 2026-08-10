@@ -368,8 +368,11 @@ public sealed class WorldEffectsFactory
         // The wreck pieces are `do_intersections: true` — `player_crash_dirt`'s `piece1`-`4` are 4
         // of the 16 (def, node) pairs in all 8 chapters that ask for the original's collider test
         // AND stay in the world. Handing the mask over is what turns their sweep on; a session that
-        // builds no colliders hands nothing and they keep flying their authored clock out, which is
-        // exactly the behaviour every golden capture recorded.
+        // builds no colliders hands nothing and they keep flying their authored clock out. Only the
+        // 4 Fly-mode goldens hand it over at all, and `c1-crash`'s own sweep IS armed by this branch
+        // — but its 20-frame capture window closes 0.333 s into piece1-4's 6 s run, long before
+        // contact, so no golden today actually shows a completed landing (A1,
+        // analysis/object-motion-goldens/FINDINGS.md).
         if (_spec.BuildsCollision)
         {
             crashRuntime.ContactMask = CollisionLayers.World;
