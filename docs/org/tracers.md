@@ -197,6 +197,19 @@ per round. The decode settles the numbers that tuning was standing in for.
 | Rockets | prototype body only, no streak; the trail is `MODEL_ANIMATION` puffer smoke | a `tracer1` streak at `RocketExhaustScale` 0.5 / `RocketStreakScale` 2.4 | ours invents a streak the data has no counterpart for |
 | Per-frame work | one position write per round | per-round basis rebuild against the listener camera | |
 
+**How the floor itself is computed**, since it is the one row above with no original behind it to
+check against: `screenPx = worldSize · viewportHeight / (2 · distance · tan(fov/2))`, inverted for
+the world size that covers `TracerMinPixels`. It is **linear in distance** — which is exactly why
+one shared world mesh cannot satisfy two cameras at once — and each viewer is measured with its
+**own pane height**, not the window's. Those two together are the whole splitscreen bug: a round
+1000 m from P1 and 100 m from P2, sized for P1, covers ten times its 2 px target in P2's pane. The
+rule is therefore the SMALLEST of the viewers' individual floors, and it follows that arithmetic
+rather than raw distance ordering — a nearer camera in a quarter-height pane legitimately needs a
+larger world size than a farther one in a full-height pane, and wins. A viewer the projection
+cannot use (a camera sitting exactly on the round, a pane with no height) is skipped rather than
+collapsing the floor to zero for everyone, and no bound viewers at all means **no floor**, falling
+through to the authored sizes rather than to zero-size or infinite geometry.
+
 None of these are changed by this page. `TracerMinPixels` in particular was introduced from the
 reference captures showing distant fire as visible streaks; the 600 m LOD says the original stops
 drawing them, so that reading needs re-checking against a shot fired at a *known* range before

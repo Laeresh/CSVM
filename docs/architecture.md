@@ -663,6 +663,12 @@ filtered to the ones this gamez carries a root for — so one district can be lo
 against the original. It prints one line naming what was requested, what resolved and what this
 chapter does not carry, since an absent name is retail-data-normal and would otherwise read as an
 empty district.
+
+**The original's placement runtime is written up in [org/clutter.md](org/clutter.md)** — the
+function map, the template lookup's first-match scan, the UV-lattice stamp and its local triangle
+frame, the engine defaults no chapter authors, and the weight list's sum-and-divide. Read it before
+changing a placement rule; the authored side stays in [formats/clutter.md](formats/clutter.md) and
+[formats/templates.md](formats/templates.md).
 ⚠ **`no_clutter` (raw polygon bit `0x800`, carried as `GameZPolygon.NoClutter`) gates every stamp**,
   reproducing `FUN_004de2c0`. It does **not** mean "leave this ground bare": where two COPLANAR
   layers are painted over each other it selects which one decorates, and flagged means skip the
@@ -1403,6 +1409,10 @@ Its scope is per-event START_TIME gating, LOOP with
 authored-count-0 = infinite, and IF/ELSEIF/ELSE/ENDIF via a `_branchTaken` stack + a deliberately
 **non**-nesting-aware `Scan` — the original counts no depth, and 48 shipped `gunhit` sequences
 observe the difference; the constraint and its one residual live in `Scan`'s own comment).
+**The original's sequence runtime is written up in [org/sequences.md](org/sequences.md)** — the
+function map, the three START_TIME origins, the LOOP's pass counter and 60 Hz frame denomination,
+and the clock-carry a timed loop needs; the authored side stays in
+[formats/anim-definitions.md](formats/anim-definitions.md).
 `AnimInstance` holds a definition's concurrent runners and removes them as they finish, and carries
 the CALL_SEQUENCE/STOP_SEQUENCE semantics (decode in `docs/formats/anim-definitions.md`;
 `AnimRuntime`'s dispatch cases are thin shims over these). **One runner per sequence, keyed on the
@@ -2124,6 +2134,9 @@ every rig respawns), owned only while the board is visible via `FlightController
 `WorldLight` (`SunIncidence` 0.46 / `MinWorldLight` 0.15, TUNE) and `SUNLIGHT_ORIENTATION` →
 `SunOrientation`, plus the `CLOUD_COVER` whiteout band (`WhiteoutAmount` trapezoid), `WIND`, and
 precipitation → `PrecipData`. Schema + colours + zone names: weather.md.
+**The original's weather/sky/fog/light runtime is written up in [org/weather.md](org/weather.md)** —
+the camera weather state machine, the `zone_id` visibility gate, the zone apply's edge trigger, the
+band flicker's two curves, and the sun/dome/deck rules. Read it before changing a weather mechanism.
 ⚠ The record is named for the whole zone, not for the fog, because `WeatherRig.ApplyZone` writes
   all three in ONE call on the zone edge — the binary's own shape (`FUN_00472ea0` sets the fog
   parameters and then the `sunlight` node's orientation). A zone change that moved the fog and left
@@ -4167,6 +4180,8 @@ Constructed once per session (`_weatherRig`, same lifetime as `LiveryResolver`/`
 `WorldEffectsFactory`) and discarded with the session node on return-to-menu — its per-rig nodes
 hang under `_worldRoot`, so the `QueueFree` of the session frees them; `_Process`'s `_weatherRig?.Tick`
 null guard covers the frame before that deferred free lands (it can never be null mid-session).
+**What the original does per frame is written up in [org/weather.md](org/weather.md)** — including
+the retired `DeckCeilingHeight` fits, which must not be re-derived.
 ⚠ **The horizon (skydome) build loop stays on `GameSession`** — it's a `SceneBuilder` concern, not
   weather state. `Build` takes it as a `buildDomes` callback, invoked between resolving the zone and
   applying fog/whiteout/precip, at exactly the point the original inline code ran it — do not

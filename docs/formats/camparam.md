@@ -89,6 +89,37 @@ this file and leaves the chase offset's *direction* as a hand-picked value. `thi
 = 16.6° sits suggestively close to the engine's hand-picked 15.7° elevation, but one near-match is
 not a decode.
 
+## The throttle transient — measured off CAP-21, authored nowhere
+
+Beyond the authored `d = dist + dist_factor·V`, the original's chase distance carries a **transient
+in the along-path acceleration**: slam the throttle open and the camera falls back, cut it and the
+camera closes in, both relaxing back onto the speed law. Every number below is **measured off the
+Bloodhawk staircase clips (`CAP-21`, `BL-248`)** — none of it is decoded from `crimson.exe`, and
+none of it matches an authored constant in this file.
+
+| Quantity | Measured | Note |
+|---|---|---|
+| Relaxation rate | **0.65 /sim-s** (τ = 1.55 sim-s) | first-order decay of the excess distance |
+| — the same, in wall time | τ = **1.11 wall-s** (0.90 /wall-s) | the raw clip figure, before conversion |
+| Wall→sim conversion | **k = 1.390** | the project-wide constant, same one the STALL lamp's dwells use |
+| Steady-state excess | **+0.28 % of `d` per mph/sim-s** = **0.105 m per m/s²** | residual-vs-`dV/dt` correlation **−0.79 to −0.85** in all four takes |
+| Peak excursion | **≈ +15 % of the radius** on a full-throttle slam, **≈ −7 %** on a full cut | this is the part the eye actually sees |
+
+⚠ **Apply it on the SIM clock.** Using the wall figure (0.90 /wall-s) runs the relaxation **39 %
+fast** — the same 1.390 trap that governs every measured dwell in this project (verification
+`DET-11`). The engine advances the radius once per sim step, never per render frame, so the
+acceleration derivative is clean and a halted or crashed sim freezes the radius with everything
+else.
+
+⚠ **This rate is a measured constant, not a reading of `dist_catch_up`.** See the catch-up warning
+above: 0.65 /sim-s matches none of the three authored rates, and `dist_catch_up` 1.0 — the nearest —
+is 1.54× it.
+
+⚠ **Do not wire `dist_min`/`dist_max` as a clamp on the dynamic radius.** The realised distance is
+`dist + dist_factor·V` plus this transient, deliberately **unclamped**; the default block's own
+`dist` 13.0 sits *below* its `dist_min` 15.7, and the footage's realised distances never reach
+`dist_max`. `dist_vary` has no identified input either — the capture footage never moves it.
+
 ## What the engine reads
 
 `CSVM/src/Flight/CamParams.cs` parses the whole file and exposes every field;

@@ -86,21 +86,21 @@
       "name": "c1-flight",
       "frame": 120,
       "hash": "7be47c666ac71748788cb66e8d7a0b8c",
-      "exercises": "a flying plane, the only shaded surface in a flight: chase camera on the sim clock, prop and control-surface animators, the mission's sun bearing, gauges, compass tape, weapon readout, a live exhaust-trail puffer, and the chapter-authored SpeedCue wisps 60 m ahead; frame-sensitive 34.52 %.",
+      "exercises": "a flying plane, the only shaded surface in a flight: chase camera on the sim clock, prop and control-surface animators, the sun bearing, gauges, compass tape, weapon readout, a live exhaust-trail puffer and SpeedCue wisps; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-destroy-effects",
       "frame": 120,
       "hash": "5c8a15f7b4d4143edb1873da98c4850d",
-      "exercises": "the world-effects runtime rendering a puffer — a flight-session kill of the single ap_radiotwr instance calls great_balls_of_fire onto the world-effects stage — plus that flight rig's chapter-authored SpeedCue; frame-sensitive (distinct hashes at 119/120/121), and moves off its Rng.Effects seed.",
+      "exercises": "the world-effects runtime rendering a puffer: a kill of the single ap_radiotwr instance calls great_balls_of_fire onto the world-effects stage, plus that rig's SpeedCue; frame-sensitive, and moves off its Rng.Effects seed.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-crash",
       "frame": 20,
       "hash": "1c6843422a489e013c37f246a0331451",
-      "exercises": "the per-player crash rig building and playing player_crash_dirt (--crash=5 is its only headless trigger), the airframe under the mission's sun, the moving distance-puffer AT_NODE offset path, and the set's largest puffer surface: fireball, wreck fire, smoke, debris, ground scorch.",
+      "exercises": "the per-player crash rig building and playing player_crash_dirt (--crash=5 is its only headless trigger), the airframe under the sun, the moving distance-puffer AT_NODE path, and the largest puffer surface: fireball, fire, smoke, debris, scorch.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     }
   ]

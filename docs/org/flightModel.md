@@ -371,6 +371,44 @@ warned not to read as validation, and it does not extend to the Bloodhawk's real
 as an open decode-vs-footage conflict (`analysis/flight-model-baseline/POST-B14.md`'s B15 section
 has the full eleven-airframe table), not resolved by switching G-conventions to fit one clip.
 
+## The two stall cues — a lamp and a nose-drop, on two unrelated thresholds
+
+Both cues are measured on the same margin (`Speed / fd_speed`), and their thresholds are
+**deliberately different numbers**, neither of them a tuning constant:
+
+- **The nose-drop** fires below the airframe's own computed stall speed — the decoded
+  `clMax · q · RefArea = Weight` solve above (B15). **Decoded.**
+- **The STALL lamp** lights at a fixed **0.30 × `fd_speed`** — 0.2989–0.2996 across four
+  original-game clips. **Measured off footage**, and deliberately *not* re-derived from the computed
+  stall speed: the split is unrelated to the nose-drop mechanism, so the lamp stays a fraction.
+
+In the original's "Stall 0% Thrust no input" clip the lamp led the Bloodhawk's own break by
+**2.64 sim s / 14.9 mph**. `CSVM.Tests/StallWarningTests.cs` asserts the ORDERING (warn leads
+stall) and the MECHANISM (two independent thresholds on one margin), **not** that absolute lead —
+the Bloodhawk's computed 56.5 mph stall does not reproduce the clip's ~76 mph nose-drop, and that
+is the recorded decode-vs-footage conflict above rather than something a test papers over.
+
+⚠ **Do not fold the two thresholds together**, and do not move the lamp onto the computed stall
+speed to tidy the split away — they are unrelated by measurement, not by oversight.
+⚠ **Do not exercise the split on the executable's fallback aircraft.** The fallback airframe's own
+computed stall (75.5 mph, i.e. ≈0.30 of its own reference speed) sits almost exactly AT the warn
+threshold, which *inverts* the split instead of testing it. The tests fly the Bloodhawk's real
+1900 / 330.
+
+**The lamp's blink is a rate ramp, measured (`CAP-06`).** Half-period **643 ms at 0.30 fd** and
+**296 ms at 0.15 fd**, shortening monotonically with stall depth and **held** below 0.15 rather
+than extrapolated into a strobe. Every figure is in **sim** seconds: the wall→sim conversion is
+**k = 1.390**, so one original game frame (33.37 ms wall) is **46.4 ms sim** — the resolution the
+lamp was measured at, and therefore the tolerance every period assertion gets.
+⚠ **A wall-clock implementation lands ≈39 % short of every dwell.** Same conversion and the same
+trap as the chase camera's throttle transient ([camparam.md](../formats/camparam.md)).
+
+**The nose-drop's own rate is a remake TUNE, not a decode.** `StallNoseRate` (1 rad/s toward
+world-down at full stall depth, scaled by the authored `stall_mag`) is chosen so the deep-stall
+rate exceeds full-elevator authority (~0.58 rad/s steady) and the drop is decisive until airspeed
+recovers; while stalled the nose additionally cannot be raised over the horizon at any bank
+(user-observed behaviour of the original). Nothing in the executable has been traced to either.
+
 ## Control authority vs speed
 
 `FUN_00490e10` derives three independent scalars from airspeed alone. Fallback values shown as
@@ -392,6 +430,20 @@ authored (MPH):
 
   The rudder is at full authority only in a 22.5–45 mph window and sits at **10 %** for all of
   normal flight. It is a ground-handling and low-speed control, not a flight control.
+
+### The low-speed ramp is decoded and UNIMPLEMENTED (`BL-330`)
+
+The base ramp `f` is the one part of `FUN_00490e10` the remake does not carry: `FlightModel.Step`
+applies the authored yaw curve and **no speed term at all** to pitch or roll, so both hold full
+authority down to zero airspeed. The original fades them to **0 at `turn_fade_in`** (10 mph),
+reaching full only at `turn_fade_out` (fallback 40, **authored 50**). Traced, corroborated from the
+controls, and open as `BL-330`.
+
+⚠ **"Roll never fades" above means never with HIGH speed.** Read as "roll authority is
+speed-independent" it becomes the misreading that had `turn_fade_in`/`turn_fade_out` filed as a
+candidate *bank* effect through four consecutive items — see the CORRECTION at the end of
+"Bank-independent lift vs the measured knife-edge sag". The ramp is keyed on airspeed alone and is
+saturated across the whole regime in which that 1.6× gap appears.
 
 ## Torques and the limiters
 
@@ -614,6 +666,16 @@ starts engaging in a knife-edge. Left at 0.35; `KnifeEdgeTests` pins the α marg
 nose drift 1.09 °/s against a measured 0.69–0.89, heading 1.7 °/s against 0.68–1.13 — the same
 ≈1.6× by which `sustained-turn-rate` exceeds the original's banked pull (32.8 against 18.95). Two
 independent manoeuvres, two different body axes, one ratio. Nothing was tuned to close it here.
+
+⚠ **Do not reintroduce a nose-sag term to deepen the knife-edge.** The decoded bank→yaw coupling
+already drops the nose there, and the weathervane then pulls it onto the falling path; a second
+nose-down term double-counts what is already present and re-creates the wings-level leak above (the
+retired term rotated the nose down at up to 11.5 °/s in a plain 45° pull).
+⚠ **Do not lower `KnifeAlignFloor` to close the remaining gap either.** Lowering it moves every row
+toward the footage and still cannot reach it, because the remaining error is in the ROTATION rate —
+the ≈1.6× above — and retuning the chase constant would hide a rotation error inside it. It also
+runs into a real boundary at 0.10, where the knife-edge α reaches 5.36° and crosses
+`liftAOAs[0] = 5°`.
 
 ⚠ **CORRECTION (2026-08-09): the authored candidates are exhausted, and this document said
 otherwise for four items running.** C22, C23, D31 and D33 each parked this gap on "`BL-095`'s
@@ -1080,6 +1142,118 @@ by the `player.json` parser at `0x4744c0`/`0x4744f0` and **read by nothing anywh
 drag multiplier and no low-speed drag fade; the per-plane `drag_factor` is the only drag scale.
 Checked while hunting the CAP-05 deficit (a fade below ~300 mph would have produced exactly its
 shape); the hunt is what proved the keys dead.
+
+## The resting altitude cap — measured, and traced to ONE mission
+
+The original's flight has a ceiling: the sustained climb above leaves its plateau at ≈6,600 ft
+(`CAP-03`). The remake carries it as a hard clamp at **2003 m**, with a **42.8 m (~140 ft)**
+overshoot backstop above that. Both numbers are **footage measurements** (C1B IA1, Bloodhawk) —
+nothing in `crimson.exe` has been traced to either, so this section is measurement, not decode.
+
+**It is a clamp on ALTITUDE, not an energy limit**, and the footage is what says so: the level
+full-throttle equilibrium is flat to ±0.3 mph right up to 15 m under the line, and holding a 22°
+nose-up pull against it gains no altitude at all (sub-foot over the clip's last 5 s) while airspeed
+bleeds instead. The mechanism therefore deletes the frame's climbing velocity outright rather than
+fading thrust, lift or drag toward the ceiling. Whatever that bleed then runs into — the stall
+thresholds above — is a consequence of the clamp, not a second mechanism built beside it.
+
+The overshoot figure is a backstop only. The footage's zoom entries coast past the resting cap on
+pre-existing momentum before the clamp ever catches them, so it needs only to be at least as
+generous as the measured **6712 ft** apex; it bounds a runaway frame, it does not shape the
+overshoot.
+
+⚠ **Traced to ONE mission.** Do not assume the cap is global, per-chapter/zone, or per-aircraft
+until another mission's footage says otherwise.
+
+⚠ **The dive-speed cap is the same kind of object and must not bind.** `MaxDiveSpeedFrac`
+(1.75 × `fd_speed`) is a numerical backstop against a loop energy pump or a `dt` spike, not a
+terminal speed — a cap that binds replaces a measured terminal with a guess. It does not bind: the
+Bloodhawk's full-throttle 71° dive terminates at **1.11 × `fd_speed`** on the aerodynamics alone.
+It is also the ceiling the `high_speed_pitch_fade` unreachability table below is computed from,
+precisely because it is the most generous "could this airframe ever get there" test available.
+
+## The three `*Tune` rates — what they are pinned to
+
+The remake's per-axis control-rate calibration. Steady rate is
+`torque · rec_moments_inertia · Tune / ang_momentum_damp` (× the yaw authority curve on yaw), and a
+full 360° takes ≈ `1/damp` of spin-up plus `2π/rate`. Fitted to stopwatch timings of the original
+and then confirmed against cockpit-gauge video of it — **360° roll 2.05 s, sustained pitch ≈33 °/s,
+full-rudder 360° 28.6 s** — all three within a few percent of what the values already gave.
+
+| Constant | Value | Note |
+|---|---:|---|
+| `PitchTune` | **0.89** | 0.75 before C23; the weathervane explains a little over half of what it used to absorb |
+| `YawTune` | **1.57** | 1.33 before C23 (and 1.32 before C21's authored yaw curve) |
+| `RollTune` | **2.12** | untouched by C21/C22/C23 — the weathervane's torque is ⊥ the nose and provably cannot reach roll |
+
+**The video also closed an open question: the original's pitch rate does NOT fall off with speed.**
+Binned round a loop it reads 37.9 / 33.7 / 30.7 / 36.5 °/s over 120–280 mph — flat within the
+noise — so speed-independent pitch is right, and this is the measurement behind "pitch carries no
+high-speed fade" above.
+
+The refits are **Bloodhawk-pinned**, as they always were; the other ten airframes have no measured
+target of their own and simply move with them.
+
+⚠ **Do not chase `BL-147`'s transient gap through these constants.** They set the STEADY rate,
+which matches; a transient chased through them breaks the thing that currently works. The
+square-wave cadence sweep is the measurement that belongs to that gap — see the C23 landing note.
+
+## What the test suite pins, and why each test can fail
+
+Every decoded mechanism above has an able-to-fail assertion behind it, and several of those tests
+encode a specific wrong reading rather than merely re-stating the right one. Recorded here because
+the tests, not the prose, are what stops a mechanism being quietly re-derived.
+
+- **`AngularDampingTests`** — `FUN_00491820` steps 2–3. Pins the ORDERING (this tick's own torque
+  is damped too, not exempted until the next tick: a decay-then-add implementation reads the same
+  two lines and fails here) and the FORM. ⚠ The two forms agree to first order in `dt`, so a small
+  timestep cannot separate them; the case that can is `dt · damp = 5`, past the linear form's
+  stability edge at **`dt · damp = 2`**, where `(1 − dt·damp) = −4` flips the rate's sign and grows
+  it every tick while `exp(−dt·damp)` stays in `(0, 1)` and only decays.
+- **`WeathervaneTests`** — `FUN_00490f70`, `0x4916fe`–`0x4917f0`. Reads the torque directly, or the
+  body rates after ONE step from rest where the arithmetic is closed form, so a sign flip, a missing
+  halving or a leak into roll fails exactly instead of being absorbed a hundred frames later. Pins:
+  it VANISHES on the flight path (exactly zero, which is what leaves level cruise untouched by
+  construction rather than by scale); the sign CLOSES the misalignment (a reversed weathervane is
+  divergent and still looks plausible in one frame); the magnitude is `return_rate × HALF` the
+  angle; the roll component is identically zero at every bank. ⚠ And it pins that a released axis
+  decays at **`ang_momentum_damp` ALONE** — folding `return_rate` back into the damping coefficient
+  is the first-order lag this replaced, and the failure message prints that number alongside.
+- **`KnifeEdgeTests`** — the retired sag term's own footprint is asserted gone: wings level, nose
+  45° up, path on the nose, stick centred, every torque in the model is identically zero, so one
+  step must not rotate the attitude at all. The bounded term keyed on `1 − |bodyUp·up|`, which is
+  0.29 in exactly that attitude, so it rotated the nose down at up to **11.5 °/s** — a nose-down
+  bias in every pull at any bank, filed as `BL-115`'s "knife-at-zero-bank leak". Also pinned: the
+  knife-edge never settles on any of the eleven (a bounded sag puts almost none of its total in the
+  last third of a 36 s hold, a genuine drift about a third), the nose stays well below the path
+  (retiring `wingVert` makes the chase faster and fails it), and α stays inside `liftAOAs[0]` on
+  all eleven — peak **0.71–4.29°** against the authored 5°. That last one **replaced a lost prose
+  figure** ("the Balmoral knife-edges at α = 5.1°, 0.1° inside the ramp") that no instrument could
+  reproduce: the Balmoral peaks at 1.77°, and the tightest airframe is the **Bloodhawk** at 4.29°,
+  ≈0.71° clear. The probe recipe lives in `Probes.KnifeEdge` — it was lost once as prose and is
+  code now precisely so that it cannot be again.
+- **`AttitudeThrustTests`** — the 0.24 / 0.13 coefficients, and the SIGN read out of the integrator
+  rather than off the formula's argument name: throttle touches only the thrust term, so
+  differencing a full-throttle step against a zero-throttle step from an identical state isolates it
+  to the last bit. ⚠ This is the one place in the force path where a dropped sign produces flight
+  that still looks entirely plausible — it merely swaps climb for dive. The four-arrangement climb
+  table above is asserted as a BOUND that separates the four, not one the shipped arrangement merely
+  passes, and the probe fails the run outright if the altitude clamp binds (a clamped run measures
+  the clamp, not the climb).
+- **`ControlLimiterTests`** — the two limiters are decoded, authored out of reach, and deliberately
+  NOT implemented; these tests are what keeps that decision honest, because they fail the moment a
+  data edit, a per-plane override or a model change brings either threshold into reach. ⚠ The
+  disproof carries its own able-to-fail control (`METHOD-9`): halving both authored thresholds must
+  make both checks fail, otherwise the manoeuvres have gone too gentle to trip anything and the
+  disproof has stopped measuring a margin.
+- **`FlightEnvelopeTests`** — the Bloodhawk's flown envelope against cockpit-gauge video, as golden
+  numbers ("150 → 290 mph in 3.76 s" is an invariant of a fixed artifact). The count of asserted
+  scenarios is **pinned at 7** so that silently demoting one to informational cannot read as a green
+  run. Three informational rows are recorded CONFLICTS rather than open questions —
+  `accel-150-290` (footage vs the byte-verified force path), `sustained-turn-speed` and
+  `sustained-turn-sink` (both riding the unattributed turn-rate gap C22 was expected to close and
+  demonstrably does not). `terminal-dive` came BACK from that list when the attitude-thrust terms
+  landed (D32): the count went 7 → 6 → 7, and a demotion is never the quiet way to make a run green.
 
 ## What this changes for the remake
 

@@ -34,10 +34,26 @@ evidence). Where CSVM deliberately differs, that is listed at the bottom rather 
 | `FUN_0054ed10` | View-matrix setup — pre-scales the third column, which is why the draw's distance is a view-space DEPTH |
 | `FUN_0054d9c0` | Writes the `PRIORITY` size constant `K`: `0.01` software, `0.02` hardware |
 | `FUN_0053c110` | Hardware-path projection setup — makes the view/draw scale factors exact reciprocals |
+| `FUN_005a8c00` | Installs the rasteriser dispatch table the draw's final call selects an entry of |
+| `FUN_005a4b70` / `LAB_005a4580` | The two sprite entries themselves — ramp / ramp-less (see the blend section) |
+| `FUN_004bc680` | The weather reader (`D:\zipper\Crimson\weather.cpp`) — reads the `WIND` block that feeds the tick's gust, converting `RANDOM_ANG_VEL` degrees→radians by `0.017453292` on the way in |
+| `FUN_00550690` / `FUN_005506b0` / `FUN_005506c0` / `FUN_005506d0` | The four one-line wind setters: `STATIC_VELOCITY`, `RANDOM_MAX_SPEED`, `RANDOM_ACCEL`, `RANDOM_ANG_VEL` |
+| `FUN_005b80a0` | The debug console — exposes the same four as `GlobalWindStaticVelocity` / `GlobalWindRandomMaxSpeed` / `GlobalWindRandomAccel` / `GlobalWindRandomAngVel`, which independently confirms the mapping |
 
 Two script-exposed globals, `PufferSetGlobalAgeFactor` (`00637a90`) and
 `PufferSetGlobalFadeFactor` (`00637a94`), both default to `1.0`. Nothing in this install writes
 either.
+
+**What the fade factor actually multiplies:** the distance the **FAR** band is measured at, and
+nothing else — both near comparisons in `FUN_0054e6e0` use the plain, unscaled depth. Below 1 it
+pushes the far fade and its cutoff outward; above 1 it pulls them in. It is a script/debug-console
+knob, so it ships at its own `1.0`; CSVM exposes it as `puffer.globalFadeFactor` rather than
+reaching for a distance multiplier of our own.
+
+**Parser flag bits** named by this pass, in the def's flag word at `+0x30` (`FUN_004f7120`):
+`FADE_RANGE` and `FAR_FADE` are **two spellings of one bit**, `0x1000` (the install authors
+`FADE_RANGE` 574 times and `FAR_FADE` exactly once, C3's `volcanosmoke`, so the alias is not
+hypothetical); `NEAR_FADE` is `0x80000`, `WIND_FACTOR` `0x100000`, `PRIORITY` `0x400000`.
 
 ## The emitter object (0xEC bytes)
 
@@ -67,6 +83,16 @@ key do?" question, and two of them contradict guesses this project had shipped:
 | `NEAR_FADE` | `(0, 0)` | i.e. no near cull |
 | `FAR_FADE` | `(FLT_MAX, FLT_MAX)` | The equal ends are why the reciprocal is stored as the raw difference (`0`) rather than an infinity |
 | `PRIORITY` (`+0x70`) | 0 | So the size factor `1 + K·PRIORITY` is exactly 1 unless authored |
+
+⚠ **Absent and explicit-zero must stay distinguishable, and in the shipped data they are.** The
+`WIND_FACTOR` default is what 2,802 of the install's 2,863 friction-bearing compiled events run
+on; reading an absent key as 0 would becalm all of them silently. The compiled surface writes
+`wind_factor: null` when unauthored (4,423 of 4,535 events) and `0.0` when a puffer deliberately
+opts out (6 names, 12 events — the `subdoors_puffer` family), and only 5 reader blocks in the
+install author the key at all (3 at `0.3`, `torpuffertrail1`/`2` at `1.0`). The same rule holds for
+`PRIORITY` (47 puffers, 192 compiled events author a non-zero value) and for both fade bands, whose
+compiled fields are present-and-null on the great majority of events — a null far band read as zero
+would discard every particle of every puffer that says nothing about distance.
 
 ## The particle (0x78 bytes)
 
@@ -115,6 +141,30 @@ in raw x87 at `0054e777`) rather than skipping. **A negative start age is a stag
 spawn delay**: the particle sits pinned to stop 0 of the scale ramp, the colour ramp and the life
 envelope alike while still moving under velocity, friction and wind.
 
+Only four puffers in the install author `START_AGE_RANGE` at all, so ~2,900 of them draw nothing
+for it — which is why CSVM gates the extra draw on the key being present rather than always
+drawing and multiplying by zero: a draw nobody needs re-scatters every particle downstream of it.
+
+### The one global wind the tick derives first
+
+The full decode of the gust — the four authored `WIND` keys, their globals and setters, the
+random-walk model, the missing `dt` on the magnitude step, and the fact that the gust is purely
+horizontal (`STATIC_VELOCITY.y` copied straight through at `0054ef5f`, only x/z composed from
+`magnitude·cos/sin(heading)`) — is written up where the authored keys are, in
+[`formats/weather.md`](../formats/weather.md)'s `WIND` section.
+Three properties belong here, with the tick that derives them:
+
+- **Frame 0 is the static vector alone.** The heading and magnitude globals live in BSS, so the
+  engine's first frame starts from heading 0, magnitude 0 — no gust until the walk has stepped.
+- **The heading wrap happens BEFORE the negative-magnitude reflection and is not re-applied
+  after it**, so the stored heading can sit above 2π for a frame. Harmless (`cos`/`sin` do not
+  care) and reproduced rather than tidied.
+- ⚠ **The engine's `±1` draw is `rand()·3.051851e-05 + rand()·3.051851e-05 − 1.0` with one
+  `rand()` result reused** — i.e. `rand()/16384 − 1` over `rand()`'s `0…32767`, giving
+  `[−1, +0.99994]`: not quite symmetric, and quantised to 1/16384. This idiom is the wind's, and
+  it is deliberately **NOT** what the spawn deviation uses — that one is `(rand01 − 0.5)`, a
+  different draw with a different range. Do not unify them.
+
 ## The emission accumulator (`FUN_0054f8b0`)
 
 Both continuous modes run one accumulator (`+0x48`), and the branch that feeds it is where they
@@ -141,7 +191,14 @@ Four things this settles:
 - **The guard suppresses the frame's emission entirely**, not just the jump's share: the carried
   remainder is by construction below one interval, so `count` is 0 on a guarded frame.
 - **Nothing bounds `count`.** A long frame emits the whole catch-up in that frame. What stops that
-  from being visible is not a cap but the spawn's own born-dead skip, below.
+  from being visible is not a cap but the spawn's own born-dead skip, below. ⚠ A per-frame cap is
+  not a harmless safety net: at 60 fps the install's tightest authored interval —
+  `torpufferblast`'s 1 ms, the torpedo trail, 8 compiled events — asks for **16 batches every
+  ordinary frame**, so any cap below that is a permanent divergence wearing a safeguard's name,
+  and on a real hitch a cap defers the catch-up into a burst the engine never produces (the engine
+  emits only the tail of batches young enough to still be alive and is back to normal next frame).
+  The trade the uncapped loop leaves is bounded: the loop's ITERATION count is unbounded in `dt`,
+  while its OUTPUT is still bounded by how many particles can be born alive.
 - **Emission is spread along the emitter's motion**, not stacked on the current pose: batch `b`
   spawns at `prevPos + (pos − prevPos)·frac` and is born `(1 − frac)·dt` old.
 
@@ -187,7 +244,26 @@ software rasteriser, and at modern resolutions it would discard sprites the orig
 near ramp's origin, and the fact that the near band is a *cull* rather than a fade with the shipped
 data — is written up where the authored keys are, in
 [`formats/effects.md`](../formats/effects.md#the-camera-distance-fade-fade_range--near_fade). The
-distance is a view-space **depth**, not a euclidean range.
+distance is a view-space **depth**, not a euclidean range. Four properties of it belong here, with
+the draw:
+
+- **It is a DRAW rule, not a sim rule.** The engine evaluates it at the head of `FUN_0054e6e0`
+  while `FUN_0054ee10` knows nothing about it, so a discarded particle keeps living, moving and
+  ageing and is simply not written this frame. Reaping is unaffected.
+- **The distance alpha MULTIPLIES whichever fade already owns the sprite and replaces neither** —
+  folded into a `COLORS` ramp's own alpha (`local_2c * fVar5`) or into the ramp-less life envelope
+  (`local_2c * (1 − ageFrac)`) at `0054e6e0`. Getting that precedence wrong makes every ramped
+  puffer invisible.
+- **The far ramp reaches zero at exactly the cutoff distance**, so the authored fade and the hard
+  discard past the band are the same line: dropping the cull alone changes nothing visible,
+  because the `alpha > 0` gate removes what it would have. Keeping distant puffers drawn on modern
+  hardware takes disabling the ramp AND the cull together.
+- ⚠ **`NEAR_FADE [40, 5]`'s descending pair is not a typo and must never be "repaired" into
+  `[5, 40]`.** Index 0 is the hard cull cutoff and index 1 is where alpha would reach 1 — an order
+  settled at six independent points in `crimson.exe` (parser, applier, the two setters, the ctor
+  defaults, the spawn copy, and the raw x87 comparisons in `FUN_0054e6e0`) and **not** inferable
+  from the authored numbers, five of whose six near pairs run downwards (`70,30`; `70,20`;
+  `70,50`; `40,5`; `30,10`).
 
 ### The three ramps
 
@@ -203,6 +279,21 @@ install. That is why the compiled `growth_factors` array is `(age, scale)` pairs
 min/max range, and why a two-point lerp is correct for all 2,906 authored events. Ramp times are
 **fractions of the particle's own lifetime**, not seconds.
 
+⚠ **Do not "repair" a `growth_factors` entry whose `max` sits below its `min`.** 216 events author
+a second entry like that, down to `(1.0, −0.2)`: coherent as a `(time, scale)` stop, incoherent as
+a range, and swapping the pair silently rewrites the authored ramp. (An earlier "matches 172 of 177
+puffers, five name collisions" survey of this field was **withdrawn** — it does not reproduce;
+there were zero real mismatches, and the unexplained names were wildcard reader names expanding at
+compile time.)
+
+⚠ **Reading `TEXTURE_SEQUENCE` times as seconds rather than life fractions is a silent
+catastrophe, not a rounding error.** No sequence in the install keys a frame past 0.8 across
+lifetimes from 0.2 s to 5.5 s, and the `mag_gunhit` firepuffers key frames out to 0.5 with a
+0.1–0.2 s lifetime — which under a seconds reading could never draw at all. Read as seconds, a 5 s
+`fire_n_smoke` particle burned `fire_f01`→`f06` in a quarter second and then held the near-black
+smoke frame for the remaining 95 % of its life, which is what collapsed `large_30sec_fire` into a
+stationary ball instead of a climbing flame.
+
 ## Where CSVM deliberately differs
 
 Everything here is a known, deliberate divergence — not a gap waiting to be closed.
@@ -215,7 +306,18 @@ Everything here is a known, deliberate divergence — not a gap waiting to be cl
 | **`K = 0.02`** rather than the software `0.01` | This project has no software path |
 | **The life-fade envelope** (ease the additive glow in/out) | A render nicety with no authored key behind it. It is bypassed entirely whenever a `COLORS` ramp is present, since the ramp owns the alpha |
 | **The blend mode, derived from the sprite a particle dies on** | The authored data never states one. Measured rule in [`formats/effects.md`](../formats/effects.md) |
+| **The soft-particle depth fade** (over the last ~1.5 m before the scene depth) | A render nicety with no counterpart in the original, softening the hard line where a tilted billboard dips into terrain. Paired with the blend: off for MIX, whose dark sprites sit at ground-level sites where the fade would zero them against the terrain right behind them; on for additive, which leaks through it anyway |
+| **Fixed particle pools**, and pooled copies of each effect template | See the ⚠ below — INVENTED on both counts |
+| **One camera for the whole world** | The original evaluates the fade per particle per DRAW, so a splitscreen pane would get its own distances. Ours is one `MultiMesh` per emitter shared by every pane, with the alpha written once per frame, so every pane sees player 1's fade. Costs nothing in the single-player and freecam paths every capture uses. Relatedly, an emitter drawing on the very first frame of a session can beat the camera publish by one frame and draw unfaded — one frame of full alpha at session start, left alone rather than deferred |
 | ~~`puffer.fireRiseScale` / `fireLifetimeScale`~~ | **DELETED 2026-08-10.** The one invented multiplier this system carried, and it is gone — see below |
+
+⚠ **Every pool size in this system is INVENTED, not decoded.** The particle pools (the trail
+emitters' fixed cap, the sustained emitters' steady-state estimate `NUMBER × LIFETIME_max /
+TIME_INTERVAL` and its floor/ceiling clamp) and the effect-template pools (how many copies of a
+template the world-effects stage holds, in `CSVM/data/effect_pools.json`) have **no counterpart in
+the original**, which copies its templates per call and bounds its particles only by what can be
+born alive. Do not read any of those numbers back as an engine constant, and do not defend one by
+citing this page — they are TUNE values, sized against measured live counts.
 
 ### The fire pair, measured and then DELETED (D10, 2026-08-10)
 
@@ -265,6 +367,12 @@ alpha-weighted luminance of the frame a particle dies on (`Puffer.SmokeLuminance
 each emitter is one `MultiMesh` with `depth_draw_never` and no per-particle sort, mixed sprites
 paint in instance-index order, so an old near-black puff can cover a young bright flame; drawn
 additively a black sprite adds nothing and cannot occlude. That is the reported symptom.
+
+Our threshold is `16/255`, and the measured population separates cleanly either side of it — the
+sprites that flip are `fire_f06` at 0.018 and `thickblksmoke` at 0.004, with nothing between there
+and `fire101` at 0.12 (`exp_yel01` 0.17, `smoke101` 0.22, `fire_f01` 0.34) — so white smoke stays
+additive and only genuinely black sprites flip. A flipbook is measured on its LAST frame and a
+static `TEXTURES` pool on its mean, since a pool sprite is picked once at birth and held.
 
 Not yet pinned: which of the two dispatch entries is additive and which is alpha-blend — that needs
 `LAB_005a4580` and `FUN_005a4b70` walked for their blend state. The darkness rule was introduced
