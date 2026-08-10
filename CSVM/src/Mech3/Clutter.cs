@@ -64,8 +64,10 @@ namespace CSVM.Mech3;
 ///
 /// <para><b>What this does NOT do, deliberately and knowingly.</b> The original's stamper
 /// (<c>FUN_004dd6e0</c>) has eleven steps and this reproduces 4, 6 and 7. The rest are driven by
-/// <c>templates.zrd</c>, which every chapter ships and nothing here reads yet — so each of these
-/// is a known deviation with a measured shape, not an oversight:</para>
+/// <c>templates.zrd</c>, which every chapter ships and which
+/// <see cref="ClutterTemplateSpec"/> now reads and nothing here consumes yet
+/// (docs/formats/templates.md) — so each of these is a known deviation with a measured shape, not
+/// an oversight:</para>
 /// <list type="bullet">
 /// <item><b>Step 5, the per-axis UV jitter</b> (<c>translate_uv_range</c>), and step 10's
 /// <c>rotation_range</c> / <c>align_normal</c> — <b>INERT, not missing.</b> No chapter in the
@@ -78,9 +80,9 @@ namespace CSVM.Mech3;
 /// become <c>firtree2</c> nine times in ten and C3's palms roll three ways evenly; here every
 /// stamp of a kind is the same model, so the species mix is wrong even where the count is
 /// right.</item>
-/// <item><b>Step 10's <c>scale_range</c></b>, authored on 148 kinds — every kind that authors
-/// anything. Every instance here is exactly its authored size where the original varies it
-/// (C1 0.9–1.5×, C2 up to 1.0–3.0×).</item>
+/// <item><b>Step 10's <c>scale_range</c></b>, authored on all 143 shipped blocks — every kind that
+/// authors anything at all. Every instance here is exactly its authored size where the original
+/// varies it (C1 0.9–1.5×, C2 up to 1.0–3.0×).</item>
 /// <item><b>Step 11, <c>far_fade_range</c></b> — the per-kind distance fade. C5 authors
 /// [[200,300],[300,350]]; here the cylindrical world fog is the only distance cue.</item>
 /// <item><b>The whole build is unseeded.</b> The original wraps it in

@@ -40,6 +40,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/WorldBuilder.cs` — builds a chapter world: placed + partition subtrees, cloud deck, camera-anchored skydome, edge extender.
 - `src/Mech3/MapEdgeExtender.cs` — rolling window of repeated border-cell blocks + clutter continuing the world past the map edge, per camera; block depth is per chapter (`DefaultBlockCells`).
 - `src/Mech3/Clutter.cs` — stamps interp.json clutter templates onto matching-textured terrain at the polygon's own UV lattice, gated per polygon by `no_clutter`: sprites, plus C2/C5's solid 3D city blocks.
+- `src/Mech3/ClutterTemplates.cs` — the `templates.zrd` reader: each clutter decoration model's authored substitution table, scale range and fade distances, plus the five keys no chapter authors.
 - `src/Mech3/FogVolumes.cs` — the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
 - `src/Mech3/Zrdr.cs` — zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's list.
 - `src/Mech3/AiNets.cs` — the chapter AI patrol nets: `ne0NNNNN` waypoint graphs + the `neindex` id→name table, raw tags/trailer included.
@@ -675,9 +676,11 @@ empty district.
   matter.** `translate_uv_range`, `rotation_range` and `align_normal` are authored by **no chapter
   in the install** — inert, not missing, and that is precisely why the original's placement has no
   random input affecting position or orientation, and why C1's tree positions come out *exactly*
-  the original's (confirmed at the controls). What IS authored and unapplied: `scale_range` (148
-  kinds), `far_fade_range` (148) and `substitute` (41) — so positions are right while sizes are
-  uniform and the species mix is wrong. Wave C owns those. Nothing here draws a random number, so
+  the original's (confirmed at the controls). What IS authored and unapplied: `scale_range` (143
+  blocks), `far_fade_range` (143) and `substitute` (41) — so positions are right while sizes are
+  uniform and the species mix is wrong. Wave C owns those; the file itself is read by
+  `Mech3/ClutterTemplates.cs` (docs/formats/templates.md), which nothing consumes yet.
+  Nothing here draws a random number, so
   the unseeded build is stable; the moment `substitute` or `scale_range` lands, a seeded PRNG has
   to land with it.
 ⚠ **There is NO world-space grid and no global clutter origin** — the original has neither
@@ -748,12 +751,42 @@ empty district.
   list. Deliberately unlanded — reopening `BL-250` is a user decision. Numbers, md5s and the three
   screenshots: `docs/PLAN-clutter-uv-placement.md` item B13.
 
+## src/Mech3/ClutterTemplates.cs
+The chapter's `templates.zrd` (`ClutterTemplateSpec.Load`/`.Parse`): one `ClutterKindProps` per
+clutter DECORATION MODEL — `substitute`'s weighted roll, `scale_range`, `far_fade_range`, and the
+jitter/rotation/slope/damage keys the retail data leaves at their defaults. Schema, offsets and the
+per-chapter census: docs/formats/templates.md. Static over a reader list, so all eight chapters are
+pinned off-engine (`CSVM.Tests/ClutterTemplatesTests.cs`). **Nothing consumes it yet** — C22 applies
+`substitute` + `scale_range`, C23 decides `far_fade_range`.
+⚠ **Keyed by decoration model, NOT by template.** C3 registers only `cliff1_sandtrans` and its file
+  describes palms, because that template's quad scatters `palmtree1.flt`. The template registry is
+  `interp.json`'s `AddClutterTemplates` (`ClutterBuilder.TemplateNames`); this file never meets it.
+⚠ **Five keys plus all three damage blocks are authored by NO chapter** — `translate_uv_range`,
+  `rotation_range`, `align_normal`, `min_slope`, `max_slope`. Read anyway, and asserted per chapter,
+  because that zero is the evidence the original's placement has no positional randomness at all.
+  Do not "simplify" the reader by dropping them: the measurement disappears with them.
+⚠ **The nested pairs group by BOUND, not by band**: `[[nearMin, farMin], [nearMax, farMax]]`, which
+  `FUN_004dd6e0`'s lerps (`+0x2c`→`+0x30` for near) settle. The two readings agree on the chained
+  values (`[[200,300],[300,350]]`) and differ on C1's `firtree2` — so a wrong grouping survives
+  casual inspection. `scale_range` is a FLAT pair and must not go through the same helper.
+⚠ **The slope keys invert**: `min_slope`'s cosine is the UPPER bound on the normal's Y. Fields are
+  named `NormalYMin`/`NormalYMax` after what they bound, never after the key.
+⚠ `substitute` weights are RELATIVE and the engine normalises them (9.0/1.0 = 90/10). Properties of
+  a substituted stamp resolve from the TARGET model — which is why 43 of C5's 78 blocks describe
+  models that are never placed directly. Two C5 targets have no block: that means defaults, not
+  "skip".
+⚠ C5 ships one duplicate name (`cb05det01.flt`). `Find` returns the FIRST block, matching the
+  engine's linear scan — and the first is the one carrying the substitute.
+
 ## src/Mech3/Zrdr.cs
-Zrdr extraction reader (zip or unpacked dir): `LoadFile`, content-sniffing `LoadMatchingFiles`,
-name-predicate `LoadFilesNamed` (for families with nothing to sniff, e.g. the `ne0*` nets),
-and `ZrdrDict`, the key/[values…] view over a reader's alternating list.
+Zrdr extraction reader (zip or unpacked dir): `LoadFile`, `LoadFileOrEmpty`, content-sniffing
+`LoadMatchingFiles`, name-predicate `LoadFilesNamed` (for families with nothing to sniff, e.g. the
+`ne0*` nets), and `ZrdrDict`, the key/[values…] view over a reader's alternating list.
 ⚠ `LoadFile` accepts both entry namings — v0.6.1 writes `X.json`, the fork writes `X.zrd.json` —
   in both the zip and directory branches.
+⚠ An EMPTY reader is the four bytes `null`, which `LoadFile` rejects as "not a reader list" —
+  indistinguishable there from corruption. `LoadFileOrEmpty` returns an empty list instead, still
+  throwing when the entry is absent. C1C/C2B's `templates.zrd` are the shipped case.
 ⚠ `ZrdrDict` COLLAPSES duplicate keys; anim definitions repeat keys meaningfully, so AnimDefs
   walks the raw lists instead.
 ⚠ It also DROPS an unkeyed value in the root list. `FogVolumeSpec.Parse` walks by hand for that

@@ -138,8 +138,9 @@ were the open case here and they were checked, so C21 does *not* need to re-run 
 counts are in B14's landed section; the consequence — that `FUN_004dd6e0`'s step 5 and the
 rotate/align half of step 10 are **inert on retail data**, so the original's placement has no random
 input affecting position or orientation, which is why C1's tree positions come out *exactly* the
-original's — is written up there and in C23. What IS authored and unapplied: `scale_range` (148
-kinds), `far_fade_range` (148), `substitute` (41).
+original's — is written up there and in C23. What IS authored and unapplied: `scale_range` (143
+blocks), `far_fade_range` (143), `substitute` (41). ⚠ **143, not 148** — C21 counted the shipped
+files and the per-chapter table below sums to 143; the 148 first written here was arithmetic.
 
 **Which templates each chapter registers** (`extracted/interp.json`, `AddClutterTemplates` lines —
 this is the census that corrects claim 6 above):
@@ -209,7 +210,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — The authored per-kind data
 
-21. ☐ `templates.zrd` reader + `docs/formats/templates.md`
+21. ☑ `templates.zrd` reader + `docs/formats/templates.md`
 22. ☐ Apply `substitute` and `scale_range`
 23. ☐ Survey `far_fade_range`, `rotation_range`, `translate_uv_range` → decide or hand to backlog
 
@@ -1354,7 +1355,8 @@ jitter, an exact match would have been impossible and one of the two readings wo
 wrong.
 
 **What this predicts the user WILL still see wrong**, and it is worth saying before they find it:
-`scale_range` is authored on 148 kinds and `substitute` on 41, and neither is applied. So every tree
+`scale_range` is authored on 143 blocks (C21's count; 148 as first written here) and `substitute` on
+41, and neither is applied. So every tree
 is exactly its authored size where the original varies it 0.9–1.5×, and C1's `firtree1` stands
 should be one-in-ten `firtree2` but are pure `firtree1`. Right positions, wrong sizes, wrong species
 mix.
@@ -1405,7 +1407,85 @@ regression; several chapters *should* change.
 
 # Wave C — The authored per-kind data
 
-## C21 ☐ `templates.zrd` reader + `docs/formats/templates.md`
+## C21 ☑ `templates.zrd` reader + `docs/formats/templates.md`
+
+### ✅ Landed 2026-08-10
+
+`Mech3/ClutterTemplates.cs` (`ClutterTemplateSpec` / `ClutterKindProps` /
+`ClutterSubstitute` / `ClutterDamageResponse`) reads all eleven keys `FUN_004deab0` accepts,
+including the eight no chapter authors; `docs/formats/templates.md` is the format page;
+`CSVM.Tests/ClutterTemplatesTests.cs` pins all eight chapters. **Nothing consumes it** — trap (c)
+held.
+
+**Two corrections to this plan's own text, both from re-reading the parser rather than from new
+data:**
+
+1. **`far_fade_range`'s nested pairs group by BOUND, not by band.** `FUN_004dd6e0` lerps the near
+   distance between `kind+0x2c` and `+0x30` — the two file pairs' *first* components — and the far
+   distance between `+0x34` and `+0x38`, their seconds. So the file is
+   `[[nearMin, farMin], [nearMax, farMax]]`, and C1's `firtree2` (`[[300,600],[1000,2000]]`) fades
+   starting somewhere in 300–1000 m, not 300–600. The two readings agree on every chained quad
+   (`[[200,300],[300,350]]`, which is most of C5) and differ only where the numbers are not
+   chained — which is what would have let a wrong grouping survive C22. Same grouping for
+   `translate_uv_range` and `rotation_range`. **And both distances come from ONE `rand()` draw**:
+   near and far are correlated per instance.
+2. **The install ships 143 blocks, not 148.** B14's own per-chapter table sums to 143
+   (5+3+0+50+0+3+4+78); "148 kinds" in this plan's prose and in `architecture.md` was arithmetic,
+   not a measurement, and is corrected. `substitute`'s 41 was right.
+
+**Five keys unauthored is now eight.** `min_slope`, `max_slope`, `align_normal`, `rotation_range`,
+`translate_uv_range` — plus **`OnWeaponHit`, `OnCrater` and `OnCollide`**, the health/anim/model
+damage blocks, which no chapter authors either. Every shipped block is `node` + `scale_range` +
+`far_fade_range`, with or without `substitute`: 102 blocks of the first shape and 41 of the second,
+install-wide, and **no other combination exists**.
+
+**Both anomalies resolved, and neither is one.**
+
+- **C3 registering `cliff1_sandtrans` while its file describes palms** — the file is keyed by
+  DECORATION MODEL, not by template. C3's cliff template root → ground quad `g4` → six
+  `palmtree1.flt` decorations (`extracted/C3/gamez/nodes.json`). The palms are what its file is
+  about; `palmtree2/3` are there because `palmtree1` rolls three ways evenly.
+- **C2B shipping an empty file against six registered templates** — its gamez carries **none of the
+  six roots** (`terpat01`, `terpat03`, `terpat04`, `resblock2`, `filmblock1`, `filmblock2`), so the
+  original logs `ClutterLoadTemplates(): cannot find node for template %s` six times and places
+  nothing. An empty properties file is the consistent outcome. Both empty files are literally the
+  four bytes `null`, which `Zrdr.LoadFile` rejected as "not a reader list" — hence
+  `Zrdr.LoadFileOrEmpty`, so "authors nothing" stays distinguishable from "file is broken".
+
+**A structural fact the survey turned up, and C22 needs it.** Cross-checking every block against
+the decorations its chapter's registered templates actually carry: **every placed decoration has a
+block** (no chapter has a decoration the file misses), and every *surplus* block is a substitution
+target — C3's `palmtree2/3`, C4's `firtree2`, and 43 of C5's 78. That is the file telling you the
+engine resolves a substituted stamp's properties from the TARGET, which is C22's trap (b) confirmed
+from the data side. Two C5 targets (`cb05det02.flt`, `cb06det03.flt`) have no block at all: that
+means defaults, never "skip".
+
+**C5 ships one duplicate**, `cb05det01.flt`. The first block carries a 50/50 substitute, the second
+carries none. `FUN_004dd230`'s lookup is a linear scan of the load order stopping at the first
+`strcmp` match, and `FUN_004de7d0` appends — so the FIRST block wins and the substitute survives.
+`Find` reproduces that; `DuplicateNodes` surfaces it rather than collapsing it silently.
+
+**Verify — WORLD-23, over the whole install and asserted in the tests.** `scale_range` spans
+0.5–3.0 with every pair low→high (multipliers, not radians); `far_fade_range` spans 50–2000 m over
+27 distinct quads, and all 143 satisfy near ≤ far on both bounds — which is the independent
+corroboration of correction 1's grouping. Per-chapter census against the byte counts in the table
+above: C1 5 blocks/1,657 B, C1B 3/795, C1C 0/4, C2 50/12,250, C2B 0/4, C3 3/992, C4 4/1,148,
+C5 78 blocks over 77 distinct models/22,956 B. The eight-chapter rows carry
+`ExtractedDataTheory`, so an unset `CSVM_DATA_ROOT` skips them rather than passing on no evidence.
+
+`.\RunTests.ps1` with `CSVM_DATA_ROOT=Z:\CSVM`, 132 s, exit 0: build clean (0 warnings), **867 units
+passed / 0 skipped**, **29 engine suites passed, engine errors clean**, **13 goldens
+hash-identical**. The goldens holding is the prediction, stated before the run (METHOD-12): nothing
+consumes the reader, so a moved pixel would have meant an accidental behaviour change, not a
+finding.
+
+**Also corrected here:** `docs/formats/clutter.md` still described the world-space grid, "quad size
+= the tiling period", the `BuriedClutterDistricts` exemption and an "**Undecoded:** exact alignment"
+section — rows 1, 2, 3 and 9 of this plan's disproven table, in the sibling page of the one C21 was
+adding. B14 rewrote `architecture.md` and the class comment but not this file. Fixed, with the
+pre-rewrite counts kept as history.
+
+### Original approach (kept for reference)
 
 **Goal.** A reader over `extracted/<chapter>/zrdr/templates.zrd.json` producing per-model-name
 property blocks, plus the format page that documents every key and what the engine does with it.
@@ -1484,7 +1564,8 @@ rotate/align half of step 10 are inert on retail data — they cannot move a dec
 the install. That is what makes the user's *"C1 positions are exactly the same as the original"*
 structurally possible, and it is the strongest single piece of evidence this plan produced for B12.
 
-What is left of C23 is therefore **`far_fade_range` alone** (authored on 148 kinds), and the
+What is left of C23 is therefore **`far_fade_range` alone** (authored on all 143 blocks — C21's
+count, and C21 also settled its pair grouping: `[[nearMin, farMin], [nearMax, farMax]]`), and the
 `CameraSetClutterFadeScaleSq` question below stands unchanged.
 
 **Goal.** A written decision on each of the three remaining authored behaviours: implement, defer
