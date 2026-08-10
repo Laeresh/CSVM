@@ -103,6 +103,8 @@ public static class Suites
             "a host going inactive spares the emitter that started in its own instant and still ends the one that did not (BL-229)", EmitterHostDeactivation));
         into.Add(new TestHarness.Suite("effect-template-mesh",
             "an effect's template meshes show at the call site — including a CALLED template's — and go dark when it ends (BL-061)", EffectTemplateMesh));
+        into.Add(new TestHarness.Suite("fbfx-flash",
+            "he_ground_effect's six-step full-screen wash reports its authored run times, so the 1.2 s ramp does not collapse into one instant", FbfxFlash));
         into.Add(new TestHarness.Suite("effects-census",
             "the full --effects-test sweep as verdicts: every effect resolves, template meshes show at the CALL SITE (not the stage origin), and none stays lit after its stop", EffectsCensus));
         into.Add(new TestHarness.Suite("bounce-launch",
@@ -2172,6 +2174,72 @@ public static class Suites
 
             ctx.Check(Probes.MeshCensus.VisibleMeshesUnder(stage, "dum_gunhit") == 0,
                 $"and is dark once the effect has ended, without waiting for its TTL — BL-061 ({Probes.MeshCensus.VisibleMeshesUnder(stage, "dum_gunhit")} still lit)");
+        });
+    }
+
+    // ---- the full-screen wash reports its authored run times ------------------------------------
+
+    /// <summary>`he_ground_effect`'s `frame_buffer_effects1` is six `FBFX_COLOR_FROM_TO` steps
+    /// washing the picture white↔violet over 1.2 s, reached through
+    /// `If PlayerRange 10000 → CallSequence`. The handler must report each step's authored
+    /// <c>run_time</c> as its duration, because that is the only thing spacing them: report 0 and
+    /// all six fire in one instant and the wash is a single frame of violet. Asserts the six
+    /// ramps arrive in order with their authored run times and colours, and that the chain
+    /// actually spans its authored 1.1 s from the first fire to the last.</summary>
+    private static void FbfxFlash(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            WithEffectStage(ctx, world, "he_ground_effect", new[] { "he_ring", "he_ring1", "he_trails" },
+                (stage, runtime, point) =>
+            {
+                // The authored chain, from extracted/C1/cam_anim/he_ring-he_ground_effect.json.
+                var white = new Color(1f, 1f, 1f, 0.3f);
+                var violet = new Color(0.2f, 0f, 1f, 0.2f);
+                var wantFrom = new[] { white, violet, violet, white, violet, violet };
+                var wantTo = new[] { violet, violet, white, violet, violet, white };
+                var wantRun = new[] { 0.2f, 0.4f, 0.2f, 0.1f, 0.2f, 0.1f };
+
+                const float dt = 1f / 60f;
+                float clock = 0f;
+                var fired = new List<(float T, Color From, Color To, float Run)>();
+                runtime.ScreenFlash = (from, to, seconds) => fired.Add((clock, from, to, seconds));
+
+                // At the camera, so the def's own PLAYER_RANGE 10000 gate passes.
+                runtime.PlayEffectAt("he_ground_effect", point);
+                for (int i = 0; i < 150; i++)
+                {
+                    clock += dt;
+                    runtime.Advance(dt);
+                }
+
+                string times = string.Join(", ", fired.Select(f => $"{f.T:0.####}s (run {f.Run:0.##})"));
+                ctx.Note($"the wash fired at {times}");
+                ctx.Check(fired.Count == 6, $"the six FBFX_COLOR_FROM_TO steps all fired ({fired.Count})");
+                if (fired.Count != 6)
+                    return;
+                for (int i = 0; i < 6; i++)
+                {
+                    ctx.Check(Mathf.IsEqualApprox(fired[i].Run, wantRun[i]),
+                        $"step {i + 1} reports its authored run time ({fired[i].Run:0.###} s, want {wantRun[i]:0.###})");
+                    ctx.Check(fired[i].From.IsEqualApprox(wantFrom[i]) && fired[i].To.IsEqualApprox(wantTo[i]),
+                        $"step {i + 1} ramps its authored colours ({fired[i].From} → {fired[i].To})");
+                }
+                // Each step must start one previous run time after the one before it — the
+                // collapse this suite exists to catch, which no per-step assertion above can see.
+                for (int i = 1; i < 6; i++)
+                {
+                    float gap = fired[i].T - fired[i - 1].T;
+                    ctx.Check(Mathf.Abs(gap - wantRun[i - 1]) <= 2f * dt,
+                        $"step {i + 1} waits step {i}'s run time ({gap:0.###} s, want {wantRun[i - 1]:0.###})");
+                }
+                // One step of headroom per gap: an authored run time is an exact multiple of the
+                // step here, but neither it nor the accumulated clock is exact in binary float, so
+                // a gate can miss by a frame and the misses do not cancel. Measured: three of the
+                // five gaps land one step late, 0.05 s over the chain.
+                ctx.Check(Mathf.Abs((fired[5].T - fired[0].T) - 1.1f) <= 5f * dt,
+                    $"the chain spans its authored 1.1 s first-to-last fire ({fired[5].T - fired[0].T:0.###} s)");
+            });
         });
     }
 

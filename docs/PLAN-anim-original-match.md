@@ -167,7 +167,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — Missing events
 
-21. C21 ☐ `FBFX_COLOR_FROM_TO` — the full-screen flash
+21. C21 ☑ `FBFX_COLOR_FROM_TO` — the full-screen flash
 22. C22 ☐ Triage the remaining four unhandled kinds that ship (`Callback`, `ObjectCycleTexture`, `ObjectDeleteChild`, `CameraState`)
 
 ### Wave D — Proof
@@ -817,7 +817,102 @@ than a plain numeric constant — check `PROJECT_CONTEXT.md`'s hard rule before 
 
 # Wave C — Missing events
 
-## C21 ☐ `FBFX_COLOR_FROM_TO` — the full-screen flash
+## C21 ☑ `FBFX_COLOR_FROM_TO` — the full-screen flash
+
+**Landed.** `FUN_004ec6a0` was decompiled *and* disassembled before anything was chosen, and every
+question the item posed is answered from it rather than from taste:
+
+- **Blend: alpha.** The compiled event interleaves `from`/`to`/**`delta`** per channel from `+0x0c`
+  with `run_time` at `+0x3c`. The handler clamps each channel to `0…1`, scales RGB by 255 and packs
+  it into ONE frame-buffer pixel through the same mask/shift globals
+  (`DAT_009c67fc`/`6800`/`6804`/`680c`) the weather particles' `COLOR` uses — and passes the alpha
+  **separately, as a scalar**, not premultiplied into that pixel. A colour plus a scalar weight is
+  `dst·(1-a) + colour·a` and nothing else; the data corroborates, since a multiply would render
+  `he_ground_effect`'s opening white-at-α-0.3 step invisible. *(The blend state itself sits behind a
+  virtual on the renderable at `this+0x28` and was not traced — the colour+weight pair and the
+  white-step argument are the evidence, and that limit is stated rather than papered over.)*
+- **Interpolation: linear in RGBA.** `from + t * delta`, with `t` the sequence's **event timer**
+  (`seq+0x28`) clamped to `run_time` and `delta` the compiled `(to - from) / run_time`. Past the run
+  time the value snaps to `to` outright.
+- **Concurrency: last writer wins, and it is simpler than blending.** The pair goes to a single
+  process-wide object — `FUN_005ca1f0` → `FUN_005ca0e0`, `this` hard-coded to `0x9c8a98`, colour at
+  `+0x60`, alpha at `+0x68` — and nothing else in the exe writes those fields. A second burst
+  overwrites the first. The vtable call that follows (`FUN_005c54a0`) arms the effect **for the
+  current frame only**, which settles a second question the item did not ask: a completed chain does
+  not hold its `to` colour, it vanishes on the next frame because nothing re-arms it. CSVM's
+  `ScreenFlash.Play` replaces the running ramp and the ramp ends rather than holding.
+- **`alpha_delta` is a round-trip artefact, not a parameter — checked before being ignored.**
+  mech3ax recomputes every delta as `(to - from) / run_time` and emits `alpha_delta` only when the
+  file's stored value disagrees bit-for-bit (`e36_fbfx_color_from_to.rs`). A census over all 3,015
+  compiled defs found **8 non-null values, all of them `flak_effect`'s `-0.99999994` against a
+  computed `-1.0`** — one ulp, ~2e-8 of alpha across the whole 0.3 s ramp, orders below one 8-bit
+  level. Not read.
+- **Return contract.** The exe returns 1 (still running) until the event timer reaches `run_time`,
+  then 2. CSVM's equivalent is `Dispatch` reporting `run_time` as the event's **duration**, which
+  `SequenceRunner` turns into the next event's `_base`. That is the whole reason the six steps
+  space out; with `duration = 0` all six fire in one instant (demonstrated — see below).
+
+**Where it lives.** `CSVM/src/UI/ScreenFlash.cs`, a session-owned node holding **one ramp state and
+one hidden `ColorRect` per rendered view**. `AnimRuntime` gets a `ScreenFlash` sink field beside its
+existing effect sinks (`ExternalEffect`/`ExternalEffectStop`/`ResolveLibraryRoot`) — no second
+mechanism was invented — and `GameSession` builds the overlay right after `BuildRigs`, wiring it to
+the world runtime directly and to the world-effects runtime through a new
+`WorldEffectsFactory.ScreenFlash`. The factory is the right carrier because a census of all 152
+shipped events found them in **exactly four definitions**: `he_ground_effect`, `ap_ground_effect`
+and `flak_effect` (6 × 8 chapters each), all three in `EffectCatalogue.EffectAnimNames` and so all
+three played by the effects runtime, plus the intro cutscene's `gi_scene1` (1 × 8), which CSVM never
+plays. `FbfxCsinwaveFromTo` was not built.
+
+**Splitscreen and HUD, decided rather than defaulted.** One state, N surfaces: each rig's
+`HudParent` gets its own `ColorRect`, so with `--players=2..4` all panes wash together (the original's
+single global state) but the 2 px gutters and the empty 3P quadrant — which are not part of any
+rendered picture — stay black. A single window-wide overlay would have painted them, and the
+per-rig shape is the one the cloud whiteout already uses. The layer is `HudLayers.WorldOverlay`,
+**under** the HUD: this is a world-picture effect, and unlike the lens flare's sun wash (which
+`CAP-13` measured whitening the compass at the same α as world pixels) there is no footage saying
+this one reaches the instruments, so the defensible reading wins. The launchscreen and both
+scoreboards sit at `HudLayers.Board` and are unreachable by it. The `PlayerRange` gate was **not
+touched** — `BL-333` still owns whether its radius is 2× the original's.
+
+**The overlay is `Visible = false` whenever no ramp runs**, which is why the golden set is
+untouched by its mere existence rather than that being a claim about a transparent rect.
+
+**Verified.** `.\RunTests.ps1` with `CSVM_DATA_ROOT=Z:\CSVM`: **883 units, 31 in-engine suites**
+(30 + the new one), **engine errors clean, 12 of 13 goldens hash-identical and `c1-destroy-effects`
+at B12's `00ab194fba6b99d169ee27fcc213f4fa`** — **no golden moved beyond the branch's known
+golden-red state**, including the four full-screen-sensitive ones (`c1-flight`, `c1-crash`,
+`c1-waterfall`, `viewer-bhawk`), which is the check a new always-present canvas layer most needed.
+
+New `fbfx-flash` `--run-tests` suite (`Suites.cs`), on `effect-template-mesh`'s `WithEffectStage`
+host so it plays the real `he_ground_effect` off the real C1 gamez at the camera point: it asserts
+six ramps arrive, each with its authored `run_time` and authored `from`/`to` colours, each starting
+one previous run time after the one before it, and the chain spanning its authored 1.1 s first fire
+to last. Measured: `0.0167s (0.2), 0.2167s (0.4), 0.6167s (0.2), 0.8333s (0.1), 0.95s (0.2),
+1.1667s (0.1)`. **Shown able to fail** by setting `duration = 0f`, which turns the note into
+`0.0167s ×6` and the suite red. The span gets one step of headroom per gap, with the reason stated
+at the assertion: the authored run times are exact multiples of 1/60 but not of binary float, so
+three of the five gaps land one step late and the misses do not cancel.
+
+**Visual evidence** (`.scratch/c21-fbfx/`), all `--det`, `--play-anim=he_ground_effect
+--direction=0,-0.15,-1` on C1 (an explicit direction suppresses the lab's auto-framing, which
+otherwise pulls the camera past the def's own 100 m `PLAYER_RANGE` gate):
+
+| File | Reading |
+|---|---|
+| `fbfx-on-f12-t0.20-white-to-violet.png` | End of step 1: the whole frame — sky, terrain, fireball — lifted toward white/lilac. |
+| `fbfx-on-f30-t0.50-violet-hold.png` | Step 2's hold: the strongest violet, uniform edge to edge, with the fireball still reading orange through it. |
+| `fbfx-on-f66-t1.10-violet-to-white.png` | Step 6's ramp back to white. |
+| `fbfx-off-f30-t0.50-control.png` | The identical pose and frame with the sink nulled — the A/B control. |
+
+**⚠ What these frames cannot show.** A single frame cannot show the *ramp*: that the wash moves
+white→violet→white on the authored schedule rather than sitting at one colour is exactly what a
+still is blind to, and it is the `fbfx-flash` suite's timings — not these images — that carry it.
+Nor can they show the splitscreen decision (single-player poses, one surface) or the HUD ordering
+(the anim lab draws no flight HUD). They show one thing: the overlay exists, covers the whole
+rendered view, and composites as an alpha blend rather than replacing the picture.
+
+<details>
+<summary>Original approach (kept for reference)</summary>
 
 **Goal.** A close HE hit washes the screen white→violet→white over 1.2 s, as the data authors it.
 
@@ -841,6 +936,8 @@ exe and should not be guessed. Concurrent flashes need a composition rule; take 
 **⚠ Traps.** The `PlayerRange` radius may be half what we compute (A2) — do not tune the gate to
 make the flash appear at a pleasing distance; that hides the open question. And `FbfxCsinwaveFromTo`
 ships **zero** occurrences; do not build it for symmetry.
+
+</details>
 
 ## C22 ☐ Triage the remaining four unhandled kinds that ship
 

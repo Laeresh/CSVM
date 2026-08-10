@@ -1003,6 +1003,16 @@ to the effects runtime / nothing live to hold) rather than through `Count`, whos
 bootstrap census and could never carry a death-time event (LOG-16). The routed case is the wait's
 one scope boundary: an `ExternalEffect` call leaves no instance HERE, and the delegate carries no
 return path to poll the effects runtime's.
+`FBFX_COLOR_FROM_TO` is the one event whose effect is screen-space: the case reads `from`/`to`/
+`run_time`, pushes them to the `ScreenFlash` sink (`UI/ScreenFlash.cs` — read its entry) and
+reports `run_time` as the event's **duration**, which is what spaces `he_ground_effect`'s six steps
+over their authored 1.2 s instead of collapsing them into one instant (the original's handler
+instead returns "still running" until the time is up; the gate is the same). A sink and not a node
+because this class is world-scoped and instanced per effect pool and per crash rig — the overlay
+belongs to the session, which sets it on the world and world-effects runtimes. RESET_STATE skips it:
+a wash is a thing that happens, not a base state. Decode (blend, interpolation, the single global
+state a second burst overwrites, and why `alpha_delta` is not read) in
+`docs/formats/anim-definitions.md`.
 ⚠ `_rng` is the runtime's ONE die (`RANDOM_WEIGHT`, `SOUND_GROUPS` picks, crash-debris scatter) —
   every session sets `Seed` (`Rng.Anim`/`Rng.Crash`/`Rng.Effects`); route new dice through it or a
   replay stops being identical. `Reseed()` also clears the sound groups' recency memory, which
@@ -2655,6 +2665,27 @@ gutter backdrop, one `SubViewport` pane per player sharing the main `World3D`, p
   at build time, node by node. (Bit 15 alone was `CloudFieldLayer`, the A7 altitude gate over the
   two ambient cloud populations, which this band replaced.)
 
+## src/UI/ScreenFlash.cs
+The `FBFX_COLOR_FROM_TO` full-screen wash — a close HE, AP or flak burst ramping the whole picture
+from one RGBA to another over the event's run time. **One ramp state, one hidden `ColorRect` per
+rendered view** (`HudLayers.WorldOverlay`, under each rig's `HudParent`, built with the rigs so
+every runtime can be handed the same `Play` sink). `AnimRuntime`'s handler pushes `(from, to,
+run_time)`; the node lerps in RGBA on `GameClock` sim time and ends — it does NOT hold the `to`
+colour, because the original re-arms its frame-buffer object for the current frame only and a
+completed chain simply stops re-arming. `Play` **replaces** whatever is running, which is the
+original's composition rule literally: one process-wide state a second burst overwrites (decode in
+`docs/formats/anim-definitions.md`).
+⚠ **Per view, not per window, and per-rig is what makes that right.** The original is single-view,
+  so "the whole picture" is unambiguous there; in splitscreen each pane IS a picture, and painting
+  the window instead would wash the 2 px gutters and the empty 3P quadrant, which are neither.
+  One state drives all panes, so all panes flash together as the single global state implies.
+  Under the HUD (unlike the lens flare's sun wash, which `CAP-13` measured whitening the
+  instruments — there is no footage saying this one does) and unreachable by the launchscreen and
+  the scoreboards, which sit at `HudLayers.Board`.
+⚠ The layer stays **`Visible = false` with no ramp running**, so a session that never sees a close
+  burst renders exactly what it rendered before this existed — that is what keeps the golden set
+  byte-identical rather than a claim about a transparent rect costing nothing.
+
 ## src/Flight/PlayerRig.cs
 One rendered view's state bag: index, camera, optional `SubViewport`, `HudParent`, `VisualLayer`,
 the player's FlightController, and private camera-anchored copies (`Horizon`/`Deck`/`Whiteout`) —
@@ -2983,8 +3014,10 @@ for a chapter world so flight/ballistics runs boot in ~2 s with nothing else in 
 ## src/Session/GameSession.cs
 The per-launch session node: `Session.Launcher` instantiates one per launch with
 `(SessionSpec, LauncherContext)` and runs `StartSession()` — an ordered sequence of phase methods
-sharing one `BuildState`; menu and CLI share that one build path. Owns the session `GameClock`
-and `StartupProfile`; delegates to the `src/Session/` clusters (LiveryResolver, SpawnPicker,
+sharing one `BuildState`; menu and CLI share that one build path. Owns the session `GameClock`,
+`StartupProfile` and the `UI.ScreenFlash` overlay (built with the rigs, since it needs one surface
+per view, and handed as a sink to the world runtime and — via `WorldEffectsFactory.ScreenFlash` —
+the world-effects one); delegates to the `src/Session/` clusters (LiveryResolver, SpawnPicker,
 PlaneRoster, FlightRigAssembler, WorldEffectsFactory, WeatherRig, LensFlareRig) and to `Testing.ProbeRunner`/
 `CaptureDirector` on the Launcher — read `src/Session/Launcher.cs`'s entry too before touching the
 build's edges. `BuildsCollision` is the only spelling of "does this session build colliders".
@@ -3296,6 +3329,13 @@ running first means it builds the shared C1 world while the fake is in effect; `
   the ceiling instead of at its callee would otherwise look like a working wait.
 ⚠ `weapons-fire` asserts `skipped == 0` as well as `ok == 48`; a skipped mount is not success.
 ⚠ `--loadout=<def>` reaches `loadout-bind`; `--run-tests=loadout-bind --loadout=pbloodhawk` is its able-to-fail cross-bind.
+`fbfx-flash` reuses `effect-template-mesh`'s `WithEffectStage` host to play `he_ground_effect` at the
+camera (so its own `PLAYER_RANGE` gate passes) with the runtime's `ScreenFlash` sink recording:
+it asserts the six wash steps' authored run times AND the gaps between their fires, since the
+per-step run time alone is reported correctly even by a handler that returns 0 as its duration and
+fires all six in one instant. Shown able to fail exactly that way. The chain's total gets one step
+of headroom per gap — the authored run times are exact multiples of the step but not of binary
+float, and three of the five gaps land one step late.
 ## src/Testing/GoldenShot.cs
 The engine half of the golden-image tripwire: `PixelHash(Image)` (md5, lower-case hex) and
 `Adapter()` (`"<gpu> / <api>"`). Called at the `--screenshot` save site, which prints
@@ -3611,7 +3651,9 @@ This module still does the staging: `Subset` handles 8/30 destruction targets; 2
 choreography names remain local (`analysis/death-effect-closure/`), and the stage-call closure
 excludes C4's train-anchored `b_steamtrail`. Constructed once per session (`_worldEffectsFactory`,
 same lifetime as `LiveryResolver`/`SpawnPicker`) from
-`(SessionSpec, Node3D worldRoot, Func<Vector3> playerPosition)`.
+`(SessionSpec, Node3D worldRoot, Func<Vector3> playerPosition)`, plus a settable `ScreenFlash`
+sink it hands to the effects runtime — the three defs carrying an `FBFX_COLOR_FROM_TO`
+(`he_ground_effect`/`ap_ground_effect`/`flak_effect`) all play there.
 The effects runtime's puffer factory passes `softParticles: false` for MIX-ramp states — these effects
 emit at ground-level sites, where the depth fade zeroes fresh dark puffs against the terrain (the
 crash-smokeball lesson; the damage-stage smoke measured near-invisible with it on) — and keeps the

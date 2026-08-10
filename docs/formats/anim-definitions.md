@@ -390,8 +390,9 @@ instantaneous base-state pass never has to interpret a branch.
 
 Playback ops seen and deferred: `OBJECT_DELETE_CHILD`,
 `SOUND` (the one-shot form — see below), `OBJECT_CYCLE_TEXTURE`, `CAMERA_STATE`,
-`FBFX_COLOR_FROM_TO`, `CALLBACK`, `DETONATE_WEAPON`.
-(`LIGHT_STATE`/`LIGHT_ANIMATION` landed 2026-07-21 — see below;
+`CALLBACK`, `DETONATE_WEAPON`.
+(`FBFX_COLOR_FROM_TO` landed — see "FBFX_COLOR_FROM_TO is a full-screen wash";
+`LIGHT_STATE`/`LIGHT_ANIMATION` landed 2026-07-21 — see below;
 `SOUND_NODE` + the sound half of `OBJECT_ADD_CHILD` landed 2026-07-22 — see "SOUND_NODE is a
 three-event triple"; `OBJECT_MOTION`'s rotation half landed 2026-07-22 and its
 ballistic/scale/tumble half 2026-07-23 — see "OBJECT_MOTION is two ops in one";
@@ -1361,3 +1362,57 @@ Disproven, not merely unimplemented: see the census in `analysis/anim-interprete
 The struct offsets above are otherwise mech3ax's `SeqDefInfoC` layout, taken as given rather than
 independently re-derived field-by-field; only the offsets the stepper and `LOOP` actually touch
 have been seen in code.
+
+## FBFX_COLOR_FROM_TO is a full-screen wash
+
+`FUN_004ec6a0`, dispatch slot 36, read in full (decompiled and disassembled). **152 events ship**,
+in four definitions and nowhere else: `he_ground_effect`, `ap_ground_effect` and `flak_effect`
+(6 events each × 8 chapters = 144) plus the intro cutscene's `gi_scene1` (1 × 8). Each of the three
+ordnance definitions carries the same shape — a sibling `Initial` sequence doing
+`If PlayerRange … → CallSequence frame_buffer_effects1 → Endif`, and an `OnCall`
+`frame_buffer_effects1` holding the chain.
+
+**The event struct**, from the handler's own offsets (`ECX` is the event, `EDX` the live sequence):
+
+| Offset | Field |
+|---|---|
+| `+0x0c` / `+0x10` / `+0x14` | red `from` / `to` / **delta** |
+| `+0x18` / `+0x1c` / `+0x20` | green `from` / `to` / delta |
+| `+0x24` / `+0x28` / `+0x2c` | blue `from` / `to` / delta |
+| `+0x30` / `+0x34` / `+0x38` | alpha `from` / `to` / delta |
+| `+0x3c` | `run_time` |
+
+**What it does, per tick.** With `t` = the sequence's **event timer** (`seq+0x28`) clamped to
+`run_time`, each channel is `from + t * delta` — the delta is the compiled
+`(to - from) / run_time`, so the interpolation is **linear in RGBA**. Once the event timer reaches
+`run_time` the value snaps to `to` outright and the handler returns **2** (complete); before that it
+returns **1** (still running, re-dispatch me next tick). Each channel is then clamped to `0…1`; RGB
+is scaled by 255 and packed into one frame-buffer pixel through the same mask/shift globals
+(`DAT_009c67fc`/`6800`/`6804`/`680c`) the weather particles' `COLOR` uses, and the alpha is passed
+**separately, as a scalar** — not premultiplied into the pixel. Colour plus a scalar weight is an
+alpha blend over the picture (`dst = dst·(1-a) + colour·a`); it cannot be a multiply or a screen,
+and the data agrees — `he_ground_effect`'s first step is white at α 0.3, which a multiply would
+render invisible. *(The blend state itself sits behind a virtual on the renderable and was not
+traced; the colour+weight pair and the white-step argument are the evidence.)*
+
+**One global state, last writer wins.** The pair goes to a single process-wide object
+(`FUN_005ca1f0` → `FUN_005ca0e0`, `this` hard-coded to `0x9c8a98`): packed colour at `+0x60`,
+alpha at `+0x68`, then a virtual call that arms the effect **for the current frame only**
+(`FUN_005c54a0` — sets the live bit and clears the persistent one). Nothing else in the exe writes
+those fields. So two bursts overlapping do not composite: the second simply overwrites the first,
+and when the last event completes nothing re-arms the object and the wash is gone on the next frame
+rather than holding its `to` colour.
+
+**`alpha_delta` in the extraction is a round-trip artefact, not a parameter.** mech3ax recomputes
+every delta as `(to - from) / run_time` and emits `alpha_delta` only when the file's stored value
+disagrees bit-for-bit. All 8 non-null values in this install are `flak_effect`'s `-0.99999994`
+against a computed `-1.0` — one ulp, about 2e-8 of alpha across the whole 0.3 s ramp, orders below
+one 8-bit level. CSVM does not read it.
+
+**How CSVM plays it.** `AnimRuntime`'s `FbfxColorFromTo` case pushes `(from, to, run_time)` to a
+session-level sink and reports `run_time` as the event's **duration**, which is the CSVM equivalent
+of the original's "return 1 until done": the sequence runner gates the next event on it, so
+`he_ground_effect`'s six steps space out over their authored 1.2 s instead of collapsing into one
+instant. The sink is `UI.ScreenFlash` (`docs/architecture.md`) — one ramp at a time, replaced
+outright by a later event, painted into every rendered view. Asserted by the `fbfx-flash`
+`--run-tests` suite.

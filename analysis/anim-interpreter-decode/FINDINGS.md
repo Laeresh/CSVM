@@ -95,14 +95,38 @@ Census over **3,015 compiled defs** (all 8 chapters' `cam_anim` + `mis_anim`):
 
 ## Event kinds present in the data with no CSVM handler
 
-`Callback` 288 · `FbfxColorFromTo` 152 · `ObjectCycleTexture` 96 · `ObjectDeleteChild` 48 ·
-`CameraState` 8 — **592 events**. Everything else the exe's table can dispatch (`Effect`,
-`FogState`, `SoundAdjust`, `CameraFromTo`, `ObjectConnector`, `CallObjectConnector`,
-`FbfxCsinwaveFromTo`, `DetonateWeapon`, `ObjectMotionSiScriptAllNames`) has **zero** occurrences in
-the compiled scope.
+`Callback` 288 · `ObjectCycleTexture` 96 · `ObjectDeleteChild` 48 · `CameraState` 8 — **440
+events** (`FbfxColorFromTo`'s 152 are handled — see below). Everything else the exe's table can
+dispatch (`Effect`, `FogState`, `SoundAdjust`, `CameraFromTo`, `ObjectConnector`,
+`CallObjectConnector`, `FbfxCsinwaveFromTo`, `DetonateWeapon`, `ObjectMotionSiScriptAllNames`) has
+**zero** occurrences in the compiled scope.
 
-`FbfxColorFromTo` is the visible one: `he_ground_effect`'s `frame_buffer_effects1` is a six-step
-white↔violet full-screen wash over 1.2 s, gated on `If PlayerRange`, and CSVM renders none of it.
+## `FBFX_COLOR_FROM_TO` — decoded and implemented
+
+`FUN_004ec6a0`, slot 36, read in full. The 152 shipped events sit in exactly four definitions:
+`he_ground_effect`, `ap_ground_effect` and `flak_effect` (6 each × 8 chapters) plus the intro
+cutscene's `gi_scene1` (1 × 8). The worked example is `he_ground_effect`'s `frame_buffer_effects1`,
+a six-step white↔violet wash over 1.2 s reached through `If PlayerRange 10000 → CallSequence`.
+
+- **Linear in RGBA.** The compiled event interleaves `from`/`to`/`delta` per channel from `+0x0c`,
+  `run_time` at `+0x3c`; the handler evaluates `from + t * delta` with `t` = the sequence's event
+  timer (`seq+0x28`), `delta` being the compiled `(to - from) / run_time`.
+- **Alpha blend.** Past `run_time` the value snaps to `to`; each channel is clamped to `0…1`, RGB
+  packed into one frame-buffer pixel and the **alpha handed over separately as a scalar weight**.
+  Colour + weight is `dst·(1-a) + colour·a`; a multiply would render `he_ground_effect`'s opening
+  white-at-α-0.3 step invisible.
+- **One global state, last writer wins.** `FUN_005ca1f0` → `FUN_005ca0e0`, `this` hard-coded to
+  `0x9c8a98`: colour at `+0x60`, alpha at `+0x68`, then a virtual that arms it for the current
+  frame only. Nothing else writes those fields, so overlapping bursts overwrite rather than
+  composite, and a completed chain vanishes on the next frame instead of holding its `to`.
+- **Return contract.** 1 (still running) until the run time is up, then 2. CSVM's equivalent is the
+  handler reporting `run_time` as the event's duration, which is what spaces the six steps.
+- **`alpha_delta` is a round-trip artefact.** mech3ax emits it only when a file's stored delta
+  differs bit-for-bit from the recomputed `(to - from) / run_time`; all 8 non-null values are
+  `flak_effect`'s `-0.99999994` against `-1.0`, one ulp. Not a parameter, not read.
+
+Full record in `docs/formats/anim-definitions.md`; CSVM's overlay is `UI.ScreenFlash` and the
+`fbfx-flash` `--run-tests` suite asserts the six authored run times.
 
 ## Disproven along the way
 
