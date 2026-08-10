@@ -36,6 +36,10 @@ The argument may be `BL-242`, a bare `242`, or a phrase like "rocket pylon".
 One item per invocation. If several IDs are given at once, explain them one after another in the
 same reply.
 
+Once the ID is resolved, set the terminal window title to it — `$Host.UI.RawUI.WindowTitle = "BL-NNN"`
+via the PowerShell tool — so the session is identifiable at a glance. Skip this for a multi-ID
+invocation (no single ID to title the window with).
+
 ## 2. Read it, inline
 
 Do the reading yourself — no Explore subagent. The item text and code need to stay in context for
