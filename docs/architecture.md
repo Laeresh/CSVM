@@ -653,6 +653,12 @@ MultiMesh per kind, solids → `SceneBuilder.SharedMesh`; the split is `SceneBui
 The sprite shader takes the decoration model's own `lighting`/`fog` flags as variants (every tree and
 bush card in the install is `lighting: false`, so clutter does not dim with the mission SUNLIGHT),
 plus a UV-clamp variant from `SceneBuilder.UvsWithinUnitSquare` over the kind's own card UVs.
+`TemplateNames` reads the chapter's `AddClutterTemplates` list minus the `BuriedClutterDistricts`
+exemption (C5's `cblock4/5/6`); `OverrideTemplateNames` is `--clutter-templates=`'s replacement for
+it — the caller's names, filtered to the ones this gamez carries a root for and **without** that
+exemption, so the buried district can be loaded on demand and A/B'd against the original. It prints
+one line naming what was requested, what resolved and what this chapter does not carry, since an
+absent name is retail-data-normal and would otherwise read as an empty district.
 ⚠ **There is NO world-space grid and no global clutter origin** — the original has neither
   (`analysis/bl-305-clutter-uv/FINDINGS-A2.md`). Placement is `ClutterBuilder.UvTriangle`, i.e.
   `FUN_004dd6e0` steps 4/6/7: floor the triangle's UV bbox to an integer lattice, test containment

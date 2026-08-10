@@ -215,6 +215,14 @@ public sealed record SessionSpec
     /// toggle. See <c>docs/cli.md</c>.</summary>
     public bool DebugClutterFlag { get; private set; }
 
+    /// <summary><c>--clutter-templates=a,b,c</c>: build these clutter templates instead of the
+    /// chapter's own <c>AddClutterTemplates</c> list, <b>bypassing</b>
+    /// <c>ClutterBuilder.BuriedClutterDistricts</c> so the exempted <c>cblock4/5/6</c> can be
+    /// loaded on demand and A/B'd against the original. Names are matched case-insensitively
+    /// against the gamez's template roots. Null → the chapter's list, exemption and all;
+    /// <see cref="NoClutter"/> wins if both are given. See <c>docs/cli.md</c>.</summary>
+    public IReadOnlyList<string>? ClutterTemplates { get; private set; }
+
     /// <summary><c>--no-zone-cull</c>: switch off the gamez <c>zone_id</c> visibility gate
     /// (<see cref="Mech3.ZoneGate"/>, <c>PLAN-weather-decompile-match</c> B12, Decision 4) — every
     /// zone draws at every camera state, as builds before that item did. The one switch the plan
@@ -647,6 +655,19 @@ public sealed record SessionSpec
             else if (arg == "--debug-classoverlay") { s.ShowClassOverlay = true; }
             else if (arg == "--debug-tilegrid") { s.ShowTileGrid = true; }
             else if (arg == "--debug-clutterflag") { s.DebugClutterFlag = true; }
+            else if (arg.StartsWith("--clutter-templates="))
+            {
+                var names = arg["--clutter-templates=".Length..]
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (names.Length == 0)
+                {
+                    notes.Add(new Note("world", "--clutter-templates= names no templates — keeping the chapter's own list"));
+                }
+                else
+                {
+                    s.ClutterTemplates = names;
+                }
+            }
             else if (arg.StartsWith("--map-edge-block="))
             {
                 string want = arg["--map-edge-block=".Length..];

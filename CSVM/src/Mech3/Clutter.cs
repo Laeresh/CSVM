@@ -227,6 +227,30 @@ public sealed class ClutterBuilder
         return names;
     }
 
+    /// <summary><c>--clutter-templates=</c>'s replacement for <see cref="TemplateNames"/>: the
+    /// caller's names, filtered to the ones this gamez actually carries a template root for, and
+    /// <b>without the <see cref="BuriedClutterDistricts"/> exemption</b> — that bypass is the
+    /// entire point of the flag, since <c>cblock4/5/6</c> are reachable no other way.
+    ///
+    /// <para>Prints one line naming what was asked for, what resolved and what did not. A name no
+    /// chapter carries is retail-data-normal (see <see cref="FindTemplateRoot(GameZ, string)"/>)
+    /// and is not an error — but it must be visible, or an absent district reads as an empty
+    /// one.</para></summary>
+    public static List<string> OverrideTemplateNames(GameZ gamez, IReadOnlyList<string> requested)
+    {
+        var resolved = new List<string>();
+        var absent = new List<string>();
+        foreach (var name in requested)
+            (FindTemplateRoot(gamez, name) != null ? resolved : absent).Add(name);
+        GD.Print($"clutter: --clutter-templates={string.Join(",", requested)} replaces the chapter's"
+                 + " registered set and bypasses the cblock4/5/6 exemption — in gamez: "
+                 + (resolved.Count > 0 ? string.Join(",", resolved) : "(none)")
+                 + "; not carried by this chapter: "
+                 + (absent.Count > 0 ? string.Join(",", absent) : "(none)")
+                 + " (retail-data-normal, not an error)");
+        return resolved;
+    }
+
     /// <summary>Template roots are parentless (they hang off nothing; the boot script
     /// LoadGameGen's them by name), so only match nodes no other node lists as a child — the
     /// world also contains unrelated same-named leaf nodes (g4/g5 …). Null when the gamez ships

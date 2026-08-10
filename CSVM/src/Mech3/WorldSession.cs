@@ -148,9 +148,14 @@ public sealed class WorldSession
         ClutterBuilder? clutterBuilder = null;
         Node3D? clutterRoot = null;
         // Clutter stamps onto matching-textured world terrain, of which a --node= stage has none.
+        // --clutter-templates= replaces the chapter's registered set outright and skips the
+        // BuriedClutterDistricts exemption, which is the whole point of the flag: cblock4/5/6 are
+        // unreachable any other way. --no-clutter still wins, since it is the stronger statement.
         var clutterNames = o.NodeSubtree != null || o.NoClutter
             ? new List<string>()
-            : ClutterBuilder.TemplateNames(o.InterpPath, o.Chapter);
+            : o.ClutterTemplates is { } wanted
+                ? ClutterBuilder.OverrideTemplateNames(gamez, wanted)
+                : ClutterBuilder.TemplateNames(o.InterpPath, o.Chapter);
         if (o.NoClutter)
         {
             GD.Print("clutter: skipped (--no-clutter)");
@@ -450,6 +455,12 @@ public sealed class WorldSession
         /// clutter is built blue, so "which ground is flagged" and "where the decorations are" can
         /// never be confused. See <see cref="SceneBuilder.DebugClutterFlag"/>.</summary>
         public bool DebugClutterFlag { get; init; }
+
+        /// <summary><c>--clutter-templates=</c>: build these clutter templates instead of the
+        /// chapter's own registered list, bypassing <c>ClutterBuilder.BuriedClutterDistricts</c> so
+        /// the exempted <c>cblock4/5/6</c> can be loaded on demand. Null → the chapter's list, with
+        /// the exemption. <see cref="NoClutter"/> wins over this.</summary>
+        public IReadOnlyList<string>? ClutterTemplates { get; init; }
 
         /// <summary>The caller's <see cref="TextureArchive"/> outlives this build, so the runtime
         /// keeps its emitter factory and every <c>PUFFER_STATE</c> reached at RUNTIME — a
