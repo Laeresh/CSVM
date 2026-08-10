@@ -187,7 +187,7 @@ public sealed class TemplateStage<TNode>
     /// while an effect plays on it and hides it again when that effect is over. Set on the
     /// world-effects runtime, whose templates are staged hidden so nothing renders ambiently at the
     /// stage origin: without it the templates' own MESHES — the rocket's per-type explosion rings,
-    /// the fireball facades, the splash models — never draw, only their puffers do (D31). Only the
+    /// the fireball facades, the splash models — never draw, only their puffers do. Only the
     /// root's own visibility is touched; what shows inside it stays the data's decision (the rings
     /// are reset INACTIVE or opacity-OFF and their defs turn them on). Off everywhere else — the
     /// crash rig included, whose templates hide by their own reset states — where the stage is
@@ -293,8 +293,8 @@ public sealed class TemplateStage<TNode>
 
     /// <summary>The copies of a definition's own template root(s) that belong with
     /// <paramref name="inSlotOf"/> — the one pool slot that call is running in. Off the pool (or
-    /// for a def whose root is staged in a single copy, like the shared gun family's, which C8
-    /// relocates on purpose) this is every match, exactly as before. Also the resolver's
+    /// for a def whose root is staged in a single copy, like the shared gun family's, which is
+    /// relocated on purpose) this is every match. Also the resolver's
     /// <c>ownRootsOf</c> hook (its middle tier — wired at the handover), which is the one route
     /// the pool takes into the resolver: it sees the resolved root list, never the slot
     /// arithmetic. Resolved through the <c>findAll</c> hook rather than <c>Anchors</c>: the
@@ -506,7 +506,7 @@ public sealed class TemplateStage<TNode>
     /// <para>Deferred while the instance's motions still run, because the reveal is paired with the
     /// EFFECT's life and not its instance's: the ring defs' scale/opacity motions outlive the
     /// sequence that launched them, and hiding on instance-finish cuts the explosion ring off
-    /// mid-expansion (D31). The <c>stillAnimated</c> hook carries which motions count, and
+    /// mid-expansion. The <c>stillAnimated</c> hook carries which motions count, and
     /// <see cref="SharedWithLiveInstance"/> the other hold; <see cref="Sweep"/> drains the
     /// deferrals.</para></summary>
     public void RetireWhenIdle(AnimDefinition def, TNode? anchor)

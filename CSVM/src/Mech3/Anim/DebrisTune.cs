@@ -2,7 +2,7 @@ namespace CSVM.Mech3.Anim;
 
 /// <summary>
 /// The two live knobs on a launched <c>OBJECT_MOTION</c> body's arc, for matching our debris
-/// against the original at the controls (<c>BL-022</c>). Both default to <b>1</b>, and at 1 they
+/// against the original at the controls. Both default to <b>1</b>, and at 1 they
 /// are exact float no-ops — a default run, and every golden hash, is byte-identical to a build
 /// without them.
 ///
@@ -14,8 +14,8 @@ namespace CSVM.Mech3.Anim;
 ///
 /// <para><b>What they do NOT scale.</b> <c>InheritedWorldVelocity</c> — the plane's momentum
 /// carried into crash debris — is deliberately outside the launch scale: it is a measured
-/// world quantity, not part of the authored launch, and <c>BL-122</c> owns its own
-/// <c>WreckMomentum</c> TUNE. Scaling it here would silently move that item's number too.</para>
+/// world quantity, not part of the authored launch, and it carries its own
+/// <c>WreckMomentum</c> TUNE. Scaling it here would silently move that number too.</para>
 ///
 /// <para>⚠ <b>A value matched by eye also absorbs the <c>run_time</c> behaviour.</b> Six of
 /// <c>m_build03</c>'s nine pieces are cut at 67–72 % of their arc while still climbing, and
@@ -26,7 +26,7 @@ namespace CSVM.Mech3.Anim;
 public static class DebrisTune
 {
     /// <summary>The shipped launch-speed scale: <b>0.65</b>, a TUNE settled at the controls
-    /// (user, 2026-08-08) against the original's own `m_build03 destruction.mp4` — "throws the
+    /// against the original's own `m_build03 destruction.mp4` — "throws the
     /// debris about the right amount". It is a JUDGED LOOK, not a decode: the authored speeds are
     /// censused and correct as read, and this scalar is the difference between what the data says
     /// and what the original renders.

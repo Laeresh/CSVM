@@ -4,27 +4,24 @@ using Godot;
 namespace CSVM.Effects;
 
 /// <summary>The mission's global wind: a static base velocity plus a horizontal random-walk gust,
-/// re-derived once per frame. Decoded verbatim from <c>FUN_0054ee10</c> (the original's one
-/// puffer tick, which derives the wind at its head before touching a single emitter or particle),
+/// re-derived once per frame. Decoded verbatim from the original's one puffer tick, which derives
+/// the wind at its head before touching a single emitter or particle,
 /// and authored per mission in <c>weather.zrd</c>'s <c>WIND</c> block — see
-/// <c>docs/formats/weather.md</c>.
+/// <c>docs/formats/weather.md</c> and <c>docs/org/weather.md</c>.
 ///
-/// <para>The four authored keys map onto four globals, each written by its own one-line setter:</para>
+/// <para>The four authored keys, each written by its own one-line setter in the original:</para>
 /// <list type="table">
-/// <item><term><c>STATIC_VELOCITY</c></term><description><c>00763db4</c>/<c>b8</c>/<c>bc</c> via
-/// <c>FUN_00550690</c> — the base vector, added to the gust every frame.</description></item>
-/// <item><term><c>RANDOM_MAX_SPEED</c></term><description><c>00763dc8</c> via
-/// <c>FUN_005506b0</c> — the gust MAGNITUDE ceiling (m/s).</description></item>
-/// <item><term><c>RANDOM_ACCEL</c></term><description><c>00763dd0</c> via <c>FUN_005506c0</c> —
-/// the magnitude's step size.</description></item>
-/// <item><term><c>RANDOM_ANG_VEL</c></term><description><c>00763dcc</c> via <c>FUN_005506d0</c>,
-/// which multiplies by <c>0.017453292</c> on the way in — the key is in DEGREES per second and
-/// the global is radians per second.</description></item>
+/// <item><term><c>STATIC_VELOCITY</c></term><description>the base vector, added to the gust every
+/// frame.</description></item>
+/// <item><term><c>RANDOM_MAX_SPEED</c></term><description>the gust MAGNITUDE ceiling
+/// (m/s).</description></item>
+/// <item><term><c>RANDOM_ACCEL</c></term><description>the magnitude's step size.</description></item>
+/// <item><term><c>RANDOM_ANG_VEL</c></term><description>multiplied by <c>0.017453292</c> on the way
+/// in — the key is in DEGREES per second and the global is radians per second.</description></item>
 /// </list>
 ///
-/// <para>Both call sites of those four setters agree on the mapping: the weather reader
-/// (<c>FUN_004bc680</c>, whose assert string names <c>D:\zipper\Crimson\weather.cpp</c>) reads the
-/// <c>WIND</c> block key by key, and the debug console (<c>FUN_005b80a0</c>) exposes the same four
+/// <para>Both call sites of those four setters agree on the mapping: the weather reader reads the
+/// <c>WIND</c> block key by key, and the debug console exposes the same four
 /// as <c>GlobalWindStaticVelocity</c> / <c>GlobalWindRandomMaxSpeed</c> /
 /// <c>GlobalWindRandomAccel</c> / <c>GlobalWindRandomAngVel</c>, the second of which is the
 /// original's own name for this mechanism.</para>
@@ -34,17 +31,16 @@ namespace CSVM.Effects;
 /// mechanism entirely; wiring them here would be wrong.</para>
 ///
 /// <para>⚠ <b>The magnitude step carries no <c>dt</c>, and that is traced, not an oversight.</b>
-/// The heading step is <c>±angVel·dt</c> (raw x87 at <c>0054ee3c</c>: <c>FMUL [00763dcc]</c> then
-/// <c>FMUL [EBP-0x10]</c>, the frame delta), while the magnitude step at <c>0054eea1</c> is
-/// <c>FMUL [00763dd0]</c> and nothing else — one <c>±RANDOM_ACCEL</c> jump per FRAME. With the
+/// The heading step is <c>±angVel·dt</c> (the frame delta is multiplied in), while the magnitude
+/// step multiplies by <c>RANDOM_ACCEL</c> and nothing else — one jump per FRAME. With the
 /// shipped data (accel 5, ceiling 10) that makes the gust magnitude effectively re-drawn every
 /// frame and frame-rate dependent, which is faithfully reproduced here rather than smoothed:
 /// this project matches the original's arithmetic, and a <c>dt</c> nobody wrote would be an
 /// invented breeze. Our sim is fixed-step under <c>--det</c>, so it is reproducible.</para></summary>
 public sealed class WorldWind
 {
-    /// <summary><c>RANDOM_ANG_VEL</c>'s degrees→radians factor, as the binary spells it
-    /// (<c>FUN_004bc680</c>: <c>*(float *)(iVar3 + 4) * 0.017453292</c>).</summary>
+    /// <summary><c>RANDOM_ANG_VEL</c>'s degrees→radians factor, as the weather reader spells
+    /// it.</summary>
     public const float AngVelDegToRad = 0.017453292f;
 
     private const float Tau = 6.2831855f;
@@ -78,9 +74,8 @@ public sealed class WorldWind
         Velocity = staticVelocity;
     }
 
-    /// <summary>The wind this frame — <c>00763da8</c>/<c>ac</c>/<c>b0</c>. Note the gust is purely
-    /// HORIZONTAL: the vertical component is the static vector's, copied verbatim
-    /// (<c>0054ef5f MOV [00763dac], ECX</c>), while only x and z carry
+    /// <summary>The wind this frame. Note the gust is purely HORIZONTAL: the vertical component is
+    /// the static vector's, copied verbatim, while only x and z carry
     /// <c>magnitude·cos/sin(heading)</c>.</summary>
     public Vector3 Velocity { get; private set; }
 
@@ -96,7 +91,7 @@ public sealed class WorldWind
     public static WorldWind Still() =>
         new(Vector3.Zero, 0f, 0f, 0f, new Random(0));
 
-    /// <summary>Advances the gust one frame, exactly in <c>FUN_0054ee10</c>'s order: turn the
+    /// <summary>Advances the gust one frame, exactly in the engine's order: turn the
     /// heading, step the magnitude, reflect a negative magnitude through +π, clamp to the ceiling,
     /// then compose. The heading wrap happens BEFORE the reflection and is not re-applied after
     /// it, so the stored heading can sit above 2π for a frame — harmless (cos/sin do not care)
@@ -137,9 +132,8 @@ public sealed class WorldWind
     /// <summary>The engine's own symmetric draw: <c>rand()·3.051851e-05 + rand()·3.051851e-05 −
     /// 1.0</c> with one <c>rand()</c> result reused, i.e. <c>rand()/16384 − 1</c> over
     /// <c>rand()</c>'s 0…32767 — <c>[−1, +0.99994]</c>, not quite symmetric, and quantised to
-    /// 1/16384. Reproduced at that quantisation because it is free to do so; the plan's A2 section
-    /// notes this idiom is the engine's ±1 draw and is deliberately NOT what the spawn deviation
-    /// uses.</summary>
+    /// 1/16384. Reproduced at that quantisation because it is free to do so. ⚠ This idiom is the
+    /// engine's ±1 draw and is deliberately NOT what the spawn deviation uses.</summary>
     private float Symmetric() => (_rng.Next(32768) / 16384f) - 1f;
 }
 
@@ -149,9 +143,8 @@ public sealed class WorldWind
 ///
 /// <para>This is deliberately a small mutable holder rather than a value passed down each
 /// <c>_Process</c>: a <see cref="Puffer"/> is a <c>Node3D</c> that ticks itself off the scene
-/// tree, so there is no per-frame call from above to thread a parameter through. B6 put the wind
-/// here; C7 put the active camera's pose here beside it, for the same reason and on the same
-/// once-per-frame write.</para>
+/// tree, so there is no per-frame call from above to thread a parameter through. The wind and the
+/// active camera's pose both live here for that reason, on the same once-per-frame write.</para>
 ///
 /// <para><see cref="Still"/> is the null object: the wind a puffer feels when nobody wired one in
 /// (unit tests, the viewer, a mission with no weather.json). It refuses to be written, so a
@@ -175,7 +168,7 @@ public sealed class EffectAmbience
     public Vector3 Wind { get; private set; }
 
     /// <summary>Whether a camera pose has ever been published. <b>False means "no camera known",
-    /// and C7's distance fade is skipped entirely</b> rather than measured against the origin —
+    /// and the camera-distance fade is skipped entirely</b> rather than measured against the origin —
     /// which is the right answer for every caller that has no camera to give (the unit suites, the
     /// plane viewer, the damage lab) and would otherwise near-cull half their particles, the
     /// unauthored <c>NEAR_FADE</c> default being a hard cull at depth 0.</summary>
@@ -199,7 +192,7 @@ public sealed class EffectAmbience
         Wind = wind;
     }
 
-    /// <summary>Publishes this frame's camera pose (C7). Throws on <see cref="Still"/>, for the
+    /// <summary>Publishes this frame's camera pose. Throws on <see cref="Still"/>, for the
     /// same reason <see cref="SetWind"/> does.
     ///
     /// <para>⚠ One camera for the world, like the wind: the original evaluates the fade per

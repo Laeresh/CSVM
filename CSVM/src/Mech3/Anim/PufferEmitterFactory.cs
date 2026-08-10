@@ -22,7 +22,7 @@ public sealed class PufferEmitterFactory : IEmitterFactory
 {
     private readonly TextureArchive _textures;
     private readonly Node _parent;
-    // B6: the session's wind, read by every emitter this builds. Still air when a caller has no
+    // The session's wind, read by every emitter this builds. Still air when a caller has no
     // session to take it from (the suites' fake runtimes).
     private readonly EffectAmbience _ambience;
 

@@ -79,9 +79,9 @@ public sealed class EmitterDirector
     }
 
     /// <summary>How many emitters this director has actually built (not just started the owning
-    /// def). The D32 world-effects verify checks this rather than "the def ran" — a started effect
-    /// whose factory is retired or whose textures are missing builds nothing and renders nothing
-    /// (verification.md WORLD-12).</summary>
+    /// def). Verification checks this rather than "the def ran" — a started effect
+    /// whose factory is retired or whose textures are missing builds nothing and renders
+    /// nothing.</summary>
     public int Built { get; private set; }
 
     /// <summary>Every KNOWN emitter, emitting or not — the module's own answer to "what exists and
@@ -238,7 +238,7 @@ public sealed class EmitterDirector
                 _count("ObjectActiveState(spared an emitter started this instant)");
                 if (_debug)
                     GD.Print($"anim: host '{AnimRuntime.NameOf(node)}' deactivated in the instant its "
-                             + "emitter started — left emitting (BL-229)");
+                             + "emitter started — left emitting");
                 continue;
             }
             emitter.SustainEnd();
@@ -337,7 +337,7 @@ public sealed class EmitterDirector
     /// <summary>The host's emission point in its own frame, cached per node. Zero — and the emission
     /// point exactly the node origin, byte-identical with the pre-cache behaviour — for every node
     /// whose origin sits inside its mesh bounds; the offset to the bounds centre for
-    /// absolute-modelled world subtrees, whose origin is the map corner (WORLD-15). Local-frame, so
+    /// absolute-modelled world subtrees, whose origin is the map corner. Local-frame, so
     /// a motion-driven host carries its emission point along.</summary>
     private Vector3 HostOffsetOf(Node3D host, in Transform3D xform)
     {

@@ -22,7 +22,7 @@ namespace CSVM.Effects;
 /// texture, billboard mode and its <c>lighting</c>/<c>fog</c> render flags come from the gamez
 /// model. This class holds <b>no TUNE constant</b> — do not re-introduce a hand-tuned cloud field
 /// (count, radius, size, opacity, band margins, vertical fades); every one of those is authored
-/// data read above. The one exception is <see cref="TopAnchorHeightFactor"/> (A3): not authored
+/// data read above. The one exception is <see cref="TopAnchorHeightFactor"/>: not authored
 /// data, but a shape-classification threshold decided from the authored volumes' own thickness
 /// gap between the sheet-thin slabs and the tall build-ups/strips — see its own remarks.</para>
 ///
@@ -43,7 +43,7 @@ namespace CSVM.Effects;
 /// has 70; C2 and C3 have none) — which is the "singles at all heights, but not on every map" the
 /// playtest saw, and it is drawn by the ordinary world build, not here.</para>
 ///
-/// <para><b>A5 — the field continues past the map edge, engine-side, matching the terrain's own
+/// <para><b>The field continues past the map edge, engine-side, matching the terrain's own
 /// continuation.</b> The original's field reads as everywhere, not stopping at the base map
 /// (`cloudparent` stops there — that population is untouched here). For the chapters whose
 /// <c>fvol*</c> volumes tile the whole map as one flat slab (C1/C1C/C2B/C4's map-spanning pieces —
@@ -57,14 +57,14 @@ namespace CSVM.Effects;
 public sealed partial class FogVolumeClutter : Node3D
 {
     // A runaway guard, not a tuning knob: the shipped chapters place up to ~22k sprites (base
-    // field plus A5's map-edge continuation), so this is several times the largest real field. It
+    // field plus the map-edge continuation), so this is several times the largest real field. It
     // can only bind if a future extraction reports a `distance` near zero or a volume far larger
     // than a map, both of which should be seen rather than swallowed.
     private const int MaxPlacements = 80_000;
 
-    // A3's per-volume-shape rule (docs/formats/fogvol.md, docs/plans/PLAN-overcast-match.md A3): a
-    // volume no more than this many card-heights thick reads as a sheet and is TOP-ANCHORED;
-    // anything taller keeps the old full-height UNIFORM draw. The evidence is a clean gap, not a
+    // The per-volume-shape rule (docs/formats/fogvol.md): a volume no more than this many
+    // card-heights thick reads as a sheet and is TOP-ANCHORED;
+    // anything taller keeps the full-height UNIFORM draw. The evidence is a clean gap, not a
     // tuned edge — measured off extracted/{C1,C1C,C2B,C4,C5}/gamez/nodes.json: C1/C2B/C4's slabs
     // and C1C's own map-spanning fvol1-9 are 120.5-120.6 m thick against a 132.3 m card (ratio
     // 0.91, comfortably under 1x); C1C's twelve build-up frusta start at 299.7 m (ratio 2.27) and
@@ -73,13 +73,13 @@ public sealed partial class FogVolumeClutter : Node3D
     // flip.
     private const float TopAnchorHeightFactor = 1.5f;
 
-    // ⚠ TUNE (C23, user's fork verdict 2026-08-09) — the fvol cards' authored vertex colour 240
-    // scaled to 225, applied in BuildCardMesh. NOT decoded: C23 refuted all four candidate
-    // mechanisms for the gap on data (no `cloudsprite` OBJECT_OPACITY_STATE exists in any
-    // chapter's zrdr; `WorldLight` on C1's cards would put them at 178.6, BELOW the original's own
-    // 204.9-213.3 at the matching rung; `fog: true` is contradicted by the same reader's trees and
-    // by the world's placed cloud facades authoring it explicitly next door; and carrying the
-    // field up with the deck is refuted by CAP-12's altimetry). What IS measured is the target:
+    // ⚠ TUNE — the fvol cards' authored vertex colour 240 scaled to 225, applied in BuildCardMesh.
+    // NOT decoded: all four candidate mechanisms for the gap are refuted on data (no `cloudsprite`
+    // OBJECT_OPACITY_STATE exists in any chapter's zrdr; `WorldLight` on C1's cards would put them
+    // at 178.6, BELOW the original's own 204.9-213.3 at the matching rung; `fog: true` is
+    // contradicted by the same reader's trees and by the world's placed cloud facades authoring it
+    // explicitly next door; and carrying the field up with the deck is refuted by the original's
+    // own altimetry). What IS measured is the target:
     // the original's saturated cloud plateau reads 208.88 and 209.16 in two independent above-band
     // frames (near-field patch, fog ~0, t124 1208 m and t59 1219 m) and its whole-frame p99 tops
     // out at 213-216, while ours rendered 222.7 = the texture's own 236.65 x 240/255.
@@ -89,26 +89,26 @@ public sealed partial class FogVolumeClutter : Node3D
     //
     // ⚠ fvol CARDS ONLY. The world's placed `cloudparent` cloud facades are ordinary world
     // geometry built by SceneBuilder and keep their own authored rules (vcol 255 and the
-    // range-gated 0.6 OBJECT_OPACITY_STATE, A6); C1C holds both populations in one frame and the
+    // range-gated 0.6 OBJECT_OPACITY_STATE); C1C holds both populations in one frame and the
     // data authors them apart on purpose (docs/formats/fogvol.md).
     private const float CardVertexColorTune = 225f / 240f;
 
     /// <summary>Sprites placed, summed over every kind — the authored volumes' own placements
-    /// plus A5's map-edge continuation (<see cref="ExtensionCount"/>). Zero means nothing was
+    /// plus the map-edge continuation (<see cref="ExtensionCount"/>). Zero means nothing was
     /// built and <see cref="Create"/> returned null.</summary>
     public int InstanceCount { get; private set; }
 
-    /// <summary>Sprites placed by A5's map-edge continuation alone (docs/plans/PLAN-overcast-match.md
-    /// § A5) — zero in every chapter whose <c>fvol*</c> volumes carry no map-spanning slab (C1B,
+    /// <summary>Sprites placed by the map-edge continuation alone — zero in every chapter whose
+    /// <c>fvol*</c> volumes carry no map-spanning slab (C1B,
     /// C2, C3 render nothing at all; C5's strips and C1C's build-ups are local geometry and are
     /// never extended). <see cref="InstanceCount"/> minus this is the count the authored volumes
     /// alone would have produced.</summary>
     public int ExtensionCount { get; private set; }
 
     /// <summary>Sprites placed inside the authored volumes alone — <see cref="InstanceCount"/>
-    /// minus <see cref="ExtensionCount"/>, i.e. what A2/A3's own mechanism produces before A5's
-    /// continuation runs. Should equal A6/A7's own logged counts unchanged, since the extension
-    /// runs after the base draw and never reads the shared RNG stream the base draw uses.</summary>
+    /// minus <see cref="ExtensionCount"/>, i.e. what the in-volume scatter produces before the
+    /// continuation runs. Unaffected by the extension, which runs after the base draw and never
+    /// reads the shared RNG stream the base draw uses.</summary>
     public int BaseCount => InstanceCount - ExtensionCount;
 
     /// <summary>Per-kind counts of the build, e.g. "cloudsprite1 x4471 (cloud1.tif, fade
@@ -366,15 +366,15 @@ public sealed partial class FogVolumeClutter : Node3D
     // The cells are anchored on the world origin (not on each volume), so a cell shared by two
     // volumes is the same X/Z in both and the stack is vertical, as authored.
     //
-    // ⚠ Vertical placement is TOP-ANCHORED for sheet-thin volumes, UNIFORM for tall ones (A3,
-    // docs/formats/fogvol.md). A volume no more than TopAnchorHeightFactor card-heights thick —
+    // ⚠ Vertical placement is TOP-ANCHORED for sheet-thin volumes, UNIFORM for tall ones
+    // (docs/formats/fogvol.md). A volume no more than TopAnchorHeightFactor card-heights thick —
     // C1/C2B/C4's slabs and C1C's own fvol1-9 tiling — draws Y at the volume's own top and lets
-    // `perp_dist_range` spread it afterward, matching the measured C1/C4 card bottoms (CAP-12).
+    // `perp_dist_range` spread it afterward, matching the measured C1/C4 card bottoms.
     // Sampling AT the top rather than inventing a band works because `Contains` already runs the
-    // EXACT face test (A2): for a sloped/tapered top the XZ drawn in the cell is simply rejected
+    // EXACT face test: for a sloped/tapered top the XZ drawn in the cell is simply rejected
     // when it falls outside the true top footprint at that height, so the accepted shape follows
     // the volume's own geometry with no separate per-column top lookup. C1C's twelve build-up
-    // frusta and C5's seventeen street strips are far taller than a card and keep the old
+    // frusta and C5's seventeen street strips are far taller than a card and keep the
     // full-height uniform draw — top-anchoring them would cap the build-ups into hollow shells and
     // lift C5's ground-level haze into an empty-streets sheet near the strip tops.
     private void Scatter(FogVolumeSpec spec, IReadOnlyList<FogVolumeBox> volumes, List<Kind> kinds)
@@ -410,7 +410,7 @@ public sealed partial class FogVolumeClutter : Node3D
         foreach (var volume in volumes)
         {
             var box = volume.Box;
-            // A3: sheet-thin volumes (a slab's own AABB height, not the field's overall extent)
+            // Sheet-thin volumes (a slab's own AABB height, not the field's overall extent)
             // anchor their draw at the volume's own top; tall ones keep filling uniformly. See the
             // method's own remarks above and TopAnchorHeightFactor's remarks for the evidence.
             bool topAnchored = box.End.Y - box.Position.Y <= cardHeight * TopAnchorHeightFactor;
@@ -431,11 +431,11 @@ public sealed partial class FogVolumeClutter : Node3D
 
                     float x = Rand(x0, x1);
                     float z = Rand(z0, z1);
-                    // A3: top-anchored volumes draw Y at the volume's own top (box.End.Y) rather
+                    // Top-anchored volumes draw Y at the volume's own top (box.End.Y) rather
                     // than across the full height; `perp_dist_range` is still added AFTER
-                    // containment below, exactly as for a uniform draw — sampling at top+perp
-                    // BEFORE the containment test would reject the whole field (A2's ordering
-                    // trap), so the offset stays where it always was.
+                    // containment below, exactly as for a uniform draw. ⚠ Sampling at top+perp
+                    // BEFORE the containment test would reject the whole field, so the offset
+                    // must stay after it.
                     float y = topAnchored ? box.End.Y : Rand(box.Position.Y, box.End.Y);
 
                     // The volume is its AUTHORED shape, not its bounding box. Exact for
@@ -483,11 +483,9 @@ public sealed partial class FogVolumeClutter : Node3D
             }
         }
 
-        // A5 (docs/plans/PLAN-overcast-match.md): continue the map-spanning slab's own cell field past
-        // the base map. Runs after every authored volume above has drawn everything it draws, and
-        // touches no state the loop above reads — it cannot realign the interior placements A2/A3
-        // already pin (unlike A3's own Y-anchoring change, which shifted the shared stream by
-        // skipping a draw per cell, this method never calls `rng` at all).
+        // Continue the map-spanning slab's own cell field past the base map. Runs after every
+        // authored volume above has drawn everything it draws, and touches no state the loop above
+        // reads — it never calls `rng` at all, so it cannot realign the interior placements.
         ExtendPastMapEdge(volumes, kinds, period, cardHeight, totalWeight);
     }
 
@@ -516,8 +514,8 @@ public sealed partial class FogVolumeClutter : Node3D
         // Rings=5 tiles past whatever cell the camera occupies (MapEdgeExtender.cs) — 5 x 1024 m
         // = 5,120 m for these chapters' 12,288 m / 12-tile-per-side map. A full precomputed ring
         // out to 5,120 m would place roughly 2.3x this field's own base count (fogvol.md has the
-        // arithmetic) — past the plan's own ">2x is unreasonable" line for a structure that is
-        // built once and kept for the process lifetime. The shader in this file already collapses
+        // arithmetic) — more than doubling a structure that is built once and kept for the process
+        // lifetime, which is not worth it. The shader in this file already collapses
         // any sprite past its kind's own `far_fade.y` to a degenerate quad, so instances beyond
         // the LARGEST authored far fade cost real memory and zero visible pixels from anywhere —
         // bounding the ring there is lossless, not a cut corner. Both cloudsprite kinds in every
@@ -558,7 +556,7 @@ public sealed partial class FogVolumeClutter : Node3D
     //    call and no cell is ever rejected.
     //  - each cell draws off its OWN hashed generator (Rng.NewSystemRandom(Rng.Clouds, gx, gz)),
     //    not the interior's one shared sequential stream. That is exactly right here and would be
-    //    wrong there (A2's own note on the interior loop): the set of extension cells is a
+    //    wrong there: the set of extension cells is a
     //    runtime computation bounded by each kind's far_fade, not a fixed walk over authored
     //    volumes, so a stream position would tie one cell's draw to how many cells the
     //    enumeration visited before it — building a different bound, in a different order, would
@@ -567,7 +565,7 @@ public sealed partial class FogVolumeClutter : Node3D
     //    future change to how this ring is enumerated.
     // Y is the slab's own constant top (`topY`, checked equal across every piece above) plus
     // `perp_dist_range`, exactly as the interior's own top-anchored draw adds it — the extension
-    // inherits A3's vertical rule rather than inventing a second one.
+    // inherits that vertical rule rather than inventing a second one.
     private void EmitExtensionRegion(float x0, float x1, float z0, float z1, float period,
         float topY, List<Kind> kinds, float totalWeight)
     {
