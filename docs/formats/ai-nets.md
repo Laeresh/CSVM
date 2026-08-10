@@ -50,7 +50,8 @@ World-space positions in the standard frame (right-handed Y-up, metres —
 A node list may carry extra numbers past `z`: **81 nodes carry two extra values and 12
 carry four**. These per-node tags are **undecoded**; the design describes stop/valve
 nodes on patrol routes (zeppelins halt at script-armed stop nodes), and these tags are
-the obvious candidate. Read them raw; do not interpret.
+the obvious candidate. Read them raw; do not interpret. ⚠ The two widths are **two different
+systems on disjoint sets of nets** — see [below](#the-tags-are-two-systems-not-one-measured-2026-08-10).
 
 **Stop points are real, and they are scripted.** The binary's mission-script vocabulary
 (`D:\zipper\Crimson\mission.cpp`) includes a **`COMPLETED_STOPPOINT`** condition, in the same
@@ -58,6 +59,55 @@ family as `COMPLETED_ZEPCANNONS` and `COMPLETED_SOUND_GROUP` — so a mission wa
 reaching its stop point, exactly as the design describes. That raises the confidence that the
 per-node tags above encode stop points, but it does **not** decode them: nothing yet ties a
 specific tag value to the condition. Still a lead, not a finding.
+
+#### The tags are two systems, not one (measured 2026-08-10)
+
+**40 nets of 222 carry tagged nodes**, and cross-referencing them against `neindex` names, the
+`zeppelins.json` `net` field, and each node's degree in the edge list splits them cleanly:
+
+| Shape | Nets | Which nets | Value pattern |
+|---|---|---|---|
+| **A — 2 extras** `[a, b]` | 36 | **zeppelin routes, exclusively** | `b ∈ {0,1}`, `a ∈ 0…8` |
+| **B — 4 extras** `[0, 0, 1, N]` | 4 | stunt / cinematic / escort routes | `N ∈ 1…10, 33, 34` |
+
+⚠ **Do not read the two shapes as one optional-length field.** They occur on disjoint net
+populations and almost certainly belong to different subsystems.
+
+**Shape A is a zeppelin feature.** All 36 are zeppelin routes by name; 31 are directly referenced by
+a `zeppelins.json` `net`, and the remaining five are unreferenced alternates or variants sitting
+beside referenced twins (`M1Cargo` beside `M1CargoAlt`, `SwanZep2` beside `SwanZep1`, plus
+`Gemini1`, `M5Bombrun`, `M4PZRetreat`). Nothing that a fighter flies carries a shape-A tag. That is
+exactly what the stop-point reading predicts, and it is the strongest evidence yet for it.
+
+Structure within shape A:
+
+- **`b` is a flag, and it is not graph topology.** It appears on both degree-1 and degree-2 nodes,
+  so it does not mean "end of the path" — the edge list already says that. It concentrates on a
+  net's **first and/or last** node, with long runs of `b = 0` between.
+- **`a` is a small id allocated sequentially per chapter, across files.** C5's three cargo routes
+  make this plain: `M3Cargo1` uses 1 and 2, `M3Cargo2` uses 3 and 4, `M3Cargo3` uses 5 and 6 — a
+  chapter-wide counter, not a per-net index. `a = 0` recurs on terminal nodes.
+
+Worked shape — `C5` `M3Cargo2`, 9 nodes:
+
+```
+node 0  [3, 1]      node 1–7  [4, 0]      node 8  [0, 1]
+```
+
+**Two readings survive this evidence and the data cannot choose between them:** `a` is a
+*stop-point id* with `b` marking a halt, or `a` is a *segment id* with `b` marking a segment
+boundary. Both fit every net. Settling it needs the runtime parser.
+
+**Shape B is not a zeppelin thing at all.** It occurs on exactly four nets — `M3StuntCourse` (7
+tagged nodes, distinct `N`), `M1FilmShot` (3), `M1Cabbie` (1), `M4MilesRun` (1) — i.e. the stunt
+course, a camera/cinematic route, and two escort routes. The constant `0, 0, 1` prefix plus a
+varying `N` reads as a reference to some other table by id. Related to the Danger Zone / stunt
+gate system ([missions.md](missions.md)) rather than to `COMPLETED_STOPPOINT`.
+
+⚠ **The runtime parser has not been located.** The only code in `crimson.exe` that names
+`ne%06d.zrd` is the editor's text-file I/O and a debug dump routine, so the string-search route does
+not reach the shipped loader. Until it is found, the above is *structure*, not *meaning*: read the
+tags raw, preserve them, and do not act on either reading.
 
 Two neighbouring script ops retarget net-followers at runtime — **`SET_AI_NET`** (accepts a vehicle
 *or* a zeppelin) and **`SET_AI_TEAM`** — which is the design's "retreat is expressed as a net

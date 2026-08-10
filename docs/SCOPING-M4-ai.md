@@ -421,6 +421,31 @@ and the fallback they defer to is documented. ⚠ A reader must still **parse** 
 field indices aligned; beyond that, ignore them. Not to be reopened without a different build or an
 authored non-zero value.
 
+**F17's per-node tags — narrowed sharply, still not decoded.** Attacked directly rather than
+deferred. The binary route does not reach the parser: the only code naming `ne%06d.zrd` is the
+editor's text I/O and a debug dump, so the shipped loader is not reachable by string search. The
+*data* route paid off instead. Cross-referencing the 40 tagged nets against `neindex` names, the
+`zeppelins.json` `net` field and each node's edge-list degree:
+
+- ⚠ **The two tag widths are two different systems on disjoint net populations** — not one
+  optional-length field, which is how the format page previously read.
+- **The 2-extra shape is zeppelin-exclusive.** All 36 are zeppelin routes by name, 31 directly
+  referenced by a `zeppelins.json` `net`, the rest unreferenced alternates. **No fighter net carries
+  one.** That is the strongest evidence yet for the stop-point reading — it is what the hypothesis
+  predicted, and it could easily have come out the other way.
+- **The 4-extra shape is `[0,0,1,N]` on exactly four nets** — `M3StuntCourse`, `M1FilmShot`,
+  `M1Cabbie`, `M4MilesRun`. Stunt/cinematic/escort, not zeppelin: this belongs with the Danger Zone
+  gate system, not with `COMPLETED_STOPPOINT`.
+- Within the 2-extra shape, `b` is a flag that is **not** graph topology (it occurs on degree-1 and
+  degree-2 nodes alike) and concentrates on first/last nodes; `a` is a small id **allocated
+  sequentially per chapter across files** (C5's three cargo routes use 1–2, 3–4, 5–6).
+
+**Two readings survive and the data cannot choose:** `a` = stop-point id with `b` = halt, or
+`a` = segment id with `b` = boundary. So F17 keeps one open item, but it is now bounded, has a
+worked example, and has a single named discriminating instrument — **locate the runtime net loader**
+(not via the filename string; try the `SET_AI_NET` handler or the net-follower's node access). Until
+then: parse and preserve the tags, act on neither reading. F17's cost and ordering are unchanged.
+
 **Still not examined:** nothing in the wave list.
 
 ---
