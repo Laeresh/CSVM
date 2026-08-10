@@ -322,10 +322,62 @@ engine accepts are never authored** (`DEACTIVATE`, `EFFECT`, `FIRE_LIMITS`, `STI
 `SHOOT_UP_ONLY`, `CATEGORY_LABEL`, `HELP_LABEL`, and the `ON`/`START`/`STOP` sounds) — a reader
 should tolerate them, an implementation needs the fourteen that ship.
 
-**Still not examined**, and costed as written: E16's trigger dispatch, though the binary does show
-voice lines are gated by a numeric id behind a `talker` roll (*"Talker test passed. Play AI sound
-#%d."*). The three unnamed roster slots are localised to 8–19 and are unauthored install-wide —
-deliberately left unresolved.
+### Wave E — the trigger taxonomy is 29 ids, and the binary names all of them
+
+Decoded and written up as [`formats/combat-voice.md`](formats/combat-voice.md). E16 was graded
+*"direction sound, magnitude a judgement call"* — the direction was right and **the magnitude is no
+longer a judgement call**. `crimson.exe` carries the trigger table as a contiguous ordered array of
+`TYPE` tokens, and the loop that fills a pilot's voice slots is bounded at `0x1d`: **29 triggers,
+ids 0–28**, each naming a family the clip survey already inventoried. § 6's taxonomy and the
+engine's table are the same list.
+
+Sixteen of the 29 ids were confirmed independently at their dispatch sites, and two of those
+confirmations are exact numbers the study wanted:
+
+- **`DI-LowDmg`/`MedDmg`/`HighDmg` fire at 70 % / 50 % / 30 % of health**, tested most-severe-first.
+  § 6's "distress at three zone-damage tiers" now has its thresholds.
+- **The 12 `WA-Enemy` bearing call-outs are computed, not enumerated** — `id = 1 + 3*bearing +
+  altitudeBand`, ordered low/level/high within each of the 12/3/6/9 o'clock bearings.
+
+Three findings change what E16 has to build:
+
+- ⚠ **The 15-second per-slot cooldown is armed by a *failed* talker roll exactly as by a successful
+  one.** A quiet pilot does not retry on the next event — losing the roll silences that trigger for
+  15 s. Re-deriving `talker` from the design prose (a chattiness stat) gets this wrong, and it is
+  the difference between "sometimes quiet" and "reliably sparse".
+- ⚠ **Triggers 1–12 have their talker chance halved, hardcoded** — on top of only 7 of 31 pilot ids
+  owning bearing clips at all. Two independent suppressions, not one.
+- **Broadcasts elect a speaker.** Several triggers address the flight, not a pilot: the engine
+  collects every eligible living teammate that owns that slot, picks one at random, and **on a
+  failed roll passes the line to the next candidate**, wrapping. So E16 is not N independent rolls
+  — it is a speaker election, and modelling it as per-pilot rolls makes the flight either silent or
+  a chorus.
+
+Two open questions close, one narrows:
+
+- **Open question 6 closes.** `DA` *is* the ally counterpart of `DE`, and the split is by team
+  rather than by outcome: both are the dying pilot's own death cry, id 20 if the aircraft is on the
+  player's team and id 21 if not. Both are dispatched with the force flag, because the speaker has
+  just been marked dead.
+- **The `aiv` → voice chain is no longer inference.** § 6 called it "strongly-supported inference,
+  not proven fact". It is traced: `accentID` (roster slot 65) → a `voice.zrd` row → a pool of pilot
+  VO ids → that pilot's clips → the 29 slots. ⚠ **`voice.zrd` is the accent table, not the trigger
+  table** — its 35 rows sit suspiciously close to 29 and are a different thing entirely.
+- **`TA-FailTail` is confirmed as a real engine trigger with a real dispatch site** (id 25), not an
+  orphan clip family. § 6 flagged it as audio documenting a behaviour the design prose omits; that
+  now has engine backing.
+
+Left open and recorded on the page: the exact attacker/victim polarity of the three gloat triggers
+(22–24), no located dispatch site for id 16 (`PR-EnemyDwn`), and how the `-A`/`-B`/`-C` and
+`Bail`/`NoBail` variants are chosen below the family root.
+
+E16 still needs B8's voice runtime and does not move in the ordering. Its **cost drops**: the
+taxonomy no longer needs deriving from clip names, and the dispatch rules are constants rather than
+TUNEs.
+
+**Still not examined:** nothing in the wave list. The three unnamed roster slots are localised to
+8–19 and are unauthored install-wide — deliberately left unresolved — and F20's `capacity`
+discrepancy still wants either a capture or a trace of the `zep_rearm_node_%d` path.
 
 ---
 
@@ -372,7 +424,7 @@ otherwise.
 | Confidence | Items | What that means for you |
 |---|---|---|
 | **Traced to an exact mechanism in code or data, reproducible by a committed script** | A1–A4, B5, B6, B8, C9, F17, F19, F20 | Confirm the trace, then implement. *(C9 stays in this row and its trace is now the binary's, not the data's — but the trace turned out to be a tracking loop rather than a table read, so its **cost** rose even though its confidence did not. Confidence is not effort.)* |
-| **Direction sound, magnitude a judgement call (TUNE, not fact)** | D14, D15, E16, F18 | The *what* is settled; the *how much* goes on `backlog.md`'s TUNE list, never invented as fact. |
+| **Direction sound, magnitude a judgement call (TUNE, not fact)** | D14, D15, ~~E16~~, F18 | The *what* is settled; the *how much* goes on `backlog.md`'s TUNE list, never invented as fact. *(E16 graduated out on 2026-08-10 — the 29-id trigger table, the damage thresholds and the cooldown are read from the binary, so its magnitudes are constants, not TUNEs.)* |
 | **Leads only — a hypothesis with a named discriminating instrument** | D11, D12, D13 | Budget for investigation; **a correct disproof that lands no code is a success here.** *(D10 graduated out of this row on 2026-08-10 — it is now traced to shipped data.)* |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
@@ -621,7 +673,7 @@ one-to-one onto the design's communication-trigger list:
 | `WA` | 188 | `WA-Enemy-{12,3,6,9}{,H,L}` (12), `WA-Attack-A/B/C`, `WA-HighDmg-A/B`, `WA-Turret-A/B` | threat warning: bearing call-out, enemy threatening, player zone at 70 %, player entered a turret's arc |
 | `DI` | 100 | `DI-LowDmg-A/B`, `DI-MedDmg-A/B`, `DI-HighDmg-A/B` | distress at three zone-damage tiers |
 | `DE` | 99 | `DE-Bail-A/B`, `DE-NoBail-A/B` | destroyed, with / without a successful bail-out |
-| `DA` | 68 | `DA-Bail-A/B`, `DA-NoBail-A/B` | the ally counterpart of `DE` *(inferred — see open question 6)* |
+| `DA` | 68 | `DA-Bail-A/B`, `DA-NoBail-A/B` | the ally counterpart of `DE` — ⚠ *confirmed 2026-08-10: both are the dying pilot's own cry, split by team (open question 6)* |
 | `DS` | 48 | `DS-Ally-A/B/C` | ally distress |
 | `GL` | 207 | `GL-AllyDwn-A/B/C`, `GL-EnemyDwn-A/B/C`, `GL-PlyrDwn-A/B/C` | gloat, by whose plane went down |
 | `PR` | 248 | `PR-EnemyDwn-A/B/C`, `PR-EngineDst-A/B/C`, `PR-ObjDst-A/B`, `PR-ZepDst-A/B/C`, `PR-DngrZn-A/B/C/D`, `PR-DangerZone-A/B` | praise |
@@ -645,6 +697,14 @@ Three findings worth carrying forward:
 0–10 are 2–3-id pools, rows 11–34 are single ids) → `soundsh/VO_id<N>_*`. All 21 observed field-65
 values are valid rows. **Caveat: 5 of the 21 mapped VO ids (5, 15, 17, 36, 40) have no clips at all.**
 Treat the chain as strongly-supported inference, not proven fact.
+
+⚠ **Confirmed 2026-08-10 — it is no longer inference.** The chain is traced in the binary, and the
+selected pilot's clips are loaded into 29 per-trigger slots at spawn. The table above is the
+engine's own taxonomy: `crimson.exe` carries all 29 `TYPE` tokens as an ordered array, so the
+families and their order are read, not derived. See
+[Delta § Wave E](#wave-e--the-trigger-taxonomy-is-29-ids-and-the-binary-names-all-of-them) and
+[`formats/combat-voice.md`](formats/combat-voice.md) — which also settles `DA` vs `DE` (open
+question 6), gives the `DI` tiers their 70/50/30 % thresholds, and confirms `TA-FailTail`.
 
 ---
 
@@ -844,6 +904,11 @@ These are places the source is ambiguous, self-contradictory, or contradicted by
    The natural reading is self vs ally, and it fits the design's four destroyed rows (target bails /
    target does not / ally bails / ally does not). **Unconfirmed** — the clip contents have not been
    listened to. Cheap to settle; do it before wiring triggers.
+   ⚠ **Closed 2026-08-10 — and the natural reading was half wrong.** `DA` and `DE` are both the
+   *dying pilot's own* death cry, split by **team**, not by self-vs-ally: id 20 if the aircraft is
+   on the player's team, id 21 if not. `DI` is the speaker's own damage (ids 17–19 at 70/50/30 %)
+   and `DS` is ally distress (id 28). See
+   [`formats/combat-voice.md`](formats/combat-voice.md). No listening required.
 7. **What `<Cx>/<mission>/zrdr/net.zrd.json` actually is.** Undecoded. Shape says spawn table. It is
    *not* needed for patrol, so this is a curiosity, not a blocker — but do not let a future session
    waste a day on it assuming it is the route data.
@@ -1066,7 +1131,11 @@ of A3 via the 2026-08-10 decompile pass), not a started milestone.
 
 ### Wave E — Communication
 
-16. ☐ E16 — Trigger dispatch across the shipped taxonomy, gated by the talker stat
+16. ☐ E16 — Trigger dispatch across the shipped taxonomy, gated by the talker stat — **spec complete
+    2026-08-10** in [`formats/combat-voice.md`](formats/combat-voice.md): 29 trigger ids named by the
+    binary, the `accentID`→`voice.zrd`→pilot chain traced, the `DI` thresholds at 70/50/30 %, the
+    computed bearing index, ⚠ the 15 s cooldown armed by a *failed* roll, ⚠ the hardcoded halving on
+    ids 1–12, and broadcasts as a speaker election rather than N rolls. Cost down; still needs B8
 
 ### Wave F — Zeppelins
 
