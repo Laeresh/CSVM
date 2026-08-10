@@ -3201,7 +3201,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         float num = AnimData.AsNum(value) ?? 0f;
         bool result = kind switch
         {
-            "RandomWeight" => _rng.NextDouble() < num,
+            // The exe's roll is inclusive (`draw <= threshold`); NextDouble() is [0,1) so <=
+            // matches it exactly (a strict < would silently exclude the num==0 case's draw==0.0).
+            "RandomWeight" => _rng.NextDouble() <= num,
             "AnimationLod" => QualityLod >= (int)num,
             // The 4-byte value slot is unused for these two: the reader form takes no
             // argument (`IF HW_RENDER`) and every compiled instance stores 0, so the

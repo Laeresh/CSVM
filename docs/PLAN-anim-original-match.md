@@ -163,7 +163,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 13. B13 ☑ `IF` skip: match the original's non-nesting-aware scan
 14. B14 ☑ `LOOP`: align the rewind, keep the carry, write down why
 15. B15 ☑ `START_TIME` origins: `Animation` reads the animation clock
-16. B16 ☐ `RANDOM_WEIGHT`: the original's 200-entry shared table
+16. B16 ❌ `RANDOM_WEIGHT`: the original's 200-entry shared table
 
 ### Wave C — Missing events
 
@@ -758,7 +758,38 @@ previous event" path.
 
 </details>
 
-## B16 ☐ `RANDOM_WEIGHT`: the original's 200-entry shared table
+## B16 ❌ `RANDOM_WEIGHT`: the original's 200-entry shared table
+
+**Disproven.** The table is not a constant. Fixed the comparison sense instead
+(`AnimRuntime.cs`'s `RandomWeight` case: `<` → `<=`).
+
+`read_memory` on `DAT_009fce20` (800 bytes) in the static image returned all zero. `get_xrefs_to`
+on the address showed why: `FUN_004ee380` writes it, once per process start, with 200 calls to
+`rand() * (1.0/32767.0)` (`_DAT_00728358 = 3.051851e-05`, matching MSVC's `RAND_MAX`). It is
+runtime-generated, not compiled data — there is nothing at that address to dump-and-embed. Worse
+for reproduction: the CRT `rand()` stream it draws from is not run-stable in the original either —
+`FUN_004df1d0` and `FUN_0044e010` (ordinary startup/level-load paths) both end with
+`srand((uint)time(NULL))`, reseeding the same global stream from wall-clock time. Two runs of the
+original fill `DAT_009fce20` with two different tables. The "shared 200-slot cursor" everyone reads
+`RANDOM_WEIGHT` through is cycling over whichever draw happened to land that session — there is no
+fixed sequence for CSVM to match, session to session, even in the original.
+
+CSVM's session-seeded `_rng` (`GameSession.cs` → `AnimRuntime._rng`, per the class comment "One
+field rather than scattered `GD.Randf()` calls so the session's master seed can pin the whole
+sequence") is already the correct-shape answer: a PRNG stream pinned by `--seed=`/`--det`, same as
+the original's own `srand()` discipline. It does not share the original's specific generator or its
+cross-condition global cursor, and nothing in the evidence says either is worth reproducing — the
+original's own value at a given `RANDOM_WEIGHT` site is not reproducible from the exe alone, so
+there is no "original" behavior to match beyond "some PRNG, uniform on [0,1)".
+
+The one real bug was free to fix regardless: the exe's branch is `draw <= threshold`
+(`FUN_004ec080`, `004ec117`), CSVM had `_rng.NextDouble() < num`. Now `<=`.
+
+Full derivation, the two `srand(time(...))` call sites and the disproof are recorded in
+`analysis/anim-interpreter-decode/FINDINGS.md`.
+
+<details>
+<summary>Original approach (kept for reference)</summary>
 
 **Goal.** Decide, on evidence, whether to reproduce the original's random source.
 
@@ -779,6 +810,8 @@ should *improve* determinism, not threaten it) and the golden set is unmoved.
 
 **⚠ Traps.** Do not commit the table as extracted game data if it turns out to be anything other
 than a plain numeric constant — check `PROJECT_CONTEXT.md`'s hard rule before adding a data file.
+
+</details>
 
 ---
 

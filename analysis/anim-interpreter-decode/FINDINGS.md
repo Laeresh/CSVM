@@ -90,7 +90,7 @@ Census over **3,015 compiled defs** (all 8 chapters' `cam_anim` + `mis_anim`):
 | `IF` / `ELSE` forward skip | breaks at the **first** `ELSE`/`ELSEIF`/`ENDIF` byte; no depth counter | nesting-aware | **96** nested `If`s, all in `*_gunhit` / `mag_gunhit` — played on every gun impact |
 | `START_TIME ANIMATION` | compares the *animation instance's* clock (`anim+0xb0`), shared across sequences | *(fixed — CSVM now resolves it against `AnimInstance.Clock`)* | **191** events name `Animation` with a non-zero time inside an `OnCall` sequence, the only case where the two clocks can disagree; 900 more sit in `Initial` sequences, where the bootstrap starts the sequence with the instance |
 | `LOOP` rewind | hard-zeroes both timers | carries the overshoot (`BL-237`) | deliberate — the original paces on its own fixed tick, we must pace on sim time at any step |
-| `RANDOM_WEIGHT` | a fixed 200-entry table at `DAT_009fce20` with a **global** cursor, `(i+1) % 200` | per-evaluation RNG | 4,537 conditions |
+| `RANDOM_WEIGHT` comparison sense | `draw <= threshold` | *(fixed — CSVM now uses `<=`, was `<`)* | 4,537 conditions |
 | `PLAYER_RANGE` | compares `dist² * 4.0 <= value` — **unresolved** whether the transform chain (`FUN_0053f9b0`, `DAT_009fd190`) already halves the vector | `dist² <= value` | 1,052 conditions; if unhalved, every gate radius is 2× too large |
 
 ## Event kinds present in the data with no CSVM handler
@@ -110,3 +110,17 @@ white↔violet full-screen wash over 1.2 s, gated on `If PlayerRange`, and CSVM 
   `flags & 2`, accumulating into `+0x2c`), but **1,018 of 1,018** compiled `Loop` events carry
   `Count` and none carries `RunTime`; mech3ax notes it is absent from the reader scope too. Nothing
   ships it.
+
+- **"`RANDOM_WEIGHT`'s 200-entry table (`DAT_009fce20`) is a compiled constant worth
+  reproducing."** It reads as all zero in the static image (confirmed with `read_memory`) because
+  it isn't one: `FUN_004ee380` fills it once per process start with `rand() * (1.0/32767.0)` — 200
+  calls to the CRT PRNG, `_DAT_00728358 = 3.051851e-05 ≈ 1/32767` matching MSVC's `RAND_MAX`. And
+  the CRT stream itself is not run-stable in the original either — `FUN_004df1d0` and `FUN_0044e010`
+  both end with `srand((uint)time(NULL))`, reseeding `rand()` from wall-clock time during ordinary
+  startup/level-load. So there is no byte sequence to embed: two runs of the original draw two
+  different tables, and the "shared 200-slot cursor" is cycling through whichever draw happened to
+  land that session. CSVM's session-seeded `_rng` (`GameSession.cs`, routed through
+  `AnimRuntime._rng`) is already the correct-shape equivalent — a PRNG stream pinned by the master
+  seed — it just doesn't share the original's specific generator or its cross-condition global
+  cursor, and nothing in the evidence says that coupling is worth building. The one real, free fix
+  was the comparison sense: the exe's branch is `draw <= threshold`; CSVM had `<` and now matches.
