@@ -149,6 +149,47 @@ sprites flip. A presence-of-COLORS rule alone was not enough: `fire_n_smoke` and
 `large_black_smokeball` both carry `colors: null` yet end on black sprites, and adding those
 turned every dying smoke puff into more glow.
 
+## Aircraft speed-cue wisps
+
+Each chapter's `speed_cue.zrd` authors the pale puffs that appear ahead of the player's aircraft.
+Although the animation and its three puffer sequences are `ON_CALL`, player setup starts
+`speed_cue`; its controller then loops every 0.1 s. This is why a census that excludes `ON_CALL`
+puffers incorrectly misses an ambient effect.
+
+The controller disables the effect within 50 m of the ground. By camera altitude it selects a
+30 m interval / 18 m deviation puffer below 800 m, 15 m / 25 m from 800–900 m, 8 m / 30 m from
+900–1200 m, and 15 m / 25 m from 1200–1500 m. Each emitter is attached to `player` at local
+`(0,0,-60)`, 60 m ahead of the aircraft. All use zero base velocity, ±0.8 m/s random velocity,
+2.5–4.5 m initial size, 3–4 s lifetime, growth 1.25, and random static
+`smoke101`/`smoke102`/`smoke103` textures. Their colour ramp is transparent white → low-alpha
+white at half-life → transparent black. C1 uses peak alpha 0.4/0.5/0.5; C4 uses 0.6/0.7/0.7.
+
+The generic distance-puffer update leaves emitted particles in world space. Consequently the
+aircraft passes through each puff, and its screen-visible duration falls approximately inversely
+with airspeed. This effect is separate from both chapter cloud-card populations and the
+hard-coded throttle-rise exhaust below. CSVM implements it in `Flight.SpeedCue`, loading the
+chapter reader verbatim and assigning one private renderer set to each player rig.
+
+## Hard-coded aircraft throttle-rise exhaust
+
+`crimson.exe` also constructs one puffer outside the authored `PUFFER_STATE` readers. Aircraft
+initialization (`FUN_00476250`) resolves `exhaust%d` model nodes (`exhaust1`, `exhaust2`, …)
+and calls `FUN_004af9e0` → `FUN_004afa20` once per node. The latter allocates a generic puffer
+through `FUN_00550100` and attaches it at zero local offset.
+
+It is a distance trail: one particle per **0.4 m**, random velocity **−0.1..+0.1 m/s** on each
+axis, initial size **0.2..0.3 m**, lifetime **0.5..1.5 s**, friction **1.2**, deviation **0.001 m**,
+and normalized scale **1.0 → 3.45** over life. Each particle chooses `smoke101`, `smoke102` or
+`smoke103`; the colour ramp is near-black at age 0.2 and transparent black at age 1, with a
+**200..300 m** distance fade. `FUN_004afbc0` activates it from a positive
+commanded-versus-current throttle gap and otherwise decays it to off. The generic puffer update
+`FUN_0054ee10` → `FUN_0054f8b0` samples each exhaust node's world transform and leaves emitted
+particles in world space, which is why they pass behind the moving aircraft.
+
+This is the executable counterpart of the throttle-rise smoke described in
+`CSVM/src/Flight/ThrottleSlamSmoke.cs`, not the speed-cue wisp system. The full BL-317 trace is in
+`analysis/bl-317-plane-wisps/FINDINGS.md`.
+
 
 ## Texture flipbooks, layer by layer (2026-07-21)
 

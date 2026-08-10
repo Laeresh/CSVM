@@ -104,6 +104,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/FlightModel.cs` — the arcade velocity-vector flight physics: thrust/drag/gravity/lift, stall, calibrated control rates.
 - `src/Flight/PropAnimator.cs` — spins the collected prop/rotor discs about their local axes, throttle-scaled (idle floor 0.4); `--fly` only.
 - `src/Flight/ThrottleSlamSmoke.cs` — a large throttle jump streams dark exhaust trail smoke for a few seconds; a single notch or a decrease shows nothing.
+- `src/Flight/SpeedCue.cs` — chapter-authored pale smoke wisps emitted 60 m ahead of each player, density selected by camera altitude.
 - `src/Flight/ControlSurfaceAnimator.cs` — deflects ailerons/elevators/rudders to an absolute pose from slewed stick input; `--fly` only.
 - `src/Flight/WingLightBlinker.cs` — blinks the wingtip flares 0.08 s every 1.5 s, reset off on respawn; `--fly` only.
 - `src/Flight/PylonOrdnance.cs` — the rockets under the wings: one FLYOUT-model body per loaded pylon, hidden as its ammo depletes; `--fly` only.
@@ -2039,16 +2040,19 @@ effects reader; `Puffer.Create` builds the atlas and hands it to an `IEmitterRen
 mode with no atlas, no `TextureArchive` and no GPU. The continuous surface is ONE pair
 (PLAN-puffer-interface A2): `Emit(worldPos, worldBasis, dt, staticBurnMps = 0f)` / `Stop()`,
 plus the one-shot `Burst` and the hard-kill `Clear` — the authored state picks the mode, callers
-never do. `Emit` dispatches: DISTANCE_INTERVAL trails per interval of actual host motion (CAP-15's
-density, `BL-259`; TrailPool-sized even on the sustained path, since the time-cadence pool floor
-silently dropped ~85% of a flight-speed trail); a still host keeps the time cadence (the static
+never do. `Emit` dispatches: DISTANCE_INTERVAL trails per interval of the authored AT_NODE
+point's actual motion, including its host-frame offset (the speed cue's point is 60 m ahead;
+CAP-15's density, `BL-259`); TrailPool-sized even on the sustained path, since the time-cadence
+pool floor silently dropped ~85% of a flight-speed trail; a still host keeps the time cadence
+(the static
 building sputters, whose distance can never elapse — every distance state carries the parsers'
 synthetic 0.1 s TIME_INTERVAL, so that cadence always exists); a host that CANNOT move declares
 `staticBurnMps` and spends virtual metres at the held pose instead (the damage lab's parked
 plane). `Stop` ends the trail as well as the emission, unconditionally and idempotently, so a
 revived emitter re-homes rather than drawing a puff line from its pooled slot's previous call
-site (the rocket ghost trails). **All four external callers (`PufferEmitter`, `ProjectilePool`,
-`DamageVisuals`, `ThrottleSlamSmoke`) drive the emitter through `Emit`/`Stop` only** — the six
+site (the rocket ghost trails). **All five external callers (`PufferEmitter`, `ProjectilePool`,
+`DamageVisuals`, `ThrottleSlamSmoke`, `SpeedCue`) drive the emitter through `Emit`/`Stop`
+only** — the six
 mode verbs (`TrailAdvance`/`TrailEnd`/`TrailBurnAt`/`SustainAt`/`SustainEnd`) are `private`
 (PLAN-puffer-interface A3); `DriveAt` was deleted (it had been a straight `Emit` alias with no
 remaining caller once `PufferEmitter` moved to calling `Emit` directly).
@@ -2551,6 +2555,15 @@ climb tracker so the throttle jump those moments make is never itself read as a 
 ⚠ `DurationSimSeconds` (≈3.89 s = 2.8 wall-s × 1.390) is TUNE within the capture's "~2-3 wall-s"
   dissipation estimate, not a measured edge.
 
+## src/Flight/SpeedCue.cs
+Loads `cuepuffer1..3` directly from the chapter's `speed_cue.zrd` and drives exactly one through
+`Puffer.Emit` at the aircraft pose. Camera altitude selects the authored 30/15/8/15 m density
+bands; within 50 m AGL none emits, while the script's empty branch above 1500 m preserves the
+current selection. One instance is built per player and its puffer renderers are stamped onto that
+rig's visual layer, so splitscreen panes never see another pilot's private speed cue. It shares the
+session `EffectAmbience`, so the authored 500–600 m camera-distance fade and wind apply. `Reset`
+hard-clears all three on crash/respawn so a teleported aircraft cannot bridge its old position.
+
 ## src/Flight/ControlSurfaceAnimator.cs
 Deflects ailerons/elevators/rudders to an absolute pose: each surface stores its build-time local
 basis and gets Basis = base · Rot(hingeAxis, angle); three channels slew toward the stick at
@@ -2639,7 +2652,7 @@ PlaneCollider boxes via CastMotion each physics frame — mask world+aircraft wi
 is solid and a mid-air resolves through the same SurviveHit/Crash as terrain; `Crash`/`Respawn`
 toggle the body's hittability; the sim half is `SimStep(dt)`, called by
 `_PhysicsProcess` (realtime clock) or by `GameSession` (fixed/halted clock). Collaborators:
-FlightModel, CameraController + CamParams, Loadout + ProjectilePool (guns/rockets),
+FlightModel, CameraController + CamParams, SpeedCue, Loadout + ProjectilePool (guns/rockets),
 `CollideDamageSink` →
 `AnimRuntime.CollideDamageAt` (fly-through facades), CrashRuntime, every HUD widget and animator.
 `Crash` reads the struck body through the same `ProjectilePool.ClassifySurface` (`ClassifySurface`
@@ -3778,8 +3791,8 @@ extraction) and as an `effects-census` condition on whatever chapter the run was
 ## src/Session/FlightRigAssembler.cs
 Assembles one player's flight rig: the painted plane model, the `FlightController` and everything hung
 on it — loadout/ordnance, compass, gauges, HUD font test/weapon readout/reticle, damage visuals,
-audio, the throttle-slam exhaust smoke (`ThrottleSlamSmoke.Build`, after `Setup` so it can seed its
-climb tracker from the live spawn throttle), this player's stunt run + marker/scoreboard/race entry
+audio, the throttle-slam exhaust smoke and chapter-authored `SpeedCue` (private visual layer per
+rig), this player's stunt run + marker/scoreboard/race entry
 (or, in `--vs`, its `VersusHud` bound to `Inputs.VersusMatch` + `Inputs.Rigs` for the opponent
 markers — C23/C24), the spawn placement, and the crash runtime built after the controller joins
 the tree. Constructed

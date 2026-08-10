@@ -78,6 +78,10 @@ public partial class FlightController : Node3D
     /// exhaust nodes.</summary>
     public ThrottleSlamSmoke? ThrottleSmoke;
 
+    /// <summary>The chapter-authored pale speed wisps spawned ahead of this aircraft; one private
+    /// instance per rendered player view.</summary>
+    public SpeedCue? SpeedCue;
+
     /// <summary>Deflects the plane's ailerons/elevators/rudders with stick input;
     /// advanced each frame. Null if the model has no control-surface nodes.</summary>
     public ControlSurfaceAnimator? Surfaces;
@@ -346,6 +350,7 @@ public partial class FlightController : Node3D
 
     private FlightModel _model = null!;
     private CameraController _cam = null!;
+    private Camera3D _viewCamera = null!;
     private CanvasLayer _hudCanvas = null!;      // the whole HUD layer; hidden while crashed (the
                                                  // original's crash camera shows no HUD — footage)
     private Label _hud = null!;
@@ -459,6 +464,7 @@ public partial class FlightController : Node3D
         Vector3 spawnPos, Vector3 spawnLookAt)
     {
         _model = model;
+        _viewCamera = camera;
         _cam = new CameraController(camera, camParams, KeyDown, PinnedView);
         _spawnPos = spawnPos;
         _spawnAttitude = Basis.LookingAt((spawnLookAt - spawnPos).Normalized(), Vector3.Up);
@@ -648,6 +654,7 @@ public partial class FlightController : Node3D
         // A fresh engine has no in-flight plume, and the spawn throttle jump (0 → SpawnThrottle)
         // must never itself read as a slam.
         ThrottleSmoke?.Reset(_throttle);
+        SpeedCue?.Reset();
         _model.Reset(_spawnPos, _spawnAttitude, SpawnSpeed, _throttle);
         _simPrev = _simCurr = _renderPose = new Transform3D(_model.Attitude, _model.Position);
         GlobalTransform = _simCurr;
@@ -1173,6 +1180,12 @@ public partial class FlightController : Node3D
             // The throttle-slam gate needs the live value every frame, not just while its plume
             // is active, so it can tell a fresh climb from one already in progress.
             ThrottleSmoke?.Update(simDt, _model.Throttle);
+            if (SpeedCue != null)
+            {
+                var cameraPos = _viewCamera.GlobalPosition;
+                SpeedCue.Update(simDt, _model.Position, _model.Attitude, cameraPos.Y,
+                    HeightAboveWorldGround(cameraPos));
+            }
         }
 
         // Spin the propeller/rotor blur discs: they keep turning even at idle (windmilling)
@@ -1519,6 +1532,19 @@ public partial class FlightController : Node3D
         return true;
     }
 
+    /// <summary>Vertical clearance over static world collision only. Unlike <see cref="HitWorld"/>,
+    /// another aircraft below the camera is not ground for speed_cue's NODE_NEAR_GROUND gate.</summary>
+    private float HeightAboveWorldGround(Vector3 from)
+    {
+        var space = GetWorld3D()?.DirectSpaceState;
+        if (space == null)
+            return float.MaxValue;
+        var to = from + Vector3.Down * 1000f;
+        var hit = space.IntersectRay(
+            PhysicsRayQueryParameters3D.Create(from, to, CollisionLayers.World));
+        return hit.Count > 0 ? from.Y - ((Vector3)hit["position"]).Y : float.MaxValue;
+    }
+
     private void Crash(Vector3 impact, string hitName, string part, Node? hitBody, int? killer = null)
     {
         if (_crashed)
@@ -1551,6 +1577,7 @@ public partial class FlightController : Node3D
         Audio?.OnEngineStop();
         // No plume survives a dead engine.
         ThrottleSmoke?.Reset(_throttle);
+        SpeedCue?.Reset();
         if (CrashRuntime != null)
         {
             // Data-driven crash: PLAY the compiled def on this plane's scoped crash

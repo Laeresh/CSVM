@@ -290,9 +290,19 @@ public static class Suites
 
         var burstState = PufferState.Load(ctx.ZrdrPath, "flame_ball.json", "fierypuffer");
         var trailState = PufferState.Load(ctx.ZrdrPath, "pufftrails.json", "smokepuffer");
+        var speedCueState = PufferState.Load(
+            SessionPaths.ChapterZrdr(ctx.DataRoot, ctx.Chapter), "speed_cue.json", "cuepuffer1");
+        var speedCue2 = PufferState.Load(
+            SessionPaths.ChapterZrdr(ctx.DataRoot, ctx.Chapter), "speed_cue.json", "cuepuffer2");
+        var speedCue3 = PufferState.Load(
+            SessionPaths.ChapterZrdr(ctx.DataRoot, ctx.Chapter), "speed_cue.json", "cuepuffer3");
         ctx.Check(burstState != null, $"flame_ball.json defines fierypuffer");
         ctx.Check(trailState != null, $"pufftrails.json defines smokepuffer");
-        if (burstState == null || trailState == null)
+        ctx.Check(speedCueState != null, $"{ctx.Chapter} speed_cue.json defines cuepuffer1");
+        ctx.Check(speedCue2 != null, $"{ctx.Chapter} speed_cue.json defines cuepuffer2");
+        ctx.Check(speedCue3 != null, $"{ctx.Chapter} speed_cue.json defines cuepuffer3");
+        if (burstState == null || trailState == null || speedCueState == null
+            || speedCue2 == null || speedCue3 == null)
             return;
 
         // The authored inputs every expected count below is derived from. Asserted rather than
@@ -317,6 +327,9 @@ public static class Suites
             PufferSustainMode(ctx, burstState);
             PufferSustainSubFrameEmission(ctx);
             PufferTrailMode(ctx, trailState);
+            PufferTrailOffset(ctx, speedCueState);
+            SpeedCueBands(ctx, speedCueState, speedCue2, speedCue3);
+            SpeedCueChapterVariants(ctx);
             PufferStillSputter(ctx, trailState);
             PufferStaticBurn(ctx, trailState);
             PufferStopRevive(ctx, trailState);
@@ -788,6 +801,139 @@ public static class Suites
         for (int i = 0; i < 100; i++)
             still.Step(1f / 60f);
         ctx.Check(still.Velocity == Vector3.Zero, $"WorldWind.Still() never blows v={still.Velocity}");
+    }
+
+    /// <summary>A moving DISTANCE_INTERVAL host keeps AT_NODE's offset in the host frame for every
+    /// emitted puff, not only the still-host fallback. The retail speed cue is the canary: its
+    /// player,0,0,-60 attachment is what places the wisps 60 m ahead of the aircraft.</summary>
+    private static void PufferTrailOffset(TestContext ctx, PufferState state)
+    {
+        ctx.Check(state.AtNodeOffset.IsEqualApprox(new Vector3(0f, 0f, -60f)),
+            $"cuepuffer1 carries its authored 60 m forward AT_NODE offset");
+        ctx.Check(Mathf.IsEqualApprox(30f, state.DistanceInterval),
+            $"cuepuffer1 emits every authored 30 m");
+        state.DeviationDistance = 0f;
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            const float dt = 1f / 60f;
+            puffer.Emit(Vector3.Zero, Basis.Identity, dt);
+            puffer.Emit(new Vector3(60f, 0f, 0f), Basis.Identity, dt);
+            puffer._Process(dt);
+            ctx.Same(3, gpu.Shown, $"homing puff plus two distance puffs were emitted");
+            ctx.Check(gpu.LastFrame.All(p => Mathf.Abs(p.Position.Z + 60f) < 0.1f),
+                $"every moving-trail puff keeps the authored -60 m local-Z offset");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    /// <summary>The speed-cue adapter selects the retail altitude bands, preserves the selected
+    /// puffer above the final authored threshold, suppresses every cue near ground, and Reset
+    /// removes live particles so a respawn cannot bridge positions.</summary>
+    private static void SpeedCueBands(TestContext ctx, params PufferState[] states)
+    {
+        var gpu = new RecordingEmitterRenderer[3];
+        var puffer = new Puffer[3];
+        for (int i = 0; i < 3; i++)
+        {
+            states[i].DeviationDistance = 0f;
+            gpu[i] = new RecordingEmitterRenderer();
+            puffer[i] = Puffer.CreateWith(states[i], gpu[i]);
+            ctx.Host.AddChild(puffer[i]);
+        }
+        try
+        {
+            var cue = SpeedCue.CreateWith(puffer[0], puffer[1], puffer[2]);
+            const float dt = 1f / 60f;
+            void Tick()
+            {
+                foreach (var p in puffer)
+                    p._Process(dt);
+            }
+
+            cue.Update(dt, Vector3.Zero, Basis.Identity, 700f, 100f);
+            Tick();
+            cue.Update(dt, new Vector3(60f, 0f, 0f), Basis.Identity, 700f, 100f);
+            Tick();
+            ctx.Same(3, gpu[0].Shown, $"below 800 m cue1 emits at its 30 m interval");
+            ctx.Same(-1, gpu[1].Shown, $"below 800 m cue2 has never started");
+            ctx.Same(-1, gpu[2].Shown, $"below 800 m cue3 has never started");
+
+            for (int i = 0; i < 6; i++)
+            {
+                cue.Update(dt, new Vector3(60f, 0f, 0f), Basis.Identity, 850f, 100f);
+                Tick();
+            }
+            Tick();
+            cue.Update(dt, new Vector3(90f, 0f, 0f), Basis.Identity, 850f, 100f);
+            Tick();
+            ctx.Same(3, gpu[1].Shown, $"800-900 m cue2 emits at its 15 m interval");
+
+            for (int i = 0; i < 6; i++)
+            {
+                cue.Update(dt, new Vector3(90f, 0f, 0f), Basis.Identity, 1000f, 100f);
+                Tick();
+            }
+            Tick();
+            cue.Update(dt, new Vector3(106f, 0f, 0f), Basis.Identity, 1000f, 100f);
+            Tick();
+            ctx.Same(3, gpu[2].Shown, $"900-1200 m cue3 emits at its 8 m interval");
+
+            cue.Reset();
+            ctx.Same(0, gpu[0].Shown, $"speed-cue reset clears cue1 particles");
+            ctx.Same(0, gpu[1].Shown, $"speed-cue reset clears cue2 particles");
+            ctx.Same(0, gpu[2].Shown, $"speed-cue reset clears cue3 particles");
+
+            cue.Update(dt, Vector3.Zero, Basis.Identity, 700f, 49f);
+            Tick();
+            ctx.Same(0, gpu[0].Shown, $"within 50 m of ground no speed cue starts");
+
+            for (int i = 0; i < 6; i++)
+                cue.Update(dt, Vector3.Zero, Basis.Identity, 850f, 100f);
+            for (int i = 0; i < 6; i++)
+                cue.Update(dt, Vector3.Zero, Basis.Identity, 1600f, 100f);
+            cue.Update(dt, new Vector3(30f, 0f, 0f), Basis.Identity, 1600f, 100f);
+            Tick();
+            ctx.Same(4, gpu[1].Shown,
+                $"above 1500 m preserves the previously selected puffer, matching the empty ELSE");
+        }
+        finally
+        {
+            foreach (var p in puffer)
+                p.Free();
+        }
+    }
+
+    /// <summary>C1 and C4 share cue geometry and timing but retain their chapter-authored alpha
+    /// variants instead of collapsing onto one global tune.</summary>
+    private static void SpeedCueChapterVariants(TestContext ctx)
+    {
+        var expected = new[]
+        {
+            (Chapter: "C1", PeakAlpha: new[] { 0.4f, 0.5f, 0.5f }),
+            (Chapter: "C4", PeakAlpha: new[] { 0.6f, 0.7f, 0.7f }),
+        };
+        foreach (var chapter in expected)
+        {
+            string path = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter.Chapter);
+            for (int i = 0; i < 3; i++)
+            {
+                var state = PufferState.Load(path, "speed_cue.json", $"cuepuffer{i + 1}");
+                ctx.Check(state != null, $"{chapter.Chapter} defines cuepuffer{i + 1}");
+                if (state == null)
+                    continue;
+                ctx.Check(state.Colors.Count == 3,
+                    $"{chapter.Chapter} cuepuffer{i + 1} keeps its three-point colour ramp");
+                if (state.Colors.Count == 3)
+                    ctx.Check(Mathf.Abs(chapter.PeakAlpha[i] - state.Colors[1].Color.A) < 0.001f,
+                        $"{chapter.Chapter} cuepuffer{i + 1} keeps its authored peak alpha");
+            }
+        }
     }
 
     /// <summary>Burst: the pool is sized from the calling animation's stop time, the first batch is

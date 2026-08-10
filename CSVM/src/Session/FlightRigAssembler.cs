@@ -361,6 +361,15 @@ public sealed class FlightRigAssembler
         controller.ThrottleSmoke = ThrottleSlamSmoke.Build(planeModel, _in.ZrdrPath, _in.Textures,
             controller, controller.Throttle, _in.Ambience);
 
+        // The ambient speed cue is chapter data, not an aircraft-model effect: one private copy
+        // per player so splitscreen panes do not see another pilot's ahead-of-plane wisps.
+        if (!_spec.EmptyStage)
+        {
+            controller.SpeedCue = SpeedCue.Build(_in.ChapterZrdrPath, _in.Textures, _worldRoot,
+                _in.Ambience,
+                rig.VisualLayer == 0 ? null : node => SplitScreen.SetVisualLayer(node, rig.VisualLayer));
+        }
+
         // The incoming-fire near-miss cue: this aircraft becomes a target every OTHER
         // pilot's rounds are measured against. After Setup — the target reads the live flight
         // model — and after PlayerIndex, the identity that excludes this pilot's own rounds.
@@ -471,13 +480,13 @@ public sealed class FlightRigAssembler
         /// keeps live for the whole session, not a snapshot; see the Assemble call site.
         public IReadOnlyList<PlayerRig>? Rigs;
 
-        /// B6: the session's wind (see Effects/WorldWind.cs), for the puffers assembled here —
-        /// the throttle-slam exhaust smoke. Still air unless the session hands its own over.
+        /// The session's wind and active camera (see Effects/WorldWind.cs), for the throttle-slam
+        /// exhaust and speed-cue puffers assembled here. Still air unless the session hands its own over.
         public Effects.EffectAmbience Ambience = Effects.EffectAmbience.Still;
 
         // The build's archives and world outputs (BuildState's, unchanged).
         public TextureArchive Textures = null!;
-        public string ZrdrPath = "", MissionZrdrPath = "";
+        public string ZrdrPath = "", ChapterZrdrPath = "", MissionZrdrPath = "";
         public GameZ Gamez = null!;
         public SceneBuilder? WorldScene;
         public AnimRuntime? WorldRuntime;
