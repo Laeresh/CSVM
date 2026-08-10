@@ -1318,10 +1318,40 @@ from the video and your position aren't the same?"). Do not read our low-rise re
 — the user's own flyover 1 km north of `brooklynbridge` — which is strictly better evidence than
 this pose could ever produce.
 
-**C1's forest is denser and remains UNCONFIRMED** (trap (c), honoured). The stands are visibly
-populated at `-6350,300,-4144` and the count matches A1's arithmetic, but no original capture of a
-C1 forest exists, so this is a measurement agreeing with a decode — not an A/B. Same for C2's
-suburbs and C4.
+**C1's forest was recorded here as UNCONFIRMED and is now CONFIRMED (2026-08-10), at the controls.**
+The user, against their own recordings: **"C1 positions are exactly the same as the original."** That
+is a positional match, not a density one — it confirms `FUN_004dd6e0`'s steps 4/6/7 as B12
+implements them, which no instrument in this plan could have established. C2's suburbs and C4 remain
+unconfirmed for want of footage.
+
+**And the data predicts exactly that match, independently.** Censusing every shipped
+`templates.zrd` for the keys that would move a decoration off its lattice point:
+
+| chapter | `translate_uv_range` | `rotation_range` | `align_normal` | `substitute` | `scale_range` | `far_fade_range` |
+|---|---|---|---|---|---|---|
+| C1 | 0 | 0 | 0 | 3 | 5 | 5 |
+| C1B | 0 | 0 | 0 | 0 | 3 | 3 |
+| C1C | 0 | 0 | 0 | 0 | 0 | 0 |
+| C2 | 0 | 0 | 0 | 2 | 50 | 50 |
+| C2B | 0 | 0 | 0 | 0 | 0 | 0 |
+| C3 | 0 | 0 | 0 | 1 | 3 | 3 |
+| C4 | 0 | 0 | 0 | 1 | 4 | 4 |
+| C5 | 0 | 0 | 0 | 34 | 78 | 78 |
+
+**Nothing in the install authors `translate_uv_range`, `rotation_range` or `align_normal`.** Every
+one of them defaults, so step 5's jitter and step 10's rotate/align halves are not "unimplemented
+here" — they are **inert on retail data**, and cannot move a decoration in any chapter. The
+original's placement therefore has *no random input that affects position or orientation at all*,
+which is the structural reason an unseeded remake reproduces its positions exactly rather than
+approximately. This is an able-to-fail check that agreed with the user's report: had C1 authored a
+jitter, an exact match would have been impossible and one of the two readings would have had to be
+wrong.
+
+**What this predicts the user WILL still see wrong**, and it is worth saying before they find it:
+`scale_range` is authored on 148 kinds and `substitute` on 41, and neither is applied. So every tree
+is exactly its authored size where the original varies it 0.9–1.5×, and C1's `firtree1` stands
+should be one-in-ten `firtree2` but are pure `firtree1`. Right positions, wrong sizes, wrong species
+mix.
 
 **Docs rewritten.** `Clutter.cs`'s class comment gains an explicit *what this does not do* section
 (the five unimplemented `FUN_004dd6e0` steps and the unseeded build, with the warning that the first
@@ -1433,6 +1463,18 @@ apply it as a uniform scale, not a basis replacement. (d) Sprite kinds get their
 it will pop at the screen edge.
 
 ## C23 ☐ Survey `far_fade_range`, `rotation_range`, `translate_uv_range` → decide or hand to backlog
+
+### ⚠ Half of this item is already answered (2026-08-10) — census run under B14
+
+`rotation_range`, `align_normal` **and `translate_uv_range` are authored by NO chapter**, C2 and C5
+included (the two this item flagged as "need checking"). Counts are in B14's table above. So all
+three are **decodes to document, not features to build**, and `FUN_004dd6e0`'s step 5 and the
+rotate/align half of step 10 are inert on retail data — they cannot move a decoration anywhere in
+the install. That is what makes the user's *"C1 positions are exactly the same as the original"*
+structurally possible, and it is the strongest single piece of evidence this plan produced for B12.
+
+What is left of C23 is therefore **`far_fade_range` alone** (authored on 148 kinds), and the
+`CameraSetClutterFadeScaleSq` question below stands unchanged.
 
 **Goal.** A written decision on each of the three remaining authored behaviours: implement, defer
 with a `backlog.md` entry, or record as a deliberate deviation.

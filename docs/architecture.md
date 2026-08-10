@@ -671,11 +671,15 @@ empty district.
   exemption that stood in for this gate is **gone** — do not reintroduce either half alone: the
   gate without the districts empties C5's downtown, the districts without the gate double the city
   (`BL-250`).
-⚠ **Five of `FUN_004dd6e0`'s eleven steps are not implemented**, all of them `templates.zrd`-driven
-  and all owned by Wave C: the step-5 UV jitter, `substitute`, `rotation_range`/`scale_range`/
-  `align_normal`, `far_fade_range`, and the `srand(0x8EA91836)` seeding that makes the original's
-  placement reproducible. Nothing here draws a random number, so the unseeded build is stable today
-  — but the first of those steps to land must bring the seed with it.
+⚠ **`FUN_004dd6e0`'s `templates.zrd`-driven steps are not implemented, but only three of them
+  matter.** `translate_uv_range`, `rotation_range` and `align_normal` are authored by **no chapter
+  in the install** — inert, not missing, and that is precisely why the original's placement has no
+  random input affecting position or orientation, and why C1's tree positions come out *exactly*
+  the original's (confirmed at the controls). What IS authored and unapplied: `scale_range` (148
+  kinds), `far_fade_range` (148) and `substitute` (41) — so positions are right while sizes are
+  uniform and the species mix is wrong. Wave C owns those. Nothing here draws a random number, so
+  the unseeded build is stable; the moment `substitute` or `scale_range` lands, a seeded PRNG has
+  to land with it.
 ⚠ **There is NO world-space grid and no global clutter origin** — the original has neither
   (`analysis/bl-305-clutter-uv/FINDINGS-A2.md`). Placement is `ClutterBuilder.UvTriangle`, i.e.
   `FUN_004dd6e0` steps 4/6/7: floor the triangle's UV bbox to an integer lattice, test containment

@@ -67,22 +67,29 @@ namespace CSVM.Mech3;
 /// <c>templates.zrd</c>, which every chapter ships and nothing here reads yet — so each of these
 /// is a known deviation with a measured shape, not an oversight:</para>
 /// <list type="bullet">
-/// <item><b>Step 5, the per-axis UV jitter</b> (<c>translate_uv_range</c>). Every instance sits on
-/// the exact authored lattice point, so the placement is more regular than the original's.</item>
-/// <item><b>Step 9, <c>substitute</c></b> — the weighted model roll. C1's <c>firtree1</c> should
+/// <item><b>Step 5, the per-axis UV jitter</b> (<c>translate_uv_range</c>), and step 10's
+/// <c>rotation_range</c> / <c>align_normal</c> — <b>INERT, not missing.</b> No chapter in the
+/// install authors any of the three, so they cannot move a decoration on retail data. This is why
+/// the original's placement has no random input affecting position or orientation at all, and why
+/// the user reports C1's tree positions as <i>exactly</i> the original's rather than merely as
+/// dense. Implementing them would change nothing; treat them as decoded and closed.</item>
+/// <item><b>Step 9, <c>substitute</c></b> — the weighted model roll, authored on 41 kinds and the
+/// most visible real gap. C1's <c>firtree1</c> should
 /// become <c>firtree2</c> nine times in ten and C3's palms roll three ways evenly; here every
 /// stamp of a kind is the same model, so the species mix is wrong even where the count is
 /// right.</item>
-/// <item><b>Step 10, <c>rotation_range</c> / <c>scale_range</c> / <c>align_normal</c></b>. Every
-/// instance is authored-size and authored-orientation; the original varies both (C1 0.9–1.5×,
-/// C2 up to 1.0–3.0×).</item>
+/// <item><b>Step 10's <c>scale_range</c></b>, authored on 148 kinds — every kind that authors
+/// anything. Every instance here is exactly its authored size where the original varies it
+/// (C1 0.9–1.5×, C2 up to 1.0–3.0×).</item>
 /// <item><b>Step 11, <c>far_fade_range</c></b> — the per-kind distance fade. C5 authors
 /// [[200,300],[300,350]]; here the cylindrical world fog is the only distance cue.</item>
 /// <item><b>The whole build is unseeded.</b> The original wraps it in
 /// <c>srand(0x8EA91836)</c> … <c>srand(time(0))</c> (<c>FUN_004df1d0</c>), so its placement is
 /// deterministic and reproducible run to run. Nothing here draws a random number at all, which
-/// is the same outcome by a different route — but the moment step 5, 9 or 10 lands, that seed
-/// has to land with it or the clutter will shimmer between runs.</item>
+/// on retail data is the same outcome by a different route — since the only authored random
+/// inputs left are <c>substitute</c> and <c>scale_range</c>, and neither moves a decoration.
+/// ⚠ The moment either of those lands, a seeded PRNG has to land with it or the clutter will
+/// shimmer between runs.</item>
 /// </list>
 /// <para>Wave C of <c>docs/PLAN-clutter-uv-placement.md</c> owns all five. One remake-only rule
 /// also survives here on purpose: the quarter-metre <c>seen</c> dedup in
