@@ -35,7 +35,7 @@
     {
       "name": "c2-city",
       "frame": 120,
-      "hash": "3bdddf2f0c2f11d95e9849f700ee954f",
+      "hash": "102866fc54a828212ada78682c83cf9e",
       "exercises": "C2's solid 3D city blocks, billboard clutter, backlot geometry, daylight fog; near-static, 51 px at 120 vs 121.",
       "args": ["--freecam", "--chapter=C2", "--pos=-5722,186,-3457", "--direction=-0.438,-0.15,-0.899", "--det", "--mute"]
     },
@@ -56,14 +56,14 @@
     {
       "name": "c4-snow",
       "frame": 120,
-      "hash": "57fa1183abe7e92d51c05bf833412bd4",
+      "hash": "2b898e5fa48693088811c5be5f36ecd4",
       "exercises": "snow precipitation plus the chapter carrying 6 UV-scroll models; frame-sensitive 3.74 %, the largest of the freecam set.",
       "args": ["--freecam", "--chapter=C4", "--pos=-3330,958,-9181", "--direction=-0.682,-0.2,0.731", "--det", "--mute"]
     },
     {
       "name": "c5-city-night",
       "frame": 120,
-      "hash": "883f85df05c0f81db7705c51068a69d5",
+      "hash": "9484cab899c2b14cb7835097e296e056",
       "exercises": "the night city: LIGHT_STATE point lights packed into csky_light_data, lit window skins, moon and stars; static, 11 px at 120 vs 360.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute"]
     },
