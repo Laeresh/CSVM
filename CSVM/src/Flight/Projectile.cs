@@ -371,6 +371,10 @@ public sealed partial class ProjectilePool : Node3D
     private readonly MultiMesh[] _tipMm = new MultiMesh[TipTextures.Length];
     // One MultiMesh per dirt-debris chip texture (DirtDebrisTextures) — built in _Ready.
     private readonly MultiMesh[] _debrisMm = new MultiMesh[DirtDebrisTextures.Length];
+    // The per-round working set behind the TracerMinPixels floor: one sample per bound viewer,
+    // cleared and refilled per round (distance is per round), so the floor allocates nothing
+    // after the first frame.
+    private readonly List<ScreenSize.ViewerSample> _viewerScratch = new();
 
     private int _projHigh;                     // highest slot ever used (bounds the scan)
     private Node3D _flyoutModels = null!;   // container for the live rocket-body instances
@@ -378,7 +382,6 @@ public sealed partial class ProjectilePool : Node3D
     private Node3D _casingModels = null!;    // container for the pooled shell-casing instances
     private MultiMesh _impactMm = null!;
     private MultiMesh _smokeMm = null!;
-    private Camera3D? _listener;               // the TracerMinPixels distance floor measures from this camera
     private int _sfxNext;
     private bool _flyoutPoseLogged;
     private int _muzzleBasisLogs;
@@ -407,9 +410,16 @@ public sealed partial class ProjectilePool : Node3D
         Name = "projectiles";
     }
 
-    /// <summary>The camera a tracer streak orients its length toward (player 1's, in splitscreen).
-    /// Tracers still render in every pane; only the streak's screen-space direction uses this.</summary>
-    public Camera3D? Listener { get => _listener; set => _listener = value; }
+    /// <summary>Every camera that can see this pool's tracers — one per player pane in splitscreen.
+    /// Used only by the <see cref="TracerMinPixels"/> distance floor, which is a SCREEN-space rule
+    /// applied to ONE shared world-space mesh, so it can only ever be satisfied exactly for one
+    /// viewer. ⚠ Bind them ALL. Binding player 1's alone (as this did until the splitscreen fix)
+    /// floors every round against P1's distance and P1's pane height and then draws that same
+    /// inflated geometry in every other pane, where a round 1000 m from P1 but 100 m from P2 is
+    /// blown up roughly 10x in P2's view. The floor now takes the NEAREST viewer, so a round is
+    /// never inflated for anyone — at worst it is under-floored for a distant pane, which is just
+    /// the un-floored look.</summary>
+    public List<Camera3D> Viewers { get; } = new();
 
     /// <summary>The aircraft each round's swept step is measured against for the near-miss cue
     /// one per flight rig. Empty in every build that has no player aircraft (the weapon
@@ -2019,19 +2029,23 @@ public sealed partial class ProjectilePool : Node3D
         player.Play();
     }
 
-    // The minimum world-space size (m) that projects to `pixels` on screen at `distance` from the
-    // listener camera — inverts Godot's default vertical (KEEP_HEIGHT) perspective projection:
-    // screenPx = worldSize * viewportHeight / (2 * distance * tan(fov/2)). 0 with no bound camera or
-    // a degenerate distance/viewport (the weapon lab, a headless dump with no listener).
-    private float MinWorldSizeForPixels(float distance, float pixels)
+    /// <summary>The floor for one round across every bound viewer: the SMALLEST size that satisfies
+    /// <paramref name="pixels"/> for any one of them, i.e. the nearest viewer's. One world-space
+    /// mesh is drawn in every pane, so no single size can satisfy them all; taking the minimum means
+    /// a round is never INFLATED for a pane whose camera is closer than the one it was sized
+    /// against, which is the splitscreen bug this replaces. Each viewer is measured with its own
+    /// pane height and FOV. 0 with no viewers bound (the weapon lab, the headless dumps).</summary>
+    private float TracerFloor(Vector3 worldPos, float pixels)
     {
-        if (_listener == null || distance <= 0f || pixels <= 0f)
-            return 0f;
-        float viewportHeight = _listener.GetViewport()?.GetVisibleRect().Size.Y ?? 0f;
-        if (viewportHeight <= 0f)
-            return 0f;
-        float fovRad = Mathf.DegToRad(_listener.Fov);
-        return pixels * 2f * distance * Mathf.Tan(fovRad * 0.5f) / viewportHeight;
+        _viewerScratch.Clear();
+        foreach (var cam in Viewers)
+        {
+            if (cam == null || !GodotObject.IsInstanceValid(cam))
+                continue;
+            float height = cam.GetViewport()?.GetVisibleRect().Size.Y ?? 0f;
+            _viewerScratch.Add(new ScreenSize.ViewerSample((cam.GlobalPosition - worldPos).Length(), cam.Fov, height));
+        }
+        return ScreenSize.NearestFloor(pixels, _viewerScratch);
     }
 
     private void RenderTracers()
@@ -2042,7 +2056,6 @@ public sealed partial class ProjectilePool : Node3D
         // reads solid from any angle — not camera-aligned either; the eye is now only consulted for
         // the TracerMinPixels floor. Full-size from the spawn frame: the original never scales a
         // gun round, so the muzzle-growth ramp this used to apply is gone. See docs/org/tracers.md.
-        var eye = _listener?.GlobalPosition;
         // Config-driven look: read once per frame, not per round — a session-wide setting,
         // not a per-shot one. Falls through to the in-code defaults verbatim with no config.json.
         float cfgLength = Config.GetFloat("weapons.tracerLength", TracerLength);
@@ -2085,14 +2098,13 @@ public sealed partial class ProjectilePool : Node3D
             var zAxis = yAxis.Cross(Mathf.Abs(yAxis.Dot(Vector3.Up)) > 0.99f ? Vector3.Right : Vector3.Up).Normalized();
             var xAxis = yAxis.Cross(zAxis).Normalized();
             // The distance-visibility floor: the minimum world size that still covers minPixels on
-            // screen at this round's distance from the listener camera — 0 with no camera bound (the
-            // weapon lab). ⚠ This is the one place this pool knowingly contradicts the decode: the
-            // authored LOD stops drawing a round past 600 m outright, while this floor keeps
-            // inflating it. Kept deliberately (it came from the reference captures' distant fire)
-            // until a shot fired at a KNOWN range settles which reading is right — see
-            // docs/org/tracers.md's closing note. The tip disc below is deliberately NOT floored.
-            float eyeDist = eye is { } e ? (e - p.Pos).Length() : 0f;
-            float floorSize = MinWorldSizeForPixels(eyeDist, minPixels);
+            // screen for the NEAREST bound viewer — 0 with none bound (the weapon lab). ⚠ This is
+            // the one place this pool knowingly contradicts the decode: the authored LOD stops
+            // drawing a round past 600 m outright, while this floor keeps inflating it. Kept
+            // deliberately (it came from the reference captures' distant fire) until a shot fired at
+            // a KNOWN range settles which reading is right — see docs/org/tracers.md's closing note.
+            // The tip disc below is deliberately NOT floored.
+            float floorSize = TracerFloor(p.Pos, minPixels);
             float width = Mathf.Max(cfgWidth, floorSize);
             float len = Mathf.Max(cfgLength, floorSize);
             // Both width axes scale by the width, the length axis by the length: the mesh's local +Y
