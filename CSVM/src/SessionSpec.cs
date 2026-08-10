@@ -210,7 +210,7 @@ public sealed record SessionSpec
     public bool NoClutter { get; private set; }
 
     /// <summary><c>--debug-clutterflag</c>: recolour the built world by each polygon's decoded
-    /// <c>no_clutter</c> flag (raw polygon bit <c>0x800</c>, <see cref="Mech3.GameZPolygon.Subface"/>)
+    /// <c>no_clutter</c> flag (raw polygon bit <c>0x800</c>, <see cref="Mech3.GameZPolygon.NoClutter"/>)
     /// — flagged red, clear green, clutter blue. A build-time recolour, so there is no runtime
     /// toggle. See <c>docs/cli.md</c>.</summary>
     public bool DebugClutterFlag { get; private set; }

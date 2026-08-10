@@ -424,11 +424,12 @@ public sealed class GameZ
                 // identified it as SHOW_BACKFACE — accept both spellings.
                 poly.ShowBackface = (pf.TryGetProperty("unk2", out var bf) || pf.TryGetProperty("show_backface", out bf))
                     && bf.ValueKind == JsonValueKind.True;
-                // OpenFlight SUBFACE ("unk3", raw bit 0x0800): this face is coplanar with and
-                // contained in the face beneath it, and draws on top of it. Serialized with
-                // skip_serializing_if bool_false by both mech3ax trees, so it is ABSENT when
-                // false — TryGetProperty with a false default is required.
-                poly.Subface = pf.TryGetProperty("unk3", out var sf) && sf.ValueKind == JsonValueKind.True;
+                // no_clutter ("unk3", raw bit 0x0800): set from a NODE-NAME SUBSTRING the artists
+                // author (gg_load.c's strstr(name, "no_clutter")), not an OpenFlight structural
+                // attribute — the earlier "SUBFACE" reading is corrected in docs/formats/gamez.md
+                // rule 23. Serialized with skip_serializing_if bool_false by both mech3ax trees, so
+                // it is ABSENT when false — TryGetProperty with a false default is required.
+                poly.NoClutter = pf.TryGetProperty("unk3", out var sf) && sf.ValueKind == JsonValueKind.True;
                 // Draw-priority layer. mech3ax v0.6.1 emits it as "unk04"; upstream has
                 // since identified and renamed it to "priority" — accept both spellings.
                 if (p.TryGetProperty("unk04", out var pr) || p.TryGetProperty("priority", out pr))
@@ -696,12 +697,16 @@ public sealed class GameZPolygon
     // (terrain-transition patches, road/shadow decals, plane logos, cockpit gauge
     // needles up to 49), <0 drawn behind (skydome walls -49, zeppelin gasbags -10).
     public int Priority;
-    // OpenFlight SUBFACE ("unk3"): coplanar with, and contained in, the face beneath —
-    // draw on top of it. The original applies one whole priority level to it globally
-    // (`GameGenSetSubfacePriorityOffset 1` in support\init.gw); see SceneBuilder's
-    // SubfaceBias. Carried by terrain patches (terpat*), cliff/river transitions, piers
-    // and C5's cblock street layer — 658 polygons in C5, none at all in C1B.
-    public bool Subface;
+    // no_clutter ("unk3"): a node-name-authored marker (NOT the OpenFlight SUBFACE
+    // attribute this was once read as — docs/formats/gamez.md rule 23) that gates
+    // ClutterBuilder's scatter. Where two coplanar layers are painted over each other
+    // the flagged one is the layer that must draw on top — SceneBuilder's
+    // NoClutterLayerBias applies one whole priority level to it globally
+    // (`GameGenSetSubfacePriorityOffset 1` in support\init.gw) on that empirical basis,
+    // not because the flag means "subface". Carried by terrain patches (terpat*),
+    // cliff/river transitions, piers and C5's cblock street layer — 658 polygons in C5,
+    // none at all in C1B.
+    public bool NoClutter;
     // Per-polygon weather-zone membership (unified-shape "zone_set").
     // Null when the field is absent (legacy tree) or the array is empty; every
     // polygon in this install carries at most one value where present, matching the

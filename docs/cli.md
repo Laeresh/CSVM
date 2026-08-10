@@ -143,8 +143,8 @@ last reconciled 2026-08-07 merging `--debug-ainets` with `PLAN-vs-mode`'s three 
   without it is GREEN, and all clutter — the 3D building decorations AND the sprite cards — is
   BLUE.** Blue is not a third state of the flag: a decoration's own polygons are unflagged, so
   without it a whole city block reads as clutter-eligible ground, which is exactly how an earlier
-  throwaway probe was misread. `no_clutter` is raw polygon bit `0x800`, the bit this repo still
-  parses under the name `GameZPolygon.Subface` — see `docs/formats/gamez.md` and
+  throwaway probe was misread. `no_clutter` is raw polygon bit `0x800`, decoded as
+  `GameZPolygon.NoClutter` — see `docs/formats/gamez.md` and
   `analysis/bl-305-clutter-uv/FINDINGS-noclutter.md`.
   **There is no runtime key toggle, deliberately**: the recolour is written into the vertex colours
   at world-build time (the flag varies *within* a mesh, so no per-instance tint can express it), and

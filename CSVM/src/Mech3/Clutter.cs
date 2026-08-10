@@ -30,7 +30,7 @@ namespace CSVM.Mech3;
 /// the intent: a building sits in its painted block wherever that block lands.</para>
 ///
 /// <para><b>Which polygons get dressed is a per-polygon decision, and the flag that makes it is
-/// <c>no_clutter</c></b> (raw bit <c>0x800</c>, carried as <see cref="GameZPolygon.Subface"/>,
+/// <c>no_clutter</c></b> (raw bit <c>0x800</c>, carried as <see cref="GameZPolygon.NoClutter"/>,
 /// gated in <c>FUN_004de2c0</c>). It does not mean "leave this ground bare" — where two
 /// COPLANAR layers are painted over each other, as C5's whole city is, it selects which layer
 /// decorates: flagged skips the overlay so the layer beneath stamps instead. C5's flagged
@@ -1183,10 +1183,11 @@ public sealed class ClutterBuilder
                 continue;
             // FUN_004de2c0's gate: a polygon flagged 0x800 grows no clutter. The bit is
             // `no_clutter`, authored by node name (gg_load.c's `strstr(name, "no_clutter")`,
-            // single-writer at 005654f6) and parsed by mech3ax as `unk3` —
-            // GameZPolygon.Subface is a misnomer this file cannot fix alone, because
-            // SceneBuilder.SubfaceBias reads the same field for draw order and the two uses
-            // are independent.
+            // single-writer at 005654f6) and parsed by mech3ax as `unk3`, decoded into
+            // GameZPolygon.NoClutter. SceneBuilder.NoClutterLayerBias reads the same field
+            // for draw order — that use is independent of this gate and stays keyed off the
+            // same bit only because the layer that must draw on top happens to be the one
+            // artists also named `no_clutter`.
             //
             // ⚠ It does NOT mean "the original leaves this ground bare". C5's city is TWO
             // COPLANAR LAYERS at the same Y — a cblock1/2/3/7 overlay and a cblock4/5/6 base
@@ -1196,7 +1197,7 @@ public sealed class ClutterBuilder
             // user's own flyover matching (analysis/bl-305-clutter-uv/FINDINGS-layer-pairing.md).
             // That is why this gate MUST NOT land without the cblock4/5/6 exemption being
             // removed below: alone it deletes the low-rise city and leaves bare pavement.
-            if (poly.Subface)
+            if (poly.NoClutter)
             {
                 _stats.NoClutterFlagged++;
                 continue;

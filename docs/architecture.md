@@ -380,8 +380,8 @@ so the layering is a topological order of the original's own draw order and cann
 layering. `WorldBuilder.RankConflicts` runs it before the build; 11–45 ms per chapter.
 ⚠ The step (`SceneBuilder.ConflictRankBias`, 1.2e-5) is boxed in from both sides and is the only
   value that fits: it must exceed `SurfaceRankCap × SurfaceRankBias` = 1e-5 or within-mesh rank
-  out-bids it, and `ConflictRankCap × it + 1e-5` must stay under `SubfaceBias` so subface +
-  tie-break keeps inside one priority level. Measured in Godot: 5e-6 leaves a coplanar pair
+  out-bids it, and `ConflictRankCap × it + 1e-5` must stay under `NoClutterLayerBias` so a
+  no_clutter overlay + tie-break keeps inside one priority level. Measured in Godot: 5e-6 leaves a coplanar pair
   swapping winner on 1,774 px under a 1 mm camera move, 1.2e-5 leaves 0 (analysis/bl-053-dense-rank).
 ⚠ The origin-parked pile is EXCLUDED from the graph — it is hidden at bootstrap
   (`WorldBuilder.HideUnplacedEntities`) so nothing in it is on screen to fight, and it alone
@@ -661,7 +661,7 @@ filtered to the ones this gamez carries a root for — so one district can be lo
 against the original. It prints one line naming what was requested, what resolved and what this
 chapter does not carry, since an absent name is retail-data-normal and would otherwise read as an
 empty district.
-⚠ **`no_clutter` (raw polygon bit `0x800`, carried as `GameZPolygon.Subface`) gates every stamp**,
+⚠ **`no_clutter` (raw polygon bit `0x800`, carried as `GameZPolygon.NoClutter`) gates every stamp**,
   reproducing `FUN_004de2c0`. It does **not** mean "leave this ground bare": where two COPLANAR
   layers are painted over each other it selects which one decorates, and flagged means skip the
   overlay so the layer beneath stamps instead. All of C5's city is such a pair — flagged ground is
@@ -753,21 +753,17 @@ empty district.
   by both — C1 +38, C4 +139, C5 +1,082 without it, mostly solid buildings whose authored quad UVs
   sit on tidy fractions. The original's step-6 test is STRICT and claims such a point in neither
   triangle; matching that is a change to `UvTriangle`, not a change to this set.
-⚠ **`PlaceOnMesh` matches a template to a polygon by TEXTURE NAME ONLY — it never reads
-  `GameZPolygon.Subface`.** In C5, `cblock1/2/3`'s subface polygons sit directly on top of
-  `cblock4/5/6`'s base polygons (88.5–100% footprint overlap, `analysis/item9-depth-bias/CBLOCK-LOD.md`),
-  so stamping both doubled the clutter buildings — settled 2026-08-07 by excluding the always-buried
-  `cblock4/5/6` via `ClutterBuilder.BuriedClutterDistricts` (CAP-22 established the original draws
-  the `cblock1/2/3` city; closing commit: `git log --grep=BL-250`). The subface depth-bias fix
-  (`SceneBuilder.SubfaceBias`) only resolves which ground TEXTURE wins the z-fight; it has no effect
-  on this file, which walks the same gamez tree independently.
-  **⚠ B13 measured the real gate (`FUN_004de2c0` skips flag `0x800`) and it is the leading `BL-305`
-  candidate — but it is COUPLED to that exemption and cannot land alone.** With the gate and the
-  exemption both in force C5's downtown empties, because the visible ground there IS the subface
-  layer and the base layer underneath is the exempted one. Gate + `cblock4/5/6` restored is the
-  state that resembles CAP-22, and it removes the doubling by mechanism instead of by a curated
-  list. Deliberately unlanded — reopening `BL-250` is a user decision. Numbers, md5s and the three
-  screenshots: `docs/PLAN-clutter-uv-placement.md` item B13.
+⚠ **STALE — pre-B15. `PlaceOnMesh` now DOES read `GameZPolygon.NoClutter`** (renamed 2026-08-10
+  from `.Subface`) and skips a flagged polygon (`FUN_004de2c0`'s gate), and
+  `ClutterBuilder.BuriedClutterDistricts` no longer exists — B13/B15 landed the gate coupled with
+  retiring that exemption, which is what actually resolves `BL-305`'s CAP-22 pose (the visible
+  ground there is the flagged overlay; the exempted base layer had to come back for the gate to
+  leave anything behind). See `docs/plans/PLAN-clutter-uv-placement.md` items B13/B14/B15 for the
+  full account; this paragraph needs rewriting to match, not just re-pointing — flagged rather than
+  silently corrected here.
+  The `SceneBuilder.NoClutterLayerBias` depth-bias fix (renamed 2026-08-10 from `SubfaceBias`) is a
+  separate mechanism: it only resolves which ground TEXTURE wins the z-fight, and has no effect on
+  this file, which walks the same gamez tree independently.
 
 ## src/Mech3/ClutterTemplates.cs
 The chapter's `templates.zrd` (`ClutterTemplateSpec.Load`/`.Parse`): one `ClutterKindProps` per
