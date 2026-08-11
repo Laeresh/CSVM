@@ -1,0 +1,15 @@
+Close BL-253: C2 facade panels' log debris now visible — facdsticks built and pooled
+
+The first BL-253 landing built facdsticks into the live world (previously it was staged as a
+library root but never actually built). This same-day A/B against the original game (CAP-24,
+2026-08-04) settled the secondary issue: the original shows several panels' debris flying in
+PARALLEL, not the latest kill's set alone — the single shared facdsticks copy was a real
+behavioral gap, not just a documented floor.
+
+Fixes: replaced hardcoded LocalCallTemplateNames array with data-driven GameZ.IsLibraryRoot
+rule; replaced single-copy pool with per-caller pooling via WorldSession.ResolveLibraryRoot.
+Verified: RunTests.ps1 green (build, 423 unit tests, 22 engine suites, 13 goldens
+hash-identical); --damage-hd sweeps show fcpan01-06 rows now have visible debris, everything
+else byte-identical.
+
+CAP-24 closed same-day: original shows multiple facdsticks debris sets in parallel (user A/B).

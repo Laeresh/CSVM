@@ -13,7 +13,7 @@ entries themselves, which were written the same day.
 
 Deliberately excluded: everything CAP-blocked (`BL-281`, `BL-250`, `BL-251`, `BL-110`, …),
 everything M4- or menu-hub-blocked (`BL-222`, `BL-233`, `BL-181`, …), the DONE-code-wise
-playtest-owed pair (`BL-253`, `BL-254`), the TUNE-at-the-controls list (judged by the user, not
+DONE-code-wise (`BL-254`), the TUNE-at-the-controls list (judged by the user, not
 planned), the census-heavy `BL-258` (research-scale, fails the visible-per-effort test), and
 `PLAN-m3-polish-8`'s Wave D (`BL-259`, `BL-270`), which runs in its own session.
 

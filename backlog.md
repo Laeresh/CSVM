@@ -359,18 +359,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ever revisited. The remaining question here is only *when* the exe calls the heavy stage, not
   where it sits — do not loosen the 0.10 tier to make it reachable.
 
-- `BL-253` `[Bug]` `[Owed-playtest]` **The C2 facade panels' log debris landed (2026-08-04, `docs/HISTORY.md`); only the
-  in-cockpit playtest is owed.**
-  ⚠ **Still open.** (a) The in-cockpit playtest: fly a row of facade panels and confirm logs visibly
-  launch from each struck panel, with several rows' debris flying in parallel rather than the earlier
-  fix's per-row floor (the pool cap — 6, `localCallRoots` in `CSVM/data/effect_pools.json` — is an
-  invented number, judged in the same flight; see `BL-231`). (b) The `air_mixed_exp_sg` one-shot
-  authored on the same death is unconfirmed audible — D31 death audio is still stubbed engine-wide,
-  unrelated to this item's scope.
-  ⚠ **Trap kept from the diagnosis:** `facdsticks`' `part1`–`4` bind through the CALLEE's own
-  compiled symbol table, and `blockit2`'s same-named `part1`–`7` carry their own distinct ptrs — the
-  two never share a lookup, so do not add a name-based rescue near `Targets()`
-  (`docs/formats/destructibles.md`'s `⚠` on symbol-table binding).
 
 - `BL-254` `[Bug]` `[Owed-playtest]` **Both C2 studio gates' deaths now match the original (2026-08-04, `docs/HISTORY.md`);
   only the in-cockpit playtest is owed.**

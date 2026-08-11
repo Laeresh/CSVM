@@ -23,7 +23,7 @@ capture, no M4/menu-hub/cutscene dependency — mixing quick wins with a couple 
 Each item was re-verified still open against **both** `docs/HISTORY.md` and the code before
 scheduling (a backlog entry is not proof the work is undone): `BL-024`/`BL-025`, which gate A1 and
 A3, landed 2026-07-30 (quickwins A1/A3), so both are clear. Deliberately excluded: everything
-already landed and owing only an in-cockpit playtest (`BL-001`–`BL-005`, `BL-253`, `BL-254`);
+already landed (`BL-001`–`BL-005`, `BL-253`, `BL-254`);
 every future-milestone item (M4 AI, menu hub, cutscenes, cockpit view); and `BL-047`, which was
 shortlisted and then dropped — `docs/HISTORY.md` records it capture-blocked per the 2026-07-30
 ruling ("check what the original shows on a crash before wiring anything"). `BL-088` was
