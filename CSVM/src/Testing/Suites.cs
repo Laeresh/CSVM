@@ -4355,28 +4355,28 @@ public static class Suites
             // `flagged: false` selects the default column; true selects the geometry sweep.
             AnimData Body(bool flagged = true, bool complex = true, float initialY = -5f,
                 bool noAltitude = false) => new(new Dictionary<string, object?>
-            {
-                ["gravity"] = new Dictionary<string, object?>
                 {
-                    ["value"] = -9.8f,
-                    ["complex"] = complex,
-                    ["no_altitude"] = noAltitude,
-                    ["do_intersections"] = flagged,
-                },
-                ["translation"] = new Dictionary<string, object?>
-                {
-                    ["initial"] = Vec(0f, initialY, 0f),
-                    ["delta"] = Vec(0f, 0f, 0f),
-                    ["rnd_xz"] = Vec(0f, 0f, 0f),
-                },
-                ["bounce_sequence"] = new Dictionary<string, object?>
-                {
-                    ["default"] = Land,
-                    ["water"] = Wet,
-                    ["lava"] = null,
-                },
-                ["run_time"] = Authored,
-            });
+                    ["gravity"] = new Dictionary<string, object?>
+                    {
+                        ["value"] = -9.8f,
+                        ["complex"] = complex,
+                        ["no_altitude"] = noAltitude,
+                        ["do_intersections"] = flagged,
+                    },
+                    ["translation"] = new Dictionary<string, object?>
+                    {
+                        ["initial"] = Vec(0f, initialY, 0f),
+                        ["delta"] = Vec(0f, 0f, 0f),
+                        ["rnd_xz"] = Vec(0f, 0f, 0f),
+                    },
+                    ["bounce_sequence"] = new Dictionary<string, object?>
+                    {
+                        ["default"] = Land,
+                        ["water"] = Wet,
+                        ["lava"] = null,
+                    },
+                    ["run_time"] = Authored,
+                });
 
             // Runs one body to a stop and reports what happened to it. `waterHook` stands in for
             // the session's ProjectilePool.ClassifySurface binding — the classifier has its own
