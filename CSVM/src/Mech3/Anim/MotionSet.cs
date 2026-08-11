@@ -33,16 +33,22 @@ internal sealed class MotionSet
     /// event, so zeroing it here would make a crash respawn read as a negative launch count.</summary>
     public int LaunchCount { get; private set; }
 
-    /// <summary>How many <c>do_intersections</c> bodies ended on a collider, and how many ran their
-    /// authored clock out instead. Only bodies that actually TEST contact are counted, so the pair
-    /// answers one question: is the sweep doing anything? A <c>--fly</c> session that launched
-    /// flagged bodies and reports <see cref="ContactLandings"/> 0 is the failure mode worth
-    /// catching — the query silently finding nothing looks exactly like no sweep at all.
+    /// <summary>How many contact-tested bodies ended on a collider or on their clock, split between
+    /// the default column and the <c>do_intersections</c> sweep. Keeping the tiers separate prevents
+    /// one working query from hiding that the other never lands anything.
     /// ⚠ Left standing by <see cref="Reset"/>, the same rule (and for the same reason) as
     /// <see cref="LaunchCount"/>: every reader takes a delta across an event.</summary>
-    public int ContactLandings { get; private set; }
+    public int ContactLandings => ColumnContactLandings + SweepContactLandings;
 
-    public int ClockEndings { get; private set; }
+    public int ClockEndings => ColumnClockEndings + SweepClockEndings;
+
+    public int ColumnContactLandings { get; private set; }
+
+    public int ColumnClockEndings { get; private set; }
+
+    public int SweepContactLandings { get; private set; }
+
+    public int SweepClockEndings { get; private set; }
 
     /// <summary>Registers a motion, replacing any motion already driving the same node's channel. An
     /// object has exactly one motion in the original, and the data relies on it: C1/IA1's
@@ -75,12 +81,19 @@ internal sealed class MotionSet
                 continue;
             var done = _motions[i];
             _motions.RemoveAt(i);
-            if (done is MotionRuntime { TestsContact: true } tested)
+            if (done is MotionRuntime { TestsColumnContact: true } column)
             {
-                if (tested.LandedByContact)
-                    ContactLandings++;
+                if (column.LandedByContact)
+                    ColumnContactLandings++;
                 else
-                    ClockEndings++;
+                    ColumnClockEndings++;
+            }
+            else if (done is MotionRuntime { TestsSweepContact: true } sweep)
+            {
+                if (sweep.LandedByContact)
+                    SweepContactLandings++;
+                else
+                    SweepClockEndings++;
             }
 
             // BOUNCE_SEQUENCE: the piece has come back down, which for a bounce-terminated

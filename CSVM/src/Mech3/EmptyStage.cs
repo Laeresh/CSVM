@@ -81,6 +81,7 @@ public sealed class EmptyStage
         if (collision)
         {
             var body = new StaticBody3D { Name = "col" };
+            body.SetMeta(SceneBuilder.AltitudeSurfaceMeta, true);
             body.AddChild(new CollisionShape3D
             {
                 Shape = new BoxShape3D { Size = new Vector3(HalfExtent * 2f, GroundThickness, HalfExtent * 2f) },

@@ -189,7 +189,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — contact and termination
 
-6. ☐ The default contact tier: the ground-column query
+6. ☑ The default contact tier: the ground-column query
 7. ☐ `NO_ALTITUDE` as the opt-out, and `gunshell` as its only author
 8. ☐ `RUN_TIME` as a universal ceiling; retire `FlightToLaunchHeight` for the watchdog
 9. ☐ Landing response: 0.2 restitution and energy-loss termination
@@ -511,7 +511,15 @@ launch-shape changes in one commit make a golden movement impossible to attribut
 
 # Wave C — contact and termination
 
-## C6 ☐ The default contact tier: the ground-column query
+## C6 ☑ The default contact tier: the ground-column query
+
+**Landed 2026-08-11.** Gravity now selects a dedicated point-column tier by default; only
+`DO_INTERSECTIONS` selects the existing trajectory sweep, `NO_ALTITUDE` vetoes only the column, and
+a zero `ContactMask` preserves the structural fallback. The column checks the 10 m span ending at
+the next point, only on descending plain-gravity steps but on every `COMPLEX` step, and filters the
+world through the extracted `flags.altitude_surface` bit so walls and roofs remain sweep-only. Both
+tiers share the surface classifier and landing response, while `MotionSet` reports their contact and
+clock endings independently.
 
 **Goal.** Every gravity-bearing ballistic body is contact-tested by default. A piece thrown off a
 destroyed structure lands on the ground and stays there, in every session that builds colliders,

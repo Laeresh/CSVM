@@ -299,17 +299,20 @@ the "Debris tumbles" bullet below for which pieces each covers. A format reader 
     only by `BL-257`'s later census — see the "no `RUN_TIME`, no `BOUNCE_SEQUENCE`" bullet below;
     what admits a launch to the solve is the **apex**, not the bounce.
     - **152 (150 reachable in an executed `sequences`) are upward launches** — positive launch speed,
-      negative gravity, so the parabola has an apex. For these, `MotionRuntime.FlightToLaunchHeight`
-      solves `t = 2·v0.y / |accel.y|` and ends the flight there instead of holding the final pose: a
-      **⚠ CHOICE, not a decode** — the original tested real collision via `do_intersections`;
-      a down-ray would only approximate it, and agrees with the launch-height solve wherever the
-      ground under the piece is flat, which is every one of the 150 measured (debris off a
-      ground-sitting structure). **All 120 of this shape author `do_intersections: false`, so the
-      original was not collision-testing them either** — the launch-height solve stands, and
-      `PT-46` (d) confirmed at the controls that the original's debris sinks through terrain the
-      same way. Landing then dispatches the named `BOUNCE_SEQUENCE` (`default` only — none of the
-      150 carry a `water`/`lava` branch), which runs the piece's own `OBJECT_ACTIVE_STATE …
-      INACTIVE` and stops its trail puffer.
+      negative gravity, so the parabola has an apex. `MotionRuntime.FlightToLaunchHeight` still
+      supplies their temporary clock fallback, but it no longer stands in for contact: gravity
+      admits the default point-column tier even when `do_intersections` is false. All 120 events in
+      this shape use that default tier. Landing dispatches the named `BOUNCE_SEQUENCE` (`default`
+      only — none of the 150 carry a `water`/`lava` branch), which runs the piece's own
+      `OBJECT_ACTIVE_STATE … INACTIVE` and stops its trail puffer.
+    - **The default tier is the original 10 m ground-column query** (`PLAN-object-motion-decode` C6,
+      2026-08-11). At the body's next X/Z it chooses an authored `flags.altitude_surface` collider
+      in the 10 m vertical column ending at the next point; ordinary solid walls and roofs are
+      excluded, so a fast body can pass a ledge between frames and a column can drop past a roof. Plain gravity consults
+      it only for a descending parent-frame step; `GRAVITY COMPLEX` widens admission to every step
+      because its world-down acceleration can have positive local Y. The next point landing below
+      the returned height ends the flight there. This is the 1,451-event default population:
+      1,363 plain + 88 complex, all with `NO_ALTITUDE` clear.
     - **Where `do_intersections` IS authored, the engine now runs the original's own test
       (`PLAN-ground-contact`, 2026-08-08).** 166 events install-wide carry it — 150
       `RUN_TIME`+bounce, 16 `RUN_TIME` — and they are exactly the bodies that used to run their
@@ -339,21 +342,17 @@ the "Debris tumbles" bullet below for which pieces each covers. A format reader 
         `Targets` now applies `IsSelfNodeRef` the way `PufferState`'s `AT_NODE` and the condition
         nodes always did, which also un-drops `genx12`'s two `ACTIVE_STATE`s and the `map` prop's
         four pose ops (154 events in all, 13/13 goldens unmoved).
-      - ⚠ **A motion that CONTINUES a contact landing is treated as the same body settling**, and
-        that means three things at once: it inherits the contact test whatever its own flag says, it
-        keeps the live pose instead of re-homing, and it inherits **none** of the aircraft's
-        momentum. `player_crash_dirt`'s `pNhit` hop is the case — authored `+3 m/s` up with
-        `do_intersections: false` over a 5–7 s `RUN_TIME`, it was handed the dive's ~45 m/s downward,
-        crossed the 2 m arming epsilon in 0.044 s and was under the terrain before the sweep armed,
-        burying the four pieces a player can actually walk up to. The test inheritance is a **judged
-        divergence** from Decision 3, kept narrow by the mark being one-shot and set only by a
-        contact landing: a false-flagged launch that continues nothing still declines the sweep.
+      - ⚠ **A motion that CONTINUES a contact landing keeps the live pose and inherits none of the
+        aircraft's momentum.** `player_crash_dirt`'s `pNhit` hop is the case — authored `+3 m/s` up
+        with `do_intersections: false` over a 5–7 s `RUN_TIME`, it was once handed the dive's
+        ~45 m/s downward and buried the four pieces. It now selects the same default column as every
+        other unflagged gravity launch; the former one-shot sweep inheritance divergence is gone.
       - A launch onto a node **another live motion is driving** starts from the live pose, not the
         authored rest: it is a takeover, and `MotionSet.Add` evicts the incumbent on the transform
         channel. `agyrobus` is why — it has no placement of its own, so its "rest" is the map origin
         and re-homing threw the wreck 13.9 km away.
-      - **The three `gravity` flags take only four combinations install-wide**, which is what makes
-        `do_intersections` legible as the whole of the question
+      - **The three `gravity` flags take only four combinations install-wide**, separating the
+        default column, its opt-out, and the geometry-sweep upgrade
         (re-derived 2026-08-10, `analysis/object-motion-flags/`):
 
         | `complex` | `no_altitude` | `do_intersections` | events | distinct shapes |
@@ -378,22 +377,16 @@ the "Debris tumbles" bullet below for which pieces each covers. A format reader 
         wreckage hangs off a frame at whatever attitude the aircraft died in. It also widens the
         default landing test from descending steps to every step.
 
-        `do_intersections: true` is a strict subset of `complex: true`. ⚠ **`no_altitude` is NOT a
-        second, default terrain test** — a tempting reading, since the 8 events carrying it are
-        exactly the spent-shell casings you would opt out of one. It dies on the same evidence: if
-        the other 1,617 events ground-tested, the original's debris would not sink, and `PT-46` (d)
-        says it does. It most likely means gravity or spawn positioning reckoned relative to terrain
-        altitude, which is precisely what a casing ejected at height would skip.
-    - **The other 379 have no apex and are still deferred (Layer-1.5, `BL-245`).** 335 free-falling
+        `do_intersections: true` is a strict subset of `complex: true`. **`no_altitude` is the
+        default column's opt-out**: the non-sweep branch tests it before issuing the altitude query.
+        Its 8 events are `gunshell`, one per chapter. `DO_INTERSECTIONS` selects the sweep first, so
+        a hypothetical combination carrying both bits would still sweep (none ships).
+    - **The other 379 have no apex (`BL-245`).** 335 free-falling
       zeppelin `gasbag1`/`crashnode1` pieces start from rest, ~17 lifeboats
       and turret parts are thrown downward, and 8 zero-gravity `chuteman` descents fall at a constant
-      rate — none has a parabola to solve. ⚠ **Not blocked on a ground ray, whatever the older
-      framing said**: the ray exists now, and these author `do_intersections: false` (8 for 8 across
-      `gasbag`/`cargozep`/`chuteman`/`lifesaver`), so the data says do not test them. What they are
-      blocked on is a *decision* to diverge from that — a zeppelin hanging in the air looks broken
-      to a player, which is a playability argument, not a faithfulness one. `MotionRuntime` still integrates these freely over the run time and then
-      holds the final pose; the pieces arc/fall and are then hidden by the sequence's own
-      `OBJECT_ACTIVE_STATE`, so they read fine without it.
+      rate — none has a parabola to solve. Gravity-bearing bodies now take the default column when
+      the session has collision; the remaining termination question is the original watchdog and
+      universal `RUN_TIME` ceiling, owned by C8, rather than whether these bodies contact-test.
   - **No `RUN_TIME`, no `BOUNCE_SEQUENCE` — the third launch shape, `BL-257` (2026-08-06).** A
     census of every ballistic `ObjectMotion` in all 8 chapters' `cam_anim`
     (`analysis/bl-257-nulled-launch/`) found **167 events / 119 distinct defs** that name *neither*
