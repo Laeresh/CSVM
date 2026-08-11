@@ -190,7 +190,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — contact and termination
 
 6. ☑ The default contact tier: the ground-column query
-7. ☐ `NO_ALTITUDE` as the opt-out, and `gunshell` as its only author
+7. ☑ `NO_ALTITUDE` as the opt-out, and `gunshell` as its only author
 8. ☐ `RUN_TIME` as a universal ceiling; retire `FlightToLaunchHeight` for the watchdog
 9. ☐ Landing response: 0.2 restitution and energy-loss termination
 
@@ -557,7 +557,7 @@ trajectory — a fast piece can pass over a ledge between frames and the origina
 "improve" that. ⚠ Performance: this now runs on most debris in the game. Measure before assuming it
 is free, and if it is not, the answer is a cheaper query, not a narrower admission test.
 
-## C7 ☐ `NO_ALTITUDE` as the opt-out, and `gunshell` as its only author
+## C7 ☑ `NO_ALTITUDE` as the opt-out, and `gunshell` as its only author
 
 **Goal.** `NO_ALTITUDE` suppresses the landing test, and nothing else does. The gun casing keeps
 falling through the world; everything else stops.
@@ -586,6 +586,10 @@ contact behaviour is decided here. Do not read a B4 regression as a C7 failure; 
 order first. ⚠ `gunshell` authors `RUN_TIME 2.0`, so the parser's
 `OBJECT_MOTION: NO_ALTITUDE fall lacks RUN_TIME` diagnostic never fires on this install — the flag's
 dependency on `RUN_TIME` is real in the parser but has no unbounded case here to guard against.
+
+**C7 outcome (2026-08-11).** The C6 contact-tier admission reads the extracted `gravity.no_altitude` flag: `DO_INTERSECTIONS` still selects the sweep first, while every other gravity-bearing body selects the default column unless `NO_ALTITUDE` vetoes it. The extracted JSON was checked directly: the only `no_altitude: true` records are the eight chapter-local `gunshell-gunshell.json` defs (C1, C1B, C1C, C2, C2B, C3, C4, C5), one per chapter. The ground contact suite now proves the opt-out falls through the surface rather than landing; its existing sweep-precedence case proves the veto does not suppress `DO_INTERSECTIONS`.
+
+**Verified.** `GroundContact` passes with the new opt-out control, and the C6 full verification remains the baseline: clean build, 949/949 unit tests, 37/37 engine suites, 13/13 golden shots hash-identical, including all eight chapter freecam shots. The plan's `docs/verification.md` rule was followed: contact is asserted through engine counters and endpoint/tier checks, not inferred from a screenshot.
 
 ## C8 ☐ `RUN_TIME` as a universal ceiling; retire `FlightToLaunchHeight` for the watchdog
 

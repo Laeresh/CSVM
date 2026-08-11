@@ -4475,6 +4475,15 @@ public static class Suites
             ctx.Check(column.Column && !column.Sweep && column.ColumnLandings == 1 && column.SweepLandings == 0,
                 $"the column landing has its own tally column={column.ColumnLandings} sweep={column.SweepLandings}");
 
+            // NO_ALTITUDE is the explicit opt-out from the default column. The extracted
+            // install uses it only on gunshell, so this control must fall through the terrain.
+            var optedOut = Run(false, CollisionLayers.World, _ => false,
+                complex: false, noAltitude: true);
+            ctx.Check(!optedOut.ByContact && !optedOut.Column && !optedOut.Sweep,
+                $"NO_ALTITUDE opts out of the default column contact={optedOut.ByContact} tier={optedOut.Column}/{optedOut.Sweep}");
+            ctx.Check(optedOut.End.Y < surfaceY - DropHeight,
+                $"NO_ALTITUDE body keeps its falling path endY={optedOut.End.Y:0.00} surfaceY={surfaceY:0.00}");
+
             // Under an inverted parent, world-down is positive local Y. COMPLEX converts gravity
             // into that frame and must consult the column despite the positive local step, or this
             // body falls through the terrain for its full clock.
