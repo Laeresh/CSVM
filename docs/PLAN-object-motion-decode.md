@@ -191,7 +191,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 6. ☑ The default contact tier: the ground-column query
 7. ☑ `NO_ALTITUDE` as the opt-out, and `gunshell` as its only author
-8. ☐ `RUN_TIME` as a universal ceiling; retire `FlightToLaunchHeight` for the watchdog
+8. ☑ `RUN_TIME` as a universal ceiling; retire `FlightToLaunchHeight` for the watchdog
 9. ☐ Landing response: 0.2 restitution and energy-loss termination
 
 ### Wave D — the tune, the coverage, the record
@@ -629,6 +629,8 @@ now column-tested), but confirm the 8 no-apex oddities the census named — `bri
 `susp_bridge`'s burning ropes, the two `fuelbox` rockerarms — behave sanely rather than assuming.
 ⚠ Keep `Seek` free of the contact test, for the reason `MotionRuntime.cs:430-433` already gives: it
 is the pose/scrub entry point and a test there fires on a backwards timeline drag.
+
+**Verified.** MotionRuntime now clamps every integration step to the authored RUN_TIME; an oversize frame ends exactly at the ceiling. Untimed ballistic bodies use the traced 15 s column / 35 s sweep watchdog, while sequence timing remains separate so the watchdog cannot hold BL-257 debris visible. The biggun_flying_parts repro passes with all eight parts moving and switching off inside the extracted 0.385–3.968 s launch band, and the full regression remains clean.
 
 ## C9 ☐ Landing response: 0.2 restitution and energy-loss termination
 

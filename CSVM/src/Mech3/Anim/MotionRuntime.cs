@@ -57,7 +57,7 @@ internal enum MotionContactTier
 ///   a body whose parent frame carries whatever attitude the aircraft died in — and the two forms
 ///   agree exactly anywhere else, which is why nothing else needs it. All 254 author a
 ///   <c>RUN_TIME</c>, so the converted acceleration never reaches
-///   <see cref="FlightToLaunchHeight"/>'s solve.</para>
+///   the no-authored-time watchdog.</para>
     ///   Every gravity-bearing ballistic body selects a contact tier when the session wires a mask:
     ///   the default is <see cref="TryGroundColumn"/>, while <c>do_intersections</c> selects
     ///   <see cref="TryContact"/>'s geometry sweep and <c>no_altitude</c> vetoes only the column. The
@@ -141,6 +141,8 @@ internal sealed class MotionRuntime : IAnimMotion
     private Vector3 _spinRate;   // rad/s per local axis (xyz_rotation)
 
     private float _t, _runTime;
+    private float _sequenceDuration;
+    private bool _clockBouncePending;
 
     // ---- ground contact: default column, or the `do_intersections` sweep -------------------------
     // Both stay structurally off when the session wires no collision mask. DO_INTERSECTIONS picks
@@ -180,6 +182,10 @@ internal sealed class MotionRuntime : IAnimMotion
     /// <see cref="Create"/> knows the randomised launch the solve rests on.</summary>
     public float RunTime => _runTime;
 
+    /// <summary>The sequence duration is separate from the internal watchdog. An untimed launch
+    /// may use its predicted arc for the following event while the watchdog remains only a backstop.</summary>
+    public float SequenceDuration => _sequenceDuration;
+
     /// <summary>The ON_CALL sequence this body owes when it lands — <c>BOUNCE_SEQUENCE</c>'s
     /// <c>default</c> branch — or null when nothing is owed. Armed only on a launch whose flight
     /// time this class SOLVED <b>and</b> which names a bounce; the bounce-less shape solves the
@@ -207,6 +213,7 @@ internal sealed class MotionRuntime : IAnimMotion
             _heldScale = held.Basis.Scale,
             _heldOrigin = held.Origin,
             _runTime = rtSafe,
+            _sequenceDuration = rtSafe,
         };
 
         float RandSym() => (float)(rt._rng.NextDouble() * 2.0 - 1.0); // [-1, 1] via the seedable RNG
@@ -343,46 +350,21 @@ internal sealed class MotionRuntime : IAnimMotion
             m._hasScale = m._scaleInit.LengthSquared() > 1e-9f;
         }
 
-        // A launch with no authored RUN_TIME: the data's idiom for "fly until you hit something"
-        // omits the duration and lets the landing end the flight, so there is nothing to run for —
-        // a `run_time ?? 0` read poses the pieces at rest on the wreck they should have left.
-        //
-        // Two shapes reach here, and the gate is the ABSENT run time, not what terminates the
-        // flight (census: `analysis/bl-257-nulled-launch/`):
-        //   • 120 events name a BOUNCE_SEQUENCE for the landing — the shape that arms
-        //     `PendingBounce` below.
-        //   • 167 events (119 distinct defs) name NEITHER field and instead follow the launch with
-        //     the piece's OWN null-start deactivation, i.e. "fly, then vanish" — the zeppelin
-        //     cannon's eight parts, the crane/sign/generator/shack debris. Gating on a bounce
-        //     instead reports all 167 as duration 0, so the deactivation lands on the launch tick
-        //     and every piece is hidden before it moves (`dblcannon_flying_parts` the repro).
-        //
-        // ⚠ Returning to launch height remains the temporary clock for an upward launch without an
-        // authored RUN_TIME. Either contact tier can end it earlier. A level or downward no-RUN_TIME
-        // body still receives 0 here and therefore never enters the per-frame contact path; the
-        // termination model owns that separate limitation.
-        // The census found 8 of the 167 with no reliable apex (a `bridge_truck` dropped level,
-        // `susp_bridge`'s burning ropes at −0.5 m/s ± 1, two `fuelbox` rockerarms whose speed range
-        // is −45…45) that keep behaving exactly as they do today.
-        //
-        // Solved in the node's PARENT frame, the same frame the launch and gravity already live
-        // in. Absent-RUN_TIME is read from the data, not from `runTime <= 0`, so an authored 0
-        // keeps meaning zero.
+        // An absent RUN_TIME uses the original watchdog as a universal backstop. The launch-height
+        // solve is retained only for sequence scheduling: it must never determine when the body
+        // stops, because contact can end it first and the watchdog must not become a visible
+        // 15/35-second sequence hold.
         if (m._hasBallistic && data.Num("run_time") is null)
         {
-            float flight = FlightToLaunchHeight(m._v0.Y, m._accel.Y);
-            if (flight > 0f)
-            {
-                rtSafe = flight;
-                m._runTime = flight;
-                // Landing is the only thing that ends this body, so the sequence the data names
-                // for the landing rides with it: every one of the 150 reachable bounce launches
-                // carries `default` alone. Null for the bounce-less shape — the flight ends,
-                // the sequence advances, and the piece's own deactivation is what runs next.
-                m.PendingBounce = data.Obj("bounce_sequence")?.Str("default");
-            }
+            m._runTime = m._contactTier == MotionContactTier.Sweep ? 35f : 15f;
+            float flight = PredictedFlightDuration(m._v0.Y, m._accel.Y);
+            m._sequenceDuration = flight > 0f ? flight : 0f;
+            // If no collision world is wired, the watchdog is the only available termination;
+            // preserve the authored bounce callback for that fallback. A real contact still
+            // chooses its branch in Land before this clock ending is observed.
+            m.PendingBounce = data.Obj("bounce_sequence")?.Str("default");
+            m._clockBouncePending = m.PendingBounce != null && m._sequenceDuration > 0f;
         }
-
         // forward_rotation.Time.initial is a TOTAL angle over run_time (the `Time`
         // parameterization), not a rate: the crash pieces carry 5π and 4.44π (clean multiples of
         // π), which read as a rate spin at ~15 rad/s (900°/s) — "spins like crazy" (user
@@ -442,15 +424,20 @@ internal sealed class MotionRuntime : IAnimMotion
     {
         if (dt > 0f)
         {
+            float next = _runTime > 0f ? Mathf.Min(_t + dt, _runTime) : _t + dt;
+            float step = next - _t;
+            if (step <= 0f)
+                return;
             bool contacted = _contactTier == MotionContactTier.Column
-                ? TryGroundColumn(dt)
-                : TryContact(dt);
+                ? TryGroundColumn(step)
+                : TryContact(step);
             if (contacted)
                 return;
+            Seek(next);
+            return;
         }
         Seek(_t + dt);
     }
-
     public void Seek(float t)
     {
         _t = t;
@@ -514,17 +501,30 @@ internal sealed class MotionRuntime : IAnimMotion
         return new Vector3(Mathf.Cos(az) * horiz, dirY, Mathf.Sin(az) * horiz);
     }
 
-    /// <summary>Time for a launch to come back down to the height it left from:
+    /// <summary>Predicts sequence timing for an untimed upward launch; this is not a termination rule.
+    /// Time for a launch to come back down to the height it left from:
     /// <c>t = 2·v0y / -ay</c>, the non-zero root of <c>v0y·t + ½·ay·t² = 0</c>. Returns 0 for
     /// anything with no apex — launched level or downward, or with no gravity to bring it back
     /// (a <c>chuteman</c>'s constant descent) — which is the caller's signal to leave the body
     /// alone rather than invent a landing.</summary>
-    private static float FlightToLaunchHeight(float v0y, float ay)
+    internal static float PredictedFlightDuration(float v0y, float ay)
     {
         if (v0y <= 0f || ay >= 0f)
             return 0f;
         float t = 2f * v0y / -ay;
         return float.IsFinite(t) ? t : 0f;
+    }
+
+    internal bool ClockBounceReady() => _clockBouncePending && _t >= _sequenceDuration;
+
+    internal string? TakeClockBounce()
+    {
+        if (!ClockBounceReady())
+            return null;
+        _clockBouncePending = false;
+        string? bounce = PendingBounce;
+        PendingBounce = null;
+        return bounce;
     }
 
     /// <summary>The default ground-column tier: inspect the 10 m vertical column ending at the

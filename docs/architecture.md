@@ -1237,16 +1237,16 @@ distinct defs naming NEITHER field, which end instead with the flying piece's ow
 `ACTIVE_STATE 0`; gated on the bounce they all reported duration 0 and were hidden on the tick they
 launched. `PendingBounce` still arms only where a bounce IS named, so the second shape flies and
 owes nothing.
-Ground contact has two explicit tiers behind `AnimRuntime.ContactMask`: gravity defaults to the
-authored-altitude-surface-only 10 m vertical column ending at the next point (`COMPLEX`: every step;
-otherwise descending only), while `DO_INTERSECTIONS` selects the trajectory sweep first and
-`NO_ALTITUDE` vetoes only the default column. `MotionRuntime` shares
-surface classification and landing response between them but never substitutes one query for the
-other.
-⚠ Do NOT re-narrow that gate to the bounce, and do not widen it past the apex. `FlightToLaunchHeight`
-  returning 0 for `v0y <= 0` is what keeps `BL-245`'s falls out — including 8 of those 167 (a level
-  `bridge_truck01`, `rope1burn`'s five rope ends, two `fuelbox` rockerarms whose speed range is
-  −45…45, so `sin(elevation)·speed` inverts). A `chuteman` parabola solve divides by zero.
+MotionRuntime gives every ballistic body an internal termination ceiling. An authored RUN_TIME is
+universal and the final frame is shortened to land exactly on it; an untimed body uses the traced
+15-second default-column or 35-second geometry-sweep watchdog. The predicted upward arc is retained
+only as sequence timing, never as the body’s termination rule. Contact still ends the body earlier,
+and PendingBounce is selected at the struck surface.
+
+NO_ALTITUDE is the explicit opt-out from the default column. DO_INTERSECTIONS selects the sweep
+first, so the opt-out does not suppress an explicitly authored sweep. Seek remains a pure pose
+operation: contact tests live only in Tick, preserving timeline scrubbing and RESET_STATE.
+
 ⚠ `RestOf`, `_rng`, `SetSubtreeOpacity` and `NonSingularScale` on `AnimRuntime` are `internal`
   (not `private`) specifically so these motion types can reach them — same-assembly only, no wider
   exposure intended; don't widen further without a reason. `NameOf`/`VisualOriginOf` joined them for

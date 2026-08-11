@@ -2307,15 +2307,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             var motion = MotionRuntime.Create(this, t, ev.Data, authored, inheritVelocity);
                             if (motion == null)
                                 continue;
-                            float flight = motion.RunTime;
-                            if (instant || flight <= 0f)
+                            float ceiling = motion.RunTime;
+                            float sequenceTime = motion.SequenceDuration;
+                            if (instant || ceiling <= 0f)
                             {
                                 motion.Seek(0f); // RESET_STATE / zero-length: pose the launch start (rest)
                             }
                             else
                             {
                                 Motions.Add(motion, def, anchor); // MotionSet.Add counts the launch
-                                ballTime = Mathf.Max(ballTime, flight);
+                                ballTime = Mathf.Max(ballTime, sequenceTime);
                                 // A contact-tested body arms its bounce AT CONTACT, not here — the
                                 // struck surface is what picks the branch — so it counts as armed
                                 // on the strength of the test being on.
@@ -2326,8 +2327,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         // A bounce this event ARMED is acted on — TickMotions dispatches it when the
                         // body lands — so it must not be filed as unhandled; doing so would report a
                         // working feature as a missing one, the same rule the retarget tallies follow.
-                        // What stays deferred is a no-RUN_TIME fall with no positive flight span:
-                        // Create cannot register it for per-frame contact until the termination
+                        // A no-RUN_TIME fall with no positive sequence span remains deferred when
+                        // no contact tier is wired; the watchdog still bounds the live motion.
                         // model supplies the untimed body's watchdog.
                         if (ev.Data.Has("bounce_sequence") && !bounceArmed)
                             Count("ObjectMotion(bounce_sequence deferred)");

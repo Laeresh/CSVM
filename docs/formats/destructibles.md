@@ -299,9 +299,7 @@ the "Debris tumbles" bullet below for which pieces each covers. A format reader 
     only by `BL-257`'s later census — see the "no `RUN_TIME`, no `BOUNCE_SEQUENCE`" bullet below;
     what admits a launch to the solve is the **apex**, not the bounce.
     - **152 (150 reachable in an executed `sequences`) are upward launches** — positive launch speed,
-      negative gravity, so the parabola has an apex. `MotionRuntime.FlightToLaunchHeight` still
-      supplies their temporary clock fallback, but it no longer stands in for contact: gravity
-      admits the default point-column tier even when `do_intersections` is false. All 120 events in
+      negative gravity, so the parabola has an apex. The traced 15 s column watchdog supplies their termination ceiling, while any predicted upward arc is used only to schedule the following sequence event. It no longer stands in for contact: gravity admits the default point-column tier even when `do_intersections` is false. All 120 events in
       this shape use that default tier. Landing dispatches the named `BOUNCE_SEQUENCE` (`default`
       only — none of the 150 carry a `water`/`lava` branch), which runs the piece's own
       `OBJECT_ACTIVE_STATE … INACTIVE` and stops its trail puffer.
@@ -385,8 +383,7 @@ the "Debris tumbles" bullet below for which pieces each covers. A format reader 
       zeppelin `gasbag1`/`crashnode1` pieces start from rest, ~17 lifeboats
       and turret parts are thrown downward, and 8 zero-gravity `chuteman` descents fall at a constant
       rate — none has a parabola to solve. Gravity-bearing bodies now take the default column when
-      the session has collision; the remaining termination question is the original watchdog and
-      universal `RUN_TIME` ceiling, owned by C8, rather than whether these bodies contact-test.
+      the session has collision; the original watchdog and universal `RUN_TIME` ceiling now terminate them: 15 s on the default-column path and 35 s on the sweep path.
   - **No `RUN_TIME`, no `BOUNCE_SEQUENCE` — the third launch shape, `BL-257` (2026-08-06).** A
     census of every ballistic `ObjectMotion` in all 8 chapters' `cam_anim`
     (`analysis/bl-257-nulled-launch/`) found **167 events / 119 distinct defs** that name *neither*

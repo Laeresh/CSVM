@@ -77,6 +77,11 @@ internal sealed class MotionSet
         for (int i = _motions.Count - 1; i >= 0; i--)
         {
             _motions[i].Tick(dt);
+            if (_motions[i] is MotionRuntime clock && clock.TakeClockBounce() is { } clockBounce)
+            {
+                landed ??= new List<Landing>();
+                landed.Add(new Landing(clock.Owner.Def, clock.Owner.Anchor, clockBounce, clock.Target, false));
+            }
             if (!_motions[i].Finished)
                 continue;
             var done = _motions[i];
