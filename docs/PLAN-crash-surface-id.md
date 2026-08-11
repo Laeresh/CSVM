@@ -46,7 +46,9 @@ mapping unmarked.
 | 3 | Do we keep the texture-name classifier? | **Yes, for weapons IMPACT only.** Two independent name spaces; conflating them is what this plan exists to undo. |
 | 4 | What if faithful selection makes the sea stop splashing? | **Measure first (A1), then decide with the user.** Do not silently keep the unfaithful path, and do not silently ship a regression. |
 | 5 | Is `dirt` a real registry name? | **Yes — id 13**, from the soils list in `ZBD/zrdr.zbd` `0xe631c`. But it is the *exception*, not the default: see Decision 6. |
-| 6 | Which def does ordinary terrain get? | **`player_crash_default`.** Id 0 is ~98 % of materials and `fire`/`airstrip`/`buildings`/`dzone` have no def, so all fall back to slot 0. Our build plays `_dirt` there. This is the plan's biggest behavioural change and A1 gates it. |
+| 6 | Which def does ordinary terrain get? | **`player_crash_default`.** Id 0 is ~98 % of materials and `fire`/`airstrip`/`buildings`/`dzone` have no def, so all fall back to slot 0. Our build plays `_dirt` there. This was the plan's biggest behavioural change; A1 gated it and it is now released — see 7. |
+| 7 | A1's gate, resolved (2026-08-11, user) | **Implement faithfully, judge after.** A1 disproved the sea fear and measured slot 0 at 63.9–96.8 % of collidable area. Wave B lands as specified; the look is judged at the controls afterwards, and anything kept for looks goes to `BL-060` as a marked, deliberate improvement — never as an unmarked divergence. Reverting is one commit on this branch. |
+| 8 | Rename mech3ax's `Soil` variants to the Crimson Skies names? | **No (2026-08-11, user).** The fork's enum is a complete 0–13 `u32`, so extraction is already lossless and our reader maps label → id anyway. Renaming would force a full 8-chapter re-extract and invalidate every table and script using `NoSlip`/`Silt`/`Grass`. The `Dirt`(6) ≠ `dirt`(13) false friend is documented instead — in `FINDINGS.md` and at the conversion point in code. |
 
 ## ⚠ Read this before implementing anything
 
@@ -128,7 +130,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 
 ### Wave A — settle what faithful actually costs
 
-1. ☐ A1 Measure which geometry carries which surface id — especially: is the flyable sea `soil=Water`?
+1. ☑ A1 Measure which geometry carries which surface id — especially: is the flyable sea `soil=Water`? — **landed 2026-08-11**
 2. ☐ A2 Carry the surface id from `materials.json` through to the collider
 3. ☐ A3 Build the surface-name registry from the decoded list
 
@@ -157,7 +159,18 @@ independent of Wave B. C22 is last.
 
 # Wave A — settle what faithful actually costs
 
-## A1 ☐ Measure which geometry carries which surface id
+## A1 ☑ Measure which geometry carries which surface id — **landed 2026-08-11**
+
+**Outcome.** Measured in `analysis/surface-classification/FINDINGS.md`, 2026-08-11 "A1" section, via
+the new `soil_area_by_mesh.py`. **The sea fear is disproven** — C2's `g29239`, the exact tile the
+2026-07-31 in-engine `--det` dive confirmed the splash on, is 100 % `soil=Water`, and the id-1 area
+share (2.1–33.3 %) tracks the texture-name `water` share (1.99–32.55 %) closely in every chapter. The
+water/not-water behaviour survives the switch. **The `_dirt` → `_default` change is confirmed and
+large:** slot 0 takes 63.9–96.8 % of every chapter's collidable area, `dirt`(13) is 0 % in four of
+eight chapters and at most 10.17 % (C2) in the rest. Landmarks: C1's `g306` hangar is 65 % `airstrip`
+(no def → slot 0), C2's `nycity` towers are 100 % `default` — a skyscraper and a hillside play the
+same def under the faithful rule. Not confirmed in-engine: water tiles outside C2, and any `dirt`
+tile anywhere — both are data-side reads, and are B11's targeted `--det` checks.
 
 **Goal.** Know, before changing any behaviour, what each chapter's *flyable* surfaces resolve to
 under the original's rule — specifically: where the `dirt`(13) geometry actually is, and whether

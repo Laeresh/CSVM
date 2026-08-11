@@ -209,6 +209,18 @@ identical everywhere — **no label ever took two different ids**:
 |---|---|---|---|---|---|---|---|
 | id | 0 | 1 | 5 | 8 | 11 | 12 | 13 |
 
+⚠ **mech3ax's `Dirt` is NOT Crimson Skies' `dirt`.** The fork's `Soil` enum
+(`tools/mech3ax/crates/api-types/src/gamez/materials.rs:14-30`) is a complete, explicitly-numbered
+`u32` covering 0–13, so the extraction is **lossless** — the label is a faithful encoding of the raw
+dword, which is why the cross-tab below is 1:1 with no gaps. But the *names* are MechWarrior 3's:
+mech3ax calls id 6 `Dirt` and id 7 `Mud`, while Crimson Skies calls 6 `player`, 7 `enemy`, and its
+real `dirt` is **13** (mech3ax `NoSlip`). Anyone who opens `materials.json`, sees `"soil": "Dirt"`
+and reasons about the dirt crash gets the wrong material entirely. Nothing in the shipped data uses
+id 6, so this cannot bite at runtime — it bites a *reader*. Deliberately not renamed (2026-08-11):
+renaming forces a full 8-chapter re-extract and invalidates every doc, script and table that says
+`NoSlip`/`Silt`/`Grass`, to buy legibility this warning buys for free. Always convert label → id
+through the table below before reasoning about a surface.
+
 Reading that table: `Default`/`Water`/`Fire` are the engine's own `default`/`water`/`fire` at
 0/1/5. **Slots 2/3/4 (`seafloor`, `quicksand`, `lava`) are used by no material in any shipped
 chapter.** Ids 8/11/12/13 are level-supplied slots, and **mech3ax's names for those are wrong** —
@@ -257,3 +269,115 @@ walks the same registry, parsing one 100-byte row per surface id into `weapon+0x
 key **inherits the `default` row wholesale** (`0x005ae268`, `MOV ECX,0x19` + `REP MOVSD`). So IMPACT
 keys are looked up *by registry name*, and their order in the `.zrd` means nothing. An IMPACT key
 that is not a registry name is never read at all.
+
+## 2026-08-11 — A1: what faithful crash-def selection actually resolves per chapter
+
+`PLAN-crash-surface-id.md` item A1. The section above settles the *mechanism* — a table lookup on
+the material's `soil` id, not a texture-name branch. This measures its *consequence*: joining
+materials → polygons → meshes by `soil` id (never by texture name — that would re-create the exact
+conflation the plan exists to undo), to know what a player actually flies over per id before B11
+changes what plays.
+
+**Method.** `analysis/surface-classification/soil_area_by_mesh.py` (new; siblings
+`soil_id_probe.py`/`soils_list.py` unchanged) iterates every mesh (`models.json`, 1:1 with
+`SceneBuilder`'s mesh index) in a chapter's extracted `gamez`, resolves each polygon's material
+`soil` label to the id table above, and accumulates polygon count and triangulated area per id.
+Triangulation matches `SceneBuilder.PolygonArea`/`EmitCollisionFaces` exactly — strip order for
+`tri_strip` polygons, a fan from vertex 0 otherwise — not `class_area_share.py`'s simplified
+always-fan `area()`, which mis-measures a strip. "Collidable area" here means every polygon of
+every mesh, each mesh counted **once** regardless of how many nodes place it in the world — the
+same convention `class_area_share.py` uses, so its water/buildings area shares (2026-08-01 section)
+are directly comparable to the id-1/id-13 numbers below. Mesh names come from `nodes.json`'s
+`model_index` → `name`; a mesh placed by more than one node is marked `+N more node` in the top-5
+lists so that is visible rather than silently averaged away.
+
+**Per-chapter area share by surface id** (of each chapter's total triangulated collidable area;
+`—` means no material in that chapter carries the id):
+
+| chapter | `default`(0) | `water`(1) | `fire`(5) | `airstrip`(8) | `buildings`(11) | `dzone`(12) | `dirt`(13) | **slot 0 share** |
+|---|---|---|---|---|---|---|---|---|
+| C1  | 91.51% | 2.09% | 0.00% | 0.04% | 0.00% | 0.00% | 6.35%  | **91.55%** |
+| C1B | 95.83% | 4.15% | 0.00% | 0.01% | —     | 0.00% | —      | **95.85%** |
+| C1C | 91.44% | 8.56% | 0.00% | —     | —     | —     | —      | **91.44%** |
+| C2  | 82.60% | 6.83% | 0.00% | 0.40% | —     | 0.01% | 10.17% | **83.00%** |
+| C2B | 91.75% | 8.25% | 0.00% | 0.00% | —     | —     | —      | **91.75%** |
+| C3  | 63.88% | 33.27%| 0.00% | 0.01% | —     | 0.01% | 2.82%  | **63.90%** |
+| C4  | 90.13% | 0.26% | 0.00% | —     | —     | 0.04% | 9.57%  | **90.16%** |
+| C5  | 96.72% | 3.24% | 0.00% | —     | —     | 0.04% | —      | **96.76%** |
+
+"Slot 0 share" sums ids `{0, 5, 8, 11, 12}` — every id whose `player_crash_<name>` def does not
+exist in the shipped install, so `FUN_0048b920`'s cascade falls each of them back to `vector[0]`
+alongside id 0 itself. It is 63.9–96.8% of every chapter's collidable area. **Four of eight
+chapters (C1B, C1C, C2B, C5) carry no `dirt`-tagged geometry at all** — `player_crash_dirt` would
+never fire there under the faithful rule.
+
+**(a) Which mesh(es) carry `water`(1), and is it the sea the player dives into?** Yes, directly
+confirmed. C2's `g29239` — the exact open-water tile the 2026-07-31 section's in-engine `--det`
+dive test used to confirm the sea splash (`Water` 8/8, `splash1.flt` instanced) — resolves **100%
+`soil=Water`** (mesh#392, area 1,048,576, its one and only id). Every chapter's top water-area
+meshes are a long, flat list of `g#####`-named tiles each carrying almost exactly 1,048,576 area
+units (the standard terrain-tile size, the same size the `default` and `dirt` top lists also show)
+— the same shape of geometry as `g29239`, not a special-cased "splash volume". That pattern is
+strong circumstantial evidence the open sea is `soil=Water` in every chapter, but **only C2's
+`g29239` was directly probed in-engine**; the other seven chapters' water tiles are inferred from
+the naming/size pattern, not independently confirmed by a `--det` dive.
+
+**This measurement disproves the plan's biggest stated fear about the sea.** A1's evidence section
+worried the `soil=Water` population (1–3 materials/chapter) might be far smaller than the
+texture-classified `water` population (hundreds of polygons/chapter) and might not even overlap the
+flyable open water. Measured: the `soil`-id water area share (2.1–33.3%, table above) and the
+texture-name `water` area share (2026-08-01 section: 1.99–32.55%) are close in magnitude in every
+chapter, and the one landmark both methods were checked against — C2's open water — is 100%
+`soil=Water`. The earlier "exactly one `Water` material out of 484" note (2026-08-01 section,
+"candidate fixes rejected") is not in tension with this: it counts distinct *materials*, and one
+material texture-shared across hundreds of polygons/dozens of tiles is exactly how a 6.83% area
+share comes from so few materials.
+
+**(b) Which carry `dirt`(13), and is it anywhere a player would plausibly crash?** Yes, on the
+evidence available. `dirt`-tagged meshes are the same shape of geometry as the `default`/`water`
+ground tiles — numbered `g#####` names at the standard ~1,048,576-unit tile size, not clutter or
+marker geometry (contrast the `fvol*` fog-volume and `dzpath*` danger-zone-path names that dominate
+some chapters' small-area rows). C3's `dirt` set names `volcano1` outright — real terrain on a
+volcanic-mountain level. This is ordinary ground the player flies over and can plausibly crash into,
+just a small, real minority of it: 0% (four chapters), 2.82% (C3), 6.35% (C1), 9.57% (C4), 10.17%
+(C2). No in-engine dive/crash was run against a named `dirt` tile — this is a data-side read, not an
+in-engine confirmation, and should be one of B11's targeted `--det` checks.
+
+**(c) Slot 0 share** — see the table's last column, 63.9–96.8%, i.e. **faithful selection makes
+`player_crash_default` the ground/building crash for the large majority of every chapter's
+collidable surface**, exactly as `PLAN-crash-surface-id.md`'s Decision 6 states.
+
+**Landmark cross-checks, per A1's verify criteria.** `docs/formats/weapon-effects.md`'s two named
+landmarks were looked up directly (not sampled from a top-5 list), to test whether the
+texture-name `buildings`/IMPACT tag and the `soil`-id registry's own `buildings`(11) slot agree —
+they are different name spaces (the plan's Decision 3 / Constraints), so no agreement was assumed:
+
+- **C1's `g306` hangar** (mesh#424) is **65.0% `airstrip`(8)** by area, 31.8% `default`(0), 3.2%
+  `dirt`(13) — **not** `buildings`(11) at all, despite `SceneBuilder.ClassifySurface` tagging its
+  `hangar*` texture `buildings` for the IMPACT table. Under the faithful crash cascade this tile
+  resolves to slot 0 everywhere except its small dirt-tagged sliver — consistent, since `airstrip`
+  has no `player_crash_airstrip` def either.
+- **C2's `nycity` film-set towers** (mesh#548) are **100% `default`(0)** — no distinguishing
+  `soil` tag at all, despite being the chapter's clearest `buildings`-by-texture landmark
+  (2026-08-01 section, 8/8 `Buildings` on `nycity/col_buildings`). Ramming a skyscraper and ramming
+  a hillside would play the identical crash def under the faithful rule.
+- `buildings`(11) itself is carried by measurable area in only **one of eight chapters** (C1,
+  0.00% share — 273 polygons, 16,066 area units across 40 meshes, table above) and by none of the
+  other seven. The soil registry's `buildings` slot is essentially unused by any shipped material;
+  it is not what makes a mesh "look like a building" to the player or to the IMPACT classifier.
+
+**What this changes at the controls, in plain language.** Today, every ordinary crash that is not a
+sea dive plays the `_dirt` choreography — terrain, hangars, skyscrapers, all of it, because the
+current code only distinguishes water from everything else. Switching to the original's rule keeps
+that water/not-water split working the same way (the open sea really is tagged `water` in the data,
+confirmed directly for C2 and consistent everywhere else), so **the sea splash should look and sound
+the same as it does now.** What changes is the "everything else" crash: it stops being `_dirt` and
+becomes `_default` for the large majority of terrain and every building — 64–97% of each chapter's
+ground, varying by level (C3, the most water-heavy chapter, has the least default-ground exposure;
+C5 the most). `_dirt` still plays, but only on real, comparatively small patches of actual
+dirt-tagged ground — a handful of tiles per chapter, up to about a tenth of the chapter's surface at
+most (C2), none at all in half the chapters (C1B, C1C, C2B, C5). A player who reliably notices the
+difference between the two ground crash choreographies (sound/anim, not implemented yet at time of
+writing per Decision 6) would hear the `_default` variant far more often than today, and would only
+ever hear `_dirt` in specific patches rather than everywhere on the ground — including on buildings,
+which never get a variant of their own either way.
