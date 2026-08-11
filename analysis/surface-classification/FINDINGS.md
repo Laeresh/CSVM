@@ -381,3 +381,33 @@ difference between the two ground crash choreographies (sound/anim, not implemen
 writing per Decision 6) would hear the `_default` variant far more often than today, and would only
 ever hear `_dirt` in specific patches rather than everywhere on the ground — including on buildings,
 which never get a variant of their own either way.
+
+## 2026-08-11 — what A2's body-granularity surface id costs (the BL-204 shape, measured)
+
+A2 stamps each collider body with the polygon-count-dominant `soil` id among its own polygons
+rather than splitting colliders per id (about 2.3 % of meshes install-wide have a texture-class
+bucket spanning more than one id). That is structurally the failure `BL-204` removed on 2026-07-31
+— a dominant vote loses the minority — so it was measured before `B11` rather than after.
+`soil_bucket_strand.py` replays `CollidersForMesh`'s bucketing and A2's dominance rule, and reports
+the share of collidable area where the body-granularity id resolves a **different crash def** than a
+per-polygon id would. Def accuracy, not id accuracy, is the metric: ids 0/5/8/11/12 all resolve
+`_default`, so an `airstrip` polygon in a `default`-dominant bucket is not an error at all.
+
+| | C1 | C1B | C1C | C2 | C2B | C3 | C4 | C5 |
+|---|---|---|---|---|---|---|---|---|
+| wrong-def area | 1.221 % | 0 % | 0 % | 0.909 % | 0 % | 0.942 % | **1.373 %** | 0 % |
+| of `dirt`'s own area, stranded | 16.4 % | — | — | 6.9 % | — | 13.8 % | 8.3 % | — |
+
+**Accepted — the analogy does not bite.** `BL-204` stranded 5.1–86.7 % of a class because the vote
+was per *mesh*; these buckets are already per texture class per mesh, an order of magnitude finer,
+so the worst chapter misplays **1.373 %** of its collidable area and four of eight misplay none.
+`water`(1) is misattributed **nowhere in any chapter** — the sea dive is exact, not approximately
+right. The error is also roughly symmetric (C4: 0.792 % `_dirt`→`_default`, 0.581 % the other way),
+so it is not a systematic erosion of `_dirt`.
+
+⚠ **The dirt-side number is the one to quote, not the area-side one.** Up to **16.4 %** of C1's
+dirt-tagged ground plays `_default` under this approximation. That is invisible in a 1.2 %
+whole-chapter figure, and it is the number that would explain a "this dirt patch doesn't kick up
+dust" report at the controls. Splitting colliders per id is the fix if that ever matters; it grows
+the collider tree and breaks the `col` name's per-parent uniqueness, so it is a change with its own
+regression surface, not a tidy-up.
