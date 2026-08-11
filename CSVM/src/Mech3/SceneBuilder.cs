@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -31,6 +32,13 @@ public sealed class SceneBuilder
 {
     /// <summary>Meta key a collider carries when its dominant surface is water or buildings.</summary>
     public const string SurfaceMeta = "csky_surface";
+
+    /// <summary>Meta key EVERY collider carries: an <c>int</c>, the original's numeric surface
+    /// type id (<see cref="GameZMaterial.SoilId"/>) for its dominant material, by polygon count
+    /// — the same body granularity <see cref="SurfaceMeta"/> already uses, not a per-triangle
+    /// value. A different name space from <see cref="SurfaceMeta"/>'s texture-derived class, so
+    /// it is never spelled as that string (see <see cref="CollidersForMesh"/>).</summary>
+    public const string SurfaceIdMeta = "csky_surface_id";
 
     public const string OpacityParam = "csky_opacity";
 
@@ -297,7 +305,7 @@ void fragment() {
     private readonly Dictionary<(int Model, bool Force, bool ForceLit), ArrayMesh?> _meshCache = new();
     private readonly Dictionary<int, Vector3> _meshPivotCache = new(); // billboard meshes only: local quad center
     private readonly Dictionary<int, ArrayMesh> _lightMeshCache = new();
-    private readonly Dictionary<int, List<(string? Surface, ConcavePolygonShape3D Shape)>> _colliderCache = new();
+    private readonly Dictionary<int, List<(string? Surface, int SurfaceId, ConcavePolygonShape3D Shape)>> _colliderCache = new();
     private readonly Dictionary<(float Size, float MaxPx, float Range), ShaderMaterial> _lightMaterialCache = new();
     // Billboard glow material for a flare sprite quad: always alpha-blended (the soft ramp
     // must never scissor into a hard star cutout), no night dimming (it's a light source).
@@ -923,7 +931,7 @@ void fragment() {
     private void AttachCollision(Node3D parent, int meshIndex)
     {
         bool tracked = false;
-        foreach (var (surface, shape) in CollidersForMesh(meshIndex))
+        foreach (var (surface, surfaceId, shape) in CollidersForMesh(meshIndex))
         {
             // Named per class ("col", "col_water", "col_buildings") rather than "col" for all
             // of them: a mesh yields at most one bucket per class, so these names never collide
@@ -937,6 +945,9 @@ void fragment() {
             // common case and stamps nothing.
             if (surface != null)
                 body.SetMeta(SurfaceMeta, surface);
+            // Every body carries the original's numeric surface id too — a different name space
+            // from the class string above (see SurfaceIdMeta).
+            body.SetMeta(SurfaceIdMeta, surfaceId);
             parent.AddChild(body);
             ColliderCount++;
             tracked = true;
@@ -960,8 +971,19 @@ void fragment() {
     /// <c>analysis/surface-classification/</c>. A polygon with a merely name-matching
     /// but literally zero-area texture reference (a stray polygon) still contributes
     /// nothing, because its own triangulated area is zero — no separate area threshold needed.
-    /// Cached per mesh index.</summary>
-    private List<(string? Surface, ConcavePolygonShape3D Shape)> CollidersForMesh(int meshIndex)
+    /// Cached per mesh index.
+    ///
+    /// <para>Each bucket also carries the original's numeric surface id
+    /// (<see cref="GameZMaterial.SoilId"/>) for the polygons that fed it, as the id that the
+    /// MOST polygons in the bucket carry (ties broken toward the lower id, for determinism). The
+    /// class string above and the numeric id are different name spaces over the SAME polygons —
+    /// a texture-derived "water"/"buildings"/untagged bucket is not guaranteed to be one soil id
+    /// (e.g. a mostly-<c>Default</c> untagged tile can carry a handful of <c>Dirt</c>-tagged
+    /// polygons too) — so this is body-granularity, exactly matching the class string's existing
+    /// precision, not a per-triangle answer. Splitting buckets by id as well would grow the
+    /// collider count on real geometry (measured non-uniform on ~2% of meshes install-wide),
+    /// which is the change this method deliberately does NOT make.</para></summary>
+    private List<(string? Surface, int SurfaceId, ConcavePolygonShape3D Shape)> CollidersForMesh(int meshIndex)
     {
         if (_colliderCache.TryGetValue(meshIndex, out var cached))
             return cached;
@@ -970,16 +992,23 @@ void fragment() {
         // "" stands in for the untagged/default bucket: Dictionary<TKey> needs a non-null key.
         const string defaultTag = "";
         var buckets = new Dictionary<string, List<Vector3>>();
+        var idCounts = new Dictionary<string, Dictionary<int, int>>();
         foreach (var poly in mesh.Polygons)
         {
-            string tag = poly.MaterialIndex >= 0 && poly.MaterialIndex < _gamez.Materials.Count
-                ? ClassifySurface(_gamez.Materials[poly.MaterialIndex].TextureName) ?? defaultTag
-                : defaultTag;
+            bool hasMaterial = poly.MaterialIndex >= 0 && poly.MaterialIndex < _gamez.Materials.Count;
+            var material = hasMaterial ? _gamez.Materials[poly.MaterialIndex] : null;
+            string tag = ClassifySurface(material?.TextureName) ?? defaultTag;
             if (!buckets.TryGetValue(tag, out var faces))
+            {
                 buckets[tag] = faces = new List<Vector3>();
+                idCounts[tag] = new Dictionary<int, int>();
+            }
             EmitCollisionFaces(mesh, poly, offset, faces);
+            int id = material?.SoilId ?? 0;
+            var counts = idCounts[tag];
+            counts[id] = counts.GetValueOrDefault(id) + 1;
         }
-        var result = new List<(string?, ConcavePolygonShape3D)>();
+        var result = new List<(string?, int, ConcavePolygonShape3D)>();
         foreach (var (tag, faces) in buckets)
         {
             if (faces.Count == 0)
@@ -988,7 +1017,11 @@ void fragment() {
             // trimesh solid from both sides — otherwise raycasts pass through down-wound faces.
             var shape = new ConcavePolygonShape3D { BackfaceCollision = true };
             shape.SetFaces(faces.ToArray());
-            result.Add((tag == defaultTag ? null : tag, shape));
+            int dominantId = idCounts[tag]
+                .OrderByDescending(kv => kv.Value)
+                .ThenBy(kv => kv.Key)
+                .First().Key;
+            result.Add((tag == defaultTag ? null : tag, dominantId, shape));
         }
         _colliderCache[meshIndex] = result;
         return result;

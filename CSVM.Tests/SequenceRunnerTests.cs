@@ -813,8 +813,11 @@ public class SequenceRunnerTests
 
     /// <summary>An instantaneous LIGHT_STATE named <paramref name="name"/>.</summary>
     private static AnimEvent Light(string name) =>
-        new() { Kind = "LightState",
-                Data = new AnimData(new Dictionary<string, object?> { ["name"] = name }) };
+        new()
+        {
+            Kind = "LightState",
+            Data = new AnimData(new Dictionary<string, object?> { ["name"] = name })
+        };
 
     /// <summary>A timed motion whose run time the host reports (its Kind keys
     /// <see cref="RecordingHost.Durations"/>).</summary>

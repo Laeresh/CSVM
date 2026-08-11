@@ -46,6 +46,23 @@ public struct GameZLight
 
 public sealed class GameZ
 {
+    // The original's surface-type registry, restricted to the labels mech3ax's extraction has
+    // ever emitted over the shipped install (analysis/surface-classification/FINDINGS.md,
+    // 2026-08-11): the `soil` field is a bulk-read raw dword from the material record, and
+    // mech3ax's own label for it is just its Soil enum variant name, not a Crimson Skies name.
+    // An unseen label means the extractor's enum changed underneath us, not that the id is 0 —
+    // fail loudly rather than silently misclassifying every material with the new label.
+    private static readonly Dictionary<string, int> SoilLabelToId = new()
+    {
+        ["Default"] = 0,
+        ["Water"] = 1,
+        ["Fire"] = 5,
+        ["Grass"] = 8,
+        ["Mech"] = 11,
+        ["Silt"] = 12,
+        ["NoSlip"] = 13,
+    };
+
     // textures.json order. Only the unified shape needs it: its materials reference
     // textures by index, where the legacy shape inlined the name. Empty when legacy.
     private readonly List<string> _textureNames = new();
@@ -570,6 +587,13 @@ public sealed class GameZ
             var prop = FirstProperty(wrapper);
             var body = prop.Value;
             var mat = new GameZMaterial();
+            string soilLabel = body.GetProperty("soil").GetString()
+                ?? throw new FormatException("Material 'soil' field is present but null.");
+            mat.SoilId = SoilLabelToId.TryGetValue(soilLabel, out var soilId)
+                ? soilId
+                : throw new FormatException(
+                    $"Unknown material soil label '{soilLabel}' — the extractor's surface-id " +
+                    "registry may have changed; GameZ.SoilLabelToId needs a new entry.");
             if (prop.Name == "Textured")
             {
                 // Legacy inlined the name; the fork stores an index into textures.json.
@@ -740,6 +764,13 @@ public sealed class GameZMaterial
 
     public string? TextureName; // set for Textured materials (e.g. "bldhwk_cowling.tif", may be truncated to 20 chars)
     public Color Color = Colors.White; // set for Colored materials
+
+    /// <summary>The original's numeric surface type id (<c>materials.json</c> <c>soil</c>,
+    /// mapped through <see cref="GameZ.SoilLabelToId"/>): what <c>crimson.exe</c> indexes into
+    /// its <c>player_crash_&lt;name&gt;</c>/<c>touchdown_&lt;name&gt;</c> vectors on impact
+    /// (analysis/surface-classification/FINDINGS.md, 2026-08-11). Default 0 matches the
+    /// engine's own fallback id and mech3ax's default Soil variant.</summary>
+    public int SoilId;
 
     /// <summary>Flipbook rate in frames per second (gamez `speed`: 4–12 across this install).</summary>
     public float CycleSpeed;

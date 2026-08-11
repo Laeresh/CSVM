@@ -66,6 +66,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/WavFile.cs` — pure-C# WAV parser + MS ADPCM→PCM16 decoder (the game's format; Godot can't load it).
 - `src/Mech3/SoundArchive.cs` — WAV lookup over a sounds extraction → cached `AudioStreamWav` (forward loop when LOOPED).
 - `src/Mech3/SoundDefs.cs` — sounds.json parser: SETS `snd_*` → `SoundDef`; `LoadGroups` → the weighted-random `SOUND_GROUPS`.
+- `src/Mech3/SurfaceRegistry.cs` — the original's compiled+level-supplied surface-name registry: material `soil` id → name, for building `player_crash_<name>`/`touchdown_<name>`.
 
 ### `src/Flight/` — the flying aircraft
 
@@ -245,6 +246,11 @@ coloured untextured triangle — see docs/formats/world-structure.md); SceneBuil
 ⚠ The unified transform `scale` is deliberately ignored (measured unit on every transformed node).
 Carries each model's `flags.lighting`/`flags.fog` as `GameZMesh.Lighting`/`Fog` (default true) —
 the original's self-lit and unfogged marks, honoured by SceneBuilder's per-model shader variants.
+Carries each material's `soil` label as `GameZMaterial.SoilId` (the original's numeric surface type
+id — `player_crash_*`/`touchdown_*` selection indexes on it, `analysis/surface-classification/
+FINDINGS.md` 2026-08-11), mapped through `SoilLabelToId`. An unmapped label throws rather than
+defaulting to 0 — mech3ax's label is just its Soil enum variant name, and a new one means the
+extractor changed, not that the id is 0.
 Parses the WHOLE per-polygon `materials` list: element 0 is the base skin, the rest become
 `GameZPolygon.OverlayPasses` (`GameZPolygonPass`: material + its own UVs), which SceneBuilder draws
 as extra surfaces — 619 polygons install-wide, none in planes.zbd (docs/formats/gamez.md).
@@ -300,7 +306,12 @@ splits a mesh's colliding geometry into one trimesh per surface class actually p
 (water/buildings/untagged, each polygon's own texture deciding) rather than forcing the
 whole mesh under one dominant-class vote — a coastal tile is mostly beach by area, so the
 area-quorum vote it replaced gave real water polygons on it to `default` outright
-(`analysis/surface-classification/`). Each collider-bearing node is registered with
+(`analysis/surface-classification/`). Every collider also carries `SurfaceIdMeta`, the original's
+numeric `GameZMaterial.SoilId` for the bucket's dominant material by polygon count — the same
+body-granularity `SurfaceMeta`'s class string already has, not a per-triangle answer; a bucket's
+minority-id polygons (small, e.g. a handful of `dirt` tiles inside an otherwise-`default` tile) are
+not separately reported, which keeps the class split (and its collider count) unchanged. Each
+collider-bearing node is registered with
 `WorldCollision`, which owns its `Disabled` flag from then on. A `GameZ.IsMarkerGizmo` mesh draws nothing, but its Node3D is
 still built with its transform — animations attach puffers and sounds to those nodes by name.
 A surface's colour is `vertex colour × material` (the original's baked-lighting modulate) — except
@@ -817,6 +828,18 @@ Zrdr extraction reader (zip or unpacked dir): `LoadFile`, `LoadFileOrEmpty`, con
   walks the raw lists instead.
 ⚠ It also DROPS an unkeyed value in the root list. `FogVolumeSpec.Parse` walks by hand for that
   reason — three chapters' `fogvol.zrd` carries its clutter block with no key in front of it.
+
+## src/Mech3/SurfaceRegistry.cs
+`Names[id]`: the id→name table a struck material's `soil` field indexes into, so a caller can build
+`"player_crash_" + name` / `"touchdown_" + name` and resolve the same def the original resolves.
+Ids 0–5 are compiled into `crimson.exe`; ids 6–13 are the `LoadSoils`-loaded list from `ZBD/zrdr.zbd`
+`0xe631c`, reproduced by `analysis/surface-classification/soils_list.py`.
+⚠ Baked in rather than read at load — this list has no structured zrdr reader entry point unlike
+  every other `Mech3` config; see the class doc comment for why re-scanning at load isn't cheaper.
+⚠ All 14 slots are kept even though 6 carry no shipped material (`seafloor`/`quicksand`/`lava`,
+  `player`/`enemy`/`opensesame`/`death`) — dropping one renumbers every id below it.
+⚠ The append rule's case-insensitive digit-dedup (a hypothetical `water2` collapsing onto `water`)
+  is not implemented; no shipped name needs it, so the table is the fourteen names undeduped.
 
 ## src/Mech3/AiNets.cs
 The chapter patrol-net reader (`docs/formats/ai-nets.md`): every `ne0NNNNN.zrd.json` in a chapter
