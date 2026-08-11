@@ -32,11 +32,21 @@ namespace CSVM.Mech3.Anim;
 ///   their explosion and made a fan read as scatter.
 ///   ⚠ Which world bearing azimuth 0 points along (+X here) is a choice, not a decode — the
 ///   data fixes the trails' spacing relative to each other, not their absolute compass.</item>
-/// <item><c>gravity.value</c> (negative) accelerates the launch; folded straight into the
-///   constant acceleration. It is an ABSOLUTE m/s², not an offset to the aircraft's arcade
+/// <item><c>gravity.value</c> (negative) accelerates the launch; folded into the constant
+///   acceleration. It is an ABSOLUTE m/s², not an offset to the aircraft's arcade
 ///   <c>nom_gravity</c> of 20: the census carries a literal <b>−9.8</b> on 173 events (and −10
 ///   on 400), which is Earth gravity spelled out. The weak values (−1/−2/−3) sit on smoke
-///   trails, where floating is the authored look. Still unresolved: the
+///   trails, where floating is the authored look.
+///   <para><c>gravity.complex</c> picks which of TWO forms that fold takes. The plain form drops
+///   the value into the parent frame's Y, which is right only while that frame is world-aligned;
+///   <c>complex</c> takes gravity as a WORLD-down vector and converts it into the frame, so a body
+///   under a banked, pitched or inverted parent falls down the WORLD rather than down its own hull.
+///   The install authors it on aircraft wreckage alone — 254 events / 25 shapes, every one of them
+///   a body whose parent frame carries whatever attitude the aircraft died in — and the two forms
+///   agree exactly anywhere else, which is why nothing else needs it. All 254 author a
+///   <c>RUN_TIME</c>, so the converted acceleration never reaches
+///   <see cref="FlightToLaunchHeight"/>'s solve.</para>
+///   Still unresolved: the
 ///   379 events that FALL with <c>do_intersections: false</c> — no apex to solve, and no authored
 ///   collider test to tell us where they land — which the body still integrates freely over the
 ///   run time and then holds at rest.
@@ -207,6 +217,28 @@ internal sealed class MotionRuntime : IAnimMotion
         float gravity = (gravityBlock?.Num("value") ?? 0f) * DebrisTune.GravityScale;
         float launchScale = DebrisTune.LaunchScale;
 
+        // `complex` is the two-form gravity switch. A motion integrates in its node's PARENT frame,
+        // and the plain form drops `gravity.value` straight into that frame's Y — correct only while
+        // the frame is world-aligned. `complex` instead takes gravity as a WORLD-down vector and
+        // converts it into the frame, so a body under a banked, pitched or inverted parent still
+        // falls down the world rather than down its own hull. That is the whole of the difference,
+        // and it is why the install authors it on aircraft wreckage alone: 254 events / 25 shapes,
+        // the eleven airframes' fall, `player`'s and both `player_crash_*`' pieces, `agyrobus`, the
+        // lost rotor and the smoke canister — every body whose parent frame is at whatever attitude
+        // the aircraft died in, and nothing else. Under a world-aligned parent the two forms agree
+        // exactly, which is why nothing else needs it.
+        bool complexGravity = gravityBlock?.Bool("complex") ?? false;
+        Vector3 GravityAccel()
+        {
+            if (!complexGravity || gravity == 0f)
+                return new Vector3(0f, gravity, 0f);
+            // A TopLevel node's own transform IS world, so there is no frame to convert into.
+            var parentBasis = target.TopLevel
+                ? Basis.Identity
+                : (target.GetParent() as Node3D)?.GlobalTransform.Basis ?? Basis.Identity;
+            return parentBasis.Inverse() * new Vector3(0f, gravity, 0f);
+        }
+
         // `do_intersections` — the original's OWN collider test, and the one field that says which
         // bodies it tested. A session that wires no mask (every lab, every headless suite that does
         // not ask for it, and 9 of the 13 golden captures — freecam/viewer/empty-stage, none of
@@ -271,7 +303,7 @@ internal sealed class MotionRuntime : IAnimMotion
             // InheritedLocal is OUTSIDE the scale: it is the plane's measured momentum, not part
             // of the authored launch, and its magnitude is tuned separately (WreckMomentum).
             m._v0 = (v0 * launchScale) + InheritedLocal();
-            m._accel = new Vector3(0f, gravity, 0f);
+            m._accel = GravityAccel();
             m._hasBallistic = true;
         }
         else if (data.Obj("translation_range") is { } range)
@@ -300,7 +332,7 @@ internal sealed class MotionRuntime : IAnimMotion
             // delta ramps the launch speed over run_time, along the same direction — the same
             // shape `translation.delta` has, and 0 on 984 of the 1,217 events.
             rampTotal = dir * speedRamp * launchScale;
-            m._accel = new Vector3(0f, gravity, 0f);
+            m._accel = GravityAccel();
             m._hasBallistic = true;
         }
 

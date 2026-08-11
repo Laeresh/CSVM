@@ -197,8 +197,8 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 decoded from `crimson.exe`: the ground-contact test is the DEFAULT rather than `do_intersections`-
 gated, the `translation_range` elevation is linear (`elev/90`) rather than spherical, and `RUN_TIME`
 is a ceiling rather than a duration. Folds in `BL-319` and `BL-245`, re-opens `PT-46` (d), and
-deletes `DebrisTune`. Wave A in progress (A1, A2 done); Waves B and C must run strictly serially.
-Next: `A3` (flag `0x2000` = `COMPLEX`: the suppressed gravity add), then Wave B.
+deletes `DebrisTune`. Wave A complete; Waves B and C must run strictly serially.
+Next: `B4` (the linear `translation_range` elevation), then `B5`.
 Owed at the controls: `PT-28`, `PT-41`, `PT-43`, `PT-45` and `PT-47`
 ([`playtest.md`](playtest.md)). Verify any change with
 **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read

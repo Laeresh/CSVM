@@ -180,7 +180,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ Establish what the goldens actually cover, and take the pre-change baseline
 2. ☑ Finish the gravity-flag map (`0x2000`, `GRAVITY LOCAL`) and re-derive the census
-3. ☐ Handle flag `0x2000`: the suppressed gravity add and the widened landing test
+3. ☑ Handle flag `0x2000`: the suppressed gravity add and the widened landing test
 
 ### Wave B — the launch decode
 
@@ -322,7 +322,31 @@ wide. ⚠ Do not assume `0x2000` is `complex` because the populations match — 
 with other groupings, and the parser evidence is cheap to get. ⚠ If the extractor cannot emit
 `local`, say so and leave it; a missing field recorded is worth more than a guessed one.
 
-## A3 ☐ Handle flag `0x2000`: the suppressed gravity add and the widened landing test
+## A3 ☑ Handle flag `0x2000`: the suppressed gravity add and the widened landing test
+
+**Landed 2026-08-10.** The suppression is real and the conclusion drawn from it was wrong: the
+non-constant path exists, forty lines below in the same function. `COMPLEX` does not remove gravity —
+it **replaces the scalar add with a transformed one**. The plain form does `accel.y += gravity.value`
+in the body's own frame; the `COMPLEX` form skips that and instead runs the world-down vector
+`(0, gravity.value, 0)` through the node's matrix into that frame, via the identical machinery the
+`IMPACT_FORCE` branch uses to bring the parent object's world velocity in. So a body under a banked,
+pitched or inverted parent falls down the **world** rather than down its own hull, and under a
+world-aligned parent the two forms are arithmetically identical — which is exactly why the install
+authors it on aircraft wreckage and on nothing else. `MotionRuntime.Create` now builds the
+acceleration through `GravityAccel()`, converting with the parent basis when `complex` is set.
+
+**⚠ The C6 specification, which C6 must consume rather than re-decide.** The widening belongs to the
+**column tier only**. In `FUN_004e8fa0` the per-step admission test inside the
+`!DO_INTERSECTIONS → !NO_ALTITUDE` branch is `stepY < 0 || (flags & COMPLEX)`: without `COMPLEX` the
+column query is consulted only on a **descending** step, with it on **every** step. The `15 s`
+watchdog sits inside that same test, so a non-`COMPLEX` body does not even accumulate it while
+climbing. The `DO_INTERSECTIONS` sweep branch carries **no** such condition — it sweeps every frame
+regardless of direction, which is what `TryContact` already does, so C6 changes nothing there.
+
+**Also settled, so nobody re-derives it.** `IMPACT_FORCE` is a strict subset of `COMPLEX` install-wide
+(182 events, all of them `complex: true`), which makes unreachable the one combination where the
+original would apply gravity **twice** — the scalar add followed by the transformed one, for a
+gravity-bearing non-`COMPLEX` body with `IMPACT_FORCE` armed. It is in the binary; no data reaches it.
 
 **Goal.** The engine does what the original does when `0x2000` is set — and the plan carries a
 written answer to what that flag *is*, rather than a bit nobody named. Concretely: a `0x2000` body

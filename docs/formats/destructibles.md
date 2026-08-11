@@ -369,8 +369,14 @@ the "Debris tumbles" bullet below for which pieces each covers. A format reader 
         `DEFAULT`, `LOCAL <value>`, `COMPLEX [<value>]`, `NO_ALTITUDE`, `DO_INTERSECTIONS` — but
         `DEFAULT` and `LOCAL` only choose where the gravity number comes from and set no flag bit,
         so they are indistinguishable once compiled. Which bit each token sets, with its parser
-        address, is in `analysis/object-motion-flags/FINDINGS.md`; `complex` is bit `0x2000` and is
-        authored on aircraft wreckage alone, never on a world destructible.
+        address, is in `analysis/object-motion-flags/FINDINGS.md`. **`complex` (bit `0x2000`) picks
+        which of two forms the gravity fold takes**: the plain form adds `value` to the body's own
+        frame Y, `complex` converts the world-down vector `(0, value, 0)` into that frame instead —
+        through the same transform the `impact_force` branch uses on the parent's velocity. The two
+        are identical under a world-aligned parent, so it is authored on aircraft wreckage alone
+        (254 events / 25 shapes, all carrying a `RUN_TIME`) and never on a world destructible: only
+        wreckage hangs off a frame at whatever attitude the aircraft died in. It also widens the
+        default landing test from descending steps to every step.
 
         `do_intersections: true` is a strict subset of `complex: true`. ⚠ **`no_altitude` is NOT a
         second, default terrain test** — a tempting reading, since the 8 events carrying it are
