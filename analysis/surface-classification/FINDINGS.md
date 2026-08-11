@@ -148,6 +148,112 @@ classifier. Aim at named geometry: C1's `g306` hangar wall at ≈ `(-4258, 172, 
 `-> Buildings` on `g306/col_buildings` every time.
 
 ⚠ **The material `soil` enum is not this classification.** `materials.json` carries a per-material
-`soil` (`Default`/`Grass`/`Water`/`Silt`/`NoSlip`/`Fire`/`Mech`) — a MechWarrior-3 leftover: it has
-no `buildings` value at all, and its `Water` count is 1–3 materials per chapter against the
-hundreds of water polygons the texture-name rule finds. Do not re-chase it as the "real" source.
+`soil` (`Default`/`Grass`/`Water`/`Silt`/`NoSlip`/`Fire`/`Mech`): it has no `buildings` value at
+all, and its `Water` count is 1–3 materials per chapter against the hundreds of water polygons the
+texture-name rule finds. Do not re-chase it as the "real" source **of the `water`/`buildings` impact
+class** — that part stands. But the 2026-08-11 section below retires the "MechWarrior-3 leftover"
+half of this note: the field is not junk, it is the original engine's own surface type id, and it
+governs a different decision (which crash/touchdown choreography plays).
+
+## 2026-08-11 — the `soil` field is the engine's surface type id, and it picks the crash def
+
+Decoded out of `crimson.exe` (read-only ghidra-mcp session) and then confirmed against the shipped
+data. Two separate claims; both are settled.
+
+**1. The crash choreography is a table lookup on the material's surface id, not a three-way branch.**
+`FUN_00476250` (plane setup, gated on the anim node being named `player`) builds a vector by
+concatenating the literal `"player_crash_"` (`0x00627cf8`) with every name in a global surface-name
+registry — count at `0x00637b10`, `char*` array at `0x00637b14` — so `vector[i]` is
+`player_crash_<registry name i>`. `FUN_004735b0` does the identical thing with `"touchdown_"`
+(`0x006274ec`) into `DAT_0071c2e8`. Six names are compiled in:
+
+| id | 0 | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|---|
+| name | `default` | `water` | `seafloor` | `quicksand` | `lava` | `fire` |
+
+`FUN_0055b7b0` appends more from level data into slots 6–99 (cap tested at `0x0055b8b6`);
+`FUN_0055aa90` resets the count to 6. **`dirt` is not a compiled-in name** — it does not appear as a
+standalone token anywhere in `crimson.exe`.
+
+Selection is `FUN_0048b920` at `0x0048bac5`–`0x0048bb00`. Given the impact record, take the struck
+material `*(record+0x20)` and its surface id `*(material+0x20)`, then:
+
+- material null, **or** `id < 0`, **or** `id >= vector length`, **or** `vector[id]` empty
+  → **`vector[0]`, i.e. `player_crash_default`**;
+- vector empty or `vector[0]` empty → the bare anim name `player` (`0x00627cf0`);
+- otherwise → `vector[id]`.
+
+The id is a **signed dword** — `MOV EDX,[EAX+0x20]` at `0x0048bab0` with no sign-extension, `JL`
+against zero at `0x0048bab5`, an *unsigned* upper-bound `JNC` at `0x0048bad2`, and
+`MOV EDI,[ECX+EDX*4]` at `0x0048bada`. The touchdown handler `FUN_0048d2c0` repeats the same test
+byte-for-byte at `0x0048d425`–`0x0048d460`.
+
+**So `player_crash_default` is the fallback arm, not an "air/no-impact" variant.** It is what plays
+for any material whose id is 0, negative, out of range, or names a def that does not exist.
+
+**2. That id is the `soil` field mech3ax already extracts.** The material record is `0x2c` bytes and
+`FUN_00559e20` (the GameZ material buffer reader) **bulk-`fread`s the whole block** with no
+per-field parse; the fixup pass afterwards touches only `+0x02`/`+0x10` (colour / texture handle)
+and the `+0x24` cycle block. `+0x20` arrives from disk untouched — the last dword of the 9-dword
+payload `FUN_0055b310` copies. Corroborated inside the engine by `FUN_004e5590`, which builds the
+quicksand surface material and writes the literal `3` into it via `FUN_0055b0a0` — registry index 3
+is `quicksand`.
+
+`soil_id_probe.py` proves it from the data end. It locates the material block in the raw
+`gamez.zbd` by a stride-`0x2c` signature (a run of `Textured` materials' `texture_index` as dwords
+at `+0x10`), which yields **exactly one candidate offset per chapter**, then tabulates the dword at
+`+0x20` against mech3ax's label. Across all 8 chapters / 4,715 materials the mapping is 1:1 and
+identical everywhere — **no label ever took two different ids**:
+
+| label | `Default` | `Water` | `Fire` | `Grass` | `Mech` | `Silt` | `NoSlip` |
+|---|---|---|---|---|---|---|---|
+| id | 0 | 1 | 5 | 8 | 11 | 12 | 13 |
+
+Reading that table: `Default`/`Water`/`Fire` are the engine's own `default`/`water`/`fire` at
+0/1/5. **Slots 2/3/4 (`seafloor`, `quicksand`, `lava`) are used by no material in any shipped
+chapter.** Ids 8/11/12/13 are level-supplied slots, and **mech3ax's names for those are wrong** —
+`Grass`/`Mech`/`Silt`/`NoSlip` are MechWarrior 3 labels applied to whatever Crimson Skies registered
+in that slot. The ids are real; those four labels are not. The real names are below.
+
+**3. The level-supplied names, recovered.** Names ≥ 6 are appended by `FUN_0055b7b0`, whose sole
+caller is the script command **`LoadSoils <filename>`** (`FUN_005b80a0`, call at `0x005ba4ae`; key
+literal `0x0063ec54`, alongside `MakeShadows`/`LoadGame`/`LODSetRange` in the same dispatch table).
+The filename is not in the executable — it is script data — so the list has to be read out of the
+shipped install. It is in the **global `ZBD/zrdr.zbd` at `0xe631c`**, eight names, contiguous:
+
+`player`, `enemy`, `airstrip`, `opensesame`, `death`, `buildings`, `dzone`, `dirt`
+
+The append rule is a linear scan that appends only absent names, so ids run 6,7,8,… in file order.
+(The match test is `_strnicmp` over `strlen(registryName)` accepting a trailing NUL *or digit* at
+`0x0055b874` — so `water2` would collapse onto `water`. No shipped name hits that case.)
+`soils_list.py` reproduces the derivation:
+
+| id | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| name | `default` | `water` | `seafloor` | `quicksand` | `lava` | `fire` | `player` | `enemy` | `airstrip` | `opensesame` | `death` | `buildings` | `dzone` | `dirt` |
+| used by materials | ✓ | ✓ | | | | ✓ | | | ✓ | | | ✓ | ✓ | ✓ |
+
+**The eight names fill exactly slots 6–13, and 13 is the highest id any shipped material carries** —
+the list and the measurement close on each other with nothing left over. Three independent checks
+agree: `dzone` lands at 12, and id 12 is carried by **exactly one material in every chapter that has
+one** (a danger-zone marker — and `crimson.exe` caches `dzone`'s id at `DAT_0064fb70`, `FUN_004459f0`
+`0x00445a16`); `buildings` lands at 11 and is also a weapon `IMPACT` key; `player`/`enemy` land at
+6/7 and are carried by no world material at all.
+
+**So `dirt` = 13**, and `player_crash_dirt` is reachable — for the 3–9 materials per chapter tagged
+with it, and nothing else.
+
+⚠ **The original's ordinary ground crash is `player_crash_default`, not `_dirt`.** Ids 5, 8, 11 and
+12 (`fire`, `airstrip`, `buildings`, `dzone`) name a `player_crash_<name>` def that does not exist,
+so by the cascade they fall back to slot 0 — and so does id 0, which is 98 % of every chapter's
+materials. `_dirt` is the *exception*, played only where a material is explicitly `dirt`-tagged. Our
+build has this backwards: it plays the `_dirt` variant as the default ground crash.
+
+⚠ **Do not hardcode 13 for `dirt` without its provenance.** Ids ≥ 6 are script-data-dependent; the
+exe fixes nothing above 5. This list comes from the shipped `zrdr.zbd`, and holds for this install.
+
+⚠ **The weapon `IMPACT` table shares this index space** — `FUN_005ad630` at `0x005ae216`–`0x005ae29b`
+walks the same registry, parsing one 100-byte row per surface id into `weapon+0x15c`, and an absent
+key **inherits the `default` row wholesale** (`0x005ae268`, `MOV ECX,0x19` + `REP MOVSD`). So IMPACT
+keys are looked up *by registry name*, and their order in the `.zrd` means nothing. An IMPACT key
+that is not a registry name is never read at all.

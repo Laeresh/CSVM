@@ -219,10 +219,15 @@ visual — which is exactly what makes them read as "identical" in the air. Maki
 would mean deleting the fireball the data calls, i.e. inventing content.
 
 ⚠ **The material `soil` field is not the surface class.** `materials.json` carries a `soil` enum
-(`Default`/`Grass`/`Water`/`Silt`/`NoSlip`/`Fire`/`Mech`) — a MechWarrior-3 leftover with no
-`buildings` value, and only 1–3 `Water` materials per chapter against the hundreds of water
-polygons the texture-name classifier finds. Surface class comes from the polygon's **texture name**
-(`SceneBuilder.ClassifySurface`), and nothing else.
+(`Default`/`Grass`/`Water`/`Silt`/`NoSlip`/`Fire`/`Mech`) with no `buildings` value, and only 1–3
+`Water` materials per chapter against the hundreds of water polygons the texture-name classifier
+finds. Surface class **for the IMPACT lookup on this page** comes from the polygon's **texture
+name** (`SceneBuilder.ClassifySurface`), and nothing else.
+⚠ But the "MechWarrior-3 leftover" gloss above is retired as of **2026-08-11**: that field is the
+original engine's own **surface type id** — the signed dword at material offset `0x20` that
+`crimson.exe` indexes the crash/touchdown choreography vector with (`FUN_0048b920`). It is junk for
+*this* decision and load-bearing for *that* one. See
+`analysis/surface-classification/FINDINGS.md`, 2026-08-11, before citing it either way.
 
 ⚠ **`buildings`-classed geometry is rare, so most hits are legitimately `Default`.** Per-chapter
 share of collidable polygon area (`analysis/surface-classification/class_area_share.py`):
