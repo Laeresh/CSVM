@@ -815,28 +815,29 @@ public partial class FlightController : Node3D
             return;
         }
 
-        // Run complete: the flight sim freezes in place (the chase camera in _Process still holds
-        // on the plane). Solo, the scoreboard is up and R (gamepad Y/A) starts a fresh run — the
-        // deliberate opposite of a mid-run respawn, clearing the clock + every completed zone.
-        // In a race this player is simply parked at the finish while the rest
-        // of the field flies on, and R only means "rematch" — restarting everybody — once the
-        // last pilot is in. Checked before the crash branch so completing the final zone always
-        // restarts cleanly.
-        if (Stunt is { AllComplete: true })
+        // A solo run freezes at the finish; R starts a fresh run.
+        // In a race, a finished pilot keeps flying while their mission state holds the time,
+        // placing and objective progress. R or an unattended restart rematches only after the
+        // last pilot finishes, while the shared board is displayed over the live simulation.
+        // This lets the finished pilot clear the remaining gates instead of parking in one.
+        // The branch remains ahead of crash handling so a finish transition is always clean.
+        if (Race is { AllFinished: true } && Stunt is { AllComplete: true })
         {
-            _simPrev = _simCurr;   // hold the finish pose — no stale pair left to interpolate
-            // Unattended scripted runs rematch on a timer, the same rule as the crash branch's
-            // auto-respawn below — so a --hold race soak-test keeps racing instead of parking on
-            // the board forever. Player 1 alone runs the timer; the rematch restarts everybody.
-            bool autoRematch = HoldSegments != null && Race is { AllFinished: true } && PlayerIndex == 0
+            bool autoRematch = HoldSegments != null && PlayerIndex == 0
                 && (_autoRestartIn -= dt) <= 0f;
             if (RespawnPressed() || autoRematch)
             {
-                if (Race == null)
-                    RestartStuntRun();
-                else if (Race.AllFinished)
-                    RestartRace?.Invoke();
+                RestartRace?.Invoke();
+                return;
             }
+        }
+
+        if (Stunt is { AllComplete: true } && Race == null)
+        {
+            _simPrev = _simCurr;   // hold the finish pose — no stale pair left to interpolate
+            // The solo scoreboard accepts R as a fresh run, distinct from a mid-run respawn.
+            if (RespawnPressed())
+                RestartStuntRun();
             return;
         }
         _autoRestartIn = AutoRespawnDelay; // re-armed while the run is live

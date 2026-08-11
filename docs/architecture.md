@@ -2862,6 +2862,9 @@ an unowned `NoShooter` round and every other cause) — a fact report the sessio
 flight holds no match state, and `Respawn` emits nothing. `AutoRespawnAfter` (session-armed —
 Versus sets 3 s on every rig) auto-respawns a crash on the sim clock with R still skipping early;
 null, the default, keeps every other mode manual-R (scripted HoldSegments runs keep their 1.5 s).
+In a splitscreen stunt race, a finished pilot continues normal flight, collision, weapons and
+crash/respawn while `StuntMission` holds their timer/objectives and `MarkerHud` holds their placing;
+this prevents their finish pose from obstructing another pilot's gate.
 `Respawn` plays `startprops` back and resets
 `ThrottleSmoke`, which `Update` otherwise drives every frame off the live throttle.
 A survivable graze also plays touchdown.zrd's per-surface reaction (`GrazeReaction`): the struck

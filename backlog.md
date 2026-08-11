@@ -2767,13 +2767,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-074` `[Research]` **PLAYER_INIT fields [3]/[4] semantics + per-plane spawn speed** — story-mission spawns
   currently assume the IA convention (0.5 throttle / 53.6 m/s).
 
-- `BL-083` `[Research]` `[Owed-playtest]` **Finished-pilot behaviour in a splitscreen stunt race** (M2.5 item 7): a pilot who clears
-  every zone freezes at the finish showing their placing while the field flies on. It matches
-  the solo run's freeze and makes the placing unmissable, but it parks a player with nothing
-  to do for as long as the slowest pilot takes. The alternative — keep flying freely with the
-  timer stopped — is a small change (drop the AllComplete early-return when `Race != null` and
-  gate only the objective/marker updates). Decide from the two-controller playtest.
-
 - `BL-314` `[Feature]` `[Blocked: PT-45]` **Race countdown — a rolling start on rails before the run clock
   opens.** The abreast starting grid landed 2026-08-08 (`RaceGrid`), so every pilot in a splitscreen
   stunt race now begins on one line, on one heading, at one altitude. What is still missing is the
