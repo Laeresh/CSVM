@@ -198,8 +198,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 10. ☑ Delete `DebrisTune` entirely
 11. ☑ Pin a golden that shows debris coming to rest
-12. ☐ Rewrite the decode records that carried the disproven readings
-13. ☐ Item bookkeeping: `BL-319`, `BL-245`, `PT-46` (d), and a fresh ID for the deleted tune
+12. ☑ Rewrite the decode records that carried the disproven readings
+13. ☑ Item bookkeeping: `BL-319`, `BL-245`, `PT-46` (d), and a fresh ID for the deleted tune
 
 ## Dependency and parallelism notes
 
@@ -784,7 +784,7 @@ something that was not there. ⚠ Do not delete the wrong readings outright; the
 table exists so nobody re-derives them. ⚠ `docs/HISTORY.md` is frozen; the narrative record goes in
 commit messages.
 
-## D13 ☐ Item bookkeeping: `BL-319`, `BL-245`, `PT-46` (d), and a fresh ID for the deleted tune
+## D13 ☑ Item bookkeeping: `BL-319`, `BL-245`, `PT-46` (d), and a fresh ID for the deleted tune
 
 **Goal.** `backlog.md` and `playtest.md` reflect what this plan settled, with no stale caveat left
 restating a disproven reading.
