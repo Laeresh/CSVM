@@ -17,12 +17,17 @@ namespace CSVM.Mech3.Anim;
 /// <list type="bullet">
 /// <item><c>translation.initial</c> is the launch VELOCITY (a piece leaves at y=10 m/s);
 ///   <c>rnd_xz</c> a per-axis random spread added to it (through the runtime's seedable
-///   <c>_rng</c>, so a lab replay is deterministic); <c>delta</c> a velocity ramp over the
-///   run time (change from initial to initial+delta) — 0 on every reachable piece, so its
-///   exact reading is near-invisible.</item>
-/// <item><c>translation_range</c> is a launch in SPHERICAL form, not a distance: <c>xz</c> is an
+///   <c>_rng</c>, so a lab replay is deterministic); <c>delta</c> a constant ACCELERATION added
+///   straight into the launch's own (<c>dir·delta</c>, no division by <c>run_time</c>) — 0 on
+///   every reachable piece, so its exact reading is near-invisible.</item>
+/// <item><c>translation_range</c> is a launch in POLAR form, not a distance: <c>xz</c> is an
 ///   AZIMUTH and <c>y</c> an ELEVATION, both in DEGREES, and <c>initial</c> is the launch SPEED
-///   in m/s (<c>delta</c> a speed ramp over the run time). Measured over all 1,217 events
+///   in m/s (<c>delta</c> a constant acceleration along the same direction, not a speed ramp
+///   divided by <c>run_time</c>). ⚠ The elevation is LINEAR, not
+///   spherical — <c>dirY = elev/90</c> with the horizontal taking the L1 remainder
+///   <c>1 − |elev|/90</c>, so the direction is NOT unit length (0.707 at 45°) and only the azimuth
+///   goes through a sincos. Transcribed from <c>FUN_004e8fa0</c>; see
+///   <see cref="RangeLaunchDirection"/>, which is where the whole of it lives. Measured over all 1,217 events
 ///   install-wide (<c>analysis/object-motion-range/</c>): every <c>xz</c> lies in [−170, 359];
 ///   every <c>y</c> but one lies in [−90, 90] and goes negative exactly where the thing falls
 ///   (a balloon turret's parts at −70…−90, a helium tank blowing sideways at 1…2); and the
@@ -32,11 +37,21 @@ namespace CSVM.Mech3.Anim;
 ///   their explosion and made a fan read as scatter.
 ///   ⚠ Which world bearing azimuth 0 points along (+X here) is a choice, not a decode — the
 ///   data fixes the trails' spacing relative to each other, not their absolute compass.</item>
-/// <item><c>gravity.value</c> (negative) accelerates the launch; folded straight into the
-///   constant acceleration. It is an ABSOLUTE m/s², not an offset to the aircraft's arcade
+/// <item><c>gravity.value</c> (negative) accelerates the launch; folded into the constant
+///   acceleration. It is an ABSOLUTE m/s², not an offset to the aircraft's arcade
 ///   <c>nom_gravity</c> of 20: the census carries a literal <b>−9.8</b> on 173 events (and −10
 ///   on 400), which is Earth gravity spelled out. The weak values (−1/−2/−3) sit on smoke
-///   trails, where floating is the authored look. Still unresolved: the
+///   trails, where floating is the authored look.
+///   <para><c>gravity.complex</c> picks which of TWO forms that fold takes. The plain form drops
+///   the value into the parent frame's Y, which is right only while that frame is world-aligned;
+///   <c>complex</c> takes gravity as a WORLD-down vector and converts it into the frame, so a body
+///   under a banked, pitched or inverted parent falls down the WORLD rather than down its own hull.
+///   The install authors it on aircraft wreckage alone — 254 events / 25 shapes, every one of them
+///   a body whose parent frame carries whatever attitude the aircraft died in — and the two forms
+///   agree exactly anywhere else, which is why nothing else needs it. All 254 author a
+///   <c>RUN_TIME</c>, so the converted acceleration never reaches
+///   <see cref="FlightToLaunchHeight"/>'s solve.</para>
+///   Still unresolved: the
 ///   379 events that FALL with <c>do_intersections: false</c> — no apex to solve, and no authored
 ///   collider test to tell us where they land — which the body still integrates freely over the
 ///   run time and then holds at rest.
@@ -207,12 +222,37 @@ internal sealed class MotionRuntime : IAnimMotion
         float gravity = (gravityBlock?.Num("value") ?? 0f) * DebrisTune.GravityScale;
         float launchScale = DebrisTune.LaunchScale;
 
+        // `complex` is the two-form gravity switch. A motion integrates in its node's PARENT frame,
+        // and the plain form drops `gravity.value` straight into that frame's Y — correct only while
+        // the frame is world-aligned. `complex` instead takes gravity as a WORLD-down vector and
+        // converts it into the frame, so a body under a banked, pitched or inverted parent still
+        // falls down the world rather than down its own hull. That is the whole of the difference,
+        // and it is why the install authors it on aircraft wreckage alone: 254 events / 25 shapes,
+        // the eleven airframes' fall, `player`'s and both `player_crash_*`' pieces, `agyrobus`, the
+        // lost rotor and the smoke canister — every body whose parent frame is at whatever attitude
+        // the aircraft died in, and nothing else. Under a world-aligned parent the two forms agree
+        // exactly, which is why nothing else needs it.
+        bool complexGravity = gravityBlock?.Bool("complex") ?? false;
+        Vector3 GravityAccel()
+        {
+            if (!complexGravity || gravity == 0f)
+                return new Vector3(0f, gravity, 0f);
+            // A TopLevel node's own transform IS world, so there is no frame to convert into.
+            var parentBasis = target.TopLevel
+                ? Basis.Identity
+                : (target.GetParent() as Node3D)?.GlobalTransform.Basis ?? Basis.Identity;
+            return parentBasis.Inverse() * new Vector3(0f, gravity, 0f);
+        }
+
         // `do_intersections` — the original's OWN collider test, and the one field that says which
-        // bodies it tested. A session that wired no mask (every lab, every headless suite that does
-        // not ask for it, every golden capture — none of which build world colliders) leaves this
-        // false and takes the untouched path: that is the fallback, made structural rather than
-        // remembered. The BOUNCE_SEQUENCE block rides along because a contact-terminated body picks
-        // its branch from the SURFACE IT STRUCK, which is not knowable here.
+        // bodies it tested. A session that wires no mask (every lab, every headless suite that does
+        // not ask for it, and 9 of the 13 golden captures — freecam/viewer/empty-stage, none of
+        // which build world colliders) leaves this false and takes the untouched path: that is the
+        // fallback, made structural rather than remembered. The remaining 4 goldens (Fly mode) DO
+        // wire a mask, but none currently completes a landing inside its own capture window —
+        // see analysis/object-motion-goldens/FINDINGS.md (A1). The BOUNCE_SEQUENCE block rides along
+        // because a contact-terminated body picks its branch from the SURFACE IT STRUCK, which is
+        // not knowable here.
         m._contactMask = rt.ContactMask;
         m._contactTest = (gravityBlock?.Bool("do_intersections") ?? false) && rt.ContactMask != 0;
         m._bounce = data.Obj("bounce_sequence");
@@ -251,31 +291,29 @@ internal sealed class MotionRuntime : IAnimMotion
             return parentBasis.Inverse() * rt.InheritedWorldVelocity;
         }
 
-        // The velocity ramp is a change spread OVER the run time, so it cannot be divided out
-        // until the run time is known — and a bounce-terminated launch does not know its own
-        // until the parabola is solved below. Collected here, folded in after that.
-        var rampTotal = Vector3.Zero;
-
         if (data.Obj("translation") is { } tr)
         {
             var v0 = tr.Vec3("initial");
             var rnd = tr.Vec3("rnd_xz");
             v0 += new Vector3(RandSym() * rnd.X, RandSym() * rnd.Y, RandSym() * rnd.Z);
-            // delta ramps velocity over run_time → a constant acceleration of delta/run_time.
-            // Scaled with the launch it ramps, or the tune would bend the arc's shape as well
-            // as its size.
-            rampTotal = tr.Vec3("delta") * launchScale;
+            // `delta` is folded straight into the acceleration slot, no division by run_time —
+            // the original stores dir·delta into +0x4c..0x54 and copies it verbatim into the
+            // live acceleration. Scaled with the launch it ramps, or the tune would bend the
+            // arc's shape as well as its size.
             // InheritedLocal is OUTSIDE the scale: it is the plane's measured momentum, not part
             // of the authored launch, and its magnitude is tuned separately (WreckMomentum).
             m._v0 = (v0 * launchScale) + InheritedLocal();
-            m._accel = new Vector3(0f, gravity, 0f);
+            m._accel = GravityAccel() + tr.Vec3("delta") * launchScale;
             m._hasBallistic = true;
         }
         else if (data.Obj("translation_range") is { } range)
         {
-            // A launch in SPHERICAL form: `xz` is an azimuth and `y` an elevation, both in
-            // DEGREES, and `initial` is the launch speed in m/s (`delta` a speed ramp over the
-            // run time). Not a distance travelled — see the class remark for the census.
+            // A launch in POLAR form: `xz` is an azimuth and `y` an elevation, both in
+            // DEGREES, and `initial` is the launch speed in m/s (`delta` a constant acceleration
+            // along the same direction, not a speed ramp divided by run_time). Not a distance
+            // travelled — see the class remark for the census. The
+            // elevation is LINEAR and the direction is not unit length: RangeLaunchDirection owns
+            // that, and `speed` here is a scale on a vector shorter than 1 everywhere but 0°/90°.
             // `translation_range_min_only` marks the rows whose `max` fields are all 0 and
             // meaningless; there the min IS the value, and interpolating toward 0 would aim
             // every one of them at a bearing and elevation the data never asked for.
@@ -294,10 +332,9 @@ internal sealed class MotionRuntime : IAnimMotion
             var dir = RangeLaunchDirection(azimuth, elevation);
             // As in the vector branch: the authored launch scales, the inherited momentum does not.
             m._v0 = (dir * speed * launchScale) + InheritedLocal();
-            // delta ramps the launch speed over run_time, along the same direction — the same
+            // `delta` folds in as a constant acceleration along the same direction — the same
             // shape `translation.delta` has, and 0 on 984 of the 1,217 events.
-            rampTotal = dir * speedRamp * launchScale;
-            m._accel = new Vector3(0f, gravity, 0f);
+            m._accel = GravityAccel() + dir * speedRamp * launchScale;
             m._hasBallistic = true;
         }
 
@@ -352,10 +389,6 @@ internal sealed class MotionRuntime : IAnimMotion
                 m.PendingBounce = data.Obj("bounce_sequence")?.Str("default");
             }
         }
-
-        // Everything denominated in the run time, folded in once it is settled — including the
-        // solved flight above, or a bounce-terminated piece would fly without its authored tumble.
-        m._accel += rtSafe > 0f ? rampTotal / rtSafe : Vector3.Zero;
 
         // forward_rotation.Time.initial is a TOTAL angle over run_time (the `Time`
         // parameterization), not a rate: the crash pieces carry 5π and 4.44π (clean multiples of
@@ -471,16 +504,34 @@ internal sealed class MotionRuntime : IAnimMotion
         Target.Transform = new Transform3D(basis.Scaled(scale), origin);
     }
 
-    /// <summary>The unit launch direction one <c>translation_range</c> draw asks for, from its
-    /// azimuth and elevation in degrees. The ONE expression of that decode: the gun-casing
-    /// ejection in <c>ProjectilePool</c> reads the very same <c>gunshell</c> event and must share
-    /// this — two spellings of the maths is how they disagree.</summary>
+    /// <summary>The launch direction one <c>translation_range</c> draw asks for, from its azimuth
+    /// and elevation in degrees. The ONE expression of that decode: the gun-casing ejection in
+    /// <c>ProjectilePool</c> reads the very same <c>gunshell</c> event and must share this — two
+    /// spellings of the maths is how they disagree.
+    ///
+    /// <para><b>⚠ This vector is deliberately NOT unit length, and normalising it is the bug.</b>
+    /// The elevation is LINEAR, not spherical: the original's <c>TRANSLATION_RANGE</c> block
+    /// (<c>FUN_004e8fa0</c>, the <c>flags &amp; 8</c> branch) computes <c>dirY = elev · 0.011111111</c>
+    /// — <c>1/90</c>, written out — and gives the horizontal the L1 remainder
+    /// <c>1 − |elev|/90</c>, caching the three components at <c>+0x70/+0x74/+0x78</c>. Only the
+    /// AZIMUTH is converted <c>deg→rad</c> (<c>· 0.017453292</c>) and passed to the sincos at
+    /// <c>FUN_0053c6c0</c>; the elevation never touches a trig call at all. So the length dips to
+    /// 0.707 at 45° and returns to 1 at 0° and 90°, and a launch at 60–70° leaves 25–20 % slower
+    /// than the unit-sphere reading this replaced — which is what cut <c>m_build03</c> part1's
+    /// nine pieces at ~70 % of their authored 5.0 s <c>RUN_TIME</c> instead of landing them
+    /// inside it.</para>
+    ///
+    /// <para>⚠ Which world bearing azimuth 0 points along (+X) stays a CHOICE, untouched by this —
+    /// and <c>FUN_0053c6c0</c>'s own output order (which of its two results the original puts on X
+    /// and which on Z) has not been checked, so the cos/sin assignment below is inherited, not
+    /// decoded.</para></summary>
     internal static Vector3 RangeLaunchDirection(float azimuthDeg, float elevationDeg)
     {
         float az = Mathf.DegToRad(azimuthDeg);
-        float el = Mathf.DegToRad(elevationDeg);
-        float cosEl = Mathf.Cos(el);
-        return new Vector3(cosEl * Mathf.Cos(az), Mathf.Sin(el), cosEl * Mathf.Sin(az));
+        // 1/90 as the original spells it — a multiply by the literal, not a divide.
+        float dirY = elevationDeg * 0.011111111f;
+        float horiz = dirY < 0f ? dirY + 1f : 1f - dirY;
+        return new Vector3(Mathf.Cos(az) * horiz, dirY, Mathf.Sin(az) * horiz);
     }
 
     /// <summary>Time for a launch to come back down to the height it left from:

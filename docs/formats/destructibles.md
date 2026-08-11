@@ -353,19 +353,35 @@ the "Debris tumbles" bullet below for which pieces each covers. A format reader 
         channel. `agyrobus` is why — it has no placement of its own, so its "rest" is the map origin
         and re-homing threw the wreck 13.9 km away.
       - **The three `gravity` flags take only four combinations install-wide**, which is what makes
-        `do_intersections` legible as the whole of the question:
+        `do_intersections` legible as the whole of the question
+        (re-derived 2026-08-10, `analysis/object-motion-flags/`):
 
-        | `complex` | `no_altitude` | `do_intersections` | events |
-        |---|---|---|---|
-        | false | false | false | 1,378 |
-        | **true** | false | **true** | **166** |
-        | true | false | false | 88 |
-        | false | **true** | false | 8 (`gunshell`, one per chapter) |
+        | `complex` | `no_altitude` | `do_intersections` | events | distinct shapes |
+        |---|---|---|---|---|
+        | false | false | false | 1,363 | 854 |
+        | **true** | false | **true** | **166** | 25 |
+        | true | false | false | 88 | 11 |
+        | false | **true** | false | 8 (`gunshell`, one per chapter) | 1 |
+
+        The all-false row read 1,378 until 2026-08-10; that was an arithmetic slip against this
+        page's own `do_intersections`×shape table, not a data change. ⚠ **The three booleans are all
+        the compiled data can carry.** The original's `GRAVITY` block parses five tokens —
+        `DEFAULT`, `LOCAL <value>`, `COMPLEX [<value>]`, `NO_ALTITUDE`, `DO_INTERSECTIONS` — but
+        `DEFAULT` and `LOCAL` only choose where the gravity number comes from and set no flag bit,
+        so they are indistinguishable once compiled. Which bit each token sets, with its parser
+        address, is in `analysis/object-motion-flags/FINDINGS.md`. **`complex` (bit `0x2000`) picks
+        which of two forms the gravity fold takes**: the plain form adds `value` to the body's own
+        frame Y, `complex` converts the world-down vector `(0, value, 0)` into that frame instead —
+        through the same transform the `impact_force` branch uses on the parent's velocity. The two
+        are identical under a world-aligned parent, so it is authored on aircraft wreckage alone
+        (254 events / 25 shapes, all carrying a `RUN_TIME`) and never on a world destructible: only
+        wreckage hangs off a frame at whatever attitude the aircraft died in. It also widens the
+        default landing test from descending steps to every step.
 
         `do_intersections: true` is a strict subset of `complex: true`. ⚠ **`no_altitude` is NOT a
         second, default terrain test** — a tempting reading, since the 8 events carrying it are
         exactly the spent-shell casings you would opt out of one. It dies on the same evidence: if
-        the other 1,632 events ground-tested, the original's debris would not sink, and `PT-46` (d)
+        the other 1,617 events ground-tested, the original's debris would not sink, and `PT-46` (d)
         says it does. It most likely means gravity or spawn positioning reckoned relative to terrain
         altitude, which is precisely what a casing ejected at height would skip.
     - **The other 379 have no apex and are still deferred (Layer-1.5, `BL-245`).** 335 free-falling
