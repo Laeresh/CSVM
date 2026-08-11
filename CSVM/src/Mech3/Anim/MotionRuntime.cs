@@ -119,6 +119,10 @@ internal sealed class MotionRuntime : IAnimMotion
 
     private const float GroundColumnRange = 10f;
 
+    private const float Restitution = 0.2f;
+
+    private const int MaxRebounds = 8;
+
     // Held pose, seeded once from the live transform: an absent channel carries it through.
     private Basis _heldRot;      // orthonormal; scale kept out
 
@@ -128,6 +132,8 @@ internal sealed class MotionRuntime : IAnimMotion
 
     // Ballistic: origin(t) = held + v0·t + ½·accel·t²  (accel folds gravity + any velocity ramp).
     private Vector3 _v0, _accel;
+
+    private float _ballisticStartTime;
 
     private bool _hasBallistic;
 
@@ -155,12 +161,16 @@ internal sealed class MotionRuntime : IAnimMotion
     private bool _landed;
     private Vector3 _landedOrigin;  // parent frame — the pose the body holds from contact onward
     private float _landedAt;        // the clock at contact; rotation and scale freeze there too
+    private float _previousReboundSpeedSq = float.PositiveInfinity;
+    private int _reboundCount;
 
     public Node3D Target { get; private init; } = null!;
 
     public (AnimDefinition Def, Node3D? Anchor) Owner { get; set; }
 
     public bool Finished => _landed || _t >= _runTime;
+
+    public int ReboundCount => _reboundCount;
 
     /// <summary>Whether this body uses either original contact tier in a session that wired a mask.
     /// False is the structural no-collision-world fallback.</summary>
@@ -450,7 +460,7 @@ internal sealed class MotionRuntime : IAnimMotion
 
         var origin = _heldOrigin;
         if (_hasBallistic)
-            origin = _landed ? _landedOrigin : _heldOrigin + _v0 * tb + 0.5f * tb * tb * _accel;
+            origin = _landed ? _landedOrigin : BallisticOrigin(tb);
 
         var basis = _heldRot;
         if (_tumbleRate != 0f)
@@ -573,7 +583,7 @@ internal sealed class MotionRuntime : IAnimMotion
             return false;
 
         return Land(next, parent.AffineInverse() * new Vector3(worldTo.X, surface.Y, worldTo.Z),
-            hit["collider"].As<GodotObject>());
+            localTo - localFrom, hit["collider"].As<GodotObject>());
     }
 
     /// <summary>The <c>do_intersections</c> sweep: cast the step the body is about to take — last
@@ -625,11 +635,31 @@ internal sealed class MotionRuntime : IAnimMotion
         // MotionSet.Tick turns this into the dispatched Landing, exactly as it already does for
         // the launches that solve their own flight time; nothing downstream changes.
         return Land(_t + (next - _t) * fraction, parent.AffineInverse() * point,
-            hit["collider"].As<GodotObject>());
+            parent.Basis.Inverse() * (to - from), hit["collider"].As<GodotObject>());
     }
 
-    private bool Land(float time, Vector3 parentOrigin, GodotObject? collider)
+    private bool Land(float time, Vector3 parentOrigin, Vector3 descendingStep, GodotObject? collider)
     {
+        float elapsed = time - _ballisticStartTime;
+        var reboundVelocity = -(_v0 + _accel * elapsed) * Restitution;
+        float reboundSpeedSq = reboundVelocity.LengthSquared();
+        bool moving = new Vector2(reboundVelocity.X, reboundVelocity.Z).Length() > 0.1f
+                      || Mathf.Abs(reboundVelocity.Y) > 0.5f;
+
+        // The original reflects the whole step and damps every velocity component equally. A
+        // moving body is held half a descending step clear of the surface before the rebound;
+        // once below the asymmetric speed thresholds it rests exactly on the surface.
+        if (moving && reboundSpeedSq < _previousReboundSpeedSq && _reboundCount < MaxRebounds)
+        {
+            _heldOrigin = parentOrigin - descendingStep * 0.5f;
+            _v0 = reboundVelocity;
+            _ballisticStartTime = time;
+            _previousReboundSpeedSq = reboundSpeedSq;
+            _reboundCount++;
+            Seek(time);
+            return false;
+        }
+
         _landedAt = time;
         _landedOrigin = parentOrigin;
         _landed = true;
@@ -641,7 +671,11 @@ internal sealed class MotionRuntime : IAnimMotion
     /// <summary>The ballistic origin at time <paramref name="t"/>, in the node's parent frame —
     /// the same closed-form solve <see cref="Seek"/> poses with, factored out because the sweep
     /// needs both ends of the step it is about to take. Never consulted for a landed body.</summary>
-    private Vector3 BallisticOrigin(float t) => _heldOrigin + _v0 * t + 0.5f * t * t * _accel;
+    private Vector3 BallisticOrigin(float t)
+    {
+        float elapsed = t - _ballisticStartTime;
+        return _heldOrigin + _v0 * elapsed + 0.5f * elapsed * elapsed * _accel;
+    }
 
     /// <summary>The <c>BOUNCE_SEQUENCE</c> branch a contact selects, from the surface it struck.
     ///

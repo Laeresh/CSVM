@@ -192,7 +192,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 6. ☑ The default contact tier: the ground-column query
 7. ☑ `NO_ALTITUDE` as the opt-out, and `gunshell` as its only author
 8. ☑ `RUN_TIME` as a universal ceiling; retire `FlightToLaunchHeight` for the watchdog
-9. ☐ Landing response: 0.2 restitution and energy-loss termination
+9. ☑ Landing response: 0.2 restitution and energy-loss termination
 
 ### Wave D — the tune, the coverage, the record
 
@@ -632,7 +632,7 @@ is the pose/scrub entry point and a test there fires on a backwards timeline dra
 
 **Verified.** MotionRuntime now clamps every integration step to the authored RUN_TIME; an oversize frame ends exactly at the ceiling. Untimed ballistic bodies use the traced 15 s column / 35 s sweep watchdog, while sequence timing remains separate so the watchdog cannot hold BL-257 debris visible. The biggun_flying_parts repro passes with all eight parts moving and switching off inside the extracted 0.385–3.968 s launch band, and the full regression remains clean.
 
-## C9 ☐ Landing response: 0.2 restitution and energy-loss termination
+## C9 ☑ Landing response: 0.2 restitution and energy-loss termination
 
 **Goal.** A landing piece bounces the way the original bounces — velocity scaled by 0.2 — and the
 body ends when a bounce stops losing energy rather than after a fixed count.
@@ -658,6 +658,12 @@ iteration defensively even so.
 thresholds (0.1 horizontal, 0.5 vertical) are asymmetric on purpose — do not tidy them into one. ⚠
 The bounce *branch* (`default`/`water`/`lava`) comes from the struck surface and is already wired;
 this item is the physical response only, and `lava` remains dead data across the install.
+
+**Verified.** The shared column/sweep landing path now reflects and scales velocity by 0.2, applies
+the asymmetric 0.1 horizontal / 0.5 vertical rest thresholds after restitution, and settles when
+post-bounce energy stops decreasing, with an eight-rebound defensive ceiling. The live
+`ground-contact` suite exercises both tiers: the 60 m drop rebounds twice, rests on the surface,
+dispatches the selected branch, and reports zero engine errors.
 
 ---
 

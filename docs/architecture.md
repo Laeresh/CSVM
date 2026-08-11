@@ -1240,8 +1240,10 @@ owes nothing.
 MotionRuntime gives every ballistic body an internal termination ceiling. An authored RUN_TIME is
 universal and the final frame is shortened to land exactly on it; an untimed body uses the traced
 15-second default-column or 35-second geometry-sweep watchdog. The predicted upward arc is retained
-only as sequence timing, never as the body’s termination rule. Contact still ends the body earlier,
-and PendingBounce is selected at the struck surface.
+only as sequence timing, never as the body's termination rule. Contact uses one response for both
+tiers: reflect the step, scale every velocity component by 0.2, then continue only above the
+asymmetric 0.1 horizontal / 0.5 vertical thresholds while post-bounce speed² keeps decreasing
+(eight rebounds is the defensive ceiling). PendingBounce is selected at the final struck surface.
 
 NO_ALTITUDE is the explicit opt-out from the default column. DO_INTERSECTIONS selects the sweep
 first, so the opt-out does not suppress an explicitly authored sweep. Seek remains a pure pose

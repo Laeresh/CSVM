@@ -383,7 +383,14 @@ the "Debris tumbles" bullet below for which pieces each covers. A format reader 
       zeppelin `gasbag1`/`crashnode1` pieces start from rest, ~17 lifeboats
       and turret parts are thrown downward, and 8 zero-gravity `chuteman` descents fall at a constant
       rate — none has a parabola to solve. Gravity-bearing bodies now take the default column when
-      the session has collision; the original watchdog and universal `RUN_TIME` ceiling now terminate them: 15 s on the default-column path and 35 s on the sweep path.
+      the session has collision; the original watchdog and universal `RUN_TIME` ceiling now
+      terminate them: 15 s on the default-column path and 35 s on the sweep path. On either
+      contact path the response reflects the descending step, multiplies all three velocity
+      components by **0.2**, and tests the damped velocity against the asymmetric horizontal
+      **0.1 m/s** / vertical **0.5 m/s** rest thresholds. A moving piece is placed half a
+      descending step above the surface for its next hop; otherwise it rests exactly on the
+      surface. Rebounds continue only while post-bounce speed² decreases, with an eight-rebound
+      defensive ceiling in the remake.
   - **No `RUN_TIME`, no `BOUNCE_SEQUENCE` — the third launch shape, `BL-257` (2026-08-06).** A
     census of every ballistic `ObjectMotion` in all 8 chapters' `cam_anim`
     (`analysis/bl-257-nulled-launch/`) found **167 events / 119 distinct defs** that name *neither*

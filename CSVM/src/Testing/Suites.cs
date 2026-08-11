@@ -4383,7 +4383,7 @@ public static class Suites
             // coverage, and stubbing it is what makes the branch choice assertable without needing
             // a chapter with reachable sea.
             (float Flight, Vector3 End, string? Bounce, bool ByContact,
-                bool Column, bool Sweep, int ColumnLandings, int SweepLandings) Run(
+                bool Column, bool Sweep, int ColumnLandings, int SweepLandings, int Rebounds) Run(
                 bool flagged, uint mask, System.Func<GodotObject?, bool>? waterHook,
                 bool complex = true, bool invertedParent = false, bool noAltitude = false,
                 float x = 0f, float? groundY = null)
@@ -4414,7 +4414,7 @@ public static class Suites
                         Body(flagged, complex, invertedParent ? 5f : -5f, noAltitude), Authored);
                     if (motion == null)
                     {
-                        return (0f, node.GlobalPosition, null, false, false, false, 0, 0);
+                        return (0f, node.GlobalPosition, null, false, false, false, 0, 0, 0);
                     }
 
                     var set = new MotionSet();
@@ -4433,7 +4433,7 @@ public static class Suites
 
                     return (flown, node.GlobalPosition, bounce, motion.LandedByContact,
                         motion.TestsColumnContact, motion.TestsSweepContact,
-                        set.ColumnContactLandings, set.SweepContactLandings);
+                        set.ColumnContactLandings, set.SweepContactLandings, motion.ReboundCount);
                 }
                 finally
                 {
@@ -4448,6 +4448,8 @@ public static class Suites
             ctx.Check(hit.ByContact, $"the sweep ended the body on a collider flight={hit.Flight:0.00}s");
             ctx.Check(hit.Flight < Authored,
                 $"contact beat the authored run time flight={hit.Flight:0.00}s authored={Authored:0}s");
+            ctx.Check(hit.Rebounds >= 1 && hit.Rebounds <= 2,
+                $"the 0.2 response hops once or twice before settling rebounds={hit.Rebounds} flight={hit.Flight:0.00}s");
             // A band, not a point: the hit lands between two frames and the body is a point, so
             // "on the surface" is within a tick's fall of it, never below it.
             ctx.Check(hit.End.Y >= surfaceY - 1f && hit.End.Y <= surfaceY + 2f,
