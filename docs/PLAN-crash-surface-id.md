@@ -132,7 +132,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 
 1. ☑ A1 Measure which geometry carries which surface id — especially: is the flyable sea `soil=Water`? — **landed 2026-08-11**
 2. ☐ A2 Carry the surface id from `materials.json` through to the collider
-3. ☐ A3 Build the surface-name registry from the decoded list
+3. ☑ A3 Build the surface-name registry from the decoded list — **landed 2026-08-11**
 
 ### Wave B — the selection mechanism
 
