@@ -1,14 +1,15 @@
 {
-  "description": "Run dotnet format + a StyleCop-checked rebuild before tests/commits (mirrors .claude/settings.json).",
+  "description": "Repository safeguards converted from .claude/settings.json.",
   "hooks": {
     "PreToolUse": [
       {
+        "matcher": "^Bash$",
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .codex/hooks/pre-tool-use.ps1",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"$(git rev-parse --show-toplevel)/.codex/hooks/pre-tool-use.ps1\"",
             "timeout": 300,
-            "statusMessage": "dotnet format before tests..."
+            "statusMessage": "repository policy checks..."
           }
         ]
       }
