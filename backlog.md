@@ -2047,8 +2047,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   one entry, **base 6**, no per-player term (world geometry, not per-player ordnance) — sized
   against a facade row breaking panels ~0.2–0.5 s apart with each set's flight lasting 4–5 s, so a
   10-panel row can want 8–10 concurrent sets; 6 covers most passes and wraps (recycles the oldest,
-  still-flying set) on a longer one. Unmeasured against an actual in-cockpit pass — the playtest
-  this pool wants is the same one `BL-253`'s own owed playtest already asks for.
+  still-flying set) on a longer burst.
 
 - `BL-245` `[Bug]` `[Blocked: a decision to diverge]` **The other 379 bounce-terminated `OBJECT_MOTION`s are FALLS, not launches — no apex to
   solve, and a live `water`/`lava` surface table to choose between (split out of `BL-240` when the
