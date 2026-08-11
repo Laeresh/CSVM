@@ -4775,11 +4775,6 @@ public static class Suites
         // The bands above are derived from the AUTHORED speed/elevation ranges, because what this
         // suite asserts is the DECODE — that a bounce-terminated body flies the parabola the data
         // describes. The shipped launch tune (0.65) is a judged LOOK layered on top of that,
-        // and folding it in here would make the suite re-assert whatever the tune happens to be
-        // rather than the maths. So pin the raw arc for the duration and restore after: the check
-        // stays about the solve, and a future look change cannot silently break it.
-        using var _ = new AuthoredArcScope();
-
         ctx.WithWorld(chapter, collision: false, world =>
         {
             var runtime = world.Runtime;
@@ -4987,11 +4982,6 @@ public static class Suites
         const string root = "zep_ng_dstry1_flt";   // the staged copy's node name, '.' sanitised
 
         // Same reason as bounce-launch: the band is the AUTHORED support, so the raw arc is what
-        // this asserts. This one happens to still pass under the shipped 0.65 — its support is
-        // wide enough to swallow the trim — which is exactly why it is pinned explicitly rather
-        // than left to luck.
-        using var _ = new AuthoredArcScope();
-
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             WithEffectStage(ctx, world, "biggun_flying_parts", new[] { "zep_ng_dstry1.flt" },
@@ -5203,22 +5193,4 @@ public static class Suites
     /// being swallowed or running a second concurrent copy.</summary>
     private sealed record BurstLane(string Sequence, BurstStep[] Steps);
 
-    /// <summary>Pins <see cref="DebrisTune"/> to the raw authored arc for a suite's duration and
-    /// restores whatever was set before. For the launch suites, whose expected bands are computed
-    /// from the authored speed/elevation ranges: they assert the <b>decode</b>, and the shipped
-    /// launch tune is a judged look sitting on top of it. Without this, tuning the look
-    /// would move a test of the maths.</summary>
-    private sealed class AuthoredArcScope : System.IDisposable
-    {
-        private readonly float _launch = DebrisTune.LaunchScale;
-        private readonly float _gravity = DebrisTune.GravityScale;
-
-        public AuthoredArcScope() => DebrisTune.UseAuthored();
-
-        public void Dispose()
-        {
-            DebrisTune.LaunchScale = _launch;
-            DebrisTune.GravityScale = _gravity;
-        }
-    }
 }

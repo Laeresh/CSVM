@@ -196,7 +196,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — the tune, the coverage, the record
 
-10. ☐ Delete `DebrisTune` entirely
+10. ☑ Delete `DebrisTune` entirely
 11. ☐ Pin a golden that shows debris coming to rest
 12. ☐ Rewrite the decode records that carried the disproven readings
 13. ☐ Item bookkeeping: `BL-319`, `BL-245`, `PT-46` (d), and a fresh ID for the deleted tune

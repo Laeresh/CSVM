@@ -99,7 +99,7 @@
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "440c61cbfb0e9ea833a8f36ca76345bc",
+      "hash": "b80b8a988cd620fba28f391fc8c85c54",
       "exercises": "the per-player crash rig playing player_crash_dirt (--crash=5 its only headless trigger), the airframe, the moving distance-puffer AT_NODE path, the translation_range launch via call_crash_trails, and flydirt's non-zero translation delta.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     }
