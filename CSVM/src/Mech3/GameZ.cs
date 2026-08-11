@@ -315,6 +315,8 @@ public sealed class GameZ
             {
                 if (fl.TryGetProperty("intersect_surface", out var isf))
                     node.IntersectSurface = isf.ValueKind == JsonValueKind.True;
+                if (fl.TryGetProperty("altitude_surface", out var asf))
+                    node.AltitudeSurface = asf.ValueKind == JsonValueKind.True;
                 if (fl.TryGetProperty("active", out var ac))
                     node.Active = ac.ValueKind == JsonValueKind.True;
             }
@@ -622,6 +624,10 @@ public sealed class GameZNode
     // flake/ripple/splash effects, light glows, ropes, shadows, the C3 spiderweb. Absent flags
     // (legacy extraction) default to collidable.
     public bool IntersectSurface = true;
+    // Participates in the original's point-column altitude query. This is distinct from
+    // IntersectSurface: walls and roofs remain solid to trajectory sweeps without becoming ground.
+    // An extraction with no flags keeps the legacy all-solid fallback.
+    public bool AltitudeSurface = true;
     // The build script's own NodeSetActive record (flags.active): false on a node the original
     // never builds visible. Absent flags (legacy extraction) default to active, matching every
     // other flags.* field here.

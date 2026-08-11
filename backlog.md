@@ -73,38 +73,32 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Damage & destruction
 
-- `BL-319` `[Research]` **`run_time` on a launched `OBJECT_MOTION` is not a flight duration — pieces are cut
-    mid-arc, or fly for seconds past their landing.** Found while settling `BL-022`'s arc scale
-    (`git log --grep=BL-022`), and it is why that item's 0.65 is a judged look rather than a decode.
-    **Only an event with NO authored `RUN_TIME` gets a solved flight** (`MotionRuntime.FlightToLaunchHeight`,
-    `MotionRuntime.cs:242-255`). Everything else integrates the parabola for exactly the authored time and is
-    then dropped by `MotionSet` (`MotionSet.cs:63-66`), holding its last pose. Both failure directions ship:
-    - **Cut mid-flight.** `m_build03` part1/5/9 author `run_time` 5.0 s against a 6.95 s parabola — the piece
-      stops at **72 % of its arc, still ~49 m up**. part2/6/7/8 stop at 67 %. Six of the nine.
-    - **Run long past landing.** `genx12` (the template `air_gen` calls, and the *vector* `translation`
-      branch, not the spherical one) authors 4.0–6.5 s against 1.1–2.0 s parabolas — every one of its twelve
-      pieces ends up roughly **135 m below** where it launched, i.e. deep under the terrain.
-    *To settle:* (a) does a following sequence event hide the frozen piece, or does it visibly hang in the
-    sky? — `--debug-anim` on a `--destroy=m_build03` run answers it; (b) then decide what `run_time` means
-    for a launch: a clamp on the flight, a hint the original overrode with real contact, or a duration the
-    parabola was meant to fit.
-    ⚠ **Traps.** (a) **Not a decode question about `translation_range`** — the speeds and angles are censused
-    and mapped (`analysis/object-motion-range/`); this is about the *duration* field. (b) **Not ground
-    contact — and half the question is already answered.** `do_intersections` is false on all 120
-    bounce-shape events, all 167 vanish-shape and 1,118 of the `run_time` shape; a piece passing *through*
-    the ground with the flag false is confirmed original behaviour (`PT-46` check (d)) and is not this item.
-    But for the **166 events that author it true**, `PLAN-ground-contact` (landed 2026-08-09) settled the
-    third of this item's three readings outright: **`RUN_TIME` is a ceiling the original overrode with real
-    contact**, and `MotionRuntime.TryContact` now ends those bodies on the first collider whatever their
-    clock says. So this item's remaining question is what `RUN_TIME` means for a launch the original was
-    *not* testing — which is where `m_build03`'s 72 %-of-arc cut lives. ⚠ `genx12`'s twelve pieces ending
-    135 m under the terrain is a **different** fault than it looks: its own two `ACTIVE_STATE`s target the
-    `INPUT_NODE` sentinel, which resolved to nothing until that plan fixed `AnimRuntime.Targets` — re-measure
-    before treating the 135 m as this item's evidence. (c) `gravity.value` is absolute m/s² (a literal −9.8 on 173
-    events, −10 on 400), **not** an offset to the aircraft's arcade `nom_gravity` of 20 — considered and
-    disproven by the same census. (d) ⚠ **`BL-022`'s shipped `DebrisTune.LaunchScale` of 0.65 silently
-    absorbs whatever this turns out to be**, so settling it will likely move that number too — re-judge the
-    look at the controls afterwards rather than assuming 0.65 survives.
+- `BL-344` `[Tuning]` `[Owed-playtest]` **Re-judge the debris arc after the `OBJECT_MOTION` decode removed the compensating launch multiplier.** `BL-022`'s retired `DebrisTune.LaunchScale = 0.65` was a judged look fitted on top of the wrong spherical `translation_range` decode; it is deleted, and the executable's decoded direction now supplies the authored launch magnitude. `PT-46` (d)'s observation that some pieces pass through or disappear remains real, but its mechanism attribution was wrong: the original default contact tier applies unless `NO_ALTITUDE` opts out, while `DO_INTERSECTIONS` selects the sweep.
+  *To settle:* fly the C1 Devastator destruction profile with firing enabled and compare the debris arc and ground behaviour against the original after the decode.
+  ⚠ **Traps.** Do not restore a scalar to make the arc feel familiar; a mismatch is a new decode or a separately filed item. Keep the original observation and distinguish unflagged pass-throughs from bodies that should land under the decoded contact rules.
+
+- `BL-343` `[Research]` **`IMPACT_FORCE` is a real velocity-inheritance mechanism in the original, and
+    `BL-008` was closed without it.** The `OBJECT_MOTION` flag word's bit `0x2` is set by the parser's
+    `IMPACT_FORCE` token (`FUN_00508590` at `00508d03`), and the per-frame update gates a parent-velocity
+    add on it (`FUN_004e8fa0` at `004e925e`, reading the parent object's velocity at `param_1+0xc0..0xc8`).
+    The engine reads the extractor's `impact_force` boolean nowhere. A census
+    (`analysis/object-motion-flags/`) puts it on **182 events / 25 distinct shapes**, and the list is
+    exclusively aircraft wreckage: the eleven airframes' `MAIN_ROOT_NODE`, `player` and both
+    `player_crash_*` defs' four pieces, `agyrobus`, and `drop_smokescreen_canister`'s `smoker`.
+    *To settle:* read the update's gate in full — the bit is necessary but a condition on the parent also
+    has to hold, and which parent state that is decides whether this fires on a shot-down plane at all —
+    then decide whether to implement the add or record a reasoned divergence.
+    ⚠ **Traps.** (a) **`BL-008` is closed (`1f09c2d`) on "the original does not inherit velocity into world
+    debris", and that closure is still right — for world debris.** Not one world destructible authors this
+    flag; every carrier is aircraft wreckage, which is the population the closure never looked at. Do not
+    reopen `BL-008`; this is the part of the question it did not answer. (b) `PLAN-object-motion-decode`
+    deliberately left this out of scope, so do not fold it back in mid-plan — the launch decode's
+    verification is already wide, and a second mechanism landing in the same window makes a moved golden
+    impossible to attribute. (c) The engine already has a **judged** inheritance rule pointing the other
+    way: a motion that continues a contact landing inherits *none* of the aircraft's momentum
+    (`docs/formats/destructibles.md`, the `player_crash_dirt` `pNhit` case). If this lands, that rule and
+    this flag have to be reconciled, not stacked. (d) `BL-122`'s crash-debris look was signed off on
+    *direction* only (`CAP-16`), never magnitude — it is not evidence either way here.
 
 - `BL-059` `[Feature]` **Data-driven crash — the remaining variants/follow-ups.** The dirt/ground crash is
   complete and the default (`PLAN-data-driven-crash`, `docs/HISTORY.md`). What is still open:
@@ -128,15 +122,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ground also needs `softParticles: false` or the depth-fade zeroes it. A fading additive fireball
   reads as smoke in a screenshot — isolate the emitter (suppress the others, freeze the crash with
   no `--hold`) before believing an effect is present. Anchor at the plane centre (`pose.Origin` =
-  `healthy`), not the impact point. For the debris arcs: `translation_range` **is** decoded and
-  **is** simulated now (2026-08-01 — xz/y an azimuth/elevation in degrees, `initial` the launch
-  speed, `delta` a speed ramp, all mapped in `MotionRuntime`), so the old "reasoned reading" caveat
-  is retired; and the arc's judged look is settled too — `DebrisTune.LaunchScale` ships at **0.65**
-  (2026-08-08, matched at the controls against `OriginalScreenshots/Videos/m_build03 destruction.mp4`;
-  `git log --grep=BL-022`), and the crash pieces tightened with it, so a blend here starts from the
-  tuned arc, not the authored one. What stays TUNE is the `fly_trailN` anchor being invisible so that
-  only the trail shows; and the DISTANCE interval hides behind an inverted flag
-  (`has_interval_value` false, key off `interval_type`).
+  `healthy`), not the impact point. For the debris arcs, the executable decode now governs:
+  `translation_range` uses `dirY = elevation/90`, horizontal magnitude `1 - |elevation|/90`,
+  authored `initial` speed, and `delta` as acceleration. The retired 0.65 multiplier was a judged
+  footage fit on top of the wrong spherical decode; `BL-344` / `PT-46` re-judges the resulting look.
+  Any future blend starts from the authored arc, with no compensating scalar. What stays TUNE is the
+  `fly_trailN` anchor being invisible so that only the trail shows; and the DISTANCE interval hides
+  behind an inverted flag (`has_interval_value` false, key off `interval_type`).
 
 - `BL-102` `[Research]` **Patrol boat: which HP governs?** (from `docs/plans/PLAN-M3-weapons.md` C23, 2026-07-22.)
   Two systems **agree on the damage-stage fractions and disagree on total HP by exactly 2×**: the
@@ -207,12 +199,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   fraction of impact velocity the wreck pieces inherit, so they scatter along travel vs. pop straight
   up); the **`forward_rotation.Time.initial` ÷ run_time** tumble-rate reading in `AnimRuntime`'s
   `MotionRuntime` (the pieces carry clean π multiples read as a *total* angle, not a rate); the
-  **debris-arc trajectory** (the *decode* is settled since 2026-08-01 — `translation_range`'s xz/y are
-  an azimuth/elevation in degrees and `initial` the launch speed, `delta` a speed ramp, all three
-  mapped in `MotionRuntime`; what stays a TUNE is only the arc's judged *look*, and the `fly_trailN`
-  anchor being invisible means only the trail's rough scale reads); the **overall crash intensity** (the fireball, the cluster, the debris
-  fire and the wreck fire are all additive, so a dirt crash can read as one big fireball — judge the
-  whole against the original); and `snd_exp_ground_a` mix level + whether it should layer over
+  **debris-arc trajectory** (the executable decode is settled: `translation_range` uses
+  `dirY = elevation/90`, horizontal magnitude `1 - |elevation|/90`, authored `initial` speed, and
+  `delta` as acceleration; only the judged look remains open under `BL-344` / `PT-46`, and the
+  invisible `fly_trailN` anchor means only the trail's rough scale reads); the **overall crash
+  intensity** (the fireball, the cluster, the debris fire and the wreck fire are all additive, so a
+  dirt crash can read as one big fireball — judge the whole against the original); and
   `plane_destroy_sg` (the dirt def's only Sound is `snd_exp_ground_a`; we keep both). The retired
   bespoke crash on branch `bespoke-crash-animation` is the A/B reference for these.
   **`CAP-16` analysed 2026-08-04** (`CAP-16.mp4`, 2560×1440, 13.49 s; corroborated by
@@ -2038,54 +2030,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   against a facade row breaking panels ~0.2–0.5 s apart with each set's flight lasting 4–5 s, so a
   10-panel row can want 8–10 concurrent sets; 6 covers most passes and wraps (recycles the oldest,
   still-flying set) on a longer burst.
-
-- `BL-245` `[Bug]` `[Blocked: a decision to diverge]` **The other 379 bounce-terminated `OBJECT_MOTION`s are FALLS, not launches — no apex to
-  solve, and a live `water`/`lava` surface table to choose between (split out of `BL-240` when the
-  census separated them, 2026-08-02).** Same authored idiom as `BL-240` — no `RUN_TIME`, a
-  `BOUNCE_SEQUENCE` naming the landing — but these start at rest or head downward, so
-  `BL-240`'s return-to-launch-height solve yields `t = 0` for every one of them and leaves the bug
-  exactly as it is today. Three shapes, censused over all 17,568 extracted defs:
-  **335** `translation initial=(0,0,0)` with gravity −9.8 — a shot-down `gasbag1` or `cargozep1`'s
-  `crashnode1` sinking to the ground, bouncing into `hit_ground1` or `hit_water1`; **~17** thrown
-  downward at elevation −70…−90° (`lifesaver11`'s `lifeboat` → `boat_explode`/`boat_explode_water`,
-  `b_turret1`'s parts); and **8** `chuteman` at `translation (0,−3,0)` with **gravity 0** — a
-  constant 3 m/s descent, no parabola at all, ending in `deactivate_chuteman`.
-  **A fourth group joined on 2026-08-06, from `BL-257`'s census** (`analysis/bl-257-nulled-launch/`):
-  **8 events that name no `BOUNCE_SEQUENCE` either**, so the 733-event census above never counted
-  them — `susp_bridge`'s `rope1burn` `part2`/`3a`/`3b`/`3c`/`part4` (`translation.initial.y`
-  −0.44…−1.0 with `rnd_xz.y` ±0.89…±1.0, gravity −9.8: a burning rope end dropping, and the user
-  confirms at the controls that it visibly falls in the original), `bridge_destroy01`'s
-  `bridge_truck01` (`initial.y` exactly 0, no spread — level), and both `fuelboxbreaks` `rockerarm`s
-  (elevation 90° but speed **−45…45**, so half the draws point down). `BL-257`'s widened gate admits
-  by APEX, so these are declined by the same `FlightToLaunchHeight` guard and stay posed at rest.
-  ⚠ For the spherical `translation_range` form the vertical speed is `sin(elevation)·speed` — **a
-  negative speed inverts an upward elevation**, which is why the rockerarms are not solvable
-  launches; any later census of this family must read the speed range, not the elevation alone.
-  ⚠ **Retagged 2026-08-09: the ray is no longer the blocker — it exists.** `PLAN-ground-contact`
-  landed `MotionRuntime.TryContact`, a swept segment along the trajectory that ends a body at the
-  first collider and picks its `BOUNCE_SEQUENCE` branch from the struck surface, water branch
-  included (`ProjectilePool.ClassifySurface`, already wired). Every piece of machinery this item
-  said it was waiting for is in the tree. What it is **actually** blocked on is a *decision*: all
-  379 of these author **`do_intersections: false`** (8 for 8 across `gasbag`/`cargozep`/`chuteman`/
-  `lifesaver`), i.e. the original was not collision-testing them, and `PT-46` (d) confirmed at the
-  controls that its debris sinks through terrain the same way. Turning the sweep on for them is a
-  deliberate divergence from authored data — a **playability** argument (a shot-down zeppelin
-  hanging in mid-air reads as broken) and not a faithfulness one. Decide that first; the wiring
-  afterwards is an hour. The one narrow precedent for reading `false` as "unset" is a settle hop
-  continuing a contact landing (`PLAN-ground-contact` B9), and its whole defence is that it cannot
-  reach a body the data never flagged.
-  ⚠ Traps:
-  - **Colliders are conditional.** `SessionSpec.cs:183` is
-    `BuildsCollision => Fly || DamageTest || ForceCollision || DebugDamage != null` — a `--freecam`
-    run and every golden-capture mode build **no world colliders at all**. A ray-based fix silently
-    does nothing there, so it needs a stated fallback, not an assumption of ground. `TryContact`
-    already answers this the structural way — it gates on the live `DirectSpaceState` and on a mask
-    the *session* hands over, so a runtime nobody wires keeps the old behaviour exactly, and all 13
-    goldens stayed byte-identical across the whole of `PLAN-ground-contact`. Copy that shape.
-  - **Do not give these a constant fall time.** Same trap `BL-240` carries: it would invent a
-    landing altitude for 335 zeppelins.
-  - `chuteman` has **zero gravity**. Any solve phrased as a parabola divides by zero on it; it is a
-    constant-velocity descent and needs the distance, nothing else.
 
 - `BL-293` `[Tuning]` **Rocket impact rings: orient the ground rings to the struck surface normal; the
   fixed-axis upper ring is faithful but reads poorly — parked** (PT-35, 2026-08-06). The

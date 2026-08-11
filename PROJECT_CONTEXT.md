@@ -116,7 +116,7 @@ GODOT --path CSVM res://scenes/Main.tscn -- --plane=player_bhawk
 - `src/UI/` (16) — launchscreen, splitscreen rig, and the inspection labs (each with a scripted `--debug-*` twin).
 - `src/Utils/` (6) — session-wide services: clock, log, seed, shader time, config, startup profile. Determinism lives here.
 - `src/Testing/` (6) — the in-engine assertion harness behind `--run-tests` and the `--dump-*` probes.
-- `src/Session/` (8) — `Launcher.cs` (Main.tscn root: bootstrap, launchscreen, persistent camera/lighting) and `GameSession.cs` (the per-launch session node it instantiates), plus livery/spawn/plane-roster resolution, the per-player flight-rig assembler, the effect/crash stage factory, and the weather rig (PLAN-planeviewer-split).
+- `src/Session/` (8) — `Launcher.cs` (Main.tscn root: bootstrap, launchscreen, persistent camera/lighting) and `GameSession.cs` (the per-launch session node it instantiates), plus livery/spawn/plane-roster resolution, the per-player flight-rig assembler, the effect/crash stage factory, and the weather rig.
 - `src/` root (3) — `SessionSpec.cs`, `SessionPaths.cs`, `Pads.cs`.
 - `CSVM.Tests/` — the xUnit project: engine-free reader units. Anything reaching `GD.*` or a live `Node` belongs in `src/Testing/` instead.
 
@@ -192,18 +192,13 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt flying, or the 2–4-player splitscreen Dogfight deathmatch, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, world destructibles that take damage, die, lose collision, throw debris and reset — and planes shoot planes down (M4 A1, front-loaded). The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
-**No active plan.** [`PLAN-anim-original-match.md`](docs/plans/PLAN-anim-original-match.md),
-[`PLAN-puffer-engine-deltas.md`](docs/plans/PLAN-puffer-engine-deltas.md) and
-[`PLAN-clutter-uv-placement.md`](docs/plans/PLAN-clutter-uv-placement.md) all completed 2026-08-10
-(the animation interpreter matched to `crimson.exe`; the puffer engine decode at
-[`docs/org/puffer.md`](docs/org/puffer.md); clutter placement rewritten off the UV-lattice decode),
-joining [`PLAN-weather-decompile-match.md`](docs/plans/PLAN-weather-decompile-match.md) and
-[`PLAN-flight-model-rewrite.md`](docs/plans/PLAN-flight-model-rewrite.md) of 2026-08-09 in
-[`docs/plans/`](docs/plans/plans.md). Next: pick the next run off `backlog.md` (`BL-305` C5
-packing, `BL-337` `far_fade_range`), or fly the owed verdicts.
-Owed at the controls: `PT-28`, `PT-41`, `PT-43`, `PT-45` and `PT-47`
-([`playtest.md`](playtest.md)). Verify any change with
-**`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read
-[`docs/verification.md`](docs/verification.md) first.
+**No active plan.** [`PLAN-object-motion-decode.md`](docs/plans/PLAN-object-motion-decode.md) completed
+2026-08-11 (13 items, four waves): the `OBJECT_MOTION` launch, contact and run-time model now
+matches the `crimson.exe` decode, and the retired global debris tune is replaced by the owed
+`BL-344` / `PT-46` look judgement. Next: pick the next run off `backlog.md` (`BL-305` C5 packing,
+`BL-337` `far_fade_range`), or fly the owed verdicts.
+Owed at the controls: `PT-28`, `PT-41`, `PT-43`, `PT-45`, `PT-46` and `PT-47`
+([`playtest.md`](playtest.md)). Verify any change with **`.\RunTests.ps1`** (build → units →
+in-engine suites → golden hashes → one exit code); read [`docs/verification.md`](docs/verification.md) first.
 
 Everything else unscheduled — known issues, deferred items, fidelity questions, the TUNE list — is in `backlog.md`; keep it updated as items land or get scheduled.

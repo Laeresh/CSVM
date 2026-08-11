@@ -28,7 +28,7 @@ and `collapse_platform`.
 **Q2 — do they all launch upward?** Every one carries gravity (**−9.8** on 161, **−10** on 6) and
 `do_intersections` is **false** on all 167, so no ground test is being asked for. **159 of the 167
 always launch upward** — an apex exists for every draw the range allows, so
-`MotionRuntime.FlightToLaunchHeight` solves them. The other **8 have no reliable apex** and are
+`the decoded untimed-body timing path` solves them. The other **8 have no reliable apex** and are
 `BL-245` falls wearing this shape:
 
 | def / node | vertical launch speed over every draw |
@@ -38,7 +38,7 @@ always launch upward** — an apex exists for every draw the range allows, so
 | `rope1burn` `part2`/`3a`/`3b`/`3c` | −0.44…−0.5 m/s ± ~1 — a burning rope end dropping |
 | `rope1burn` `part4` | −1.0 m/s ± 1 — same |
 
-⚠ The vertical speed is `sin(elevation) · speed` for the spherical `translation_range` form, so a
+⚠ The vertical speed is `(elevation/90) · speed` for the decoded linear `translation_range` form, so a
 **negative speed flips an upward elevation into a downward launch** — the `rockerarm`s read as
 "elevation 90°, straight up" until the speed range is read with them.
 
@@ -59,7 +59,7 @@ before it moved.
 now the **absent `RUN_TIME` plus an apex**, not the bounce. `PendingBounce` still arms only where a
 `BOUNCE_SEQUENCE` is named, so this shape solves its flight and owes nothing.
 
-The 8 no-apex events are unaffected by construction: `FlightToLaunchHeight` returns 0 for
+The 8 no-apex events are unaffected by construction: `the decoded untimed-body timing path` returns 0 for
 `v0y ≤ 0`, the caller declines the body, and they stay posed at rest exactly as before — they are
 `BL-245`'s, and a fall's distance is unknowable without the ground ray that item is blocked on.
 

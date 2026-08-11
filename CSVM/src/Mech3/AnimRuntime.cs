@@ -150,11 +150,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     public Action<AnimDefinition, Node3D?>? OnInstanceFinished;
 
-    /// <summary>The collision mask a <c>do_intersections</c> body sweeps against, or <b>0</b> — the
-    /// default — for "this session does no ground contact", which is every runtime nobody wires:
-    /// the labs, the golden captures, the headless suites that do not ask for it. None of those
-    /// build world colliders, so the flag-free launch-height behaviour is what they keep, and
-    /// keeping it is structural here rather than a rule someone has to remember.
+    /// <summary>The collision mask both ballistic contact tiers query, or <b>0</b> — the default —
+    /// for "this session does no ground contact". Runtimes without world colliders leave it zero,
+    /// making the fallback structural rather than a rule each caller must remember.
     ///
     /// <para>Handed in rather than read from <c>CollisionLayers</c> directly: that constant lives in
     /// the flight layer, and this one is the animation runtime — the session, which knows both,
@@ -2309,15 +2307,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             var motion = MotionRuntime.Create(this, t, ev.Data, authored, inheritVelocity);
                             if (motion == null)
                                 continue;
-                            float flight = motion.RunTime;
-                            if (instant || flight <= 0f)
+                            float ceiling = motion.RunTime;
+                            float sequenceTime = motion.SequenceDuration;
+                            if (instant || ceiling <= 0f)
                             {
                                 motion.Seek(0f); // RESET_STATE / zero-length: pose the launch start (rest)
                             }
                             else
                             {
                                 Motions.Add(motion, def, anchor); // MotionSet.Add counts the launch
-                                ballTime = Mathf.Max(ballTime, flight);
+                                ballTime = Mathf.Max(ballTime, sequenceTime);
                                 // A contact-tested body arms its bounce AT CONTACT, not here — the
                                 // struck surface is what picks the branch — so it counts as armed
                                 // on the strength of the test being on.
@@ -2328,11 +2327,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         // A bounce this event ARMED is acted on — TickMotions dispatches it when the
                         // body lands — so it must not be filed as unhandled; doing so would report a
                         // working feature as a missing one, the same rule the retarget tallies follow.
-                        // What stays deferred is the falls that author `do_intersections: false` —
-                        // no apex to solve, so they never arm, and the data does not ask for a
-                        // collider test that would tell us where they land.
-                        // ⚠ The 204 RUN_TIME+bounce events are NOT that case: 150 of them author
-                        // `do_intersections: true` and arm at contact, water branch and all.
+                        // A no-RUN_TIME fall with no positive sequence span remains deferred when
+                        // no contact tier is wired; the watchdog still bounds the live motion.
+                        // model supplies the untimed body's watchdog.
                         if (ev.Data.Has("bounce_sequence") && !bounceArmed)
                             Count("ObjectMotion(bounce_sequence deferred)");
                         duration = instant ? 0f : ballTime;
@@ -3568,16 +3565,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (_debugClock < 1f)
             return;
         _debugClock = 0f;
-        // The contact tally: is the `do_intersections` sweep actually finding anything? Printed
-        // whenever a flagged body has ended at all, because the answer that matters is the one
-        // nobody would otherwise notice — all clock, no contact, which every other line reports
-        // exactly as a working sweep.
+        // Keep the two tiers separate: a working sweep cannot mask a dead default column, or vice
+        // versa. Print whenever either tier ends a body so all-clock/no-contact remains visible.
         if (Motions.ContactLandings + Motions.ClockEndings > 0)
         {
-            // "contact-tested", not "do_intersections": a settle hop inherits the test from the
-            // landing it continues even though its own flag is false (MotionRuntime.Create).
-            GD.Print($"anim/debug: contact-tested bodies ended: {Motions.ContactLandings} by contact, "
-                     + $"{Motions.ClockEndings} on their run time"
+            GD.Print($"anim/debug: contact-tested bodies ended: column "
+                     + $"{Motions.ColumnContactLandings} by contact/{Motions.ColumnClockEndings} on clock; "
+                     + $"sweep {Motions.SweepContactLandings} by contact/{Motions.SweepClockEndings} on clock"
                      + (Motions.ContactLandings == 0 ? " — NO CONTACT AT ALL (is a mask wired?)" : ""));
         }
 

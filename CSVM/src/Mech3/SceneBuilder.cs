@@ -31,6 +31,8 @@ public sealed class SceneBuilder
 {
     /// <summary>Meta key a collider carries when its dominant surface is water or buildings.</summary>
     public const string SurfaceMeta = "csky_surface";
+    /// <summary>Marks a collider as a member of the authored altitude-surface database.</summary>
+    public const string AltitudeSurfaceMeta = "csky_altitude_surface";
 
     public const string OpacityParam = "csky_opacity";
 
@@ -882,7 +884,7 @@ void fragment() {
                 n3d.AddChild(mi);
                 MeshInstanceCount++;
                 if (collidable)
-                    AttachCollision(n3d, node.MeshIndex);
+                    AttachCollision(n3d, node.MeshIndex, node.AltitudeSurface);
             }
             // Point-sprite lights (night-sky stars, nav/tower beacons): rendered by the
             // original engine as small glowing dots. Never collidable, never shadowed.
@@ -920,7 +922,7 @@ void fragment() {
     // the whole mesh — see CollidersForMesh. The parent node carries the world transform, so
     // each collider lines up with the rendered surface it was carved from. Shapes are cached per
     // mesh index and shared across instances (shapes are resources).
-    private void AttachCollision(Node3D parent, int meshIndex)
+    private void AttachCollision(Node3D parent, int meshIndex, bool altitudeSurface)
     {
         bool tracked = false;
         foreach (var (surface, shape) in CollidersForMesh(meshIndex))
@@ -937,6 +939,8 @@ void fragment() {
             // common case and stamps nothing.
             if (surface != null)
                 body.SetMeta(SurfaceMeta, surface);
+            if (altitudeSurface)
+                body.SetMeta(AltitudeSurfaceMeta, true);
             parent.AddChild(body);
             ColliderCount++;
             tracked = true;

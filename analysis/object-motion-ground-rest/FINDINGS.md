@@ -30,7 +30,7 @@ node is ever switched off by its own `ACTIVE_STATE 0` downstream:
 | `run_time+bounce` | **yes** | 160 | 40 | `BL-245`'s deferred half, left in place |
 
 **The rule, and it is simple: a piece comes to rest only if its launch names no `RUN_TIME`.** That
-absent run time is the admission test for `MotionRuntime.FlightToLaunchHeight`, the only landing
+absent run time is the admission test for `the decoded untimed-body timing path`, the only landing
 solve we have. Anything carrying a `RUN_TIME` integrates its parabola for exactly that long and then
 holds its final pose — which, at 3.5–20 s under Earth gravity, is routinely below the terrain.
 
@@ -93,14 +93,9 @@ sink because nothing stops them. `m_build01` is the same pattern at nine parts. 
 playtest report of "the larger parts stay, the wings go through" is *per-part within one def*, not a
 per-object bug.
 
-## ⚠ `do_intersections` is probably a collider test, not a terrain ray
+## Retired contact reading
 
-User's reading, 2026-08-08, and it changes the shape of the deferred work rather than any decode: a
-collider intersection can land a piece on a rooftop or bounce it off a wall, which no down-ray
-reproduces — the `agyrobus` case was lost between C5 buildings precisely because it may have bounced
-off one. Scope `BL-059` item 1 / `BL-245` as a collision query, with a down-ray as the cheap first
-cut, and record which of the two shipped. `BL-245`'s `[Blocked: ground ray]` tag is the narrower
-reading of the same blocker.
+The earlier uncertainty over whether `do_intersections` was a collider test or a terrain ray is resolved by the executable decode: the default `OBJECT_MOTION` path is the 10 m altitude column, while `DO_INTERSECTIONS` selects the geometry sweep. `NO_ALTITUDE` opts out of the column. See [`docs/org/objectMotion.md`](../../docs/org/objectMotion.md).
 
 ## ⚠ A trap the script itself fell into
 
@@ -116,5 +111,5 @@ should sanity-check that the four shapes do **not** all come back `stays=True`.
 [`docs/plans/PLAN-ground-contact.md`](../../docs/plans/PLAN-ground-contact.md) (what `BL-059`
 item 1 became, and where this census's strict test set was discharged) ·
 `BL-245` · `BL-319` (`run_time` is not a flight duration — pieces cut mid-arc or flying long past
-landing; found closing `BL-022`, whose arc scale shipped as `DebrisTune.LaunchScale` 0.65,
+landing; found closing `BL-022`, whose retired arc look fit was 0.65,
 `git log --grep=BL-022`) · `docs/formats/destructibles.md` "Debris tumbles"

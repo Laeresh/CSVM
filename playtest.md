@@ -194,6 +194,14 @@ an upper bound, and the correction to the 137.9 mph equilibrium are on `BL-115` 
   *Variations:* `--chapter=C4` for the one deck chapter whose `WorldLight` clamps to 1.0 — its
   deck must look exactly as it did, and its cards must still be *there* above the band.
 
+### C1 · Devastator — debris arc and ground contact
+
+```powershell
+./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire --infinite-ammo
+```
+
+- `PT-46` `[A/B: original C1 Devastator destruction]` **Re-opened check (d): debris after the `OBJECT_MOTION` decode (`BL-344`).** The earlier observation was real: some original pieces passed through or disappeared. Its mechanism attribution is superseded by the executable decode. *Look for:* the debris arc at authored speed after the deleted 0.65 multiplier, and whether pieces land under the decoded default contact tier; distinguish an unflagged pass-through from a body that should be ground-tested. Shell casings remain the `NO_ALTITUDE` exception and should arc away and vanish. *Blocks:* `BL-344`; a mismatch mints a new follow-up rather than restoring the deleted scalar.
+
 ### C1 · two pilots — Dogfight (splitscreen VS)
 
 ```powershell

@@ -233,6 +233,8 @@ plain C# objects, reading both the v0.6.1 "legacy" and the fork "unified" shapes
 docs/formats/gamez.md); `WorldTransformOf` resolves a node's world transform without building it.
 Carries the node's `flags.intersect_surface` as `IntersectSurface` (default true when flags are
 absent) — the original's collision-participation flag, honoured by WorldBuilder.NoCollisionNode.
+Carries `flags.altitude_surface` as `AltitudeSurface` (same absent-flags fallback), which
+SceneBuilder stamps on colliders for the OBJECT_MOTION point-column query.
 Carries `flags.active` as `Active` (same default) — the build script's own `NodeSetActive` record,
 honoured by `WorldBuilder.Add`, which skips building an inactive world-build root outright.
 Carries the node's `zone_id` as `ZoneId` (default −1 when the field is absent, i.e. ungated) — the
@@ -301,7 +303,9 @@ splits a mesh's colliding geometry into one trimesh per surface class actually p
 whole mesh under one dominant-class vote — a coastal tile is mostly beach by area, so the
 area-quorum vote it replaced gave real water polygons on it to `default` outright
 (`analysis/surface-classification/`). Each collider-bearing node is registered with
-`WorldCollision`, which owns its `Disabled` flag from then on. A `GameZ.IsMarkerGizmo` mesh draws nothing, but its Node3D is
+`WorldCollision`, which owns its `Disabled` flag from then on, and colliders from a node whose
+`flags.altitude_surface` is true carry `AltitudeSurfaceMeta` independently of their water/building
+surface class. A `GameZ.IsMarkerGizmo` mesh draws nothing, but its Node3D is
 still built with its transform — animations attach puffers and sounds to those nodes by name.
 A surface's colour is `vertex colour × material` (the original's baked-lighting modulate) — except
 where the two are the same authored value, which `GameZ.VertexColorsRestateMaterialColor` detects
@@ -1017,6 +1021,8 @@ sequence interpreter (event clock / LOOP / IF-ELSEIF) lives in `SequenceRunner.c
 motions in `Anim/MotionSet.cs` (`Motions`); this class
 satisfies its `ISequenceHost` seam by explicit interface implementation (`Dispatch`,
 `EvaluateCondition`, the get-only `OnEventDispatched` hook — off its own public surface).
+`ContactMask` is the session-owned adapter for both ballistic contact tiers; zero structurally keeps
+collision-free runtimes out of both queries, while `SurfaceIsWater` is their shared classifier.
 ⚠ A partial opacity on an opaque-shader mesh swaps that instance's surfaces to a fade-twin
   material (`EnsureOpacityPath`/`SceneBuilder.FadeShaderFor`) — per-instance surface overrides
   only; the shared material/mesh caches must never be edited, and opacity 1 removes the override.
@@ -1206,23 +1212,44 @@ rate, no `AnimRuntime`/`MotionSet` state, so the reach-in is inert to everything
 `MotionSet`, `EmitterDirector`,
 `NameResolver` and `TemplateStage` share the namespace but ARE independently owned — their own
 entries below.
-`MotionRuntime`'s `translation_range` is a SPHERICAL launch — `xz` azimuth, `y` elevation, both in
+`MotionRuntime`'s `translation_range` is a POLAR launch — `xz` azimuth, `y` elevation, both in
 degrees, `initial` the speed (`analysis/object-motion-range/`, decoded 2026-08-01) — and a launch
 seeds from the node's authored rest pose, since a shared effect template's children are re-homed by
 nothing between calls. `RangeLaunchDirection` is that decode's ONE expression; `ProjectilePool`'s
-gun-casing ejection reads the same `gunshell` event through it (INSTR-3). Its `scale` channel is an
+gun-casing ejection reads the same `gunshell` event through it (INSTR-3).
+The original runtime decode, including contact tiers and termination, is in [docs/org/objectMotion.md](org/objectMotion.md); this entry keeps engine-side constraints.
+⚠ The elevation is LINEAR, not spherical, and the direction is deliberately NOT unit length:
+`FUN_004e8fa0`'s `flags & 8` block computes `dirY = elev · 0.011111111` (1/90 written out) and gives
+the horizontal the L1 remainder `1 − |elev|/90`, so the length dips to 0.707 at 45°; only the
+AZIMUTH is converted deg→rad and passed to the sincos at `FUN_0053c6c0`. **Do not normalise it** —
+the unit-sphere reading that shipped until 2026-08-11 launched 60–70° debris 20–25 % too fast and is
+what cut `m_build03` part1 at ~70 % of its authored 5.0 s `RUN_TIME`. Which world bearing azimuth 0
+points along (+X) remains a choice, and `FUN_0053c6c0`'s output order is unchecked — the cos-on-X /
+sin-on-Z assignment is inherited, not decoded. Its `scale` channel is an
 OFFSET from unit scale (`1 + initial + delta·u`), unlike the absolute `PoseScale`/`OBJECT_SCALE_STATE`
 — 30 of the 45 distinct SCALE events carry a bare `-0.1`, which absolute is a negative scale.
+`gravity.complex` picks between two forms of the same fold: plain drops the value into the parent
+frame's Y, `complex` converts world-down INTO that frame — identical under a world-aligned parent,
+which is why the install authors it on aircraft wreckage alone (254 events / 25 shapes, all with a
+`RUN_TIME`).
 `MotionRuntime`'s flight solve is admitted by an **absent `RUN_TIME` plus an apex**, never by the
 `BOUNCE_SEQUENCE` — `BL-257`'s census (`analysis/bl-257-nulled-launch/`) found 167 events / 119
 distinct defs naming NEITHER field, which end instead with the flying piece's own null-start
 `ACTIVE_STATE 0`; gated on the bounce they all reported duration 0 and were hidden on the tick they
 launched. `PendingBounce` still arms only where a bounce IS named, so the second shape flies and
 owes nothing.
-⚠ Do NOT re-narrow that gate to the bounce, and do not widen it past the apex. `FlightToLaunchHeight`
-  returning 0 for `v0y <= 0` is what keeps `BL-245`'s falls out — including 8 of those 167 (a level
-  `bridge_truck01`, `rope1burn`'s five rope ends, two `fuelbox` rockerarms whose speed range is
-  −45…45, so `sin(elevation)·speed` inverts). A `chuteman` parabola solve divides by zero.
+MotionRuntime gives every ballistic body an internal termination ceiling. An authored RUN_TIME is
+universal and the final frame is shortened to land exactly on it; an untimed body uses the traced
+15-second default-column or 35-second geometry-sweep watchdog. The predicted upward arc is retained
+only as sequence timing, never as the body's termination rule. Contact uses one response for both
+tiers: reflect the step, scale every velocity component by 0.2, then continue only above the
+asymmetric 0.1 horizontal / 0.5 vertical thresholds while post-bounce speed² keeps decreasing
+(eight rebounds is the defensive ceiling). PendingBounce is selected at the final struck surface.
+
+NO_ALTITUDE is the explicit opt-out from the default column. DO_INTERSECTIONS selects the sweep
+first, so the opt-out does not suppress an explicitly authored sweep. Seek remains a pure pose
+operation: contact tests live only in Tick, preserving timeline scrubbing and RESET_STATE.
+
 ⚠ `RestOf`, `_rng`, `SetSubtreeOpacity` and `NonSingularScale` on `AnimRuntime` are `internal`
   (not `private`) specifically so these motion types can reach them — same-assembly only, no wider
   exposure intended; don't widen further without a reason. `NameOf`/`VisualOriginOf` joined them for
@@ -1238,7 +1265,8 @@ owes nothing.
 
 ## src/Mech3/Anim/MotionSet.cs
 `AnimRuntime`'s live motions as a module: `Add` (owner stamp + `(Target, Channel)` eviction +
-`LaunchCount`), the per-frame `Tick` sweep, `DiscardFor`/`Reset`, and the two predicates the rest of
+`LaunchCount`), the per-frame `Tick` sweep with separate column/sweep contact-vs-clock tallies,
+`DiscardFor`/`Reset`, and the two predicates the rest of
 the runtime asks — `OwesBounce` (the BL-240 retirement hold's own mechanism, which `AnimRuntime.
 Retirable` consults) and `HasSpinOn` (the `Loop{-1}` spin re-assert guard, which cannot fold into
 `Add` because it must run before `SpinMotion`'s constructor writes `Target.Transform`). Never
@@ -3445,7 +3473,8 @@ for a chapter world so flight/ballistics runs boot in ~2 s with nothing else in 
 ⚠ The grid texture is DRAWN pixel-by-pixel here. Never load one — the repo ships no assets, and a
   test stage is the easiest place to break that rule by accident.
 ⚠ The collider is a sunk `BoxShape3D` whose TOP face is y=0, not a `WorldBoundaryShape3D` and not a
-  trimesh: the weapon and airframe raycasts want a definite thickness under the surface.
+trimesh: the weapon and airframe raycasts want a definite thickness under the surface. It carries
+`SceneBuilder.AltitudeSurfaceMeta`, so the default OBJECT_MOTION column treats it as ground too.
 ⚠ It carries the `cs_name` meta (`ground`) like a built gamez node, so the impact log and the node
   labels read a real name off it (`on ground/col`).
 
@@ -3711,7 +3740,9 @@ exactly the shooter, killer-less and unowned-round deaths score nobody, and the 
 `AutoRespawnAfter` 3 s respawns at that mark in sim frames, respawn reports nothing, null waits
 for R),
 destructible stages/death/census, animation
-stops and bounce-terminated launches, the full effects sweep (`effects-census`: every effect
+stops and bounce-terminated launches, the two ballistic contact tiers (`ground-contact`: default
+column vs authored geometry sweep, roof exclusion, `DO_INTERSECTIONS` precedence, `COMPLEX`'s
+widened step gate, independent landing tallies and the zero-mask control), the full effects sweep (`effects-census`: every effect
 resolves, template meshes peak at the CALL SITE not the stage origin, none stays lit after its
 stop — `Probes.Effects` rows asserted; its puffer/mesh tallies are golden counts under the
 suite's own conditions, literal seed 1 + the counting factory, pinned separately from the probe's;
