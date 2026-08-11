@@ -2764,11 +2764,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Missions, modes & campaign
 
-- `BL-064` `[Feature]` **Better mission states.** There is still a lot of difference between our maps and the
-  original's. May need a pipeline to diff them, or to crack the mission loading states properly.
-  (`MissionSetup`'s interp boot script, landed 2026-07-22, closed the largest single gap and
-  incidentally fixed the C3 coast z-fight — but it is a boot script, not the full state model.)
-
 - `BL-074` `[Research]` **PLAYER_INIT fields [3]/[4] semantics + per-plane spawn speed** — story-mission spawns
   currently assume the IA convention (0.5 throttle / 53.6 m/s).
 
