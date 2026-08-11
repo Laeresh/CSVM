@@ -99,8 +99,8 @@
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "1c6843422a489e013c37f246a0331451",
-      "exercises": "the per-player crash rig building and playing player_crash_dirt (--crash=5 is its only headless trigger), the airframe under the sun, the moving distance-puffer AT_NODE path, and the largest puffer surface: fireball, fire, smoke, debris, scorch.",
+      "hash": "a3319bcce42bdd63dcad94136d306dae",
+      "exercises": "the per-player crash rig playing player_crash_dirt (--crash=5 is its only headless trigger), the airframe under the sun, the moving distance-puffer AT_NODE path, the largest puffer surface, and the translation_range launch via call_crash_trails.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     }
   ]

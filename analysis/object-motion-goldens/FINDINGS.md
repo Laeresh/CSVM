@@ -169,6 +169,36 @@ goldens hash-identical to the committed manifest** —
 No golden is re-pinned by this item. These 13 hashes are the baseline every later item's golden
 movement is measured against.
 
+## Postscript: what "covers a launch" is worth in pixels (B4, 2026-08-11)
+
+A1 established that `c1-destroy-effects` and `c1-crash` each launch one ballistic
+`translation_range` body inside their window. B4 changed the launch direction for every such body
+install-wide and only **one of the two hashes moved** — so "covers a launch" turns out to be
+necessary and not sufficient, and the gap is amplitude.
+
+`c1-destroy-effects` has a measured **sensitivity floor between 0.85× and 2×** of the authored
+launch. Sweeping `--debris-launch` on the shot's own args at its own pinned frame:
+
+| `--debris-launch` | hash |
+|---|---|
+| (default 0.65) | `5c8a15f7b4d4143edb1873da98c4850d` — pinned |
+| 0.5 | `5c8a15f7b4d4143edb1873da98c4850d` — unchanged |
+| 0.85 | `5c8a15f7b4d4143edb1873da98c4850d` — unchanged |
+| 2 | `a241843fb25935b67e804af400277ae6` — moved |
+| 10 | `c55e90212b94100b8460839badef72c8` — moved |
+
+Its one body (`ap_radiotwr`'s `upper`: elevation 30–70°, speed 2.5–4.5 m/s, gravity −2, starting
+0.2 s in) is still inside the fireball column that fills this framing at frame 120; only a throw
+large enough to carry it clear of that column reaches the pixels. B4's own magnitude ratio is
+0.745–0.81, inside the dead band — which is why its unchanged hash is an explained result and not an
+unnoticed regression. **⚠ Read the same way round in future: an unchanged hash here bounds the
+change at under ~2×, and says nothing at all below that.**
+
+`c1-crash`'s movement also needed re-attributing. Its `player_crash_dirt` pieces are all the
+**vector** `translation` form — B4 cannot reach them. What moved is
+`carnage_trails-call_crash_trails`' five `fly_trailN`, the only `translation_range` bodies in that
+shot, whose manifest `exercises` now says so.
+
 ## Loose end for D12
 
 `docs/formats/destructibles.md:330-331` carries the same wrong claim as the two comments this item

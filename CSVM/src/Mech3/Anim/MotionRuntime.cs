@@ -20,9 +20,13 @@ namespace CSVM.Mech3.Anim;
 ///   <c>_rng</c>, so a lab replay is deterministic); <c>delta</c> a velocity ramp over the
 ///   run time (change from initial to initial+delta) — 0 on every reachable piece, so its
 ///   exact reading is near-invisible.</item>
-/// <item><c>translation_range</c> is a launch in SPHERICAL form, not a distance: <c>xz</c> is an
+/// <item><c>translation_range</c> is a launch in POLAR form, not a distance: <c>xz</c> is an
 ///   AZIMUTH and <c>y</c> an ELEVATION, both in DEGREES, and <c>initial</c> is the launch SPEED
-///   in m/s (<c>delta</c> a speed ramp over the run time). Measured over all 1,217 events
+///   in m/s (<c>delta</c> a speed ramp over the run time). ⚠ The elevation is LINEAR, not
+///   spherical — <c>dirY = elev/90</c> with the horizontal taking the L1 remainder
+///   <c>1 − |elev|/90</c>, so the direction is NOT unit length (0.707 at 45°) and only the azimuth
+///   goes through a sincos. Transcribed from <c>FUN_004e8fa0</c>; see
+///   <see cref="RangeLaunchDirection"/>, which is where the whole of it lives. Measured over all 1,217 events
 ///   install-wide (<c>analysis/object-motion-range/</c>): every <c>xz</c> lies in [−170, 359];
 ///   every <c>y</c> but one lies in [−90, 90] and goes negative exactly where the thing falls
 ///   (a balloon turret's parts at −70…−90, a helium tank blowing sideways at 1…2); and the
@@ -308,9 +312,11 @@ internal sealed class MotionRuntime : IAnimMotion
         }
         else if (data.Obj("translation_range") is { } range)
         {
-            // A launch in SPHERICAL form: `xz` is an azimuth and `y` an elevation, both in
+            // A launch in POLAR form: `xz` is an azimuth and `y` an elevation, both in
             // DEGREES, and `initial` is the launch speed in m/s (`delta` a speed ramp over the
-            // run time). Not a distance travelled — see the class remark for the census.
+            // run time). Not a distance travelled — see the class remark for the census. The
+            // elevation is LINEAR and the direction is not unit length: RangeLaunchDirection owns
+            // that, and `speed` here is a scale on a vector shorter than 1 everywhere but 0°/90°.
             // `translation_range_min_only` marks the rows whose `max` fields are all 0 and
             // meaningless; there the min IS the value, and interpolating toward 0 would aim
             // every one of them at a bearing and elevation the data never asked for.
@@ -506,16 +512,34 @@ internal sealed class MotionRuntime : IAnimMotion
         Target.Transform = new Transform3D(basis.Scaled(scale), origin);
     }
 
-    /// <summary>The unit launch direction one <c>translation_range</c> draw asks for, from its
-    /// azimuth and elevation in degrees. The ONE expression of that decode: the gun-casing
-    /// ejection in <c>ProjectilePool</c> reads the very same <c>gunshell</c> event and must share
-    /// this — two spellings of the maths is how they disagree.</summary>
+    /// <summary>The launch direction one <c>translation_range</c> draw asks for, from its azimuth
+    /// and elevation in degrees. The ONE expression of that decode: the gun-casing ejection in
+    /// <c>ProjectilePool</c> reads the very same <c>gunshell</c> event and must share this — two
+    /// spellings of the maths is how they disagree.
+    ///
+    /// <para><b>⚠ This vector is deliberately NOT unit length, and normalising it is the bug.</b>
+    /// The elevation is LINEAR, not spherical: the original's <c>TRANSLATION_RANGE</c> block
+    /// (<c>FUN_004e8fa0</c>, the <c>flags &amp; 8</c> branch) computes <c>dirY = elev · 0.011111111</c>
+    /// — <c>1/90</c>, written out — and gives the horizontal the L1 remainder
+    /// <c>1 − |elev|/90</c>, caching the three components at <c>+0x70/+0x74/+0x78</c>. Only the
+    /// AZIMUTH is converted <c>deg→rad</c> (<c>· 0.017453292</c>) and passed to the sincos at
+    /// <c>FUN_0053c6c0</c>; the elevation never touches a trig call at all. So the length dips to
+    /// 0.707 at 45° and returns to 1 at 0° and 90°, and a launch at 60–70° leaves 25–20 % slower
+    /// than the unit-sphere reading this replaced — which is what cut <c>m_build03</c> part1's
+    /// nine pieces at ~70 % of their authored 5.0 s <c>RUN_TIME</c> instead of landing them
+    /// inside it.</para>
+    ///
+    /// <para>⚠ Which world bearing azimuth 0 points along (+X) stays a CHOICE, untouched by this —
+    /// and <c>FUN_0053c6c0</c>'s own output order (which of its two results the original puts on X
+    /// and which on Z) has not been checked, so the cos/sin assignment below is inherited, not
+    /// decoded.</para></summary>
     internal static Vector3 RangeLaunchDirection(float azimuthDeg, float elevationDeg)
     {
         float az = Mathf.DegToRad(azimuthDeg);
-        float el = Mathf.DegToRad(elevationDeg);
-        float cosEl = Mathf.Cos(el);
-        return new Vector3(cosEl * Mathf.Cos(az), Mathf.Sin(el), cosEl * Mathf.Sin(az));
+        // 1/90 as the original spells it — a multiply by the literal, not a divide.
+        float dirY = elevationDeg * 0.011111111f;
+        float horiz = dirY < 0f ? dirY + 1f : 1f - dirY;
+        return new Vector3(Mathf.Cos(az) * horiz, dirY, Mathf.Sin(az) * horiz);
     }
 
     /// <summary>Time for a launch to come back down to the height it left from:

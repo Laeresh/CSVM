@@ -184,7 +184,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — the launch decode
 
-4. ☐ `translation_range` elevation is linear (`elev/90`), not spherical
+4. ☑ `translation_range` elevation is linear (`elev/90`), not spherical
 5. ☐ `translation.delta` is an acceleration, not a ramp divided by `run_time`
 
 ### Wave C — contact and termination
@@ -392,7 +392,34 @@ slip between them is invisible until debris stops landing.
 
 # Wave B — the launch decode
 
-## B4 ☐ `translation_range` elevation is linear (`elev/90`), not spherical
+## B4 ☑ `translation_range` elevation is linear (`elev/90`), not spherical
+
+**Landed 2026-08-11.** The trace was re-read off `FUN_004e8fa0`'s `flags & 8` block and confirmed
+verbatim: `fVar1 = elev * 0.011111111` cached at `+0x74`, `fVar6 = fVar1 < 0 ? fVar1 + 1.0 : 1.0 -
+fVar1` giving the horizontal at `+0x70`/`+0x78`, and only the azimuth taking the `* 0.017453292` and
+the `FUN_0053c6c0` sincos. `RangeLaunchDirection` is now that expression and nothing else was
+touched; the azimuth's cos-on-X / sin-on-Z assignment stays inherited, as instructed.
+
+**Measured at the controls** (`--freecam --chapter=C1 --destroy=m_build03 --debris-launch=1`, so the
+authored arc rather than the 0.65 tune, A/B'd against a temporary rebuild of the old expression).
+At the 5.0 s `RUN_TIME` ceiling the pieces sit **21–24 m lower** and are out of the sky rather than
+hanging in it — `part9` 167.8 m against the old 191.7, `part5` 177.3 against 198.5, `part8` 169.0
+against 185.1. That is the reported symptom's cause, removed.
+
+**⚠ The golden that did NOT move, explained by measurement rather than assumption.** `c1-crash`
+moved as expected and is re-pinned. `c1-destroy-effects` did **not**, which A1 and this item's Verify
+both call a red flag — and the cause is not blindness in the shot but its amplitude. That shot's only
+`translation_range` body is `ap_radiotwr`'s `upper` (elevation 30–70°, speed 2.5–4.5, gravity −2,
+starting 0.2 s in), and a `--debris-launch` sweep on the shot's own args gives it a **sensitivity
+floor between 0.85× and 2×**: 0.5× and 0.85× both reproduce `5c8a15f7…` exactly, while 2× and 10×
+move it. B4's magnitude ratio is 0.745–0.81, i.e. inside the band the shot cannot resolve — the piece
+is still inside the fireball column that dominates this framing at frame 120. So the shot covers a
+`translation_range` launch, as A1 said, but not one at this amplitude.
+
+**Also worth knowing, because it re-attributes the moving golden.** `c1-crash`'s movement is *not*
+`player_crash_dirt`'s four pieces — all eight of its motions are the **vector** `translation` form and
+B4 cannot touch them. It moved through `carnage_trails-call_crash_trails`' five `fly_trailN`, the
+starburst the class remark already cites, which are the only `translation_range` bodies in that shot.
 
 **Goal.** A `translation_range` launch produces the original's direction and speed: `dirY = elev/90`
 with horizontal magnitude `1 − |elev|/90`, a vector that is deliberately not unit length. `m_build03`
