@@ -359,16 +359,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ever revisited. The remaining question here is only *when* the exe calls the heavy stage, not
   where it sits — do not loosen the 0.10 tier to make it reachable.
 
-
-- `BL-254` `[Bug]` `[Owed-playtest]` **Both C2 studio gates' deaths now match the original (2026-08-04, `docs/HISTORY.md`);
-  only the in-cockpit playtest is owed.**
-  ⚠ **Still open.** (a) The in-cockpit playtest, now covering both gates: fly gate2 to confirm the
-  doors fall before the archway blows and the passage only truly opens once the wreck's colliders
-  replace the healthy ones; fly gate1 to confirm the doors open but the archway stays solid — no
-  passage. (b) `gate2`'s death also calls `go_get_her` (mission scripting) — left to whatever
-  handles it today; this item was the swap timing/authorship only. (c) The 28.5 s offset reads long
-  but is what is authored — A/B the original's timing rather than "fixing" the number.
-
 - `BL-291` `[Feature]` **A way to spawn/damage a zeppelin — the thin harness that finishes `BL-239`'s in-game
   verification** (PT-36, 2026-08-06). Splash damage reads right at the controls, but nothing in
   C1 shows damage registering on the zeppelin, so `BL-239`'s one unverified picture — a gasbag
