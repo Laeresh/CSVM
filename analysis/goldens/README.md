@@ -1,6 +1,6 @@
 # The golden-image tripwire
 
-Thirteen pinned `--det` captures, each reduced to one md5. `RunTests.ps1` re-renders them and compares;
+Fourteen pinned `--det` captures, each reduced to one md5. `RunTests.ps1` re-renders them and compares;
 a mismatch names the shot and leaves the actual PNG in `.scratch/goldens/` next to that run's engine
 log. Nothing here is a picture — `manifest.json` holds command lines and hashes only, which is what
 keeps it inside the repo's no-game-assets rule.
@@ -71,7 +71,7 @@ perturbation (`c1-flight` 34.52 %, `empty-stage` 12.21 %, `c4-snow` 3.74 %, `c2b
 **The 2-second window is itself a gap.** Every shot is captured at frame 120 = **2.00 s** of sim
 (`viewer-bhawk` 30, `c1-crash` 20), so anything whose period is seconds long is barely sampled: the
 ground-vehicle route animations loop on 1.0 s and up, and two rollovers do not move a car far enough
-to change a hash. A change to authored animation *timing* can pass all 13 untouched and still be
+to change a hash. A change to authored animation *timing* can pass all 14 untouched and still be
 wrong — `BL-237` (2026-08-02) was exactly that, and a long-horizon unit test covers it instead.
 
 **Not covered, deliberately.** The `TextureCycler` flipbooks are below screenshot resolution — the

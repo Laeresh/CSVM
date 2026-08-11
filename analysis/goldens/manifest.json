@@ -102,6 +102,13 @@
       "hash": "b80b8a988cd620fba28f391fc8c85c54",
       "exercises": "the per-player crash rig playing player_crash_dirt (--crash=5 its only headless trigger), the airframe, the moving distance-puffer AT_NODE path, the translation_range launch via call_crash_trails, and flydirt's non-zero translation delta.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
+    },
+    {
+      "name": "c1-mbuild03-settled-debris",
+      "frame": 120,
+      "hash": "aedc6f5691ca74ac7d27b8128cb9d557",
+      "exercises": "a collision-enabled m_build03 destruction, with six default-column debris landings inside its 2 s window.",
+      "args": ["--freecam", "--chapter=C1", "--collision", "--destroy=m_build03", "--det", "--mute"]
     }
   ]
 }
