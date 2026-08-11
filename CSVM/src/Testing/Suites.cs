@@ -4009,7 +4009,8 @@ public static class Suites
                         ctx.Host.AddChild(runtime);
                         var restOrigin = planeModel.GlobalTransform.Origin;
                         runtime.Bind(controller,
-                            world.Session.Program.Subset(Session.EffectCatalogue.CrashRigAnimNames));
+                            world.Session.Program.Subset(Session.EffectCatalogue.CrashRigAnimNames(
+                                Session.EffectCatalogue.CrashDefTable(world.Session.Program))));
                         for (int i = 0; i < 6; i++)
                         {
                             runtime.Advance(1f / 60f);

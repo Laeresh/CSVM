@@ -136,7 +136,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 
 ### Wave B — the selection mechanism
 
-11. ☐ B11 Replace crash-def selection with the original's indexed cascade
+11. ☑ B11 Replace crash-def selection with the original's indexed cascade — **landed 2026-08-11** (⚠ the ground crash lost its earth-impact boom — faithful; judge at the controls)
 12. ☐ B12 Route `touchdown_*` graze selection through the same table
 
 ### Wave C — the destruct model and the cleanup

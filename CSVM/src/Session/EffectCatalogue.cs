@@ -29,6 +29,18 @@ public enum AnchorPlacement
 /// consumes these names to build and stage the runtime; the naming lives here, never there.</summary>
 public static class EffectCatalogue
 {
+    // The crash def vector's prefix: slot i is "player_crash_" + SurfaceRegistry.Names[i], the
+    // vector the original concatenates in FUN_00476250 and indexes with the struck material's
+    // surface id. Only default/dirt/water ship a def, so the other eleven slots fall back to slot 0
+    // — asked of the bound program by SurfaceDefTable rather than listed here, because "this slot
+    // names no def" IS the original's mechanism.
+    public const string CrashDefPrefix = "player_crash_";
+
+    // The bare anim name the selection cascade falls to when the vector cannot answer at all (empty
+    // vector, or a slot 0 naming no def) — the crash defs' own anim root. Unreachable in this
+    // install: all eight chapters' cam_anim carry player_crash_default, so slot 0 always resolves.
+    public const string CrashAnimRoot = "player";
+
     // The impact/destruction effect ANIMATION names the world-effects runtime is bound to —
     // the closure of these is staged and playable via PlayEffectAt. IMPACT names come from
     // weapons.json (the non-model `default`/`buildings` effects of rockets/ordnance, plus the gun
@@ -61,11 +73,6 @@ public static class EffectCatalogue
         // dust off terrain, a splash off water. FlightController.SurviveHit plays one per contact.
         "touchdown_default", "touchdown_dirt", "touchdown_water",
     };
-
-    // The crash rig's two variants (BuildFlightCrashRuntime) — the struck surface is only known at
-    // the moment of impact (FlightController.ClassifySurface picks), so both closures are bound and
-    // the crash chooses between them at play time.
-    public static readonly string[] CrashDefNames = { "player_crash_dirt", "player_crash_water" };
 
     // The belly-slide ground splash (`flydirt_plane`, called AT_NODE `healthy` by
     // `player_crash_dirt`): its own `ObjectMotion` translation is authored as a near-zero-horizontal
@@ -117,14 +124,6 @@ public static class EffectCatalogue
         "pdpanel8", "player_fuelleak", "player_damage_trail",
     };
 
-    // Everything the per-player crash rig binds — both crash variants, the four damage shims,
-    // the prop choreography and the authored damage-stage menu, i.e. every def that plays ON one
-    // aircraft — and therefore the name set whose anchor-root closure that rig's own template
-    // stage must satisfy (<see cref="CrashStageRoots"/>).
-    public static readonly string[] CrashRigAnimNames =
-        Concat(Concat(Concat(CrashDefNames, PlaneDamageEffectAnims), PropChoreographyAnims),
-            PlayerDamageStageAnims);
-
     // Anchors the mechanical closure below reports that no bind stages, because the CALL that
     // reaches the definition supplies its anchor instead of its own NAME. Curation, not derivation:
     // the closure walks NAMEs and cannot see either of these, so they are dropped before the
@@ -158,7 +157,7 @@ public static class EffectCatalogue
     // (`crash-rig-anchors` suite, TemplateStageTests.PlaceAtNeverMovesAPlaceExemptCallee).
     public static readonly string[] AirframeScopedAnchors = { "player_pfighter" };
 
-    // The crash rig's own anim-root scaffold NAME. `player_crash_dirt`/`_water`,
+    // The crash rig's own anim-root scaffold NAME. The `player_crash_*` defs,
     // `player_destruction_reset`, `cpejectstop` and `random_gun_impact` are all authored
     // NAME=`player` — the crash root the rig builds — and a relocating CALL reaching any of them
     // (the dirt crash CALLs `cpejectstop` live) must never place that scaffold like a template:
@@ -166,6 +165,28 @@ public static class EffectCatalogue
     // with it, so every later crash's destroyed plane and dirt burst replay at the FIRST crash's
     // position (`crash-rig-anchors`' crash→respawn→move→crash leg is the regression test).
     public static readonly string[] CrashScaffoldAnchors = { "player" };
+
+    /// <summary>The crash-def vector this program can play, built over the whole surface registry
+    /// with <see cref="CrashDefPrefix"/> — what <c>BuildFlightCrashRuntime</c> binds and what
+    /// <c>FlightController.Crash</c> indexes with the struck material's surface id. A slot whose
+    /// def this install does not ship is empty and falls back to slot 0, which is the original's
+    /// own mechanism rather than a list of exceptions (see <see cref="SurfaceDefTable"/>).</summary>
+    public static SurfaceDefTable CrashDefTable(AnimProgram program) =>
+        new(CrashDefPrefix, CrashAnimRoot, name => program.ByAnimName(name).Count > 0);
+
+    /// <summary>Everything the per-player crash rig binds — every playable crash-vector slot (the
+    /// struck surface is only known at impact, so the whole vector is bound), the four damage
+    /// shims, the prop choreography and the authored damage-stage menu, i.e. every def that plays
+    /// ON one aircraft — and therefore the name set whose anchor-root closure that rig's own
+    /// template stage must satisfy (<see cref="CrashStageRoots"/>).</summary>
+    public static IReadOnlyList<string> CrashRigAnimNames(SurfaceDefTable crashDefs)
+    {
+        var names = new List<string>(crashDefs.PlayableDefs);
+        names.AddRange(PlaneDamageEffectAnims);
+        names.AddRange(PropChoreographyAnims);
+        names.AddRange(PlayerDamageStageAnims);
+        return names;
+    }
 
     /// <summary>The graze reaction's per-surface touchdown def (<c>FlightController.GrazeReaction</c>):
     /// sparks off a hard building surface, dust off unclassified terrain, a splash off water — the
@@ -191,7 +212,7 @@ public static class EffectCatalogue
     /// plane/wreck already carries needs no template.</summary>
     public static IReadOnlyList<string> CrashStageRoots(AnimProgram program,
         Func<string, AnchorPlacement> resolveRoot) =>
-        StageRootsFor(program, CrashRigAnimNames, resolveRoot);
+        StageRootsFor(program, CrashRigAnimNames(CrashDefTable(program)), resolveRoot);
 
     /// <summary>The anchor-root closure of <paramref name="names"/> against a bound program — what a
     /// bind must stage for every definition those names can reach to have something to anchor on.
@@ -242,14 +263,6 @@ public static class EffectCatalogue
         if (missing.Count > 0)
             throw new EffectAnchorException(missing);
         return staged;
-    }
-
-    private static string[] Concat(string[] first, string[] second)
-    {
-        var all = new string[first.Length + second.Length];
-        Array.Copy(first, all, first.Length);
-        Array.Copy(second, 0, all, first.Length, second.Length);
-        return all;
     }
 
     private static bool SuppliedElsewhere(string anchor)

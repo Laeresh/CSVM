@@ -373,10 +373,10 @@ public sealed class WorldEffectsFactory
         if (_spec.BuildsCollision)
         {
             crashRuntime.ContactMask = CollisionLayers.World;
-            // `player_crash_dirt`'s own pieces author no `water` branch — the wet crash is a
+            // The ground defs' own pieces author no `water` branch — the wet crash is a
             // separate def — so this changes nothing for them today. Bound anyway: the rig plays
-            // both crash variants, and the hook is what keeps the branch choice reading the same
-            // classifier the crash surface itself was picked with.
+            // every playable crash variant, and the hook is what keeps a piece's own BOUNCE branch
+            // reading a real struck surface rather than a guess.
             crashRuntime.SurfaceIsWater =
                 body => ProjectilePool.ClassifySurface(body as Node) == SurfaceClass.Water;
         }
@@ -385,11 +385,13 @@ public sealed class WorldEffectsFactory
         // mis-anchor onto this plane's parts and run their reset states on the aircraft. The set
         // (EffectCatalogue.CrashRigAnimNames) is the crash defs, the damage-effect shims, the prop
         // choreography and the authored damage-stage menu — every def that plays ON this aircraft.
-        // Both crash variants are bound because the surface is only known at the moment of impact
-        // (FlightController.ClassifySurface); Air stays out, having no trigger.
-        crashRuntime.Bind(controller, crashProgram.Subset(EffectCatalogue.CrashRigAnimNames));
+        // EVERY playable slot of the crash vector is bound because the struck surface is only known
+        // at the moment of impact; FlightController.Crash then indexes the table below with it.
+        var crashDefs = EffectCatalogue.CrashDefTable(crashProgram);
+        crashRuntime.Bind(controller, crashProgram.Subset(EffectCatalogue.CrashRigAnimNames(crashDefs)));
         controller.AddChild(crashRuntime);
         controller.CrashRuntime = crashRuntime;
+        controller.CrashDefs = crashDefs;
         controller.CrashAnchor = crashRoot;
         controller.CrashRestPoses = restPoses;
         // The plane model's built visibility, so respawn can undo the crash def's healthy/markers

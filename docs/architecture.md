@@ -197,6 +197,7 @@ clusters they delegate to.
 - `src/Session/RaceGrid.cs` — the race starting grid: every pilot fanned symmetrically about one anchor spawn on its heading, with the whole field lifted as one to clear terrain.
 - `src/Session/PlaneRoster.cs` — pure lookups over a `SessionSpec`'s plane roster: which plane a player flies, and its display name.
 - `src/Session/EffectCatalogue.cs` — the record of which authored anims are playable effects, and what their defs need staged: the effect/crash/damage-shim name tables, the pure `TouchdownFor` graze pick, and the anchor-root derivation both binds stage from.
+- `src/Session/SurfaceDefTable.cs` — one of the original's per-surface anim-def vectors (`player_crash_*` / `touchdown_*` over the surface registry) and the cascade that indexes it with a struck material's surface id.
 - `src/Session/EffectPools.cs` — the `data/effect_pools.json` reader: how many copies of each effect template the stage builds, per ROOT, scaled by player count.
 - `src/Session/FlightRigAssembler.cs` — assembles one player's flight rig: painted plane, `FlightController`, loadout/ordnance, HUD instruments, damage visuals, audio, stunt run, spawn, crash runtime.
 
@@ -2214,9 +2215,11 @@ Own-plane non-positional loops (engine with throttle-driven pitch, overspeed whi
 damaged-engine blend keyed to `Update`'s `damageFrac` via `PlaneStats.DamagedEngineGain`) +
 one-shots: `StartEngine`/`EngineStartRamp` prop-start fade (re-fired via the loop-restart hook
 in `Update`; `EngineStartRamp` 2.0 s is sourced from startprops' authored prop cross-fade duration,
-not a bare literal), `OnCrash` → `snd_exp_plane1..4`, `OnGroundExplosion`/`OnWaterExplosion` layering
-the crash variant's boom (`snd_exp_ground_a` off the dirt def itself, `snd_exp_water_a` from the
-`plane_big_splash` inside the sea dive — the crash runtime renders effects, never sound),
+not a bare literal), `OnCrash` → `snd_exp_plane1..4` (the `plane_destroy_sg` group every crash def
+that names it wants), `OnGroundExplosion`/`OnWaterExplosion` layering the boom the *chosen crash
+def* authors (`snd_exp_ground_a` off `player_crash_dirt` itself, `snd_exp_water_a` from the
+`plane_big_splash` inside the sea dive — the crash runtime renders effects, never sound; the
+fallback `player_crash_default` Sounds only `plane_destroy_sg`, so it layers neither),
 `OnEngineStop` → `snd_propstop`, called right after the explosion one-shots on every crash/destruction
 (`FlightController.Crash`) so the loops end on the authored wind-down cue instead of a cut,
 `OnGraze(water)` → the survivable scrape's authored `snd_exp_water_b`/`snd_exp_ground_b`
@@ -2869,10 +2872,12 @@ toggle the body's hittability; the sim half is `SimStep(dt)`, called by
 FlightModel, CameraController + CamParams, SpeedCue, Loadout + ProjectilePool (guns/rockets),
 `CollideDamageSink` →
 `AnimRuntime.CollideDamageAt` (fly-through facades), CrashRuntime, every HUD widget and animator.
-`Crash` reads the struck body through the same `ProjectilePool.ClassifySurface` (`ClassifySurface`
-here maps it to `CrashSurface`) to pick the variant: a `water`-tagged body plays
-`player_crash_water` + `snd_exp_water_a`, everything else `player_crash_dirt` + `snd_exp_ground_a`;
-`Air` is the no-impact destruct and has no trigger. `--crash` has no struck body, so it forces dirt.
+`Crash` reads the struck body's numeric surface id (`SceneBuilder.SurfaceIdMeta`) and indexes
+`CrashDefs` (`SurfaceDefTable`) with it, the original's own cascade: `dirt`(13) plays
+`player_crash_dirt` + `snd_exp_ground_a`, `water`(1) `player_crash_water` + `snd_exp_water_a`, and
+everything else — id 0 plus the ids whose def this install does not ship — falls back to slot 0,
+`player_crash_default`, which authors no surface boom of its own. `--crash` has no struck body, so
+it takes the null-material arm to that same slot 0.
 It also fires `Audio.OnEngineStop` (the wind-down cue, layered over the explosion) and plays
 `stopprops` on `CrashRuntime` — the one call site every engine-death path shares, whether the
 collision resolver called it for a full-speed impact, for a critical part reaching 0 HP on a
@@ -3978,6 +3983,20 @@ Static, spec-free lookups over a `SessionSpec`'s plane roster: `PlaneFor(spec, i
 No session state — every call takes the `SessionSpec` explicitly rather than caching one, since
 these are pure over their arguments.
 
+## src/Session/SurfaceDefTable.cs
+One of the original's per-surface anim-def vectors — `"player_crash_" + name` or `"touchdown_" +
+name` over every `SurfaceRegistry` slot — plus the cascade that indexes it with a struck material's
+numeric surface id (`SceneBuilder.SurfaceIdMeta`). Faithful to `FUN_0048b920`
+`0x0048bac5`–`0x0048bb00`: a null struck material, a negative id, an id at/beyond the vector length,
+or a slot naming a def the program does not define all resolve **slot 0**; an empty vector or an
+empty slot 0 resolves the bare last-resort anim name; anything else is `vector[id]`. Built once per
+bind from a caller-supplied "does this def exist" test, so `PlayableDefs` is what a runtime must
+bind and `DefForSurfaceId` is what an impact asks. Engine-free and pure.
+⚠ **The empty-slot arm is the mechanism, not a special case.** This install ships three defs per
+  family, so eleven of fourteen slots fall back — never hardcode *which*: ask the bound program.
+⚠ The id space is the surface registry's, NOT `ProjectilePool.ClassifySurface`'s texture-derived
+  `water`/`buildings` class, which keys the weapon IMPACT tables and is a different name space.
+
 ## src/Session/EffectPools.cs
 The `CSVM/data/effect_pools.json` reader — how many copies of each effect-template ROOT the
 world-effects stage builds (`BL-225`; the numbers are `BL-231` in the TUNE list). Hand-authored
@@ -4048,7 +4067,8 @@ The record of which authored anims are playable effects, and what their defs nee
 tables every effect producer must stay inside, static and engine-free. Owns `EffectAnimNames` (the
 33 impact/destruction/graze names, with the curation comments naming every exclusion —
 `b_steamtrail`, `random_gun_impact`, the LOCAL_CHOREOGRAPHY fail-closed set — as the load-bearing
-knowledge), the crash-rig's own name sets (`CrashDefNames`: `player_crash_dirt`/`_water`;
+knowledge), the crash-rig's own name sets (`CrashDefTable(program)`: the `player_crash_*` vector
+over the whole surface registry, `CrashDefPrefix`/`CrashAnimRoot` its prefix and last-resort name;
 `PlaneDamageEffectAnims`: the four `<part>_damage_effects` shims; `PropChoreographyAnims`:
 `startprops`/`stopprops`, played directly by `FlightController` rather than through a CALL;
 `PlayerDamageStageAnims`: the authored damage-stage menu `pdpanelN`/`player_fuelleak`/
@@ -4071,8 +4091,8 @@ the anchor and the animations on it. `resolveRoot` is caller-supplied, so the wo
 per-player crash binds share the one function (`WorldEffectsFactory.StageRootResolver`); the result is
 sorted, so no caller's staging order can depend on definition load order.
 **This derivation IS the stage's source** (B3, 2026-08-05): `WorldStageRoots` (the closure of
-`EffectAnimNames`) and `CrashStageRoots` (the closure of `CrashRigAnimNames` — both crash variants
-plus the four damage shims) are what `WorldEffectsFactory` builds a copy of, per pool slot; the two
+`EffectAnimNames`) and `CrashStageRoots` (the closure of `CrashRigAnimNames` — every playable crash
+slot plus the four damage shims) are what `WorldEffectsFactory` builds a copy of, per pool slot; the two
 hand root-tables are gone, and an unstageable anchor now fails the build instead of leaving a def
 anchored on nothing.
 `WorldEffectsFactory` consumes these names to build and stage the runtime; it no longer owns the
@@ -4094,9 +4114,10 @@ its whole producible range resolves inside `EffectAnimNames`/`PlaneDamageEffectA
 
 ## src/Session/WorldEffectsFactory.cs
 Builds the impact/destruction effect stages and the per-player crash runtime: the world-effects runtime (D32) and
-`BuildFlightCrashRuntime` — which despite the name binds every def that plays ON one aircraft: BOTH
-crash variants' closures (`EffectCatalogue.CrashDefNames`: `player_crash_dirt` + `player_crash_water`;
-the surface is only known at impact, so both are bound and `FlightController.ClassifySurface` picks)
+`BuildFlightCrashRuntime` — which despite the name binds every def that plays ON one aircraft: EVERY
+playable slot of the crash-def vector (`EffectCatalogue.CrashDefTable`, handed to the controller as
+`CrashDefs`; the struck surface is only known at impact, so the whole vector is bound and
+`FlightController.Crash` indexes it with the struck body's surface id)
 **plus** `EffectCatalogue.PlaneDamageEffectAnims` (the four `<part>_damage_effects` shims →
 `random_gun_impact` → `yellow_sparks_follow`) **plus** `EffectCatalogue.PropChoreographyAnims`
 (`startprops`/`stopprops`), because those need exactly what it already has — the

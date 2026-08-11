@@ -99,8 +99,8 @@
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "1c6843422a489e013c37f246a0331451",
-      "exercises": "the per-player crash rig building and playing player_crash_dirt (--crash=5 is its only headless trigger), the airframe under the sun, the moving distance-puffer AT_NODE path, and the largest puffer surface: fireball, fire, smoke, debris, scorch.",
+      "hash": "7d8f88fd19c8aa3b4aa1667549b64188",
+      "exercises": "the per-player crash rig building and playing player_crash_default, the slot-0 def --crash=5 resolves with no struck material, plus the airframe under the sun, the moving distance-puffer AT_NODE path, and the fireball/fire/smoke/debris puffers.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     }
   ]
