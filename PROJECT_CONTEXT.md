@@ -192,15 +192,13 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt flying, or the 2–4-player splitscreen Dogfight deathmatch, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, world destructibles that take damage, die, lose collision, throw debris and reset — and planes shoot planes down (M4 A1, front-loaded). The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
-**Active plan: [`PLAN-object-motion-decode.md`](docs/PLAN-object-motion-decode.md)** (written
-2026-08-10; 13 items, 4 waves) — the original's `OBJECT_MOTION` launch, contact and run-time model,
-decoded from `crimson.exe`: the ground-contact test is the DEFAULT rather than `do_intersections`-
-gated, the `translation_range` elevation is linear (`elev/90`) rather than spherical, and `RUN_TIME`
-is a ceiling rather than a duration. Folds in `BL-319` and `BL-245`, re-opens `PT-46` (d), and
-deletes `DebrisTune`. All 13 items are complete. Next: archive the plan.
+**No active plan.** [`PLAN-object-motion-decode.md`](docs/plans/PLAN-object-motion-decode.md) completed
+2026-08-11 (13 items, four waves): the `OBJECT_MOTION` launch, contact and run-time model now
+matches the `crimson.exe` decode, and the retired global debris tune is replaced by the owed
+`BL-344` / `PT-46` look judgement. Next: pick the next run off `backlog.md` (`BL-305` C5 packing,
+`BL-337` `far_fade_range`), or fly the owed verdicts.
 Owed at the controls: `PT-28`, `PT-41`, `PT-43`, `PT-45`, `PT-46` and `PT-47`
-([`playtest.md`](playtest.md)). Verify any change with
-**`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read
-[`docs/verification.md`](docs/verification.md) first.
+([`playtest.md`](playtest.md)). Verify any change with **`.\RunTests.ps1`** (build → units →
+in-engine suites → golden hashes → one exit code); read [`docs/verification.md`](docs/verification.md) first.
 
 Everything else unscheduled — known issues, deferred items, fidelity questions, the TUNE list — is in `backlog.md`; keep it updated as items land or get scheduled.

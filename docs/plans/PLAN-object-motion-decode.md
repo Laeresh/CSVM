@@ -1,8 +1,6 @@
 # OBJECT_MOTION — the original's launch, contact and run-time model, decoded
 
-**ACTIVE PLAN** (written 2026-08-10). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE 2026-08-11** (written 2026-08-10). All 13 items landed. Kept for its executable decode, evidence and dead ends — read as history, not live work. The decode it produced is [`docs/org/objectMotion.md`](../org/objectMotion.md); `PT-46` remains owed at the controls for the post-decode debris-arc judgement tracked by `BL-344`.
 
 This plan replaces the engine's `OBJECT_MOTION` launch and termination model with the one decoded
 from the original's own per-frame update, `FUN_004e8fa0` in `crimson.exe`. Three shipped readings
@@ -591,7 +589,7 @@ dependency on `RUN_TIME` is real in the parser but has no unbounded case here to
 
 **Verified.** `GroundContact` passes with the new opt-out control, and the C6 full verification remains the baseline: clean build, 949/949 unit tests, 37/37 engine suites, 13/13 golden shots hash-identical, including all eight chapter freecam shots. The plan's `docs/verification.md` rule was followed: contact is asserted through engine counters and endpoint/tier checks, not inferred from a screenshot.
 
-## C8 ☐ `RUN_TIME` as a universal ceiling; retire `FlightToLaunchHeight` for the watchdog
+## C8 ☑ `RUN_TIME` as a universal ceiling; retire `FlightToLaunchHeight` for the watchdog
 
 **Goal.** `RUN_TIME` ends a motion exactly on time with a shortened final step, everywhere — not
 only for the flagged 166. A launch carrying no `RUN_TIME` is bounded by the original's watchdog
@@ -669,7 +667,7 @@ dispatches the selected branch, and reports zero engine errors.
 
 # Wave D — the tune, the coverage, the record
 
-## D10 ☐ Delete `DebrisTune` entirely
+## D10 ☑ Delete `DebrisTune` entirely
 
 **Goal.** No global debris multiplier exists in the tree, in any form that can persist across
 sessions or silently absorb a future decode error.
@@ -699,7 +697,7 @@ intended, but check nothing asserts on their presence. ⚠ This is the item wher
 reads at full authored speed *with* the B4 correction — the first honest look at the decode. If it
 reads wrong, file an item; do not reintroduce a scalar (the milestone boundary).
 
-## D11 ☐ Pin a golden that shows debris coming to rest
+## D11 ☑ Pin a golden that shows debris coming to rest
 
 **Goal.** A capture in `analysis/goldens/manifest.json` that fails loudly if the contact tier
 breaks.
