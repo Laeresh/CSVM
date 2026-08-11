@@ -185,7 +185,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — the launch decode
 
 4. ☑ `translation_range` elevation is linear (`elev/90`), not spherical
-5. ☐ `translation.delta` is an acceleration, not a ramp divided by `run_time`
+5. ☑ `translation.delta` is an acceleration, not a ramp divided by `run_time`
 
 ### Wave C — contact and termination
 
@@ -459,7 +459,26 @@ this item and its removal is D10. That means the intermediate build launches at 
 authored and will look weak — that is expected, and it is not a reason to re-tune. ⚠ The
 `translation_range_min_only` rule is unrelated and stays exactly as it is.
 
-## B5 ☐ `translation.delta` is an acceleration, not a ramp divided by `run_time`
+## B5 ☑ `translation.delta` is an acceleration, not a ramp divided by `run_time`
+
+**Landed 2026-08-11.** The division is gone and `rampTotal` is folded straight into `m._accel` at
+the point each branch (`translation`/`translation_range`) computes it — the deferred-fold ordering
+the old code needed (`rampTotal` collected early, applied once `rtSafe` was settled by the flight
+solve) fell out cleanly, since the new fold no longer depends on `rtSafe` at all. `FlightToLaunchHeight`
+now solves against the delta-inclusive `m._accel.Y`, which is more consistent than before (the old
+code fed it gravity-only accel while the ballistic-origin formula it was approximating already used
+the full accel) — no reachable non-`v0y<=0` case is affected, since every `translation_range` event
+with a non-zero `delta` authors a `run_time` and never reaches that solve.
+
+**Measured at the controls** (`--chapter=C4 --play-anim=blow_zdome --debug-anim --det --mute`,
+`zdome`'s `zdtop1`, `delta` a constant 5 on the launch direction, `run_time` 1.5 s — one of the
+non-zero-`delta` `translation_range` events install-wide). A one-line, restore-after A/B (dividing by
+the def's own 1.5 s `run_time`, matching the old formula exactly, then reverting): old formula lands
+`zdtop1` at y=1341.4 at the ~1 s debug tick, the new formula at y=1341.8 — a +0.4 m difference against
+a `0.5·Δaccel·t²` prediction of ~0.33 m, the right size and the right sign for a 5× larger
+acceleration contribution over one second. `c1-crash`'s golden hash moves for the same reason:
+`flydirt`'s (vector-form) `translation.delta.y = -3.0` over a 5.0 s `run_time` now contributes
+-3.0 m/s² instead of -0.6 — the exact "five times as much" the item's own trap warned of.
 
 **Goal.** The `delta` speed ramp contributes the acceleration the original gives it, with no
 division by the flight time.

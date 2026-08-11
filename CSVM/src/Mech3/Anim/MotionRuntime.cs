@@ -17,12 +17,13 @@ namespace CSVM.Mech3.Anim;
 /// <list type="bullet">
 /// <item><c>translation.initial</c> is the launch VELOCITY (a piece leaves at y=10 m/s);
 ///   <c>rnd_xz</c> a per-axis random spread added to it (through the runtime's seedable
-///   <c>_rng</c>, so a lab replay is deterministic); <c>delta</c> a velocity ramp over the
-///   run time (change from initial to initial+delta) — 0 on every reachable piece, so its
-///   exact reading is near-invisible.</item>
+///   <c>_rng</c>, so a lab replay is deterministic); <c>delta</c> a constant ACCELERATION added
+///   straight into the launch's own (<c>dir·delta</c>, no division by <c>run_time</c>) — 0 on
+///   every reachable piece, so its exact reading is near-invisible.</item>
 /// <item><c>translation_range</c> is a launch in POLAR form, not a distance: <c>xz</c> is an
 ///   AZIMUTH and <c>y</c> an ELEVATION, both in DEGREES, and <c>initial</c> is the launch SPEED
-///   in m/s (<c>delta</c> a speed ramp over the run time). ⚠ The elevation is LINEAR, not
+///   in m/s (<c>delta</c> a constant acceleration along the same direction, not a speed ramp
+///   divided by <c>run_time</c>). ⚠ The elevation is LINEAR, not
 ///   spherical — <c>dirY = elev/90</c> with the horizontal taking the L1 remainder
 ///   <c>1 − |elev|/90</c>, so the direction is NOT unit length (0.707 at 45°) and only the azimuth
 ///   goes through a sincos. Transcribed from <c>FUN_004e8fa0</c>; see
@@ -290,31 +291,27 @@ internal sealed class MotionRuntime : IAnimMotion
             return parentBasis.Inverse() * rt.InheritedWorldVelocity;
         }
 
-        // The velocity ramp is a change spread OVER the run time, so it cannot be divided out
-        // until the run time is known — and a bounce-terminated launch does not know its own
-        // until the parabola is solved below. Collected here, folded in after that.
-        var rampTotal = Vector3.Zero;
-
         if (data.Obj("translation") is { } tr)
         {
             var v0 = tr.Vec3("initial");
             var rnd = tr.Vec3("rnd_xz");
             v0 += new Vector3(RandSym() * rnd.X, RandSym() * rnd.Y, RandSym() * rnd.Z);
-            // delta ramps velocity over run_time → a constant acceleration of delta/run_time.
-            // Scaled with the launch it ramps, or the tune would bend the arc's shape as well
-            // as its size.
-            rampTotal = tr.Vec3("delta") * launchScale;
+            // `delta` is folded straight into the acceleration slot, no division by run_time —
+            // the original stores dir·delta into +0x4c..0x54 and copies it verbatim into the
+            // live acceleration. Scaled with the launch it ramps, or the tune would bend the
+            // arc's shape as well as its size.
             // InheritedLocal is OUTSIDE the scale: it is the plane's measured momentum, not part
             // of the authored launch, and its magnitude is tuned separately (WreckMomentum).
             m._v0 = (v0 * launchScale) + InheritedLocal();
-            m._accel = GravityAccel();
+            m._accel = GravityAccel() + tr.Vec3("delta") * launchScale;
             m._hasBallistic = true;
         }
         else if (data.Obj("translation_range") is { } range)
         {
             // A launch in POLAR form: `xz` is an azimuth and `y` an elevation, both in
-            // DEGREES, and `initial` is the launch speed in m/s (`delta` a speed ramp over the
-            // run time). Not a distance travelled — see the class remark for the census. The
+            // DEGREES, and `initial` is the launch speed in m/s (`delta` a constant acceleration
+            // along the same direction, not a speed ramp divided by run_time). Not a distance
+            // travelled — see the class remark for the census. The
             // elevation is LINEAR and the direction is not unit length: RangeLaunchDirection owns
             // that, and `speed` here is a scale on a vector shorter than 1 everywhere but 0°/90°.
             // `translation_range_min_only` marks the rows whose `max` fields are all 0 and
@@ -335,10 +332,9 @@ internal sealed class MotionRuntime : IAnimMotion
             var dir = RangeLaunchDirection(azimuth, elevation);
             // As in the vector branch: the authored launch scales, the inherited momentum does not.
             m._v0 = (dir * speed * launchScale) + InheritedLocal();
-            // delta ramps the launch speed over run_time, along the same direction — the same
+            // `delta` folds in as a constant acceleration along the same direction — the same
             // shape `translation.delta` has, and 0 on 984 of the 1,217 events.
-            rampTotal = dir * speedRamp * launchScale;
-            m._accel = GravityAccel();
+            m._accel = GravityAccel() + dir * speedRamp * launchScale;
             m._hasBallistic = true;
         }
 
@@ -393,10 +389,6 @@ internal sealed class MotionRuntime : IAnimMotion
                 m.PendingBounce = data.Obj("bounce_sequence")?.Str("default");
             }
         }
-
-        // Everything denominated in the run time, folded in once it is settled — including the
-        // solved flight above, or a bounce-terminated piece would fly without its authored tumble.
-        m._accel += rtSafe > 0f ? rampTotal / rtSafe : Vector3.Zero;
 
         // forward_rotation.Time.initial is a TOTAL angle over run_time (the `Time`
         // parameterization), not a rate: the crash pieces carry 5π and 4.44π (clean multiples of
