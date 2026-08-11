@@ -1217,6 +1217,7 @@ degrees, `initial` the speed (`analysis/object-motion-range/`, decoded 2026-08-0
 seeds from the node's authored rest pose, since a shared effect template's children are re-homed by
 nothing between calls. `RangeLaunchDirection` is that decode's ONE expression; `ProjectilePool`'s
 gun-casing ejection reads the same `gunshell` event through it (INSTR-3).
+The original runtime decode, including contact tiers and termination, is in [docs/org/objectMotion.md](org/objectMotion.md); this entry keeps engine-side constraints.
 ⚠ The elevation is LINEAR, not spherical, and the direction is deliberately NOT unit length:
 `FUN_004e8fa0`'s `flags & 8` block computes `dirY = elev · 0.011111111` (1/90 written out) and gives
 the horizontal the L1 remainder `1 − |elev|/90`, so the length dips to 0.707 at 45°; only the

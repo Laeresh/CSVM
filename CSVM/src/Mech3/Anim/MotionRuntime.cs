@@ -12,76 +12,10 @@ internal enum MotionContactTier
 }
 
 /// <summary>
-/// The full OBJECT_MOTION rigid body: a ballistic translate/launch, a scale ramp and a
-/// tumble, driving one node over its run time, in the node's own parent frame (the same
-/// absolute-in-parent-frame convention as <see cref="FromToMotion"/>). Each channel is
-/// optional and an absent one holds the node's live value, seeded once at creation so the
-/// motion cannot compound into itself. This is the reachable half of OBJECT_MOTION — thrown by a
-/// crash or a weapon hit; nothing ambient fires it.
-///
-/// <para><b>Semantics</b> (established from <c>player_crash_dirt</c>'s pieces,
-/// <c>call_crash_trails</c> and <c>flydirt</c>; ⚠ several are TUNE, not a settled decode):
-/// <list type="bullet">
-/// <item><c>translation.initial</c> is the launch VELOCITY (a piece leaves at y=10 m/s);
-///   <c>rnd_xz</c> a per-axis random spread added to it (through the runtime's seedable
-///   <c>_rng</c>, so a lab replay is deterministic); <c>delta</c> a constant ACCELERATION added
-///   straight into the launch's own (<c>dir·delta</c>, no division by <c>run_time</c>) — 0 on
-///   every reachable piece, so its exact reading is near-invisible.</item>
-/// <item><c>translation_range</c> is a launch in POLAR form, not a distance: <c>xz</c> is an
-///   AZIMUTH and <c>y</c> an ELEVATION, both in DEGREES, and <c>initial</c> is the launch SPEED
-///   in m/s (<c>delta</c> a constant acceleration along the same direction, not a speed ramp
-///   divided by <c>run_time</c>). ⚠ The elevation is LINEAR, not
-///   spherical — <c>dirY = elev/90</c> with the horizontal taking the L1 remainder
-///   <c>1 − |elev|/90</c>, so the direction is NOT unit length (0.707 at 45°) and only the azimuth
-///   goes through a sincos. Transcribed from <c>FUN_004e8fa0</c>; see
-///   <see cref="RangeLaunchDirection"/>, which is where the whole of it lives. Measured over all 1,217 events
-///   install-wide (<c>analysis/object-motion-range/</c>): every <c>xz</c> lies in [−170, 359];
-///   every <c>y</c> but one lies in [−90, 90] and goes negative exactly where the thing falls
-///   (a balloon turret's parts at −70…−90, a helium tank blowing sideways at 1…2); and the
-///   five <c>fly_trailN</c> of one explosion carry evenly spaced <c>xz</c> bands — 35–55,
-///   85–105, 135–165, 185–205, 235–255 — i.e. a starburst around the circle. Read as distances
-///   those became a quarter-kilometre sideways throw, which is what put the trails far from
-///   their explosion and made a fan read as scatter.
-///   ⚠ Which world bearing azimuth 0 points along (+X here) is a choice, not a decode — the
-///   data fixes the trails' spacing relative to each other, not their absolute compass.</item>
-/// <item><c>gravity.value</c> (negative) accelerates the launch; folded into the constant
-///   acceleration. It is an ABSOLUTE m/s², not an offset to the aircraft's arcade
-///   <c>nom_gravity</c> of 20: the census carries a literal <b>−9.8</b> on 173 events (and −10
-///   on 400), which is Earth gravity spelled out. The weak values (−1/−2/−3) sit on smoke
-///   trails, where floating is the authored look.
-///   <para><c>gravity.complex</c> picks which of TWO forms that fold takes. The plain form drops
-///   the value into the parent frame's Y, which is right only while that frame is world-aligned;
-///   <c>complex</c> takes gravity as a WORLD-down vector and converts it into the frame, so a body
-///   under a banked, pitched or inverted parent falls down the WORLD rather than down its own hull.
-///   The install authors it on aircraft wreckage alone — 254 events / 25 shapes, every one of them
-///   a body whose parent frame carries whatever attitude the aircraft died in — and the two forms
-///   agree exactly anywhere else, which is why nothing else needs it. All 254 author a
-///   <c>RUN_TIME</c>, so the converted acceleration never reaches
-///   the no-authored-time watchdog.</para>
-    ///   Every gravity-bearing ballistic body selects a contact tier when the session wires a mask:
-    ///   the default is <see cref="TryGroundColumn"/>, while <c>do_intersections</c> selects
-    ///   <see cref="TryContact"/>'s geometry sweep and <c>no_altitude</c> vetoes only the column. The
-    ///   column runs on descending parent-frame steps, widened to every step by <c>complex</c>, and
-    ///   searches only the 10 m span ending at the next point. The two tiers share the struck-surface bounce
-    ///   classification but deliberately disagree on walls and rooftops.</item>
-/// <item><c>forward_rotation.Time.initial</c> is a tumble RATE (rad/s) about the node's local
-///   X axis (a piece = 15.708 = 900°/s). ⚠ the axis is a reasoned choice — the data carries a
-///   scalar rate, not an axis — an end-over-end tumble about the local X reads well for
-///   scattered wreckage.</item>
-/// <item><c>xyz_rotation.initial</c> a steady multi-axis spin (rad/s), composed like
-///   <see cref="SpinMotion"/>; present only on the rare spin+ballistic events.</item>
-/// <item><c>scale.initial</c> and <c>scale.delta</c> are OFFSETS from unit scale, not absolute
-///   sizes: <c>scale = 1 + initial + delta·u</c>. Unlike <c>PoseScale</c>/<c>OBJECT_SCALE_STATE</c>,
-///   which are absolute. Settled by the install's commonest value — a bare
-///   <c>(-0.1, -0.1, -0.1)</c> with zero delta, on <b>30 of the 45 distinct SCALE events</b>
-///   (every `h2twr`/`radiotwr`/`transmitter` collapse and every `gullfly`): as an absolute that is
-///   a NEGATIVE scale, i.e. the object inside-out at a tenth of its size; as an offset it is a
-///   clean 10 % shrink, which is what the water tower collapsing actually does (user playtest).
-///   ⚠ The base is <c>Vector3.One</c>, and whether it should instead be the node's own authored
-///   scale is UNDECIDED — every node carrying this channel is authored at exactly unit scale in
-///   this install, so the two readings coincide and no capture can separate them.</item>
-/// </list></para>
-///
+/// The full OBJECT_MOTION rigid body: ballistic translation, scale and tumble channels driving
+/// one node in its parent frame. Optional channels preserve the node's live value, and the
+/// runtime is reached by crash or weapon-hit effects rather than ambient animation. The original
+/// runtime decode and retired readings are documented in docs/org/objectMotion.md.
 /// </summary>
 internal sealed class MotionRuntime : IAnimMotion
 {

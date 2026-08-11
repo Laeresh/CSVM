@@ -277,21 +277,7 @@ the "Debris tumbles" bullet below for which pieces each covers. A format reader 
   water tower launches **2** visible pieces (`h2twr_middle` arcs from y≈5 to y≈19 in 0.8 s, tumbling,
   `run_time` 5 s), C1 buildings **7** each, passenger planes **2**; deaths that author no
   `OBJECT_MOTION` (the AA guns, `air_gen`) correctly launch **0**.
-  - **⚠ The shipped arc is the authored one scaled by `0.65` (`BL-022`, 2026-08-08).** Every launch
-    speed above is multiplied by `DebrisTune.LaunchScale`, default **0.65**; gravity is unscaled.
-    That is a **judged look, not a decode** — the authored speeds are censused and correct as read,
-    and the scalar is the gap between what the data says and what the original renders, settled at
-    the controls against `OriginalScreenshots/Videos/m_build03 destruction.mp4`. A frame comparison
-    of that kill put our debris' rise at roughly **3×** the original's; the authored data alone
-    would throw `m_build03`'s pieces to a **34–60 m apex** and **63–128 m** downrange. So a reader
-    computing an expected arc from the extracted numbers must apply the scale, or use
-    `DebrisTune.UseAuthored()` (what the `bounce-launch`/`nulled-launch` suites do) to assert the
-    decode instead. The tune is **global**, so `player_crash_dirt`'s pieces tightened with it —
-    `CAP-16` signed off the crash debris' *direction*, never its magnitude (`BL-122`).
-    ⚠ It also silently absorbs the `run_time` behaviour below: six of `m_build03`'s nine pieces are
-    cut at 67–72 % of their arc while still climbing, and `genx12`'s twelve run 3.7–5.2 s past
-    their landing. Until that is settled the scalar will not generalise to defs with different
-    authored run times.
+  - **The launch decode and contact model live in [`org/objectMotion.md`](../org/objectMotion.md).** Authored values are not scaled by a format-level scalar; `RUN_TIME` is a ceiling and contact is selected by compiled gravity flags. **Measured off footage:** the former 0.65 look fit and approximately 0.58 frame comparison remain historical observations, not executable constants.
   - **Ground-rest is split, `PLAN-bounce-launch` (2026-08-03).** A census over all 17,568 extracted
     defs found 733 `OBJECT_MOTION` events naming a `bounce_sequence`, 529 of those with no authored
     `RUN_TIME` (217 def files) — the shape that means "fly until you land." Those 529 are two
@@ -408,8 +394,8 @@ the "Debris tumbles" bullet below for which pieces each covers. A format reader 
       always launch upward** and solve. The other **8 are `BL-245` falls wearing this shape** and
       are declined by the same no-apex guard: `bridge_destroy01`'s truck (level), `rope1burn`'s five
       burning rope ends (−0.44…−1.0 m/s ± ~1), and both `fuelboxbreaks` rockerarms (elevation 90°
-      but speed **−45…45**, so half the draws point down). ⚠ For the spherical `translation_range`
-      form the vertical speed is `sin(elevation)·speed` — **a negative speed inverts an upward
+      but speed **−45…45**, so half the draws point down). ⚠ For the decoded linear `translation_range`
+      form the vertical speed is `(elevation/90)·speed` — **a negative speed inverts an upward
       elevation**, which is the only reason the rockerarms are not in the solved 159.
     - 159 of the 167 are switched off downstream with every intervening event null-start
       (`destroy_pwr_station` puts three `CALL_ANIMATION`s between launch and hide); the other 8 are

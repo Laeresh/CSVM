@@ -725,7 +725,7 @@ exercises" clause, and it is **rewritten on a re-pin, never appended to**. ⚠ D
 `--det --mute` like every other shot, and a landing that depends on the seeded RNG's draw needs its
 window chosen so every draw lands, not just the median one.
 
-## D12 ☐ Land `docs/org/objectMotion.md`, and correct the records that carried the disproven readings
+## D12 ☑ Land `docs/org/objectMotion.md`, and correct the records that carried the disproven readings
 
 **Goal.** This plan's decode has a home of its own in `docs/org/`, the corrected records point at it
 instead of restating it, and no document in the repo still teaches a reading this plan disproved —

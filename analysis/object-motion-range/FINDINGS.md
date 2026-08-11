@@ -10,8 +10,7 @@ python analysis/object-motion-range/census.py
 ## The finding (2026-08-01)
 
 **`xz` is an AZIMUTH and `y` an ELEVATION, both in degrees; `initial` is the launch SPEED in m/s**
-(`delta` a speed ramp over the run time). The engine had read `xz`/`y` as *distances travelled over
-`run_time`* with a random azimuth, which threw debris and smoke trails hundreds of metres.
+(`delta` a constant acceleration along the launch direction). The earlier distance reading is retired. The executable decode is a polar launch: `xz`/`y` are azimuth/elevation and `initial` is speed; `delta` is constant acceleration. See [`docs/org/objectMotion.md`](../../docs/org/objectMotion.md).
 
 Measured over **1,217 events / 613 distinct shapes**:
 
