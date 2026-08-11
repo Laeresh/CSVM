@@ -87,10 +87,11 @@ surface. The struck surface's type selects the bounce branch: the caller maps th
 types to the default, water or lava branch indices. The extracted install carries no live lava
 branch; that is dead authored data.
 
-**Decoded from the executable.** On contact, the step is reflected and all velocity components are
-multiplied by 0.2. Rebounds continue only while the damped velocity loses energy and remains above
-the asymmetric rest thresholds: 0.1 m/s horizontally and 0.5 m/s vertically. A body stops when it
-no longer meets those conditions.
+**Decoded from the executable.** On contact, a moving body's pose is held half of the incoming step
+clear of the surface; below the asymmetric 0.1 m/s horizontal / 0.5 m/s vertical thresholds it is
+placed exactly on the surface. Velocity itself is **not reflected**: every component keeps its sign
+and is multiplied by 0.2. The motion continues only while incoming speed squared is at least
+acceleration squared; otherwise it ends exactly on the struck surface.
 
 ## Time and termination
 

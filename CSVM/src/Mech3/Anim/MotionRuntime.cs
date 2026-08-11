@@ -47,9 +47,8 @@ internal sealed class MotionRuntime : IAnimMotion
 
     private const float GroundColumnRange = 10f;
 
-    private const float Restitution = 0.2f;
+    private const float ContactDamping = 0.2f;
 
-    private const int MaxRebounds = 8;
 
     // Held pose, seeded once from the live transform: an absent channel carries it through.
     private Basis _heldRot;      // orthonormal; scale kept out
@@ -89,7 +88,6 @@ internal sealed class MotionRuntime : IAnimMotion
     private bool _landed;
     private Vector3 _landedOrigin;  // parent frame — the pose the body holds from contact onward
     private float _landedAt;        // the clock at contact; rotation and scale freeze there too
-    private float _previousReboundSpeedSq = float.PositiveInfinity;
     private int _reboundCount;
 
     public Node3D Target { get; private init; } = null!;
@@ -561,26 +559,28 @@ internal sealed class MotionRuntime : IAnimMotion
     private bool Land(float time, Vector3 parentOrigin, Vector3 descendingStep, GodotObject? collider)
     {
         float elapsed = time - _ballisticStartTime;
-        var reboundVelocity = -(_v0 + _accel * elapsed) * Restitution;
-        float reboundSpeedSq = reboundVelocity.LengthSquared();
-        bool moving = new Vector2(reboundVelocity.X, reboundVelocity.Z).Length() > 0.1f
-                      || Mathf.Abs(reboundVelocity.Y) > 0.5f;
+        var incomingVelocity = _v0 + _accel * elapsed;
+        bool moving = new Vector2(incomingVelocity.X, incomingVelocity.Z).Length() >= 0.1f
+                      || Mathf.Abs(incomingVelocity.Y) >= 0.5f;
+        var contactOrigin = moving ? parentOrigin - descendingStep * 0.5f : parentOrigin;
 
-        // The original reflects the whole step and damps every velocity component equally. A
-        // moving body is held half a descending step clear of the surface before the rebound;
-        // once below the asymmetric speed thresholds it rests exactly on the surface.
-        if (moving && reboundSpeedSq < _previousReboundSpeedSq && _reboundCount < MaxRebounds)
+        // The original reflects only the penetrating STEP, by holding a moving body half that
+        // step clear of the surface. Velocity is not reflected: all three components keep their
+        // sign at 20%. It continues while incoming speed² still covers acceleration²; otherwise
+        // this contact ends the motion at the already-corrected pose.
+        if (incomingVelocity.LengthSquared() >= _accel.LengthSquared())
         {
-            _heldOrigin = parentOrigin - descendingStep * 0.5f;
-            _v0 = reboundVelocity;
+            _heldOrigin = contactOrigin;
+            _v0 = incomingVelocity * ContactDamping;
             _ballisticStartTime = time;
-            _previousReboundSpeedSq = reboundSpeedSq;
             _reboundCount++;
             Seek(time);
             return false;
         }
 
         _landedAt = time;
+        // The half-step offset is only the intermediate contact pose. The final response lands
+        // exactly on the struck surface, including when the defensive response ceiling is hit.
         _landedOrigin = parentOrigin;
         _landed = true;
         PendingBounce ??= ChooseBounce(collider);

@@ -4383,7 +4383,8 @@ public static class Suites
             // coverage, and stubbing it is what makes the branch choice assertable without needing
             // a chapter with reachable sea.
             (float Flight, Vector3 End, string? Bounce, bool ByContact,
-                bool Column, bool Sweep, int ColumnLandings, int SweepLandings, int Rebounds) Run(
+                bool Column, bool Sweep, int ColumnLandings, int SweepLandings, int Rebounds,
+                float RiseAfterFirstContact) Run(
                 bool flagged, uint mask, System.Func<GodotObject?, bool>? waterHook,
                 bool complex = true, bool invertedParent = false, bool noAltitude = false,
                 float x = 0f, float? groundY = null)
@@ -4414,13 +4415,15 @@ public static class Suites
                         Body(flagged, complex, invertedParent ? 5f : -5f, noAltitude), Authored);
                     if (motion == null)
                     {
-                        return (0f, node.GlobalPosition, null, false, false, false, 0, 0, 0);
+                        return (0f, node.GlobalPosition, null, false, false, false, 0, 0, 0, 0f);
                     }
 
                     var set = new MotionSet();
                     set.Add(motion, world.Runtime.Destructibles.All.First().Def, null);
                     float flown = 0f;
                     string? bounce = null;
+                    float? firstContactY = null;
+                    float riseAfterFirstContact = 0f;
                     for (int i = 0; i < (int)(Authored / Tick) + 2 && !motion.Finished; i++)
                     {
                         foreach (var landing in set.Tick(Tick))
@@ -4428,12 +4431,20 @@ public static class Suites
                             bounce = landing.Bounce;
                         }
 
+                        if (motion.ReboundCount > 0)
+                        {
+                            firstContactY ??= node.GlobalPosition.Y;
+                            riseAfterFirstContact = Mathf.Max(
+                                riseAfterFirstContact, node.GlobalPosition.Y - firstContactY.Value);
+                        }
+
                         flown += Tick;
                     }
 
                     return (flown, node.GlobalPosition, bounce, motion.LandedByContact,
                         motion.TestsColumnContact, motion.TestsSweepContact,
-                        set.ColumnContactLandings, set.SweepContactLandings, motion.ReboundCount);
+                        set.ColumnContactLandings, set.SweepContactLandings, motion.ReboundCount,
+                        riseAfterFirstContact);
                 }
                 finally
                 {
@@ -4449,10 +4460,12 @@ public static class Suites
             ctx.Check(hit.Flight < Authored,
                 $"contact beat the authored run time flight={hit.Flight:0.00}s authored={Authored:0}s");
             ctx.Check(hit.Rebounds >= 1 && hit.Rebounds <= 2,
-                $"the 0.2 response hops once or twice before settling rebounds={hit.Rebounds} flight={hit.Flight:0.00}s");
-            // A band, not a point: the hit lands between two frames and the body is a point, so
-            // "on the surface" is within a tick's fall of it, never below it.
-            ctx.Check(hit.End.Y >= surfaceY - 1f && hit.End.Y <= surfaceY + 2f,
+                $"the 0.2 response repeats once or twice before settling responses={hit.Rebounds} flight={hit.Flight:0.00}s");
+            ctx.Check(hit.RiseAfterFirstContact <= 0.001f,
+                $"the original's damped contact response never launches the body upward rise={hit.RiseAfterFirstContact:0.000} m");
+            // Final contact is exact; allow only numerical/collision-query noise, not a hovering
+            // half-step pose left behind by the intermediate response.
+            ctx.Check(Mathf.Abs(hit.End.Y - surfaceY) <= 0.1f,
                 $"the body rests at the struck surface endY={hit.End.Y:0.00} surfaceY={surfaceY:0.00}");
             ctx.Check(hit.Bounce == Land, $"contact dispatched the default branch bounce={hit.Bounce ?? "(none)"}");
             ctx.Check(hit.Sweep && !hit.Column && hit.SweepLandings == 1 && hit.ColumnLandings == 0,

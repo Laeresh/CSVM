@@ -106,7 +106,7 @@
     {
       "name": "c1-mbuild03-settled-debris",
       "frame": 120,
-      "hash": "aedc6f5691ca74ac7d27b8128cb9d557",
+      "hash": "dfcb692973fbe9d578ff5f131cf47a49",
       "exercises": "a collision-enabled m_build03 destruction, with six default-column debris landings inside its 2 s window.",
       "args": ["--freecam", "--chapter=C1", "--collision", "--destroy=m_build03", "--det", "--mute"]
     }
