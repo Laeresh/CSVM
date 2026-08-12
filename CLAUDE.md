@@ -53,3 +53,15 @@ the "Current status" pointer. This file holds only what's specific to Claude Cod
   left behind turns any later cleanup into a deletion of irreplaceable original-game footage.
   `CleanScratch.ps1` unlinks reparse points before sweeping as a backstop, but other tools'
   recursive deletes have no such guard.
+
+
+## Writing style
+
+- No em dashes. Use commas, parentheses, or a new sentence.
+- Banned phrases: "load-bearing", "worth stating plainly", "full stop",
+  "carry the argument", "the trap", "isn't just X — it's Y".
+- No punchy fragments for drama. Write complete sentences.
+- Do not build to a turn of phrase. State the claim directly.
+- Technical documentation, not marketing copy.
+- Comments explain why, in one line. No paragraph-length comments.
+- Write no documentation unless explicitly asked.
