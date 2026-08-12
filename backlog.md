@@ -2786,7 +2786,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   scripted `--det`/`--hold` runs; the polling *sites* are the seam, `FireControl` itself never
   changes (it consumes `FireInputs` booleans). Update `docs/controls.md` when this lands.
 
-- `BL-343` `[Bug]` **The collision overlay colours colliders by the wrong tag.** `--collision=show`
+- `BL-345` `[Bug]` **The collision overlay colours colliders by the wrong tag.** `--collision=show`
   keys its colours off `SceneBuilder.SurfaceMeta` (`ColliderOverlay.ClassOf`), the texture-derived
   `water`/`buildings`/`default` class. Since `PLAN-crash-surface-id` A2 every collider also carries
   `SceneBuilder.SurfaceIdMeta`, the original's numeric surface id, and that id is what actually
@@ -2841,7 +2841,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   before writing code, and treat it as a Decision-7-shaped question for the user, not an
   implementation detail.
   *Fix shape:* `ImpactOutcome`'s key comes off `SurfaceIdMeta`, `SurfaceClass` collapses into the
-  registry, and `BL-343`'s overlay question answers itself. Large, playtested, and it changes what
+  registry, and `BL-345`'s overlay question answers itself. Large, playtested, and it changes what
   every gun and rocket draws on most of the ground — its own plan, with a before/after, not a
   follow-on commit.
   ⚠ Do not read `PLAN-crash-surface-id` Decision 3 ("keep the texture-name classifier, for weapons
