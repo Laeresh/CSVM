@@ -4676,12 +4676,15 @@ public static class Suites
     private static void BounceLaunch(TestContext ctx)
     {
         // extracted/C1/cam_anim/refuel1-refuel1-healthy.json, the two bounce-terminated events.
-        // t = 2·v0y/|g| = 2·speed·sin(elev)/10 over the authored ranges, so the support is closed:
-        //   part3  speed 18…22  elev 60…70°  g −10  →  3.118 … 4.135 s
-        //   part4  speed 28…36  elev 35…50°  g −10  →  3.212 … 5.516 s
+        // t = 2·v0y/|g| = 2·speed·(elev/90)/10 over the authored ranges, so the support is closed.
+        // ⚠ The elevation is LINEAR, not spherical (MotionRuntime.RangeLaunchDirection, decoded
+        // from FUN_004e8fa0) — v0y is speed·elev/90, not speed·sin(elev), which is why these bands
+        // sit ~23 % lower than the sin() ones they replaced:
+        //   part3  speed 18…22  elev 60…70°  g −10  →  2.400 … 3.422 s
+        //   part4  speed 28…36  elev 35…50°  g −10  →  2.178 … 4.000 s
         // A landing is detected on a frame boundary, so the observed time can run one tick long.
-        const float Part3Min = 3.118f, Part3Max = 4.135f;
-        const float Part4Min = 3.212f, Part4Max = 5.516f;
+        const float Part3Min = 2.400f, Part3Max = 3.422f;
+        const float Part4Min = 2.178f, Part4Max = 4.000f;
         const float Tick = 1f / 60f;
         const string chapter = "C1";   // the only chapter shipping refuel* (5 defs)
         const string lateBounce = "ObjectMotion(bounce landed after its instance ended)";
@@ -4744,7 +4747,7 @@ public static class Suites
                     }
                 };
                 runtime.DamageAt(tank.Anchor, tank.MaxHealth + 1f);
-                for (int i = 0; i < 600; i++)   // 10 s, comfortably past the 5.5 s worst-case flight
+                for (int i = 0; i < 600; i++)   // 10 s, comfortably past the 4.0 s worst-case flight
                 {
                     clock += Tick;
                     runtime.Advance(Tick);
@@ -4886,15 +4889,17 @@ public static class Suites
     ///
     /// <para>⚠ Assert a BAND (the same rule as <c>bounce-launch</c>): elevation and speed are
     /// per-instance draws, so the flight is a random variable whose support the authored ranges fix
-    /// — <c>t = 2·speed·sin(elevation)/9.8</c> over elevation 10…70° and speed 17…25 m/s.</para>
+    /// — <c>t = 2·speed·(elevation/90)/9.8</c> over elevation 10…70° and speed 17…25 m/s. ⚠ The
+    /// elevation is LINEAR, not spherical (<see cref="MotionRuntime.RangeLaunchDirection"/>), so
+    /// <c>v0y</c> is <c>speed·elev/90</c> and not <c>speed·sin(elev)</c>.</para>
     /// </summary>
     private static void NulledLaunch(TestContext ctx)
     {
         // extracted/*/cam_anim/zep_can_dstry1-dblcannon_flying_parts.json: eight parts, each
         // xz −135…135°, y 10…70°, initial 17…25 m/s, gravity −9.8, no run_time, no bounce_sequence.
-        //   min  2·17·sin(10°)/9.8 = 0.602 s      max  2·25·sin(70°)/9.8 = 4.794 s
+        //   min  2·17·(10/90)/9.8 = 0.385 s       max  2·25·(70/90)/9.8 = 3.968 s
         // A dispatch is observed on a frame boundary, so the gap can run one tick long.
-        const float FlightMin = 0.602f, FlightMax = 4.794f;
+        const float FlightMin = 0.385f, FlightMax = 3.968f;
         const float Tick = 1f / 60f;
         const string root = "zep_ng_dstry1_flt";   // the staged copy's node name, '.' sanitised
 
@@ -4943,7 +4948,7 @@ public static class Suites
                         bounceOwed |= runtime.Motions.OwesBounce(d.Def, d.Anchor);
                     };
                     runtime.PlayEffectAt("biggun_flying_parts", point);
-                    for (int i = 0; i < 360; i++)   // 6 s, past the 4.79 s worst-case flight
+                    for (int i = 0; i < 360; i++)   // 6 s, past the 3.97 s worst-case flight
                     {
                         clock += Tick;
                         runtime.Advance(Tick);

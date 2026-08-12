@@ -1230,13 +1230,25 @@ rate, no `AnimRuntime`/`MotionSet` state, so the reach-in is inert to everything
 `MotionSet`, `EmitterDirector`,
 `NameResolver` and `TemplateStage` share the namespace but ARE independently owned — their own
 entries below.
-`MotionRuntime`'s `translation_range` is a SPHERICAL launch — `xz` azimuth, `y` elevation, both in
+`MotionRuntime`'s `translation_range` is a POLAR launch — `xz` azimuth, `y` elevation, both in
 degrees, `initial` the speed (`analysis/object-motion-range/`, decoded 2026-08-01) — and a launch
 seeds from the node's authored rest pose, since a shared effect template's children are re-homed by
 nothing between calls. `RangeLaunchDirection` is that decode's ONE expression; `ProjectilePool`'s
-gun-casing ejection reads the same `gunshell` event through it (INSTR-3). Its `scale` channel is an
+gun-casing ejection reads the same `gunshell` event through it (INSTR-3).
+⚠ The elevation is LINEAR, not spherical, and the direction is deliberately NOT unit length:
+`FUN_004e8fa0`'s `flags & 8` block computes `dirY = elev · 0.011111111` (1/90 written out) and gives
+the horizontal the L1 remainder `1 − |elev|/90`, so the length dips to 0.707 at 45°; only the
+AZIMUTH is converted deg→rad and passed to the sincos at `FUN_0053c6c0`. **Do not normalise it** —
+the unit-sphere reading that shipped until 2026-08-11 launched 60–70° debris 20–25 % too fast and is
+what cut `m_build03` part1 at ~70 % of its authored 5.0 s `RUN_TIME`. Which world bearing azimuth 0
+points along (+X) remains a choice, and `FUN_0053c6c0`'s output order is unchecked — the cos-on-X /
+sin-on-Z assignment is inherited, not decoded. Its `scale` channel is an
 OFFSET from unit scale (`1 + initial + delta·u`), unlike the absolute `PoseScale`/`OBJECT_SCALE_STATE`
 — 30 of the 45 distinct SCALE events carry a bare `-0.1`, which absolute is a negative scale.
+`gravity.complex` picks between two forms of the same fold: plain drops the value into the parent
+frame's Y, `complex` converts world-down INTO that frame — identical under a world-aligned parent,
+which is why the install authors it on aircraft wreckage alone (254 events / 25 shapes, all with a
+`RUN_TIME`).
 `MotionRuntime`'s flight solve is admitted by an **absent `RUN_TIME` plus an apex**, never by the
 `BOUNCE_SEQUENCE` — `BL-257`'s census (`analysis/bl-257-nulled-launch/`) found 167 events / 119
 distinct defs naming NEITHER field, which end instead with the flying piece's own null-start
@@ -2906,6 +2918,9 @@ an unowned `NoShooter` round and every other cause) — a fact report the sessio
 flight holds no match state, and `Respawn` emits nothing. `AutoRespawnAfter` (session-armed —
 Versus sets 3 s on every rig) auto-respawns a crash on the sim clock with R still skipping early;
 null, the default, keeps every other mode manual-R (scripted HoldSegments runs keep their 1.5 s).
+In a splitscreen stunt race, a finished pilot continues normal flight, collision, weapons and
+crash/respawn while `StuntMission` holds their timer/objectives and `MarkerHud` holds their placing;
+this prevents their finish pose from obstructing another pilot's gate.
 `Respawn` plays `startprops` back and resets
 `ThrottleSmoke`, which `Update` otherwise drives every frame off the live throttle.
 A survivable graze plays touchdown.zrd's per-surface reaction (`GrazeReaction`) through the SAME

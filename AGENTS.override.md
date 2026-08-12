@@ -1,0 +1,37 @@
+# AGENTS.override.md — pi agent instructions (CSVM)
+
+> This file **replaces** AGENTS.md/CLAUDE.md for pi. `AGENTS.md` and `CLAUDE.md` stay in
+> the repo — **other agents read them** — so never merge their content or delete them. The
+> rules below are the pi-relevant core, made self-contained so nothing depends on you choosing
+> to open another file.
+
+## Non-negotiables (in effect every session — no reading required)
+
+- **Commit to `main`, never a branch.** Single-developer repo, no PR workflow. Push only when
+  explicitly asked.
+- **Every landed commit carries a `Co-Authored-By:` trailer naming the acting agent + model**
+  (e.g. `Co-Authored-By: DeepSeek V4 Flash <noreply@deepseek.com>`, taken from `PI_MODEL`).
+  Body = what landed, how it was verified, the outcome — brief; not a narrative.
+- **Before touching any module, read it first:** its `## src/...` entry in `docs/architecture.md`
+  (grep for the module path + `-A 12`; **never read architecture.md whole — it is ~110 KB**),
+  `docs/verification.md` before measuring anything, and `docs/formats/gotchas.md` before writing
+  any reader/transform/shader. Read `docs/cli.md` before touching a flag's behaviour.
+- **Never commit game assets** (game files, extracted assets, ZBD contents, hexdumps with bulk
+  asset data). Code + format docs only.
+- **Probes/scratch output → `./.scratch/`**, never the OS temp. Print the workspace-relative
+  path. `CleanScratch.ps1` sweeps it; `playtest/` and `analysis/` are the durable homes.
+- **Update docs in the same change as the code it describes.** New formats land with their
+  `docs/formats/` page. Diagnosis narratives go in the commit body, not the docs.
+- **`AGENTS.md` / `CLAUDE.md` are not yours to simplify** — they are the pointer files other
+  agents consume.
+
+## First step of any task
+
+Open `PROJECT_CONTEXT.md` (the compact, authoritative index) and locate the **active plan**
+(`docs/PLAN-*.md`) and its **Current status** section before changing code. Also read the
+matching **[skill](.agents/skills/)** before using it (backlog, plan-item, analyse-capture,
+commit-next, close-backlog-item, …).
+
+**Run `.\RunTests.ps1` only when code under `./CSVM` changed** (build → units → in-engine
+suites → golden hashes → one exit code). Doc and tooling changes (this file, `.pi/`,
+`.claude/`, `docs/`, scripts) do **not** need `RunTests.ps1`.

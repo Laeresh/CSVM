@@ -106,6 +106,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     absorbs whatever this turns out to be**, so settling it will likely move that number too — re-judge the
     look at the controls afterwards rather than assuming 0.65 survives.
 
+- `BL-343` `[Research]` **`IMPACT_FORCE` is a real velocity-inheritance mechanism in the original, and
+    `BL-008` was closed without it.** The `OBJECT_MOTION` flag word's bit `0x2` is set by the parser's
+    `IMPACT_FORCE` token (`FUN_00508590` at `00508d03`), and the per-frame update gates a parent-velocity
+    add on it (`FUN_004e8fa0` at `004e925e`, reading the parent object's velocity at `param_1+0xc0..0xc8`).
+    The engine reads the extractor's `impact_force` boolean nowhere. A census
+    (`analysis/object-motion-flags/`) puts it on **182 events / 25 distinct shapes**, and the list is
+    exclusively aircraft wreckage: the eleven airframes' `MAIN_ROOT_NODE`, `player` and both
+    `player_crash_*` defs' four pieces, `agyrobus`, and `drop_smokescreen_canister`'s `smoker`.
+    *To settle:* read the update's gate in full — the bit is necessary but a condition on the parent also
+    has to hold, and which parent state that is decides whether this fires on a shot-down plane at all —
+    then decide whether to implement the add or record a reasoned divergence.
+    ⚠ **Traps.** (a) **`BL-008` is closed (`1f09c2d`) on "the original does not inherit velocity into world
+    debris", and that closure is still right — for world debris.** Not one world destructible authors this
+    flag; every carrier is aircraft wreckage, which is the population the closure never looked at. Do not
+    reopen `BL-008`; this is the part of the question it did not answer. (b) `PLAN-object-motion-decode`
+    deliberately left this out of scope, so do not fold it back in mid-plan — the launch decode's
+    verification is already wide, and a second mechanism landing in the same window makes a moved golden
+    impossible to attribute. (c) The engine already has a **judged** inheritance rule pointing the other
+    way: a motion that continues a contact landing inherits *none* of the aircraft's momentum
+    (`docs/formats/destructibles.md`, the `player_crash_dirt` `pNhit` case). If this lands, that rule and
+    this flag have to be reconciled, not stacked. (d) `BL-122`'s crash-debris look was signed off on
+    *direction* only (`CAP-16`), never magnitude — it is not evidence either way here.
+
 - `BL-060` `[Feature]` **Improve on the original crash — the bespoke "breaking apart" (branch `bespoke-crash-animation`).**
   User's call (2026-07-23): the retired bespoke `CrashBreakup` wreck-scatter looked *better* than the
   faithful data-driven crash, so it was preserved on that branch rather than deleted. **The A/B playtest
@@ -348,28 +371,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `short_firetrail` shape and the mapping is one pinned string in `DamageVisuals.RigAnimFor` if
   ever revisited. The remaining question here is only *when* the exe calls the heavy stage, not
   where it sits — do not loosen the 0.10 tier to make it reachable.
-
-- `BL-253` `[Bug]` `[Owed-playtest]` **The C2 facade panels' log debris landed (2026-08-04, `docs/HISTORY.md`); only the
-  in-cockpit playtest is owed.**
-  ⚠ **Still open.** (a) The in-cockpit playtest: fly a row of facade panels and confirm logs visibly
-  launch from each struck panel, with several rows' debris flying in parallel rather than the earlier
-  fix's per-row floor (the pool cap — 6, `localCallRoots` in `CSVM/data/effect_pools.json` — is an
-  invented number, judged in the same flight; see `BL-231`). (b) The `air_mixed_exp_sg` one-shot
-  authored on the same death is unconfirmed audible — D31 death audio is still stubbed engine-wide,
-  unrelated to this item's scope.
-  ⚠ **Trap kept from the diagnosis:** `facdsticks`' `part1`–`4` bind through the CALLEE's own
-  compiled symbol table, and `blockit2`'s same-named `part1`–`7` carry their own distinct ptrs — the
-  two never share a lookup, so do not add a name-based rescue near `Targets()`
-  (`docs/formats/destructibles.md`'s `⚠` on symbol-table binding).
-
-- `BL-254` `[Bug]` `[Owed-playtest]` **Both C2 studio gates' deaths now match the original (2026-08-04, `docs/HISTORY.md`);
-  only the in-cockpit playtest is owed.**
-  ⚠ **Still open.** (a) The in-cockpit playtest, now covering both gates: fly gate2 to confirm the
-  doors fall before the archway blows and the passage only truly opens once the wreck's colliders
-  replace the healthy ones; fly gate1 to confirm the doors open but the archway stays solid — no
-  passage. (b) `gate2`'s death also calls `go_get_her` (mission scripting) — left to whatever
-  handles it today; this item was the swap timing/authorship only. (c) The 28.5 s offset reads long
-  but is what is authored — A/B the original's timing rather than "fixing" the number.
 
 - `BL-291` `[Feature]` **A way to spawn/damage a zeppelin — the thin harness that finishes `BL-239`'s in-game
   verification** (PT-36, 2026-08-06). Splash damage reads right at the controls, but nothing in
@@ -726,10 +727,21 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   uniform in `[0, θ]`, **not** uniform over the cone's solid angle; the candidate set is **not
   aircraft-only** — it is vehicles + turrets + `targets.zrd` mission structures + **live
   proximity-fused ordnance in flight**, so guns legitimately snap onto an incoming rocket, and
-  scoping the port to planes would be a silent behaviour change. **Unsettled before tuning:** how
-  the 1° assist scatter composes with the per-gun `CANNON_SPREAD 6.0` (`docs/formats/weapons.md`) —
-  replace, stack, or different stage — was not traced and must be settled first, or both numbers
-  get tuned against each other.
+  scoping the port to planes would be a silent behaviour change.
+  *Decoded 2026-08-12* (settles this entry's former "unsettled before tuning" clause; write-up in
+  [`docs/org/aim-assist.md`](docs/org/aim-assist.md)): **`CANNON_SPREAD` is not a dispersion term.**
+  Its one reader in the executable (`FUN_004ba6f0` @ `0x004ba9da`) stores `−cos(value × π/180)` into
+  `[def+0x210]+0x08`, read only by the four assist scorers — it is the assist's **acceptance cone**,
+  6° half-angle for the stock guns, and the 1° `inaccuracy` cone is the *only* scatter on a round.
+  No key means `0.0` from the block's `calloc`, i.e. a 90° hemisphere, not a non-zero default. The
+  per-target override at candidate `+0x50` is `−1.0` from every entity constructor (planes
+  `0x004b0006`, turrets `0x004a9ae7`, MStructs `0x004a25ee`, ordnance `0x00441be1`); the only
+  authored writer is the turret key `STICKINESS` (`FUN_004a9df0` @ `0x004aa5b4`), which ships zero
+  times, so with the shipped data the cone is always the firing weapon's.
+  ⚠ **Fallout, fix alongside:** `Projectile.cs:534` scatters every round through
+  `ApplySpread(forward, weapon.CannonSpread)`. The original scatters through nothing of the kind.
+  That 6° jitter is a live fidelity bug in shipped code, separate from the missing assist, and both
+  live at the same fire call.
   *Playtest after fix:* `--vs` dogfight, and the `PT-43` gun-feel line — guns should become a
   practical kill weapon without rockets. The honest risk is over-assist reading as aimbot; the
   shipped constants are the original's answer, so tune only against footage, not taste.
@@ -2049,8 +2061,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   one entry, **base 6**, no per-player term (world geometry, not per-player ordnance) — sized
   against a facade row breaking panels ~0.2–0.5 s apart with each set's flight lasting 4–5 s, so a
   10-panel row can want 8–10 concurrent sets; 6 covers most passes and wraps (recycles the oldest,
-  still-flying set) on a longer one. Unmeasured against an actual in-cockpit pass — the playtest
-  this pool wants is the same one `BL-253`'s own owed playtest already asks for.
+  still-flying set) on a longer burst.
 
 - `BL-245` `[Bug]` `[Blocked: a decision to diverge]` **The other 379 bounce-terminated `OBJECT_MOTION`s are FALLS, not launches — no apex to
   solve, and a live `water`/`lava` surface table to choose between (split out of `BL-240` when the
@@ -2842,20 +2853,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Missions, modes & campaign
 
-- `BL-064` `[Feature]` **Better mission states.** There is still a lot of difference between our maps and the
-  original's. May need a pipeline to diff them, or to crack the mission loading states properly.
-  (`MissionSetup`'s interp boot script, landed 2026-07-22, closed the largest single gap and
-  incidentally fixed the C3 coast z-fight — but it is a boot script, not the full state model.)
-
 - `BL-074` `[Research]` **PLAYER_INIT fields [3]/[4] semantics + per-plane spawn speed** — story-mission spawns
   currently assume the IA convention (0.5 throttle / 53.6 m/s).
-
-- `BL-083` `[Research]` `[Owed-playtest]` **Finished-pilot behaviour in a splitscreen stunt race** (M2.5 item 7): a pilot who clears
-  every zone freezes at the finish showing their placing while the field flies on. It matches
-  the solo run's freeze and makes the placing unmissable, but it parks a player with nothing
-  to do for as long as the slowest pilot takes. The alternative — keep flying freely with the
-  timer stopped — is a small change (drop the AllComplete early-return when `Race != null` and
-  gate only the objective/marker updates). Decide from the two-controller playtest.
 
 - `BL-314` `[Feature]` `[Blocked: PT-45]` **Race countdown — a rolling start on rails before the run clock
   opens.** The abreast starting grid landed 2026-08-08 (`RaceGrid`), so every pilot in a splitscreen

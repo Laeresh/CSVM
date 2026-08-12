@@ -116,7 +116,7 @@ GODOT --path CSVM res://scenes/Main.tscn -- --plane=player_bhawk
 - `src/UI/` (16) — launchscreen, splitscreen rig, and the inspection labs (each with a scripted `--debug-*` twin).
 - `src/Utils/` (6) — session-wide services: clock, log, seed, shader time, config, startup profile. Determinism lives here.
 - `src/Testing/` (6) — the in-engine assertion harness behind `--run-tests` and the `--dump-*` probes.
-- `src/Session/` (8) — `Launcher.cs` (Main.tscn root: bootstrap, launchscreen, persistent camera/lighting) and `GameSession.cs` (the per-launch session node it instantiates), plus livery/spawn/plane-roster resolution, the per-player flight-rig assembler, the effect/crash stage factory, and the weather rig (PLAN-planeviewer-split).
+- `src/Session/` (8) — `Launcher.cs` (Main.tscn root: bootstrap, launchscreen, persistent camera/lighting) and `GameSession.cs` (the per-launch session node it instantiates), plus livery/spawn/plane-roster resolution, the per-player flight-rig assembler, the effect/crash stage factory, and the weather rig.
 - `src/` root (3) — `SessionSpec.cs`, `SessionPaths.cs`, `Pads.cs`.
 - `CSVM.Tests/` — the xUnit project: engine-free reader units. Anything reaching `GD.*` or a live `Node` belongs in `src/Testing/` instead.
 
@@ -192,10 +192,13 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt flying, or the 2–4-player splitscreen Dogfight deathmatch, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, world destructibles that take damage, die, lose collision, throw debris and reset — and planes shoot planes down (M4 A1, front-loaded). The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
-**No active plan.** [`PLAN-crash-surface-id.md`](docs/plans/PLAN-crash-surface-id.md) completed
-2026-08-13 (7 items; indexed in [`docs/plans/plans.md`](docs/plans/plans.md)). Owed: a
-judge-at-the-controls pass on its `_default` fallback crash and the now-sparking terrain touchdown
-scrape (Decision 7) — anything kept for looks goes to `BL-060`, not back into this plan.
+**Active plan: [`PLAN-object-motion-decode.md`](docs/PLAN-object-motion-decode.md)** (written
+2026-08-10; 13 items, 4 waves) — the original's `OBJECT_MOTION` launch, contact and run-time model,
+decoded from `crimson.exe`: the ground-contact test is the DEFAULT rather than `do_intersections`-
+gated, the `translation_range` elevation is linear (`elev/90`) rather than spherical, and `RUN_TIME`
+is a ceiling rather than a duration. Folds in `BL-319` and `BL-245`, re-opens `PT-46` (d), and
+deletes `DebrisTune`. Wave A complete, Wave B (`B4`, `B5`) landed; Waves B and C must run strictly
+serially. Next: Wave C from `C6`.
 Owed at the controls: `PT-28`, `PT-41`, `PT-43`, `PT-45` and `PT-47`
 ([`playtest.md`](playtest.md)). Verify any change with
 **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read

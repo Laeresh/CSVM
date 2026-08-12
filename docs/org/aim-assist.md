@@ -2,7 +2,8 @@
 
 Read out of the retail executable with Ghidra (static analysis of the shipped x86 build,
 `crimson.exe`, `language x86:LE:32:default`), 2026-08-10, settling `BL-091`. Every claim below
-names the function or address it came from.
+names the function or address it came from. A second pass on 2026-08-12 settled the assist cone
+(`CANNON_SPREAD`) and the per-target `+0x50` override, both flagged open by the first.
 
 Everything here is a description of *behaviour*. No decompiler output is reproduced; the addresses
 are given so any claim can be re-checked at source.
@@ -50,7 +51,7 @@ Weapon-def offsets used: `+0x1c` = `RANGE`, `+0x20` = **`RANGE²`** (precomputed
 `+0x2c` = `VELOCITY` in m/s (written at `0x005ae0b8`; a `TIME_TO_MAX_RANGE` reciprocal and a
 `GRAVITY`-derived `sqrt(2·g·RANGE)` both write the same slot earlier in the parse, and both are
 overwritten — `GRAVITY` is 0 for every weapon in this install), `+0x210` = pointer to a secondary
-block whose `+0x08` is the **default assist-cone cosine**.
+block whose `+0x08` is the **assist-cone cosine** (see below: it is `−cos(CANNON_SPREAD)`).
 
 ## The four keys — what the parser actually stores
 
@@ -148,8 +149,55 @@ Rejections, in order:
 - the intercept direction falls outside the assist cone.
 
 The cone half-angle comes from the **target**: its `+0x50` field, if `≥ 0`, is a half-angle in
-radians and the test uses `−cos` of it. If `+0x50 < 0` the weapon's default cosine at
+radians and the test uses `−cos` of it. If `+0x50 < 0` the weapon's own cosine at
 `[def+0x210]+0x08` is used instead. So an entity can advertise how easy it is to snap onto.
+
+### The cone is `CANNON_SPREAD`, and it is not a dispersion term
+
+Decoded 2026-08-12, settling the composition question this page previously left open.
+
+`CANNON_SPREAD` (string `0x0062b334`) has **exactly one reader in the executable**: the secondary
+block parse `FUN_004ba6f0` at `0x004ba9da`, which stores `−cos(value × π/180)` into the block's
+`+0x08` (`0x004ba9ef`–`0x004ba9fc`). That slot's only consumers are the four scorers
+(`0x004bb088`, `0x004bb32c`, `0x004bb5d2`, `0x004bb887`); no other `[def+0x210]` load in the
+program reads `+0x08`. The key is therefore **the assist's acceptance cone**, 6° half-angle for the
+stock guns, and nothing scatters a round by it.
+
+The block is `calloc(1, 0x38)` at `0x004ba6f6`, so a weapon def with **no** `CANNON_SPREAD` key
+keeps `0.0`, which is `−cos(90°)`: the whole forward hemisphere is in cone. There is no non-zero
+built-in default.
+
+⚠ **Sign convention.** The scorer tests `dot(interceptDir, planeAxis) < coneCos` with both sides in
+the engine's negated-forward convention, and ranks by `−(distance × dist_factor) − dot`. That is
+the same relation as the positive-alignment form used elsewhere on this page; do not mix halves of
+the two conventions.
+
+### Who writes the per-target override
+
+`+0x50` sits on the shared entity base class (vtable `0x00608b58`). Every constructor initialises
+it to `−1.0f` (`0xbf800000`), which routes the test to the weapon's cone:
+
+| Family | Constructor | Address |
+|---|---|---|
+| Aircraft / AI vehicles | `FUN_004aff80` | `0x004b0006` |
+| Turrets | `FUN_004a9a60` | `0x004a9ae7` |
+| Mission structures | `FUN_004a2570` | `0x004a25ee` |
+| Tracked ordnance in flight | `FUN_00441b90` | `0x00441be1` |
+
+Two writers can raise it. The authored one is the turret key **`STICKINESS`** (string `0x00629cec`,
+`ai.zrd`), parsed in `FUN_004a9df0` at `0x004aa57e`–`0x004aa5b4`: degrees × π/180 into `+0x50`, and
+if the authored value is not greater than `0.0` it stores `−1.0` (`0x006034e8`) instead. That
+string has one xref, so turrets are the only family with a keyword for it, and
+[`../formats/turrets.md`](../formats/turrets.md) records it shipping **zero times**.
+
+The other is `FUN_004a2e00` at `0x004a30d7`, which copies `+0x50` verbatim (no degree conversion)
+from the campaign-structs table entry field `+0x48` (`DAT_0071d34c`, stride `0x5c`) when building
+mission structures. Where that table field is authored was not traced; it is a binary record, not a
+keyword.
+
+**So with the shipped data no entity overrides the cone** and the assist cone is always the firing
+weapon's `CANNON_SPREAD`. The override path still belongs in a port, since dropping it changes
+behaviour the moment a mission sets it, but it carries no tuning decision.
 
 Surviving candidates are ranked by
 
@@ -192,9 +240,10 @@ Build any perpendicular to the aim direction, rotate it about the aim axis by `r
 uniformly on the cap — the reflex when porting — puts noticeably more shots near the rim. With
 `inaccuracy 1.0` the cone is 1° wide.
 
-⚠ **Unresolved: how this composes with `CANNON_SPREAD 6.0`** (`weapons.md`), the other, larger
-per-gun dispersion term. Whether the assist scatter replaces it, stacks on it, or applies to a
-different stage was not traced. Settle it before tuning either number.
+**This is the only scatter.** `CANNON_SPREAD` was assumed to be a second, larger per-gun dispersion
+term composing with it somehow; it is not a dispersion term at all (above). A player's round is
+perturbed once, by `inaccuracy`; an AI's round once, by the plane's `+0x95c` dead-eye scalar. There
+is no second stage.
 
 ## Per frame — `FUN_004b3e50`
 
@@ -237,5 +286,6 @@ implementation. Deltas worth naming up front:
 | Lead | full constant-velocity intercept on **relative** velocity | none — rounds go where the nose points |
 | Smoothing | slerp in **plane-local** space, ~0.2 s, snaps past 200 ms frames | n/a |
 | Forget | resets on time since **last shot**, not since lock loss | n/a |
-| Scatter | 1° cone, polar angle uniform in `[0, θ]` | `CANNON_SPREAD` handling only |
+| Scatter | 1° cone, polar angle uniform in `[0, θ]` | ⚠ scatters by `CANNON_SPREAD`, which the original never scatters by (`Projectile.cs:534`) |
+| Cone gate | `CANNON_SPREAD` half-angle, per-target `+0x50` override | n/a |
 | Multiplayer | shooter-authoritative; the assisted vector is transmitted | n/a |
