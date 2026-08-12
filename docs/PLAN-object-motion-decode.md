@@ -106,13 +106,25 @@ symptom, "six of the nine parts cut at 67–72 % of arc". Under the original's, 
 inside it and only the tail is clipped. Magnitude ratio across the band: **0.745 – 0.81**, against
 a judged `LaunchScale` of 0.65 and a frame-comparison estimate of ~0.58.
 
-**The contact tiers.** `FUN_004e9e30` is the default tier: it calls
-`FUN_004c76e0(collisionDB, x, y+step, z, out)` — a vertical **column query** returning candidate
-surface records (0x2c bytes each, height at `+0x14`), and picks the nearest below within 10 m. The
-caller reads the struck surface's type at `+0x20` and maps it `1→1, 4→2`, which is the
-`default`/`water`/`lava` `BOUNCE_SEQUENCE` branch index. On contact the step is reflected, velocity
-is damped by **0.2**, and the body ends once a bounce no longer loses energy. `FUN_004c8ec0` is the
-`DO_INTERSECTIONS` tier, a full geometry sweep against the same world database.
+**The contact tiers** (re-read in full at C6, 2026-08-12; this paragraph is the corrected text).
+`FUN_004e9e30` is the default tier: it calls `FUN_004c76e0(worldDB, x, y+step, z, out)`, a
+**terrain-grid column query** that floors `(x, z)` into the database's cell and returns that cell's
+surface records (0x2c bytes each, height at `+0x14`) for every node flagged `altitude_surface` AND
+`intersect_surface`. It then picks the record whose height is nearest the body's y in **absolute**
+value, taking the first unconditionally and rejecting only *replacements* more than 10 m **above**
+the body — not "the nearest below within 10 m". The caller reads the struck surface's type at
+`+0x20` and maps it `1→1, 4→2`, the `default`/`water`/`lava` `BOUNCE_SEQUENCE` branch index. The
+landing fires when `y + stepY < height`. `FUN_004c8ec0` is the `DO_INTERSECTIONS` tier, a full
+geometry sweep against the same world database.
+
+**The landing response**, from the same re-read, and **not** what C9's Evidence said before it:
+the original does not reflect anything. It **replaces the step's Y** — `stepY = |stepY·0.5| +
+height − y` while any of `|vx| ≥ 0.1`, `|vz| ≥ 0.1`, `|vy| ≥ 0.5` holds, else `stepY = height − y`
+exactly — leaving X and Z untouched, then multiplies all three velocity components by `0.19999999`
+**keeping their signs**. The termination test is `accel² > speed²` at contact: if the incoming
+speed² still covers the acceleration², the body damps and continues; otherwise the motion ends.
+Both halves also run when the watchdog fires, with a null surface record, which is what makes an
+untimed body still dispatch its `default` branch.
 
 **The termination model.** With `0x400` (`RUN_TIME` authored) the final step is shortened by the
 overshoot so the motion ends exactly on time, and the update returns "done" once elapsed ≥
@@ -189,7 +201,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — contact and termination
 
-6. ☐ The default contact tier: the ground-column query
+6. ☑ The default contact tier: the ground-column query
 7. ☐ `NO_ALTITUDE` as the opt-out, and `gunshell` as its only author
 8. ☐ `RUN_TIME` as a universal ceiling; retire `FlightToLaunchHeight` for the watchdog
 9. ☐ Landing response: 0.2 restitution and energy-loss termination
@@ -511,7 +523,55 @@ launch-shape changes in one commit make a golden movement impossible to attribut
 
 # Wave C — contact and termination
 
-## C6 ☐ The default contact tier: the ground-column query
+## C6 ☑ The default contact tier: the ground-column query
+
+**Landed 2026-08-12.** `MotionRuntime` now selects a tier once, from the gravity block, in the
+original's own branch order, and `TryGroundColumn` sits beside `TryContact` as a second named
+mechanism. Both end on one shared `Land`. `MotionSet` tallies the two tiers apart, and the
+`--debug-anim` line prints the split. The settle-hop sweep inheritance is deleted rather than kept
+alongside: a `pNhit` follow-up authors a gravity block, so it now selects the column like every
+other unflagged body, which is what that judged divergence was standing in for.
+
+**Two corrections to this item's own Evidence, from re-reading the trace before implementing.**
+Neither changes the mechanism, both change what a later reader would build.
+
+1. `FUN_004e9e30` does **not** pick "the nearest surface below within 10 m". It picks the cell
+   record whose height is nearest the body's y in **absolute** value, takes the first record
+   unconditionally whatever its height, and applies the 10 m only as a filter on *replacements*
+   more than 10 m **above** the body. A surface above can therefore win, and `y + stepY < height`
+   then lifts the body onto it. The implementation casts downward and takes the first surface
+   under the body, which is what that pick degenerates to whenever the cell holds one ground
+   surface, and which cannot lift a piece onto a ceiling it was flying beneath. Recorded as a
+   deliberate departure in `TryGroundColumn`.
+2. `FUN_004c76e0` is a **terrain-grid** lookup, not a general collision query: it floors `(x, z)`
+   into the world database's cell and walks that cell's nodes, admitting only those whose flags
+   carry `altitude_surface` **and** `intersect_surface` (`& 4` and `& 8`). The engine builds
+   colliders from `intersect_surface` alone, so reusing the collider set diverges by exactly the
+   28 nodes install-wide carrying `intersect_surface` without `altitude_surface`: 14 in C1, 0 in
+   C1B/C1C/C2B, 2–4 elsewhere, every one a destructible's own sub-part (`healthy`, `dest_base`,
+   `front`/`rear`, `prhit`) rather than terrain or a building shell. Measured, not assumed, so no
+   second surface pipeline was built. ⚠ Note what this kills: `altitude_surface` is **not** a
+   terrain-only bit — 50,927 of 53,303 nodes carry it, buildings included — so filtering the
+   column by it does *not* keep debris off rooftops, and any future item reaching for it on that
+   reasoning is reaching for the wrong thing.
+
+**Also settled, so C7/C8/C9 do not re-derive it.** A3's descending-step admission and its `COMPLEX`
+widening are transcribed but **behaviourally inert given a downward column**: a step that ends
+higher than it starts cannot end below a surface the ray found at or under its start, so both only
+save the query. They are load-bearing in the original because its cell query can return a surface
+above the body and because its step sign is the parent-frame one, which `COMPLEX` makes
+meaningless; this engine takes the sign in the world, where it is the true answer for both forms.
+The suite records this rather than asserting it, since an assertion would claim coverage that does
+not exist.
+
+**Measured.** `--freecam --chapter=C1 --collision --destroy=<def> --debug-anim --det --mute`:
+`m_build03` 9 launches, **7 by column, 2 on the clock**; `pass_plane01` (the C1 airfield plane)
+4 launches, **2 by column, 2 on the clock**, A/B'd against the same shot without `--collision`,
+where the landing and its ground-level fireball are absent. Both remainders are the no-`RUN_TIME`
+shape that `FlightToLaunchHeight` still ends at **launch height**, above the ground, which is C8's
+item and not a contact failure. Scale and cost: `--destroy=m_build` kills seven buildings at once
+for **63 simultaneous launches, 42 landed by column**, at `physics_ms=0.02` and 101–115 fps, so
+the per-body query is free at the only scale the install can produce.
 
 **Goal.** Every gravity-bearing ballistic body is contact-tested by default. A piece thrown off a
 destroyed structure lands on the ground and stays there, in every session that builds colliders,
@@ -623,12 +683,17 @@ is the pose/scrub entry point and a test there fires on a backwards timeline dra
 **Goal.** A landing piece bounces the way the original bounces — velocity scaled by 0.2 — and the
 body ends when a bounce stops losing energy rather than after a fixed count.
 
-**Evidence (confidence: traced).** On contact the original reflects the step (half the descending
-step above the surface when horizontal speed exceeds 0.1 or vertical exceeds 0.5, otherwise resting
-exactly on it), scales all three velocity components by `0.19999999`, and compares the post-bounce
-speed² against the pre-bounce acceleration² — ending the body when it no longer decreases. The
-`BOUNCES` token exists in the binary (`0063d1f4`) and may cap this independently; that is worth a
-look but is not load-bearing.
+**Evidence (confidence: traced — ⚠ this paragraph was WRONG until C6 re-read the function; see "The
+landing response" above for the full corrected text, and do not reinstate the reflection).** The
+original **replaces the step's Y component** rather than reflecting anything: `stepY = |stepY·0.5|
++ height − y` while any of `|vx| ≥ 0.1`, `|vz| ≥ 0.1`, `|vy| ≥ 0.5` holds, and `stepY = height − y`
+exactly once all three have fallen below, which is what rests a slow piece on the surface. X and Z
+are left alone, so the body keeps its horizontal travel through the contact frame. Velocity is then
+scaled by `0.19999999` on all three components **with their signs kept**. The body ends when
+`accel² > speed²` at contact and damps-and-continues otherwise, so with Earth gravity a piece
+striking at 20 m/s damps to 4 m/s and ends on its next contact: one or two hops, not a count. The
+`BOUNCES` token exists in the binary (`0063d1f4`) and may cap this independently; worth a look, not
+required.
 
 **Approach.** Implement inside the landing path shared by both tiers, so a column landing and a
 sweep landing respond identically — the response is not what the two tiers differ in.
@@ -641,7 +706,11 @@ twice and stop. A piece that never stops means the energy comparison is inverted
 iteration defensively even so.
 
 **⚠ Traps.** ⚠ `0.19999999` is `0.2` in float; do not transcribe the artefact. ⚠ The two speed
-thresholds (0.1 horizontal, 0.5 vertical) are asymmetric on purpose — do not tidy them into one. ⚠
+thresholds (0.1 horizontal, 0.5 vertical) are asymmetric on purpose — do not tidy them into one, and
+note the horizontal one is tested per axis (`|vx|`, `|vz|`), not on their magnitude. ⚠ A damped body
+whose velocity keeps its downward sign does not hop off the surface; what lifts it clear is the
+half-step in the POSE, and reading that as "the response launches it upward" is how the previous
+attempt at this wave ended up with debris hovering. ⚠
 The bounce *branch* (`default`/`water`/`lava`) comes from the struck surface and is already wired;
 this item is the physical response only, and `lava` remains dead data across the install.
 

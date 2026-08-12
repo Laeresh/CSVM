@@ -4,6 +4,15 @@ using Godot;
 
 namespace CSVM.Mech3.Anim;
 
+/// <summary>Which of the original's two contact mechanisms a body carries. <c>None</c> is the
+/// structural fallback a session that wired no collision mask takes.</summary>
+internal enum MotionContactTier
+{
+    None,
+    Column,
+    Sweep,
+}
+
 /// <summary>
 /// The full OBJECT_MOTION rigid body: a ballistic translate/launch, a scale ramp and a
 /// tumble, driving one node over its run time, in the node's own parent frame (the same
@@ -51,24 +60,20 @@ namespace CSVM.Mech3.Anim;
 ///   agree exactly anywhere else, which is why nothing else needs it. All 254 author a
 ///   <c>RUN_TIME</c>, so the converted acceleration never reaches
 ///   <see cref="FlightToLaunchHeight"/>'s solve.</para>
-///   Still unresolved: the
-///   379 events that FALL with <c>do_intersections: false</c> — no apex to solve, and no authored
-///   collider test to tell us where they land — which the body still integrates freely over the
-///   run time and then holds at rest.
-///   ⚠ For every event that LAUNCHES upward with no authored <c>RUN_TIME</c> — the 152 (150
-///   reachable) that name a bounce, plus the 167 that name neither a bounce nor a run time
-///   and end with the piece's own deactivation instead — <see cref="FlightToLaunchHeight"/> ends
-///   the flight when the parabola returns to launch height: a CHOICE, not a decode. It stands, and
-///   deliberately: all 120 of the bounce shape and all 167 of the vanish shape author
-///   <c>do_intersections: false</c>, so the original was not collision-testing them either, and the
-///   original was confirmed at the controls to sink its debris through terrain the same way.
-///   The choice agrees wherever the ground under the piece is flat, which is every reachable case
-///   measured. The apex is the ADMISSION TEST, not the bounce: anything with no apex is declined
-///   here and left posed at rest.
-///   <para>Where the flag IS authored — 166 events, 150 of them RUN_TIME+bounce —
-///   <see cref="TryContact"/> sweeps the trajectory against real colliders and ends the body
-///   there, which is the original's own test rather than an approximation of it. See
-///   <c>docs/formats/destructibles.md</c>'s "Debris tumbles" bullet for the split.</para></item>
+///   <para>Contact is the DEFAULT, in one of two tiers. Every gravity-bearing ballistic body is
+///   tested wherever the session wired a mask: <see cref="TryGroundColumn"/>, a vertical column
+///   under the body, unless <c>do_intersections</c> upgrades it to <see cref="TryContact"/>'s
+///   trajectory sweep (166 events install-wide). <c>no_altitude</c> is the opt-out and vetoes the
+///   column only, and <c>gunshell</c> alone authors it. So the 1,451 default-combination bodies
+///   that used to sink through the world now land on it. See
+///   <c>docs/formats/destructibles.md</c>'s "Debris tumbles" bullet for the split.</para>
+///   ⚠ An event that LAUNCHES upward with no authored <c>RUN_TIME</c> (the 152 that name a bounce,
+///   plus the 167 that name neither a bounce nor a run time and end with the piece's own
+///   deactivation) still has <see cref="FlightToLaunchHeight"/> end its flight when the parabola
+///   returns to launch height. That is a CHOICE, not a decode, and now only the ceiling such a
+///   body carries, since either tier ends it earlier on real geometry. The apex is that solve's
+///   admission test, not the bounce, so a body with no apex is declined there and simply falls
+///   until it lands.</item>
 /// <item><c>forward_rotation.Time.initial</c> is a tumble RATE (rad/s) about the node's local
 ///   X axis (a piece = 15.708 = 900°/s). ⚠ the axis is a reasoned choice — the data carries a
 ///   scalar rate, not an axis — an end-over-end tumble about the local X reads well for
@@ -122,6 +127,15 @@ internal sealed class MotionRuntime : IAnimMotion
 
     private const float ArmSeconds = 0.1f;
 
+    /// <summary>How far down <see cref="TryGroundColumn"/> looks. The original bounds nothing here,
+    /// since its query is a grid-cell lookup and the cell's surfaces come back at whatever depth
+    /// they sit at. The 10 m in <c>FUN_004e9e30</c> filters candidates above the body, not below
+    /// it. A ray needs a finite end, so this is chosen past any chapter's vertical extent (the
+    /// highest reachable geometry sits near y=1400) rather than decoded. ⚠ Shortening it would
+    /// invent a rule the original does not have, stopping a piece over a canyon from being tested
+    /// at all rather than letting it fall to the floor.</summary>
+    private const float ColumnDepth = 4096f;
+
     // Held pose, seeded once from the live transform: an absent channel carries it through.
     private Basis _heldRot;      // orthonormal; scale kept out
 
@@ -145,13 +159,11 @@ internal sealed class MotionRuntime : IAnimMotion
 
     private float _t, _runTime;
 
-    // ---- ground contact: the `do_intersections` sweep -------------------------------------------
-    // Armed only for the 166 events install-wide that author `do_intersections: true` (150 of them
-    // RUN_TIME+bounce), and only in a session that handed the runtime a collision mask. Everything
-    // else keeps its flag-free behaviour byte-for-byte — the 120 bounce-shape launches and the 167
-    // vanish-shape all author `false`, and the original was confirmed at the controls to sink those
-    // through the terrain too.
-    private bool _contactTest;
+    // ---- ground contact: the default column, or the `do_intersections` sweep ---------------------
+    // Selected once at creation, from the gravity block alone; both tiers stay structurally off in
+    // a session that wired no collision mask, which is the whole fallback.
+    private MotionContactTier _contactTier;
+    private bool _complexGravity;   // widens the column's per-step admission — see TryGroundColumn
     private uint _contactMask;
     private AnimData? _bounce;      // the BOUNCE_SEQUENCE block, chosen from AT CONTACT
     private Func<GodotObject?, bool>? _surfaceIsWater;
@@ -165,9 +177,14 @@ internal sealed class MotionRuntime : IAnimMotion
 
     public bool Finished => _landed || _t >= _runTime;
 
-    /// <summary>Whether this body carries the original's own collider test — `do_intersections`,
-    /// with a session that wired a mask for it. False leaves every pre-existing behaviour alone.</summary>
-    public bool TestsContact => _contactTest;
+    /// <summary>Whether this body carries either of the original's contact tiers, in a session that
+    /// wired a mask. False is the no-collision-world fallback and nothing else.</summary>
+    public bool TestsContact => _contactTier != MotionContactTier.None;
+
+    /// <summary>Which tier, read by <see cref="MotionSet"/> so the two are tallied apart. A pair of
+    /// counters is the only way to answer whether the default tier is doing anything, since the
+    /// sweep alone can carry a healthy-looking total.</summary>
+    public MotionContactTier ContactTier => _contactTier;
 
     /// <summary>Whether the flight actually ended on a collider rather than running its clock out.
     /// The honest half of the contact/fallback tally: a `--fly` session reporting zero of these
@@ -233,6 +250,7 @@ internal sealed class MotionRuntime : IAnimMotion
         // the aircraft died in, and nothing else. Under a world-aligned parent the two forms agree
         // exactly, which is why nothing else needs it.
         bool complexGravity = gravityBlock?.Bool("complex") ?? false;
+        m._complexGravity = complexGravity;
         Vector3 GravityAccel()
         {
             if (!complexGravity || gravity == 0f)
@@ -244,26 +262,34 @@ internal sealed class MotionRuntime : IAnimMotion
             return parentBasis.Inverse() * new Vector3(0f, gravity, 0f);
         }
 
-        // `do_intersections` — the original's OWN collider test, and the one field that says which
-        // bodies it tested. A session that wires no mask (every lab, every headless suite that does
-        // not ask for it, and 9 of the 13 golden captures — freecam/viewer/empty-stage, none of
-        // which build world colliders) leaves this false and takes the untouched path: that is the
-        // fallback, made structural rather than remembered. The remaining 4 goldens (Fly mode) DO
-        // wire a mask, but none currently completes a landing inside its own capture window —
-        // see analysis/object-motion-goldens/FINDINGS.md (A1). The BOUNCE_SEQUENCE block rides along
-        // because a contact-terminated body picks its branch from the SURFACE IT STRUCK, which is
-        // not knowable here.
+        // The tier, decided once from the gravity block, in the original's own branch order
+        // (FUN_004e8fa0: !DO_INTERSECTIONS, then !NO_ALTITUDE, then the column). The GRAVITY token
+        // admits a body to the test at all, `do_intersections` upgrades it to the sweep, and
+        // `no_altitude` opts out of the column only, so the order matters and not just the
+        // conditions: the opt-out cannot suppress an explicitly authored sweep.
+        //
+        // A session that wires no mask selects neither tier and takes the untouched path, which is
+        // the fallback made structural rather than remembered. The BOUNCE_SEQUENCE block rides
+        // along because a contact-terminated body picks its branch from the surface it struck,
+        // which is not knowable here.
         m._contactMask = rt.ContactMask;
-        m._contactTest = (gravityBlock?.Bool("do_intersections") ?? false) && rt.ContactMask != 0;
+        if (gravityBlock != null && rt.ContactMask != 0)
+        {
+            if (gravityBlock.Bool("do_intersections"))
+                m._contactTier = MotionContactTier.Sweep;
+            else if (!gravityBlock.Bool("no_altitude"))
+                m._contactTier = MotionContactTier.Column;
+        }
+
         m._bounce = data.Obj("bounce_sequence");
         m._surfaceIsWater = rt.SurfaceIsWater;
 
-        // Does this motion CONTINUE a contact landing — i.e. is it the `pNhit` settle hop the
-        // sweep itself dispatched onto the very node that just came to rest? One question, three
-        // consequences below (no inherited momentum, no re-home to the authored rest, and the
-        // contact test carries over), so it is asked once, here, before any of them. The mark is
-        // one-shot and consuming it IS the answer. Read `_hasBallistic`'s own condition off the
-        // data, since the field is not set until the translation block below.
+        // Does this motion CONTINUE a contact landing — i.e. is it the `pNhit` settle hop a landing
+        // dispatched onto the very node that just came to rest? One question, two consequences
+        // below (no inherited momentum, no re-home to the authored rest), so it is asked once,
+        // here, before either of them. The mark is one-shot and consuming it IS the answer. Read
+        // `_hasBallistic`'s own condition off the data, since the field is not set until the
+        // translation block below.
         bool continuesLanding = !target.TopLevel
                                 && (data.Has("translation") || data.Has("translation_range"))
                                 && rt.ConsumeLandingResume(target);
@@ -434,39 +460,27 @@ internal sealed class MotionRuntime : IAnimMotion
             m._heldRot = rest.Basis.Orthonormalized();
         }
 
-        // ⚠ A settle hop INHERITS the test from the landing it continues, whatever its own flag
-        // says — the one place `do_intersections: false` is read as "unset" rather than
-        // "opted out", and it is a judged divergence, not a decode. `player_crash_dirt`'s pieces are
-        // the case: `pieceNseq` lands the piece on the ground (flag true), the dispatched `pNhit`
-        // throws the SAME node again at +3 m/s over a 5-7 s RUN_TIME with the flag false, and
-        // nothing stops it — 3t − 4.9t² is 107 m under the airfield at t=5, seen at the controls as
-        // "plane went through ground". These four pieces are 4 of the
-        // 16 (def, node) pairs the census calls ground-tested AND left lying there — the only debris
-        // a player can walk up to — so burying them defeats the whole point.
-        //
-        // The narrowness is the whole defence. ⚠ This is NOT a licence to widen to the 379 events
-        // that author false (the original sinks those, confirmed at the controls): the
-        // mark is set only by a CONTACT landing, is one-shot, and is consumed above, so the only
-        // motions it can reach are follow-ups the sweep itself dispatched on a node the data DID
-        // flag. A compiled gravity block always carries all four bits, so "false" here cannot be
-        // told from "not re-stated" — and the object, not the event, is what the original tests.
-        m._contactTest |= continuesLanding && rt.ContactMask != 0;
-
         // Nothing to drive → no motion (a bare gravity/bounce stub, handled by the caller).
         bool any = m._hasBallistic || m._hasScale || m._tumbleRate != 0f || !m._spinRate.IsZeroApprox();
         return any ? m : null;
     }
 
-    /// <summary>Advances the body one frame — and, for a <c>do_intersections</c> body, asks the
-    /// world whether the step it is about to take runs into anything.
+    /// <summary>Advances the body one frame — and, for a contact-tested body, asks the world
+    /// whether the step it is about to take ends under something.
     ///
-    /// <para>⚠ The sweep lives HERE and never in <see cref="Seek"/>. <c>Seek</c> is also the
+    /// <para>⚠ Both tiers live HERE and never in <see cref="Seek"/>. <c>Seek</c> is also the
     /// pose/scrub entry point — <c>RESET_STATE</c> poses through it (<c>AnimRuntime</c>'s
     /// <c>Seek(0f)</c> calls) and AnimLab's timeline scrubs through it, in both directions — so a
     /// contact test there would fire on a backwards drag and land a piece that never flew.</para></summary>
     public void Tick(float dt)
     {
-        if (dt > 0f && TryContact(dt))
+        bool contacted = dt > 0f && _contactTier switch
+        {
+            MotionContactTier.Column => TryGroundColumn(dt),
+            MotionContactTier.Sweep => TryContact(dt),
+            _ => false,
+        };
+        if (contacted)
             return;
         Seek(_t + dt);
     }
@@ -547,6 +561,72 @@ internal sealed class MotionRuntime : IAnimMotion
         return float.IsFinite(t) ? t : 0f;
     }
 
+    /// <summary>The default contact tier, the ground column. Looks straight down from where the
+    /// body is and ends the flight once the step it is about to take would put it under whatever
+    /// is there. Returns whether contact ended the body.
+    ///
+    /// <para>Decoded from <c>FUN_004e8fa0</c>'s <c>!DO_INTERSECTIONS</c>, <c>!NO_ALTITUDE</c>
+    /// branch, via <c>FUN_004e9e30</c> and <c>FUN_004c76e0</c>. The query is not a trajectory test:
+    /// <c>FUN_004c76e0</c> floors the body's own <c>(x, z)</c> into the world database's terrain
+    /// grid cell and collects that cell's surface records, so it answers "what is in this column"
+    /// rather than "what did the path cross". That is the whole difference between the two tiers,
+    /// and it is why a piece can pass over a ledge between frames. The landing test is on the next
+    /// point, <c>y + stepY &lt; surfaceHeight</c>.</para>
+    ///
+    /// <para>⚠ Two deliberate departures from that transcription. (1) <c>FUN_004e9e30</c> picks the
+    /// cell record whose height is nearest the body's y in ABSOLUTE value, rejecting only
+    /// replacements more than 10 m above it, and takes the first record unconditionally whatever
+    /// its height. A surface above the body can therefore win, and the landing test then lifts the
+    /// body onto it. This casts downward and takes the first surface under the body, which is what
+    /// that pick degenerates to whenever the cell holds one ground surface. (2) The original's
+    /// column reads the node flags <c>altitude_surface</c> AND <c>intersect_surface</c> together;
+    /// this engine builds colliders from <c>intersect_surface</c> alone. The two sets differ by 28
+    /// nodes install-wide (14 in C1, 0 in C1B/C1C/C2B, 2 to 4 elsewhere), every one of them a
+    /// destructible's own sub-part rather than terrain or a building shell.</para>
+    ///
+    /// <para>⚠ No <see cref="ArmDistance"/>/<see cref="ArmSeconds"/> epsilon, unlike the sweep. The
+    /// original arms this tier on the descending step alone, and a launch climbs before it falls,
+    /// so it cannot contact the thing it left on its first frame.</para></summary>
+    private bool TryGroundColumn(float dt)
+    {
+        if (_landed || !_hasBallistic)
+            return false;
+
+        // No collision world means the flag-free behaviour, untouched. Gated on the live space
+        // state rather than on SessionSpec, exactly as the sweep is.
+        if (Target.GetWorld3D()?.DirectSpaceState is not { } space)
+            return false;
+
+        // The solve is in the node's parent frame and the column is a world-space vertical, so both
+        // ends of the step go through the parent and the resting pose comes back the same way.
+        float next = _runTime > 0f ? Mathf.Min(_t + dt, _runTime) : _t + dt;
+        var parent = (Target.GetParent() as Node3D)?.GlobalTransform ?? Transform3D.Identity;
+        var from = parent * BallisticOrigin(_t);
+        var to = parent * BallisticOrigin(next);
+        // A3's rule: a descending step admits the test, and `complex` widens it to every step.
+        // ⚠ Here it saves the query and decides nothing, because a downward column reports only
+        // surfaces at or below `from`, so a rising step can never satisfy the landing test. The
+        // original needs the rule because its cell query can return a surface above the body and
+        // because its sign is the parent-frame one, which the COMPLEX form makes meaningless. This
+        // sign is the world's, which is the true answer for both forms.
+        if (!_complexGravity && to.Y >= from.Y)
+            return false;
+
+        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+            from, from + Vector3.Down * ColumnDepth, _contactMask));
+        if (hit.Count == 0)
+            return false;
+
+        float surfaceY = hit["position"].AsVector3().Y;
+        if (to.Y >= surfaceY)
+            return false;
+
+        // The body keeps the step's horizontal travel and gives up only its descent, as the
+        // original does: it rewrites the step's Y component alone and leaves X and Z be.
+        return Land(next, parent.AffineInverse() * new Vector3(to.X, surfaceY, to.Z),
+            hit["collider"].As<GodotObject>());
+    }
+
     /// <summary>The <c>do_intersections</c> sweep: cast the step the body is about to take — last
     /// origin to next origin, in WORLD space — and stop the flight at whatever it meets first.
     /// Returns whether contact ended the body.
@@ -559,7 +639,7 @@ internal sealed class MotionRuntime : IAnimMotion
     /// <c>CollisionLayers</c>' own rule that world-only probes stay blind to planes.</para></summary>
     private bool TryContact(float dt)
     {
-        if (!_contactTest || _landed || !_hasBallistic)
+        if (_landed || !_hasBallistic)
             return false;
         // Not armed yet — see ArmDistance. Judged at the START of the step, so a body arms at
         // worst one frame late rather than testing a segment whose first half is still inside the
@@ -591,14 +671,23 @@ internal sealed class MotionRuntime : IAnimMotion
         // impact rather than snapping to the end of the frame.
         float span = from.DistanceTo(to);
         float fraction = span > 0f ? Mathf.Clamp(from.DistanceTo(point) / span, 0f, 1f) : 0f;
-        _landedAt = _t + (next - _t) * fraction;
-        _landedOrigin = parent.AffineInverse() * point;
+        return Land(_t + (next - _t) * fraction, parent.AffineInverse() * point,
+            hit["collider"].As<GodotObject>());
+    }
+
+    /// <summary>Comes to rest, the shared response both tiers end on. The two mechanisms differ in
+    /// what they ask the world, never in what they do with the answer, so a column landing and a
+    /// sweep landing cannot disagree about where the piece ends up or which sequence it owes.
+    ///
+    /// <para>The landing is the whole meaning of a bounce-terminated flight ending, and for that
+    /// family the branch could not be chosen until now, since the struck body is what picks it.
+    /// <see cref="MotionSet.Tick"/> turns this into the dispatched <c>Landing</c>.</para></summary>
+    private bool Land(float time, Vector3 parentOrigin, GodotObject? struck)
+    {
+        _landedAt = time;
+        _landedOrigin = parentOrigin;
         _landed = true;
-        // The landing is the whole meaning of a bounce-terminated flight ending, and for this
-        // family the branch could not be chosen until now — the struck body is what picks it.
-        // MotionSet.Tick turns this into the dispatched Landing, exactly as it already does for
-        // the launches that solve their own flight time; nothing downstream changes.
-        PendingBounce ??= ChooseBounce(hit["collider"].As<GodotObject>());
+        PendingBounce ??= ChooseBounce(struck);
         Seek(_landedAt);
         return true;
     }

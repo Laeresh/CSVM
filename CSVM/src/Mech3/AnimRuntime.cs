@@ -3568,16 +3568,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (_debugClock < 1f)
             return;
         _debugClock = 0f;
-        // The contact tally: is the `do_intersections` sweep actually finding anything? Printed
-        // whenever a flagged body has ended at all, because the answer that matters is the one
-        // nobody would otherwise notice — all clock, no contact, which every other line reports
-        // exactly as a working sweep.
+        // The contact tally: is contact actually finding anything? Printed whenever a tested body
+        // has ended at all, because all clock and no contact is the one outcome every other line
+        // reports exactly as a working test. ⚠ Split by tier, since the sweep's 166 authored events
+        // can carry a healthy-looking total on their own.
         if (Motions.ContactLandings + Motions.ClockEndings > 0)
         {
-            // "contact-tested", not "do_intersections": a settle hop inherits the test from the
-            // landing it continues even though its own flag is false (MotionRuntime.Create).
             GD.Print($"anim/debug: contact-tested bodies ended: {Motions.ContactLandings} by contact, "
                      + $"{Motions.ClockEndings} on their run time"
+                     + $" (column {Motions.ColumnLandings}/{Motions.ColumnClockEndings},"
+                     + $" sweep {Motions.SweepLandings}/{Motions.SweepClockEndings})"
                      + (Motions.ContactLandings == 0 ? " — NO CONTACT AT ALL (is a mask wired?)" : ""));
         }
 

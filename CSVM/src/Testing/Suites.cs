@@ -155,7 +155,7 @@ public static class Suites
         into.Add(new TestHarness.Suite("bounce-launch",
             "a bounce-terminated OBJECT_MOTION flies its solved parabola and fires its BOUNCE_SEQUENCE on landing", BounceLaunch));
         into.Add(new TestHarness.Suite("ground-contact",
-            "a do_intersections OBJECT_MOTION is cut short by real geometry, rests on the surface and picks its BOUNCE_SEQUENCE branch from what it struck — and does none of it without a mask", GroundContact));
+            "a gravity-bearing OBJECT_MOTION is cut short by real geometry through the right tier (default column, do_intersections sweep, no_altitude neither), rests on the surface and picks its BOUNCE_SEQUENCE branch from what it struck, and does none of it without a mask", GroundContact));
         into.Add(new TestHarness.Suite("self-ref-launch",
             "an OBJECT_MOTION naming the MAIN_ROOT_NODE sentinel launches the node its def was invoked on, taking that node over from whatever was driving it", SelfRefLaunch));
         into.Add(new TestHarness.Suite("nulled-launch",
@@ -4284,32 +4284,31 @@ public static class Suites
         }
     }
 
-    // ---- do_intersections: the flight ends where the world says ---------------------------------
+    // ---- contact: the flight ends where the world says ------------------------------------------
 
-    /// <summary>The 166 events that author <c>do_intersections: true</c> must be cut short by real
-    /// geometry instead of running their authored <c>RUN_TIME</c> out below the terrain, and must
-    /// pick their <c>BOUNCE_SEQUENCE</c> branch from the surface they struck.
+    /// <summary>A gravity-bearing OBJECT_MOTION must be cut short by real geometry instead of
+    /// running its authored <c>RUN_TIME</c> out below the terrain, through whichever of the two
+    /// tiers its flags select, and must pick its <c>BOUNCE_SEQUENCE</c> branch from the surface it
+    /// struck. Tier selection is asserted as well as the landing, since the two tiers are one
+    /// mechanism apiece and the wrong one lands a piece in the wrong place.
     ///
-    /// <para>Driven as a synthetic body rather than off a chapter's own debris, deliberately: the
-    /// reachable carriers are a crashed player's wreck and C5's <c>agyrobus</c>, both of which
-    /// reach their launch through a death sequence and a randomised draw. What is under test here
-    /// is the sweep, so the launch is authored by hand — thrown downward from a known height at
-    /// real chapter geometry — and the flight time, the resting height and the branch are all then
-    /// exactly predictable.</para>
+    /// <para>Driven as a synthetic body rather than off a chapter's own debris, deliberately. The
+    /// reachable carriers reach their launch through a death sequence and a randomised draw, so the
+    /// launch is authored by hand and thrown downward from a known height at real chapter geometry.
+    /// The flight time, the resting height and the branch are then exactly predictable.</para>
     ///
-    /// <para>⚠ The control is the THIRD case: the identical body with no mask handed over runs its
-    /// full 20 s and ends far below the surface. Without it a suite that never fired the query at
-    /// all would still pass its first two checks on a body that simply had not got anywhere yet —
-    /// and it is also the assertion that the no-collision-world fallback runs its authored clock
-    /// rather than being merely untested.</para>
+    /// <para>⚠ The control is the last case: the same bodies with no mask handed over run their
+    /// full 20 s and end far below the surface. Without it, a suite that never fired a query at all
+    /// would still pass its landing checks on a body that simply had not got anywhere yet, and it
+    /// is also the assertion that the no-collision-world fallback runs its authored clock rather
+    /// than being merely untested.</para>
     ///
-    /// <para>⚠ Shown able to fail by disabling <c>TryContact</c>'s gate: the contact case then
-    /// reports the same 20.02 s / −2000 m as the unmasked control and four checks go red. It is
-    /// NOT able to fail on the arming rule — raising <c>ArmDistance</c> alone changes nothing here,
-    /// because arming is distance OR time and <c>ArmSeconds</c> still arms the body at 0.1 s, long
-    /// before a 60 m drop reaches anything. Arming is what the cockpit checks cover (the self-hit
-    /// at launch, where a piece starts inside the wreck); this suite covers truncation, resting
-    /// height, branch choice and the fallback.</para></summary>
+    /// <para>⚠ Shown able to fail by disabling each tier's landing test in turn: the matching case
+    /// then reports the same 20.02 s and −2000 m as the unmasked control. It is NOT able to fail on
+    /// the sweep's arming rule, because arming is distance OR time and <c>ArmSeconds</c> still arms
+    /// the body at 0.1 s, long before a 60 m drop reaches anything. Arming is what the cockpit
+    /// checks cover; this suite covers tier selection, truncation, resting height, branch choice
+    /// and the fallback.</para></summary>
     private static void GroundContact(TestContext ctx)
     {
         const float Tick = 1f / 60f;
@@ -4352,37 +4351,40 @@ public static class Suites
             static Dictionary<string, object?> Vec(float x, float y, float z) =>
                 new() { ["x"] = x, ["y"] = y, ["z"] = z };
 
-            // `flagged: false` is how a `pNhit` settle hop is authored — the same body with
-            // do_intersections off, which must still be swept because it CONTINUES a landing.
-            AnimData Body(bool flagged = true) => new(new Dictionary<string, object?>
-            {
-                ["gravity"] = new Dictionary<string, object?>
+            // `flagged: false` is the DEFAULT authoring — 1,451 events install-wide — which selects
+            // the ground column; `noAltitude` is the opt-out that selects neither.
+            AnimData Body(bool flagged = true, bool noAltitude = false, bool complex = true) =>
+                new(new Dictionary<string, object?>
                 {
-                    ["value"] = -9.8f,
-                    ["complex"] = true,
-                    ["no_altitude"] = false,
-                    ["do_intersections"] = flagged,
-                },
-                ["translation"] = new Dictionary<string, object?>
-                {
-                    ["initial"] = Vec(0f, -5f, 0f),
-                    ["delta"] = Vec(0f, 0f, 0f),
-                    ["rnd_xz"] = Vec(0f, 0f, 0f),
-                },
-                ["bounce_sequence"] = new Dictionary<string, object?>
-                {
-                    ["default"] = Land,
-                    ["water"] = Wet,
-                    ["lava"] = null,
-                },
-                ["run_time"] = Authored,
-            });
+                    ["gravity"] = new Dictionary<string, object?>
+                    {
+                        ["value"] = -9.8f,
+                        ["complex"] = complex,
+                        ["no_altitude"] = noAltitude,
+                        ["do_intersections"] = flagged,
+                    },
+                    ["translation"] = new Dictionary<string, object?>
+                    {
+                        ["initial"] = Vec(0f, -5f, 0f),
+                        ["delta"] = Vec(0f, 0f, 0f),
+                        ["rnd_xz"] = Vec(0f, 0f, 0f),
+                    },
+                    ["bounce_sequence"] = new Dictionary<string, object?>
+                    {
+                        ["default"] = Land,
+                        ["water"] = Wet,
+                        ["lava"] = null,
+                    },
+                    ["run_time"] = Authored,
+                });
 
             // Runs one body to a stop and reports what happened to it. `waterHook` stands in for
             // the session's ProjectilePool.ClassifySurface binding — the classifier has its own
             // coverage, and stubbing it is what makes the branch choice assertable without needing
             // a chapter with reachable sea.
-            (float Flight, float EndY, string? Bounce, bool ByContact) Run(uint mask, System.Func<GodotObject?, bool>? waterHook)
+            (float Flight, float EndY, string? Bounce, bool ByContact, MotionContactTier Tier,
+                int ColumnLandings, int SweepLandings) Run(
+                uint mask, System.Func<GodotObject?, bool>? waterHook, AnimData? body = null)
             {
                 var node = new Node3D { Name = "ground-contact-probe" };
                 root.AddChild(node);
@@ -4394,10 +4396,10 @@ public static class Suites
                 runtime.SurfaceIsWater = waterHook;
                 try
                 {
-                    var motion = MotionRuntime.Create(runtime, node, Body(), Authored);
+                    var motion = MotionRuntime.Create(runtime, node, body ?? Body(), Authored);
                     if (motion == null)
                     {
-                        return (0f, node.GlobalPosition.Y, null, false);
+                        return (0f, node.GlobalPosition.Y, null, false, MotionContactTier.None, 0, 0);
                     }
 
                     var set = new MotionSet();
@@ -4414,7 +4416,8 @@ public static class Suites
                         flown += Tick;
                     }
 
-                    return (flown, node.GlobalPosition.Y, bounce, motion.LandedByContact);
+                    return (flown, node.GlobalPosition.Y, bounce, motion.LandedByContact,
+                        motion.ContactTier, set.ColumnLandings, set.SweepLandings);
                 }
                 finally
                 {
@@ -4424,8 +4427,10 @@ public static class Suites
                 }
             }
 
-            // 1 — contact cuts the flight short and rests the body ON the surface.
+            // 1 — the SWEEP tier cuts the flight short and rests the body ON the surface.
             var hit = Run(CollisionLayers.World, _ => false);
+            ctx.Check(hit.Tier == MotionContactTier.Sweep,
+                $"do_intersections selects the sweep tier={hit.Tier}");
             ctx.Check(hit.ByContact, $"the sweep ended the body on a collider flight={hit.Flight:0.00}s");
             ctx.Check(hit.Flight < Authored,
                 $"contact beat the authored run time flight={hit.Flight:0.00}s authored={Authored:0}s");
@@ -4434,10 +4439,42 @@ public static class Suites
             ctx.Check(hit.EndY >= surfaceY - 1f && hit.EndY <= surfaceY + 2f,
                 $"the body rests at the struck surface endY={hit.EndY:0.00} surfaceY={surfaceY:0.00}");
             ctx.Check(hit.Bounce == Land, $"contact dispatched the default branch bounce={hit.Bounce ?? "(none)"}");
+            ctx.Check(hit.SweepLandings == 1 && hit.ColumnLandings == 0,
+                $"and it is tallied as a sweep landing sweep={hit.SweepLandings} column={hit.ColumnLandings}");
 
             // 2 — the same contact over water takes the water branch.
             var wet = Run(CollisionLayers.World, _ => true);
             ctx.Check(wet.Bounce == Wet, $"a water surface picks the water branch bounce={wet.Bounce ?? "(none)"}");
+
+            // 1b — the DEFAULT tier. The identical body with `do_intersections` off, which is how
+            // 1,451 of the install's gravity-bearing events are authored, must land too and rest in
+            // the same place. Before C6 this body sank through the world and ran its 20 s clock out.
+            var column = Run(CollisionLayers.World, _ => false, Body(flagged: false));
+            ctx.Check(column.Tier == MotionContactTier.Column,
+                $"an unflagged gravity body selects the default column tier={column.Tier}");
+            ctx.Check(column.ByContact && column.Flight < Authored,
+                $"the column ended the body on a surface flight={column.Flight:0.00}s authored={Authored:0}s");
+            ctx.Check(column.EndY >= surfaceY - 1f && column.EndY <= surfaceY + 2f,
+                $"and rests it at the struck surface endY={column.EndY:0.00} surfaceY={surfaceY:0.00}");
+            ctx.Check(column.Bounce == Land,
+                $"the column landing dispatches its branch too bounce={column.Bounce ?? "(none)"}");
+            ctx.Check(column.ColumnLandings == 1 && column.SweepLandings == 0,
+                $"and is tallied apart from the sweep column={column.ColumnLandings} sweep={column.SweepLandings}");
+
+            // 1c — NO_ALTITUDE is the opt-out, and it vetoes the COLUMN only. `gunshell` is its one
+            // author install-wide, and it must keep falling through the world exactly as before.
+            var optedOut = Run(CollisionLayers.World, _ => false, Body(flagged: false, noAltitude: true));
+            ctx.Check(optedOut.Tier == MotionContactTier.None,
+                $"no_altitude vetoes the column tier={optedOut.Tier}");
+            ctx.Check(!optedOut.ByContact && optedOut.EndY < surfaceY - 100f,
+                $"so the body falls straight through endY={optedOut.EndY:0.00} surfaceY={surfaceY:0.00}");
+
+            // 1d — and it does not suppress an explicitly authored sweep. The original's branch
+            // order reaches the veto only on an unflagged body, so a reading that treats the two
+            // flags as independent conditions fails right here.
+            var bothFlags = Run(CollisionLayers.World, _ => false, Body(flagged: true, noAltitude: true));
+            ctx.Check(bothFlags.Tier == MotionContactTier.Sweep && bothFlags.ByContact,
+                $"do_intersections outranks no_altitude tier={bothFlags.Tier} byContact={bothFlags.ByContact}");
 
             // 2b — the bounce is a CONTINUATION. The sequence a landing dispatches re-launches the
             // very node that landed (`pNhit` throws `pieceN` on again), and MotionRuntime.Create
@@ -4476,9 +4513,13 @@ public static class Suites
                     ctx.Check(landed, $"the first flight landed by contact before the follow-up y={node.GlobalPosition.Y:0.00}");
                     float restedY = node.GlobalPosition.Y;
                     // The follow-up is built the way `pNhit` authors one: the SAME body with the
-                    // flag OFF. It must still resume from the landing AND still test contact —
+                    // flag OFF. It must still resume from the landing AND still be contact-tested —
                     // otherwise it runs its whole clock and buries the piece (3t − 4.9t² is 107 m
                     // under the airfield at t=5 — the "plane went through the ground" symptom).
+                    // ⚠ It is tested because the default tier tests it, like every other unflagged
+                    // gravity body. A judged inheritance used to do that job (a hop carried the
+                    // sweep over from the landing it continued), and the default column dissolves
+                    // the case it existed for, so it is gone rather than kept alongside.
                     var settle = Body(flagged: false);
                     // A dive hands the crash rig a large downward momentum. The FIRST launch spends
                     // it; a hop off the ground must not be handed it again, or it covers the 2 m
@@ -4491,8 +4532,8 @@ public static class Suites
                     float relaunchY = node.GlobalPosition.Y;
                     ctx.Check(Mathf.Abs(relaunchY - restedY) < 1f,
                         $"the follow-up launch starts from the landing, not the authored rest relaunchY={relaunchY:0.00} restedY={restedY:0.00} rest={restPose.Y:0.00}");
-                    ctx.Check(second is { TestsContact: true },
-                        $"the settle hop inherits the contact test from the landing it continues despite authoring do_intersections=false tests={second?.TestsContact}");
+                    ctx.Check(second is { ContactTier: MotionContactTier.Column },
+                        $"the settle hop is contact-tested through the default column tier={second?.ContactTier}");
                     second?.Seek(0.2f);
                     float hopY = node.GlobalPosition.Y;
                     // The band, not a point: this synthetic body is authored throwing DOWNWARD at
@@ -4501,15 +4542,16 @@ public static class Suites
                     ctx.Check(hopY > relaunchY - 3f,
                         $"and it inherits none of the dive's momentum hopY={hopY:0.00} relaunchY={relaunchY:0.00} (inherited it would be ≈{relaunchY - 10.2f:0.00})");
 
-                    // And a plain launch on a node that did NOT just land keeps the data's word:
-                    // the same false-flagged body, no mark, no test. This is the line the
-                    // inheritance must not cross.
+                    // And a plain launch on a node that did NOT just land takes the same tier — the
+                    // resume mark buys momentum and re-homing rules, never a different contact
+                    // mechanism. A body that reported Sweep here would mean the retired
+                    // inheritance had grown back somewhere.
                     var elsewhere = new Node3D { Name = "ground-contact-unflagged" };
                     root.AddChild(elsewhere);
                     elsewhere.GlobalPosition = restPose;
                     var plain = MotionRuntime.Create(runtime, elsewhere, settle, Authored);
-                    ctx.Check(plain is { TestsContact: false },
-                        $"a false-flagged launch that continues nothing still declines the sweep tests={plain?.TestsContact}");
+                    ctx.Check(plain is { ContactTier: MotionContactTier.Column },
+                        $"a false-flagged launch that continues nothing takes the column too tier={plain?.ContactTier}");
                     elsewhere.QueueFree();
                 }
                 finally
@@ -4519,14 +4561,24 @@ public static class Suites
                 }
             }
 
-            // 3 — THE CONTROL. No mask: no sweep, so the body runs its full clock and ends far
+            // 3 — THE CONTROL. No mask: neither tier, so the body runs its full clock and ends far
             // below the surface — which is also the no-collision-world fallback every golden
             // capture takes.
             var free = Run(0u, _ => false);
-            ctx.Check(!free.ByContact, $"with no mask the body never tests contact flight={free.Flight:0.00}s");
+            ctx.Check(free.Tier == MotionContactTier.None && !free.ByContact,
+                $"with no mask the body selects no tier at all tier={free.Tier} flight={free.Flight:0.00}s");
             ctx.Check(free.EndY < surfaceY - 100f,
                 $"the unmasked body falls straight through endY={free.EndY:0.00} surfaceY={surfaceY:0.00}");
-            ctx.Note($"contact {hit.Flight:0.00}s ending {hit.EndY - surfaceY:0.00} m from the surface; unmasked {free.Flight:0.00}s ending {free.EndY - surfaceY:0.00} m from it");
+            var freeColumn = Run(0u, _ => false, Body(flagged: false));
+            ctx.Check(freeColumn.Tier == MotionContactTier.None && freeColumn.EndY < surfaceY - 100f,
+                $"and so does the unflagged body the column would otherwise land tier={freeColumn.Tier} endY={freeColumn.EndY:0.00}");
+            ctx.Note($"sweep {hit.Flight:0.00}s ending {hit.EndY - surfaceY:0.00} m from the surface; column {column.Flight:0.00}s ending {column.EndY - surfaceY:0.00} m from it; unmasked {free.Flight:0.00}s ending {free.EndY - surfaceY:0.00} m from it");
+            // ⚠ Two decoded rules are deliberately NOT asserted here, because asserting them would
+            // claim coverage the suite does not have. With a downward column, the descending-step
+            // admission and `complex`'s widening of it can only save the query, never change the
+            // outcome: a step that ends higher than it starts cannot end below a surface the ray
+            // found at or under its start. Both are transcribed in TryGroundColumn. What a later
+            // item must re-check is the query's shape, not those two lines.
         });
     }
 
