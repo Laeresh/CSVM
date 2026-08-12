@@ -1363,13 +1363,13 @@ public static class Probes
     /// <c>flame_ball_01</c> 0.3 s in, well before the 0.5 s the puffer count needs), so a
     /// single sample at the end reports a working effect as a blank one. The residual rows after
     /// each stop are the opposite question — what is still lit once the effect is over.</para></summary>
-    public static EffectsResult Effects(AnimRuntime effects, string[] effectAnimNames,
+    public static EffectsResult Effects(AnimRuntime effects, IReadOnlyList<string> effectAnimNames,
         Vector3 playPoint, Node3D? stage, string chapter)
     {
         var r = new EffectsResult { HasStage = stage != null };
         var p = playPoint;
         var sb = new StringBuilder();
-        sb.AppendLine($"effects-test: chapter {chapter}, {effectAnimNames.Length} effect name(s), "
+        sb.AppendLine($"effects-test: chapter {chapter}, {effectAnimNames.Count} effect name(s), "
                       + $"point ({p.X:0},{p.Y:0},{p.Z:0})");
         if (stage != null)
         {
@@ -1437,7 +1437,7 @@ public static class Probes
             }
         }
 
-        r.Summary = $"effects-test: {r.Resolved}/{effectAnimNames.Length} resolved, "
+        r.Summary = $"effects-test: {r.Resolved}/{effectAnimNames.Count} resolved, "
                     + $"{r.Puffered} built a puffer, {r.Resolved - r.Puffered} started but built none"
                     + (stage == null ? "" : $"; {r.Meshed} showed template mesh(es)");
         sb.AppendLine(r.Summary);

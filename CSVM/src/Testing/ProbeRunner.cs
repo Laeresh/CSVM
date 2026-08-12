@@ -334,10 +334,11 @@ public sealed class ProbeRunner
     /// census the <c>effect-template-mesh</c> suite counts through.
     /// Plays every effect at the camera point so range-gated ones (gunhit's PLAYER_RANGE) pass;
     /// <paramref name="effectAnimNames"/> is the caller's static name table
-    /// (<c>EffectCatalogue.EffectAnimNames</c>), <paramref name="stage"/> its template stage
+    /// (<c>EffectCatalogue.WorldEffectAnimNames</c>: the fixed table plus the playable
+    /// <c>touchdown_*</c> vector slots), <paramref name="stage"/> its template stage
     /// for the MESH half. Reports to stdout and <c>./.scratch/effects_test.txt</c>.</summary>
     public void RunEffectsTest(SessionSpec spec, Camera3D camera, Mech3.AnimRuntime effects,
-        string[] effectAnimNames, Node3D? stage = null)
+        IReadOnlyList<string> effectAnimNames, Node3D? stage = null)
     {
         var r = Probes.Effects(effects, effectAnimNames, camera.GlobalPosition, stage, spec.Chapter);
         GD.Print(r.Text);

@@ -447,10 +447,12 @@ public sealed partial class ProjectilePool : Node3D
         return velocity.Normalized().Dot(towardTarget.Normalized()) >= minimumDot.Value;
     }
     /// <summary>Which weapons.json IMPACT surface class a struck collider belongs to, from the
-    /// per-mesh <see cref="SceneBuilder.SurfaceMeta"/> tag. The ONE surface classifier for the
-    /// collision-consequence paths — the airframe's graze reaction
-    /// (<c>FlightController.GrazeReaction</c>) picks its <c>touchdown_*</c> def from this same
-    /// read, so a round and a wingtip never disagree about what they hit.</summary>
+    /// per-mesh <see cref="SceneBuilder.SurfaceMeta"/> tag.
+    /// <para>⚠ This is the WEAPON name space only. The crash and graze defs no longer come from
+    /// this read: since <c>PLAN-crash-surface-id</c> B11/B12 both index the surface-id vector
+    /// (<c>SurfaceDefTable</c>) instead, so a round and a wingtip now classify the same geometry by
+    /// two different tags. Whether the original's IMPACT lookup is also id-driven is an open
+    /// question, not a settled difference — see <c>BL-344</c>.</para></summary>
     public static SurfaceClass ClassifySurface(Node? collider)
     {
         if (collider is AircraftBody)

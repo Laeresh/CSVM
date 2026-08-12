@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using CSVM.Flight;
 using CSVM.Mech3;
 
 namespace CSVM.Session;
@@ -41,6 +40,15 @@ public static class EffectCatalogue
     // install: all eight chapters' cam_anim carry player_crash_default, so slot 0 always resolves.
     public const string CrashAnimRoot = "player";
 
+    // The graze family's vector prefix: slot i is "touchdown_" + SurfaceRegistry.Names[i], built by
+    // FUN_004735b0 exactly as the crash vector is (prepend the literal 0x006274ec to each registry
+    // name, intern it via FUN_00523820, push THAT handle) and indexed by FUN_0048d2c0 with the same
+    // cascade. Unlike the crash family it has NO bare last-resort anim: when the vector cannot
+    // answer at all the handler skips its play call entirely, which is why TouchdownDefTable passes
+    // a null lastResort. The vector is a GLOBAL built once at level init where the crash vector is
+    // per-plane, mirrored here by building this one against the world program.
+    public const string TouchdownDefPrefix = "touchdown_";
+
     // The impact/destruction effect ANIMATION names the world-effects runtime is bound to —
     // the closure of these is staged and playable via PlayEffectAt. IMPACT names come from
     // weapons.json (the non-model `default`/`buildings` effects of rockets/ordnance, plus the gun
@@ -69,9 +77,8 @@ public static class EffectCatalogue
         // plus C4's one-off `b_steamtrail`, which is excluded: its anim root is the live train
         // subtree, not a relocatable effect template.
         "sputter_black_smoke_obj", "sputter_fire_smoke_obj",
-        // the airframe's per-surface graze reaction (touchdown.zrd): sparks off a hard surface,
-        // dust off terrain, a splash off water. FlightController.SurviveHit plays one per contact.
-        "touchdown_default", "touchdown_dirt", "touchdown_water",
+        // The graze reaction's touchdown_* defs are NOT listed here. They are a surface-indexed
+        // vector, so WorldEffectAnimNames appends whichever slots the bound program can play.
     };
 
     // The belly-slide ground splash (`flydirt_plane`, called AT_NODE `healthy` by
@@ -188,23 +195,33 @@ public static class EffectCatalogue
         return names;
     }
 
-    /// <summary>The graze reaction's per-surface touchdown def (<c>FlightController.GrazeReaction</c>):
-    /// sparks off a hard building surface, dust off unclassified terrain, a splash off water — the
-    /// same three names in <see cref="EffectAnimNames"/>' graze-reaction entries above. Pure, so the
-    /// switch is unit-testable without a scene.</summary>
-    public static string TouchdownFor(SurfaceClass surface) => surface switch
+    /// <summary>The graze family's def vector — the original's <c>touchdown_</c> global
+    /// (<c>FUN_004735b0</c> into <c>DAT_0071c2e8</c>), which <c>FlightController.GrazeReaction</c>
+    /// indexes with the scraped material's surface id exactly as the crash does. Built against the
+    /// WORLD program, because that vector is built once at level init rather than per plane.
+    /// <b>No last resort:</b> where the crash cascade ends at a bare anim name, this one ends at
+    /// "play nothing". <see cref="SurfaceDefTable"/>'s remarks carry the address.</summary>
+    public static SurfaceDefTable TouchdownDefTable(AnimProgram program) =>
+        new(TouchdownDefPrefix, lastResort: null, name => program.ByAnimName(name).Count > 0);
+
+    /// <summary>Every effect animation the world-effects runtime binds: the fixed
+    /// <see cref="EffectAnimNames"/> plus whichever <see cref="TouchdownDefTable"/> slots this
+    /// program can actually play. One call serves the bind, the stage closure and the
+    /// <c>--effects-test</c>/<c>effects-census</c> sweeps, so a graze def can never be playable but
+    /// unstaged, or swept but unbound.</summary>
+    public static IReadOnlyList<string> WorldEffectAnimNames(AnimProgram program)
     {
-        SurfaceClass.Water => "touchdown_water",
-        SurfaceClass.Buildings => "touchdown_default",
-        _ => "touchdown_dirt",
-    };
+        var names = new List<string>(EffectAnimNames);
+        names.AddRange(TouchdownDefTable(program).PlayableDefs);
+        return names;
+    }
 
     /// <summary>What the world-effects bind stages: the anchor-root closure of
-    /// <see cref="EffectAnimNames"/> against the bound world program. This IS the stage's source —
-    /// <c>WorldEffectsFactory</c> builds a copy of every name it returns, per pool slot.</summary>
+    /// <see cref="WorldEffectAnimNames"/> against the bound world program. This IS the stage's
+    /// source — <c>WorldEffectsFactory</c> builds a copy of every name it returns, per pool slot.</summary>
     public static IReadOnlyList<string> WorldStageRoots(AnimProgram program,
         Func<string, AnchorPlacement> resolveRoot) =>
-        StageRootsFor(program, EffectAnimNames, resolveRoot);
+        StageRootsFor(program, WorldEffectAnimNames(program), resolveRoot);
 
     /// <summary>The same for the per-player crash rig: the closure of
     /// <see cref="CrashRigAnimNames"/> against that rig's own scope. The rig's

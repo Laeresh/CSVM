@@ -2806,6 +2806,71 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   scripted `--det`/`--hold` runs; the polling *sites* are the seam, `FireControl` itself never
   changes (it consumes `FireInputs` booleans). Update `docs/controls.md` when this lands.
 
+- `BL-343` `[Bug]` **The collision overlay colours colliders by the wrong tag.** `--collision=show`
+  keys its colours off `SceneBuilder.SurfaceMeta` (`ColliderOverlay.ClassOf`), the texture-derived
+  `water`/`buildings`/`default` class. Since `PLAN-crash-surface-id` A2 every collider also carries
+  `SceneBuilder.SurfaceIdMeta`, the original's numeric surface id, and that id is what actually
+  decides behaviour: B11 and B12 put both the crash def and the `touchdown_*` graze def on it. So
+  the overlay now shows a name space that no longer matches what happens when you touch the
+  geometry. Concretely: `dirt`(13) and `default`(0) terrain are one colour, though one raises dust
+  and the other sparks; `airstrip`(8)/`buildings`(11)/`dzone`(12) fall back to slot 0 in the engine
+  and the overlay cannot show that; and a body named `col_water` can carry soil `0` (C4's doubled
+  water sheet, `g1708` vs `g2109`, recorded in B11's landing commit), which is exactly the case
+  someone would open the overlay to diagnose.
+  *Fix shape:* colour by `SurfaceIdMeta` through `SurfaceRegistry.NameForId`, with the ids that
+  resolve no def of their own drawn as what they actually resolve (slot 0) rather than as
+  themselves — the empty-slot arm is the mechanism, so an overlay that hides it re-creates the
+  confusion this plan removed. A legend naming id and name (`13/dirt`) beats a fixed palette,
+  since fourteen ids do not have fourteen readable colours.
+  ⚠ **Do not "fix" this by deleting the class read.** `SurfaceMeta` is still the correct key for the
+  weapon-IMPACT question, and `ClassOverlay` (key X) deliberately uses neither tag — read both
+  overlays' doc comments before touching either. The two name spaces coexisting is the settled
+  design (`PLAN-crash-surface-id` Decision 3), not a leftover.
+  ⚠ The overlay reads the tag off the collider BODY, and A2 stamped the id at body granularity, not
+  per polygon: a mesh whose polygons carry different ids reports one id for the whole body
+  (`analysis/surface-classification/FINDINGS.md`, the A2 stranding table — up to 16.4 % of C1's
+  dirt-tagged ground). The overlay will therefore show what the engine will actually select, which is
+  the right thing, but it is not a picture of the source data. Say so wherever the legend is
+  documented.
+
+- `BL-344` `[Bug]` **The weapon IMPACT lookup is surface-id-driven in the original, and ours is not.**
+  **Decoded 2026-08-12** (read-only ghidra-mcp; full write-up in
+  `analysis/surface-classification/FINDINGS.md`, that date's second section). `PLAN-crash-surface-id`
+  scoped weapons out on the grounds that the IMPACT keys are "a different name space" and that
+  "`buildings` is not a surface-registry name at all". **Both halves are wrong.** `buildings` IS
+  registry id 11 (the plan's own data section says so), and the IMPACT table is not name-keyed at
+  runtime at all:
+  1. **Parse time** (`FUN_005ad630`, `0x005ae1cf`–`0x005ae24e`): on the `IMPACT` token the parser
+     matches the block's surface against `registry[0]` first, then loops `&registry[1]` to
+     `[0x00637b10]` (the count), and parses the block into **`weapon + 0x15c + i*100`**. So the
+     table is an array indexed by surface id, stride 100 bytes, and a block whose name is not a
+     registry name is parsed into nothing — which is exactly what happens to `fault`.
+  2. **Runtime** (`FUN_005acf60` → `FUN_005ad100`): `surfaceId = hit->material ? *(material+0x20) : 0`,
+     then `row = table + surfaceId*100`. The same soil-id field and the same null-material-to-0 arm
+     the crash and touchdown cascades use. `FUN_005ad330` independently tests `*(material+0x20) == 1`
+     (water) on the impact path.
+  So a round and a wingtip DO classify by the same tag in the original; today ours do not, since
+  B11/B12 moved the crash and graze onto `SurfaceIdMeta` while `Projectile.ClassifySurface` still
+  reads the texture-derived `SurfaceMeta`.
+  ⚠ **The fallback differs from the crash family, and this is the part with teeth.** `FUN_005ad100`
+  tests the row's own variant count (`row[0x2c]`) and, if it is zero, **plays nothing** — there is no
+  empty-slot-to-slot-0 arm here. The shipped weapons author `default`/`water`/`quicksand`/`player`/
+  `buildings` blocks (plus the dead `fault`), so under a faithful implementation a round striking
+  `dirt`(13), `fire`(5), `airstrip`(8) or `dzone`(12) geometry plays **no impact effect at all**,
+  where ours currently plays the `default` one. Confirm that against the extracted weapons data
+  before writing code, and treat it as a Decision-7-shaped question for the user, not an
+  implementation detail.
+  *Fix shape:* `ImpactOutcome`'s key comes off `SurfaceIdMeta`, `SurfaceClass` collapses into the
+  registry, and `BL-343`'s overlay question answers itself. Large, playtested, and it changes what
+  every gun and rocket draws on most of the ground — its own plan, with a before/after, not a
+  follow-on commit.
+  ⚠ Do not read `PLAN-crash-surface-id` Decision 3 ("keep the texture-name classifier, for weapons
+  only") as settling this. That decision was taken on the premise this entry disproves.
+  ⚠ Also found while looking, unmodelled: `FUN_00478a00` builds a third registry-indexed vector,
+  `ai_crash_<name>` — the AI planes' crash family. And `FUN_004c56c0` resolves a `soil_<name>`
+  substring (`0x0062bf98`) through `FUN_00559670` and writes the id onto the material with
+  `FUN_0055b0a0`, which is how surface ids are authored in the first place: by registry name.
+
 ## Missions, modes & campaign
 
 - `BL-064` `[Feature]` **Better mission states.** There is still a lot of difference between our maps and the

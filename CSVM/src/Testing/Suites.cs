@@ -4165,7 +4165,7 @@ public static class Suites
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            var names = Session.EffectCatalogue.EffectAnimNames;
+            var names = Session.EffectCatalogue.WorldEffectAnimNames(world.Session.Program);
             // The staged set is DERIVED, so this census stages what the
             // real world-effects build stages, from the same call — a root the closure gains and
             // this chapter's gamez cannot supply throws here, naming the def and the anchor.
@@ -4196,7 +4196,7 @@ public static class Suites
                 runtime.Bind(stage, world.Session.Program.Subset(names));
                 var r = Probes.Effects(runtime, names, point, stage, ctx.Chapter);
 
-                ctx.Check(r.Ok, $"all effects resolve ({r.Resolved}/{names.Length} resolved)");
+                ctx.Check(r.Ok, $"all effects resolve ({r.Resolved}/{names.Count} resolved)");
                 var far = r.Rows.SelectMany(row => row.MeshPeaks
                         .Where(pk => pk.Visible > 0 && pk.Distance > 100f)
                         .Select(pk => $"{row.Name}: {pk.Root} @{pk.Distance:0} m"))

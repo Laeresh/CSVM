@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight;
+using CSVM.Mech3;
 using CSVM.Session;
 using Xunit;
 
@@ -29,34 +30,66 @@ public class EffectCatalogueTests
     private static string SharedZrdr =>
         SessionPaths.PreferUnzipped(System.IO.Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
 
-    /// <summary>The graze trio: <see cref="EffectCatalogue.TouchdownFor"/>'s whole producible range
-    /// — every <see cref="SurfaceClass"/> value, reachable or not (it is a pure switch with no
-    /// surface excluded) — resolves a name <see cref="EffectCatalogue.EffectAnimNames"/> knows.</summary>
-    [Theory]
-    [InlineData(SurfaceClass.Default)]
-    [InlineData(SurfaceClass.Water)]
-    [InlineData(SurfaceClass.Buildings)]
-    [InlineData(SurfaceClass.Player)]
-    [InlineData(SurfaceClass.Enemy)]
-    [InlineData(SurfaceClass.Quicksand)]
-    public void TouchdownForsWholeRangeIsInTheCatalogue(SurfaceClass surface)
+    /// <summary>The graze family's whole producible range, over every surface id the cascade can be
+    /// handed: every registry slot, plus the out-of-range and null-material arms. Against a program
+    /// shipping exactly the three touchdown defs this install ships, every one of those resolves a
+    /// name the world-effects bind would have bound, because
+    /// <see cref="EffectCatalogue.WorldEffectAnimNames"/> appends the same vector. So a graze can
+    /// never select a def nothing staged.</summary>
+    [Fact]
+    public void EveryTouchdownSelectionIsANameTheWorldBindBinds()
     {
-        string effect = EffectCatalogue.TouchdownFor(surface);
+        var shipped = new HashSet<string>(
+            new[] { "touchdown_default", "touchdown_dirt", "touchdown_water" }, StringComparer.Ordinal);
+        var table = new SurfaceDefTable(
+            EffectCatalogue.TouchdownDefPrefix, lastResort: null, shipped.Contains);
 
-        Assert.Contains(effect, EffectCatalogue.EffectAnimNames);
+        var produced = new HashSet<string>(StringComparer.Ordinal);
+        // -1 and 14 are the cascade's two out-of-range arms; null is "no struck material".
+        foreach (int? id in Enumerable.Range(-1, SurfaceRegistry.Names.Count + 2).Cast<int?>().Append(null))
+        {
+            string? def = table.DefForSurfaceId(id);
+            Assert.NotNull(def); // slot 0 ships, so the play-nothing arm is unreachable here
+            produced.Add(def!);
+        }
+
+        Assert.Equal(shipped, produced);
     }
 
-    /// <summary>Belt-and-braces on the trio itself, independent of the per-surface theory above:
-    /// the whole enum's image under <see cref="EffectCatalogue.TouchdownFor"/> is exactly the three
-    /// touchdown names <see cref="EffectCatalogue.EffectAnimNames"/> carries — no fourth name
-    /// sneaks in and none of the three goes missing.</summary>
+    /// <summary>The correction B12 exists to make, stated as a test rather than left to a comment.
+    /// Only <c>dirt</c>(13) raises dust. Everything else sparks off <c>touchdown_default</c>:
+    /// ordinary terrain (id 0), the ids with no def of their own
+    /// (<c>fire</c>/<c>airstrip</c>/<c>buildings</c>/<c>dzone</c>), an out-of-range id and a null
+    /// material. Our build had this backwards, scraping dust off everything that was not a building
+    /// or water.</summary>
     [Fact]
-    public void TouchdownForNeverProducesAFourthName()
+    public void OnlyDirtScrapesDustAndOnlyWaterSplashes()
     {
-        var produced = new HashSet<string>(
-            Enum.GetValues<SurfaceClass>().Select(EffectCatalogue.TouchdownFor));
+        var shipped = new HashSet<string>(
+            new[] { "touchdown_default", "touchdown_dirt", "touchdown_water" }, StringComparer.Ordinal);
+        var table = new SurfaceDefTable(
+            EffectCatalogue.TouchdownDefPrefix, lastResort: null, shipped.Contains);
 
-        Assert.Equal(new HashSet<string> { "touchdown_default", "touchdown_dirt", "touchdown_water" }, produced);
+        Assert.Equal("touchdown_dirt", table.DefForSurfaceId(13));
+        Assert.Equal("touchdown_water", table.DefForSurfaceId(1));
+        foreach (int? id in new int?[] { 0, 5, 8, 11, 12, -1, 14, null })
+            Assert.Equal("touchdown_default", table.DefForSurfaceId(id));
+    }
+
+    /// <summary>The one arm the crash family does not share: with no slot 0 to fall back on, the
+    /// touchdown cascade plays <b>nothing</b> (<c>FUN_0048d2c0</c> skips its play call) where the
+    /// crash cascade resolves its bare anim name. It is unreachable in this install, since all
+    /// eight chapters ship <c>touchdown_default</c>, but it is the difference between the two
+    /// families, so it is pinned rather than assumed away.</summary>
+    [Fact]
+    public void AnEmptyTouchdownVectorPlaysNothing()
+    {
+        var table = new SurfaceDefTable(
+            EffectCatalogue.TouchdownDefPrefix, lastResort: null, _ => false);
+
+        Assert.Null(table.DefForSurfaceId(1));
+        Assert.Null(table.DefForSurfaceId(null));
+        Assert.Empty(table.PlayableDefs);
     }
 
     /// <summary>The per-part damage-effect shims (`DamageVisuals.OnPartDamage`'s own filter,

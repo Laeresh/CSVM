@@ -17,6 +17,15 @@ namespace CSVM.Session;
 /// <b>slot 0</b>; a vector that is empty or whose slot 0 is itself empty resolves the bare anim
 /// name instead; anything else resolves <c>vector[id]</c>.</para>
 ///
+/// <para><b>The two families differ in their last arm, and only there.</b> The touchdown handler
+/// <c>FUN_0048d2c0</c> repeats the whole test at <c>0x0048d425</c>–<c>0x0048d460</c> against the
+/// global vector <c>DAT_0071c2e8</c>/<c>DAT_0071c2ec</c>, with the same registry, the same index
+/// space, the same signed lower and unsigned upper bound, and the same empty-slot arm. Where the
+/// crash family resolves a bare anim handle, though, the touchdown fallback jumps <b>past</b> its
+/// play call (<c>FUN_004edc10</c>) to <c>LAB_0048d4c1</c> and plays nothing at all. So
+/// <paramref name="lastResort"/> is null for touchdown, and <see cref="DefForSurfaceId"/> answers
+/// null for "the original plays no def here". Decoded 2026-08-12, read-only.</para>
+///
 /// <para><b>The empty-slot arm is the whole mechanism, not a special case.</b> This install ships
 /// three defs per family (<c>default</c>/<c>dirt</c>/<c>water</c>), so the other eleven slots name
 /// a def that does not exist and fall back to slot 0 — which is why the ordinary ground crash is
@@ -30,12 +39,13 @@ namespace CSVM.Session;
 public sealed class SurfaceDefTable
 {
     private readonly string?[] _slots;
-    private readonly string _lastResort;
+    private readonly string? _lastResort;
 
     /// <summary>Builds the vector for <paramref name="prefix"/> against the program
     /// <paramref name="defExists"/> answers for. <paramref name="lastResort"/> is the bare anim
-    /// name the original falls to when the vector cannot answer at all.</summary>
-    public SurfaceDefTable(string prefix, string lastResort, Func<string, bool> defExists)
+    /// name the original falls to when the vector cannot answer at all. It is <b>null</b> for a
+    /// family whose handler plays nothing in that case, which is touchdown (see the remarks).</summary>
+    public SurfaceDefTable(string prefix, string? lastResort, Func<string, bool> defExists)
     {
         _lastResort = lastResort;
         _slots = new string?[SurfaceRegistry.Names.Count];
@@ -56,10 +66,11 @@ public sealed class SurfaceDefTable
     /// The registry names are pairwise distinct, so no def appears twice.</summary>
     public IReadOnlyList<string> PlayableDefs { get; }
 
-    /// <summary>The def for a struck surface id, or the bare last-resort anim name.
+    /// <summary>The def for a struck surface id, or the bare last-resort anim name. Null when this
+    /// family has no last resort and the original plays nothing.
     /// <paramref name="surfaceId"/> is null for "no struck material" — the original's null-material
     /// arm, which the headless <c>--crash</c> force takes.</summary>
-    public string DefForSurfaceId(int? surfaceId)
+    public string? DefForSurfaceId(int? surfaceId)
     {
         // vector[id], when the id is in range (signed lower bound, unsigned upper) and its slot
         // names a def that exists.

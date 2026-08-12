@@ -192,15 +192,11 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt flying, or the 2–4-player splitscreen Dogfight deathmatch, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, world destructibles that take damage, die, lose collision, throw debris and reset — and planes shoot planes down (M4 A1, front-loaded). The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
-**No active plan.** [`PLAN-anim-original-match.md`](docs/plans/PLAN-anim-original-match.md),
-[`PLAN-puffer-engine-deltas.md`](docs/plans/PLAN-puffer-engine-deltas.md) and
-[`PLAN-clutter-uv-placement.md`](docs/plans/PLAN-clutter-uv-placement.md) all completed 2026-08-10
-(the animation interpreter matched to `crimson.exe`; the puffer engine decode at
-[`docs/org/puffer.md`](docs/org/puffer.md); clutter placement rewritten off the UV-lattice decode),
-joining [`PLAN-weather-decompile-match.md`](docs/plans/PLAN-weather-decompile-match.md) and
-[`PLAN-flight-model-rewrite.md`](docs/plans/PLAN-flight-model-rewrite.md) of 2026-08-09 in
-[`docs/plans/`](docs/plans/plans.md). Next: pick the next run off `backlog.md` (`BL-305` C5
-packing, `BL-337` `far_fade_range`), or fly the owed verdicts.
+**Active plan: [`PLAN-crash-surface-id.md`](docs/PLAN-crash-surface-id.md)** — Waves A and B are
+done (surface id carried to the collider, the registry built, crash and `touchdown_*` selection both
+on the original's indexed cascade). Next: `C21` (model the mid-air destruct), then `C22`
+(retire `CrashSurface`, close `BL-059`). Owed after it: the judge-at-the-controls pass Decision 7
+set up, on the `_default` crash and the now-sparking terrain scrape.
 Owed at the controls: `PT-28`, `PT-41`, `PT-43`, `PT-45` and `PT-47`
 ([`playtest.md`](playtest.md)). Verify any change with
 **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read

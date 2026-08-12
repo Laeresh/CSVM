@@ -95,6 +95,8 @@ public sealed class FlightRigAssembler
             // A survivable scrape plays touchdown.zrd's per-surface reaction (sparks/dust/
             // splash) at the contact point, through the same runtime a rocket impact uses.
             GrazeEffectSink = _in.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
+            // The level's one touchdown vector (the original's global), not one per plane.
+            TouchdownDefs = _in.TouchdownDefs,
             // splitscreen: this player's own device(s), own pane for the HUD,
             // and no debug freeze (it would halt the shared world for everyone)
             PadDevices = _in.PadAssignment?[pi],
@@ -493,6 +495,9 @@ public sealed class FlightRigAssembler
         /// The session's one world-effects runtime, so a graze plays its touchdown_* def.
         /// Null on a world-less build — the scrape then keeps its sound and loses its effect.
         public AnimRuntime? WorldEffects;
+        /// The level's <c>touchdown_*</c> def vector, built alongside that runtime. Every rig
+        /// indexes the same one, as the original indexes one global.
+        public SurfaceDefTable? TouchdownDefs;
         public AnimProgram? CrashProgram;
         public SoundArchive? Sounds;
         public Dictionary<string, SoundDef>? SoundDefs;

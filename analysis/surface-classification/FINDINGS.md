@@ -411,3 +411,78 @@ whole-chapter figure, and it is the number that would explain a "this dirt patch
 dust" report at the controls. Splitting colliders per id is the fix if that ever matters; it grows
 the collider tree and breaks the `col` name's per-parent uniqueness, so it is a change with its own
 regression surface, not a tidy-up.
+
+## 2026-08-12 — the touchdown vector's last arm plays nothing (B12)
+
+Decoded out of `crimson.exe` (read-only ghidra-mcp session) while implementing `PLAN-crash-surface-id`
+B12. The 2026-08-11 section said `FUN_0048d2c0` "repeats the same test byte-for-byte" as the crash
+handler. It repeats the *selection*, but not the whole cascade, and the difference decides what our
+code has to do when nothing resolves.
+
+**The builder is the same shape.** `FUN_004735b0` (a level-init function, alongside the sunlight and
+cloud-floor setup and the `opensesame`/`death`/`dzone` soil lookups) walks the surface registry by
+count `FUN_00559650()` and name `FUN_00559660(i)`, prepends the literal `"touchdown_"` (`0x006274ec`),
+interns the result with `FUN_00523820` — the same intern the crash builder uses — and pushes that
+handle into the vector at `DAT_0071c2ec`. So "empty slot" means "this install ships no such def"
+here exactly as it does for the crash family.
+
+**The selection is the same test.** `0x0048d425`–`0x0048d460`: null material or a signed-negative id
+takes the fallback path; otherwise the length is `(DAT_0071c2ec - DAT_0071c2e8) >> 2` and an id at or
+beyond it, or a slot holding a null handle, falls to the same path; anything else is
+`DAT_0071c2e8[id]`.
+
+**The last arm differs.** The crash handler resolves a bare `player` anim handle when the vector
+cannot answer. The touchdown fallback instead tests `vector == null || length == 0 || vector[0] == 0`
+and, on any of those, `goto LAB_0048d4c1` — jumping **past** its play call `FUN_004edc10` entirely.
+The graze family has no last-resort def: it plays nothing, and therefore makes no sound either,
+because the bark is authored inside the def. Modelled as a null `lastResort` on `SurfaceDefTable`.
+
+Unreachable in this install: all eight chapters ship `spark_touchdown-touchdown_default.json`, so
+slot 0 always resolves. Implemented and pinned anyway (`EffectCatalogueTests
+.AnEmptyTouchdownVectorPlaysNothing`), because it is the one place the two families genuinely part.
+
+## 2026-08-12 — the weapon IMPACT table is surface-id-indexed too (`BL-344`)
+
+Decoded the same session, prompted by the question "shouldn't the weapon impact also be classified by
+the surface id?". It should. The 2026-08-11 write-up and `PLAN-crash-surface-id`'s scope note both say
+the weapons IMPACT keys are "a different name space" and that `buildings` "is not a surface-registry
+name at all". The second claim contradicts this file's own registry table (`buildings` is id 11), and
+the first does not survive the decode.
+
+**Parse time — the table is built by walking the registry.** `FUN_005ad630` is the `.zrd` token
+dispatcher. On `IMPACT` (`0x0063cf98`, matched at `0x005ae1cf`) it takes the weapon's table base from
+`weapon + 0x15c` and:
+
+- `0x005ae1ea` matches the block's surface name against `registry[0]` (`[0x00637b14]`, i.e.
+  `default`) and parses into the base row;
+- `0x005ae1fd`–`0x005ae24e` loads the registry count `[0x00637b10]`, walks `EDI = 0x00637b18`
+  (`&registry[1]`) with `ESI` stepping `0x64`, and on a name match parses into
+  `base + i*100`.
+
+So each weapon's IMPACT table is an **array indexed by surface type id, stride 100 bytes**, and a
+block whose name is not a registry name is parsed into nothing. That is the fate of `fault`, which
+also exists nowhere as a literal in `crimson.exe` — an authored row that can never be selected, the
+same shape as the eleven crash slots with no def.
+
+**Runtime — the index is the struck material's soil id.** `FUN_005acf60` resolves the hit, then:
+
+```
+surfaceId = hit->material ? *(int *)(material + 0x20) : 0
+FUN_005ad100(weapon, hit, surfaceId, 1.0f)      // row = weapon[0x15c] + surfaceId * 100
+```
+
+the same dword at material offset `0x20` and the same null-material-to-0 arm `FUN_0048b920` and
+`FUN_0048d2c0` use. `FUN_005ad100` then reads the row's variant count at `+0x2c` and picks one of
+`+0x30[k]` by `rand()`; `FUN_005ad160` does the same over a second list at `+0x40`/`+0x44`.
+Independently, `FUN_005ad330` tests `*(material + 0x20) == 1` (water) as a special case on the impact
+path — the weapon code reads the soil id directly, in two places.
+
+⚠ **The IMPACT fallback is NOT the crash cascade's.** `FUN_005ad100` gates on `row[0x2c] != 0` and
+otherwise plays nothing. There is no empty-row-to-row-0 arm. Since the shipped weapons author only
+`default`/`water`/`quicksand`/`player`/`buildings` blocks, a faithful implementation plays **no impact
+effect at all** on `dirt`(13), `fire`(5), `airstrip`(8) and `dzone`(12) geometry, where our
+texture-derived classifier currently plays the `default` one. Verify against the extracted weapons
+data before building on this.
+
+Not decoded: what the two variant lists at `+0x2c`/`+0x40` hold respectively, and whether any other
+path supplies a default when a row is empty.

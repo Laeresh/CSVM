@@ -137,7 +137,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 ### Wave B — the selection mechanism
 
 11. ☑ B11 Replace crash-def selection with the original's indexed cascade — **landed 2026-08-11** (⚠ the ground crash lost its earth-impact boom — faithful; judge at the controls)
-12. ☐ B12 Route `touchdown_*` graze selection through the same table
+12. ☑ B12 Route `touchdown_*` graze selection through the same table — **landed 2026-08-12**
+    (⚠ the touchdown cascade has no last-resort arm; the crash one does — see B12's outcome note)
 
 ### Wave C — the destruct model and the cleanup
 
@@ -313,7 +314,19 @@ without checking it is unreachable in *our* build, and say which. ⚠ Do not pre
 by special-casing water — if A1 showed the sea is not id 1, that is a decision already taken at A1,
 not something to re-litigate here.
 
-## B12 ☐ Route `touchdown_*` graze selection through the same table
+## B12 ☑ Route `touchdown_*` graze selection through the same table — **landed 2026-08-12**
+
+**Outcome.** The texture-class pick is gone; `GrazeReaction` indexes a `SurfaceDefTable` built with
+the `touchdown_` prefix, so ordinary terrain and buildings now spark off `touchdown_default` and
+`_dirt` is reserved for `dirt`(13). Verified in-engine on C1: id 1 (`g16233`) plays
+`touchdown_water`, id 13 (`g16323`) `touchdown_dirt`, id 0 (`g28015`) `touchdown_default`.
+**The item's "byte-for-byte" evidence was wrong in one arm, and the decode caught it:** the
+touchdown cascade has **no bare last-resort anim** — where the crash handler resolves `player`, this
+one jumps past its play call and plays nothing (`FUN_0048d2c0` → `LAB_0048d4c1`). Modelled as a null
+`lastResort`, unreachable here because all eight chapters ship `touchdown_default`. The global-vs-
+per-plane difference the trap below names is real and honoured: the table is built once by
+`WorldEffectsFactory` against the world program and handed to every rig. Full decode:
+`analysis/surface-classification/FINDINGS.md`, 2026-08-12 section.
 
 **Goal.** The survivable-scrape reaction picks its `touchdown_*` def by the same id lookup.
 

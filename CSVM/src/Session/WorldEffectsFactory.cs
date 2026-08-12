@@ -90,6 +90,13 @@ public sealed class WorldEffectsFactory
     /// only — the stage is owned here and hangs under the world root.</summary>
     public Node3D? EffectStage { get; private set; }
 
+    /// <summary>The session's one <c>touchdown_*</c> def vector, built against the same program the
+    /// world-effects runtime binds. It is the original's global, built once at level init
+    /// (<c>FUN_004735b0</c>) where each plane's crash vector is built at plane setup. Null until
+    /// <see cref="EnsureWorldEffects"/> has run. <c>FlightRigAssembler</c> hands it to every
+    /// controller, so all rigs index the ONE vector rather than each building its own.</summary>
+    public SurfaceDefTable? TouchdownDefs { get; private set; }
+
     /// <summary>The effect-template ROOT names the world-effects stage builds — the set
     /// <see cref="EffectPools"/> sizes, exposed so the committed pool config can be checked
     /// against what a bound chapter actually stages (a root renamed on one side and not the other
@@ -248,6 +255,8 @@ public sealed class WorldEffectsFactory
             try
             {
                 _worldEffects = BuildWorldEffectsRuntime(gamez, worldScene, textures, worldProgram);
+                // Built here rather than per rig: one level, one touchdown vector (see the property).
+                TouchdownDefs = EffectCatalogue.TouchdownDefTable(worldProgram);
             }
             catch (Exception e)
             {
@@ -526,7 +535,8 @@ public sealed class WorldEffectsFactory
         // Bind name resolution to the template stage — so the effect names resolve to these
         // templates and not to the world's or the crash roots' same-named nodes — but parent the
         // runtime node itself under the visible world root, a plain logic node that self-ticks.
-        effects.Bind(stage, worldProgram.Subset(EffectCatalogue.EffectAnimNames));
+        var bound = EffectCatalogue.WorldEffectAnimNames(worldProgram);
+        effects.Bind(stage, worldProgram.Subset(bound));
         _worldRoot.AddChild(effects);
         int wanted = 0;
         foreach (var r in roots)
@@ -547,7 +557,7 @@ public sealed class WorldEffectsFactory
         }
         GD.Print($"world-effects runtime: {staged}/{wanted} effect template(s) staged over "
                  + $"{depth} pool slot(s) for {players} player(s) [{string.Join(", ", sizes)}], "
-                 + $"{EffectCatalogue.EffectAnimNames.Length} effect name(s) bound");
+                 + $"{bound.Count} effect name(s) bound");
         foreach (var unknown in _pools.UnknownRoots(roots))
             Log.Warn("anim", $"effect pools: '{unknown}' is not an effect stage root — it sizes nothing");
         return effects;

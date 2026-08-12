@@ -139,6 +139,13 @@ public partial class FlightController : Node3D
     /// leaves the scrape's sound without its sparks/dust/splash.</summary>
     public System.Action<string, Vector3>? GrazeEffectSink;
 
+    /// <summary>The graze family's def vector — the session's ONE <c>touchdown_*</c> table
+    /// (<c>WorldEffectsFactory.TouchdownDefs</c>), indexed by the scraped material's surface id by
+    /// the same cascade <see cref="CrashDefs"/> uses. Null on a build with no world-effects runtime,
+    /// which leaves a scrape with neither its def nor its bark, exactly as the original leaves it
+    /// when the vector cannot answer, because the sound is authored inside the def.</summary>
+    public SurfaceDefTable? TouchdownDefs;
+
     /// <summary>Visible damage: torn-skin pdpanel flips + the authored damage-stage anims
     /// (panel burns, fuel leak, heavy prop1 trail), driven from the data's injure_anims
     /// thresholds through the rig runtime. Optional.</summary>
@@ -1858,12 +1865,18 @@ public partial class FlightController : Node3D
         Log.Info("weapons", $"near miss P{PlayerIndex + 1} at {distance:0.0} m intensity={_warningShots.Intensity:0.00} snd={variant ?? "none"}");
     }
 
-    /// <summary>The survivable scrape's authored per-surface reaction: the struck collider's
-    /// <see cref="SceneBuilder.SurfaceMeta"/> class picks one of touchdown.zrd's three defs —
-    /// <c>touchdown_default</c> sparks off a hard building surface, <c>touchdown_dirt</c> raises
-    /// dust off terrain, <c>touchdown_water</c> splashes — which the world-effects runtime stages at
-    /// the contact point, alongside the sequence's own SOUND. Classification is
-    /// <see cref="ProjectilePool.ClassifySurface"/>, the same read a round's impact makes.
+    /// <summary>The survivable scrape's authored per-surface reaction, selected exactly as
+    /// <see cref="Crash"/> selects its own: index <see cref="TouchdownDefs"/> with the struck
+    /// material's numeric surface id (<see cref="SceneBuilder.SurfaceIdMeta"/>), falling back to
+    /// slot 0 for a null material, an out-of-range id, or a slot naming a def this install does not
+    /// ship. touchdown.zrd ships three (<c>touchdown_default</c> sparks, <c>touchdown_dirt</c>
+    /// raises dust, <c>touchdown_water</c> splashes), so the other eleven ids fall back. That makes
+    /// <b>ordinary terrain scrapes spark</b> off <c>_default</c> and reserves <c>_dirt</c> for
+    /// <c>dirt</c>(13)-tagged material, the same correction B11 made to the crash.
+    ///
+    /// <para>The world-effects runtime stages the def at the contact point, alongside the
+    /// sequence's own SOUND. Where the crash cascade ends at a bare anim name, this one ends at
+    /// "play nothing", so a null def is silent rather than defaulted.</para>
     ///
     /// <para>One reaction per <see cref="GrazeReactionInterval"/> rather than per frame: a scrape
     /// confirms a hit every physics frame, and each call restarts the def and re-fires its sound.
@@ -1886,14 +1899,20 @@ public partial class FlightController : Node3D
         if (_grazeReactionCooldown > 0f)
             return;
         _grazeReactionCooldown = GrazeReactionInterval;
-        var surface = ProjectilePool.ClassifySurface(hitBody);
-        // Buildings are the hard surface the spark variant is for; water splashes; everything else
-        // (terrain, the unclassified majority) is dirt.
-        string effect = EffectCatalogue.TouchdownFor(surface);
+        int? surfaceId = SurfaceIdOf(hitBody);
+        string? effect = TouchdownDefs?.DefForSurfaceId(surfaceId);
         var site = Config.GetBool("graze.siteAtContact", true) ? impact : _model.Position;
-        GrazeEffectSink?.Invoke(effect, site);
-        Audio?.OnGraze(surface == SurfaceClass.Water);
-        Log.Info("flight", $"graze reaction effect={effect} surface={surface} into={hitName} contact=({impact.X:0},{impact.Y:0},{impact.Z:0}) site=({site.X:0},{site.Y:0},{site.Z:0}) rendered={(GrazeEffectSink != null ? 1 : 0)}");
+        if (effect != null)
+        {
+            GrazeEffectSink?.Invoke(effect, site);
+            // The bark belongs to the def, exactly as the crash boom does: touchdown_water Sounds
+            // snd_exp_water_b, the other two snd_exp_ground_b. No def, no sound.
+            Audio?.OnGraze(effect == EffectCatalogue.TouchdownDefPrefix + "water");
+        }
+        string surface = surfaceId is { } sid
+            ? $"{sid}/{SurfaceRegistry.NameForId(sid) ?? "?"}"
+            : "none";
+        Log.Info("flight", $"graze reaction effect={effect ?? "-"} surface={surface} into={hitName} contact=({impact.X:0},{impact.Y:0},{impact.Z:0}) site=({site.X:0},{site.Y:0},{site.Z:0}) rendered={(GrazeEffectSink != null ? 1 : 0)}");
     }
 
     /// <summary>Sweeps each airframe box along this frame's motion against every solid

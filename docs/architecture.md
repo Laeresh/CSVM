@@ -196,7 +196,7 @@ clusters they delegate to.
 - `src/Session/IFlightStarts.cs` — the spawn-placement seam: one call answering for the **whole field** at once, plus the `FlightStart` pos/look-at pair every rig is placed from.
 - `src/Session/RaceGrid.cs` — the race starting grid: every pilot fanned symmetrically about one anchor spawn on its heading, with the whole field lifted as one to clear terrain.
 - `src/Session/PlaneRoster.cs` — pure lookups over a `SessionSpec`'s plane roster: which plane a player flies, and its display name.
-- `src/Session/EffectCatalogue.cs` — the record of which authored anims are playable effects, and what their defs need staged: the effect/crash/damage-shim name tables, the pure `TouchdownFor` graze pick, and the anchor-root derivation both binds stage from.
+- `src/Session/EffectCatalogue.cs` — the record of which authored anims are playable effects, and what their defs need staged: the effect/crash/damage-shim name tables, the two surface-indexed def vectors (`CrashDefTable`/`TouchdownDefTable`), and the anchor-root derivation both binds stage from.
 - `src/Session/SurfaceDefTable.cs` — one of the original's per-surface anim-def vectors (`player_crash_*` / `touchdown_*` over the surface registry) and the cascade that indexes it with a struck material's surface id.
 - `src/Session/EffectPools.cs` — the `data/effect_pools.json` reader: how many copies of each effect template the stage builds, per ROOT, scaled by player count.
 - `src/Session/FlightRigAssembler.cs` — assembles one player's flight rig: painted plane, `FlightController`, loadout/ordnance, HUD instruments, damage visuals, audio, stunt run, spawn, crash runtime.
@@ -2223,7 +2223,8 @@ fallback `player_crash_default` Sounds only `plane_destroy_sg`, so it layers nei
 `OnEngineStop` → `snd_propstop`, called right after the explosion one-shots on every crash/destruction
 (`FlightController.Crash`) so the loops end on the authored wind-down cue instead of a cut,
 `OnGraze(water)` → the survivable scrape's authored `snd_exp_water_b`/`snd_exp_ground_b`
-(touchdown.zrd; rate-limited by `FlightController`, not here). `OnWarningShot` draws one
+(touchdown.zrd; rate-limited by `FlightController`, not here, and its argument now comes from the
+CHOSEN `touchdown_*` def, since the sound is authored inside that def). `OnWarningShot` draws one
 `bullet_warning_sg` variant per near miss (player.json `warning_shot_sound` is a SOUND_GROUPS name, so
 `Setup` takes the group table too; rate-limited by `FlightController`'s `WarningShotCue`, same split).
 The engine loop (`BL-078`) is two voices of the same clip, pitch-split ±half of `EngineDetuneRatio`
@@ -2892,10 +2893,14 @@ Versus sets 3 s on every rig) auto-respawns a crash on the sim clock with R stil
 null, the default, keeps every other mode manual-R (scripted HoldSegments runs keep their 1.5 s).
 `Respawn` plays `startprops` back and resets
 `ThrottleSmoke`, which `Update` otherwise drives every frame off the live throttle.
-A survivable graze also plays touchdown.zrd's per-surface reaction (`GrazeReaction`): the struck
-collider classified through the same call picks `touchdown_default` (buildings,
-sparks) / `touchdown_dirt` / `touchdown_water`, staged at the contact point via `GrazeEffectSink`
-(the world-effects runtime) with `FlightAudio.OnGraze` under it, one per `GrazeReactionInterval`.
+A survivable graze plays touchdown.zrd's per-surface reaction (`GrazeReaction`) through the SAME
+cascade: the struck body's surface id indexes `TouchdownDefs` (the session's one `SurfaceDefTable`,
+built by `WorldEffectsFactory` against the world program because the original's touchdown vector is
+a level-init global). `dirt`(13) raises dust, `water`(1) splashes, and everything else falls back to
+slot 0, so **ordinary terrain and buildings alike spark off `touchdown_default`** — the same
+correction B11 made to the crash, and the reverse of what this build did before. The def is staged
+at the contact point via `GrazeEffectSink` (the world-effects runtime) with `FlightAudio.OnGraze`
+under it, gated on the CHOSEN DEF rather than on a water flag, one per `GrazeReactionInterval`.
 Where it stages is an open A/B — `graze.siteAtContact`, default the contact point (judged at the
 controls); false stages on the aircraft, which is what the def's `MAIN_ROOT_NODE` offsets assume.
 `AttachWarningShotCue` registers the aircraft on the pool as a near-miss target and `OnNearMiss`
@@ -3994,6 +3999,12 @@ bind from a caller-supplied "does this def exist" test, so `PlayableDefs` is wha
 bind and `DefForSurfaceId` is what an impact asks. Engine-free and pure.
 ⚠ **The empty-slot arm is the mechanism, not a special case.** This install ships three defs per
   family, so eleven of fourteen slots fall back — never hardcode *which*: ask the bound program.
+⚠ **The two families differ in the last arm only.** The touchdown handler `FUN_0048d2c0`
+  `0x0048d425`–`0x0048d460` repeats the crash test byte for byte against the global vector
+  `DAT_0071c2e8`/`DAT_0071c2ec`, but its fallback jumps past the play call to `LAB_0048d4c1` and
+  plays nothing, where the crash family resolves a bare anim handle. So `lastResort` is null for
+  touchdown and `DefForSurfaceId` can answer null. Unreachable in this install, because all eight
+  chapters ship `touchdown_default`, so slot 0 always resolves (decoded 2026-08-12, read-only).
 ⚠ The id space is the surface registry's, NOT `ProjectilePool.ClassifySurface`'s texture-derived
   `water`/`buildings` class, which keys the weapon IMPACT tables and is a different name space.
 
@@ -4072,8 +4083,11 @@ over the whole surface registry, `CrashDefPrefix`/`CrashAnimRoot` its prefix and
 `PlaneDamageEffectAnims`: the four `<part>_damage_effects` shims; `PropChoreographyAnims`:
 `startprops`/`stopprops`, played directly by `FlightController` rather than through a CALL;
 `PlayerDamageStageAnims`: the authored damage-stage menu `pdpanelN`/`player_fuelleak`/
-`player_damage_trail` DamageVisuals plays as injure_anims thresholds cross, `BL-259`), and the pure
-`TouchdownFor(SurfaceClass)` the graze reaction's three-way pick routes through.
+`player_damage_trail` DamageVisuals plays as injure_anims thresholds cross, `BL-259`), and the two
+surface-indexed def vectors: `CrashDefTable(program)` for the per-plane crash rig and
+`TouchdownDefTable(program)` for the level's graze reaction (`SurfaceDefTable`, null last resort).
+`WorldEffectAnimNames(program)` is `EffectAnimNames` plus that vector's playable slots, so the bind,
+the stage closure and the `--effects-test`/`effects-census` sweeps all see one set.
 `GroundSplashAnimNames` (`flydirt_plane`) names the crash's ground-splash def for
 `AnimRuntime.InheritedVelocityExempt` (`BL-274`) — its `ObjectMotion` is authored the same
 vertical-only shape as a launched wreck piece, so only the name can tell "stay planted" from
@@ -4096,7 +4110,7 @@ slot plus the four damage shims) are what `WorldEffectsFactory` builds a copy of
 hand root-tables are gone, and an unstageable anchor now fails the build instead of leaving a def
 anchored on nothing.
 `WorldEffectsFactory` consumes these names to build and stage the runtime; it no longer owns the
-naming itself. Every producer of a name here — `ImpactOutcome`'s gunhit lookup, `TouchdownFor`,
+naming itself. Every producer of a name here — `ImpactOutcome`'s gunhit lookup, `TouchdownDefTable`,
 `PlaneDamageEffectAnims` against every plane's real `injure_anims` data — carries a producer-range
 unit tripwire in `CSVM.Tests` (`ImpactOutcomeTests`'s B5 battery, `EffectCatalogueTests`) asserting
 its whole producible range resolves inside `EffectAnimNames`/`PlaneDamageEffectAnims`.
@@ -4142,7 +4156,8 @@ death effects, including the 12 gun `*_gunhit` variants (a gun hit plays throttl
 time-bounded, C8), the `DAMAGE_SEQUENCE` stage pair `sputter_black_smoke_obj`/`sputter_fire_smoke_obj`
 (root `partial_damage_obj`), and the airframe's three graze reactions
 (`touchdown_default`/`_dirt`/`_water`, roots `spark_touchdown`/`dust_touchdown`/`splash_touchdown`
-+ `yellow_spark_01`, played by `FlightController.GrazeReaction` through `EffectCatalogue.TouchdownFor`).
++ `yellow_spark_01`, played by `FlightController.GrazeReaction` off `EffectCatalogue
+.TouchdownDefTable`'s surface-indexed vector, which `WorldEffectAnimNames` appends to the bind).
 This module still does the staging: `Subset` handles 8/30 destruction targets; 22 live-object
 choreography names remain local (`analysis/death-effect-closure/`), and the stage-call closure
 excludes C4's train-anchored `b_steamtrail`. Constructed once per session (`_worldEffectsFactory`,
