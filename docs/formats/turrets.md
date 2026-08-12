@@ -85,7 +85,7 @@ times are seconds; distances metres.
 | `DEACTIVATE` | **0** | a second node whose destruction *disables* the turret |
 | `EFFECT` | **0** | `[node, duration]` — an effect node shown while firing |
 | `FIRE_LIMITS` | **0** | `[burst, cooldown]` duty cycle on the gun itself |
-| `STICKINESS` | **0** | an angle, degrees; stored but no consumer located |
+| `STICKINESS` | **0** | an angle, degrees: this turret's own gun-aim-assist cone, overriding the firing weapon's. Consumer decoded 2026-08-12, see [`org/aim-assist.md`](../org/aim-assist.md); a value not greater than 0 is stored as "no override" |
 | `SHOOT_UP_ONLY` | **0** | reject targets below the turret's own altitude |
 | `CATEGORY_LABEL` | **0** | a raw (unlocalised) label string |
 | `HELP_LABEL` | **0** | a string-table id, localised at load |

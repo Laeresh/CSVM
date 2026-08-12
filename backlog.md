@@ -737,10 +737,21 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   uniform in `[0, θ]`, **not** uniform over the cone's solid angle; the candidate set is **not
   aircraft-only** — it is vehicles + turrets + `targets.zrd` mission structures + **live
   proximity-fused ordnance in flight**, so guns legitimately snap onto an incoming rocket, and
-  scoping the port to planes would be a silent behaviour change. **Unsettled before tuning:** how
-  the 1° assist scatter composes with the per-gun `CANNON_SPREAD 6.0` (`docs/formats/weapons.md`) —
-  replace, stack, or different stage — was not traced and must be settled first, or both numbers
-  get tuned against each other.
+  scoping the port to planes would be a silent behaviour change.
+  *Decoded 2026-08-12* (settles this entry's former "unsettled before tuning" clause; write-up in
+  [`docs/org/aim-assist.md`](docs/org/aim-assist.md)): **`CANNON_SPREAD` is not a dispersion term.**
+  Its one reader in the executable (`FUN_004ba6f0` @ `0x004ba9da`) stores `−cos(value × π/180)` into
+  `[def+0x210]+0x08`, read only by the four assist scorers — it is the assist's **acceptance cone**,
+  6° half-angle for the stock guns, and the 1° `inaccuracy` cone is the *only* scatter on a round.
+  No key means `0.0` from the block's `calloc`, i.e. a 90° hemisphere, not a non-zero default. The
+  per-target override at candidate `+0x50` is `−1.0` from every entity constructor (planes
+  `0x004b0006`, turrets `0x004a9ae7`, MStructs `0x004a25ee`, ordnance `0x00441be1`); the only
+  authored writer is the turret key `STICKINESS` (`FUN_004a9df0` @ `0x004aa5b4`), which ships zero
+  times, so with the shipped data the cone is always the firing weapon's.
+  ⚠ **Fallout, fix alongside:** `Projectile.cs:534` scatters every round through
+  `ApplySpread(forward, weapon.CannonSpread)`. The original scatters through nothing of the kind.
+  That 6° jitter is a live fidelity bug in shipped code, separate from the missing assist, and both
+  live at the same fire call.
   *Playtest after fix:* `--vs` dogfight, and the `PT-43` gun-feel line — guns should become a
   practical kill weapon without rockets. The honest risk is over-assist reading as aimbot; the
   shipped constants are the original's answer, so tune only against footage, not taste.
