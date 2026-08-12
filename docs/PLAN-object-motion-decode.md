@@ -208,10 +208,17 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 7. ☑ `NO_ALTITUDE` as the opt-out, and `gunshell` as its only author
 8. ☑ `RUN_TIME` as a universal ceiling; retire `FlightToLaunchHeight` for the watchdog
 9. ☑ Landing response: 0.2 restitution and energy-loss termination
+10. ☐ `FORWARD_ROTATION`: the tumble is a rate about the launch's own perpendicular, not an angle
+    over `run_time` about local X
+
+⚠ `C10` was minted at `C9` (2026-08-13) from a user report at the controls, not from the plan's
+original scope: the rotation reads far larger than the original's. It is a decode of the same
+function and it must land before `D12` writes the record, since `D12` would otherwise document a
+tumble that is about to change.
 
 ### Wave D — the tune, the coverage, the record
 
-10. ☐ Delete `DebrisTune` entirely
+10. ☑ Delete `DebrisTune` entirely
 11. ☐ Pin a golden that shows debris coming to rest
 12. ☐ Rewrite the decode records that carried the disproven readings
 13. ☐ Item bookkeeping: `BL-319`, `BL-245`, `PT-46` (d), and a fresh ID for the deleted tune
@@ -831,11 +838,72 @@ attempt at this wave ended up with debris hovering. ⚠
 The bounce *branch* (`default`/`water`/`lava`) comes from the struck surface and is already wired;
 this item is the physical response only, and `lava` remains dead data across the install.
 
+## C10 ☐ `FORWARD_ROTATION`: the tumble's axis and its rate
+
+**Goal.** A tumbling piece spins at the rate the data authors, about the axis the original spins it
+about — so a steep launch tumbles slowly and a flat one fast, off the same authored number, and the
+axis follows the throw rather than the mesh.
+
+**Evidence (confidence: traced — read at C9, 2026-08-13, and not yet built).** This engine reads
+`forward_rotation.Time.initial` as a TOTAL angle, divides it by the run time, and rotates about the
+node's local X (`MotionRuntime`'s `_tumbleRate`, and its class remark has always called the axis a
+reasoned choice rather than a decode). `FUN_004e8fa0` does neither. Its `0x80` (`TIME`) branch holds
+a live RATE at `+0x84`, seeded from `Time.initial` in rad/s and integrated each frame by
+`+0x84 += dt · Time.delta` (`+0x80`), and applies the euler triple
+
+```
+( +0x78 · rate · dt ,  0 ,  −( +0x70 · rate · dt ) )
+```
+
+where `+0x70`/`+0x78` are the launch direction's cached X and Z (`cos(az)·h` and `sin(az)·h`, from
+the same `TRANSLATION_RANGE` block B4 decoded). That is a rotation about the horizontal axis
+**perpendicular to the launch direction**, scaled by the direction's own horizontal magnitude
+`h = 1 − |elev|/90`. The `0x40` (`DISTANCE`) branch is the same shape driven by the step rather than
+by `dt`, so it is a rotation per metre travelled rather than per second.
+
+**Approach.** Replace `_tumbleRate`'s derivation and its axis together — they are one reading, and
+changing only the rate would leave the spin about a mesh axis it was never about. Carry
+`Time.delta` as the rate's own integrator rather than dropping it. Check what `DISTANCE`'s
+population is before deciding whether to build both branches or file the second.
+
+**Model recommendation.** high — small diff, wide blast radius (282 of the 296 untimed events carry
+a tumble, and the crash pieces carry the biggest ones), and it will move `c1-crash`.
+
+**Verify.** The user's own report is the acceptance test: the rotation must stop reading larger than
+the original's. Pin the arithmetic first — a steep launch and a flat one off the same authored
+number must differ — then look at `--destroy=pass_plane01` and the crash, and expect `c1-crash` to
+move.
+
+**⚠ Traps.** ⚠ `Time.initial` is a RATE here, not the total angle the class remark claims; the "5π
+and 4.44π are clean multiples of π" reasoning that produced the total-angle reading is a
+coincidence of the authored numbers and must not be used to argue the decode back. ⚠ Do not
+normalise the axis: its length is `h`, and that is what makes a steep throw tumble slowly. ⚠ This
+lands before `D12`, which would otherwise write the old reading into `docs/org/`.
+
 ---
 
 # Wave D — the tune, the coverage, the record
 
-## D10 ☐ Delete `DebrisTune` entirely
+## D10 ☑ Delete `DebrisTune` entirely
+
+**Landed 2026-08-13.** Gone in full, per Decision 5: the class and its file, `LaunchScale` and
+`GravityScale` both, `Launcher.ApplyDebrisTune` and its call site, `SessionSpec`'s two properties
+and their argument parsing, the `--debris-launch`/`--debris-gravity` flags and their `cli.md` entry,
+the `debris.launchScale`/`debris.gravityScale` config keys (which the removed `Config.GetFloat`
+reads also removes from `--dump-config`), the `WorldDamageLab` panel with its two sliders, three
+buttons, readout and sync, and `Suites.cs`'s `AuthoredArcScope` with both of its uses. The launch
+suites need no pin now: the authored arc IS what flies, so their bands apply directly.
+
+**The golden that moved, and it is the one that should.** `c1-crash` re-pinned
+(`440c61cb…` → `b80b8a98…`): `call_crash_trails`' five `fly_trailN` now launch at the authored speed
+instead of 0.65 of it. The other twelve are unchanged, which is what a knob that only ever touched
+launched `OBJECT_MOTION` bodies should do. 949/949 units, 37/37 suites, engine errors clean.
+
+**⚠ The first honest look, and it is not signed off.** With `B4`'s elevation decode and no tune, the
+arc is finally the data's own. The two open look questions belong here rather than to any item:
+debris resting too deep (`C9`, decoded end to end, no extent term anywhere in the original's chain)
+and the tumble reading far larger than the original's (`C10`, now its own item). Neither is to be
+answered with a scalar; that is the whole reason this item exists.
 
 **Goal.** No global debris multiplier exists in the tree, in any form that can persist across
 sessions or silently absorb a future decode error.

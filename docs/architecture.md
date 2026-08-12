@@ -1225,16 +1225,24 @@ OFFSET from unit scale (`1 + initial + delta·u`), unlike the absolute `PoseScal
 frame's Y, `complex` converts world-down INTO that frame — identical under a world-aligned parent,
 which is why the install authors it on aircraft wreckage alone (254 events / 25 shapes, all with a
 `RUN_TIME`).
-`MotionRuntime`'s flight solve is admitted by an **absent `RUN_TIME` plus an apex**, never by the
-`BOUNCE_SEQUENCE` — `BL-257`'s census (`analysis/bl-257-nulled-launch/`) found 167 events / 119
-distinct defs naming NEITHER field, which end instead with the flying piece's own null-start
-`ACTIVE_STATE 0`; gated on the bounce they all reported duration 0 and were hidden on the tick they
-launched. `PendingBounce` still arms only where a bounce IS named, so the second shape flies and
-owes nothing.
-⚠ Do NOT re-narrow that gate to the bounce, and do not widen it past the apex. `FlightToLaunchHeight`
-  returning 0 for `v0y <= 0` is what keeps `BL-245`'s falls out — including 8 of those 167 (a level
-  `bridge_truck01`, `rope1burn`'s five rope ends, two `fuelbox` rockerarms whose speed range is
-  −45…45, so `sin(elevation)·speed` inverts). A `chuteman` parabola solve divides by zero.
+Contact is the DEFAULT and comes in the original's two tiers: `TryGroundColumn`, a vertical column
+under the body, unless `do_intersections` upgrades it to `TryContact`'s trajectory sweep (166 events
+install-wide); `no_altitude` vetoes the column only, and `gunshell` alone authors it. No mask wired
+means neither tier, which is the structural fallback every lab and 9 of the 13 goldens take. Both
+end on one shared response: half a descending step clear of the surface while moving, exactly on it
+once below 0.1 horizontal / 0.5 vertical, velocity scaled by 0.2 with every sign KEPT (the original
+reflects nothing), continuing while incoming speed² covers acceleration².
+`MotionRuntime` separates the duration it REPORTS from the ceiling that ENDS it. `RunTime` is the
+authored `RUN_TIME` or the parabola's return to launch height, and it drives the sequence's wait,
+the tumble rate and the channel parameter — `BL-257`'s census (`analysis/bl-257-nulled-launch/`)
+found 167 events / 119 distinct defs naming neither a run time nor a bounce, which end with the
+flying piece's own null-start `ACTIVE_STATE 0`, so a wrong number here hides them mid-air or leaves
+them on screen. The ceiling is that same `RUN_TIME`, or the original's watchdog (15 s column / 35 s
+sweep), charged only by a contact query that ran and found nothing.
+⚠ Do not feed the watchdog into `RunTime`, and do not re-narrow the untimed gate to the bounce.
+  `BL-245`'s falls and the 8 no-apex oddities among those 167 (a level `bridge_truck01`,
+  `rope1burn`'s five rope ends, two `fuelbox` rockerarms whose speed range is −45…45) report no
+  duration and are admitted by their contact tier instead.
 ⚠ `RestOf`, `_rng`, `SetSubtreeOpacity` and `NonSingularScale` on `AnimRuntime` are `internal`
   (not `private`) specifically so these motion types can reach them — same-assembly only, no wider
   exposure intended; don't widen further without a reason. `NameOf`/`VisualOriginOf` joined them for

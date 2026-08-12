@@ -92,12 +92,11 @@ internal enum MotionContactTier
 ///   this install, so the two readings coincide and no capture can separate them.</item>
 /// </list></para>
 ///
-/// <para>⚠ <b>Every speed above is the AUTHORED one; what flies is that scaled by
-/// <see cref="DebrisTune"/>.</b> <c>LaunchScale</c> ships at <b>0.65</b> — a judged look matched at
-/// the controls against the original, not a decode —
-/// so a piece whose data says it leaves at 10 m/s actually leaves at 6.5. Anything computing an
-/// expected arc from the extracted numbers must apply the scale, or pin the raw arc with
-/// <see cref="DebrisTune.UseAuthored"/> (what the launch suites do) to assert the decode instead.</para>
+/// <para>Every speed above is the AUTHORED one, and it is what flies. No global multiplier stands
+/// between the data and the launch: a piece whose data says it leaves at 10 m/s leaves at 10 m/s.
+/// A tuned one used to (0.65, judged at the controls), and it was deleted rather than re-judged
+/// once the elevation decode supplied the 0.745–0.81 it was standing in for. If an arc reads wrong
+/// from here on, the answer is a further decode or a filed item, never a scalar.</para>
 /// </summary>
 internal sealed class MotionRuntime : IAnimMotion
 {
@@ -284,12 +283,8 @@ internal sealed class MotionRuntime : IAnimMotion
         float RandSym() => (float)(rt._rng.NextDouble() * 2.0 - 1.0); // [-1, 1] via the seedable RNG
         float Rand(float a, float b) => a + (float)rt._rng.NextDouble() * (b - a);
 
-        // The debris arc knobs. Both default to 1 and multiply exactly, so an untuned run — and
-        // every golden — is byte-identical to a build without them. See DebrisTune for why the
-        // launch and the gravity are separate sliders rather than one "size" scalar.
         var gravityBlock = data.Obj("gravity");
-        float gravity = (gravityBlock?.Num("value") ?? 0f) * DebrisTune.GravityScale;
-        float launchScale = DebrisTune.LaunchScale;
+        float gravity = gravityBlock?.Num("value") ?? 0f;
 
         // `complex` is the two-form gravity switch. A motion integrates in its node's PARENT frame,
         // and the plain form drops `gravity.value` straight into that frame's Y — correct only while
@@ -376,12 +371,11 @@ internal sealed class MotionRuntime : IAnimMotion
             v0 += new Vector3(RandSym() * rnd.X, RandSym() * rnd.Y, RandSym() * rnd.Z);
             // `delta` is folded straight into the acceleration slot, no division by run_time —
             // the original stores dir·delta into +0x4c..0x54 and copies it verbatim into the
-            // live acceleration. Scaled with the launch it ramps, or the tune would bend the
-            // arc's shape as well as its size.
-            // InheritedLocal is OUTSIDE the scale: it is the plane's measured momentum, not part
-            // of the authored launch, and its magnitude is tuned separately (WreckMomentum).
-            m._v0 = (v0 * launchScale) + InheritedLocal();
-            m._accel = GravityAccel() + tr.Vec3("delta") * launchScale;
+            // live acceleration.
+            // InheritedLocal is the plane's measured momentum rather than part of the authored
+            // launch, and its magnitude carries its own WreckMomentum TUNE.
+            m._v0 = v0 + InheritedLocal();
+            m._accel = GravityAccel() + tr.Vec3("delta");
             m._hasBallistic = true;
         }
         else if (data.Obj("translation_range") is { } range)
@@ -408,11 +402,10 @@ internal sealed class MotionRuntime : IAnimMotion
             float speed = Pick(range.Obj("initial"));
             float speedRamp = Pick(range.Obj("delta"));
             var dir = RangeLaunchDirection(azimuth, elevation);
-            // As in the vector branch: the authored launch scales, the inherited momentum does not.
-            m._v0 = (dir * speed * launchScale) + InheritedLocal();
+            m._v0 = (dir * speed) + InheritedLocal();
             // `delta` folds in as a constant acceleration along the same direction — the same
             // shape `translation.delta` has, and 0 on 984 of the 1,217 events.
-            m._accel = GravityAccel() + dir * speedRamp * launchScale;
+            m._accel = GravityAccel() + dir * speedRamp;
             m._hasBallistic = true;
         }
 

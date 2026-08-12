@@ -197,10 +197,9 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 decoded from `crimson.exe`: the ground-contact test is the DEFAULT rather than `do_intersections`-
 gated, the `translation_range` elevation is linear (`elev/90`) rather than spherical, and `RUN_TIME`
 is a ceiling rather than a duration. Folds in `BL-319` and `BL-245`, re-opens `PT-46` (d), and
-deletes `DebrisTune`. Waves A, B and C complete; Wave D next, from `D10`. Two look questions are
-open against the milestone rather than any one item: debris resting too deep (the contact chain is
-decoded and carries no extent term) and the tumble's axis and rate (decoded at `C9`, undecided in
-code).
+deletes `DebrisTune`. Waves A and B complete, Wave C landed and `D10` with it; `C10` was minted from
+a controls report and is next, then `D11`–`D13`. One look question stays open with no item: debris
+resting too deep, whose chain is decoded and carries no extent term.
 Owed at the controls: `PT-28`, `PT-41`, `PT-43`, `PT-45` and `PT-47`
 ([`playtest.md`](playtest.md)). Verify any change with
 **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read
