@@ -8,16 +8,6 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>Dead: superseded by <see cref="SurfaceDefTable"/>'s id-indexed cascade
-/// (<c>PLAN-crash-surface-id</c> B11/B12), which reconstructs the original's actual mechanism —
-/// an array index on the struck material's numeric surface id, not a three-way branch. Kept only
-/// until C22 retires it (<c>BL-059</c>): unreferenced everywhere but its own declaration.
-/// <see cref="Air"/> was never the original's air/no-impact variant — that reading is disproven
-/// (docs/architecture.md's `FlightController.cs` entry). The original's actual mid-air destruct is
-/// a separate canned anim (`FUN_004b82d0`) that plays no `player_crash_*` def at all and has no
-/// trigger in this build, since nothing in M3 shoots the player down.</summary>
-public enum CrashSurface { Air, Ground, Water }
-
 /// <summary>
 /// The flying aircraft: polls keyboard + gamepad into a <see cref="FlightModel"/>,
 /// applies the result to this node's transform (the plane model is a child), and

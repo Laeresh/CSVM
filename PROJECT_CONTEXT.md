@@ -192,11 +192,10 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt flying, or the 2–4-player splitscreen Dogfight deathmatch, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, world destructibles that take damage, die, lose collision, throw debris and reset — and planes shoot planes down (M4 A1, front-loaded). The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
-**Active plan: [`PLAN-crash-surface-id.md`](docs/PLAN-crash-surface-id.md)** — Waves A and B are
-done (surface id carried to the collider, the registry built, crash and `touchdown_*` selection both
-on the original's indexed cascade); `C21` (the mid-air destruct model) is documented, no trigger.
-Next: `C22` (retire `CrashSurface`, close `BL-059`). Owed after it: the judge-at-the-controls pass
-Decision 7 set up, on the `_default` crash and the now-sparking terrain scrape.
+**No active plan.** [`PLAN-crash-surface-id.md`](docs/plans/PLAN-crash-surface-id.md) completed
+2026-08-13 (7 items; indexed in [`docs/plans/plans.md`](docs/plans/plans.md)). Owed: a
+judge-at-the-controls pass on its `_default` fallback crash and the now-sparking terrain touchdown
+scrape (Decision 7) — anything kept for looks goes to `BL-060`, not back into this plan.
 Owed at the controls: `PT-28`, `PT-41`, `PT-43`, `PT-45` and `PT-47`
 ([`playtest.md`](playtest.md)). Verify any change with
 **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read

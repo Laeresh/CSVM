@@ -106,37 +106,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     absorbs whatever this turns out to be**, so settling it will likely move that number too — re-judge the
     look at the controls afterwards rather than assuming 0.65 survives.
 
-- `BL-059` `[Feature]` **Data-driven crash — the remaining variants/follow-ups.** The dirt/ground crash is
-  complete and the default (`PLAN-data-driven-crash`, `docs/HISTORY.md`). What is still open:
-  1. **The selection mechanism is wrong, and `player_crash_default` is not what we thought.**
-     ⚠ **Decoded 2026-08-11** (`analysis/surface-classification/FINDINGS.md`, that date's section):
-     the original does **not** branch three ways on what was struck. It builds a vector of
-     `"player_crash_" + <surface name>` from a global surface-name registry (`FUN_00476250`,
-     literal `0x00627cf8`; registry `0x00637b10`/`0x00637b14`) and **indexes it with the struck
-     material's surface type id** (`FUN_0048b920`, `0x0048bac5`–`0x0048bb00`). That id is a signed
-     dword at material record offset `0x20` — **exactly the `soil` field mech3ax already extracts**,
-     proven 1:1 across all 8 chapters / 4,715 materials by
-     `analysis/surface-classification/soil_id_probe.py`. Compiled-in names are
-     `default`(0) `water`(1) `seafloor`(2) `quicksand`(3) `lava`(4) `fire`(5); ids ≥ 6 are
-     level-supplied — and the level list is recovered too (`soils_list.py`, from `ZBD/zrdr.zbd`
-     `0xe631c`): `player`(6) `enemy`(7) `airstrip`(8) `opensesame`(9) `death`(10) `buildings`(11)
-     `dzone`(12) **`dirt`(13)**. Shipped materials use 0, 1, 5, 8, 11, 12, 13; 2/3/4 are used by
-     nothing. So **`player_crash_default` is the fallback arm** (id 0, negative, out of range, or
-     naming a def that does not exist), *not* a no-impact/air destruct. ⚠ **The original's ordinary
-     ground crash is `_default`, not `_dirt`** — id 0 is ~98 % of every chapter's materials, and
-     `fire`/`airstrip`/`buildings`/`dzone` have no def of their own, so all of them fall back to
-     slot 0. `_dirt` plays only on the 3–9 explicitly `dirt`-tagged materials per chapter. **Our
-     build has this backwards**, playing `_dirt` as the default ground crash. The earlier reading —
-     "it fires when the plane is destroyed with no impact at all", and `CrashSurface.Air` as the
-     thing to build a trigger for — is disproven; the mid-air destruct is real but lives in
-     `FUN_004b82d0` and plays **no** `player_crash_*` def at all, handing off to the impact def on
-     ground contact via the flag byte at `this+0x91f`. ⚠ Do not hardcode 13 for `dirt` without that
-     provenance: ids ≥ 6 are script data, not fixed by the exe. Superseded shape, kept as the trap:
-     *do not* wire a variant off a low-HP test on the collision path. Planned as
-     `docs/PLAN-crash-surface-id.md`. Data:
-     `extracted/C1/cam_anim/player-player_crash_default.json`; the water half landed 2026-08-02
-     (`docs/HISTORY.md`), effects decode there under 2026-07-23.
-
 - `BL-060` `[Feature]` **Improve on the original crash — the bespoke "breaking apart" (branch `bespoke-crash-animation`).**
   User's call (2026-07-23): the retired bespoke `CrashBreakup` wreck-scatter looked *better* than the
   faithful data-driven crash, so it was preserved on that branch rather than deleted. **The A/B playtest

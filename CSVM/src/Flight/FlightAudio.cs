@@ -276,9 +276,11 @@ public partial class FlightAudio : Node
         GD.Print($"crash sound: {name}");
     }
 
-    /// <summary>The ground/dirt crash's earth-impact boom (snd_exp_ground_a), layered over the
-    /// plane explosion <see cref="OnCrash"/> already fired. Called only for a Ground surface
-    /// (FlightController.Crash), so it does not sound on a sea dive or a future air destruct.</summary>
+    /// <summary>The `dirt`(13) crash's earth-impact boom (snd_exp_ground_a), layered over the
+    /// plane explosion <see cref="OnCrash"/> already fired. Called only when `player_crash_dirt`
+    /// is the resolved def (FlightController.PlayCrashBoom), so it does not sound on a sea dive,
+    /// the `player_crash_default` fallback, or a future mid-air destruct (which plays no
+    /// `player_crash_*` def at all).</summary>
     public void OnGroundExplosion() => PlayOneShot(_groundExp, _groundExpVol);
 
     /// <summary>The sea dive's counterpart (snd_exp_water_a — the `_a` pair, not the graze's

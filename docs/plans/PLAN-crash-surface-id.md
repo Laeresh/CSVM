@@ -1,8 +1,7 @@
 # Crash and touchdown selection — the original's surface-id table
 
-**ACTIVE PLAN** (written 2026-08-11). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans/plans.md), when every item lands.
+**✅ COMPLETE** (written 2026-08-11, completed 2026-08-13). All 7 items landed
+(A1/A2/A3, B11/B12, C21/C22); indexed in [`plans.md`](plans.md).
 
 The recreation picks a crash choreography by classifying the struck collider's **texture name** into
 `water` / `buildings` / `default` and mapping that onto one of two defs. The original does something
@@ -143,7 +142,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 ### Wave C — the destruct model and the cleanup
 
 21. ☑ C21 Model the mid-air destruct as the original does (no `player_crash_*`, handoff on contact) — **landed 2026-08-13**
-22. ☐ C22 Retire `CrashSurface`, and close `BL-059`
+22. ☑ C22 Retire `CrashSurface`, and close `BL-059` — **landed 2026-08-13**
 
 ## Dependency and parallelism notes
 
@@ -392,7 +391,22 @@ nothing in the build claims `player_crash_default` is the air variant.
 ⚠ The `this+0x19f ∈ {0,4}` condition inside `FUN_004b82d0` is undecoded — do not model it as though
 it were understood.
 
-## C22 ☐ Retire `CrashSurface`, and close `BL-059`
+## C22 ☑ Retire `CrashSurface`, and close `BL-059` — **landed 2026-08-13**
+
+**Outcome.** The enum is deleted (`FlightController.cs`); it was unreferenced everywhere but its
+own declaration, so no other change was needed to remove it. `FlightAudio.cs`'s `OnGroundExplosion`
+doc comment was the one other live restatement of the old model (it named "a Ground surface" and a
+"future air destruct" — both pre-B11 vocabulary); rewritten to name the actual call site
+(`PlayCrashBoom` on `player_crash_dirt`) and the id-cascade fallback. `EffectCatalogue.cs:65-68` and
+`FlightController.cs`'s old `:702-710`/`:1233-1240` line references in this item's Approach were
+already stale (written before B11 shifted the file) and needed no further edit — checked directly,
+neither range nor any other code comment restates the disproven reading. `BL-059` is deleted from
+`backlog.md` (its own text already carried the full disproof and supersession, folded into this
+item's outcome and `docs/architecture.md`'s C21 write-up). `BL-060`'s crash notes name no mechanism
+this item invalidates — left as is. Verify: `dotnet build` clean; `RunTests.ps1` full green (962
+units, 37 engine checks, 13/13 goldens hash-identical — expected, no behavioural change); grepped
+`CSVM/src` for `CrashSurface` — only the unrelated `EffectCatalogue.CrashSurfaceLevelAnimNames`
+remains.
 
 **Goal.** No enum in the build asserts a three-way surface model, and the backlog no longer carries a
 disproven item.
