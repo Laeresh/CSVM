@@ -1878,8 +1878,9 @@ public static class Suites
                 },
             });
 
-            // A round overtaking the aircraft 3 m abeam, fired 60 m astern along +Z. Short enough
-            // that the weapon's own 6° CANNON_SPREAD cone cannot throw it past the trigger radius.
+            // A round overtaking the aircraft 3 m abeam, fired 60 m astern along +Z. A round leaves
+            // dead straight (A1 — CANNON_SPREAD is not a dispersion cone), so the pass distance is
+            // the requested one, not a budget against a scatter cone.
             void FireBy(int shooter, float abeam)
             {
                 var origin = target + new Vector3(abeam, 0f, -60f);
@@ -2157,9 +2158,10 @@ public static class Suites
             var noseState = target.Damage!.Parts["nose"];
             for (int shot = 1; shot <= 2; shot++)
             {
-                // One round per attempt: a CANNON_SPREAD deviation can miss the box from any
-                // range, so retry a clean miss (armor unmoved) — but a REGISTERING round must
-                // move the pool by exactly one ARMOR_DAMAGE quantum, which is the assertion.
+                // One round per attempt. A round leaves dead straight (A1 — CANNON_SPREAD is not a
+                // dispersion cone), so this should register on the first try; the retry stays as a
+                // defensive margin against an unrelated near-miss, and a REGISTERING round must move
+                // the pool by exactly one ARMOR_DAMAGE quantum, which is the assertion.
                 float before = noseState.Armor;
                 int tries = 0;
                 while (noseState.Armor >= before && tries < 5)
@@ -2168,7 +2170,7 @@ public static class Suites
                     FireOne(noseMuzzle, shooter.PlayerIndex, 10);
                 }
                 if (tries > 1)
-                    ctx.Note($"shot {shot} needed {tries} rounds (spread misses)");
+                    ctx.Note($"shot {shot} needed {tries} rounds");
                 ctx.Check(Mathf.IsEqualApprox(noseState.Armor, nose.MaxArmor - shot * armorDmg),
                     $"shot {shot}: nose armor moved by the weapon's ARMOR_DAMAGE armor={noseState.Armor:0.##} expected={nose.MaxArmor - shot * armorDmg:0.##}");
                 ctx.Check(Mathf.IsEqualApprox(noseState.Hp, nose.MaxHp),

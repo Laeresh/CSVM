@@ -286,6 +286,6 @@ implementation. Deltas worth naming up front:
 | Lead | full constant-velocity intercept on **relative** velocity | none — rounds go where the nose points |
 | Smoothing | slerp in **plane-local** space, ~0.2 s, snaps past 200 ms frames | n/a |
 | Forget | resets on time since **last shot**, not since lock loss | n/a |
-| Scatter | 1° cone, polar angle uniform in `[0, θ]` | ⚠ scatters by `CANNON_SPREAD`, which the original never scatters by (`Projectile.cs:534`) |
+| Scatter | 1° cone, polar angle uniform in `[0, θ]` | none — the wrong `CANNON_SPREAD` scatter was removed (A1, 2026-08-13); the 1° `inaccuracy` cone this row describes is still unbuilt, landing with B5 |
 | Cone gate | `CANNON_SPREAD` half-angle, per-target `+0x50` override | n/a |
 | Multiplayer | shooter-authoritative; the assisted vector is transmitted | n/a |

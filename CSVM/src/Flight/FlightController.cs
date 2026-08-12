@@ -1362,9 +1362,12 @@ public partial class FlightController : Node3D
     /// <summary>Points the gun reticle at the SELECTED gun group's ballistic impact point at
     /// the convergence distance. It integrates the round exactly as <see cref="ProjectilePool"/>
     /// fires it — muzzle-forward × <c>VELOCITY</c> plus the plane's inherited velocity, stepped
-    /// through any <c>ACCELERATION</c>/<c>GRAVITY</c> — so the pipper and the rounds agree; it drops
-    /// only the random <c>CANNON_SPREAD</c> (the reticle marks the cone centre). Hidden while crashed
-    /// or when the plane has no firable gun / no muzzle to fire from. No-op without a reticle.</summary>
+    /// through any <c>ACCELERATION</c>/<c>GRAVITY</c> — so the pipper and the rounds agree exactly
+    /// (A1 removed the only divergence, a wrongly-applied <c>CANNON_SPREAD</c> scatter). Once the
+    /// aim assist lands (`BL-342`/B5) a round leaves along the assist's smoothed line instead of the
+    /// muzzle axis this reads, and the two will disagree again — a real HUD question B5 decodes, not
+    /// solved here. Hidden while crashed or when the plane has no firable gun / no muzzle to fire
+    /// from. No-op without a reticle.</summary>
     private void UpdateReticle()
     {
         if (Reticle == null)

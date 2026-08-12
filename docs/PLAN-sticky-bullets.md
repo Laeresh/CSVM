@@ -125,7 +125,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Stop scattering by a number that isn't a scatter
 
-1. ☐ Remove the `CANNON_SPREAD` jitter from the fire path and requalify the key everywhere it is described
+1. ☑ Remove the `CANNON_SPREAD` jitter from the fire path and requalify the key everywhere it is described
 
 ### Wave B — Build the assist
 
@@ -164,7 +164,7 @@ this plan.
 
 # Wave A — Stop scattering by a number that isn't a scatter
 
-## A1 ☐ Remove the `CANNON_SPREAD` jitter from the fire path and requalify the key everywhere it is described
+## A1 ☑ Remove the `CANNON_SPREAD` jitter from the fire path and requalify the key everywhere it is described
 
 **Goal.** A gun round leaves the muzzle along the muzzle axis exactly, with no random deviation, as
 the original's does. `CANNON_SPREAD` stops being described anywhere in the repo as a dispersion

@@ -356,8 +356,8 @@ public sealed partial class ProjectilePool : Node3D
     // `_aircraft` list instead (ProximityFuseTriggered / BlastAircraftPass) — never this query.
     private readonly PhysicsShapeQueryParameters3D _proximityQuery = new() { CollisionMask = CollisionLayers.World };
     private readonly List<AudioStreamPlayer> _sfxPool = new();
-    // CANNON_SPREAD jitter and the stand-in fireball's sprite scatter. Held rather than resolved
-    // per draw: two draws fire per round.
+    // The stand-in fireball's sprite scatter, muzzle-flash roll, and debris/ricochet spread
+    // (ApplySpread — gun dispersion itself was removed, A1). Held rather than resolved per draw.
     private readonly RandomNumberGenerator _rng = Rng.Stream(Rng.Weapons);
     private readonly HashSet<string> _flyoutLogged = new();
     // One MultiMesh per muzzle-flash ammo texture (MuzzleAmmoTextures) — built in _Ready.
@@ -515,9 +515,10 @@ public sealed partial class ProjectilePool : Node3D
     }
 
     /// <summary>Fires one round of <paramref name="weapon"/> from the world muzzle transform,
-    /// inheriting the launch platform's velocity, with a random offset inside the weapon's
-    /// <c>CANNON_SPREAD</c> cone. Also flashes the muzzle. Silently drops the round if the pool is
-    /// momentarily full (a soft cap, never a crash).
+    /// inheriting the launch platform's velocity, exactly along the muzzle axis — the original
+    /// applies no dispersion at the fire call; <c>CANNON_SPREAD</c> is the unbuilt aim assist's
+    /// acceptance cone, not a scatter (`BL-342`/A1). Also flashes the muzzle. Silently drops the
+    /// round if the pool is momentarily full (a soft cap, never a crash).
     ///
     /// <para><paramref name="shooterId"/> is who fired — a <c>FlightController.PlayerIndex</c>, or
     /// <see cref="NoShooter"/> for a round nobody owns (the weapon lab). It exists for the
@@ -531,7 +532,6 @@ public sealed partial class ProjectilePool : Node3D
         if (weapon.Fire?.Sound is { } fireSnd)
             PlaySound(fireSnd);
         var forward = -muzzle.Basis.Z.Normalized();
-        forward = ApplySpread(forward, weapon.CannonSpread ?? 0f);
         float speed = weapon.Velocity ?? 500f;
         float accel = weapon.Acceleration ?? 0f;
         // Rockets only: scale launch velocity and acceleration by the same dev factor. Guns stay

@@ -1891,9 +1891,13 @@ happens to sit. Falls back to the shape owner's transform origin only if that qu
 contact. The fuse tests the whole swept segment per candidate plane (no tunnelling at ~20 m/step)
 and gates through `DETONATION_DOT_PRODUCT` toward the nearest hull point. The linear curve and
 1 N·s/HP impulse are TUNE.
-⚠ `CANNON_SPREAD` jitter and the stand-in fireball draw from `Rng.Weapons` — a pinned run repeats
-  its whole impact pattern (two `--det` C1B dives: 8/8 identical impact positions); new randomness
-  must route through it. Trail-puffer scatter draws each emitter's own `Rng.Puffer` stream.
+⚠ **RETRACTED 2026-08-13 (A1, `BL-342`): `CANNON_SPREAD` is not a dispersion cone — it is the
+  unbuilt aim assist's acceptance cone, decoded in `org/aim-assist.md`.** The original applies no
+  scatter at the fire call; `Projectile.cs:534`'s `ApplySpread(forward, weapon.CannonSpread)` call
+  was a fidelity bug, now removed. A round leaves the muzzle exactly along its aim.
+⚠ The stand-in fireball's sprite scatter draws from `Rng.Weapons` — a pinned run repeats its whole
+  impact pattern (two `--det` C1B dives: 8/8 identical impact positions); new randomness must route
+  through it. Trail-puffer scatter draws each emitter's own `Rng.Puffer` stream.
 ⚠ A trail emitter is reusable only when its round died AND `LiveCount == 0` — reusing sooner
   grafts the new rocket's trail onto the old one's live smoke. A chapter lacking the rocket's
   prototype model now flies the smoke trail **alone** — the `RocketStreakScale` stand-in streak that
@@ -1924,9 +1928,10 @@ maths.
 ⚠ **Near misses only — a hit cannot be simulated by any rig.** An aircraft exists to the projectile
   raycast as nothing at all (collision is the swept `PlaneCollider` query boxes, not a body), which
   is why `bullet_hit_sg` stays unbuildable (`BL-226`).
-⚠ Standoff is short on purpose: `CANNON_SPREAD` grows with range and past ~200 m throws rounds clean
-  outside the trigger radius, which would read as a broken cue. The achieved distance still scatters
-  a few metres around the requested one — judge over a burst, never one pass.
+⚠ Standoff (120 m) was originally kept short because `CANNON_SPREAD` was wrongly read as a dispersion
+  cone that grows with range; A1 (`BL-342`) removed that scatter, so a round now leaves dead straight
+  and the achieved pass distance equals the requested one at any standoff. No data-driven reason
+  remains for this exact figure.
 
 ## src/Flight/PhysicsConstants.cs
 `PhysicsConstants.NomGravity` — the single 20 m/s² player.json `nom_gravity` value, shared by
