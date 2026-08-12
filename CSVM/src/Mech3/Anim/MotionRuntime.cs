@@ -144,6 +144,22 @@ internal sealed class MotionRuntime : IAnimMotion
 
     private const float SweepWatchdog = 35f;
 
+    /// <summary>What a contact leaves of the body's speed. <c>0.19999999</c> in the binary, which
+    /// is 0.2 in float; the artefact is not transcribed. ⚠ Every component keeps its SIGN. The
+    /// original reflects nothing, and reading it as a reflection is how debris ends up hovering.
+    /// What lifts a body clear of the surface is the POSE correction, not the velocity.</summary>
+    private const float Restitution = 0.2f;
+
+    /// <summary>The two rest thresholds, asymmetric on purpose and tested per axis rather than on
+    /// the horizontal magnitude. Above any of them a contact holds the body half a descending step
+    /// clear of the surface; below all three it rests exactly on it.</summary>
+    private const float RestHorizontal = 0.1f, RestVertical = 0.5f;
+
+    /// <summary>Defensive only. The energy test ends a body after two or three contacts (each one
+    /// takes a fifth of the speed), so this is never reached; it exists so a mistake in that test
+    /// cannot spin a body forever on the hot path.</summary>
+    private const int MaxContacts = 8;
+
     // Held pose, seeded once from the live transform: an absent channel carries it through.
     private Basis _heldRot;      // orthonormal; scale kept out
 
@@ -192,6 +208,10 @@ internal sealed class MotionRuntime : IAnimMotion
     // Whether a SURFACE ended it, as against the watchdog. Both freeze the body the same way, so
     // `_landed` cannot answer the tally's question on its own.
     private bool _landedByContact;
+    // A contact that does not end the body re-bases the launch: the corrected pose becomes the new
+    // origin, the damped velocity the new v0, and this the new zero of its clock.
+    private float _ballisticStart;
+    private int _contacts;
     private Vector3 _landedOrigin;  // parent frame — the pose the body holds from contact onward
     private float _landedAt;        // the clock at contact; rotation and scale freeze there too
 
@@ -550,7 +570,7 @@ internal sealed class MotionRuntime : IAnimMotion
 
         var origin = _heldOrigin;
         if (_hasBallistic)
-            origin = _landed ? _landedOrigin : _heldOrigin + _v0 * tb + 0.5f * tb * tb * _accel;
+            origin = _landed ? _landedOrigin : BallisticOrigin(tb);
 
         var basis = _heldRot;
         if (_tumbleRate != 0f)
@@ -677,7 +697,7 @@ internal sealed class MotionRuntime : IAnimMotion
         // The body keeps the step's horizontal travel and gives up only its descent, as the
         // original does: it rewrites the step's Y component alone and leaves X and Z be.
         return Land(next, parent.AffineInverse() * new Vector3(to.X, surfaceY, to.Z),
-            hit["collider"].As<GodotObject>(), byContact: true);
+            hit["collider"].As<GodotObject>(), byContact: true, worldStepY: to.Y - from.Y);
     }
 
     /// <summary>The <c>do_intersections</c> sweep: cast the step the body is about to take — last
@@ -725,7 +745,7 @@ internal sealed class MotionRuntime : IAnimMotion
         float span = from.DistanceTo(to);
         float fraction = span > 0f ? Mathf.Clamp(from.DistanceTo(point) / span, 0f, 1f) : 0f;
         return Land(_t + (next - _t) * fraction, parent.AffineInverse() * point,
-            hit["collider"].As<GodotObject>(), byContact: true);
+            hit["collider"].As<GodotObject>(), byContact: true, worldStepY: to.Y - from.Y);
     }
 
     /// <summary>Comes to rest, the shared response both tiers end on. The two mechanisms differ in
@@ -756,10 +776,36 @@ internal sealed class MotionRuntime : IAnimMotion
                && Land(next, BallisticOrigin(next), null, byContact: false);
     }
 
-    private bool Land(float time, Vector3 parentOrigin, GodotObject? struck, bool byContact)
+    private bool Land(float time, Vector3 parentOrigin, GodotObject? struck, bool byContact,
+        float worldStepY = 0f)
     {
+        // The velocity this contact arrives with, which decides both halves of the response.
+        var incoming = _v0 + _accel * (time - _ballisticStart);
+        // Held half a descending step clear of the surface while it is still moving; resting
+        // exactly on it once all three thresholds are met. This is the ONLY thing that lifts a
+        // body: the velocity below keeps every sign it arrived with.
+        bool moving = Mathf.Abs(incoming.X) >= RestHorizontal
+                      || Mathf.Abs(incoming.Z) >= RestHorizontal
+                      || Mathf.Abs(incoming.Y) >= RestVertical;
+        var pose = parentOrigin;
+        if (byContact && moving)
+            pose += ParentUp() * Mathf.Abs(worldStepY * 0.5f);
+
+        // Energy: the contact is survivable while the incoming speed still covers the acceleration
+        // driving it. Each one takes four fifths of the speed, so a piece striking at 20 m/s under
+        // Earth gravity damps to 4 and ends on its next contact: one hop or two, never a count.
+        if (byContact && incoming.LengthSquared() >= _accel.LengthSquared() && _contacts < MaxContacts)
+        {
+            _heldOrigin = pose;
+            _v0 = incoming * Restitution;
+            _ballisticStart = time;
+            _contacts++;
+            Seek(time);
+            return true;
+        }
+
         _landedAt = time;
-        _landedOrigin = parentOrigin;
+        _landedOrigin = pose;
         _landed = true;
         _landedByContact = byContact;
         PendingBounce ??= ChooseBounce(struck);
@@ -767,10 +813,26 @@ internal sealed class MotionRuntime : IAnimMotion
         return true;
     }
 
+    /// <summary>World up, in the node's parent frame — the direction the pose correction lifts
+    /// along. The original adds to its step's own Y, which is the same thing wherever the parent is
+    /// world-aligned and is what it means everywhere else.</summary>
+    private Vector3 ParentUp()
+    {
+        var parent = (Target.GetParent() as Node3D)?.GlobalTransform.Basis;
+        return parent is { } b ? b.Inverse() * Vector3.Up : Vector3.Up;
+    }
+
     /// <summary>The ballistic origin at time <paramref name="t"/>, in the node's parent frame —
     /// the same closed-form solve <see cref="Seek"/> poses with, factored out because the sweep
-    /// needs both ends of the step it is about to take. Never consulted for a landed body.</summary>
-    private Vector3 BallisticOrigin(float t) => _heldOrigin + _v0 * t + 0.5f * t * t * _accel;
+    /// needs both ends of the step it is about to take. Never consulted for a landed body.
+    ///
+    /// <para>Measured from <see cref="_ballisticStart"/> rather than from 0, because a contact the
+    /// body survives re-bases the launch at the surface with a fifth of its speed.</para></summary>
+    private Vector3 BallisticOrigin(float t)
+    {
+        float e = t - _ballisticStart;
+        return _heldOrigin + _v0 * e + 0.5f * e * e * _accel;
+    }
 
     /// <summary>The <c>BOUNCE_SEQUENCE</c> branch a contact selects, from the surface it struck.
     ///

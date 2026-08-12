@@ -207,7 +207,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 6. ☑ The default contact tier: the ground-column query
 7. ☑ `NO_ALTITUDE` as the opt-out, and `gunshell` as its only author
 8. ☑ `RUN_TIME` as a universal ceiling; retire `FlightToLaunchHeight` for the watchdog
-9. ☐ Landing response: 0.2 restitution and energy-loss termination
+9. ☑ Landing response: 0.2 restitution and energy-loss termination
 
 ### Wave D — the tune, the coverage, the record
 
@@ -762,7 +762,40 @@ now column-tested), but confirm the 8 no-apex oddities the census named — `bri
 ⚠ Keep `Seek` free of the contact test, for the reason `MotionRuntime.cs:430-433` already gives: it
 is the pose/scrub entry point and a test there fires on a backwards timeline drag.
 
-## C9 ☐ Landing response: 0.2 restitution and energy-loss termination
+## C9 ☑ Landing response: 0.2 restitution and energy-loss termination
+
+**Landed 2026-08-13**, transcribed from the corrected reading above rather than from this item's
+original Evidence. A contact holds a moving body half its descending step clear of the surface and
+rests a slow one exactly on it (thresholds per axis: 0.1 on X, 0.1 on Z, 0.5 on Y); velocity is
+scaled by 0.2 with **every sign kept**; and the body survives the contact while its incoming speed²
+still covers its acceleration², re-basing the launch at the corrected pose. Both tiers share it,
+since they differ in what they ask the world and not in what they do with the answer. A defensive
+contact cap exists and is never reached: each contact takes four fifths of the speed, so a piece
+striking at 20 m/s under Earth gravity damps to 4 and ends on its next contact.
+
+**⚠ It does not answer the sinking, and the measurement says why.** The suite's resting body moved
+from **0.00 m to 0.06 m** above the struck surface, which is the entire lift this mechanism has:
+half a descending step is centimetres once the speed has been damped. The user's report stands
+(`the parts should not sink into the ground that much`; and, of the original, `lands not perfectly
+above ground but not as much sunken as it is now`), so a gap remains and it is not in the contact
+model. That chain is now read end to end and carries no extent term anywhere: `FUN_004cf200` hands
+the query the node's ORIGIN, `FUN_0055bbc0` walks the struck mesh's polygons and `FUN_0055d5c0`
+returns the polygon's height at `(x, z)`, and the database itself only admits surfaces at or below
+the query point. What remains is how far a piece's own geometry hangs below its node origin.
+**Left open for the milestone's look pass, and it must be answered by a decode or a filed item
+rather than by an offset.**
+
+**⚠ A decode this item did NOT own, found in the same function and worth its own item.** The tumble
+is wrong in both axis and rate, and it is the other half of what the user is seeing. This engine
+reads `forward_rotation.Time.initial` as a TOTAL angle, divides it by the run time and spins about
+the node's local X — a reasoned choice, never a decode. `FUN_004e8fa0`'s `0x80` branch instead
+treats `+0x84` as a live RATE (rad/s), seeded from `Time.initial` and integrated by
+`+0x84 += dt · Time.delta`, and applies it per frame as the euler triple
+`(dirZ · rate · dt, 0, −dirX · rate · dt)` — i.e. about the horizontal axis **perpendicular to the
+launch direction**, scaled by the launch direction's own horizontal magnitude `h = 1 − |elev|/90`.
+So a steep launch tumbles slowly and a flat one fast, off the same authored number, and the axis
+follows the throw instead of the mesh. The `0x40` (`DISTANCE`) branch is the same shape driven by
+the step rather than by `dt`.
 
 **Goal.** A landing piece bounces the way the original bounces — velocity scaled by 0.2 — and the
 body ends when a bounce stops losing energy rather than after a fixed count.
