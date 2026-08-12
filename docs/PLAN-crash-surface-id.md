@@ -142,7 +142,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 
 ### Wave C — the destruct model and the cleanup
 
-21. ☐ C21 Model the mid-air destruct as the original does (no `player_crash_*`, handoff on contact)
+21. ☑ C21 Model the mid-air destruct as the original does (no `player_crash_*`, handoff on contact) — **landed 2026-08-13**
 22. ☐ C22 Retire `CrashSurface`, and close `BL-059`
 
 ## Dependency and parallelism notes
@@ -352,7 +352,17 @@ matter for us, say so explicitly rather than silently collapsing them.
 
 # Wave C — the destruct model and the cleanup
 
-## C21 ☐ Model the mid-air destruct as the original does
+## C21 ☑ Model the mid-air destruct as the original does — **landed 2026-08-13**
+
+**Outcome.** No trigger exists (confirmed: nothing in M3 shoots the player down), so this landed as
+documentation only, matching the plan. `docs/architecture.md`'s `FlightController.cs` entry now
+describes the two-stage split — `FUN_00498bf0`'s fork, `FUN_004b82d0`'s canned no-`player_crash_*`
+mid-air destruct, and the `FUN_0048b920` handshake at `0x0048bb0a`–`0x0048bb30` — and states plainly
+that `player_crash_default` is the cascade's fallback arm, not the air variant, with the undecoded
+`this+0x19f ∈ {0,4}` condition flagged as unmodelled. `CrashSurface`'s doc comment (still declared;
+C22 deletes it) is rewritten to stop asserting the disproven reading and to point at the real
+mechanism instead of the removed `ClassifySurface` method it referenced. No code path changed —
+`Crash` still only ever takes the cascade arm, exactly as before this item.
 
 **Goal.** A plane destroyed in mid-air plays the original's canned destruct — **not** a
 `player_crash_*` def — and the impact def plays when it reaches the ground.

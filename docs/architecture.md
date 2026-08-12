@@ -2879,6 +2879,21 @@ FlightModel, CameraController + CamParams, SpeedCue, Loadout + ProjectilePool (g
 everything else — id 0 plus the ids whose def this install does not ship — falls back to slot 0,
 `player_crash_default`, which authors no surface boom of its own. `--crash` has no struck body, so
 it takes the null-material arm to that same slot 0.
+**The original's death is two-stage; this build's `Crash` only ever models the second stage.**
+`FUN_00498bf0` forks on a signed field of the death event: negative plays a canned mid-air destruct
+(`FUN_004b82d0` — no `player_crash_*` def, sets the byte `this+0x91f`) and defers the surface pick
+to ground contact; non-negative builds a synthetic impact record carrying that same field as the
+surface id and drives the id cascade directly, which is the only arm `Crash` implements. The
+handshake lives in `FUN_0048b920` `0x0048bb0a`–`0x0048bb30`: with `0x91f` set, a resolved bare-
+`player` handle suppresses the anim; otherwise the running mid-air anim at `this+0x6d8` is released
+before the crash anim starts. Nothing in this build's M3 slice shoots a plane down, so the negative
+arm has no trigger today — `Crash` fires once, at first (and only) contact, and always takes the
+cascade above. `player_crash_default` is the cascade's **fallback arm**, reached by a null material,
+an out-of-range id or an empty slot — it is NOT the original's air/no-impact variant, a reading
+`PLAN-crash-surface-id` (`BL-059`) disproved; the mid-air destruct is a separate, unwired anim with
+no `player_crash_*` def of its own. Modelling the two-stage split — wiring a trigger for the negative
+arm — is future work for when the player becomes killable; `this+0x19f ∈ {0,4}` inside
+`FUN_004b82d0` is undecoded and stays unmodelled.
 It also fires `Audio.OnEngineStop` (the wind-down cue, layered over the explosion) and plays
 `stopprops` on `CrashRuntime` — the one call site every engine-death path shares, whether the
 collision resolver called it for a full-speed impact, for a critical part reaching 0 HP on a

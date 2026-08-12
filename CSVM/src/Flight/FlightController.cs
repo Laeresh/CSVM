@@ -8,14 +8,14 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>Which crash variant the original would play for the surface just hit.
-/// The engine chooses natively from the impact surface — the three <c>player_crash_*</c> defs are
-/// never <c>CallAnimation</c>-referenced by name — so the choice is ours to reconstruct in
-/// <see cref="FlightController.ClassifySurface"/>, which reads the struck body's surface tag.
-/// <see cref="Water"/> is a sea dive, <see cref="Ground"/> everything else it can hit;
-/// <see cref="Air"/> stays unreachable — it is the no-impact destruct, and even a shoot-down
-/// (a critical part killed by gunfire) routes through the ground/water variant at the plane's
-/// pose; wiring the dedicated air destruct is deliberately still open.</summary>
+/// <summary>Dead: superseded by <see cref="SurfaceDefTable"/>'s id-indexed cascade
+/// (<c>PLAN-crash-surface-id</c> B11/B12), which reconstructs the original's actual mechanism —
+/// an array index on the struck material's numeric surface id, not a three-way branch. Kept only
+/// until C22 retires it (<c>BL-059</c>): unreferenced everywhere but its own declaration.
+/// <see cref="Air"/> was never the original's air/no-impact variant — that reading is disproven
+/// (docs/architecture.md's `FlightController.cs` entry). The original's actual mid-air destruct is
+/// a separate canned anim (`FUN_004b82d0`) that plays no `player_crash_*` def at all and has no
+/// trigger in this build, since nothing in M3 shoots the player down.</summary>
 public enum CrashSurface { Air, Ground, Water }
 
 /// <summary>

@@ -194,9 +194,9 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Active plan: [`PLAN-crash-surface-id.md`](docs/PLAN-crash-surface-id.md)** — Waves A and B are
 done (surface id carried to the collider, the registry built, crash and `touchdown_*` selection both
-on the original's indexed cascade). Next: `C21` (model the mid-air destruct), then `C22`
-(retire `CrashSurface`, close `BL-059`). Owed after it: the judge-at-the-controls pass Decision 7
-set up, on the `_default` crash and the now-sparking terrain scrape.
+on the original's indexed cascade); `C21` (the mid-air destruct model) is documented, no trigger.
+Next: `C22` (retire `CrashSurface`, close `BL-059`). Owed after it: the judge-at-the-controls pass
+Decision 7 set up, on the `_default` crash and the now-sparking terrain scrape.
 Owed at the controls: `PT-28`, `PT-41`, `PT-43`, `PT-45` and `PT-47`
 ([`playtest.md`](playtest.md)). Verify any change with
 **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read
