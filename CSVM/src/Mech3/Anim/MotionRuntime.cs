@@ -136,6 +136,14 @@ internal sealed class MotionRuntime : IAnimMotion
     /// at all rather than letting it fall to the floor.</summary>
     private const float ColumnDepth = 4096f;
 
+    /// <summary>What bounds a launch that authors no <c>RUN_TIME</c>: the original's own watchdog,
+    /// per tier, read off <c>FUN_004e8fa0</c>. ⚠ A backstop, not a duration. Bodies routinely
+    /// ending here means contact is broken, and the answer is to fix contact rather than to tune
+    /// these down.</summary>
+    private const float ColumnWatchdog = 15f;
+
+    private const float SweepWatchdog = 35f;
+
     // Held pose, seeded once from the live transform: an absent channel carries it through.
     private Basis _heldRot;      // orthonormal; scale kept out
 
@@ -159,6 +167,19 @@ internal sealed class MotionRuntime : IAnimMotion
 
     private float _t, _runTime;
 
+    // What ENDS the body, which is not what parameterises its channels. `_runTime` is the authored
+    // RUN_TIME or, absent one, the parabola's return to launch height, and it still drives the
+    // tumble rate, the scale ramp and the duration the sequence waits on. `_ceiling` is the
+    // termination alone: the authored RUN_TIME, the original's watchdog, or (with no contact tier
+    // to back it) `_runTime` itself. Splitting them is what lets a launch carrying no RUN_TIME keep
+    // flying until it lands without also stretching its 5pi tumble over 15 seconds.
+    private float _ceiling;
+
+    // The original reuses the RUN_TIME slot as this accumulator when no RUN_TIME is authored, and
+    // adds to it only on a step whose contact query ran and found NOTHING. A body falling toward
+    // ground it can see never accumulates it at all. Zero limit means no watchdog on this body.
+    private float _watchdog, _watchdogLimit;
+
     // ---- ground contact: the default column, or the `do_intersections` sweep ---------------------
     // Selected once at creation, from the gravity block alone; both tiers stay structurally off in
     // a session that wired no collision mask, which is the whole fallback.
@@ -168,6 +189,9 @@ internal sealed class MotionRuntime : IAnimMotion
     private AnimData? _bounce;      // the BOUNCE_SEQUENCE block, chosen from AT CONTACT
     private Func<GodotObject?, bool>? _surfaceIsWater;
     private bool _landed;
+    // Whether a SURFACE ended it, as against the watchdog. Both freeze the body the same way, so
+    // `_landed` cannot answer the tally's question on its own.
+    private bool _landedByContact;
     private Vector3 _landedOrigin;  // parent frame — the pose the body holds from contact onward
     private float _landedAt;        // the clock at contact; rotation and scale freeze there too
 
@@ -175,7 +199,7 @@ internal sealed class MotionRuntime : IAnimMotion
 
     public (AnimDefinition Def, Node3D? Anchor) Owner { get; set; }
 
-    public bool Finished => _landed || _t >= _runTime;
+    public bool Finished => _landed || _t >= _ceiling;
 
     /// <summary>Whether this body carries either of the original's contact tiers, in a session that
     /// wired a mask. False is the no-collision-world fallback and nothing else.</summary>
@@ -186,16 +210,24 @@ internal sealed class MotionRuntime : IAnimMotion
     /// sweep alone can carry a healthy-looking total.</summary>
     public MotionContactTier ContactTier => _contactTier;
 
-    /// <summary>Whether the flight actually ended on a collider rather than running its clock out.
+    /// <summary>Whether the flight actually ended on a SURFACE rather than running a clock out.
     /// The honest half of the contact/fallback tally: a `--fly` session reporting zero of these
-    /// while <see cref="TestsContact"/> bodies launched is the failure mode worth catching.</summary>
-    public bool LandedByContact => _landed;
+    /// while <see cref="TestsContact"/> bodies launched is the failure mode worth catching.
+    /// ⚠ A watchdog end is not one of these. It freezes the body identically but it is the clock
+    /// expiring, and counting it here would report a body that found nothing as a landing.</summary>
+    public bool LandedByContact => _landedByContact;
 
-    /// <summary>The flight time this body actually runs for: the authored <c>RUN_TIME</c>, or —
-    /// for a launch that carries none, whether it names a <c>BOUNCE_SEQUENCE</c> or
-    /// nothing at all — the time its own parabola takes to return to launch height. The
-    /// caller reads it back rather than trusting the authored value, since only
-    /// <see cref="Create"/> knows the randomised launch the solve rests on.</summary>
+    /// <summary>The duration this body REPORTS: the authored <c>RUN_TIME</c>, or, for a launch that
+    /// carries none, the time its own parabola takes to return to launch height. The caller reads it
+    /// back rather than trusting the authored value, since only <see cref="Create"/> knows the
+    /// randomised launch the solve rests on.
+    ///
+    /// <para>⚠ This is the SEQUENCE's number, not the body's. It is what the next null-start event
+    /// waits on, so it is also what hides a vanish-shape piece (<c>BL-257</c>), and it sets the
+    /// tumble rate, which is an angle divided by exactly this. What ends the body is
+    /// <see cref="Finished"/>'s own ceiling, which for an untimed launch is the original's watchdog
+    /// and can outlast this by seconds. Feeding the watchdog in here instead would leave every
+    /// vanish-shape piece on screen for 15 s and slow 282 tumbles to a crawl.</para></summary>
     public float RunTime => _runTime;
 
     /// <summary>The ON_CALL sequence this body owes when it lands — <c>BOUNCE_SEQUENCE</c>'s
@@ -385,36 +417,52 @@ internal sealed class MotionRuntime : IAnimMotion
         //     instead reports all 167 as duration 0, so the deactivation lands on the launch tick
         //     and every piece is hidden before it moves (`dblcannon_flying_parts` the repro).
         //
-        // ⚠ Ending it when the parabola returns to LAUNCH HEIGHT is a CHOICE, not a decode. The
-        // original tested real geometry through `do_intersections` (probably a collider
-        // intersection rather than a terrain ray) — false on all 167 of the second
-        // shape, and on the whole first one; this agrees wherever the ground under the object is
-        // flat, which is every reachable case here — debris thrown off a ground-sitting structure.
-        // A down-ray replaces it, and must, for the events that FALL rather than launch (a
-        // shot-down zeppelin, a parachutist): those have no apex, `FlightToLaunchHeight` declines
-        // them, and they stay posed at rest until a ray lands them. That guard is what keeps
-        // this off the falls — it is the apex, not the bounce, that admits a launch,
-        // and the census found 8 of the 167 with no reliable apex (a `bridge_truck` dropped level,
-        // `susp_bridge`'s burning ropes at −0.5 m/s ± 1, two `fuelbox` rockerarms whose speed range
-        // is −45…45) that keep behaving exactly as they do today.
+        // ⚠ The parabola's return to launch height is no longer what ENDS such a body — the
+        // original's watchdog is, and before that its contact tier. What the solve still supplies
+        // is the duration the SEQUENCE waits on and the tumble rate, which is why it stays: see
+        // RunTime. A body with no apex (a shot-down zeppelin, a parachutist, the 8 of the vanish
+        // shape the census names) reports 0 here and is admitted by its contact tier instead.
         //
         // Solved in the node's PARENT frame, the same frame the launch and gravity already live
         // in. Absent-RUN_TIME is read from the data, not from `runTime <= 0`, so an authored 0
         // keeps meaning zero.
-        if (m._hasBallistic && data.Num("run_time") is null)
+        bool untimed = m._hasBallistic && data.Num("run_time") is null;
+        if (untimed)
         {
             float flight = FlightToLaunchHeight(m._v0.Y, m._accel.Y);
             if (flight > 0f)
             {
                 rtSafe = flight;
                 m._runTime = flight;
-                // Landing is the only thing that ends this body, so the sequence the data names
-                // for the landing rides with it: every one of the 150 reachable bounce launches
-                // carries `default` alone. Null for the bounce-less shape — the flight ends,
-                // the sequence advances, and the piece's own deactivation is what runs next.
-                m.PendingBounce = data.Obj("bounce_sequence")?.Str("default");
             }
         }
+
+        // The termination ceiling: the authored RUN_TIME wherever there is one, which the original
+        // applies universally rather than only to the flagged set. An untimed launch is bounded by
+        // its tier's watchdog instead, so its clock ceiling is open and the watchdog (or a landing)
+        // is what ends it. With no tier to back it — a session that wired no mask — it keeps the
+        // solved parabola, the same structural fallback the tiers themselves take.
+        //
+        // ⚠ An open ceiling cannot leave a body running forever HERE, and the reason is the data,
+        // not a cap: all 296 untimed ballistic events author a gravity block, so every one of them
+        // descends, and a descending body either crosses a surface it can see (a landing) or finds
+        // none and charges the watchdog. A future untimed event with gravity 0 would need one.
+        m._watchdogLimit = untimed
+            ? m._contactTier switch
+            {
+                MotionContactTier.Column => ColumnWatchdog,
+                MotionContactTier.Sweep => SweepWatchdog,
+                _ => 0f,
+            }
+            : 0f;
+        m._ceiling = m._watchdogLimit > 0f ? float.PositiveInfinity : m._runTime;
+
+        // A bounce is chosen from the surface struck, so it is armed at contact — or, on a watchdog
+        // end, from a null surface, which is the `default` branch. Arming it here would beat both.
+        // The exception is that same no-tier fallback: nothing there will ever reach a surface, so
+        // the launch that names a bounce and solves its own flight still owes it up front.
+        if (untimed && m._contactTier == MotionContactTier.None && m._runTime > 0f)
+            m.PendingBounce = data.Obj("bounce_sequence")?.Str("default");
 
         // forward_rotation.Time.initial is a TOTAL angle over run_time (the `Time`
         // parameterization), not a rate: the crash pieces carry 5π and 4.44π (clean multiples of
@@ -490,7 +538,12 @@ internal sealed class MotionRuntime : IAnimMotion
         _t = t;
         // A landed body freezes every channel at the contact moment: the piece is lying on the
         // ground, so it must not keep tumbling or scaling toward its authored end state.
-        float tb = _runTime > 0f ? Mathf.Min(t, _runTime) : t;
+        //
+        // The ballistic clock stops at the CEILING and the channels are parameterised by the
+        // REPORTED duration, which is the same number for every body that authors a RUN_TIME. They
+        // part company on an untimed launch, where the body must keep flying to its landing while
+        // its tumble keeps the rate its own parabola set.
+        float tb = _ceiling > 0f ? Mathf.Min(t, _ceiling) : t;
         if (_landed)
             tb = Mathf.Min(tb, _landedAt);
         float u = _runTime <= 0f ? 1f : Mathf.Clamp(tb / _runTime, 0f, 1f);
@@ -599,7 +652,7 @@ internal sealed class MotionRuntime : IAnimMotion
 
         // The solve is in the node's parent frame and the column is a world-space vertical, so both
         // ends of the step go through the parent and the resting pose comes back the same way.
-        float next = _runTime > 0f ? Mathf.Min(_t + dt, _runTime) : _t + dt;
+        float next = _ceiling > 0f ? Mathf.Min(_t + dt, _ceiling) : _t + dt;
         var parent = (Target.GetParent() as Node3D)?.GlobalTransform ?? Transform3D.Identity;
         var from = parent * BallisticOrigin(_t);
         var to = parent * BallisticOrigin(next);
@@ -615,7 +668,7 @@ internal sealed class MotionRuntime : IAnimMotion
         var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
             from, from + Vector3.Down * ColumnDepth, _contactMask));
         if (hit.Count == 0)
-            return false;
+            return Watchdog(dt, next);
 
         float surfaceY = hit["position"].AsVector3().Y;
         if (to.Y >= surfaceY)
@@ -624,7 +677,7 @@ internal sealed class MotionRuntime : IAnimMotion
         // The body keeps the step's horizontal travel and gives up only its descent, as the
         // original does: it rewrites the step's Y component alone and leaves X and Z be.
         return Land(next, parent.AffineInverse() * new Vector3(to.X, surfaceY, to.Z),
-            hit["collider"].As<GodotObject>());
+            hit["collider"].As<GodotObject>(), byContact: true);
     }
 
     /// <summary>The <c>do_intersections</c> sweep: cast the step the body is about to take — last
@@ -664,7 +717,7 @@ internal sealed class MotionRuntime : IAnimMotion
 
         var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, to, _contactMask));
         if (hit.Count == 0)
-            return false;
+            return Watchdog(dt, next);
 
         var point = hit["position"].AsVector3();
         // Where in the step the contact happened, so the tumble and scale freeze at the moment of
@@ -672,7 +725,7 @@ internal sealed class MotionRuntime : IAnimMotion
         float span = from.DistanceTo(to);
         float fraction = span > 0f ? Mathf.Clamp(from.DistanceTo(point) / span, 0f, 1f) : 0f;
         return Land(_t + (next - _t) * fraction, parent.AffineInverse() * point,
-            hit["collider"].As<GodotObject>());
+            hit["collider"].As<GodotObject>(), byContact: true);
     }
 
     /// <summary>Comes to rest, the shared response both tiers end on. The two mechanisms differ in
@@ -682,11 +735,33 @@ internal sealed class MotionRuntime : IAnimMotion
     /// <para>The landing is the whole meaning of a bounce-terminated flight ending, and for that
     /// family the branch could not be chosen until now, since the struck body is what picks it.
     /// <see cref="MotionSet.Tick"/> turns this into the dispatched <c>Landing</c>.</para></summary>
-    private bool Land(float time, Vector3 parentOrigin, GodotObject? struck)
+    /// <summary>The original's watchdog, charged by a contact query that ran and found nothing.
+    /// Returns whether it just ended the body.
+    ///
+    /// <para>⚠ Only an EMPTY query charges it. A body descending toward ground it can see never
+    /// accumulates a tick of this, and neither does one climbing (the column is not consulted on a
+    /// rising step at all), so it is not a flight timer: it is how long a body has been falling
+    /// past nothing. It also only bounds a launch that authors no <c>RUN_TIME</c> — with one, the
+    /// ceiling is that instead and this never runs.</para>
+    ///
+    /// <para>The body ends where it is, and owes its <c>default</c> branch: the original runs the
+    /// bounce block on a watchdog end too, with a null surface record, which indexes to
+    /// <c>default</c>.</para></summary>
+    private bool Watchdog(float dt, float next)
+    {
+        if (_watchdogLimit <= 0f)
+            return false;
+        _watchdog += dt;
+        return _watchdog >= _watchdogLimit
+               && Land(next, BallisticOrigin(next), null, byContact: false);
+    }
+
+    private bool Land(float time, Vector3 parentOrigin, GodotObject? struck, bool byContact)
     {
         _landedAt = time;
         _landedOrigin = parentOrigin;
         _landed = true;
+        _landedByContact = byContact;
         PendingBounce ??= ChooseBounce(struck);
         Seek(_landedAt);
         return true;

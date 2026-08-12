@@ -2310,7 +2310,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             if (motion == null)
                                 continue;
                             float flight = motion.RunTime;
-                            if (instant || flight <= 0f)
+                            // A body runs if it has a duration to run for OR a contact tier to end
+                            // it. The second half is what admits the falls that have no apex to
+                            // solve — a shot-down zeppelin, the 8 vanish-shape oddities the census
+                            // names — which used to be posed at rest because the solve declined
+                            // them. They report 0 to the sequence either way.
+                            if (instant || (flight <= 0f && !motion.TestsContact))
                             {
                                 motion.Seek(0f); // RESET_STATE / zero-length: pose the launch start (rest)
                             }

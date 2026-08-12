@@ -206,7 +206,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 6. ☑ The default contact tier: the ground-column query
 7. ☑ `NO_ALTITUDE` as the opt-out, and `gunshell` as its only author
-8. ☐ `RUN_TIME` as a universal ceiling; retire `FlightToLaunchHeight` for the watchdog
+8. ☑ `RUN_TIME` as a universal ceiling; retire `FlightToLaunchHeight` for the watchdog
 9. ☐ Landing response: 0.2 restitution and energy-loss termination
 
 ### Wave D — the tune, the coverage, the record
@@ -677,7 +677,53 @@ order first. ⚠ `gunshell` authors `RUN_TIME 2.0`, so the parser's
 `OBJECT_MOTION: NO_ALTITUDE fall lacks RUN_TIME` diagnostic never fires on this install — the flag's
 dependency on `RUN_TIME` is real in the parser but has no unbounded case here to guard against.
 
-## C8 ☐ `RUN_TIME` as a universal ceiling; retire `FlightToLaunchHeight` for the watchdog
+## C8 ☑ `RUN_TIME` as a universal ceiling; retire `FlightToLaunchHeight` for the watchdog
+
+**Landed 2026-08-13.** The item's riskiest interaction is resolved by splitting one number into two.
+`_runTime` stays exactly what it was — the authored `RUN_TIME` or the parabola's return to launch
+height — and keeps its three existing jobs: the duration the sequence waits on (so `BL-257`'s
+vanish-shape pieces hide when they always did), the tumble rate (an angle divided by exactly that,
+on 282 of the 296 untimed events), and the channel parameter. `_ceiling` is new and terminates the
+body alone: the authored `RUN_TIME`, or an open clock bounded by the watchdog, or — with no contact
+tier behind it — `_runTime` again, which keeps every collider-less session untouched.
+
+The watchdog is charged the way the original charges it, not as a flight timer: `+= dt` only on a
+step whose contact query RAN and came back EMPTY, so a body descending toward ground it can see
+never accumulates a tick, and a climbing body is not even queried. 15 s on the column, 35 s on the
+sweep. An open ceiling cannot hang a body forever here, and the reason is the data rather than a
+cap: all 296 untimed ballistic events author a gravity block, so every one of them descends.
+
+**Two model corrections that fell out of building it.** (1) A watchdog end freezes the body exactly
+as a landing does, so `LandedByContact` was reporting one as the other and `MotionSet` was tallying
+a body that found NOTHING as a contact landing — precisely the reading the item's Verify depends
+on. Contact and clock are now separate flags. (2) The bounce is armed at contact, or on a watchdog
+end from a null surface (which indexes to `default`, as the original does); the create-time arming
+survives only on the no-tier fallback, where nothing will ever reach a surface.
+
+**Measured at the controls** (`--freecam --chapter=C1 --collision --destroy=<def> --debug-anim`).
+`m_build03` **9 of 9** bodies now end by contact, against 7 of 9 before; `pass_plane01` **4 of 4**,
+against 2 of 4. In both cases the remainder was the untimed shape ending at launch height, which is
+what this item removed. C3's no-apex oddities behave: `bridge_truck01` launches 12 with 6 landed and
+none on the clock, `susp_bridge` 5 with 4 landed and none on the clock. **No body anywhere ended on
+the watchdog**, which is the backstop behaving as one. The no-mask capture of `pass_plane01` at
+frame 420 is **byte-identical** to the pre-C8 one (`DE5751AF…`), so the collider-less fallback is
+untouched.
+
+**⚠ Open, and NOT this item's to fix: the pieces rest too deep in the ground** (user, at the
+controls, 2026-08-13). The mechanism is faithful and was re-read to confirm it — `FUN_004cf200`
+hands the column the node's ORIGIN, `FUN_0055bbc0` fills the surface record's height from the
+struck polygon, and there is no bounding-box or extent term anywhere in the chain, so the original
+lands the origin on the polygon exactly as this does (the suite measures the resting origin at
+0.00 m from the struck surface). What sinks a piece is therefore how far its own geometry hangs
+below its node origin, which nothing in the decode compensates for. **C9 owns the resting pose** —
+its half-step-above rule and its exact-rest rule are the only remaining places the original decides
+where a landed body sits — so the question belongs there, and it must be answered by a decode or a
+filed item rather than by an offset (the milestone boundary).
+
+⚠ Also worth not re-deriving: `FUN_004ccf50`/`FUN_004ccf00` around the column query get and clear
+the flying piece's OWN `intersect_surface` bit, restoring it afterwards. That is the original's
+self-hit guard, and it is the mechanism our sweep's `ArmDistance`/`ArmSeconds` epsilon stands in
+for.
 
 **Goal.** `RUN_TIME` ends a motion exactly on time with a shortened final step, everywhere — not
 only for the flagged 166. A launch carrying no `RUN_TIME` is bounded by the original's watchdog

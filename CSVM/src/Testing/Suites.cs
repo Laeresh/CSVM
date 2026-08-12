@@ -4353,8 +4353,13 @@ public static class Suites
 
             // `flagged: false` is the DEFAULT authoring — 1,466 events install-wide — which selects
             // the ground column; `noAltitude` is the opt-out that selects neither.
-            AnimData Body(bool flagged = true, bool noAltitude = false, bool complex = true) =>
-                new(new Dictionary<string, object?>
+            // `timed: false` omits run_time the way 296 ballistic events install-wide do, which is
+            // the shape C8's watchdog bounds; it is thrown UPWARD so the parabola has an apex to
+            // report to the sequence.
+            AnimData Body(bool flagged = true, bool noAltitude = false, bool complex = true,
+                bool timed = true)
+            {
+                var props = new Dictionary<string, object?>
                 {
                     ["gravity"] = new Dictionary<string, object?>
                     {
@@ -4365,7 +4370,7 @@ public static class Suites
                     },
                     ["translation"] = new Dictionary<string, object?>
                     {
-                        ["initial"] = Vec(0f, -5f, 0f),
+                        ["initial"] = Vec(0f, timed ? -5f : 10f, 0f),
                         ["delta"] = Vec(0f, 0f, 0f),
                         ["rnd_xz"] = Vec(0f, 0f, 0f),
                     },
@@ -4375,16 +4380,23 @@ public static class Suites
                         ["water"] = Wet,
                         ["lava"] = null,
                     },
-                    ["run_time"] = Authored,
-                });
+                };
+                if (timed)
+                {
+                    props["run_time"] = Authored;
+                }
+
+                return new AnimData(props);
+            }
 
             // Runs one body to a stop and reports what happened to it. `waterHook` stands in for
             // the session's ProjectilePool.ClassifySurface binding — the classifier has its own
             // coverage, and stubbing it is what makes the branch choice assertable without needing
             // a chapter with reachable sea.
             (float Flight, float EndY, string? Bounce, bool ByContact, MotionContactTier Tier,
-                int ColumnLandings, int SweepLandings) Run(
-                uint mask, System.Func<GodotObject?, bool>? waterHook, AnimData? body = null)
+                int ColumnLandings, int SweepLandings, float Reported) Run(
+                uint mask, System.Func<GodotObject?, bool>? waterHook, AnimData? body = null,
+                float limit = 0f)
             {
                 var node = new Node3D { Name = "ground-contact-probe" };
                 root.AddChild(node);
@@ -4396,17 +4408,20 @@ public static class Suites
                 runtime.SurfaceIsWater = waterHook;
                 try
                 {
-                    var motion = MotionRuntime.Create(runtime, node, body ?? Body(), Authored);
+                    var data = body ?? Body();
+                    // What AnimRuntime passes: the authored value, or 0 when the event omits one.
+                    var motion = MotionRuntime.Create(runtime, node, data, data.Num("run_time") ?? 0f);
                     if (motion == null)
                     {
-                        return (0f, node.GlobalPosition.Y, null, false, MotionContactTier.None, 0, 0);
+                        return (0f, node.GlobalPosition.Y, null, false, MotionContactTier.None, 0, 0, 0f);
                     }
 
                     var set = new MotionSet();
                     set.Add(motion, world.Runtime.Destructibles.All.First().Def, null);
                     float flown = 0f;
                     string? bounce = null;
-                    for (int i = 0; i < (int)(Authored / Tick) + 2 && !motion.Finished; i++)
+                    float cap = limit > 0f ? limit : Authored;
+                    for (int i = 0; i < (int)(cap / Tick) + 2 && !motion.Finished; i++)
                     {
                         foreach (var landing in set.Tick(Tick))
                         {
@@ -4417,7 +4432,7 @@ public static class Suites
                     }
 
                     return (flown, node.GlobalPosition.Y, bounce, motion.LandedByContact,
-                        motion.ContactTier, set.ColumnLandings, set.SweepLandings);
+                        motion.ContactTier, set.ColumnLandings, set.SweepLandings, motion.RunTime);
                 }
                 finally
                 {
@@ -4475,6 +4490,32 @@ public static class Suites
             var bothFlags = Run(CollisionLayers.World, _ => false, Body(flagged: true, noAltitude: true));
             ctx.Check(bothFlags.Tier == MotionContactTier.Sweep && bothFlags.ByContact,
                 $"do_intersections outranks no_altitude tier={bothFlags.Tier} byContact={bothFlags.ByContact}");
+
+            // 1f — an UNTIMED launch, the shape C8 re-terminates. It must land on the column like
+            // any other body, and it must keep REPORTING its parabola rather than its watchdog:
+            // the reported number is what the sequence waits on, so a body reporting 15 s here
+            // would leave every vanish-shape piece on screen for 15 s (BL-257) and divide its
+            // tumble by the same figure.
+            var untimed = Run(CollisionLayers.World, _ => false, Body(flagged: false, timed: false));
+            ctx.Check(untimed.ByContact && untimed.Flight < 10f,
+                $"an untimed launch still ends on the ground flight={untimed.Flight:0.00}s byContact={untimed.ByContact}");
+            ctx.Check(untimed.Reported > 0f && untimed.Reported < 5f,
+                $"and reports its own parabola to the sequence, not the 15 s watchdog reported={untimed.Reported:0.00}s");
+            ctx.Check(untimed.Bounce == Land,
+                $"its branch comes from the surface it struck bounce={untimed.Bounce ?? "(none)"}");
+
+            // 1g — THE WATCHDOG ITSELF, which nothing else here can fire: the same untimed body
+            // with a mask no collider answers. The tier is selected (the mask is non-zero) but
+            // every query comes back empty, which is the only thing that charges the accumulator.
+            // Without it this body would fly forever, since an untimed launch has no clock.
+            const uint EmptyLayer = 1u << 20;   // no collider in this project is built on it
+            var watchdog = Run(EmptyLayer, _ => false, Body(flagged: false, timed: false), limit: 20f);
+            ctx.Check(watchdog.Tier == MotionContactTier.Column && !watchdog.ByContact,
+                $"a query that answers nothing still selects the tier tier={watchdog.Tier} byContact={watchdog.ByContact}");
+            ctx.Check(watchdog.Flight > 14f && watchdog.Flight < 16f,
+                $"and the 15 s column watchdog ends the body flight={watchdog.Flight:0.00}s");
+            ctx.Check(watchdog.Bounce == Land,
+                $"a watchdog end owes the default branch, from its null surface bounce={watchdog.Bounce ?? "(none)"}");
 
             // 1e — the veto on REAL extracted data. Every case above builds its gravity block by
             // hand, which pins the branch but not that `no_altitude` survives extraction and
