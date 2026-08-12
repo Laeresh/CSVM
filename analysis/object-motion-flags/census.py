@@ -37,6 +37,15 @@ import sys
 
 
 def scan():
+    """Every ObjectMotion the RUNTIME can reach.
+
+    ⚠ `sequences` is not all of them. mech3ax's `unknown_seq` is the compiled destruction slot
+    (AnimDefinition.DeathSlot), which a real kill dispatches -- BL-276 landed exactly that, after
+    ~1,035 of large_30sec_fire's death calls had sat there unread for the project's whole life.
+    It holds 15 more ObjectMotion events, every one ballistic with an all-false gravity block, so
+    walking `sequences` alone under-counts the default-combination population by 15 (C7,
+    2026-08-12). Both blocks are walked here.
+    """
     rows = []
     for f in sorted(glob.glob("extracted/*/cam_anim/*.json")):
         try:
@@ -44,8 +53,11 @@ def scan():
         except Exception:
             continue
         chap = f.replace(os.sep, "/").split("/")[1]
-        for s in (d.get("sequences") or []):
-            for e in s["events"]:
+        blocks = list(d.get("sequences") or [])
+        if isinstance(d.get("unknown_seq"), dict):
+            blocks.append(d["unknown_seq"])
+        for s in blocks:
+            for e in (s.get("events") or []):
                 if list(e["data"].keys())[0] != "ObjectMotion":
                     continue
                 v = e["data"]["ObjectMotion"]

@@ -64,7 +64,7 @@ internal enum MotionContactTier
 ///   tested wherever the session wired a mask: <see cref="TryGroundColumn"/>, a vertical column
 ///   under the body, unless <c>do_intersections</c> upgrades it to <see cref="TryContact"/>'s
 ///   trajectory sweep (166 events install-wide). <c>no_altitude</c> is the opt-out and vetoes the
-///   column only, and <c>gunshell</c> alone authors it. So the 1,451 default-combination bodies
+///   column only, and <c>gunshell</c> alone authors it. So the 1,466 default-combination bodies
 ///   that used to sink through the world now land on it. See
 ///   <c>docs/formats/destructibles.md</c>'s "Debris tumbles" bullet for the split.</para>
 ///   ⚠ An event that LAUNCHES upward with no authored <c>RUN_TIME</c> (the 152 that name a bounce,

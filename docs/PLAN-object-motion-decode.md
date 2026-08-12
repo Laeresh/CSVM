@@ -152,14 +152,17 @@ corroboration in `analysis/object-motion-flags/FINDINGS.md`).
 | `0x4000` | `GRAVITY NO_ALTITUDE` | `00508bf8` | opt-out from the landing test |
 | `0x8000` | `GRAVITY DO_INTERSECTIONS` | `00508c41` | upgrades the landing test to the geometry sweep |
 
-**The flag census, re-derived** (A2, 2026-08-10, `analysis/object-motion-flags/census.py`). Over
-3,051 `ObjectMotion` events in all 8 chapters, 1,625 carry a `gravity` block and every one of them
-is ballistic: **1,363** / 166 / 88 / 8 across the four combinations. `do_intersections` reproduces
-**166** exactly, and `no_altitude`'s 8 (`gunshell`, one per chapter) were never wrong — the "5
-chapter files" grep does not reproduce. The all-false row moved from the published 1,378, which was
-an arithmetic slip against `destructibles.md`'s own `do_intersections`×shape table rather than a
-data change. So the default-combination bodies that should be landing and are not are
-1,363 + 88 = **1,451**, alongside the 120 bounce-shape and 167 vanish-shape launches currently
+**The flag census, re-derived** (A2, 2026-08-10; corrected at C7, 2026-08-12,
+`analysis/object-motion-flags/census.py`). Over 3,066 `ObjectMotion` events in all 8 chapters,
+1,640 carry a `gravity` block and every one of them is ballistic: **1,378** / 166 / 88 / 8 across
+the four combinations. `do_intersections` reproduces **166** exactly, and `no_altitude`'s 8
+(`gunshell`, one per chapter) were never wrong — the "5 chapter files" grep does not reproduce.
+⚠ A2 moved the all-false row to 1,363 and called the published 1,378 an arithmetic slip; that was
+backwards. Its scan walked `sequences` only and missed the **15 `ObjectMotion` events in
+`unknown_seq`** — the compiled destruction slot (`AnimDefinition.DeathSlot`) that a real kill
+dispatches, per `BL-276`. All 15 are ballistic with an all-false gravity block. So the
+default-combination bodies that should be landing and are not are 1,378 + 88 = **1,466**,
+alongside the 120 bounce-shape and 167 vanish-shape launches currently
 ended by `FlightToLaunchHeight`. The parser's fifth `GRAVITY` token, **`LOCAL <value>`**, sets no
 bit and only selects where the gravity number comes from, so it is erased at compile time and
 *cannot* be surfaced by the extractor — the three booleans that ship are the three that exist.
@@ -202,7 +205,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — contact and termination
 
 6. ☑ The default contact tier: the ground-column query
-7. ☐ `NO_ALTITUDE` as the opt-out, and `gunshell` as its only author
+7. ☑ `NO_ALTITUDE` as the opt-out, and `gunshell` as its only author
 8. ☐ `RUN_TIME` as a universal ceiling; retire `FlightToLaunchHeight` for the watchdog
 9. ☐ Landing response: 0.2 restitution and energy-loss termination
 
@@ -288,8 +291,9 @@ counter can move by forcing a landing.
 "What the data actually ships" above is the result. Two of this plan's own inferred rows were wrong
 and are corrected there (`0x200` is `MORPH`; `TRANSLATION_RANGE` is two bits). `GRAVITY LOCAL` sets
 no bit — it is a value selector, erased at compile time, so the extractor cannot surface it and
-there is nothing to teach it. The census reproduces 166 and 8; the all-false row is **1,363**, not
-1,378, which makes A3/C6's population **1,451**. `impact_force` filed as `BL-343`. ⚠ For A3: every
+there is nothing to teach it. The census reproduces 166 and 8. ⚠ Its all-false row of **1,363** was
+withdrawn at C7: the scan missed `unknown_seq`, so the figure is **1,378** and A3/C6's population is
+**1,466**. `impact_force` filed as `BL-343`. ⚠ For A3: every
 one of the 254 `complex` carriers is aircraft wreckage, and three of them author gravity *stronger*
 than Earth's (−15, −20) — the value is authored deliberately, so the non-constant path A3 is told to
 find had better exist.
@@ -594,7 +598,7 @@ that wires no mask still takes the untouched path, which is what keeps the labs 
 deterministic. Reuse the existing surface classification hook (`SurfaceIsWater`) so a landing piece,
 a round's impact and a wingtip graze cannot disagree.
 
-**Model recommendation.** max — the widest behaviour change in the plan (~1,451 events plus every
+**Model recommendation.** max — the widest behaviour change in the plan (~1,466 events plus every
 bounce and vanish launch), on the hot path, in the file everything else touches.
 
 **Verify.** `ContactLandings` non-zero for the column tier specifically — instrument it separately
@@ -609,7 +613,41 @@ trajectory — a fast piece can pass over a ledge between frames and the origina
 "improve" that. ⚠ Performance: this now runs on most debris in the game. Measure before assuming it
 is free, and if it is not, the answer is a cheaper query, not a narrower admission test.
 
-## C7 ☐ `NO_ALTITUDE` as the opt-out, and `gunshell` as its only author
+## C7 ☑ `NO_ALTITUDE` as the opt-out, and `gunshell` as its only author
+
+**Landed 2026-08-13, and it lands no new engine code.** C6's tier selection already reads the flag
+in the original's branch order, so the veto shipped with it; what C7 owed was proof that the field
+survives extraction and reaches `Create`, which the item itself flagged as unchecked. It does, with
+no plumbing: `AnimData` is a property bag over the parsed JSON and `CompiledAnim` maps JSON
+true/false to `bool`, so `gravityBlock.Bool("no_altitude")` reads the extracted value directly.
+
+**The census, re-derived independently.** `no_altitude: true` appears on `gunshell` alone, **8
+events, one per chapter**, every one `translation_range` form with gravity −3.0, `RUN_TIME` 2.0,
+`complex` false, `do_intersections` false and no bounce. A2's figure confirmed rather than replaced.
+⚠ The same run found A2's all-false row wrong in the other direction, and that is corrected
+throughout: its scan walked `sequences` only and missed the 15 `ObjectMotion` events in
+`unknown_seq`, the compiled destruction slot the runtime dispatches (`BL-276`). The row is **1,378**,
+not 1,363, so C6's population is **1,466**; `census.py` now walks both blocks and `do_intersections`
+still reproduces 166 exactly.
+
+**⚠ The finding that matters for anyone reading this later: in this engine the casing never becomes
+a `MotionRuntime` at all.** `ProjectilePool` reads the `gunshell` event's fields into its own
+`CasingSpec` and integrates them itself (`Projectile.cs`, `CasingSpecResolve`/`CasingSlot`), so
+neither tier can reach an ejected shell whatever the flag says. The veto is live only on the path
+that plays the def through `AnimRuntime`, which `muzzle_burst`'s `muzzleburst_effects` does
+`CallAnimation` (8 sites, one per chapter). So this item is correctness insurance for that path
+rather than a behaviour change, and the "casings must not start resting on the ground" risk it was
+written against could not have materialised.
+
+**Verified.** `ground-contact` gained a case that builds the motion from the **real extracted
+gunshell event** out of the chapter's own anim program, with a mask wired, and asserts it selects
+no tier. Shown able to fail: replacing the veto with `else if (true)` turns exactly that check and
+the hand-built `no_altitude` case red (`tier=Column` both), and nothing else, which is also what
+proves the flag arrives from the data rather than from the suite's own dictionary. `.\RunTests.ps1`
+949/949 units, 37/37 suites, 13/13 goldens hash-identical. At the controls
+(`--chapter=C1 --plane=player_bhawk --hold=0.2,0.1,0,1 --fire --infinite-ammo --debug-anim`):
+casings eject and tumble as before, 12 live simultaneously, and the run reports **0 ballistic
+launches**, which is the direct measurement of the paragraph above.
 
 **Goal.** `NO_ALTITUDE` suppresses the landing test, and nothing else does. The gun casing keeps
 falling through the world; everything else stops.

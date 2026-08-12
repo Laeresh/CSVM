@@ -73,28 +73,34 @@ trace. `COMPLEX` is the one token that both sets a bit *and* may carry the value
 The closest the extract can get is the value distribution itself (report Q5): `-15` and `-20`
 appear **only** under `complex`, and nothing outside `complex` is authored stronger than `-10`.
 
-## The census, re-derived (2026-08-10)
+## The census, re-derived (2026-08-10, corrected 2026-08-12 at C7)
 
-Over **3,051** `ObjectMotion` events in all 8 chapters (1,055 distinct file/anim/node): **1,625**
-carry a `gravity` block, **1,968** are ballistic (a `translation` or `translation_range` block).
+Over **3,066** `ObjectMotion` events in all 8 chapters (1,068 distinct file/anim/node): **1,640**
+carry a `gravity` block, **1,983** are ballistic (a `translation` or `translation_range` block).
 Every gravity-carrying motion is ballistic, so the cross-tab is the same either way.
 
-| `complex` | `no_altitude` | `do_intersections` | events | distinct shapes | previously published |
-|---|---|---|---|---|---|
-| false | false | false | **1,363** | 854 | 1,378 |
-| **true** | false | **true** | **166** | 25 | 166 |
-| true | false | false | **88** | 11 | 88 |
-| false | **true** | false | **8** | 1 | 8 |
+| `complex` | `no_altitude` | `do_intersections` | events | distinct shapes |
+|---|---|---|---|---|
+| false | false | false | **1,378** | 867 |
+| **true** | false | **true** | **166** | 25 |
+| true | false | false | **88** | 11 |
+| false | **true** | false | **8** | 1 |
 
-**One number moved, and it was an arithmetic slip, not a data change.** `do_intersections: true`
-reproduces **166** exactly — the figure that has now been checked three times and should not move
-again. The all-false row is **1,363**, not 1,378. The 2026-08-08 cross-tab's own sibling table
-(`analysis/object-motion-ground-rest/FINDINGS.md`, `do_intersections` × motion shape) already
-implied it: 1,459 ballistic-with-gravity events author `do_intersections: false`, and taking off
-the 88 `complex` and the 8 `no_altitude` leaves 1,363. The two censuses agree on every other
-figure, including the 343 ballistic events that carry no `gravity` block at all
-(1,968 − 1,625 = 343, the old table's `null` column). So **the plan's "1,378 + 88 = 1,466 bodies
-that should be landing" is 1,363 + 88 = 1,451.**
+**⚠ The 2026-08-10 version of this table read 1,363 in the all-false row, and that was this
+census's own scan error, not a correction of the published 1,378.** `scan()` walked `sequences`
+only. mech3ax's **`unknown_seq` is the compiled destruction slot** (`AnimDefinition.DeathSlot`),
+which a real kill dispatches — `BL-276` landed exactly that path, after ~1,035 of
+`large_30sec_fire`'s death calls had sat there unread for the project's whole life. It holds
+**15 more `ObjectMotion` events**, every one ballistic with an all-false gravity block: three
+`t_truck0N` `part3` in C3, seven C4 defs (`col_tower`, `mineshack`, `shaft`, `sluice`, two
+`switchhouse`, `t_truck01/02`, `train01`), and two C5 `loading_craneN` `part5`. So the runtime
+population is **1,378**, the number that was published before, and the 2026-08-10 arithmetic
+(1,459 − 88 − 8 = 1,363) inherited the same narrow scan through its sibling table. `census.py`
+now walks both blocks.
+
+`do_intersections: true` reproduces **166** exactly under the wider scan too — the figure that has
+now been checked four times and should not move again. **The default-combination bodies that
+should be landing are 1,378 + 88 = 1,466.**
 
 **The `no_altitude` row was never wrong.** A grep of `extracted/` for `"no_altitude": true` returns
 **8** files, one per chapter, all `gunshell-gunshell.json` — the "5 chapter files vs 8 events"

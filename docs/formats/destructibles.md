@@ -358,13 +358,14 @@ the "Debris tumbles" bullet below for which pieces each covers. A format reader 
 
         | `complex` | `no_altitude` | `do_intersections` | events | distinct shapes |
         |---|---|---|---|---|
-        | false | false | false | 1,363 | 854 |
+        | false | false | false | 1,378 | 867 |
         | **true** | false | **true** | **166** | 25 |
         | true | false | false | 88 | 11 |
         | false | **true** | false | 8 (`gunshell`, one per chapter) | 1 |
 
-        The all-false row read 1,378 until 2026-08-10; that was an arithmetic slip against this
-        page's own `do_intersections`×shape table, not a data change. ⚠ **The three booleans are all
+        The all-false row read 1,363 between 2026-08-10 and 2026-08-12, when a census that walked
+        `sequences` only missed the 15 `ObjectMotion` events sitting in `unknown_seq`, the compiled
+        destruction slot the runtime does dispatch. ⚠ **The three booleans are all
         the compiled data can carry.** The original's `GRAVITY` block parses five tokens —
         `DEFAULT`, `LOCAL <value>`, `COMPLEX [<value>]`, `NO_ALTITUDE`, `DO_INTERSECTIONS` — but
         `DEFAULT` and `LOCAL` only choose where the gravity number comes from and set no flag bit,

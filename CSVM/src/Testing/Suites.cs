@@ -4351,7 +4351,7 @@ public static class Suites
             static Dictionary<string, object?> Vec(float x, float y, float z) =>
                 new() { ["x"] = x, ["y"] = y, ["z"] = z };
 
-            // `flagged: false` is the DEFAULT authoring — 1,451 events install-wide — which selects
+            // `flagged: false` is the DEFAULT authoring — 1,466 events install-wide — which selects
             // the ground column; `noAltitude` is the opt-out that selects neither.
             AnimData Body(bool flagged = true, bool noAltitude = false, bool complex = true) =>
                 new(new Dictionary<string, object?>
@@ -4447,7 +4447,7 @@ public static class Suites
             ctx.Check(wet.Bounce == Wet, $"a water surface picks the water branch bounce={wet.Bounce ?? "(none)"}");
 
             // 1b — the DEFAULT tier. The identical body with `do_intersections` off, which is how
-            // 1,451 of the install's gravity-bearing events are authored, must land too and rest in
+            // 1,466 of the install's gravity-bearing events are authored, must land too and rest in
             // the same place. Before C6 this body sank through the world and ran its 20 s clock out.
             var column = Run(CollisionLayers.World, _ => false, Body(flagged: false));
             ctx.Check(column.Tier == MotionContactTier.Column,
@@ -4475,6 +4475,53 @@ public static class Suites
             var bothFlags = Run(CollisionLayers.World, _ => false, Body(flagged: true, noAltitude: true));
             ctx.Check(bothFlags.Tier == MotionContactTier.Sweep && bothFlags.ByContact,
                 $"do_intersections outranks no_altitude tier={bothFlags.Tier} byContact={bothFlags.ByContact}");
+
+            // 1e — the veto on REAL extracted data. Every case above builds its gravity block by
+            // hand, which pins the branch but not that `no_altitude` survives extraction and
+            // reaches Create at all: the engine had never read that field before C7. gunshell is
+            // its only author install-wide, 8 events, one per chapter, and it is reachable because
+            // muzzleburst_effects CallAnimations it.
+            {
+                var shellDefs = world.Session.Program.ByAnimName("gunshell");
+                AnimData? shell = null;
+                foreach (var def in shellDefs)
+                {
+                    foreach (var seq in def.Sequences)
+                    {
+                        foreach (var ev in seq.Events)
+                        {
+                            if (ev.Kind == "ObjectMotion" && ev.Data.Obj("translation_range") != null)
+                            {
+                                shell ??= ev.Data;
+                            }
+                        }
+                    }
+                }
+
+                ctx.Check(shell != null,
+                    $"the chapter program carries gunshell's launch defs={shellDefs.Count} chapter={ctx.Chapter}");
+                if (shell != null)
+                {
+                    ctx.Check(shell.Obj("gravity")?.Bool("no_altitude") == true,
+                        $"and the extracted event still authors no_altitude value={shell.Obj("gravity")?.Bool("no_altitude")}");
+                    var node = new Node3D { Name = "ground-contact-gunshell" };
+                    root.AddChild(node);
+                    node.GlobalPosition = new Vector3(0f, surfaceY + DropHeight, 0f);
+                    uint maskWas = runtime.ContactMask;
+                    runtime.ContactMask = CollisionLayers.World;
+                    try
+                    {
+                        var casing = MotionRuntime.Create(runtime, node, shell, shell.Num("run_time") ?? 2f);
+                        ctx.Check(casing is { ContactTier: MotionContactTier.None },
+                            $"so the one def that opts out selects no tier even with a mask wired tier={casing?.ContactTier}");
+                    }
+                    finally
+                    {
+                        runtime.ContactMask = maskWas;
+                        node.QueueFree();
+                    }
+                }
+            }
 
             // 2b — the bounce is a CONTINUATION. The sequence a landing dispatches re-launches the
             // very node that landed (`pNhit` throws `pieceN` on again), and MotionRuntime.Create
