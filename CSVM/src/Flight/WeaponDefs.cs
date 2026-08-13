@@ -49,8 +49,9 @@ public sealed class WeaponDef
 {
     /// <summary>The <c>IMPACT</c> table, one row per <see cref="SurfaceRegistry"/> id in slot
     /// order — the original's own shape, an array indexed by surface id (<c>FUN_005ad630</c>
-    /// writes each parsed block into <c>weapon + 0x15c + id*100</c>). A null row is an id this
-    /// weapon authors nothing for, which the original plays nothing for; read it through
+    /// writes each parsed block into <c>weapon + 0x15c + id*100</c>). An id the weapon names no
+    /// block for holds the <c>default</c> row (see <c>InheritDefaultRow</c>); a null row is an id
+    /// it named and bound nothing on, which plays nothing. Read it through
     /// <see cref="ImpactFor"/>.</summary>
     public readonly WeaponEffect?[] Impact = new WeaponEffect?[SurfaceRegistry.Names.Count];
 
@@ -134,11 +135,14 @@ public sealed class WeaponDef
     /// every rocket currently flies dumbfire — so this describes the data rather than driving flight.</summary>
     public bool IsGuided => TurnRate is > 0.01f;
 
-    /// <summary>This weapon's <c>IMPACT</c> row for a struck surface id, or null when it authors
-    /// none. The bounds test is the registry's (signed lower, unsigned upper), the same one
-    /// <c>FUN_0048b920</c> makes — but an out-of-range or unauthored id answers null here rather
-    /// than falling back to row 0, because the impact family has no such arm
-    /// (<c>FUN_005ad100</c> gates on the row's own variant count and otherwise plays nothing).</summary>
+    /// <summary>This weapon's <c>IMPACT</c> row for a struck surface id, or null when the row binds
+    /// nothing. Rows an id inherits from <c>default</c> were filled at parse time, so this is a
+    /// plain index — the original's fallback is in how the table was built, never in how it is
+    /// read (<c>FUN_005ad100</c> only gates on the row it is handed).
+    ///
+    /// <para>The bounds test is ours: <c>FUN_005ad100</c> indexes <c>weapon + 0x15c + id*100</c>
+    /// unchecked, and no id out of the registry's range reaches it, since every id comes from a
+    /// material's own <c>soil</c> field or from <c>SurfaceIdOf</c>.</para></summary>
     public WeaponEffect? ImpactFor(int surfaceId) =>
         surfaceId >= 0 && (uint)surfaceId < (uint)Impact.Length ? Impact[surfaceId] : null;
 }
@@ -329,23 +333,61 @@ public sealed class WeaponDefs
     // is null (no effect on that surface, e.g. "enemy" on 28 of the 48) is skipped explicitly
     // rather than read back as an empty binding. The name is matched against the surface registry
     // and written at that id, which is what FUN_005ad630 does — a name the registry does not carry
-    // is parsed into nothing, exactly as the original discards it.
+    // is parsed into nothing, exactly as the original discards it. Which names were NAMED is
+    // tracked separately from which parsed to a binding, because the two decide different things:
+    // see InheritDefaultRow.
     private static void ParseImpact(List<object?>? impact, WeaponEffect?[] into)
     {
         if (impact == null)
         {
             return;
         }
+        var authored = new bool[into.Length];
         for (int i = 0; i + 1 < impact.Count; i += 2)
         {
             if (impact[i] is not string surfaceName || SurfaceRegistry.IdForName(surfaceName) is not { } id)
             {
                 continue;
             }
+            authored[id] = true;
             if (impact[i + 1] is List<object?> slots
                 && ParseEffect(ZrdrDict.FromAlternating(slots)) is { } effect)
             {
                 into[id] = effect;
+            }
+        }
+        InheritDefaultRow(into, authored);
+    }
+
+    /// <summary>Give every id the weapon names no block for the <c>default</c> row, verbatim —
+    /// <c>FUN_005ad630</c>'s per-id loop, whose miss arm copies row 0 over row <c>i</c> whole
+    /// (<c>0x005ae268</c>: <c>ECX = 0x19</c>, <c>REP MOVSD</c>, i.e. all 100 bytes of the row, both
+    /// its effect names and its sound list). The table is built by walking the registry, so "this
+    /// weapon said nothing about that surface" means "inherit", not "stay silent".
+    ///
+    /// <para><b>Naming an id and binding nothing on it is the opposite case, and stays empty</b> —
+    /// the original finds the block, parses it, and gets a row with no variants. That is the
+    /// difference between <c>dirt</c>(13), which no weapon names at all, and the 30 cal slug's
+    /// <c>player</c>(6), whose slots are all authored empty. Only the miss arm copies, which is why
+    /// presence is tracked apart from what parsed.</para>
+    ///
+    /// <para>The row is shared rather than cloned. The original copies bytes, but nothing mutates a
+    /// parsed row, so one instance per weapon reads the same and says what it means: this id
+    /// resolves the weapon's <c>default</c> row.</para></summary>
+    private static void InheritDefaultRow(WeaponEffect?[] into, bool[] authored)
+    {
+        // Row 0 has nothing to inherit from: a weapon authoring no `default` row supplies no
+        // template, and every id it is silent on stays silent (`wep_26`, which has no IMPACT at all,
+        // never reaches here).
+        if (into[SurfaceRegistry.Default] is not { } template)
+        {
+            return;
+        }
+        for (int id = SurfaceRegistry.Default + 1; id < into.Length; id++)
+        {
+            if (!authored[id])
+            {
+                into[id] = template;
             }
         }
     }

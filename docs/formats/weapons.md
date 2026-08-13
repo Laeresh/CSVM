@@ -245,12 +245,28 @@ how 28 entries author `enemy`). `SURFACE_ANIMATION` is the surface-oriented vari
 **Hit-testing reads the struck material's surface id** to select the row.
 
 A row is only reachable if some material carries its id: `quicksand`(3), `player`(6) and `enemy`(7)
-are carried by no chapter material at all. The reverse also holds — the eight ids **no** weapon
-authors (`seafloor`(2), `lava`(4), `fire`(5), `airstrip`(8), `opensesame`(9), `death`(10),
-`dzone`(12), `dirt`(13)) are ids a round can strike, and the game draws and sounds nothing there:
-there is no fall back to the `default` row. Counted per weapon and per id in
-`analysis/surface-classification/FINDINGS.md` (2026-08-13). A block named something outside the
-registry would be parsed into nothing; the shipped data contains no such name.
+are carried by no chapter material at all. A block named something outside the registry would be
+parsed into nothing; the shipped data contains no such name. Counted per weapon and per id in
+`analysis/surface-classification/FINDINGS.md` (2026-08-13).
+
+### An id the weapon never names inherits the `default` row
+
+The table is built by walking the registry, and an id the weapon has no block for takes the
+`default` row whole — its effect names and its sound list together. So the eight ids **no** weapon
+names (`seafloor`(2), `lava`(4), `fire`(5), `airstrip`(8), `opensesame`(9), `death`(10),
+`dzone`(12), `dirt`(13)) are not silent: a round striking them plays the weapon's ordinary
+`default` impact.
+
+**Naming an id and binding nothing on it is the opposite case, and plays nothing.** The block is
+found, so it is read rather than inherited, and it yields a row with no bindings. That is `enemy` on
+the 28 entries whose value is null, and the 30 cal slug's own `player`, whose slots are all authored
+empty. The distinction is the whole behavioural content of the mechanism: nobody names `dirt`, so
+every weapon's impact reaches it, while the guns name `player` and leave it empty, so a gun round on
+an aircraft draws nothing — and a rocket, which never names `player` at all, throws its ground
+burst there.
+
+The engine-side mechanism (the parse loop, the row layout, the runtime index) is decoded in
+[`../org/weaponImpact.md`](../org/weaponImpact.md).
 
 The **`player` row is where the got-shot feedback on your own airframe is authored** — the 44
 entries carrying it name the caliber's own `*_gunhit`, or `f18sparks2`, or (on `wep_03`, 60slug,

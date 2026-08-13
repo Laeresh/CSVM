@@ -477,15 +477,11 @@ the same dword at material offset `0x20` and the same null-material-to-0 arm `FU
 Independently, `FUN_005ad330` tests `*(material + 0x20) == 1` (water) as a special case on the impact
 path — the weapon code reads the soil id directly, in two places.
 
-⚠ **The IMPACT fallback is NOT the crash cascade's.** `FUN_005ad100` gates on `row[0x2c] != 0` and
-otherwise plays nothing. There is no empty-row-to-row-0 arm. Since the shipped weapons author only
-`default`/`water`/`quicksand`/`player`/`buildings` blocks, a faithful implementation plays **no impact
-effect at all** on `dirt`(13), `fire`(5), `airstrip`(8) and `dzone`(12) geometry, where our
-texture-derived classifier currently plays the `default` one. Verify against the extracted weapons
-data before building on this.
-
-Not decoded: what the two variant lists at `+0x2c`/`+0x40` hold respectively, and whether any other
-path supplies a default when a row is empty.
+⚠ **The IMPACT fallback is applied when the table is built, not when it is read.** The parse loop's
+miss arm copies the whole `default` row over every id the weapon names no block for, so `dirt`(13),
+`fire`(5), `airstrip`(8) and `dzone`(12) geometry plays the weapon's ordinary `default` impact.
+`FUN_005ad100`'s gate on `row[0x2c]` is real but unreachable for those ids, and it is the SOUND half
+of the row specifically. Full decode: [`docs/org/weaponImpact.md`](../../docs/org/weaponImpact.md).
 
 ## 2026-08-13 — the `ai_crash_<name>` family: built per AI vehicle-params, selected by the same cascade (M4 G21)
 
@@ -652,3 +648,9 @@ own instruction to make this cross-check — it is not a direct measurement of i
 ground, and inherits that table's per-mesh/body granularity caveat (up to 16.4% of C1's `dirt`
 polygons strand to `default` at body granularity, so these are upper bounds on the affected share,
 not exact).
+
+⚠ **Authoring no row for an id is inheritance, not silence** — those four ids play the weapon's
+`default` impact ([`docs/org/weaponImpact.md`](../../docs/org/weaponImpact.md)). The area shares
+above are the right measure of how much ground the id affects; they are not a silent share. What
+genuinely plays nothing is a row the weapon **names** and leaves empty: `enemy`'s 28 null values and
+the guns' empty `player` blocks, which this section already counts apart from "absent".

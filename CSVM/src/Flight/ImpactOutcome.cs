@@ -13,10 +13,9 @@ public enum ImpactStandIn { None, Spark, Explosion, DirtDebris, Ricochet }
 public readonly record struct ImpactOutcome
 {
     /// <summary>The authored effect selected out of the weapon's <c>IMPACT</c> table for this
-    /// surface id (its <c>ANIMATION</c>, else its <c>SURFACE_ANIMATION</c>), or null when the
-    /// weapon authors no row for that id — there is no fall back to <c>default</c>. It is both the
-    /// gamez node a caller tries to instance and, when that misses, the name it hands to the
-    /// world-effects runtime.</summary>
+    /// surface id (its <c>ANIMATION</c>, else its <c>SURFACE_ANIMATION</c>), or null when the row
+    /// binds nothing. It is both the gamez node a caller tries to instance and, when that misses,
+    /// the name it hands to the world-effects runtime.</summary>
     public string? EffectName { get; init; }
 
     /// <summary>The struck surface's own <c>SOUND</c>, null when it authors no row. A
@@ -49,15 +48,11 @@ public readonly record struct ImpactOutcome
     /// the caller: a scene-less pool (the weapon lab) has nowhere to build a hardpoint weapon's real
     /// fireball, so the explosion stand-in carries the blast there and only there.</para>
     ///
-    /// <para><b>An id the weapon authors no row for plays nothing</b> — no effect name, no sound.
-    /// That is <c>FUN_005ad100</c>, which gates on the row's own variant count at <c>+0x2c</c> and
-    /// has no empty-row-to-row-0 arm, unlike the crash cascade's
-    /// (<see cref="Session.SurfaceDefTable"/>, whose slot-0 fallback must NOT be copied here). It
-    /// is audible: the shipped weapons author rows on six of the registry's fourteen ids, so a
-    /// round striking <c>dirt</c>(13), <c>fire</c>(5), <c>airstrip</c>(8) or <c>dzone</c>(12)
-    /// ground draws and sounds nothing authored, where before it borrowed <c>default</c>'s
-    /// (0–10.6 % of a chapter's collidable area, worst C2; counted in
-    /// <c>analysis/surface-classification/FINDINGS.md</c>, 2026-08-13).</para>
+    /// <para><b>Whether an unauthored id falls back to <c>default</c> is settled in
+    /// <c>WeaponDefs.InheritDefaultRow</c>, not here</b> — it does, and the table arrives already
+    /// filled, so this is an index and nothing more. Do not re-add a fallback arm at the lookup:
+    /// two of them would resurrect <c>default</c>'s effect on the ids a weapon names and
+    /// deliberately binds nothing on (the slug's <c>player</c>(6)).</para>
     ///
     /// <para><c>player</c>(6) is a struck <c>AircraftBody</c>; <c>enemy</c>(7) stays unreachable
     /// until something non-player flies. Neither gets a case of its own here: both read out of the
@@ -67,7 +62,8 @@ public readonly record struct ImpactOutcome
     public static ImpactOutcome Resolve(WeaponDef weapon, int surfaceId, bool modelResolved,
         bool hasEffectsRuntime)
     {
-        // The struck id's IMPACT row, or nothing at all. No fallback: see the remarks.
+        // The struck id's IMPACT row — already carrying `default`'s binding if the weapon named no
+        // block for this id (WeaponDefs.InheritDefaultRow).
         var effect = weapon.ImpactFor(surfaceId);
 
         return new ImpactOutcome
