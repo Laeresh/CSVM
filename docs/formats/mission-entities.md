@@ -241,7 +241,8 @@ contradiction is now sharper rather than resolved.
   another game mode), stopping at the first index that does not resolve, and files them into a
   global list — **player rearm pads**, the counterpart of the `rearm_rad` / `rearmrad` tuning keys.
   It never touches a generator.
-- **A runtime top-up does not exist.** In the whole generator module there are exactly three writes
+- **A runtime top-up does not exist** (⚠ refuted 2026-08-13, see the correction below; the claim
+  was true of the generator module only). In the whole generator module there are exactly three writes
   to `capacityRemaining`: the loader's `= capacity`, the tick's decrement, and a reset routine that
   sets it *back to* `capacity` (along with `active`, the wave counter and the timer). Nothing ever
   raises it above `capacity`, so with `capacity` `0` it is `0` or negative forever. The loader has
@@ -257,6 +258,18 @@ contradiction is now sharper rather than resolved.
 Re-measured from the extraction at the same time: `capacity` is **present on all 23 generators and
 `0` on all 23**, and `wave_size` is `1` on 22 and `3` on one — so the blocked branch is taken on the
 first tick of every generator in the install.
+
+#### Correction, 2026-08-13 (found during the B7 `group` decode): a runtime top-up DOES exist
+
+The "runtime top-up does not exist" bullet above searched the generator module and was wrong by
+scope: the Instant Action wave sequencer (`FUN_0045b9d0`, mission-type-2 branch) **adds the next
+wave group's member count to a named generator's `capacityRemaining`** and stamps the generator
+with that group id. So in Instant Action a zeppelin's generator is fed capacity at runtime, wave
+by wave, which is consistent with `capacity 0` in the data and zeppelins visibly launching. What
+this does not settle: whether campaign missions have an equivalent feed (the script layer's
+generator lookup in `FUN_00465910` reads `capacityRemaining` but was not seen writing it), so the
+raw-byte read below is still worth having for the campaign case. Mechanism details:
+`analysis/m4-b7-group-slot/FINDINGS.md`.
 
 **Where that leaves it.** Every explanation that lives in the engine has been eliminated, which
 points the remaining suspicion at the *value*: what the engine reads for `capacity` may not be the

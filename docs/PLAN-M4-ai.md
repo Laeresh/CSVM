@@ -1326,8 +1326,16 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
    `--generators[=plane]`, spawning held-course planes through `SpawnAiAircraft` (net pick logged
    for B5; host death and doors stubbed for F18/F20). Found shipped-data typo: C1/M04's
    `Eairg32_params` vs the aiv header's `Earig32_params`
-7. ☐ B7 — Formation flying — ⚠ **premise refuted 2026-08-10: there is no leader field** (slot 6 is
-   `primary_target`). Re-scope onto `group` (slot 4) or drop
+7. ☑ B7 — Formation flying — **closed/disproven 2026-08-13, no code.** The last data candidate,
+   `group` (slot 4), is a mission-logic cohort id: script wake-up and "N remain" conditions
+   (`FUN_004658d0`/`FUN_00465910`), the Instant Action wave sequencer (`FUN_0045b9d0`, `ia.zrd`
+   `group1`..`group4`), the egen generator's launch pool (`FUN_00452450` via `vehicle.group`),
+   and objective radius counts (`FUN_004659b0`/`FUN_00465a70`). Nothing in steering, targeting
+   or the mode machine reads it, and there is no formation/wingman mode. Formation-looking
+   behaviour rides `player`-trailer nets (B5) and `primary_target`. Survey + decode:
+   `analysis/m4-b7-group-slot/`; slot table corrected in `formats/ai-rosters.md`. Side find for
+   F20: the IA wave logic tops up a generator's remaining capacity at runtime
+   (`FUN_0045b9d0`'s mission-type-2 branch), a fourth write the 2026-08-10 pass missed
 8. ☑ B8 — The voice runtime: prewarm, source-following one-shots, the `aiv`→voice→clip chain —
    **landed 2026-08-13**: `Mech3/CombatVoice.cs` (accentID→voice.zrd→pilot-clip resolver; the
    clips turned out to be sounds.json `SETS` entries, with 466 shipped `_random` variant groups

@@ -39,7 +39,7 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 | 1 | `(x y z)` | spawn position — the only list-typed slot, present on all 414 |
 | 2 | `yaw` | spawn heading, degrees |
 | 3 | `team` | |
-| 4 | `group` | formation/wing grouping |
+| 4 | `group` | **mission-logic cohort id, not a formation** (see [below](#group-is-a-cohort-id-not-a-formation)). Values 0-8; `0` (the default) is the at-mission-start population |
 | 5 | `enabled` | |
 | 6 | `primary_target` | **an assigned target node name, not a formation leader.** 6 distinct: `""` (346), `player` (27), `devastator_1/2/3`, `piratezep`. The engine's own debug readout prints it as "Primary target: %s" |
 | 7 | `init_health` | starting health override; `0.0` = use the airframe default. Real values do occur (e.g. `216.0`) |
@@ -71,6 +71,32 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 
 **31 of the bare-number slots are constant across all 414 blocks** (8–19, 36, 43–56, 58, 60, 62, 64) —
 authored defaults, not signal.
+
+### `group` is a cohort id, not a formation
+
+Decoded 2026-08-13 (plan item B7; instrument and function addresses in
+`analysis/m4-b7-group-slot/`). Slot 4 tags a block with a small integer so that mission logic can
+address a set of vehicles at once. The executable has exactly four consumers of the value, and
+none of them is flight behaviour:
+
+- **Script wake-up.** The mission-script layer wakes every living member of a group by widening
+  its activation volumes to 9000 m, and its companion condition tests "at most N members of group
+  G remain" (`FUN_004658d0` / `FUN_00465850` / `FUN_00465910`).
+- **Instant Action waves.** `ia.zrd`'s `group1`..`group4` keys define waves; when the current
+  group is wiped out, the sequencer advances a counter, teleports the next group's members to a
+  point at least 500 m from the player (fanned 100 m apart) and reactivates them
+  (`FUN_0045b9d0`).
+- **Generator launches.** An `egen` generator's `vehicle.group` key selects which parked roster
+  vehicles it launches; `group` is the join key between the two files (`FUN_00452450`,
+  parser `FUN_00452850`).
+- **Objective conditions.** Count living members of a group inside or outside a radius of a point
+  (`FUN_004659b0` / `FUN_00465a70`).
+
+The data agrees: a shared group value never crosses teams (71/71 shared groups) but only weakly
+shares a net (37/71) or spawn proximity (31/71), and later groups ship `deactivated 1` (group 2:
+68 of 70 blocks) waiting to be released. The steering, targeting and maneuver code never reads
+the field. Formation-looking behaviour in the original rides nets whose trailer names `player`
+([ai-nets.md](ai-nets.md)) and `primary_target`, not this slot.
 
 ### The three unnamed slots
 
