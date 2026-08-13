@@ -300,6 +300,11 @@ public sealed record SessionSpec
     public bool Generators { get; private set; }
     /// <summary>Which plane <c>--generators</c> spawns; the default is the default flight plane.</summary>
     public string GeneratorsPlane { get; private set; } = "player_bhawk";
+    /// <summary><c>--zeppelins</c>: place and fly the mission's zeppelins (M4 F17) — each
+    /// <c>zeppelins.zrd.json</c> record whose world node and net resolve is set to its authored
+    /// position/yaw/pitch and moved along its net under the record's speed/accel/pitch/rate
+    /// limits (a kinematic node follow, no flight model).</summary>
+    public bool Zeppelins { get; private set; }
     public (FlightInput, float)[][]? HoldSets { get; private set; }
     /// <summary>The <c>--damage=</c> preset pairs (part, fraction 0–1); null when <c>--damage</c>
     /// carried no value.</summary>
@@ -779,6 +784,7 @@ public sealed record SessionSpec
             else if (arg == "--no-assist") { s.NoAssist = true; }
             else if (arg == "--generators") { s.Generators = true; }
             else if (arg.StartsWith("--generators=")) { s.Generators = true; s.GeneratorsPlane = arg["--generators=".Length..]; }
+            else if (arg == "--zeppelins") { s.Zeppelins = true; }
             else if (arg == "--fire") { s.AutoFire = true; }
             else if (arg == "--fire-rockets") { s.AutoFireRockets = true; }
             else if (arg.StartsWith("--gun-select=")) { s.GunSelect = int.Parse(arg["--gun-select=".Length..]); }
