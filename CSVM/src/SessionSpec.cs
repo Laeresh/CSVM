@@ -276,6 +276,10 @@ public sealed record SessionSpec
     public float? IncomingPass { get; private set; }
     /// <summary>Which weapon <c>--incoming</c> fires; null takes the target's own first gun.</summary>
     public string? IncomingWeapon { get; private set; }
+    /// <summary><c>--ai=&lt;plane&gt;[,&lt;plane&gt;…]</c>: AI-piloted aircraft spawned into the
+    /// flight session through the runtime spawn seam (<c>GameSession.SpawnAiAircraft</c>), placed
+    /// ahead of player 1 and holding its course. Null when the flag was absent.</summary>
+    public IReadOnlyList<string>? AiPlanes { get; private set; }
     public (FlightInput, float)[][]? HoldSets { get; private set; }
     /// <summary>The <c>--damage=</c> preset pairs (part, fraction 0–1); null when <c>--damage</c>
     /// carried no value.</summary>
@@ -718,6 +722,12 @@ public sealed record SessionSpec
                 s.IncomingPass = parts[0].Length > 0 ? Flt(parts[0]) : IncomingFire.DefaultPass;
                 if (parts.Length > 1 && parts[1].Length > 0)
                     s.IncomingWeapon = parts[1];
+            }
+            else if (arg.StartsWith("--ai="))
+            {
+                var names = arg["--ai=".Length..].Split(',', StringSplitOptions.RemoveEmptyEntries);
+                if (names.Length > 0)
+                    s.AiPlanes = names;
             }
             else if (arg == "--fire") { s.AutoFire = true; }
             else if (arg == "--fire-rockets") { s.AutoFireRockets = true; }

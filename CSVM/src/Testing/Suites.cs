@@ -150,6 +150,11 @@ public static class Suites
             "weapon's own values, downs it on a critical zero with the kill attributed through the " +
             "Downed event — never hits the shooter's own geometry — and a rocket fuses on a passing " +
             "plane, blasting with falloff and attributing the kill", AirToAir));
+        into.Add(new TestHarness.Suite("ai-actor",
+            "the M4 AI actor seam: an AI-piloted plane (AiPilot input, IsHumanPiloted false, no " +
+            "camera/HUD/devices) spawned into an already-running sim flies its orders, takes a " +
+            "mid-flight retarget, and is present, ticking, damageable by the weapon's own values " +
+            "and killable with the kill attributed to the shooter through Downed", AiActor));
         into.Add(new TestHarness.Suite("damage-stages",
             "each DAMAGE_SEQUENCE def fires its stage effects across an HP sweep", DamageStages));
         into.Add(new TestHarness.Suite("damage-hd",
@@ -2887,6 +2892,192 @@ public static class Suites
             target?.Free();
             shooter?.Free();
             bystander?.Free();
+            textures.Dispose();
+        }
+    }
+
+    /// <summary>The AI actor seam (M4 A2), against real engine state on manual sim steps. A human
+    /// rig is built and stepped first, so the AI plane demonstrably joins a RUNNING sim — the
+    /// runtime-spawn half of the seam — with an <see cref="AiPilot"/> for input, no camera
+    /// (<c>Setup(null)</c>), no HUD, no input devices, and <c>IsHumanPiloted</c> false. Pins:
+    /// the spawned plane is present and registered as a hit target (its body answers the
+    /// <c>player</c> surface id); it TICKS — displacement along its ordered course, altitude
+    /// held; its orders are mutable mid-flight (a 90° retarget between steps is flown to);
+    /// a round moves its part pools by the weapon's own ARMOR_DAMAGE; and sustained fire downs
+    /// it with the kill attributed to the human shooter's id through <c>Downed</c>.</summary>
+    private static void AiActor(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        WeaponDef? gun = weapons.All.FirstOrDefault(w =>
+            w.IsGun && w.ArmorDamage is > 0f && w.HealthDamage is > 0f);
+        ctx.Check(gun != null, $"a gun with ARMOR_DAMAGE and HEALTH_DAMAGE exists in the data");
+        if (gun == null)
+            return;
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var nose = stats.DestroyableParts.FirstOrDefault(p =>
+            p.Name.Equals("nose", System.StringComparison.OrdinalIgnoreCase));
+        ctx.Check(nose is { Critical: true }, $"{ctx.PlaneName} carries a critical nose part");
+        if (nose == null)
+            return;
+
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        FlightController? shooter = null;
+        FlightController? ai = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            // The human rig first, and 120 sim steps before the AI exists: the spawn below is
+            // a RUNTIME spawn into a sim already in motion, not part of a session build.
+            var shooterModel = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+            shooter = new FlightController
+            {
+                PlaneModel = shooterModel,
+                Collider = PlaneCollider.Build(shooterModel),
+                Damage = new PlaneDamage(stats.DestroyableParts),
+                PlayerIndex = 0,
+                Projectiles = live,
+                UseKeyboard = false,
+                AllowPause = false,
+            };
+            shooter.AddChild(shooterModel);
+            shooter.Setup(new FlightModel(stats), ctx.Camera, new CamParams(),
+                new Vector3(2000f, 500f, 0f), new Vector3(2000f, 500f, -1f));
+            ctx.Host.AddChild(shooter);
+            for (int i = 0; i < 120; i++)
+            {
+                live.SimStep(1f / 60f);
+                shooter.SimStep(1f / 60f);
+            }
+
+            // The AI actor: an AiPilot ordered to hold the spawn course, a null camera, no HUD,
+            // no devices — exactly what AiAircraftSpawner builds, on the suite's own stage.
+            var spawnPos = new Vector3(0f, 500f, 0f);
+            var pilot = AiPilot.HoldingCourse(spawnPos, spawnPos + Vector3.Forward);
+            var aiModel = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+            ai = new FlightController
+            {
+                PlaneModel = aiModel,
+                Collider = PlaneCollider.Build(aiModel),
+                Damage = new PlaneDamage(stats.DestroyableParts),
+                PlayerIndex = AiAircraftSpawner.ShooterIdBase,
+                IsHumanPiloted = false,
+                Pilot = pilot,
+                Projectiles = live,
+                UseKeyboard = false,
+                PadDevices = System.Array.Empty<int>(),
+                AllowPause = false,
+            };
+            ai.AddChild(aiModel);
+            ai.Setup(new FlightModel(stats), null, new CamParams(), spawnPos, spawnPos + Vector3.Forward);
+            ctx.Host.AddChild(ai);
+
+            // Present: in the tree, body built, registered as a hit target on the player id, and
+            // visible to a physics ray where it spawned.
+            ctx.Check(ai.IsInsideTree() && ai.Body != null,
+                $"the AI plane is in the tree with an AircraftBody");
+            if (ai.Body == null)
+                return;
+            ctx.Check(ProjectilePool.SurfaceIdOf(ai.Body) == SurfaceRegistry.Player,
+                $"the AI body answers surface id {SurfaceRegistry.Player} (player) — weapon IMPACT rows fire on it");
+            var space = live.GetWorld3D().DirectSpaceState;
+            var probe = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                spawnPos + new Vector3(0f, 0f, -30f), spawnPos, CollisionLayers.WorldAndAircraft));
+            ctx.Check(probe.Count > 0 && ReferenceEquals(probe["collider"].Obj, ai.Body),
+                $"a physics ray at the spawned AI returns its body");
+
+            // ⚠ The gunfire phases run at the SPAWN pose, before the plane flies anywhere: the
+            // suite runs inside one engine frame, and a body MOVED after creation is invisible
+            // to space queries until a physics flush this frame never gets (measured: the same
+            // ray at the flown-to position hits nothing). Damage first, flight after.
+            float armorDmg = gun.ArmorDamage!.Value;
+            float healthDmg = gun.HealthDamage!.Value;
+            float Combined() => ai!.Damage!.Parts.Values.Sum(p => p.Hp + p.Armor);
+            var muzzle = new Transform3D(
+                Basis.LookingAt(Vector3.Back, Vector3.Up), spawnPos + new Vector3(0f, 0f, -10f));
+            void FireOne(int steps = 10)
+            {
+                live.Spawn(gun, muzzle, Vector3.Zero, shooter!.PlayerIndex);
+                for (int i = 0; i < steps; i++)
+                    live.SimStep(1f / 60f);
+                live.Clear();
+            }
+
+            // Damageable: a registering round moves the pools by exactly the weapon's
+            // ARMOR_DAMAGE (armor-first over full pools, so the combined total moves by it).
+            float beforeHit = Combined();
+            int tries = 0;
+            while (Combined() >= beforeHit && tries < 5)
+            {
+                tries++;
+                FireOne();
+            }
+            ctx.Check(Mathf.IsEqualApprox(beforeHit - Combined(), armorDmg),
+                $"a round moves the AI's pools by the weapon's ARMOR_DAMAGE moved={beforeHit - Combined():0.##} expected={armorDmg:0.##} (rounds={tries})");
+
+            // Killable, with the kill attributed: sustained fire on the same bearing zeroes the
+            // critical nose; Downed reports (AI shooter id, human killer id).
+            int? downedVictim = null, downedKiller = null;
+            ai.Downed += (victim, killer) => { downedVictim = victim; downedKiller = killer; };
+            int budget = (int)(nose.MaxArmor / armorDmg + nose.MaxHp / healthDmg) * 3 + 20;
+            int fired = 0;
+            while (!ai.Crashed && fired < budget)
+            {
+                fired++;
+                FireOne(8);
+            }
+            ctx.Check(ai.Crashed, $"sustained fire downs the AI plane rounds={fired}/{budget}");
+            ctx.Check(downedVictim == AiAircraftSpawner.ShooterIdBase,
+                $"Downed reports the AI's own shooter id victim={downedVictim?.ToString() ?? "-"}");
+            ctx.Check(downedKiller == shooter.PlayerIndex,
+                $"…with the kill attributed to the human shooter killer={downedKiller?.ToString() ?? "-"}");
+
+            // Back into the air for the flying half — Respawn repairs the wreck and re-arms the
+            // same pilot; nothing below needs a physics query.
+            ai.Respawn();
+            void FlyAi(float seconds)
+            {
+                for (int i = 0; i < (int)(seconds * 60f); i++)
+                {
+                    live.SimStep(1f / 60f);
+                    ai!.SimStep(1f / 60f);
+                }
+            }
+
+            // Ticking, on its orders: 10 s of manual sim steps move it along the ordered course
+            // (world -Z) at altitude, driven by AiPilot — no keyboard, no hold script.
+            var before = ai.WorldPosition;
+            FlyAi(10f);
+            var disp = ai.WorldPosition - before;
+            ctx.Check(disp.Length() > 300f,
+                $"the AI plane flies under its pilot moved={disp.Length():0} m in 10 s");
+            ctx.Check(disp.Normalized().Dot(Vector3.Forward) > 0.9f,
+                $"…along its ordered course dot={disp.Normalized().Dot(Vector3.Forward):0.00}");
+            ctx.Check(Mathf.Abs(ai.WorldPosition.Y - 500f) < 80f,
+                $"…holding its ordered altitude y={ai.WorldPosition.Y:0}");
+
+            // Orders are mutable mid-flight: retarget 90° between steps, no rebuild, no respawn.
+            pilot.TargetHeadingDeg = 90f;
+            FlyAi(25f);
+            var noseDir = -ai.GlobalTransform.Basis.Z;
+            float errDeg = Mathf.Wrap(90f - AiPilot.HeadingDegOf(noseDir), -180f, 180f);
+            ctx.Check(Mathf.Abs(errDeg) < 10f,
+                $"a mid-flight retarget is flown to err={errDeg:0.0}° after 25 s");
+        }
+        finally
+        {
+            pool?.Free();
+            shooter?.Free();
+            ai?.Free();
             textures.Dispose();
         }
     }
