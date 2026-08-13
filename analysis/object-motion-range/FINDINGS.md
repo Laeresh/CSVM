@@ -1,4 +1,4 @@
-# `OBJECT_MOTION` `translation_range` is a spherical launch, not a distance
+# `OBJECT_MOTION` `translation_range` is a polar launch, not a distance
 
 `census.py` walks every compiled `ObjectMotion` event in all 8 chapters' `cam_anim` and prints each
 distinct `translation_range` shape, plus the value distributions. Run it from the repo root:
@@ -9,9 +9,16 @@ python analysis/object-motion-range/census.py
 
 ## The finding (2026-08-01)
 
-**`xz` is an AZIMUTH and `y` an ELEVATION, both in degrees; `initial` is the launch SPEED in m/s**
-(`delta` a speed ramp over the run time). The engine had read `xz`/`y` as *distances travelled over
-`run_time`* with a random azimuth, which threw debris and smoke trails hundreds of metres.
+**`xz` is an AZIMUTH and `y` an ELEVATION, both in degrees; `initial` is the launch SPEED in m/s.**
+The engine had read `xz`/`y` as *distances travelled over `run_time`* with a random azimuth, which
+threw debris and smoke trails hundreds of metres.
+
+> ⚠ **Two readings on this page were later corrected against the executable itself
+> (`docs/org/objectMotion.md`, 2026-08-11/13), and neither disturbs the finding above.**
+> (1) The elevation is **linear**, not spherical: the direction is `dirY = elevation/90` with the
+> horizontal taking `1 − |elevation|/90`, so it is deliberately not unit length and only the azimuth
+> is trigonometric. The spherical reading launched 60–70° debris 20–25 % too fast.
+> (2) `delta` is a constant **acceleration** along the launch, not a speed ramp over the run time.
 
 Measured over **1,217 events / 613 distinct shapes**:
 

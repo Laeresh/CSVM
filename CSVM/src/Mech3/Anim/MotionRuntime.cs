@@ -21,81 +21,59 @@ internal enum MotionContactTier
 /// motion cannot compound into itself. This is the reachable half of OBJECT_MOTION — thrown by a
 /// crash or a weapon hit; nothing ambient fires it.
 ///
-/// <para><b>Semantics</b> (established from <c>player_crash_dirt</c>'s pieces,
-/// <c>call_crash_trails</c> and <c>flydirt</c>; ⚠ several are TUNE, not a settled decode):
+/// <para><b>The original's own update is written up in <c>docs/org/objectMotion.md</c></b> — the
+/// function map, the flag word, both contact tiers and how they pick a surface, the landing
+/// response, the termination model and the retired readings. Read it before changing a mechanism
+/// here. What follows is only what this type does with those rules.</para>
+///
+/// <para><b>Channels.</b>
 /// <list type="bullet">
-/// <item><c>translation.initial</c> is the launch VELOCITY (a piece leaves at y=10 m/s);
-///   <c>rnd_xz</c> a per-axis random spread added to it (through the runtime's seedable
-///   <c>_rng</c>, so a lab replay is deterministic); <c>delta</c> a constant ACCELERATION added
-///   straight into the launch's own (<c>dir·delta</c>, no division by <c>run_time</c>) — 0 on
-///   every reachable piece, so its exact reading is near-invisible.</item>
+/// <item><c>translation.initial</c> is the launch VELOCITY; <c>rnd_xz</c> a per-axis random spread
+///   added to it (through the runtime's seedable <c>_rng</c>, so a lab replay is deterministic);
+///   <c>delta</c> a constant ACCELERATION along the launch, never a ramp divided by
+///   <c>run_time</c>.</item>
 /// <item><c>translation_range</c> is a launch in POLAR form, not a distance: <c>xz</c> is an
 ///   AZIMUTH and <c>y</c> an ELEVATION, both in DEGREES, and <c>initial</c> is the launch SPEED
-///   in m/s (<c>delta</c> a constant acceleration along the same direction, not a speed ramp
-///   divided by <c>run_time</c>). ⚠ The elevation is LINEAR, not
-///   spherical — <c>dirY = elev/90</c> with the horizontal taking the L1 remainder
-///   <c>1 − |elev|/90</c>, so the direction is NOT unit length (0.707 at 45°) and only the azimuth
-///   goes through a sincos. Transcribed from <c>FUN_004e8fa0</c>; see
-///   <see cref="RangeLaunchDirection"/>, which is where the whole of it lives. Measured over all 1,217 events
-///   install-wide (<c>analysis/object-motion-range/</c>): every <c>xz</c> lies in [−170, 359];
-///   every <c>y</c> but one lies in [−90, 90] and goes negative exactly where the thing falls
-///   (a balloon turret's parts at −70…−90, a helium tank blowing sideways at 1…2); and the
-///   five <c>fly_trailN</c> of one explosion carry evenly spaced <c>xz</c> bands — 35–55,
-///   85–105, 135–165, 185–205, 235–255 — i.e. a starburst around the circle. Read as distances
-///   those became a quarter-kilometre sideways throw, which is what put the trails far from
-///   their explosion and made a fan read as scatter.
-///   ⚠ Which world bearing azimuth 0 points along (+X here) is a choice, not a decode — the
-///   data fixes the trails' spacing relative to each other, not their absolute compass.</item>
+///   in m/s. The elevation is LINEAR — <c>dirY = elev/90</c>, the horizontal taking the L1
+///   remainder <c>1 − |elev|/90</c> — so the direction is deliberately NOT unit length (0.707 at
+///   45°) and only the azimuth goes through a sincos. ⚠ Do not normalise it; that is the whole
+///   finding, and it launches 60–70° debris 20–25 % too fast when undone.
+///   <see cref="RangeLaunchDirection"/> is where the whole of it lives, because
+///   <c>ProjectilePool</c>'s casing ejection shares it.
+///   ⚠ Which world bearing azimuth 0 points along (+X here) is a CHOICE, not a decode — the data
+///   fixes the trails' spacing relative to each other, not their absolute compass.</item>
 /// <item><c>gravity.value</c> (negative) accelerates the launch; folded into the constant
-///   acceleration. It is an ABSOLUTE m/s², not an offset to the aircraft's arcade
-///   <c>nom_gravity</c> of 20: the census carries a literal <b>−9.8</b> on 173 events (and −10
-///   on 400), which is Earth gravity spelled out. The weak values (−1/−2/−3) sit on smoke
-///   trails, where floating is the authored look.
+///   acceleration once. It is an ABSOLUTE m/s², not an offset to the aircraft's arcade
+///   <c>nom_gravity</c> of 20.
 ///   <para><c>gravity.complex</c> picks which of TWO forms that fold takes. The plain form drops
 ///   the value into the parent frame's Y, which is right only while that frame is world-aligned;
 ///   <c>complex</c> takes gravity as a WORLD-down vector and converts it into the frame, so a body
 ///   under a banked, pitched or inverted parent falls down the WORLD rather than down its own hull.
-///   The install authors it on aircraft wreckage alone — 254 events / 25 shapes, every one of them
-///   a body whose parent frame carries whatever attitude the aircraft died in — and the two forms
-///   agree exactly anywhere else, which is why nothing else needs it. All 254 author a
-///   <c>RUN_TIME</c>, so the converted acceleration never reaches
-///   <see cref="FlightToLaunchHeight"/>'s solve.</para>
+///   The two agree exactly under a world-aligned parent, which is why only aircraft wreckage
+///   authors it. ⚠ It does not remove gravity.</para>
 ///   <para>Contact is the DEFAULT, in one of two tiers. Every gravity-bearing ballistic body is
 ///   tested wherever the session wired a mask: <see cref="TryGroundColumn"/>, a vertical column
 ///   under the body, unless <c>do_intersections</c> upgrades it to <see cref="TryContact"/>'s
-///   trajectory sweep (166 events install-wide). <c>no_altitude</c> is the opt-out and vetoes the
-///   column only, and <c>gunshell</c> alone authors it. So the 1,466 default-combination bodies
-///   that used to sink through the world now land on it. See
-///   <c>docs/formats/destructibles.md</c>'s "Debris tumbles" bullet for the split.</para>
-///   ⚠ An event that LAUNCHES upward with no authored <c>RUN_TIME</c> (the 152 that name a bounce,
-///   plus the 167 that name neither a bounce nor a run time and end with the piece's own
-///   deactivation) still has <see cref="FlightToLaunchHeight"/> end its flight when the parabola
-///   returns to launch height. That is a CHOICE, not a decode, and now only the ceiling such a
-///   body carries, since either tier ends it earlier on real geometry. The apex is that solve's
-///   admission test, not the bounce, so a body with no apex is declined there and simply falls
-///   until it lands.</item>
-/// <item><c>forward_rotation.Time.initial</c> is a tumble RATE in rad/s (<c>delta</c> its
-///   acceleration, non-zero on 2 events install-wide), and the axis is not a mesh axis at all:
-///   the original turns the body about the HORIZONTAL PERPENDICULAR of its own launch direction,
-///   <c>(dirZ, 0, −dirX)</c>, left unnormalised so its length is the launch's own
-///   <c>h = 1 − |elev|/90</c>. A steep throw therefore tumbles slowly and a flat one fast off the
-///   same authored number. See <see cref="TumbleAxis"/>.
-///   ⚠ A body launched by the VECTOR <c>translation</c> form does not tumble AT ALL: that cache
-///   (<c>+0x70/+0x78</c>) is filled only by the <c>translation_range</c> branch, the parser zeroes
-///   the whole 0x14c-byte event struct before reading it (<c>REP STOSD</c> at <c>005085e0</c>),
-///   and the tumble multiplies straight through it. That is 495 of the install's 1,399 tumbles,
-///   the four <c>player_crash_dirt</c> pieces among them. ⚠ The <c>DISTANCE</c>
-///   parameterisation (flag <c>0x40</c>, a turn per metre travelled rather than per second) is not
-///   built: all 1,399 author <c>Time</c> and none authors <c>Distance</c>.</item>
+///   trajectory sweep. <c>no_altitude</c> is the opt-out and vetoes the column only.</para>
+///   ⚠ An event that LAUNCHES upward with no authored <c>RUN_TIME</c> still has
+///   <see cref="FlightToLaunchHeight"/> supply the duration it REPORTS, which is what the
+///   sequence's own deactivation is timed against. That is a CHOICE, not a decode, and it is no
+///   longer what ends the body — see <c>_ceiling</c>.</item>
+/// <item><c>forward_rotation.Time.initial</c> is a tumble RATE in rad/s and <c>delta</c> its
+///   acceleration; the run time never enters. The axis is not a mesh axis: the body turns about
+///   the HORIZONTAL PERPENDICULAR of its own launch direction, <c>(dirZ, 0, −dirX)</c>, left
+///   unnormalised so its length is the launch's own <c>h = 1 − |elev|/90</c> and a steep throw
+///   tumbles slowly off the same authored number. See <see cref="TumbleAxis"/>.
+///   ⚠ A body launched by the VECTOR <c>translation</c> form does not tumble AT ALL — that
+///   direction cache is filled only by the <c>translation_range</c> branch, so the rate multiplies
+///   through zero. Arithmetic, not a missing feature. ⚠ The <c>DISTANCE</c> parameterisation
+///   (a turn per metre travelled rather than per second) is not built: nothing authors it.</item>
 /// <item><c>xyz_rotation.initial</c> a steady multi-axis spin (rad/s), composed like
 ///   <see cref="SpinMotion"/>; present only on the rare spin+ballistic events.</item>
 /// <item><c>scale.initial</c> and <c>scale.delta</c> are OFFSETS from unit scale, not absolute
 ///   sizes: <c>scale = 1 + initial + delta·u</c>. Unlike <c>PoseScale</c>/<c>OBJECT_SCALE_STATE</c>,
-///   which are absolute. Settled by the install's commonest value — a bare
-///   <c>(-0.1, -0.1, -0.1)</c> with zero delta, on <b>30 of the 45 distinct SCALE events</b>
-///   (every `h2twr`/`radiotwr`/`transmitter` collapse and every `gullfly`): as an absolute that is
-///   a NEGATIVE scale, i.e. the object inside-out at a tenth of its size; as an offset it is a
-///   clean 10 % shrink, which is what the water tower collapsing actually does (user playtest).
+///   which are absolute — read as absolute, the install's commonest value is a negative scale,
+///   i.e. the object inside-out at a tenth of its size.
 ///   ⚠ The base is <c>Vector3.One</c>, and whether it should instead be the node's own authored
 ///   scale is UNDECIDED — every node carrying this channel is authored at exactly unit scale in
 ///   this install, so the two readings coincide and no capture can separate them.</item>
@@ -103,9 +81,8 @@ internal enum MotionContactTier
 ///
 /// <para>Every speed above is the AUTHORED one, and it is what flies. No global multiplier stands
 /// between the data and the launch: a piece whose data says it leaves at 10 m/s leaves at 10 m/s.
-/// A tuned one used to (0.65, judged at the controls), and it was deleted rather than re-judged
-/// once the elevation decode supplied the 0.745–0.81 it was standing in for. If an arc reads wrong
-/// from here on, the answer is a further decode or a filed item, never a scalar.</para>
+/// ⚠ If an arc reads wrong, the answer is a further decode or a filed item, never a scalar — one
+/// such scalar shipped for months and turned out to be an elevation decode error in disguise.</para>
 /// </summary>
 internal sealed class MotionRuntime : IAnimMotion
 {

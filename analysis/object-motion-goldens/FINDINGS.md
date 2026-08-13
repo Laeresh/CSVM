@@ -71,15 +71,19 @@ anim/debug: 6 live motion(s), 0 ballistic launch(es) so far    (flight/prop runt
 == 0`: the piece has neither landed nor run its clock out by capture time. Checked against the
 extracted data it actually launches from
 (`extracted/C1/cam_anim/ap_radiotwr-radiotwr_destruction-healthy.json:240-283`):
-`"do_intersections": false`, `"translation_range"` (not `"translation"`), `"run_time": 6.0`. With
-`do_intersections` false, `MotionRuntime.TestsContact` is false regardless of whether a mask is
-wired — this piece is **structurally** never contact-tested today, not merely "not yet" inside a
-2 s window. It runs its authored 6 s clock and holds its final pose, wherever that lands it.
+`"do_intersections": false`, `"translation_range"` (not `"translation"`), `"run_time": 6.0`. On the
+build this item measured, `do_intersections: false` made `MotionRuntime.TestsContact` false whatever
+mask was wired, so the piece was **structurally** never contact-tested — not merely "not yet" inside
+a 2 s window. It ran its authored 6 s clock and held its final pose, wherever that landed it.
 
-**This shot covers a `translation_range` LAUNCH. It does not cover ground contact and cannot,
-without a code change** — `do_intersections: false` takes the untouched path regardless of capture
-length (Decision 2/3's territory: this is exactly the "reachable but currently untestable" case C6
-is meant to open up, not close).
+**This shot covers a `translation_range` LAUNCH, and did not cover ground contact.** ⚠ The reason
+given here — `do_intersections: false` takes an untouched path whatever the capture length —
+stopped being true at C6: the flag is an *upgrade* to the sweep, not the switch that turns contact
+on, so this piece IS column-tested now (the session is Fly-mode, so it does build colliders). What
+keeps the shot out of the contact story is the window after all: at frame 120 the piece is 1.8 s
+into a 6 s flight and nowhere near the ground, which is why D11 pinned a longer shot rather than
+re-framing this one. The mechanism is in
+[`docs/org/objectMotion.md`](../../docs/org/objectMotion.md).
 
 ### `c1-crash` (frame 20 = 0.333 s)
 
@@ -137,13 +141,14 @@ to.
 
 ## The answer
 
-**No golden capture, today, contains a piece actually coming to rest.** Two of the thirteen
+**No golden capture, as of this item, contains a piece actually coming to rest.** Two of the thirteen
 (`c1-destroy-effects`, `c1-crash`) do launch ballistic `OBJECT_MOTION` debris inside their capture
-window — one `translation_range` launch each — but neither shows a landing: one is structurally
-untestable (`do_intersections: false`), the other is armed but its window is far too short for its
-6 s run time. This is the gap Decision 3 / D11 exists to close, and it is unresolved by this item on
-purpose — D11 pins the golden that shows debris coming to rest; A1 only establishes that none of the
-current 13 already does.
+window — one `translation_range` launch each — but neither shows a landing: on the build measured
+here one was structurally untestable (`do_intersections: false`, a gate C6 has since removed — the
+window is what actually stops it), and the other's window is far too short for its 6 s run time.
+This is the gap Decision 3 / D11 exists to close, and it is unresolved by this item on purpose.
+✅ D11 closed it: `c1-debris-rest` is a 14th shot whose landing spark puffer moves the hash when the
+contact tier is disabled.
 
 ## Pre-change baseline (2026-08-10)
 

@@ -220,7 +220,7 @@ tumble that is about to change.
 
 10. ☑ Delete `DebrisTune` entirely
 11. ☑ Pin a golden that shows debris coming to rest
-12. ☐ Rewrite the decode records that carried the disproven readings
+12. ☑ Land `docs/org/objectMotion.md`, and correct the records that carried the disproven readings
 13. ☐ Item bookkeeping: `BL-319`, `BL-245`, `PT-46` (d), and a fresh ID for the deleted tune
 
 ## Dependency and parallelism notes
@@ -1021,7 +1021,54 @@ exercises" clause, and it is **rewritten on a re-pin, never appended to**. ⚠ D
 `--det --mute` like every other shot, and a landing that depends on the seeded RNG's draw needs its
 window chosen so every draw lands, not just the median one.
 
-## D12 ☐ Land `docs/org/objectMotion.md`, and correct the records that carried the disproven readings
+## D12 ☑ Land `docs/org/objectMotion.md`, and correct the records that carried the disproven readings
+
+**Landed 2026-08-13.** `docs/org/objectMotion.md` is the decode's home, in the `puffer.md` house
+style: function map, the flag word with its parser addresses, the live slots, then behaviour and
+constants — the linear elevation and its non-unit magnitude, `delta` as an acceleration, gravity's
+two forms, both contact tiers with the column's exact surface pick, the landing response, the
+termination model and both watchdogs, the tumble and its axis. It closes with the divergence table
+and **eight retired readings**, each with its cause of death: the spherical elevation, `DebrisTune`,
+the total-angle tumble, the ÷`run_time` `delta`, "`do_intersections: false` means no test",
+"`no_altitude` is about spawn altitude", `PT-46` (d)'s mechanism (observation intact, attribution
+reversed), and "every golden builds no colliders".
+
+**Six records corrected rather than duplicated**, each keeping its own view and gaining a pointer:
+`formats/destructibles.md` (the tune bullet, the ground-rest split, the `no_altitude` paragraph, the
+`BL-245` deferral, the Wave C status line, the `sin(elevation)` vertical speed);
+`formats/anim-definitions.md` (the two `delta` readings, "spherical form", the `DO_INTERSECTIONS`
+follow-up framing, and the `FORWARD_ROTATION` bullet's inline addresses, which belong in `org/` now
+that it exists); `formats/README.md`'s `org/` index; `architecture.md`'s anim entry, which sheds the
+decode narrative it was carrying and keeps the engine-side constraints (⚠ count 6 → 5);
+`analysis/object-motion-ground-rest/FINDINGS.md` (a banner retiring its interpretation, with its
+tables left standing); `analysis/bl-257-nulled-launch/FINDINGS.md` + its `census.py`;
+`analysis/object-motion-range/FINDINGS.md` (title and a two-line correction note);
+`analysis/object-motion-goldens/FINDINGS.md`; and `analysis/object-motion-flags/FINDINGS.md`'s open
+A3 question, now answered. `MotionRuntime`'s class remark is stripped of its provenance — install
+counts, dates, plan tags, Ghidra offsets — down to what each channel is, why, and the pointer.
+
+**Verified.** Every install-wide number on the new page re-derived from `extracted/` rather than
+carried across: the four-way flag census (1,378 / 166 / 88 / 8, so 1,466 on the column), 3,066
+events / 1,983 ballistic / 1,640 gravity-bearing, 1,399 tumbles with 495 on the vector form and
+**zero** authoring `DISTANCE`, `delta` non-zero on 233 of 1,226 range and 92 of 757 vector events,
+296 untimed ballistic events **all** carrying gravity, 324 bounce blocks naming `default` and 104
+`water` with **no** lava branch, 182 `impact_force`, `gunshell` as the sole `no_altitude` carrier at
+8 events. `m_build03` part1's block re-read at source (azimuth 35–55°, elevation 60–70°, speed
+28–37, gravity −10, `RUN_TIME` 5.0), and the 0.745–0.81 magnitude band recomputed from it.
+`bl-257-nulled-launch/census.py`'s `sin(elev)` → `elev/90` fix re-run: the 159-up / 8-no-apex split
+and all eight named defs reproduce exactly, which is what makes the edit a correction rather than a
+new finding. `.\RunTests.ps1`: build clean, 949/949 units, 38/38 engine suites with engine errors
+clean, **14/14 goldens hash-identical** — a documentation item must move nothing, and it moved
+nothing. Repo grep for the disproven phrasings leaves them only inside "this was wrong, here is
+how it died" contexts, plus `backlog.md`, which is **D13's** file. Five live restatements are
+waiting there, listed so D13 does not have to re-find them: `:85` ("the spherical one"), `:105` and
+`:157` (`DebrisTune.LaunchScale` 0.65 as a settled judged look), `:2108` (`sin(elevation)·speed`)
+and `:2117` (`BL-245`'s "the original was not collision-testing them", with `PT-46` (d) cited as
+confirmation).
+
+⚠ **Not done here, deliberately:** the Ghidra addresses in `MotionRuntime`'s *member* comments. The
+convention's code-comment cleanup is what `acbb9ba` was groundwork for and it is wider than this
+plan; the class remark is what D12 scoped.
 
 **Goal.** This plan's decode has a home of its own in `docs/org/`, the corrected records point at it
 instead of restating it, and no document in the repo still teaches a reading this plan disproved —

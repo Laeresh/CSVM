@@ -120,12 +120,13 @@ not one of the building, tower, bridge or zeppelin defs.
 `complex` **without** `do_intersections` is the 88: `player` pieces 2/3/4 (gravity **−15, −15,
 −20**), both crash defs' first pieces, the lost rotor and the smoke canister.
 
-⚠ **That is the shape of the argument A3 has to answer.** `COMPLEX` is authored on the bodies whose
-fall the original cared most about, and three of those bodies ask for gravity *stronger* than
-Earth's while the update declines to apply the constant add for exactly them. "No constant gravity
-add" therefore cannot mean "no gravity" — the value is authored, deliberately, and something else
-must be reading it. Finding that path is A3's job and it is A3's stated stop condition; this census
-only fixes the population it acts on.
+⚠ **That was the shape of the argument, and it was answered: `COMPLEX` does not remove gravity, it
+transforms it.** Three of these bodies ask for gravity *stronger* than Earth's while the update
+declines the constant add for exactly them — so "no constant gravity add" could not mean "no
+gravity", and the other path is forty lines below in the same function: the world-down vector
+`(0, value, 0)` run through the node's matrix into the body's frame, which is identical to the plain
+form under a world-aligned parent and is why only wreckage authors it. Full write-up in
+[`docs/org/objectMotion.md`](../../docs/org/objectMotion.md).
 
 ## `impact_force` (bit `0x2`) — censused, filed, not built
 

@@ -1206,49 +1206,26 @@ rate, no `AnimRuntime`/`MotionSet` state, so the reach-in is inert to everything
 `MotionSet`, `EmitterDirector`,
 `NameResolver` and `TemplateStage` share the namespace but ARE independently owned — their own
 entries below.
-`MotionRuntime`'s `translation_range` is a POLAR launch — `xz` azimuth, `y` elevation, both in
-degrees, `initial` the speed (`analysis/object-motion-range/`, decoded 2026-08-01) — and a launch
-seeds from the node's authored rest pose, since a shared effect template's children are re-homed by
-nothing between calls. `RangeLaunchDirection` is that decode's ONE expression; `ProjectilePool`'s
-gun-casing ejection reads the same `gunshell` event through it (INSTR-3).
-⚠ The elevation is LINEAR, not spherical, and the direction is deliberately NOT unit length:
-`FUN_004e8fa0`'s `flags & 8` block computes `dirY = elev · 0.011111111` (1/90 written out) and gives
-the horizontal the L1 remainder `1 − |elev|/90`, so the length dips to 0.707 at 45°; only the
-AZIMUTH is converted deg→rad and passed to the sincos at `FUN_0053c6c0`. **Do not normalise it** —
-the unit-sphere reading that shipped until 2026-08-11 launched 60–70° debris 20–25 % too fast and is
-what cut `m_build03` part1 at ~70 % of its authored 5.0 s `RUN_TIME`. Which world bearing azimuth 0
-points along (+X) remains a choice, and `FUN_0053c6c0`'s output order is unchecked — the cos-on-X /
-sin-on-Z assignment is inherited, not decoded.
-`forward_rotation` rides on that same direction: `Time.initial` is a RATE in rad/s (`delta` its
-acceleration, integrated), and the axis is the launch's own horizontal perpendicular
-`(dirZ, 0, −dirX)` — `TumbleAxis`, shared with the casing ejection — left unnormalised so its length
-is the launch's `h = 1 − |elev|/90`, which is what makes a steep throw tumble slowly off the same
-authored number. The original accumulates it as an EULER triple on the node's own angles
-(`FUN_004e8fa0`'s `0x80` branch into `FUN_004d25c0`/`FUN_004d1ba0`), never as a turn about a live
-basis axis. `DISTANCE` (flag `0x40`, a turn per metre travelled) is not built — all 1,399 tumbles
-in the install author `Time`.
-⚠ A body launched by the VECTOR `translation` form does not tumble at all — 495 of those 1,399, the
-  four `player_crash_dirt` pieces among them. The direction cache is filled only by the
-  `translation_range` branch and the parser zeroes the event struct before parsing (`005085e0`), so
-  the multiply is by zero. Arithmetic, not a missing feature: the ÷`run_time`-about-local-X reading
-  that shipped until 2026-08-13 spun those pieces at ~2.6 rad/s, reported at the controls as far
-  larger than the original's.
-Its `scale` channel is an
-OFFSET from unit scale (`1 + initial + delta·u`), unlike the absolute `PoseScale`/`OBJECT_SCALE_STATE`
-— 30 of the 45 distinct SCALE events carry a bare `-0.1`, which absolute is a negative scale.
-`gravity.complex` picks between two forms of the same fold: plain drops the value into the parent
-frame's Y, `complex` converts world-down INTO that frame — identical under a world-aligned parent,
-which is why the install authors it on aircraft wreckage alone (254 events / 25 shapes, all with a
-`RUN_TIME`).
+**The original's `OBJECT_MOTION` update is written up in [org/objectMotion.md](org/objectMotion.md)**
+— the function map, the flag word, the linear elevation, `delta` as an acceleration, both contact
+tiers and how they pick a surface, the landing response, the termination model, and the retired
+readings (the spherical elevation, the ÷`run_time` tumble, `DebrisTune`, `no_altitude` as a second
+terrain test). Read it before changing a mechanism here; only what this engine adds is below.
+`MotionRuntime`'s launch seeds from the node's authored rest pose, since a shared effect template's
+children are re-homed by nothing between calls. `RangeLaunchDirection` is the launch decode's ONE
+expression and `TumbleAxis` the tumble's; `ProjectilePool`'s gun-casing ejection reads the same
+`gunshell` event through both (INSTR-3), because two spellings of the maths is how they disagree.
+⚠ Do not normalise the launch direction — its length is `1 − |elev|/90` on the horizontal with
+  `elev/90` on Y, and that non-unit length is the decode. Which world bearing azimuth 0 points along
+  (+X) remains a CHOICE, and the sincos' output order is unchecked: the cos-on-X / sin-on-Z
+  assignment is inherited, not decoded.
 Contact is the DEFAULT and comes in the original's two tiers: `TryGroundColumn`, a vertical column
 under the body, unless `do_intersections` upgrades it to `TryContact`'s trajectory sweep (166 events
 install-wide); `no_altitude` vetoes the column only, and `gunshell` alone authors it. No mask wired
 means neither tier, which is the structural fallback every lab and 9 of the 14 goldens take;
 `c1-debris-rest` is the one golden that wires a mask and reaches the column tier, a killed
 `m_build03` piece resting with its landing's own spark puffer as the pixel-level tell. Both
-end on one shared response: half a descending step clear of the surface while moving, exactly on it
-once below 0.1 horizontal / 0.5 vertical, velocity scaled by 0.2 with every sign KEPT (the original
-reflects nothing), continuing while incoming speed² covers acceleration².
+end on one shared response.
 `MotionRuntime` separates the duration it REPORTS from the ceiling that ENDS it. `RunTime` is the
 authored `RUN_TIME` or the parabola's return to launch height, and it drives the sequence's wait and
 the scale ramp's parameter (the tumble is a rate and no longer divides by it) — `BL-257`'s census (`analysis/bl-257-nulled-launch/`)
