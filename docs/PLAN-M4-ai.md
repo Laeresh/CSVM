@@ -1276,12 +1276,14 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
    the shared `PlaneCollider` boxes, per-shot owner exclusion, part-mapped damage, attributed
    kills, aircraft-only proximity fuse + blast falloff, all pinned by the `air-to-air` suite
 2. ☐ A2 — The AI actor seam: runtime spawn, a non-player `FlightModel` driver, `GameClock` wiring
-3. ◐ A3 — the AI format pages — **rosters, skills and maneuvers landed 2026-08-10**
+3. ☑ A3 — the AI format pages — **rosters, skills and maneuvers landed 2026-08-10**
    ([`formats/ai-rosters.md`](formats/ai-rosters.md)); nets already had
    [`formats/ai-nets.md`](formats/ai-nets.md), zeppelins/generators
    [`formats/mission-entities.md`](formats/mission-entities.md), and the `ai.zrd` turrets landed
-   2026-08-10 as [`formats/turrets.md`](formats/turrets.md). **Remaining: `--dump-ai`, plus a
-   check that `formats/zrdr.md`'s family index rows exist for all five families**
+   2026-08-10 as [`formats/turrets.md`](formats/turrets.md). **Closed:** `--dump-ai`
+   (`Testing/Probes.cs`) sweeps every chapter/mission dir and reproduces the plan's golden counts
+   verbatim (222 nets, 414 aiv blocks/53 files, 42 turrets, 58 zeppelins, 23 generators);
+   `formats/zrdr.md`'s family index already carried a row for all five families
 4. ☐ A4 — **Decision + design note only:** multi-zone destructibles and the kill threshold
 
 ### Wave B — Non-combat presence

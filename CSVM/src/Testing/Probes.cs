@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
 using CSVM.Flight;
@@ -33,6 +34,17 @@ public static class Probes
     private const float Mph = 0.44704f;         // m/s per mph
     private const float Ft = 0.3048f;           // m per foot
     private const float EnvDt = 1f / 60f;       // the sim step --det pins every session to
+
+    /// <summary>The eight chapter codes an AI dump walks — every one that ships its own
+    /// <c>&lt;Cx&gt;/zrdr/</c> patrol-net scope and mission dirs.</summary>
+    private static readonly string[] AiChapters = { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5" };
+
+    /// <summary>Chapter-scope directory names that are NOT mission dirs, so a plain
+    /// <see cref="Directory.EnumerateDirectories(string)"/> over a chapter folder can tell a
+    /// mission (<c>IA1</c>/<c>M0x</c>/<c>MP1-3</c>) from the chapter's own gamez/texture/zrdr/anim
+    /// scopes without a fixed mission-name table.</summary>
+    private static readonly HashSet<string> AiChapterScopeDirs =
+        new(StringComparer.OrdinalIgnoreCase) { "gamez", "texture", "cam_anim", "zrdr" };
 
     // ---- markers -----------------------------------------------------------------------------
 
@@ -390,6 +402,182 @@ public static class Probes
             ? $"mips dump: {r.Textures} texture(s), {r.Failures.Count} FAILED to build"
             : $"mips dump: {r.Textures} texture(s), {r.LevelsMatching}/{r.LevelsShipped} level(s) "
               + $"match the authored artwork ({r.LevelsInstalled} installed as authored)";
+        return r;
+    }
+
+    // ---- AI data -------------------------------------------------------------------------------
+
+    /// <summary>--dump-ai[=chapter]: a pure-data report over the five AI data families the plan
+    /// (docs/PLAN-M4-ai.md, "What the data actually ships") measured and none of the engine reads
+    /// yet — patrol nets (the one family <see cref="AiNets"/> already reads), <c>aiv</c> rosters,
+    /// <c>ai.zrd</c> turrets, zeppelins, generators. Reads every mission dir under the data root
+    /// (no optional value) or one chapter's dirs (with one), so the unfiltered totals are the
+    /// install-wide golden counts the plan cites: 222 nets, 414 aiv blocks across 53 files, 42
+    /// turret entries, 58 zeppelin records, 23 generators.
+    ///
+    /// <para>Loose parsing only, matching the traps the plan names: <c>aiv</c> blocks are read by
+    /// their actual length (never assumed 81-wide), <c>neindex</c>'s leading number is skipped
+    /// (not read as a count — <see cref="AiNets.LoadIndex"/> already does this), and net trailers
+    /// are read via <see cref="AiNets"/>'s own <c>[-1]</c> / <c>[-1,"name"]</c> / <c>[3]</c> /
+    /// <c>[nodeIndex,"name"]</c> handling rather than a second copy of it here.</para></summary>
+    public static AiDumpResult Ai(string dataRoot, string sharedZrdrPath, string chapterFilter)
+    {
+        System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
+        var r = new AiDumpResult();
+        var chapters = chapterFilter.Length == 0
+            ? AiChapters
+            : AiChapters.Where(c => c.Equals(chapterFilter, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (chapters.Length == 0)
+        {
+            r.Error = $"'{chapterFilter}' is not a known chapter. Available: {string.Join(", ", AiChapters)}";
+            r.Summary = $"ai dump: {r.Error}";
+            return r;
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"# AI data families — {dataRoot}");
+        sb.AppendLine("# nets (patrol graphs), aiv (rosters), ai.zrd (turrets), zeppelins, egen (generators)");
+        sb.AppendLine("# See docs/formats/ai-nets.md, ai-rosters.md, turrets.md, mission-entities.md.");
+        sb.AppendLine();
+
+        // Turrets: one shared, chapter-independent file — always reported in full, even under a
+        // chapter filter, since ai.zrd.json is not chapter-scoped.
+        try
+        {
+            var root = Zrdr.LoadFile(sharedZrdrPath, "ai.json");
+            // The whole reader is wrapped in one outer element, same as zeppelins/egen:
+            // [ ["TURRET", [entry0, entry1, …]] ].
+            if (root.Count == 0 || root[0] is not List<object?> alt)
+            {
+                throw new InvalidDataException("ai.json: not a one-record TURRET reader");
+            }
+            var dict = ZrdrDict.FromAlternating(alt);
+            var entries = dict.List("TURRET") ?? new List<object?>();
+            int carried = 0;
+            foreach (var e in entries)
+            {
+                if (e is List<object?> fields && ZrdrDict.FromAlternating(fields).Has("CREATE_STANDALONE"))
+                {
+                    carried++;
+                }
+            }
+            r.TurretEntries = entries.Count;
+            sb.AppendLine($"=== turrets — {sharedZrdrPath}/ai.json ===");
+            sb.AppendLine($"  {r.TurretEntries} TURRET entries "
+                + $"({carried} CREATE_STANDALONE/carried, {r.TurretEntries - carried} NODES/world emplacements)");
+            sb.AppendLine();
+        }
+        catch (Exception e)
+        {
+            r.Errors.Add($"turrets: {e.Message}");
+            sb.AppendLine($"=== turrets — FAILED: {e.Message} ===").AppendLine();
+        }
+
+        foreach (var chapter in chapters)
+        {
+            var chapterZrdr = SessionPaths.ChapterZrdr(dataRoot, chapter);
+            List<AiNet> nets;
+            try
+            {
+                nets = AiNets.Load(chapterZrdr);
+            }
+            catch (Exception e)
+            {
+                r.Errors.Add($"{chapter} nets: {e.Message}");
+                sb.AppendLine($"=== {chapter} — nets FAILED: {e.Message} ===").AppendLine();
+                continue;
+            }
+            r.NetFiles += nets.Count;
+            int nodeSum = nets.Sum(n => n.Nodes.Count);
+            int edgeSum = nets.Sum(n => n.Edges.Count);
+
+            var missions = DiscoverMissions(dataRoot, chapter);
+            int aivBlocksChapter = 0, zepChapter = 0, genChapter = 0;
+            foreach (var mission in missions)
+            {
+                var missionZrdr = SessionPaths.MissionZrdr(dataRoot, chapter, mission);
+
+                try
+                {
+                    var root = Zrdr.LoadFile(missionZrdr, "aiv.json");
+                    // Element 0 is the header (slotId/label pairs); 1..N are [name, fields] pairs.
+                    // Never assume a fixed field count — 42/65/66/67/68/81 all ship.
+                    for (int i = 1; i < root.Count; i++)
+                    {
+                        if (root[i] is List<object?> { Count: 2 } pair
+                            && pair[0] is string && pair[1] is List<object?> fields)
+                        {
+                            aivBlocksChapter++;
+                            r.AivFieldHistogram.TryGetValue(fields.Count, out int c);
+                            r.AivFieldHistogram[fields.Count] = c + 1;
+                        }
+                    }
+                    r.AivFiles++;
+                }
+                catch (IOException)
+                {
+                    // No aiv.zrd.json in this mission dir — not expected among the 53 the plan
+                    // measured, but not fatal to the rest of the report either.
+                }
+                catch (Exception e)
+                {
+                    r.Errors.Add($"{chapter}/{mission} aiv: {e.Message}");
+                }
+
+                try
+                {
+                    zepChapter += LoadRecordList(missionZrdr, "zeppelins.json").Count;
+                }
+                catch (IOException)
+                {
+                }
+                catch (Exception e)
+                {
+                    r.Errors.Add($"{chapter}/{mission} zeppelins: {e.Message}");
+                }
+
+                try
+                {
+                    genChapter += LoadRecordList(missionZrdr, "egen.json").Count;
+                }
+                catch (IOException)
+                {
+                }
+                catch (Exception e)
+                {
+                    r.Errors.Add($"{chapter}/{mission} egen: {e.Message}");
+                }
+            }
+            r.AivBlocks += aivBlocksChapter;
+            r.ZeppelinRecords += zepChapter;
+            r.GeneratorRecords += genChapter;
+            r.MissionFiles += missions.Count;
+
+            sb.AppendLine($"=== {chapter} ===");
+            sb.AppendLine($"  nets: {nets.Count} file(s), {nodeSum} node(s), {edgeSum} edge(s)");
+            sb.AppendLine($"  missions: {missions.Count} ({string.Join(", ", missions)})");
+            sb.AppendLine($"  aiv: {aivBlocksChapter} vehicle block(s)  |  "
+                + $"zeppelins: {zepChapter} record(s)  |  generators: {genChapter}");
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("=== totals ===");
+        sb.AppendLine($"  nets: {r.NetFiles} across {chapters.Length} chapter(s)");
+        sb.AppendLine($"  aiv: {r.AivBlocks} vehicle block(s) across {r.AivFiles} file(s)");
+        sb.AppendLine($"  aiv field-count histogram: {{{string.Join(", ", r.AivFieldHistogram.Select(kv => $"{kv.Key}: {kv.Value}"))}}}");
+        sb.AppendLine($"  turrets: {r.TurretEntries} entries");
+        sb.AppendLine($"  zeppelins: {r.ZeppelinRecords} record(s)");
+        sb.AppendLine($"  generators: {r.GeneratorRecords}");
+        if (r.Errors.Count > 0)
+        {
+            sb.AppendLine($"  !! {r.Errors.Count} ERROR(s): {string.Join("; ", r.Errors)}");
+        }
+
+        r.Text = sb.ToString();
+        r.Summary = r.Errors.Count == 0
+            ? $"ai dump: {r.NetFiles} net(s), {r.AivBlocks} aiv block(s)/{r.AivFiles} file(s), "
+              + $"{r.TurretEntries} turret(s), {r.ZeppelinRecords} zeppelin(s), {r.GeneratorRecords} generator(s)"
+            : $"ai dump: {r.Errors.Count} ERROR(s) — see the FAILED/!! lines above";
         return r;
     }
 
@@ -1469,6 +1657,53 @@ public static class Probes
         return r;
     }
 
+    /// <summary>Every mission dir under a chapter — <c>IA1</c>/<c>M0x</c>/<c>MP1-3</c> — sorted so
+    /// campaign missions list before multiplayer ones. Empty when the chapter is not extracted
+    /// here. See <c>analysis/m4-ai-data/aiv_skill_slots.py</c>'s <c>*/*/zrdr/aiv.zrd.json</c> glob
+    /// for the same discovery done from the shell.</summary>
+    private static List<string> DiscoverMissions(string dataRoot, string chapter)
+    {
+        var dir = Path.Combine(dataRoot, "extracted", chapter);
+        var missions = new List<string>();
+        if (!Directory.Exists(dir))
+        {
+            return missions;
+        }
+        foreach (var d in Directory.EnumerateDirectories(dir))
+        {
+            var name = Path.GetFileName(d);
+            if (AiChapterScopeDirs.Contains(name)
+                || name.StartsWith("rtexture", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            missions.Add(name);
+        }
+        missions.Sort(StringComparer.OrdinalIgnoreCase);
+        return missions;
+    }
+
+    /// <summary>A mission-scope reader file that is a list of alternating-dict records wrapped in
+    /// one outer element — the shape <c>zeppelins.zrd.json</c> and <c>egen.zrd.json</c> both use:
+    /// <c>[[record0, record1, …]]</c> when the mission carries any, bare <c>[null]</c> when it
+    /// ships none. Loosely parsed (a dump probe, not a typed reader — B7/F17/F20 own those).</summary>
+    private static List<List<object?>> LoadRecordList(string missionZrdrPath, string fileName)
+    {
+        var root = Zrdr.LoadFile(missionZrdrPath, fileName);
+        var records = new List<List<object?>>();
+        if (root.Count > 0 && root[0] is List<object?> list)
+        {
+            foreach (var entry in list)
+            {
+                if (entry is List<object?> record)
+                {
+                    records.Add(record);
+                }
+            }
+        }
+        return records;
+    }
+
     private static Basis Level() => Basis.Identity;
 
     /// <summary>Attitude with the nose <paramref name="deg"/>° above the horizon (negative = dive),
@@ -1830,6 +2065,27 @@ public static class Probes
         /// <summary>Shipped levels whose installed pixels are the authored ones.</summary>
         public int LevelsMatching;
         public bool Ok => Error == null && Failures.Count == 0 && Textures > 0;
+    }
+
+    /// <summary>The five AI data families' install-wide census: nets, <c>aiv</c> vehicle blocks
+    /// (plus their field-count histogram — never assume 81-wide), turret entries, zeppelin
+    /// records and generators. Unfiltered, these should read 222/414/42/58/23 against the retail
+    /// extraction (docs/PLAN-M4-ai.md, "What the data actually ships").</summary>
+    public sealed class AiDumpResult
+    {
+        public readonly List<string> Errors = new();
+        public readonly SortedDictionary<int, int> AivFieldHistogram = new();
+        public string Text = "";
+        public string Summary = "";
+        public string? Error;
+        public int TurretEntries;
+        public int NetFiles;
+        public int MissionFiles;
+        public int AivFiles;
+        public int AivBlocks;
+        public int ZeppelinRecords;
+        public int GeneratorRecords;
+        public bool Ok => Error == null && Errors.Count == 0 && NetFiles > 0;
     }
 
     /// <summary>Stock loadouts bound to their built models: how many bound and every binding
