@@ -2626,16 +2626,22 @@ the eye agree, so the pair came out.
   under `-Filter` reads different decimals than the full run. The suite's assertions are ratios and
   bands for that reason; do not tighten them onto a decimal.
 
-⚠ **Our blend verdict disagrees with the engine's — open, and it is what makes dark smoke paint over
-fire.** The original selects a particle's draw routine on ONE test, "does it have a `COLORS` ramp?"
-(`FUN_0054e6e0` → `FUN_0057c5c0`'s fifth argument, dispatching to `DAT_009be790` vs `DAT_009be78c`);
-the sprite's darkness plays no part. `Puffer.Create` adds `SmokeLuminance`, the luminance of the
-frame a particle dies on, which flips `fire_n_smoke` (`colors: null` — ramp-less, so additive in the
-original) onto `blend_mix`. Since each emitter is one `MultiMesh` with `depth_draw_never` and no
-per-particle sort, mixed sprites paint in instance-index order and an old near-black puff can cover
-a young bright flame. The full trace is in [org/puffer.md](org/puffer.md). ⚠ Reverting the darkness
-rule is NOT a one-liner: it was added because ramp-less near-black smoke drawn additively became
-*more glow*, and it will move puffer-bearing goldens.
+⚠ **Our blend verdict disagrees with the engine's (open in code, decoded 2026-08-13).** The original
+draws a sprite additively if and only if **bit 2 of its texture's render-flags word** is set, and
+alpha-mixes it otherwise (`FUN_005a4210`; in the sorted transparent pass `FUN_005a6160` sets only
+`DESTBLEND`). Blend is a property of the texture, so it is per particle and per flipbook frame.
+Neither the `COLORS` ramp nor the sprite's darkness plays any part. `Puffer.Create` uses
+`ramp OR diesDark ⇒ Mix, else Additive` (`SmokeLuminance`, the luminance of the frame a particle
+dies on), which is wrong in both directions. The full trace is in
+[org/textures.md](org/textures.md), with the particle side in [org/puffer.md](org/puffer.md).
+⚠ Reverting the darkness rule is NOT a one-liner, and on its own it makes things worse:
+`fire_n_smoke` dies on `fire_f06`, which is **unflagged**, so `blend_mix` is the right answer
+reached by the wrong route. Only `fire101` … `fire112` carry the flag among the puffer sprites.
+`TextureArchive` does not carry the field yet (it classifies alpha from decoded pixels), so this
+needs the raw `stretch`/render-flags u16 plumbed through first. Expect it to move puffer-bearing
+goldens. ⚠ The dark-over-fire ordering symptom is a separate delta: one `MultiMesh` per emitter with
+`depth_draw_never` and no sort paints in instance-index order, whereas the original depth-sorts its
+transparent polygons farthest-first across the whole frame.
 
 ## src/Effects/WorldWind.cs
 Two small types, one job: get the mission's authored wind to every puffer that reads it.

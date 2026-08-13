@@ -20,9 +20,10 @@ A page whose claims come from the executable **wholesale** does not live here at
 particle runtime behind [effects.md](effects.md)), [tracers.md](../org/tracers.md) (the projectile
 visual runtime behind [weapons.md](weapons.md)), [objectMotion.md](../org/objectMotion.md) (the
 launch/contact/run-time model behind the `OBJECT_MOTION` sections of
-[anim-definitions.md](anim-definitions.md) and [destructibles.md](destructibles.md)) and
+[anim-definitions.md](anim-definitions.md) and [destructibles.md](destructibles.md)),
 [aim-assist.md](../org/aim-assist.md) (the sticky-bullet gun assist behind
-[vehicle.md](vehicle.md)'s `player.json` table).
+[vehicle.md](vehicle.md)'s `player.json` table) and [textures.md](../org/textures.md) (the texture
+header layout and the additive-vs-mix blend rule behind [effects.md](effects.md)'s sprites).
 
 ## Pages
 

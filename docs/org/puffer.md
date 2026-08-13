@@ -351,30 +351,44 @@ particle of the run, so it is a maximum over ~300 draws rather than a mean, and 
 stream is seeded by how many puffers were built before it. Read the ratios and the deltas, not the
 last decimal.
 
-### ⚠ Our blend verdict disagrees with the engine's (open)
+### ⚠ Our blend verdict disagrees with the engine's (settled 2026-08-13, still open in code)
 
-Traced 2026-08-10, after the flames were reported drawing dark-smoke-over-fire. **The engine picks
-a particle's draw routine on exactly one test: does it have a `COLORS` ramp?** `FUN_0054e6e0`'s
-final call is `FUN_0057c5c0(pos, radius, texture, alpha, hasColourRamp)`, and on the hardware path
-that flag selects between two entries of the rasteriser dispatch table — `DAT_009be790`
-(`FUN_005a4b70`) with a ramp, `DAT_009be78c` (`LAB_005a4580`) without, both installed by
-`FUN_005a8c00`. In the ramp-less branch the engine also forces vertex colour to white and alpha to
-`(1 − ageFrac)`, its own life envelope.
+**The blend rule is a property of the texture, not of the particle.** A sprite is drawn additively
+if and only if bit 2 of its texture's render-flags word is set; otherwise it is alpha-mixed. The
+full decode, including the texture header layout and the additive census, is
+[`textures.md`](textures.md). `FUN_005a4210` is the explicit form: bit set gives `ONE, ONE`, bit
+clear gives `SRCALPHA, INVSRCALPHA`. In the deferred transparent pass that particles actually take,
+`FUN_005a6160` sets only `DESTBLEND`, so additive there is `SRCALPHA, ONE`.
 
-**Nothing about the sprite's darkness enters into it.** CSVM adds a second condition — the
-alpha-weighted luminance of the frame a particle dies on (`Puffer.SmokeLuminance`) — which flips
-`fire_n_smoke` (`colors: null`, so ramp-less, so additive in the original) onto `blend_mix`. Because
-each emitter is one `MultiMesh` with `depth_draw_never` and no per-particle sort, mixed sprites
-paint in instance-index order, so an old near-black puff can cover a young bright flame; drawn
-additively a black sprite adds nothing and cannot occlude. That is the reported symptom.
+**The `COLORS` ramp does not enter the blend decision.** `FUN_0054e6e0`'s final call is
+`FUN_0057c5c0(pos, radius, texture, alpha, hasColourRamp)`, and that fifth argument does select
+between two dispatch entries (`DAT_009be790` → `FUN_005a4b70` with a ramp, `DAT_009be78c` →
+`LAB_005a4580` without, installed by `FUN_005a8c00`), but the two differ only in FLAT vs GOURAUD
+shading and in whether the ramp colour survives into the vertices. Neither touches a blend register.
+The ramp-less branch also forces vertex colour to white and alpha to `(1 − ageFrac)`, the engine's
+own life envelope, which is unchanged from the earlier reading.
+
+**Nothing about the sprite's darkness enters into it either.** CSVM's `Puffer.Create` uses
+`ramp OR diesDark ⇒ Mix, else Additive`, where `diesDark` is the alpha-weighted luminance of the
+frame a particle dies on (`Puffer.SmokeLuminance`). That is wrong in both directions against the
+engine: it draws a ramp-less unflagged sprite additively where the engine mixes, and mixes a flagged
+sprite carrying a ramp where the engine adds.
 
 Our threshold is `16/255`, and the measured population separates cleanly either side of it — the
 sprites that flip are `fire_f06` at 0.018 and `thickblksmoke` at 0.004, with nothing between there
-and `fire101` at 0.12 (`exp_yel01` 0.17, `smoke101` 0.22, `fire_f01` 0.34) — so white smoke stays
-additive and only genuinely black sprites flip. A flipbook is measured on its LAST frame and a
-static `TEXTURES` pool on its mean, since a pool sprite is picked once at birth and held.
+and `fire101` at 0.12 (`exp_yel01` 0.17, `smoke101` 0.22, `fire_f01` 0.34). A flipbook is measured
+on its LAST frame and a static `TEXTURES` pool on its mean, since a pool sprite is picked once at
+birth and held.
 
-Not yet pinned: which of the two dispatch entries is additive and which is alpha-blend — that needs
-`LAB_005a4580` and `FUN_005a4b70` walked for their blend state. The darkness rule was introduced
-deliberately (a ramp-less near-black smoke drawn additively became *more glow*), so reverting it is
-a real change with a known prior symptom, not a one-line fix.
+⚠ **The reported case comes out right by accident, so the darkness rule must not be dropped on its
+own.** `fire_n_smoke` dies on `fire_f06`, which is unflagged and therefore alpha-mixed in the
+original; our rule reaches `blend_mix` for it by a different route. Removing the rule without
+implementing the texture flag would flip that emitter to additive and put the reported symptom back.
+Of the sprites above, only `fire101` … `fire112` carry the flag.
+
+⚠ **The ordering delta is ours, not the engine's.** Each of our emitters is one `MultiMesh` with
+`depth_draw_never` and no per-particle sort, so mixed sprites paint in instance-index order and an
+old near-black puff can cover a young bright flame. The original sorts its transparent polygons
+farthest-first across the whole frame (`FUN_005a6160` → `FUN_005a5fa0`, key proportional to
+distance, comparator `LAB_005a5f00`), so it has no such exposure. See
+[`textures.md`](textures.md), "The transparent list is depth-sorted".

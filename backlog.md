@@ -1765,35 +1765,47 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   C3's own `spew_puffer`/`volcanosmoke`, and the near cull is what stops a camera flying through an
   emitter from filling the screen.
 
-- `BL-335` `[Fidelity]` **Our puffer blend verdict reads the sprite's darkness; the original reads
-  only the `COLORS` ramp — which is why dark smoke paints over fire.** Reported at the controls
-  2026-08-10 (the refuel-tank flames) and traced the same day; the decode is in
-  [`docs/org/puffer.md`](docs/org/puffer.md) ("Our blend verdict disagrees with the engine's").
-  **The engine's rule, whole:** `FUN_0054e6e0` ends in
-  `FUN_0057c5c0(pos, radius, texture, alpha, hasColourRamp)`, and on the hardware path that fifth
-  argument picks between two rasteriser dispatch entries — `DAT_009be790` (`FUN_005a4b70`) when the
-  particle has a ramp, `DAT_009be78c` (`LAB_005a4580`) when it does not, both installed by
-  `FUN_005a8c00`. The ramp-less branch also forces vertex colour to white and alpha to
-  `(1 − ageFrac)`, the engine's own life envelope. **Nothing about the texture enters the choice.**
+- `BL-335` `[Fidelity]` **Our puffer blend verdict reads the sprite's darkness; the original reads a
+  flag in the texture's own header.** Reported at the controls 2026-08-10 (the refuel-tank flames),
+  traced the same day and **fully decoded 2026-08-13**. The decode is
+  [`docs/org/textures.md`](docs/org/textures.md), with the particle side in
+  [`docs/org/puffer.md`](docs/org/puffer.md).
+  **The engine's rule, whole:** a sprite is drawn **additively if and only if bit 2 (`0x04`) of its
+  texture's render-flags word is set**, and alpha-mixed otherwise. That word is the u16 at offset
+  `0x0E` of the 16-byte texture header, landing at `+0x0c` of the image object (`FUN_0052f7f0`).
+  `FUN_005a4210` is the explicit form: set gives `SRCBLEND/DESTBLEND = ONE, ONE`; clear gives
+  `SRCALPHA, INVSRCALPHA`. Particle quads take the deferred transparent list instead, where
+  `FUN_005a6160` sets only `DESTBLEND` from the same bit, so additive there is `SRCALPHA, ONE`.
+  Blend is therefore a property of the **texture**, so it is per particle and per flipbook frame.
+  **Neither the `COLORS` ramp nor the sprite's darkness plays any part.** The ramp does pick between
+  two dispatch entries (`DAT_009be790` → `FUN_005a4b70`, `DAT_009be78c` → `LAB_005a4580`, installed
+  by `FUN_005a8c00`), but they differ only in FLAT vs GOURAUD shading and in whether the ramp colour
+  survives into the vertices; neither touches a blend register.
   **Ours** (`Puffer.Create`) is `ramp OR diesDark ⇒ Mix, else Additive`, where `diesDark` is
-  `SmokeLuminance` measured off the frame a particle dies on. `fire_n_smoke` authors `colors: null`
-  and dies on `fire_f06` (0.018), so we put on `blend_mix` an emitter the original draws ramp-less.
-  **Why it is visible:** one `MultiMesh` per emitter, `depth_draw_never`, no per-particle sort — so
-  mixed sprites paint in instance-index order and an old near-black puff can cover a young bright
-  flame. Additively a black sprite adds nothing and cannot occlude anything, so the original has no
-  such ordering artefact to solve.
-  ⚠ **Not a one-line revert.** The darkness rule was added deliberately: ramp-less near-black smoke
-  drawn additively read as *more glow*, which is the bug it fixed. Dropping it puts that back unless
-  the ramp-less branch's own `(1 − ageFrac)` white-modulated envelope — which we approximate with a
-  different curve in `FadeFor` — turns out to be what made it acceptable in the original.
-  ⚠ **Not yet pinned:** WHICH dispatch entry is additive and which is alpha-blend. `LAB_005a4580`
-  and `FUN_005a4b70` need walking for their blend state before anything is changed on this — the
-  reading above is from the branch structure and the white/`(1 − ageFrac)` handling, not from the
-  blend registers themselves. Settle that first; it is the difference between a fidelity fix and an
-  inverted one.
+  `SmokeLuminance` measured off the frame a particle dies on. That is wrong in both directions: it
+  draws a ramp-less unflagged sprite additively where the engine mixes, and mixes a flagged sprite
+  carrying a ramp where the engine adds.
+  **The census, install-wide:** 31 of C1's 881 textures carry the bit (26 of C3's 732), and they are
+  exactly the emissive elements: `fire101` … `fire112`, the lens flares, the impact rings and the
+  HUD hilites/indicators. Of the puffer sprites, **only `fire101` … `fire112` are additive**;
+  `fire_f01`, `fire_f02`, `fire_f06`, `smoke101/102/103`, `exp_yel01` and `thickblksmoke` are all
+  alpha-mixed.
+  ⚠ **Do not just delete the darkness rule. On its own it makes the reported case worse.**
+  `fire_n_smoke` authors `colors: null` and dies on `fire_f06`, which is **unflagged**, so
+  `blend_mix` is the correct answer that our rule happens to reach by the wrong route. Removing it
+  without implementing the texture flag flips that emitter to additive and puts the symptom back.
+  ⚠ **`TextureArchive` does not carry the field.** It classifies alpha from the decoded pixels and
+  never sees the header word, so the raw value (`texture_infos[].stretch` in each chapter's
+  `texture/manifest.json`) has to be plumbed through before the rule can be applied. See
+  [`docs/org/textures.md`](docs/org/textures.md)'s "Suggested extractor changes" for the field name.
   ⚠ Expect this to move every puffer-bearing golden (the seven listed in `docs/architecture.md`'s
-  `SizeScaleDefault` note). Sorting particles by depth inside the emitter is a *different*,
-  additional change and is NOT what the original does — it draws its list in order too.
+  `SizeScaleDefault` note).
+  ⚠ **Correction to the earlier entry: the original DOES depth-sort.** `FUN_005a6160` fills an index
+  array, `FUN_005a5fa0` sorts it by a per-polygon key proportional to distance (`LAB_005a5f00`
+  returns `key[b] − key[a]`, so farthest first), and only then does it draw. The sort is across the
+  whole frame's transparent polygons, not within one emitter. Our one `MultiMesh` per emitter with
+  `depth_draw_never` and no sort is a **separate delta** from the blend rule, and it is the one that
+  actually produces dark-over-fire. Fixing blend alone will not close the reported symptom.
 
 - `BL-336` `[Fidelity]` **An unauthored puffer `TIME_INTERVAL` is `1.0` s in the original; both our
   parsers invent `0.1`.** Decoded 2026-08-10 while closing `PLAN-puffer-engine-deltas` C9: the
