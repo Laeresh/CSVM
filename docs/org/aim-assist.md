@@ -281,11 +281,11 @@ implementation. Deltas worth naming up front:
 | | Original | CSVM today |
 |---|---|---|
 | When it runs | at spawn, per round | n/a |
-| Target set | vehicles + turrets + `MStruct` targets + **live proximity-fused ordnance**, cone- and range-gated, team-filtered | n/a |
-| Selection | most-aligned intercept (`dist_factor` off) | n/a |
+| Target set | vehicles + turrets + `MStruct` targets + **live proximity-fused ordnance**, cone- and range-gated, team-filtered | built (B4, 2026-08-13) — `AimAssist.Scan` over an `AimCandidateSet`'s four lists. Vehicles and ordnance (`ProjectilePool.CollectFusedOrdnance`) have real contents; turrets iterate nothing until M4; `MStruct` is approximated by `DestructibleRegistry`. No fire call feeds it yet (B5) |
+| Selection | most-aligned intercept (`dist_factor` off) | built (B4) — same score, on the shipped `dist_factor 0.0` now parsed into `PlaneStats.StickyBulletDistFactor` |
 | Lead | full constant-velocity intercept on **relative** velocity | built (B3, 2026-08-13) — `AimAssist.TryIntercept`; not yet fed a real target (B4) or driving a fired round (B5) |
 | Smoothing | slerp in **plane-local** space, ~0.2 s, snaps past 200 ms frames | built (B2, 2026-08-13) — `AimAssist.Tick`; not yet driving a fired round (B5) |
 | Forget | resets on time since **last shot**, not since lock loss | built (B2) — same caveat: the timer runs, but nothing restamps it on a shot until B5 |
 | Scatter | 1° cone, polar angle uniform in `[0, θ]` | none — the wrong `CANNON_SPREAD` scatter was removed (A1, 2026-08-13); the 1° `inaccuracy` cone this row describes is still unbuilt, landing with B5 |
-| Cone gate | `CANNON_SPREAD` half-angle, per-target `+0x50` override | n/a |
+| Cone gate | `CANNON_SPREAD` half-angle, per-target `+0x50` override | built (B4) — `AimAssist.WeaponConeCos`/`ConeCosFor`, the override branch included even though nothing ships a value |
 | Multiplayer | shooter-authoritative; the assisted vector is transmitted | n/a |

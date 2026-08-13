@@ -32,6 +32,10 @@ public sealed partial class ProjectilePool : Node3D
     /// It matches no player, so such a round can still warn every aircraft it passes.</summary>
     public const int NoShooter = -1;
 
+    /// <summary>Launch speed for a def carrying no <c>VELOCITY</c>, m/s. Shared with the aim
+    /// assist's scan so the lead it solves is solved for the speed the round actually leaves at.</summary>
+    public const float DefaultVelocity = 500f;
+
     /// <summary>Where a hit's damage goes: given the struck collider and the weapon's
     /// <c>HEALTH_DAMAGE</c>, apply it to the destructible that collider belongs to. Wired to
     /// <c>AnimRuntime.DamageAt</c> in flight; null when there is no destructible system (the static
@@ -472,6 +476,25 @@ public sealed partial class ProjectilePool : Node3D
     /// <see cref="AircraftBody.PlayerIndex"/> is matched against each round's shooter id).</summary>
     public void RegisterAircraft(AircraftBody body) => _aircraft.Add(body);
 
+    /// <summary>Appends this pool's live proximity-fused rounds to the gun assist's candidate set
+    /// (`BL-342` B4) — the original's fourth candidate list, which is a FILTER over the rounds in
+    /// flight rather than a structure of its own: the engine registers a tracking record after every
+    /// spawn whose def carries a fuse longer than <see cref="AimAssist.MinFuseDistance"/>. A round
+    /// nobody owns lands on <see cref="AimAssist.NeutralTeam"/> and is therefore rejected by the
+    /// scorer's team gate, same as the engine's own "either side is 0" rule.</summary>
+    public void CollectFusedOrdnance(AimCandidateSet into)
+    {
+        for (int i = 0; i < _proj.Length; i++)
+        {
+            ref var p = ref _proj[i];
+            if (!p.Alive || p.Weapon.DetonationDistance is not > AimAssist.MinFuseDistance)
+            {
+                continue;
+            }
+            into.AddOrdnance(p.Pos, p.Vel, AimAssist.TeamOfPilot(p.Shooter), source: null);
+        }
+    }
+
     public override void _Ready()
     {
         // Tracers are velocity-aligned streaks (NOT billboarded — billboard would collapse the
@@ -532,7 +555,7 @@ public sealed partial class ProjectilePool : Node3D
         if (weapon.Fire?.Sound is { } fireSnd)
             PlaySound(fireSnd);
         var forward = -muzzle.Basis.Z.Normalized();
-        float speed = weapon.Velocity ?? 500f;
+        float speed = weapon.Velocity ?? DefaultVelocity;
         float accel = weapon.Acceleration ?? 0f;
         // Rockets only: scale launch velocity and acceleration by the same dev factor. Guns stay
         // byte-identical (the impact reticle reads weapon.Velocity separately), and default 1.0

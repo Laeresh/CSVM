@@ -78,7 +78,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/Loadout.cs` — `stock_loadouts.json` reader + `Bind` to a built plane: gun groups + hardpoints, markers→muzzle nodes; `--dump-loadout`.
 - `src/Flight/WeaponBench.cs` — the world-less 48-weapon mount-and-fire pass check behind `--weapon-test` and `weapons-fire`; fires the whole `ForRig` rig, no lab node involved.
 - `src/Flight/FireControl.cs` — the engine-free fire-control state machine (BL-295): trigger edges, fire clocks, ammo draw-down, both selectors, dry cues; `FlightController` performs its `FireOutcome`.
-- `src/Flight/AimAssist.cs` — the gun aim assist (`BL-342`): `GunAimSlot`'s plane-local per-muzzle state and the engine-free forget + catch-up pass (B2), plus the constant-velocity intercept solver (B3); B4 adds the candidate scorer.
+- `src/Flight/AimAssist.cs` — the gun aim assist (`BL-342`): `GunAimSlot`'s plane-local per-muzzle state and the engine-free forget + catch-up pass (B2), the constant-velocity intercept solver (B3), and the four-list candidate scan with its rejection gates and scorer (B4).
 - `src/Flight/WeaponCursor.cs` — `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
 - `src/Flight/Ballistics.cs` — the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
@@ -1645,8 +1645,9 @@ every pilot unconditionally today because every pilot in CSVM is human (Decision
   and guards it the same way). `Tick` falls back to a normalized lerp near-parallel and snaps
   outright near-opposite; do not replace that branch with a bare `Slerp` call.
 ⚠ `PlaneStats.StickyBulletCatchupRate`/`StickyBulletForgetInterval` are the two of the four
-  `sticky_bullet_*` keys B2 consumes (shipped 5.0 / 1.5); `Inaccuracy`/`DistFactor` are B4/B5's and
-  are not parsed yet — do not add them here ahead of the items that use them.
+  `sticky_bullet_*` keys B2 consumes (shipped 5.0 / 1.5); `StickyBulletDistFactor` (shipped 0.0) is
+  B4's, and `Inaccuracy` is B5's and is not parsed yet — do not add it here ahead of the item that
+  uses it.
 
 `AimAssist.TryIntercept` (B3, `FUN_00460e30`) is the constant-velocity intercept solver: given a
 muzzle position, the round's speed, a target position, and the target's velocity RELATIVE to the
@@ -1667,6 +1668,39 @@ dead-ahead/crossing/receding cases.
 ⚠ The original's square root is a bit-trick approximation (`(x>>1)+0x1fc00000`), accurate to roughly
   a per cent — `TryIntercept` uses a real `Mathf.Sqrt`. Do not reproduce the approximation, and do
   not read a sub-per-cent disagreement with a hand-computed reference as a bug in either.
+
+`AimAssist.Scan` (B4, `FUN_004b6530`'s scan half) picks the target the original would pick, or none.
+It takes an `AimScan` context (world muzzle, shooter velocity + team, the plane's forward axis, the
+weapon's speed/`RANGE²`/cone cosine, `dist_factor`) and an `AimCandidateSet`, and returns the
+highest-scoring survivor as an `AimScanResult` (which list it came from, the intercept direction,
+time of flight, score, and the candidate's `Source` object). One scorer runs over all four of the
+original's lists in its order — the engine ships four byte-identical scorers differing only in the
+container accessor. Gates, in the engine's order: the shooter itself (matched by reference against
+`AimScan.Self`), a candidate that is not live (the vtable `+0x14` predicate), same team **or either
+side unaffiliated**, no intercept, `speed²·t² > RANGE²`, outside the acceptance cone
+(`AimAssist.WeaponConeCos` = `cos(CANNON_SPREAD°)`, or the candidate's own `+0x50` half-angle in
+radians via `ConeCosFor`). Survivors rank by `alignment − distance × dist_factor`. All world-space:
+B5 rotates the winner world→local into the slot's target field. Proven in the `aim-assist` suite,
+every gate with its able-to-fail baseline.
+`AimCandidateSet` keeps the four lists **separately** and deliberately: `Vehicles` (the live
+`FlightController`s), `Turrets` (**empty until M4** — the pass exists and iterates nothing, so
+wiring turrets in is an `AddTurret` call and not a rediscovery of this item), `Structures`
+(`AddStructures(DestructibleRegistry)` — an **approximation** of the original's `targets.zrd`
+`MStructList`, recorded as one; `MissionTargets` is not the analogue, it holds objective display
+strings and nothing damageable) and `Ordnance` (`ProjectilePool.CollectFusedOrdnance` — a FILTER
+over the rounds in flight, `DetonationDistance > AimAssist.MinFuseDistance`, not a structure of its
+own).
+⚠ **CSVM has no team model at all**, and the engine's team gate needs one, so `AimAssist` supplies
+  the convention: `TeamOfPilot` = `PlayerIndex + 1` (every pane hostile to every other, which is
+  what `--vs` is), `NeutralTeam` 0 for a round nobody owns, `WorldTeam` for the destructibles. Team
+  0 on EITHER side rejects the pair — it is "never a target", not a wildcard.
+⚠ `dist_factor` **ships at 0.0**, which deletes the distance term outright: selection is purely
+  most-aligned, and a distant on-axis target beats a near off-axis one at any range inside `RANGE`.
+  The executable's compiled default is `2.5e-4`; "restoring" it during tuning re-enables something
+  the shipped data turns off. The suite pins both, and shows the winner flipping between them.
+⚠ Scoping the candidate set to aircraft is a silent behaviour change, not a simplification: guns
+  snap onto a live proximity-fused round by design (the engine's own priority query ranks that list
+  above the other three), which is why the ordnance filter is here and not deferred.
 
 ## src/Flight/WeaponCursor.cs
 `FireControl`'s internal ammo-slot index math (an `internal` class — nothing else may call it):
@@ -1781,9 +1815,15 @@ never in the CC-BY `docs/formats/` tree.
 
 **Rounds leave the muzzle along the nose axis — the original's don't.** The retail engine runs a
 per-muzzle gun aim assist at spawn time (target scan → constant-velocity intercept → plane-local
-smoothing → scatter cone), decoded in [org/aim-assist.md](org/aim-assist.md) and unbuilt here
-(`BL-342`). ⚠ It is a **launch-direction** assist: nothing steers a round in flight, so it belongs
-at the fire call, not in this file's integrator.
+smoothing → scatter cone), decoded in [org/aim-assist.md](org/aim-assist.md) and built in
+`AimAssist.cs` (`BL-342`); `Spawn` is not wired to it yet (B5). ⚠ It is a **launch-direction**
+assist: nothing steers a round in flight, so it belongs at the fire call, not in this file's
+integrator.
+`CollectFusedOrdnance(AimCandidateSet)` is this file's one contribution to it: the assist's fourth
+candidate list is a FILTER over the live pool (every round whose def carries a proximity fuse longer
+than `AimAssist.MinFuseDistance`), so the guns can snap onto an incoming rocket the way the
+original's do. `DefaultVelocity` (500 m/s, the launch speed for a def with no `VELOCITY`) is shared
+with the scan so the lead it solves is solved for the speed the round actually leaves at.
 
 `ProjectilePool` — the shared-world weapon-fire subsystem: a fixed pool of projectiles integrated
 with `Ballistics` (VELOCITY/ACCELERATION/GRAVITY, expiring at RANGE), plus tracer streaks,
@@ -1988,7 +2028,8 @@ maths.
 Typed per-plane stats: vehicle.json `dynamics` (resolved through the `kind_of` def chain) +
 engines.json stock engine power + player.json globals (the flight constants, the near-miss cue's
 `warning_shot_*` block, the gun aim assist's `sticky_bullet_catchup_rate`/`_forget_interval`
-(`AimAssist.cs`'s B2 — `_inaccuracy`/`_dist_factor` are not parsed yet), plus the decoded model's
+(`AimAssist.cs`'s B2) and `_dist_factor` (B4's scoring — `_inaccuracy` is B5's and is not parsed
+yet), plus the decoded model's
 lift/AoA/G, turn/yaw-curve, pitch-fade and drag-fade-speed globals — docs/org/flightModel.md; converted
 exactly as the original does: MPH×0.44704, AoA/liftAOAs cosined, highGs/lowGs raw G — and as yet
 unread by FlightModel.cs), the `engine_sound` def name with its

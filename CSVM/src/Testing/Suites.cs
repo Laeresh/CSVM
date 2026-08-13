@@ -25,6 +25,13 @@ public static class Suites
     private const int PlayerAirframes = 11;
     private const int WeaponDefCount = 48;
 
+    // B4's scan fixture (aim-assist): a shooter at the origin on player 0's team, nose down world
+    // -Z, firing a 500 m/s round with a 1000 m RANGE through the stock guns' 6° cone. Every gate
+    // case moves ONE thing off this baseline, so a rejection can only be the gate under test.
+    private const float ScanSpeed = 500f;
+    private const float ScanRange = 1000f;
+    private const float ScanConeDeg = 6f; // the shipped CANNON_SPREAD, asserted in AimAssistShippedData
+
     /// <summary>The fixed step <c>ordnance-burst-timeline</c> drives its three bursts at.
     /// Deliberately FOUR TIMES finer than <see cref="SequenceRunner.AnimFrame"/>: the authored gaps
     /// under test go down to 0.01 s, which one 1/60 s step cannot resolve at all, and nothing in
@@ -123,8 +130,11 @@ public static class Suites
         into.Add(new TestHarness.Suite("aim-assist",
             "the gun aim assist's per-muzzle slot (B2): a ~0.2 s catch-up time constant that snaps "
             + "outright past 1/catchup_rate, and a forget timer keyed to the last SHOT, not to losing "
-            + "a lock; plus the shipped sticky_bullet_* values player.json actually carries and B3's "
-            + "constant-velocity intercept solver (dead-ahead, crossing, and outrun-with-no-solution)",
+            + "a lock; plus the shipped sticky_bullet_* values player.json actually carries, B3's "
+            + "constant-velocity intercept solver (dead-ahead, crossing, and outrun-with-no-solution) "
+            + "and B4's candidate scan — every rejection gate proved able to fail, the most-aligned "
+            + "selection the shipped dist_factor 0.0 produces, and a real fused round in a live pool "
+            + "outranking the aircraft behind it",
             AimAssistSuite));
         into.Add(new TestHarness.Suite("loadout-forrig",
             "Loadout.ForRig covers every firepoint/pylon on all 11 airframes, seeded from stock", LoadoutForRig));
@@ -1694,16 +1704,21 @@ public static class Suites
         }
     }
 
-    /// <summary>B2's per-muzzle slot state (the forget + catch-up pass) and B3's intercept solver,
-    /// both in isolation — no plane, no pool, <see cref="AimAssist"/> is engine-free by design —
-    /// plus a golden check that the two player.json keys B2 consumes parse at their documented
-    /// shipped values (docs/PLAN-sticky-bullets.md "What the data actually ships").</summary>
+    /// <summary>B2's per-muzzle slot state (the forget + catch-up pass), B3's intercept solver and
+    /// B4's candidate scan, the first three in isolation — no plane, no pool,
+    /// <see cref="AimAssist"/> is engine-free by design — plus a golden check that the player.json
+    /// and weapons.json values the assist consumes parse at their documented shipped figures
+    /// (docs/PLAN-sticky-bullets.md "What the data actually ships"). B4's ordnance list is the one
+    /// case that needs a live pool, since the list IS a filter over the rounds in flight.</summary>
     private static void AimAssistSuite(TestContext ctx)
     {
         AimAssistCatchup(ctx);
         AimAssistForgetTimer(ctx);
         AimAssistShippedData(ctx);
         AimAssistIntercept(ctx);
+        AimAssistScanGates(ctx);
+        AimAssistSelection(ctx);
+        AimAssistOrdnancePriority(ctx);
     }
 
     /// <summary>The catch-up slerp: a ~0.2 s time constant at the shipped catchup_rate (5.0), full
@@ -1817,8 +1832,11 @@ public static class Suites
             $"aim-assist forget: continuous fire never lets the target unwind");
     }
 
-    /// <summary>Golden check: the two keys B2 consumes parse off the real player.json at their
-    /// documented shipped values, not just their compiled-in defaults.</summary>
+    /// <summary>Golden check: the keys B2/B4 consume parse off the real player.json and
+    /// weapons.json at their documented shipped values, not just their compiled-in defaults. The
+    /// dist_factor one matters most — it ships at 0.0 where the executable's compiled fallback is
+    /// 2.5e-4, so a reader that quietly failed to find the key would restore a distance term the
+    /// shipped data deliberately turns off.</summary>
     private static void AimAssistShippedData(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -1827,6 +1845,17 @@ public static class Suites
             $"sticky_bullet_catchup_rate parses as the shipped 5.0");
         ctx.Check(Mathf.IsEqualApprox(1.5f, stats.StickyBulletForgetInterval),
             $"sticky_bullet_forget_interval parses as the shipped 1.5");
+        ctx.Check(stats.StickyBulletDistFactor == 0f,
+            $"sticky_bullet_dist_factor parses as the shipped 0.0 (compiled default 2.5e-4), so selection is purely most-aligned");
+
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var gun = weapons.All.FirstOrDefault(w => w.IsGun && w.CannonSpread is > 0f);
+        ctx.Check(gun != null, $"a gun ships CANNON_SPREAD — the assist's acceptance cone (BL-342 A1)");
+        if (gun != null)
+        {
+            ctx.Check(Mathf.IsEqualApprox(6.0f, gun.CannonSpread!.Value),
+                $"{gun.Id} ships CANNON_SPREAD 6.0, a 6° cone half-angle: cos={AimAssist.WeaponConeCos(gun):0.000000}");
+        }
     }
 
     /// <summary>B3's constant-velocity intercept solver (<see cref="AimAssist.TryIntercept"/>): a
@@ -1869,6 +1898,188 @@ public static class Suites
         var recedingRelVel = new Vector3(0f, 0f, -500f); // outruns the 300 m/s round in a straight line
         hit = AimAssist.TryIntercept(muzzle, speed, recedingPos, recedingRelVel, out _, out _);
         ctx.Check(!hit, $"aim-assist intercept: a target outrunning the round has no solution");
+    }
+
+    // The B4 scan fixture's baseline context — see the ScanSpeed/ScanRange/ScanConeDeg constants.
+    private static AimScan MakeScan(float distFactor = 0f, object? self = null) => new()
+    {
+        MuzzlePosition = Vector3.Zero,
+        ShooterVelocity = Vector3.Zero,
+        Forward = Vector3.Forward,
+        Team = AimAssist.TeamOfPilot(0),
+        Speed = ScanSpeed,
+        RangeSquared = ScanRange * ScanRange,
+        ConeCos = Mathf.Cos(Mathf.DegToRad(ScanConeDeg)),
+        DistFactor = distFactor,
+        Self = self,
+    };
+
+    // A point `range` metres out, `offAxisDeg` off the shooter's nose in the XZ plane.
+    private static Vector3 ScanPoint(float range, float offAxisDeg)
+    {
+        float a = Mathf.DegToRad(offAxisDeg);
+        return new Vector3(Mathf.Sin(a), 0f, -Mathf.Cos(a)) * range;
+    }
+
+    /// <summary>B4's rejection gates, each proved able to fail: the same candidate that is accepted
+    /// on the baseline is rejected when exactly one thing changes. Covers the engine's order —
+    /// self, not live, same team (and either side unaffiliated), out of RANGE, outside the cone —
+    /// plus the per-target <c>+0x50</c> cone override, which nothing ships but which is ported
+    /// deliberately (Decision 2), and the turret pass, which exists and iterates nothing until M4
+    /// puts a list in it.</summary>
+    private static void AimAssistScanGates(TestContext ctx)
+    {
+        int enemy = AimAssist.TeamOfPilot(1);
+        var deadAhead = ScanPoint(300f, 0f);
+        var set = new AimCandidateSet();
+
+        void Only(int team, bool live, Vector3 at, object? source = null,
+            float cone = AimAssist.NoConeOverride)
+        {
+            set.Clear();
+            set.AddVehicle(at, Vector3.Zero, team, live, source, cone);
+        }
+
+        Only(enemy, live: true, deadAhead);
+        var scan = MakeScan();
+        ctx.Check(AimAssist.Scan(scan, set, out var best) && best.Kind == AimTargetKind.Vehicle,
+            $"aim-assist scan: baseline — a live enemy 300 m dead ahead is accepted");
+        ctx.Check(best.Direction.IsEqualApprox(Vector3.Forward),
+            $"aim-assist scan: a stationary target dead ahead scores on the plain nose direction");
+
+        Only(AimAssist.TeamOfPilot(0), live: true, deadAhead);
+        ctx.Check(!AimAssist.Scan(scan, set, out _), $"aim-assist scan: a SAME-team target is rejected");
+
+        Only(AimAssist.NeutralTeam, live: true, deadAhead);
+        ctx.Check(!AimAssist.Scan(scan, set, out _),
+            $"aim-assist scan: an unaffiliated (team 0) target is rejected — 0 is not a wildcard");
+
+        Only(enemy, live: true, deadAhead);
+        var neutralShooter = MakeScan();
+        neutralShooter.Team = AimAssist.NeutralTeam;
+        ctx.Check(!AimAssist.Scan(neutralShooter, set, out _),
+            $"aim-assist scan: an unaffiliated SHOOTER snaps onto nothing — either side being 0 rejects the pair");
+
+        Only(enemy, live: false, deadAhead);
+        ctx.Check(!AimAssist.Scan(scan, set, out _),
+            $"aim-assist scan: a dead / not-yet-live target is rejected (the vtable +0x14 predicate)");
+
+        var self = new object();
+        Only(enemy, live: true, deadAhead, source: self);
+        ctx.Check(!AimAssist.Scan(MakeScan(self: self), set, out _),
+            $"aim-assist scan: the shooter never snaps onto itself");
+
+        Only(enemy, live: true, ScanPoint(ScanRange - 100f, 0f));
+        ctx.Check(AimAssist.Scan(scan, set, out _),
+            $"aim-assist scan: a target just inside RANGE ({ScanRange - 100f:0} m of {ScanRange:0} m) is accepted");
+        Only(enemy, live: true, ScanPoint(ScanRange + 100f, 0f));
+        ctx.Check(!AimAssist.Scan(scan, set, out _),
+            $"aim-assist scan: a target beyond RANGE ({ScanRange + 100f:0} m) is rejected");
+
+        Only(enemy, live: true, ScanPoint(300f, ScanConeDeg - 0.5f));
+        ctx.Check(AimAssist.Scan(scan, set, out _),
+            $"aim-assist scan: {ScanConeDeg - 0.5f:0.0}° off-axis, just INSIDE the {ScanConeDeg:0}° cone, is accepted");
+        Only(enemy, live: true, ScanPoint(300f, ScanConeDeg + 0.5f));
+        ctx.Check(!AimAssist.Scan(scan, set, out _),
+            $"aim-assist scan: {ScanConeDeg + 0.5f:0.0}° off-axis, just OUTSIDE it, is rejected");
+
+        // The per-target override: the same off-cone geometry, accepted because the candidate
+        // advertises a wider cone of its own (a half-angle in RADIANS, unlike the weapon's degrees).
+        Only(enemy, live: true, ScanPoint(300f, ScanConeDeg + 0.5f), cone: Mathf.DegToRad(20f));
+        ctx.Check(AimAssist.Scan(scan, set, out _),
+            $"aim-assist scan: a target advertising a 20° cone (+0x50) is accepted where the weapon's {ScanConeDeg:0}° rejected it");
+
+        // The turret pass: nothing in CSVM fills this list until M4, so the check that matters is
+        // that the pass is wired — a turret put in it can win, and no code change is owed.
+        set.Clear();
+        set.AddTurret(deadAhead, Vector3.Zero, enemy, live: true, source: null);
+        ctx.Check(AimAssist.Scan(scan, set, out best) && best.Kind == AimTargetKind.Turret,
+            $"aim-assist scan: the turret pass exists and scores — M4 wires a list in, it does not re-derive this");
+    }
+
+    /// <summary>Selection among survivors, on the shipped <c>dist_factor 0.0</c>: a distant
+    /// on-axis target outranks a near off-axis one at any range inside RANGE, because the distance
+    /// term is deleted outright. The contrast case runs the identical geometry at the executable's
+    /// compiled 2.5e-4 default and shows the winner FLIPS — so this is a measurement of the shipped
+    /// value, not of the arithmetic being insensitive to it.</summary>
+    private static void AimAssistSelection(TestContext ctx)
+    {
+        int enemy = AimAssist.TeamOfPilot(1);
+        var far = new object();
+        var near = new object();
+        var set = new AimCandidateSet();
+        set.AddVehicle(ScanPoint(900f, 0f), Vector3.Zero, enemy, live: true, far);
+        set.AddVehicle(ScanPoint(100f, 5f), Vector3.Zero, enemy, live: true, near);
+
+        ctx.Check(AimAssist.Scan(MakeScan(), set, out var best) && ReferenceEquals(best.Source, far),
+            $"aim-assist selection: at the shipped dist_factor 0.0 a 900 m on-axis target beats a 100 m 5°-off one");
+        ctx.Check(AimAssist.Scan(MakeScan(distFactor: 2.5e-4f), set, out best) && ReferenceEquals(best.Source, near),
+            $"aim-assist selection: at the executable's 2.5e-4 default the same pair flips to the near one — the term is live, the shipped data turns it off");
+    }
+
+    /// <summary>The rocket snap, on a live pool: a real proximity-fused round in flight is a
+    /// candidate, and it outranks the aircraft behind it. The ordnance list is a FILTER over the
+    /// rounds in flight, so this is the one B4 case that cannot be proved off-engine — and the gun
+    /// round fired alongside is the able-to-fail half: it is in the same pool, alive, and must NOT
+    /// be collected, since it carries no proximity fuse.</summary>
+    private static void AimAssistOrdnancePriority(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        // Data-driven, not hardcoded ids: the fuse test IS the list membership rule, so the fixture
+        // asserts its two halves off the data before relying on them.
+        var fused = weapons.All.FirstOrDefault(w => w.DetonationDistance is > AimAssist.MinFuseDistance);
+        var gun = weapons.All.FirstOrDefault(w => w.IsGun && w.DetonationDistance is not > AimAssist.MinFuseDistance);
+        ctx.Check(fused != null, $"a weapon ships DETONATION_DISTANCE > {AimAssist.MinFuseDistance:0.0} m — the assist's ordnance-list test");
+        ctx.Check(gun != null, $"a gun ships no proximity fuse, so it is NOT ordnance the assist can snap onto");
+        if (fused == null || gun == null)
+            return;
+
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            // The incoming round: on the shooter's nose axis 400 m out, flying straight back at it,
+            // fired by player 1. The aircraft sits 800 m out and 3° off-axis — inside the cone, so
+            // it is a genuine survivor the round has to outrank, not a candidate the gates drop.
+            var incoming = ScanPoint(400f, 0f);
+            live.Spawn(fused, new Transform3D(Basis.LookingAt(Vector3.Back, Vector3.Up), incoming),
+                Vector3.Zero, shooterId: 1);
+            live.Spawn(gun, new Transform3D(Basis.LookingAt(Vector3.Back, Vector3.Up), ScanPoint(380f, 0f)),
+                Vector3.Zero, shooterId: 1);
+            live.SimStep(1f / 60f);
+
+            var set = new AimCandidateSet();
+            live.CollectFusedOrdnance(set);
+            ctx.Same(1, set.Ordnance.Count,
+                $"the fused round is a candidate and the gun round in the same pool is not");
+
+            var plane = new object();
+            set.AddVehicle(ScanPoint(800f, 3f), Vector3.Zero, AimAssist.TeamOfPilot(1), live: true, plane);
+            var scan = MakeScan();
+            ctx.Check(AimAssist.Scan(scan, set, out var best), $"aim-assist ordnance: the scan finds a target");
+            ctx.Check(best.Kind == AimTargetKind.Ordnance,
+                $"aim-assist ordnance: the guns snap onto the incoming fused round, not the aircraft behind it (won={best.Kind} score={best.Score:0.0000})");
+
+            // Able to fail the other way: drop the round out of the pool and the aircraft wins.
+            live.Clear();
+            set.Clear();
+            live.CollectFusedOrdnance(set);
+            set.AddVehicle(ScanPoint(800f, 3f), Vector3.Zero, AimAssist.TeamOfPilot(1), live: true, plane);
+            ctx.Check(AimAssist.Scan(scan, set, out best) && best.Kind == AimTargetKind.Vehicle,
+                $"aim-assist ordnance: with no round in flight the same aircraft wins — the snap was the round, not the ranking");
+        }
+        finally
+        {
+            pool?.Free();
+            textures.Dispose();
+        }
     }
 
     /// <summary><see cref="Loadout.ForRig"/> against all 11 player airframes — 4 gun groups

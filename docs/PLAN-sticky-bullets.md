@@ -131,7 +131,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 2. ☑ Per-muzzle slot state and the per-frame forget + catch-up update
 3. ☑ The constant-velocity intercept solver
-4. ☐ The candidate scan, rejection gates and scorer
+4. ☑ The candidate scan, rejection gates and scorer
 5. ☐ Wire the assist into the fire call, apply the 1° scatter, and decode what the reticle follows
 6. ☐ Who gets the assist (every human pilot, not just pane 1), and the shooter-authoritative invariant for later
 
@@ -293,7 +293,7 @@ its lead is accurate to roughly a per cent. Use a real `sqrt` — do not reprodu
 Do not "fix" the unstable-root form into the textbook quadratic; the stable form is what the engine
 uses and the difference shows up at long range.
 
-## B4 ☐ The candidate scan, rejection gates and scorer
+## B4 ☑ The candidate scan, rejection gates and scorer
 
 **Goal.** Given a firing muzzle and weapon, pick the target the original would pick, or none.
 
