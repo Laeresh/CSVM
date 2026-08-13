@@ -1312,7 +1312,12 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
 
 ### Wave B — Non-combat presence
 
-5. ☐ B5 — Net following: the `ne`/`neindex` graph as a patrol behaviour
+5. ☑ B5 — Net following: the `ne`/`neindex` graph as a patrol behaviour — **landed 2026-08-13**:
+   `Flight/AiNetFollower.cs` (aircraft-agnostic graph walk, undirected edge traversal, seeded
+   branch draws off `Rng.Ai`, invented 200 m XZ capture radius) driven through `AiPilot.Patrol`;
+   id + name lookup via `AiNets.ById/ByName/Resolve`; `--ai=<plane>:<net>` is the CLI probe;
+   trailer recorded/exposed but not acted on, tags preserved raw (both per F17); pinned by
+   `AiNetFollowerTests` + the `ai-net-follow` suite
 6. ☑ B6 — Generators: `egen` waves, capacity and periods — **landed 2026-08-13**:
    `Mech3/EnemyGenerators.cs` (typed reader, three shapes + `[null]`),
    `Session/GeneratorCycle.cs` (the pure decoded timing law; capacity ≤ 0 disables the capacity

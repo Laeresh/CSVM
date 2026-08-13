@@ -168,6 +168,10 @@ public static class Suites
             "is retired (a never-prewarmed def stays null), a source-following one-shot tracks a " +
             "moving node and survives its source's death, and the full-set prewarm cost is " +
             "measured and reported", VoiceRuntime));
+        into.Add(new TestHarness.Suite("ai-net-follow",
+            "net following (B5): a real chapter net resolves by id and by name, its trailer and " +
+            "tags ride along unacted-on, and an AI plane with a net-following pilot captures node " +
+            "after node with every hop an EDGE of the graph, never node order", AiNetFollow));
         into.Add(new TestHarness.Suite("damage-stages",
             "each DAMAGE_SEQUENCE def fires its stage effects across an HP sweep", DamageStages));
         into.Add(new TestHarness.Suite("damage-hd",
@@ -3388,6 +3392,103 @@ public static class Suites
             }
         }
         return last;
+    }
+
+    private static void AiNetFollow(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
+        ctx.RequireData(chapterZrdr, $"C1 zrdr");
+
+        // The chapter graph resolves both ways the data references it: by id (aiv field 0)
+        // and by neindex name (egen/zeppelins/objectives), case-insensitively.
+        var nets = AiNets.Load(chapterZrdr);
+        var byId = AiNets.ById(nets, 10);
+        ctx.Check(byId is { Name: "M4ReinfAce" }, $"net id 10 resolves to M4ReinfAce");
+        var byName = AiNets.ByName(nets, "m4reinface");
+        ctx.Check(byId != null && ReferenceEquals(byId, byName),
+            $"the name lookup (case-insensitive) finds the same net");
+        ctx.Check(byId != null && ReferenceEquals(byId, AiNets.Resolve(nets, "10"))
+            && ReferenceEquals(byId, AiNets.Resolve(nets, "M4ReinfAce")),
+            $"Resolve takes either spelling");
+        if (byId == null)
+            return;
+        var net = byId;
+
+        // The trailer is recorded on the net, unacted-on (B5's documented decision: no
+        // target-relative motion until a later wave decodes what to do with it).
+        ctx.Check(net.Trailer is { NodeIndex: 10, Name: "player" },
+            $"the trailer [10, player] rides the net trailer={net.Trailer?.ToString() ?? "-"}");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        var textures = new TextureArchive(texturesPath);
+        FlightController? ai = null;
+        try
+        {
+            // The ai-actor pattern: a pilot-driven controller, no camera, no HUD, no devices,
+            // spawned on the net's first node, its follower seeded with a fixed value so the
+            // route repeats.
+            var spawn = net.Nodes[0].Position;
+            var look = net.Nodes[1].Position;
+            var pilot = AiPilot.HoldingCourse(spawn, look);
+            pilot.Throttle = AiPilot.PatrolThrottle;
+            var follower = new AiNetFollower(net, new System.Random(1));
+            pilot.Patrol = follower;
+            var aiModel = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+            ai = new FlightController
+            {
+                PlaneModel = aiModel,
+                Collider = PlaneCollider.Build(aiModel),
+                PlayerIndex = AiAircraftSpawner.ShooterIdBase,
+                IsHumanPiloted = false,
+                Pilot = pilot,
+                UseKeyboard = false,
+                PadDevices = System.Array.Empty<int>(),
+                AllowPause = false,
+            };
+            ai.AddChild(aiModel);
+            ai.Setup(new FlightModel(stats), null, new CamParams(), spawn, look);
+            ctx.Host.AddChild(ai);
+
+            // Fly until the follower has captured five nodes (or the budget runs out), logging
+            // each target change so a hop off the edge list cannot hide.
+            var hops = new List<(int From, int To)>();
+            int last = follower.CurrentIndex;
+            const int wanted = 5;
+            int steps = 0, budget = 120 * 60;
+            while (follower.Advances < wanted && steps < budget)
+            {
+                steps++;
+                ai.SimStep(1f / 60f);
+                if (follower.CurrentIndex != last)
+                {
+                    if (last >= 0)
+                        hops.Add((last, follower.CurrentIndex));
+                    last = follower.CurrentIndex;
+                }
+            }
+            ctx.Check(follower.Advances >= wanted,
+                $"the plane captures {wanted} net nodes advances={follower.Advances} in {steps / 60f:0} s of sim");
+            bool allEdges = hops.Count > 0;
+            foreach (var (from, to) in hops)
+            {
+                if (!net.Edges.Contains((from, to)) && !net.Edges.Contains((to, from)))
+                    allEdges = false;
+            }
+            ctx.Check(allEdges,
+                $"every hop is an EDGE of the graph hops={string.Join(" ", hops.ConvertAll(h => $"{h.From}→{h.To}"))}");
+            ctx.Check(Mathf.Abs(ai.WorldPosition.Y - 400f) < 250f,
+                $"…within the placeholder law's altitude leash of the net's 400 m y={ai.WorldPosition.Y:0}");
+        }
+        finally
+        {
+            ai?.Free();
+            textures.Dispose();
+        }
     }
 
     private static void GltfExport(TestContext ctx)

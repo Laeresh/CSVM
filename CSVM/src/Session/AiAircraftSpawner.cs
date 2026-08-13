@@ -127,7 +127,9 @@ public sealed class AiAircraftSpawner
 
         GD.Print($"ai: spawned '{planeName}' as {controller.Name} (shooter id " +
                  $"{controller.PlayerIndex}) pos=({pos.X:0},{pos.Y:0},{pos.Z:0}) " +
-                 $"heading={pilot.TargetHeadingDeg:0}° alt={pilot.TargetAltitude:0} m");
+                 (pilot.Patrol is { } patrol
+                     ? $"net='{patrol.Net.Name}#{patrol.Net.Id}' ({patrol.Net.Nodes.Count} nodes)"
+                     : $"heading={pilot.TargetHeadingDeg:0}° alt={pilot.TargetAltitude:0} m"));
         return controller;
     }
 }

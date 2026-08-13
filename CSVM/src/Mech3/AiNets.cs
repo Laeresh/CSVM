@@ -74,6 +74,37 @@ public static class AiNets
         return names;
     }
 
+    /// <summary>The net with this id, or null. Ids are how <c>aiv</c> field 0 references nets
+    /// (−1 = none).</summary>
+    public static AiNet? ById(IReadOnlyList<AiNet> nets, int id)
+    {
+        foreach (var net in nets)
+        {
+            if (net.Id == id)
+                return net;
+        }
+        return null;
+    }
+
+    /// <summary>The net with this neindex name (case-insensitive), or null. Names are how egen
+    /// (<c>vehicle.nets</c>), zeppelins (<c>net</c>) and objectives reference nets.</summary>
+    public static AiNet? ByName(IReadOnlyList<AiNet> nets, string name)
+    {
+        foreach (var net in nets)
+        {
+            if (net.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                return net;
+        }
+        return null;
+    }
+
+    /// <summary>Resolves a reference in either shipped spelling: all digits reads as an id,
+    /// anything else as a name.</summary>
+    public static AiNet? Resolve(IReadOnlyList<AiNet> nets, string idOrName) =>
+        int.TryParse(idOrName, NumberStyles.None, CultureInfo.InvariantCulture, out int id)
+            ? ById(nets, id)
+            : ByName(nets, idOrName);
+
     // ne000010.zrd.json / ne000010.json (fork vs v0.6.1 naming, same rule as
     // Zrdr.CandidateNames).
     private static bool IsNetFileName(string name)

@@ -5,7 +5,9 @@ original's AI flies: waypoint sets with an **explicit edge list**, referenced by
 AI-consuming reader family. First surveyed in `docs/PLAN-M4-ai.md` (2026-07-25); the
 numbers below were re-measured against the same install on 2026-08-06 and are asserted by
 `CSVM.Tests/AiNetsTests.cs`. Engine reader: `CSVM/src/Mech3/AiNets.cs`; the
-`--debug-ainets` overlay (F13) renders them.
+`--debug-ainets` overlay (F13) renders them, and `CSVM/src/Flight/AiNetFollower.cs` (M4 B5)
+flies them as a patrol behaviour (`--ai=<plane>:<net>`), traversal along the edge list, tags
+and trailer preserved unacted-on.
 
 ## Where they live
 

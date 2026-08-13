@@ -34,6 +34,9 @@ public static class Rng
     public const string Anim = "anim";
     public const string Crash = "crash";
     public const string Effects = "effects";
+    // AI behaviour draws (patrol-net branch choices; later waves add theirs). Its own stream so
+    // an AI's route never shifts what the weapons or paint code rolls, and vice versa.
+    public const string Ai = "ai";
     public const string Puffer = "puffer";
     public const string Clouds = "clouds";
     public const string Precip = "precip";
