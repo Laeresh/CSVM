@@ -2640,6 +2640,21 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Missions, modes & campaign
 
+- `BL-350` `[Bug]` `[Blocked: mission animations]` **Generator-spawned planes crash inside closed hangars
+  (C1/M04 `--generators`, user-reported 2026-08-13).** The spawn position is decoded-correct: the
+  original's launch routine (`FUN_00452450`) teleports the launched vehicle to the same generator
+  node, joined by roster `group` over parked vehicles. What differs is the mission layer: the
+  original plays a hangar-door-open animation (mission scripting/`WAKE_ANIM`, out of M4's scope)
+  before launch, so the geometry the plane flies through is open. Ours never plays it, the door
+  stays closed, and the collision sweep kills the plane on frame one.
+  ⚠ **Traps.** (a) Do NOT "fix" the spawn placement — it matches the decode; the missing piece is
+  the door animation, not the position. (b) Leads preserved from a partial decode, unimplemented:
+  the launch also sets two timers (`+0xac = now + 1.5`, `+0xb4 = now + 2.5`, consumers untraced)
+  and an initial velocity with a −22.352 m/s vertical component (the zeppelin drop case); read
+  those before inventing any grace window. (c) The launched-vehicle mechanism itself (parked
+  roster planes, not fresh spawns) is a separate fidelity gap from this bug; B6's fresh-spawn
+  stand-in is documented in its landing commit.
+
 - `BL-074` `[Research]` **PLAYER_INIT fields [3]/[4] semantics + per-plane spawn speed** — story-mission spawns
   currently assume the IA convention (0.5 throttle / 53.6 m/s).
 
