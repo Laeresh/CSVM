@@ -88,6 +88,47 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     unflagged pass-through (faithful — `do_intersections: false` bodies keep sinking through terrain
     the original also sinks them through) from a flagged body that should now land.
 
+- `BL-348` `[Bug]` **C3's balloon-battery kill chain (`bontN`/`tbaseN`/`b_turretN`, M02) doesn't
+    match the authored data on any of its four death paths — over-triggers, drags the wrong node,
+    and drops calls silently.** Each of the six balloons is three independently-`WeaponHit`
+    destructibles — `tbaseN` (ground tether anchor), `bontN`/`ball_kaboomN` (the balloon body) and
+    `b_turretN` (its slung AI turret) — wired by three authored, exact-numbered `CallAnimation`s:
+    killing `tbaseN` calls `balloon_upN` (24s tether burn → 512m rise → `ball_kaboomN`); killing
+    `b_turretN` waits 2s then also calls `ball_kaboomN`; `ball_kaboomN` itself calls
+    `balloont_dieN` back. Every one of these names its target with an exact digit (`balloon_up1`,
+    never a wildcard), and all three defs ship `local_nodes_only: false`.
+    User-observed at the controls (2026-08-13), against `--chapter=C3 --mission=M02`:
+    (a) killing ONE `tbaseN` raises all six balloons, not just the matching one;
+    (b) the killed `tbaseN`'s own body drags upward with its balloon (visible tether
+    stretching/ripping) instead of staying grounded — its own death sequence never moves
+    `tbaseN`, only its three debris chunks;
+    (c) the five wrongly-triggered balloons do play their own `balloon_upN` rise, but never
+    detonate at the top — no `ball_kaboomN`, they just disappear instead of exploding;
+    (d) killing `b_turretN` swaps the balloon straight to its `b_destroyed`/`f_destroyed` skin
+    but leaves it hanging motionless in the air — `ball_kaboomN`'s debris/fireball/sound/
+    `balloon_downaN` fall never runs.
+    *To settle:* trace `CallAnimation` dispatch and `NameResolver`'s three-tier scope chain
+    (`docs/architecture.md`, `Anim/NameResolver.cs`) for a cross-instance name collision — all
+    three defs reuse generic node names (`healthy`/`destroyed`/`part1..3`/`dbase`) across all six
+    numbered instances, and the tier-3 global fallback (`local_nodes_only: false`) is a candidate
+    for (a): an over-trigger, five defs launching that a single, exact-numbered `CallAnimation`
+    never named. (c) is the opposite shape — the wrongly-launched balloons *do* run their own
+    correctly-numbered `balloon_upN`, but its own trailing `CallAnimation(ball_kaboomN)` never
+    fires, which looks more like a dropped/truncated sequence-completion than a name leak; trace
+    it separately rather than assuming (a)'s cause explains it. (b) needs the `tbaseN`↔`bontN`
+    transform/parenting checked too, since nothing in either def's `ObjectMotion*` targets the
+    other's node.
+    ⚠ **Traps.** (i) A prior report of "shooting the tether instantly explodes the balloon
+    instead of raising it" turned out not to be a bug: `tether1` has no separate destructible —
+    it's a plain node inside `bontN`'s own def, so a hit there resolves to `bontN`'s own
+    independent `ball_kaboomN` pool (health 30, immediate detonation by design) rather than to
+    `tbaseN`. Confirmed at the F5/`--debug-damage` damage lab: killing the tether node's pool
+    resolves to the parent (`bontN`), not a phantom tether entity — don't re-file this. (ii) Do
+    not assume one fix covers all four symptoms — (a) is an over-trigger, (c) is a dropped
+    trailing call on an otherwise-correct trigger, (d) looks like a stalled/dropped sequence on
+    yet another trigger path, and (b) is unproven to share any of their causes. Verify each
+    independently before closing.
+
 - `BL-343` `[Research]` **`IMPACT_FORCE` is a real velocity-inheritance mechanism in the original, and
     `BL-008` was closed without it.** The `OBJECT_MOTION` flag word's bit `0x2` is set by the parser's
     `IMPACT_FORCE` token (`FUN_00508590` at `00508d03`), and the per-frame update gates a parent-velocity
