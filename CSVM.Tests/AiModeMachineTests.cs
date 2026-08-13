@@ -12,12 +12,17 @@ namespace CSVM.Tests;
 /// rolls (chances pinned to 0/1) and seeded rngs. Pins activation into pursue, the return-range
 /// exit, the steady-hand and sixth-sense reactions in the engine's own vocabulary, the evasive
 /// maneuver playing to Done and returning, the avoid-crash override on an injected probe, the
-/// signature-maneuver weighting, and seed determinism.
+/// signature-maneuver weighting, the D15 lay-off entry/exit (a chasing human fallen behind,
+/// gated by the AssistEnabled switch), and seed determinism.
 /// </summary>
 public class AiModeMachineTests
 {
     private static readonly Vector3 Home = new(0f, 400f, 0f);
     private static readonly Vector3 Level = new(0f, 0f, -100f); // 100 m/s along -Z
+
+    // Lay-off geometry: dead astern of a plane flying Level, and a velocity closing on it.
+    private static readonly Vector3 Astern600 = Home + new Vector3(0f, 0f, 600f);
+    private static readonly Vector3 Chasing = new(0f, 0f, -80f);
 
     [Fact]
     public void ModeNamesAreTheEngineVocabulary()
@@ -234,6 +239,101 @@ public class AiModeMachineTests
         for (int i = 0; i <= AiModeMachine.ClearProbesToExit; i++)
             m.Update(Home, Level, null, null, AiModeMachine.ProbeIntervalS);
         Assert.Equal(AiMode.Patrol, m.Mode);
+    }
+
+    // ---- Lay off (D15): the rubber-band assist ----------------------------------------------
+    // Decoded: the mode and the sixth_sense_factor ease-off constant. Invented (named on the
+    // machine's constants): the pursued-test cones, the enter/caught-up distances, the hold.
+
+    [Fact]
+    public void LayOffEntersWhenAChasingHumanFallsBehind()
+    {
+        var m = Machine();
+        PursueFrom(m, Astern600);
+        Assert.Equal(AiMode.LayOff,
+            m.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: true));
+
+        // The lay-off course is the entry velocity's heading at the entry altitude.
+        Assert.Equal(AiPilot.HeadingDegOf(Level), m.LayOffHeadingDeg, 3);
+        Assert.Equal(Home.Y, m.LayOffAltitude, 3);
+
+        // Inside the enter distance nothing moves: the pursuer has not fallen behind.
+        var m2 = Machine();
+        var astern300 = Home + new Vector3(0f, 0f, 300f);
+        PursueFrom(m2, astern300);
+        Assert.Equal(AiMode.Pursue,
+            m2.Update(Home, Level, astern300, null, 1f / 60f, Chasing, targetIsHuman: true));
+    }
+
+    [Fact]
+    public void LayOffNeverEntersWithoutTheAssistTheHumanOrTheChase()
+    {
+        // --no-assist's switch: same geometry, never entered.
+        var m = Machine();
+        m.AssistEnabled = false;
+        PursueFrom(m, Astern600);
+        Assert.Equal(AiMode.Pursue,
+            m.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: true));
+
+        // An AI pursuer gets no favours: the assist is for human players only.
+        var m2 = Machine();
+        PursueFrom(m2, Astern600);
+        Assert.Equal(AiMode.Pursue,
+            m2.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: false));
+
+        // A target astern but flying AWAY is not pursuing.
+        var m3 = Machine();
+        PursueFrom(m3, Astern600);
+        Assert.Equal(AiMode.Pursue,
+            m3.Update(Home, Level, Astern600, null, 1f / 60f, new Vector3(0f, 0f, 80f), targetIsHuman: true));
+
+        // A chasing target abeam is outside the rear cone.
+        var m4 = Machine();
+        var abeam = Home + new Vector3(600f, 0f, 0f);
+        PursueFrom(m4, abeam);
+        Assert.Equal(AiMode.Pursue,
+            m4.Update(Home, Level, abeam, null, 1f / 60f, new Vector3(-80f, 0f, 0f), targetIsHuman: true));
+    }
+
+    [Fact]
+    public void LayOffExitsWhenCaughtUpOrTheChaseEnds()
+    {
+        var m = Machine();
+        PursueFrom(m, Astern600);
+        m.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: true);
+        Assert.Equal(AiMode.LayOff, m.Mode);
+
+        // The anti-chatter hold: a caught-up gap inside it does not exit yet.
+        var astern200 = Home + new Vector3(0f, 0f, 200f);
+        Assert.Equal(AiMode.LayOff,
+            m.Update(Home, Level, astern200, null, 1f / 60f, Chasing, targetIsHuman: true));
+
+        // Hold out the dwell, then the pursuer catching up returns to pursue.
+        for (int i = 0; i < (int)(AiModeMachine.LayOffMinHoldS * 60f) + 5; i++)
+            m.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: true);
+        Assert.Equal(AiMode.LayOff, m.Mode);
+        Assert.Equal(AiMode.Pursue,
+            m.Update(Home, Level, astern200, null, 1f / 60f, Chasing, targetIsHuman: true));
+
+        // Re-enter, hold out, then the chase ending (velocity away) also returns to pursue.
+        m.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: true);
+        Assert.Equal(AiMode.LayOff, m.Mode);
+        for (int i = 0; i < (int)(AiModeMachine.LayOffMinHoldS * 60f) + 5; i++)
+            m.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: true);
+        Assert.Equal(AiMode.Pursue,
+            m.Update(Home, Level, Astern600, null, 1f / 60f, new Vector3(0f, 0f, 80f), targetIsHuman: true));
+    }
+
+    [Fact]
+    public void SwitchingTheAssistOffReleasesARunningLayOff()
+    {
+        var m = Machine();
+        PursueFrom(m, Astern600);
+        m.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: true);
+        Assert.Equal(AiMode.LayOff, m.Mode);
+        m.AssistEnabled = false;
+        Assert.Equal(AiMode.Pursue,
+            m.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: true));
     }
 
     [Fact]

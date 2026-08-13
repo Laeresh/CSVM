@@ -167,6 +167,7 @@ public partial class GameSession : Node3D
     private AiAircraftSpawner? _aiSpawner;
     private AiSkills? _aiSkills; // ai_skill_parameters, loaded once on the first AI spawn
     private List<Maneuver>? _aiManeuvers; // the D13 library, loaded once for the D11 machines
+    private bool _noAssistLogged; // the one-per-session --no-assist breadcrumb
     // The egen enemy generators (M4 B6, --generators): loaded with the rigs, stepped in
     // DriveSimSteps before the AI planes it spawns into _aiPlanes, freed with the world subtree.
     private AiGeneratorRuntime? _generators;
@@ -305,10 +306,17 @@ public partial class GameSession : Node3D
                     ActivationRange = _aiSkills.MinAiActiveDist,
                     SteadyHandChance = _aiSkills.At("steady_hand_chance", rating),
                     SixthSenseChance = _aiSkills.At("sixth_sense_chance", rating),
+                    SixthSenseFactor = _aiSkills.At("sixth_sense_factor", rating),
                     StunRecoveryIntervalS = _aiSkills.At("stun_recovery_interval", rating),
                     NaturalTouch = rating,
                     Library = _aiManeuvers,
+                    AssistEnabled = !_spec.NoAssist,
                 };
+                if (_spec.NoAssist && !_noAssistLogged)
+                {
+                    _noAssistLogged = true;
+                    GD.Print("ai assist: off (--no-assist): lay off disabled, pursue only");
+                }
             }
             catch (Exception e)
             {

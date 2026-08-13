@@ -175,9 +175,10 @@ public static class Suites
             "the shipped 2000 m radius, a scripted failed steady-hand roll on a real projectile " +
             "hit breaks off into an evasive maneuver that plays to Done and returns, a failed " +
             "sixth-sense roll stuns (gunner silent) and recovers after stun_recovery_interval, " +
-            "the avoid-crash override climbs out on a blocked probe and releases, and lay off " +
-            "stands in as pursue (D15's seam) — every transition in the engine's own mode " +
-            "vocabulary", AiModes));
+            "the avoid-crash override climbs out on a blocked probe and releases, and the D15 " +
+            "rubber-band assist: a chasing human fallen behind puts the machine in lay off " +
+            "(throttle eased, fire held) and --no-assist's switch never enters it under the " +
+            "same geometry — every transition in the engine's own mode vocabulary", AiModes));
         into.Add(new TestHarness.Suite("voice-runtime",
             "the B8 combat-voice runtime: the accent→voice.zrd→pilot-clip chain resolves against " +
             "the real archive, a roster-subset prewarm makes the lines playable after the loader " +
@@ -3788,12 +3789,42 @@ public static class Suites
             ctx.Check(machine.Mode != AiMode.AvoidCrash,
                 $"a cleared probe releases the override mode={AiModeMachine.NameOf(machine.Mode)}");
 
-            // --- lay off: a first-class mode that stands in as pursue until D15 lands the
-            // rubber-band behaviour inside it.
-            machine.Enter(AiMode.LayOff, "test: D15 seam");
-            Step(120);
-            ctx.Check(machine.Mode == AiMode.LayOff && pilot.Gunner.Target != null,
-                $"lay off holds as a live mode with pursue's behaviour mode={AiModeMachine.NameOf(machine.Mode)}");
+            // --- lay off (D15, the rubber-band assist). Entry A/B on fixed geometry through
+            // the machine's own tick: a chasing human 600 m dead astern enters lay off with
+            // the assist on, and never with --no-assist's switch off.
+            machine.Enter(AiMode.Pursue, "test: rejoin for lay off");
+            var aiPos2 = ai.WorldPosition;
+            var ownVel = new Vector3(0f, 0f, -100f);               // flying -Z
+            var pursuerPos = aiPos2 + new Vector3(0f, 0f, 600f);   // 600 m dead astern
+            var pursuerVel = new Vector3(0f, 0f, -80f);            // giving chase
+            machine.AssistEnabled = false;
+            machine.Update(aiPos2, ownVel, pursuerPos, null, 1f / 60f, pursuerVel, targetIsHuman: true);
+            ctx.Check(machine.Mode == AiMode.Pursue,
+                $"--no-assist: the same pursued geometry never enters lay off mode={AiModeMachine.NameOf(machine.Mode)}");
+            machine.AssistEnabled = true;
+            machine.Update(aiPos2, ownVel, pursuerPos, null, 1f / 60f, pursuerVel, targetIsHuman: true);
+            ctx.Check(machine.Mode == AiMode.LayOff,
+                $"assist on: a chasing human fallen 600 m behind enters lay off mode={AiModeMachine.NameOf(machine.Mode)}");
+            ctx.Check(transitions.Contains("pursue>lay off"),
+                $"…logged as pursue>lay off transitions=[{string.Join(" ", transitions)}]");
+
+            // The observable assist, through the live pilot: the throttle eases off flat-out
+            // (pursue's is 1) and the gunner's trigger is held for the whole dwell.
+            Step(30);
+            ctx.Check(machine.Mode == AiMode.LayOff,
+                $"the anti-chatter hold keeps the mode mode={AiModeMachine.NameOf(machine.Mode)}");
+            ctx.Check(pilot.Throttle < 1f,
+                $"the throttle is eased off flat-out throttle={pilot.Throttle:0.00}");
+            ctx.Check(!pilot.Gunner.WantsFire, $"fire is held while laying off");
+
+            // The parked target is not actually chasing, so once the hold expires the machine
+            // releases back to pursue and the throttle runs flat out again.
+            Step(150);
+            ctx.Check(machine.Mode == AiMode.Pursue,
+                $"a non-pursuing target releases lay off after the hold mode={AiModeMachine.NameOf(machine.Mode)}");
+            Step(5);
+            ctx.Check(Mathf.IsEqualApprox(pilot.Throttle, 1f),
+                $"…and pursue runs flat out again throttle={pilot.Throttle:0.00}");
 
             ctx.Note($"transitions: {string.Join(" ", transitions)}");
         }

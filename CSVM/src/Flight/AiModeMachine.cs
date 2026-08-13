@@ -17,9 +17,9 @@ public enum AiMode
     /// <summary>Chasing the target; the gunner (D14) fires in this mode.</summary>
     Pursue,
 
-    /// <summary>The "let the player catch up" mode. Present in the dispatch as a first-class
-    /// state; D15 lands the rubber-band behaviour inside it. Until then it steers and fires
-    /// exactly like <see cref="Pursue"/>.</summary>
+    /// <summary>The rubber-band assist (D15): a pursued AI lets its human pursuer catch up —
+    /// course held, throttle eased by the decoded <c>sixth_sense_factor</c>, fire held.
+    /// Disabled session-wide by <c>--no-assist</c> (<see cref="AiModeMachine.AssistEnabled"/>).</summary>
     LayOff,
 
     /// <summary>Broken off after a failed steady-hand test.</summary>
@@ -54,14 +54,19 @@ public enum AiMode
 /// rolls the sixth-sense test (<c>sixth_sense_chance</c>) and a FAILED test stuns for
 /// <c>stun_recovery_interval</c>. An evasive maneuver is an eligible library entry
 /// (<see cref="Maneuver.EligibleFor"/>) played to <see cref="ManeuverExecutor.Done"/>, then back
-/// to the prior mode.</para>
+/// to the prior mode. Lay off is the design's rubber-band assist, deliberate design: a pursued
+/// pilot eases off to let the player catch up, and the shipped <c>sixth_sense_factor</c>
+/// (0.994 at rating 1 → 1.07 at 9) is its decoded ease-off constant.</para>
 ///
 /// <para><b>Invented, named as such:</b> the evade behaviour beyond breaking off (timed run,
 /// seeded heading scrambles away from the threat — the decode is thin past "Evading."); the
 /// steady-hand roll is the flat shipped chance, the design's "damage weighted by accumulated
 /// damage" arithmetic being undecoded; <c>return_range</c> read as a chase leash from the point
 /// where pursuit began (which anchor the original uses is undecoded); the avoid-crash probe
-/// geometry, cadence and climb-out; the ×3 signature-maneuver selection weight.</para>
+/// geometry, cadence and climb-out; the ×3 signature-maneuver selection weight; lay off's
+/// entry/exit geometry (the pursued test's cones, the fallen-behind / caught-up distances and
+/// the anti-chatter hold — only the mode, the ease-off constant and the intent are decoded;
+/// no condition on the player's health exists anywhere in the decode, so none is modelled).</para>
 ///
 /// <para><b>Enum-only:</b> the two danger-zone modes are never entered. Their entry conditions
 /// are undecoded — the danger-zone gate data is the 4-extra net-tag system the F17 decode left
@@ -104,6 +109,26 @@ public sealed class AiModeMachine
     /// ("weighted up during selection" is decoded; the factor is not).</summary>
     public const int SignatureWeight = 3;
 
+    /// <summary>Invented: a pursuing human this far behind has "fallen behind" — pursue eases
+    /// into lay off past this gap. The mode and the intent are decoded; the distance is not.</summary>
+    public const float LayOffEnterRangeM = 350f;
+
+    /// <summary>Invented: the pursuer has "caught up" inside this gap — lay off returns to
+    /// pursue (hysteresis against <see cref="LayOffEnterRangeM"/>).</summary>
+    public const float LayOffCaughtUpRangeM = 250f;
+
+    /// <summary>Invented: the pursued test's rear cone — the pursuer must sit within this
+    /// half-angle of the AI's tail axis (its velocity, reversed).</summary>
+    public const float LayOffRearConeDeg = 60f;
+
+    /// <summary>Invented: the pursued test's chase cone — the pursuer's velocity must point
+    /// within this half-angle of the line to the AI, i.e. it is actually chasing.</summary>
+    public const float LayOffPursuerConeDeg = 30f;
+
+    /// <summary>Invented: minimum lay-off dwell, seconds — an anti-chatter hold before any
+    /// lay-off exit condition is honoured.</summary>
+    public const float LayOffMinHoldS = 2f;
+
     /// <summary>Activation radius, metres — player.json's <c>min_ai_active_dist</c> (2000 shipped),
     /// the fallback for every roster whose own volume slots are unauthored (all of them).
     /// A target outside it is not ranked at all (the engine scores it 1e21).</summary>
@@ -133,6 +158,19 @@ public sealed class AiModeMachine
     /// 0.6 s at 9).</summary>
     public float StunRecoveryIntervalS = 4.8f;
 
+    /// <summary>The decoded ease-off factor applied while being pursued —
+    /// <c>sixth_sense_factor</c> (0.994 at rating 1 → 1.07 at 9): the fraction of the
+    /// pursuer's speed a laying-off pilot flies at, so a poor pilot lets the player close and
+    /// an ace pulls away. The constant is decoded; the speed-matching application point is our
+    /// reading (<see cref="AiPilot"/>).</summary>
+    public float SixthSenseFactor = 0.994f;
+
+    /// <summary>The rubber-band assist switch: false (<c>--no-assist</c>) means
+    /// <see cref="AiMode.LayOff"/> is never entered by <see cref="Update"/> — pursue only, the
+    /// original's assist off. Default true, the original's behaviour. External
+    /// <see cref="Enter"/> overrides (script/tests) are deliberately not gated.</summary>
+    public bool AssistEnabled = true;
+
     /// <summary>The pilot's 1–9 <c>natural_touch</c>, compared directly against maneuver
     /// difficulty (no interpolation table, by design).</summary>
     public int NaturalTouch = 1;
@@ -156,6 +194,8 @@ public sealed class AiModeMachine
     private AiMode? _lastTargetMode;
     private Vector3 _pursuitAnchor;
     private Vector3 _lastPos;
+    private Vector3 _lastVelocity;
+    private float _layOffHold;
     private float _stunRemaining;
     private float _evadeRemaining;
     private float _evadeScramble;
@@ -192,6 +232,13 @@ public sealed class AiModeMachine
     /// <summary>Avoid-crash's climb-out altitude order (entry altitude + <see cref="ClimbOutM"/>).</summary>
     public float ClimbOutAltitude { get; private set; }
 
+    /// <summary>Lay off's course order, degrees: the heading flown at entry, held so the pilot
+    /// stays ahead of the pursuer instead of turning back into a head-on.</summary>
+    public float LayOffHeadingDeg { get; private set; }
+
+    /// <summary>Lay off's altitude order, metres: the entry altitude.</summary>
+    public float LayOffAltitude { get; private set; }
+
     /// <summary>The engine's own name for a mode — the debug-readout vocabulary, verbatim.</summary>
     public static string NameOf(AiMode mode) => mode switch
     {
@@ -218,11 +265,16 @@ public sealed class AiModeMachine
     /// position or null (no live target); <paramref name="targetMode"/> its own machine's mode
     /// when the target is an AI aircraft — the sixth-sense trigger watches it enter an evasive
     /// state. A human target reports null: detecting a human player's maneuver is undecoded, so
-    /// the sixth-sense roll fires only against AI targets today.</summary>
+    /// the sixth-sense roll fires only against AI targets today.
+    /// <paramref name="targetVelocity"/>/<paramref name="targetIsHuman"/> feed the lay-off
+    /// pursued test (D15): the assist is only ever extended to a human-piloted pursuer — in
+    /// splitscreen that is whichever human the AI is currently engaging, an extension decision
+    /// (the original is single-player and its "the player" needs no choosing).</summary>
     public AiMode Update(Vector3 pos, Vector3 velocity, Vector3? targetPos, AiMode? targetMode,
-        float dt)
+        float dt, Vector3? targetVelocity = null, bool targetIsHuman = false)
     {
         _lastPos = pos;
+        _lastVelocity = velocity;
         if (Mode == AiMode.Stunned)
         {
             // Nothing interrupts a stun: the pilot has no controls to react with.
@@ -269,6 +321,10 @@ public sealed class AiModeMachine
                     && pos.DistanceTo(_pursuitAnchor) > ReturnRange)
                 {
                     Transition(AiMode.Patrol, "beyond return range");
+                }
+                else
+                {
+                    UpdateLayOff(pos, velocity, tp, targetVelocity, targetIsHuman, dt);
                 }
                 break;
 
@@ -379,6 +435,61 @@ public sealed class AiModeMachine
         Transition(back, "reaction complete");
     }
 
+    /// <summary>The rubber-band assist's transitions (D15). Decoded: the mode, its "let the
+    /// player catch up" intent (the design's Sixth Sense pursued-side role) and the
+    /// <c>sixth_sense_factor</c> ease-off constant. Invented, named on the constants above: the
+    /// pursued-test cones, the fallen-behind / caught-up distances and the anti-chatter hold.
+    /// Pursue eases into lay off when a chasing human target has fallen behind; lay off returns
+    /// to pursue when the pursuer catches up or stops chasing. <see cref="AssistEnabled"/>
+    /// false never enters and immediately releases.</summary>
+    private void UpdateLayOff(Vector3 pos, Vector3 velocity, Vector3 targetPos,
+        Vector3? targetVelocity, bool targetIsHuman, float dt)
+    {
+        _layOffHold -= dt;
+        float gap = pos.DistanceTo(targetPos);
+        bool pursued = AssistEnabled && targetIsHuman
+            && IsPursuedBy(pos, velocity, targetPos, targetVelocity);
+        if (Mode == AiMode.Pursue)
+        {
+            if (pursued && gap > LayOffEnterRangeM)
+            {
+                Transition(AiMode.LayOff, FormattableString.Invariant(
+                    $"pursuer {gap:0} m behind; easing off x{SixthSenseFactor:0.00}"));
+            }
+        }
+        else if (!AssistEnabled)
+        {
+            Transition(AiMode.Pursue, "assist off");
+        }
+        else if (_layOffHold <= 0f)
+        {
+            if (gap < LayOffCaughtUpRangeM)
+                Transition(AiMode.Pursue, FormattableString.Invariant($"pursuer caught up at {gap:0} m"));
+            else if (!pursued)
+                Transition(AiMode.Pursue, "no longer pursued");
+        }
+    }
+
+    /// <summary>The pursued test (invented geometry): the target sits behind the AI — within
+    /// <see cref="LayOffRearConeDeg"/> of the tail axis — and its velocity points at the AI
+    /// within <see cref="LayOffPursuerConeDeg"/>, i.e. it is actually giving chase. An unknown
+    /// target velocity can never read as pursuit.</summary>
+    private bool IsPursuedBy(Vector3 pos, Vector3 velocity, Vector3 targetPos,
+        Vector3? targetVelocity)
+    {
+        if (targetVelocity is not { } tv || tv.LengthSquared() < 1e-4f
+            || velocity.LengthSquared() < 1e-4f)
+            return false;
+        var toTarget = targetPos - pos;
+        if (toTarget.LengthSquared() < 1e-4f)
+            return false;
+        float behindCos = (-velocity.Normalized()).Dot(toTarget.Normalized());
+        if (behindCos < Mathf.Cos(Mathf.DegToRad(LayOffRearConeDeg)))
+            return false;
+        float chaseCos = tv.Normalized().Dot((-toTarget).Normalized());
+        return chaseCos >= Mathf.Cos(Mathf.DegToRad(LayOffPursuerConeDeg));
+    }
+
     /// <summary>The terrain-closure override (invented probe, marked above): two world-only rays
     /// along the velocity lookahead, every <see cref="ProbeIntervalS"/>. Blocked → avoid crash
     /// (dropping a running maneuver); clear for <see cref="ClearProbesToExit"/> rounds → back.</summary>
@@ -454,6 +565,15 @@ public sealed class AiModeMachine
         }
         if (to == AiMode.AvoidCrash && ClimbOutAltitude <= 0f)
             ClimbOutAltitude = _lastPos.Y + ClimbOutM;
+        if (to == AiMode.LayOff)
+        {
+            // The lay-off course: straight on from the entry velocity, at the entry altitude —
+            // stay ahead of the pursuer rather than turning back into a head-on.
+            _layOffHold = LayOffMinHoldS;
+            if (new Vector2(_lastVelocity.X, _lastVelocity.Z).LengthSquared() > 1e-4f)
+                LayOffHeadingDeg = AiPilot.HeadingDegOf(_lastVelocity);
+            LayOffAltitude = _lastPos.Y;
+        }
         ModeChanged?.Invoke(from, to, reason);
     }
 }

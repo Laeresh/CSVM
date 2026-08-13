@@ -2011,9 +2011,11 @@ public partial class FlightController : Node3D
                          $"at {WorldPosition.DistanceTo(target.WorldPosition):0} m");
             }
         }
-        // The mode machine gates the trigger (D11): the target stays acquired in every mode —
-        // patrol needs its position for the activation test — but only pursue / lay off shoot.
-        if (Pilot?.Machine is { } modes && modes.Mode is not (AiMode.Pursue or AiMode.LayOff))
+        // The mode machine gates the trigger (D11/D15): the target stays acquired in every
+        // mode — patrol needs its position for the activation test — but only pursue shoots.
+        // Lay off holds fire: the mode exists to let the player catch up and recover (the
+        // design's rubber-band assist), and shooting the pursuer it is favouring defeats it.
+        if (Pilot?.Machine is { } modes && modes.Mode != AiMode.Pursue)
             return;
         GunGroup? group = _fire.GunSel >= 0 && _fire.GunSel < _firableGuns.Length
             ? _firableGuns[_fire.GunSel]

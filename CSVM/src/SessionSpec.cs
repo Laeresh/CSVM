@@ -287,6 +287,10 @@ public sealed record SessionSpec
     /// <c>ai_skill_parameters</c>; default 5), auto-targeting the nearest hostile aircraft.
     /// Null when the flag was absent.</summary>
     public int? AiAttackSkill { get; private set; }
+    /// <summary><c>--no-assist</c>: disable the D15 rubber-band assist — every spawned AI mode
+    /// machine gets <c>AssistEnabled</c> false, so the lay-off mode is never entered (pursue
+    /// only). Default off: the assist is the original's shipped behaviour.</summary>
+    public bool NoAssist { get; private set; }
     /// <summary><c>--generators[=plane]</c>: run the mission's egen enemy generators (M4 B6);
     /// each surviving generator spawns AI aircraft on its decoded wave/period cycle through the
     /// same runtime spawn seam <c>--ai=</c> uses. The optional value picks the spawned airframe
@@ -762,6 +766,7 @@ public sealed record SessionSpec
             }
             else if (arg == "--ai-attack") { s.AiAttackSkill = 5; }
             else if (arg.StartsWith("--ai-attack=")) { s.AiAttackSkill = Math.Clamp(int.Parse(arg["--ai-attack=".Length..]), 1, 9); }
+            else if (arg == "--no-assist") { s.NoAssist = true; }
             else if (arg == "--generators") { s.Generators = true; }
             else if (arg.StartsWith("--generators=")) { s.Generators = true; s.GeneratorsPlane = arg["--generators=".Length..]; }
             else if (arg == "--fire") { s.AutoFire = true; }
