@@ -130,6 +130,9 @@ public sealed class FlightRigAssembler
                     ? Loadout.ForRig(planeModel, _in.WeaponDefs, ldef)
                     : Loadout.Bind(ldef, planeModel, _in.WeaponDefs);
                 controller.Projectiles = _in.Projectiles;
+                // The gun aim assist's structure candidates (`BL-342`/B4): the world's
+                // destructibles, when this session built a world at all.
+                controller.Destructibles = _in.WorldRuntime?.Destructibles;
                 controller.InfiniteAmmo = _spec.InfiniteAmmo;
                 controller.AmmoCapOverride = _spec.AmmoCap;
                 controller.AutoFire = _spec.AutoFire;

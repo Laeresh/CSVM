@@ -11,8 +11,17 @@ python analysis/object-motion-ground-rest/census.py pass_plane01 # drill into on
 ```
 
 Written to answer `PT-46` (flown 2026-08-08, retired; verdicts in `git log --grep=PT-46`), whose
-check (d) asked whether debris passing *through* the ground is a defect. It is not — and this is
-why.
+check (d) asked whether debris passing *through* the ground is a defect.
+
+> ⚠ **The answer this census reached — "it is not a defect, the original does not ground-test these
+> either" — is WRONG, and the executable is what killed it (2026-08-12/13,
+> `PLAN-object-motion-decode`).** A contact test is the **default**; `do_intersections` upgrades it
+> from a terrain-grid column to a full geometry sweep, and `no_altitude` is the opt-out. So
+> `do_intersections: false` means *test with the cheap tier*, not *do not test* — and the counts
+> below, which are correct as counts, do not mean what the prose around them says they mean. Every
+> claim of the form "the original was not collision-testing these" on this page is retired; the
+> mechanism is in [`docs/org/objectMotion.md`](../../docs/org/objectMotion.md). The tables stand;
+> the interpretation does not.
 
 ## The finding (2026-08-08)
 
@@ -29,10 +38,13 @@ node is ever switched off by its own `ACTIVE_STATE 0` downstream:
 | `run_time+bounce` | no | 44 | 9 | |
 | `run_time+bounce` | **yes** | 160 | 40 | `BL-245`'s deferred half, left in place |
 
-**The rule, and it is simple: a piece comes to rest only if its launch names no `RUN_TIME`.** That
-absent run time is the admission test for `MotionRuntime.FlightToLaunchHeight`, the only landing
-solve we have. Anything carrying a `RUN_TIME` integrates its parabola for exactly that long and then
-holds its final pose — which, at 3.5–20 s under Earth gravity, is routinely below the terrain.
+**The rule as it stood in 2026-08-08: a piece comes to rest only if its launch names no `RUN_TIME`**
+— that absent run time being the admission test for `MotionRuntime.FlightToLaunchHeight`, then the
+only landing we had. ⚠ **Retired.** `RUN_TIME` is a **ceiling**, not a flight duration, and a body
+now ends on whichever comes first, contact or clock; the launch-height solve survives only as the
+duration an untimed body *reports* to its sequence. Anything carrying a `RUN_TIME` used to integrate
+its parabola for exactly that long and then hold its final pose — which, at 3.5–20 s under Earth
+gravity, is routinely below the terrain, and is the symptom this whole page was written around.
 
 ### `do_intersections` — the original's own collision test
 
@@ -43,10 +55,12 @@ holds its final pose — which, at 3.5–20 s under Earth gravity, is routinely 
 | `run_time` | 1,118 | 343 | **16** |
 | `run_time+bounce` | 54 | — | **150** |
 
-**The original was not ground-testing these either.** It is `false` on *all* 120 of the bounce shape
-and *all* 167 of the vanish shape, and on 924 of the `run_time` shape. So a piece sinking through
-the terrain reproduces the original rather than diverging from it — confirmed at the controls by
-`PT-46` (d), independently of this census.
+~~**The original was not ground-testing these either.**~~ **RETIRED — see the banner above.** The
+counts are right: `false` on *all* 120 of the bounce shape and *all* 167 of the vanish shape, and on
+924 of the `run_time` shape. What is wrong is reading `false` as "no test". It selects the **column**
+tier, so all of these were being ground-tested by the original — with the cheap query, which is why
+a piece can pass over a ledge between frames and why nothing rests on a rooftop. `PT-46` (d)'s
+observation at the controls stands; its mechanism was misattributed to this flag.
 
 ### The strict test set — ground-tested **and** left lying there
 
@@ -93,14 +107,16 @@ sink because nothing stops them. `m_build01` is the same pattern at nine parts. 
 playtest report of "the larger parts stay, the wings go through" is *per-part within one def*, not a
 per-object bug.
 
-## ⚠ `do_intersections` is probably a collider test, not a terrain ray
+## ✅ `do_intersections` is a collider test, not a terrain ray — and it is the SECOND tier
 
-User's reading, 2026-08-08, and it changes the shape of the deferred work rather than any decode: a
-collider intersection can land a piece on a rooftop or bounce it off a wall, which no down-ray
-reproduces — the `agyrobus` case was lost between C5 buildings precisely because it may have bounced
-off one. Scope `BL-059` item 1 / `BL-245` as a collision query, with a down-ray as the cheap first
-cut, and record which of the two shipped. `BL-245`'s `[Blocked: ground ray]` tag is the narrower
-reading of the same blocker.
+User's reading, 2026-08-08, confirmed by the decode: a collider intersection can land a piece on a
+rooftop or bounce it off a wall, which no down-ray reproduces — the `agyrobus` case was lost between
+C5 buildings precisely because it may have bounced off one. What the reading could not have known is
+that the flag is an **upgrade**, not a switch: the original's default tier is a terrain-grid column
+query, and `do_intersections` swaps it for the sweep. Both shipped, as two named mechanisms
+(`MotionRuntime.TryGroundColumn` / `TryContact`), for exactly that reason. ⚠ `BL-245`'s
+`[Blocked: ground ray]` and its later `[Blocked: a decision to diverge]` tag were both readings of a
+blocker that did not exist.
 
 ## ⚠ A trap the script itself fell into
 
@@ -111,10 +127,11 @@ should sanity-check that the four shapes do **not** all come back `stays=True`.
 
 ## Related
 
+[`docs/org/objectMotion.md`](../../docs/org/objectMotion.md) — **read this first**: the original's
+own update, which retires this page's interpretation of `do_intersections` and of `RUN_TIME` ·
+`analysis/object-motion-flags/` (the flag word named from the parser, and the census re-derived) ·
 `analysis/bl-257-nulled-launch/` (the termination-field split these shapes come from) ·
 `analysis/object-motion-range/` (the 2026-08-01 azimuth/elevation/speed decode) ·
 [`docs/plans/PLAN-ground-contact.md`](../../docs/plans/PLAN-ground-contact.md) (what `BL-059`
 item 1 became, and where this census's strict test set was discharged) ·
-`BL-245` · `BL-319` (`run_time` is not a flight duration — pieces cut mid-arc or flying long past
-landing; found closing `BL-022`, whose arc scale shipped as `DebrisTune.LaunchScale` 0.65,
-`git log --grep=BL-022`) · `docs/formats/destructibles.md` "Debris tumbles"
+`docs/formats/destructibles.md` "Debris tumbles"

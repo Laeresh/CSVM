@@ -25,6 +25,13 @@ public static class Suites
     private const int PlayerAirframes = 11;
     private const int WeaponDefCount = 48;
 
+    // B4's scan fixture (aim-assist): a shooter at the origin on player 0's team, nose down world
+    // -Z, firing a 500 m/s round with a 1000 m RANGE through the stock guns' 6° cone. Every gate
+    // case moves ONE thing off this baseline, so a rejection can only be the gate under test.
+    private const float ScanSpeed = 500f;
+    private const float ScanRange = 1000f;
+    private const float ScanConeDeg = 6f; // the shipped CANNON_SPREAD, asserted in AimAssistShippedData
+
     /// <summary>The fixed step <c>ordnance-burst-timeline</c> drives its three bursts at.
     /// Deliberately FOUR TIMES finer than <see cref="SequenceRunner.AnimFrame"/>: the authored gaps
     /// under test go down to 0.01 s, which one 1/60 s step cannot resolve at all, and nothing in
@@ -120,6 +127,17 @@ public static class Suites
             "every stock loadout binds to its model with every marker resolved", LoadoutBind));
         into.Add(new TestHarness.Suite("weapons-fire",
             "all 48 weapons mount and fire from a built plane", WeaponsFire));
+        into.Add(new TestHarness.Suite("aim-assist",
+            "the gun aim assist's per-muzzle slot (B2): a ~0.2 s catch-up time constant that snaps "
+            + "outright past 1/catchup_rate, and a forget timer keyed to the last SHOT, not to losing "
+            + "a lock; plus the shipped sticky_bullet_* values player.json actually carries, B3's "
+            + "constant-velocity intercept solver (dead-ahead, crossing, and outrun-with-no-solution) "
+            + "and B4's candidate scan — every rejection gate proved able to fail, the most-aligned "
+            + "selection the shipped dist_factor 0.0 produces, and a real fused round in a live pool "
+            + "outranking the aircraft behind it; plus B5's 1° launch scatter (flat in the polar "
+            + "angle, not over the solid angle) and the fire call's asymmetric step order, which "
+            + "fires the SMOOTHED line while the scan updates the target",
+            AimAssistSuite));
         into.Add(new TestHarness.Suite("loadout-forrig",
             "Loadout.ForRig covers every firepoint/pylon on all 11 airframes, seeded from stock", LoadoutForRig));
         into.Add(new TestHarness.Suite("warning-shot",
@@ -155,7 +173,9 @@ public static class Suites
         into.Add(new TestHarness.Suite("bounce-launch",
             "a bounce-terminated OBJECT_MOTION flies its solved parabola and fires its BOUNCE_SEQUENCE on landing", BounceLaunch));
         into.Add(new TestHarness.Suite("ground-contact",
-            "a do_intersections OBJECT_MOTION is cut short by real geometry, rests on the surface and picks its BOUNCE_SEQUENCE branch from what it struck — and does none of it without a mask", GroundContact));
+            "a gravity-bearing OBJECT_MOTION is cut short by real geometry through the right tier (default column, do_intersections sweep, no_altitude neither), rests on the surface and picks its BOUNCE_SEQUENCE branch from what it struck, and does none of it without a mask", GroundContact));
+        into.Add(new TestHarness.Suite("forward-rotation",
+            "an OBJECT_MOTION tumble turns at the authored RATE about its own launch direction's horizontal perpendicular, scaled by that direction's length — and a vector-translation launch does not turn at all", ForwardRotation));
         into.Add(new TestHarness.Suite("self-ref-launch",
             "an OBJECT_MOTION naming the MAIN_ROOT_NODE sentinel launches the node its def was invoked on, taking that node over from whatever was driving it", SelfRefLaunch));
         into.Add(new TestHarness.Suite("nulled-launch",
@@ -1688,6 +1708,500 @@ public static class Suites
         }
     }
 
+    /// <summary>B2's per-muzzle slot state (the forget + catch-up pass), B3's intercept solver and
+    /// B4's candidate scan, the first three in isolation — no plane, no pool,
+    /// <see cref="AimAssist"/> is engine-free by design — plus a golden check that the player.json
+    /// and weapons.json values the assist consumes parse at their documented shipped figures
+    /// (docs/PLAN-sticky-bullets.md "What the data actually ships"). B4's ordnance list is the one
+    /// case that needs a live pool, since the list IS a filter over the rounds in flight.</summary>
+    private static void AimAssistSuite(TestContext ctx)
+    {
+        AimAssistCatchup(ctx);
+        AimAssistForgetTimer(ctx);
+        AimAssistShippedData(ctx);
+        AimAssistIntercept(ctx);
+        AimAssistScanGates(ctx);
+        AimAssistSelection(ctx);
+        AimAssistOrdnancePriority(ctx);
+        AimAssistScatter(ctx);
+        AimAssistFireDirection(ctx);
+    }
+
+    /// <summary>The catch-up slerp: a ~0.2 s time constant at the shipped catchup_rate (5.0), full
+    /// convergence given enough time, and an outright snap on a single frame at or past
+    /// 1/catchup_rate — the real hitch-behaviour difference docs/org/aim-assist.md flags, not a
+    /// rounding detail to smooth away.</summary>
+    private static void AimAssistCatchup(TestContext ctx)
+    {
+        const float catchupRate = 5f;       // shipped sticky_bullet_catchup_rate
+        const float forgetInterval = 100f;  // isolate this test from the forget pass
+        const float dt = 1f / 60f;
+        var target = new Vector3(0.5f, 0f, -0.8660254f); // 30° off local forward
+
+        var slot = new GunAimSlot
+        {
+            Active = true,
+            Smoothed = AimAssist.LocalForward,
+            Target = target,
+            LastUpdate = 0.0,
+        };
+        var slots = new[] { slot };
+        float initialAngle = AimAssist.LocalForward.AngleTo(target);
+        double now = 0.0;
+        int tauSteps = Mathf.RoundToInt(1f / catchupRate / dt); // 12 steps at 60 Hz
+        for (int i = 0; i < tauSteps; i++)
+        {
+            now += dt;
+            AimAssist.Tick(slots, now, dt, forgetInterval, catchupRate);
+        }
+        float remainingFrac = slots[0].Smoothed.AngleTo(target) / initialAngle;
+        ctx.Check(remainingFrac is > 0.25f and < 0.5f,
+            $"aim-assist catch-up: one time constant (~{1f / catchupRate:0.0}s) leaves {remainingFrac:0.000} of the initial angle (e^-1 approx 0.368)");
+
+        for (int i = 0; i < tauSteps * 8; i++)
+        {
+            now += dt;
+            AimAssist.Tick(slots, now, dt, forgetInterval, catchupRate);
+        }
+        ctx.Check(slots[0].Smoothed.Dot(target) > 1f - 1e-4f,
+            $"aim-assist catch-up: converges onto the target given enough time");
+
+        var snapSlot = new GunAimSlot
+        {
+            Active = true,
+            Smoothed = AimAssist.LocalForward,
+            Target = target,
+            LastUpdate = 0.0,
+        };
+        var snapSlots = new[] { snapSlot };
+        AimAssist.Tick(snapSlots, 1f / catchupRate, 1f / catchupRate, forgetInterval, catchupRate);
+        ctx.Check(snapSlots[0].Smoothed.IsEqualApprox(target),
+            $"aim-assist catch-up: a frame ≥ 1/catchup_rate snaps the gun line in one step");
+    }
+
+    /// <summary>The forget timer measures time since the barrel last FIRED, not time since a lock
+    /// was lost: stop restamping and the target unwinds to local forward exactly
+    /// forget_interval seconds later; keep restamping (as B5's fire call will) and it never does.</summary>
+    private static void AimAssistForgetTimer(TestContext ctx)
+    {
+        const float forgetInterval = 1.5f; // shipped sticky_bullet_forget_interval
+        const float dt = 1f / 60f;
+        var marker = new Vector3(0.5f, 0f, -0.8660254f); // 30° off forward — distinct from "forgotten"
+
+        var slot = new GunAimSlot
+        {
+            Active = true,
+            Smoothed = marker,
+            Target = marker,
+            LastUpdate = 0.0,
+        };
+        var slots = new[] { slot };
+        double now = 0.0;
+        int steps = Mathf.CeilToInt(forgetInterval / dt) + 2; // a couple past the threshold
+        bool unwoundEarly = false;
+        for (int i = 0; i < steps; i++)
+        {
+            now += dt;
+            AimAssist.Tick(slots, now, dt, forgetInterval, 0f); // catchupRate 0 isolates the forget check
+            if (now < forgetInterval && !slots[0].Target.IsEqualApprox(marker))
+            {
+                unwoundEarly = true;
+            }
+        }
+        ctx.Check(!unwoundEarly, $"aim-assist forget: target holds until forget_interval elapses");
+        ctx.Check(slots[0].Target.IsEqualApprox(AimAssist.LocalForward),
+            $"aim-assist forget: target unwinds to local forward {forgetInterval}s after the last shot");
+
+        var held = new GunAimSlot
+        {
+            Active = true,
+            Smoothed = marker,
+            Target = marker,
+            LastUpdate = 0.0,
+        };
+        var heldSlots = new[] { held };
+        now = 0.0;
+        float sinceShot = 0f;
+        float shotInterval = forgetInterval * 0.5f; // fires well inside the forget window
+        for (int i = 0; i < steps * 2; i++)
+        {
+            now += dt;
+            sinceShot += dt;
+            if (sinceShot >= shotInterval)
+            {
+                heldSlots[0].LastUpdate = now; // a round goes out this frame (B5's restamp, simulated)
+                sinceShot = 0f;
+            }
+            AimAssist.Tick(heldSlots, now, dt, forgetInterval, 0f);
+        }
+        ctx.Check(heldSlots[0].Target.IsEqualApprox(marker),
+            $"aim-assist forget: continuous fire never lets the target unwind");
+    }
+
+    /// <summary>Golden check: the keys B2/B4 consume parse off the real player.json and
+    /// weapons.json at their documented shipped values, not just their compiled-in defaults. The
+    /// dist_factor one matters most — it ships at 0.0 where the executable's compiled fallback is
+    /// 2.5e-4, so a reader that quietly failed to find the key would restore a distance term the
+    /// shipped data deliberately turns off.</summary>
+    private static void AimAssistShippedData(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        ctx.Check(Mathf.IsEqualApprox(5.0f, stats.StickyBulletCatchupRate),
+            $"sticky_bullet_catchup_rate parses as the shipped 5.0");
+        ctx.Check(Mathf.IsEqualApprox(1.5f, stats.StickyBulletForgetInterval),
+            $"sticky_bullet_forget_interval parses as the shipped 1.5");
+        ctx.Check(stats.StickyBulletDistFactor == 0f,
+            $"sticky_bullet_dist_factor parses as the shipped 0.0 (compiled default 2.5e-4), so selection is purely most-aligned");
+        ctx.Check(Mathf.IsEqualApprox(1.0f, Mathf.RadToDeg(stats.StickyBulletInaccuracy), 1e-4f),
+            $"sticky_bullet_inaccuracy parses as the shipped 1.0 DEGREE, stored in radians as the original stores it");
+
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var gun = weapons.All.FirstOrDefault(w => w.IsGun && w.CannonSpread is > 0f);
+        ctx.Check(gun != null, $"a gun ships CANNON_SPREAD — the assist's acceptance cone (BL-342 A1)");
+        if (gun != null)
+        {
+            ctx.Check(Mathf.IsEqualApprox(6.0f, gun.CannonSpread!.Value),
+                $"{gun.Id} ships CANNON_SPREAD 6.0, a 6° cone half-angle: cos={AimAssist.WeaponConeCos(gun):0.000000}");
+        }
+    }
+
+    /// <summary>B3's constant-velocity intercept solver (<see cref="AimAssist.TryIntercept"/>): a
+    /// stationary target dead ahead solves to the plain displacement direction with t =
+    /// distance/speed; a crossing target's solved direction and t place the round at exactly the
+    /// target's projected position (self-consistency, not an independent re-derivation of the
+    /// quadratic); a target receding faster than the round returns no solution rather than a
+    /// bogus direction.</summary>
+    private static void AimAssistIntercept(TestContext ctx)
+    {
+        var muzzle = Vector3.Zero;
+        const float speed = 300f;
+
+        var deadAhead = new Vector3(0f, 0f, -100f);
+        bool hit = AimAssist.TryIntercept(muzzle, speed, deadAhead, Vector3.Zero, out var aimDir, out float t);
+        ctx.Check(hit, $"aim-assist intercept: a stationary target dead ahead solves");
+        if (hit)
+        {
+            ctx.Check(aimDir.IsEqualApprox(deadAhead.Normalized()),
+                $"aim-assist intercept: dead-ahead aim direction equals the displacement direction");
+            ctx.Check(Mathf.IsEqualApprox(t, deadAhead.Length() / speed, 1e-4f),
+                $"aim-assist intercept: dead-ahead t equals distance/speed");
+        }
+
+        var crossingPos = new Vector3(0f, 0f, -200f);
+        var crossingRelVel = new Vector3(50f, 0f, 0f); // crosses left-to-right at 50 m/s
+        hit = AimAssist.TryIntercept(muzzle, speed, crossingPos, crossingRelVel, out aimDir, out t);
+        ctx.Check(hit, $"aim-assist intercept: a crossing target solves");
+        if (hit)
+        {
+            var roundAt = muzzle + aimDir * speed * t;
+            var targetAt = crossingPos + crossingRelVel * t;
+            ctx.Check((roundAt - targetAt).Length() < 1e-2f,
+                $"aim-assist intercept: the crossing target's solved direction and t meet at the same point");
+            ctx.Check(!aimDir.IsEqualApprox(crossingPos.Normalized()),
+                $"aim-assist intercept: a crossing target's aim leads it, not fired at its current position");
+        }
+
+        var recedingPos = new Vector3(0f, 0f, -100f);
+        var recedingRelVel = new Vector3(0f, 0f, -500f); // outruns the 300 m/s round in a straight line
+        hit = AimAssist.TryIntercept(muzzle, speed, recedingPos, recedingRelVel, out _, out _);
+        ctx.Check(!hit, $"aim-assist intercept: a target outrunning the round has no solution");
+    }
+
+    // The B4 scan fixture's baseline context — see the ScanSpeed/ScanRange/ScanConeDeg constants.
+    private static AimScan MakeScan(float distFactor = 0f, object? self = null) => new()
+    {
+        MuzzlePosition = Vector3.Zero,
+        ShooterVelocity = Vector3.Zero,
+        Forward = Vector3.Forward,
+        Team = AimAssist.TeamOfPilot(0),
+        Speed = ScanSpeed,
+        RangeSquared = ScanRange * ScanRange,
+        ConeCos = Mathf.Cos(Mathf.DegToRad(ScanConeDeg)),
+        DistFactor = distFactor,
+        Self = self,
+    };
+
+    // A point `range` metres out, `offAxisDeg` off the shooter's nose in the XZ plane.
+    private static Vector3 ScanPoint(float range, float offAxisDeg)
+    {
+        float a = Mathf.DegToRad(offAxisDeg);
+        return new Vector3(Mathf.Sin(a), 0f, -Mathf.Cos(a)) * range;
+    }
+
+    /// <summary>B4's rejection gates, each proved able to fail: the same candidate that is accepted
+    /// on the baseline is rejected when exactly one thing changes. Covers the engine's order —
+    /// self, not live, same team (and either side unaffiliated), out of RANGE, outside the cone —
+    /// plus the per-target <c>+0x50</c> cone override, which nothing ships but which is ported
+    /// deliberately (Decision 2), and the turret pass, which exists and iterates nothing until M4
+    /// puts a list in it.</summary>
+    private static void AimAssistScanGates(TestContext ctx)
+    {
+        int enemy = AimAssist.TeamOfPilot(1);
+        var deadAhead = ScanPoint(300f, 0f);
+        var set = new AimCandidateSet();
+
+        void Only(int team, bool live, Vector3 at, object? source = null,
+            float cone = AimAssist.NoConeOverride)
+        {
+            set.Clear();
+            set.AddVehicle(at, Vector3.Zero, team, live, source, cone);
+        }
+
+        Only(enemy, live: true, deadAhead);
+        var scan = MakeScan();
+        ctx.Check(AimAssist.Scan(scan, set, out var best) && best.Kind == AimTargetKind.Vehicle,
+            $"aim-assist scan: baseline — a live enemy 300 m dead ahead is accepted");
+        ctx.Check(best.Direction.IsEqualApprox(Vector3.Forward),
+            $"aim-assist scan: a stationary target dead ahead scores on the plain nose direction");
+
+        Only(AimAssist.TeamOfPilot(0), live: true, deadAhead);
+        ctx.Check(!AimAssist.Scan(scan, set, out _), $"aim-assist scan: a SAME-team target is rejected");
+
+        Only(AimAssist.NeutralTeam, live: true, deadAhead);
+        ctx.Check(!AimAssist.Scan(scan, set, out _),
+            $"aim-assist scan: an unaffiliated (team 0) target is rejected — 0 is not a wildcard");
+
+        Only(enemy, live: true, deadAhead);
+        var neutralShooter = MakeScan();
+        neutralShooter.Team = AimAssist.NeutralTeam;
+        ctx.Check(!AimAssist.Scan(neutralShooter, set, out _),
+            $"aim-assist scan: an unaffiliated SHOOTER snaps onto nothing — either side being 0 rejects the pair");
+
+        Only(enemy, live: false, deadAhead);
+        ctx.Check(!AimAssist.Scan(scan, set, out _),
+            $"aim-assist scan: a dead / not-yet-live target is rejected (the vtable +0x14 predicate)");
+
+        var self = new object();
+        Only(enemy, live: true, deadAhead, source: self);
+        ctx.Check(!AimAssist.Scan(MakeScan(self: self), set, out _),
+            $"aim-assist scan: the shooter never snaps onto itself");
+
+        Only(enemy, live: true, ScanPoint(ScanRange - 100f, 0f));
+        ctx.Check(AimAssist.Scan(scan, set, out _),
+            $"aim-assist scan: a target just inside RANGE ({ScanRange - 100f:0} m of {ScanRange:0} m) is accepted");
+        Only(enemy, live: true, ScanPoint(ScanRange + 100f, 0f));
+        ctx.Check(!AimAssist.Scan(scan, set, out _),
+            $"aim-assist scan: a target beyond RANGE ({ScanRange + 100f:0} m) is rejected");
+
+        Only(enemy, live: true, ScanPoint(300f, ScanConeDeg - 0.5f));
+        ctx.Check(AimAssist.Scan(scan, set, out _),
+            $"aim-assist scan: {ScanConeDeg - 0.5f:0.0}° off-axis, just INSIDE the {ScanConeDeg:0}° cone, is accepted");
+        Only(enemy, live: true, ScanPoint(300f, ScanConeDeg + 0.5f));
+        ctx.Check(!AimAssist.Scan(scan, set, out _),
+            $"aim-assist scan: {ScanConeDeg + 0.5f:0.0}° off-axis, just OUTSIDE it, is rejected");
+
+        // The per-target override: the same off-cone geometry, accepted because the candidate
+        // advertises a wider cone of its own (a half-angle in RADIANS, unlike the weapon's degrees).
+        Only(enemy, live: true, ScanPoint(300f, ScanConeDeg + 0.5f), cone: Mathf.DegToRad(20f));
+        ctx.Check(AimAssist.Scan(scan, set, out _),
+            $"aim-assist scan: a target advertising a 20° cone (+0x50) is accepted where the weapon's {ScanConeDeg:0}° rejected it");
+
+        // The turret pass: nothing in CSVM fills this list until M4, so the check that matters is
+        // that the pass is wired — a turret put in it can win, and no code change is owed.
+        set.Clear();
+        set.AddTurret(deadAhead, Vector3.Zero, enemy, live: true, source: null);
+        ctx.Check(AimAssist.Scan(scan, set, out best) && best.Kind == AimTargetKind.Turret,
+            $"aim-assist scan: the turret pass exists and scores — M4 wires a list in, it does not re-derive this");
+    }
+
+    /// <summary>Selection among survivors, on the shipped <c>dist_factor 0.0</c>: a distant
+    /// on-axis target outranks a near off-axis one at any range inside RANGE, because the distance
+    /// term is deleted outright. The contrast case runs the identical geometry at the executable's
+    /// compiled 2.5e-4 default and shows the winner FLIPS — so this is a measurement of the shipped
+    /// value, not of the arithmetic being insensitive to it.</summary>
+    private static void AimAssistSelection(TestContext ctx)
+    {
+        int enemy = AimAssist.TeamOfPilot(1);
+        var far = new object();
+        var near = new object();
+        var set = new AimCandidateSet();
+        set.AddVehicle(ScanPoint(900f, 0f), Vector3.Zero, enemy, live: true, far);
+        set.AddVehicle(ScanPoint(100f, 5f), Vector3.Zero, enemy, live: true, near);
+
+        ctx.Check(AimAssist.Scan(MakeScan(), set, out var best) && ReferenceEquals(best.Source, far),
+            $"aim-assist selection: at the shipped dist_factor 0.0 a 900 m on-axis target beats a 100 m 5°-off one");
+        ctx.Check(AimAssist.Scan(MakeScan(distFactor: 2.5e-4f), set, out best) && ReferenceEquals(best.Source, near),
+            $"aim-assist selection: at the executable's 2.5e-4 default the same pair flips to the near one — the term is live, the shipped data turns it off");
+    }
+
+    /// <summary>The rocket snap, on a live pool: a real proximity-fused round in flight is a
+    /// candidate, and it outranks the aircraft behind it. The ordnance list is a FILTER over the
+    /// rounds in flight, so this is the one B4 case that cannot be proved off-engine — and the gun
+    /// round fired alongside is the able-to-fail half: it is in the same pool, alive, and must NOT
+    /// be collected, since it carries no proximity fuse.</summary>
+    private static void AimAssistOrdnancePriority(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        // Data-driven, not hardcoded ids: the fuse test IS the list membership rule, so the fixture
+        // asserts its two halves off the data before relying on them.
+        var fused = weapons.All.FirstOrDefault(w => w.DetonationDistance is > AimAssist.MinFuseDistance);
+        var gun = weapons.All.FirstOrDefault(w => w.IsGun && w.DetonationDistance is not > AimAssist.MinFuseDistance);
+        ctx.Check(fused != null, $"a weapon ships DETONATION_DISTANCE > {AimAssist.MinFuseDistance:0.0} m — the assist's ordnance-list test");
+        ctx.Check(gun != null, $"a gun ships no proximity fuse, so it is NOT ordnance the assist can snap onto");
+        if (fused == null || gun == null)
+            return;
+
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            // The incoming round: on the shooter's nose axis 400 m out, flying straight back at it,
+            // fired by player 1. The aircraft sits 800 m out and 3° off-axis — inside the cone, so
+            // it is a genuine survivor the round has to outrank, not a candidate the gates drop.
+            var incoming = ScanPoint(400f, 0f);
+            live.Spawn(fused, new Transform3D(Basis.LookingAt(Vector3.Back, Vector3.Up), incoming),
+                Vector3.Zero, shooterId: 1);
+            live.Spawn(gun, new Transform3D(Basis.LookingAt(Vector3.Back, Vector3.Up), ScanPoint(380f, 0f)),
+                Vector3.Zero, shooterId: 1);
+            live.SimStep(1f / 60f);
+
+            var set = new AimCandidateSet();
+            live.CollectFusedOrdnance(set);
+            ctx.Same(1, set.Ordnance.Count,
+                $"the fused round is a candidate and the gun round in the same pool is not");
+
+            var plane = new object();
+            set.AddVehicle(ScanPoint(800f, 3f), Vector3.Zero, AimAssist.TeamOfPilot(1), live: true, plane);
+            var scan = MakeScan();
+            ctx.Check(AimAssist.Scan(scan, set, out var best), $"aim-assist ordnance: the scan finds a target");
+            ctx.Check(best.Kind == AimTargetKind.Ordnance,
+                $"aim-assist ordnance: the guns snap onto the incoming fused round, not the aircraft behind it (won={best.Kind} score={best.Score:0.0000})");
+
+            // Able to fail the other way: drop the round out of the pool and the aircraft wins.
+            live.Clear();
+            set.Clear();
+            live.CollectFusedOrdnance(set);
+            set.AddVehicle(ScanPoint(800f, 3f), Vector3.Zero, AimAssist.TeamOfPilot(1), live: true, plane);
+            ctx.Check(AimAssist.Scan(scan, set, out best) && best.Kind == AimTargetKind.Vehicle,
+                $"aim-assist ordnance: with no round in flight the same aircraft wins — the snap was the round, not the ranking");
+        }
+        finally
+        {
+            pool?.Free();
+            textures.Dispose();
+        }
+    }
+
+    /// <summary>B5's launch scatter (<see cref="AimAssist.Scatter"/>): every round lands inside the
+    /// cone, the polar angle is UNIFORM IN THE ANGLE rather than over the cone's solid angle (the
+    /// reflex port, and what <c>ProjectilePool.ApplySpread</c>'s <c>sqrt(rand)</c> does, which would
+    /// pile shots at the rim), and the roll about the aim axis covers the full circle. The
+    /// able-to-fail control is the solid-angle sampling itself, computed alongside from the same
+    /// draws: it fails the flatness test this one passes.</summary>
+    private static void AimAssistScatter(TestContext ctx)
+    {
+        const int shots = 20000;
+        const int bins = 5;
+        float cone = Mathf.DegToRad(1f); // the shipped sticky_bullet_inaccuracy
+        var rng = new RandomNumberGenerator { Seed = 20260813 };
+        var aim = new Vector3(0.3f, -0.2f, -0.9f).Normalized(); // deliberately off every world axis
+        var flat = new int[bins];
+        var cap = new int[bins];
+        var rollQuadrants = new int[4];
+        float maxAngle = 0f;
+        // A frame to measure the roll in: any two axes perpendicular to the aim direction.
+        var right = aim.Cross(Vector3.Up).Normalized();
+        var up = right.Cross(aim).Normalized();
+        for (int i = 0; i < shots; i++)
+        {
+            var dir = AimAssist.Scatter(aim, cone, rng);
+            float angle = aim.AngleTo(dir);
+            maxAngle = Mathf.Max(maxAngle, angle);
+            flat[Mathf.Min(bins - 1, (int)(angle / cone * bins))]++;
+            // The same draw scored as a solid-angle sample would be: equal-AREA bands, which is
+            // what "uniform over the cap" means. A flat-in-angle sample fills these unevenly.
+            float band = 1f - Mathf.Cos(angle);
+            float bandMax = 1f - Mathf.Cos(cone);
+            cap[Mathf.Min(bins - 1, (int)(band / bandMax * bins))]++;
+            var off = dir - aim * dir.Dot(aim);
+            if (off.LengthSquared() > 0f)
+            {
+                float roll = Mathf.Atan2(off.Dot(up), off.Dot(right)) + Mathf.Pi;
+                rollQuadrants[Mathf.Min(3, (int)(roll / Mathf.Tau * 4f))]++;
+            }
+        }
+        ctx.Check(maxAngle <= cone + 1e-5f,
+            $"aim-assist scatter: every round is inside the {Mathf.RadToDeg(cone):0.0}° cone (worst {Mathf.RadToDeg(maxAngle):0.000}°)");
+        float lo = (float)flat[0] / shots * bins;
+        float hi = (float)flat[bins - 1] / shots * bins;
+        ctx.Check(lo is > 0.85f and < 1.15f && hi is > 0.85f and < 1.15f,
+            $"aim-assist scatter: the polar angle is flat across [0,θ] — innermost band {lo:0.00}× of even, outermost {hi:0.00}× (1.00 = flat)");
+        float capLo = (float)cap[0] / shots * bins;
+        ctx.Check(capLo > 1.5f,
+            $"able to fail: scored as equal-AREA bands the same draws are anything but flat ({capLo:0.00}× in the innermost) — a solid-angle port would have passed the check above and failed this one");
+        int rollMin = Mathf.Min(Mathf.Min(rollQuadrants[0], rollQuadrants[1]), Mathf.Min(rollQuadrants[2], rollQuadrants[3]));
+        ctx.Check(rollMin > shots / 4 * 9 / 10,
+            $"aim-assist scatter: the roll about the aim axis covers the whole circle (thinnest quadrant {rollMin} of {shots / 4} even)");
+    }
+
+    /// <summary>B5's fire-call step order (<c>FUN_004b6530</c>), which is asymmetric on purpose: the
+    /// scan updates the slot's TARGET, and what leaves the muzzle is the SMOOTHED direction from
+    /// previous frames. Run on a rolled plane basis, so a world/local mix-up cannot pass: the fired
+    /// direction must be the smoothed LOCAL vector rotated out to world (inside the scatter cone),
+    /// and the stored target must be the scan winner rotated INTO local. Firing this frame's scan
+    /// result instead would remove the lag entirely and read as an aimbot.</summary>
+    private static void AimAssistFireDirection(TestContext ctx)
+    {
+        var rng = new RandomNumberGenerator { Seed = 4242 };
+        float cone = Mathf.DegToRad(1f);
+        // A plane rolled 30° and yawed 40° — nothing lines up with the world axes.
+        var basis = new Basis(Vector3.Up, Mathf.DegToRad(40f)) * new Basis(Vector3.Forward, Mathf.DegToRad(30f));
+        var nose = -basis.Z;
+        var smoothedLocal = new Vector3(0.25f, 0.1f, -0.96f).Normalized(); // a gun line lagging off-centre
+        var slots = new[]
+        {
+            new GunAimSlot { Active = true, Smoothed = smoothedLocal, Target = AimAssist.LocalForward, LastUpdate = 0.0 },
+        };
+
+        // A target 8° off the nose, well inside a 20° cone, stationary — its intercept direction is
+        // just the displacement direction, so the expected local target is computable by hand.
+        var muzzle = new Vector3(0f, 500f, 0f);
+        var offAxis = (nose + basis.X * 0.14f).Normalized();
+        var targetPos = muzzle + offAxis * 400f;
+        var set = new AimCandidateSet();
+        set.AddVehicle(targetPos, Vector3.Zero, AimAssist.TeamOfPilot(1), live: true, source: null);
+        var scan = new AimScan
+        {
+            MuzzlePosition = muzzle,
+            ShooterVelocity = Vector3.Zero,
+            Forward = nose,
+            Team = AimAssist.TeamOfPilot(0),
+            Speed = ScanSpeed,
+            RangeSquared = ScanRange * ScanRange,
+            ConeCos = Mathf.Cos(Mathf.DegToRad(20f)),
+            DistFactor = 0f,
+            Self = null,
+        };
+
+        var fired = AimAssist.FireDirection(ref slots[0], scan, set, basis, now: 12.5, cone, rng, out var found);
+        ctx.Check(found.Found, $"aim-assist fire: the scan found the off-axis target");
+        var expectedFired = (basis * smoothedLocal).Normalized();
+        ctx.Check(fired.AngleTo(expectedFired) <= cone + 1e-5f,
+            $"aim-assist fire: the round leaves along the SMOOTHED line (off by {Mathf.RadToDeg(fired.AngleTo(expectedFired)):0.000}°, inside the {Mathf.RadToDeg(cone):0.0}° scatter) — not this frame's scan result");
+        ctx.Check(fired.AngleTo(offAxis) > cone,
+            $"able to fail: the scan winner is {Mathf.RadToDeg(fired.AngleTo(offAxis)):0.0}° away from what was fired, so firing it instead would have been visible here");
+        var expectedTarget = (basis.Transposed() * offAxis).Normalized();
+        ctx.Check(slots[0].Target.Dot(expectedTarget) > 1f - 1e-3f,
+            $"aim-assist fire: the winner is stored as the slot's plane-LOCAL target, ready for the next frame's catch-up");
+        ctx.Check(slots[0].LastUpdate == 12.5,
+            $"aim-assist fire: the shot restamps the slot, which is what makes the forget timer run from the last SHOT");
+
+        // No candidate at all: the target unwinds to the plane's own forward (local forward), which
+        // is the engine's "no target found" seed, and the fired direction is unchanged.
+        set.Clear();
+        AimAssist.FireDirection(ref slots[0], scan, set, basis, now: 13.0, cone, rng, out found);
+        ctx.Check(!found.Found && slots[0].Target.Dot(AimAssist.LocalForward) > 1f - 1e-4f,
+            $"aim-assist fire: with nothing to snap onto the slot's target is seeded with the plane's own forward axis");
+    }
+
     /// <summary><see cref="Loadout.ForRig"/> against all 11 player airframes — 4 gun groups
     /// covering every <c>firepointN</c> the rig actually carries (the Kestrel's odd 7th), one
     /// hardpoint per <c>pylonN</c>, no marker bound to two groups, and every synthesized group
@@ -1878,8 +2392,9 @@ public static class Suites
                 },
             });
 
-            // A round overtaking the aircraft 3 m abeam, fired 60 m astern along +Z. Short enough
-            // that the weapon's own 6° CANNON_SPREAD cone cannot throw it past the trigger radius.
+            // A round overtaking the aircraft 3 m abeam, fired 60 m astern along +Z. A round leaves
+            // dead straight (A1 — CANNON_SPREAD is not a dispersion cone), so the pass distance is
+            // the requested one, not a budget against a scatter cone.
             void FireBy(int shooter, float abeam)
             {
                 var origin = target + new Vector3(abeam, 0f, -60f);
@@ -2157,9 +2672,10 @@ public static class Suites
             var noseState = target.Damage!.Parts["nose"];
             for (int shot = 1; shot <= 2; shot++)
             {
-                // One round per attempt: a CANNON_SPREAD deviation can miss the box from any
-                // range, so retry a clean miss (armor unmoved) — but a REGISTERING round must
-                // move the pool by exactly one ARMOR_DAMAGE quantum, which is the assertion.
+                // One round per attempt. A round leaves dead straight (A1 — CANNON_SPREAD is not a
+                // dispersion cone), so this should register on the first try; the retry stays as a
+                // defensive margin against an unrelated near-miss, and a REGISTERING round must move
+                // the pool by exactly one ARMOR_DAMAGE quantum, which is the assertion.
                 float before = noseState.Armor;
                 int tries = 0;
                 while (noseState.Armor >= before && tries < 5)
@@ -2168,7 +2684,7 @@ public static class Suites
                     FireOne(noseMuzzle, shooter.PlayerIndex, 10);
                 }
                 if (tries > 1)
-                    ctx.Note($"shot {shot} needed {tries} rounds (spread misses)");
+                    ctx.Note($"shot {shot} needed {tries} rounds");
                 ctx.Check(Mathf.IsEqualApprox(noseState.Armor, nose.MaxArmor - shot * armorDmg),
                     $"shot {shot}: nose armor moved by the weapon's ARMOR_DAMAGE armor={noseState.Armor:0.##} expected={nose.MaxArmor - shot * armorDmg:0.##}");
                 ctx.Check(Mathf.IsEqualApprox(noseState.Hp, nose.MaxHp),
@@ -4285,32 +4801,31 @@ public static class Suites
         }
     }
 
-    // ---- do_intersections: the flight ends where the world says ---------------------------------
+    // ---- contact: the flight ends where the world says ------------------------------------------
 
-    /// <summary>The 166 events that author <c>do_intersections: true</c> must be cut short by real
-    /// geometry instead of running their authored <c>RUN_TIME</c> out below the terrain, and must
-    /// pick their <c>BOUNCE_SEQUENCE</c> branch from the surface they struck.
+    /// <summary>A gravity-bearing OBJECT_MOTION must be cut short by real geometry instead of
+    /// running its authored <c>RUN_TIME</c> out below the terrain, through whichever of the two
+    /// tiers its flags select, and must pick its <c>BOUNCE_SEQUENCE</c> branch from the surface it
+    /// struck. Tier selection is asserted as well as the landing, since the two tiers are one
+    /// mechanism apiece and the wrong one lands a piece in the wrong place.
     ///
-    /// <para>Driven as a synthetic body rather than off a chapter's own debris, deliberately: the
-    /// reachable carriers are a crashed player's wreck and C5's <c>agyrobus</c>, both of which
-    /// reach their launch through a death sequence and a randomised draw. What is under test here
-    /// is the sweep, so the launch is authored by hand — thrown downward from a known height at
-    /// real chapter geometry — and the flight time, the resting height and the branch are all then
-    /// exactly predictable.</para>
+    /// <para>Driven as a synthetic body rather than off a chapter's own debris, deliberately. The
+    /// reachable carriers reach their launch through a death sequence and a randomised draw, so the
+    /// launch is authored by hand and thrown downward from a known height at real chapter geometry.
+    /// The flight time, the resting height and the branch are then exactly predictable.</para>
     ///
-    /// <para>⚠ The control is the THIRD case: the identical body with no mask handed over runs its
-    /// full 20 s and ends far below the surface. Without it a suite that never fired the query at
-    /// all would still pass its first two checks on a body that simply had not got anywhere yet —
-    /// and it is also the assertion that the no-collision-world fallback runs its authored clock
-    /// rather than being merely untested.</para>
+    /// <para>⚠ The control is the last case: the same bodies with no mask handed over run their
+    /// full 20 s and end far below the surface. Without it, a suite that never fired a query at all
+    /// would still pass its landing checks on a body that simply had not got anywhere yet, and it
+    /// is also the assertion that the no-collision-world fallback runs its authored clock rather
+    /// than being merely untested.</para>
     ///
-    /// <para>⚠ Shown able to fail by disabling <c>TryContact</c>'s gate: the contact case then
-    /// reports the same 20.02 s / −2000 m as the unmasked control and four checks go red. It is
-    /// NOT able to fail on the arming rule — raising <c>ArmDistance</c> alone changes nothing here,
-    /// because arming is distance OR time and <c>ArmSeconds</c> still arms the body at 0.1 s, long
-    /// before a 60 m drop reaches anything. Arming is what the cockpit checks cover (the self-hit
-    /// at launch, where a piece starts inside the wreck); this suite covers truncation, resting
-    /// height, branch choice and the fallback.</para></summary>
+    /// <para>⚠ Shown able to fail by disabling each tier's landing test in turn: the matching case
+    /// then reports the same 20.02 s and −2000 m as the unmasked control. It is NOT able to fail on
+    /// the sweep's arming rule, because arming is distance OR time and <c>ArmSeconds</c> still arms
+    /// the body at 0.1 s, long before a 60 m drop reaches anything. Arming is what the cockpit
+    /// checks cover; this suite covers tier selection, truncation, resting height, branch choice
+    /// and the fallback.</para></summary>
     private static void GroundContact(TestContext ctx)
     {
         const float Tick = 1f / 60f;
@@ -4353,37 +4868,52 @@ public static class Suites
             static Dictionary<string, object?> Vec(float x, float y, float z) =>
                 new() { ["x"] = x, ["y"] = y, ["z"] = z };
 
-            // `flagged: false` is how a `pNhit` settle hop is authored — the same body with
-            // do_intersections off, which must still be swept because it CONTINUES a landing.
-            AnimData Body(bool flagged = true) => new(new Dictionary<string, object?>
+            // `flagged: false` is the DEFAULT authoring — 1,466 events install-wide — which selects
+            // the ground column; `noAltitude` is the opt-out that selects neither.
+            // `timed: false` omits run_time the way 296 ballistic events install-wide do, which is
+            // the shape C8's watchdog bounds; it is thrown UPWARD so the parabola has an apex to
+            // report to the sequence.
+            AnimData Body(bool flagged = true, bool noAltitude = false, bool complex = true,
+                bool timed = true)
             {
-                ["gravity"] = new Dictionary<string, object?>
+                var props = new Dictionary<string, object?>
                 {
-                    ["value"] = -9.8f,
-                    ["complex"] = true,
-                    ["no_altitude"] = false,
-                    ["do_intersections"] = flagged,
-                },
-                ["translation"] = new Dictionary<string, object?>
+                    ["gravity"] = new Dictionary<string, object?>
+                    {
+                        ["value"] = -9.8f,
+                        ["complex"] = complex,
+                        ["no_altitude"] = noAltitude,
+                        ["do_intersections"] = flagged,
+                    },
+                    ["translation"] = new Dictionary<string, object?>
+                    {
+                        ["initial"] = Vec(0f, timed ? -5f : 10f, 0f),
+                        ["delta"] = Vec(0f, 0f, 0f),
+                        ["rnd_xz"] = Vec(0f, 0f, 0f),
+                    },
+                    ["bounce_sequence"] = new Dictionary<string, object?>
+                    {
+                        ["default"] = Land,
+                        ["water"] = Wet,
+                        ["lava"] = null,
+                    },
+                };
+                if (timed)
                 {
-                    ["initial"] = Vec(0f, -5f, 0f),
-                    ["delta"] = Vec(0f, 0f, 0f),
-                    ["rnd_xz"] = Vec(0f, 0f, 0f),
-                },
-                ["bounce_sequence"] = new Dictionary<string, object?>
-                {
-                    ["default"] = Land,
-                    ["water"] = Wet,
-                    ["lava"] = null,
-                },
-                ["run_time"] = Authored,
-            });
+                    props["run_time"] = Authored;
+                }
+
+                return new AnimData(props);
+            }
 
             // Runs one body to a stop and reports what happened to it. `waterHook` stands in for
             // the session's ProjectilePool.SurfaceIsWater binding — the surface-id read has its own
             // coverage, and stubbing it is what makes the branch choice assertable without needing
             // a chapter with reachable sea.
-            (float Flight, float EndY, string? Bounce, bool ByContact) Run(uint mask, System.Func<GodotObject?, bool>? waterHook)
+            (float Flight, float EndY, string? Bounce, bool ByContact, MotionContactTier Tier,
+                int ColumnLandings, int SweepLandings, float Reported) Run(
+                uint mask, System.Func<GodotObject?, bool>? waterHook, AnimData? body = null,
+                float limit = 0f)
             {
                 var node = new Node3D { Name = "ground-contact-probe" };
                 root.AddChild(node);
@@ -4395,17 +4925,20 @@ public static class Suites
                 runtime.SurfaceIsWater = waterHook;
                 try
                 {
-                    var motion = MotionRuntime.Create(runtime, node, Body(), Authored);
+                    var data = body ?? Body();
+                    // What AnimRuntime passes: the authored value, or 0 when the event omits one.
+                    var motion = MotionRuntime.Create(runtime, node, data, data.Num("run_time") ?? 0f);
                     if (motion == null)
                     {
-                        return (0f, node.GlobalPosition.Y, null, false);
+                        return (0f, node.GlobalPosition.Y, null, false, MotionContactTier.None, 0, 0, 0f);
                     }
 
                     var set = new MotionSet();
                     set.Add(motion, world.Runtime.Destructibles.All.First().Def, null);
                     float flown = 0f;
                     string? bounce = null;
-                    for (int i = 0; i < (int)(Authored / Tick) + 2 && !motion.Finished; i++)
+                    float cap = limit > 0f ? limit : Authored;
+                    for (int i = 0; i < (int)(cap / Tick) + 2 && !motion.Finished; i++)
                     {
                         foreach (var landing in set.Tick(Tick))
                         {
@@ -4415,7 +4948,8 @@ public static class Suites
                         flown += Tick;
                     }
 
-                    return (flown, node.GlobalPosition.Y, bounce, motion.LandedByContact);
+                    return (flown, node.GlobalPosition.Y, bounce, motion.LandedByContact,
+                        motion.ContactTier, set.ColumnLandings, set.SweepLandings, motion.RunTime);
                 }
                 finally
                 {
@@ -4425,8 +4959,10 @@ public static class Suites
                 }
             }
 
-            // 1 — contact cuts the flight short and rests the body ON the surface.
+            // 1 — the SWEEP tier cuts the flight short and rests the body ON the surface.
             var hit = Run(CollisionLayers.World, _ => false);
+            ctx.Check(hit.Tier == MotionContactTier.Sweep,
+                $"do_intersections selects the sweep tier={hit.Tier}");
             ctx.Check(hit.ByContact, $"the sweep ended the body on a collider flight={hit.Flight:0.00}s");
             ctx.Check(hit.Flight < Authored,
                 $"contact beat the authored run time flight={hit.Flight:0.00}s authored={Authored:0}s");
@@ -4435,10 +4971,115 @@ public static class Suites
             ctx.Check(hit.EndY >= surfaceY - 1f && hit.EndY <= surfaceY + 2f,
                 $"the body rests at the struck surface endY={hit.EndY:0.00} surfaceY={surfaceY:0.00}");
             ctx.Check(hit.Bounce == Land, $"contact dispatched the default branch bounce={hit.Bounce ?? "(none)"}");
+            ctx.Check(hit.SweepLandings == 1 && hit.ColumnLandings == 0,
+                $"and it is tallied as a sweep landing sweep={hit.SweepLandings} column={hit.ColumnLandings}");
 
             // 2 — the same contact over water takes the water branch.
             var wet = Run(CollisionLayers.World, _ => true);
             ctx.Check(wet.Bounce == Wet, $"a water surface picks the water branch bounce={wet.Bounce ?? "(none)"}");
+
+            // 1b — the DEFAULT tier. The identical body with `do_intersections` off, which is how
+            // 1,466 of the install's gravity-bearing events are authored, must land too and rest in
+            // the same place. Before C6 this body sank through the world and ran its 20 s clock out.
+            var column = Run(CollisionLayers.World, _ => false, Body(flagged: false));
+            ctx.Check(column.Tier == MotionContactTier.Column,
+                $"an unflagged gravity body selects the default column tier={column.Tier}");
+            ctx.Check(column.ByContact && column.Flight < Authored,
+                $"the column ended the body on a surface flight={column.Flight:0.00}s authored={Authored:0}s");
+            ctx.Check(column.EndY >= surfaceY - 1f && column.EndY <= surfaceY + 2f,
+                $"and rests it at the struck surface endY={column.EndY:0.00} surfaceY={surfaceY:0.00}");
+            ctx.Check(column.Bounce == Land,
+                $"the column landing dispatches its branch too bounce={column.Bounce ?? "(none)"}");
+            ctx.Check(column.ColumnLandings == 1 && column.SweepLandings == 0,
+                $"and is tallied apart from the sweep column={column.ColumnLandings} sweep={column.SweepLandings}");
+
+            // 1c — NO_ALTITUDE is the opt-out, and it vetoes the COLUMN only. `gunshell` is its one
+            // author install-wide, and it must keep falling through the world exactly as before.
+            var optedOut = Run(CollisionLayers.World, _ => false, Body(flagged: false, noAltitude: true));
+            ctx.Check(optedOut.Tier == MotionContactTier.None,
+                $"no_altitude vetoes the column tier={optedOut.Tier}");
+            ctx.Check(!optedOut.ByContact && optedOut.EndY < surfaceY - 100f,
+                $"so the body falls straight through endY={optedOut.EndY:0.00} surfaceY={surfaceY:0.00}");
+
+            // 1d — and it does not suppress an explicitly authored sweep. The original's branch
+            // order reaches the veto only on an unflagged body, so a reading that treats the two
+            // flags as independent conditions fails right here.
+            var bothFlags = Run(CollisionLayers.World, _ => false, Body(flagged: true, noAltitude: true));
+            ctx.Check(bothFlags.Tier == MotionContactTier.Sweep && bothFlags.ByContact,
+                $"do_intersections outranks no_altitude tier={bothFlags.Tier} byContact={bothFlags.ByContact}");
+
+            // 1f — an UNTIMED launch, the shape C8 re-terminates. It must land on the column like
+            // any other body, and it must keep REPORTING its parabola rather than its watchdog:
+            // the reported number is what the sequence waits on, so a body reporting 15 s here
+            // would leave every vanish-shape piece on screen for 15 s (BL-257) and divide its
+            // tumble by the same figure.
+            var untimed = Run(CollisionLayers.World, _ => false, Body(flagged: false, timed: false));
+            ctx.Check(untimed.ByContact && untimed.Flight < 10f,
+                $"an untimed launch still ends on the ground flight={untimed.Flight:0.00}s byContact={untimed.ByContact}");
+            ctx.Check(untimed.Reported > 0f && untimed.Reported < 5f,
+                $"and reports its own parabola to the sequence, not the 15 s watchdog reported={untimed.Reported:0.00}s");
+            ctx.Check(untimed.Bounce == Land,
+                $"its branch comes from the surface it struck bounce={untimed.Bounce ?? "(none)"}");
+
+            // 1g — THE WATCHDOG ITSELF, which nothing else here can fire: the same untimed body
+            // with a mask no collider answers. The tier is selected (the mask is non-zero) but
+            // every query comes back empty, which is the only thing that charges the accumulator.
+            // Without it this body would fly forever, since an untimed launch has no clock.
+            const uint EmptyLayer = 1u << 20;   // no collider in this project is built on it
+            var watchdog = Run(EmptyLayer, _ => false, Body(flagged: false, timed: false), limit: 20f);
+            ctx.Check(watchdog.Tier == MotionContactTier.Column && !watchdog.ByContact,
+                $"a query that answers nothing still selects the tier tier={watchdog.Tier} byContact={watchdog.ByContact}");
+            ctx.Check(watchdog.Flight > 14f && watchdog.Flight < 16f,
+                $"and the 15 s column watchdog ends the body flight={watchdog.Flight:0.00}s");
+            ctx.Check(watchdog.Bounce == Land,
+                $"a watchdog end owes the default branch, from its null surface bounce={watchdog.Bounce ?? "(none)"}");
+
+            // 1e — the veto on REAL extracted data. Every case above builds its gravity block by
+            // hand, which pins the branch but not that `no_altitude` survives extraction and
+            // reaches Create at all: the engine had never read that field before C7. gunshell is
+            // its only author install-wide, 8 events, one per chapter, and it is reachable because
+            // muzzleburst_effects CallAnimations it.
+            {
+                var shellDefs = world.Session.Program.ByAnimName("gunshell");
+                AnimData? shell = null;
+                foreach (var def in shellDefs)
+                {
+                    foreach (var seq in def.Sequences)
+                    {
+                        foreach (var ev in seq.Events)
+                        {
+                            if (ev.Kind == "ObjectMotion" && ev.Data.Obj("translation_range") != null)
+                            {
+                                shell ??= ev.Data;
+                            }
+                        }
+                    }
+                }
+
+                ctx.Check(shell != null,
+                    $"the chapter program carries gunshell's launch defs={shellDefs.Count} chapter={ctx.Chapter}");
+                if (shell != null)
+                {
+                    ctx.Check(shell.Obj("gravity")?.Bool("no_altitude") == true,
+                        $"and the extracted event still authors no_altitude value={shell.Obj("gravity")?.Bool("no_altitude")}");
+                    var node = new Node3D { Name = "ground-contact-gunshell" };
+                    root.AddChild(node);
+                    node.GlobalPosition = new Vector3(0f, surfaceY + DropHeight, 0f);
+                    uint maskWas = runtime.ContactMask;
+                    runtime.ContactMask = CollisionLayers.World;
+                    try
+                    {
+                        var casing = MotionRuntime.Create(runtime, node, shell, shell.Num("run_time") ?? 2f);
+                        ctx.Check(casing is { ContactTier: MotionContactTier.None },
+                            $"so the one def that opts out selects no tier even with a mask wired tier={casing?.ContactTier}");
+                    }
+                    finally
+                    {
+                        runtime.ContactMask = maskWas;
+                        node.QueueFree();
+                    }
+                }
+            }
 
             // 2b — the bounce is a CONTINUATION. The sequence a landing dispatches re-launches the
             // very node that landed (`pNhit` throws `pieceN` on again), and MotionRuntime.Create
@@ -4477,9 +5118,13 @@ public static class Suites
                     ctx.Check(landed, $"the first flight landed by contact before the follow-up y={node.GlobalPosition.Y:0.00}");
                     float restedY = node.GlobalPosition.Y;
                     // The follow-up is built the way `pNhit` authors one: the SAME body with the
-                    // flag OFF. It must still resume from the landing AND still test contact —
+                    // flag OFF. It must still resume from the landing AND still be contact-tested —
                     // otherwise it runs its whole clock and buries the piece (3t − 4.9t² is 107 m
                     // under the airfield at t=5 — the "plane went through the ground" symptom).
+                    // ⚠ It is tested because the default tier tests it, like every other unflagged
+                    // gravity body. A judged inheritance used to do that job (a hop carried the
+                    // sweep over from the landing it continued), and the default column dissolves
+                    // the case it existed for, so it is gone rather than kept alongside.
                     var settle = Body(flagged: false);
                     // A dive hands the crash rig a large downward momentum. The FIRST launch spends
                     // it; a hop off the ground must not be handed it again, or it covers the 2 m
@@ -4492,8 +5137,8 @@ public static class Suites
                     float relaunchY = node.GlobalPosition.Y;
                     ctx.Check(Mathf.Abs(relaunchY - restedY) < 1f,
                         $"the follow-up launch starts from the landing, not the authored rest relaunchY={relaunchY:0.00} restedY={restedY:0.00} rest={restPose.Y:0.00}");
-                    ctx.Check(second is { TestsContact: true },
-                        $"the settle hop inherits the contact test from the landing it continues despite authoring do_intersections=false tests={second?.TestsContact}");
+                    ctx.Check(second is { ContactTier: MotionContactTier.Column },
+                        $"the settle hop is contact-tested through the default column tier={second?.ContactTier}");
                     second?.Seek(0.2f);
                     float hopY = node.GlobalPosition.Y;
                     // The band, not a point: this synthetic body is authored throwing DOWNWARD at
@@ -4502,15 +5147,16 @@ public static class Suites
                     ctx.Check(hopY > relaunchY - 3f,
                         $"and it inherits none of the dive's momentum hopY={hopY:0.00} relaunchY={relaunchY:0.00} (inherited it would be ≈{relaunchY - 10.2f:0.00})");
 
-                    // And a plain launch on a node that did NOT just land keeps the data's word:
-                    // the same false-flagged body, no mark, no test. This is the line the
-                    // inheritance must not cross.
+                    // And a plain launch on a node that did NOT just land takes the same tier — the
+                    // resume mark buys momentum and re-homing rules, never a different contact
+                    // mechanism. A body that reported Sweep here would mean the retired
+                    // inheritance had grown back somewhere.
                     var elsewhere = new Node3D { Name = "ground-contact-unflagged" };
                     root.AddChild(elsewhere);
                     elsewhere.GlobalPosition = restPose;
                     var plain = MotionRuntime.Create(runtime, elsewhere, settle, Authored);
-                    ctx.Check(plain is { TestsContact: false },
-                        $"a false-flagged launch that continues nothing still declines the sweep tests={plain?.TestsContact}");
+                    ctx.Check(plain is { ContactTier: MotionContactTier.Column },
+                        $"a false-flagged launch that continues nothing takes the column too tier={plain?.ContactTier}");
                     elsewhere.QueueFree();
                 }
                 finally
@@ -4520,14 +5166,159 @@ public static class Suites
                 }
             }
 
-            // 3 — THE CONTROL. No mask: no sweep, so the body runs its full clock and ends far
+            // 3 — THE CONTROL. No mask: neither tier, so the body runs its full clock and ends far
             // below the surface — which is also the no-collision-world fallback every golden
             // capture takes.
             var free = Run(0u, _ => false);
-            ctx.Check(!free.ByContact, $"with no mask the body never tests contact flight={free.Flight:0.00}s");
+            ctx.Check(free.Tier == MotionContactTier.None && !free.ByContact,
+                $"with no mask the body selects no tier at all tier={free.Tier} flight={free.Flight:0.00}s");
             ctx.Check(free.EndY < surfaceY - 100f,
                 $"the unmasked body falls straight through endY={free.EndY:0.00} surfaceY={surfaceY:0.00}");
-            ctx.Note($"contact {hit.Flight:0.00}s ending {hit.EndY - surfaceY:0.00} m from the surface; unmasked {free.Flight:0.00}s ending {free.EndY - surfaceY:0.00} m from it");
+            var freeColumn = Run(0u, _ => false, Body(flagged: false));
+            ctx.Check(freeColumn.Tier == MotionContactTier.None && freeColumn.EndY < surfaceY - 100f,
+                $"and so does the unflagged body the column would otherwise land tier={freeColumn.Tier} endY={freeColumn.EndY:0.00}");
+            ctx.Note($"sweep {hit.Flight:0.00}s ending {hit.EndY - surfaceY:0.00} m from the surface; column {column.Flight:0.00}s ending {column.EndY - surfaceY:0.00} m from it; unmasked {free.Flight:0.00}s ending {free.EndY - surfaceY:0.00} m from it");
+            // ⚠ Two decoded rules are deliberately NOT asserted here, because asserting them would
+            // claim coverage the suite does not have. With a downward column, the descending-step
+            // admission and `complex`'s widening of it can only save the query, never change the
+            // outcome: a step that ends higher than it starts cannot end below a surface the ray
+            // found at or under its start. Both are transcribed in TryGroundColumn. What a later
+            // item must re-check is the query's shape, not those two lines.
+        });
+    }
+
+    // ---- the tumble: a rate about the launch's own perpendicular ---------------------------------
+
+    /// <summary><c>FORWARD_ROTATION</c> turns a launched body about the horizontal PERPENDICULAR of
+    /// its own launch direction, at the authored rate, with that direction's own horizontal length
+    /// as the scale — so the same authored number tumbles a flat throw fast and a steep one slowly,
+    /// and a body launched by the vector <c>translation</c> form does not turn at all.
+    ///
+    /// <para>Every case is arithmetic on a synthetic body: the ranges are authored min = max so the
+    /// draw is deterministic, and the pose is read back as geometry (where the body's own axes point
+    /// after a quarter turn) rather than as the euler triple the implementation writes, which would
+    /// assert nothing.</para>
+    ///
+    /// <para>⚠ The last case is the one that came from the controls. A crash piece flies the vector
+    /// form, whose launch never fills the direction cache the tumble reads, so it must hold its
+    /// orientation exactly — this is the case that fails if the axis is ever "fixed" back to a mesh
+    /// axis.</para></summary>
+    private static void ForwardRotation(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var runtime = world.Runtime;
+            var root = world.Session.Root;
+
+            static Dictionary<string, object?> Vec(float x, float y, float z) =>
+                new() { ["x"] = x, ["y"] = y, ["z"] = z };
+            static Dictionary<string, object?> Range(float v) =>
+                new() { ["min"] = v, ["max"] = v };
+
+            // A ranged launch at one exact azimuth/elevation, tumbling at `rate` (+`accel`).
+            static AnimData Ranged(float azimuth, float elevation, float rate, float accel = 0f,
+                float runTime = 5f) =>
+                new(new Dictionary<string, object?>
+                {
+                    ["translation_range"] = new Dictionary<string, object?>
+                    {
+                        ["xz"] = Range(azimuth),
+                        ["y"] = Range(elevation),
+                        ["initial"] = Range(10f),
+                        ["delta"] = Range(0f),
+                    },
+                    ["forward_rotation"] = new Dictionary<string, object?>
+                    {
+                        ["Time"] = new Dictionary<string, object?>
+                        {
+                            ["initial"] = rate,
+                            ["delta"] = accel,
+                        },
+                    },
+                    ["run_time"] = runTime,
+                });
+
+            // The same tumble on the VECTOR launch form — the shape the crash pieces author.
+            static AnimData Vector(float rate) =>
+                new(new Dictionary<string, object?>
+                {
+                    ["translation"] = new Dictionary<string, object?>
+                    {
+                        ["initial"] = Vec(10f, 0f, 0f),
+                        ["delta"] = Vec(0f, 0f, 0f),
+                        ["rnd_xz"] = Vec(0f, 0f, 0f),
+                    },
+                    ["forward_rotation"] = new Dictionary<string, object?>
+                    {
+                        ["Time"] = new Dictionary<string, object?>
+                        {
+                            ["initial"] = rate,
+                            ["delta"] = 0f,
+                        },
+                    },
+                    ["run_time"] = 5f,
+                });
+
+            Basis Pose(AnimData data, float t)
+            {
+                var node = new Node3D { Name = "forward-rotation-probe" };
+                root.AddChild(node);
+                try
+                {
+                    var motion = MotionRuntime.Create(runtime, node, data, data.Num("run_time") ?? 0f);
+                    motion?.Seek(t);
+                    return node.Transform.Basis.Orthonormalized();
+                }
+                finally
+                {
+                    node.QueueFree();
+                }
+            }
+
+            // 1 — the axis. A flat throw along +X (azimuth 0, h = 1) turns about (0, 0, −1): after a
+            // quarter turn at π/2 rad/s the body's own up axis points along the throw and its own X
+            // points down, which is an end-over-end tumble FORWARD over the launch.
+            var alongX = Pose(Ranged(0f, 0f, Mathf.Pi / 2f), 1f);
+            ctx.Check(alongX.Y.IsEqualApprox(Vector3.Right) && alongX.X.IsEqualApprox(Vector3.Down),
+                $"a throw along +X pitches forward over it up={alongX.Y} fwd={alongX.X}");
+
+            // And the axis FOLLOWS the throw rather than the mesh: the same body launched along +Z
+            // turns about (1, 0, 0) instead, which the old local-X reading cannot produce.
+            var alongZ = Pose(Ranged(90f, 0f, Mathf.Pi / 2f), 1f);
+            ctx.Check(alongZ.Y.IsEqualApprox(Vector3.Back),
+                $"and a throw along +Z pitches forward over THAT up={alongZ.Y}");
+
+            // 2 — the rate is a RATE, not an angle over the run time. Two bodies with the same
+            // authored number and different run times must be in the same pose at the same instant;
+            // under the ÷ run_time reading the 2 s body would have turned 2.5× as far.
+            var slow = Pose(Ranged(0f, 0f, 1f, runTime: 5f), 1f);
+            var fast = Pose(Ranged(0f, 0f, 1f, runTime: 2f), 1f);
+            ctx.Check(slow.X.IsEqualApprox(fast.X) && slow.Y.IsEqualApprox(fast.Y),
+                $"the run time does not scale the tumble at 5 s={slow.X} at 2 s={fast.X}");
+            ctx.Check(Mathf.Abs(slow.GetEuler(EulerOrder.Yxz).Z + 1f) < 1e-3f,
+                $"one second of 1 rad/s is one radian euler={slow.GetEuler(EulerOrder.Yxz)}");
+
+            // 3 — the launch's own horizontal length scales it, which is what makes a steep throw
+            // tumble slowly off the same authored number. At 60° of elevation h = 1/3.
+            var steep = Pose(Ranged(0f, 60f, 1f), 1f);
+            float steepAngle = -steep.GetEuler(EulerOrder.Yxz).Z;
+            ctx.Check(Mathf.Abs(steepAngle - (1f / 3f)) < 1e-3f,
+                $"a 60° launch turns at h = 1 − |elev|/90 of the authored rate angle={steepAngle:0.000} rad expected=0.333");
+
+            // 4 — `delta` is the rate's own acceleration, integrated rather than dropped: from rest
+            // at 2 rad/s², one second is 1 rad.
+            var ramped = Pose(Ranged(0f, 0f, 0f, accel: 2f), 1f);
+            float rampedAngle = -ramped.GetEuler(EulerOrder.Yxz).Z;
+            ctx.Check(Mathf.Abs(rampedAngle - 1f) < 1e-3f,
+                $"forward_rotation.delta accelerates the rate angle={rampedAngle:0.000} rad expected=1.000");
+
+            // 5 — the report from the controls. The vector launch form never fills the direction
+            // cache the tumble multiplies through, and the parser zeroes the event struct before
+            // reading it, so these bodies hold their orientation however large the authored rate is.
+            var vec = Pose(Vector(15.708f), 1f);
+            ctx.Check(vec.IsEqualApprox(Basis.Identity),
+                $"a vector-translation launch does not tumble at all basis={vec}");
+            ctx.Note($"flat 1 rad/s = {-slow.GetEuler(EulerOrder.Yxz).Z:0.000} rad/s, the same launch at 60° = {steepAngle:0.000} rad/s, vector form = 0");
         });
     }
 
@@ -4690,13 +5481,10 @@ public static class Suites
         const string lateBounce = "ObjectMotion(bounce landed after its instance ended)";
 
         // The bands above are derived from the AUTHORED speed/elevation ranges, because what this
-        // suite asserts is the DECODE — that a bounce-terminated body flies the parabola the data
-        // describes. The shipped launch tune (0.65) is a judged LOOK layered on top of that,
-        // and folding it in here would make the suite re-assert whatever the tune happens to be
-        // rather than the maths. So pin the raw arc for the duration and restore after: the check
-        // stays about the solve, and a future look change cannot silently break it.
-        using var _ = new AuthoredArcScope();
-
+        // suite asserts is the DECODE: that a bounce-terminated body flies the parabola the data
+        // describes. That used to need pinning against a global launch tune sitting on top of the
+        // authored arc; the tune is gone, so the authored arc IS what flies and the bands apply
+        // directly.
         ctx.WithWorld(chapter, collision: false, world =>
         {
             var runtime = world.Runtime;
@@ -4903,12 +5691,7 @@ public static class Suites
         const float Tick = 1f / 60f;
         const string root = "zep_ng_dstry1_flt";   // the staged copy's node name, '.' sanitised
 
-        // Same reason as bounce-launch: the band is the AUTHORED support, so the raw arc is what
-        // this asserts. This one happens to still pass under the shipped 0.65 — its support is
-        // wide enough to swallow the trim — which is exactly why it is pinned explicitly rather
-        // than left to luck.
-        using var _ = new AuthoredArcScope();
-
+        // Same as bounce-launch: the band is the AUTHORED support, which is now simply what flies.
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
             WithEffectStage(ctx, world, "biggun_flying_parts", new[] { "zep_ng_dstry1.flt" },
@@ -5120,22 +5903,4 @@ public static class Suites
     /// being swallowed or running a second concurrent copy.</summary>
     private sealed record BurstLane(string Sequence, BurstStep[] Steps);
 
-    /// <summary>Pins <see cref="DebrisTune"/> to the raw authored arc for a suite's duration and
-    /// restores whatever was set before. For the launch suites, whose expected bands are computed
-    /// from the authored speed/elevation ranges: they assert the <b>decode</b>, and the shipped
-    /// launch tune is a judged look sitting on top of it. Without this, tuning the look
-    /// would move a test of the maths.</summary>
-    private sealed class AuthoredArcScope : System.IDisposable
-    {
-        private readonly float _launch = DebrisTune.LaunchScale;
-        private readonly float _gravity = DebrisTune.GravityScale;
-
-        public AuthoredArcScope() => DebrisTune.UseAuthored();
-
-        public void Dispose()
-        {
-            DebrisTune.LaunchScale = _launch;
-            DebrisTune.GravityScale = _gravity;
-        }
-    }
 }

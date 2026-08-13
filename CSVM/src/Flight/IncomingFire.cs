@@ -15,9 +15,9 @@ namespace CSVM.Flight;
 /// impacts as a fired round — and the target's self-exclusion is not what makes them audible.
 /// The muzzle is placed <see cref="Standoff"/> behind the aircraft, offset laterally by the pass
 /// distance and aimed along the target's own nose, so the round overtakes it on a parallel track
-/// and the geometry holds without lead maths. Sides alternate. <c>CANNON_SPREAD</c> still jitters
-/// each round, so the achieved distance scatters a little around the requested one — which is what
-/// makes a threshold sweep read honestly rather than as an on/off switch.</para>
+/// and the geometry holds without lead maths. Sides alternate. A round leaves the muzzle exactly
+/// along that aim (A1 — the original applies no dispersion at the fire call), so the achieved pass
+/// distance equals the requested one, modulo the swept-segment sampling.</para>
 ///
 /// <para><b>Near misses only.</b> A hit cannot be simulated this way: an aircraft exists to the
 /// projectile raycast as nothing at all (its collision is the swept <see cref="PlaneCollider"/>
@@ -34,10 +34,11 @@ public sealed partial class IncomingFire : Node
     /// bare <c>--incoming</c> sounds the cue rather than testing the threshold's far side.</summary>
     public const float DefaultPass = 8f;
 
-    // How far behind the target the phantom muzzle sits. Kept short on purpose: the weapon's own
-    // CANNON_SPREAD cone (6° for the stock guns) grows with range, and past ~200 m it can throw a
-    // round clean outside the trigger radius, so a test rig at a longer standoff would sometimes
-    // be silent for reasons that have nothing to do with the cue.
+    // How far behind the target the phantom muzzle sits. Originally kept short because CANNON_SPREAD
+    // was (wrongly) read as a dispersion cone that grows with range and, past ~200 m, could throw a
+    // round outside the trigger radius (A1 removed that scatter — a round now leaves dead straight,
+    // so the achieved pass distance no longer depends on Standoff at all). No data-driven reason
+    // remains for this exact figure; left at 120 m since nothing needs it changed.
     private const float Standoff = 120f;   // m
     private const float FireInterval = 2f; // s between rounds — one pass, heard, then the next
 

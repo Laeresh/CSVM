@@ -34,7 +34,11 @@ import re
 import numpy as np
 
 OUT = os.environ.get("CAP08_OUT", ".scratch/cap08")
-LOG = "Z:/CSVM/playtest/CAP-08/combo-log.txt"
+# playtest/ is git-ignored, so a worktree has none: CSVM_DATA_ROOT names the tree that does
+# (the same env var the engine reads), defaulting to this checkout.
+DATA_ROOT = os.environ.get("CSVM_DATA_ROOT") or os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+LOG = os.path.join(DATA_ROOT, "playtest", "CAP-08", "combo-log.txt")
 HZ = 120.0            # resample grid; well above the ~30 fps source
 SLEW = 0.45           # s, a full camera slew at k ~ 7.5/s (BL-150(b))
 

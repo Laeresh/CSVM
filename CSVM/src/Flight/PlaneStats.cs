@@ -117,6 +117,18 @@ public sealed class PlaneStats
     public float WarningShotInterval = 1f;      // s between cues
     public string WarningShotSound = "bullet_warning_sg";
 
+    // The gun aim assist (sticky_bullet_*, docs/org/aim-assist.md) — CatchupRate/ForgetInterval
+    // feed B2's per-frame slot update, DistFactor B4's candidate scoring, Inaccuracy B5's launch
+    // scatter. Fallbacks are the executable's own compiled defaults, not the shipped player.json
+    // values — DistFactor's shipped 0.0 deletes the scan's distance term outright, where the
+    // compiled fallback below does not.
+    public float StickyBulletCatchupRate = 1f;      // sticky_bullet_catchup_rate, 1/s
+    public float StickyBulletForgetInterval = 0.5f; // sticky_bullet_forget_interval, s
+    public float StickyBulletDistFactor = 2.5e-4f;  // sticky_bullet_dist_factor, per metre
+    // Held in RADIANS, as the original stores it: the parser multiplies the file's degrees by
+    // pi/180 on the way in. The shipped 1.0 is a 1-degree cone.
+    public float StickyBulletInaccuracy = Mathf.Pi / 180f;
+
     // sound (vehicle.json 'engine_sound' name + player.json curve blocks).
     // Engine curves run on throttle [0..1]; whine (the 'prop_sound' block — only
     // audible past fd_speed, i.e. a dive) and rattle run on speed/fd_speed.
@@ -339,6 +351,14 @@ public sealed class PlaneStats
             stats.WarningShotDissipation = player.Float("warning_shot_dissipation", stats.WarningShotDissipation);
             stats.WarningShotInterval = player.Float("warning_shot_interval", stats.WarningShotInterval);
             stats.WarningShotSound = player.Str("warning_shot_sound") ?? stats.WarningShotSound;
+            stats.StickyBulletCatchupRate = player.Float("sticky_bullet_catchup_rate", stats.StickyBulletCatchupRate);
+            stats.StickyBulletForgetInterval = player.Float("sticky_bullet_forget_interval", stats.StickyBulletForgetInterval);
+            stats.StickyBulletDistFactor = player.Float("sticky_bullet_dist_factor", stats.StickyBulletDistFactor);
+            // Degrees in the file, radians in the field — the original's own parse-time conversion.
+            // ⚠ Do NOT reproduce the executable's missing-key bug here (its absent-inaccuracy branch
+            // writes catchup_rate's global); the shipped player.json always carries the key.
+            stats.StickyBulletInaccuracy = Mathf.DegToRad(
+                player.Float("sticky_bullet_inaccuracy", Mathf.RadToDeg(stats.StickyBulletInaccuracy)));
 
             // Flight globals for the decoded model — see the field comments above for units and
             // fallback provenance. Not yet read by FlightModel.cs.

@@ -29,10 +29,10 @@ import math
 import os
 from collections import Counter, defaultdict
 
+# extracted/ is git-ignored, so a worktree has none: CSVM_DATA_ROOT names the tree that does
+# (the same env var the engine reads), defaulting to this checkout.
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-EXTRACTED = os.path.join(os.path.dirname(REPO), "extracted")
-if not os.path.isdir(EXTRACTED):
-    EXTRACTED = r"Z:\CSVM\extracted"
+EXTRACTED = os.path.join(os.environ.get("CSVM_DATA_ROOT") or REPO, "extracted")
 
 CHAPTERS = ["C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5"]
 

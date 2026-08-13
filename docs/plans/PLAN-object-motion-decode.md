@@ -1,8 +1,7 @@
 # OBJECT_MOTION — the original's launch, contact and run-time model, decoded
 
-**ACTIVE PLAN** (written 2026-08-10). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**✅ COMPLETE** — written 2026-08-10, landed 2026-08-13, all 13 items (Waves A–D). `C10` was minted
+mid-plan from a controls report, not from the original scope, and landed with Wave C.
 
 This plan replaces the engine's `OBJECT_MOTION` launch and termination model with the one decoded
 from the original's own per-frame update, `FUN_004e8fa0` in `crimson.exe`. Three shipped readings
@@ -106,13 +105,25 @@ symptom, "six of the nine parts cut at 67–72 % of arc". Under the original's, 
 inside it and only the tail is clipped. Magnitude ratio across the band: **0.745 – 0.81**, against
 a judged `LaunchScale` of 0.65 and a frame-comparison estimate of ~0.58.
 
-**The contact tiers.** `FUN_004e9e30` is the default tier: it calls
-`FUN_004c76e0(collisionDB, x, y+step, z, out)` — a vertical **column query** returning candidate
-surface records (0x2c bytes each, height at `+0x14`), and picks the nearest below within 10 m. The
-caller reads the struck surface's type at `+0x20` and maps it `1→1, 4→2`, which is the
-`default`/`water`/`lava` `BOUNCE_SEQUENCE` branch index. On contact the step is reflected, velocity
-is damped by **0.2**, and the body ends once a bounce no longer loses energy. `FUN_004c8ec0` is the
-`DO_INTERSECTIONS` tier, a full geometry sweep against the same world database.
+**The contact tiers** (re-read in full at C6, 2026-08-12; this paragraph is the corrected text).
+`FUN_004e9e30` is the default tier: it calls `FUN_004c76e0(worldDB, x, y+step, z, out)`, a
+**terrain-grid column query** that floors `(x, z)` into the database's cell and returns that cell's
+surface records (0x2c bytes each, height at `+0x14`) for every node flagged `altitude_surface` AND
+`intersect_surface`. It then picks the record whose height is nearest the body's y in **absolute**
+value, taking the first unconditionally and rejecting only *replacements* more than 10 m **above**
+the body — not "the nearest below within 10 m". The caller reads the struck surface's type at
+`+0x20` and maps it `1→1, 4→2`, the `default`/`water`/`lava` `BOUNCE_SEQUENCE` branch index. The
+landing fires when `y + stepY < height`. `FUN_004c8ec0` is the `DO_INTERSECTIONS` tier, a full
+geometry sweep against the same world database.
+
+**The landing response**, from the same re-read, and **not** what C9's Evidence said before it:
+the original does not reflect anything. It **replaces the step's Y** — `stepY = |stepY·0.5| +
+height − y` while any of `|vx| ≥ 0.1`, `|vz| ≥ 0.1`, `|vy| ≥ 0.5` holds, else `stepY = height − y`
+exactly — leaving X and Z untouched, then multiplies all three velocity components by `0.19999999`
+**keeping their signs**. The termination test is `accel² > speed²` at contact: if the incoming
+speed² still covers the acceleration², the body damps and continues; otherwise the motion ends.
+Both halves also run when the watchdog fires, with a null surface record, which is what makes an
+untimed body still dispatch its `default` branch.
 
 **The termination model.** With `0x400` (`RUN_TIME` authored) the final step is shortened by the
 overshoot so the motion ends exactly on time, and the update returns "done" once elapsed ≥
@@ -140,14 +151,17 @@ corroboration in `analysis/object-motion-flags/FINDINGS.md`).
 | `0x4000` | `GRAVITY NO_ALTITUDE` | `00508bf8` | opt-out from the landing test |
 | `0x8000` | `GRAVITY DO_INTERSECTIONS` | `00508c41` | upgrades the landing test to the geometry sweep |
 
-**The flag census, re-derived** (A2, 2026-08-10, `analysis/object-motion-flags/census.py`). Over
-3,051 `ObjectMotion` events in all 8 chapters, 1,625 carry a `gravity` block and every one of them
-is ballistic: **1,363** / 166 / 88 / 8 across the four combinations. `do_intersections` reproduces
-**166** exactly, and `no_altitude`'s 8 (`gunshell`, one per chapter) were never wrong — the "5
-chapter files" grep does not reproduce. The all-false row moved from the published 1,378, which was
-an arithmetic slip against `destructibles.md`'s own `do_intersections`×shape table rather than a
-data change. So the default-combination bodies that should be landing and are not are
-1,363 + 88 = **1,451**, alongside the 120 bounce-shape and 167 vanish-shape launches currently
+**The flag census, re-derived** (A2, 2026-08-10; corrected at C7, 2026-08-12,
+`analysis/object-motion-flags/census.py`). Over 3,066 `ObjectMotion` events in all 8 chapters,
+1,640 carry a `gravity` block and every one of them is ballistic: **1,378** / 166 / 88 / 8 across
+the four combinations. `do_intersections` reproduces **166** exactly, and `no_altitude`'s 8
+(`gunshell`, one per chapter) were never wrong — the "5 chapter files" grep does not reproduce.
+⚠ A2 moved the all-false row to 1,363 and called the published 1,378 an arithmetic slip; that was
+backwards. Its scan walked `sequences` only and missed the **15 `ObjectMotion` events in
+`unknown_seq`** — the compiled destruction slot (`AnimDefinition.DeathSlot`) that a real kill
+dispatches, per `BL-276`. All 15 are ballistic with an all-false gravity block. So the
+default-combination bodies that should be landing and are not are 1,378 + 88 = **1,466**,
+alongside the 120 bounce-shape and 167 vanish-shape launches currently
 ended by `FlightToLaunchHeight`. The parser's fifth `GRAVITY` token, **`LOCAL <value>`**, sets no
 bit and only selects where the gravity number comes from, so it is erased at compile time and
 *cannot* be surfaced by the extractor — the three booleans that ship are the three that exist.
@@ -189,17 +203,24 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — contact and termination
 
-6. ☐ The default contact tier: the ground-column query
-7. ☐ `NO_ALTITUDE` as the opt-out, and `gunshell` as its only author
-8. ☐ `RUN_TIME` as a universal ceiling; retire `FlightToLaunchHeight` for the watchdog
-9. ☐ Landing response: 0.2 restitution and energy-loss termination
+6. ☑ The default contact tier: the ground-column query
+7. ☑ `NO_ALTITUDE` as the opt-out, and `gunshell` as its only author
+8. ☑ `RUN_TIME` as a universal ceiling; retire `FlightToLaunchHeight` for the watchdog
+9. ☑ Landing response: 0.2 restitution and energy-loss termination
+10. ☑ `FORWARD_ROTATION`: the tumble is a rate about the launch's own perpendicular, not an angle
+    over `run_time` about local X
+
+⚠ `C10` was minted at `C9` (2026-08-13) from a user report at the controls, not from the plan's
+original scope: the rotation reads far larger than the original's. It is a decode of the same
+function and it must land before `D12` writes the record, since `D12` would otherwise document a
+tumble that is about to change.
 
 ### Wave D — the tune, the coverage, the record
 
-10. ☐ Delete `DebrisTune` entirely
-11. ☐ Pin a golden that shows debris coming to rest
-12. ☐ Rewrite the decode records that carried the disproven readings
-13. ☐ Item bookkeeping: `BL-319`, `BL-245`, `PT-46` (d), and a fresh ID for the deleted tune
+10. ☑ Delete `DebrisTune` entirely
+11. ☑ Pin a golden that shows debris coming to rest
+12. ☑ Land `docs/org/objectMotion.md`, and correct the records that carried the disproven readings
+13. ☑ Item bookkeeping: `BL-319`, `BL-245`, `PT-46` (d), and a fresh ID for the deleted tune
 
 ## Dependency and parallelism notes
 
@@ -276,8 +297,9 @@ counter can move by forcing a landing.
 "What the data actually ships" above is the result. Two of this plan's own inferred rows were wrong
 and are corrected there (`0x200` is `MORPH`; `TRANSLATION_RANGE` is two bits). `GRAVITY LOCAL` sets
 no bit — it is a value selector, erased at compile time, so the extractor cannot surface it and
-there is nothing to teach it. The census reproduces 166 and 8; the all-false row is **1,363**, not
-1,378, which makes A3/C6's population **1,451**. `impact_force` filed as `BL-343`. ⚠ For A3: every
+there is nothing to teach it. The census reproduces 166 and 8. ⚠ Its all-false row of **1,363** was
+withdrawn at C7: the scan missed `unknown_seq`, so the figure is **1,378** and A3/C6's population is
+**1,466**. `impact_force` filed as `BL-343`. ⚠ For A3: every
 one of the 254 `complex` carriers is aircraft wreckage, and three of them author gravity *stronger*
 than Earth's (−15, −20) — the value is authored deliberately, so the non-constant path A3 is told to
 find had better exist.
@@ -511,7 +533,55 @@ launch-shape changes in one commit make a golden movement impossible to attribut
 
 # Wave C — contact and termination
 
-## C6 ☐ The default contact tier: the ground-column query
+## C6 ☑ The default contact tier: the ground-column query
+
+**Landed 2026-08-12.** `MotionRuntime` now selects a tier once, from the gravity block, in the
+original's own branch order, and `TryGroundColumn` sits beside `TryContact` as a second named
+mechanism. Both end on one shared `Land`. `MotionSet` tallies the two tiers apart, and the
+`--debug-anim` line prints the split. The settle-hop sweep inheritance is deleted rather than kept
+alongside: a `pNhit` follow-up authors a gravity block, so it now selects the column like every
+other unflagged body, which is what that judged divergence was standing in for.
+
+**Two corrections to this item's own Evidence, from re-reading the trace before implementing.**
+Neither changes the mechanism, both change what a later reader would build.
+
+1. `FUN_004e9e30` does **not** pick "the nearest surface below within 10 m". It picks the cell
+   record whose height is nearest the body's y in **absolute** value, takes the first record
+   unconditionally whatever its height, and applies the 10 m only as a filter on *replacements*
+   more than 10 m **above** the body. A surface above can therefore win, and `y + stepY < height`
+   then lifts the body onto it. The implementation casts downward and takes the first surface
+   under the body, which is what that pick degenerates to whenever the cell holds one ground
+   surface, and which cannot lift a piece onto a ceiling it was flying beneath. Recorded as a
+   deliberate departure in `TryGroundColumn`.
+2. `FUN_004c76e0` is a **terrain-grid** lookup, not a general collision query: it floors `(x, z)`
+   into the world database's cell and walks that cell's nodes, admitting only those whose flags
+   carry `altitude_surface` **and** `intersect_surface` (`& 4` and `& 8`). The engine builds
+   colliders from `intersect_surface` alone, so reusing the collider set diverges by exactly the
+   28 nodes install-wide carrying `intersect_surface` without `altitude_surface`: 14 in C1, 0 in
+   C1B/C1C/C2B, 2–4 elsewhere, every one a destructible's own sub-part (`healthy`, `dest_base`,
+   `front`/`rear`, `prhit`) rather than terrain or a building shell. Measured, not assumed, so no
+   second surface pipeline was built. ⚠ Note what this kills: `altitude_surface` is **not** a
+   terrain-only bit — 50,927 of 53,303 nodes carry it, buildings included — so filtering the
+   column by it does *not* keep debris off rooftops, and any future item reaching for it on that
+   reasoning is reaching for the wrong thing.
+
+**Also settled, so C7/C8/C9 do not re-derive it.** A3's descending-step admission and its `COMPLEX`
+widening are transcribed but **behaviourally inert given a downward column**: a step that ends
+higher than it starts cannot end below a surface the ray found at or under its start, so both only
+save the query. They are load-bearing in the original because its cell query can return a surface
+above the body and because its step sign is the parent-frame one, which `COMPLEX` makes
+meaningless; this engine takes the sign in the world, where it is the true answer for both forms.
+The suite records this rather than asserting it, since an assertion would claim coverage that does
+not exist.
+
+**Measured.** `--freecam --chapter=C1 --collision --destroy=<def> --debug-anim --det --mute`:
+`m_build03` 9 launches, **7 by column, 2 on the clock**; `pass_plane01` (the C1 airfield plane)
+4 launches, **2 by column, 2 on the clock**, A/B'd against the same shot without `--collision`,
+where the landing and its ground-level fireball are absent. Both remainders are the no-`RUN_TIME`
+shape that `FlightToLaunchHeight` still ends at **launch height**, above the ground, which is C8's
+item and not a contact failure. Scale and cost: `--destroy=m_build` kills seven buildings at once
+for **63 simultaneous launches, 42 landed by column**, at `physics_ms=0.02` and 101–115 fps, so
+the per-body query is free at the only scale the install can produce.
 
 **Goal.** Every gravity-bearing ballistic body is contact-tested by default. A piece thrown off a
 destroyed structure lands on the ground and stays there, in every session that builds colliders,
@@ -534,7 +604,7 @@ that wires no mask still takes the untouched path, which is what keeps the labs 
 deterministic. Reuse the existing surface classification hook (`SurfaceIsWater`) so a landing piece,
 a round's impact and a wingtip graze cannot disagree.
 
-**Model recommendation.** max — the widest behaviour change in the plan (~1,451 events plus every
+**Model recommendation.** max — the widest behaviour change in the plan (~1,466 events plus every
 bounce and vanish launch), on the hot path, in the file everything else touches.
 
 **Verify.** `ContactLandings` non-zero for the column tier specifically — instrument it separately
@@ -549,7 +619,41 @@ trajectory — a fast piece can pass over a ledge between frames and the origina
 "improve" that. ⚠ Performance: this now runs on most debris in the game. Measure before assuming it
 is free, and if it is not, the answer is a cheaper query, not a narrower admission test.
 
-## C7 ☐ `NO_ALTITUDE` as the opt-out, and `gunshell` as its only author
+## C7 ☑ `NO_ALTITUDE` as the opt-out, and `gunshell` as its only author
+
+**Landed 2026-08-13, and it lands no new engine code.** C6's tier selection already reads the flag
+in the original's branch order, so the veto shipped with it; what C7 owed was proof that the field
+survives extraction and reaches `Create`, which the item itself flagged as unchecked. It does, with
+no plumbing: `AnimData` is a property bag over the parsed JSON and `CompiledAnim` maps JSON
+true/false to `bool`, so `gravityBlock.Bool("no_altitude")` reads the extracted value directly.
+
+**The census, re-derived independently.** `no_altitude: true` appears on `gunshell` alone, **8
+events, one per chapter**, every one `translation_range` form with gravity −3.0, `RUN_TIME` 2.0,
+`complex` false, `do_intersections` false and no bounce. A2's figure confirmed rather than replaced.
+⚠ The same run found A2's all-false row wrong in the other direction, and that is corrected
+throughout: its scan walked `sequences` only and missed the 15 `ObjectMotion` events in
+`unknown_seq`, the compiled destruction slot the runtime dispatches (`BL-276`). The row is **1,378**,
+not 1,363, so C6's population is **1,466**; `census.py` now walks both blocks and `do_intersections`
+still reproduces 166 exactly.
+
+**⚠ The finding that matters for anyone reading this later: in this engine the casing never becomes
+a `MotionRuntime` at all.** `ProjectilePool` reads the `gunshell` event's fields into its own
+`CasingSpec` and integrates them itself (`Projectile.cs`, `CasingSpecResolve`/`CasingSlot`), so
+neither tier can reach an ejected shell whatever the flag says. The veto is live only on the path
+that plays the def through `AnimRuntime`, which `muzzle_burst`'s `muzzleburst_effects` does
+`CallAnimation` (8 sites, one per chapter). So this item is correctness insurance for that path
+rather than a behaviour change, and the "casings must not start resting on the ground" risk it was
+written against could not have materialised.
+
+**Verified.** `ground-contact` gained a case that builds the motion from the **real extracted
+gunshell event** out of the chapter's own anim program, with a mask wired, and asserts it selects
+no tier. Shown able to fail: replacing the veto with `else if (true)` turns exactly that check and
+the hand-built `no_altitude` case red (`tier=Column` both), and nothing else, which is also what
+proves the flag arrives from the data rather than from the suite's own dictionary. `.\RunTests.ps1`
+949/949 units, 37/37 suites, 13/13 goldens hash-identical. At the controls
+(`--chapter=C1 --plane=player_bhawk --hold=0.2,0.1,0,1 --fire --infinite-ammo --debug-anim`):
+casings eject and tumble as before, 12 live simultaneously, and the run reports **0 ballistic
+launches**, which is the direct measurement of the paragraph above.
 
 **Goal.** `NO_ALTITUDE` suppresses the landing test, and nothing else does. The gun casing keeps
 falling through the world; everything else stops.
@@ -579,7 +683,53 @@ order first. ⚠ `gunshell` authors `RUN_TIME 2.0`, so the parser's
 `OBJECT_MOTION: NO_ALTITUDE fall lacks RUN_TIME` diagnostic never fires on this install — the flag's
 dependency on `RUN_TIME` is real in the parser but has no unbounded case here to guard against.
 
-## C8 ☐ `RUN_TIME` as a universal ceiling; retire `FlightToLaunchHeight` for the watchdog
+## C8 ☑ `RUN_TIME` as a universal ceiling; retire `FlightToLaunchHeight` for the watchdog
+
+**Landed 2026-08-13.** The item's riskiest interaction is resolved by splitting one number into two.
+`_runTime` stays exactly what it was — the authored `RUN_TIME` or the parabola's return to launch
+height — and keeps its three existing jobs: the duration the sequence waits on (so `BL-257`'s
+vanish-shape pieces hide when they always did), the tumble rate (an angle divided by exactly that,
+on 282 of the 296 untimed events), and the channel parameter. `_ceiling` is new and terminates the
+body alone: the authored `RUN_TIME`, or an open clock bounded by the watchdog, or — with no contact
+tier behind it — `_runTime` again, which keeps every collider-less session untouched.
+
+The watchdog is charged the way the original charges it, not as a flight timer: `+= dt` only on a
+step whose contact query RAN and came back EMPTY, so a body descending toward ground it can see
+never accumulates a tick, and a climbing body is not even queried. 15 s on the column, 35 s on the
+sweep. An open ceiling cannot hang a body forever here, and the reason is the data rather than a
+cap: all 296 untimed ballistic events author a gravity block, so every one of them descends.
+
+**Two model corrections that fell out of building it.** (1) A watchdog end freezes the body exactly
+as a landing does, so `LandedByContact` was reporting one as the other and `MotionSet` was tallying
+a body that found NOTHING as a contact landing — precisely the reading the item's Verify depends
+on. Contact and clock are now separate flags. (2) The bounce is armed at contact, or on a watchdog
+end from a null surface (which indexes to `default`, as the original does); the create-time arming
+survives only on the no-tier fallback, where nothing will ever reach a surface.
+
+**Measured at the controls** (`--freecam --chapter=C1 --collision --destroy=<def> --debug-anim`).
+`m_build03` **9 of 9** bodies now end by contact, against 7 of 9 before; `pass_plane01` **4 of 4**,
+against 2 of 4. In both cases the remainder was the untimed shape ending at launch height, which is
+what this item removed. C3's no-apex oddities behave: `bridge_truck01` launches 12 with 6 landed and
+none on the clock, `susp_bridge` 5 with 4 landed and none on the clock. **No body anywhere ended on
+the watchdog**, which is the backstop behaving as one. The no-mask capture of `pass_plane01` at
+frame 420 is **byte-identical** to the pre-C8 one (`DE5751AF…`), so the collider-less fallback is
+untouched.
+
+**⚠ Open, and NOT this item's to fix: the pieces rest too deep in the ground** (user, at the
+controls, 2026-08-13). The mechanism is faithful and was re-read to confirm it — `FUN_004cf200`
+hands the column the node's ORIGIN, `FUN_0055bbc0` fills the surface record's height from the
+struck polygon, and there is no bounding-box or extent term anywhere in the chain, so the original
+lands the origin on the polygon exactly as this does (the suite measures the resting origin at
+0.00 m from the struck surface). What sinks a piece is therefore how far its own geometry hangs
+below its node origin, which nothing in the decode compensates for. **C9 owns the resting pose** —
+its half-step-above rule and its exact-rest rule are the only remaining places the original decides
+where a landed body sits — so the question belongs there, and it must be answered by a decode or a
+filed item rather than by an offset (the milestone boundary).
+
+⚠ Also worth not re-deriving: `FUN_004ccf50`/`FUN_004ccf00` around the column query get and clear
+the flying piece's OWN `intersect_surface` bit, restoring it afterwards. That is the original's
+self-hit guard, and it is the mechanism our sweep's `ArmDistance`/`ArmSeconds` epsilon stands in
+for.
 
 **Goal.** `RUN_TIME` ends a motion exactly on time with a shortened final step, everywhere — not
 only for the flagged 166. A launch carrying no `RUN_TIME` is bounded by the original's watchdog
@@ -618,17 +768,55 @@ now column-tested), but confirm the 8 no-apex oddities the census named — `bri
 ⚠ Keep `Seek` free of the contact test, for the reason `MotionRuntime.cs:430-433` already gives: it
 is the pose/scrub entry point and a test there fires on a backwards timeline drag.
 
-## C9 ☐ Landing response: 0.2 restitution and energy-loss termination
+## C9 ☑ Landing response: 0.2 restitution and energy-loss termination
+
+**Landed 2026-08-13**, transcribed from the corrected reading above rather than from this item's
+original Evidence. A contact holds a moving body half its descending step clear of the surface and
+rests a slow one exactly on it (thresholds per axis: 0.1 on X, 0.1 on Z, 0.5 on Y); velocity is
+scaled by 0.2 with **every sign kept**; and the body survives the contact while its incoming speed²
+still covers its acceleration², re-basing the launch at the corrected pose. Both tiers share it,
+since they differ in what they ask the world and not in what they do with the answer. A defensive
+contact cap exists and is never reached: each contact takes four fifths of the speed, so a piece
+striking at 20 m/s under Earth gravity damps to 4 and ends on its next contact.
+
+**⚠ It does not answer the sinking, and the measurement says why.** The suite's resting body moved
+from **0.00 m to 0.06 m** above the struck surface, which is the entire lift this mechanism has:
+half a descending step is centimetres once the speed has been damped. The user's report stands
+(`the parts should not sink into the ground that much`; and, of the original, `lands not perfectly
+above ground but not as much sunken as it is now`), so a gap remains and it is not in the contact
+model. That chain is now read end to end and carries no extent term anywhere: `FUN_004cf200` hands
+the query the node's ORIGIN, `FUN_0055bbc0` walks the struck mesh's polygons and `FUN_0055d5c0`
+returns the polygon's height at `(x, z)`, and the database itself only admits surfaces at or below
+the query point. What remains is how far a piece's own geometry hangs below its node origin.
+**Left open for the milestone's look pass, and it must be answered by a decode or a filed item
+rather than by an offset.**
+
+**⚠ A decode this item did NOT own, found in the same function and worth its own item.** The tumble
+is wrong in both axis and rate, and it is the other half of what the user is seeing. This engine
+reads `forward_rotation.Time.initial` as a TOTAL angle, divides it by the run time and spins about
+the node's local X — a reasoned choice, never a decode. `FUN_004e8fa0`'s `0x80` branch instead
+treats `+0x84` as a live RATE (rad/s), seeded from `Time.initial` and integrated by
+`+0x84 += dt · Time.delta`, and applies it per frame as the euler triple
+`(dirZ · rate · dt, 0, −dirX · rate · dt)` — i.e. about the horizontal axis **perpendicular to the
+launch direction**, scaled by the launch direction's own horizontal magnitude `h = 1 − |elev|/90`.
+So a steep launch tumbles slowly and a flat one fast, off the same authored number, and the axis
+follows the throw instead of the mesh. The `0x40` (`DISTANCE`) branch is the same shape driven by
+the step rather than by `dt`.
 
 **Goal.** A landing piece bounces the way the original bounces — velocity scaled by 0.2 — and the
 body ends when a bounce stops losing energy rather than after a fixed count.
 
-**Evidence (confidence: traced).** On contact the original reflects the step (half the descending
-step above the surface when horizontal speed exceeds 0.1 or vertical exceeds 0.5, otherwise resting
-exactly on it), scales all three velocity components by `0.19999999`, and compares the post-bounce
-speed² against the pre-bounce acceleration² — ending the body when it no longer decreases. The
-`BOUNCES` token exists in the binary (`0063d1f4`) and may cap this independently; that is worth a
-look but is not load-bearing.
+**Evidence (confidence: traced — ⚠ this paragraph was WRONG until C6 re-read the function; see "The
+landing response" above for the full corrected text, and do not reinstate the reflection).** The
+original **replaces the step's Y component** rather than reflecting anything: `stepY = |stepY·0.5|
++ height − y` while any of `|vx| ≥ 0.1`, `|vz| ≥ 0.1`, `|vy| ≥ 0.5` holds, and `stepY = height − y`
+exactly once all three have fallen below, which is what rests a slow piece on the surface. X and Z
+are left alone, so the body keeps its horizontal travel through the contact frame. Velocity is then
+scaled by `0.19999999` on all three components **with their signs kept**. The body ends when
+`accel² > speed²` at contact and damps-and-continues otherwise, so with Earth gravity a piece
+striking at 20 m/s damps to 4 m/s and ends on its next contact: one or two hops, not a count. The
+`BOUNCES` token exists in the binary (`0063d1f4`) and may cap this independently; worth a look, not
+required.
 
 **Approach.** Implement inside the landing path shared by both tiers, so a column landing and a
 sweep landing respond identically — the response is not what the two tiers differ in.
@@ -641,15 +829,113 @@ twice and stop. A piece that never stops means the energy comparison is inverted
 iteration defensively even so.
 
 **⚠ Traps.** ⚠ `0.19999999` is `0.2` in float; do not transcribe the artefact. ⚠ The two speed
-thresholds (0.1 horizontal, 0.5 vertical) are asymmetric on purpose — do not tidy them into one. ⚠
+thresholds (0.1 horizontal, 0.5 vertical) are asymmetric on purpose — do not tidy them into one, and
+note the horizontal one is tested per axis (`|vx|`, `|vz|`), not on their magnitude. ⚠ A damped body
+whose velocity keeps its downward sign does not hop off the surface; what lifts it clear is the
+half-step in the POSE, and reading that as "the response launches it upward" is how the previous
+attempt at this wave ended up with debris hovering. ⚠
 The bounce *branch* (`default`/`water`/`lava`) comes from the struck surface and is already wired;
 this item is the physical response only, and `lava` remains dead data across the install.
+
+## C10 ☑ `FORWARD_ROTATION`: the tumble's axis and its rate
+
+**Landed 2026-08-13.** `Time.initial` is a rate in rad/s and `delta` its acceleration, both read
+across verbatim; the run time is gone from the derivation. The axis is the launch direction's own
+horizontal perpendicular `(dirZ, 0, −dirX)`, unnormalised, so a launch's `h = 1 − |elev|/90` scales
+its own tumble — `TumbleAxis`, shared with the casing ejection the way `RangeLaunchDirection`
+already was. It composes as an EULER triple on the node's angles, which is what the original
+accumulates (`FUN_004d25c0`/`FUN_004d1ba0` write `node+0x18..0x20`), not as a turn about a live
+basis axis.
+
+**The finding that answers the report.** A body launched by the VECTOR `translation` form does not
+tumble at all. The cache the tumble multiplies through is filled only by the `translation_range`
+branch, and the parser zeroes the whole 0x14c-byte event struct before parsing (`REP STOSD` at
+`005085e0`), so the multiply is by zero. That is **495 of the install's 1,399 tumbles**, including
+all four `player_crash_dirt` pieces — the biggest authored numbers in the install (15.708 rad/s,
+which the old reading turned into a 2.6 rad/s spin). ⚠ `CAP-16`'s wing-panel strip measured
+20–30 °/s against the ÷`run_time` reading's ~150 °/s and was recorded as confirming a *total angle*;
+it fits "no tumble at all" better than either reading. Noted as agreement only — no measurement off
+that footage decides this (`docs/verification.md`, and the `CAP-16` rule).
+
+**What moves, honestly.** For a ranged launch the new rate is `initial · h` against the old
+`initial / run_time`, so the ratio is `h · run_time` and it can go either way: `pass_plane01`'s
+part1 (6.98 rad/s authored, 60–70°) goes 1.40 → 1.55–2.33 rad/s, its part3 (80–85°, untimed)
+drops to 0.03 rad/s, and the crash pieces go to zero. The tumble reading larger than the original's
+is answered by the vector-form finding, not by everything getting slower.
+
+**Verified.** 949/949 units, 38/38 engine suites with engine errors clean (a new `forward-rotation`
+suite pins the axis geometrically, the rate against two different run times, `h`'s scaling at 60°,
+`delta`'s integration, and the vector form's zero), 12 of 13 goldens unchanged. `c1-crash` re-pinned
+`b80b8a98…` → `d15e38ed…`, image inspected, `exercises` rewritten. `--destroy=pass_plane01` still
+lands 4 of 4 by column with no engine errors.
+
+**Not built.** `FORWARD_ROTATION DISTANCE` (flag `0x40`): all 1,399 tumbles in the install author
+`Time` and none authors `Distance`, so the branch is documented and left unwritten.
+
+**Goal.** A tumbling piece spins at the rate the data authors, about the axis the original spins it
+about — so a steep launch tumbles slowly and a flat one fast, off the same authored number, and the
+axis follows the throw rather than the mesh.
+
+**Evidence (confidence: traced — read at C9, 2026-08-13, and not yet built).** This engine reads
+`forward_rotation.Time.initial` as a TOTAL angle, divides it by the run time, and rotates about the
+node's local X (`MotionRuntime`'s `_tumbleRate`, and its class remark has always called the axis a
+reasoned choice rather than a decode). `FUN_004e8fa0` does neither. Its `0x80` (`TIME`) branch holds
+a live RATE at `+0x84`, seeded from `Time.initial` in rad/s and integrated each frame by
+`+0x84 += dt · Time.delta` (`+0x80`), and applies the euler triple
+
+```
+( +0x78 · rate · dt ,  0 ,  −( +0x70 · rate · dt ) )
+```
+
+where `+0x70`/`+0x78` are the launch direction's cached X and Z (`cos(az)·h` and `sin(az)·h`, from
+the same `TRANSLATION_RANGE` block B4 decoded). That is a rotation about the horizontal axis
+**perpendicular to the launch direction**, scaled by the direction's own horizontal magnitude
+`h = 1 − |elev|/90`. The `0x40` (`DISTANCE`) branch is the same shape driven by the step rather than
+by `dt`, so it is a rotation per metre travelled rather than per second.
+
+**Approach.** Replace `_tumbleRate`'s derivation and its axis together — they are one reading, and
+changing only the rate would leave the spin about a mesh axis it was never about. Carry
+`Time.delta` as the rate's own integrator rather than dropping it. Check what `DISTANCE`'s
+population is before deciding whether to build both branches or file the second.
+
+**Model recommendation.** high — small diff, wide blast radius (282 of the 296 untimed events carry
+a tumble, and the crash pieces carry the biggest ones), and it will move `c1-crash`.
+
+**Verify.** The user's own report is the acceptance test: the rotation must stop reading larger than
+the original's. Pin the arithmetic first — a steep launch and a flat one off the same authored
+number must differ — then look at `--destroy=pass_plane01` and the crash, and expect `c1-crash` to
+move.
+
+**⚠ Traps.** ⚠ `Time.initial` is a RATE here, not the total angle the class remark claims; the "5π
+and 4.44π are clean multiples of π" reasoning that produced the total-angle reading is a
+coincidence of the authored numbers and must not be used to argue the decode back. ⚠ Do not
+normalise the axis: its length is `h`, and that is what makes a steep throw tumble slowly. ⚠ This
+lands before `D12`, which would otherwise write the old reading into `docs/org/`.
 
 ---
 
 # Wave D — the tune, the coverage, the record
 
-## D10 ☐ Delete `DebrisTune` entirely
+## D10 ☑ Delete `DebrisTune` entirely
+
+**Landed 2026-08-13.** Gone in full, per Decision 5: the class and its file, `LaunchScale` and
+`GravityScale` both, `Launcher.ApplyDebrisTune` and its call site, `SessionSpec`'s two properties
+and their argument parsing, the `--debris-launch`/`--debris-gravity` flags and their `cli.md` entry,
+the `debris.launchScale`/`debris.gravityScale` config keys (which the removed `Config.GetFloat`
+reads also removes from `--dump-config`), the `WorldDamageLab` panel with its two sliders, three
+buttons, readout and sync, and `Suites.cs`'s `AuthoredArcScope` with both of its uses. The launch
+suites need no pin now: the authored arc IS what flies, so their bands apply directly.
+
+**The golden that moved, and it is the one that should.** `c1-crash` re-pinned
+(`440c61cb…` → `b80b8a98…`): `call_crash_trails`' five `fly_trailN` now launch at the authored speed
+instead of 0.65 of it. The other twelve are unchanged, which is what a knob that only ever touched
+launched `OBJECT_MOTION` bodies should do. 949/949 units, 37/37 suites, engine errors clean.
+
+**⚠ The first honest look, and it is not signed off.** With `B4`'s elevation decode and no tune, the
+arc is finally the data's own. The two open look questions belong here rather than to any item:
+debris resting too deep (`C9`, decoded end to end, no extent term anywhere in the original's chain)
+and the tumble reading far larger than the original's (`C10`, now its own item). Neither is to be
+answered with a scalar; that is the whole reason this item exists.
 
 **Goal.** No global debris multiplier exists in the tree, in any form that can persist across
 sessions or silently absorb a future decode error.
@@ -679,7 +965,36 @@ intended, but check nothing asserts on their presence. ⚠ This is the item wher
 reads at full authored speed *with* the B4 correction — the first honest look at the decode. If it
 reads wrong, file an item; do not reintroduce a scalar (the milestone boundary).
 
-## D11 ☐ Pin a golden that shows debris coming to rest
+## D11 ☑ Pin a golden that shows debris coming to rest
+
+**Landed 2026-08-13.** `c1-debris-rest`: `--freecam --chapter=C1 --collision --destroy=m_build03`,
+camera hand-placed on the one piece (`part4`) that lands inside its own 5.0 s `RUN_TIME` ceiling,
+frame 360 (6.0 s) — late enough for the landing's own bounce/spark puffer (`sparkout4`) to have
+fired and be fading, early enough that it still marks the pixels. `A1`'s own three Fly-mode goldens
+were re-checked first and confirmed still short: `c1-destroy-effects`'s piece is structurally
+untestable (`do_intersections: false`) and `c1-crash`'s pieces launch too late in a 0.333 s window
+to reach the ground — neither closes on its own. `m_build03`'s other eight pieces do NOT reliably
+land inside their own ceiling under `--det`'s seed (only `part4` does; the rest end on the clock,
+one — `part3` — still free-falling past the terrain grid's column at frame 900 with no matching
+surface under it, the "a fast piece can pass over a ledge" case C6's Evidence already named) — so
+the shot is framed on the one piece that does, not on the building's auto-framed full bounds, which
+stays hash-identical with contact on or off (checked and rejected: the flying pieces that would
+move it all land outside that framing).
+
+**Shown able to fail, locally, per this item's own acceptance bar.** `GameSession.cs`'s
+`if (BuildsCollision)` gate on `session.Runtime.ContactMask` was flipped to `if (false && ...)`,
+rebuilt, and the identical probe re-run: `pixmd5` moved from `b77edef2…` (contact) to `5e3e023c…`
+(no contact) at frame 360 — the landing spark puffer is the discriminator, and it is gone with the
+tier off. The same A/B at frame 900 (well past the puffer's fade) came back hash-IDENTICAL both
+ways, which is why frame 360 is pinned and not a later, cleaner-looking one: a golden that cannot
+fail is not coverage, and a frame chosen for looks alone would have been exactly that. The edit was
+reverted before pinning; `git diff` on `GameSession.cs` is empty in this commit.
+
+**Verified.** `.\RunTests.ps1`: build clean, 949/949 units, 38/38 engine suites, 14/14 goldens
+hash-identical including the new shot; `c1-debris-rest`'s own probe log shows
+`'part4' landed at (-6104.4863, 158.73997, -4279.1753) — bounce sequence 'sparkout4'` and
+`contact-tested bodies ended: 1 by contact, 4 on their run time (column 1/4, sweep 0/0)` at the
+pinned frame — `ContactLandings` non-zero, as required.
 
 **Goal.** A capture in `analysis/goldens/manifest.json` that fails loudly if the contact tier
 breaks.
@@ -705,7 +1020,54 @@ exercises" clause, and it is **rewritten on a re-pin, never appended to**. ⚠ D
 `--det --mute` like every other shot, and a landing that depends on the seeded RNG's draw needs its
 window chosen so every draw lands, not just the median one.
 
-## D12 ☐ Land `docs/org/objectMotion.md`, and correct the records that carried the disproven readings
+## D12 ☑ Land `docs/org/objectMotion.md`, and correct the records that carried the disproven readings
+
+**Landed 2026-08-13.** `docs/org/objectMotion.md` is the decode's home, in the `puffer.md` house
+style: function map, the flag word with its parser addresses, the live slots, then behaviour and
+constants — the linear elevation and its non-unit magnitude, `delta` as an acceleration, gravity's
+two forms, both contact tiers with the column's exact surface pick, the landing response, the
+termination model and both watchdogs, the tumble and its axis. It closes with the divergence table
+and **eight retired readings**, each with its cause of death: the spherical elevation, `DebrisTune`,
+the total-angle tumble, the ÷`run_time` `delta`, "`do_intersections: false` means no test",
+"`no_altitude` is about spawn altitude", `PT-46` (d)'s mechanism (observation intact, attribution
+reversed), and "every golden builds no colliders".
+
+**Six records corrected rather than duplicated**, each keeping its own view and gaining a pointer:
+`formats/destructibles.md` (the tune bullet, the ground-rest split, the `no_altitude` paragraph, the
+`BL-245` deferral, the Wave C status line, the `sin(elevation)` vertical speed);
+`formats/anim-definitions.md` (the two `delta` readings, "spherical form", the `DO_INTERSECTIONS`
+follow-up framing, and the `FORWARD_ROTATION` bullet's inline addresses, which belong in `org/` now
+that it exists); `formats/README.md`'s `org/` index; `architecture.md`'s anim entry, which sheds the
+decode narrative it was carrying and keeps the engine-side constraints (⚠ count 6 → 5);
+`analysis/object-motion-ground-rest/FINDINGS.md` (a banner retiring its interpretation, with its
+tables left standing); `analysis/bl-257-nulled-launch/FINDINGS.md` + its `census.py`;
+`analysis/object-motion-range/FINDINGS.md` (title and a two-line correction note);
+`analysis/object-motion-goldens/FINDINGS.md`; and `analysis/object-motion-flags/FINDINGS.md`'s open
+A3 question, now answered. `MotionRuntime`'s class remark is stripped of its provenance — install
+counts, dates, plan tags, Ghidra offsets — down to what each channel is, why, and the pointer.
+
+**Verified.** Every install-wide number on the new page re-derived from `extracted/` rather than
+carried across: the four-way flag census (1,378 / 166 / 88 / 8, so 1,466 on the column), 3,066
+events / 1,983 ballistic / 1,640 gravity-bearing, 1,399 tumbles with 495 on the vector form and
+**zero** authoring `DISTANCE`, `delta` non-zero on 233 of 1,226 range and 92 of 757 vector events,
+296 untimed ballistic events **all** carrying gravity, 324 bounce blocks naming `default` and 104
+`water` with **no** lava branch, 182 `impact_force`, `gunshell` as the sole `no_altitude` carrier at
+8 events. `m_build03` part1's block re-read at source (azimuth 35–55°, elevation 60–70°, speed
+28–37, gravity −10, `RUN_TIME` 5.0), and the 0.745–0.81 magnitude band recomputed from it.
+`bl-257-nulled-launch/census.py`'s `sin(elev)` → `elev/90` fix re-run: the 159-up / 8-no-apex split
+and all eight named defs reproduce exactly, which is what makes the edit a correction rather than a
+new finding. `.\RunTests.ps1`: build clean, 949/949 units, 38/38 engine suites with engine errors
+clean, **14/14 goldens hash-identical** — a documentation item must move nothing, and it moved
+nothing. Repo grep for the disproven phrasings leaves them only inside "this was wrong, here is
+how it died" contexts, plus `backlog.md`, which is **D13's** file. Five live restatements are
+waiting there, listed so D13 does not have to re-find them: `:85` ("the spherical one"), `:105` and
+`:157` (`DebrisTune.LaunchScale` 0.65 as a settled judged look), `:2108` (`sin(elevation)·speed`)
+and `:2117` (`BL-245`'s "the original was not collision-testing them", with `PT-46` (d) cited as
+confirmation).
+
+⚠ **Not done here, deliberately:** the Ghidra addresses in `MotionRuntime`'s *member* comments. The
+convention's code-comment cleanup is what `acbb9ba` was groundwork for and it is wider than this
+plan; the class remark is what D12 scoped.
 
 **Goal.** This plan's decode has a home of its own in `docs/org/`, the corrected records point at it
 instead of restating it, and no document in the repo still teaches a reading this plan disproved —
@@ -764,7 +1126,20 @@ something that was not there. ⚠ Do not delete the wrong readings outright; the
 table exists so nobody re-derives them. ⚠ `docs/HISTORY.md` is frozen; the narrative record goes in
 commit messages.
 
-## D13 ☐ Item bookkeeping: `BL-319`, `BL-245`, `PT-46` (d), and a fresh ID for the deleted tune
+## D13 ☑ Item bookkeeping: `BL-319`, `BL-245`, `PT-46` (d), and a fresh ID for the deleted tune
+
+**Landed 2026-08-13.** `BL-319` deleted as answered — `RUN_TIME` is a ceiling everywhere, `m_build03`'s
+cut arc traced to the linear-elevation decode (B4) and `genx12`'s underground landing to the missing
+default contact tier (C6), both settled. `BL-245` deleted per Decision 7 — `do_intersections: false`
+selects the cheap column tier rather than opting a body out, so its 379 falls simply land under C6/C7
+with no divergence decision left to make. `PT-46` (d) re-opened in `playtest.md` against a C1
+Devastator destruction sortie: the observation (pieces pass through terrain or vanish) stands, and the
+new check asks the same question against the corrected mechanism (default column test,
+`NO_ALTITUDE`'s opt-out, `DO_INTERSECTIONS`'s sweep) instead of the disproven "no test at all" reading.
+`./New-ItemId.ps1 -Kind BL` minted `BL-346` for the at-controls debris-arc judgement left behind by
+D10's deletion of `DebrisTune.LaunchScale`; the two other backlog entries that still cited the deleted
+0.65 constant (`BL-060`, `BL-122`) were rewritten to point at the executable decode and at `BL-346`
+instead.
 
 **Goal.** `backlog.md` and `playtest.md` reflect what this plan settled, with no stale caveat left
 restating a disproven reading.

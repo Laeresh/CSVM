@@ -31,7 +31,11 @@ import sys
 import imageio_ffmpeg as iio
 import numpy as np
 
-VIDEO = "Z:/CSVM/playtest/CAP-08/CAP-08.mp4"
+# playtest/ is git-ignored, so a worktree has none: CSVM_DATA_ROOT names the tree that does
+# (the same env var the engine reads), defaulting to this checkout.
+DATA_ROOT = os.environ.get("CSVM_DATA_ROOT") or os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+VIDEO = os.path.join(DATA_ROOT, "playtest", "CAP-08", "CAP-08.mp4")
 OUT = os.environ.get("CAP08_OUT", ".scratch/cap08")
 
 # 1/4 of 2560x1440.  The aircraft masks to a few thousand px here, enough that

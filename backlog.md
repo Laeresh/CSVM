@@ -73,38 +73,61 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Damage & destruction
 
-- `BL-319` `[Research]` **`run_time` on a launched `OBJECT_MOTION` is not a flight duration — pieces are cut
-    mid-arc, or fly for seconds past their landing.** Found while settling `BL-022`'s arc scale
-    (`git log --grep=BL-022`), and it is why that item's 0.65 is a judged look rather than a decode.
-    **Only an event with NO authored `RUN_TIME` gets a solved flight** (`MotionRuntime.FlightToLaunchHeight`,
-    `MotionRuntime.cs:242-255`). Everything else integrates the parabola for exactly the authored time and is
-    then dropped by `MotionSet` (`MotionSet.cs:63-66`), holding its last pose. Both failure directions ship:
-    - **Cut mid-flight.** `m_build03` part1/5/9 author `run_time` 5.0 s against a 6.95 s parabola — the piece
-      stops at **72 % of its arc, still ~49 m up**. part2/6/7/8 stop at 67 %. Six of the nine.
-    - **Run long past landing.** `genx12` (the template `air_gen` calls, and the *vector* `translation`
-      branch, not the spherical one) authors 4.0–6.5 s against 1.1–2.0 s parabolas — every one of its twelve
-      pieces ends up roughly **135 m below** where it launched, i.e. deep under the terrain.
-    *To settle:* (a) does a following sequence event hide the frozen piece, or does it visibly hang in the
-    sky? — `--debug-anim` on a `--destroy=m_build03` run answers it; (b) then decide what `run_time` means
-    for a launch: a clamp on the flight, a hint the original overrode with real contact, or a duration the
-    parabola was meant to fit.
-    ⚠ **Traps.** (a) **Not a decode question about `translation_range`** — the speeds and angles are censused
-    and mapped (`analysis/object-motion-range/`); this is about the *duration* field. (b) **Not ground
-    contact — and half the question is already answered.** `do_intersections` is false on all 120
-    bounce-shape events, all 167 vanish-shape and 1,118 of the `run_time` shape; a piece passing *through*
-    the ground with the flag false is confirmed original behaviour (`PT-46` check (d)) and is not this item.
-    But for the **166 events that author it true**, `PLAN-ground-contact` (landed 2026-08-09) settled the
-    third of this item's three readings outright: **`RUN_TIME` is a ceiling the original overrode with real
-    contact**, and `MotionRuntime.TryContact` now ends those bodies on the first collider whatever their
-    clock says. So this item's remaining question is what `RUN_TIME` means for a launch the original was
-    *not* testing — which is where `m_build03`'s 72 %-of-arc cut lives. ⚠ `genx12`'s twelve pieces ending
-    135 m under the terrain is a **different** fault than it looks: its own two `ACTIVE_STATE`s target the
-    `INPUT_NODE` sentinel, which resolved to nothing until that plan fixed `AnimRuntime.Targets` — re-measure
-    before treating the 135 m as this item's evidence. (c) `gravity.value` is absolute m/s² (a literal −9.8 on 173
-    events, −10 on 400), **not** an offset to the aircraft's arcade `nom_gravity` of 20 — considered and
-    disproven by the same census. (d) ⚠ **`BL-022`'s shipped `DebrisTune.LaunchScale` of 0.65 silently
-    absorbs whatever this turns out to be**, so settling it will likely move that number too — re-judge the
-    look at the controls afterwards rather than assuming 0.65 survives.
+- `BL-346` `[Tuning]` `[Owed-playtest]` **Re-judge the debris arc at the controls now that
+    `OBJECT_MOTION` is a decode, not a tuned look.** `BL-022`'s retired `DebrisTune.LaunchScale =
+    0.65` was a footage fit laid over the wrong spherical `translation_range` reading; the constant
+    and the whole class are deleted (`PLAN-object-motion-decode` D10), and the launch direction,
+    speed and `RUN_TIME` ceiling the executable actually authors now drive the arc unscaled. `PT-46`
+    (d)'s observation that some original pieces pass through terrain or vanish stands — only its
+    mechanism attribution was wrong, and `PT-46` is re-opened against the corrected one (the default
+    ground-column tier, `NO_ALTITUDE`'s opt-out, `DO_INTERSECTIONS`'s sweep upgrade).
+    *To settle:* fly the C1 `m_build03` destruction and compare the arc and landings against
+    `OriginalScreenshots/Videos/m_build03 destruction.mp4`.
+    ⚠ **Traps.** Do not reintroduce a compensating scalar to chase the old look — a mismatch is a
+    further decode or a newly filed item, per this plan's milestone boundary. Distinguish an
+    unflagged pass-through (faithful — `do_intersections: false` bodies keep sinking through terrain
+    the original also sinks them through) from a flagged body that should now land.
+
+- `BL-348` `[Bug]` **C3's balloon-battery kill chain (`bontN`/`tbaseN`/`b_turretN`, M02) doesn't
+    match the authored data on any of its four death paths — over-triggers, drags the wrong node,
+    and drops calls silently.** Each of the six balloons is three independently-`WeaponHit`
+    destructibles — `tbaseN` (ground tether anchor), `bontN`/`ball_kaboomN` (the balloon body) and
+    `b_turretN` (its slung AI turret) — wired by three authored, exact-numbered `CallAnimation`s:
+    killing `tbaseN` calls `balloon_upN` (24s tether burn → 512m rise → `ball_kaboomN`); killing
+    `b_turretN` waits 2s then also calls `ball_kaboomN`; `ball_kaboomN` itself calls
+    `balloont_dieN` back. Every one of these names its target with an exact digit (`balloon_up1`,
+    never a wildcard), and all three defs ship `local_nodes_only: false`.
+    User-observed at the controls (2026-08-13), against `--chapter=C3 --mission=M02`:
+    (a) killing ONE `tbaseN` raises all six balloons, not just the matching one;
+    (b) the killed `tbaseN`'s own body drags upward with its balloon (visible tether
+    stretching/ripping) instead of staying grounded — its own death sequence never moves
+    `tbaseN`, only its three debris chunks;
+    (c) the five wrongly-triggered balloons do play their own `balloon_upN` rise, but never
+    detonate at the top — no `ball_kaboomN`, they just disappear instead of exploding;
+    (d) killing `b_turretN` swaps the balloon straight to its `b_destroyed`/`f_destroyed` skin
+    but leaves it hanging motionless in the air — `ball_kaboomN`'s debris/fireball/sound/
+    `balloon_downaN` fall never runs.
+    *To settle:* trace `CallAnimation` dispatch and `NameResolver`'s three-tier scope chain
+    (`docs/architecture.md`, `Anim/NameResolver.cs`) for a cross-instance name collision — all
+    three defs reuse generic node names (`healthy`/`destroyed`/`part1..3`/`dbase`) across all six
+    numbered instances, and the tier-3 global fallback (`local_nodes_only: false`) is a candidate
+    for (a): an over-trigger, five defs launching that a single, exact-numbered `CallAnimation`
+    never named. (c) is the opposite shape — the wrongly-launched balloons *do* run their own
+    correctly-numbered `balloon_upN`, but its own trailing `CallAnimation(ball_kaboomN)` never
+    fires, which looks more like a dropped/truncated sequence-completion than a name leak; trace
+    it separately rather than assuming (a)'s cause explains it. (b) needs the `tbaseN`↔`bontN`
+    transform/parenting checked too, since nothing in either def's `ObjectMotion*` targets the
+    other's node.
+    ⚠ **Traps.** (i) A prior report of "shooting the tether instantly explodes the balloon
+    instead of raising it" turned out not to be a bug: `tether1` has no separate destructible —
+    it's a plain node inside `bontN`'s own def, so a hit there resolves to `bontN`'s own
+    independent `ball_kaboomN` pool (health 30, immediate detonation by design) rather than to
+    `tbaseN`. Confirmed at the F5/`--debug-damage` damage lab: killing the tether node's pool
+    resolves to the parent (`bontN`), not a phantom tether entity — don't re-file this. (ii) Do
+    not assume one fix covers all four symptoms — (a) is an over-trigger, (c) is a dropped
+    trailing call on an otherwise-correct trigger, (d) looks like a stalled/dropped sequence on
+    yet another trigger path, and (b) is unproven to share any of their causes. Verify each
+    independently before closing.
 
 - `BL-343` `[Research]` **`IMPACT_FORCE` is a real velocity-inheritance mechanism in the original, and
     `BL-008` was closed without it.** The `OBJECT_MOTION` flag word's bit `0x2` is set by the parser's
@@ -141,13 +164,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ground also needs `softParticles: false` or the depth-fade zeroes it. A fading additive fireball
   reads as smoke in a screenshot — isolate the emitter (suppress the others, freeze the crash with
   no `--hold`) before believing an effect is present. Anchor at the plane centre (`pose.Origin` =
-  `healthy`), not the impact point. For the debris arcs: `translation_range` **is** decoded and
-  **is** simulated now (2026-08-01 — xz/y an azimuth/elevation in degrees, `initial` the launch
-  speed, `delta` a speed ramp, all mapped in `MotionRuntime`), so the old "reasoned reading" caveat
-  is retired; and the arc's judged look is settled too — `DebrisTune.LaunchScale` ships at **0.65**
-  (2026-08-08, matched at the controls against `OriginalScreenshots/Videos/m_build03 destruction.mp4`;
-  `git log --grep=BL-022`), and the crash pieces tightened with it, so a blend here starts from the
-  tuned arc, not the authored one. What stays TUNE is the `fly_trailN` anchor being invisible so that
+  `healthy`), not the impact point. For the debris arcs, the executable decode governs now
+  (`PLAN-object-motion-decode`, 2026-08-13): `translation_range` gives `dirY = elevation/90` and
+  horizontal `1 − |elevation|/90` (an L1 direction, not spherical), `initial` the launch speed,
+  `delta` an acceleration. The retired `DebrisTune.LaunchScale` of 0.65 was a footage fit laid over
+  the earlier, wrong spherical reading and is deleted along with the whole tune class — a blend
+  here starts from the authored arc, with no compensating scalar; `BL-346` / `PT-46` re-judges the
+  resulting look at the controls. What stays TUNE is the `fly_trailN` anchor being invisible so that
   only the trail shows; and the DISTANCE interval hides behind an inverted flag
   (`has_interval_value` false, key off `interval_type`).
 
@@ -218,12 +241,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-122` `[Tuning]` `[Owed-playtest]` **Data-driven crash (PLAN-data-driven-crash, default since Wave 4)** — several playtest-gated TUNEs,
   all needing the original at the controls: `WreckMomentum` **0.4** (`FlightController.cs` — the
   fraction of impact velocity the wreck pieces inherit, so they scatter along travel vs. pop straight
-  up); the **`forward_rotation.Time.initial` ÷ run_time** tumble-rate reading in `AnimRuntime`'s
-  `MotionRuntime` (the pieces carry clean π multiples read as a *total* angle, not a rate); the
-  **debris-arc trajectory** (the *decode* is settled since 2026-08-01 — `translation_range`'s xz/y are
-  an azimuth/elevation in degrees and `initial` the launch speed, `delta` a speed ramp, all three
-  mapped in `MotionRuntime`; what stays a TUNE is only the arc's judged *look*, and the `fly_trailN`
-  anchor being invisible means only the trail's rough scale reads); the **overall crash intensity** (the fireball, the cluster, the debris
+  up); the **debris-arc trajectory** (the executable decode is settled — `translation_range` gives
+  `dirY = elevation/90` and horizontal `1 − |elevation|/90`, `initial` the launch speed, `delta` an
+  acceleration, `PLAN-object-motion-decode`, 2026-08-13; the former `DebrisTune.LaunchScale` footage
+  fit is deleted with no replacement scalar, and only the arc's judged *look* stays open, under
+  `BL-346` / `PT-46`; the `fly_trailN` anchor being invisible means only the trail's rough scale
+  reads); the **overall crash intensity** (the fireball, the cluster, the debris
   fire and the wreck fire are all additive, so a dirt crash can read as one big fireball — judge the
   whole against the original); and `snd_exp_ground_a` mix level + whether it should layer over
   `plane_destroy_sg` (the dirt def's only Sound is `snd_exp_ground_a`; we keep both). The retired
@@ -232,13 +255,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `C1 IA1 Crash.mp4` and `CAP-14 Crash.mp4`, two further ground crashes with the same signature;
   stills in `playtest/CAP-16/`). ⚠ All times below are **wall-clock** off container PTS — multiply
   by k = 1.390 for sim-seconds before comparing against any authored `run_time`.
-  - **Tumble is a total angle, not a rate — the reading in the entry above is confirmed.** A wing
-    panel detaches at ignition and stays legible for 8 sampled frames, t = 6.13 → 6.60
+  - **The crash pieces barely turn, and the decode since 2026-08-13 says they do not turn at all.**
+    A wing panel detaches at ignition and stays legible for 8 sampled frames, t = 6.13 → 6.60
     (0.47 s wall / 0.65 sim-s; `wing-tumble-strip-6.13-6.60.png`). Its long axis rotates only
-    **~10–15° over that span** — order 20–30 °/s wall-clock. A π-rad-per-second *rate* would have
-    turned it ~85° in the same window, which is not what the footage shows. So `forward_rotation`'s
-    clean π multiples read as the piece's **total** sweep over `run_time`. *Limit:* one piece, seen
-    near edge-on under camera motion, so only rotation about the view axis is observable.
+    **~10–15° over that span** — order 20–30 °/s wall-clock, against the ~150 °/s the ÷`run_time`
+    reading of the day predicted. `FORWARD_ROTATION` is now decoded (`PLAN-object-motion-decode`
+    C10): the crash `pieceN` fly the vector `TRANSLATION` form, which fills none of the launch
+    direction cache the tumble multiplies through, so they hold their orientation and what the strip
+    shows is the piece's path plus camera motion. Recorded as agreement, not as evidence — the
+    footage is one piece, near edge-on under camera motion, and no measurement off it decides a
+    decode.
   - **`WreckMomentum` — direction confirmed, magnitude not pinned.** The same panel travels on a
     straight shallow down-and-forward path along the flight direction (t = 6.13, 6.27); it does not
     pop upward. At t = 12.50 the burning chunks lie **scattered laterally on the ground**, at rest,
@@ -699,56 +725,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `VELOCITY`; a fast launch would then visibly slow, as a drop-torpedo physically should. `CAP-28`
   films it; measurement can reuse `analysis/video-flight-calibration` if the HUD is in frame.
   `wep_14` is mountable via `--rocket=wep_14` (no stock loadout carries it).
-
-- `BL-342` `[Feature]` **Sticky bullets — build the player's gun aim assist the original ships and we don't.**
-  Guns currently fire straight down the muzzle axis with no lead and no assist, which is the direct
-  cause of `BL-301`/`PT-43`'s "gun kills are impractical, everything leans on rockets". The
-  original's mechanism is fully decoded — build it, do not re-derive it.
-  *Evidence:* [`docs/org/aim-assist.md`](docs/org/aim-assist.md) — the whole mechanism read out of
-  `crimson.exe` 2026-08-10 (`FUN_004b6530` the assist, `FUN_004b3e50` the per-frame slot update,
-  `FUN_00460e30` the intercept solver, `FUN_004bae60` + 3 twins the scorer). Tuning is
-  `player.json`'s `sticky_bullet_catchup_rate 5.0` / `_inaccuracy 1.0` (degrees) /
-  `_forget_interval 1.5` / `_dist_factor 0.0`, decoded in
-  [`docs/formats/vehicle.md`](docs/formats/vehicle.md)'s `player.json` table.
-  *Fix shape:* eight per-muzzle slots on the plane (4 weapon groups × 2 alternating barrels), each
-  holding a **plane-local** gun-line direction and a target direction. Per frame: unwind the target
-  to local forward once `forget_interval` has passed since that barrel last fired, then slerp the
-  gun line toward it at `catchup_rate · dt` (snap at `≥ 1`). At spawn: scan candidates, reject
-  same-team / out-of-`RANGE` / outside the assist cone / no intercept, rank by
-  `alignment − distance · dist_factor`, write the winner into the target slot, and fire along the
-  **smoothed** line with a `inaccuracy`-wide random cone applied. Shooter-authoritative in MP — the
-  original transmits the assisted vector rather than re-running the scan per client.
-  *⚠ Traps:* **this is not bullet steering** — the pre-decode `vehicle.md` wording said rounds in
-  flight are pulled toward a target and that is wrong, nothing touches a round after spawn;
-  smoothing is in **plane-local** space, so the assist must lag your own roll/pitch, and doing it in
-  world space is a different feel; `forget_interval` counts from the **last shot**, so it never
-  expires while you hold the trigger; `dist_factor 0` means selection is *purely* most-aligned, so
-  a far target dead ahead legitimately outranks a near one off-axis; the scatter's polar angle is
-  uniform in `[0, θ]`, **not** uniform over the cone's solid angle; the candidate set is **not
-  aircraft-only** — it is vehicles + turrets + `targets.zrd` mission structures + **live
-  proximity-fused ordnance in flight**, so guns legitimately snap onto an incoming rocket, and
-  scoping the port to planes would be a silent behaviour change.
-  *Decoded 2026-08-12* (settles this entry's former "unsettled before tuning" clause; write-up in
-  [`docs/org/aim-assist.md`](docs/org/aim-assist.md)): **`CANNON_SPREAD` is not a dispersion term.**
-  Its one reader in the executable (`FUN_004ba6f0` @ `0x004ba9da`) stores `−cos(value × π/180)` into
-  `[def+0x210]+0x08`, read only by the four assist scorers — it is the assist's **acceptance cone**,
-  6° half-angle for the stock guns, and the 1° `inaccuracy` cone is the *only* scatter on a round.
-  No key means `0.0` from the block's `calloc`, i.e. a 90° hemisphere, not a non-zero default. The
-  per-target override at candidate `+0x50` is `−1.0` from every entity constructor (planes
-  `0x004b0006`, turrets `0x004a9ae7`, MStructs `0x004a25ee`, ordnance `0x00441be1`); the only
-  authored writer is the turret key `STICKINESS` (`FUN_004a9df0` @ `0x004aa5b4`), which ships zero
-  times, so with the shipped data the cone is always the firing weapon's.
-  ⚠ **Fallout, fix alongside:** `Projectile.cs:534` scatters every round through
-  `ApplySpread(forward, weapon.CannonSpread)`. The original scatters through nothing of the kind.
-  That 6° jitter is a live fidelity bug in shipped code, separate from the missing assist, and both
-  live at the same fire call.
-  *Playtest after fix:* `--vs` dogfight, and the `PT-43` gun-feel line — guns should become a
-  practical kill weapon without rockets. The honest risk is over-assist reading as aimbot; the
-  shipped constants are the original's answer, so tune only against footage, not taste.
-  *Cross-refs:* `BL-301` (Dogfight tuning — its bullet-magnetism line is this item, and the
-  strength call stays there), `PT-43` (where it gets judged), `docs/org/tracers.md` (the same
-  spawn-time-only orientation rule on the visual side). Supersedes `BL-091`, whose research half
-  the decode above closes.
 
 ## Flight model & collision physics
 
@@ -2063,54 +2039,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   10-panel row can want 8–10 concurrent sets; 6 covers most passes and wraps (recycles the oldest,
   still-flying set) on a longer burst.
 
-- `BL-245` `[Bug]` `[Blocked: a decision to diverge]` **The other 379 bounce-terminated `OBJECT_MOTION`s are FALLS, not launches — no apex to
-  solve, and a live `water`/`lava` surface table to choose between (split out of `BL-240` when the
-  census separated them, 2026-08-02).** Same authored idiom as `BL-240` — no `RUN_TIME`, a
-  `BOUNCE_SEQUENCE` naming the landing — but these start at rest or head downward, so
-  `BL-240`'s return-to-launch-height solve yields `t = 0` for every one of them and leaves the bug
-  exactly as it is today. Three shapes, censused over all 17,568 extracted defs:
-  **335** `translation initial=(0,0,0)` with gravity −9.8 — a shot-down `gasbag1` or `cargozep1`'s
-  `crashnode1` sinking to the ground, bouncing into `hit_ground1` or `hit_water1`; **~17** thrown
-  downward at elevation −70…−90° (`lifesaver11`'s `lifeboat` → `boat_explode`/`boat_explode_water`,
-  `b_turret1`'s parts); and **8** `chuteman` at `translation (0,−3,0)` with **gravity 0** — a
-  constant 3 m/s descent, no parabola at all, ending in `deactivate_chuteman`.
-  **A fourth group joined on 2026-08-06, from `BL-257`'s census** (`analysis/bl-257-nulled-launch/`):
-  **8 events that name no `BOUNCE_SEQUENCE` either**, so the 733-event census above never counted
-  them — `susp_bridge`'s `rope1burn` `part2`/`3a`/`3b`/`3c`/`part4` (`translation.initial.y`
-  −0.44…−1.0 with `rnd_xz.y` ±0.89…±1.0, gravity −9.8: a burning rope end dropping, and the user
-  confirms at the controls that it visibly falls in the original), `bridge_destroy01`'s
-  `bridge_truck01` (`initial.y` exactly 0, no spread — level), and both `fuelboxbreaks` `rockerarm`s
-  (elevation 90° but speed **−45…45**, so half the draws point down). `BL-257`'s widened gate admits
-  by APEX, so these are declined by the same `FlightToLaunchHeight` guard and stay posed at rest.
-  ⚠ For the spherical `translation_range` form the vertical speed is `sin(elevation)·speed` — **a
-  negative speed inverts an upward elevation**, which is why the rockerarms are not solvable
-  launches; any later census of this family must read the speed range, not the elevation alone.
-  ⚠ **Retagged 2026-08-09: the ray is no longer the blocker — it exists.** `PLAN-ground-contact`
-  landed `MotionRuntime.TryContact`, a swept segment along the trajectory that ends a body at the
-  first collider and picks its `BOUNCE_SEQUENCE` branch from the struck surface, water branch
-  included (`ProjectilePool.ClassifySurface`, already wired). Every piece of machinery this item
-  said it was waiting for is in the tree. What it is **actually** blocked on is a *decision*: all
-  379 of these author **`do_intersections: false`** (8 for 8 across `gasbag`/`cargozep`/`chuteman`/
-  `lifesaver`), i.e. the original was not collision-testing them, and `PT-46` (d) confirmed at the
-  controls that its debris sinks through terrain the same way. Turning the sweep on for them is a
-  deliberate divergence from authored data — a **playability** argument (a shot-down zeppelin
-  hanging in mid-air reads as broken) and not a faithfulness one. Decide that first; the wiring
-  afterwards is an hour. The one narrow precedent for reading `false` as "unset" is a settle hop
-  continuing a contact landing (`PLAN-ground-contact` B9), and its whole defence is that it cannot
-  reach a body the data never flagged.
-  ⚠ Traps:
-  - **Colliders are conditional.** `SessionSpec.cs:183` is
-    `BuildsCollision => Fly || DamageTest || ForceCollision || DebugDamage != null` — a `--freecam`
-    run and every golden-capture mode build **no world colliders at all**. A ray-based fix silently
-    does nothing there, so it needs a stated fallback, not an assumption of ground. `TryContact`
-    already answers this the structural way — it gates on the live `DirectSpaceState` and on a mask
-    the *session* hands over, so a runtime nobody wires keeps the old behaviour exactly, and all 13
-    goldens stayed byte-identical across the whole of `PLAN-ground-contact`. Copy that shape.
-  - **Do not give these a constant fall time.** Same trap `BL-240` carries: it would invent a
-    landing altitude for 335 zeppelins.
-  - `chuteman` has **zero gravity**. Any solve phrased as a parabola divides by zero on it; it is a
-    constant-velocity descent and needs the distance, nothing else.
-
 - `BL-293` `[Tuning]` **Rocket impact rings: orient the ground rings to the struck surface normal; the
   fixed-axis upper ring is faithful but reads poorly — parked** (PT-35, 2026-08-06). The
   actionable half: ALL ground rings — HE's ground ring, AP's cracks quad, the sonic stack —
@@ -2123,30 +2051,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   carry no rotation data (scale/opacity only — `docs/formats/weapon-effects.md`), so any change
   is engine-side and a deliberate deviation. Cross-link: `BL-292` (crash-splash orientation,
   different spawn path; scheduled in `docs/plans/PLAN-m3-polish-10.md` A3).
-
-- `BL-333` `[Research]` **`PLAYER_RANGE`'s `dist² * 4.0` factor may mean every gate radius in the
-  game is half what we give it — the transform chain feeding the comparison is untraced.**
-  `FUN_004ec080` (the `IF`/`ELSEIF` condition evaluator in `crimson.exe`) resolves a `PlayerRange`
-  branch as `dist² * 4.0 <= value` — not the bare `dist² <= value` CSVM implements. Whether the
-  vector reaching that comparison is already halved upstream, by the transform chain
-  `FUN_0053f610` → `FUN_0053f9b0` (via `DAT_009fd190`) → `FUN_0053fca0`, is untraced. If it is not
-  halved somewhere in that chain, the `* 4.0` is real and every `PLAYER_RANGE` gate in the game
-  fires at half the radius CSVM currently gives it — a compiled `72900` (reader `270`) would gate
-  at 135 m, not 270 m. **1,052 shipped `PlayerRange` conditions** are affected install-wide
-  (`docs/formats/anim-definitions.md`'s condition table), including gates on real content:
-  `he_ground_effect`'s `frame_buffer_effects1` full-screen flash (`If PlayerRange 10000`) and
-  C1/MP1's `rearm_node_1/call_door` poll (`If { PlayerRange: 625 }`).
-  *Fix shape:* trace `FUN_0053f610`/`FUN_0053f9b0`/`FUN_0053fca0` to determine whether the vector
-  they hand to `FUN_004ec080` is already scaled by 0.5 (or an equivalent halving) before the
-  comparison runs. If it is, the `* 4.0` is compensating and CSVM's `dist² <= value` is already
-  correct — a documented disproof, not a code change. If it is not, CSVM's gate radii are 2× the
-  original's and need correcting.
-  ⚠ **Traps:** do not halve every `PLAYER_RANGE` radius on the strength of the `* 4.0` multiply
-  alone — it needs the trace above, or an at-the-controls capture measuring an actual gate
-  distance, before any change lands. A change here reads exactly like a fidelity win (a decoded
-  exe constant CSVM does not reproduce) and is exactly the shape of change that regresses: halving
-  every gate radius on an unconfirmed reading would silently break every effect currently gated
-  correctly by chance or by the original data's own margins.
 
 - `BL-334` `[Research]` **A stopped sequence stays callable in CSVM; in the original it is disabled
   until the definition resets.** `STOP_SEQUENCE` (`004eb610`) writes the sequence *done*, and
@@ -2166,7 +2070,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   wrongly left disabled fails *silently* — the effect simply never plays again, which is the
   hardest class of bug to attribute later. The instrument comes first.
   *Cross-refs:* `docs/formats/anim-definitions.md` (the decoded `CALL_SEQUENCE`/`STOP_SEQUENCE`
-  state rules); `BL-333` (the other divergence the same decode left open).
+  state rules). The `PLAYER_RANGE` `* 4.0` divergence the same decode opened is closed as a
+  disproof — the `* 4.0` is on `PLAYER_LINED_UP`, not `PLAYER_RANGE` (`git log --grep=BL-333`).
 
 ## Audio
 
@@ -2872,19 +2777,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   uncovered canard tips are the known gap to close.
 
 - `BL-301` `[Tuning]` `[Owed-playtest]` **Dogfight (VS mode) tuning** — every deliberate v1 deferral, to be re-judged from
-  `PT-43` evidence, not speculation: **aim-assist strength** (the mechanism is no longer a question
-  — it is decoded in [`docs/org/aim-assist.md`](docs/org/aim-assist.md) and built by `BL-342`; what
-  stays here is whether the original's shipped constants feel right in VS), spawn
-  camping / spawn protection (none in v1), suicide penalty and last-damager credit (0 / none in
-  v1), sudden-death overtime on a drawn time-out (draw declared in v1), menu-side match options
-  (kill target and time limit are CLI-only), `dogfight_ace` vs `zeppelin_run` spawn spacing, the
-  self-blast exemption (own rockets can't hurt you — the guns invariant applied consistently, not
-  a balance call), VS HUD line/arrow sizing at 4-player panes. Related, not absorbed: `BL-126`
-  (splitscreen chrome). ⚠ The stunt race's abreast starting grid landed 2026-08-08 and deliberately
-  did **not** touch `--vs` — it is selected only when a race exists, so Dogfight still walks the
-  scattered `dogfight_ace` list. Spawn spacing here stays this item's call from `PT-43`, and copying
-  the grid over is the wrong reflex: four dogfighters 60 m apart on one heading is an instant
-  head-on merge every round.
+  `PT-43` evidence, not speculation. **Aim-assist strength settled 2026-08-13** from `PT-43`(a)/(b):
+  the shipped `sticky_bullet_*` constants (decoded in
+  [`docs/org/aim-assist.md`](docs/org/aim-assist.md), built by `BL-342`) read right at the
+  controls — damage balance plane-vs-plane felt good and guns are now a practical kill weapon
+  without rockets, a marked improvement over firing with no assist at all. No retune. Still open:
+  spawn camping / spawn protection (none in v1) — **confirmed a real problem, not speculation, by
+  `PT-43`(c) 2026-08-13**: every player has a fixed spawn point and camping one is very much
+  viable; the fix is spawn rotation, likely alongside whatever `--vs`'s existing spawn-spacing
+  logic already tracks per-pane; suicide penalty and last-damager credit (0 / none in
+  v1), sudden-death overtime on a drawn time-out (draw declared in v1; `PT-43`(f) found draw
+  frequency fine at the 5-kills/5-min defaults, so this stays low priority), menu-side match
+  options (kill target and time limit are CLI-only), `dogfight_ace` vs `zeppelin_run` spawn
+  spacing, the self-blast exemption (own rockets can't hurt you — the guns invariant applied
+  consistently, not a balance call), VS HUD line/arrow sizing at 4-player panes (`PT-43`(d):
+  readable and correctly edge-flipping at 2 players; 4-player still untested, no second controller
+  pair available yet). Related, not absorbed: `BL-126` (splitscreen chrome). ⚠ The stunt race's
+  abreast starting grid landed 2026-08-08 and deliberately did **not** touch `--vs` — it is
+  selected only when a race exists, so Dogfight still walks the scattered `dogfight_ace` list.
+  Spawn spacing here stays this item's call from `PT-43`, and copying the grid over is the wrong
+  reflex: four dogfighters 60 m apart on one heading is an instant head-on merge every round.
 
 - `BL-134` `[Feature]` **Cutscene player — the missing consumer (M04's zeppelin, `letterbox`, `CALLBACK`).**
   **This is a missing subsystem, not a bug.** The cutscene defs run because nothing tells them they

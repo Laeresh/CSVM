@@ -293,8 +293,10 @@ draws directly with no colour-keying — unlike the black-backed font atlas.
 **Behaviour (remake E37, `src/Flight/ImpactReticle.cs`).** The reticle is **not pinned to screen
 centre.** It marks the **projected ballistic impact point of the selected gun group's rounds at a
 fixed convergence distance**, computed with the *same* `VELOCITY`/`ACCELERATION`/`GRAVITY`
-integration `ProjectilePool` fires each round with (dropping only the random `CANNON_SPREAD` — the
-pipper marks the cone centre), from the averaged muzzle pose. Because the rounds inherit the
+integration `ProjectilePool` fires each round with — the pipper and the rounds agree exactly, since
+a round leaves the muzzle with no scatter at all (`CANNON_SPREAD` is the unbuilt gun aim assist's
+acceptance cone, not a dispersion term; see [`org/aim-assist.md`](../org/aim-assist.md)) — from the
+averaged muzzle pose. Because the rounds inherit the
 plane's velocity — which lags the nose during a hard roll or pull — the reticle **trails the nose**
 in a hard manoeuvre and sits on the rounds in steady flight (measured: `nose→reticle = 0.00°`
 level, up to `~0.77°` below the nose toward the velocity vector at ~15° angle-of-attack; the small

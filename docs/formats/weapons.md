@@ -65,7 +65,7 @@ See [CLUSTER_SIZE vs AMMO_LIMIT](#cluster_size-vs-ammo_limit) for which entries 
 | `RANGE` | 46 | 900–10000 | max effective / despawn range, m (Seeker 10000) |
 | `RANGE_MINIMUM` | 1 | `[300, 0]` | minimum arming range (torpedo) |
 | `GRAVITY` | 5 | 0.0 | projectile-gravity scale (0 throughout this install) |
-| `CANNON_SPREAD` | 31 | 6.0 | gun dispersion cone, degrees (constant) |
+| `CANNON_SPREAD` | 31 | 6.0 | **not a dispersion cone** — the gun aim assist's acceptance-cone half-angle, degrees (constant). Consumer decoded 2026-08-12, see [`org/aim-assist.md`](../org/aim-assist.md) |
 | `FIRING_HEAT` | 4 | 5.0 | heat added per shot; only the base guns `wep_00`–`03` |
 | `TURN_RATE` | 14 | 0.001–1.25 | guidance turn rate; 0.001 is effectively straight-flying — only the Seeker's 1.25 actually homes |
 

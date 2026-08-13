@@ -14,7 +14,6 @@ Run from the repo root:  python analysis/bl-257-nulled-launch/census.py
 import collections
 import glob
 import json
-import math
 import os
 
 EPS = 1e-6
@@ -34,9 +33,10 @@ def shape_of(v):
 def elevation_span(v):
     """(min, max) launch elevation in degrees, or None when the shape carries no elevation.
 
-    `translation_range` is spherical (BL-240 / analysis/object-motion-range): `y` is an
-    ELEVATION in degrees. `translation` is cartesian: its `initial.y` IS the vertical speed,
-    so its sign answers 'upward?' directly and is reported as +90/-90.
+    `translation_range` is polar (analysis/object-motion-range): `y` is an ELEVATION in
+    degrees, and it is applied LINEARLY -- v0y = (elev/90)*speed, not sin(elev)*speed
+    (docs/org/objectMotion.md). `translation` is cartesian: its `initial.y` IS the vertical
+    speed, so its sign answers 'upward?' directly and is reported as +90/-90.
     """
     r = v.get("translation_range")
     if r:
@@ -134,9 +134,11 @@ print("  do_intersections:", collections.Counter(r["do_int"] for r in neither).m
 def vertical_speed_span(r):
     """(min, max) of the launch's vertical speed v0y over every draw the range allows.
 
-    Spherical: v0y = sin(elevation)·speed, so a NEGATIVE speed flips an upward elevation into a
-    downward launch — `fuelboxbreaks`' rockerarm is elevation 90° at speed −45…45. Cartesian:
-    v0y is `initial.y ± |rnd_xz.y|` outright.
+    Polar: v0y = (elevation/90)*speed -- a LINEAR elevation, not sin(elevation)
+    (docs/org/objectMotion.md). A NEGATIVE speed flips an upward elevation into a downward
+    launch; `fuelboxbreaks`' rockerarm is elevation 90 deg at speed -45..45. The two readings
+    agree on every sign over [-90, 90], so the upward/no-apex split this census reports is the
+    same under either. Cartesian: v0y is `initial.y +/- |rnd_xz.y|` outright.
     """
     e = r["elev"]
     if e is None:
@@ -145,8 +147,8 @@ def vertical_speed_span(r):
         return (-1.0 if e[0] <= 0 else 1.0, -1.0 if e[1] <= 0 else 1.0)
     lo, hi = r["speed"].get("min") or 0.0, r["speed"].get("max") or 0.0
     slo, shi = min(lo, hi), max(lo, hi)
-    sins = [math.sin(math.radians(a)) for a in e]
-    products = [s * v for s in sins for v in (slo, shi)]
+    verticals = [a / 90.0 for a in e]
+    products = [s * v for s in verticals for v in (slo, shi)]
     return (min(products), max(products))
 
 

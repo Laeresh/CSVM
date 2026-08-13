@@ -36,8 +36,9 @@ already-live gate would drop every ejection but one per 2 s window):
 - **Casing** — a pooled instance of the `gunshell` gamez subtree (the `g1` child carries the
   mesh) per shot, flying the gunshell def's `OBJECT_MOTION` verbatim under `MotionRuntime`'s
   semantics: `TRANSLATION_RANGE` xz `[10,−10]` / y `[−75,−85]` as distances travelled over
-  `RUN_TIME 2` (random azimuth, `GRAVITY −3` folded), and `FORWARD_ROTATION TIME 20.94` rad
-  (1200°) as a **total** angle over the run time — a 10.47 rad/s tumble about local X.
+  `RUN_TIME 2` (random azimuth, `GRAVITY −3` folded), and `FORWARD_ROTATION TIME 20.94` rad/s
+  (1200°/s) as a **rate**, turned about the launch's own horizontal perpendicular — whose length at
+  gunshell's −75…−85° of elevation is 0.06–0.17, so the casing turns at 1.3–3.6 rad/s.
 - **Muzzle smoke** — the `muzzlepuffer` values (aft 20 m/s in the muzzle frame, ±0.8 random,
   size 0.3–0.6 m, life 0.1–0.2 s, deviation 0.05 m, `smoke101`) as oriented sprites on the
   pool's sprite path; the per-shot count glosses the authored 0.05 s × 0.3 s emission window.
