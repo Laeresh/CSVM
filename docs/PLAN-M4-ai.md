@@ -549,6 +549,21 @@ vehicle defs carry the `armor` + `health` pair `PlaneStats` ignores (armour-firs
 the roster's four zones corroborate). `BL-069`'s "turret rotation limits stay undecoded" line is
 superseded by [`formats/turrets.md`](formats/turrets.md). `BL-347` became G21.
 
+**A4 is decided (landed under this plan the same day), on the strength of the
+[`org/vehicleDamage.md`](org/vehicleDamage.md) executable decode; the design note is that page's
+closing section ("The A4 decision").** Summary for the downstream items: `DestructibleRegistry`
+stays scalar and keeps the static destructibles only; aircraft damage stays in
+`Flight/PlaneDamage.cs`, which gains the decoded whole-vehicle summary pair; zeppelins become an
+F18-built aggregator counting surviving `healthy` nodes over per-gasbag scalar pools, so F18 needs
+no `(def, anchor, zone)` registry keying. Kill thresholds: vehicle death is whole-vehicle health
+at or below zero (the remake's current any-`critical`-part kill at `FlightController.cs:823` is a
+recorded divergence D14 retires); zeppelin death is `survivors < num_healthy_required`;
+destructible death is the scalar pool at zero, unchanged. ⚠ Two body-text passages are superseded
+by the decision: the "Damage zones" section's unified critical-zone model is design-era (the
+shipped engine has two kill rules and no shared zone vocabulary), and the architecture-constraints
+bullet proposing `(def, anchor, zone)` plus a threshold counter inside the registry describes a
+shape the decode shows is not needed.
+
 ---
 
 ## Milestone goal
@@ -1284,7 +1299,10 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
    (`Testing/Probes.cs`) sweeps every chapter/mission dir and reproduces the plan's golden counts
    verbatim (222 nets, 414 aiv blocks/53 files, 42 turrets, 58 zeppelins, 23 generators);
    `formats/zrdr.md`'s family index already carried a row for all five families
-4. ☐ A4 — **Decision + design note only:** multi-zone destructibles and the kill threshold
+4. ☑ A4 — **Decision + design note only:** multi-zone destructibles and the kill threshold.
+   **Decided 2026-08-13**, recorded as the closing section of
+   [`org/vehicleDamage.md`](org/vehicleDamage.md) ("The A4 decision"): the registry stays scalar,
+   vehicles keep `PlaneDamage` plus the decoded summary pair, zeppelins get an F18 aggregator
 
 ### Wave B — Non-combat presence
 
@@ -1333,7 +1351,9 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
     confirmed to exist as a scripted concept (`COMPLETED_STOPPOINT`) but their per-node tag
     encoding is still undecoded
 18. ☐ F18 — Multi-zone zeppelin damage — **the survivor threshold is decoded and its polarity
-    confirmed against the engine**; the multi-zone `DestructibleRegistry` work (A4) is what remains
+    confirmed against the engine**; the design is decided (A4, 2026-08-13,
+    [`org/vehicleDamage.md`](org/vehicleDamage.md) closing section): no registry zone work;
+    anchor the sub-part defs, seed their scalar pools, build the survivor-count aggregator
 19. ☐ F19 — Broadside cannons: side-alternating volleys and the 90° arc — ⚠ **build it ballistic:
     the probabilistic hit curve is design-era and is not in the shipped engine**
 20. ☐ F20 — Zeppelin fighter launch — **the launch cycle is decoded** (hold-not-cancel confirmed,
