@@ -160,11 +160,17 @@ public static class Probes
             sb.Append($"\n    flags: [{string.Join(", ", flags)}]");
             sb.Append($"\n    fire={FmtEffect(w.Fire)} flyout={FmtFlyout(w.Flyout)} looped={w.LoopedSoundName ?? "-"}");
             sb.Append("\n    impact:");
-            foreach (var kv in w.Impact)
+            int impactRows = 0;
+            for (int id = 0; id < w.Impact.Length; id++)
             {
-                sb.Append($" {kv.Key}={FmtEffect(kv.Value)}");
+                if (w.Impact[id] is not { } row)
+                {
+                    continue;
+                }
+                impactRows++;
+                sb.Append($" {id}/{SurfaceRegistry.NameForId(id)}={FmtEffect(row)}");
             }
-            if (w.Impact.Count == 0)
+            if (impactRows == 0)
             {
                 sb.Append(" (none)");
             }

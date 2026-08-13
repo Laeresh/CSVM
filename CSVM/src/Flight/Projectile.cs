@@ -17,10 +17,11 @@ namespace CSVM.Flight;
 /// splitscreen pane sees them).
 ///
 /// <para>Hit detection is a per-step raycast over world + aircraft: a round can strike an
-/// opponent's <see cref="AircraftBody"/> (the <c>player</c> IMPACT class), with the shooter's own
+/// opponent's <see cref="AircraftBody"/> (the <c>player</c>(6) IMPACT row), with the shooter's own
 /// body excluded per shot by identity — a pilot's rounds never hit their own launcher. World
-/// surfaces classify as <c>default</c>/<c>water</c>/<c>buildings</c> from the struck collider's
-/// <see cref="SceneBuilder.SurfaceMeta"/> tag; an aircraft hit routes its damage to the struck
+/// surfaces select their IMPACT row by the struck collider's numeric surface id
+/// (<see cref="SceneBuilder.SurfaceIdMeta"/>, <see cref="SurfaceIdOf"/>), the registry index the
+/// original indexes that table by; an aircraft hit routes its damage to the struck
 /// plane's own part model, never the destructible pipeline. A round that misses may still fuse:
 /// the <c>DETONATION_DISTANCE</c> proximity fuse arms against aircraft (only — never world
 /// geometry), and a detonation's blast reaches planes through a dedicated falloff pass beside
@@ -430,7 +431,7 @@ public sealed partial class ProjectilePool : Node3D
     /// weapon-level spelling of <see cref="ImpactOutcome.HasBlastDamage"/>, where the rule lives.
     /// The surface never changes the answer, so any resolves it.</summary>
     public static bool HasBlastDamage(WeaponDef weapon) =>
-        ImpactOutcome.Resolve(weapon, SurfaceClass.Default, modelResolved: false, hasEffectsRuntime: true)
+        ImpactOutcome.Resolve(weapon, SurfaceRegistry.Default, modelResolved: false, hasEffectsRuntime: true)
             .HasBlastDamage;
 
     /// <summary>Linear blast falloff: full at the centre and zero at the authored radius.</summary>
@@ -446,13 +447,33 @@ public sealed partial class ProjectilePool : Node3D
             return true;
         return velocity.Normalized().Dot(towardTarget.Normalized()) >= minimumDot.Value;
     }
+    /// <summary>The struck collider's numeric surface id — the index the weapon's <c>IMPACT</c>
+    /// table is read at (<see cref="ImpactOutcome.Resolve"/>), off the same
+    /// <see cref="SceneBuilder.SurfaceIdMeta"/> tag the crash and graze cascades read
+    /// (<c>FlightController.SurfaceIdOf</c>). A collider carrying no tag answers
+    /// <c>default</c>(0), which is <c>FUN_005acf60</c>'s null-material arm
+    /// (<c>surfaceId = hit-&gt;material ? *(int *)(material + 0x20) : 0</c>).
+    /// <para>A struck aircraft answers <c>player</c>(6): our aircraft come from mechlib models
+    /// rather than a chapter's gamez, so they carry no material soil id to read, and 44 of the 48
+    /// weapons author a <c>player</c> row (<c>flak_effectplayer</c> and friends) that nothing else
+    /// could select. Which id the original's own plane materials carry is not decoded; this arm
+    /// keeps the pre-B11 behaviour rather than inventing a new one.</para></summary>
+    public static int SurfaceIdOf(Node? collider)
+    {
+        if (collider is AircraftBody)
+            return SurfaceRegistry.Player;
+        return collider != null && collider.HasMeta(SceneBuilder.SurfaceIdMeta)
+            ? collider.GetMeta(SceneBuilder.SurfaceIdMeta).AsInt32()
+            : SurfaceRegistry.Default;
+    }
+
     /// <summary>Which weapons.json IMPACT surface class a struck collider belongs to, from the
     /// per-mesh <see cref="SceneBuilder.SurfaceMeta"/> tag.
-    /// <para>⚠ This is the WEAPON name space only. The crash and graze defs no longer come from
-    /// this read: since <c>PLAN-crash-surface-id</c> B11/B12 both index the surface-id vector
-    /// (<c>SurfaceDefTable</c>) instead, so a round and a wingtip now classify the same geometry by
-    /// two different tags. Whether the original's IMPACT lookup is also id-driven is an open
-    /// question, not a settled difference — see <c>BL-344</c>.</para></summary>
+    /// <para>⚠ Nothing about a weapon impact reads this any more: since
+    /// <c>PLAN-surface-id-weapons</c> B11 the IMPACT table is indexed by
+    /// <see cref="SurfaceIdOf"/>, the same surface id the crash and graze cascades use. What is
+    /// left are the non-impact readers B12 retires — the lab's target picker, the two water
+    /// predicates and two suite checks.</para></summary>
     public static SurfaceClass ClassifySurface(Node? collider)
     {
         if (collider is AircraftBody)
@@ -1403,7 +1424,7 @@ public sealed partial class ProjectilePool : Node3D
     private void Impact(WeaponDef weapon, Vector3 point, Node? collider, Vector3 normal, int shapeIdx = -1,
         int shooter = NoShooter)
     {
-        var surface = ClassifySurface(collider);
+        int surface = SurfaceIdOf(collider);
         bool hasEffectsRuntime = EffectSink != null;
         // The decision, taken once and read twice. `modelResolved` cannot be known before the
         // attempt, so the first resolve is only for the effect NAME to attempt; the second carries
@@ -1425,7 +1446,7 @@ public sealed partial class ProjectilePool : Node3D
         if (_impactsLogged < 8)
         {
             _impactsLogged++;
-            GD.Print($"impact: {weapon.Id} ({weapon.Name}) -> {surface} at " +
+            GD.Print($"impact: {weapon.Id} ({weapon.Name}) -> {surface}/{SurfaceRegistry.NameForId(surface) ?? "?"} at " +
                      $"({point.X:0},{point.Y:0},{point.Z:0}) on {collider?.GetParent()?.Name}/{collider?.Name}" +
                      $" fx={outcome.EffectName ?? "-"} snd={outcome.Sound ?? "-"} standin={outcome.StandIn}");
         }
@@ -1437,7 +1458,7 @@ public sealed partial class ProjectilePool : Node3D
     /// weapon for the gun-effect rate limit (a stateful throttle, not a decision) and the surface for
     /// the spark's tint (a <c>Color</c>, which the engine-free <see cref="ImpactOutcome"/> cannot
     /// carry).</summary>
-    private void Apply(WeaponDef weapon, SurfaceClass surface, in ImpactOutcome outcome, Vector3 point,
+    private void Apply(WeaponDef weapon, int surface, in ImpactOutcome outcome, Vector3 point,
         Node? collider, Vector3 normal, int shapeIdx = -1, int shooter = NoShooter)
     {
         // The impact sprites face the struck surface (SurfaceBasis(normal)) rather than a fixed world
@@ -1463,7 +1484,10 @@ public sealed partial class ProjectilePool : Node3D
                 SpawnRicochet(point, orient);
                 break;
             case ImpactStandIn.Spark when _impact.Count < MaxFlashes:
-                var tint = surface == SurfaceClass.Water ? new Color(0.8f, 0.9f, 1.0f) : new Color(1f, 0.9f, 0.5f);
+                // The water case is its own read of the struck id, as it is in the original
+                // (FUN_005ad330 tests `*(material + 0x20) == 1` on the impact path independently of
+                // the table lookup) — not a branch the table could carry.
+                var tint = surface == SurfaceRegistry.Water ? new Color(0.8f, 0.9f, 1.0f) : new Color(1f, 0.9f, 0.5f);
                 _impact.Add(new Sprite { Pos = point, Life = ImpactLife, Size = ImpactSize, Tint = tint, Orient = orient });
                 break;
         }

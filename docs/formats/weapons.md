@@ -225,27 +225,38 @@ slot values may be `null`.
 [weapon-effects.md](weapon-effects.md#flyout-model_animation--the-in-flight-smoke-trails)), and
 `SOUND` (looped in-flight sound, e.g. the torpedo). Present on all 48 entries.
 
-**`IMPACT`** — keyed by **surface class**, one value per class:
+**`IMPACT`** — keyed by **surface name**, one value per name. The names are the game's global
+surface registry (the fourteen `soil` types a material can carry, [gamez.md](gamez.md)), so the
+block is really an array indexed by surface **id**, and the struck material's own `soil` id selects
+the row. Six of the fourteen names appear anywhere in this install:
 
-| Class | On n entries | The struck surface |
-|---|---|---|
-| `default` | 47 | terrain / anything unclassified |
-| `water` | 47 | water |
-| `buildings` | 47 | building geometry |
-| `player` | 44 | the player's own aircraft |
-| `enemy` | 31 | an enemy aircraft |
-| `quicksand` | 3 | quicksand |
+| id | Name | On n entries | The struck surface |
+|---|---|---|---|
+| 0 | `default` | 47 | material carrying no distinguishing soil type — most terrain, and almost every building |
+| 1 | `water` | 47 | water |
+| 3 | `quicksand` | 3 | quicksand (no material in the shipped chapters carries it) |
+| 6 | `player` | 44 | the player's own aircraft |
+| 7 | `enemy` | 31, populated on 3 | an enemy aircraft |
+| 11 | `buildings` | 47 | material tagged the `buildings` soil type, which is a handful of C1 polygons — NOT "geometry that looks like a building" |
 
-Each class value is again an alternating dict over `ANIMATION` / `SURFACE_ANIMATION` /
-`EFFECT` / `SOUND` (any may be null; a whole class may be null — no effect on that surface).
-`SURFACE_ANIMATION` is the surface-oriented variant of `ANIMATION`. **Hit-testing must
-classify the struck surface** to select the right variant.
+Each row value is again an alternating dict over `ANIMATION` / `SURFACE_ANIMATION` /
+`EFFECT` / `SOUND` (any may be null; a whole row may be null — no effect on that surface, which is
+how 28 entries author `enemy`). `SURFACE_ANIMATION` is the surface-oriented variant of `ANIMATION`.
+**Hit-testing reads the struck material's surface id** to select the row.
 
-The **`player` class is where the got-shot feedback on your own airframe is authored** — the 44
+A row is only reachable if some material carries its id: `quicksand`(3), `player`(6) and `enemy`(7)
+are carried by no chapter material at all. The reverse also holds — the eight ids **no** weapon
+authors (`seafloor`(2), `lava`(4), `fire`(5), `airstrip`(8), `opensesame`(9), `death`(10),
+`dzone`(12), `dirt`(13)) are ids a round can strike, and the game draws and sounds nothing there:
+there is no fall back to the `default` row. Counted per weapon and per id in
+`analysis/surface-classification/FINDINGS.md` (2026-08-13). A block named something outside the
+registry would be parsed into nothing; the shipped data contains no such name.
+
+The **`player` row is where the got-shot feedback on your own airframe is authored** — the 44
 entries carrying it name the caliber's own `*_gunhit`, or `f18sparks2`, or (on `wep_03`, 60slug,
-whose `enemy` class draws `5060slug_gunhit`) `SURFACE_ANIMATION: random_gun_impact` — the spark
+whose `enemy` row draws `5060slug_gunhit`) `SURFACE_ANIMATION: random_gun_impact` — the spark
 burst at a `pdpN` panel documented in [vehicle.md](vehicle.md). Unreachable while nothing shoots
-back: it needs an enemy aircraft firing at the player, so the whole class is untriggered in M3.
+back: it needs an enemy aircraft firing at the player, so the whole row is untriggered in M3.
 
 ```json
 "IMPACT": [

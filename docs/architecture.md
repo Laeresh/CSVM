@@ -833,6 +833,9 @@ Zrdr extraction reader (zip or unpacked dir): `LoadFile`, `LoadFileOrEmpty`, con
 ## src/Mech3/SurfaceRegistry.cs
 `Names[id]`: the id→name table a struck material's `soil` field indexes into, so a caller can build
 `"player_crash_" + name` / `"touchdown_" + name` and resolve the same def the original resolves.
+`IdForName` is the parse-time direction (a name the registry does not carry answers null and is
+discarded, as `FUN_005ad630` discards it), which is how a weapon's `IMPACT` blocks land at their id;
+`Default`/`Water`/`Player`/`Enemy`/`Buildings` name the five slots code branches on outright.
 Ids 0–5 are compiled into `crimson.exe`; ids 6–13 are the `LoadSoils`-loaded list from `ZBD/zrdr.zbd`
 `0xe631c`, reproduced by `analysis/surface-classification/soils_list.py`.
 ⚠ Baked in rather than read at load — this list has no structured zrdr reader entry point unlike
@@ -1563,13 +1566,18 @@ grammar and flag/key meanings are in `docs/formats/sounds.md`. `LoadGroups` pars
 Typed reader over the shared `weapons.zrd.json` `BALLISTICS` block — 48 `WeaponDef`s (guns /
 rockets / ordnance) keyed by `wep_*`, plus the `NO_AMMO_WARNING` empty-clip sound. Ballistics,
 damage, allotment, the class flags, the specials, and the `FIRE`/`FLYOUT`/`IMPACT` bindings
-(`IMPACT` keyed by `SurfaceClass`); `DESC` resolved through `Messages`. Modelled on PlaneStats.
+(`IMPACT` keyed by `SurfaceRegistry` id); `DESC` resolved through `Messages`. Modelled on PlaneStats.
 Schema: docs/formats/weapons.md. Verify/inspect with `--dump-weapons`.
+⚠ `IMPACT` is an ARRAY, one row per registry id in slot order (`WeaponDef.Impact`, read through
+  `ImpactFor`) — the original's own shape (`FUN_005ad630` writes each block into
+  `weapon + 0x15c + id*100`). A block name the registry does not carry is parsed into nothing, the
+  same discard the original makes; a null row means "this weapon authors nothing here", which is
+  played as nothing, never as row 0.
 ⚠ Flags (`CANNON`/`ROCKET`/`HIGH_EXPLOSIVE`/…) are `KEY,null` in the data — `ZrdrDict` bare-flag
   handling makes them present-but-empty, so `Has` is the test; a valued struct (`BEEPER`/`TANGLER`)
   is `Has`+`Dict`.
-⚠ `IMPACT` is walked as raw class/value pairs, not via `ZrdrDict` — a null class value (`enemy`,
-  "no effect on that surface") must be skipped, not read back as an empty binding.
+⚠ `IMPACT` is walked as raw name/value pairs, not via `ZrdrDict` — a null row value (`enemy` on 28
+  of the 48, "no effect on that surface") must be skipped, not read back as an empty binding.
 ⚠ `UnhandledKeys` is a tripwire: empty for this install (asserted by `--dump-weapons`); non-empty
   means the data grew a key `KnownKeys` hasn't learned — update the reader, don't ignore it.
 
@@ -1716,34 +1724,45 @@ authored) plus a first-order acceleration transient relaxing at the MEASURED 0.6
   of the view LAYOUT is still open.
 
 ## src/Flight/ImpactOutcome.cs
-"What should happen when this weapon hits this surface" as a value — `EffectName` (the class's
+"What should happen when this weapon hits this surface id" as a value — `EffectName` (the row's
 `ANIMATION`, else its `SURFACE_ANIMATION`), `Sound`, the `ImpactStandIn`, `Damage`/`BlastRadius`
 (+ `HasBlastDamage`) — plus the pure static `Resolve` that computes it from a `WeaponDef` and a
-`SurfaceClass`. No Godot type, no scene, no sink, no sound archive, so the dispatch's one decision
-is readable by a unit test; `ImpactOutcomeTests` is that test, including a suite over all 48
-shipped weapons × the three reachable surfaces asserting the *rule* (an effect or a stand-in but
+`SurfaceRegistry` id. No Godot type, no scene, no sink, no sound archive, so the dispatch's one
+decision is readable by a unit test; `ImpactOutcomeTests` is that test, including a suite over all 48
+shipped weapons × the eight reachable ids asserting the *rule* (an effect or a stand-in but
 never neither; a resolved sound names either a `SoundDefs` entry or a `SOUND_GROUPS` name;
 `HasBlastDamage` matches the raw damage/radius fields) rather than a table of expected per-weapon
-outcomes. `ProjectilePool.Impact` classifies the
-surface and calls it, then `Apply` performs the result; `ProjectilePool.HasBlastDamage` is the
-weapon-level spelling of the same `HasBlastDamage` rule, so the rule exists once.
+outcomes. `ProjectilePool.Impact` reads the struck id (`SurfaceIdOf`) and calls it, then `Apply`
+performs the result; `ProjectilePool.HasBlastDamage` is the weapon-level spelling of the same
+`HasBlastDamage` rule, so the rule exists once.
+⚠ **An id the weapon authors no row for plays nothing** — no effect name, no sound (`FUN_005ad100`
+  gates on the row's own variant count at `+0x2c` and has no empty-row-to-row-0 arm). Do NOT copy
+  `SurfaceDefTable`'s slot-0 fallback here: the two families differ in exactly that arm. Landed
+  2026-08-13 as `PLAN-surface-id-weapons` Decision 3; measured in a C4 burst, where the same
+  trigger pull draws the gunhit on `default`(0) ground and nothing on the `dirt`(13) tile beside it.
+⚠ **Buildings-textured geometry is not `buildings`(11).** Almost every shipped tower carries soil
+  `default`(0) (C2's `nycity` set is 100% id 0), so city hits now take the `default` row and its
+  ground look, not `bld_damage.flt` + the ricochet. That is what the original's own id lookup does;
+  `analysis/surface-classification/FINDINGS.md` (2026-08-11) has the per-chapter numbers.
 ⚠ `modelResolved` and `hasEffectsRuntime` are **inputs**, not things `Resolve` discovers: whether
   the effect name is a real gamez node needs the chapter scene, and whether a world-effects runtime
   exists is a fact about the caller (a scene-less pool takes the explosion stand-in). Passing a
   guess for either silently changes which stand-in a caller draws.
 ⚠ The stand-in ladder's order is load-bearing and mirrors `Impact`'s branch chain exactly —
-  model ▸ explosion (non-gun, no runtime) ▸ dirt debris (Default) ▸ ricochet (Buildings + gun) ▸
-  spark. Reordering it gives a weapon a different look.
-⚠ `Player`/`Enemy` get no case of their own — unreachable in M3, they read off the table and fall
-  to the spark like any unbound class. Do not author behaviour for them; and note the reader drops
-  an all-null class entry, so "present but empty" and "absent" are the same thing here.
-⚠ `Quicksand` is unreachable too, for a different reason than `Player`/`Enemy`: `ProjectilePool
-  .ClassifySurface` and `SceneBuilder.ClassifySurface(string?)` only ever stamp a collider `water`
-  or `buildings`, defaulting everything else — including quicksand terrain — to `Default`
-  (the lab's own pick readout agrees: three classes, not four). A weapon's `quicksand` IMPACT entry
-  is still real data the reader parses correctly; `Resolve` is just never called with it. `B5`'s
-  suite runs the 48 weapons across `{Default, Water, Buildings}` only — a fourth case would be
-  invented coverage.
+  model ▸ explosion (non-gun, no runtime) ▸ dirt debris (ground) ▸ ricochet (`buildings`(11) + gun)
+  ▸ spark. Reordering it gives a weapon a different look. The ladder is OURS, standing in for
+  authored assets that do not render, so its "ground" arm stayed the whole set the texture-derived
+  `Default` class covered (every id that is not water, a building or an aircraft) rather than
+  narrowing to id 0 — narrowing it would spark on `dirt`(13) for no reason in data or decode.
+⚠ `player`(6)/`enemy`(7) get no case of their own — no material carries either id, so they arrive
+  only from `ProjectilePool.SurfaceIdOf`'s struck-`AircraftBody` arm, read off the table and fall to
+  the spark like any unauthored id. Do not author behaviour for them; and note the reader drops an
+  all-null row, so "present but empty" and "absent" are the same thing here.
+⚠ The eight ids no shipped weapon authors at all (`seafloor`(2), `lava`(4), `fire`(5),
+  `airstrip`(8), `opensesame`(9), `death`(10), `dzone`(12), `dirt`(13)) are where the silence above
+  is reachable; `quicksand`(3) is authored by three weapons but carried by no material anywhere, so
+  `Resolve` is never asked for it. The 48-weapon suite runs the eight ids some material or body
+  actually carries — a case for the other six would be invented coverage.
 
 ## src/Flight/Projectile.cs
 **The original's projectile-visual runtime is written up in [org/tracers.md](org/tracers.md)** — how
@@ -1877,15 +1896,20 @@ kill attribution run the direct-hit path. Planes never enter `DamageSink`; the d
 sphere stays world-masked.
 ⚠ `_ray` is a shared mutable query object: per-shot `Exclude` is set AND reset around every
   query — a leaked exclusion silently shields the next round's target.
+⚠ `ClassifySurface` (the texture-derived `SurfaceClass`) survives only for the readers
+  `PLAN-surface-id-weapons` B12 retires — the lab's target picker, the two water predicates, two
+  suite checks. No weapon impact reads it since B11; do not key new behaviour off it.
 `DamageSink` (→ `AnimRuntime.DamageAt`) turns a world hit into destructible damage;
 `EffectSink` (→ `AnimRuntime.PlayEffectAt`) plays the non-model impact effects — rockets on the
 runtime's own bound, gun hits under `GunEffectTtl` 0.3 s (the `*_gunhit` family's longest authored
 stop, and the only bound the stop-less slug defs have) and one play per `GunEffectInterval` 0.1 s
 per effect name = per firing group (`GunEffectDue`, on the sim clock);
-`ClassifySurface` is `public static` — the ONE surface classifier, shared with the airframe's
-graze reaction so a round and a wingtip never disagree about what they hit; `Impact` classifies and
-calls `ImpactOutcome.Resolve`, then `Apply` obeys the result and decides nothing — the first 8
-impacts log a breadcrumb of that record (`fx=`/`snd=`/`standin=`), so the probe line and the unit
+`SurfaceIdOf` is `public static` — the struck body's numeric surface id off `SceneBuilder
+.SurfaceIdMeta`, the SAME index space the crash and graze cascades use, with `default`(0) for an
+untagged collider (`FUN_005acf60`'s null-material arm) and `player`(6) for a struck `AircraftBody`;
+`Impact` reads it and calls `ImpactOutcome.Resolve`, then `Apply` obeys the result and decides
+nothing — the first 8
+impacts log a breadcrumb of that record (`id/name` + `fx=`/`snd=`/`standin=`), so the probe line and the unit
 assertion say the same thing, which is what makes a "these two surfaces look the same" report
 answerable without a lucky screenshot (`BL-019`); rockets fly
 their FLYOUT model body via `BuildFlyoutBody` (shared with `PylonOrdnance`) and trail their FLYOUT
@@ -4035,8 +4059,10 @@ bind and `DefForSurfaceId` is what an impact asks. Engine-free and pure.
   plays nothing, where the crash family resolves a bare anim handle. So `lastResort` is null for
   touchdown and `DefForSurfaceId` can answer null. Unreachable in this install, because all eight
   chapters ship `touchdown_default`, so slot 0 always resolves (decoded 2026-08-12, read-only).
-⚠ The id space is the surface registry's, NOT `ProjectilePool.ClassifySurface`'s texture-derived
-  `water`/`buildings` class, which keys the weapon IMPACT tables and is a different name space.
+⚠ The weapon `IMPACT` table now indexes the SAME registry id space (`PLAN-surface-id-weapons` B11),
+  so a round and a wingtip agree about what they struck — but it does NOT share this cascade's
+  fallback: an id whose IMPACT row is empty plays nothing, where an empty slot here resolves slot 0.
+  Copying this class's arm into `ImpactOutcome` is the specific mistake to avoid.
 
 ## src/Session/EffectPools.cs
 The `CSVM/data/effect_pools.json` reader — how many copies of each effect-template ROOT the

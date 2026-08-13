@@ -563,12 +563,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 - `BL-222` `[Feature]` `[Blocked: M4]` **The `player` IMPACT surface class — the general got-shot feedback on your own airframe,
   authored on 44 of 48 weapons and untriggerable until something shoots back (found 2026-08-01
-  while landing `BL-090` item 2).** `weapons.json`'s `IMPACT` block is keyed by surface class, and
-  `player` ("the struck surface is the player's aircraft") is populated on 44 entries: most name the
+  while landing `BL-090` item 2).** `weapons.json`'s `IMPACT` block is keyed by surface id, and
+  `player` (id 6, "the struck surface is the player's aircraft") is populated on 44 entries: most name the
   caliber's own `*_gunhit`, several name `f18sparks2`, and `wep_03` (60slug) names
   `SURFACE_ANIMATION: random_gun_impact` — the spark burst at a `pdpN` panel that B4 wired.
-  `SurfaceClass.Player` already parses (`WeaponDefs.cs`) and `ProjectilePool` already classifies
-  surfaces; what is missing is a shooter. **Blocked on M4's enemy aircraft**, not on data or decode.
+  The row already parses (`WeaponDefs.cs`) and `ProjectilePool.SurfaceIdOf` already answers id 6 for
+  a struck `AircraftBody`; what is missing is a shooter. **Blocked on M4's enemy aircraft**, not on data or decode.
   This is the *general* mechanism B4's goal described — B4 reaches it only through the Devastator's
   one-off 0.99 `injure_anims` entry, which is plausibly an authoring leftover
   (`docs/formats/vehicle.md`).

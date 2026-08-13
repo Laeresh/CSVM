@@ -1,4 +1,6 @@
+using System.Linq;
 using CSVM.Flight;
+using CSVM.Mech3;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -106,14 +108,21 @@ public class WeaponDefsTests
     }
 
     [Fact]
-    public void ImpactIsIndexedBySurfaceClassAndANullClassIsSkipped()
+    public void ImpactIsIndexedBySurfaceIdAndANullRowIsSkipped()
     {
         var gun = Load().Get("wep_probe_gun")!;
-        Assert.Equal(2, gun.Impact.Count);
-        Assert.Equal("probe_spark", gun.Impact[SurfaceClass.Default].Effect);
-        Assert.Equal("probe_splash", gun.Impact[SurfaceClass.Water].SurfaceAnimation);
+        // One row per registry slot, in slot order — the original's own array shape.
+        Assert.Equal(SurfaceRegistry.Names.Count, gun.Impact.Length);
+        Assert.Equal(2, gun.Impact.Count(row => row != null));
+        Assert.Equal("probe_spark", gun.Impact[SurfaceRegistry.Default]!.Effect);
+        Assert.Equal("probe_splash", gun.Impact[SurfaceRegistry.Water]!.SurfaceAnimation);
         // "enemy" is present in the data with a null body: no binding, not an empty one.
-        Assert.False(gun.Impact.ContainsKey(SurfaceClass.Enemy));
+        Assert.Null(gun.ImpactFor(SurfaceRegistry.Enemy));
+        // An id no row was authored for is null, not the `default` row.
+        Assert.Null(gun.ImpactFor(13));
+        // Out of range answers null rather than faulting: the registry's own bounds test.
+        Assert.Null(gun.ImpactFor(-1));
+        Assert.Null(gun.ImpactFor(SurfaceRegistry.Names.Count));
     }
 
     [Fact]

@@ -134,7 +134,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — move the impact key onto the surface id
 
-11. ☐ Key the IMPACT table by surface id at parse time and at impact
+11. ☑ Key the IMPACT table by surface id at parse time and at impact
 12. ☐ Retire `SurfaceClass` at its remaining call sites
 
 ### Wave C — the overlay
@@ -223,7 +223,7 @@ Done: put to the user directly with A1's per-chapter numbers; not picked silentl
 
 # Wave B — move the impact key onto the surface id
 
-## B11 ☐ Key the IMPACT table by surface id at parse time and at impact
+## B11 ☑ Key the IMPACT table by surface id at parse time and at impact
 
 **Goal.** `ImpactOutcome` selects its effect by the struck body's `SceneBuilder.SurfaceIdMeta`,
 resolved through `SurfaceRegistry`, with the fallback A2 chose.
@@ -256,13 +256,52 @@ from the neighbouring family that just landed.
 least one unauthored id, so the A2 decision is visible rather than inferred. Take the "before"
 capture first: an unchanged effect is not evidence unless you have seen it able to change. Plus the
 8-chapter `--freecam` regression from the ground rules.
-<TODO: name the specific capture command and location (`RunGame.ps1` flags, chapter, weapon); this session did not establish one. `WeaponLab` (`CSVM/src/UI/WeaponLab.cs`) has target-selection-by-surface built in and is probably the instrument.>
+
+**Done, 2026-08-13.** The instrument is the weapon lab's scripted placement, headless, reading the
+`impact:` breadcrumb (which now prints `id/name`) out of `.scratch/logs/game-*.out`. That is
+`docs/verification.md` SHOT-3 (a state log where pixels cannot resolve the effect: the difference
+here is an absent sprite and an absent sound), and it is why the runs are headless at all, since
+SHOT-9 rules out combining a screenshot with `--headless`. The `--screenshot=` below only bounds
+the run length:
+
+```
+.\RunGame.ps1 --headless --det --chapter=C4 --weapon-lab=wep_00 \
+  --weapon-target=-3688.6,617.1,-2598.1 --weapon-fire --screenshot=./.scratch/b11.png --frames=90
+```
+
+The target is the vertex centroid of C4 mesh#722's `dirt` polygons (node `g1588`, 35 of 40 polygons
+`NoSlip`=13, so the body's dominant id is 13), derived from the extracted gamez the same way
+`soil_area_by_mesh.py` does. The "before" run was the same command in a throwaway
+`git worktree` at the pre-B11 commit (never `git stash` — the worktree hazard above).
+
+| capture | before | after |
+|---|---|---|
+| C4 `g1588/col`, id 13 | `-> Default … fx=3040slug_gunhit snd=snd_grnd_bullet standin=DirtDebris` | `-> 13/dirt … fx=- snd=- standin=DirtDebris` |
+| C4 `g2/col`, id 0, same burst | `-> Default … fx=3040slug_gunhit snd=snd_grnd_bullet` | `-> 0/default … fx=3040slug_gunhit snd=snd_grnd_bullet` (unchanged) |
+| C3 `g28683/col_water` (`--weapon-surface=water`) | — | `-> 1/water … fx=splash1.flt snd=snd_water_bullet standin=None` (the sea splash still instances) |
+| C2 `g36350/col_buildings` (`--weapon-surface=buildings`) | `-> Buildings … fx=bld_damage.flt snd=- standin=Ricochet` | `-> 0/default … fx=3040slug_gunhit snd=snd_grnd_bullet standin=DirtDebris` |
+| C1 `g306/col_buildings`, `wep_06` at `(-4258,172,-6405)` | `-> Buildings … fx=large_fireball` (recorded in `weapon-effects.md`) | `-> 0/default … fx=he_ground_effect snd=snd_missile_explode` |
+
+The last two rows are the item's own surprise and are faithful: the shipped towers and hangar walls
+carry soil `default`(0), not `buildings`(11), so the `buildings` row is unreachable on them —
+`weapon-effects.md`'s two ⚠ notes were corrected in the same turn, since that page asserted the
+opposite keying. Regression: `RunTests.ps1` green — 964 units, 37 in-engine suites, engine errors
+clean, and all 13 goldens hash-identical, which includes the eight `--freecam` chapter shots.
 
 **⚠ Traps.** The IMPACT fallback is not the crash cascade's, and copying `SurfaceDefTable`'s
 slot-0 arm wholesale is the specific mistake this item is most likely to make. The water special
 case at `FUN_005ad330` is a second, independent read of the same field, so a refactor that routes
 everything through one lookup must not quietly drop it. `fault` is authored but unreachable in the
 original; keeping it reachable in ours is a divergence, not a kindness.
+
+Done: no slot-0 arm — `WeaponDef.ImpactFor` answers null for an unauthored or out-of-range id, with
+the bounds test alone borrowed from the cascade. The water tint stayed its own read of the same id
+(`Projectile.Apply`, `surface == SurfaceRegistry.Water`) rather than being folded into the table
+lookup. `fault` never arose: A1 disproved it in the shipped data, and `SurfaceRegistry.IdForName`
+discards any unmatched name by construction. One trap this list did not name and the item hit
+anyway: the stand-in ladder's arms are OURS, not the original's, and keying them by id would have
+narrowed the debris arm from "terrain" to id 0 alone — it now covers every id that is not water, a
+building or an aircraft, which is exactly the set the deleted `Default` class covered.
 
 ## B12 ☐ Retire `SurfaceClass` at its remaining call sites
 

@@ -206,9 +206,13 @@ opposite, and the shared fireball is authored, not a lookup collapse.** Measured
    `default` → `SURFACE_ANIMATION he_ground_effect` (`--dump-weapons=wep_06`). The `default` entry
    uses the `SURFACE_ANIMATION` slot, not `ANIMATION`; a reader that reads only `ANIMATION` would
    see nothing there, which is why `WeaponDef` keeps both slots.
-2. The engine's per-surface lookup **does** differentiate. The `impact:` breadcrumb reports the
-   resolved name: a C1 hit on the `g306` hangar wall logs `-> Buildings … fx=large_fireball`, a hit
-   on terrain 60 m away logs `-> Default … fx=he_ground_effect`.
+2. The engine's per-surface lookup **does** differentiate, though not where this measurement
+   expected. It selects on the struck material's surface **id**, not on the texture name (corrected
+   2026-08-13, see the ⚠ below), and the C1 `g306` hangar's colliding polygons carry `default`(0),
+   not `buildings`(11) — so the same shot now logs `-> 0/default … fx=he_ground_effect`, measured.
+   The `buildings` row (`large_fireball`) needs a material actually tagged the `buildings` soil
+   type, which almost nothing in this install is. The two rows differ; what changed is which
+   geometry reaches which row.
 3. `he_ground_effect` (`he_control.zrd.json`) `CALL_ANIMATION`s **`large_fireball` itself**, at
    `AT_NODE he_ring, 0, 12, 0` — plus `call_he_ring`, `call_he_ring1`, two `call_hetrails_up`
    columns, a `he_light`/`he_light1` flash pair and a `FBFX_COLOR_FROM_TO` screen flash.
@@ -218,23 +222,27 @@ the light flashes. Both surfaces are *supposed* to show the same fireball, and i
 visual — which is exactly what makes them read as "identical" in the air. Making dirt a light flash
 would mean deleting the fireball the data calls, i.e. inventing content.
 
-⚠ **The material `soil` field is not the surface class.** `materials.json` carries a `soil` enum
-(`Default`/`Grass`/`Water`/`Silt`/`NoSlip`/`Fire`/`Mech`) with no `buildings` value, and only 1–3
-`Water` materials per chapter against the hundreds of water polygons the texture-name classifier
-finds. Surface class **for the IMPACT lookup on this page** comes from the polygon's **texture
-name** (`SceneBuilder.ClassifySurface`), and nothing else.
-⚠ But the "MechWarrior-3 leftover" gloss above is retired as of **2026-08-11**: that field is the
-original engine's own **surface type id** — the signed dword at material offset `0x20` that
-`crimson.exe` indexes the crash/touchdown choreography vector with (`FUN_0048b920`). It is junk for
-*this* decision and load-bearing for *that* one. See
-`analysis/surface-classification/FINDINGS.md`, 2026-08-11, before citing it either way.
+⚠ **The material `soil` field IS what the IMPACT lookup keys on** — corrected **2026-08-13**, and
+the reverse of what this page said until then. The `IMPACT` block's names are the game's global
+surface registry, the block is an array indexed by surface id, and the struck material's `soil` id
+picks the row (`analysis/surface-classification/FINDINGS.md`, 2026-08-12 and 2026-08-13; the
+`weapons.md` `IMPACT` section has the shipped per-id counts). The polygon's **texture name**
+(`SceneBuilder.ClassifySurface`) decides nothing about a weapon impact any more. The earlier
+"MechWarrior-3 leftover" gloss on the field was already retired on 2026-08-11, when the same field
+turned out to drive the crash/touchdown choreography vectors; it drives both families.
 
-⚠ **`buildings`-classed geometry is rare, so most hits are legitimately `Default`.** Per-chapter
-share of collidable polygon area (`analysis/surface-classification/class_area_share.py`):
-C5 5.85 %, C1/C2 0.07 %, C3/C4 ~0.00 %, and **C1C and C2B have none at all** — those two are
-open-water/mountain maps. A run that never finds a building is the map's content, not a bug; aim at
-a named hangar (C1 `g306` ≈ `(-4258, 172, -6405)`) rather than sampling terrain and concluding the
-class is unreachable.
+⚠ **An id no weapon authors draws and sounds nothing.** There is no fall back to the `default` row
+(unlike the crash cascade's fall back to slot 0), so a hit on `dirt`(13), `fire`(5),
+`airstrip`(8) or `dzone`(12) material plays no authored impact at all — 0–10.6 % of a chapter's
+collidable area, worst in C2. Measured in C4: one 30 cal burst draws `3040slug_gunhit` on the
+`default`(0) tile and nothing on the `dirt`(13) tile beside it.
+
+⚠ **Material tagged the `buildings` soil type is vanishingly rare, so building hits are
+legitimately `default`.** Only C1 carries any measurable `buildings`(11) area at all (273 polygons)
+and the other seven chapters carry none — C2's `nycity` towers and C1's `g306` hangar walls are
+100 % / dominantly `default`(0). A run that never reaches the `buildings` row is the map's content,
+not a bug. To photograph the `default` row's rocket burst on wall geometry, aim at the hangar
+(C1 `g306` ≈ `(-4258, 172, -6405)`).
 
 ### Explosion rings — the per-type ground decals
 

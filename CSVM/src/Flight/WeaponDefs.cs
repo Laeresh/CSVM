@@ -4,9 +4,11 @@ using CSVM.Mech3;
 
 namespace CSVM.Flight;
 
-/// <summary>Which surface a projectile struck — the key <c>weapons.json</c>'s <c>IMPACT</c> block
-/// selects its hit effect by (<see cref="WeaponDef.Impact"/>). <c>Enemy</c> has no meaning yet
-/// (nothing else flies) but is carried so the classifier and the future AI stay in step with the data.</summary>
+/// <summary>The texture-derived surface class, on its way out. It no longer keys anything the
+/// weapons do: <see cref="WeaponDef.Impact"/> is indexed by <see cref="SurfaceRegistry"/> id since
+/// <c>PLAN-surface-id-weapons</c> B11, which is what the original indexes it by. What is left are
+/// the non-impact readers B12 retires (<c>WeaponLab</c>'s target picker, the two water predicates,
+/// two suite checks); do not key new behaviour off it.</summary>
 public enum SurfaceClass { Default, Water, Buildings, Player, Enemy, Quicksand }
 
 /// <summary>A muzzle (<c>FIRE</c>) or per-surface (<c>IMPACT</c>) effect binding: any slot may be
@@ -52,7 +54,12 @@ public sealed class TanglerData
 /// </summary>
 public sealed class WeaponDef
 {
-    public readonly Dictionary<SurfaceClass, WeaponEffect> Impact = new();
+    /// <summary>The <c>IMPACT</c> table, one row per <see cref="SurfaceRegistry"/> id in slot
+    /// order — the original's own shape, an array indexed by surface id (<c>FUN_005ad630</c>
+    /// writes each parsed block into <c>weapon + 0x15c + id*100</c>). A null row is an id this
+    /// weapon authors nothing for, which the original plays nothing for; read it through
+    /// <see cref="ImpactFor"/>.</summary>
+    public readonly WeaponEffect?[] Impact = new WeaponEffect?[SurfaceRegistry.Names.Count];
 
     public string Id = "";            // "wep_00"
     public string DescKey = "";       // "MSG_WEAP_30CAL_SLUG"
@@ -133,6 +140,14 @@ public sealed class WeaponDef
     /// is well above the 0.001 sentinel and far below the Seeker's 1.25. Homing is not yet modelled —
     /// every rocket currently flies dumbfire — so this describes the data rather than driving flight.</summary>
     public bool IsGuided => TurnRate is > 0.01f;
+
+    /// <summary>This weapon's <c>IMPACT</c> row for a struck surface id, or null when it authors
+    /// none. The bounds test is the registry's (signed lower, unsigned upper), the same one
+    /// <c>FUN_0048b920</c> makes — but an out-of-range or unauthored id answers null here rather
+    /// than falling back to row 0, because the impact family has no such arm
+    /// (<c>FUN_005ad100</c> gates on the row's own variant count and otherwise plays nothing).</summary>
+    public WeaponEffect? ImpactFor(int surfaceId) =>
+        surfaceId >= 0 && (uint)surfaceId < (uint)Impact.Length ? Impact[surfaceId] : null;
 }
 
 /// <summary>
@@ -158,16 +173,6 @@ public sealed class WeaponDefs
         "SMOKE_SCREEN", "REAR", "TORPEDO", "TARGETABLE", "FLYOUT_HEALTH", "PROJECTILE_BBOX",
         "DESTROY_ANIMATION", "DAMAGES_ZEPPELIN", "SHAKES_CAMERA",
         "CANNON", "LOOPED_SOUND_NAME", "FIRE", "FLYOUT", "IMPACT",
-    };
-
-    private static readonly Dictionary<string, SurfaceClass> Surfaces = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["default"] = SurfaceClass.Default,
-        ["water"] = SurfaceClass.Water,
-        ["buildings"] = SurfaceClass.Buildings,
-        ["player"] = SurfaceClass.Player,
-        ["enemy"] = SurfaceClass.Enemy,
-        ["quicksand"] = SurfaceClass.Quicksand,
     };
 
     private readonly Dictionary<string, WeaponDef> _byId = new(StringComparer.OrdinalIgnoreCase);
@@ -327,10 +332,12 @@ public sealed class WeaponDefs
         return e.IsEmpty ? null : e;
     }
 
-    // IMPACT is walked as raw class/value pairs rather than through ZrdrDict, so a class whose
-    // value is null (no effect on that surface, e.g. "enemy") is skipped explicitly rather than
-    // read back as an empty binding.
-    private static void ParseImpact(List<object?>? impact, Dictionary<SurfaceClass, WeaponEffect> into)
+    // IMPACT is walked as raw name/value pairs rather than through ZrdrDict, so a row whose value
+    // is null (no effect on that surface, e.g. "enemy" on 28 of the 48) is skipped explicitly
+    // rather than read back as an empty binding. The name is matched against the surface registry
+    // and written at that id, which is what FUN_005ad630 does — a name the registry does not carry
+    // is parsed into nothing, exactly as the original discards it.
+    private static void ParseImpact(List<object?>? impact, WeaponEffect?[] into)
     {
         if (impact == null)
         {
@@ -338,14 +345,14 @@ public sealed class WeaponDefs
         }
         for (int i = 0; i + 1 < impact.Count; i += 2)
         {
-            if (impact[i] is not string className || !Surfaces.TryGetValue(className, out var surface))
+            if (impact[i] is not string surfaceName || SurfaceRegistry.IdForName(surfaceName) is not { } id)
             {
                 continue;
             }
             if (impact[i + 1] is List<object?> slots
                 && ParseEffect(ZrdrDict.FromAlternating(slots)) is { } effect)
             {
-                into[surface] = effect;
+                into[id] = effect;
             }
         }
     }

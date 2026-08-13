@@ -196,7 +196,7 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 2026-08-13; 5 items, 3 waves): part two of the surface-id work, moving the weapon `IMPACT` lookup
 onto the original's numeric surface id (decoded 2026-08-12; its empty row plays nothing rather than
 falling back) and colouring the collision overlay by the same id. Folds in `BL-344` and `BL-345`;
-disproves `PLAN-crash-surface-id` Decision 3. Strictly serial. Next: `B11`.
+disproves `PLAN-crash-surface-id` Decision 3. Strictly serial. Next: `B12`.
 [`PLAN-object-motion-decode.md`](docs/PLAN-object-motion-decode.md) is live in
 parallel on its own branch, at Wave C from `C6`.
 Owed at the controls: `PT-28`, `PT-41`, `PT-43`, `PT-45` and `PT-47`
