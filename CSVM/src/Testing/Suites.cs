@@ -156,6 +156,8 @@ public static class Suites
             "a bounce-terminated OBJECT_MOTION flies its solved parabola and fires its BOUNCE_SEQUENCE on landing", BounceLaunch));
         into.Add(new TestHarness.Suite("ground-contact",
             "a gravity-bearing OBJECT_MOTION is cut short by real geometry through the right tier (default column, do_intersections sweep, no_altitude neither), rests on the surface and picks its BOUNCE_SEQUENCE branch from what it struck, and does none of it without a mask", GroundContact));
+        into.Add(new TestHarness.Suite("forward-rotation",
+            "an OBJECT_MOTION tumble turns at the authored RATE about its own launch direction's horizontal perpendicular, scaled by that direction's length — and a vector-translation launch does not turn at all", ForwardRotation));
         into.Add(new TestHarness.Suite("self-ref-launch",
             "an OBJECT_MOTION naming the MAIN_ROOT_NODE sentinel launches the node its def was invoked on, taking that node over from whatever was driving it", SelfRefLaunch));
         into.Add(new TestHarness.Suite("nulled-launch",
@@ -4667,6 +4669,141 @@ public static class Suites
             // outcome: a step that ends higher than it starts cannot end below a surface the ray
             // found at or under its start. Both are transcribed in TryGroundColumn. What a later
             // item must re-check is the query's shape, not those two lines.
+        });
+    }
+
+    // ---- the tumble: a rate about the launch's own perpendicular ---------------------------------
+
+    /// <summary><c>FORWARD_ROTATION</c> turns a launched body about the horizontal PERPENDICULAR of
+    /// its own launch direction, at the authored rate, with that direction's own horizontal length
+    /// as the scale — so the same authored number tumbles a flat throw fast and a steep one slowly,
+    /// and a body launched by the vector <c>translation</c> form does not turn at all.
+    ///
+    /// <para>Every case is arithmetic on a synthetic body: the ranges are authored min = max so the
+    /// draw is deterministic, and the pose is read back as geometry (where the body's own axes point
+    /// after a quarter turn) rather than as the euler triple the implementation writes, which would
+    /// assert nothing.</para>
+    ///
+    /// <para>⚠ The last case is the one that came from the controls. A crash piece flies the vector
+    /// form, whose launch never fills the direction cache the tumble reads, so it must hold its
+    /// orientation exactly — this is the case that fails if the axis is ever "fixed" back to a mesh
+    /// axis.</para></summary>
+    private static void ForwardRotation(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var runtime = world.Runtime;
+            var root = world.Session.Root;
+
+            static Dictionary<string, object?> Vec(float x, float y, float z) =>
+                new() { ["x"] = x, ["y"] = y, ["z"] = z };
+            static Dictionary<string, object?> Range(float v) =>
+                new() { ["min"] = v, ["max"] = v };
+
+            // A ranged launch at one exact azimuth/elevation, tumbling at `rate` (+`accel`).
+            static AnimData Ranged(float azimuth, float elevation, float rate, float accel = 0f,
+                float runTime = 5f) =>
+                new(new Dictionary<string, object?>
+                {
+                    ["translation_range"] = new Dictionary<string, object?>
+                    {
+                        ["xz"] = Range(azimuth),
+                        ["y"] = Range(elevation),
+                        ["initial"] = Range(10f),
+                        ["delta"] = Range(0f),
+                    },
+                    ["forward_rotation"] = new Dictionary<string, object?>
+                    {
+                        ["Time"] = new Dictionary<string, object?>
+                        {
+                            ["initial"] = rate,
+                            ["delta"] = accel,
+                        },
+                    },
+                    ["run_time"] = runTime,
+                });
+
+            // The same tumble on the VECTOR launch form — the shape the crash pieces author.
+            static AnimData Vector(float rate) =>
+                new(new Dictionary<string, object?>
+                {
+                    ["translation"] = new Dictionary<string, object?>
+                    {
+                        ["initial"] = Vec(10f, 0f, 0f),
+                        ["delta"] = Vec(0f, 0f, 0f),
+                        ["rnd_xz"] = Vec(0f, 0f, 0f),
+                    },
+                    ["forward_rotation"] = new Dictionary<string, object?>
+                    {
+                        ["Time"] = new Dictionary<string, object?>
+                        {
+                            ["initial"] = rate,
+                            ["delta"] = 0f,
+                        },
+                    },
+                    ["run_time"] = 5f,
+                });
+
+            Basis Pose(AnimData data, float t)
+            {
+                var node = new Node3D { Name = "forward-rotation-probe" };
+                root.AddChild(node);
+                try
+                {
+                    var motion = MotionRuntime.Create(runtime, node, data, data.Num("run_time") ?? 0f);
+                    motion?.Seek(t);
+                    return node.Transform.Basis.Orthonormalized();
+                }
+                finally
+                {
+                    node.QueueFree();
+                }
+            }
+
+            // 1 — the axis. A flat throw along +X (azimuth 0, h = 1) turns about (0, 0, −1): after a
+            // quarter turn at π/2 rad/s the body's own up axis points along the throw and its own X
+            // points down, which is an end-over-end tumble FORWARD over the launch.
+            var alongX = Pose(Ranged(0f, 0f, Mathf.Pi / 2f), 1f);
+            ctx.Check(alongX.Y.IsEqualApprox(Vector3.Right) && alongX.X.IsEqualApprox(Vector3.Down),
+                $"a throw along +X pitches forward over it up={alongX.Y} fwd={alongX.X}");
+
+            // And the axis FOLLOWS the throw rather than the mesh: the same body launched along +Z
+            // turns about (1, 0, 0) instead, which the old local-X reading cannot produce.
+            var alongZ = Pose(Ranged(90f, 0f, Mathf.Pi / 2f), 1f);
+            ctx.Check(alongZ.Y.IsEqualApprox(Vector3.Back),
+                $"and a throw along +Z pitches forward over THAT up={alongZ.Y}");
+
+            // 2 — the rate is a RATE, not an angle over the run time. Two bodies with the same
+            // authored number and different run times must be in the same pose at the same instant;
+            // under the ÷ run_time reading the 2 s body would have turned 2.5× as far.
+            var slow = Pose(Ranged(0f, 0f, 1f, runTime: 5f), 1f);
+            var fast = Pose(Ranged(0f, 0f, 1f, runTime: 2f), 1f);
+            ctx.Check(slow.X.IsEqualApprox(fast.X) && slow.Y.IsEqualApprox(fast.Y),
+                $"the run time does not scale the tumble at 5 s={slow.X} at 2 s={fast.X}");
+            ctx.Check(Mathf.Abs(slow.GetEuler(EulerOrder.Yxz).Z + 1f) < 1e-3f,
+                $"one second of 1 rad/s is one radian euler={slow.GetEuler(EulerOrder.Yxz)}");
+
+            // 3 — the launch's own horizontal length scales it, which is what makes a steep throw
+            // tumble slowly off the same authored number. At 60° of elevation h = 1/3.
+            var steep = Pose(Ranged(0f, 60f, 1f), 1f);
+            float steepAngle = -steep.GetEuler(EulerOrder.Yxz).Z;
+            ctx.Check(Mathf.Abs(steepAngle - (1f / 3f)) < 1e-3f,
+                $"a 60° launch turns at h = 1 − |elev|/90 of the authored rate angle={steepAngle:0.000} rad expected=0.333");
+
+            // 4 — `delta` is the rate's own acceleration, integrated rather than dropped: from rest
+            // at 2 rad/s², one second is 1 rad.
+            var ramped = Pose(Ranged(0f, 0f, 0f, accel: 2f), 1f);
+            float rampedAngle = -ramped.GetEuler(EulerOrder.Yxz).Z;
+            ctx.Check(Mathf.Abs(rampedAngle - 1f) < 1e-3f,
+                $"forward_rotation.delta accelerates the rate angle={rampedAngle:0.000} rad expected=1.000");
+
+            // 5 — the report from the controls. The vector launch form never fills the direction
+            // cache the tumble multiplies through, and the parser zeroes the event struct before
+            // reading it, so these bodies hold their orientation however large the authored rate is.
+            var vec = Pose(Vector(15.708f), 1f);
+            ctx.Check(vec.IsEqualApprox(Basis.Identity),
+                $"a vector-translation launch does not tumble at all basis={vec}");
+            ctx.Note($"flat 1 rad/s = {-slow.GetEuler(EulerOrder.Yxz).Z:0.000} rad/s, the same launch at 60° = {steepAngle:0.000} rad/s, vector form = 0");
         });
     }
 

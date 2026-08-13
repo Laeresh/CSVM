@@ -74,10 +74,19 @@ internal enum MotionContactTier
 ///   body carries, since either tier ends it earlier on real geometry. The apex is that solve's
 ///   admission test, not the bounce, so a body with no apex is declined there and simply falls
 ///   until it lands.</item>
-/// <item><c>forward_rotation.Time.initial</c> is a tumble RATE (rad/s) about the node's local
-///   X axis (a piece = 15.708 = 900°/s). ⚠ the axis is a reasoned choice — the data carries a
-///   scalar rate, not an axis — an end-over-end tumble about the local X reads well for
-///   scattered wreckage.</item>
+/// <item><c>forward_rotation.Time.initial</c> is a tumble RATE in rad/s (<c>delta</c> its
+///   acceleration, non-zero on 2 events install-wide), and the axis is not a mesh axis at all:
+///   the original turns the body about the HORIZONTAL PERPENDICULAR of its own launch direction,
+///   <c>(dirZ, 0, −dirX)</c>, left unnormalised so its length is the launch's own
+///   <c>h = 1 − |elev|/90</c>. A steep throw therefore tumbles slowly and a flat one fast off the
+///   same authored number. See <see cref="TumbleAxis"/>.
+///   ⚠ A body launched by the VECTOR <c>translation</c> form does not tumble AT ALL: that cache
+///   (<c>+0x70/+0x78</c>) is filled only by the <c>translation_range</c> branch, the parser zeroes
+///   the whole 0x14c-byte event struct before reading it (<c>REP STOSD</c> at <c>005085e0</c>),
+///   and the tumble multiplies straight through it. That is 495 of the install's 1,399 tumbles,
+///   the four <c>player_crash_dirt</c> pieces among them. ⚠ The <c>DISTANCE</c>
+///   parameterisation (flag <c>0x40</c>, a turn per metre travelled rather than per second) is not
+///   built: all 1,399 author <c>Time</c> and none authors <c>Distance</c>.</item>
 /// <item><c>xyz_rotation.initial</c> a steady multi-axis spin (rad/s), composed like
 ///   <see cref="SpinMotion"/>; present only on the rare spin+ballistic events.</item>
 /// <item><c>scale.initial</c> and <c>scale.delta</c> are OFFSETS from unit scale, not absolute
@@ -176,7 +185,11 @@ internal sealed class MotionRuntime : IAnimMotion
 
     private bool _hasScale;
 
-    private float _tumbleRate;   // rad/s about local X (forward_rotation)
+    // forward_rotation: a live rate about the launch's own perpendicular. angle(t) = rate·t +
+    // ½·accel·t², turned about `_tumbleAxis` — zero for a body that never drew a launch direction.
+    private float _tumbleRate, _tumbleAccel;
+
+    private Vector3 _tumbleAxis;
 
     private Vector3 _spinRate;   // rad/s per local axis (xyz_rotation)
 
@@ -249,6 +262,7 @@ internal sealed class MotionRuntime : IAnimMotion
     /// vanish-shape piece on screen for 15 s and slow 282 tumbles to a crawl.</para></summary>
     public float RunTime => _runTime;
 
+
     /// <summary>The ON_CALL sequence this body owes when it lands — <c>BOUNCE_SEQUENCE</c>'s
     /// <c>default</c> branch — or null when nothing is owed. Armed only on a launch whose flight
     /// time this class SOLVED <b>and</b> which names a bounce; the bounce-less shape solves the
@@ -260,6 +274,11 @@ internal sealed class MotionRuntime : IAnimMotion
     /// run time is a ceiling, not a duration.</para>
     /// </summary>
     public string? PendingBounce { get; private set; }
+
+    /// <summary>Whether this body turns at all: an authored rate AND an axis to turn it about. A
+    /// vector-<c>translation</c> launch has the rate and no axis, which is the original's own
+    /// arithmetic rather than a guard against it (see <see cref="TumbleAxis"/>).</summary>
+    private bool Tumbles => (_tumbleRate != 0f || _tumbleAccel != 0f) && _tumbleAxis != Vector3.Zero;
 
     public static MotionRuntime? Create(AnimRuntime rt, Node3D target, AnimData data, float runTime,
         bool inheritVelocity = true)
@@ -402,6 +421,9 @@ internal sealed class MotionRuntime : IAnimMotion
             float speed = Pick(range.Obj("initial"));
             float speedRamp = Pick(range.Obj("delta"));
             var dir = RangeLaunchDirection(azimuth, elevation);
+            // The tumble turns about THIS draw's own perpendicular: the original caches the
+            // direction at +0x70/0x74/0x78 here and the FORWARD_ROTATION branch reads it back.
+            m._tumbleAxis = TumbleAxis(dir);
             m._v0 = (dir * speed) + InheritedLocal();
             // `delta` folds in as a constant acceleration along the same direction — the same
             // shape `translation.delta` has, and 0 on 984 of the 1,217 events.
@@ -444,10 +466,7 @@ internal sealed class MotionRuntime : IAnimMotion
         {
             float flight = FlightToLaunchHeight(m._v0.Y, m._accel.Y);
             if (flight > 0f)
-            {
-                rtSafe = flight;
                 m._runTime = flight;
-            }
         }
 
         // The termination ceiling: the authored RUN_TIME wherever there is one, which the original
@@ -477,12 +496,14 @@ internal sealed class MotionRuntime : IAnimMotion
         if (untimed && m._contactTier == MotionContactTier.None && m._runTime > 0f)
             m.PendingBounce = data.Obj("bounce_sequence")?.Str("default");
 
-        // forward_rotation.Time.initial is a TOTAL angle over run_time (the `Time`
-        // parameterization), not a rate: the crash pieces carry 5π and 4.44π (clean multiples of
-        // π), which read as a rate spin at ~15 rad/s (900°/s) — "spins like crazy" (user
-        // playtest). ÷ run_time gives 5π over 6 s = 2.5 tumbles, the reference debris tumble.
-        float fwdTotal = data.Obj("forward_rotation")?.Obj("Time")?.Num("initial") ?? 0f;
-        m._tumbleRate = rtSafe > 0f ? fwdTotal / rtSafe : 0f;
+        // forward_rotation.Time is a RATE and its own acceleration, read straight across: the
+        // original seeds a live rate at +0x84 from `initial` on the launch frame and integrates it
+        // by `delta` every frame, so the run time never enters. ⚠ The clean multiples of π the
+        // crash pieces carry (5π, 4.44π) are a coincidence of the authored numbers and were the
+        // whole argument for the total-angle reading this replaces; they are not evidence.
+        var fwd = data.Obj("forward_rotation")?.Obj("Time");
+        m._tumbleRate = fwd?.Num("initial") ?? 0f;
+        m._tumbleAccel = fwd?.Num("delta") ?? 0f;
         m._spinRate = data.Obj("xyz_rotation")?.Vec3("initial") ?? Vector3.Zero;
 
         // A ballistic launch starts from the node's AUTHORED rest pose, not from wherever the last
@@ -522,7 +543,7 @@ internal sealed class MotionRuntime : IAnimMotion
         }
 
         // Nothing to drive → no motion (a bare gravity/bounce stub, handled by the caller).
-        bool any = m._hasBallistic || m._hasScale || m._tumbleRate != 0f || !m._spinRate.IsZeroApprox();
+        bool any = m._hasBallistic || m._hasScale || m.Tumbles || !m._spinRate.IsZeroApprox();
         return any ? m : null;
     }
 
@@ -566,8 +587,17 @@ internal sealed class MotionRuntime : IAnimMotion
             origin = _landed ? _landedOrigin : BallisticOrigin(tb);
 
         var basis = _heldRot;
-        if (_tumbleRate != 0f)
-            basis = basis.Rotated(basis.X.Normalized(), _tumbleRate * tb);
+        if (Tumbles)
+        {
+            // The original ADDS its euler triple into the node's own angles and rebuilds the
+            // matrix from them (FUN_004d25c0/FUN_004d1ba0 write node+0x18..0x20), so this composes
+            // in euler rather than turning the live basis about an axis. The triple is
+            // (axisX·angle, 0, axisZ·angle) — nothing is added to the Y angle at all.
+            var euler = _heldRot.GetEuler(EulerOrder.Yxz)
+                        + _tumbleAxis * TumbleAngle(_tumbleRate, _tumbleAccel, tb);
+            basis = Basis.FromEuler(euler, EulerOrder.Yxz);
+        }
+
         if (!_spinRate.IsZeroApprox())
         {
             var a = _spinRate * tb;
@@ -613,6 +643,31 @@ internal sealed class MotionRuntime : IAnimMotion
         float horiz = dirY < 0f ? dirY + 1f : 1f - dirY;
         return new Vector3(Mathf.Cos(az) * horiz, dirY, Mathf.Sin(az) * horiz);
     }
+
+    /// <summary>The axis one <c>forward_rotation</c> tumble turns about, as the euler triple the
+    /// original accumulates: the horizontal perpendicular of the launch direction that
+    /// <see cref="RangeLaunchDirection"/> just drew. <c>FUN_004e8fa0</c>'s <c>0x80</c> branch
+    /// applies <c>( +0x78 · rate · dt , 0 , −( +0x70 · rate · dt ) )</c>, and <c>+0x70</c>/
+    /// <c>+0x78</c> are that direction's cached X and Z — so the body pitches forward over its own
+    /// throw, and the same authored rate reads differently per elevation.
+    ///
+    /// <para><b>⚠ Deliberately NOT unit length</b>, for the same reason the launch direction is not:
+    /// its length is the launch's <c>h = 1 − |elev|/90</c>, so a near-vertical throw (h → 0) barely
+    /// turns while a flat one (h → 1) turns at the full authored rate. Normalising it is what makes
+    /// a steep launch tumble as fast as a flat one. Shared with <c>ProjectilePool</c>'s casing
+    /// ejection, which flies the same <c>gunshell</c> event and must not spell this twice.</para>
+    ///
+    /// <para>⚠ A zero vector in means no tumble, and that is a DECODE, not a guard: the vector
+    /// <c>translation</c> form never writes the cache, and the parser zeroes the event struct
+    /// before parsing (<c>005085e0</c>), so those 495 events multiply a live rate by nothing.
+    /// </para></summary>
+    internal static Vector3 TumbleAxis(Vector3 launchDir) => new(launchDir.Z, 0f, -launchDir.X);
+
+    /// <summary>How far a tumble has turned at <paramref name="t"/>: the integral of a rate that is
+    /// itself integrating its own <c>delta</c> (<c>+0x84 += dt · +0x80</c> every frame), in closed
+    /// form. The discrete sum and this differ by one frame's worth of the acceleration, which is
+    /// nothing on the 2 events install-wide that author a non-zero <c>delta</c>.</summary>
+    internal static float TumbleAngle(float rate, float accel, float t) => (rate + 0.5f * accel * t) * t;
 
     /// <summary>Time for a launch to come back down to the height it left from:
     /// <c>t = 2·v0y / -ay</c>, the non-zero root of <c>v0y·t + ½·ay·t² = 0</c>. Returns 0 for

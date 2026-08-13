@@ -228,9 +228,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-122` `[Tuning]` `[Owed-playtest]` **Data-driven crash (PLAN-data-driven-crash, default since Wave 4)** — several playtest-gated TUNEs,
   all needing the original at the controls: `WreckMomentum` **0.4** (`FlightController.cs` — the
   fraction of impact velocity the wreck pieces inherit, so they scatter along travel vs. pop straight
-  up); the **`forward_rotation.Time.initial` ÷ run_time** tumble-rate reading in `AnimRuntime`'s
-  `MotionRuntime` (the pieces carry clean π multiples read as a *total* angle, not a rate); the
-  **debris-arc trajectory** (the *decode* is settled since 2026-08-01 — `translation_range`'s xz/y are
+  up); the **debris-arc trajectory** (the *decode* is settled since 2026-08-01 — `translation_range`'s xz/y are
   an azimuth/elevation in degrees and `initial` the launch speed, `delta` a speed ramp, all three
   mapped in `MotionRuntime`; what stays a TUNE is only the arc's judged *look*, and the `fly_trailN`
   anchor being invisible means only the trail's rough scale reads); the **overall crash intensity** (the fireball, the cluster, the debris
@@ -242,13 +240,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `C1 IA1 Crash.mp4` and `CAP-14 Crash.mp4`, two further ground crashes with the same signature;
   stills in `playtest/CAP-16/`). ⚠ All times below are **wall-clock** off container PTS — multiply
   by k = 1.390 for sim-seconds before comparing against any authored `run_time`.
-  - **Tumble is a total angle, not a rate — the reading in the entry above is confirmed.** A wing
-    panel detaches at ignition and stays legible for 8 sampled frames, t = 6.13 → 6.60
+  - **The crash pieces barely turn, and the decode since 2026-08-13 says they do not turn at all.**
+    A wing panel detaches at ignition and stays legible for 8 sampled frames, t = 6.13 → 6.60
     (0.47 s wall / 0.65 sim-s; `wing-tumble-strip-6.13-6.60.png`). Its long axis rotates only
-    **~10–15° over that span** — order 20–30 °/s wall-clock. A π-rad-per-second *rate* would have
-    turned it ~85° in the same window, which is not what the footage shows. So `forward_rotation`'s
-    clean π multiples read as the piece's **total** sweep over `run_time`. *Limit:* one piece, seen
-    near edge-on under camera motion, so only rotation about the view axis is observable.
+    **~10–15° over that span** — order 20–30 °/s wall-clock, against the ~150 °/s the ÷`run_time`
+    reading of the day predicted. `FORWARD_ROTATION` is now decoded (`PLAN-object-motion-decode`
+    C10): the crash `pieceN` fly the vector `TRANSLATION` form, which fills none of the launch
+    direction cache the tumble multiplies through, so they hold their orientation and what the strip
+    shows is the piece's path plus camera motion. Recorded as agreement, not as evidence — the
+    footage is one piece, near edge-on under camera motion, and no measurement off it decides a
+    decode.
   - **`WreckMomentum` — direction confirmed, magnitude not pinned.** The same panel travels on a
     straight shallow down-and-forward path along the flight direction (t = 6.13, 6.27); it does not
     pop upward. At t = 12.50 the burning chunks lie **scattered laterally on the ground**, at rest,

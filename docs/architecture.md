@@ -1218,7 +1218,22 @@ AZIMUTH is converted deg→rad and passed to the sincos at `FUN_0053c6c0`. **Do 
 the unit-sphere reading that shipped until 2026-08-11 launched 60–70° debris 20–25 % too fast and is
 what cut `m_build03` part1 at ~70 % of its authored 5.0 s `RUN_TIME`. Which world bearing azimuth 0
 points along (+X) remains a choice, and `FUN_0053c6c0`'s output order is unchecked — the cos-on-X /
-sin-on-Z assignment is inherited, not decoded. Its `scale` channel is an
+sin-on-Z assignment is inherited, not decoded.
+`forward_rotation` rides on that same direction: `Time.initial` is a RATE in rad/s (`delta` its
+acceleration, integrated), and the axis is the launch's own horizontal perpendicular
+`(dirZ, 0, −dirX)` — `TumbleAxis`, shared with the casing ejection — left unnormalised so its length
+is the launch's `h = 1 − |elev|/90`, which is what makes a steep throw tumble slowly off the same
+authored number. The original accumulates it as an EULER triple on the node's own angles
+(`FUN_004e8fa0`'s `0x80` branch into `FUN_004d25c0`/`FUN_004d1ba0`), never as a turn about a live
+basis axis. `DISTANCE` (flag `0x40`, a turn per metre travelled) is not built — all 1,399 tumbles
+in the install author `Time`.
+⚠ A body launched by the VECTOR `translation` form does not tumble at all — 495 of those 1,399, the
+  four `player_crash_dirt` pieces among them. The direction cache is filled only by the
+  `translation_range` branch and the parser zeroes the event struct before parsing (`005085e0`), so
+  the multiply is by zero. Arithmetic, not a missing feature: the ÷`run_time`-about-local-X reading
+  that shipped until 2026-08-13 spun those pieces at ~2.6 rad/s, reported at the controls as far
+  larger than the original's.
+Its `scale` channel is an
 OFFSET from unit scale (`1 + initial + delta·u`), unlike the absolute `PoseScale`/`OBJECT_SCALE_STATE`
 — 30 of the 45 distinct SCALE events carry a bare `-0.1`, which absolute is a negative scale.
 `gravity.complex` picks between two forms of the same fold: plain drops the value into the parent
@@ -1233,8 +1248,8 @@ end on one shared response: half a descending step clear of the surface while mo
 once below 0.1 horizontal / 0.5 vertical, velocity scaled by 0.2 with every sign KEPT (the original
 reflects nothing), continuing while incoming speed² covers acceleration².
 `MotionRuntime` separates the duration it REPORTS from the ceiling that ENDS it. `RunTime` is the
-authored `RUN_TIME` or the parabola's return to launch height, and it drives the sequence's wait,
-the tumble rate and the channel parameter — `BL-257`'s census (`analysis/bl-257-nulled-launch/`)
+authored `RUN_TIME` or the parabola's return to launch height, and it drives the sequence's wait and
+the scale ramp's parameter (the tumble is a rate and no longer divides by it) — `BL-257`'s census (`analysis/bl-257-nulled-launch/`)
 found 167 events / 119 distinct defs naming neither a run time nor a bounce, which end with the
 flying piece's own null-start `ACTIVE_STATE 0`, so a wrong number here hides them mid-air or leaves
 them on screen. The ceiling is that same `RUN_TIME`, or the original's watchdog (15 s column / 35 s

@@ -191,10 +191,18 @@ live pose walked every repeat explosion's debris further from the blast than the
   duration of 0 fired on the launch tick. ⚠ 8 of the 167 have no apex and stay `BL-245`'s; the
   vertical speed is `sin(elevation)·speed`, so **a negative speed range inverts an upward
   elevation** (`fuelboxbreaks`' rockerarm, elevation 90° at speed −45…45).
-- `FORWARD_ROTATION.Time.initial` is a tumble **total angle over `RUN_TIME`**, not a rate: divide
-  by `RUN_TIME` before integrating (read as rad/s, the crash pieces spin ~15 rad/s, visibly wrong;
-  the ÷`RUN_TIME` reading passed the crash A/B playtest and remains a TUNE handle, not a decode).
-  ⚠ the axis is a reasoned choice (local X): the data carries a scalar, not an axis.
+- `FORWARD_ROTATION.Time.initial` is a tumble **RATE in rad/s**, and `delta` its acceleration:
+  `FUN_004e8fa0`'s `0x80` branch seeds a live rate at `+0x84` from it on the launch frame and
+  integrates that rate by `delta` every frame, so `RUN_TIME` never enters. The compiled numbers fly
+  as they are — the parser converts the authored `initial` deg→rad on the way in (`FMUL` at
+  `0050b551`) and stores `delta` raw. **The axis is decoded, not chosen**: the euler triple applied
+  is `(dirZ·rate·dt, 0, −dirX·rate·dt)` off the `TRANSLATION_RANGE` direction cached at
+  `+0x70`/`+0x78`, i.e. the horizontal perpendicular of the launch, unnormalised, so its length is
+  that launch's own `h = 1 − |elev|/90` and a steep throw turns slowly off the same number.
+  ⚠ A `TRANSLATION` (vector) launch never fills that cache and the parser zeroes the event struct
+  before parsing (`005085e0`), so those bodies **do not tumble at all** — 495 of the install's 1,399
+  tumbles, the `player_crash_dirt` pieces among them. ⚠ `FORWARD_ROTATION DISTANCE` (flag `0x40`,
+  the same shape driven by the step rather than by `dt`) is authored **nowhere** in this install.
 - `SCALE.initial`/`delta` a linear scale ramp that is an **OFFSET from unit scale, not an absolute
   size**: `scale = 1 + initial + delta·u`. Unlike `OBJECT_SCALE_STATE`/`OBJECT_SCALE_FROM_TO`, which
   are absolute. **Settled 2026-08-01** by the install's commonest value — a bare `(-0.1, -0.1, -0.1)`
@@ -209,7 +217,8 @@ live pose walked every repeat explosion's debris further from the blast than the
 
 Verified 2026-07-23 in `--anim-lab --play-anim=player_crash_dirt` (seeded, fixed-dt): the five
 `fly_trail*` debris anchors integrate outward and the two carrying `FORWARD_ROTATION` tumble while
-the others do not, `dust` runs a scale ramp and an `OpacityFade` at once, `flydirt` sinks on its
+the others do not (those two are `TRANSLATION_RANGE` launches; the crash's own `pieceN`, which fly
+the vector form, stopped tumbling on 2026-08-13), `dust` runs a scale ramp and an `OpacityFade` at once, `flydirt` sinks on its
 `TRANSLATION`. An 8-chapter ambient regression is byte-identical bar C3's one reachable opacity
 fade — because nothing ambient fires the ballistic half (see the reachability boundary above).
 

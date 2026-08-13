@@ -208,7 +208,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 7. ☑ `NO_ALTITUDE` as the opt-out, and `gunshell` as its only author
 8. ☑ `RUN_TIME` as a universal ceiling; retire `FlightToLaunchHeight` for the watchdog
 9. ☑ Landing response: 0.2 restitution and energy-loss termination
-10. ☐ `FORWARD_ROTATION`: the tumble is a rate about the launch's own perpendicular, not an angle
+10. ☑ `FORWARD_ROTATION`: the tumble is a rate about the launch's own perpendicular, not an angle
     over `run_time` about local X
 
 ⚠ `C10` was minted at `C9` (2026-08-13) from a user report at the controls, not from the plan's
@@ -838,7 +838,40 @@ attempt at this wave ended up with debris hovering. ⚠
 The bounce *branch* (`default`/`water`/`lava`) comes from the struck surface and is already wired;
 this item is the physical response only, and `lava` remains dead data across the install.
 
-## C10 ☐ `FORWARD_ROTATION`: the tumble's axis and its rate
+## C10 ☑ `FORWARD_ROTATION`: the tumble's axis and its rate
+
+**Landed 2026-08-13.** `Time.initial` is a rate in rad/s and `delta` its acceleration, both read
+across verbatim; the run time is gone from the derivation. The axis is the launch direction's own
+horizontal perpendicular `(dirZ, 0, −dirX)`, unnormalised, so a launch's `h = 1 − |elev|/90` scales
+its own tumble — `TumbleAxis`, shared with the casing ejection the way `RangeLaunchDirection`
+already was. It composes as an EULER triple on the node's angles, which is what the original
+accumulates (`FUN_004d25c0`/`FUN_004d1ba0` write `node+0x18..0x20`), not as a turn about a live
+basis axis.
+
+**The finding that answers the report.** A body launched by the VECTOR `translation` form does not
+tumble at all. The cache the tumble multiplies through is filled only by the `translation_range`
+branch, and the parser zeroes the whole 0x14c-byte event struct before parsing (`REP STOSD` at
+`005085e0`), so the multiply is by zero. That is **495 of the install's 1,399 tumbles**, including
+all four `player_crash_dirt` pieces — the biggest authored numbers in the install (15.708 rad/s,
+which the old reading turned into a 2.6 rad/s spin). ⚠ `CAP-16`'s wing-panel strip measured
+20–30 °/s against the ÷`run_time` reading's ~150 °/s and was recorded as confirming a *total angle*;
+it fits "no tumble at all" better than either reading. Noted as agreement only — no measurement off
+that footage decides this (`docs/verification.md`, and the `CAP-16` rule).
+
+**What moves, honestly.** For a ranged launch the new rate is `initial · h` against the old
+`initial / run_time`, so the ratio is `h · run_time` and it can go either way: `pass_plane01`'s
+part1 (6.98 rad/s authored, 60–70°) goes 1.40 → 1.55–2.33 rad/s, its part3 (80–85°, untimed)
+drops to 0.03 rad/s, and the crash pieces go to zero. The tumble reading larger than the original's
+is answered by the vector-form finding, not by everything getting slower.
+
+**Verified.** 949/949 units, 38/38 engine suites with engine errors clean (a new `forward-rotation`
+suite pins the axis geometrically, the rate against two different run times, `h`'s scaling at 60°,
+`delta`'s integration, and the vector form's zero), 12 of 13 goldens unchanged. `c1-crash` re-pinned
+`b80b8a98…` → `d15e38ed…`, image inspected, `exercises` rewritten. `--destroy=pass_plane01` still
+lands 4 of 4 by column with no engine errors.
+
+**Not built.** `FORWARD_ROTATION DISTANCE` (flag `0x40`): all 1,399 tumbles in the install author
+`Time` and none authors `Distance`, so the branch is documented and left unwritten.
 
 **Goal.** A tumbling piece spins at the rate the data authors, about the axis the original spins it
 about — so a steep launch tumbles slowly and a flat one fast, off the same authored number, and the

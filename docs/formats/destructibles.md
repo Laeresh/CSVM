@@ -179,7 +179,8 @@ bodies via `OBJECT_MOTION` (the ballistic form; channels documented in
 [10, 70, 4.5, 0]`, `FORWARD_ROTATION [TIME 60, 0]`, `SCALE [-0.1, -0.1, -0.1]`, `RUN_TIME 5`, then
 `OBJECT_ACTIVE_STATE h2twr_middle INACTIVE`. `h2twr_upper` is the same with `START_TIME` +2.0 s
 and `FORWARD_ROTATION [TIME 70, 0]`. (The negative `SCALE` is the section shrinking to nothing as
-it tumbles clear.)
+it tumbles clear. `TIME 60` is 60°/s — a rate, not a total angle — turned about the horizontal
+perpendicular of that draw's own 30–70° launch, so the section turns at 0.22–0.7 rad/s.)
 
 **Puffers** — two `ON_CALL` sequences (`h2twr_puffer`, `h2twr_puffer2`), each a `PUFFER_STATE`
 loop of 13 iterations on the `splashbase` texture (`PUFFER_STATE` schema in

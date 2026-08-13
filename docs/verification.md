@@ -208,6 +208,13 @@ and leave gaps when retiring old ones.
   source so the next reader cannot re-derive the wrong one; `CamSmooth` 8 is a known wall-rate still
   awaiting the conversion.
 
+- **DET-12** — **An angle measured off footage cannot confirm a decode; at best it ranks two
+  readings, and it will happily rank a third one you have not thought of.** `CAP-16`'s wing-panel
+  strip measured 20–30 °/s and was recorded as confirming `forward_rotation` as a total angle over
+  `RUN_TIME`. The binary says the crash pieces do not turn at all (`PLAN-object-motion-decode` C10),
+  which that same 10–15° of apparent motion under a moving camera fits at least as well. One piece,
+  near edge-on, is one axis of one sample.
+
 ## PERF — performance
 
 - **PERF-1** — **Do not interpret `script_ms` as literal frame cost.**
