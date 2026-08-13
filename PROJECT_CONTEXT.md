@@ -193,7 +193,8 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt flying, or the 2–4-player splitscreen Dogfight deathmatch, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, world destructibles that take damage, die, lose collision, throw debris and reset — and planes shoot planes down (M4 A1, front-loaded). The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
 **Active plan: [`docs/PLAN-M4-ai.md`](docs/PLAN-M4-ai.md)** (Milestone 4 — Game AI, scheduled
-2026-08-13). A1 and A4 landed; next: A2 (the AI actor seam), with C9a startable in parallel. Owed at the controls: `PT-28`, `PT-41`, `PT-43`
+2026-08-13). A1, A3 and A4 landed; next: A2 (the AI actor seam), with C9a in progress in
+parallel. Owed at the controls: `PT-28`, `PT-41`, `PT-43`
 (4-player pane only), `PT-45`, `PT-46` and `PT-47` ([`playtest.md`](playtest.md)). Verify any
 change with **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit
 code); read [`docs/verification.md`](docs/verification.md) first.
