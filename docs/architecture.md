@@ -1673,8 +1673,13 @@ Schema: docs/formats/weapons.md. Verify/inspect with `--dump-weapons`.
 ⚠ `IMPACT` is an ARRAY, one row per registry id in slot order (`WeaponDef.Impact`, read through
   `ImpactFor`) — the original's own shape (`FUN_005ad630` writes each block into
   `weapon + 0x15c + id*100`). A block name the registry does not carry is parsed into nothing, the
-  same discard the original makes; a null row means "this weapon authors nothing here", which is
-  played as nothing, never as row 0.
+  same discard the original makes.
+⚠ **An id the weapon NAMES NO BLOCK for inherits the `default` row whole** (`InheritDefaultRow`) —
+  effect names and sound list alike, the original's own per-id miss arm (`org/weaponImpact.md`).
+  Naming an id and binding nothing on it is the opposite case and stays null, so presence is tracked
+  apart from what parsed: that is the whole difference between `dirt`(13), which no weapon names,
+  and the slug's `player`(6), whose slots are authored empty. Without the copy, rockets draw and
+  sound nothing on dirt or on a struck plane.
 ⚠ Flags (`CANNON`/`ROCKET`/`HIGH_EXPLOSIVE`/…) are `KEY,null` in the data — `ZrdrDict` bare-flag
   handling makes them present-but-empty, so `Has` is the test; a valued struct (`BEEPER`/`TANGLER`)
   is `Has`+`Dict`.
@@ -1965,34 +1970,20 @@ never neither; a resolved sound names either a `SoundDefs` entry or a `SOUND_GRO
 outcomes. `ProjectilePool.Impact` reads the struck id (`SurfaceIdOf`) and calls it, then `Apply`
 performs the result; `ProjectilePool.HasBlastDamage` is the weapon-level spelling of the same
 `HasBlastDamage` rule, so the rule exists once.
-⚠ **An id the weapon authors no row for plays nothing** — no effect name, no sound (`FUN_005ad100`
-  gates on the row's own variant count at `+0x2c` and has no empty-row-to-row-0 arm). Do NOT copy
-  `SurfaceDefTable`'s slot-0 fallback here: the two families differ in exactly that arm. Landed
-  2026-08-13 as `PLAN-surface-id-weapons` Decision 3; measured in a C4 burst, where the same
-  trigger pull draws the gunhit on `default`(0) ground and nothing on the `dirt`(13) tile beside it.
+⚠ **The `default` fallback is applied at parse time, not here** — `WeaponDefs.InheritDefaultRow`
+  fills every id a weapon names no block for with row 0, so `Resolve` is an index and nothing more.
+  Do NOT add a second fallback at the lookup: it would also fire on the ids a weapon *names* and
+  deliberately binds nothing on (the slug's `player`(6)), which is the one case that stays silent.
 ⚠ **Buildings-textured geometry is not `buildings`(11).** Almost every shipped tower carries soil
-  `default`(0) (C2's `nycity` set is 100% id 0), so city hits now take the `default` row and its
+  `default`(0) (C2's `nycity` set is 100% id 0), so city hits take the `default` row and its
   ground look, not `bld_damage.flt` + the ricochet. That is what the original's own id lookup does;
   `analysis/surface-classification/FINDINGS.md` (2026-08-11) has the per-chapter numbers.
-⚠ `modelResolved` and `hasEffectsRuntime` are **inputs**, not things `Resolve` discovers: whether
-  the effect name is a real gamez node needs the chapter scene, and whether a world-effects runtime
-  exists is a fact about the caller (a scene-less pool takes the explosion stand-in). Passing a
-  guess for either silently changes which stand-in a caller draws.
 ⚠ The stand-in ladder's order is load-bearing and mirrors `Impact`'s branch chain exactly —
   model ▸ explosion (non-gun, no runtime) ▸ dirt debris (ground) ▸ ricochet (`buildings`(11) + gun)
   ▸ spark. Reordering it gives a weapon a different look. The ladder is OURS, standing in for
-  authored assets that do not render, so its "ground" arm stayed the whole set the texture-derived
-  `Default` class covered (every id that is not water, a building or an aircraft) rather than
-  narrowing to id 0 — narrowing it would spark on `dirt`(13) for no reason in data or decode.
-⚠ `player`(6)/`enemy`(7) get no case of their own — no material carries either id, so they arrive
-  only from `ProjectilePool.SurfaceIdOf`'s struck-`AircraftBody` arm, read off the table and fall to
-  the spark like any unauthored id. Do not author behaviour for them; and note the reader drops an
-  all-null row, so "present but empty" and "absent" are the same thing here.
-⚠ The eight ids no shipped weapon authors at all (`seafloor`(2), `lava`(4), `fire`(5),
-  `airstrip`(8), `opensesame`(9), `death`(10), `dzone`(12), `dirt`(13)) are where the silence above
-  is reachable; `quicksand`(3) is authored by three weapons but carried by no material anywhere, so
-  `Resolve` is never asked for it. The 48-weapon suite runs the eight ids some material or body
-  actually carries — a case for the other six would be invented coverage.
+  authored assets that do not render, so its "ground" arm is every id that is not water, a building
+  or an aircraft. `player`(6)/`enemy`(7) get no arm of their own: they arrive only from
+  `ProjectilePool.SurfaceIdOf`'s struck-`AircraftBody` case and fall to the spark.
 
 ## src/Flight/Projectile.cs
 **The original's projectile-visual runtime is written up in [org/tracers.md](org/tracers.md)** — how
@@ -4726,8 +4717,9 @@ the stage closure and the `--effects-test`/`effects-census` sweeps all see one s
 `ResolvedSurfaceIds(program|defExists)` answers what each registry id RESOLVES to on contact —
 itself where either touch vector has a def of its own for it, else slot 0 — by asking the two
 `SurfaceDefTable`s rather than listing ids; the collider overlay's colour key is that map
-(`BL-345`). The weapon IMPACT table is deliberately not part of it: an unauthored row plays
-nothing rather than resolving row 0, so it contributes no resolved id.
+(`BL-345`). The weapon IMPACT table is deliberately not part of it: it is per weapon, and every id
+a weapon does not name resolves that weapon's own row 0, so it distinguishes no id the overlay
+could colour by.
 `GroundSplashAnimNames` (`flydirt_plane`) names the crash's ground-splash def for
 `AnimRuntime.InheritedVelocityExempt` (`BL-274`) — its `ObjectMotion` is authored the same
 vertical-only shape as a launched wreck piece, so only the name can tell "stay planted" from

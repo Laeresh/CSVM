@@ -159,40 +159,61 @@ public class ImpactOutcomeTests
         Assert.Null(wall.Sound);
     }
 
-    /// <summary>An id the weapon authors no row for plays nothing — no effect name and no sound,
-    /// and specifically NOT the <c>default</c> row (`FUN_005ad100` has no empty-row-to-row-0 arm,
-    /// unlike the crash cascade; `PLAN-surface-id-weapons` Decision 3). The slug's own table is the
-    /// case with consequences: no shipped weapon authors <c>dirt</c>(13), which is up to 10.2 % of
-    /// a chapter's collidable ground. The stand-in still draws, because that ladder is ours and
-    /// stands in for assets that do not render here.</summary>
+    /// <summary>An id the weapon names no block for resolves the <c>default</c> row whole, effect
+    /// name and sound alike — <c>FUN_005ad630</c>'s miss arm copies row 0 over it at parse time
+    /// (`0x005ae268`). <c>dirt</c>(13) is the case with consequences: no shipped weapon names it,
+    /// and it is up to 10.2 % of a chapter's collidable ground, so without the copy the four ids
+    /// below go silent on ground that visibly is not special.</summary>
     [ExtractedDataFact]
-    public void AnUnauthoredSurfaceIdPlaysNothingRatherThanTheDefaultRow()
+    public void AnIdTheWeaponNeverNamesResolvesTheDefaultRow()
     {
         var slug = WeaponDefs.Load(SharedZrdr).Get("wep_00")!;
 
-        var dirt = ImpactOutcome.Resolve(slug, 13, false, true);
-        Assert.Null(dirt.EffectName);
-        Assert.Null(dirt.Sound);
-        Assert.Equal(ImpactStandIn.DirtDebris, dirt.StandIn);
+        var ground = ImpactOutcome.Resolve(slug, SurfaceRegistry.Default, false, true);
+        Assert.Equal("3040slug_gunhit", ground.EffectName);
 
-        // ...while the id it does author still resolves, so the null above is the rule and not a
-        // broken lookup.
-        Assert.Equal("3040slug_gunhit", ImpactOutcome.Resolve(slug, SurfaceRegistry.Default, false, true).EffectName);
+        // fire(5), airstrip(8), dzone(12), dirt(13): the reachable ids no weapon names.
+        foreach (var id in new[] { 5, 8, 12, 13 })
+        {
+            var outcome = ImpactOutcome.Resolve(slug, id, false, true);
+            Assert.Equal(ground.EffectName, outcome.EffectName);
+            Assert.Equal(ground.Sound, outcome.Sound);
+        }
     }
 
-    /// <summary>The ids no terrain carries are read exactly as authored, with nothing supplied for
-    /// them. The slug binds neither <c>player</c>(6) — its entry has every slot null — nor
-    /// <c>enemy</c>(7), whose value is the data's "no effect on that surface" null; the reader
-    /// drops both, so a round striking an aircraft draws nothing authored. The AA flak rocket does
-    /// bind <c>player</c>, and that row is what a struck plane selects.</summary>
+    /// <summary>The rocket half of the same rule, which is what a player sees: the HE rocket names
+    /// only <c>default</c>/<c>water</c>/<c>buildings</c>, so its ground burst is what fires on a
+    /// dirt tile and on a struck aircraft — reported at the controls as "rockets do not explode on
+    /// dirt or on other planes", and the reason the copy is not a detail.</summary>
     [ExtractedDataFact]
-    public void TheAircraftIdsAreReadOffTheTableLikeAnyOther()
+    public void TheHeRocketsBurstReachesDirtAndAStruckAircraft()
+    {
+        var boom = WeaponDefs.Load(SharedZrdr).Get("wep_06")!;
+
+        foreach (var id in new[] { SurfaceRegistry.Default, 13, SurfaceRegistry.Player })
+        {
+            var outcome = ImpactOutcome.Resolve(boom, id, false, true);
+            Assert.Equal("he_ground_effect", outcome.EffectName);
+            Assert.Equal("snd_missile_explode", outcome.Sound);
+        }
+    }
+
+    /// <summary>Naming an id and binding nothing on it is not the same as never naming it, and the
+    /// 30 cal slug is the case that separates them: it names <c>player</c>(6) with every slot empty
+    /// and <c>enemy</c>(7) with the data's "no effect on that surface" null, so both stay silent
+    /// while its unnamed ids take the <c>default</c> row. A slug round on a plane therefore draws
+    /// nothing authored even though a rocket's does. The flak rocket binds <c>player</c> outright,
+    /// and that row is what a struck plane selects.</summary>
+    [ExtractedDataFact]
+    public void ANamedButEmptyAircraftRowStaysSilentWhileUnnamedIdsInherit()
     {
         var weapons = WeaponDefs.Load(SharedZrdr);
         var slug = weapons.Get("wep_00")!;
 
         Assert.Null(slug.ImpactFor(SurfaceRegistry.Player));
         Assert.Null(slug.ImpactFor(SurfaceRegistry.Enemy));
+        // ...against an id it simply never names, which inherits.
+        Assert.Equal("3040slug_gunhit", slug.ImpactFor(13)!.Animation);
         Assert.Null(ImpactOutcome.Resolve(slug, SurfaceRegistry.Player, false, true).EffectName);
         Assert.Null(ImpactOutcome.Resolve(slug, SurfaceRegistry.Enemy, false, true).EffectName);
 

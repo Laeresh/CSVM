@@ -232,11 +232,11 @@ picks the row (`analysis/surface-classification/FINDINGS.md`, 2026-08-12 and 202
 "MechWarrior-3 leftover" gloss on the field was already retired on 2026-08-11, when the same field
 turned out to drive the crash/touchdown choreography vectors; it drives both families.
 
-⚠ **An id no weapon authors draws and sounds nothing.** There is no fall back to the `default` row
-(unlike the crash cascade's fall back to slot 0), so a hit on `dirt`(13), `fire`(5),
-`airstrip`(8) or `dzone`(12) material plays no authored impact at all — 0–10.6 % of a chapter's
-collidable area, worst in C2. Measured in C4: one 30 cal burst draws `3040slug_gunhit` on the
-`default`(0) tile and nothing on the `dirt`(13) tile beside it.
+⚠ **An id no weapon NAMES plays the `default` row** ([weapons.md](weapons.md#an-id-the-weapon-never-names-inherits-the-default-row)).
+So a hit on `dirt`(13), `fire`(5), `airstrip`(8) or `dzone`(12) material — 0–10.6 % of a chapter's
+collidable area, worst in C2 — draws and sounds the weapon's ordinary ground impact, and an HE
+rocket's fireball reaches a struck aircraft the same way, since the rockets name no `player`(6) row
+either. An id a weapon does name and leaves empty is the silent case.
 
 ⚠ **Material tagged the `buildings` soil type is vanishingly rare, so building hits are
 legitimately `default`.** Only C1 carries any measurable `buildings`(11) area at all (273 polygons)

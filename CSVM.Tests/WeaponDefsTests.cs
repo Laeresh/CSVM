@@ -108,21 +108,39 @@ public class WeaponDefsTests
     }
 
     [Fact]
-    public void ImpactIsIndexedBySurfaceIdAndANullRowIsSkipped()
+    public void ImpactIsIndexedBySurfaceIdAndAnUnnamedIdInheritsTheDefaultRow()
     {
         var gun = Load().Get("wep_probe_gun")!;
         // One row per registry slot, in slot order — the original's own array shape.
         Assert.Equal(SurfaceRegistry.Names.Count, gun.Impact.Length);
-        Assert.Equal(2, gun.Impact.Count(row => row != null));
         Assert.Equal("probe_spark", gun.Impact[SurfaceRegistry.Default]!.Effect);
         Assert.Equal("probe_splash", gun.Impact[SurfaceRegistry.Water]!.SurfaceAnimation);
-        // "enemy" is present in the data with a null body: no binding, not an empty one.
+        // "enemy" is present in the data with a null body: a named id that binds nothing, which is
+        // the one case the parse-time copy does NOT reach.
         Assert.Null(gun.ImpactFor(SurfaceRegistry.Enemy));
-        // An id no row was authored for is null, not the `default` row.
-        Assert.Null(gun.ImpactFor(13));
-        // Out of range answers null rather than faulting: the registry's own bounds test.
+        // An id the fixture never names inherits the `default` row whole, sound included —
+        // FUN_005ad630's miss arm. `dirt`(13) is the case with consequences in the shipped data.
+        Assert.Equal("probe_spark", gun.ImpactFor(13)!.Effect);
+        Assert.Equal("snd_probe_hit", gun.ImpactFor(13)!.Sound);
+        Assert.Equal("probe_spark", gun.ImpactFor(SurfaceRegistry.Buildings)!.Effect);
+        // So every slot but the named-and-empty one is filled.
+        Assert.Equal(SurfaceRegistry.Names.Count - 1, gun.Impact.Count(row => row != null));
+        // Out of range answers null rather than faulting: a bounds test of ours, since the original
+        // indexes its row array unchecked and is never handed an id off the registry.
         Assert.Null(gun.ImpactFor(-1));
         Assert.Null(gun.ImpactFor(SurfaceRegistry.Names.Count));
+    }
+
+    /// <summary>A weapon that names only <c>default</c> answers that row at every id — the rocket
+    /// fixture's shape, and the shipped HE/AP rockets' shape too (they name
+    /// <c>default</c>/<c>water</c>/<c>buildings</c> and nothing else, so their burst is what a
+    /// struck aircraft and a dirt tile both select).</summary>
+    [Fact]
+    public void AWeaponNamingOnlyDefaultAnswersThatRowEverywhere()
+    {
+        var rocket = Load().Get("wep_probe_rocket")!;
+
+        Assert.All(rocket.Impact, row => Assert.Equal("probe_boom", row!.Effect));
     }
 
     [Fact]
