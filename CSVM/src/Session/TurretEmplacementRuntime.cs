@@ -1,0 +1,80 @@
+using System;
+using System.Collections.Generic;
+using CSVM.Flight;
+using Godot;
+
+namespace CSVM.Session;
+
+/// <summary>
+/// The world's AA emplacements (M4 C9b): the 26 standalone <c>ai.zrd</c> entries resolved
+/// against the built chapter world (one entry instantiates as many turrets as its
+/// <c>NODES</c> patterns match — the count is a property of the world model, not of the file),
+/// each driven by the same <see cref="TurretController"/> loop as the carried gunners. Built
+/// with the flight rigs whenever a chapter world and the shared projectile pool exist, stepped
+/// from <c>GameSession.DriveSimSteps</c> after the zeppelins (so a zeppelin-slung mount reads
+/// its moved pose), and registered with the pool so every player's aim assist sees the
+/// emplacements (<c>ProjectilePool.CollectTurrets</c>).
+///
+/// <para>Shipped <c>ACTIVATED</c> values are honoured by default: 22 of the 26 entries are
+/// dormant and stay dormant, because the real wake mechanism is the mission script's
+/// <c>WAKEUP_TURRETS</c> and objectives scripting is out of M4's scope. <see cref="WakeAll"/>
+/// is the documented stand-in behind <c>--wake-turrets</c> — explicit, logged per emplacement,
+/// never a silent default. A plain class, not a Node: the controllers write onto world nodes
+/// the runtime does not own.</para>
+/// </summary>
+public sealed class TurretEmplacementRuntime
+{
+    private readonly TurretController[] _turrets;
+
+    public TurretEmplacementRuntime(TurretDefs defs, WeaponDefs weapons,
+        Func<string, Node3D?, IReadOnlyList<Node3D>> findNodes, ProjectilePool pool)
+    {
+        _turrets = TurretController.BuildEmplacements(defs, weapons, findNodes, pool);
+        pool.RegisterWorldTurrets(_turrets);
+    }
+
+    public IReadOnlyList<TurretController> Emplacements => _turrets;
+
+    public int Count => _turrets.Length;
+
+    public int AwakeCount
+    {
+        get
+        {
+            int n = 0;
+            foreach (var t in _turrets)
+            {
+                if (t.Activated)
+                {
+                    n++;
+                }
+            }
+            return n;
+        }
+    }
+
+    /// <summary>The <c>WAKEUP_TURRETS</c> stand-in: wakes every dormant emplacement, one
+    /// breadcrumb per turret so a log shows exactly what the flag armed.</summary>
+    public int WakeAll()
+    {
+        int woken = 0;
+        foreach (var t in _turrets)
+        {
+            if (!t.Activated)
+            {
+                t.Wake();
+                woken++;
+                GD.Print($"turret {t.Label}: woken (--wake-turrets stand-in for WAKEUP_TURRETS)");
+            }
+        }
+        return woken;
+    }
+
+    public void SimStep(float dt)
+    {
+        foreach (var t in _turrets)
+        {
+            t.SimStep(dt);
+        }
+    }
+}

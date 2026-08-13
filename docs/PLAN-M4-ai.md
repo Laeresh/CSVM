@@ -1349,7 +1349,7 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
 
 ### Wave C — Emplacements
 
-9. ☐ C9 — Turret and AA AI from `ai.zrd.json`, both structural families — **spec complete
+9. ☑ C9 — Turret and AA AI from `ai.zrd.json`, both structural families — **spec complete
    2026-08-10** in [`formats/turrets.md`](formats/turrets.md): the `CREATE_STANDALONE` placement
    split, the `PARTS` kinematic chain, the wrap-aware yaw arc (⚠ `[0,0]` = unrestricted), the
    attack/bored duty cycle, rate-limited slew + the 15° fire gate, and geometric hit resolution.
@@ -1361,8 +1361,19 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
       `TurretDefsTests` pin it); `_G1`/`_G3` turned out to be the `firstp`/`thirdp` viewpoint
       rigs of vehicle.zrd's `turrets` block, not gun-group slots (turrets.md corrected); the
       AI-carried half awaits A2's hosts
-    - ☐ **C9b — world emplacements** (26 entries, 22 of them dormant). Needs an activation stand-in
-      for `WAKEUP_TURRETS`; deferrable, since nothing on the playable path depends on it
+    - ☑ **C9b — world emplacements** (26 entries, 22 of them dormant) — **landed 2026-08-14**:
+      `Session/TurretEmplacementRuntime` + `TurretController.BuildEmplacements` place the
+      standalone family at its `NODES` patterns against the built world (multi-segment paths
+      scoped; census C1 74 / C4 92, pinned by the `world-turrets` suite) and register with
+      `CollectTurrets`. Shipped `ACTIVATED` honoured (awake-by-data = the piratezep's allied
+      rings + C5's thugs); `--wake-turrets` is the documented, per-turret-logged stand-in for
+      `WAKEUP_TURRETS` (out of scope). Decoded along the way: an absent TEAM defaults to the
+      FIRST ENEMY team (id 2; 0 neutral / 1 ally / 2+ enemy — the four authored TEAM 1 entries
+      are the player's own piratezep rings), and neither loader reads `HEALTH` — an
+      emplacement's real pool is its node's own gamez destroy def, so death rides the
+      healthy-node swap, no registry change. Runtime verification kept to ground emplacements
+      (aagun/thug) plus the static piratezep rings; live-zeppelin hosts and BL-348's C3
+      balloon nodes deferred to F18/F19 and the BL-348 fix
 
 ### Wave D — The pilot model
 

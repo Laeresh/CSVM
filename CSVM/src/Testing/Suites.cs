@@ -151,6 +151,13 @@ public static class Suites
             "part no longer kills — the decoded rule, D14) with the kill attributed through the " +
             "Downed event — never hits the shooter's own geometry — and a rocket fuses on a passing " +
             "plane, blasting with falloff and attributing the kill", AirToAir));
+        into.Add(new TestHarness.Suite("world-turrets",
+            "the world AA emplacements (C9b) place at their NODES patterns against the real C1 " +
+            "world (census pinned, one entry many turrets, scoped multi-segment paths), honour " +
+            "shipped ACTIVATED (a dormant aagun holds fire with a hostile plane in range until " +
+            "the --wake-turrets stand-in wakes it, then acquires and fires under its own " +
+            "enemy-default team), skip same-team targets, join the aim-assist candidate list, " +
+            "and go permanently quiet when the emplacement's own destructible dies", WorldTurrets));
         into.Add(new TestHarness.Suite("carried-turrets",
             "a carried turret gunner (C9a) builds from ai.zrd + the vehicle def's thirdp mount, " +
             "poses at its arc centre, tracks and fires on a hostile plane inside DETECTION_RANGE " +
@@ -3185,6 +3192,224 @@ public static class Suites
             target?.Free();
             textures.Dispose();
         }
+    }
+
+    /// <summary>The world AA emplacements (M4 C9b) against the real C1 chapter world: the NODES
+    /// placement census, the shipped-ACTIVATED default, the --wake-turrets stand-in, the
+    /// enemy-default/ally team split, the aim-assist candidate list, and the healthy-node kill
+    /// switch. Zeppelin-slung entries are placed (they are world nodes) but the firing checks run
+    /// on the GROUND emplacements only — the zeppelin hosts belong to F18/F19's live work.</summary>
+    private static void WorldTurrets(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+        ctx.Check(turretDefs.All.Count(d => !d.Carried) == 26,
+            $"the 26 standalone ai.zrd entries parse standalone={turretDefs.All.Count(d => !d.Carried)}");
+
+        // The mapping CSVM runs the decoded team space through: neutral stays untargetable,
+        // ally = player one's side, the enemy default lands clear of every pilot team.
+        ctx.Check(TurretController.EngineTeamFor(0) == AimAssist.NeutralTeam
+                  && TurretController.EngineTeamFor(1) == AimAssist.TeamOfPilot(0)
+                  && TurretController.EngineTeamFor(TurretDef.DefaultTeamId) > AimAssist.WorldTeam,
+            $"the team mapping: neutral 0, ally = P1's team, enemy default past every pilot team");
+
+        ctx.WithWorld("C1", collision: false, world =>
+        {
+            var textures = new TextureArchive(texturesPath);
+            ProjectilePool? pool = null;
+            FlightController? target = null;
+            FlightController? friend = null;
+            try
+            {
+                var live = new ProjectilePool(textures, null, null)
+                {
+                    DamageSink = world.Runtime.DamageAt,
+                };
+                pool = live;
+                ctx.Host.AddChild(live);
+                var runtime = new Session.TurretEmplacementRuntime(turretDefs, weapons,
+                    (pattern, scope) => world.Runtime.FindNodes(pattern, scope), live);
+
+                // The placement census: one entry instantiates as many turrets as its patterns
+                // match, so the counts are properties of C1's world model. Pinned as goldens.
+                var byEntry = new Dictionary<string, int>();
+                foreach (var t in runtime.Emplacements)
+                {
+                    string site = t.Label[(t.Label.IndexOf('@') + 1)..];
+                    string root = site.TrimEnd("0123456789 ".ToCharArray());
+                    string key = $"{t.Def.Title}:{root}";
+                    byEntry.TryGetValue(key, out int had);
+                    byEntry[key] = had + 1;
+                }
+                ctx.Note($"C1 census: {string.Join(", ", byEntry.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}={kv.Value}"))}");
+                int AagunCount() => runtime.Emplacements.Count(t => t.Label.StartsWith("MSG_TUR_AAA@aagun"));
+                ctx.Same(5, AagunCount(), $"C1 places the five aagun emplacements");
+                ctx.Same(9, runtime.Emplacements.Count(t => t.Label.StartsWith("MSG_TUR_BALLOON_TOP@bbtur")),
+                    $"C1 places the nine balloon-top emplacements");
+                ctx.Same(74, runtime.Count, $"C1's whole emplacement census");
+                ctx.Same(15, runtime.AwakeCount,
+                    $"shipped ACTIVATED: only the piratezep's own awake rings are up (ally, TEAM 1)");
+                ctx.Check(runtime.Emplacements.Where(t => t.Activated)
+                        .All(t => t.EngineTeam == AimAssist.TeamOfPilot(0)),
+                    $"every emplacement awake by data is on the ally team — no hostile fires unwoken");
+
+                // A dormant hostile emplacement: aagun32, enemy by the loader's no-TEAM default.
+                var aagun = runtime.Emplacements.FirstOrDefault(t => t.Label.EndsWith("@aagun32"));
+                ctx.Check(aagun != null, $"aagun32 built a gunner");
+                if (aagun == null)
+                    return;
+                ctx.Check(!aagun.Activated && aagun.EngineTeam > AimAssist.WorldTeam,
+                    $"aagun32 is dormant and hostile-by-default team={aagun.EngineTeam}");
+                aagun.Def.InaccuracyDeg = 0f; // determinism: the scatter cone is the assist suite's
+
+                FlightController BuildRig(string plane, int playerIndex, Vector3 pos, Vector3 look)
+                {
+                    var st = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+                    var model = new PlaneBuilder(planesGamez, textures).Build(plane);
+                    var rig = new FlightController
+                    {
+                        PlaneModel = model,
+                        Collider = PlaneCollider.Build(model),
+                        Damage = new PlaneDamage(st.DestroyableParts),
+                        PlayerIndex = playerIndex,
+                        Projectiles = live,
+                        UseKeyboard = false,
+                        AllowPause = false,
+                    };
+                    rig.AddChild(model);
+                    rig.Setup(new FlightModel(st), ctx.Camera, new CamParams(), pos, look);
+                    ctx.Host.AddChild(rig);
+                    rig.PlaceHeld(pos, look); // parked: no phantom velocity for the lead solve
+                    return rig;
+                }
+
+                // A hostile plane parked inside DETECTION_RANGE (500 m), well above the fort.
+                var gunPos = aagun.WorldPosition;
+                var targetPos = gunPos + new Vector3(120f, 250f, 0f);
+                target = BuildRig(ctx.PlaneName, 0, targetPos, targetPos + Vector3.Forward);
+
+                void Step(int frames)
+                {
+                    for (int i = 0; i < frames; i++)
+                    {
+                        runtime.SimStep(1f / 60f);
+                        live.SimStep(1f / 60f);
+                    }
+                }
+
+                float Combined(FlightController rig) => rig.Damage!.Parts.Values.Sum(p => p.Hp + p.Armor);
+
+                // Dormant = inert: no tracking, no fire, through several attack windows.
+                var restDir = aagun.BarrelWorldDir;
+                Step(240);
+                ctx.Check(aagun.ShotsFired == 0 && aagun.BarrelWorldDir.IsEqualApprox(restDir),
+                    $"a dormant emplacement neither tracks nor fires shots={aagun.ShotsFired}");
+
+                // The stand-in wakes it — explicit, counted, logged — and it engages.
+                int woken = runtime.WakeAll();
+                ctx.Same(runtime.Count - 15, woken, $"--wake-turrets stand-in wakes every dormant emplacement");
+                float before = Combined(target);
+                Step(360);
+                var toTarget = (target.WorldPosition - aagun.WorldPosition).Normalized();
+                ctx.Check(aagun.BarrelWorldDir.Dot(toTarget) > TurretController.FireGateCos,
+                    $"the woken gun slewed onto the plane dot={aagun.BarrelWorldDir.Dot(toTarget):0.000}");
+                ctx.Check(aagun.ShotsFired >= 2,
+                    $"…and fires at its FIRE_RATE shots={aagun.ShotsFired}");
+                ctx.Check(Combined(target) < before,
+                    $"…with rounds striking the target moved={before - Combined(target):0.##}");
+
+                // The team gate, both halves over the piratezep's allied rings (authored TEAM 1
+                // = the player's side): none engages the player's own plane, and the same rings
+                // DO engage a hostile pane there — the able-to-fail control for the hold. The
+                // per-ring arcs are the zep's own frame, so the assertions run over the whole
+                // allied population rather than betting on one ring's arc.
+                var allied = runtime.Emplacements
+                    .Where(t => t.EngineTeam == AimAssist.TeamOfPilot(0)).ToList();
+                ctx.Check(allied.Count > 0, $"the piratezep's allied rings exist count={allied.Count}");
+                if (allied.Count > 0)
+                {
+                    int AlliedShots() => allied.Sum(t => t.ShotsFired);
+                    var zepPos = allied[0].WorldPosition;
+                    target.PlaceHeld(zepPos + new Vector3(0f, -80f, 200f), zepPos);
+                    Step(240);
+                    ctx.Check(AlliedShots() == 0,
+                        $"every allied ring holds fire on the player's own team shots={AlliedShots()}");
+                    friend = BuildRig(ctx.PlaneName, 1, zepPos + new Vector3(50f, -80f, 200f), zepPos);
+                    Step(600);
+                    ctx.Check(AlliedShots() > 0,
+                        $"…and the same rings engage a hostile pane there shots={AlliedShots()}");
+                }
+
+                // The aim assist's turret list now carries the emplacements too — the player's
+                // lock-on sees world AA, dormant or not, until it dies.
+                var candidates = new AimCandidateSet();
+                live.CollectTurrets(candidates);
+                ctx.Same(runtime.Count, candidates.Turrets.Count,
+                    $"CollectTurrets feeds every emplacement to the candidate scan");
+
+                // The kill switch: the emplacement's own destructible dies (the weapon-damage
+                // path, ProbeRunner.TriggerDestroy = DamageAt), its healthy node hides, and the
+                // gunner goes permanently quiet — ai.zrd HEALTH is authored-but-unread; the real
+                // pool is the gamez destroy def's (aagun32: 30 hp).
+                target.PlaceHeld(targetPos, targetPos + Vector3.Forward);
+                int killed = ProbeRunner.TriggerDestroy(world.Runtime, "aagun32", out _);
+                ctx.Check(killed > 0, $"aagun32's destructible died to weapon damage killed={killed}");
+                int shotsAtDeath = aagun.ShotsFired;
+                Step(240);
+                ctx.Check(!aagun.Alive && aagun.ShotsFired == shotsAtDeath,
+                    $"the dead emplacement goes quiet shots={aagun.ShotsFired}");
+                candidates.Clear();
+                live.CollectTurrets(candidates);
+                ctx.Check(candidates.Turrets.Count(c => !c.Live) >= 1,
+                    $"…and the candidate list reports it dead");
+            }
+            finally
+            {
+                pool?.Free();
+                target?.Free();
+                friend?.Free();
+                textures.Dispose();
+            }
+        });
+
+        // A second chapter's census (C4: the ground AA belt — aagun/tcargun/t_truck/8igun),
+        // built and freed here; placement only, no firing. b_turret sites place too, but the
+        // C3 balloon wiring bug (BL-348) and its fix stay out of this item.
+        ctx.WithWorld("C4", collision: false, world =>
+        {
+            using var c4Textures = new TextureArchive(texturesPath);
+            var live = new ProjectilePool(c4Textures, null, null);
+            ctx.Host.AddChild(live);
+            try
+            {
+                var runtime = new Session.TurretEmplacementRuntime(turretDefs, weapons,
+                    (pattern, scope) => world.Runtime.FindNodes(pattern, scope), live);
+                var census = new List<string>();
+                foreach (var g in runtime.Emplacements.GroupBy(t => t.Def.Title).OrderBy(g => g.Key))
+                    census.Add($"{g.Key}={g.Count()}");
+                ctx.Note($"C4 census: {string.Join(", ", census)}");
+                ctx.Same(5, runtime.Emplacements.Count(t => t.Label.StartsWith("MSG_TUR_AAA@aagun")),
+                    $"C4 places the five aagun emplacements");
+                ctx.Same(3, runtime.Emplacements.Count(t => t.Label.StartsWith("MSG_TUR_TRAIN@tcargun")),
+                    $"C4 places the three train-car guns");
+                ctx.Same(1, runtime.Emplacements.Count(t => t.Label.StartsWith("MSG_TUR_8_INCH@8igun")),
+                    $"C4 places the one 8-inch gun");
+                ctx.Same(92, runtime.Count, $"C4's whole emplacement census");
+                // The piratezep model (and its allied awake rings) is part of EVERY chapter's
+                // world — the awake set is a world-model property, not a C1 fact.
+                ctx.Same(15, runtime.AwakeCount, $"C4's awake set is the piratezep's own rings again");
+            }
+            finally
+            {
+                live.Free();
+            }
+        });
     }
 
     /// <summary>The AI actor seam (M4 A2), against real engine state on manual sim steps. A human

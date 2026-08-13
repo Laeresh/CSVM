@@ -305,6 +305,12 @@ public sealed record SessionSpec
     /// position/yaw/pitch and moved along its net under the record's speed/accel/pitch/rate
     /// limits (a kinematic node follow, no flight model).</summary>
     public bool Zeppelins { get; private set; }
+    /// <summary><c>--wake-turrets</c>: wake every dormant world AA emplacement at build (M4
+    /// C9b). The emplacements themselves always build with a chapter flight; 22 of the 26
+    /// standalone <c>ai.zrd</c> entries ship <c>ACTIVATED 0</c> and the real wake mechanism is
+    /// the mission script's <c>WAKEUP_TURRETS</c>, which M4 does not implement — this flag is
+    /// the documented, logged stand-in, never a silent default.</summary>
+    public bool WakeTurrets { get; private set; }
     public (FlightInput, float)[][]? HoldSets { get; private set; }
     /// <summary>The <c>--damage=</c> preset pairs (part, fraction 0–1); null when <c>--damage</c>
     /// carried no value.</summary>
@@ -785,6 +791,7 @@ public sealed record SessionSpec
             else if (arg == "--generators") { s.Generators = true; }
             else if (arg.StartsWith("--generators=")) { s.Generators = true; s.GeneratorsPlane = arg["--generators=".Length..]; }
             else if (arg == "--zeppelins") { s.Zeppelins = true; }
+            else if (arg == "--wake-turrets") { s.WakeTurrets = true; }
             else if (arg == "--fire") { s.AutoFire = true; }
             else if (arg == "--fire-rockets") { s.AutoFireRockets = true; }
             else if (arg.StartsWith("--gun-select=")) { s.GunSelect = int.Parse(arg["--gun-select=".Length..]); }

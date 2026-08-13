@@ -221,6 +221,7 @@ clusters they delegate to.
 - `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (M4 B6, `--generators`): load-time drop rules, per-cycle stepping, spawns through `GameSession.SpawnAiAircraft`.
 - `src/Session/AiVoiceRuntime.cs` — wires E16's dispatch into a session: the decoded event sources (hit-path DI, Downed death cries, acquisition call-outs, taunts) played through `CombatVoice` + `WorldSounds.PlayOneShot`.
 - `src/Session/ZeppelinRuntime.cs` — runs a mission's zeppelins (M4 F17, `--zeppelins`): places each record's world node at its authored pose and flies it along its net through `ZeppelinMotion`.
+- `src/Session/TurretEmplacementRuntime.cs` — the world AA emplacements (M4 C9b): the standalone `ai.zrd` family placed at its `NODES` patterns against the built chapter world, shipped `ACTIVATED` honoured, `--wake-turrets` the `WAKEUP_TURRETS` stand-in.
 
 ### Session root and tests
 
@@ -1861,26 +1862,33 @@ from a host; `NODES` patterns = world emplacements, C9b), the `PARTS` kinematic 
 `[yaw, pitch, firepoint(s)]` or 2-element with no traverse ring), the `WEAPON` sub-block
 (`NAME` is a BALLISTICS id), arcs, the attack/bored duty-cycle windows and `SOUNDS.CANNON`.
 Tolerates the eight engine-accepted never-authored keys. `FindByTitle` mirrors the engine's lookup:
-a titleless entry matches unconditionally.
+a titleless entry matches unconditionally. `TeamId` carries the decoded loader default — an
+absent TEAM is the first ENEMY team (id 2; the space is 0 neutral / 1 ally / 2+ enemy), and the
+four authored TEAM 1 standalone entries are the piratezep's own allied rings.
 ⚠ An absent arc key or **min == max is UNRESTRICTED, never locked** — `YawRestricted`/
   `PitchRestricted` carry the engine's `min != max` gate; read them, never the raw pair.
 ⚠ `MSG_TUR_TRAIN` mis-nests its `PITCH` inside `WEAPON`, so top-level `PITCH` is on 37 entries
   and that turret has no elevation arc; do not "fix" the census back to the raw key count of 38.
 
 ## src/Flight/TurretController.cs
-One carried turret gunner (M4 C9a): built per host by `BuildCarried` from the vehicle def's
-`thirdp` `TurretMount`s (PlaneStats) × `TurretDefs` × the built plane model, ticked from
-`FlightController.SimStep`. Per tick: nearest hostile aircraft inside `DETECTION_RANGE` (team
-gate = `AimAssist.TeamOfPilot`), `AimAssist.TryIntercept` lead (no solution ⇒ track, hold fire),
+One `ai.zrd` turret gunner, both families (M4 C9a/C9b): carried (`BuildCarried`, per host from
+the vehicle def's `thirdp` `TurretMount`s × `TurretDefs` × the built plane model, ticked from
+`FlightController.SimStep`) and world emplacement (`BuildEmplacements`, per matched `NODES`
+pattern node via `AnimRuntime.FindNodes` with multi-segment paths scoped to the prior match,
+ticked by `Session/TurretEmplacementRuntime`). Per tick: nearest hostile aircraft inside
+`DETECTION_RANGE` (team gate; carried = host's pilot team, emplacement = `EngineTeamFor` over
+the authored/default TEAM), `AimAssist.TryIntercept` lead (no solution ⇒ track, hold fire),
 wrap-aware directed yaw clamp + pitch clamp, bounded slew (3.0/s), pose written onto the PARTS
-nodes, then the fire gates: attack window, 15° barrel-on-solution cone, cached 1–2 s world-only
-line of sight, `FIRE_RATE` redraw — rounds spawn in the shared pool under the HOST's shooter id
-with `INACCURACY` as a uniform-polar scatter on the shot. Proven by the `carried-turrets` suite
-and `TurretDefsTests`.
+nodes, then the fire gates: `Activated`, attack window, 15° barrel-on-solution cone, cached
+1–2 s world-only line of sight, `FIRE_RATE` redraw. Proven by the `carried-turrets` +
+`world-turrets` suites and `TurretDefsTests`.
 ⚠ Out-of-arc yaw snaps to the angularly NEARER end stop, not the shortest-path one, and bored
-  suppresses firing ONLY — tracking runs through it. Both are visible original behaviour.
-⚠ PARTS names resolve inside the mount's subtree with TRIMMED cs_names (the shipped
-  `"brigturret2 "` carries a trailing space); a global or exact match drives the wrong rig or none.
+  suppresses firing ONLY — tracking runs through it; a DORMANT emplacement does neither
+  (`ACTIVATED` gates the tick, but the load pose still writes). All visible original behaviour.
+⚠ PARTS names resolve inside the mount's/matched node's subtree with TRIMMED cs_names (the
+  shipped `"brigturret2 "` carries a trailing space); a global or exact match drives the wrong
+  rig or none. An emplacement's kill switch is its healthy node's visibility — ai.zrd HEALTH is
+  authored-but-unread; the real pool is the node's own gamez destroy def (turrets.md).
 ⚠ The gunner's weapon is its ai.zrd row (`wep_140` on every carried entry), NOT the stock-loadout
   turret slot's caliber — those slots stay bound-but-inert (`GunGroup.IsTurret`).
 
@@ -4663,6 +4671,22 @@ the `zeppelin-motion` suite.
 ⚠ Stop nodes are NOT implemented: the per-node tags are preserved and acted on by nothing (two
   readings survive; F17's open item). Effect templates snap to absolute world points and never
   track a moving host — a hit effect on a flying zeppelin stays behind; F18/F19 inherit that.
+
+## src/Session/TurretEmplacementRuntime.cs
+The world AA emplacements (M4 C9b): `TurretController.BuildEmplacements` resolved against the
+built chapter world (`AnimRuntime.FindNodes`; a multi-segment `NODES` path scopes each further
+segment to the prior match's subtree), registered with the shared pool so every player's aim
+assist sees them (`ProjectilePool.CollectTurrets`), and stepped from `GameSession.DriveSimSteps`
+after the zeppelins so a slung mount reads its ride's moved pose. Built unconditionally with a
+chapter flight — the original's world placement pass is unconditional too. Observability: the
+`turrets: N world emplacement(s) placed…` census line plus per-turret `woken`/`engaging`
+breadcrumbs. Pinned by the `world-turrets` suite (C1 census 74, C4 census 92).
+⚠ Shipped `ACTIVATED` is the default: dormant emplacements stay dormant (the real mechanism is
+  the mission script's `WAKEUP_TURRETS`, out of M4's scope). `WakeAll` — the `--wake-turrets`
+  stand-in — is the ONLY wake path, explicit and logged per turret; never wake them silently.
+⚠ The awake-by-data set is world-model dependent, not per-chapter authored: the piratezep model
+  (and its allied TEAM-1 rings) is part of EVERY chapter's world, so C1 and C4 both census 15
+  awake; C5 adds the hostile `thug*` boats.
 
 ## src/Session/AiVoiceRuntime.cs
 Wires E16's dispatch into a running flight session (built with the rigs when the world has a

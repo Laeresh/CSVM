@@ -12,6 +12,13 @@ namespace CSVM.Flight;
 /// engine's clamp is gated on <c>min != max</c>.</summary>
 public sealed class TurretDef
 {
+    /// <summary>The loader's default for an absent <c>TEAM</c> key: the original's FIRST ENEMY
+    /// team (its team space is 0 = neutral, 1 = ally, 2+ = enemy; the loader writes enemy team
+    /// index 0 = id 2 when the key is missing). This is why the 22 no-TEAM world emplacements
+    /// are hostile — and the four authored <c>TEAM 1</c> entries (the piratezep set) are the
+    /// player's OWN zeppelin's defensive turrets, allied on purpose.</summary>
+    public const int DefaultTeamId = 2;
+
     /// <summary>The <c>MSG_TUR_*</c> string key, and the lookup name for carried turrets. Null
     /// never ships, but the engine's by-title lookup accepts a titleless entry unconditionally —
     /// see <see cref="MatchesTitle"/>.</summary>
@@ -25,8 +32,9 @@ public sealed class TurretDef
     /// entries ship 0 and wait for a mission script (C9b).</summary>
     public bool Activated;
 
-    /// <summary>Authored team id (always 1 where present). A carried turret takes its HOST's
-    /// team at runtime; this is kept for the standalone family.</summary>
+    /// <summary>Authored team id (always 1 = ally where present; absent =
+    /// <see cref="DefaultTeamId"/>). A carried turret takes its HOST's team at runtime; this
+    /// matters for the standalone family.</summary>
     public int? Team;
 
     /// <summary>The host node whose destruction kills the turret (carried family).</summary>
@@ -85,6 +93,10 @@ public sealed class TurretDef
 
     /// <summary><c>SOUNDS.CANNON</c> (always <c>snd_chaingun</c> where authored).</summary>
     public string? CannonSound;
+
+    /// <summary>The team id the original's loader ends up with: the authored value, else the
+    /// enemy default.</summary>
+    public int TeamId => Team ?? DefaultTeamId;
 
     /// <summary>Whether the yaw axis is actually limited: the engine clamps only when both
     /// limits exist and differ.</summary>

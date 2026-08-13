@@ -6,20 +6,32 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// One carried turret — an AI gunner riding an aircraft, driving that airframe's built turret
-/// rig from its <c>ai.zrd</c> row (docs/formats/turrets.md). Per sim tick it acquires the
-/// nearest hostile aircraft inside <c>DETECTION_RANGE</c>, solves a constant-velocity intercept
+/// One <c>ai.zrd</c> turret gunner (docs/formats/turrets.md) — the same tracking loop for both
+/// families: a carried turret riding an aircraft (C9a, <see cref="BuildCarried"/>) and a world
+/// emplacement placed at the entry's <c>NODES</c> patterns (C9b,
+/// <see cref="BuildEmplacements"/>). Per sim tick it acquires the nearest hostile aircraft
+/// inside <c>DETECTION_RANGE</c>, solves a constant-velocity intercept
 /// (<see cref="AimAssist.TryIntercept"/>), clamps the solution to the authored arcs (the yaw arc
 /// is a DIRECTED interval on the circle; an absent or min==max arc is unrestricted), slews the
 /// barrel toward it at a bounded rate, writes the pose onto the <c>PARTS</c> nodes, and fires
-/// real rounds through the shared <see cref="ProjectilePool"/> under the host's shooter id —
-/// hit resolution is therefore geometric (the round either strikes or misses), with
-/// <c>INACCURACY</c> as a scatter cone on the shot, never a probability roll.
+/// real rounds through the shared <see cref="ProjectilePool"/> — hit resolution is therefore
+/// geometric (the round either strikes or misses), with <c>INACCURACY</c> as a scatter cone on
+/// the shot, never a probability roll.
+///
+/// <para>What splits the families at runtime: a carried gunner lives and dies, aims and shoots
+/// under its HOST (team, velocity, shooter id, crash = death); an emplacement carries its own
+/// authored team, measures its platform velocity by differencing its own position (the decoded
+/// moving-host fold-in, with the same ~447 m/s sanity cut), spawns unowned rounds, dies with
+/// its <c>HEALTHY_NODE</c> (default <c>healthy</c>) and honours <c>ACTIVATED</c> — 22 of the 26
+/// shipped emplacement entries are dormant until <see cref="Wake"/> (the mission script's
+/// <c>WAKEUP_TURRETS</c>, which is out of M4's scope; <c>--wake-turrets</c> is the documented
+/// stand-in).</para>
 ///
 /// <para>The attack/bored keys are a duty cycle, not two moods: bored suppresses FIRING only,
 /// the aim solution keeps running, so a holding turret still tracks. A plain class, not a Node —
-/// the host <see cref="FlightController"/> ticks it from its own <c>SimStep</c>, so a crashed
-/// host's early return silences its gunners for free.</para>
+/// a carried gunner is ticked by its host <see cref="FlightController"/>'s <c>SimStep</c> (so a
+/// crashed host's early return silences it for free), an emplacement by
+/// <c>Session.TurretEmplacementRuntime</c>.</para>
 /// </summary>
 public sealed class TurretController
 {
@@ -31,22 +43,38 @@ public sealed class TurretController
     /// (the binary compares against cos 15°). A turret still slewing does not fire.</summary>
     public const float FireGateCos = 0.965926f;
 
-    private readonly FlightController _host;
+    /// <summary>The decoded moving-platform sanity cut: a differenced position implying a
+    /// platform speed past this discards the estimate for the frame.</summary>
+    public const float MaxPlatformSpeed = 447f;
+
+    /// <summary>The engine-side team an emplacement's authored TEAM id maps to when the entry
+    /// authors none: the original's loader defaults an absent TEAM to its FIRST ENEMY team
+    /// (id 2 in its 0=neutral / 1=ally / 2+=enemy space), which is why the 22 no-TEAM world
+    /// emplacements all engage the player. See <see cref="EngineTeamFor"/>.</summary>
+    public const int EmplacementEnemyBand = 200;
+
+    private readonly FlightController? _host;
     private readonly ProjectilePool _pool;
     private readonly RandomNumberGenerator _rng;
     private readonly AimCandidateSet _scan = new(); // reused per tick, aircraft list only
     private readonly Transform3D _yawRest;
     private readonly Transform3D _pitchRest;
+    private readonly int _team;            // engine-space team (AimAssist convention)
+    private readonly Node3D? _healthyNode; // emplacement kill switch; null on a carried turret
 
     private float _windowLeft;   // s left in the current attack/bored window
     private float _fireIn;       // s until the next shot is allowed
     private int _fpNext;         // round-robin firepoint cursor
     private double _losNext;     // game-time s the cached line-of-sight verdict expires
     private bool _losBlocked;
+    private Vector3 _platformVel;
+    private Vector3 _lastPos;
+    private bool _hasLastPos;
+    private bool _firstShotLogged;
 
-    private TurretController(TurretDef def, WeaponDef weapon, FlightController host,
+    private TurretController(TurretDef def, WeaponDef weapon, FlightController? host,
         ProjectilePool pool, Node3D? yawNode, Node3D pitchNode, Node3D[] firepoints,
-        RandomNumberGenerator rng)
+        RandomNumberGenerator rng, int team, bool activated, Node3D? healthyNode, string label)
     {
         Def = def;
         Weapon = weapon;
@@ -56,12 +84,17 @@ public sealed class TurretController
         PitchNode = pitchNode;
         Firepoints = firepoints;
         _rng = rng;
+        _team = team;
+        Activated = activated;
+        _healthyNode = healthyNode;
+        Label = label;
         _yawRest = yawNode?.Transform ?? Transform3D.Identity;
         _pitchRest = pitchNode.Transform;
         Ammo = def.Ammo;
         Attacking = true;
         _windowLeft = RandRange(def.AttackMin, def.AttackMax);
-        // Load pose: the centre of each arc; a free axis stays unrotated.
+        // Load pose: the centre of each arc; a free axis stays unrotated. The original poses
+        // dormant emplacements too — ACTIVATED gates the tick, not the load pose.
         BarrelLocal = LocalDir(def.RestYawDeg, def.RestPitchDeg);
         ApplyNodePose();
     }
@@ -88,14 +121,37 @@ public sealed class TurretController
     /// redrawn uniform(min,max) at every transition, so no two turrets stay in phase.</summary>
     public bool Attacking { get; private set; }
 
+    /// <summary>The decoded awake gate: a dormant emplacement neither tracks nor fires until a
+    /// script wakes it. Every carried turret is built awake (all 16 ship <c>ACTIVATED 1</c>).</summary>
+    public bool Activated { get; private set; }
+
+    /// <summary>Who this gunner is in a log line — the entry's TITLE plus, for an emplacement,
+    /// the world node it stands on.</summary>
+    public string Label { get; }
+
+    /// <summary>The engine-space team the acquisition gate and the aim-assist candidate list
+    /// run on (<see cref="EngineTeamFor"/> for an emplacement, the host's pilot team for a
+    /// carried turret).</summary>
+    public int EngineTeam => _team;
+
+    /// <summary>The platform's velocity: the host's for a carried turret, the differenced own
+    /// position (the decoded moving-host estimate, <see cref="MaxPlatformSpeed"/> cut) for an
+    /// emplacement — zero while static, the ride while a zeppelin-slung mount moves.</summary>
+    public Vector3 PlatformVelocity => _host?.WorldVelocity ?? _platformVel;
+
     /// <summary>The barrel direction in the turret's base frame (the yaw node's rest frame) —
     /// what the pose writes and the fire gate read.</summary>
     public Vector3 BarrelLocal { get; private set; }
 
-    /// <summary>Alive while the host flies. The carried family's <c>HEALTHY_NODE</c> is a model
-    /// node the plane damage model does not track individually, so host death is the kill
-    /// condition CSVM can express today.</summary>
-    public bool Alive => !_host.Crashed;
+    /// <summary>Carried: alive while the host flies (the carried family's <c>HEALTHY_NODE</c> is
+    /// a model node the plane damage model does not track individually, so host death is the
+    /// kill condition CSVM can express today). Emplacement: alive while its healthy node is —
+    /// the destroy sequence's healthy→destroyed swap hides it, which is the decoded permanent
+    /// kill switch (the retail loaders read no HEALTH key; the emplacement's real hit points are
+    /// its own gamez destroy def's).</summary>
+    public bool Alive => _host != null
+        ? !_host.Crashed
+        : _healthyNode == null || (GodotObject.IsInstanceValid(_healthyNode) && _healthyNode.Visible);
 
     /// <summary>Where the turret is, for the aim assist's candidate list and the detection gate.</summary>
     public Vector3 WorldPosition => (YawNode ?? PitchNode).GlobalPosition;
@@ -170,7 +226,110 @@ public sealed class TurretController
                 continue;
             }
             var rng = new RandomNumberGenerator { Seed = (ulong)(uint)Utils.Rng.NewIntSeed(Utils.Rng.Weapons) };
-            built.Add(new TurretController(def, weapon, host, pool, yaw, pitch, fps.ToArray(), rng));
+            built.Add(new TurretController(def, weapon, host, pool, yaw, pitch, fps.ToArray(), rng,
+                AimAssist.TeamOfPilot(host.PlayerIndex), activated: true, healthyNode: null,
+                label: mount.Title));
+        }
+        return built.ToArray();
+    }
+
+    /// <summary>The engine-space team an emplacement fights on. The original's team ids are
+    /// 0 = neutral, 1 = ally (the player's side — the four authored <c>TEAM 1</c> entries are
+    /// the piratezep's own defensive turrets), 2+ = enemy teams, and the loader defaults an
+    /// absent TEAM to enemy team 2. CSVM has no team model (docs on
+    /// <see cref="AimAssist.TeamOfPilot"/>), so: neutral stays <see cref="AimAssist.NeutralTeam"/>
+    /// (never a target, never acquires), ally maps to player one's team (the closest thing CSVM
+    /// has to "the player's side"), and an enemy id lands in a band clear of every pilot team,
+    /// hostile to all of them.</summary>
+    public static int EngineTeamFor(int originalTeamId) => originalTeamId switch
+    {
+        0 => AimAssist.NeutralTeam,
+        1 => AimAssist.TeamOfPilot(0),
+        _ => EmplacementEnemyBand + originalTeamId,
+    };
+
+    /// <summary>Builds the chapter's world emplacements — every standalone <c>ai.zrd</c> entry's
+    /// <c>NODES</c> patterns resolved against the built world (<paramref name="findNodes"/> is
+    /// <c>AnimRuntime.FindNodes</c>: pattern, then optional subtree scope). A multi-segment path
+    /// (<c>["piratezep","ctur*"]</c>) scopes each further segment to the previous match's
+    /// subtree; one entry instantiates as many turrets as there are matching nodes. The
+    /// <c>PARTS</c> names (<c>turret</c>/<c>gun</c>/<c>firepoint</c> throughout the standalone
+    /// family) resolve INSIDE each matched node's subtree; the kill switch is the
+    /// <c>HEALTHY_NODE</c> (default <c>healthy</c>) child, falling back to the matched node
+    /// itself — the decoded loader order. A matched node whose parts do not resolve is skipped
+    /// with a warning (the world carries grouping nodes like C5's <c>thugs</c> beside
+    /// <c>thug1..3</c> that the patterns also match).</summary>
+    public static TurretController[] BuildEmplacements(TurretDefs defs, WeaponDefs weapons,
+        Func<string, Node3D?, IReadOnlyList<Node3D>> findNodes, ProjectilePool pool)
+    {
+        var built = new List<TurretController>();
+        foreach (var def in defs.All)
+        {
+            if (def.Carried || def.NodePatterns.Count == 0)
+            {
+                continue;
+            }
+            var weapon = weapons.Get(def.WeaponName);
+            if (weapon == null || def.Firepoints.Count == 0)
+            {
+                // "An entry with no resolvable WEAPON ticks no further" — the engine's own rule.
+                GD.PushWarning($"turret '{def.Title}': weapon '{def.WeaponName}' unresolved or no firepoints");
+                continue;
+            }
+            foreach (var path in def.NodePatterns)
+            {
+                if (path.Count == 0)
+                {
+                    continue;
+                }
+                IReadOnlyList<Node3D> matches = findNodes(path[0], null);
+                for (int seg = 1; seg < path.Count; seg++)
+                {
+                    var next = new List<Node3D>();
+                    foreach (var scope in matches)
+                    {
+                        next.AddRange(findNodes(path[seg], scope));
+                    }
+                    matches = next;
+                }
+                foreach (var site in matches)
+                {
+                    var rig = CollectNamedNodes(site);
+                    string label = $"{def.Title}@{site.Name}";
+                    Node3D? yaw = null;
+                    if (def.YawNode is { } yawName && !rig.TryGetValue(yawName, out yaw))
+                    {
+                        GD.PushWarning($"turret {label}: yaw node '{yawName}' not under the site");
+                        continue;
+                    }
+                    if (!rig.TryGetValue(def.PitchNode, out var pitch))
+                    {
+                        GD.PushWarning($"turret {label}: pitch node '{def.PitchNode}' not under the site");
+                        continue;
+                    }
+                    var fps = new List<Node3D>();
+                    foreach (var fpName in def.Firepoints)
+                    {
+                        if (rig.TryGetValue(fpName, out var fp))
+                        {
+                            fps.Add(fp);
+                        }
+                    }
+                    if (fps.Count == 0)
+                    {
+                        GD.PushWarning($"turret {label}: no firepoint under the site");
+                        continue;
+                    }
+                    // The kill switch: HEALTHY_NODE (default "healthy") under the site, else the
+                    // site itself — the decoded fallback chain.
+                    rig.TryGetValue(def.HealthyNode ?? "healthy", out var healthy);
+                    healthy ??= site;
+                    var rng = new RandomNumberGenerator { Seed = (ulong)(uint)Utils.Rng.NewIntSeed(Utils.Rng.Weapons) };
+                    built.Add(new TurretController(def, weapon, host: null, pool, yaw, pitch,
+                        fps.ToArray(), rng, EngineTeamFor(def.TeamId),
+                        def.Activated, healthy, label));
+                }
+            }
         }
         return built.ToArray();
     }
@@ -223,12 +382,27 @@ public sealed class TurretController
         return new Basis(Vector3.Up, y) * new Basis(Vector3.Right, p) * Vector3.Forward;
     }
 
-    /// <summary>One gunner tick: duty cycle, acquire, aim, slew, pose, fire.</summary>
+    /// <summary>The activation stand-in's hook (and, later, the real <c>WAKEUP_TURRETS</c>'):
+    /// wakes a dormant emplacement. Logged by the caller, never silent.</summary>
+    public void Wake() => Activated = true;
+
+    /// <summary>One gunner tick: duty cycle, acquire, aim, slew, pose, fire. A dormant
+    /// emplacement takes no tick at all — <c>ACTIVATED</c> gates tracking as well as fire.</summary>
     public void SimStep(float dt)
     {
-        if (!Alive)
+        if (!Activated || !Alive)
         {
             return;
+        }
+        if (_host == null && dt > 0f)
+        {
+            // The decoded moving-platform estimate: difference own position across the frame,
+            // discard implausible speeds (a teleporting anchor, the first frame in the tree).
+            var here = WorldPosition;
+            var vel = _hasLastPos ? (here - _lastPos) / dt : Vector3.Zero;
+            _platformVel = vel.Length() <= MaxPlatformSpeed ? vel : _platformVel;
+            _lastPos = here;
+            _hasLastPos = true;
         }
         _windowLeft -= dt;
         if (_windowLeft <= 0f)
@@ -254,7 +428,7 @@ public sealed class TurretController
         // relative to the platform. No solution ⇒ the turret tracks the raw bearing and holds
         // fire — it never falls back to a straight shot.
         bool solution = AimAssist.TryIntercept(muzzlePos, Weapon.Velocity ?? ProjectilePool.DefaultVelocity,
-            targetPos, targetVel - _host.WorldVelocity, out var aimWorld, out _);
+            targetPos, targetVel - PlatformVelocity, out var aimWorld, out _);
         if (!solution)
         {
             var bearing = targetPos - muzzlePos;
@@ -290,7 +464,13 @@ public sealed class TurretController
         // INACCURACY perturbs the SHOT after the pose is written: the turret aims true and the
         // rounds spread. Same uniform-polar cone as the player assist's launch scatter.
         var dir = AimAssist.Scatter(aimWorld, Mathf.DegToRad(Def.InaccuracyDeg), _rng);
-        _pool.Spawn(Weapon, fp.GlobalTransform, _host.WorldVelocity, _host.PlayerIndex, fp, dir);
+        _pool.Spawn(Weapon, fp.GlobalTransform, PlatformVelocity,
+            _host?.PlayerIndex ?? ProjectilePool.NoShooter, fp, dir);
+        if (_host == null && !_firstShotLogged)
+        {
+            _firstShotLogged = true; // verification breadcrumb: WHICH emplacements actually engage
+            GD.Print($"turret {Label}: engaging (first shot, team {_team})");
+        }
         if (Def.CannonSound is { } snd)
         {
             _pool.PlayShotSound(snd);
@@ -340,7 +520,7 @@ public sealed class TurretController
     }
 
     // The nearest live hostile aircraft inside DETECTION_RANGE — the shared target-picker's
-    // minimise-a-score structure with distance as the score. The host's own plane and its
+    // minimise-a-score structure with distance as the score. The own plane (carried) and
     // teammates are gated out by the same team rule the aim assist runs.
     private bool AcquireTarget(out Vector3 pos, out Vector3 vel)
     {
@@ -348,16 +528,15 @@ public sealed class TurretController
         vel = default;
         _scan.Clear();
         _pool.CollectAircraft(_scan);
-        int hostTeam = AimAssist.TeamOfPilot(_host.PlayerIndex);
         var here = WorldPosition;
         float best = float.MaxValue;
         foreach (var c in _scan.Vehicles)
         {
-            if (!c.Live || ReferenceEquals(c.Source, _host))
+            if (!c.Live || (_host != null && ReferenceEquals(c.Source, _host)))
             {
                 continue;
             }
-            if (c.Team == AimAssist.NeutralTeam || hostTeam == AimAssist.NeutralTeam || c.Team == hostTeam)
+            if (c.Team == AimAssist.NeutralTeam || _team == AimAssist.NeutralTeam || c.Team == _team)
             {
                 continue;
             }
@@ -375,16 +554,32 @@ public sealed class TurretController
 
     // The original casts from the platform to 0.2 m above the target and caches the verdict for
     // a random 1–2 s before re-testing; a failed test blocks firing. World geometry only —
-    // another aircraft in the way is not cover.
+    // another aircraft in the way is not cover. C9a applies the cached test to whatever target
+    // was acquired (the original scopes it to the player); emplacements keep that consistent.
     private bool LineOfSightBlocked(Vector3 targetPos)
     {
         double now = Utils.GameClock.Current?.Time ?? 0.0;
         if (now >= _losNext)
         {
             _losNext = now + RandRange(1f, 2f);
-            _losBlocked = _host.WorldBlocksLine(WorldPosition, targetPos + Vector3.Up * 0.2f);
+            _losBlocked = _host != null
+                ? _host.WorldBlocksLine(WorldPosition, targetPos + Vector3.Up * 0.2f)
+                : WorldRayBlocked(WorldPosition, targetPos + Vector3.Up * 0.2f);
         }
         return _losBlocked;
+    }
+
+    // FlightController.WorldBlocksLine's twin for a gunner with no host rig: the same
+    // world-layer-only ray off the turret's own node.
+    private bool WorldRayBlocked(Vector3 from, Vector3 to)
+    {
+        var space = (YawNode ?? PitchNode).GetWorld3D()?.DirectSpaceState;
+        if (space == null)
+        {
+            return false;
+        }
+        return space.IntersectRay(
+            PhysicsRayQueryParameters3D.Create(from, to, CollisionLayers.World)).Count > 0;
     }
 
     // The bounded slew: the barrel chases the clamped aim direction at SlewRate per second,
