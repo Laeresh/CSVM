@@ -44,6 +44,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/FogVolumes.cs` — the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
 - `src/Mech3/Zrdr.cs` — zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's list.
 - `src/Mech3/AiNets.cs` — the chapter AI patrol nets: `ne0NNNNN` waypoint graphs + the `neindex` id→name table, raw tags/trailer included.
+- `src/Mech3/EnemyGenerators.cs` — the mission `egen.zrd.json` reader: the 23 enemy generators in their three shapes (zeppelin launch / plain / moving spawner), `[null]` files as empty.
 - `src/Mech3/Messages.cs` — the game's localized string table: the `messages.json` key→value map behind every `MSG_*` key.
 - `src/Mech3/MarkerRig.cs` — a plane's firepoint/pylon/target rig from planes.zbd: plane-frame positions + co-located mounts; feeds `--dump-markers`.
 - `src/Mech3/CompiledAnim.cs` — reader for the compiled `cam_anim`/`mis_anim` archives: anim defs, sequences/events, lazy SI-script pool.
@@ -205,6 +206,8 @@ clusters they delegate to.
 - `src/Session/EffectPools.cs` — the `data/effect_pools.json` reader: how many copies of each effect template the stage builds, per ROOT, scaled by player count.
 - `src/Session/FlightRigAssembler.cs` — assembles one player's flight rig: painted plane, `FlightController`, loadout/ordnance, HUD instruments, damage visuals, audio, stunt run, spawn, crash runtime.
 - `src/Session/AiAircraftSpawner.cs` — spawns an AI-piloted aircraft into a running session (M4 A2): the flight-essential subset of a rig, an `AiPilot` at the controls, shooter ids from 100.
+- `src/Session/GeneratorCycle.cs` — the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel blocking, the capacity stand-in.
+- `src/Session/AiGeneratorRuntime.cs` — runs a mission's egen generators (M4 B6, `--generators`): load-time drop rules, per-cycle stepping, spawns through `GameSession.SpawnAiAircraft`.
 
 ### Session root and tests
 
@@ -859,6 +862,18 @@ tags, and the trailer attach target. First consumer: `UI/AiNetsOverlay.cs`; M4's
   authoring choice. Tags and the trailer are exposed raw, never interpreted (undecoded).
 ⚠ The `neindex` first element is NOT the pair count (C1: 46 over 29 pairs) — parse pairs to the
   list's end.
+
+## src/Mech3/EnemyGenerators.cs
+The mission `egen.zrd.json` reader (docs/formats/mission-entities.md): the enemy generators that
+feed AI aircraft into a live mission, typed as `EnemyGeneratorDef` in the three shipped shapes
+(zeppelin launch 17, plain spawner 5, moving spawner 1); a `[null]` file reads as an empty list.
+Consumed by `Session/AiGeneratorRuntime`; golden counts in `CSVM.Tests/EnemyGeneratorsTests.cs`.
+⚠ `vehicle.params` names a designer label in the aiv HEADER's `(slotId, label)` pairs, not a
+  vehicle block name; one shipped label is a typo (C1/M04 `Eairg32_params` vs the header's
+  `Earig32_params`), so an exact-label join must tolerate a miss.
+⚠ `capacity` is 0 on all 23 and its decoded blocking rule is unresolved (the capacity puzzle,
+  mission-entities.md); the stand-in lives in `Session/GeneratorCycle.cs`, not here. The reader
+  reports the value verbatim.
 
 ## src/Mech3/FogVolumes.cs
 The chapter's `fogvol.zrd` (`FogVolumeSpec.Load`/`Parse`) plus `VolumesOf`, the gamez census of
@@ -4352,6 +4367,29 @@ outside every player index and `IncomingFire.ShooterId`.
   as a player's plane): planes.zbd gamez indices collide with the chapter's by-index map — the
   `NameResolveFallback` case. A later item making AI aircraft addressable by mission animations
   goes through `AnimRuntime.IndexStage`, which owns the find-cache invalidation.
+
+## src/Session/GeneratorCycle.cs
+The decoded egen launch timing law for ONE generator (M4 B6), pure over `Step` calls (no clock,
+no randomness, no nodes), so `CSVM.Tests/GeneratorCycleTests.cs` pins it off-engine. The law:
+the timer always advances; blocking HOLDS (never cancels); `ind_period` gaps individuals inside a
+wave and `ind_period + wave_period` gaps waves (they compose). The hardcoded door timings sit here
+as constants for F20; the door itself is not modelled.
+⚠ The capacity check is a STAND-IN: the decoded rule applies only at `capacity > 0`, disabled at
+  `<= 0` (the shipped value on all 23), pending the egen.zbd raw-byte read. See
+  mission-entities.md's capacity-puzzle section. NOT a decode of "0 means unlimited".
+⚠ The first post-load threshold is an assumption (full inter-wave gap); the decode does not pin
+  it, and F20 revisits.
+
+## src/Session/AiGeneratorRuntime.cs
+Runs a mission's egen generators (M4 B6, behind `--generators[=plane]`): one `GeneratorCycle` per
+surviving `EnemyGeneratorDef`, host altitude read live off the resolved host node, spawns through
+`GameSession.SpawnAiAircraft` with the cyclic net pick logged and recorded on `SpawnedNet`.
+Every drop/live/spawn prints an `egen:` line, which is the flag's observability.
+⚠ Load drops are decoded semantics: an unresolved host node, or a nets list where NOTHING
+  resolves, drops the generator at load. Never load one inert.
+⚠ Stand-ins/stubs, all named in the class comment: host DEATH is unwired until F18/F20
+  (`GeneratorCycle.HostDied` has no caller); the door choreography is skipped (F20); spawned
+  planes hold course, since handing them the recorded net pick is B5's net-follower's.
 
 ## src/Session/FlightRigAssembler.cs
 Assembles one player's flight rig: the painted plane model, the `FlightController` and everything hung
