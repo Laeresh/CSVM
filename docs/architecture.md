@@ -1243,7 +1243,9 @@ which is why the install authors it on aircraft wreckage alone (254 events / 25 
 Contact is the DEFAULT and comes in the original's two tiers: `TryGroundColumn`, a vertical column
 under the body, unless `do_intersections` upgrades it to `TryContact`'s trajectory sweep (166 events
 install-wide); `no_altitude` vetoes the column only, and `gunshell` alone authors it. No mask wired
-means neither tier, which is the structural fallback every lab and 9 of the 13 goldens take. Both
+means neither tier, which is the structural fallback every lab and 9 of the 14 goldens take;
+`c1-debris-rest` is the one golden that wires a mask and reaches the column tier, a killed
+`m_build03` piece resting with its landing's own spark puffer as the pixel-level tell. Both
 end on one shared response: half a descending step clear of the surface while moving, exactly on it
 once below 0.1 horizontal / 0.5 vertical, velocity scaled by 0.2 with every sign KEPT (the original
 reflects nothing), continuing while incoming speed² covers acceleration².

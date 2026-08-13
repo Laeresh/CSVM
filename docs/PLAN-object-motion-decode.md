@@ -219,7 +219,7 @@ tumble that is about to change.
 ### Wave D — the tune, the coverage, the record
 
 10. ☑ Delete `DebrisTune` entirely
-11. ☐ Pin a golden that shows debris coming to rest
+11. ☑ Pin a golden that shows debris coming to rest
 12. ☐ Rewrite the decode records that carried the disproven readings
 13. ☐ Item bookkeeping: `BL-319`, `BL-245`, `PT-46` (d), and a fresh ID for the deleted tune
 
@@ -966,7 +966,36 @@ intended, but check nothing asserts on their presence. ⚠ This is the item wher
 reads at full authored speed *with* the B4 correction — the first honest look at the decode. If it
 reads wrong, file an item; do not reintroduce a scalar (the milestone boundary).
 
-## D11 ☐ Pin a golden that shows debris coming to rest
+## D11 ☑ Pin a golden that shows debris coming to rest
+
+**Landed 2026-08-13.** `c1-debris-rest`: `--freecam --chapter=C1 --collision --destroy=m_build03`,
+camera hand-placed on the one piece (`part4`) that lands inside its own 5.0 s `RUN_TIME` ceiling,
+frame 360 (6.0 s) — late enough for the landing's own bounce/spark puffer (`sparkout4`) to have
+fired and be fading, early enough that it still marks the pixels. `A1`'s own three Fly-mode goldens
+were re-checked first and confirmed still short: `c1-destroy-effects`'s piece is structurally
+untestable (`do_intersections: false`) and `c1-crash`'s pieces launch too late in a 0.333 s window
+to reach the ground — neither closes on its own. `m_build03`'s other eight pieces do NOT reliably
+land inside their own ceiling under `--det`'s seed (only `part4` does; the rest end on the clock,
+one — `part3` — still free-falling past the terrain grid's column at frame 900 with no matching
+surface under it, the "a fast piece can pass over a ledge" case C6's Evidence already named) — so
+the shot is framed on the one piece that does, not on the building's auto-framed full bounds, which
+stays hash-identical with contact on or off (checked and rejected: the flying pieces that would
+move it all land outside that framing).
+
+**Shown able to fail, locally, per this item's own acceptance bar.** `GameSession.cs`'s
+`if (BuildsCollision)` gate on `session.Runtime.ContactMask` was flipped to `if (false && ...)`,
+rebuilt, and the identical probe re-run: `pixmd5` moved from `b77edef2…` (contact) to `5e3e023c…`
+(no contact) at frame 360 — the landing spark puffer is the discriminator, and it is gone with the
+tier off. The same A/B at frame 900 (well past the puffer's fade) came back hash-IDENTICAL both
+ways, which is why frame 360 is pinned and not a later, cleaner-looking one: a golden that cannot
+fail is not coverage, and a frame chosen for looks alone would have been exactly that. The edit was
+reverted before pinning; `git diff` on `GameSession.cs` is empty in this commit.
+
+**Verified.** `.\RunTests.ps1`: build clean, 949/949 units, 38/38 engine suites, 14/14 goldens
+hash-identical including the new shot; `c1-debris-rest`'s own probe log shows
+`'part4' landed at (-6104.4863, 158.73997, -4279.1753) — bounce sequence 'sparkout4'` and
+`contact-tested bodies ended: 1 by contact, 4 on their run time (column 1/4, sweep 0/0)` at the
+pinned frame — `ContactLandings` non-zero, as required.
 
 **Goal.** A capture in `analysis/goldens/manifest.json` that fails loudly if the contact tier
 breaks.

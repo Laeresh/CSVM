@@ -102,6 +102,13 @@
       "hash": "d15e38ed54f9a2e68769a89ab0b23765",
       "exercises": "the per-player crash rig playing player_crash_dirt (--crash=5, its only headless trigger), the airframe, the moving distance-puffer path, call_crash_trails' ranged launch and tumble, the vector-form pieces that do not turn, and flydirt's delta.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
+    },
+    {
+      "name": "c1-debris-rest",
+      "frame": 360,
+      "hash": "b77edef29bb9fc23958496b7a2bd2902",
+      "exercises": "the column ground-contact tier: a killed hangar's flung debris tested against terrain, one piece resting with its landing's own spark puffer as the visible signal.",
+      "args": ["--freecam", "--chapter=C1", "--collision", "--destroy=m_build03", "--pos=-6104,230,-4200", "--direction=0,-0.55,-0.83", "--det", "--mute"]
     }
   ]
 }
