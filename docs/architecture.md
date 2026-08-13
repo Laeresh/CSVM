@@ -44,6 +44,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/FogVolumes.cs` — the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
 - `src/Mech3/Zrdr.cs` — zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's list.
 - `src/Mech3/AiNets.cs` — the chapter AI patrol nets: `ne0NNNNN` waypoint graphs + the `neindex` id→name table, raw tags/trailer included.
+- `src/Mech3/Maneuvers.cs` — the shared maneuver library (`zrdr/maneuvers.zrd`): 17 timed attitude-step programs with `natural_touch` difficulty gates, the eligibility cull, and the `signature_maneuvers` bitmask decode.
 - `src/Mech3/EnemyGenerators.cs` — the mission `egen.zrd.json` reader: the 23 enemy generators in their three shapes (zeppelin launch / plain / moving spawner), `[null]` files as empty.
 - `src/Mech3/Messages.cs` — the game's localized string table: the `messages.json` key→value map behind every `MSG_*` key.
 - `src/Mech3/MarkerRig.cs` — a plane's firepoint/pylon/target rig from planes.zbd: plane-frame positions + co-located mounts; feeds `--dump-markers`.
@@ -86,6 +87,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/TurretController.cs` — one carried turret gunner (M4 C9a): acquire, intercept, wrap-aware arc clamp, bounded slew, duty cycle, geometric fire into the shared pool.
 - `src/Flight/AiPilot.cs` — the non-player `FlightModel` driver (M4 A2): mutable standing orders (heading/altitude/throttle, optional patrol net) → one `FlightInput` per sim step; a placeholder hold-course law until wave D.
 - `src/Flight/AiNetFollower.cs` — walks an `AiNet` patrol graph as waypoints (M4 B5): nearest node first, then edge-list neighbours, seeded branch draws; aircraft-agnostic so F17's zeppelins reuse it.
+- `src/Flight/ManeuverExecutor.cs` — plays one maneuver's attitude-step program as `FlightInput` per sim step (M4 D13): the input source D11's state machine runs during `evasive maneuver`.
 - `src/Flight/WeaponCursor.cs` — `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
 - `src/Flight/Ballistics.cs` — the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
@@ -866,6 +868,21 @@ asserted in `CSVM.Tests/AiNetsTests.cs`.
   authoring choice. Tags and the trailer are exposed raw, never interpreted (undecoded).
 ⚠ The `neindex` first element is NOT the pair count (C1: 46 over 29 pairs) — parse pairs to the
   list's end.
+
+## src/Mech3/Maneuvers.cs
+The shared maneuver-library reader (`docs/formats/ai-rosters.md`): `zrdr/maneuvers.zrd`'s 17
+entries as `Maneuver` (name, `natural_touch` difficulty, timed attitude steps, the
+autogyro/relative/nitro/bias flags), plus the selection cull (`EligibleFor`: difficulty ≤ the
+pilot's 1–9 `natural_touch`, no interpolation table — the stat has no `ai_skill_parameters`
+entry by design) and the roster `signature_maneuvers` bitmask decode (`SignatureNames`, over
+`ExeTableOrder`). Consumers: `Flight/ManeuverExecutor.cs`; goldens in `ManeuversTests`.
+⚠ `high_yo_yo` is a shipped STUB — difficulty 99, no steps. It must parse (`IsStub`) and must
+  never fly; do not "fix" its difficulty or invent steps for it.
+⚠ The `signature_maneuvers` bit order is `ExeTableOrder` — the exe's internal table, NOT the
+  JSON file order. `2064` = dive+split_s is the documented worked example.
+⚠ Two steps (barrel_roll, spiral_dive's second) carry 3 extra numbers past
+  [duration, pitch, yaw, roll]; they are undecoded and preserved raw in `ManeuverStep.Extra` —
+  never interpret them.
 
 ## src/Mech3/EnemyGenerators.cs
 The mission `egen.zrd.json` reader (docs/formats/mission-entities.md): the enemy generators that
@@ -2186,6 +2203,20 @@ fixed-dt run is deterministic (`AiPilotTests`).
 ⚠ `PatrolThrottle` (0.5) and the leash/gain constants are INVENTED placeholder-law values, never
   original behaviour; at the 0.85 default the turn radius exceeds the tightest fighter rings and
   the plane limit-cycles around a node forever (measured on C1's `M4ReinfAce`).
+
+## src/Flight/ManeuverExecutor.cs
+Plays one library maneuver's timed step program as `FlightInput` values (M4 D13) — `Next(model,
+dt)` each sim step until `Done`, consumed the way `AiPilot` is; D11's state machine holds one per
+`evasive maneuver` run and switches back to its own law on `Done`. Steps are TARGET ATTITUDES in
+degrees (not stick deflections, not rates), composed onto the entry frame — level entry-heading
+frame normally, the full entry attitude for a `relative` maneuver; a positive-duration step is
+held for its time, a zero-duration step advances when the attitude is captured. Pure and
+engine-free; deterministic on a fixed dt (`ManeuverExecutorTests` demonstrates a real Bloodhawk
+flying the shipped dive and split_s).
+⚠ The tracking law (body-frame quaternion error × gain, rate lead) and `ZeroDurationTimeoutS`
+  are placeholder/invented values, not original behaviour — same status as `AiPilot`'s law.
+⚠ A positive-yaw step turns LEFT (FlightInput's sign). Whether the original mirrors maneuvers
+  left/right at selection time is undecided — D11's question, do not bake a side in here.
 
 ## src/Flight/IncomingFire.cs
 `--incoming[=metres[,wep_id]]` — the near-miss test rig: a phantom shooter 120 m on each player's

@@ -1369,8 +1369,12 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
 11. ☐ D11 — The state machine — **nine modes, not five** (and no `flee`/`inactive` in the dispatch);
     activation radius is `min_ai_active_dist` 2000 m
 12. ☐ D12 — Target selection, ranking and ally deconfliction — ranking formula recovered
-13. ☐ D13 — The maneuver library — **shipped as `maneuvers.zrd`**, so this is a loader plus
-    selection/culling, not an authoring job
+13. ☑ D13 — The maneuver library — **landed 2026-08-13**: `Mech3/Maneuvers.cs` (17 entries, the
+    high_yo_yo stub parsed-never-flown, `EligibleFor` cull, `SignatureNames` over the exe-order
+    bitmask) + `Flight/ManeuverExecutor.cs` (steps are TARGET ATTITUDES in degrees; plays a
+    program as `FlightInput` per sim step for D11 to consume like `AiPilot`); pinned by
+    `ManeuversTests` + `ManeuverExecutorTests`, incl. a real Bloodhawk flying the shipped dive
+    (275 m lost, nose −55°) and split_s (heading reversed 174°, 725 m lower)
 14. ☐ D14 — Gunnery: the lead-sphere accuracy model and the shot-angle cones
 15. ☐ D15 — The rubber-band assist, behind a switch
 
