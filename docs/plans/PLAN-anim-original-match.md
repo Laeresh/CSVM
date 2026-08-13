@@ -218,8 +218,11 @@ reset's `state ← +0x21` / `event ptr ← +0x38` / timers-to-0. Read `FUN_004ee
 the dispatch table's 47 entries slot-for-slot, the null slot 29 (`_DAT_00727e54 = 0`), and real
 handlers at 38/43/44/45. Confirmed `004ec5d0` is a bare `MOV EAX,2 / RET`. Read `FUN_004ec080` (the
 `IF`/`ELSEIF` evaluator) in full — confirms the `RANDOM_WEIGHT` 200-entry table read/increment, the
-`PLAYER_RANGE` `dist² * 4.0` comparison, and the non-nesting-aware scan to the first `Else`/`Elseif`
-byte. **Not independently re-checked this pass:** `LOOP` (`004ebfd0`) has no Ghidra-recognised
+`dist² * 4.0` comparison, and the non-nesting-aware scan to the first `Else`/`Elseif`
+byte. (⚠ That `* 4.0` comparison was read here as `PLAYER_RANGE`'s and it is not — the flag word
+was traced token-by-token on 2026-08-13 and it belongs to `PLAYER_LINED_UP`, an unauthored angle
+condition. `PLAYER_RANGE` compares `dist² <= m²`. See `docs/formats/anim-definitions.md`'s
+flag-word table and `git log --grep=BL-333`.) **Not independently re-checked this pass:** `LOOP` (`004ebfd0`) has no Ghidra-recognised
 function boundary (it's reached only through the dispatch table) and was not disassembled here — its
 use of struct offsets `+0x2c`/`+0x30` rests on the existing decode in
 `analysis/anim-interpreter-decode/FINDINGS.md`, not on a re-check in this session. The
@@ -277,6 +280,8 @@ implementation, not a claim about the original, so it needed no change. Opened `
 `BL-333` `[Research]` under "Effects & animation runtime" for the `PLAYER_RANGE` `* 4.0` factor,
 naming `FUN_004ec080`, the untraced `FUN_0053f610`/`FUN_0053f9b0`/`DAT_009fd190`/`FUN_0053fca0`
 chain, the 1,052 shipped conditions, and a ⚠ Traps line against halving radii on the multiply alone.
+(`BL-333` was settled and closed on 2026-08-13: the chain is angular, the `* 4.0` belongs to the
+unauthored `PLAYER_LINED_UP` condition, and no radius moves. The trap held.)
 
 **Verified.** `grep` for `Event \+ 0` and `EVENT_OFFSET 0` across `docs/formats/anim-definitions.md`
 returns only the two corrected sentences (the encoding they now name is `Animation + 0.0`, stated as
@@ -874,7 +879,8 @@ per-rig shape is the one the cloud whiteout already uses. The layer is `HudLayer
 `CAP-13` measured whitening the compass at the same α as world pixels) there is no footage saying
 this one reaches the instruments, so the defensible reading wins. The launchscreen and both
 scoreboards sit at `HudLayers.Board` and are unreachable by it. The `PlayerRange` gate was **not
-touched** — `BL-333` still owns whether its radius is 2× the original's.
+touched**, and the question of whether its radius was 2× the original's has since been answered no
+(`git log --grep=BL-333`).
 
 **The overlay is `Visible = false` whenever no ramp runs**, which is why the golden set is
 untouched by its mere existence rather than that being a claim about a transparent rect.
@@ -935,8 +941,9 @@ exe and should not be guessed. Concurrent flashes need a composition rule; take 
 **Verify.** D31's timeline suite asserts the six steps fire at the right times. Visually:
 `--screenshot` at a fixed frame during a close HE hit, with and without, at `--det`.
 
-**⚠ Traps.** The `PlayerRange` radius may be half what we compute (A2) — do not tune the gate to
-make the flash appear at a pleasing distance; that hides the open question. And `FbfxCsinwaveFromTo`
+**⚠ Traps.** Do not tune the `PlayerRange` gate to make the flash appear at a pleasing distance.
+(A2 suspected the radius was half what we compute; that was traced out on 2026-08-13 and the radius
+is correct, so a gate that looks wrong is evidence about something else.) And `FbfxCsinwaveFromTo`
 ships **zero** occurrences; do not build it for symmetry.
 
 </details>
@@ -950,7 +957,7 @@ judging it. The plan's own lead ("`ObjectCycleTexture` is the most likely real g
 that read: it turned out to be the SAME `<part>_damage_{green,yellow,red}` cockpit indicator
 `docs/architecture.md`'s `Flight/DamageVisuals.cs` entry already records as deliberately unwired (no
 cockpit), not a second, unrelated mechanism — a disproof, not new code. Full per-kind decode, exe
-addresses and def census in `docs/formats/anim-definitions.md`'s "The last four unhandled kinds";
+addresses and def census in `docs/org/sequences.md`'s "The last four unhandled kinds";
 summary:
 
 - **`Callback`** (288, 120 defs) — calls a native callback the anim instance never has registered

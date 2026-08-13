@@ -4,7 +4,7 @@ Sizes the reachable blast radius of resolving origin `Animation` against the ani
 instance's clock instead of the sequence's own: an `Animation` offset only diverges when
 the sequence did not start with the instance, i.e. when its `seq_state` is `OnCall`.
 
-Reads Z:/CSVM/extracted/<chapter>/{cam_anim,mis_anim}/*.json (git-ignored install data).
+Reads <data root>/extracted/<chapter>/{cam_anim,mis_anim}/*.json (git-ignored install data).
 Read-only.
 
     python analysis\\anim-interpreter-decode\\start_origin_census.py
@@ -17,7 +17,11 @@ import json
 import os
 from collections import Counter
 
-ROOT = r"Z:\CSVM\extracted"
+# extracted/ is git-ignored, so a worktree has none: CSVM_DATA_ROOT names the tree that does
+# (the same env var the engine reads), defaulting to this checkout.
+DATA_ROOT = os.environ.get("CSVM_DATA_ROOT") or os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ROOT = os.path.join(DATA_ROOT, "extracted")
 
 files = 0
 null_start = 0

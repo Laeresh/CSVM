@@ -18,8 +18,11 @@ A page whose claims come from the executable **wholesale** does not live here at
 [`docs/org/`](../org/), outside this directory and outside its licence:
 [flightModel.md](../org/flightModel.md) (the flight model), [puffer.md](../org/puffer.md) (the
 particle runtime behind [effects.md](effects.md)), [tracers.md](../org/tracers.md) (the projectile
-visual runtime behind [weapons.md](weapons.md)) and [aim-assist.md](../org/aim-assist.md) (the
-sticky-bullet gun assist behind [vehicle.md](vehicle.md)'s `player.json` table).
+visual runtime behind [weapons.md](weapons.md)), [objectMotion.md](../org/objectMotion.md) (the
+launch/contact/run-time model behind the `OBJECT_MOTION` sections of
+[anim-definitions.md](anim-definitions.md) and [destructibles.md](destructibles.md)) and
+[aim-assist.md](../org/aim-assist.md) (the sticky-bullet gun assist behind
+[vehicle.md](vehicle.md)'s `player.json` table).
 
 ## Pages
 

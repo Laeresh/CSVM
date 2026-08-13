@@ -1,8 +1,13 @@
 # Print the candidate magnitude inputs for the player 40-cal slug gun (wep_40)
 # and its base-gun cousin wep_01, straight from extracted weapons.zrd.json.
 import json
+import os
 
-PATH = r"Z:\CSVM\extracted\zrdr\weapons.zrd.json"
+# extracted/ is git-ignored, so a worktree has none: CSVM_DATA_ROOT names the tree that does
+# (the same env var the engine reads), defaulting to this checkout.
+DATA_ROOT = os.environ.get("CSVM_DATA_ROOT") or os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PATH = os.path.join(DATA_ROOT, "extracted", "zrdr", "weapons.zrd.json")
 
 
 def blocks(node, out):
