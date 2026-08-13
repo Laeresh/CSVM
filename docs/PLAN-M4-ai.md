@@ -12,8 +12,9 @@ was re-verified and re-pointed to the tree at `0b2385e` on 2026-08-13; a cited l
 of that commit. The ticked checklist items were front-loaded by other plans (A1 via PLAN-vs-mode,
 D10 and most of A3 via the 2026-08-10 decompile pass), not started here. On scheduling, backlog
 items `BL-068`, `BL-069` and `BL-347` were re-verified still-open and absorbed into this plan
-(deleted there); `BL-065`, `BL-222`, `BL-226`, `BL-233`, `BL-291` and `BL-343` stay in
-`backlog.md`, blocked on this plan's items — see the 2026-08-13 Delta.
+(deleted there); `BL-065`, `BL-222`, `BL-226`, `BL-233`, `BL-291` and `BL-343` stayed in
+`backlog.md`, blocked on this plan's items — see the 2026-08-13 Delta. (`BL-222` has since
+closed: D14 fielded the shooter it waited on, same day.)
 
 ## Why this document exists
 
@@ -464,7 +465,8 @@ plane, built from the same `PlaneCollider.Parts` boxes, `CollisionMask = 0`); re
 `SurfaceRegistry` (`Mech3/SurfaceRegistry.cs:61-65`), and weapon IMPACT tables are keyed by
 surface id (`WeaponDefs.cs:55`). `ProjectilePool.SurfaceIdOf` already answers `player` (id 6) for
 a struck `AircraftBody` (`Projectile.cs:465-471`), so the `player` IMPACT row — authored on 44 of
-48 weapons — fires the moment this plan fields a shooter; that is `BL-222`, which stays in backlog
+48 weapons — fires the moment this plan fields a shooter; that is `BL-222` (closed 2026-08-13
+when D14 landed; `git log --grep=BL-222`), which stayed in backlog
 and closes as a side effect of A2 + D14. The `enemy` row (id 7) is non-null on only 3 of 48.
 
 **New item G21 — the `ai_crash_<name>` family (absorbs `BL-347`, minted 2026-08-12).** A third

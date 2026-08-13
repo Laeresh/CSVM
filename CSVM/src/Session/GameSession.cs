@@ -1869,7 +1869,7 @@ public partial class GameSession : Node3D
         }
 
         // --incoming: the near-miss test rig — a phantom shooter on every pilot's six, so the
-        // incoming-fire cue is reachable with one player and nothing in the world that shoots back.
+        // incoming-fire cue is reachable deterministically with one player, no AI gunner needed.
         if (_spec.IncomingPass is float incomingPass)
         {
             var incoming = new IncomingFire(projectiles, weaponDefs, incomingPass, _spec.IncomingWeapon);

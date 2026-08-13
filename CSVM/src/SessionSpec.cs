@@ -272,7 +272,7 @@ public sealed record SessionSpec
     public bool AutoFireRockets { get; private set; }
     /// <summary><c>--incoming[=metres[,wep_id]]</c>: the near-miss test rig — a phantom shooter on
     /// each player's six walking bursts past the canopy, so the incoming-fire cue is reachable
-    /// before there is anything in the world that shoots back. Null when the flag was absent.</summary>
+    /// deterministically without an AI gunner (which aims to hit). Null when the flag was absent.</summary>
     public float? IncomingPass { get; private set; }
     /// <summary>Which weapon <c>--incoming</c> fires; null takes the target's own first gun.</summary>
     public string? IncomingWeapon { get; private set; }

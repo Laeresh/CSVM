@@ -534,25 +534,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   passed the cockpit A/B (PT-09), but the user flags the puff size as possibly needing more tuning.
   The authored FLYOUT values are verbatim; only render-side size/overlap is in play.
 
-- `BL-222` `[Feature]` `[Blocked: M4]` **The `player` IMPACT surface class — the general got-shot feedback on your own airframe,
-  authored on 44 of 48 weapons and untriggerable until something shoots back (found 2026-08-01
-  while landing `BL-090` item 2).** `weapons.json`'s `IMPACT` block is keyed by surface id, and
-  `player` (id 6, "the struck surface is the player's aircraft") is populated on 44 entries: most name the
-  caliber's own `*_gunhit`, several name `f18sparks2`, and `wep_03` (60slug) names
-  `SURFACE_ANIMATION: random_gun_impact` — the spark burst at a `pdpN` panel that B4 wired.
-  The row already parses (`WeaponDefs.cs`) and `ProjectilePool.SurfaceIdOf` already answers id 6 for
-  a struck `AircraftBody`; what is missing is a shooter. **Blocked on M4's enemy aircraft**, not on data or decode.
-  This is the *general* mechanism B4's goal described — B4 reaches it only through the Devastator's
-  one-off 0.99 `injure_anims` entry, which is plausibly an authoring leftover
-  (`docs/formats/vehicle.md`).
-  ⚠ **Traps.** (a) `ProjectilePool`'s hit detection is a world raycast against a body-less plane —
-  a round never hits an aircraft at all today, so this needs the aircraft to become a hittable body
-  first; it is not a matter of adding a switch case. (b) Do not reach it early by firing the
-  `player` effect off our own collision path — that is what B4's Devastator entry already does, and
-  conflating "I was shot" with "I scraped a wall" would make both wrong. (c) `f18sparks2` is
-  undecoded — check it resolves in the effect readers before assuming the class is fully wireable.
-
-- `BL-226` `[Feature]` `[Blocked: M4]` **The incoming-fire cue set's other two halves are blocked on things that do not exist
+- `BL-226` `[Feature]` `[Blocked: cockpit view]` **The incoming-fire cue set's other two halves are blocked on things that do not exist
   yet.** The near-miss third landed (`BL-087`, 2026-08-02); `bullet_hit_sg` (= `snd_ricochet1-4`,
   `player.json`'s `bullet_hit_sound`) and `window_hit_sg` (= `snd_windowhit1-3`, non-3D) did not.
   Both sit on the five `player_pfighter-bulletN` canopy-hole defs (the `bullethole_anims` of
@@ -560,15 +542,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   orphans. The design's rule is that incoming-fire intensity is how the player reads a shooter's
   distance, calibre and ammo type; the accumulator that rates it is now decoded and running
   (`WarningShotCue`), so both cues can hang off it once their blockers clear.
-  ⚠ **Traps.** (a) **The blocker for `bullet_hit_sg` is a shooter, not hittability:** since
-  PLAN-vs-mode (2026-08-06) aircraft are real projectile targets (`AircraftBody`), so another
-  pilot's rounds already strike a plane in splitscreen — but solo play has nothing that fires on
-  the player until `PLAN-M4-ai.md` fields AI. Wireable early via a two-pilot test if wanted.
+  ⚠ **Traps.** (a) **`bullet_hit_sg`'s shooter blocker is GONE (2026-08-13):** since M4 A2+D14 an
+  AI gunner fires real rounds at the player (`--ai=… --ai-attack=…`), so this half is wireable
+  now — it hangs off the projectile-hit path, not the near-miss accumulator alone.
   (b) `window_hit_sg` additionally needs a cockpit view —
   the bullet defs are `PlayerFirstPerson`-gated. (c) **Do not fake either off our collision path**:
-  firing the hit cue on a wall scrape conflates "I was shot" with "I hit something", the trap
-  `BL-222` records. (d) Only `snd_warningshot1-3` are true orphans (in no `SOUND_GROUPS` entry and
-  named nowhere) — do not conflate the four groups.
+  firing the hit cue on a wall scrape conflates "I was shot" with "I hit something" and would make
+  both wrong (the same rule that kept the `player` IMPACT row honest; its closing commit is
+  `git log --grep=BL-222`). (d) Only `snd_warningshot1-3` are true orphans (in no `SOUND_GROUPS`
+  entry and named nowhere) — do not conflate the four groups.
 
 - `BL-227` `[Tuning]` `[Owed-playtest]` **Rocket blast falloff + knockback magnitude (D10, 2026-08-01).** The radius and full
   health damage are authored (`IMPACT_PROXIMITY`, `HEALTH_DAMAGE`), but the shipped data does not

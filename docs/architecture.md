@@ -97,7 +97,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/ImpactOutcome.cs` — what a weapon×surface hit should do (effect, sound, stand-in, damage) as a value; `Resolve` is pure and engine-free.
 - `src/Flight/Projectile.cs` — `ProjectilePool`: the weapon-fire subsystem — ballistics, tracers, flashes, per-surface impact, damage to destructibles.
 - `src/Flight/WarningShotCue.cs` — the shipped near-miss accumulator (player.json `warning_shot_*`) + swept-segment/point distance; engine-free so it unit-tests.
-- `src/Flight/IncomingFire.cs` — `--incoming`: the near-miss test rig — a phantom shooter on each player's six, so the cue is reachable before anything in the world shoots back.
+- `src/Flight/IncomingFire.cs` — `--incoming`: the near-miss test rig — a phantom shooter on each player's six, so the cue is reachable deterministically without an AI gunner.
 - `src/Flight/SpawnPoints.cs` — flight spawn from the mission's own zrdr: ia.json `spawn_points`, or objectives.json PLAYER_INIT as fallback.
 - `src/Flight/MissionTargets.cs` — mission `targets.json` loader: world-node name → objective display keys, resolved through `Messages`.
 - `src/Flight/StuntMission.cs` — Stunt Flying state: ia.json `dzones` → a danger-zone run with completion, clock and splits, one per pilot.
@@ -2255,14 +2255,13 @@ Engine-free (`AiGunnerTests`); the live half is the `ai-gunnery` suite.
 ## src/Flight/IncomingFire.cs
 `--incoming[=metres[,wep_id]]` — the near-miss test rig: a phantom shooter 120 m on each player's
 six, alternating sides, firing the target's own gun (or the named weapon) into the shared pool under
-a shooter identity no player holds. Exists because nothing in the world shoots back until M4 AI, so
-the cue would otherwise need a second pilot in splitscreen. Aims along the target's own nose with a
-lateral offset, so the round overtakes on a parallel track and the pass distance holds without lead
-maths.
+a shooter identity no player holds. Exists for deterministic near-miss testing: an AI gunner
+(D14's `--ai-attack`) is a real shooter but aims to hit, and a splitscreen pilot needs a second
+human. Aims along the target's own nose with a lateral offset, so the round overtakes on a
+parallel track and the pass distance holds without lead maths.
 ⚠ **Near misses by construction, not by limitation.** Since A1 an aircraft IS a projectile target
   (`AircraftBody`), so this rig deliberately never aims at the plane; hit feedback (`BL-226`)
-  needs a real shooter — another pilot, or an M4 AI plane once one fires (`--ai=` spawns them
-  unarmed-in-behaviour today).
+  comes from a real shooter — another pilot, or an AI gunner since D14.
 ⚠ Standoff (120 m) was originally kept short because `CANNON_SPREAD` was wrongly read as a dispersion
   cone that grows with range; A1 (`BL-342`) removed that scatter, so a round now leaves dead straight
   and the achieved pass distance equals the requested one at any standoff. No data-driven reason
@@ -3363,7 +3362,7 @@ AUTHORED anim through `DamageEffectSink` — the player's own rig runtime (`BL-2
 `player_fuelleak` (0.85 — gunhit flash + fuel vapor at a random pdp1–3, its stream authored-gated
 on that panel being ACTIVE, so it renders only once torn), the `<part>_damage_effects` spark shims
 (0.99, `player_pfighter` data alone — B4; their general home is the weapons.json `player` IMPACT
-surface, blocked on `BL-222`), and, for the data's 0.10 `player_smoketrail`, `player_damage_trail`
+surface, live since M4 A2+D14 fielded AI shooters), and, for the data's 0.10 `player_smoketrail`, `player_damage_trail`
 (short_firetrail at prop1 + the fire_lt light) — `RigAnimFor` owns that one mapping.
 `DamageEffectStop` (Reset, first) stops the whole stage CLOSURE, derived from the program — a
 stopped pdpanelN cannot reach the trail it CALLed, and prop1's trail has no authored exit.
