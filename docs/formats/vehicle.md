@@ -128,7 +128,12 @@ A list of part entries:
   *(An earlier version of this page said AI variants differ 25/20 — that is wrong; nothing in
   this install has an unequal pair.)*
 - Flags: `critical` — the plane is destroyed when this part reaches 0 HP (all four player
-  parts carry it); `engine` — engine damage/power loss on that part. Not tail-only: it sits on
+  parts carry it); `engine` — engine damage/power loss on that part.
+  ⚠ **The `critical` reading is from the flag's name and the 2026-08-13 executable decode does not
+  support it** ([`org/vehicleDamage.md`](../org/vehicleDamage.md)): the death path tests only
+  whole-vehicle health, no code on it reads a part flag, and one zone at zero leaves the
+  whole-vehicle summary at 75 %. Either the flag is consumed somewhere not yet found, or the
+  reading is wrong. Do not build a kill rule on it without settling that first. Not tail-only: it sits on
   the tail for `pbloodhawk`/`pdevastator` but on the nose for `pautogyro`/`pbrigand`/`pfury`/
   `ppeacemaker`/`pbalmoral`/`pwarhawk` and on **both wings** for
   `pfirebrand`/`pavenger`/`pkestrel` — it
@@ -272,9 +277,14 @@ weight model can carry. The armory's own constants — per-unit cost and weight,
 "injure_anims", [[0.10, "player_smoketrail"], [0.85, "player_fuelleak"]]
 ```
 
-Whole-plane effects. The fractions are read as **any part's** HP fraction (an
-interpretation: a total-HP reading could never reach 0.10 before a critical part died at
-75 % total). `player_smoketrail` starts the `dense_firetrail` pair (pufftrails.json)
+Whole-plane effects. **The fractions are the whole-vehicle health fraction**, decoded from the
+executable 2026-08-13 ([`org/vehicleDamage.md`](../org/vehicleDamage.md)); an earlier reading here
+had them as any single part's fraction, on the argument that a total-HP reading could never reach
+0.10 if a critical part killed the plane at 75 % total. The decode removes that argument: the
+whole-vehicle fraction is itself the parts-weighted total, and nothing on the death path reads the
+`critical` flag, so a plane reaches 0.10 by having all four zones nearly gone. Staging is also
+**reversible** rather than a latch: the driver stops an anim again if the fraction climbs back above
+its threshold. `player_smoketrail` starts the `dense_firetrail` pair (pufftrails.json)
 following `prop1`: a black-smoke trail (COLORS ramp: born orange 255,164,90 → near-black
 5,5,5) plus a fire trail, both `DISTANCE_INTERVAL` emitters (one puff per N meters of the
 node's motion — 1.0 m smoke / 0.25 m fire). `player_fuelleak` runs a `fuel_trail` at a
@@ -330,8 +340,43 @@ before health, the same ordering as the per-part pools.
 An `r*` AI variant chains to its base def (`rbloodhawk → bloodhawk → basic_airplane`), so it
 inherits `armor 64` *and* carries its own 4×20/20 `destroyable_parts`. No **player** def resolves
 a whole-vehicle pair at all (`pbloodhawk → player_airplane → basic_airplane` carries none in the
-chain), so for player planes the per-part pools are the whole model. Which of the two an AI
-combatant actually spends is undecided — `BL-102` for the same question on the patrol boat.
+chain), so for player planes the per-part pools are the whole model.
+
+**A vehicle spends both, in a fixed relationship: the per-part pools are the ledger and the
+whole-vehicle pair is a running summary of them.** Decoded from the executable 2026-08-13, full
+write-up in [`org/vehicleDamage.md`](../org/vehicleDamage.md). A weapon hit carries two damage
+numbers (armour and health, not one figure) and, sometimes, a zone id. When it names a zone, the
+damage is spent against that zone's pools, armour first with 1:1 overflow into health, and the
+whole-vehicle current values are then recomputed as the parts' fraction of their own maxima times
+the whole-vehicle maxima. When it names no zone, it is spent against the whole-vehicle pools
+directly, through the same armour-first helper. So the `armor 64 / health 64` on an AI Bloodhawk is
+not a second, competing pool; it is the scale its four 20/20 zones are expressed in.
+
+Everything downstream reads the summary rather than the parts. **Death is one test: whole-vehicle
+health at or below zero**, which under that recompute means every zone exhausted, not one. The
+def-level `injure_anims` stage off the same fraction (see below), as do the AI's damage reactions
+and the pilot radio lines. The one shipped datum that would invert this relationship, an `aiv`
+block's four per-zone `(armor, health)` pairs, would set the zones directly and then re-derive the
+whole-vehicle pair as their plain **sum** rather than a fraction, making the zones authoritative;
+all 414 shipped blocks leave those eight slots at `-1`, so that path never runs.
+
+Two spawn-time modifiers scale the authored numbers. An enemy vehicle (one whose team differs from
+the player's) has both maxima multiplied by a difficulty factor of **0.875, 1.0 or 1.25**. On top of
+that, an **aircraft or autogyro that is not the player** draws a fresh uniform **±5 %** on both
+maxima (and on nine other def-derived numbers) every time it spawns, which is why two AI planes of
+the same type are never quite identical. Ships and ground vehicles are excluded from the jitter, so
+a patrol boat is exactly its authored 40 times the difficulty factor: 35, 40 or 50.
+
+**The patrol boat has two sets of hit points because it is authored as two things, and both are
+live** (settled 2026-08-13; the decode is [`org/vehicleDamage.md`](../org/vehicleDamage.md)). A boat
+spawned from an `aiv` roster is a **vehicle** and reads the 40 on this page, with the 0.60/0.30
+`injure_anims` above it; a boat *placed* in the world is a **destructible** and reads the `HEALTH 20`
+of the anim def whose wildcard `NAME` catches it, with that def's own `ANIM_HEALTH` stages. C1 ships
+both: three placed `ptboat1`–`3` at the refinery, and 12 roster boats in M05. Which model applies is
+decided by how the instance was created and by nothing else; the executable does not know a boat
+from a water tower. A third def, the `patrolboat` in `zrdr/patrol_boat_destroy.zrd`, is compiled
+onto an unparented prototype node and is neither: it is the vehicle's **death animation**, and its
+own `HEALTH` is never read. Same shape for `t_truck`.
 
 **`turrets`** — on exactly the five turret airframes (`pavenger`, `pbalmoral`, `pbrigand`,
 `pfirebrand`, `pkestrel`). A viewpoint-keyed list (`firstp`/`thirdp`) of

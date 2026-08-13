@@ -229,7 +229,16 @@ the "Debris tumbles" bullet below. A format reader should know the current wirin
     sequence are the real ones — not simply the first anchor it meets.
   - The patrol boat and truck are the only world objects also described by an AI-**vehicle** def
     (armour+health). M3 sees them only as scenery, so they are damaged through their **anim** def
-    (`patrolboat` HEALTH 20), not the vehicle def (HP 40); the armour+health combatant model is M4.
+    (`ptboat*`, HEALTH 20), not the vehicle def (HP 40); the armour+health combatant model is M4.
+    **Confirmed by the 2026-08-13 executable decode** ([`../org/vehicleDamage.md`](../org/vehicleDamage.md)):
+    the two models are selected by how an instance was created, not by what it is, so both are
+    correct at once. C1's three placed refinery boats (`ptboat1`–`3`, compiled into `C1/cam_anim`
+    at `health 20.0` / `WeaponHit`) are destructibles and this path is right for them; boats spawned
+    from an `aiv` roster in mission play are vehicles on 40. ⚠ Do not "fix" the scenery boats to 40.
+    ⚠ A third def, `patrolboat` from `zrdr/patrol_boat_destroy.zrd`, also carries `HEALTH 20` and
+    also compiles as a `WeaponHit` destructible, but onto an **unparented prototype node** that is
+    not in the scene graph: it is the vehicle's death animation, and any instance bound to it is
+    unreachable by weapon fire.
 - **The object dies at zero (C24).** When `DamageAt` empties an instance's HP the engine plays the
   def's death via `Start(def)` — its Initial sequences: the healthy→destroyed `OBJECT_ACTIVE_STATE`
   swap, the debris sequences and the puffer calls. Those sequences ARE the destruction (the def's

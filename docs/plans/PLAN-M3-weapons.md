@@ -1100,7 +1100,10 @@ does not: the tower's `ap_h2otwr*` matches `ap_h2otwr.flt`, between the collider
 `ARMOR_DAMAGE` is inert against them), runs `ApplyDamageStages`, and marks the instance `Destroyed`
 at zero. The death **sequence** (the visible swap + debris) is C24. **Patrol-boat ⚠ resolved:** its
 anim def is HEALTH 20 `WeaponHit` (mission archives only), so M3 damages it as scenery through that
-path; the AI-vehicle armour+health model (HP 40) stays M4.
+path; the AI-vehicle armour+health model (HP 40) stays M4. (Confirmed correct by the 2026-08-13
+executable decode: the two models are selected per instance by how it was created, so a placed boat
+really is a HEALTH-20 destructible. See the settled note below and
+[`docs/org/vehicleDamage.md`](../org/vehicleDamage.md).)
 
 **Verified.** New `--damage-hd=<n>` mode of `--damage-test` (discrete weapon hits via `DamageAt`,
 counting hits to destruction): a HEALTH-60 tower dies in **1** hit at HD 60 (HE), **2** at 40 (AP —
@@ -1155,6 +1158,15 @@ anim def governs it **as placed world scenery**, but that is a hypothesis, not a
 (HP 20) is the probable answer — but verify by shooting one in the original and counting hits,
 rather than assuming. Check whether `t_truck` (`armor 0 / health 40`, **no injure_anims**) and
 `fueltruck` / `armytruck_destruct` show the same duplication.
+
+⚠ **Settled 2026-08-13, and the reading above was right: both, on different boats.** Executable
+decode in [`docs/org/vehicleDamage.md`](../org/vehicleDamage.md). The two models are selected by how
+an instance was created and by nothing else, so a placed boat (C1's `ptboat1`–`3` at the refinery,
+compiled into `C1/cam_anim` at `health 20.0` / `WeaponHit` from the wildcard def `ptboat*`) is a
+destructible on 20, while a boat spawned from an `aiv` roster is a vehicle on 40 with the 0.60/0.30
+`injure_anims`. **M3's scenery-only choice of 20 is correct** and needs no revisit. The count-hits
+verification proposed here was never needed. `t_truck` is the same shape; `fueltruck` and
+`armytruck_destruct` have no vehicle def at all, so they are destructibles only.
 
 ⚠ **Note the animation-name trap.** `ptboat_50damage` fires at **60 %** remaining and
 `ptboat_75damage` at **30 %** — the names lag their trigger, exactly as

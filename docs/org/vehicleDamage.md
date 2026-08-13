@@ -1,0 +1,258 @@
+# The vehicle damage model, decoded from `crimson.exe`
+
+Read out of the retail executable with Ghidra (static analysis of the shipped x86 build,
+`crimson.exe`, `language x86:LE:32:default`), 2026-08-13, to settle which of two shipped numbers is
+the patrol boat's hit points. That backlog item is retired on the strength of this page; its closing
+commit is `git log --grep=BL-102`. Every claim below names the function it came from.
+
+Everything here is a description of *behaviour and constants*. No decompiler output is reproduced;
+the addresses are given so any claim can be re-checked at source.
+
+**Scope.** One class covers everything the player can shoot down that flies or drives, and it is
+selected by **how the instance was created, never by what it is**: a roster entry spawns a vehicle,
+which runs the code on this page (player plane, AI plane, autogyro, patrol boat, truck). A compiled
+anim def anchored to a placed world node makes a destructible, which runs the *other* system,
+described in [`formats/destructibles.md`](../formats/destructibles.md). Nothing in the executable
+special-cases a vehicle type; the split is entirely in the data. The patrol boat is authored into
+both, which is what made its hit points look contradictory, and the last section works that through.
+
+**Where the authored side lives.** [`formats/vehicle.md`](../formats/vehicle.md) has the
+`armor`/`health` pair, `destroyable_parts` and `injure_anims`;
+[`formats/ai-rosters.md`](../formats/ai-rosters.md) has the `aiv` roster slots this page shows being
+consumed (`init_health`, the four zone pairs, `armor`).
+
+## Function map
+
+| Address | Role |
+|---|---|
+| `FUN_00479240` | The `vehicle.zrd` parser. `health` -> def`+0xb4`, `armor` -> def`+0xb8`, each written only if the key is present |
+| `FUN_00475820` | Def -> instance: the whole-vehicle pair, the `destroyable_parts` array, the death-anim reference, and the def pointer itself |
+| `FUN_00476250` | Spawn/reset: resolves model nodes, fills the per-part pools from the def, and applies the per-spawn jitter |
+| `FUN_0047c210` | The roster spawn: applies an `aiv` block's `init_health`, `armor` and four zone pairs, then the difficulty scale |
+| `FUN_0047bd90` | Set one named part's pools **and re-derive the whole-vehicle pair as the sum over parts** |
+| `FUN_0047bf70` | The same for current values only (no maxima) |
+| `FUN_004b9bc0` | Take a hit: routing, the steady-hand test, the damage voice lines, the death test |
+| `FUN_004b7f80` | The spend: armour first, 1:1 overflow into health |
+| `FUN_004b8070` | Spend against the whole-vehicle pools |
+| `FUN_004b3bf0` | Spend against one part, then recompute the whole-vehicle pools from the parts |
+| `FUN_004b80a0` / `FUN_004b8180` | Set armour / set health directly (repair, cheats); the health one rescales every part pool |
+| `FUN_004b3800` | The def-level `injure_anims` driver, keyed on the **whole-vehicle** health fraction |
+| `FUN_004b3d70` | The per-part `injure_anims` driver, keyed on **that part's** fraction |
+| `FUN_004b1790` | The low-health test that arms the damage-state call (`FUN_004b1690`) |
+| `FUN_004b82d0` | Death: plays the def's destroy anim, and everything that follows from being dead |
+| `FUN_0048ad20` | The surface-vehicle terrain update, which carries a health drain of its own |
+| `FUN_0041c470` | The debug info panel, which is what names these fields |
+
+## The two ledgers
+
+A vehicle instance carries a whole-vehicle pair and, optionally, a list of per-part pools.
+
+| Instance offset | Field |
+|---|---|
+| `+0x2c4` | armour max |
+| `+0x2c8` | armour current |
+| `+0x2cc` | health max |
+| `+0x2d0` | health current |
+| `+0x64` | the airframe def it was built from |
+| `+0x9c` / `+0xa0` | begin/end of the per-part array, records of `0x58` bytes |
+| `+0x890` | one anim handle per def-level `injure_anims` entry |
+| `+0x6d0` | the destroy anim reference, copied from def`+0x158` |
+
+The naming is not inferred: `FUN_0041c470` prints these four as
+`Armor: %.1f/%.1f  Health: %.1f/%.1f` (`0061fdfc`), and each part as
+`DP: %s Armor: %.1f/%.1f  Health: %.1f/%.1f` (`00620400`) from the part fields below. An object with
+no vehicle behind it gets a third format, `Armor: N/A  Health: %.1f/%.1f` (`0061fe44`), read through
+two virtuals rather than these offsets: that is the static-destructible case.
+
+A part record (`0x58` bytes, `FUN_00476250` fills it, `FUN_0041c470` prints it):
+
+| Part offset | Field |
+|---|---|
+| `+0x04` | the model node this zone is |
+| `+0x0c` / `+0x10` | the got-hit anim and its live handle |
+| `+0x18` / `+0x1c` | the destroy anim and its live handle |
+| `+0x24` / `+0x28` | armour max / current |
+| `+0x2c` / `+0x30` | health max / current |
+| `+0x34` | the zone id a hit is matched against |
+| `+0x3c` / `+0x40` | the part's own `injure_anims` list, `0x1c` per entry |
+| `+0x4c` | one handle per entry of that list |
+
+## Where the numbers come from at spawn
+
+Four things can write the pools, in this order.
+
+**1. The airframe def.** `FUN_00475820` copies def`+0xb4` into health max and def`+0xb8` into armour
+max, unconditionally, and copies the whole `destroyable_parts` array across. `FUN_00476250` then
+fills each part's max and current from the def's own record, so a fresh vehicle starts at full on
+both ledgers. Because `FUN_00479240` only writes def`+0xb4` when the def actually spells `health`,
+a def chain that never spells it leaves whatever the def struct was initialised with (see "Open
+threads").
+
+**2. The roster block.** `FUN_0047c210` is the spawn used for an `aiv` entry. It applies
+`init_health` (block`+0x28`) **only if greater than zero**, and `armor` (block`+0x2c`) if greater
+than or equal to zero, which is exactly the "0.0 means use the airframe default" the roster's own
+field list implies. It then hands the four zone pairs (block`+0xdc` onward: nose, tail, then the
+literal names `leftwing` and `rightwing`) to `FUN_0047bd90` one at a time.
+
+⚠ **`FUN_0047bd90` would change what "total health" means, and in the shipped data it never runs.**
+It sets the named part's max and current, then re-derives the whole-vehicle armour and health, max
+and current, as the **plain sum over all parts**. That would make the parts authoritative and the
+whole-vehicle pair a derived total. Its first line rejects the call when both arguments are `-1`,
+and all 414 shipped roster blocks carry `-1` in all eight zone slots, so the sum-derivation is dead
+in this install and the def's own `health` stays authoritative.
+
+**3. The difficulty scale.** Still in `FUN_0047c210`, and only when the spawned vehicle's team
+differs from the player's: armour max and health max are multiplied by `1 + k * 0.125`, where `k`
+comes from the difficulty query `FUN_00440710` as `-1` on one tier and `+2` on another, with the
+middle tier skipping the block entirely. Enemy vehicles are therefore on **0.875x, 1.0x or 1.25x**
+their authored pools. Current is re-seeded from max afterwards.
+
+**4. The per-spawn jitter, aircraft only.** At the end of `FUN_00476250`, a vehicle whose name is
+not `player`, in single player, and whose dynamics mode is 0 (airplane) or 1 (autogyro), gets each
+of armour max and health max multiplied by a uniform random factor in `[0.95, 1.05]`, current
+re-seeded from max, and the same treatment applied to nine other def-derived numbers. **Ships (mode
+3) and ground vehicles (mode 2) are excluded**, so no patrol boat or truck is ever jittered and no
+player plane is either.
+
+## Taking a hit
+
+`FUN_004b9bc0` is the entry point. Ignoring the special cases it opens with (already dead, hit by
+its own shooter, weapon classes that detonate or attach instead of damaging), it does this:
+
+1. It takes a **pair** of damage numbers, armour damage and health damage, not one figure.
+2. If the hit reports a zone id and the vehicle has parts, it looks for the part whose `+0x34`
+   matches and spends against that part (`FUN_004b3bf0`). Otherwise it spends against the
+   whole-vehicle pools (`FUN_004b8070`). Both routes go through the same spend helper.
+3. The spend (`FUN_004b7f80`) takes armour first and overflows 1:1: the armour pool absorbs the
+   fraction of the armour damage it can cover, and only the remaining fraction of the health damage
+   reaches health. Armour covering the hit outright leaves health untouched. This is the ordering
+   `CAP-19` observed at the controls, now confirmed in code.
+4. **Part damage rewrites the whole-vehicle pools.** After spending on a part, `FUN_004b3bf0` sets
+   whole-vehicle health current to `(sum of part health current / sum of part health max) * health
+   max`, and armour the same way. The whole-vehicle pair is a running summary of the parts whenever
+   parts exist, and it is what everything downstream reads.
+5. **Death is one test and one test only: whole-vehicle health current at or below zero**, which
+   sends it to `FUN_004b82d0`. Under (4) that means every part exhausted, not one.
+6. Along the way it prints the AI's steady-hand test (`Absorbed %f damage; steady hand test
+   failed. Evading.`, `0062b1e8`) and picks a radio line by comparing combined
+   `armour + health` current against 0.7, 0.5 and 0.3 of combined max.
+
+The reverse direction exists too: `FUN_004b8180` sets health directly and then scales **every**
+part's current health by the new whole-vehicle fraction, so the two ledgers are kept consistent
+from either end.
+
+## Damage staging
+
+Two independent drivers, both structured identically, both able to retract what they started.
+
+**Def-level `injure_anims` (`FUN_004b3800`)** runs off `health current / health max` on the
+**whole vehicle**, walking the def's list at def`+0x1a8` (entries of `0x1c` bytes, the anim
+reference at `+0x18`). When the fraction drops to or below an entry's threshold and that entry has
+no anim running, it starts one and stores the handle in the instance's `+0x890` array; when the
+fraction rises back above the threshold and a handle is live, it stops the anim and clears the
+handle. So the staging is reversible, not a latch, and repairing a vehicle visibly un-stages it.
+
+**Per-part `injure_anims` (`FUN_004b3d70`)** is the same loop against `part health current / part
+health max`, over the part's own list at part`+0x3c` with handles at part`+0x4c`. It runs on every
+part-scoped hit.
+
+Both are called from the spend paths, so a single bullet can move both levels at once. A part
+reaching zero also plays that part's destroy anim (part`+0x1c`), which is separate from either list.
+
+## Death
+
+`FUN_004b82d0` starts the anim reference the def supplied at `+0x158` (instance `+0x6d0`), keeps its
+handle at `+0x6d8`, drops the AI's target, marks the instance dead, and picks the kill message.
+No vehicle def in `vehicle.zrd` carries a key naming that anim, so the reference is resolved by
+name at load: the shipped `zrdr/patrol_boat_destroy.zrd` holds an `ANIMATION_DEFINITION` named
+exactly `patrolboat`, and it is that def's sequence (parts thrown clear, `sinker` rolling and
+sliding under, `ptboat_slick` fading in) that plays. For the player specifically, `FUN_00476250`
+resolves an anim named `player` plus a set of `player_crash_*` variants into the same slot.
+
+## The surface-vehicle drain
+
+`FUN_0048ad20`, the terrain-conform update for ground vehicles and ships, carries a health path of
+its own: while one global flag is set it kills the vehicle outright, and while a second is set it
+subtracts `0.5 * health max` per second and kills at zero. Both flags are cleared each pass by the
+update itself and are set from inside the terrain query, so this reads as a terrain or obstacle
+collision penalty. **What sets them is not decoded** and this page does not claim more than that
+the drain exists and is expressed as a fraction of max per second.
+
+## What this settles for the patrol boat
+
+The question was which of two shipped numbers is the boat's hit points: `vehicle.zrd`'s
+`patrolboat` (`armor 0`, `health 40`, stages at 0.60 and 0.30 firing `ptboat_50damage` and
+`ptboat_75damage`) or an anim def's `HEALTH 20` with `ANIM_HEALTH` stages at 12 and 6. They agree on
+the stage fractions and differ by exactly 2x on the total, which is what made it look like one
+object described twice.
+
+**Both are live, on different boats, and nothing in the executable knows a boat from a water
+tower.** There are three shipped defs, not two, and which one an instance runs under is decided
+entirely by how that instance was created:
+
+| Def | Binds to | Model |
+|---|---|---|
+| `vehicle.zrd`'s `patrolboat` | an `aiv` roster entry, spawned as a vehicle | this page: 40 health, 0 armour, `injure_anims` at 0.60/0.30 |
+| `C1/zrdr/patrol_boat.zrd`, `NAME ptboat*`, `HEALTH 20`, with a `DAMAGE_SEQUENCE` | placed world nodes matching the wildcard | the destructible model in [`formats/destructibles.md`](../formats/destructibles.md) |
+| `zrdr/patrol_boat_destroy.zrd`, `NAME patrolboat`, `HEALTH 20`, no `DAMAGE_SEQUENCE` | the unparented prototype node | neither: it is the vehicle's death animation |
+
+**The AI boat is a vehicle and reads 40.** `health 40` reaches health max through `FUN_00475820`;
+`injure_anims` `[[0.6, ptboat_50damage], [0.3, ptboat_75damage]]` is the list `FUN_004b3800` walks
+against the whole-vehicle fraction; death is the whole-vehicle test in `FUN_004b9bc0`. 19 `aiv`
+blocks name a `patrolboat` (12 in C1/M05, 4 in **C1B/M03**, a mission the earlier survey missed, 2
+in C5/M01, 1 in C2/M01), and every one carries `init_health 0.0`, `-1` in all eight zone slots and
+`-1` for `armor`, so `FUN_0047c210` overrides nothing. Being a ship it takes the difficulty scale
+(**35 / 40 / 50**) but not the aircraft jitter.
+
+**The placed boat is a destructible and reads 20.** C1's refinery has three: `ptboat1`, `ptboat2`
+and `ptboat3`, children of `refinery.flt` with real translates (nodes 3015 / 3029 / 3043), each
+compiled into `C1/cam_anim` as `health 20.0`, `activation WeaponHit`, carrying the wildcard def's
+`DAMAGE_SEQUENCE` (`ANIM_HEALTH 12` -> `sputter_black_smoke_obj`, `ANIM_HEALTH 6` ->
+`sputter_fire_smoke_obj`, the generic shared effects rather than the boat-specific pair). These are
+the boats visible in C1's freecam chapter, and they are shootable exactly like any other
+destructible.
+
+**The prototype is neither.** The `patrolboat` node in each chapter's `gamez` has no parent and an
+identity transform (C1 2689, C1B 620, C2 4930, C3 1550, C5 8042; C5's `t_truck` at 7565 likewise),
+so it is not in the scene graph and cannot be hit. What is compiled onto it, in exactly the four
+missions that have roster boats, is exactly the anim list the **vehicle** def names:
+`emit_ptsplash1` and `emit_ptsplash2` (its `start_anims`), `ptboat_50damage` and `ptboat_75damage`
+(its `injure_anims`), and `patrolboat`/`healthy` (its death sequence). That correspondence is the
+cleanest confirmation that the vehicle path is what consumes them; the `health 20.0` on the death
+entry is a field inherited from the source def and nothing reads it.
+
+⚠ **So the answer depends on which boat, and the earlier "the vehicle def governs the AI combatant,
+the anim def governs placed scenery" reading was right.** For a scenery-only scope it is 20, from
+the destructible; for mission play with a roster it is 40, from the vehicle. C1B's dock boat
+(`patrolboat.flt` under `boat_at_dock`, node 669) is a third case: placed, but with no compiled def
+of any kind, so it is inert geometry.
+
+## The same question for aircraft
+
+`vehicle.md` recorded that 11 AI defs resolve **both** a whole-vehicle `armor`/`health` pair and
+their own `destroyable_parts`, and left it open which one an AI combatant spends. The answer is
+both, in a fixed relationship: **the parts are the ledger and the whole-vehicle pair is a running
+summary of them**, recomputed as a fraction of max on every part-scoped hit (`FUN_004b3bf0`), while
+a hit that names no zone spends the summary directly. Death, the def-level staging and the AI's
+damage reactions all read the summary. So a Bloodhawk's `armor 64 / health 64` is not an alternative
+to its 4x20/20 zones; it is the scale the zones are expressed in.
+
+The two other airframe-only behaviours are the ones above: enemy aircraft take the same difficulty
+scale as the boat, and aircraft alone additionally take the +/-5% per-spawn jitter on both pools
+(and on nine other def numbers), which is why two Bloodhawks on the same tier are not identical.
+
+## Open threads
+
+- **Where a player plane's health max comes from.** No player def resolves a whole-vehicle pair, and
+  `FUN_00479240` leaves the field alone when the key is absent, so the value is whatever the def
+  struct is initialised with. `FUN_004b3bf0`'s recompute multiplies by that max, so it cannot be
+  zero in practice. The initialiser was not located.
+- **The `critical` flag** on a `destroyable_parts` entry is documented as "the plane is destroyed
+  when this part reaches 0 HP", from the flag's name. No code on the death path reads a part flag:
+  `FUN_004b82d0` has four callers and none of them is a per-part check, and `FUN_004b3bf0` only
+  plays the part's destroy anim. Under the recompute, one zone at zero leaves the summary at 75%.
+  Either the flag is consumed somewhere not yet found or the reading is wrong; it is not settled
+  here.
+- **Who supplies the zone id** a hit is matched against (`FUN_004b9bc0`'s parameter, against part
+  `+0x34`) is on the hit-detection side and was not traced.
+- **What sets the surface-vehicle drain flags**, as above.

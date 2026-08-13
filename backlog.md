@@ -192,43 +192,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   only the trail shows; and the DISTANCE interval hides behind an inverted flag
   (`has_interval_value` false, key off `interval_type`).
 
-- `BL-102` `[Research]` **Patrol boat: which HP governs?** (from `docs/plans/PLAN-M3-weapons.md` C23, 2026-07-22.)
-  Two systems **agree on the damage-stage fractions and disagree on total HP by exactly 2×**: the
-  `patrolboat` vehicle def says `health 40` with stages at 0.60/0.30 firing
-  `ptboat_50damage`/`ptboat_75damage`, while the `C1/patrol_boat` anim def says `HEALTH 20` with
-  stages at `ANIM_HEALTH` 12/6 (also 0.60/0.30) firing the generic
-  `sputter_black_smoke_obj`/`sputter_fire_smoke_obj`. Likely reading: the vehicle def governs the boat
-  as an **AI combatant**, the anim def as **placed scenery** — so M3 (scenery only) wants 20.
-  **Counting hits in play is impractical (user, 2026-07-30) — settle from data instead.**
-  **Where they are:** a placed `patrolboat` gamez node exists in C1, C2, C3 and C5 (none in C4); it is
-  wired to a destructible (`HEALTH 20`, 0.60/0.30 stages, `ptboat_50damage`/`75damage`) only in
-  **C1/M05, C2/M01 and C5/M01** — `--node=patrolboat --viewer --chapter=C1` (or `C2`/`C5`) frames it
-  directly. **C3's placed boat has no mission wiring at all** (grepped every C3 mission/IA folder for
-  `patrolboat` — zero matches outside `gamez`/`textures`), so it is inert scenery there, not a target.
-  Those same three missions' `aiv.zrd.json` (the **AI vehicle table**,
-  `docs/formats/anim-definitions.md:564` — confirmed **not** a spawn roster, so entry count ≠
-  spawned-boat count) also carries `patrolboat_N` behaviour entries (12 in C1/M05, 1 in C2/M01, 2 in
-  C5/M01) with per-entry position/heading — consistent with patrol boats being AI-piloted there, but
-  `aiv.zrd`'s numeric schema is undecoded, so which HP value a moving AI boat actually reads is not
-  provable from this file alone.
-  **The "exactly 2×" doubling does not generalize** (checked as asked): `t_truck`'s vehicle def
-  (`armor 0`, `health 40`) vs. its own mis_anim def
-  (`extracted/C5/M01/mis_anim/t_truck-t_truck.json`, `health 15`, stages at 12/8 = 80%/53%, not
-  60%/30%) disagree by **2.67×, not 2×**, and with different stage fractions — a genuine
-  counter-example to a fixed doubling rule. `armytruck_destruct` and `fueltruck` have **no vehicle-def
-  entry at all** (grepped `extracted/zrdr/vehicle.zrd.json`) — anim-only, so there is nothing to
-  duplicate; notably `armytruck_destruct` still uses the same 60/30% stage split as `patrolboat`,
-  which is better read as a **shared authoring idiom for two-stage damage** than as evidence of a
-  doubling bug.
-  **Revised settle path:** decode `aiv.zrd`'s per-entry field layout (or find it already decoded
-  upstream for MW/PM, which share the vehicle-table concept) far enough to confirm whether a moving AI
-  patrol boat's hit points come from the vehicle def or a mis_anim-style def — a stronger, data-side
-  argument than a cockpit count, and it doesn't need the original open.
-  ⚠ **Never infer a damage threshold from an animation's name.** `ptboat_50damage` fires at
-  **60 %** health remaining and `ptboat_75damage` at **30 %** — the names lag their trigger,
-  the same way `docs/formats/hud.md` records for the cockpit damage dial ("the anim names lag
-  their effect by one state"). Measured 2026-07-22 while planning M3.
-
 - `BL-121` `[Tuning]` `[Owed-playtest]` **Damage (Run-2 item 10)** — `CrashSpeed` 25, graze friction + attitude kick,
   `GrazeStopSpeed`, breakup scatter, and whether the 10c panel-flip and smoke-trail look right in
   real flight. Rendering at real spawns is verified (the `TopLevel` anchor fix, `docs/HISTORY.md`
