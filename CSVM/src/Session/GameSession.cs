@@ -1932,10 +1932,8 @@ public partial class GameSession : Node3D
                 GD.Print($"egen: no generator file for {_spec.Chapter}/{_spec.Mission}: {e.Message}");
                 egenDefs = new List<EnemyGeneratorDef>();
             }
-            var netNames = new HashSet<string>(
-                AiNets.LoadIndex(rigInputs.ChapterZrdrPath).Values,
-                StringComparer.OrdinalIgnoreCase);
-            _generators = new AiGeneratorRuntime(egenDefs, rigInputs.WorldRuntime, netNames,
+            var chapterNets = AiNets.Load(rigInputs.ChapterZrdrPath);
+            _generators = new AiGeneratorRuntime(egenDefs, rigInputs.WorldRuntime, chapterNets,
                 _spec.GeneratorsPlane, SpawnAiAircraft);
             _worldRoot!.AddChild(_generators);
             GD.Print($"egen: {_generators.LiveCount} of {egenDefs.Count} generator(s) live for " +

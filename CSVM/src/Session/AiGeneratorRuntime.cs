@@ -21,15 +21,13 @@ namespace CSVM.Session;
 /// static, and it keeps tracking the node once F17 moves them); HOST DEATH is stubbed (nothing
 /// can kill a zeppelin or the submarine's <c>subhealthy</c> node yet, so
 /// <see cref="GeneratorCycle.HostDied"/> has no caller until F18/F20 wire the real death sources);
-/// the DOOR choreography is skipped entirely (F20, it needs a zeppelin model; the hardcoded
-/// timings wait as <see cref="GeneratorCycle"/> constants); and spawned aircraft fly plain
-/// held-course orders. Handing them their generator's cyclic net pick is B5's net-follower's,
-/// so the pick is made, logged and recorded on <see cref="SpawnedNet"/> but not yet flown.</para>
+/// and the DOOR choreography is skipped entirely (F20, it needs a zeppelin model; the hardcoded
+/// timings wait as <see cref="GeneratorCycle"/> constants). Spawned aircraft patrol their
+/// generator's cyclic net pick through <see cref="AiNetFollower"/> (B5).</para>
 /// </summary>
 public sealed partial class AiGeneratorRuntime : Node
 {
-    /// <summary>The most recent spawn's net pick, per generator node: the seam B5's
-    /// net-follower picks up (today the spawned plane holds course instead of flying it).</summary>
+    /// <summary>The most recent spawn's net pick, per generator node.</summary>
     public readonly Dictionary<string, string> SpawnedNet = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly List<LiveGenerator> _live = new();
@@ -37,7 +35,7 @@ public sealed partial class AiGeneratorRuntime : Node
     private readonly Func<string, Vector3, Vector3, AiPilot, FlightController?> _spawn;
 
     public AiGeneratorRuntime(IReadOnlyList<EnemyGeneratorDef> defs, AnimRuntime? worldRuntime,
-        ISet<string> chapterNetNames, string planeName,
+        IReadOnlyList<AiNet> chapterNets, string planeName,
         Func<string, Vector3, Vector3, AiPilot, FlightController?> spawn)
     {
         Name = "ai_generators";
@@ -54,12 +52,12 @@ public sealed partial class AiGeneratorRuntime : Node
                 continue;
             }
             // Load-drop 2: none of the nets resolve against the chapter's neindex names.
-            var nets = new List<string>();
+            var nets = new List<AiNet>();
             foreach (var net in def.Nets)
             {
-                if (chapterNetNames.Contains(net))
+                if (AiNets.ByName(chapterNets, net) is { } resolved)
                 {
-                    nets.Add(net);
+                    nets.Add(resolved);
                 }
             }
             if (nets.Count == 0)
@@ -73,9 +71,14 @@ public sealed partial class AiGeneratorRuntime : Node
                 && worldRuntime!.FindNodes(def.Origin, host) is { Count: > 0 } o ? o[0] : null;
             _live.Add(new LiveGenerator(def, new GeneratorCycle(def), host, origin, nets));
             string kind = def.IsZeppelin ? "zeppelin launch" : def.MovingPath ? "moving spawner" : "spawner";
+            var netNames = new List<string>(nets.Count);
+            foreach (var n in nets)
+            {
+                netNames.Add(n.Name);
+            }
             GD.Print($"egen: generator '{def.Node}' live ({kind}), " +
                      $"wave {def.WaveSize} every {def.IndPeriod + def.WavePeriod:0.#} s (ind {def.IndPeriod:0.#} + wave {def.WavePeriod:0.#}), " +
-                     $"max_active {def.MaxActive}, nets [{string.Join(", ", nets)}]" +
+                     $"max_active {def.MaxActive}, nets [{string.Join(", ", netNames)}]" +
                      (def.MinAltitude is { } gate ? $", launch gate {gate:0} m" : ""));
         }
     }
@@ -118,13 +121,15 @@ public sealed partial class AiGeneratorRuntime : Node
         forward = forward.LengthSquared() > 1e-6f ? forward.Normalized() : Vector3.Forward;
 
         // The cyclic net pick (choose_nets is cyclic on every authored file; 'random' falls back
-        // to cyclic here until something authors it). Recorded for B5's net-follower; the plane
-        // holds course until that lands.
+        // to cyclic here until something authors it). The spawned pilot patrols it.
         var net = gen.Nets[gen.NetCursor % gen.Nets.Count];
         gen.NetCursor++;
-        SpawnedNet[gen.Def.Node] = net;
+        SpawnedNet[gen.Def.Node] = net.Name;
 
-        var controller = _spawn(_planeName, pos, pos + forward, AiPilot.HoldingCourse(pos, pos + forward));
+        var pilot = AiPilot.HoldingCourse(pos, pos + forward);
+        pilot.Throttle = AiPilot.PatrolThrottle;
+        pilot.Patrol = new AiNetFollower(net, Rng.NewSystemRandom(Rng.Ai));
+        var controller = _spawn(_planeName, pos, pos + forward, pilot);
         if (controller == null)
         {
             gen.Cycle.SpawnRemoved();   // the slot was counted before the spawn could fail
@@ -132,15 +137,15 @@ public sealed partial class AiGeneratorRuntime : Node
         }
         gen.SpawnCount++;
         controller.Downed += (_, _) => gen.Cycle.SpawnRemoved();
-        GD.Print($"egen: '{gen.Def.Node}' spawn #{gen.SpawnCount}: '{_planeName}' on net '{net}' " +
-                 $"(held course pending B5), active {gen.Cycle.Active}/{gen.Def.MaxActive}" +
+        GD.Print($"egen: '{gen.Def.Node}' spawn #{gen.SpawnCount}: '{_planeName}' patrolling " +
+                 $"net '{net.Name}', active {gen.Cycle.Active}/{gen.Def.MaxActive}" +
                  (gen.Def.VehicleParams != null ? $", params '{gen.Def.VehicleParams}'" : ""));
     }
 
     private sealed class LiveGenerator
     {
         public LiveGenerator(EnemyGeneratorDef def, GeneratorCycle cycle, Node3D host,
-            Node3D? origin, List<string> nets)
+            Node3D? origin, List<AiNet> nets)
         {
             Def = def;
             Cycle = cycle;
@@ -157,7 +162,7 @@ public sealed partial class AiGeneratorRuntime : Node
 
         public Node3D? Origin { get; }
 
-        public List<string> Nets { get; }
+        public List<AiNet> Nets { get; }
 
         public int NetCursor { get; set; }
 

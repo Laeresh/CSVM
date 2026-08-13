@@ -4424,13 +4424,13 @@ as constants for F20; the door itself is not modelled.
 ## src/Session/AiGeneratorRuntime.cs
 Runs a mission's egen generators (M4 B6, behind `--generators[=plane]`): one `GeneratorCycle` per
 surviving `EnemyGeneratorDef`, host altitude read live off the resolved host node, spawns through
-`GameSession.SpawnAiAircraft` with the cyclic net pick logged and recorded on `SpawnedNet`.
-Every drop/live/spawn prints an `egen:` line, which is the flag's observability.
+`GameSession.SpawnAiAircraft`, each spawned pilot patrolling the cyclic net pick through
+`AiNetFollower` (recorded on `SpawnedNet`). Every drop/live/spawn prints an `egen:` line, which
+is the flag's observability.
 ⚠ Load drops are decoded semantics: an unresolved host node, or a nets list where NOTHING
   resolves, drops the generator at load. Never load one inert.
 ⚠ Stand-ins/stubs, all named in the class comment: host DEATH is unwired until F18/F20
-  (`GeneratorCycle.HostDied` has no caller); the door choreography is skipped (F20); spawned
-  planes hold course, since handing them the recorded net pick is B5's net-follower's.
+  (`GeneratorCycle.HostDied` has no caller); the door choreography is skipped (F20).
 
 ## src/Session/FlightRigAssembler.cs
 Assembles one player's flight rig: the painted plane model, the `FlightController` and everything hung
