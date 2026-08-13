@@ -330,16 +330,17 @@ public partial class GameSession : Node3D
         var ai = _aiSpawner.Spawn(planeName, pos, lookAt, pilot);
         _aiPlanes.Add(ai);
         // Mode transitions and reaction rolls, in the engine's own vocabulary — the D11
-        // observability lines.
+        // observability lines. Through Log (not GD.Print) so a play session's file sink
+        // (.scratch/logs/<mode>-<stamp>.log) carries them for post-flight reading.
         if (pilot.Machine is { } modes)
         {
             string tag = ai.Name;
-            modes.ModeChanged += (from, to, why) => GD.Print(
+            modes.ModeChanged += (from, to, why) => Log.Info("flight",
                 $"ai mode: {tag}: {AiModeMachine.NameOf(from)} -> {AiModeMachine.NameOf(to)} ({why})");
-            modes.RollLogged += line => GD.Print($"ai roll: {tag}: {line}");
+            modes.RollLogged += line => Log.Info("flight", $"ai roll: {tag}: {line}");
         }
-        ai.Downed += (victim, killer) =>
-            GD.Print($"ai: {ai.Name} downed (shooter id {victim}, killer {killer?.ToString() ?? "none"})");
+        ai.Downed += (victim, killer) => Log.Info("flight",
+            $"ai: {ai.Name} downed (shooter id {victim}, killer {killer?.ToString() ?? "none"})");
         return ai;
     }
 

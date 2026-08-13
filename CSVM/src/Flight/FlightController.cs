@@ -2037,9 +2037,8 @@ public partial class FlightController : Node3D
             if (!_gunnerLoggedTarget)
             {
                 _gunnerLoggedTarget = true; // verification breadcrumb: who the gunner went after
-                GD.Print($"ai gunner: shooter {PlayerIndex} targets P{target.PlayerIndex + 1} " +
-                         $"at {score.Distance:0} m ({how}: weight {score.Weight:0.0#} " +
-                         $"bias {score.Bias:0} rank {score.Rank:0})");
+                Log.Info("flight",
+                    $"ai gunner: shooter {PlayerIndex} targets P{target.PlayerIndex + 1} at {score.Distance:0} m ({how}: weight {score.Weight:0.0#} bias {score.Bias:0} rank {score.Rank:0})");
             }
         }
         // The mode machine gates the trigger (D11/D15): the target stays acquired in every
@@ -2067,8 +2066,8 @@ public partial class FlightController : Node3D
         if (gunner.WantsFire && !_gunnerLoggedFire)
         {
             _gunnerLoggedFire = true; // verification breadcrumb: the gates first opened
-            GD.Print($"ai gunner: shooter {PlayerIndex} opens fire on P{target.PlayerIndex + 1} " +
-                     $"at {WorldPosition.DistanceTo(target.WorldPosition):0} m ({group.Weapon.Id})");
+            Log.Info("flight",
+                $"ai gunner: shooter {PlayerIndex} opens fire on P{target.PlayerIndex + 1} at {WorldPosition.DistanceTo(target.WorldPosition):0} m ({group.Weapon.Id})");
         }
     }
 
