@@ -667,6 +667,18 @@ public partial class GameSession : Node3D
         // world+runtime. The per-view steps below (unplaced watch, edge extender, per-rig
         // horizon + weather) stay here and read the returned builder. WorldSession does NOT
         // add its Root to the tree — _worldRoot.AddChild(_plane) below still owns that.
+        //
+        // Flight sessions host AI pilots, whose voice lines are all first reached at runtime
+        // (after the sound archive closes), so their clips must join the prewarm set now. The set
+        // is the mission roster's own accents (median 24 clip defs, worst case 457), not the whole
+        // 1,413-def voice bank; a mission without a roster prewarms none.
+        IReadOnlyCollection<string>? voiceClips = null;
+        if (_spec.Fly && state.NodeSubtree == null
+            && state.SoundDefs is { } voiceDefs && state.SoundGroups is { } voiceGroups)
+        {
+            voiceClips = CombatVoice.SessionPrewarmNames(
+                state.ZrdrPath, state.MissionZrdrPath, voiceDefs, voiceGroups);
+        }
         var session = WorldSession.Build(
             new WorldSession.Options
             {
@@ -718,6 +730,7 @@ public partial class GameSession : Node3D
                 // flags come from LoadArchives's ArchiveIntent, not set here by hand.
                 TexturesOutliveBuild = state.TexturesOutliveBuild,
                 SoundsOutliveBuild = state.SoundsOutliveBuild,
+                VoiceClipNames = voiceClips,
                 // The lab: quiet stage, ambient playback deferred to its A toggle, and its staged
                 // templates relocated onto the (in-front-of-camera) call site. The second is stage
                 // construction state — safe to set this early, since a quiet-stage bootstrap

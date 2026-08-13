@@ -1323,7 +1323,14 @@ most of A3 via the 2026-08-10 decompile pass), not items started under this plan
    `Eairg32_params` vs the aiv header's `Earig32_params`
 7. ☐ B7 — Formation flying — ⚠ **premise refuted 2026-08-10: there is no leader field** (slot 6 is
    `primary_target`). Re-scope onto `group` (slot 4) or drop
-8. ☐ B8 — The voice runtime: prewarm, source-following one-shots, the `aiv`→voice→clip chain
+8. ☑ B8 — The voice runtime: prewarm, source-following one-shots, the `aiv`→voice→clip chain —
+   **landed 2026-08-13**: `Mech3/CombatVoice.cs` (accentID→voice.zrd→pilot-clip resolver; the
+   clips turned out to be sounds.json `SETS` entries, with 466 shipped `_random` variant groups
+   answering the `-A/-B/-C` pick), `WorldSounds.PlayOneShot(Node3D)` follows a moving source,
+   dialogue chains kept as `SoundGroup.Chains` (222), and flight sessions prewarm the mission
+   roster's accents (median 24 defs, worst 457; prewarm-everything measured at 60.7 MB / ~0.7 s
+   and rejected). Pinned by the `voice-runtime` suite + `CombatVoiceTests` +
+   `CombatVoiceGoldenTests`; E16 dispatches on `PlayableFor`/`HasStream`
 
 ### Wave C — Emplacements
 

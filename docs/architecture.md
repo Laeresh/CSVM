@@ -66,7 +66,8 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/EmptyStage.cs` — the `--stage=empty` test stage: a collidable ground plane under a code-generated grid, standing in for a chapter world.
 - `src/Mech3/WavFile.cs` — pure-C# WAV parser + MS ADPCM→PCM16 decoder (the game's format; Godot can't load it).
 - `src/Mech3/SoundArchive.cs` — WAV lookup over a sounds extraction → cached `AudioStreamWav` (forward loop when LOOPED).
-- `src/Mech3/SoundDefs.cs` — sounds.json parser: SETS `snd_*` → `SoundDef`; `LoadGroups` → the weighted-random `SOUND_GROUPS`.
+- `src/Mech3/SoundDefs.cs` — sounds.json parser: SETS `snd_*` → `SoundDef`; `LoadGroups` → the weighted-random `SOUND_GROUPS` + their dialogue chains.
+- `src/Mech3/CombatVoice.cs` — the combat-voice chain: roster `accentID` → `voice.zrd` pool → pilot VO id → clip defs / the shipped `_random` variant groups; the mission's voice prewarm set.
 - `src/Mech3/SurfaceRegistry.cs` — the original's compiled+level-supplied surface-name registry: material `soil` id → name, for building `player_crash_<name>`/`touchdown_<name>`.
 
 ### `src/Flight/` — the flying aircraft
@@ -1002,7 +1003,10 @@ frames resolve at build time while the TextureArchive is open — an incomplete 
 `SOUND_NODE` ambient looping 3D emitters: one pooled AudioStreamPlayer3D per live emitter,
 following its host's pose per frame. `PlayOneShot(name, worldPos, rng)` is the one-shot `SOUND`
 half (D31): fire-and-forget destruction/impact audio, resolving a `SOUND_GROUPS` name to a member
-first; the `Sound` anim event calls it.
+first; the `Sound` anim event calls it. The `PlayOneShot(name, Node3D source, rng)` overload rides
+the source's pose per Tick (a voice line from a moving aircraft; a freed source leaves it finishing
+at its last position). `HasStream(name)` answers clip availability after the prewarm, which a def
+alone cannot (B8).
 ⚠ Pooled emitters are never parented into world subtrees — AnimRuntime's FindAll memoization forbids runtime reparenting.
 ⚠ `Prewarm` (SoundNode + one-shot `Sound` names, expanded through `SOUND_GROUPS`) must run BEFORE
   the sound archive closes — the Loader dies with the world build and most events first fire at
@@ -1581,8 +1585,23 @@ grammar and flag/key meanings are in `docs/formats/sounds.md`. `LoadGroups` pars
   does not replay a pick sequence — `ResetRecency()` exists for exactly that, and whoever re-seeds
   calls it (`AnimRuntime.Reseed` → `WorldSounds.ResetGroupRecency`). A fresh session is safe without
   it only because `LoadGroups` parses new objects per session.
-⚠ VO dialogue chains (`snd_assignments`, `snd_HI1*`) contribute no weighted member and are skipped;
-  music `*_sg` groups parse but no `SOUND` event names them.
+⚠ VO dialogue chains (`snd_assignments`, `snd_HI1*`; 222 groups) contribute no weighted member;
+  they are kept as `SoundGroup.Chains` (ordered snd-name lists) for the comms/mission layer, never
+  returned by `Pick`. Music `*_sg` groups parse but no `SOUND` event names them.
+
+## src/Mech3/CombatVoice.cs
+The combat-voice resolver (`docs/formats/combat-voice.md`): roster `accentID` (slot 65) →
+`voice.zrd` row (the ACCENT table, 35 rows) → pilot VO id pool → clip defs. `PlayableFor(voId,
+family)` returns the one name to hand `WorldSounds.PlayOneShot`: the shipped
+`snd_<FAMILY>-A_id<N>_random` variant group when authored (466 are), else the bare def (the 12
+bearing tokens). `SessionPrewarmNames` is the flight session's mission-roster prewarm set
+(`GameSession.BuildWorldStage` → `WorldSession.Options.VoiceClipNames`). E16's dispatch
+(cooldowns, talker roll, speaker election) sits above this seam, not in it.
+⚠ A clip def is not a playable clip: ids 13/15/17/35/36 ship def sets with no WAVs, id 44 has the
+  12 bearing defs without their WAVs, and accent-mapped ids 5/40 have neither. Availability is
+  `WorldSounds.HasStream` after the prewarm, never def presence.
+⚠ Prewarm-everything was measured and rejected: 1,414 defs → 1,258 streams, 60.7 MB PCM, ~0.7 s.
+  The per-mission roster subset is median 24 defs, worst 457 (C2/M03); 21 missions author none.
 
 ## src/Flight/WeaponDefs.cs
 Typed reader over the shared `weapons.zrd.json` `BALLISTICS` block — 48 `WeaponDef`s (guns /

@@ -79,9 +79,18 @@ public class SoundDefsTests
     }
 
     [Fact]
-    public void ADialogueChainContributesNoMemberSoItsGroupIsNotRegistered()
+    public void ADialogueChainIsKeptAsAnOrderedLineListWithNoWeightedMember()
     {
-        Assert.DoesNotContain("probe_dialogue_sg", Groups().Keys);
+        var group = Groups()["probe_dialogue_sg"];
+        Assert.Empty(group.Members);
+        var chain = Assert.Single(group.Chains);
+        Assert.Equal(new[] { "snd_probe_oneshot", "snd_probe_second", "snd_probe_loop" }, chain);
+    }
+
+    [Fact]
+    public void AGroupWithNeitherMembersNorChainsIsNotRegistered()
+    {
+        Assert.DoesNotContain("probe_empty_sg", Groups().Keys);
     }
 
     [Fact]

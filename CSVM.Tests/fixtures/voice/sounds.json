@@ -1,0 +1,33 @@
+[
+  [
+    "SETS",
+    [
+      "id1",
+      [
+        ["snd_id1_DI-LowDmg-A", "VO_id1_DI-LowDmg-A.wav", "PURGEABLE", "QUEUE", [0.5]],
+        ["snd_id1_DI-LowDmg-B", "VO_id1_DI-LowDmg-B.wav", "PURGEABLE", "QUEUE", [0.5], "OPTIONAL"],
+        ["snd_id1_DA-Bail-A", "VO_id1_DA-Bail-A.wav", "PURGEABLE"],
+        ["snd_id1_DA-Bail-B", "VO_id1_DA-Bail-B.wav", "PURGEABLE", "OPTIONAL"],
+        ["snd_id1_DA-NoBail-A", "VO_id1_DA-NoBail-A.wav", "PURGEABLE"],
+        ["snd_id1_PR-DngrZn-A", "VO_id1_PR-DngrZn-A.wav", "PURGEABLE"]
+      ],
+      "id2",
+      [
+        ["snd_id2_WA-Enemy-3H", "VO_id2_WA-Enemy-3H.wav", "PURGEABLE"],
+        ["snd_id2_WA-Enemy-3", "VO_id2_WA-Enemy-3.wav", "PURGEABLE"],
+        ["snd_id2_PR-DangerZone-A", "VO_id2_PR-DangerZone-A.wav", "PURGEABLE"],
+        ["snd_id2_PR-DangerZone-B", "VO_id2_PR-DangerZone-B.wav", "PURGEABLE"]
+      ],
+      "COMMON",
+      [
+        ["snd_not_voice", "not_voice.wav"]
+      ]
+    ],
+    "SOUND_GROUPS",
+    [
+      ["snd_DI-LowDmg-A_id1_random", "DYNAMIC_WEIGHTS", 0.5, ["snd_id1_DI-LowDmg-A"], ["snd_id1_DI-LowDmg-B"]],
+      ["snd_DA-Bail-A_id1_random", "DYNAMIC_WEIGHTS", 0.5, ["snd_id1_DA-Bail-A"], ["snd_id1_DA-Bail-B"]],
+      ["snd_PR-DangerZone-A_id2_random", "DYNAMIC_WEIGHTS", 0.5, ["snd_id2_PR-DangerZone-A"], ["snd_id2_PR-DangerZone-B"]]
+    ]
+  ]
+]

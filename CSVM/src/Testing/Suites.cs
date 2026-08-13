@@ -162,6 +162,12 @@ public static class Suites
             "camera/HUD/devices) spawned into an already-running sim flies its orders, takes a " +
             "mid-flight retarget, and is present, ticking, damageable by the weapon's own values " +
             "and killable with the kill attributed to the shooter through Downed", AiActor));
+        into.Add(new TestHarness.Suite("voice-runtime",
+            "the B8 combat-voice runtime: the accent→voice.zrd→pilot-clip chain resolves against " +
+            "the real archive, a roster-subset prewarm makes the lines playable after the loader " +
+            "is retired (a never-prewarmed def stays null), a source-following one-shot tracks a " +
+            "moving node and survives its source's death, and the full-set prewarm cost is " +
+            "measured and reported", VoiceRuntime));
         into.Add(new TestHarness.Suite("damage-stages",
             "each DAMAGE_SEQUENCE def fires its stage effects across an HP sweep", DamageStages));
         into.Add(new TestHarness.Suite("damage-hd",
@@ -3262,6 +3268,126 @@ public static class Suites
             ai?.Free();
             textures.Dispose();
         }
+    }
+
+    /// <summary>The B8 voice runtime, against the real soundsh archive. Reproduces the session's
+    /// own lifecycle in order: resolve the chain (accent 12 → VO id 2), prewarm that one pilot's
+    /// clips, retire the loader exactly as <c>WorldSession.Build</c> does, then prove a resolved
+    /// line still plays while a def never prewarmed returns null. The source-following one-shot is
+    /// asserted by position only; whether anything is audible is the user's half
+    /// (<c>docs/verification.md</c>, "What this project cannot verify itself"); the player node's
+    /// tracked <c>GlobalPosition</c> is what IS assertable headless. Closes with the measured cost
+    /// of prewarming the ENTIRE voice bank, the number that justifies the roster-subset choice.</summary>
+    private static void VoiceRuntime(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"shared zrdr");
+        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        var defs = SoundDefs.Load(ctx.ZrdrPath);
+        var groups = SoundDefs.LoadGroups(ctx.ZrdrPath);
+        var voice = new CombatVoice(defs, groups, CombatVoice.LoadAccents(ctx.ZrdrPath));
+        ctx.Same(35, voice.AccentIds.Count, $"voice.zrd accent rows");
+
+        using var archive = new SoundArchive(ctx.SoundsPath);
+        WorldSounds? sounds = null;
+        Node3D? mover = null;
+        try
+        {
+            sounds = new WorldSounds(defs, groups)
+            {
+                Loader = (d, warn) => archive.Find(d.WavName, d.Looped, warn),
+            };
+            ctx.Host.AddChild(sounds);
+
+            // The chain's worked example: accent 12 is a single-id pool, VO id 2 (the pilot with
+            // the full bearing set). Prewarm that pilot exactly as a mission roster would.
+            int? pilot = voice.PilotFor(12, new System.Random(1));
+            ctx.Check(pilot == 2, $"accent 12 resolves to VO id 2 got={pilot?.ToString() ?? "null"}");
+            var subset = voice.PrewarmNames(new[] { 12 });
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            int decoded = sounds.Prewarm(subset);
+            sw.Stop();
+            ctx.Check(decoded >= 70, $"the accent-12 subset decodes names={subset.Count} decoded={decoded}");
+            ctx.Note($"accent-12 prewarm: {subset.Count} defs, {decoded} streams, {sw.ElapsedMilliseconds} ms");
+            sounds.Loader = null;   // the session's build scope closing (WorldSession.Build)
+
+            string? playable = voice.PlayableFor(2, "DI-LowDmg");
+            ctx.Check(playable == "snd_DI-LowDmg-A_id2_random",
+                $"DI-LowDmg resolves to the shipped variant group got={playable}");
+            string? bearing = voice.PlayableForTrigger(2, 6);   // WA-Enemy-3H
+            ctx.Check(bearing != null && sounds.HasStream(bearing),
+                $"the bearing clip's stream survived the loader retirement name={bearing}");
+
+            // A prewarmed line plays from a MOVING source and tracks it across ticks.
+            mover = new Node3D();
+            ctx.Host.AddChild(mover);
+            mover.GlobalPosition = new Vector3(100f, 200f, 300f);
+            string? resolved = sounds.PlayOneShot(playable!, mover, new System.Random(2));
+            ctx.Check(resolved != null && resolved.StartsWith("snd_id2_DI-LowDmg"),
+                $"a prewarmed voice line plays after the archive closed resolved={resolved}");
+            var player = LastOneShotPlayer(sounds);
+            ctx.Check(player != null && player.GlobalPosition.DistanceTo(mover.GlobalPosition) < 0.01f,
+                $"the one-shot starts at its source pos={player?.GlobalPosition}");
+            mover.GlobalPosition = new Vector3(-450f, 60f, 1200f);
+            sounds.Tick();
+            ctx.Check(player!.GlobalPosition.DistanceTo(mover.GlobalPosition) < 0.01f,
+                $"the one-shot follows the moved source pos={player.GlobalPosition}");
+            var lastPos = mover.GlobalPosition;
+            mover.Free();
+            mover = null;
+            sounds.Tick();
+            ctx.Check(GodotObject.IsInstanceValid(player) && player.GlobalPosition.DistanceTo(lastPos) < 0.01f,
+                $"a freed source leaves the line finishing at its last position");
+
+            // The positional overload is untouched, and a def never prewarmed is null once the
+            // loader is gone: the exact failure the prewarm exists to prevent.
+            ctx.Check(sounds.PlayOneShot("snd_id26_TA-SucShk-A", Vector3.Zero, new System.Random(3)) == null,
+                $"an unprewarmed pilot's line stays null after the archive closed");
+
+            // The cost of prewarm-everything, measured on a fresh archive so nothing is cached:
+            // the number the roster-subset strategy is justified against.
+            using var fresh = new SoundArchive(ctx.SoundsPath);
+            long bytes = 0;
+            int ok = 0, absent = 0;
+            sw.Restart();
+            foreach (var name in voice.AllClipNames())
+            {
+                var def = defs[name];
+                if (fresh.Find(def.WavName, def.Looped, warn: false) is { } stream)
+                {
+                    ok++;
+                    bytes += stream.Data.Length;
+                }
+                else
+                {
+                    absent++;
+                }
+            }
+            sw.Stop();
+            ctx.Note($"full voice bank: {voice.AllClipNames().Count} defs, {ok} decoded ({absent} defs without a WAV), {bytes / (1024.0 * 1024.0):0.0} MB PCM, {sw.ElapsedMilliseconds} ms; why the session prewarms the roster subset");
+        }
+        finally
+        {
+            mover?.Free();
+            if (sounds != null)
+            {
+                sounds.FlushOneShots();
+                sounds.Free();
+            }
+        }
+    }
+
+    /// <summary>The most recent one-shot player under a <see cref="WorldSounds"/> node.</summary>
+    private static AudioStreamPlayer3D? LastOneShotPlayer(WorldSounds sounds)
+    {
+        AudioStreamPlayer3D? last = null;
+        foreach (var child in sounds.GetChildren())
+        {
+            if (child is AudioStreamPlayer3D p)
+            {
+                last = p;
+            }
+        }
+        return last;
     }
 
     private static void GltfExport(TestContext ctx)

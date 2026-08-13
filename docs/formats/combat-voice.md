@@ -80,10 +80,41 @@ aiv accentID (slot 65)  →  a row in zrdr/voice.zrd  →  a pool of pilot VO id
 ⚠ **`voice.zrd` is the accent table, not the trigger table.** Its 35 rows are keyed by `accentID`
 and their values are **pilot VO ids** (`soundsh/VO_id<N>_*`) — the numbers run over the same sparse
 id set the clip survey found. The row count coincidentally sits near the trigger count; they are
-unrelated tables and conflating them will mis-key every lookup.
+unrelated tables and conflating them will mis-key every lookup. Row shape: `[accentId, voId, …]`;
+rows 0–10 hold 2–3-id pools, rows 11–34 a single id.
 
 In multiplayer the accent lookup is skipped and the voice set is handed in directly, so a remake's
 single-player path is the one that needs `accentID`.
+
+### The clips are sounds.json entries, and the data picks the variants itself
+
+Measured against the extraction while building the B8 runtime (2026-08-13):
+
+- **Every combat clip has an ordinary `SETS` entry**: sounds.json carries one set per pilot id
+  (`id1` … `id48`, 35 sets), whose entries are `snd_id<N>_<TYPE>` → `VO_id<N>_<TYPE>.wav` with
+  `PURGEABLE`, `QUEUE [0.5]` and (on most `-B`/`-C` takes) `OPTIONAL`. 1,414 clip defs total. So
+  the ordinary sound pipeline plays a voice line; no separate loader exists.
+- **The `-A`/`-B`/`-C` selection is authored data, not code.** sounds.json ships **466**
+  `SOUND_GROUPS` entries named `snd_<FAMILY>-A_id<N>_random`, each a `DYNAMIC_WEIGHTS 0.5` group
+  over that pilot's takes of one sub-family (`snd_DA-Bail-A_id2_random` picks `DA-Bail-A/B`).
+  This closes the open question below for the variant letter; the `Bail`/`NoBail` split above it
+  is still the dispatcher's. The 12 bearing tokens have no variants and no groups.
+- ⚠ **A def is not a clip.** Five pilot ids (13, 15, 17, 35, 36) ship full 25-def sets with **no
+  WAVs at all**, id 44 ships the 12 bearing defs without their WAVs (so the *playable* bearing set
+  is 7 ids, the def-side set 8), and the accent table maps ids 5 and 40 which have neither defs
+  nor WAVs. Id 47 (the multiplayer announcer) is the inverse: 51 WAVs with no `id47` set.
+  Availability is only answerable after decode, per pilot, per clip.
+
+**Runtime (B8, `CSVM/src/Mech3/CombatVoice.cs`).** The chain above is a queryable service:
+`accentID` → pool → `PilotFor` (random pick, clipless ids skipped) → `PlayableFor(voId, family)`,
+which returns the `_random` group when authored, else the bare def; both feed
+`WorldSounds.PlayOneShot`, whose `Node3D` overload follows a moving speaker. Because a clip that
+was not prewarmed while the sound archive was open never plays, a flight session prewarms the
+mission roster's own accents (`CombatVoice.SessionPrewarmNames`, wired through
+`WorldSession.Options.VoiceClipNames`): median 24 clip defs per mission, worst case 457 (C2/M03),
+21 of 53 missions author none. Prewarming everything was measured at 1,258 streams / 60.7 MB PCM
+/ ~0.7 s and rejected. E16's dispatch (the gate, cooldowns and elections below) sits on top of
+this seam.
 
 ## Whether a line actually plays
 
@@ -138,7 +169,10 @@ death and taunt triggers address a specific aircraft.
   The token names indicate the intent; the dispatch was not traced far enough to assert it.
 - **Trigger 16 (`PR-EnemyDwn`) has no located dispatch site.** It may be reached through a path not
   covered, or be unused.
-- **How `-A`/`-B`/`-C` and `Bail`/`NoBail` are chosen** below the family root.
+- **How `Bail`/`NoBail` is chosen** below the family root (the natural candidate is the
+  constitution roll, unconfirmed). The `-A`/`-B`/`-C` half closed 2026-08-13: the shipped
+  `snd_<FAMILY>-A_id<N>_random` groups pick the take, weighted-random with recency 0.5 (see
+  "The clips are sounds.json entries" above).
 
 ## What this is not
 
