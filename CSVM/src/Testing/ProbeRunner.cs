@@ -330,6 +330,28 @@ public sealed class ProbeRunner
         return r.Ok;
     }
 
+    /// <summary>--dump-ai[=chapter]: a pure-data report over the five AI data families — patrol
+    /// nets, <c>aiv</c> rosters, <c>ai.zrd</c> turrets, zeppelins, generators (see
+    /// <see cref="Probes.Ai"/>) — to stdout and <c>./.scratch/ai_dump.txt</c>, then quit. No
+    /// world, no scene: every family is read straight off the extraction. An optional value
+    /// restricts the per-chapter/mission half (nets/aiv/zeppelins/egen) to one chapter; turrets
+    /// are one shared file and are always reported in full.</summary>
+    /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
+    public bool DumpAi(SessionSpec spec)
+    {
+        DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
+        var r = Probes.Ai(_dataRoot, _zrdrPath, spec.DumpAiChapter);
+        if (r.Error != null)
+        {
+            GD.PrintErr($"--dump-ai: {r.Error}");
+            return false;
+        }
+        GD.Print(r.Text);
+        WriteScratch("ai_dump.txt", r.Text);
+        GD.Print($"{r.Summary} → ./.scratch/ai_dump.txt");
+        return r.Ok;
+    }
+
     /// <summary>--effects-test: the world-effects headless verify — see <see cref="Probes.Effects"/>, whose
     /// census the <c>effect-template-mesh</c> suite counts through.
     /// Plays every effect at the camera point so range-gated ones (gunhit's PLAYER_RANGE) pass;

@@ -425,6 +425,14 @@ public partial class Launcher : Node3D
             GetTree().Quit(_probeRunner.DumpMips(_spec) ? 0 : 1);
             return;
         }
+        // --dump-ai: the five AI data families read straight off the extraction — no world, no
+        // scene, no readers built for the families that don't have one yet (aiv/ai.zrd/zeppelins/
+        // egen). See Probes.Ai.
+        if (_spec.DumpAi)
+        {
+            GetTree().Quit(_probeRunner.DumpAi(_spec) ? 0 : 1);
+            return;
+        }
 
         // Populate Config's tuning registry by exercising the wired modules once (WarmTuningRegistry),
         // then flag any config.json key that matched no tunable. Both run on every launch, are
